@@ -15,8 +15,11 @@
 | `MessageSigner` | подпись | Ed25519 detached над `canonical_bytes` |
 | `CanonicalBytes` | подпись | Сборка preimage строго по [proto/README](../schema/proto/README.md) |
 | `PersonalMessageSealer` | оркестрация | `seal()` = слои 1+2+4 + подпись; `openWithWrappedKey()` = путь B |
+| `MessageSerializer` | сериализация | `MessageBody` → protobuf (Wire, кодоген из `../schema/proto`) → zstd; `Envelope` ↔ protobuf; guard от zstd-бомбы (16 MiB) |
 
-Слой 3 (Double Ratchet, PFS) — фаза 5: `ratchet_envelope` пока всегда пуст. Protobuf-сериализация `Envelope`/`MessageBody` + zstd (`MessageSerializer`) — фаза 1.2.
+Слой 3 (Double Ratchet, PFS) — фаза 5: `ratchet_envelope` пока всегда пуст.
+
+Protobuf-классы генерируются Wire из `../schema/proto` при сборке (в git не коммитятся). Байты `MessageBody` заморожены вектором `message_body` (Wire — референс для Go-реализации); zstd по байтам не нормативен — только распаковка.
 
 ## Тесты
 

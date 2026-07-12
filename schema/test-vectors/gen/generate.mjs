@@ -99,6 +99,29 @@ const V = { schema: 'tima.crypto.v1', format_version: 1, generated_by: 'tweetnac
   };
 }
 
+// ── 5b. MessageBody: замороженные protobuf-байты. ИСТОЧНИК — Kotlin-реализация (Wire),
+//        зафиксировано на первом зелёном прогоне SerializerTest (2026-07-12); генератор
+//        лишь переносит константу, чтобы регенерация не теряла вектор. Wire — референс для Go.
+{
+  V.vectors.message_body = {
+    desc: 'Замороженные protobuf-байты MessageBody (Wire, Kotlin-реализация — референс для Go). zstd не фиксируется: нормативна только распаковка.',
+    frozen_by: 'messenger-crypto SerializerTest, Wire 5.2.1, первый зелёный прогон 2026-07-12',
+    inputs: {
+      text: 'Привет, TIMA! 👋 жирный #тест',
+      entities: [
+        { type: 'ET_LINK(9)', offset: 8, length: 4, url: 'https://tima.app' },
+        { type: 'ET_BOLD(1)', offset: 17, length: 6 },
+        { type: 'ET_HASHTAG(11)', offset: 24, length: 5, attribute: 'тест' }
+      ],
+      media: [
+        { media_id: 'aaaabbbb-cccc-dddd-eeee-ffff00001111', media_key: 'cc…(32 байта 0xcc)', mime: 'image/webp', size_bytes: 34567, width: 640, height: 480, blurhash: 'LKO2?U%2Tw=w', chunk_count: 1 }
+      ],
+      note: 'offset/length — UTF-16 code units: 👋 занимает 2 юнита, поэтому «жирный» начинается с 17'
+    },
+    protobuf_hex: '0a2fd09fd180d0b8d0b2d0b5d1822c2054494d412120f09f918b20d0b6d0b8d180d0bdd18bd0b92023d182d0b5d181d1821218080910081804221068747470733a2f2f74696d612e61707012060801101118061210080b101818053208d182d0b5d181d1821a6e0a2461616161626262622d636363632d646464642d656565652d6666666630303030313131311220cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc1a0a696d6167652f7765627020878e0228800530e003420c4c4b4f323f55253254773d774801'
+  };
+}
+
 // ── 6. ML-KEM-768 escrow round-trip (keygen детерминирован из seed; ct рандомизирован RNG,
 //        поэтому фиксируем НЕ ct, а корректность: decapsulate(ct, sk) === shared) ──
 {
