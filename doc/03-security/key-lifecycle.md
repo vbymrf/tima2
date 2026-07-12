@@ -6,8 +6,9 @@
 
 ```
 1. Телефон подтверждён SMS + привязан email (обязателен)
-2. Устройство генерирует: identity (Curve25519) + signing (Ed25519) пары
-   — приватные ключи в Keystore (Android) / Secure Enclave (iOS), не экспортируются
+2. Устройство генерирует одну `Kodium.generateKeyPair()` → `KodiumPrivateKey`
+   (даёт и X25519-encryption, и Ed25519-signing из общего seed)
+   — приватный ключ в Keystore (Android) / Secure Enclave (iOS)
 3. Аттестация: Play Integrity / App Attest ([client-attestation.md](./client-attestation.md))
 4. Регистрация device_id + публичных ключей на сервере (таблица devices)
 5. Первое телефонное устройство помечается is_trust_anchor = TRUE

@@ -41,15 +41,17 @@ Kodium.encryptSymmetricToEncodedString(passwordOrKey, data)
 
 // 1:1 сессия с PFS
 DoubleRatchetSession.initializeAsInitiator(sharedSecret, responderRatchetKey)
-session.encryptToEncodedString(plaintext)
+session.encrypt(plaintext)   // → Result<RatchetMessage>; состояние — exportToEncryptedString(key)
 
 // Post-Quantum гибрид
 Kodium.pqc.encryptToEncodedString(mySecretKey, theirPublicKey, data)
-MLKEM.encapsulate(publicKey) // → (ciphertext, sharedSecret) для escrow
+MLKEM.encapsulate(publicKey) // → Pair(sharedSecret, ciphertext) — sharedSecret ПЕРВЫЙ
 
 // Подпись сообщений
 Kodium.signDetachedToEncodedString(privateKey, data)
 ```
+
+> **Сверено с исходниками (2026-07-12):** этот overview — legacy; точные сигнатуры и порядок — в [crypto-protocol.md](./03-security/crypto-protocol.md) §2. Ключевые поправки против прежнего текста: `MLKEM.encapsulate` возвращает `Pair(sharedSecret, ciphertext)` (не наоборот); у `DoubleRatchetSession` нет `encryptToEncodedString` — только `encrypt(): Result<RatchetMessage>` и `exportToEncryptedString()` для состояния; все операции возвращают `Result<T>`.
 
 ---
 
@@ -165,7 +167,7 @@ val plaintext = compressThenSerialize(text)  // ZSTD до шифрования �
 val encryptedPayload = Kodium.encryptSymmetric(messageKey, plaintext)
 
 // 3. Escrow blob
-val (escrowCiphertext, _) = MLKEM.encapsulate(escrowPublicKey)
+val (escrowShared, escrowCiphertext) = MLKEM.encapsulate(escrowPublicKey)  // Pair(shared, ct)
 val escrowBlob = escrowCiphertext + Kodium.encryptSymmetric(derivedFromKEM, messageKey)
 
 // 4. Обёртка для получателя (ПЛАН Б)

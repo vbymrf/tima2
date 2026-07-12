@@ -27,8 +27,9 @@ CREATE TABLE devices (
     device_id       UUID PRIMARY KEY,
     user_id         UUID NOT NULL REFERENCES users,
     platform        TEXT NOT NULL,                 -- 'android'|'ios'|'windows'|'web' (web — в планах)
-    identity_pub    BYTEA NOT NULL,                -- Curve25519 public
-    signing_pub     BYTEA NOT NULL,                -- Ed25519 public
+    identity_pub    BYTEA NOT NULL,                -- X25519 public (KodiumPublicKey.encryptionKey)
+    signing_pub     BYTEA NOT NULL,                -- Ed25519 public (KodiumPublicKey.signingKey)
+    -- обе части — из ОДНОЙ KodiumPrivateKey устройства (общий seed); crypto-protocol §2
     is_trust_anchor BOOLEAN DEFAULT FALSE,         -- телефон-якорь
     attested_at     TIMESTAMPTZ,                   -- прошёл аттестацию
     push_token      TEXT,
