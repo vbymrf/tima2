@@ -22,7 +22,7 @@
 | X3DH (PreKeys, Signed PreKey) | `ratchet/X3DH.kt` | ✅ Готово |
 | Double Ratchet (1:1 E2EE) | `ratchet/DoubleRatchet.kt` | ✅ Готово |
 | PQ X3DH + PQ Double Ratchet | `ratchet/PQXDH.kt`, `PQDoubleRatchetSession.kt` | ✅ Готово |
-| ML-KEM-768 (FIPS 203) | `core/MLKEM.kt`, `core/fips203/*` | ✅ Готово |
+| ML-KEM-768 (FIPS 203) | `core/MLKEM.kt`, `core/fips203/*` | ⚠️ Не интероперабелен с FIPS 203 — escrow использует BouncyCastle ([ADR-0005 Поправка-1](./adr/0005-kodium-readiness-gate.md)) |
 | HKDF, PBKDF2, Ed25519 | `ratchet/HKDF.kt`, `core/fips203/*` | ✅ Готово |
 | Экспорт/импорт сессий и ключей | `DoubleRatchetSession.exportToEncryptedString()` | ✅ Готово |
 | LRU для пропущенных ключей ratchet | `maxSkippedMessages = 2000` | ✅ Готово |

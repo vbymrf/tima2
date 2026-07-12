@@ -19,6 +19,8 @@
 ## 2. Ключи
 
 > **Привязка к Kodium (сверено с исходниками `io.kodium`, 2026-07-12).** Пакет — `io.kodium`, координата Maven — `eu.livotov.labs:kodium`. Одна пара `KodiumPrivateKey` (генерируется `Kodium.generateKeyPair()`) даёт **и** encryption-ключ (X25519, для Box/wrapped), **и** signing-ключ (Ed25519) — оба выводятся из одного 32-байтного seed; публичная часть — `KodiumPublicKey(encryptionKey, signingKey)`. **Все операции возвращают `Result<T>`** — обязательна обработка (`getOrElse`/`fold`), «тихого» исключения нет.
+>
+> **Исключение — ML-KEM-768:** реализация Kodium 1.0.0 не интероперабельна с FIPS 203 (KAT-канарейка сработала, [ADR-0005 Поправка-1](../adr/0005-kodium-readiness-gate.md)); escrow использует провайдер `Mlkem768` (BouncyCastle) из `messenger-crypto` с тем же API (`encapsulate` → `Pair(shared, ct)`).
 
 | Ключ | Тип | Где живёт | Назначение |
 |------|-----|-----------|-----------|
@@ -62,7 +64,7 @@ val plaintext  = zstd(protobuf(body))                                    // сж
 val payload = Kodium.encryptSymmetric(messageKey, plaintext).getOrThrow()  // слой 1 (nonce+box)
 
 // слой 2 — escrow. ВНИМАНИЕ порядок: encapsulate возвращает Pair(sharedSecret, ciphertext)
-val (kemShared, kemCt) = MLKEM.encapsulate(escrowPublicKey)              // io.kodium.core.MLKEM
+val (kemShared, kemCt) = Mlkem768.encapsulate(escrowPublicKey)           // BouncyCastle-провайдер (ADR-0005 Поправка-1)
 val escrowBlob = kemCt + Kodium.encryptSymmetric(hkdf(kemShared), messageKey).getOrThrow()  // ct=1088 B
 
 // слой 4 — обёртки: Kodium.encrypt(myPrivate, theirPublic, data); эфемерная пара отправителя
@@ -154,6 +156,7 @@ class GroupKeyManager {
 ## 6. Escrow
 
 - На каждый `message_key` (1:1) или версию `GK`/`period_id` (группы, медиа) создаётся `escrow_blob` — ML-KEM-768 инкапсуляция на `Escrow_Public`.
+- Нормативная деривация ключа обёртки (контракт клиент ↔ HSM): `wrap_key = HKDF-SHA256(ikm = mlkem_shared, salt = пусто, info = "tima/escrow/v1", len = 32)`; сама обёртка — `SecretBox(message_key, wrap_key)` → `nonce‖box`.
 - Приватный ключ escrow существует **только** в HSM/анклаве; доступ M-of-N (Shamir) по юридическому запросу, каждый доступ — в append-only audit log.
 - MVP: stub-анклав (изолированный контейнер с тем же API); production HSM — gate фазы 6.
 - Процедуры, политика периодов и формулировки для пользователей — [escrow-legal-access.md](./escrow-legal-access.md).
