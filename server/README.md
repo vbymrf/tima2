@@ -45,6 +45,17 @@ Client → server: `sync.pull {cursor?, limit?}` — события с `event_id
 
 Шина — Redis Pub/Sub (`REDIS_URL`, dev: `redis://:tima-dev-only@localhost:6379`); без него `/ws` отвечает 503. Если cursor старше ретеншена (GC уже удалил события после него) — `sync.gap {next_cursor}`: полный re-bootstrap REST-историей, дальше live. Офлайн-очередь push (Redis Stream → FCM/APNs) — когда появится push-провайдер.
 
+## Escrow (stub-анклав)
+
+`escrow-stub` — **отдельный процесс/контейнер** (escrow-legal-access.md §7): приватный ключ ML-KEM-768 живёт только у него, tima ходит лишь за публичным ключом. API — контракт будущего HSM/Nitro (gate фазы 6):
+
+| Метод | Путь | Что делает |
+|-------|------|-----------|
+| GET | `/v1/pubkey` | `{escrow_key_version, public_key}` — tima проксирует клиентам как `GET /api/v1/escrow/pubkey` (кэш 10 мин; без `ESCROW_URL` — 503) |
+| POST | `/v1/unseal` | Юридический доступ: `{shares[], reason, blobs[]}` → ключи. Порог — 3 из 5 долей Шамира (GF-256, формат доли зафиксирован); каждый вызов, включая отказ, — строка в append-only `escrow-audit.jsonl` |
+
+Доли Шамира печатаются один раз при первой инициализации (`escrow-state.json` в `ESCROW_STATE_DIR`). Запуск: `go run ./cmd/escrow-stub` (`:8090`) или контейнером — `docker compose -f deploy/docker-compose.dev.yml --profile escrow up -d --build`. Деривация `wrap_key = HKDF(mlkem_shared, "tima/escrow/v1")` — общий контракт с клиентским `EscrowModule` (crypto-protocol §6). Изоляция stub-уровня: seed на диске контейнера; криптографический барьер (невыгружаемый ключ) — production HSM.
+
 ## Worker (GC ретеншена)
 
 `tima worker` — фоновый процесс: каждый `TIMA_GC_INTERVAL` (1h) чистит по правилам sync-offline.md §1 и escrow-legal-access.md §5:

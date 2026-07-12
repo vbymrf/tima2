@@ -14,6 +14,8 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"sync"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -35,6 +37,12 @@ type Server struct {
 	Events *events.Bus        // nil → /ws отвечает 503, доставка только REST-историей
 	Limit  *ratelimit.Limiter // nil → без лимитов частоты (dev без Redis)
 	DevSMS bool               // TIMA_DEV_SMS=1: код из /auth/sms/request возвращается в ответе
+
+	// EscrowURL — адрес stub-анклава (ESCROW_URL); "" → /escrow/pubkey отвечает 503
+	EscrowURL     string
+	escrowMu      sync.Mutex
+	escrowCached  []byte
+	escrowFetched time.Time
 }
 
 func (s *Server) Register(mux *http.ServeMux) {
@@ -46,6 +54,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/messages", s.Auth.Require(s.postMessage))
 	mux.HandleFunc("GET /api/v1/chats/{chatID}/messages", s.Auth.Require(s.listMessages))
 	mux.HandleFunc("GET /api/v1/keys/devices", s.Auth.Require(s.listDeviceKeys))
+	mux.HandleFunc("GET /api/v1/escrow/pubkey", s.Auth.Require(s.escrowPubkey))
 	mux.HandleFunc("POST /api/v1/groups", s.Auth.Require(s.createGroup))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}", s.Auth.Require(s.getGroup))
 	mux.HandleFunc("PATCH /api/v1/groups/{groupID}", s.Auth.Require(s.patchGroup))

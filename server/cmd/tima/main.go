@@ -164,6 +164,12 @@ func serve() {
 		} else {
 			log.Print("S3_ENDPOINT не задан — media-эндпоинты отвечают 503")
 		}
+		if escrowURL := os.Getenv("ESCROW_URL"); escrowURL != "" {
+			srv.EscrowURL = escrowURL
+			log.Printf("Escrow: публичный ключ проксируется из %s", escrowURL)
+		} else {
+			log.Print("ESCROW_URL не задан — /escrow/pubkey отвечает 503 (подними cmd/escrow-stub)")
+		}
 		srv.Register(mux)
 		log.Print("Auth + Message Service подключены")
 	} else {

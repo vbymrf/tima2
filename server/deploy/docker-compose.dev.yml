@@ -40,7 +40,20 @@ services:
     ports: ["9000:9000", "9001:9001"]
     volumes: ["tima-dev-minio:/data"]
 
+  # Stub-анклав escrow — opt-in (нужна сборка образа):
+  #   docker compose -f docker-compose.dev.yml --profile escrow up -d --build
+  # Доли Шамира печатаются в лог ПЕРВОГО запуска: docker logs tima-dev-escrow-stub-1
+  escrow-stub:
+    profiles: ["escrow"]
+    build:
+      context: ..
+      dockerfile: deploy/escrow-stub.Dockerfile
+    restart: unless-stopped
+    ports: ["8090:8090"]
+    volumes: ["tima-dev-escrow:/data"]
+
 volumes:
   tima-dev-postgres:
   tima-dev-redis:
   tima-dev-minio:
+  tima-dev-escrow:
