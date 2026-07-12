@@ -117,6 +117,29 @@ class VectorsTest {
     }
 
     @Test
+    fun `group_message_canonical - preimage подписи сообщения группы совпадает байт-в-байт`() {
+        val v = vector("group_message_canonical")
+        val inputs = v["inputs"]!!.jsonObject
+        assertEquals(inputs["domain"]!!.jsonPrimitive.content, CanonicalBytes.GROUP_MESSAGE_DOMAIN)
+
+        val meta = GroupMessageMeta(
+            groupId = inputs["group_id"]!!.jsonPrimitive.content,
+            senderId = inputs["sender_id"]!!.jsonPrimitive.content,
+            senderDevice = inputs["sender_device"]!!.jsonPrimitive.content,
+            kind = inputs["kind"]!!.jsonPrimitive.int,
+            createdAtUnixMs = inputs["created_at_unix_ms"]!!.jsonPrimitive.long,
+            threadRoot = inputs["thread_root"]!!.jsonPrimitive.long.toULong(),
+            replyTo = inputs["reply_to"]!!.jsonPrimitive.long.toULong(),
+            gkVersion = inputs["gk_version"]!!.jsonPrimitive.int,
+        )
+        val payload = vector("secretbox").hex("kodium_output_hex")
+
+        val cb = CanonicalBytes.buildGroupMessage(meta, payload)
+        assertEquals(v["canonical_bytes_hex"]!!.jsonPrimitive.content, cb.toHex())
+        assertEquals(v["sha256_hex"]!!.jsonPrimitive.content, sha256(cb).toHex())
+    }
+
+    @Test
     fun `mlkem768 - keygen из seed детерминирован, escrow round-trip`() {
         val v = vector("mlkem768_escrow")
         val seed = v.hex("keygen_seed") // 64 байта, layout noble/FIPS 203: d(32) ‖ z(32)
@@ -142,10 +165,10 @@ class VectorsTest {
     }
 
     @Test
-    fun `все восемь векторов присутствуют`() {
+    fun `все девять векторов присутствуют`() {
         val expected = setOf(
             "secretbox", "box_wrap", "ed25519", "hkdf_sha256", "media_chunk_keys",
-            "canonical_bytes", "message_body", "mlkem768_escrow",
+            "canonical_bytes", "message_body", "mlkem768_escrow", "group_message_canonical",
         )
         assertEquals(expected, vectors.keys, "Состав vectors.json изменился — обнови KAT")
     }

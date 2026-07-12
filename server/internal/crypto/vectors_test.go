@@ -105,6 +105,47 @@ func TestCanonicalBytesVector(t *testing.T) {
 	assertHex(t, v.Sha256Hex, digest[:], "sha256(canonical_bytes)")
 }
 
+func TestGroupMessageCanonicalVector(t *testing.T) {
+	vectors := loadVectors(t)
+	v := vec[struct {
+		Inputs struct {
+			Domain          string `json:"domain"`
+			GroupID         string `json:"group_id"`
+			SenderID        string `json:"sender_id"`
+			SenderDevice    string `json:"sender_device"`
+			Kind            uint32 `json:"kind"`
+			CreatedAtUnixMs int64  `json:"created_at_unix_ms"`
+			ThreadRoot      uint64 `json:"thread_root"`
+			ReplyTo         uint64 `json:"reply_to"`
+			GKVersion       uint32 `json:"gk_version"`
+		} `json:"inputs"`
+		CanonicalBytesHex string `json:"canonical_bytes_hex"`
+		Sha256Hex         string `json:"sha256_hex"`
+	}](t, vectors, "group_message_canonical")
+
+	if v.Inputs.Domain != GroupMessageDomain {
+		t.Fatalf("доменная метка разошлась: вектор %q, реализация %q", v.Inputs.Domain, GroupMessageDomain)
+	}
+	sb := vec[struct {
+		KodiumOutputHex string `json:"kodium_output_hex"`
+	}](t, vectors, "secretbox")
+
+	cb := GroupMessageCanonicalBytes(GroupMessageMeta{
+		GroupID:         v.Inputs.GroupID,
+		SenderID:        v.Inputs.SenderID,
+		SenderDevice:    v.Inputs.SenderDevice,
+		Kind:            v.Inputs.Kind,
+		CreatedAtUnixMs: v.Inputs.CreatedAtUnixMs,
+		ThreadRoot:      v.Inputs.ThreadRoot,
+		ReplyTo:         v.Inputs.ReplyTo,
+		GKVersion:       v.Inputs.GKVersion,
+	}, unhex(t, sb.KodiumOutputHex))
+
+	assertHex(t, v.CanonicalBytesHex, cb, "group_message_canonical_bytes")
+	digest := sha256.Sum256(cb)
+	assertHex(t, v.Sha256Hex, digest[:], "sha256(group_message_canonical_bytes)")
+}
+
 func TestEd25519Vector(t *testing.T) {
 	v := vec[struct {
 		Seed         string `json:"seed"`

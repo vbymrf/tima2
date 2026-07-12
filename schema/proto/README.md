@@ -43,6 +43,26 @@ canonical_bytes =
 - `wrapped_keys[]` в подпись **не входят**: они per-recipient и управляются сервером (план Б). Их целостность обеспечивается тем, что развёрнутый из них `message_key` обязан корректно открыть подписанный `encrypted_payload` (MAC SecretBox). Подмена wrapped_key ведёт к провалу расшифровки, не к принятию поддельного текста.
 - Порядок и состав полей **фиксированы** — изменение = новый `format_version` и новый тест-вектор.
 
+## `group_message_canonical_bytes` — подпись сообщения группы
+
+Сообщение группы ходит без конверта `Envelope` (нет per-message escrow и wrapped_keys — GK у участников, escrow один на версию GK; crypto-protocol.md §4.1). `payload` — тот же `MessageBody` конвейер: private-группа `SecretBox(zstd(protobuf(body)), GK)`, публичная — plaintext protobuf. Подписывается:
+
+```
+group_message_canonical_bytes =
+    lp("tima.group_message.v1")    // доменная метка: не пересекается с canonical_bytes конверта
+  ⊕ lp(group_id)
+  ⊕ lp(sender_id)
+  ⊕ lp(sender_device)
+  ⊕ u32(kind)                     // ContentKind из envelope.proto
+  ⊕ u64(created_at_unix_ms)
+  ⊕ u64(thread_root)              // 0 = сообщение вне ветки
+  ⊕ u64(reply_to)                 // 0 = нет
+  ⊕ u32(gk_version)               // 0 = публичная группа (plaintext)
+  ⊕ sha256(payload)
+```
+
+`message_id` в preimage не входит — его назначает сервер при приёме. Версию раскладки несёт доменная метка (`…v1`); изменение = новая метка + новый тест-вектор (`group_message_canonical`).
+
 ## Правила эволюции (обратная совместимость)
 
 1. **Никогда** не менять номер и тип существующего поля. Удаляемое → `reserved`.

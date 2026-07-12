@@ -52,6 +52,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/groups/{groupID}/members/{userID}", s.Auth.Require(s.removeGroupMember))
 	mux.HandleFunc("PUT /api/v1/groups/{groupID}/members/{userID}/role", s.Auth.Require(s.setGroupRole))
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/members/{userID}/ban", s.Auth.Require(s.banGroupMember))
+	mux.HandleFunc("POST /api/v1/groups/{groupID}/messages", s.Auth.Require(s.postGroupMessage))
+	mux.HandleFunc("GET /api/v1/groups/{groupID}/messages", s.Auth.Require(s.listGroupMessages))
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys", s.Auth.Require(s.groupRotate))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}/keys", s.Auth.Require(s.groupKeys))
 	mux.HandleFunc("POST /api/v1/media/init", s.Auth.Require(s.mediaInit))

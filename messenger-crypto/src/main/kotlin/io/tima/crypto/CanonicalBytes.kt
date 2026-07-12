@@ -26,8 +26,27 @@ data class EnvelopeMeta(
  * Порядок и состав полей ФИКСИРОВАНЫ. Любое изменение = новый format_version
  * + новый тест-вектор (`schema/test-vectors/vectors.json` → `canonical_bytes`).
  */
+/**
+ * Подписываемые поля сообщения группы (schema/proto/README.md §group_message_canonical_bytes).
+ * `message_id` не входит — его назначает сервер при приёме. [gkVersion] 0 = публичная
+ * группа (plaintext payload).
+ */
+data class GroupMessageMeta(
+    val groupId: String,
+    val senderId: String,
+    val senderDevice: String,
+    val kind: Int,
+    val createdAtUnixMs: Long,
+    val threadRoot: ULong = 0u,
+    val replyTo: ULong = 0u,
+    val gkVersion: Int = 0,
+)
+
 object CanonicalBytes {
     const val FORMAT_VERSION = 1
+
+    /** Доменная метка preimage сообщения группы; несёт версию раскладки. */
+    const val GROUP_MESSAGE_DOMAIN = "tima.group_message.v1"
 
     val EMPTY: ByteArray = ByteArray(0)
 
@@ -55,4 +74,22 @@ object CanonicalBytes {
             sha256(escrowBytes) +
             sha256(senderEphemeralPub) +
             sha256(ratchetEnvelope)
+
+    /**
+     * Preimage подписи сообщения группы — schema/proto/README.md
+     * §group_message_canonical_bytes, KAT-вектор `group_message_canonical`.
+     * Payload — тот же конвейер MessageBody: private-группа
+     * `SecretBox(zstd(protobuf(body)), GK)`, публичная — plaintext protobuf.
+     */
+    fun buildGroupMessage(meta: GroupMessageMeta, payload: ByteArray): ByteArray =
+        lp(GROUP_MESSAGE_DOMAIN) +
+            lp(meta.groupId) +
+            lp(meta.senderId) +
+            lp(meta.senderDevice) +
+            u32le(meta.kind) +
+            u64le(meta.createdAtUnixMs) +
+            u64le(meta.threadRoot.toLong()) +
+            u64le(meta.replyTo.toLong()) +
+            u32le(meta.gkVersion) +
+            sha256(payload)
 }

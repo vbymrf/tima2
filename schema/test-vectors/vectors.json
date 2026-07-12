@@ -108,6 +108,22 @@
       "shared_len": 32,
       "roundtrip_ok": true,
       "public_key_sha256": "05d743bfc5e7d61b4437d2512131e85e50ff8c593756bf6f57d1b4ec05363df3"
+    },
+    "group_message_canonical": {
+      "desc": "Preimage подписи сообщения группы (schema/proto/README.md §group_message_canonical_bytes): lp(домен) ⊕ lp(group_id) ⊕ lp(sender_id) ⊕ lp(sender_device) ⊕ u32(kind) ⊕ u64(created_at_unix_ms) ⊕ u64(thread_root) ⊕ u64(reply_to) ⊕ u32(gk_version) ⊕ sha256(payload); payload — kodium_output_hex из secretbox",
+      "inputs": {
+        "domain": "tima.group_message.v1",
+        "group_id": "44444444-4444-4444-4444-444444444444",
+        "sender_id": "22222222-2222-2222-2222-222222222222",
+        "sender_device": "33333333-3333-3333-3333-333333333333",
+        "kind": 1,
+        "created_at_unix_ms": 1750000000000,
+        "thread_root": 0,
+        "reply_to": 5,
+        "gk_version": 7
+      },
+      "canonical_bytes_hex": "1500000074696d612e67726f75705f6d6573736167652e76312400000034343434343434342d343434342d343434342d343434342d3434343434343434343434342400000032323232323232322d323232322d323232322d323232322d3232323232323232323232322400000033333333333333332d333333332d333333332d333333332d3333333333333333333333330100000000dc2074970100000000000000000000050000000000000007000000f303e907fca039eb114ee0f50c3b41a6cdcff46c899e55451fe809d5593d9db1",
+      "sha256_hex": "8b283716d684db652a4574476cafca035902176c6cfcb4cd0cc98ea6d72a67aa"
     }
   }
 }

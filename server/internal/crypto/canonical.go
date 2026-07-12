@@ -47,6 +47,40 @@ func CanonicalBytes(formatVersion uint32, meta EnvelopeMeta, encryptedPayload, e
 	return out
 }
 
+// GroupMessageDomain — доменная метка preimage сообщения группы; несёт версию
+// раскладки (schema/proto/README.md §group_message_canonical_bytes).
+const GroupMessageDomain = "tima.group_message.v1"
+
+// GroupMessageMeta — подписываемые поля сообщения группы. message_id не входит —
+// его назначает сервер при приёме. GKVersion 0 = публичная группа (plaintext).
+type GroupMessageMeta struct {
+	GroupID         string
+	SenderID        string
+	SenderDevice    string
+	Kind            uint32
+	CreatedAtUnixMs int64
+	ThreadRoot      uint64
+	ReplyTo         uint64
+	GKVersion       uint32
+}
+
+// GroupMessageCanonicalBytes — preimage подписи сообщения группы: строго
+// schema/proto/README.md, KAT-вектор group_message_canonical.
+func GroupMessageCanonicalBytes(meta GroupMessageMeta, payload []byte) []byte {
+	var out []byte
+	out = appendLP(out, GroupMessageDomain)
+	out = appendLP(out, meta.GroupID)
+	out = appendLP(out, meta.SenderID)
+	out = appendLP(out, meta.SenderDevice)
+	out = appendU32(out, meta.Kind)
+	out = appendU64(out, uint64(meta.CreatedAtUnixMs))
+	out = appendU64(out, meta.ThreadRoot)
+	out = appendU64(out, meta.ReplyTo)
+	out = appendU32(out, meta.GKVersion)
+	h := sha256.Sum256(payload)
+	return append(out, h[:]...)
+}
+
 // VerifyEnvelopeSignature проверяет detached-подпись Ed25519 устройства отправителя
 // над canonical_bytes (публичный ключ — из devices).
 func VerifyEnvelopeSignature(senderSigningPub, canonicalBytes, signature []byte) bool {
