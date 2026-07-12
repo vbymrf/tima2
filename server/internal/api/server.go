@@ -19,6 +19,7 @@ import (
 	"tima/server/internal/auth"
 	"tima/server/internal/blob"
 	timacrypto "tima/server/internal/crypto"
+	"tima/server/internal/events"
 	pb "tima/server/internal/proto"
 	"tima/server/internal/store"
 )
@@ -29,6 +30,7 @@ type Server struct {
 	Store  *store.Store
 	Auth   *auth.Issuer
 	Blob   *blob.Client // nil → media-эндпоинты отвечают 503
+	Events *events.Bus  // nil → /ws отвечает 503, доставка только REST-историей
 	DevSMS bool         // TIMA_DEV_SMS=1: код из /auth/sms/request возвращается в ответе
 }
 
@@ -46,6 +48,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/media/init", s.Auth.Require(s.mediaInit))
 	mux.HandleFunc("POST /api/v1/media/complete", s.Auth.Require(s.mediaComplete))
 	mux.HandleFunc("GET /api/v1/media/{mediaID}/url", s.Auth.Require(s.mediaURL))
+	mux.HandleFunc("GET /ws", s.handleWS) // auth — первым кадром, не Bearer (websocket-events.md)
 }
 
 func writeErr(w http.ResponseWriter, status int, code, msg string) {
@@ -145,6 +148,26 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return
 	}
+	// Live-доставка онлайн-устройствам: конверт с единственной обёрткой адресата.
+	// Best-effort (websocket-events.md: офлайн — очередь push, итерация worker-а).
+	if s.Events != nil {
+		for _, wk := range env.GetWrappedKeys() {
+			single := proto.Clone(&env).(*pb.Envelope)
+			single.WrappedKeys = []*pb.WrappedKey{wk}
+			raw, err := proto.Marshal(single)
+			if err != nil {
+				continue
+			}
+			if err := s.Events.Publish(r.Context(), wk.GetRecipient(), "message.new", map[string]any{
+				"chat_id":    meta.GetChatId(),
+				"message_id": meta.GetMessageId(),
+				"envelope":   base64.RawURLEncoding.EncodeToString(raw),
+			}); err != nil {
+				log.Printf("postMessage: publish %s: %v", wk.GetRecipient(), err)
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{"message_id": meta.GetMessageId()})

@@ -13,6 +13,7 @@ import (
 	"tima/server/internal/api"
 	"tima/server/internal/auth"
 	"tima/server/internal/blob"
+	"tima/server/internal/events"
 	"tima/server/internal/store"
 	"tima/server/migrations"
 )
@@ -85,6 +86,16 @@ func serve() {
 			Store:  st,
 			Auth:   auth.NewIssuer(key),
 			DevSMS: os.Getenv("TIMA_DEV_SMS") == "1",
+		}
+		if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+			bus, err := events.New(ctx, redisURL)
+			if err != nil {
+				log.Fatal(err)
+			}
+			srv.Events = bus
+			log.Print("WS-доставка подключена (Redis Pub/Sub)")
+		} else {
+			log.Print("REDIS_URL не задан — /ws отвечает 503, доставка только REST-историей")
 		}
 		if endpoint := os.Getenv("S3_ENDPOINT"); endpoint != "" {
 			bucket := os.Getenv("S3_BUCKET")
