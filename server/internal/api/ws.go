@@ -147,6 +147,27 @@ func (s *Server) handleWSFrame(ctx context.Context, conn *websocket.Conn, device
 				return writeJSON(ctx, conn, map[string]any{"event": "error", "code": "internal"})
 			}
 		}
+		// Cursor старше ретеншена (GC удалил события после него) → sync.gap:
+		// полный re-bootstrap REST-историей, дальше live с next_cursor.
+		// cursor=0 — это и есть bootstrap, gap для него не нужен.
+		if cursor > 0 {
+			watermark, err := s.Store.GCWatermark(ctx)
+			if err != nil {
+				log.Printf("ws %s: watermark: %v", deviceID, err)
+				return writeJSON(ctx, conn, map[string]any{"event": "error", "code": "internal"})
+			}
+			if cursor < watermark {
+				next, err := s.Store.MaxDeviceEventID(ctx, deviceID)
+				if err != nil {
+					log.Printf("ws %s: max event: %v", deviceID, err)
+					return writeJSON(ctx, conn, map[string]any{"event": "error", "code": "internal"})
+				}
+				if next < watermark {
+					next = watermark
+				}
+				return writeJSON(ctx, conn, map[string]any{"event": "sync.gap", "next_cursor": next})
+			}
+		}
 		events, err := s.Store.ListDeviceEvents(ctx, deviceID, cursor, f.Limit)
 		if err != nil {
 			log.Printf("ws %s: pull: %v", deviceID, err)

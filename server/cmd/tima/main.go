@@ -9,12 +9,17 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
+	"time"
 
 	"tima/server/internal/api"
 	"tima/server/internal/auth"
 	"tima/server/internal/blob"
 	"tima/server/internal/events"
 	"tima/server/internal/store"
+	"tima/server/internal/worker"
 	"tima/server/migrations"
 )
 
@@ -29,7 +34,7 @@ func main() {
 	case "migrate":
 		migrate()
 	case "worker":
-		log.Fatal("worker: не реализован (фаза 2+: fan-out лент, push, GC медиа)")
+		runWorker()
 	default:
 		fmt.Fprintf(os.Stderr, "использование: tima [serve|worker|migrate]\n")
 		os.Exit(2)
@@ -56,6 +61,48 @@ func migrate() {
 		log.Fatal(err)
 	}
 	log.Println("миграции применены")
+}
+
+// envDays читает срок из env: голое число — дни, иначе time.ParseDuration (h/m/s).
+func envDays(name string, defDays int) time.Duration {
+	v := os.Getenv(name)
+	if v == "" {
+		return time.Duration(defDays) * 24 * time.Hour
+	}
+	if days, err := strconv.Atoi(v); err == nil {
+		return time.Duration(days) * 24 * time.Hour
+	}
+	if d, err := time.ParseDuration(v); err == nil {
+		return d
+	}
+	log.Fatalf("%s: не число дней и не duration: %q", name, v)
+	return 0
+}
+
+// runWorker — фоновые задачи (GC ретеншена, internal/worker). Env:
+// TIMA_GC_INTERVAL (duration, 1h), TIMA_RETENTION_DAYS (90), TIMA_APPEAL_WINDOW_DAYS (30).
+func runWorker() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	st := mustStore(ctx)
+	defer st.Close()
+	if err := st.Migrate(ctx, migrations.FS); err != nil {
+		log.Fatal(err)
+	}
+	interval := time.Hour
+	if v := os.Getenv("TIMA_GC_INTERVAL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			log.Fatalf("TIMA_GC_INTERVAL: %v", err)
+		}
+		interval = d
+	}
+	w := &worker.Worker{
+		Store:        st,
+		Retention:    envDays("TIMA_RETENTION_DAYS", 90),
+		AppealWindow: envDays("TIMA_APPEAL_WINDOW_DAYS", 30),
+	}
+	w.Run(ctx, interval)
 }
 
 func serve() {

@@ -77,7 +77,7 @@ func (s *Store) Migrate(ctx context.Context, fsys fs.FS) error {
 
 // ResetForTests очищает таблицы (только интеграционные тесты; в бою не вызывается).
 func (s *Store) ResetForTests(ctx context.Context) error {
-	_, err := s.pool.Exec(ctx, `TRUNCATE personal_messages, personal_message_keys, devices, users, sms_codes, media_objects, group_key_history, group_wrapped_keys, groups, memberships, group_messages, device_events, sync_cursors`)
+	_, err := s.pool.Exec(ctx, `TRUNCATE personal_messages, personal_message_keys, devices, users, sms_codes, media_objects, group_key_history, group_wrapped_keys, groups, memberships, group_messages, device_events, sync_cursors, gc_state`)
 	return err
 }
 
