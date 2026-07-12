@@ -77,7 +77,7 @@ func (s *Store) Migrate(ctx context.Context, fsys fs.FS) error {
 
 // ResetForTests очищает таблицы (только интеграционные тесты; в бою не вызывается).
 func (s *Store) ResetForTests(ctx context.Context) error {
-	_, err := s.pool.Exec(ctx, `TRUNCATE personal_messages, personal_message_keys, devices, users, sms_codes, media_objects`)
+	_, err := s.pool.Exec(ctx, `TRUNCATE personal_messages, personal_message_keys, devices, users, sms_codes, media_objects, group_key_history, group_wrapped_keys`)
 	return err
 }
 
@@ -229,6 +229,93 @@ func (s *Store) SaveMessage(ctx context.Context, m Message) error {
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+// ── Групповые ключи ──
+
+type GroupRotation struct {
+	GroupID            string
+	GKVersion          int32
+	RotatedBy          string
+	SenderEphemeralPub []byte
+	EscrowMlkemCt      []byte
+	EscrowWrappedKey   []byte
+	EscrowKeyVersion   int32
+	Reason             string
+	WrappedKeys        map[string][]byte // recipient device_id/vu_id → wrapped_GK
+}
+
+var ErrVersionConflict = errors.New("gk_version не следует за текущей версией")
+
+// SaveGroupRotation атомарно кладёт версию GK: строго current+1 (первая — 1).
+func (s *Store) SaveGroupRotation(ctx context.Context, rot GroupRotation) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck — no-op после Commit
+
+	// Гонку параллельных ротаций одной группы исключает advisory-блокировка транзакции
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, rot.GroupID); err != nil {
+		return err
+	}
+	var current int32
+	if err := tx.QueryRow(ctx,
+		`SELECT COALESCE(MAX(gk_version), 0) FROM group_key_history WHERE group_id = $1`,
+		rot.GroupID).Scan(&current); err != nil {
+		return err
+	}
+	if rot.GKVersion != current+1 {
+		return fmt.Errorf("%w: текущая %d, предложена %d", ErrVersionConflict, current, rot.GKVersion)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO group_key_history (group_id, gk_version, rotated_by, sender_ephemeral_pub,
+			escrow_mlkem_ct, escrow_wrapped_key, escrow_key_version, reason)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+		rot.GroupID, rot.GKVersion, rot.RotatedBy, rot.SenderEphemeralPub,
+		rot.EscrowMlkemCt, rot.EscrowWrappedKey, rot.EscrowKeyVersion, rot.Reason); err != nil {
+		return err
+	}
+	for recipient, wrapped := range rot.WrappedKeys {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO group_wrapped_keys (group_id, gk_version, recipient, wrapped)
+			VALUES ($1,$2,$3,$4)`, rot.GroupID, rot.GKVersion, recipient, wrapped); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// DeviceGroupKey — wrapped_GK одной версии для конкретного устройства.
+type DeviceGroupKey struct {
+	GKVersion          int32
+	SenderEphemeralPub []byte
+	Wrapped            []byte
+}
+
+// ListGroupKeysForDevice — версии > sinceVersion, для которых у устройства есть обёртка
+// (GET /groups/{id}/keys?since_version=). Исключённый участник новых версий не увидит.
+func (s *Store) ListGroupKeysForDevice(ctx context.Context, groupID, deviceID string, sinceVersion int32) ([]DeviceGroupKey, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT h.gk_version, h.sender_ephemeral_pub, w.wrapped
+		FROM group_key_history h
+		JOIN group_wrapped_keys w
+		  ON w.group_id = h.group_id AND w.gk_version = h.gk_version AND w.recipient = $2
+		WHERE h.group_id = $1 AND h.gk_version > $3
+		ORDER BY h.gk_version`, groupID, deviceID, sinceVersion)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []DeviceGroupKey
+	for rows.Next() {
+		var k DeviceGroupKey
+		if err := rows.Scan(&k.GKVersion, &k.SenderEphemeralPub, &k.Wrapped); err != nil {
+			return nil, err
+		}
+		out = append(out, k)
+	}
+	return out, rows.Err()
 }
 
 // ── Медиа ──
