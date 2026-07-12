@@ -7,4 +7,8 @@ Thumbs.db
 
 # Временные файлы Office
 ~$*.docx
+
+# Локальные копии сторонних репозиториев (справочные материалы)
 aiogram-dev-3.x/
+livekit-master git/
+Kodium git/

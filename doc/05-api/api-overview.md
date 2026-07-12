@@ -56,7 +56,8 @@
 | GET | `/inbox/events?cursor=` | Личные события (реакции, упоминания, назначения); read-state per пользователь |
 | POST | `/inbox/events/read` · `/hide` | Пачкой: прочитано / скрыть |
 | GET/PUT | `/inbox/preferences` | Правила агрегации (source + event_type → вкладка/скрыть/push/приоритет); синхронизируются между устройствами |
-| POST | `/appeals` | Пользователь пишет сущности `{target_type, target_id, text}` → обращение-thread (отвечают операторы/ВП/бот через inbox или [bot-api](./bot-api.md) `answerAppeal`) |
+| POST | `/appeals` | Пользователь пишет сущности `{target_type, target_id, text}`. К **ВП** — E2E-чат (боты недоступны); к **группе/каналу/сообществу** — публичный plaintext-тред с пометкой в UI (отвечают операторы или бот через [bot-api](./bot-api.md) `answerAppeal`) |
+| POST | `/inbox/notify` | Сообщение-карточка от имени сущности её аудитории (owner/admin, MVP-путь без ботов); те же лимиты и `block_messages`, что `notifyUser` |
 
 ## Сообщения и ключи
 

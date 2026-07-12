@@ -205,14 +205,16 @@ CREATE TABLE memberships (
     banned_until    TIMESTAMPTZ,                   -- модерация: временная блокировка
     PRIMARY KEY (target_type, target_id, user_id)
 );
--- Подписчики (каналов, сообществ) — в subscriptions; membership — роли и членство личных групп
+-- Подписчики (каналов, сообществ) — в subscriptions; membership — роли и членство личных групп.
+-- Для канала строка может существовать ТОЛЬКО ради banned_until (запрет комментирования подписчику)
 
 -- === Подсистема invites ===
 CREATE TABLE invites (
     invite_id       UUID PRIMARY KEY,
     target_type     TEXT NOT NULL,                 -- 'group'|'channel'|'community'
     target_id       UUID NOT NULL,
-    created_by      UUID NOT NULL REFERENCES users,
+    created_by      UUID NOT NULL REFERENCES users,   -- для бот-инвайтов = installed_by установки бота
+    via_bot         UUID,                             -- actor-бот (аудит; REFERENCES bots)
     expires_at      TIMESTAMPTZ,
     max_uses        INT,
     used_count      INT DEFAULT 0,
@@ -299,13 +301,16 @@ CREATE TABLE group_messages (
     group_id        UUID NOT NULL,
     sender_id       UUID NOT NULL,
     kind            TEXT NOT NULL DEFAULT 'text',
+    sender_type     TEXT NOT NULL DEFAULT 'user',  -- 'user' | 'entity' (от имени группы: бот/система; только публичные группы)
+    via_bot         UUID,                          -- actor-бот (аудит; REFERENCES bots)
     gk_version      INT,                           -- NULL для публичных групп
     payload         BYTEA NOT NULL,                -- private: SecretBox(GK); public: protobuf plaintext
     thread_root     BIGINT,                        -- ветки
     reply_to        BIGINT,
     forward_from_group UUID,                       -- forward-ссылка (только публичные группы)
     forward_from_msg   BIGINT,
-    signature       BYTEA NOT NULL,
+    signature       BYTEA,                         -- Ed25519 устройства; NULL только при sender_type='entity'
+                                                   --   (аутентичность гарантирует сервер: bot token + HMAC)
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted         BOOLEAN DEFAULT FALSE,
     deleted_at      TIMESTAMPTZ,
@@ -400,6 +405,7 @@ CREATE TABLE posts (
     media_ids       UUID[],
     status          TEXT NOT NULL DEFAULT 'published', -- 'pending' (премодерация) | 'published' | 'scheduled'
     scheduled_at    TIMESTAMPTZ,                   -- отложенная публикация
+    via_bot         UUID,                          -- actor-бот (аудит; REFERENCES bots)
     fts             TSVECTOR GENERATED ALWAYS AS (to_tsvector('russian', coalesce(title,'') || ' ' || coalesce(body,''))) STORED,
     plus_count      INT DEFAULT 0,                 -- [+]
     minus_count     INT DEFAULT 0,                 -- [−]
@@ -691,10 +697,12 @@ CREATE TABLE vu_audit (                            -- кто реально де
 Агрегатор карточек ([10-social-interaction](../doc_UI/10-social-interaction.md)): обращения — командные (серверный статус/ответственный), события — личные (только read-state).
 
 ```sql
-CREATE TABLE inbox_threads (                       -- обращения (managed inbox ВП и осн. аккаунта)
+CREATE TABLE inbox_threads (                       -- обращения: к ВП (E2E) и к сущностям (plaintext)
     thread_id       UUID PRIMARY KEY,
-    identity_id     UUID NOT NULL REFERENCES users,  -- ВП или основной аккаунт
-    chat_id         UUID NOT NULL,                   -- настоящий чат обращения (карточка → в него)
+    identity_type   TEXT NOT NULL,                   -- 'user' (ВП/осн. аккаунт) | 'group'|'channel'|'community'
+    identity_id     UUID NOT NULL,
+    chat_id         UUID,                            -- identity_type='user': настоящий E2E-чат обращения
+                                                     -- сущности: NULL — тред в appeal_messages (plaintext)
     from_user       UUID NOT NULL,
     source_type     TEXT,                            -- контекст: channel|group|community|direct
     source_id       UUID,
@@ -704,7 +712,17 @@ CREATE TABLE inbox_threads (                       -- обращения (manage
     priority        SMALLINT DEFAULT 0,
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_inbox_identity ON inbox_threads (identity_id, status, updated_at DESC);
+CREATE INDEX idx_inbox_identity ON inbox_threads (identity_type, identity_id, status, updated_at DESC);
+
+-- Публичные обращения к сущностям (боты/операторы; E2E-обращения к ВП живут в личных чатах)
+CREATE TABLE appeal_messages (
+    thread_id       UUID NOT NULL REFERENCES inbox_threads,
+    msg_id          BIGINT GENERATED ALWAYS AS IDENTITY,
+    author_side     TEXT NOT NULL,                   -- 'user' | 'entity' (оператор или бот; факт бота — в bot_audit)
+    body            TEXT NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (thread_id, msg_id)
+);
 
 CREATE TABLE inbox_events (                        -- личные события агрегатора
     event_id        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -765,7 +783,16 @@ CREATE TABLE bot_update_cursors (                  -- getUpdates: подтвер
     bot_id          UUID PRIMARY KEY REFERENCES bots,
     last_update_id  BIGINT NOT NULL DEFAULT 0
 );
--- Очередь updates — Redis Streams per bot; действия ботов пишутся с actor = bot_id (аудит сущности)
+
+CREATE TABLE bot_audit (                           -- кто (какой бот) действовал от имени сущности
+    audit_id        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    bot_id          UUID NOT NULL REFERENCES bots,
+    target_type     TEXT NOT NULL, target_id UUID NOT NULL,
+    action          TEXT NOT NULL,                 -- message|post|moderation|invite|appeal|notify
+    target_ref      TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Очередь updates — Redis Streams per bot; в контентных таблицах actor-бот = колонка via_bot
 ```
 
 ## 13. Принципы эволюции
