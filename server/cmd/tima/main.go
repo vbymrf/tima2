@@ -12,6 +12,7 @@ import (
 
 	"tima/server/internal/api"
 	"tima/server/internal/auth"
+	"tima/server/internal/blob"
 	"tima/server/internal/store"
 	"tima/server/migrations"
 )
@@ -84,6 +85,20 @@ func serve() {
 			Store:  st,
 			Auth:   auth.NewIssuer(key),
 			DevSMS: os.Getenv("TIMA_DEV_SMS") == "1",
+		}
+		if endpoint := os.Getenv("S3_ENDPOINT"); endpoint != "" {
+			bucket := os.Getenv("S3_BUCKET")
+			if bucket == "" {
+				bucket = "media"
+			}
+			bl, err := blob.New(ctx, endpoint, os.Getenv("S3_ACCESS_KEY"), os.Getenv("S3_SECRET_KEY"), bucket)
+			if err != nil {
+				log.Fatal(err)
+			}
+			srv.Blob = bl
+			log.Printf("Media Service подключён (bucket %s)", bucket)
+		} else {
+			log.Print("S3_ENDPOINT не задан — media-эндпоинты отвечают 503")
 		}
 		srv.Register(mux)
 		log.Print("Auth + Message Service подключены")

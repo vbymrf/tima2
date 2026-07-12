@@ -42,7 +42,7 @@ type device struct {
 	signKey ed25519.PrivateKey
 }
 
-func setup(t *testing.T) *httptest.Server {
+func setup(t *testing.T) (*httptest.Server, *Server) {
 	t.Helper()
 	url := os.Getenv("TIMA_TEST_DATABASE_URL")
 	if url == "" {
@@ -64,7 +64,7 @@ func setup(t *testing.T) *httptest.Server {
 	srv.Register(mux)
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
-	return ts
+	return ts, srv
 }
 
 func postJSON(t *testing.T, ts *httptest.Server, path string, body any, out any) int {
@@ -205,7 +205,7 @@ func post(t *testing.T, ts *httptest.Server, env *pb.Envelope, bearer, clientMsg
 }
 
 func TestAuthAndMessagingEndToEnd(t *testing.T) {
-	ts := setup(t)
+	ts, _ := setup(t)
 	sender := registerDevice(t, ts, "+79990000001")
 	recipient := registerDevice(t, ts, "+79990000002")
 
@@ -314,7 +314,7 @@ func TestAuthAndMessagingEndToEnd(t *testing.T) {
 }
 
 func TestRejections(t *testing.T) {
-	ts := setup(t)
+	ts, _ := setup(t)
 	sender := registerDevice(t, ts, "+79990000003")
 	recipient := registerDevice(t, ts, "+79990000004")
 

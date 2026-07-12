@@ -17,6 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"tima/server/internal/auth"
+	"tima/server/internal/blob"
 	timacrypto "tima/server/internal/crypto"
 	pb "tima/server/internal/proto"
 	"tima/server/internal/store"
@@ -27,7 +28,8 @@ const maxEnvelopeBytes = 4 << 20 // конверт с payload; медиа ход
 type Server struct {
 	Store  *store.Store
 	Auth   *auth.Issuer
-	DevSMS bool // TIMA_DEV_SMS=1: код из /auth/sms/request возвращается в ответе
+	Blob   *blob.Client // nil → media-эндпоинты отвечают 503
+	DevSMS bool         // TIMA_DEV_SMS=1: код из /auth/sms/request возвращается в ответе
 }
 
 func (s *Server) Register(mux *http.ServeMux) {
@@ -39,6 +41,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/messages", s.Auth.Require(s.postMessage))
 	mux.HandleFunc("GET /api/v1/chats/{chatID}/messages", s.Auth.Require(s.listMessages))
 	mux.HandleFunc("GET /api/v1/keys/devices", s.Auth.Require(s.listDeviceKeys))
+	mux.HandleFunc("POST /api/v1/media/init", s.Auth.Require(s.mediaInit))
+	mux.HandleFunc("POST /api/v1/media/complete", s.Auth.Require(s.mediaComplete))
+	mux.HandleFunc("GET /api/v1/media/{mediaID}/url", s.Auth.Require(s.mediaURL))
 }
 
 func writeErr(w http.ResponseWriter, status int, code, msg string) {
