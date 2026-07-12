@@ -3,6 +3,7 @@
 > Обзорный каталог эндпоинтов по доменам. Детальные контракты (схемы запросов/ответов) генерируются из OpenAPI-спеки в репозитории бэкенда; этот документ — карта поверхности API. Realtime-события — [websocket-events.md](./websocket-events.md).
 
 **Общее:** префикс `/api/v1` · JSON (бинарные поля base64url; конверты сообщений — Protobuf, `Content-Type: application/x-protobuf`) · авторизация `Bearer` (device JWT) · rate limiting per device · ошибки `{code, message, details}`.
+**Schema-first:** машинная истина — `schema/` (OpenAPI + Protobuf), этот документ — карта ([ADR-0009](../adr/0009-schema-first-api.md)). Публичный **Bot API** — отдельный контур: [bot-api.md](./bot-api.md).
 
 ## Auth и устройства
 
@@ -55,13 +56,14 @@
 | GET | `/inbox/events?cursor=` | Личные события (реакции, упоминания, назначения); read-state per пользователь |
 | POST | `/inbox/events/read` · `/hide` | Пачкой: прочитано / скрыть |
 | GET/PUT | `/inbox/preferences` | Правила агрегации (source + event_type → вкладка/скрыть/push/приоритет); синхронизируются между устройствами |
+| POST | `/appeals` | Пользователь пишет сущности `{target_type, target_id, text}` → обращение-thread (отвечают операторы/ВП/бот через inbox или [bot-api](./bot-api.md) `answerAppeal`) |
 
 ## Сообщения и ключи
 
 | Метод | Путь | Назначение |
 |-------|------|-----------|
 | GET/POST | `/chats` | Список / создание чата 1:1 |
-| PATCH | `/chats/{id}/settings` | Пер-пользовательские настройки: архив, закрепление чата |
+| PATCH | `/chats/{id}/settings` | Пер-пользовательские настройки чата/сущности: архив, закрепление, `block_messages` (запрет карточек от сущности; уведомления — отдельно в `/notifications/settings`) |
 | POST/DELETE | `/messages/{id}/pin` | Закрепить/открепить сообщение |
 | POST | `/messages` | Отправка конверта (payload+escrow+wrapped keys, `client_msg_id` для дедупликации) |
 | GET | `/chats/{id}/messages?before=&limit=` | История (конверты + wrapped keys для устройства) |

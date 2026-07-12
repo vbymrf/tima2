@@ -44,3 +44,4 @@
 | Звонки: LiveKit/SRTP, не app-E2E; запись private запрещена | [0006](./adr/0006-livekit-media-policy.md) |
 | Поиск: приватное — только локальный индекс, публичное — серверный | [0007](./adr/0007-search-split.md) |
 | Входная точка: Caddy (MVP), Envoy — при переходе на микросервисы | [0008](./adr/0008-caddy-edge.md) |
+| API: schema-first, два контура (Client REST / Bot RPC) | [0009](./adr/0009-schema-first-api.md) |

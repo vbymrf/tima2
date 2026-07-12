@@ -219,13 +219,15 @@ CREATE TABLE invites (
     newcomer_role   TEXT DEFAULT 'member'          -- group: роль участника; channel: 'author' или NULL (=подписка); community: NULL (=подписка)
 );
 
-CREATE TABLE chat_user_settings (                  -- пер-пользовательские настройки чата
+CREATE TABLE chat_user_settings (                  -- пер-пользовательские настройки чата/сущности
     user_id         UUID NOT NULL REFERENCES users,
-    target_type     TEXT NOT NULL,                 -- 'chat'|'group'|'channel'
+    target_type     TEXT NOT NULL,                 -- 'chat'|'group'|'channel'|'community'
     target_id       UUID NOT NULL,
     archived        BOOLEAN DEFAULT FALSE,         -- архив: скрыть из списка, история сохраняется
     pinned          BOOLEAN DEFAULT FALSE,         -- закрепить чат в списке
     pinned_position INT,
+    block_messages  BOOLEAN DEFAULT FALSE,         -- запрет карточек-сообщений ОТ сущности (окно 4);
+                                                   --   независим от уведомлений (notification_settings) — «и/или»
     PRIMARY KEY (user_id, target_type, target_id)
 );
 
@@ -708,7 +710,7 @@ CREATE TABLE inbox_events (                        -- личные событи�
     event_id        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id         UUID NOT NULL,                   -- получатель (владелец окна 4)
     identity_id     UUID,                            -- от имени какого ВП (NULL = основной)
-    event_type      TEXT NOT NULL,                   -- appeal|reply|mention|reaction|comment|role_assigned|moderation_request|thread_activity (вкладка «Мои треды»)
+    event_type      TEXT NOT NULL,                   -- appeal|entity_message (сообщение от сущности/бота)|reply|mention|reaction|comment|role_assigned|moderation_request|thread_activity
     source_type     TEXT, source_id UUID,
     target_ref      TEXT,                            -- ссылка на сообщение/пост/комментарий
     read_at         TIMESTAMPTZ,                     -- личный read-state
@@ -730,7 +732,43 @@ CREATE TABLE social_inbox_preferences (            -- правила агрег�
 );
 ```
 
-## 12. Принципы эволюции
+## 12. Боты
+
+Бот — не пользователь: приложение с токеном, установленное в сущность; работает только в публичном контуре ([bot-api.md](../05-api/bot-api.md)).
+
+```sql
+CREATE TABLE bots (
+    bot_id          UUID PRIMARY KEY,
+    owner_id        UUID NOT NULL REFERENCES users,
+    title           TEXT NOT NULL,
+    description     TEXT,
+    token_hash      BYTEA NOT NULL,                -- токен показывается один раз
+    hmac_key_hash   BYTEA NOT NULL,
+    webhook_url     TEXT,
+    webhook_secret  BYTEA,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at      TIMESTAMPTZ
+);
+
+CREATE TABLE bot_installations (
+    bot_id          UUID NOT NULL REFERENCES bots,
+    target_type     TEXT NOT NULL,                 -- 'group'|'channel'|'community' (ТОЛЬКО публичный контур:
+    target_id       UUID NOT NULL,                 --  установка в личную E2E-группу запрещена)
+    scopes          TEXT[] NOT NULL,               -- send_messages|moderate|publish_posts|invite_links|inbox|notify
+    installed_by    UUID NOT NULL REFERENCES users,
+    installed_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at      TIMESTAMPTZ,
+    PRIMARY KEY (bot_id, target_type, target_id)
+);
+
+CREATE TABLE bot_update_cursors (                  -- getUpdates: подтверждённый offset
+    bot_id          UUID PRIMARY KEY REFERENCES bots,
+    last_update_id  BIGINT NOT NULL DEFAULT 0
+);
+-- Очередь updates — Redis Streams per bot; действия ботов пишутся с actor = bot_id (аудит сущности)
+```
+
+## 13. Принципы эволюции
 
 - **Шардинг**: все запросы к сообщениям идут через интерфейс `GetShard(chatID)`; на MVP один узел. Партиции по `created_at` готовят hot/cold-разделение.
 - **Retention**: экспирация историй, автоудаление сообщений и политика escrow-ключей — фоновые джобы; политика периодов — [escrow-legal-access.md](../03-security/escrow-legal-access.md).

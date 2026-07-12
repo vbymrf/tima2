@@ -164,6 +164,7 @@ services:
 api.{$DOMAIN} {
     reverse_proxy /ws  backend:8080     # WebSocket — Caddy проксирует автоматически
     reverse_proxy /api/* backend:8080
+    reverse_proxy /bot/* backend:8080   # Bot API (bot-api.md) — тот же монолит, модуль bot_gateway
     encode zstd gzip
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"

@@ -25,6 +25,7 @@
 | `reactions` | `emotions`, `rating_counters`, `recommendations` | всё, что оценивается |
 | `attributes` | `attributes` (= хэштеги), `genres`, `post_attributes`, `user_attributes` | publications, feeds, search ([feed-ranking.md](../04-data/feed-ranking.md)) |
 | `social_inbox` | `inbox_threads`, `inbox_events`, `social_inbox_preferences` (окно 4) | messages (обращения к ВП), reactions, membership ([virtual-users.md](../01-product/virtual-users.md)) |
+| `bot_gateway` | `bots`, `bot_installations`, `bot_update_cursors`; RPC `/bot/v1`, updates-очереди | group, channel, community, publications, social_inbox — по scopes; только публичный контур ([bot-api.md](../05-api/bot-api.md)) |
 | `invites` | `invites` (target: group/channel/community) | group, channel, community |
 | `catalog` | `chat_folders`, `chat_folder_items` | окна 2–3 (каталог), папки |
 | `feeds` | fan-out (Redis), выдача лент | publications, subscriptions |

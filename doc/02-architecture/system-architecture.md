@@ -80,6 +80,7 @@
 | `calls` | Комнаты LiveKit, токены, история звонков | PG + LiveKit API |
 | `notifications` | Push (FCM/APNs), группировка, тихие часы | PG + Redis |
 | `search` | Публичный FTS (PG), фасад для клиента | PG |
+| `bot_gateway` | Bot API: RPC `/bot/v1/{token}/*`, updates (webhook/polling), scopes, rate limits ([bot-api.md](../05-api/bot-api.md)) | PG + Redis Streams |
 | `escrow` | Только запись escrow_blob и интерфейс к анклаву; приватный ключ вне бэкенда | HSM/анклав |
 
 ### 2.3. Инфраструктура
