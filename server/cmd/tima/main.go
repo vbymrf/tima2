@@ -4,12 +4,14 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 
 	"tima/server/internal/api"
+	"tima/server/internal/auth"
 	"tima/server/internal/store"
 	"tima/server/migrations"
 )
@@ -63,15 +65,28 @@ func serve() {
 	mux.HandleFunc("GET /healthz", healthz)        // для docker healthcheck
 	mux.HandleFunc("GET /api/v1/healthz", healthz) // smoke-тест через Caddy
 
-	// Message Service поднимается при наличии DATABASE_URL; без него — только healthz.
+	// API поднимается при наличии DATABASE_URL; без него — только healthz.
 	if os.Getenv("DATABASE_URL") != "" {
 		ctx := context.Background()
 		st := mustStore(ctx)
 		if err := st.Migrate(ctx, migrations.FS); err != nil {
 			log.Fatal(err)
 		}
-		(&api.Server{Store: st}).Register(mux)
-		log.Print("Message Service подключён")
+		key := []byte(os.Getenv("JWT_SIGNING_KEY"))
+		if len(key) == 0 {
+			key = make([]byte, 32)
+			if _, err := rand.Read(key); err != nil {
+				log.Fatal(err)
+			}
+			log.Print("ВНИМАНИЕ: JWT_SIGNING_KEY не задан — сгенерирован эфемерный (токены умрут с рестартом)")
+		}
+		srv := &api.Server{
+			Store:  st,
+			Auth:   auth.NewIssuer(key),
+			DevSMS: os.Getenv("TIMA_DEV_SMS") == "1",
+		}
+		srv.Register(mux)
+		log.Print("Auth + Message Service подключены")
 	} else {
 		log.Print("DATABASE_URL не задан — поднят только healthz")
 	}

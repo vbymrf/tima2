@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -76,8 +77,73 @@ func (s *Store) Migrate(ctx context.Context, fsys fs.FS) error {
 
 // ResetForTests очищает таблицы (только интеграционные тесты; в бою не вызывается).
 func (s *Store) ResetForTests(ctx context.Context) error {
-	_, err := s.pool.Exec(ctx, `TRUNCATE personal_messages, personal_message_keys, devices`)
+	_, err := s.pool.Exec(ctx, `TRUNCATE personal_messages, personal_message_keys, devices, users, sms_codes`)
 	return err
+}
+
+// ── Auth: SMS-коды и пользователи ──
+
+// SaveSmsCode кладёт hash одноразового кода.
+func (s *Store) SaveSmsCode(ctx context.Context, requestID, phone string, codeHash []byte, ttl time.Duration) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO sms_codes (request_id, phone, code_hash, expires_at)
+		VALUES ($1, $2, $3, now() + $4)`, requestID, phone, codeHash, ttl)
+	return err
+}
+
+var ErrCodeInvalid = errors.New("код неверен, просрочен или уже использован")
+
+// ConsumeSmsCode атомарно гасит код и возвращает телефон.
+func (s *Store) ConsumeSmsCode(ctx context.Context, requestID string, codeHash []byte) (string, error) {
+	var phone string
+	err := s.pool.QueryRow(ctx, `
+		UPDATE sms_codes SET used = TRUE
+		WHERE request_id = $1 AND code_hash = $2 AND NOT used AND expires_at > now()
+		RETURNING phone`, requestID, codeHash).Scan(&phone)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrCodeInvalid
+	}
+	return phone, err
+}
+
+// UpsertUserByPhone возвращает user_id, создавая пользователя при первом входе.
+func (s *Store) UpsertUserByPhone(ctx context.Context, phone string) (string, error) {
+	var userID string
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO users (phone) VALUES ($1)
+		ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone
+		RETURNING user_id`, phone).Scan(&userID)
+	return userID, err
+}
+
+// NewDevice регистрирует устройство пользователя, device_id назначает база.
+func (s *Store) NewDevice(ctx context.Context, userID string, encryptionPub, signingPub []byte) (string, error) {
+	var deviceID string
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO devices (user_id, encryption_pub, signing_pub)
+		VALUES ($1, $2, $3) RETURNING device_id`, userID, encryptionPub, signingPub).Scan(&deviceID)
+	return deviceID, err
+}
+
+// ListDevices — неотозванные устройства пользователя с публичными ключами
+// (GET /keys/devices: отправителю — для обёрток, получателю — для проверки подписи).
+func (s *Store) ListDevices(ctx context.Context, userID string) ([]Device, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT device_id, user_id, encryption_pub, signing_pub
+		FROM devices WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Device
+	for rows.Next() {
+		var d Device
+		if err := rows.Scan(&d.DeviceID, &d.UserID, &d.EncryptionPub, &d.SigningPub); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
 }
 
 // ── Устройства ──
@@ -87,17 +153,6 @@ type Device struct {
 	UserID        string
 	EncryptionPub []byte
 	SigningPub    []byte
-}
-
-// RegisterDevice — upsert устройства. До появления Auth/User Service используется
-// тестами и dev-эндпоинтом; в бою регистрация — через /auth (фаза Auth).
-func (s *Store) RegisterDevice(ctx context.Context, d Device) error {
-	_, err := s.pool.Exec(ctx, `
-		INSERT INTO devices (device_id, user_id, encryption_pub, signing_pub)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (device_id) DO UPDATE SET encryption_pub = $3, signing_pub = $4`,
-		d.DeviceID, d.UserID, d.EncryptionPub, d.SigningPub)
-	return err
 }
 
 // SigningKey возвращает Ed25519-ключ неотозванного устройства пользователя.

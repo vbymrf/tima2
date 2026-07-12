@@ -11,17 +11,25 @@ $env:DATABASE_URL="postgres://tima:tima-dev-only@localhost:5432/tima"
 go run ./cmd/tima                                       # serve: миграции + API на :8080
 ```
 
-## Message Service (MVP)
+## Auth (MVP-ядро)
 
 | Метод | Путь | Что делает |
 |-------|------|-----------|
-| POST | `/api/v1/messages` | Приём `Envelope` (protobuf): валидация инвариантов wire-формата → **проверка подписи Ed25519 по canonical_bytes** (ключ из `devices`) → раскладка в `personal_messages` + `personal_message_keys`. Дедупликация по заголовку `X-Client-Msg-Id` (UUID, обязателен) |
-| GET | `/api/v1/chats/{id}/messages?before=&limit=` | История (новые → старые): конверт как base64url(protobuf) с единственной обёрткой запрашивающего устройства |
-| POST | `/api/v1/dev/devices` | **Dev-заглушка** регистрации устройства (до фазы Auth — потом `/auth/register`) |
+| POST | `/api/v1/auth/sms/request` | `{phone}` (E.164) → одноразовый код. Провайдера SMS нет: при `TIMA_DEV_SMS=1` код возвращается в ответе (`dev_code`), иначе пишется в лог |
+| POST | `/api/v1/auth/sms/verify` | `{request_id, code}` → короткий `registration_token` (10 мин). Код одноразовый, хранится только hash |
+| POST | `/api/v1/auth/register` | `{registration_token, encryption_pub, signing_pub}` → пользователь (по телефону) + устройство → `access_token` (device JWT, 24 ч). Повторный вход с тем же телефоном добавляет новое устройство (мультиустройство) |
+| GET | `/api/v1/keys/devices?user_id=` | Публичные ключи устройств пользователя: отправителю — адресаты wrapped keys, получателю — проверка подписи |
 
-Авторизация MVP — заголовок `X-Device-Id` (dev-заглушка до device JWT). Наружу не выставлять.
+Секрет JWT — `JWT_SIGNING_KEY`; без него генерируется эфемерный (dev). Ещё не реализовано из карты Auth: guest, refresh, recovery, `/link/*` (QR), attestation, rate limiting (Redis).
 
-Интеграционный тест (`internal/api`) гоняет полный цикл против живого PostgreSQL: «клиент» шифрует и подписывает конверт тем же конвейером, что `messenger-crypto`, сервер проверяет и раскладывает, «получатель» разворачивает wrapped_key и читает plaintext; плюс негативные сценарии (битая подпись, подмена метаданных, чужое устройство → 403, дубль → dedup). Без поднятой базы тест пропускается.
+## Message Service
+
+| Метод | Путь | Что делает |
+|-------|------|-----------|
+| POST | `/api/v1/messages` | Bearer. Приём `Envelope` (protobuf): инварианты wire-формата → **sender из токена == meta** → **подпись Ed25519 по canonical_bytes** → раскладка в `personal_messages` + `personal_message_keys`. Дедуп по `X-Client-Msg-Id` (UUID, обязателен) |
+| GET | `/api/v1/chats/{id}/messages?before=&limit=` | Bearer. История (новые → старые): конверт base64url(protobuf) с единственной обёрткой устройства из токена |
+
+Интеграционные тесты (`internal/api`) гоняют полный производственный поток против живого PostgreSQL: SMS-код → регистрация двух пользователей и трёх устройств → отправка с обёртками → дедуп → история → «получатель» разворачивает wrapped_key и читает plaintext. Негативные: без токена 401; чужой токен, битая подпись, подмена метаданных, повтор/подбор SMS-кода → 403. Без поднятой базы тесты пропускаются.
 
 ## Крипто-паритет
 

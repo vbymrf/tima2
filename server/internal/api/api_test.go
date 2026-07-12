@@ -1,9 +1,9 @@
 package api
 
-// Интеграционный тест Message Service с реальным PostgreSQL (dev-compose).
-// Пропускается, если база недоступна. Криптография — настоящая, тем же конвейером,
-// что клиентский messenger-crypto: тест «клиента» шифрует и подписывает конверт,
-// сервер проверяет подпись и раскладывает, «получатель» разворачивает и читает.
+// Интеграционные тесты Auth + Message Service с реальным PostgreSQL (dev-compose).
+// Пропускаются, если база недоступна. Полный производственный поток:
+// SMS-код → регистрация устройства → device JWT → конверт → история → чтение.
+// Криптография настоящая, тем же конвейером, что клиентский messenger-crypto.
 
 import (
 	"bytes"
@@ -23,45 +23,26 @@ import (
 	"golang.org/x/crypto/nacl/secretbox"
 	"google.golang.org/protobuf/proto"
 
+	"tima/server/internal/auth"
 	timacrypto "tima/server/internal/crypto"
 	pb "tima/server/internal/proto"
 	"tima/server/internal/store"
 	"tima/server/migrations"
 )
 
-const (
-	chatID   = "aaaaaaaa-0000-0000-0000-00000000c4a7"
-	senderID = "bbbbbbbb-0000-0000-0000-0000000c0de1"
-	recipID  = "cccccccc-0000-0000-0000-0000000c0de2"
-)
+const chatID = "aaaaaaaa-0000-0000-0000-00000000c4a7"
 
+// device — «клиентское устройство»: ключи + выданные сервером идентичность и токен.
 type device struct {
+	userID  string
 	id      string
+	token   string
 	encPriv [32]byte
 	encPub  [32]byte
 	signKey ed25519.PrivateKey
 }
 
-func newDevice(t *testing.T, id string) *device {
-	t.Helper()
-	d := &device{id: id}
-	if _, err := rand.Read(d.encPriv[:]); err != nil {
-		t.Fatal(err)
-	}
-	pub, err := curve25519.X25519(d.encPriv[:], curve25519.Basepoint)
-	if err != nil {
-		t.Fatal(err)
-	}
-	copy(d.encPub[:], pub)
-	seed := make([]byte, 32)
-	if _, err := rand.Read(seed); err != nil {
-		t.Fatal(err)
-	}
-	d.signKey = ed25519.NewKeyFromSeed(seed)
-	return d
-}
-
-func setup(t *testing.T) (*httptest.Server, *store.Store) {
+func setup(t *testing.T) *httptest.Server {
 	t.Helper()
 	url := os.Getenv("TIMA_TEST_DATABASE_URL")
 	if url == "" {
@@ -79,52 +60,96 @@ func setup(t *testing.T) (*httptest.Server, *store.Store) {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	(&Server{Store: st}).Register(mux)
+	srv := &Server{Store: st, Auth: auth.NewIssuer([]byte("test-signing-key")), DevSMS: true}
+	srv.Register(mux)
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
-	return ts, st
+	return ts
 }
 
-func registerDevice(t *testing.T, ts *httptest.Server, d *device, userID string) {
+func postJSON(t *testing.T, ts *httptest.Server, path string, body any, out any) int {
 	t.Helper()
-	b64 := base64.RawURLEncoding
-	body, _ := json.Marshal(map[string]string{
-		"device_id":      d.id,
-		"user_id":        userID,
-		"encryption_pub": b64.EncodeToString(d.encPub[:]),
-		"signing_pub":    b64.EncodeToString(d.signKey.Public().(ed25519.PublicKey)),
-	})
-	resp, err := http.Post(ts.URL+"/api/v1/dev/devices", "application/json", bytes.NewReader(body))
+	raw, _ := json.Marshal(body)
+	resp, err := http.Post(ts.URL+path, "application/json", bytes.NewReader(raw))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("регистрация устройства %s: %d", d.id, resp.StatusCode)
+	if out != nil {
+		_ = json.NewDecoder(resp.Body).Decode(out)
 	}
+	return resp.StatusCode
+}
+
+// registerDevice проходит полный auth-поток: sms/request → verify → register.
+func registerDevice(t *testing.T, ts *httptest.Server, phone string) *device {
+	t.Helper()
+	d := &device{}
+	if _, err := rand.Read(d.encPriv[:]); err != nil {
+		t.Fatal(err)
+	}
+	pub, err := curve25519.X25519(d.encPriv[:], curve25519.Basepoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copy(d.encPub[:], pub)
+	seed := make([]byte, 32)
+	if _, err := rand.Read(seed); err != nil {
+		t.Fatal(err)
+	}
+	d.signKey = ed25519.NewKeyFromSeed(seed)
+
+	var smsResp struct {
+		RequestID string `json:"request_id"`
+		DevCode   string `json:"dev_code"`
+	}
+	if code := postJSON(t, ts, "/api/v1/auth/sms/request", map[string]string{"phone": phone}, &smsResp); code != 200 {
+		t.Fatalf("sms/request: %d", code)
+	}
+	if smsResp.DevCode == "" {
+		t.Fatal("dev_code пуст — DevSMS должен быть включён в тестах")
+	}
+	var verifyResp struct {
+		RegistrationToken string `json:"registration_token"`
+	}
+	if code := postJSON(t, ts, "/api/v1/auth/sms/verify",
+		map[string]string{"request_id": smsResp.RequestID, "code": smsResp.DevCode}, &verifyResp); code != 200 {
+		t.Fatalf("sms/verify: %d", code)
+	}
+	b64 := base64.RawURLEncoding
+	var regResp struct {
+		UserID      string `json:"user_id"`
+		DeviceID    string `json:"device_id"`
+		AccessToken string `json:"access_token"`
+	}
+	if code := postJSON(t, ts, "/api/v1/auth/register", map[string]string{
+		"registration_token": verifyResp.RegistrationToken,
+		"encryption_pub":     b64.EncodeToString(d.encPub[:]),
+		"signing_pub":        b64.EncodeToString(d.signKey.Public().(ed25519.PublicKey)),
+	}, &regResp); code != 201 {
+		t.Fatalf("register: %d", code)
+	}
+	d.userID, d.id, d.token = regResp.UserID, regResp.DeviceID, regResp.AccessToken
+	return d
 }
 
 // sealEnvelope повторяет клиентский конвейер (crypto-protocol.md §3.2) на Go.
-func sealEnvelope(t *testing.T, sender *device, recipients []*device, messageID uint64, plaintext []byte) (*pb.Envelope, []byte) {
+func sealEnvelope(t *testing.T, sender *device, recipients []*device, messageID uint64, plaintext []byte) *pb.Envelope {
 	t.Helper()
 	var messageKey [32]byte
 	if _, err := rand.Read(messageKey[:]); err != nil {
 		t.Fatal(err)
 	}
-
-	// Слой 1: конверт
 	var nonce [24]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
 		t.Fatal(err)
 	}
-	payload := secretbox.Seal(nonce[:], plaintext, &nonce, &messageKey)
+	payload := secretbox.Seal(nonce[:], plaintext, &nonce, &messageKey) // слой 1
 
-	// Слой 2: escrow — серверу важны только размеры (он не может проверить семантику)
-	escrowCt := bytes.Repeat([]byte{0xEC}, 1088)
+	escrowCt := bytes.Repeat([]byte{0xEC}, 1088) // слой 2: серверу проверяем только размеры
 	escrowWrapped := bytes.Repeat([]byte{0xED}, 24+16+32)
 
-	// Слой 4: обёртки эфемерной парой на каждое устройство
-	ephPub, ephPriv, err := box.GenerateKey(rand.Reader)
+	ephPub, ephPriv, err := box.GenerateKey(rand.Reader) // слой 4
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +166,7 @@ func sealEnvelope(t *testing.T, sender *device, recipients []*device, messageID 
 	meta := &pb.Metadata{
 		MessageId:       messageID,
 		ChatId:          chatID,
-		SenderId:        senderID,
+		SenderId:        sender.userID,
 		SenderDevice:    sender.id,
 		Kind:            pb.ContentKind_CK_TEXT,
 		CreatedAtUnixMs: 1_750_000_000_000,
@@ -155,14 +180,14 @@ func sealEnvelope(t *testing.T, sender *device, recipients []*device, messageID 
 		WrappedKeys:        wrappedKeys,
 	}
 	cb := timacrypto.CanonicalBytes(env.FormatVersion, timacrypto.EnvelopeMeta{
-		MessageID: messageID, ChatID: chatID, SenderID: senderID, SenderDevice: sender.id,
+		MessageID: messageID, ChatID: chatID, SenderID: sender.userID, SenderDevice: sender.id,
 		Kind: uint32(meta.Kind), CreatedAtUnixMs: meta.CreatedAtUnixMs,
 	}, payload, append(append([]byte{}, escrowCt...), escrowWrapped...), ephPub[:], nil)
 	env.Signature = ed25519.Sign(sender.signKey, cb)
-	return env, messageKey[:]
+	return env
 }
 
-func post(t *testing.T, ts *httptest.Server, env *pb.Envelope, clientMsgID string) *http.Response {
+func post(t *testing.T, ts *httptest.Server, env *pb.Envelope, bearer, clientMsgID string) *http.Response {
 	t.Helper()
 	raw, err := proto.Marshal(env)
 	if err != nil {
@@ -170,6 +195,7 @@ func post(t *testing.T, ts *httptest.Server, env *pb.Envelope, clientMsgID strin
 	}
 	req, _ := http.NewRequest("POST", ts.URL+"/api/v1/messages", bytes.NewReader(raw))
 	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("Authorization", "Bearer "+bearer)
 	req.Header.Set("X-Client-Msg-Id", clientMsgID)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -178,26 +204,51 @@ func post(t *testing.T, ts *httptest.Server, env *pb.Envelope, clientMsgID strin
 	return resp
 }
 
-func TestMessageServiceEndToEnd(t *testing.T) {
-	ts, _ := setup(t)
-	sender := newDevice(t, "dddddddd-0000-0000-0000-000000000001")
-	recipient := newDevice(t, "dddddddd-0000-0000-0000-000000000002")
-	registerDevice(t, ts, sender, senderID)
-	registerDevice(t, ts, recipient, recipID)
+func TestAuthAndMessagingEndToEnd(t *testing.T) {
+	ts := setup(t)
+	sender := registerDevice(t, ts, "+79990000001")
+	recipient := registerDevice(t, ts, "+79990000002")
 
-	plaintext := []byte("Сквозной тест TIMA: клиент → сервер → получатель 🚀")
-	env, _ := sealEnvelope(t, sender, []*device{recipient, sender}, 1001, plaintext)
+	// Мультиустройство: повторный вход с тем же телефоном → новое устройство того же пользователя
+	senderPhone2 := registerDevice(t, ts, "+79990000001")
+	if senderPhone2.userID != sender.userID {
+		t.Fatal("повторная регистрация телефона должна добавлять устройство тому же пользователю")
+	}
+	if senderPhone2.id == sender.id {
+		t.Fatal("device_id обязаны различаться")
+	}
 
-	// Приём
+	// /keys/devices: отправитель видит устройства получателя для обёрток
+	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/keys/devices?user_id="+recipient.userID, nil)
+	req.Header.Set("Authorization", "Bearer "+sender.token)
+	keysResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var keys struct {
+		Devices []struct {
+			DeviceID      string `json:"device_id"`
+			EncryptionPub string `json:"encryption_pub"`
+		} `json:"devices"`
+	}
+	_ = json.NewDecoder(keysResp.Body).Decode(&keys)
+	keysResp.Body.Close()
+	if len(keys.Devices) != 1 || keys.Devices[0].DeviceID != recipient.id {
+		t.Fatalf("/keys/devices: ожидалось устройство получателя, получено %+v", keys.Devices)
+	}
+
+	// Отправка: обёртки получателю и второму устройству отправителя
+	plaintext := []byte("Сквозной тест TIMA с настоящим auth 🚀")
+	env := sealEnvelope(t, sender, []*device{recipient, senderPhone2}, 1001, plaintext)
 	const clientMsgID = "eeeeeeee-0000-0000-0000-000000001001"
-	resp := post(t, ts, env, clientMsgID)
+	resp := post(t, ts, env, sender.token, clientMsgID)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("POST /messages: %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 
-	// Повтор (тот же client_msg_id) → дедупликация, не вторая запись
-	resp = post(t, ts, env, clientMsgID)
+	// Повтор → дедупликация
+	resp = post(t, ts, env, sender.token, clientMsgID)
 	var dup struct {
 		Duplicate bool `json:"duplicate"`
 	}
@@ -207,10 +258,10 @@ func TestMessageServiceEndToEnd(t *testing.T) {
 		t.Fatalf("повторный POST: ожидался duplicate=true, статус %d", resp.StatusCode)
 	}
 
-	// История для устройства получателя
-	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/chats/%s/messages", ts.URL, chatID), nil)
-	req.Header.Set("X-Device-Id", recipient.id)
-	histResp, err := http.DefaultClient.Do(req)
+	// История получателя: устройство определяется токеном
+	histReq, _ := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/chats/%s/messages", ts.URL, chatID), nil)
+	histReq.Header.Set("Authorization", "Bearer "+recipient.token)
+	histResp, err := http.DefaultClient.Do(histReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,11 +275,11 @@ func TestMessageServiceEndToEnd(t *testing.T) {
 	if err := json.NewDecoder(histResp.Body).Decode(&hist); err != nil {
 		t.Fatal(err)
 	}
-	if len(hist.Messages) == 0 {
-		t.Fatal("история пуста")
+	if len(hist.Messages) != 1 {
+		t.Fatalf("в истории %d сообщений, ожидалось 1", len(hist.Messages))
 	}
 
-	// «Получатель»: парсим конверт, разворачиваем message_key, открываем payload
+	// «Получатель»: конверт → wrapped_key → message_key → plaintext
 	raw, err := base64.RawURLEncoding.DecodeString(hist.Messages[0].Envelope)
 	if err != nil {
 		t.Fatal(err)
@@ -262,38 +313,71 @@ func TestMessageServiceEndToEnd(t *testing.T) {
 	}
 }
 
-func TestRejectsBadSignatureAndUnknownDevice(t *testing.T) {
-	ts, _ := setup(t)
-	sender := newDevice(t, "dddddddd-0000-0000-0000-000000000003")
-	recipient := newDevice(t, "dddddddd-0000-0000-0000-000000000004")
-	registerDevice(t, ts, sender, senderID)
-	registerDevice(t, ts, recipient, recipID)
+func TestRejections(t *testing.T) {
+	ts := setup(t)
+	sender := registerDevice(t, ts, "+79990000003")
+	recipient := registerDevice(t, ts, "+79990000004")
 
-	// Повреждённая подпись → 403, в базу не попадает
-	env, _ := sealEnvelope(t, sender, []*device{recipient}, 2001, []byte("тайна"))
-	env.Signature[0] ^= 1
-	resp := post(t, ts, env, "eeeeeeee-0000-0000-0000-000000002001")
+	// Без токена → 401
+	env := sealEnvelope(t, sender, []*device{recipient}, 2000, []byte("тайна"))
+	raw, _ := proto.Marshal(env)
+	resp, err := http.Post(ts.URL+"/api/v1/messages", "application/x-protobuf", bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("без токена: ожидался 401, получен %d", resp.StatusCode)
+	}
+
+	// Чужой токен (конверт отправителя, токен получателя) → 403 ещё до подписи
+	resp = post(t, ts, env, recipient.token, "eeeeeeee-0000-0000-0000-000000002000")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("чужой токен: ожидался 403, получен %d", resp.StatusCode)
+	}
+
+	// Повреждённая подпись → 403
+	env1 := sealEnvelope(t, sender, []*device{recipient}, 2001, []byte("тайна"))
+	env1.Signature[0] ^= 1
+	resp = post(t, ts, env1, sender.token, "eeeeeeee-0000-0000-0000-000000002001")
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("повреждённая подпись: ожидался 403, получен %d", resp.StatusCode)
 	}
 
-	// Подмена метаданных после подписи → 403
-	env2, _ := sealEnvelope(t, sender, []*device{recipient}, 2002, []byte("тайна"))
-	env2.Meta.SenderId = recipID
-	resp = post(t, ts, env2, "eeeeeeee-0000-0000-0000-000000002002")
+	// Подмена метаданных после подписи → 403 (sender_mismatch)
+	env2 := sealEnvelope(t, sender, []*device{recipient}, 2002, []byte("тайна"))
+	env2.Meta.SenderId = recipient.userID
+	resp = post(t, ts, env2, sender.token, "eeeeeeee-0000-0000-0000-000000002002")
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("подмена sender_id: ожидался 403, получен %d", resp.StatusCode)
 	}
 
-	// Незарегистрированное устройство → 403
-	ghost := newDevice(t, "dddddddd-0000-0000-0000-00000000dead")
-	env3, _ := sealEnvelope(t, ghost, []*device{recipient}, 2003, []byte("тайна"))
-	env3.Meta.SenderDevice = ghost.id
-	resp = post(t, ts, env3, "eeeeeeee-0000-0000-0000-000000002003")
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("неизвестное устройство: ожидался 403, получен %d", resp.StatusCode)
+	// Повторное использование SMS-кода → 403
+	var smsResp struct {
+		RequestID string `json:"request_id"`
+		DevCode   string `json:"dev_code"`
+	}
+	postJSON(t, ts, "/api/v1/auth/sms/request", map[string]string{"phone": "+79990000005"}, &smsResp)
+	var verifyResp struct {
+		RegistrationToken string `json:"registration_token"`
+	}
+	if code := postJSON(t, ts, "/api/v1/auth/sms/verify",
+		map[string]string{"request_id": smsResp.RequestID, "code": smsResp.DevCode}, &verifyResp); code != 200 {
+		t.Fatalf("sms/verify: %d", code)
+	}
+	if code := postJSON(t, ts, "/api/v1/auth/sms/verify",
+		map[string]string{"request_id": smsResp.RequestID, "code": smsResp.DevCode}, nil); code != http.StatusForbidden {
+		t.Fatalf("повторный verify: ожидался 403, получен %d", code)
+	}
+
+	// Неверный код → 403
+	postJSON(t, ts, "/api/v1/auth/sms/request", map[string]string{"phone": "+79990000006"}, &smsResp)
+	if code := postJSON(t, ts, "/api/v1/auth/sms/verify",
+		map[string]string{"request_id": smsResp.RequestID, "code": "000000"}, nil); code != http.StatusForbidden {
+		// вероятность коллизии с настоящим кодом 1e-6 — приемлемо для теста
+		t.Fatalf("неверный код: ожидался 403, получен %d", code)
 	}
 }

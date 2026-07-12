@@ -1,10 +1,8 @@
-// Package api — HTTP-поверхность Message Service (api-overview.md §Сообщения и ключи).
+// Package api — HTTP-поверхность бэкенда (api-overview.md).
 //
 // Конверты ходят как protobuf (Content-Type: application/x-protobuf); JSON в ответах —
 // обвязка с base64url для бинарных полей (api-overview.md §Общее).
-//
-// АВТОРИЗАЦИЯ (MVP): устройство берётся из заголовка X-Device-Id — это dev-заглушка
-// до фазы Auth (device JWT Bearer). Наружу в таком виде не выставлять.
+// Авторизация — Bearer device JWT (internal/auth); auth-эндпоинты публичные.
 package api
 
 import (
@@ -18,6 +16,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"tima/server/internal/auth"
 	timacrypto "tima/server/internal/crypto"
 	pb "tima/server/internal/proto"
 	"tima/server/internal/store"
@@ -26,13 +25,20 @@ import (
 const maxEnvelopeBytes = 4 << 20 // конверт с payload; медиа ходят через MinIO, не сюда
 
 type Server struct {
-	Store *store.Store
+	Store  *store.Store
+	Auth   *auth.Issuer
+	DevSMS bool // TIMA_DEV_SMS=1: код из /auth/sms/request возвращается в ответе
 }
 
 func (s *Server) Register(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/v1/messages", s.postMessage)
-	mux.HandleFunc("GET /api/v1/chats/{chatID}/messages", s.listMessages)
-	mux.HandleFunc("POST /api/v1/dev/devices", s.registerDeviceDev)
+	// Публичные (до токена)
+	mux.HandleFunc("POST /api/v1/auth/sms/request", s.smsRequest)
+	mux.HandleFunc("POST /api/v1/auth/sms/verify", s.smsVerify)
+	mux.HandleFunc("POST /api/v1/auth/register", s.register)
+	// Под device JWT
+	mux.HandleFunc("POST /api/v1/messages", s.Auth.Require(s.postMessage))
+	mux.HandleFunc("GET /api/v1/chats/{chatID}/messages", s.Auth.Require(s.listMessages))
+	mux.HandleFunc("GET /api/v1/keys/devices", s.Auth.Require(s.listDeviceKeys))
 }
 
 func writeErr(w http.ResponseWriter, status int, code, msg string) {
@@ -58,6 +64,13 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	meta := env.GetMeta()
+
+	// Отправитель конверта обязан совпадать с владельцем токена: чужим именем не подписаться
+	id, _ := auth.FromContext(r.Context())
+	if meta.GetSenderId() != id.UserID || meta.GetSenderDevice() != id.DeviceID {
+		writeErr(w, http.StatusForbidden, "sender_mismatch", "sender_id/sender_device не совпадают с токеном")
+		return
+	}
 
 	// Подпись: ключ устройства отправителя обязан существовать и принадлежать sender_id
 	signingPub, err := s.Store.SigningKey(r.Context(), meta.GetSenderDevice(), meta.GetSenderId())
@@ -164,11 +177,8 @@ func validateEnvelope(env *pb.Envelope) string {
 
 // listMessages — история чата: конверт (protobuf, base64url) + wrapped_key устройства.
 func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
-	deviceID := r.Header.Get("X-Device-Id")
-	if deviceID == "" {
-		writeErr(w, http.StatusUnauthorized, "no_device", "нет X-Device-Id (dev-авторизация MVP)")
-		return
-	}
+	id, _ := auth.FromContext(r.Context())
+	deviceID := id.DeviceID
 	var before uint64
 	if v := r.URL.Query().Get("before"); v != "" {
 		before, _ = strconv.ParseUint(v, 10, 64)
@@ -223,30 +233,3 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"messages": out})
 }
 
-// registerDeviceDev — dev-регистрация устройства (до фазы Auth; в бою — /auth/register).
-func (s *Server) registerDeviceDev(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		DeviceID      string `json:"device_id"`
-		UserID        string `json:"user_id"`
-		EncryptionPub string `json:"encryption_pub"` // base64url, 32 B
-		SigningPub    string `json:"signing_pub"`    // base64url, 32 B
-	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
-		return
-	}
-	enc, err1 := base64.RawURLEncoding.DecodeString(req.EncryptionPub)
-	sig, err2 := base64.RawURLEncoding.DecodeString(req.SigningPub)
-	if err1 != nil || err2 != nil || len(enc) != 32 || len(sig) != 32 || req.DeviceID == "" || req.UserID == "" {
-		writeErr(w, http.StatusBadRequest, "bad_keys", "нужны device_id, user_id и ключи по 32 байта (base64url)")
-		return
-	}
-	if err := s.Store.RegisterDevice(r.Context(), store.Device{
-		DeviceID: req.DeviceID, UserID: req.UserID, EncryptionPub: enc, SigningPub: sig,
-	}); err != nil {
-		log.Printf("registerDeviceDev: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	w.WriteHeader(http.StatusCreated)
-}
