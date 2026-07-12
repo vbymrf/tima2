@@ -1,0 +1,9 @@
+# Локальные настройки Claude Code
+.claude/settings.local.json
+
+# ОС
+Thumbs.db
+.DS_Store
+
+# Временные файлы Office
+~$*.docx
