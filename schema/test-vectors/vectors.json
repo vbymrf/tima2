@@ -1,0 +1,66 @@
+{
+  "schema": "tima.crypto.v1",
+  "format_version": 1,
+  "generated_by": "tweetnacl-js@1.0.3 + noble",
+  "note": "Все входы фиксированы → вывод детерминирован. Kodium должен совпасть байт-в-байт.",
+  "vectors": {
+    "secretbox": {
+      "desc": "Kodium.encryptSymmetric(key,data) должен вернуть nonce||secretbox с этим nonce",
+      "key": "1111111111111111111111111111111111111111111111111111111111111111",
+      "nonce": "222222222222222222222222222222222222222222222222",
+      "plaintext_hex": "54494d4120736563726574626f78204b415420c2b720d0bfd180d0b8d0b2d0b5d182",
+      "kodium_output_hex": "222222222222222222222222222222222222222222222222fae4e5f4af759e1518d5bde539c79c76e157fa65d9b648c0a4beed365a97306facea402b5809a8016582bd7679f5bb501b53",
+      "box_only_hex": "fae4e5f4af759e1518d5bde539c79c76e157fa65d9b648c0a4beed365a97306facea402b5809a8016582bd7679f5bb501b53"
+    },
+    "box_wrap": {
+      "desc": "wrapped_key: Kodium.encrypt(eph_secret, recipient_public, message_key) = nonce||box",
+      "eph_secret": "3333333333333333333333333333333333333333333333333333333333333333",
+      "eph_public": "7b0d47d93427f8311160781c7c733fd89f88970aef490d8aa0ee19a4cb8a1b14",
+      "recipient_secret": "4444444444444444444444444444444444444444444444444444444444444444",
+      "recipient_public": "ff2ee45601ec1b67310c7790404585ae697331eee1c1f8cf2419731c1fff3e6b",
+      "nonce": "555555555555555555555555555555555555555555555555",
+      "message_key": "6666666666666666666666666666666666666666666666666666666666666666",
+      "kodium_output_hex": "5555555555555555555555555555555555555555555555557ff677e18207ce4f7f15042533c884cc71891501a495a3a2685e49bca7525f03a4cb3bc3cf196208d5c28382cc0f4d26"
+    },
+    "ed25519": {
+      "desc": "signDetached(deviceKey, data): seed→keyPair.fromSeed; подпись 64 байта; verify=true",
+      "seed": "7777777777777777777777777777777777777777777777777777777777777777",
+      "public_key": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7",
+      "message_hex": "54494d412063616e6f6e6963616c5f6279746573207374616e642d696e",
+      "signature_hex": "ace4cc3fc6ffb67d487e97aaac5b3c897862be70c86b65bfde2bfc21c0c4dfb1023b7f4f1f062e760cef69adb6083584d0fbe8e31d6ae7c0f1cd48d2dad41c07",
+      "verify": true
+    },
+    "hkdf_sha256": {
+      "desc": "HKDF-SHA256, 32 байта",
+      "ikm": "8888888888888888888888888888888888888888888888888888888888888888",
+      "salt": "99999999999999999999999999999999",
+      "info_hex": "74696d612f657363726f772f7631",
+      "output_hex": "b2fdeebcdcefbf05b92a3472cda5936eab1993339b42e799304f17204070bc95"
+    },
+    "canonical_bytes": {
+      "desc": "Преобраз фиксированных полей Envelope в canonical_bytes; подписывается именно sha-preimage",
+      "inputs": {
+        "format_version": 1,
+        "message_id": 42,
+        "chat_id": "11111111-1111-1111-1111-111111111111",
+        "sender_id": "22222222-2222-2222-2222-222222222222",
+        "sender_device": "33333333-3333-3333-3333-333333333333",
+        "kind": 1,
+        "created_at_unix_ms": 1750000000000,
+        "reply_to": 0
+      },
+      "canonical_bytes_hex": "010000002a000000000000002400000031313131313131312d313131312d313131312d313131312d3131313131313131313131312400000032323232323232322d323232322d323232322d323232322d3232323232323232323232322400000033333333333333332d333333332d333333332d333333332d3333333333333333333333330100000000dc2074970100000000000000000000f303e907fca039eb114ee0f50c3b41a6cdcff46c899e55451fe809d5593d9db1caa12e46ddb7b5cefe90a96d3431d756d4587a0e2e4e764301e27dc84752825219bd195f8fa9ecb95fdaa8ddd5c96f9101c547d53d8a889f0e105e473b0aff36e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256_hex": "dbfaa811ab4a164a64db59420007c01b001f28cff2ed8a0f24e6b579605e235a"
+    },
+    "mlkem768_escrow": {
+      "desc": "ML-KEM-768: keygen из seed детерминирован; encapsulate рандомизирован. Инвариант: decap(ct,sk)===shared. ct=1088 байт.",
+      "keygen_seed": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "public_key_len": 1184,
+      "secret_key_len": 2400,
+      "ciphertext_len": 1088,
+      "shared_len": 32,
+      "roundtrip_ok": true,
+      "public_key_sha256": "05d743bfc5e7d61b4437d2512131e85e50ff8c593756bf6f57d1b4ec05363df3"
+    }
+  }
+}

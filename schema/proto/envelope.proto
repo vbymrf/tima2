@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+// Каноническая wire-схема конверта личного сообщения (crypto-protocol.md §3).
+// ЭТО КОНТРАКТ: номера полей неизменны; удалённые — в reserved; новые добавляются
+// только с новыми номерами (обратная совместимость). Реализацию можно переписывать
+// свободно — совместимость держится на этих байтах, а не на коде.
+//
+// Envelope — то, что клиент сериализует и шлёт POST /messages. Сервер раскладывает:
+//   meta/encrypted_payload/escrow/sender_ephemeral_pub/ratchet_envelope/signature → personal_messages
+//   wrapped_keys[] → personal_message_keys (по строке на устройство/ВП).
+package tima.crypto.v1;
+
+option java_package = "io.tima.crypto.proto";
+option java_multiple_files = true;
+
+message Envelope {
+  uint32 format_version = 1;         // = 1; bump только при несовместимой смене раскладки
+  Metadata meta = 2;                 // plaintext (сервер видит; escrow-политика в §10)
+  bytes encrypted_payload = 3;       // Kodium.encryptSymmetric(message_key, zstd(MessageBody)) → nonce||box
+  EscrowBlob escrow = 4;             // всегда (ADR-0004)
+  bytes sender_ephemeral_pub = 5;    // X25519 pub эфемерной пары отправителя (32 B) — получателю для unwrap
+  bytes ratchet_envelope = 6;        // opaque Kodium RatchetMessage; пусто, если сессии нет (путь A)
+  bytes signature = 7;               // Ed25519 detached над canonical_bytes (см. proto/README.md)
+  repeated WrappedKey wrapped_keys = 8; // по одному на устройство получателя И отправителя (план Б)
+}
+
+message Metadata {
+  uint64 message_id = 1;
+  string chat_id = 2;                // UUID
+  string sender_id = 3;              // UUID (пользователь или ВП)
+  string sender_device = 4;          // UUID устройства; для ВП — vu_id
+  ContentKind kind = 5;
+  int64 created_at_unix_ms = 6;
+  uint64 reply_to = 7;               // 0 = нет ответа
+}
+
+enum ContentKind {
+  CK_UNSPECIFIED = 0;
+  CK_TEXT = 1;
+  CK_VOICE = 2;
+  CK_IMAGE = 3;
+  CK_VIDEO = 4;
+  CK_FILE = 5;
+  CK_SYSTEM = 6;
+}
+
+// escrow_blob = mlkem_ct(1088) ‖ SecretBox(message_key, hkdf(mlkem_shared)).
+// MLKEM.encapsulate(escrow_pub) → Pair(shared, ct); shared идёт в HKDF, ct — в mlkem_ct.
+message EscrowBlob {
+  bytes mlkem_ct = 1;                // ML-KEM-768 ciphertext, ровно 1088 байт
+  bytes wrapped_message_key = 2;     // Kodium.encryptSymmetric(hkdf(shared), message_key) → nonce||box
+  uint32 escrow_key_version = 3;     // версия публичного escrow-ключа
+}
+
+message WrappedKey {
+  string recipient = 1;              // device_id (UUID) или vu_id
+  bytes wrapped = 2;                 // Kodium.encrypt(sender_ephemeral_priv, recipient_pub, message_key) → nonce||box
+}

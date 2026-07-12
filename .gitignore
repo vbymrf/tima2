@@ -12,3 +12,6 @@ Thumbs.db
 aiogram-dev-3.x/
 livekit-master git/
 Kodium git/
+
+# Зависимости (устанавливаются локально)
+node_modules/

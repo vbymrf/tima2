@@ -8,7 +8,8 @@ API мессенджера потребляют три стороны: наши 
 
 ## Решение
 
-1. **Схема — источник истины.** Каталог `schema/` (в монорепо): `openapi/client-api.yaml`, `openapi/bot-api.yaml`, `proto/envelopes.proto`, `proto/ws-events.proto`. Всё остальное генерируется: Go-хендлеры и типы (oapi-codegen/protoc), KMP-клиент, Bot SDK (Python/TS), портал документации для разработчиков ботов.
+1. **Схема — источник истины.** Каталог `schema/` (в монорепо): `openapi/client-api.yaml`, `openapi/bot-api.yaml`, `proto/*.proto`, `proto/ws-events.proto`. Всё остальное генерируется: Go-хендлеры и типы (oapi-codegen/protoc), KMP-клиент, Bot SDK (Python/TS), портал документации.
+   - Уже зафиксировано: `proto/envelope.proto` + `proto/message_body.proto` (конверт сообщения) с определением `canonical_bytes` ([proto/README.md](../../schema/proto/README.md)) и каноничные тест-векторы ([test-vectors/](../../schema/test-vectors/README.md)) — контракт крипто-ядра, воспроизводимый независимой реализацией (tweetnacl-js).
 2. **Правка API = правка схемы** (PR со схемой); CI проверяет обратную совместимость (oasdiff) и регенерирует артефакты.
 3. **Два контура с разными гарантиями:**
 

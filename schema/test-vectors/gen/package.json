@@ -1,0 +1,13 @@
+{
+  "name": "tima-crypto-test-vectors-gen",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Генератор канонических тест-векторов крипто-ядра TIMA (эталон: tweetnacl-js + noble). Kodium ДОЛЖЕН совпадать байт-в-байт.",
+  "scripts": { "gen": "node generate.mjs" },
+  "dependencies": {
+    "tweetnacl": "1.0.3",
+    "@noble/hashes": "1.5.0",
+    "@noble/post-quantum": "0.2.0"
+  }
+}
