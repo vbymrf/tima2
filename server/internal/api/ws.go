@@ -1,10 +1,11 @@
 // WebSocket-доставка (websocket-events.md): один WS на устройство, auth — device JWT
-// в первом кадре, дальше live-поток событий из Redis Pub/Sub.
+// в первом кадре, дальше sync.pull/ack и live-поток событий из Redis Pub/Sub.
 //
-// РЕАЛИЗОВАНО (MVP): auth → ok → live (message.new, key.rotated); ping каждые 30 с;
-// кадры — JSON (debug-транспорт по контракту; protobuf — вместе с клиентом).
-// TODO(sync-offline.md §2): sync.pull/ack/cursor — нужен персистентный event log;
-// до него догон после офлайна — REST-историей, WS отдаёт только live.
+// auth → ok → sync.pull {cursor?, limit?} → события из device_events (те же
+// event_id, что в live) → sync.done {next_cursor, more} → ack {event_id}
+// сдвигает серверный cursor → live. Кадры — JSON (debug-транспорт по контракту;
+// protobuf — вместе с клиентом). События идемпотентны: пересечение догона и
+// live безопасно. sync.gap (cursor старше ретеншена) — вместе с GC worker-а.
 package api
 
 import (
@@ -67,13 +68,24 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Читатель клиентских кадров: MVP игнорирует (ack/typing — итерация sync),
-	// но чтение обязательно — оно же обрабатывает pong и close.
+	// Читатель клиентских кадров (sync.pull, ack); он же обрабатывает pong и close.
+	// Пишет в conn только главный цикл — один конкурентный писатель.
 	readErr := make(chan error, 1)
+	frames := make(chan wsClientFrame, 8)
 	go func() {
 		for {
-			if _, _, err := conn.Read(ctx); err != nil {
+			_, raw, err := conn.Read(ctx)
+			if err != nil {
 				readErr <- err
+				return
+			}
+			var f wsClientFrame
+			if json.Unmarshal(raw, &f) != nil {
+				continue // мусорный кадр не рвёт соединение
+			}
+			select {
+			case frames <- f:
+			case <-ctx.Done():
 				return
 			}
 		}
@@ -87,6 +99,10 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-readErr:
 			return // клиент закрылся
+		case f := <-frames:
+			if err := s.handleWSFrame(ctx, conn, deviceID, f); err != nil {
+				return
+			}
 		case <-ping.C:
 			pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			err := conn.Ping(pingCtx)
@@ -106,6 +122,66 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+	}
+}
+
+// wsClientFrame — client→server кадры (websocket-events.md §Client → Server).
+type wsClientFrame struct {
+	Event   string `json:"event"`
+	Cursor  *int64 `json:"cursor"`   // sync.pull; nil → серверная копия cursor
+	Limit   int    `json:"limit"`    // sync.pull; 0 → 100, максимум 500
+	EventID int64  `json:"event_id"` // ack
+}
+
+// handleWSFrame — sync.pull и ack; typing/receipt/presence — следующие итерации.
+func (s *Server) handleWSFrame(ctx context.Context, conn *websocket.Conn, deviceID string, f wsClientFrame) error {
+	switch f.Event {
+	case "sync.pull":
+		var cursor int64
+		if f.Cursor != nil {
+			cursor = *f.Cursor
+		} else {
+			var err error
+			if cursor, err = s.Store.SyncCursor(ctx, deviceID); err != nil {
+				log.Printf("ws %s: cursor: %v", deviceID, err)
+				return writeJSON(ctx, conn, map[string]any{"event": "error", "code": "internal"})
+			}
+		}
+		events, err := s.Store.ListDeviceEvents(ctx, deviceID, cursor, f.Limit)
+		if err != nil {
+			log.Printf("ws %s: pull: %v", deviceID, err)
+			return writeJSON(ctx, conn, map[string]any{"event": "error", "code": "internal"})
+		}
+		next := cursor
+		for _, e := range events {
+			frame := map[string]any{}
+			if err := json.Unmarshal(e.Payload, &frame); err != nil {
+				log.Printf("ws %s: событие %d повреждено: %v", deviceID, e.EventID, err)
+				continue
+			}
+			frame["event"] = e.EventType
+			frame["event_id"] = e.EventID
+			if err := writeJSON(ctx, conn, frame); err != nil {
+				return err
+			}
+			next = e.EventID
+		}
+		limit := f.Limit
+		if limit <= 0 || limit > 500 {
+			limit = 100
+		}
+		return writeJSON(ctx, conn, map[string]any{
+			"event": "sync.done", "count": len(events), "next_cursor": next, "more": len(events) == limit,
+		})
+	case "ack":
+		if f.EventID > 0 {
+			if err := s.Store.SetSyncCursor(ctx, deviceID, f.EventID); err != nil {
+				log.Printf("ws %s: ack: %v", deviceID, err)
+			}
+		}
+		return nil
+	default:
+		return nil // неизвестные кадры молча пропускаем (typing и пр. — позже)
 	}
 }
 

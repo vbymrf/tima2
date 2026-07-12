@@ -188,18 +188,15 @@ func (s *Server) postGroupMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	msg.MessageID = messageID
 
-	// Live-доставка онлайн-устройствам активных участников (кроме устройства отправителя)
-	if s.Events != nil {
-		devices, err := s.Store.ActiveMemberDevices(r.Context(), groupID, id.DeviceID)
-		if err != nil {
-			log.Printf("postGroupMessage: member devices: %v", err)
-		}
-		payload := groupMessageJSON(msg)
-		for _, dev := range devices {
-			if err := s.Events.Publish(r.Context(), dev, "message.group", payload); err != nil {
-				log.Printf("postGroupMessage: publish %s: %v", dev, err)
-			}
-		}
+	// Доставка активным участникам (кроме устройства отправителя):
+	// event log + live онлайн-устройствам
+	devices, err := s.Store.ActiveMemberDevices(r.Context(), groupID, id.DeviceID)
+	if err != nil {
+		log.Printf("postGroupMessage: member devices: %v", err)
+	}
+	eventPayload := groupMessageJSON(msg)
+	for _, dev := range devices {
+		s.notify(r.Context(), dev, "message.group", eventPayload)
 	}
 
 	w.WriteHeader(http.StatusCreated)

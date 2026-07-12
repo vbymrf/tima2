@@ -120,18 +120,14 @@ func (s *Server) groupRotate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return
 	}
-	// key.rotated онлайн-устройствам участников (websocket-events.md)
-	if s.Events != nil {
-		for recipient, w := range wrapped {
-			if err := s.Events.Publish(r.Context(), recipient, "key.rotated", map[string]any{
-				"group_id":             r.PathValue("groupID"),
-				"gk_version":           req.GKVersion,
-				"sender_ephemeral_pub": req.SenderEphemeralPub,
-				"wrapped_gk":           base64.RawURLEncoding.EncodeToString(w),
-			}); err != nil {
-				log.Printf("groupRotate: publish %s: %v", recipient, err)
-			}
-		}
+	// key.rotated участникам: event log + live онлайн-устройствам (websocket-events.md)
+	for recipient, w := range wrapped {
+		s.notify(r.Context(), recipient, "key.rotated", map[string]any{
+			"group_id":             r.PathValue("groupID"),
+			"gk_version":           req.GKVersion,
+			"sender_ephemeral_pub": req.SenderEphemeralPub,
+			"wrapped_gk":           base64.RawURLEncoding.EncodeToString(w),
+		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")

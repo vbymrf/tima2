@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -36,12 +35,12 @@ func channel(deviceID string) string { return "tima:dev:" + deviceID }
 
 // Publish шлёт событие устройству. payload сериализуется в JSON-кадр
 // (debug-транспорт по websocket-events.md; protobuf-кадры — вместе с клиентом).
-// event_id — монотонный в пределах соединения источник (unix ns); идемпотентность
-// событий обеспечивают доменные id (message_id, gk_version).
-func (b *Bus) Publish(ctx context.Context, deviceID, event string, payload map[string]any) error {
+// eventID — из персистентного event log (device_events): live-кадр и кадр
+// sync.pull одного события несут один и тот же event_id.
+func (b *Bus) Publish(ctx context.Context, deviceID, event string, eventID int64, payload map[string]any) error {
 	frame := map[string]any{
 		"event":    event,
-		"event_id": time.Now().UnixNano(),
+		"event_id": eventID,
 	}
 	for k, v := range payload {
 		frame[k] = v
