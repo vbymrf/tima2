@@ -1,0 +1,12 @@
+# Кодоген Go-классов из контрактных схем ../schema/proto (ADR-0009).
+# Генерённый код — артефакт сборки, в git не коммитится: scripts/gen-proto.sh
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package
+      value: tima/server/internal/proto
+plugins:
+  - local: protoc-gen-go
+    out: internal/proto
+    opt: paths=source_relative

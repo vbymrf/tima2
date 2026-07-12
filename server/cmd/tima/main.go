@@ -3,10 +3,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+
+	"tima/server/internal/api"
+	"tima/server/internal/store"
+	"tima/server/migrations"
 )
 
 func main() {
@@ -17,14 +22,36 @@ func main() {
 	switch cmd {
 	case "serve":
 		serve()
+	case "migrate":
+		migrate()
 	case "worker":
 		log.Fatal("worker: не реализован (фаза 2+: fan-out лент, push, GC медиа)")
-	case "migrate":
-		log.Fatal("migrate: не реализован (появится вместе с Message Service)")
 	default:
 		fmt.Fprintf(os.Stderr, "использование: tima [serve|worker|migrate]\n")
 		os.Exit(2)
 	}
+}
+
+func mustStore(ctx context.Context) *store.Store {
+	url := os.Getenv("DATABASE_URL")
+	if url == "" {
+		log.Fatal("DATABASE_URL не задан (dev: postgres://tima:tima-dev-only@localhost:5432/tima)")
+	}
+	st, err := store.New(ctx, url)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return st
+}
+
+func migrate() {
+	ctx := context.Background()
+	st := mustStore(ctx)
+	defer st.Close()
+	if err := st.Migrate(ctx, migrations.FS); err != nil {
+		log.Fatal(err)
+	}
+	log.Println("миграции применены")
 }
 
 func serve() {
@@ -35,6 +62,19 @@ func serve() {
 	}
 	mux.HandleFunc("GET /healthz", healthz)        // для docker healthcheck
 	mux.HandleFunc("GET /api/v1/healthz", healthz) // smoke-тест через Caddy
+
+	// Message Service поднимается при наличии DATABASE_URL; без него — только healthz.
+	if os.Getenv("DATABASE_URL") != "" {
+		ctx := context.Background()
+		st := mustStore(ctx)
+		if err := st.Migrate(ctx, migrations.FS); err != nil {
+			log.Fatal(err)
+		}
+		(&api.Server{Store: st}).Register(mux)
+		log.Print("Message Service подключён")
+	} else {
+		log.Print("DATABASE_URL не задан — поднят только healthz")
+	}
 
 	addr := os.Getenv("LISTEN_ADDR")
 	if addr == "" {
