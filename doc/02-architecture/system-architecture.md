@@ -71,7 +71,8 @@
 | `community` | Сообщества: состав, уровни доступа, витрина | PG |
 | `publications` | Посты (body + entities), черновики, отложенная публикация | PG |
 | `comments` | Комментарии (полиморфные; только публичный контур) | PG |
-| `membership` | Роли всех сущностей, инвайты, папки каталога | PG |
+| `membership` | Роли всех сущностей (memberships) | PG |
+| `invites` · `catalog` · `reports` | Инвайты/QR; каталог и папки; жалобы — отдельные подсистемы ([module-boundaries.md](./module-boundaries.md) §2) | PG |
 | `media` | Presigned URL, CAS-дедупликация публичного, квоты | PG (метаданные) + MinIO |
 | `feeds` | Общая лента: скоринг по оценкам + атрибуты; лента друзей: fan-out публичных полок ([feed-ranking.md](../04-data/feed-ranking.md)) | PG + Redis (feed:user_id) |
 | `attributes` | Атрибуты (= хэштеги), жанры, одобрение меток «автор + репутация» | PG |

@@ -67,7 +67,7 @@
 | GET | `/chats/{id}/messages?before=&limit=` | История (конверты + wrapped keys для устройства) |
 | POST | `/messages/{id}/receipt` | delivered / read / listened |
 | DELETE | `/messages/{id}?scope=me\|all` | Удаление (all = soft delete) |
-| GET | `/keys/devices?user_id=` | Публичные ключи устройств собеседника |
+| GET | `/keys/devices?user_id=` | Публичные ключи устройств собеседника; для ВП возвращает его identity-ключ (виртуальное «устройство» = vu_id) |
 | GET/PUT | `/keys/prekeys` | PreKey bundles (фаза ratchet) |
 
 ## Сообщества
@@ -77,8 +77,8 @@
 | POST | `/communities` | Создать сообщество (аудио-чат standalone создаёт его автоматически) |
 | GET | `/communities/{id}` | Страница: инфо + элементы с учётом доступа (`preview` видны всем; `open` — состав виден, контент по подписке; `restricted` — по `restricted_visible`) |
 | PATCH/DELETE | `/communities/{id}` | Настройки; удаление → элементы становятся standalone |
-| POST/DELETE | `/communities/{id}/items` | Добавить/убрать группу/канал/аудио-чат `{group_id, community_access, restricted_visible}` |
-| PATCH | `/communities/{id}/items/{group_id}` | Сменить уровень доступа элемента |
+| POST/DELETE | `/communities/{id}/items` | Добавить/убрать элемент `{target_type: group\|channel\|voice_room, target_id, community_access, restricted_visible}` |
+| PATCH | `/communities/{id}/items/{target_id}` | Сменить уровень доступа элемента |
 | GET/PUT/DELETE | `/communities/{id}/roles` | Роли owner/admin/moderator ([communities.md](../01-product/communities.md) §4) |
 | POST/DELETE | `/communities/{id}/subscribe` | Подписка на сообщество (= `subscriptions target_type='community'`) |
 | GET | `/communities/{id}/subscribers` | Счётчик/список подписчиков (по правам) |
@@ -171,7 +171,6 @@
 | GET/PUT | `/shelf/private` | Личная полка: зашифрованный blob (SecretBox(shelf_key)) |
 | POST | `/shelf/access/request` · `/grant` · `/revoke` | Доступ к личной полке по запросу; grant = wrapped shelf_key на устройства друга; revoke = ротация ключа |
 | POST | `/share` | Пересылка/репост `{source, dest}` |
-| GET | `/activity?tab=` | Окно 4: отслеживаемое / реакции |
 
 ## Истории и коллекции
 

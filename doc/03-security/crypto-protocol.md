@@ -27,6 +27,9 @@
 | `media_key` | 32 байта random | Внутри encrypted_payload сообщения-указателя | Медиа-объект |
 | Escrow key pair | ML-KEM-768 | Public — у клиентов; private — только HSM/анклав | Юридический доступ |
 | Ratchet-состояние | X3DH + Double Ratchet | SQLDelight (шифрованный экспорт) | PFS активных сессий |
+| `shelf_key` | 32 байта random | Wrapped на устройства владельца и грантополучателей; escrow per версия | Личная полка избранного ([feed-ranking.md](../04-data/feed-ranking.md) §2) |
+| `collection_key` / `story_key` | 32 байта random | Wrapped на устройства участников/аудитории; escrow через period/blob | Личные коллекции и истории |
+| Ключи ВП (identity + signing) | Curve25519 / Ed25519 | **Только wrapped** на устройства владельца и операторов (не в Keystore); ротация при смене команды/передаче | Виртуальные пользователи ([key-lifecycle.md](./key-lifecycle.md) §8) |
 
 Жизненный цикл (генерация, ротация, отзыв, восстановление) — [key-lifecycle.md](./key-lifecycle.md).
 

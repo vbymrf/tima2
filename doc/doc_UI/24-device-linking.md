@@ -34,7 +34,7 @@
 
 > Пользователь уже авторизован; attestation пройдена на телефоне.
 
-> После привязки Windows получает **собственные wrapped keys** (обёрнутые на его identity-ключ) для sync защищённой истории — backfill 90 дней. Per-device ключи — см. [key-lifecycle.md](../03-security/key-lifecycle.md), [23-auth-recovery.md](./23-auth-recovery.md).
+> После привязки Windows получает **собственные wrapped keys** (обёрнутые на его identity-ключ): их **перезаворачивает доверенный телефон** при привязке — backfill 90 дней. Per-device ключи — см. [key-lifecycle.md](../03-security/key-lifecycle.md), [23-auth-recovery.md](./23-auth-recovery.md).
 
 ## Шаг 3 — Успех
 

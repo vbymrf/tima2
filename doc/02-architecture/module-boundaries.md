@@ -19,8 +19,8 @@
 
 | Подсистема | Владеет | Кто использует |
 |-----------|---------|----------------|
-| `membership` | `memberships` (роли: owner/admin/moderator/author/member, ban) | group, channel, voiceroom, community |
-| `publications` | `posts` (body + **entities**), `post_drafts`, отложенная публикация | channel (посты канала), личная страница/медиа-лента (посты пользователя), блогер (alias) |
+| `membership` | `memberships` (роли: owner/admin/moderator/author/member/speaker, ban) | group, channel, voiceroom, community |
+| `publications` | `posts` (body + **entities**), `post_drafts`, отложенная публикация | channel (посты канала), личная страница/медиа-лента (посты пользователя), виртуальные пользователи |
 | `comments` | `comments` | posts, публичные медиа, публичные коллекции |
 | `reactions` | `emotions`, `rating_counters`, `recommendations` | всё, что оценивается |
 | `attributes` | `attributes` (= хэштеги), `genres`, `post_attributes`, `user_attributes` | publications, feeds, search ([feed-ranking.md](../04-data/feed-ranking.md)) |
