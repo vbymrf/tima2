@@ -71,6 +71,19 @@ const V = { schema: 'tima.crypto.v1', format_version: 1, generated_by: 'tweetnac
   V.vectors.hkdf_sha256 = { desc: 'HKDF-SHA256, 32 байта', ikm: hex(ikm), salt: hex(salt), info_hex: hex(info), output_hex: hex(out) };
 }
 
+// ── 4b. Ключи чанков медиа: chunk_key[i] = HKDF-SHA256(ikm=media_key, salt пустой, info="chunk:"+i, 32) ──
+{
+  const mediaKey = rep(0xdd, 32);
+  const info = (i) => new TextEncoder().encode('chunk:' + i);
+  V.vectors.media_chunk_keys = {
+    desc: 'MediaCipher: chunk_key[i] = HKDF-SHA256(media_key, salt пустой, info "chunk:"+i десятичный, 32 байта)',
+    media_key: hex(mediaKey),
+    chunk_0: hex(hkdf(sha256, mediaKey, undefined, info(0), 32)),
+    chunk_1: hex(hkdf(sha256, mediaKey, undefined, info(1), 32)),
+    chunk_10: hex(hkdf(sha256, mediaKey, undefined, info(10), 32))
+  };
+}
+
 // ── 5. canonical_bytes (что подписывается) + его sha256. Layout — proto/README.md ──
 {
   const encrypted_payload = bytes(V.vectors.secretbox.kodium_output_hex);

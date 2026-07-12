@@ -37,6 +37,13 @@
       "info_hex": "74696d612f657363726f772f7631",
       "output_hex": "b2fdeebcdcefbf05b92a3472cda5936eab1993339b42e799304f17204070bc95"
     },
+    "media_chunk_keys": {
+      "desc": "MediaCipher: chunk_key[i] = HKDF-SHA256(media_key, salt пустой, info \"chunk:\"+i десятичный, 32 байта)",
+      "media_key": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "chunk_0": "e8dbaf907cb3b26a28d71ea484268cd1c35b19bc098602ce0d7455946efa1c11",
+      "chunk_1": "9aa0602adefad0a66d1fb0040bf72204c777a60ff96258b3f57d169d71d05953",
+      "chunk_10": "94557d90f77017d2b49fec0828944906b01cd0c5eb6ba6110a671a133af98e3e"
+    },
     "canonical_bytes": {
       "desc": "Преобраз фиксированных полей Envelope в canonical_bytes; подписывается именно sha-preimage",
       "inputs": {

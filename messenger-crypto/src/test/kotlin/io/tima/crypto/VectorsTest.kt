@@ -142,9 +142,9 @@ class VectorsTest {
     }
 
     @Test
-    fun `все семь векторов присутствуют`() {
+    fun `все восемь векторов присутствуют`() {
         val expected = setOf(
-            "secretbox", "box_wrap", "ed25519", "hkdf_sha256",
+            "secretbox", "box_wrap", "ed25519", "hkdf_sha256", "media_chunk_keys",
             "canonical_bytes", "message_body", "mlkem768_escrow",
         )
         assertEquals(expected, vectors.keys, "Состав vectors.json изменился — обнови KAT")

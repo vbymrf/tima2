@@ -27,6 +27,7 @@
 | `canonical_bytes` | Сборка подписываемого preimage (layout — proto/README §canonical_bytes) + его sha256 | Точные байты |
 | `mlkem768_escrow` | ML-KEM-768: keygen(seed) детерминирован (зафиксирован sha256 pk); ct=1088; инвариант `decap(ct,sk)=shared` | Инвариант, не ct |
 | `message_body` | Protobuf-байты `MessageBody` (Wire, заморожены 2026-07-12 на первом зелёном прогоне Kotlin) — референс для Go | Точные байты |
+| `media_chunk_keys` | `chunk_key[i] = HKDF-SHA256(media_key, salt пустой, "chunk:"+i, 32)` — чанкование медиа | Точные байты |
 
 ## Что НЕ заморожено намеренно (и почему это правильно)
 

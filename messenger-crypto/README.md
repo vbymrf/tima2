@@ -16,6 +16,8 @@
 | `CanonicalBytes` | подпись | Сборка preimage строго по [proto/README](../schema/proto/README.md) |
 | `PersonalMessageSealer` | оркестрация | `seal()` = слои 1+2+4 + подпись; `openWithWrappedKey()` = путь B |
 | `MessageSerializer` | сериализация | `MessageBody` → protobuf (Wire, кодоген из `../schema/proto`) → zstd; `Envelope` ↔ protobuf; guard от zstd-бомбы (16 MiB) |
+| `GroupKeyManager` | группы | Ротация GK: одна эфемерная пара на ротацию, wrapped_GK на устройство, escrow один на версию |
+| `MediaCipher` | медиа | Целиком (< 10 MB) или чанками: `chunk_key[i] = HKDF(media_key, "chunk:"+i)` — KAT `media_chunk_keys` |
 
 Слой 3 (Double Ratchet, PFS) — фаза 5: `ratchet_envelope` пока всегда пуст.
 
