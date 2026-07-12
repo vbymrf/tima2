@@ -154,9 +154,12 @@ func TestWSDeliversKeyRotated(t *testing.T) {
 	admin := registerDevice(t, ts, "+79993330003")
 	member := registerDevice(t, ts, "+79993330004")
 
+	groupID := createGroupAPI(t, ts, admin.token)
+	addMemberAPI(t, ts, admin.token, groupID, member.userID, "member")
+
 	conn := dialWS(t, ts, member.token)
 
-	gk, code := doRotate(t, ts, admin.token, 1, "periodic", []*device{admin, member})
+	gk, code := doRotate(t, ts, admin.token, groupID, 1, "periodic", []*device{admin, member})
 	if code != 201 {
 		t.Fatalf("ротация: %d", code)
 	}

@@ -1,10 +1,9 @@
 // API групповых ключей (api-overview.md §Группы; crypto-protocol.md §4).
 // Серверная сторона клиентского GroupKeyManager: приём ротации GK и выдача
 // пропущенных wrapped_GK. Сервер сами GK не видит — только escrow и обёртки.
-//
-// TODO(Group Service): проверка членства/роли ротирующего появится вместе с
-// модулем групп (membership) — до него любой аутентифицированный клиент может
-// ротировать любой group_id; для закрытого dev-контура это приемлемо.
+// Права: ротирует owner|admin private-группы (crypto-protocol §4.2: GK
+// генерирует админ-устройство); получатели обёрток — устройства активных
+// участников (membership — group_service.go).
 package api
 
 import (
@@ -15,6 +14,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"tima/server/internal/auth"
 	"tima/server/internal/store"
@@ -69,6 +69,37 @@ func (s *Server) groupRotate(w http.ResponseWriter, r *http.Request) {
 	if reason == "" {
 		reason = "periodic"
 	}
+
+	// Права: группа существует, private, ротирующий — owner|admin
+	g, role, ok := s.groupAndRole(w, r)
+	if !ok {
+		return
+	}
+	if g.Kind != "private" {
+		writeErr(w, http.StatusBadRequest, "not_e2e", "GK есть только у private-групп")
+		return
+	}
+	if roleRank[role] < rankAdmin {
+		writeErr(w, http.StatusForbidden, "not_group_admin", "GK ротируют owner и admin группы")
+		return
+	}
+	// Получатели wrapped_GK — действующие устройства активных участников
+	recipients := make([]string, 0, len(wrapped))
+	for rcpt := range wrapped {
+		recipients = append(recipients, rcpt)
+	}
+	outsiders, err := s.Store.NonMemberDevices(r.Context(), r.PathValue("groupID"), recipients)
+	if err != nil {
+		log.Printf("groupRotate: non-member devices: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	if len(outsiders) > 0 {
+		writeErr(w, http.StatusBadRequest, "recipient_not_member",
+			"wrapped_keys содержат устройства не-участников: "+strings.Join(outsiders, ", "))
+		return
+	}
+
 	id, _ := auth.FromContext(r.Context())
 	err = s.Store.SaveGroupRotation(r.Context(), store.GroupRotation{
 		GroupID:            r.PathValue("groupID"),
@@ -110,6 +141,9 @@ func (s *Server) groupRotate(w http.ResponseWriter, r *http.Request) {
 
 // groupKeys — GET /groups/{groupID}/keys?since_version=: пропущенные wrapped_GK
 // для устройства из токена (догон после офлайна / нового устройства).
+// Членство не проверяется намеренно: выдаются только обёртки, адресованные
+// этому устройству, — исключённый читает старые версии для истории
+// (crypto-protocol §4.2: окно апелляции), новых версий у него нет.
 func (s *Server) groupKeys(w http.ResponseWriter, r *http.Request) {
 	var since int64
 	if v := r.URL.Query().Get("since_version"); v != "" {

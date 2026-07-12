@@ -17,10 +17,8 @@ import (
 	"golang.org/x/crypto/nacl/secretbox"
 )
 
-const groupID = "abababab-0000-0000-0000-0000000060c1"
-
 // doRotate повторяет клиентский GroupKeyManager.rotate на Go.
-func doRotate(t *testing.T, ts *httptest.Server, token string, version int32, reason string, recipients []*device) ([32]byte, int) {
+func doRotate(t *testing.T, ts *httptest.Server, token, groupID string, version int32, reason string, recipients []*device) ([32]byte, int) {
 	t.Helper()
 	var gk [32]byte
 	if _, err := rand.Read(gk[:]); err != nil {
@@ -59,7 +57,7 @@ type deviceGroupKey struct {
 	wrapped []byte
 }
 
-func fetchGroupKeys(t *testing.T, ts *httptest.Server, token string, since int) []deviceGroupKey {
+func fetchGroupKeys(t *testing.T, ts *httptest.Server, token, groupID string, since int) []deviceGroupKey {
 	t.Helper()
 	var resp struct {
 		Keys []struct {
@@ -109,27 +107,48 @@ func TestGroupKeysRotationAndCatchUp(t *testing.T) {
 	member := registerDevice(t, ts, "+79992220002")
 	outcast := registerDevice(t, ts, "+79992220003")
 
+	groupID := createGroupAPI(t, ts, admin.token)
+	addMemberAPI(t, ts, admin.token, groupID, member.userID, "member")
+	addMemberAPI(t, ts, admin.token, groupID, outcast.userID, "member")
+
+	// Права: обычный участник и не-участник ротировать не могут
+	if _, code := doRotate(t, ts, member.token, groupID, 1, "periodic", []*device{admin, member}); code != http.StatusForbidden {
+		t.Fatalf("ротация участником: ожидался 403, получен %d", code)
+	}
+	outsider := registerDevice(t, ts, "+79992220009")
+	if _, code := doRotate(t, ts, outsider.token, groupID, 1, "periodic", []*device{admin}); code != http.StatusForbidden {
+		t.Fatalf("ротация не-участником: ожидался 403, получен %d", code)
+	}
+	// Обёртка на устройство не-участника → 400
+	if _, code := doRotate(t, ts, admin.token, groupID, 1, "periodic", []*device{admin, outsider}); code != http.StatusBadRequest {
+		t.Fatalf("обёртка чужому устройству: ожидался 400, получен %d", code)
+	}
+
 	// v1: все трое
-	gk1, code := doRotate(t, ts, admin.token, 1, "periodic", []*device{admin, member, outcast})
+	gk1, code := doRotate(t, ts, admin.token, groupID, 1, "periodic", []*device{admin, member, outcast})
 	if code != http.StatusCreated {
 		t.Fatalf("ротация v1: %d", code)
 	}
-	// v2: исключение outcast
-	gk2, code := doRotate(t, ts, admin.token, 2, "member_leave", []*device{admin, member})
+	// Исключение outcast из группы, затем v2 без него
+	if code := authedJSON(t, ts, "DELETE",
+		"/api/v1/groups/"+groupID+"/members/"+outcast.userID, admin.token, nil, nil); code != http.StatusNoContent {
+		t.Fatalf("исключение outcast: %d", code)
+	}
+	gk2, code := doRotate(t, ts, admin.token, groupID, 2, "member_leave", []*device{admin, member})
 	if code != http.StatusCreated {
 		t.Fatalf("ротация v2: %d", code)
 	}
 
 	// Монотонность: повтор v2 и скачок v4 → 409
-	if _, code := doRotate(t, ts, admin.token, 2, "periodic", []*device{admin}); code != http.StatusConflict {
+	if _, code := doRotate(t, ts, admin.token, groupID, 2, "periodic", []*device{admin}); code != http.StatusConflict {
 		t.Fatalf("повтор v2: ожидался 409, получен %d", code)
 	}
-	if _, code := doRotate(t, ts, admin.token, 4, "periodic", []*device{admin}); code != http.StatusConflict {
+	if _, code := doRotate(t, ts, admin.token, groupID, 4, "periodic", []*device{admin}); code != http.StatusConflict {
 		t.Fatalf("скачок v4: ожидался 409, получен %d", code)
 	}
 
 	// member догоняет с нуля: обе версии, GK разворачиваются и совпадают
-	keys := fetchGroupKeys(t, ts, member.token, 0)
+	keys := fetchGroupKeys(t, ts, member.token, groupID, 0)
 	if len(keys) != 2 {
 		t.Fatalf("member: ожидалось 2 версии, получено %d", len(keys))
 	}
@@ -153,13 +172,14 @@ func TestGroupKeysRotationAndCatchUp(t *testing.T) {
 		t.Fatal("сообщение группы не расшифровалось GK, полученным через API")
 	}
 
-	// outcast: видит только v1 (v2 ему не выдавалась) — post-compromise security
-	outKeys := fetchGroupKeys(t, ts, outcast.token, 0)
+	// outcast: видит только v1 (v2 ему не выдавалась) — post-compromise security;
+	// доступ к старым версиям после исключения сохраняется (окно апелляции)
+	outKeys := fetchGroupKeys(t, ts, outcast.token, groupID, 0)
 	if len(outKeys) != 1 || outKeys[0].version != 1 {
 		t.Fatalf("outcast: ожидалась только v1, получено %d версий", len(outKeys))
 	}
 	// Догон с since_version=1 → пусто
-	if rest := fetchGroupKeys(t, ts, outcast.token, 1); len(rest) != 0 {
+	if rest := fetchGroupKeys(t, ts, outcast.token, groupID, 1); len(rest) != 0 {
 		t.Fatalf("outcast since=1: ожидалось 0, получено %d", len(rest))
 	}
 }
