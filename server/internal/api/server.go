@@ -22,6 +22,7 @@ import (
 	timacrypto "tima/server/internal/crypto"
 	"tima/server/internal/events"
 	pb "tima/server/internal/proto"
+	"tima/server/internal/ratelimit"
 	"tima/server/internal/store"
 )
 
@@ -30,9 +31,10 @@ const maxEnvelopeBytes = 4 << 20 // конверт с payload; медиа ход
 type Server struct {
 	Store  *store.Store
 	Auth   *auth.Issuer
-	Blob   *blob.Client // nil → media-эндпоинты отвечают 503
-	Events *events.Bus  // nil → /ws отвечает 503, доставка только REST-историей
-	DevSMS bool         // TIMA_DEV_SMS=1: код из /auth/sms/request возвращается в ответе
+	Blob   *blob.Client       // nil → media-эндпоинты отвечают 503
+	Events *events.Bus        // nil → /ws отвечает 503, доставка только REST-историей
+	Limit  *ratelimit.Limiter // nil → без лимитов частоты (dev без Redis)
+	DevSMS bool               // TIMA_DEV_SMS=1: код из /auth/sms/request возвращается в ответе
 }
 
 func (s *Server) Register(mux *http.ServeMux) {

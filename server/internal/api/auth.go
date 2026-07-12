@@ -12,14 +12,63 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"regexp"
+	"strconv"
+	"strings"
+	"time"
 
 	"tima/server/internal/auth"
 	"tima/server/internal/store"
 )
 
 var phoneRe = regexp.MustCompile(`^\+[1-9][0-9]{7,14}$`) // E.164
+
+// Лимиты auth-контура (api-overview: rate limiting): значения консервативные,
+// пересматриваются по метрикам.
+const (
+	rlWindow        = 10 * time.Minute
+	rlSmsPerPhone   = 3  // SMS на телефон: защита от спама SMS-провайдером
+	rlSmsPerIP      = 10 // SMS с одного IP: перебор чужих телефонов
+	rlVerifyPerCode = 5  // попыток verify на request_id: перебор 6-значного кода
+)
+
+// rateLimit — попытка по ключу; false = ответ 429 уже записан. Без Redis
+// (Limit == nil, dev) лимитов нет. Ошибка Redis = fail-open с логом:
+// недоступность шины не должна класть вход целиком.
+func (s *Server) rateLimit(w http.ResponseWriter, r *http.Request, key string, limit int64) bool {
+	if s.Limit == nil {
+		return true
+	}
+	ok, retryAfter, err := s.Limit.Allow(r.Context(), key, limit, rlWindow)
+	if err != nil {
+		log.Printf("ratelimit %s: %v", key, err)
+		return true
+	}
+	if !ok {
+		w.Header().Set("Retry-After", strconv.FormatInt(int64(retryAfter/time.Second)+1, 10))
+		writeErr(w, http.StatusTooManyRequests, "rate_limited", "слишком часто — попробуйте позже")
+		return false
+	}
+	return true
+}
+
+// clientIP — адрес клиента; за Caddy — первый X-Forwarded-For (Caddy его
+// перезаписывает; прямое соединение мимо прокси в проде закрыто фаерволом).
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.IndexByte(xff, ','); i > 0 {
+			xff = xff[:i]
+		}
+		return strings.TrimSpace(xff)
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
 
 func newUUID() string {
 	var b [16]byte
@@ -46,7 +95,10 @@ func (s *Server) smsRequest(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad_phone", "нужен телефон в формате E.164 (+79991234567)")
 		return
 	}
-	// TODO(фаза 2+): rate limiting per phone/IP через Redis (api-overview: rate limiting per device)
+	if !s.rateLimit(w, r, "sms:phone:"+req.Phone, rlSmsPerPhone) ||
+		!s.rateLimit(w, r, "sms:ip:"+clientIP(r), rlSmsPerIP) {
+		return
+	}
 	requestID := newUUID()
 	var digits [4]byte
 	if _, err := rand.Read(digits[:]); err != nil {
@@ -77,6 +129,10 @@ func (s *Server) smsVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&req); err != nil || req.RequestID == "" || req.Code == "" {
 		writeErr(w, http.StatusBadRequest, "bad_request", "нужны request_id и code")
+		return
+	}
+	// Перебор 6-значного кода: лимит попыток на request_id
+	if !s.rateLimit(w, r, "verify:"+req.RequestID, rlVerifyPerCode) {
 		return
 	}
 	phone, err := s.Store.ConsumeSmsCode(r.Context(), req.RequestID, hashCode(req.RequestID, req.Code))

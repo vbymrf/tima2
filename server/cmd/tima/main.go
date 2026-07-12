@@ -18,6 +18,7 @@ import (
 	"tima/server/internal/auth"
 	"tima/server/internal/blob"
 	"tima/server/internal/events"
+	"tima/server/internal/ratelimit"
 	"tima/server/internal/store"
 	"tima/server/internal/worker"
 	"tima/server/migrations"
@@ -140,9 +141,14 @@ func serve() {
 				log.Fatal(err)
 			}
 			srv.Events = bus
-			log.Print("WS-доставка подключена (Redis Pub/Sub)")
+			limiter, err := ratelimit.New(ctx, redisURL)
+			if err != nil {
+				log.Fatal(err)
+			}
+			srv.Limit = limiter
+			log.Print("WS-доставка и rate limiting подключены (Redis)")
 		} else {
-			log.Print("REDIS_URL не задан — /ws отвечает 503, доставка только REST-историей")
+			log.Print("REDIS_URL не задан — /ws отвечает 503, лимитов частоты нет, доставка только REST-историей")
 		}
 		if endpoint := os.Getenv("S3_ENDPOINT"); endpoint != "" {
 			bucket := os.Getenv("S3_BUCKET")
