@@ -1,0 +1,46 @@
+# Локальный dev-стек TIMA (Windows/Docker Desktop): только хранилища.
+# Бэкенд в dev запускается на хосте (go run ./cmd/tima), боевой compose — server-setup.md §5.
+# Запуск:  docker compose -f docker-compose.dev.yml up -d
+name: tima-dev
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tima
+      POSTGRES_PASSWORD: tima-dev-only   # dev; боевые секреты — .env по server-setup.md §4
+      POSTGRES_DB: tima
+    ports: ["5432:5432"]
+    volumes: ["tima-dev-postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tima"]
+      interval: 10s
+      retries: 10
+    shm_size: 256mb
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "tima-dev-only", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    volumes: ["tima-dev-redis:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "tima-dev-only", "ping"]
+      interval: 10s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: tima-admin
+      MINIO_ROOT_PASSWORD: tima-dev-only
+    ports: ["9000:9000", "9001:9001"]
+    volumes: ["tima-dev-minio:/data"]
+
+volumes:
+  tima-dev-postgres:
+  tima-dev-redis:
+  tima-dev-minio:
