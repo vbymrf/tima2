@@ -45,9 +45,11 @@ type device struct {
 
 func setup(t *testing.T) (*httptest.Server, *Server) {
 	t.Helper()
+	// ОТДЕЛЬНАЯ база: setup труncate-ит все таблицы — dev-база с живыми
+	// аккаунтами приложений не должна страдать от прогона тестов.
 	url := os.Getenv("TIMA_TEST_DATABASE_URL")
 	if url == "" {
-		url = "postgres://tima:tima-dev-only@localhost:5432/tima"
+		url = "postgres://tima:tima-dev-only@localhost:5432/tima_test"
 	}
 	st, err := store.New(context.Background(), url)
 	if err != nil {
