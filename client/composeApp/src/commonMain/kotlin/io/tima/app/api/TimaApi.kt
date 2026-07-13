@@ -9,6 +9,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
@@ -80,6 +81,25 @@ data class HistoryItem(
 
 @Serializable
 private data class HistoryResponse(@SerialName("messages") val messages: List<HistoryItem>)
+
+@Serializable
+private data class MediaInitBody(
+    @SerialName("size_bytes") val sizeBytes: Long,
+    val mime: String,
+    @SerialName("is_encrypted") val isEncrypted: Boolean,
+)
+
+@Serializable
+data class MediaInitResponse(
+    @SerialName("media_id") val mediaId: String,
+    @SerialName("upload_urls") val uploadUrls: List<String> = emptyList(),
+)
+
+@Serializable
+private data class MediaCompleteBody(@SerialName("media_id") val mediaId: String)
+
+@Serializable
+private data class MediaUrlResponse(@SerialName("urls") val urls: List<String>)
 
 @Serializable
 private data class ApiError(val error: String = "", val message: String = "")
@@ -163,6 +183,47 @@ class TimaApi(private val baseUrl: String) {
         }
         if (!response.status.isSuccess()) fail(response)
         return response.body<HistoryResponse>().messages
+    }
+
+    // ── Media (media-storage.md: файлы ходят в MinIO напрямую, мимо бэкенда) ──
+
+    /** Регистрация шифрованного медиа → media_id + presigned PUT. content_hash приватному запрещён. */
+    suspend fun mediaInit(token: String, sizeBytes: Long, mime: String): MediaInitResponse {
+        val response = client.post(baseUrl.trimEnd('/') + "/api/v1/media/init") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(MediaInitBody(sizeBytes, mime, isEncrypted = true))
+        }
+        if (!response.status.isSuccess()) fail(response)
+        return response.body()
+    }
+
+    suspend fun mediaComplete(token: String, mediaId: String) {
+        val response = client.post(baseUrl.trimEnd('/') + "/api/v1/media/complete") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(MediaCompleteBody(mediaId))
+        }
+        if (!response.status.isSuccess()) fail(response)
+    }
+
+    suspend fun mediaUrls(token: String, mediaId: String): List<String> {
+        val response = client.get(baseUrl.trimEnd('/') + "/api/v1/media/$mediaId/url") { bearerAuth(token) }
+        if (!response.status.isSuccess()) fail(response)
+        return response.body<MediaUrlResponse>().urls
+    }
+
+    /** Загрузка ciphertext по presigned PUT (без Bearer — подпись в самом URL). */
+    suspend fun putPresigned(url: String, bytes: ByteArray) {
+        val response = client.put(url) { setBody(bytes) }
+        if (!response.status.isSuccess()) throw TimaApiException("upload_failed", "MinIO PUT: HTTP ${response.status.value}")
+    }
+
+    /** Скачивание ciphertext по presigned GET. */
+    suspend fun getPresigned(url: String): ByteArray {
+        val response = client.get(url)
+        if (!response.status.isSuccess()) throw TimaApiException("download_failed", "MinIO GET: HTTP ${response.status.value}")
+        return response.body()
     }
 
     /** POST /messages: конверт как protobuf; clientMsgId — дедуп повторной отправки. */

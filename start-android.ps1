@@ -1,6 +1,5 @@
 ﻿# Запуск TIMA на эмуляторе Android (второй собеседник для проверки переписки).
-# Сначала запусти запуск-tima.ps1 (сервер должен работать).
-# Использование: powershell -ExecutionPolicy Bypass -File C:\!tima2\запуск-android.ps1
+# Сначала запусти ЗАПУСК-TIMA.bat (сервер должен работать).
 $ErrorActionPreference = "Continue"
 $sdk = "$env:LOCALAPPDATA\Android\Sdk"
 $adb = "$sdk\platform-tools\adb.exe"
@@ -16,7 +15,11 @@ if (-not $devices) {
     do { Start-Sleep 5; $boot = (& $adb shell getprop sys.boot_completed 2>$null) } until ("$boot".Trim() -eq "1")
 }
 
-# 2. Установка приложения (обновляет, если уже стоит)
+# 2. Проброс портов: presigned-ссылки MinIO указывают на localhost:9000 хоста
+& $adb reverse tcp:8080 tcp:8080 | Out-Null
+& $adb reverse tcp:9000 tcp:9000 | Out-Null
+
+# 3. Установка приложения (обновляет, если уже стоит)
 if (Test-Path $apk) {
     Write-Host "Ставлю TIMA на эмулятор..."
     & $adb install -r $apk
@@ -24,6 +27,6 @@ if (Test-Path $apk) {
     Write-Host "APK не собран - собери: cd C:\!tima2\client; & `"$env:USERPROFILE\gradle-8.14.3\bin\gradle`" :composeApp:assembleDebug"
 }
 
-# 3. Запуск
+# 4. Запуск
 & $adb shell am start -n io.tima.app/.MainActivity
 Write-Host "Готово: TIMA открыт на эмуляторе."

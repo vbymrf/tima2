@@ -12,10 +12,14 @@ import io.tima.app.session.Session
 import io.tima.crypto.DeviceAddress
 import io.tima.crypto.EnvelopeMeta
 import io.tima.crypto.EscrowModule
+import io.tima.crypto.MediaCipher
 import io.tima.crypto.MessageSerializer
 import io.tima.crypto.PersonalMessageSealer
 import io.tima.crypto.SealedPersonalMessage
+import io.tima.crypto.proto.MediaRef
 import io.tima.crypto.proto.MessageBody
+import java.util.concurrent.ConcurrentHashMap
+import okio.ByteString.Companion.toByteString
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.UUID
@@ -66,6 +70,7 @@ class TimaClient(private val session: Session) : ChatClient {
 
     private var sealer: PersonalMessageSealer? = null
     private val devicesCache = mutableMapOf<String, List<DeviceKeyInfo>>()
+    private val mediaCache = ConcurrentHashMap<String, ByteArray>() // media_id → plaintext (на сессию)
 
     private val _messages = MutableSharedFlow<ChatMessage>(extraBufferCapacity = 256)
     override val messages: Flow<ChatMessage> = _messages
@@ -121,7 +126,39 @@ class TimaClient(private val session: Session) : ChatClient {
             .mapNotNull { decrypt(b64url.decode(it.envelope)) }
             .sortedBy { it.messageId }
 
-    override suspend fun send(peerUserId: String, text: String): ChatMessage {
+    override suspend fun send(peerUserId: String, text: String): ChatMessage =
+        sealAndPost(peerUserId, MessageBody(text = text), kind = 1) // CK_TEXT
+
+    override suspend fun sendImage(peerUserId: String, imageBytes: ByteArray, mime: String, caption: String): ChatMessage {
+        // media_key — случайный на файл; сервер и MinIO видят только ciphertext
+        val mediaKey = ByteArray(32).also(random::nextBytes)
+        val sealedFile = MediaCipher.seal(mediaKey, imageBytes).getOrThrow()
+        val init = api.mediaInit(session.accessToken, sealedFile.size.toLong(), mime)
+        api.putPresigned(init.uploadUrls.first(), sealedFile)
+        api.mediaComplete(session.accessToken, init.mediaId)
+
+        val body = MessageBody(
+            text = caption,
+            media = listOf(
+                MediaRef(
+                    media_id = init.mediaId,
+                    media_key = mediaKey.toByteString(),
+                    mime = mime,
+                    size_bytes = imageBytes.size.toLong(),
+                ),
+            ),
+        )
+        mediaCache[init.mediaId] = imageBytes // своё фото не перекачивать
+        return sealAndPost(peerUserId, body, kind = 3) // CK_IMAGE
+    }
+
+    override suspend fun loadMedia(attachment: MediaAttachment): ByteArray =
+        mediaCache.getOrPut(attachment.mediaId) {
+            val urls = api.mediaUrls(session.accessToken, attachment.mediaId)
+            MediaCipher.open(attachment.mediaKey, api.getPresigned(urls.first())).getOrThrow()
+        }
+
+    private suspend fun sealAndPost(peerUserId: String, body: MessageBody, kind: Int): ChatMessage {
         val sealer = ensureSealer()
         val chatId = chatIdWith(peerUserId)
         // Обёртки: все устройства собеседника + все мои (мультиустройство и своя история)
@@ -136,13 +173,16 @@ class TimaClient(private val session: Session) : ChatClient {
             chatId = chatId,
             senderId = session.userId,
             senderDevice = session.deviceId,
-            kind = 1, // CK_TEXT
+            kind = kind,
             createdAtUnixMs = now,
         )
-        val payload = MessageSerializer.encodeBody(MessageBody(text = text))
+        val payload = MessageSerializer.encodeBody(body)
         val sealed = sealer.seal(meta, payload, deviceKey, recipients).getOrThrow()
         api.postEnvelope(session.accessToken, MessageSerializer.encodeEnvelope(sealed), UUID.randomUUID().toString())
-        return ChatMessage(chatId, messageId.toLong(), session.userId, text, now, mine = true)
+        return ChatMessage(
+            chatId, messageId.toLong(), session.userId, body.text, now, mine = true,
+            media = body.media.firstOrNull()?.toAttachment(),
+        )
     }
 
     /** Путь B: подпись → wrapped_key своего устройства → конверт → body. Битое/чужое → null. */
@@ -163,8 +203,16 @@ class TimaClient(private val session: Session) : ChatClient {
             text = body.text,
             createdAtMs = sealed.meta.createdAtUnixMs,
             mine = sealed.meta.senderId == session.userId,
+            media = body.media.firstOrNull()?.toAttachment(),
         )
     }
+
+    private fun MediaRef.toAttachment() = MediaAttachment(
+        mediaId = media_id,
+        mediaKey = media_key.toByteArray(),
+        mime = mime,
+        sizeBytes = size_bytes,
+    )
 
     override fun close() {
         scope.cancel()

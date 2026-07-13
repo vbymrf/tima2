@@ -97,6 +97,15 @@ class ChatEndToEndTest {
             }
             assertEquals(2, aliceAfter.size)
             assertEquals("И тебе привет, Алиса!", aliceAfter.last().text)
+
+            // Фото: MediaCipher → MinIO по presigned PUT → CK_IMAGE с MediaRef → приём и расшифровка
+            val image = ByteArray(2048).also { java.security.SecureRandom().nextBytes(it) }
+            aliceChat.sendImage(bob.userId, image, "image/png", "подпись к фото")
+            val photo = withTimeout(20_000) { bobChat.messages.first { it.media != null } }
+            assertEquals("подпись к фото", photo.text)
+            assertEquals("image/png", photo.media!!.mime)
+            val loaded = bobChat.loadMedia(photo.media!!)
+            assertTrue(image.contentEquals(loaded), "расшифрованное медиа обязано совпасть с исходником")
         } finally {
             aliceChat.close()
             bobChat.close()

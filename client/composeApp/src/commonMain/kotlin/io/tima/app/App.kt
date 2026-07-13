@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -38,13 +40,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.kodium.Kodium
 import io.tima.app.api.TimaApi
 import io.tima.app.chat.ChatClient
 import io.tima.app.chat.ChatMessage
+import io.tima.app.chat.MediaAttachment
 import io.tima.app.chat.createChatClient
+import io.tima.app.chat.preview
+import io.tima.app.platform.decodeImage
+import io.tima.app.platform.pickImage
 import io.tima.app.session.ChatEntry
 import io.tima.app.session.Session
 import io.tima.app.session.SessionCodec
@@ -86,7 +93,7 @@ fun App() {
             if (!known && msg.mine) return@collect
             val isOpen = msg.mine ||
                 (screen as? Screen.Chat)?.let { c.chatIdWith(it.peerUserId) == msg.chatId } == true
-            chats = SessionCodec.noteMessage(msg.chatId, msg.senderId, msg.text, msg.createdAtMs, isOpen)
+            chats = SessionCodec.noteMessage(msg.chatId, msg.senderId, msg.preview(), msg.createdAtMs, isOpen)
         }
     }
 
@@ -372,13 +379,33 @@ private fun ChatScreen(state: Screen.Chat, client: ChatClient, onRead: (String) 
                         else MaterialTheme.colorScheme.surfaceVariant,
                         shape = MaterialTheme.shapes.medium,
                     ) {
-                        Text(msg.text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                            msg.media?.let { MediaImage(client, it) }
+                            if (msg.text.isNotEmpty()) Text(msg.text)
+                        }
                     }
                 }
             }
         }
         ErrorText(error)
         Row(verticalAlignment = Alignment.CenterVertically) {
+            Button(enabled = !busy, onClick = {
+                busy = true; error = null
+                scope.launch {
+                    try {
+                        val image = pickImage()
+                        if (image != null) {
+                            add(client.sendImage(state.peerUserId, image.bytes, image.mime, draft.trim()))
+                            draft = ""
+                        }
+                    } catch (e: Throwable) {
+                        error = e.message ?: e.toString()
+                    } finally {
+                        busy = false
+                    }
+                }
+            }) { Text("📷") }
+            Spacer(Modifier.width(8.dp))
             OutlinedTextField(
                 value = draft, onValueChange = { draft = it },
                 label = { Text("Сообщение") },
@@ -400,6 +427,29 @@ private fun ChatScreen(state: Screen.Chat, client: ChatClient, onRead: (String) 
                 }
             }) { Text("➤") }
         }
+    }
+}
+
+@Composable
+private fun MediaImage(client: ChatClient, media: MediaAttachment) {
+    var bitmap by remember(media.mediaId) { mutableStateOf<ImageBitmap?>(null) }
+    var failed by remember(media.mediaId) { mutableStateOf(false) }
+    LaunchedEffect(media.mediaId) {
+        try {
+            bitmap = decodeImage(client.loadMedia(media))
+            failed = bitmap == null
+        } catch (_: Throwable) {
+            failed = true
+        }
+    }
+    when {
+        bitmap != null -> Image(
+            bitmap = bitmap!!,
+            contentDescription = null,
+            modifier = Modifier.widthIn(max = 260.dp).heightIn(max = 320.dp).padding(bottom = 4.dp),
+        )
+        failed -> Text("⚠ фото не загрузилось", style = MaterialTheme.typography.bodySmall)
+        else -> Text("📷 загрузка…", style = MaterialTheme.typography.bodySmall)
     }
 }
 
