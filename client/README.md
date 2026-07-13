@@ -29,6 +29,18 @@ cd C:\!tima2\client
 Windows: `~/.tima`); секрет устройства пока в файле — перенос в Keystore/Secure Enclave
 записан в roadmap фазы 3.
 
+Чат 1-на-1 (`chat/TimaChatService`, общий JVM-код в `jvmCommon`): собеседник ищется
+по телефону (`/users/lookup`), `chat_id` детерминированный — sha256 доменной метки
+и отсортированной пары user_id, стороны совпадают без договорённости. Отправка —
+полный конверт crypto-protocol.md §3: `MessageBody → zstd → SecretBox(message_key)`,
+escrow ML-KEM (публичный ключ анклава с `/escrow/pubkey`), wrapped keys всем
+устройствам обеих сторон, подпись Ed25519 по canonical_bytes. Приём — путь B
+(подпись → wrapped_key → конверт), история REST-ом и live по WS (`sync.pull`,
+`message.new` + `ack`). Сервер видит только ciphertext.
+
+E2E-тест `ChatEndToEndTest` (desktopTest) гоняет всё это против живого dev-стека;
+без поднятого сервера пропускается. Запуск: `gradle :composeApp:desktopTest`.
+
 Адрес сервера редактируется на экране входа; по умолчанию `http://127.0.0.1:8080`
 (desktop) и `http://10.0.2.2:8080` (эмулятор Android смотрит на хост).
 
