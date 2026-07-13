@@ -21,6 +21,7 @@ import (
 
 	"tima/server/internal/auth"
 	"tima/server/internal/blob"
+	"tima/server/internal/calls"
 	timacrypto "tima/server/internal/crypto"
 	"tima/server/internal/events"
 	pb "tima/server/internal/proto"
@@ -41,6 +42,11 @@ type Server struct {
 	// Переопределение лимитов auth (0 → прод-дефолт). Для dev/тестов, где с одного
 	// IP регистрируется много устройств (иначе rate limit ложно срабатывает).
 	SMSPerPhone, SMSPerIP, VerifyPerCode int
+
+	// Звонки: LiveKit-токены (nil → /calls отвечает 503). LiveKitURL клиент получает
+	// для подключения к SFU.
+	Calls      *calls.Issuer
+	LiveKitURL string
 
 	// EscrowURL — адрес stub-анклава (ESCROW_URL); "" → /escrow/pubkey отвечает 503
 	EscrowURL     string
@@ -90,6 +96,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/channels/{channelID}/subscribe", s.Auth.Require(s.unsubscribeChannel))
 	mux.HandleFunc("POST /api/v1/channels/{channelID}/posts", s.Auth.Require(s.postToChannel))
 	mux.HandleFunc("GET /api/v1/channels/{channelID}/posts", s.Auth.Require(s.listChannelPosts))
+	mux.HandleFunc("POST /api/v1/calls", s.Auth.Require(s.startCall))
+	mux.HandleFunc("POST /api/v1/calls/{callID}/answer", s.Auth.Require(s.answerCall))
+	mux.HandleFunc("POST /api/v1/calls/{callID}/end", s.Auth.Require(s.endCall))
 	mux.HandleFunc("GET /ws", s.handleWS) // auth — первым кадром, не Bearer (websocket-events.md)
 }
 

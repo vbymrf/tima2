@@ -40,6 +40,19 @@ services:
     ports: ["9000:9000", "9001:9001"]
     volumes: ["tima-dev-minio:/data"]
 
+  # LiveKit (SFU для звонков) — opt-in:
+  #   docker compose -f docker-compose.dev.yml --profile calls up -d
+  # Токены бэкенд выдаёт ключом ниже (LIVEKIT_API_KEY/SECRET). Реальный звонок с видео
+  # требует ещё и двух настоящих устройств — эмулятор камеру/сеть не даёт (ADR-0006).
+  livekit:
+    profiles: ["calls"]
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    command: ["--dev", "--bind", "0.0.0.0"]
+    environment:
+      LIVEKIT_KEYS: "devkey: devsecret_at_least_32_chars_long_000"
+    ports: ["7880:7880", "7881:7881", "7882:7882/udp"]
+
   # Stub-анклав escrow — opt-in (нужна сборка образа):
   #   docker compose -f docker-compose.dev.yml --profile escrow up -d --build
   # Доли Шамира печатаются в лог ПЕРВОГО запуска: docker logs tima-dev-escrow-stub-1

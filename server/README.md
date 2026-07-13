@@ -45,6 +45,34 @@ Client → server: `sync.pull {cursor?, limit?}` — события с `event_id
 
 Шина — Redis Pub/Sub (`REDIS_URL`, dev: `redis://:tima-dev-only@localhost:6379`); без него `/ws` отвечает 503. Если cursor старше ретеншена (GC уже удалил события после него) — `sync.gap {next_cursor}`: полный re-bootstrap REST-историей, дальше live. Офлайн-очередь push (Redis Stream → FCM/APNs) — когда появится push-провайдер.
 
+## Каналы (вещание)
+
+| Метод | Путь | Что делает |
+|-------|------|-----------|
+| POST | `/api/v1/channels` | `{title, description}` → канал, создатель — владелец и подписчик |
+| GET | `/api/v1/channels` | Мои каналы (владелец или подписчик) |
+| GET | `/api/v1/channels/discover` | Каталог публичных каналов для подписки |
+| POST/DELETE | `/api/v1/channels/{id}/subscribe` | Подписка/отписка |
+| POST | `/api/v1/channels/{id}/posts` | Публикация (владелец); fan-out `channel.post` подписчикам по WS |
+| GET | `/api/v1/channels/{id}/posts` | Лента (публичный канал — всем; приватный — подписчикам) |
+
+Канал — одностороннее вещание: контент **публичный (не E2E)**, осознанно для трансляции
+(в отличие от private-групп с GK). Авторы/премодерация (`who_can_post`) — следующая итерация.
+
+## Звонки (LiveKit)
+
+| Метод | Путь | Что делает |
+|-------|------|-----------|
+| POST | `/api/v1/calls` | `{peer_id, kind}` → комната + LiveKit-токен инициатора; собеседнику — WS `call.incoming` |
+| POST | `/api/v1/calls/{id}/answer` | Токен вызываемого, состояние `answered`, инициатору — `call.state` |
+| POST | `/api/v1/calls/{id}/end` | Завершение участником (`ended`/`missed`), собеседнику — `call.state` |
+
+Бэкенд выпускает **LiveKit access-токены** (HS256, grants `video`; ADR-0006, calls-livekit.md §4)
+ключом `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET`; медиа идёт через LiveKit (SFU/SRTP), не через нас.
+Без ключей `/calls` отвечает 503. LiveKit — opt-in в dev-compose (`--profile calls`).
+**Живой звонок с видео требует реальных устройств** (эмулятор не даёт камеру/сеть, ADR-0006) —
+серверная выдача токенов и история покрыты тестами (`internal/calls`, `TestCallFlow`).
+
 ## Escrow (stub-анклав)
 
 `escrow-stub` — **отдельный процесс/контейнер** (escrow-legal-access.md §7): приватный ключ ML-KEM-768 живёт только у него, tima ходит лишь за публичным ключом. API — контракт будущего HSM/Nitro (gate фазы 6):

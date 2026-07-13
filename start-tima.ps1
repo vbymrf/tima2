@@ -40,6 +40,9 @@ if (-not (Test-Http "http://127.0.0.1:8080/healthz")) {
 `$env:JWT_SIGNING_KEY='tima-dev-only-jwt-signing-key-not-for-prod'
 `$env:TIMA_RL_SMS_PER_IP='1000'
 `$env:TIMA_RL_SMS_PER_PHONE='100'
+`$env:LIVEKIT_API_KEY='devkey'
+`$env:LIVEKIT_API_SECRET='devsecret_at_least_32_chars_long_000'
+`$env:LIVEKIT_URL='ws://localhost:7880'
 & '$go' run ./cmd/tima serve
 "@
     Write-Host "Жду сервер..."

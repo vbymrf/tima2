@@ -17,6 +17,7 @@ import (
 	"tima/server/internal/api"
 	"tima/server/internal/auth"
 	"tima/server/internal/blob"
+	"tima/server/internal/calls"
 	"tima/server/internal/events"
 	"tima/server/internal/ratelimit"
 	"tima/server/internal/store"
@@ -177,6 +178,13 @@ func serve() {
 			log.Printf("Media Service подключён (bucket %s)", bucket)
 		} else {
 			log.Print("S3_ENDPOINT не задан — media-эндпоинты отвечают 503")
+		}
+		if lk := calls.NewIssuer(os.Getenv("LIVEKIT_API_KEY"), os.Getenv("LIVEKIT_API_SECRET")); lk != nil {
+			srv.Calls = lk
+			srv.LiveKitURL = os.Getenv("LIVEKIT_URL")
+			log.Printf("Звонки: LiveKit-токены подключены (%s)", srv.LiveKitURL)
+		} else {
+			log.Print("LIVEKIT_API_KEY/SECRET не заданы — /calls отвечает 503")
 		}
 		if escrowURL := os.Getenv("ESCROW_URL"); escrowURL != "" {
 			srv.EscrowURL = escrowURL
