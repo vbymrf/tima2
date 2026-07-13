@@ -7,11 +7,20 @@ import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import io.tima.app.api.DeviceKeyInfo
+import io.tima.app.api.EscrowDto
+import io.tima.app.api.GroupMessageDto
 import io.tima.app.api.TimaApi
+import io.tima.app.api.TimaApiException
+import io.tima.app.api.WrappedKeyDto
 import io.tima.app.session.Session
+import io.tima.crypto.CanonicalBytes
 import io.tima.crypto.DeviceAddress
+import io.tima.crypto.EnvelopeCipher
 import io.tima.crypto.EnvelopeMeta
 import io.tima.crypto.EscrowModule
+import io.tima.crypto.GroupKeyManager
+import io.tima.crypto.GroupMessageMeta
+import io.tima.crypto.MessageSigner
 import io.tima.crypto.MediaCipher
 import io.tima.crypto.MessageSerializer
 import io.tima.crypto.PersonalMessageSealer
@@ -60,6 +69,14 @@ private data class WsFrame(
     val envelope: String? = null,
 )
 
+@Serializable
+private data class KeyRotatedFrame(
+    @SerialName("group_id") val groupId: String,
+    @SerialName("gk_version") val gkVersion: Int,
+    @SerialName("sender_ephemeral_pub") val senderEphemeralPub: String,
+    @SerialName("wrapped_gk") val wrappedGk: String,
+)
+
 class TimaClient(private val session: Session) : ChatClient {
 
     private val api = TimaApi(session.serverUrl)
@@ -68,9 +85,11 @@ class TimaClient(private val session: Session) : ChatClient {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val random = SecureRandom()
 
+    private var escrowModule: EscrowModule? = null
     private var sealer: PersonalMessageSealer? = null
     private val devicesCache = mutableMapOf<String, List<DeviceKeyInfo>>()
     private val mediaCache = ConcurrentHashMap<String, ByteArray>() // media_id → plaintext (на сессию)
+    private val groupKeyCache = ConcurrentHashMap<String, MutableMap<Int, ByteArray>>() // group_id → версия → GK
 
     private val _messages = MutableSharedFlow<ChatMessage>(extraBufferCapacity = 256)
     override val messages: Flow<ChatMessage> = _messages
@@ -81,11 +100,13 @@ class TimaClient(private val session: Session) : ChatClient {
         devicesCache.getOrPut(userId) { api.listDevices(session.accessToken, userId) }
 
     /** Escrow-модуль лениво: публичный ML-KEM-ключ анклава берётся с сервера. */
-    private suspend fun ensureSealer(): PersonalMessageSealer = sealer ?: run {
+    private suspend fun ensureEscrow(): EscrowModule = escrowModule ?: run {
         val pub = api.escrowPubkey(session.accessToken)
-        PersonalMessageSealer(EscrowModule(b64url.decode(pub.publicKey), pub.version))
-            .also { sealer = it }
+        EscrowModule(b64url.decode(pub.publicKey), pub.version).also { escrowModule = it }
     }
+
+    private suspend fun ensureSealer(): PersonalMessageSealer =
+        sealer ?: PersonalMessageSealer(ensureEscrow()).also { sealer = it }
 
     /** Один WS на устройство: auth → sync.pull (догон) → live; обрыв → реконнект с паузой. */
     override suspend fun start() {
@@ -105,6 +126,23 @@ class TimaClient(private val session: Session) : ChatClient {
                                     f.envelope?.let { env ->
                                         decrypt(b64url.decode(env))?.let { _messages.emit(it) }
                                     }
+                                    if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
+                                }
+                                "message.group" -> {
+                                    // кадр несёт все поля preimage — тот же DTO, что и история
+                                    try { json.decodeFromString<GroupMessageDto>(text) } catch (_: Throwable) { null }
+                                        ?.let { dto -> decryptGroup(dto)?.let { _messages.emit(it) } }
+                                    if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
+                                }
+                                "key.rotated" -> {
+                                    try { json.decodeFromString<KeyRotatedFrame>(text) } catch (_: Throwable) { null }
+                                        ?.let { k ->
+                                            GroupKeyManager.unwrapGroupKey(
+                                                deviceKey, b64url.decode(k.senderEphemeralPub), b64url.decode(k.wrappedGk),
+                                            ).getOrNull()?.let { gk ->
+                                                groupKeyCache.getOrPut(k.groupId) { mutableMapOf() }[k.gkVersion] = gk
+                                            }
+                                        }
                                     if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
                                 }
                                 "sync.gap" -> Unit // история чата и так грузится REST-ом при открытии
@@ -213,6 +251,114 @@ class TimaClient(private val session: Session) : ChatClient {
         mime = mime,
         sizeBytes = size_bytes,
     )
+
+    // ── Группы (crypto-protocol §4: GK генерирует клиент-админ, сервер видит только обёртки) ──
+
+    override suspend fun myGroups(): List<GroupSummary> =
+        api.myGroups(session.accessToken).map { GroupSummary(it.groupId, it.title, it.myRole) }
+
+    override suspend fun createGroup(title: String, memberPhones: List<String>): GroupSummary {
+        val groupId = api.createGroup(session.accessToken, title)
+        val notFound = mutableListOf<String>()
+        for (phone in memberPhones.map { it.trim() }.filter { it.isNotEmpty() }) {
+            val userId = api.lookupUser(session.accessToken, phone)
+            if (userId == null) notFound += phone else api.addGroupMember(session.accessToken, groupId, userId)
+        }
+        rotateGroup(groupId, currentVersion = 0, reason = "member_join")
+        if (notFound.isNotEmpty()) {
+            throw TimaApiException("members_not_found", "Группа создана, но не в TIMA: ${notFound.joinToString()}")
+        }
+        return GroupSummary(groupId, title, myRole = "owner")
+    }
+
+    /** Новая версия GK: обёртки всем устройствам активных участников + escrow (один на версию). */
+    private suspend fun rotateGroup(groupId: String, currentVersion: Int, reason: String): Int {
+        val members = api.listGroupMembers(session.accessToken, groupId)
+        val devices = members.flatMap { devicesOf(it.userId) }.map {
+            DeviceAddress(it.deviceId, b64url.decode(it.encryptionPub))
+        }
+        val rotation = GroupKeyManager(ensureEscrow()).rotate(currentVersion, devices).getOrThrow()
+        api.rotateGroupKey(
+            session.accessToken, groupId, rotation.gkVersion, reason,
+            senderEphemeralPub = b64url.encode(rotation.senderEphemeralPub),
+            escrow = EscrowDto(
+                mlkemCt = b64url.encode(rotation.escrow.mlkemCt),
+                wrappedMessageKey = b64url.encode(rotation.escrow.wrappedMessageKey),
+                escrowKeyVersion = rotation.escrow.escrowKeyVersion,
+            ),
+            wrappedKeys = rotation.wrappedKeys.map { (recipient, wrapped) ->
+                WrappedKeyDto(recipient, b64url.encode(wrapped))
+            },
+        )
+        groupKeyCache.getOrPut(groupId) { mutableMapOf() }[rotation.gkVersion] = rotation.groupKey
+        return rotation.gkVersion
+    }
+
+    /** GK версии: кэш → догон с сервера (обёртки своего устройства) → unwrap. */
+    private suspend fun groupKey(groupId: String, version: Int): ByteArray? {
+        groupKeyCache[groupId]?.get(version)?.let { return it }
+        fetchGroupKeys(groupId)
+        return groupKeyCache[groupId]?.get(version)
+    }
+
+    private suspend fun fetchGroupKeys(groupId: String) {
+        val cache = groupKeyCache.getOrPut(groupId) { mutableMapOf() }
+        val since = cache.keys.maxOrNull() ?: 0
+        api.groupKeys(session.accessToken, groupId, since).forEach { k ->
+            GroupKeyManager.unwrapGroupKey(deviceKey, b64url.decode(k.senderEphemeralPub), b64url.decode(k.wrapped))
+                .getOrNull()?.let { cache[k.gkVersion] = it }
+        }
+    }
+
+    override suspend fun sendGroup(groupId: String, text: String): ChatMessage {
+        fetchGroupKeys(groupId)
+        var version = groupKeyCache[groupId]?.keys?.maxOrNull() ?: 0
+        if (version == 0) version = rotateGroup(groupId, 0, "member_join") // группа без ключа: первая ротация
+        val gk = groupKeyCache.getValue(groupId).getValue(version)
+        val payload = EnvelopeCipher.seal(gk, MessageSerializer.encodeBody(MessageBody(text = text))).getOrThrow()
+        val now = System.currentTimeMillis()
+        val meta = GroupMessageMeta(
+            groupId = groupId, senderId = session.userId, senderDevice = session.deviceId,
+            kind = 1, createdAtUnixMs = now, gkVersion = version,
+        )
+        val signature = MessageSigner.sign(deviceKey, CanonicalBytes.buildGroupMessage(meta, payload)).getOrThrow()
+        val messageId = api.postGroupMessage(
+            session.accessToken, groupId, UUID.randomUUID().toString(),
+            kind = 1, gkVersion = version, payload = b64url.encode(payload),
+            createdAtUnixMs = now, signature = b64url.encode(signature),
+        )
+        return ChatMessage(groupId, messageId, session.userId, text, now, mine = true, group = true)
+    }
+
+    override suspend fun groupHistory(groupId: String): List<ChatMessage> =
+        api.listGroupMessages(session.accessToken, groupId)
+            .mapNotNull { decryptGroup(it) }
+            .sortedBy { it.messageId }
+
+    /** Подпись по group_message_canonical → GK нужной версии → SecretBox → body. */
+    private suspend fun decryptGroup(m: GroupMessageDto): ChatMessage? {
+        val payload = b64url.decode(m.payload)
+        val senderPub = devicesOf(m.senderId).firstOrNull { it.deviceId == m.senderDevice }
+            ?.let { b64url.decode(it.signingPub) } ?: return null
+        val meta = GroupMessageMeta(
+            groupId = m.groupId, senderId = m.senderId, senderDevice = m.senderDevice,
+            kind = m.kind, createdAtUnixMs = m.createdAtUnixMs,
+            threadRoot = m.threadRoot.toULong(), replyTo = m.replyTo.toULong(), gkVersion = m.gkVersion,
+        )
+        if (!MessageSigner.verify(senderPub, CanonicalBytes.buildGroupMessage(meta, payload), b64url.decode(m.signature))) {
+            return null
+        }
+        val gk = groupKey(m.groupId, m.gkVersion) ?: return null
+        val plain = EnvelopeCipher.open(gk, payload).getOrNull() ?: return null
+        val body = MessageSerializer.decodeBody(plain).getOrNull() ?: return null
+        return ChatMessage(
+            chatId = m.groupId, messageId = m.messageId, senderId = m.senderId,
+            text = body.text, createdAtMs = m.createdAtUnixMs,
+            mine = m.senderId == session.userId,
+            media = body.media.firstOrNull()?.toAttachment(),
+            group = true,
+        )
+    }
 
     override fun close() {
         scope.cancel()

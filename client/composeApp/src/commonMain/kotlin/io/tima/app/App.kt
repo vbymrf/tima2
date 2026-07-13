@@ -47,6 +47,7 @@ import io.kodium.Kodium
 import io.tima.app.api.TimaApi
 import io.tima.app.chat.ChatClient
 import io.tima.app.chat.ChatMessage
+import io.tima.app.chat.GroupSummary
 import io.tima.app.chat.MediaAttachment
 import io.tima.app.chat.createChatClient
 import io.tima.app.chat.preview
@@ -65,6 +66,7 @@ private sealed interface Screen {
     data class Code(val serverUrl: String, val phone: String, val requestId: String, val devCode: String?) : Screen
     data class Home(val session: Session) : Screen
     data class Chat(val session: Session, val peerUserId: String, val peerPhone: String) : Screen
+    data class GroupChat(val session: Session, val groupId: String, val title: String) : Screen
 }
 
 private val b64url = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
@@ -77,6 +79,7 @@ fun App() {
     val session = when (val s = screen) {
         is Screen.Home -> s.session
         is Screen.Chat -> s.session
+        is Screen.GroupChat -> s.session
         else -> null
     }
     // Один ChatClient (одно WS) на сессию — живёт, пока пользователь вошёл
@@ -88,6 +91,7 @@ fun App() {
         val c = client ?: return@LaunchedEffect
         c.start()
         c.messages.collect { msg ->
+            if (msg.group) return@collect // группы живут своим списком (серверным), без локальных записей
             val known = SessionCodec.loadChats().any { it.chatId == msg.chatId }
             // Своё эхо с неизвестным чатом не создаёт запись: peer из senderId не извлечь
             if (!known && msg.mine) return@collect
@@ -102,9 +106,19 @@ fun App() {
             when (val s = screen) {
                 // Чат сам управляет раскладкой (LazyColumn несовместим с внешним verticalScroll)
                 is Screen.Chat -> ChatScreen(
-                    s,
                     client = client ?: return@Surface,
+                    title = "Чат с ${s.peerPhone}",
+                    targetId = s.peerUserId,
+                    isGroup = false,
                     onRead = { chatId -> chats = SessionCodec.markRead(chatId) },
+                    onBack = { screen = Screen.Home(s.session) },
+                )
+                is Screen.GroupChat -> ChatScreen(
+                    client = client ?: return@Surface,
+                    title = "Группа: ${s.title}",
+                    targetId = s.groupId,
+                    isGroup = true,
+                    onRead = {},
                     onBack = { screen = Screen.Home(s.session) },
                 )
                 else -> Column(
@@ -123,6 +137,7 @@ fun App() {
                                 chats = SessionCodec.markRead(entry.chatId)
                                 screen = Screen.Chat(s.session, entry.peerUserId, entry.title)
                             },
+                            onOpenGroup = { g -> screen = Screen.GroupChat(s.session, g.groupId, g.title) },
                             onChatsChange = { chats = it },
                             onLogout = {
                                 SessionCodec.clear()
@@ -130,7 +145,7 @@ fun App() {
                                 screen = Screen.Phone
                             },
                         )
-                        is Screen.Chat -> Unit // обработан выше
+                        is Screen.Chat, is Screen.GroupChat -> Unit // обработаны выше
                     }
                 }
             }
@@ -245,13 +260,27 @@ private fun HomeScreen(
     chats: List<ChatEntry>,
     client: ChatClient?,
     onOpen: (ChatEntry) -> Unit,
+    onOpenGroup: (GroupSummary) -> Unit,
     onChatsChange: (List<ChatEntry>) -> Unit,
     onLogout: () -> Unit,
 ) {
     var peerPhone by remember { mutableStateOf("+7") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var groups by remember { mutableStateOf<List<GroupSummary>>(emptyList()) }
+    var groupTitle by remember { mutableStateOf("") }
+    var groupPhones by remember { mutableStateOf("") }
+    var showCreateGroup by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(client) {
+        client ?: return@LaunchedEffect
+        try {
+            groups = client.myGroups()
+        } catch (_: Throwable) {
+            // сервер недоступен — секция просто пуста, чаты работают из локального списка
+        }
+    }
 
     Text("TIMA", style = MaterialTheme.typography.headlineMedium)
     Spacer(Modifier.height(8.dp))
@@ -291,6 +320,54 @@ private fun HomeScreen(
         Spacer(Modifier.height(16.dp))
     }
 
+    if (groups.isNotEmpty()) {
+        Text("Группы", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        groups.forEach { g ->
+            Button(
+                onClick = { onOpenGroup(g) },
+                enabled = !busy,
+                modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(vertical = 2.dp),
+            ) { Text("👥 ${g.title}") }
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+
+    if (showCreateGroup) {
+        OutlinedTextField(
+            value = groupTitle, onValueChange = { groupTitle = it },
+            label = { Text("Название группы") }, singleLine = true,
+            modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = groupPhones, onValueChange = { groupPhones = it },
+            label = { Text("Телефоны участников через запятую") }, singleLine = true,
+            modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        Button(enabled = !busy && groupTitle.isNotBlank() && client != null, onClick = {
+            busy = true; error = null
+            scope.launch {
+                try {
+                    val g = client!!.createGroup(groupTitle.trim(), groupPhones.split(","))
+                    groups = client.myGroups()
+                    showCreateGroup = false; groupTitle = ""; groupPhones = ""
+                    onOpenGroup(g)
+                } catch (e: Throwable) {
+                    error = e.message ?: e.toString()
+                    try { groups = client!!.myGroups() } catch (_: Throwable) {}
+                } finally {
+                    busy = false
+                }
+            }
+        }) { Text("Создать") }
+        Spacer(Modifier.height(16.dp))
+    } else {
+        Button(onClick = { showCreateGroup = true }, enabled = !busy) { Text("Создать группу") }
+        Spacer(Modifier.height(16.dp))
+    }
+
     OutlinedTextField(
         value = peerPhone, onValueChange = { peerPhone = it },
         label = { Text("Новый чат: телефон собеседника") }, singleLine = true,
@@ -326,9 +403,17 @@ private fun HomeScreen(
     Button(onClick = onLogout, enabled = !busy) { Text("Выйти") }
 }
 
+/** Экран переписки: личный чат ([isGroup]=false, [targetId]=peerUserId) или группа ([targetId]=groupId). */
 @Composable
-private fun ChatScreen(state: Screen.Chat, client: ChatClient, onRead: (String) -> Unit, onBack: () -> Unit) {
-    val chatId = remember(state.peerUserId) { client.chatIdWith(state.peerUserId) }
+private fun ChatScreen(
+    client: ChatClient,
+    title: String,
+    targetId: String,
+    isGroup: Boolean,
+    onRead: (String) -> Unit,
+    onBack: () -> Unit,
+) {
+    val chatId = remember(targetId) { if (isGroup) targetId else client.chatIdWith(targetId) }
     val messages = remember { mutableStateListOf<ChatMessage>() }
     var draft by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -345,7 +430,7 @@ private fun ChatScreen(state: Screen.Chat, client: ChatClient, onRead: (String) 
 
     LaunchedEffect(chatId) {
         try {
-            client.history(state.peerUserId).forEach(::add)
+            (if (isGroup) client.groupHistory(targetId) else client.history(targetId)).forEach(::add)
         } catch (e: Throwable) {
             error = e.message ?: e.toString()
         }
@@ -361,7 +446,7 @@ private fun ChatScreen(state: Screen.Chat, client: ChatClient, onRead: (String) 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = onBack) { Text("←") }
             Spacer(Modifier.width(12.dp))
-            Text("Чат с ${state.peerPhone}", style = MaterialTheme.typography.titleLarge)
+            Text(title, style = MaterialTheme.typography.titleLarge)
         }
         // reverseLayout: индекс 0 — низ; список сам держится за последнее сообщение
         LazyColumn(
@@ -380,6 +465,9 @@ private fun ChatScreen(state: Screen.Chat, client: ChatClient, onRead: (String) 
                         shape = MaterialTheme.shapes.medium,
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                            if (isGroup && !msg.mine) {
+                                Text(msg.senderId.take(8) + "…", style = MaterialTheme.typography.labelSmall)
+                            }
                             msg.media?.let { MediaImage(client, it) }
                             if (msg.text.isNotEmpty()) Text(msg.text)
                         }
@@ -389,23 +477,25 @@ private fun ChatScreen(state: Screen.Chat, client: ChatClient, onRead: (String) 
         }
         ErrorText(error)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(enabled = !busy, onClick = {
-                busy = true; error = null
-                scope.launch {
-                    try {
-                        val image = pickImage()
-                        if (image != null) {
-                            add(client.sendImage(state.peerUserId, image.bytes, image.mime, draft.trim()))
-                            draft = ""
+            if (!isGroup) { // медиа в группах — следующая итерация (нужен MediaRef поверх GK)
+                Button(enabled = !busy, onClick = {
+                    busy = true; error = null
+                    scope.launch {
+                        try {
+                            val image = pickImage()
+                            if (image != null) {
+                                add(client.sendImage(targetId, image.bytes, image.mime, draft.trim()))
+                                draft = ""
+                            }
+                        } catch (e: Throwable) {
+                            error = e.message ?: e.toString()
+                        } finally {
+                            busy = false
                         }
-                    } catch (e: Throwable) {
-                        error = e.message ?: e.toString()
-                    } finally {
-                        busy = false
                     }
-                }
-            }) { Text("📷") }
-            Spacer(Modifier.width(8.dp))
+                }) { Text("📷") }
+                Spacer(Modifier.width(8.dp))
+            }
             OutlinedTextField(
                 value = draft, onValueChange = { draft = it },
                 label = { Text("Сообщение") },
@@ -417,7 +507,7 @@ private fun ChatScreen(state: Screen.Chat, client: ChatClient, onRead: (String) 
                 busy = true; error = null
                 scope.launch {
                     try {
-                        add(client.send(state.peerUserId, text))
+                        add(if (isGroup) client.sendGroup(targetId, text) else client.send(targetId, text))
                         draft = ""
                     } catch (e: Throwable) {
                         error = e.message ?: e.toString()

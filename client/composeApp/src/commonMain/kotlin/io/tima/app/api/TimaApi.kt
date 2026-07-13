@@ -21,6 +21,7 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class SmsRequestBody(val phone: String)
@@ -100,6 +101,92 @@ private data class MediaCompleteBody(@SerialName("media_id") val mediaId: String
 
 @Serializable
 private data class MediaUrlResponse(@SerialName("urls") val urls: List<String>)
+
+@Serializable
+data class GroupDto(
+    @SerialName("group_id") val groupId: String,
+    val kind: String,
+    val title: String,
+    @SerialName("my_role") val myRole: String = "",
+)
+
+@Serializable
+private data class GroupsResponse(val groups: List<GroupDto>)
+
+@Serializable
+private data class CreateGroupBody(val kind: String, val title: String)
+
+@Serializable
+private data class CreateGroupResponse(@SerialName("group_id") val groupId: String)
+
+@Serializable
+private data class AddMemberBody(@SerialName("user_id") val userId: String)
+
+@Serializable
+data class EscrowDto(
+    @SerialName("mlkem_ct") val mlkemCt: String,
+    @SerialName("wrapped_message_key") val wrappedMessageKey: String,
+    @SerialName("escrow_key_version") val escrowKeyVersion: Int,
+)
+
+@Serializable
+data class WrappedKeyDto(val recipient: String, val wrapped: String)
+
+@Serializable
+private data class RotateBody(
+    @SerialName("gk_version") val gkVersion: Int,
+    val reason: String,
+    @SerialName("sender_ephemeral_pub") val senderEphemeralPub: String,
+    val escrow: EscrowDto,
+    @SerialName("wrapped_keys") val wrappedKeys: List<WrappedKeyDto>,
+)
+
+@Serializable
+data class GroupKeyDto(
+    @SerialName("gk_version") val gkVersion: Int,
+    @SerialName("sender_ephemeral_pub") val senderEphemeralPub: String,
+    val wrapped: String,
+)
+
+@Serializable
+private data class GroupKeysResponse(val keys: List<GroupKeyDto>)
+
+@Serializable
+data class GroupMemberDto(@SerialName("user_id") val userId: String, val role: String)
+
+@Serializable
+private data class GroupMembersResponse(val members: List<GroupMemberDto>)
+
+@Serializable
+data class GroupMessageDto(
+    @SerialName("message_id") val messageId: Long,
+    @SerialName("group_id") val groupId: String,
+    @SerialName("sender_id") val senderId: String,
+    @SerialName("sender_device") val senderDevice: String,
+    val kind: Int,
+    @SerialName("gk_version") val gkVersion: Int,
+    val payload: String, // base64url
+    @SerialName("thread_root") val threadRoot: Long = 0,
+    @SerialName("reply_to") val replyTo: Long = 0,
+    @SerialName("created_at_unix_ms") val createdAtUnixMs: Long,
+    val signature: String, // base64url
+)
+
+@Serializable
+private data class GroupMessagesResponse(val messages: List<GroupMessageDto>)
+
+@Serializable
+private data class PostGroupMessageBody(
+    @SerialName("client_msg_id") val clientMsgId: String,
+    val kind: Int,
+    @SerialName("gk_version") val gkVersion: Int,
+    val payload: String,
+    @SerialName("created_at_unix_ms") val createdAtUnixMs: Long,
+    val signature: String,
+)
+
+@Serializable
+private data class PostGroupMessageResponse(@SerialName("message_id") val messageId: Long)
 
 @Serializable
 private data class ApiError(val error: String = "", val message: String = "")
@@ -184,6 +271,64 @@ class TimaApi(private val baseUrl: String) {
         if (!response.status.isSuccess()) fail(response)
         return response.body<HistoryResponse>().messages
     }
+
+    // ── Группы (api-overview §Группы; крипто — crypto-protocol §4) ──
+
+    private suspend inline fun <reified T> getAuthed(path: String, token: String, vararg params: Pair<String, String>): T {
+        val response = client.get(baseUrl.trimEnd('/') + path) {
+            bearerAuth(token)
+            params.forEach { (k, v) -> parameter(k, v) }
+        }
+        if (!response.status.isSuccess()) fail(response)
+        return response.body()
+    }
+
+    private suspend inline fun <reified Req, reified Resp> postAuthed(path: String, token: String, requestBody: Req): Resp {
+        val response = client.post(baseUrl.trimEnd('/') + path) {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(requestBody)
+        }
+        if (!response.status.isSuccess()) fail(response)
+        return response.body()
+    }
+
+    suspend fun myGroups(token: String): List<GroupDto> =
+        getAuthed<GroupsResponse>("/api/v1/groups", token).groups
+
+    suspend fun createGroup(token: String, title: String): String =
+        postAuthed<CreateGroupBody, CreateGroupResponse>("/api/v1/groups", token, CreateGroupBody("private", title)).groupId
+
+    suspend fun addGroupMember(token: String, groupId: String, userId: String) {
+        postAuthed<AddMemberBody, JsonObject>("/api/v1/groups/$groupId/members", token, AddMemberBody(userId))
+    }
+
+    suspend fun listGroupMembers(token: String, groupId: String): List<GroupMemberDto> =
+        getAuthed<GroupMembersResponse>("/api/v1/groups/$groupId/members", token).members
+
+    suspend fun rotateGroupKey(
+        token: String, groupId: String, gkVersion: Int, reason: String,
+        senderEphemeralPub: String, escrow: EscrowDto, wrappedKeys: List<WrappedKeyDto>,
+    ) {
+        postAuthed<RotateBody, JsonObject>(
+            "/api/v1/groups/$groupId/keys", token,
+            RotateBody(gkVersion, reason, senderEphemeralPub, escrow, wrappedKeys),
+        )
+    }
+
+    suspend fun groupKeys(token: String, groupId: String, sinceVersion: Int): List<GroupKeyDto> =
+        getAuthed<GroupKeysResponse>("/api/v1/groups/$groupId/keys", token, "since_version" to sinceVersion.toString()).keys
+
+    suspend fun postGroupMessage(
+        token: String, groupId: String, clientMsgId: String, kind: Int,
+        gkVersion: Int, payload: String, createdAtUnixMs: Long, signature: String,
+    ): Long = postAuthed<PostGroupMessageBody, PostGroupMessageResponse>(
+        "/api/v1/groups/$groupId/messages", token,
+        PostGroupMessageBody(clientMsgId, kind, gkVersion, payload, createdAtUnixMs, signature),
+    ).messageId
+
+    suspend fun listGroupMessages(token: String, groupId: String, limit: Int = 100): List<GroupMessageDto> =
+        getAuthed<GroupMessagesResponse>("/api/v1/groups/$groupId/messages", token, "limit" to limit.toString()).messages
 
     // ── Media (media-storage.md: файлы ходят в MinIO напрямую, мимо бэкенда) ──
 

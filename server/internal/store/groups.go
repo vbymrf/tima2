@@ -189,6 +189,37 @@ func (s *Store) ListGroupMembers(ctx context.Context, groupID string) ([]Member,
 	return out, rows.Err()
 }
 
+// MyGroup — группа глазами участника (список на главном экране клиента).
+type MyGroup struct {
+	Group
+	MyRole string
+}
+
+// ListGroupsForUser — активные членства пользователя в неудалённых группах.
+func (s *Store) ListGroupsForUser(ctx context.Context, userID string) ([]MyGroup, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT g.group_id, g.kind, g.title, COALESCE(g.description, ''), g.owner_id,
+		       COALESCE(g.slow_mode_sec, 0), g.premoderation, g.threads_only, m.role
+		FROM memberships m
+		JOIN groups g ON g.group_id = m.target_id AND g.deleted_at IS NULL
+		WHERE m.target_type = 'group' AND m.user_id = $1 AND m.left_at IS NULL
+		ORDER BY m.joined_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MyGroup
+	for rows.Next() {
+		var g MyGroup
+		if err := rows.Scan(&g.GroupID, &g.Kind, &g.Title, &g.Description, &g.OwnerID,
+			&g.SlowModeSec, &g.Premoderation, &g.ThreadsOnly, &g.MyRole); err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
 // NonMemberDevices — какие из deviceIDs НЕ являются действующими устройствами
 // активных участников группы (проверка получателей wrapped_GK при ротации).
 // Сравнение по тексту: мусорный идентификатор тоже вернётся как «чужой».

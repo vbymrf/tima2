@@ -56,8 +56,10 @@ class ChatEndToEndTest {
 
         // Случайные телефоны: повторные прогоны не упираются в дедуп и rate limit телефона
         val suffix = Random.nextInt(1_000_000)
-        val alice = register(api, "+7999%07d".format(suffix))
-        val bob = register(api, "+7998%07d".format(suffix))
+        val alicePhone = "+7999%07d".format(suffix)
+        val bobPhone = "+7998%07d".format(suffix)
+        val alice = register(api, alicePhone)
+        val bob = register(api, bobPhone)
 
         val aliceChat = createChatClient(alice)
         val bobChat = createChatClient(bob)
@@ -106,6 +108,26 @@ class ChatEndToEndTest {
             assertEquals("image/png", photo.media!!.mime)
             val loaded = bobChat.loadMedia(photo.media!!)
             assertTrue(image.contentEquals(loaded), "расшифрованное медиа обязано совпасть с исходником")
+
+            // Группа: создание + ротация GK Алисой, приём и расшифровка Бобом (GK по wrapped_GK)
+            val group = aliceChat.createGroup("Тест-группа", listOf(bobPhone))
+            val bobGroups = bobChat.myGroups()
+            assertTrue(bobGroups.any { it.groupId == group.groupId }, "Боб обязан видеть группу в своём списке")
+            aliceChat.sendGroup(group.groupId, "Привет, группа! 🔐")
+            val groupMsg = withTimeout(20_000) { bobChat.messages.first { it.group && it.chatId == group.groupId } }
+            assertEquals("Привет, группа! 🔐", groupMsg.text)
+            assertEquals(alice.userId, groupMsg.senderId)
+            // Ответ Боба (member): GK берётся догоном с сервера, подпись своя
+            bobChat.sendGroup(group.groupId, "Принято!")
+            val aliceGroupHistory = withTimeout(20_000) {
+                var h = aliceChat.groupHistory(group.groupId)
+                while (h.size < 2) {
+                    kotlinx.coroutines.delay(300)
+                    h = aliceChat.groupHistory(group.groupId)
+                }
+                h
+            }
+            assertEquals(listOf("Привет, группа! 🔐", "Принято!"), aliceGroupHistory.map { it.text })
         } finally {
             aliceChat.close()
             bobChat.close()

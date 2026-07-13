@@ -57,6 +57,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/users/lookup", s.Auth.Require(s.lookupUser))
 	mux.HandleFunc("GET /api/v1/escrow/pubkey", s.Auth.Require(s.escrowPubkey))
 	mux.HandleFunc("POST /api/v1/groups", s.Auth.Require(s.createGroup))
+	mux.HandleFunc("GET /api/v1/groups", s.Auth.Require(s.listMyGroups))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}", s.Auth.Require(s.getGroup))
 	mux.HandleFunc("PATCH /api/v1/groups/{groupID}", s.Auth.Require(s.patchGroup))
 	mux.HandleFunc("DELETE /api/v1/groups/{groupID}", s.Auth.Require(s.deleteGroup))

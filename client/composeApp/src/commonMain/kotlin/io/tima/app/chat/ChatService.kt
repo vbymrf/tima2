@@ -11,7 +11,7 @@ data class MediaAttachment(
     val sizeBytes: Long,
 )
 
-/** Расшифрованное сообщение для UI. */
+/** Расшифрованное сообщение для UI. Для группы [chatId] = group_id, [group] = true. */
 data class ChatMessage(
     val chatId: String,
     val messageId: Long,
@@ -20,7 +20,11 @@ data class ChatMessage(
     val createdAtMs: Long,
     val mine: Boolean,
     val media: MediaAttachment? = null,
+    val group: Boolean = false,
 )
+
+/** Группа в списке на главном экране. */
+data class GroupSummary(val groupId: String, val title: String, val myRole: String)
 
 /** Что показать в списке чатов как последнее сообщение. */
 fun ChatMessage.preview(): String = when {
@@ -58,6 +62,19 @@ interface ChatClient {
 
     /** Скачивает и расшифровывает вложение (с кэшем в памяти). */
     suspend fun loadMedia(attachment: MediaAttachment): ByteArray
+
+    // ── Группы (crypto-protocol §4: GK генерирует клиент-админ) ──
+
+    suspend fun myGroups(): List<GroupSummary>
+
+    /** Создаёт private-группу, добавляет участников по телефонам и ротирует GK v1. */
+    suspend fun createGroup(title: String, memberPhones: List<String>): GroupSummary
+
+    /** История группы с расшифровкой GK нужных версий, старые → новые. */
+    suspend fun groupHistory(groupId: String): List<ChatMessage>
+
+    /** Шифрует GK текущей версии, подписывает group_message_canonical и отправляет. */
+    suspend fun sendGroup(groupId: String, text: String): ChatMessage
 
     fun close()
 }

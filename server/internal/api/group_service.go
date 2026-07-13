@@ -91,6 +91,23 @@ func (s *Server) createGroup(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"group_id": groupID})
 }
 
+// listMyGroups — GET /groups: активные членства пользователя (клиентский список групп).
+func (s *Server) listMyGroups(w http.ResponseWriter, r *http.Request) {
+	id, _ := auth.FromContext(r.Context())
+	groups, err := s.Store.ListGroupsForUser(r.Context(), id.UserID)
+	if err != nil {
+		log.Printf("listMyGroups: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	out := make([]map[string]any, 0, len(groups))
+	for _, g := range groups {
+		out = append(out, groupJSON(g.Group, g.MyRole))
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"groups": out})
+}
+
 func groupJSON(g store.Group, myRole string) map[string]any {
 	return map[string]any{
 		"group_id": g.GroupID, "kind": g.Kind, "title": g.Title, "description": g.Description,
