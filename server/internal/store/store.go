@@ -3,6 +3,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -124,6 +125,40 @@ func (s *Store) FindUserByPhone(ctx context.Context, phone string) (string, erro
 		return "", ErrUserUnknown
 	}
 	return userID, err
+}
+
+// ErrIdentityMismatch — присланный ключ личности не совпал с установленным у аккаунта.
+var ErrIdentityMismatch = errors.New("ключ личности не совпадает с установленным для аккаунта")
+
+// SetOrCheckIdentity: если у пользователя ещё нет ключа личности — устанавливает
+// присланный; если есть — требует точного совпадения (ADR-0010 §этап 3). Пустой
+// identityPub — пользователь без фразы (устройство работает, восстановление недоступно).
+func (s *Store) SetOrCheckIdentity(ctx context.Context, userID string, identityPub []byte) error {
+	if len(identityPub) == 0 {
+		return nil
+	}
+	var existing []byte
+	if err := s.pool.QueryRow(ctx, `SELECT identity_pub FROM users WHERE user_id = $1`, userID).Scan(&existing); err != nil {
+		return err
+	}
+	if existing == nil {
+		_, err := s.pool.Exec(ctx, `UPDATE users SET identity_pub = $2 WHERE user_id = $1`, userID, identityPub)
+		return err
+	}
+	if !bytes.Equal(existing, identityPub) {
+		return ErrIdentityMismatch
+	}
+	return nil
+}
+
+// IdentityPub — ключ личности аккаунта устройства (nil, если не установлен).
+func (s *Store) IdentityPub(ctx context.Context, userID string) ([]byte, error) {
+	var pub []byte
+	err := s.pool.QueryRow(ctx, `SELECT identity_pub FROM users WHERE user_id = $1`, userID).Scan(&pub)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrUserUnknown
+	}
+	return pub, err
 }
 
 // NewDevice регистрирует устройство пользователя, device_id назначает база.

@@ -425,3 +425,57 @@ func TestUserLookup(t *testing.T) {
 		t.Fatalf("мусорный phone: ожидался 400, получен %d", code)
 	}
 }
+
+// registerWithIdentity — SMS-флоу + register с заданным identity_pub. Возвращает статус.
+func registerWithIdentity(t *testing.T, ts *httptest.Server, phone string, identityPub []byte) int {
+	t.Helper()
+	var smsResp struct {
+		RequestID string `json:"request_id"`
+		DevCode   string `json:"dev_code"`
+	}
+	if code := postJSON(t, ts, "/api/v1/auth/sms/request", map[string]string{"phone": phone}, &smsResp); code != 200 {
+		t.Fatalf("sms/request: %d", code)
+	}
+	var verifyResp struct {
+		RegistrationToken string `json:"registration_token"`
+	}
+	if code := postJSON(t, ts, "/api/v1/auth/sms/verify",
+		map[string]string{"request_id": smsResp.RequestID, "code": smsResp.DevCode}, &verifyResp); code != 200 {
+		t.Fatalf("sms/verify: %d", code)
+	}
+	b64 := base64.RawURLEncoding
+	encPub := make([]byte, 32)
+	sigSeed := make([]byte, 32)
+	_, _ = rand.Read(encPub)
+	_, _ = rand.Read(sigSeed)
+	sigPub := ed25519.NewKeyFromSeed(sigSeed).Public().(ed25519.PublicKey)
+	return postJSON(t, ts, "/api/v1/auth/register", map[string]string{
+		"registration_token": verifyResp.RegistrationToken,
+		"encryption_pub":     b64.EncodeToString(encPub),
+		"signing_pub":        b64.EncodeToString(sigPub),
+		"identity_pub":       b64.EncodeToString(identityPub),
+	}, nil)
+}
+
+// TestAccountIdentity — ключ личности (ADR-0010 §этап 3): первое устройство
+// устанавливает identity_pub, второе с ТЕМ ЖЕ — ок, с ДРУГИМ — 403 (барьер угона).
+func TestAccountIdentity(t *testing.T) {
+	ts, _ := setup(t)
+	phone := "+79990000010"
+
+	idA := make([]byte, 32)
+	_, _ = rand.Read(idA)
+	if code := registerWithIdentity(t, ts, phone, idA); code != 201 {
+		t.Fatalf("первое устройство с identity: ожидался 201, получен %d", code)
+	}
+	// То же устройство/аккаунт, тот же ключ личности — совпадение, ок
+	if code := registerWithIdentity(t, ts, phone, idA); code != 201 {
+		t.Fatalf("второе устройство с тем же identity: ожидался 201, получен %d", code)
+	}
+	// Чужой ключ личности на тот же аккаунт — отказ
+	idB := make([]byte, 32)
+	_, _ = rand.Read(idB)
+	if code := registerWithIdentity(t, ts, phone, idB); code != http.StatusForbidden {
+		t.Fatalf("чужой identity: ожидался 403, получен %d", code)
+	}
+}

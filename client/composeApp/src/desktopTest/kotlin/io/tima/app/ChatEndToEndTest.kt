@@ -28,19 +28,25 @@ class ChatEndToEndTest {
     private val base = "http://127.0.0.1:8080"
     private val b64url = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
 
-    private suspend fun register(api: TimaApi, phone: String): Session {
+    /** Регистрация устройства; при phrase != null — с ключом личности из этой фразы. */
+    private suspend fun register(api: TimaApi, phone: String, phrase: List<String>? = null): Session {
         val sms = api.smsRequest(phone)
         val code = requireNotNull(sms.devCode) { "сервер должен работать с TIMA_DEV_SMS=1" }
         val token = api.smsVerify(sms.requestId, code).registrationToken
         val key = Kodium.generateKeyPair()
         val pub = key.getPublicKey()
-        val reg = api.register(token, b64url.encode(pub.encryptionKey), b64url.encode(pub.signingKey))
+        val identity = phrase?.let { io.tima.crypto.AccountMnemonic.identityFromMnemonic(it) }
+        val reg = api.register(
+            token, b64url.encode(pub.encryptionKey), b64url.encode(pub.signingKey),
+            identityPub = identity?.let { b64url.encode(it.getPublicKey().signingKey) } ?: "",
+        )
         return Session(
             serverUrl = base,
             userId = reg.userId,
             deviceId = reg.deviceId,
             accessToken = reg.accessToken,
             deviceSecretB64 = b64url.encode(key.secretKey),
+            identitySecretB64 = identity?.let { b64url.encode(it.secretKey) } ?: "",
         )
     }
 
@@ -144,9 +150,11 @@ class ChatEndToEndTest {
             return@runBlocking
         }
         val suffix = Random.nextInt(1_000_000)
+        // Боб — с ключом личности (recovery-фраза): восстановление требует подписи ею (этап 3)
+        val bobPhrase = io.tima.crypto.AccountMnemonic.generate()
         val alice = register(api, "+7997%07d".format(suffix))
         val bobPhone = "+7996%07d".format(suffix)
-        val bob1 = register(api, bobPhone)
+        val bob1 = register(api, bobPhone, bobPhrase)
 
         val aliceChat = createChatClient(alice)
         val bob1Chat = createChatClient(bob1)
@@ -164,8 +172,9 @@ class ChatEndToEndTest {
             }
             assertEquals(listOf("Сообщение до входа второго устройства"), h1.map { it.text })
 
-            // Второе устройство Боба: тот же телефон → тот же аккаунт, НОВЫЙ device без GK v1
-            val bob2 = register(api, bobPhone)
+            // Второе устройство Боба: тот же телефон → тот же аккаунт, ТА ЖЕ фраза → тот же
+            // ключ личности; НОВЫЙ device без GK v1. Восстановление подписывается фразой.
+            val bob2 = register(api, bobPhone, bobPhrase)
             val bob2Chat = createChatClient(bob2)
             try {
                 bob2Chat.start()
@@ -174,12 +183,13 @@ class ChatEndToEndTest {
                     bob2Chat.groupHistory(group.groupId).isEmpty(),
                     "новое устройство не должно читать историю без GK",
                 )
-                // Восстановление у участников (bob1 онлайн помогает)
+                // Восстановление у участников (bob1 онлайн помогает), запрос подписан фразой
                 val recovered = bob2Chat.recoverGroupHistory(group.groupId)
                 assertEquals(
                     listOf("Сообщение до входа второго устройства"), recovered.map { it.text },
                     "после восстановления второе устройство читает историю",
                 )
+                // Барьер этапа 3 (чужая фраза → отказ) проверяется в Go: TestAccountIdentity
             } finally {
                 bob2Chat.close()
             }

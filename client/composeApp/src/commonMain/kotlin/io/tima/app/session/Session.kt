@@ -24,6 +24,9 @@ data class Session(
     @SerialName("device_id") val deviceId: String,
     @SerialName("access_token") val accessToken: String,
     @SerialName("device_secret_b64") val deviceSecretB64: String,
+    // Секрет ключа личности (из recovery-фразы); пусто — устройство без фразы
+    // (восстановление истории недоступно, ADR-0010 §этап 3). На диске тоже под SecretVault.
+    @SerialName("identity_secret_b64") val identitySecretB64: String = "",
     @SerialName("secret_vaulted") val secretVaulted: Boolean = false,
 )
 
@@ -44,13 +47,15 @@ object SessionCodec {
     private const val SESSION = "session.json"
     private const val CHATS = "chats.json"
 
-    /** Возвращает сессию с открытым секретом в памяти; старый plaintext-файл мигрирует в vault. */
+    /** Возвращает сессию с открытыми секретами в памяти; старый plaintext-файл мигрирует в vault. */
     fun load(): Session? = SessionStorage.read(SESSION)?.let {
         try {
             val stored = json.decodeFromString<Session>(it)
             if (stored.secretVaulted) {
                 stored.copy(
                     deviceSecretB64 = b64url.encode(SecretVault.reveal(b64url.decode(stored.deviceSecretB64))),
+                    identitySecretB64 = stored.identitySecretB64.takeIf { s -> s.isNotEmpty() }
+                        ?.let { s -> b64url.encode(SecretVault.reveal(b64url.decode(s))) } ?: "",
                     secretVaulted = false,
                 )
             } else {
@@ -62,10 +67,12 @@ object SessionCodec {
         }
     }
 
-    /** На диск секрет уходит только через [SecretVault]. */
+    /** На диск секреты (устройства и личности) уходят только через [SecretVault]. */
     fun save(session: Session) {
         val vaulted = session.copy(
             deviceSecretB64 = b64url.encode(SecretVault.protect(b64url.decode(session.deviceSecretB64))),
+            identitySecretB64 = session.identitySecretB64.takeIf { it.isNotEmpty() }
+                ?.let { b64url.encode(SecretVault.protect(b64url.decode(it))) } ?: "",
             secretVaulted = true,
         )
         SessionStorage.write(SESSION, json.encodeToString(Session.serializer(), vaulted))

@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"tima/server/internal/auth"
+	timacrypto "tima/server/internal/crypto"
 	"tima/server/internal/store"
 )
 
@@ -135,6 +136,12 @@ func (s *Server) groupRotate(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"group_id": r.PathValue("groupID"), "gk_version": req.GKVersion})
 }
 
+// recoverCanonical — подписываемый ключом личности preimage запроса восстановления.
+// Домен + group_id + requester_device (UUID без '|' — однозначно). Тот же в Kotlin-клиенте.
+func recoverCanonical(groupID, requesterDevice string) []byte {
+	return []byte("tima.recover.v1|" + groupID + "|" + requesterDevice)
+}
+
 // groupKeyRecover — POST /groups/{groupID}/keys/recover: устройство просит недостающие
 // версии GK (историю до своего входа) у участников (ADR-0010 §этап 1). Сервер находит
 // устройства-помощники, у кого эти версии есть, и рассылает им recovery.gk_request.
@@ -149,6 +156,28 @@ func (s *Server) groupKeyRecover(w http.ResponseWriter, r *http.Request) {
 	if err != nil || role == "" {
 		writeErr(w, http.StatusForbidden, "not_member", "восстановление доступно только участникам группы")
 		return
+	}
+
+	// Аутентификация запроса ключом личности (ADR-0010 §этап 3): если у аккаунта
+	// установлен identity_pub, запрос обязан быть им подписан — барьер против угона
+	// номера (укравший SIM имеет device JWT, но без фразы не подпишет). Аккаунт без
+	// фразы (identity_pub NULL) — восстановление по членству (совместимость).
+	var req struct {
+		Signature string `json:"signature"` // base64url, Ed25519 над recoverCanonical
+	}
+	_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req)
+	identityPub, err := s.Store.IdentityPub(r.Context(), id.UserID)
+	if err != nil {
+		log.Printf("groupKeyRecover: identity: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	if len(identityPub) == 32 {
+		sig, derr := base64.RawURLEncoding.DecodeString(req.Signature)
+		if derr != nil || !timacrypto.VerifyEnvelopeSignature(identityPub, recoverCanonical(groupID, id.DeviceID), sig) {
+			writeErr(w, http.StatusForbidden, "bad_identity_sig", "запрос не подписан ключом личности аккаунта")
+			return
+		}
 	}
 	missing, err := s.Store.MissingGKVersions(r.Context(), groupID, id.DeviceID)
 	if err != nil {

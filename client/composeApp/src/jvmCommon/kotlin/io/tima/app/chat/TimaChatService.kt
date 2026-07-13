@@ -97,6 +97,9 @@ class TimaClient(private val session: Session) : ChatClient {
 
     private val api = TimaApi(session.serverUrl)
     private val deviceKey = KodiumPrivateKey.fromRaw(b64url.decode(session.deviceSecretB64))
+    // Ключ личности (из фразы) — для подписи запросов восстановления; null без фразы
+    private val identityKey: KodiumPrivateKey? =
+        session.identitySecretB64.takeIf { it.isNotEmpty() }?.let { KodiumPrivateKey.fromRaw(b64url.decode(it)) }
     private val json = Json { ignoreUnknownKeys = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val random = SecureRandom()
@@ -381,7 +384,10 @@ class TimaClient(private val session: Session) : ChatClient {
             .sortedBy { it.messageId }
 
     override suspend fun recoverGroupHistory(groupId: String): List<ChatMessage> {
-        val resp = api.recoverGroupKeys(session.accessToken, groupId)
+        // Подпись запроса ключом личности (этап 3): сервер сверит с identity_pub аккаунта.
+        val canonical = "tima.recover.v1|$groupId|${session.deviceId}".encodeToByteArray()
+        val signature = identityKey?.let { b64url.encode(MessageSigner.sign(it, canonical).getOrThrow()) } ?: ""
+        val resp = api.recoverGroupKeys(session.accessToken, groupId, signature)
         // Есть помощники онлайн — ждём их обёртки; иначе сразу отдаём что есть.
         if (resp.helpers > 0) {
             withTimeoutOrNull(15_000) { _recoveryReady.first { it == groupId } }

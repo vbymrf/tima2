@@ -46,6 +46,7 @@ data class RegisterBody(
     @SerialName("registration_token") val registrationToken: String,
     @SerialName("encryption_pub") val encryptionPub: String, // base64url, X25519 32 B
     @SerialName("signing_pub") val signingPub: String,       // base64url, Ed25519 32 B
+    @SerialName("identity_pub") val identityPub: String = "", // base64url, Ed25519 32 B — ключ личности
 )
 
 @Serializable
@@ -192,6 +193,9 @@ private data class PostGroupMessageBody(
 private data class PostGroupMessageResponse(@SerialName("message_id") val messageId: Long)
 
 @Serializable
+private data class RecoverBody(val signature: String = "")
+
+@Serializable
 data class RecoverResponse(val requested: Int = 0, val helpers: Int = 0)
 
 @Serializable
@@ -251,8 +255,10 @@ class TimaApi(private val baseUrl: String) {
     suspend fun smsVerify(requestId: String, code: String): SmsVerifyResponse =
         post("/api/v1/auth/sms/verify", SmsVerifyBody(requestId, code))
 
-    suspend fun register(registrationToken: String, encryptionPub: String, signingPub: String): RegisterResponse =
-        post("/api/v1/auth/register", RegisterBody(registrationToken, encryptionPub, signingPub))
+    suspend fun register(
+        registrationToken: String, encryptionPub: String, signingPub: String, identityPub: String = "",
+    ): RegisterResponse =
+        post("/api/v1/auth/register", RegisterBody(registrationToken, encryptionPub, signingPub, identityPub))
 
     // ── Под device JWT ──
 
@@ -349,9 +355,10 @@ class TimaApi(private val baseUrl: String) {
     suspend fun listGroupMessages(token: String, groupId: String, limit: Int = 100): List<GroupMessageDto> =
         getAuthed<GroupMessagesResponse>("/api/v1/groups/$groupId/messages", token, "limit" to limit.toString()).messages
 
-    /** Запрос восстановления недостающих версий GK у участников (ADR-0010 §этап 1). */
-    suspend fun recoverGroupKeys(token: String, groupId: String): RecoverResponse =
-        postAuthed<JsonObject, RecoverResponse>("/api/v1/groups/$groupId/keys/recover", token, JsonObject(emptyMap()))
+    /** Запрос восстановления недостающих версий GK у участников (ADR-0010 §этап 1/3).
+     *  signature — подпись ключом личности (пусто, если у аккаунта нет фразы). */
+    suspend fun recoverGroupKeys(token: String, groupId: String, signature: String = ""): RecoverResponse =
+        postAuthed<RecoverBody, RecoverResponse>("/api/v1/groups/$groupId/keys/recover", token, RecoverBody(signature))
 
     /** Помощник отдаёт обёртки GK под устройство-запросившее. */
     suspend fun provideGroupKeys(token: String, groupId: String, requesterDevice: String, keys: List<ProvideKeyDto>) {

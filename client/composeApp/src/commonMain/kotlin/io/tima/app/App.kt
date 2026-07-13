@@ -52,6 +52,8 @@ import io.tima.app.chat.MediaAttachment
 import io.tima.app.chat.createChatClient
 import io.tima.app.chat.preview
 import io.tima.app.platform.decodeImage
+import io.tima.app.platform.identityFromPhrase
+import io.tima.app.platform.newIdentity
 import io.tima.app.platform.pickImage
 import io.tima.app.session.ChatEntry
 import io.tima.app.session.Session
@@ -67,6 +69,7 @@ private sealed interface Screen {
     data class Home(val session: Session) : Screen
     data class Chat(val session: Session, val peerUserId: String, val peerPhone: String) : Screen
     data class GroupChat(val session: Session, val groupId: String, val title: String) : Screen
+    data class PhraseReveal(val session: Session, val phrase: List<String>) : Screen
 }
 
 private val b64url = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
@@ -128,7 +131,15 @@ fun App() {
                 ) {
                     when (s) {
                         is Screen.Phone -> PhoneScreen(onCode = { screen = it })
-                        is Screen.Code -> CodeScreen(s, onHome = { screen = it }, onBack = { screen = Screen.Phone })
+                        is Screen.Code -> CodeScreen(
+                            s,
+                            onRegistered = { session, newPhrase ->
+                                screen = if (newPhrase != null) Screen.PhraseReveal(session, newPhrase)
+                                else Screen.Home(session)
+                            },
+                            onBack = { screen = Screen.Phone },
+                        )
+                        is Screen.PhraseReveal -> PhraseRevealScreen(s, onDone = { screen = Screen.Home(s.session) })
                         is Screen.Home -> HomeScreen(
                             s.session,
                             chats = chats,
@@ -196,8 +207,13 @@ private fun PhoneScreen(onCode: (Screen.Code) -> Unit) {
 }
 
 @Composable
-private fun CodeScreen(state: Screen.Code, onHome: (Screen.Home) -> Unit, onBack: () -> Unit) {
+private fun CodeScreen(
+    state: Screen.Code,
+    onRegistered: (Session, List<String>?) -> Unit, // phrase != null → показать её (новый аккаунт)
+    onBack: () -> Unit,
+) {
     var code by remember { mutableStateOf(state.devCode ?: "") }
+    var phraseInput by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -213,6 +229,17 @@ private fun CodeScreen(state: Screen.Code, onHome: (Screen.Home) -> Unit, onBack
         label = { Text("6 цифр") }, singleLine = true,
         modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
     )
+    Spacer(Modifier.height(8.dp))
+    OutlinedTextField(
+        value = phraseInput, onValueChange = { phraseInput = it },
+        label = { Text("Секретная фраза (для входа на новом устройстве)") },
+        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+    )
+    Text(
+        "Пусто — создадим новый аккаунт и покажем фразу.",
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.widthIn(max = 420.dp),
+    )
     Spacer(Modifier.height(16.dp))
     if (busy) {
         CircularProgressIndicator()
@@ -221,6 +248,15 @@ private fun CodeScreen(state: Screen.Code, onHome: (Screen.Home) -> Unit, onBack
             busy = true; error = null
             scope.launch {
                 try {
+                    // Ключ личности: введённая фраза (новое устройство) или новая (регистрация)
+                    val entered = phraseInput.trim()
+                    val identity = if (entered.isEmpty()) newIdentity()
+                    else identityFromPhrase(entered.split(Regex("\\s+")))
+                    if (identity == null) {
+                        error = "Неверная секретная фраза — проверьте слова"
+                        busy = false
+                        return@launch
+                    }
                     val api = TimaApi(state.serverUrl)
                     val token = api.smsVerify(state.requestId, code.trim()).registrationToken
                     // Ключи устройства: один seed → X25519 (конверты) + Ed25519 (подпись)
@@ -230,6 +266,7 @@ private fun CodeScreen(state: Screen.Code, onHome: (Screen.Home) -> Unit, onBack
                         registrationToken = token,
                         encryptionPub = b64url.encode(pub.encryptionKey),
                         signingPub = b64url.encode(pub.signingKey),
+                        identityPub = identity.pubB64,
                     )
                     val session = Session(
                         serverUrl = state.serverUrl,
@@ -238,9 +275,11 @@ private fun CodeScreen(state: Screen.Code, onHome: (Screen.Home) -> Unit, onBack
                         deviceId = reg.deviceId,
                         accessToken = reg.accessToken,
                         deviceSecretB64 = b64url.encode(deviceKey.secretKey),
+                        identitySecretB64 = identity.secretB64,
                     )
                     SessionCodec.save(session)
-                    onHome(Screen.Home(session))
+                    // Новую фразу показываем; введённую — не повторяем
+                    onRegistered(session, if (entered.isEmpty()) identity.phrase else null)
                 } catch (e: Throwable) {
                     error = e.message ?: e.toString()
                 } finally {
@@ -252,6 +291,32 @@ private fun CodeScreen(state: Screen.Code, onHome: (Screen.Home) -> Unit, onBack
     Spacer(Modifier.height(8.dp))
     Button(onClick = onBack, enabled = !busy) { Text("Назад") }
     ErrorText(error)
+}
+
+@Composable
+private fun PhraseRevealScreen(state: Screen.PhraseReveal, onDone: () -> Unit) {
+    Text("Сохраните секретную фразу", style = MaterialTheme.typography.headlineMedium)
+    Spacer(Modifier.height(12.dp))
+    Text(
+        "Эти 12 слов восстанавливают доступ на новом устройстве и вашу переписку. " +
+            "Запишите их по порядку и храните в тайне — восстановить фразу нельзя.",
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.widthIn(max = 420.dp),
+    )
+    Spacer(Modifier.height(16.dp))
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+    ) {
+        Text(
+            state.phrase.mapIndexed { i, w -> "${i + 1}. $w" }.joinToString("   "),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+    Spacer(Modifier.height(20.dp))
+    Button(onClick = onDone) { Text("Я записал(а) фразу") }
 }
 
 @Composable

@@ -159,8 +159,9 @@ func (s *Server) smsVerify(w http.ResponseWriter, r *http.Request) {
 func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		RegistrationToken string `json:"registration_token"`
-		EncryptionPub     string `json:"encryption_pub"` // base64url, X25519 32 B
-		SigningPub        string `json:"signing_pub"`    // base64url, Ed25519 32 B
+		EncryptionPub     string `json:"encryption_pub"`         // base64url, X25519 32 B
+		SigningPub        string `json:"signing_pub"`            // base64url, Ed25519 32 B
+		IdentityPub       string `json:"identity_pub,omitempty"` // base64url, Ed25519 32 B — ключ личности из фразы
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -177,9 +178,27 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad_keys", "ключи должны быть по 32 байта (base64url)")
 		return
 	}
+	var identityPub []byte
+	if req.IdentityPub != "" {
+		identityPub, err = base64.RawURLEncoding.DecodeString(req.IdentityPub)
+		if err != nil || len(identityPub) != 32 {
+			writeErr(w, http.StatusBadRequest, "bad_identity", "identity_pub — Ed25519 32 байта (base64url)")
+			return
+		}
+	}
 	userID, err := s.Store.UpsertUserByPhone(r.Context(), claims.Subject)
 	if err != nil {
 		log.Printf("register: upsert user: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	// Ключ личности: первое устройство устанавливает, последующие обязаны совпасть
+	// (устройство, знающее фразу, выведет тот же ключ). Расхождение → отказ.
+	if err := s.Store.SetOrCheckIdentity(r.Context(), userID, identityPub); errors.Is(err, store.ErrIdentityMismatch) {
+		writeErr(w, http.StatusForbidden, "identity_mismatch", "ключ личности не совпадает с аккаунтом")
+		return
+	} else if err != nil {
+		log.Printf("register: identity: %v", err)
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return
 	}
