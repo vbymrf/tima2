@@ -301,19 +301,34 @@ class TimaClient(private val session: Session) : ChatClient {
         return groupKeyCache[groupId]?.get(version)
     }
 
-    private suspend fun fetchGroupKeys(groupId: String) {
+    /** Забирает обёртки для своего устройства; возвращает current_version группы на сервере. */
+    private suspend fun fetchGroupKeys(groupId: String): Int {
         val cache = groupKeyCache.getOrPut(groupId) { mutableMapOf() }
         val since = cache.keys.maxOrNull() ?: 0
-        api.groupKeys(session.accessToken, groupId, since).forEach { k ->
+        val resp = api.groupKeys(session.accessToken, groupId, since)
+        resp.keys.forEach { k ->
             GroupKeyManager.unwrapGroupKey(deviceKey, b64url.decode(k.senderEphemeralPub), b64url.decode(k.wrapped))
                 .getOrNull()?.let { cache[k.gkVersion] = it }
         }
+        return resp.currentVersion
     }
 
     override suspend fun sendGroup(groupId: String, text: String): ChatMessage {
-        fetchGroupKeys(groupId)
+        val serverVersion = fetchGroupKeys(groupId)
         var version = groupKeyCache[groupId]?.keys?.maxOrNull() ?: 0
-        if (version == 0) version = rotateGroup(groupId, 0, "member_join") // группа без ключа: первая ротация
+        if (version == 0) {
+            // Ключа для этого устройства нет. Владелец/админ — ротирует (строго
+            // current+1, чтобы покрыть в т.ч. новое устройство); иначе понятная ошибка.
+            try {
+                version = rotateGroup(groupId, serverVersion, "member_join")
+            } catch (e: TimaApiException) {
+                if (e.code == "not_group_admin") {
+                    throw TimaApiException("no_group_key",
+                        "Ключ группы ещё не выдан вашему устройству — дождитесь сообщения от владельца группы")
+                }
+                throw e
+            }
+        }
         val gk = groupKeyCache.getValue(groupId).getValue(version)
         val payload = EnvelopeCipher.seal(gk, MessageSerializer.encodeBody(MessageBody(text = text))).getOrThrow()
         val now = System.currentTimeMillis()

@@ -273,14 +273,15 @@ private fun HomeScreen(
     var showCreateGroup by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(client) {
-        client ?: return@LaunchedEffect
+    suspend fun refreshGroups() {
+        client ?: return
         try {
             groups = client.myGroups()
         } catch (_: Throwable) {
             // сервер недоступен — секция просто пуста, чаты работают из локального списка
         }
     }
+    LaunchedEffect(client) { refreshGroups() }
 
     Text("TIMA", style = MaterialTheme.typography.headlineMedium)
     Spacer(Modifier.height(8.dp))
@@ -320,9 +321,18 @@ private fun HomeScreen(
         Spacer(Modifier.height(16.dp))
     }
 
-    if (groups.isNotEmpty()) {
-        Text("Группы", style = MaterialTheme.typography.titleMedium)
+    Row(
+        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Группы", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Button(enabled = !busy, onClick = { scope.launch { refreshGroups() } }) { Text("⟳") }
+    }
+    Spacer(Modifier.height(8.dp))
+    if (groups.isEmpty()) {
+        Text("Групп пока нет", style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(8.dp))
+    } else {
         groups.forEach { g ->
             Button(
                 onClick = { onOpenGroup(g) },

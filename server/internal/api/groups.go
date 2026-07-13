@@ -145,10 +145,19 @@ func (s *Server) groupKeys(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("since_version"); v != "" {
 		since, _ = strconv.ParseInt(v, 10, 32)
 	}
+	groupID := r.PathValue("groupID")
 	id, _ := auth.FromContext(r.Context())
-	keys, err := s.Store.ListGroupKeysForDevice(r.Context(), r.PathValue("groupID"), id.DeviceID, int32(since))
+	keys, err := s.Store.ListGroupKeysForDevice(r.Context(), groupID, id.DeviceID, int32(since))
 	if err != nil {
 		log.Printf("groupKeys: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	// current_version — максимум по группе (может быть больше версий, выданных
+	// этому устройству): новому устройству админа она нужна для ротации current+1.
+	current, err := s.Store.CurrentGKVersion(r.Context(), groupID)
+	if err != nil {
+		log.Printf("groupKeys: current version: %v", err)
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return
 	}
@@ -163,5 +172,5 @@ func (s *Server) groupKeys(w http.ResponseWriter, r *http.Request) {
 		out = append(out, item{k.GKVersion, b64.EncodeToString(k.SenderEphemeralPub), b64.EncodeToString(k.Wrapped)})
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"keys": out})
+	_ = json.NewEncoder(w).Encode(map[string]any{"keys": out, "current_version": current})
 }

@@ -303,6 +303,16 @@ type DeviceGroupKey struct {
 	Wrapped            []byte
 }
 
+// CurrentGKVersion — максимальная версия GK группы (0, если ротаций не было).
+// Нужна клиенту-админу, чьё новое устройство ещё без обёрток: чтобы ротировать
+// строго current+1, а не вслепую с 0 (иначе version_conflict).
+func (s *Store) CurrentGKVersion(ctx context.Context, groupID string) (int32, error) {
+	var v int32
+	err := s.pool.QueryRow(ctx, `
+		SELECT COALESCE(MAX(gk_version), 0) FROM group_key_history WHERE group_id = $1`, groupID).Scan(&v)
+	return v, err
+}
+
 // ListGroupKeysForDevice — версии > sinceVersion, для которых у устройства есть обёртка
 // (GET /groups/{id}/keys?since_version=). Исключённый участник новых версий не увидит.
 func (s *Store) ListGroupKeysForDevice(ctx context.Context, groupID, deviceID string, sinceVersion int32) ([]DeviceGroupKey, error) {

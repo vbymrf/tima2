@@ -149,7 +149,10 @@ data class GroupKeyDto(
 )
 
 @Serializable
-private data class GroupKeysResponse(val keys: List<GroupKeyDto>)
+data class GroupKeysResponse(
+    val keys: List<GroupKeyDto>,
+    @SerialName("current_version") val currentVersion: Int = 0,
+)
 
 @Serializable
 data class GroupMemberDto(@SerialName("user_id") val userId: String, val role: String)
@@ -316,8 +319,8 @@ class TimaApi(private val baseUrl: String) {
         )
     }
 
-    suspend fun groupKeys(token: String, groupId: String, sinceVersion: Int): List<GroupKeyDto> =
-        getAuthed<GroupKeysResponse>("/api/v1/groups/$groupId/keys", token, "since_version" to sinceVersion.toString()).keys
+    suspend fun groupKeys(token: String, groupId: String, sinceVersion: Int): GroupKeysResponse =
+        getAuthed("/api/v1/groups/$groupId/keys", token, "since_version" to sinceVersion.toString())
 
     suspend fun postGroupMessage(
         token: String, groupId: String, clientMsgId: String, kind: Int,
