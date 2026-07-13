@@ -4,12 +4,17 @@ package io.tima.app
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -19,7 +24,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -29,6 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.kodium.Kodium
 import io.tima.app.api.TimaApi
+import io.tima.app.chat.ChatMessage
+import io.tima.app.chat.createChatService
 import io.tima.app.session.Session
 import io.tima.app.session.SessionCodec
 import io.tima.app.session.defaultServerUrl
@@ -40,6 +50,7 @@ private sealed interface Screen {
     data object Phone : Screen
     data class Code(val serverUrl: String, val requestId: String, val devCode: String?) : Screen
     data class Home(val session: Session) : Screen
+    data class Chat(val session: Session, val peerUserId: String, val peerPhone: String) : Screen
 }
 
 private val b64url = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
@@ -50,18 +61,27 @@ fun App() {
 
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                when (val s = screen) {
-                    is Screen.Phone -> PhoneScreen(onCode = { screen = it })
-                    is Screen.Code -> CodeScreen(s, onHome = { screen = it }, onBack = { screen = Screen.Phone })
-                    is Screen.Home -> HomeScreen(s.session, onLogout = {
-                        SessionCodec.clear()
-                        screen = Screen.Phone
-                    })
+            when (val s = screen) {
+                // Чат сам управляет раскладкой (LazyColumn несовместим с внешним verticalScroll)
+                is Screen.Chat -> ChatScreen(s, onBack = { screen = Screen.Home(s.session) })
+                else -> Column(
+                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    when (s) {
+                        is Screen.Phone -> PhoneScreen(onCode = { screen = it })
+                        is Screen.Code -> CodeScreen(s, onHome = { screen = it }, onBack = { screen = Screen.Phone })
+                        is Screen.Home -> HomeScreen(
+                            s.session,
+                            onChat = { screen = it },
+                            onLogout = {
+                                SessionCodec.clear()
+                                screen = Screen.Phone
+                            },
+                        )
+                        is Screen.Chat -> Unit // обработан выше
+                    }
                 }
             }
         }
@@ -169,17 +189,127 @@ private fun CodeScreen(state: Screen.Code, onHome: (Screen.Home) -> Unit, onBack
 }
 
 @Composable
-private fun HomeScreen(session: Session, onLogout: () -> Unit) {
-    Text("Вы вошли в TIMA", style = MaterialTheme.typography.headlineMedium)
-    Spacer(Modifier.height(16.dp))
-    Text("Сервер: ${session.serverUrl}")
-    Text("Пользователь: ${session.userId}")
-    Text("Устройство: ${session.deviceId}")
+private fun HomeScreen(session: Session, onChat: (Screen.Chat) -> Unit, onLogout: () -> Unit) {
+    var peerPhone by remember { mutableStateOf("+7") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    Text("TIMA", style = MaterialTheme.typography.headlineMedium)
     Spacer(Modifier.height(8.dp))
-    Text("Ключи устройства созданы, устройство зарегистрировано.", style = MaterialTheme.typography.bodyMedium)
-    Text("Чаты — следующая итерация.", style = MaterialTheme.typography.bodyMedium)
+    Text("Вы вошли: ${session.userId.take(8)}…", style = MaterialTheme.typography.bodyMedium)
+    Spacer(Modifier.height(24.dp))
+    OutlinedTextField(
+        value = peerPhone, onValueChange = { peerPhone = it },
+        label = { Text("Телефон собеседника") }, singleLine = true,
+        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+    )
     Spacer(Modifier.height(16.dp))
-    Button(onClick = onLogout) { Text("Выйти") }
+    if (busy) {
+        CircularProgressIndicator()
+    } else {
+        Button(onClick = {
+            busy = true; error = null
+            scope.launch {
+                try {
+                    val peer = TimaApi(session.serverUrl).lookupUser(session.accessToken, peerPhone.trim())
+                    if (peer == null) {
+                        error = "Пользователь не найден — он ещё не вошёл в TIMA"
+                    } else {
+                        onChat(Screen.Chat(session, peer, peerPhone.trim()))
+                    }
+                } catch (e: Throwable) {
+                    error = e.message ?: e.toString()
+                } finally {
+                    busy = false
+                }
+            }
+        }) { Text("Открыть чат") }
+    }
+    ErrorText(error)
+    Spacer(Modifier.height(24.dp))
+    Button(onClick = onLogout, enabled = !busy) { Text("Выйти") }
+}
+
+@Composable
+private fun ChatScreen(state: Screen.Chat, onBack: () -> Unit) {
+    val service = remember(state.peerUserId) { createChatService(state.session, state.peerUserId) }
+    val messages = remember { mutableStateListOf<ChatMessage>() }
+    var draft by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+
+    fun add(msg: ChatMessage) {
+        if (messages.none { it.messageId == msg.messageId }) {
+            messages.add(msg)
+            messages.sortBy { it.messageId }
+        }
+    }
+
+    LaunchedEffect(service) {
+        try {
+            service.start()
+            service.history().forEach(::add)
+        } catch (e: Throwable) {
+            error = e.message ?: e.toString()
+        }
+        service.incoming.collect(::add)
+    }
+    DisposableEffect(service) {
+        onDispose { service.close() }
+    }
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = onBack) { Text("←") }
+            Spacer(Modifier.width(12.dp))
+            Text("Чат с ${state.peerPhone}", style = MaterialTheme.typography.titleLarge)
+        }
+        LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp)) {
+            items(messages, key = { it.messageId }) { msg ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    horizontalArrangement = if (msg.mine) Arrangement.End else Arrangement.Start,
+                ) {
+                    Surface(
+                        color = if (msg.mine) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                        shape = MaterialTheme.shapes.medium,
+                    ) {
+                        Text(msg.text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+                    }
+                }
+            }
+        }
+        ErrorText(error)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = draft, onValueChange = { draft = it },
+                label = { Text("Сообщение") },
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Button(enabled = !busy && draft.isNotBlank(), onClick = {
+                val text = draft.trim()
+                busy = true; error = null
+                scope.launch {
+                    try {
+                        add(service.send(text))
+                        draft = ""
+                    } catch (e: Throwable) {
+                        error = e.message ?: e.toString()
+                    } finally {
+                        busy = false
+                    }
+                }
+            }) { Text("➤") }
+        }
+    }
 }
 
 @Composable

@@ -23,14 +23,31 @@ kotlin {
             implementation("eu.livotov.labs:kodium:1.0.0")
             implementation("io.ktor:ktor-client-core:3.5.1")
             implementation("io.ktor:ktor-client-content-negotiation:3.5.1")
+            implementation("io.ktor:ktor-client-websockets:3.5.1")
             implementation("io.ktor:ktor-serialization-kotlinx-json:3.5.1")
         }
+        // Общий JVM-код Android+Desktop: конвейер конверта поверх messenger-crypto (JVM-библиотека)
+        val jvmCommon by creating {
+            dependsOn(commonMain.get())
+            dependencies {
+                implementation("com.squareup.wire:wire-runtime:5.2.1") // классы Envelope/MessageBody из messenger-crypto
+            }
+        }
         val desktopMain by getting {
+            dependsOn(jvmCommon)
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation("io.ktor:ktor-client-okhttp:3.5.1")
                 implementation("io.tima:messenger-crypto:0.1.0") // подменяется composite build
             }
+        }
+        val desktopTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
+        androidMain {
+            dependsOn(jvmCommon)
         }
         androidMain.dependencies {
             implementation("androidx.activity:activity-compose:1.9.3")
