@@ -825,25 +825,25 @@ private fun ChatScreen(
         }
         ErrorText(error)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (!isGroup) { // медиа в группах — следующая итерация (нужен MediaRef поверх GK)
-                Button(enabled = !busy, onClick = {
-                    busy = true; error = null
-                    scope.launch {
-                        try {
-                            val image = pickImage()
-                            if (image != null) {
-                                add(client.sendImage(targetId, image.bytes, image.mime, draft.trim()))
-                                draft = ""
-                            }
-                        } catch (e: Throwable) {
-                            error = e.message ?: e.toString()
-                        } finally {
-                            busy = false
+            Button(enabled = !busy, onClick = {
+                busy = true; error = null
+                scope.launch {
+                    try {
+                        val image = pickImage()
+                        if (image != null) {
+                            val sent = if (isGroup) client.sendGroupImage(targetId, image.bytes, image.mime, draft.trim())
+                            else client.sendImage(targetId, image.bytes, image.mime, draft.trim())
+                            add(sent)
+                            draft = ""
                         }
+                    } catch (e: Throwable) {
+                        error = e.message ?: e.toString()
+                    } finally {
+                        busy = false
                     }
-                }) { Text("📷") }
-                Spacer(Modifier.width(8.dp))
-            }
+                }
+            }) { Text("📷") }
+            Spacer(Modifier.width(8.dp))
             OutlinedTextField(
                 value = draft, onValueChange = { draft = it },
                 label = { Text("Сообщение") },

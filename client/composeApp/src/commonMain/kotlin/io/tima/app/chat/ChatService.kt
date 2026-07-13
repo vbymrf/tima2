@@ -127,6 +127,9 @@ interface ChatClient {
     /** Шифрует GK текущей версии, подписывает group_message_canonical и отправляет. */
     suspend fun sendGroup(groupId: String, text: String): ChatMessage
 
+    /** Фото в группу: файл под своим media_key → MinIO; media_key в теле под GK. */
+    suspend fun sendGroupImage(groupId: String, imageBytes: ByteArray, mime: String, caption: String = ""): ChatMessage
+
     fun close()
 }
 

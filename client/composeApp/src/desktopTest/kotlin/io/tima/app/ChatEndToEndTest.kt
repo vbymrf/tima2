@@ -135,6 +135,14 @@ class ChatEndToEndTest {
                 h
             }
             assertEquals(listOf("Привет, группа! 🔐", "Принято!"), aliceGroupHistory.map { it.text })
+
+            // Фото в группе: файл под media_key → MinIO; media_key в теле под GK; Боб расшифровывает
+            val groupImage = ByteArray(1500).also { java.security.SecureRandom().nextBytes(it) }
+            aliceChat.sendGroupImage(group.groupId, groupImage, "image/png", "фото в группу")
+            val groupPhoto = withTimeout(20_000) { bobChat.messages.first { it.group && it.media != null } }
+            assertEquals("фото в группу", groupPhoto.text)
+            val gLoaded = bobChat.loadMedia(groupPhoto.media!!)
+            assertTrue(groupImage.contentEquals(gLoaded), "медиа группы расшифровано верно")
         } finally {
             aliceChat.close()
             bobChat.close()

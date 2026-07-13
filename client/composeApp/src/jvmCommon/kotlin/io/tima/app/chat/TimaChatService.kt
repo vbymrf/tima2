@@ -518,7 +518,26 @@ class TimaClient(private val session: Session) : ChatClient {
         return resp.currentVersion
     }
 
-    override suspend fun sendGroup(groupId: String, text: String): ChatMessage {
+    override suspend fun sendGroup(groupId: String, text: String): ChatMessage =
+        sealAndPostGroup(groupId, MessageBody(text = text), kind = 1) // CK_TEXT
+
+    override suspend fun sendGroupImage(groupId: String, imageBytes: ByteArray, mime: String, caption: String): ChatMessage {
+        // media_key на файл; сервер и MinIO видят только ciphertext (как в личных)
+        val mediaKey = ByteArray(32).also(random::nextBytes)
+        val sealedFile = MediaCipher.seal(mediaKey, imageBytes).getOrThrow()
+        val init = api.mediaInit(session.accessToken, sealedFile.size.toLong(), mime)
+        api.putPresigned(init.uploadUrls.first(), sealedFile)
+        api.mediaComplete(session.accessToken, init.mediaId)
+        mediaCache[init.mediaId] = imageBytes
+        val body = MessageBody(
+            text = caption,
+            media = listOf(MediaRef(media_id = init.mediaId, media_key = mediaKey.toByteString(), mime = mime, size_bytes = imageBytes.size.toLong())),
+        )
+        return sealAndPostGroup(groupId, body, kind = 3) // CK_IMAGE
+    }
+
+    /** GK нужной версии → SecretBox(zstd(body)) → подпись group_message_canonical → отправка. */
+    private suspend fun sealAndPostGroup(groupId: String, body: MessageBody, kind: Int): ChatMessage {
         val serverVersion = fetchGroupKeys(groupId)
         var version = groupKeyCache[groupId]?.keys?.maxOrNull() ?: 0
         if (version == 0) {
@@ -535,19 +554,22 @@ class TimaClient(private val session: Session) : ChatClient {
             }
         }
         val gk = groupKeyCache.getValue(groupId).getValue(version)
-        val payload = EnvelopeCipher.seal(gk, MessageSerializer.encodeBody(MessageBody(text = text))).getOrThrow()
+        val payload = EnvelopeCipher.seal(gk, MessageSerializer.encodeBody(body)).getOrThrow()
         val now = System.currentTimeMillis()
         val meta = GroupMessageMeta(
             groupId = groupId, senderId = session.userId, senderDevice = session.deviceId,
-            kind = 1, createdAtUnixMs = now, gkVersion = version,
+            kind = kind, createdAtUnixMs = now, gkVersion = version,
         )
         val signature = MessageSigner.sign(deviceKey, CanonicalBytes.buildGroupMessage(meta, payload)).getOrThrow()
         val messageId = api.postGroupMessage(
             session.accessToken, groupId, UUID.randomUUID().toString(),
-            kind = 1, gkVersion = version, payload = b64url.encode(payload),
+            kind = kind, gkVersion = version, payload = b64url.encode(payload),
             createdAtUnixMs = now, signature = b64url.encode(signature),
         )
-        return ChatMessage(groupId, messageId, session.userId, text, now, mine = true, group = true)
+        return ChatMessage(
+            groupId, messageId, session.userId, body.text, now, mine = true, group = true,
+            media = body.media.firstOrNull()?.toAttachment(),
+        )
     }
 
     override suspend fun groupHistory(groupId: String): List<ChatMessage> =
