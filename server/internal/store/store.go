@@ -116,6 +116,16 @@ func (s *Store) UpsertUserByPhone(ctx context.Context, phone string) (string, er
 	return userID, err
 }
 
+// FindUserByPhone — user_id по телефону; ErrUserUnknown, если не зарегистрирован.
+func (s *Store) FindUserByPhone(ctx context.Context, phone string) (string, error) {
+	var userID string
+	err := s.pool.QueryRow(ctx, `SELECT user_id FROM users WHERE phone = $1`, phone).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrUserUnknown
+	}
+	return userID, err
+}
+
 // NewDevice регистрирует устройство пользователя, device_id назначает база.
 func (s *Store) NewDevice(ctx context.Context, userID string, encryptionPub, signingPub []byte) (string, error) {
 	var deviceID string

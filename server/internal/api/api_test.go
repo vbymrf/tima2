@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"testing"
 
@@ -379,5 +380,46 @@ func TestRejections(t *testing.T) {
 		map[string]string{"request_id": smsResp.RequestID, "code": "000000"}, nil); code != http.StatusForbidden {
 		// вероятность коллизии с настоящим кодом 1e-6 — приемлемо для теста
 		t.Fatalf("неверный код: ожидался 403, получен %d", code)
+	}
+}
+
+// TestUserLookup — contact discovery: телефон → user_id, только под Bearer.
+func TestUserLookup(t *testing.T) {
+	ts, _ := setup(t)
+	alice := registerDevice(t, ts, "+79990000005")
+	bob := registerDevice(t, ts, "+79990000006")
+
+	// Без токена → 401
+	resp, err := http.Get(ts.URL + "/api/v1/users/lookup?phone=%2B79990000006")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("без токена: ожидался 401, получен %d", resp.StatusCode)
+	}
+
+	get := func(phone string) (int, string) {
+		req, _ := http.NewRequest("GET", ts.URL+"/api/v1/users/lookup?phone="+url.QueryEscape(phone), nil)
+		req.Header.Set("Authorization", "Bearer "+alice.token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out struct {
+			UserID string `json:"user_id"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		return resp.StatusCode, out.UserID
+	}
+	if code, userID := get("+79990000006"); code != http.StatusOK || userID != bob.userID {
+		t.Fatalf("lookup: %d, user_id=%q (ожидался %q)", code, userID, bob.userID)
+	}
+	if code, _ := get("+79990000099"); code != http.StatusNotFound {
+		t.Fatalf("незарегистрированный: ожидался 404, получен %d", code)
+	}
+	if code, _ := get("не-телефон"); code != http.StatusBadRequest {
+		t.Fatalf("мусорный phone: ожидался 400, получен %d", code)
 	}
 }

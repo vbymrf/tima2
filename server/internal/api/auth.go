@@ -201,6 +201,28 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// lookupUser — GET /users/lookup?phone=: user_id по телефону (contact discovery MVP).
+// Только под Bearer; отвечает 404 без деталей. Приватность справочника (rate limit
+// на перебор, скрытие по настройке) — итерация Privacy вместе с контактами.
+func (s *Server) lookupUser(w http.ResponseWriter, r *http.Request) {
+	phone := r.URL.Query().Get("phone")
+	if !phoneRe.MatchString(phone) {
+		writeErr(w, http.StatusBadRequest, "bad_phone", "нужен телефон в формате E.164")
+		return
+	}
+	userID, err := s.Store.FindUserByPhone(r.Context(), phone)
+	if errors.Is(err, store.ErrUserUnknown) {
+		writeErr(w, http.StatusNotFound, "user_not_found", "пользователь не найден")
+		return
+	} else if err != nil {
+		log.Printf("lookupUser: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"user_id": userID})
+}
+
 // listDeviceKeys — GET /keys/devices?user_id=: публичные ключи устройств собеседника
 // (отправителю — адресаты wrapped keys; получателю — проверка подписи).
 func (s *Server) listDeviceKeys(w http.ResponseWriter, r *http.Request) {
