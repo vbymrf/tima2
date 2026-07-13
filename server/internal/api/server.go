@@ -38,6 +38,10 @@ type Server struct {
 	Limit  *ratelimit.Limiter // nil → без лимитов частоты (dev без Redis)
 	DevSMS bool               // TIMA_DEV_SMS=1: код из /auth/sms/request возвращается в ответе
 
+	// Переопределение лимитов auth (0 → прод-дефолт). Для dev/тестов, где с одного
+	// IP регистрируется много устройств (иначе rate limit ложно срабатывает).
+	SMSPerPhone, SMSPerIP, VerifyPerCode int
+
 	// EscrowURL — адрес stub-анклава (ESCROW_URL); "" → /escrow/pubkey отвечает 503
 	EscrowURL     string
 	escrowMu      sync.Mutex
@@ -53,6 +57,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// Под device JWT
 	mux.HandleFunc("POST /api/v1/messages", s.Auth.Require(s.postMessage))
 	mux.HandleFunc("GET /api/v1/chats/{chatID}/messages", s.Auth.Require(s.listMessages))
+	mux.HandleFunc("POST /api/v1/chats/{chatID}/recover", s.Auth.Require(s.chatRecover))
+	mux.HandleFunc("POST /api/v1/chats/{chatID}/recover/provide", s.Auth.Require(s.chatRecoverProvide))
 	mux.HandleFunc("GET /api/v1/keys/devices", s.Auth.Require(s.listDeviceKeys))
 	mux.HandleFunc("GET /api/v1/users/lookup", s.Auth.Require(s.lookupUser))
 	mux.HandleFunc("GET /api/v1/escrow/pubkey", s.Auth.Require(s.escrowPubkey))
@@ -269,8 +275,9 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
 	b64 := base64.RawURLEncoding
 	type item struct {
 		MessageID  uint64 `json:"message_id"`
-		Envelope   string `json:"envelope"`    // base64url(protobuf Envelope) с единственной обёрткой устройства
-		WrappedKey string `json:"wrapped_key"` // base64url — дублирует обёртку из конверта для удобства
+		Envelope   string `json:"envelope"`                 // base64url(protobuf Envelope) с единственной обёрткой устройства
+		WrappedKey string `json:"wrapped_key"`              // base64url — дублирует обёртку из конверта для удобства
+		WrapEph    string `json:"wrap_ephemeral,omitempty"` // эфемерал обёртки восстановления (иначе — sender_ephemeral_pub конверта)
 	}
 	out := make([]item, 0, len(msgs))
 	for _, m := range msgs {
@@ -302,7 +309,11 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка сериализации")
 			return
 		}
-		out = append(out, item{MessageID: m.MessageID, Envelope: b64.EncodeToString(raw), WrappedKey: b64.EncodeToString(m.WrappedKeyForDevice)})
+		it := item{MessageID: m.MessageID, Envelope: b64.EncodeToString(raw), WrappedKey: b64.EncodeToString(m.WrappedKeyForDevice)}
+		if len(m.WrapEphemeral) == 32 {
+			it.WrapEph = b64.EncodeToString(m.WrapEphemeral)
+		}
+		out = append(out, it)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"messages": out})

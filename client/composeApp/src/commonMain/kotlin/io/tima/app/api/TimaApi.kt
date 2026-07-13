@@ -79,6 +79,8 @@ data class EscrowPubkey(
 data class HistoryItem(
     @SerialName("message_id") val messageId: Long,
     @SerialName("envelope") val envelope: String, // base64url(protobuf Envelope), обёртка этого устройства
+    // Эфемерал обёртки восстановления (иначе разворачивается по sender_ephemeral_pub конверта)
+    @SerialName("wrap_ephemeral") val wrapEphemeral: String = "",
 )
 
 @Serializable
@@ -196,7 +198,24 @@ private data class PostGroupMessageResponse(@SerialName("message_id") val messag
 private data class RecoverBody(val signature: String = "")
 
 @Serializable
-data class RecoverResponse(val requested: Int = 0, val helpers: Int = 0)
+data class RecoverResponse(
+    val requested: Int = 0,
+    val helpers: Int = 0,
+    @SerialName("own_helpers") val ownHelpers: Int = 0,
+)
+
+@Serializable
+data class ProvideMsgKeyDto(
+    @SerialName("message_id") val messageId: Long,
+    @SerialName("sender_ephemeral_pub") val senderEphemeralPub: String,
+    val wrapped: String,
+)
+
+@Serializable
+private data class ProvideChatBody(
+    @SerialName("requester_device") val requesterDevice: String,
+    val keys: List<ProvideMsgKeyDto>,
+)
 
 @Serializable
 data class ProvideKeyDto(
@@ -407,6 +426,18 @@ class TimaApi(private val baseUrl: String) {
         val response = client.get(url)
         if (!response.status.isSuccess()) throw TimaApiException("download_failed", "MinIO GET: HTTP ${response.status.value}")
         return response.body()
+    }
+
+    /** Запрос восстановления истории личного чата (ADR-0010 §этап 2). */
+    suspend fun recoverChatKeys(token: String, chatId: String, signature: String = ""): RecoverResponse =
+        postAuthed<RecoverBody, RecoverResponse>("/api/v1/chats/$chatId/recover", token, RecoverBody(signature))
+
+    /** Помощник отдаёт обёртки ключей сообщений под устройство-запросившее. */
+    suspend fun provideChatKeys(token: String, chatId: String, requesterDevice: String, keys: List<ProvideMsgKeyDto>) {
+        postAuthed<ProvideChatBody, JsonObject>(
+            "/api/v1/chats/$chatId/recover/provide", token,
+            ProvideChatBody(requesterDevice, keys),
+        )
     }
 
     /** POST /messages: конверт как protobuf; clientMsgId — дедуп повторной отправки. */

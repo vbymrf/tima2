@@ -11,6 +11,7 @@ import io.tima.app.api.DeviceKeyInfo
 import io.tima.app.api.EscrowDto
 import io.tima.app.api.GroupMessageDto
 import io.tima.app.api.ProvideKeyDto
+import io.tima.app.api.ProvideMsgKeyDto
 import io.tima.app.api.TimaApi
 import io.tima.app.api.TimaApiException
 import io.tima.app.api.WrappedKeyDto
@@ -93,6 +94,17 @@ private data class RecoveryRequestFrame(
 @Serializable
 private data class RecoveryReadyFrame(@SerialName("group_id") val groupId: String)
 
+@Serializable
+private data class MsgRecoveryRequestFrame(
+    @SerialName("chat_id") val chatId: String,
+    @SerialName("requester_device") val requesterDevice: String,
+    @SerialName("requester_enc_pub") val requesterEncPub: String,
+    val own: Boolean = false,
+)
+
+@Serializable
+private data class MsgRecoveryReadyFrame(@SerialName("chat_id") val chatId: String)
+
 class TimaClient(private val session: Session) : ChatClient {
 
     private val api = TimaApi(session.serverUrl)
@@ -113,8 +125,11 @@ class TimaClient(private val session: Session) : ChatClient {
     private val _messages = MutableSharedFlow<ChatMessage>(extraBufferCapacity = 256)
     override val messages: Flow<ChatMessage> = _messages
 
-    // Сигнал «обёртки восстановления готовы» по group_id (recovery.gk_ready)
+    // Сигналы «обёртки восстановления готовы» по group_id / chat_id
     private val _recoveryReady = MutableSharedFlow<String>(extraBufferCapacity = 16)
+    private val _msgRecoveryReady = MutableSharedFlow<String>(extraBufferCapacity = 16)
+    private val _consentRequests = MutableSharedFlow<RecoveryConsent>(extraBufferCapacity = 16)
+    override val consentRequests: Flow<RecoveryConsent> = _consentRequests
 
     override fun chatIdWith(peerUserId: String): String = personalChatId(session.userId, peerUserId)
 
@@ -178,6 +193,20 @@ class TimaClient(private val session: Session) : ChatClient {
                                         ?.let { _recoveryReady.emit(it.groupId) }
                                     if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
                                 }
+                                "recovery.msg_request" -> {
+                                    // Помощник личного чата: свои устройства — авто, собеседник — согласие
+                                    try { json.decodeFromString<MsgRecoveryRequestFrame>(text) } catch (_: Throwable) { null }
+                                        ?.let { req ->
+                                            val consent = RecoveryConsent(req.chatId, req.requesterDevice, req.requesterEncPub)
+                                            if (req.own) provideChatKeys(consent) else _consentRequests.emit(consent)
+                                        }
+                                    if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
+                                }
+                                "recovery.msg_ready" -> {
+                                    try { json.decodeFromString<MsgRecoveryReadyFrame>(text) } catch (_: Throwable) { null }
+                                        ?.let { _msgRecoveryReady.emit(it.chatId) }
+                                    if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
+                                }
                                 "sync.gap" -> Unit // история чата и так грузится REST-ом при открытии
                                 else -> Unit
                             }
@@ -194,7 +223,10 @@ class TimaClient(private val session: Session) : ChatClient {
 
     override suspend fun history(peerUserId: String): List<ChatMessage> =
         api.listMessages(session.accessToken, chatIdWith(peerUserId))
-            .mapNotNull { decrypt(b64url.decode(it.envelope)) }
+            .mapNotNull { item ->
+                val wrapEph = item.wrapEphemeral.takeIf { it.isNotEmpty() }?.let { b64url.decode(it) }
+                decrypt(b64url.decode(item.envelope), wrapEph)
+            }
             .sortedBy { it.messageId }
 
     override suspend fun send(peerUserId: String, text: String): ChatMessage =
@@ -229,6 +261,40 @@ class TimaClient(private val session: Session) : ChatClient {
             MediaCipher.open(attachment.mediaKey, api.getPresigned(urls.first())).getOrThrow()
         }
 
+    // ── Восстановление личного чата (ADR-0010 §этап 2) ──
+
+    override suspend fun recoverChatHistory(peerUserId: String): List<ChatMessage> {
+        val chatId = chatIdWith(peerUserId)
+        val canonical = "tima.recover.v1|$chatId|${session.deviceId}".encodeToByteArray()
+        val signature = identityKey?.let { b64url.encode(MessageSigner.sign(it, canonical).getOrThrow()) } ?: ""
+        val resp = api.recoverChatKeys(session.accessToken, chatId, signature)
+        // Свои устройства помогают сразу; согласие собеседника — асинхронно, ждём готовности
+        if (resp.helpers > 0) {
+            withTimeoutOrNull(20_000) { _msgRecoveryReady.first { it == chatId } }
+        }
+        return history(peerUserId)
+    }
+
+    override suspend fun approveRecovery(consent: RecoveryConsent) = provideChatKeys(consent)
+
+    /** Помощник: разворачивает свои ключи сообщений чата и заворачивает под устройство-запросившее. */
+    private suspend fun provideChatKeys(consent: RecoveryConsent) {
+        val recipientPub = b64url.decode(consent.requesterEncPub)
+        val ephemeral = Kodium.generateKeyPair()
+        val ephPub = b64url.encode(ephemeral.getPublicKey().encryptionKey)
+        val keys = api.listMessages(session.accessToken, consent.chatId).mapNotNull { item ->
+            val sealed = MessageSerializer.decodeEnvelope(b64url.decode(item.envelope)).getOrNull() ?: return@mapNotNull null
+            val wrapped = sealed.wrappedKeys[session.deviceId] ?: return@mapNotNull null
+            val wrapEph = item.wrapEphemeral.takeIf { it.isNotEmpty() }?.let { b64url.decode(it) } ?: sealed.senderEphemeralPub
+            val messageKey = WrappedKeyService.unwrap(deviceKey, wrapEph, wrapped).getOrNull() ?: return@mapNotNull null
+            val reWrapped = WrappedKeyService.wrap(ephemeral, recipientPub, messageKey).getOrNull() ?: return@mapNotNull null
+            ProvideMsgKeyDto(item.messageId, ephPub, b64url.encode(reWrapped))
+        }
+        if (keys.isNotEmpty()) {
+            runCatching { api.provideChatKeys(session.accessToken, consent.chatId, consent.requesterDevice, keys) }
+        }
+    }
+
     private suspend fun sealAndPost(peerUserId: String, body: MessageBody, kind: Int): ChatMessage {
         val sealer = ensureSealer()
         val chatId = chatIdWith(peerUserId)
@@ -256,15 +322,18 @@ class TimaClient(private val session: Session) : ChatClient {
         )
     }
 
-    /** Путь B: подпись → wrapped_key своего устройства → конверт → body. Битое/чужое → null. */
-    private suspend fun decrypt(envelopeBytes: ByteArray): ChatMessage? {
+    /**
+     * Путь B: подпись → wrapped_key своего устройства → конверт → body. Битое/чужое → null.
+     * @param wrapEphemeral эфемерал обёртки восстановления, если он не из конверта (этап 2).
+     */
+    private suspend fun decrypt(envelopeBytes: ByteArray, wrapEphemeral: ByteArray? = null): ChatMessage? {
         val sealed: SealedPersonalMessage =
             MessageSerializer.decodeEnvelope(envelopeBytes).getOrNull() ?: return null
         val senderSigningPub = devicesOf(sealed.meta.senderId)
             .firstOrNull { it.deviceId == sealed.meta.senderDevice }
             ?.let { b64url.decode(it.signingPub) } ?: return null
         val payload = PersonalMessageSealer
-            .openWithWrappedKey(sealed, session.deviceId, deviceKey, senderSigningPub)
+            .openWithWrappedKey(sealed, session.deviceId, deviceKey, senderSigningPub, wrapEphemeral)
             .getOrNull() ?: return null
         val body = MessageSerializer.decodeBody(payload).getOrNull() ?: return null
         return ChatMessage(

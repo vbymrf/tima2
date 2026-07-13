@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +50,7 @@ import io.tima.app.chat.ChatClient
 import io.tima.app.chat.ChatMessage
 import io.tima.app.chat.GroupSummary
 import io.tima.app.chat.MediaAttachment
+import io.tima.app.chat.RecoveryConsent
 import io.tima.app.chat.createChatClient
 import io.tima.app.chat.preview
 import io.tima.app.platform.decodeImage
@@ -78,6 +80,7 @@ private val b64url = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
 fun App() {
     var screen by remember { mutableStateOf(SessionCodec.load()?.let { Screen.Home(it) } ?: Screen.Phone) }
     var chats by remember { mutableStateOf(SessionCodec.loadChats()) }
+    val scope = rememberCoroutineScope()
 
     val session = when (val s = screen) {
         is Screen.Home -> s.session
@@ -90,6 +93,29 @@ fun App() {
     DisposableEffect(client) {
         onDispose { client?.close() }
     }
+    // Запрос собеседника на восстановление — показываем диалог согласия
+    var consent by remember { mutableStateOf<RecoveryConsent?>(null) }
+    LaunchedEffect(client) {
+        client?.consentRequests?.collect { consent = it }
+    }
+    consent?.let { req ->
+        val c = client
+        AlertDialog(
+            onDismissRequest = { consent = null },
+            title = { Text("Запрос на восстановление") },
+            text = { Text("Собеседник просит отдать ему историю этой переписки для входа на новом устройстве. Разрешить?") },
+            confirmButton = {
+                Button(onClick = {
+                    consent = null
+                    scope.launch { runCatching { c?.approveRecovery(req) } }
+                }) { Text("Разрешить") }
+            },
+            dismissButton = {
+                Button(onClick = { consent = null }) { Text("Отклонить") }
+            },
+        )
+    }
+
     LaunchedEffect(client) {
         val c = client ?: return@LaunchedEffect
         c.start()
@@ -521,7 +547,23 @@ private fun ChatScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = onBack) { Text("←") }
             Spacer(Modifier.width(12.dp))
-            Text(title, style = MaterialTheme.typography.titleLarge)
+            Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            // Восстановить историю: у своих устройств (авто) или собеседника/участников (согласие)
+            Button(enabled = !busy, onClick = {
+                busy = true; error = null
+                scope.launch {
+                    try {
+                        val restored = if (isGroup) client.recoverGroupHistory(targetId)
+                        else client.recoverChatHistory(targetId)
+                        restored.forEach(::add)
+                        if (restored.isEmpty()) error = "История не восстановлена — источник офлайн или недоступен"
+                    } catch (e: Throwable) {
+                        error = e.message ?: e.toString()
+                    } finally {
+                        busy = false
+                    }
+                }
+            }) { Text("⟲") }
         }
         // reverseLayout: индекс 0 — низ; список сам держится за последнее сообщение
         LazyColumn(

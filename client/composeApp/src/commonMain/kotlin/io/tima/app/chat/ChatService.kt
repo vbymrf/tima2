@@ -26,6 +26,9 @@ data class ChatMessage(
 /** Группа в списке на главном экране. */
 data class GroupSummary(val groupId: String, val title: String, val myRole: String)
 
+/** Запрос собеседника на восстановление: показать пользователю «разрешить?». */
+data class RecoveryConsent(val chatId: String, val requesterDevice: String, val requesterEncPub: String)
+
 /** Что показать в списке чатов как последнее сообщение. */
 fun ChatMessage.preview(): String = when {
     media != null && text.isEmpty() -> "📷 Фото"
@@ -62,6 +65,18 @@ interface ChatClient {
 
     /** Скачивает и расшифровывает вложение (с кэшем в памяти). */
     suspend fun loadMedia(attachment: MediaAttachment): ByteArray
+
+    /**
+     * Восстановление истории личного чата у своих устройств (авто) или собеседника
+     * (с согласия). Возвращает историю после восстановления (ADR-0010 §этап 2).
+     */
+    suspend fun recoverChatHistory(peerUserId: String): List<ChatMessage>
+
+    /** Запросы собеседника на выдачу истории — UI показывает диалог согласия. */
+    val consentRequests: Flow<RecoveryConsent>
+
+    /** Согласиться отдать историю чата запросившему устройству (после подтверждения в UI). */
+    suspend fun approveRecovery(consent: RecoveryConsent)
 
     // ── Группы (crypto-protocol §4: GK генерирует клиент-админ) ──
 

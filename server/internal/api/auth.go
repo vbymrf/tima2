@@ -26,13 +26,25 @@ import (
 var phoneRe = regexp.MustCompile(`^\+[1-9][0-9]{7,14}$`) // E.164
 
 // Лимиты auth-контура (api-overview: rate limiting): значения консервативные,
-// пересматриваются по метрикам.
+// пересматриваются по метрикам. Прод-дефолты; Server.SMS* переопределяют их
+// (dev/тесты, где с одного IP регистрируется много устройств) — см. main.go.
 const (
 	rlWindow        = 10 * time.Minute
 	rlSmsPerPhone   = 3  // SMS на телефон: защита от спама SMS-провайдером
 	rlSmsPerIP      = 10 // SMS с одного IP: перебор чужих телефонов
 	rlVerifyPerCode = 5  // попыток verify на request_id: перебор 6-значного кода
 )
+
+func (s *Server) limSmsPerPhone() int64   { return orDefault(s.SMSPerPhone, rlSmsPerPhone) }
+func (s *Server) limSmsPerIP() int64      { return orDefault(s.SMSPerIP, rlSmsPerIP) }
+func (s *Server) limVerifyPerCode() int64 { return orDefault(s.VerifyPerCode, rlVerifyPerCode) }
+
+func orDefault(v, def int) int64 {
+	if v > 0 {
+		return int64(v)
+	}
+	return int64(def)
+}
 
 // rateLimit — попытка по ключу; false = ответ 429 уже записан. Без Redis
 // (Limit == nil, dev) лимитов нет. Ошибка Redis = fail-open с логом:
@@ -95,8 +107,8 @@ func (s *Server) smsRequest(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad_phone", "нужен телефон в формате E.164 (+79991234567)")
 		return
 	}
-	if !s.rateLimit(w, r, "sms:phone:"+req.Phone, rlSmsPerPhone) ||
-		!s.rateLimit(w, r, "sms:ip:"+clientIP(r), rlSmsPerIP) {
+	if !s.rateLimit(w, r, "sms:phone:"+req.Phone, s.limSmsPerPhone()) ||
+		!s.rateLimit(w, r, "sms:ip:"+clientIP(r), s.limSmsPerIP()) {
 		return
 	}
 	requestID := newUUID()
@@ -132,7 +144,7 @@ func (s *Server) smsVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Перебор 6-значного кода: лимит попыток на request_id
-	if !s.rateLimit(w, r, "verify:"+req.RequestID, rlVerifyPerCode) {
+	if !s.rateLimit(w, r, "verify:"+req.RequestID, s.limVerifyPerCode()) {
 		return
 	}
 	phone, err := s.Store.ConsumeSmsCode(r.Context(), req.RequestID, hashCode(req.RequestID, req.Code))

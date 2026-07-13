@@ -95,18 +95,26 @@ class PersonalMessageSealer(private val escrowModule: EscrowModule) {
          * @param senderSigningPub Ed25519-ключ устройства отправителя (из `devices`);
          *   при провале подписи расшифровка не выполняется.
          */
+        /**
+         * @param wrapEphemeralOverride эфемерный публичный ключ обёртки, если он ОТЛИЧАЕТСЯ от
+         *   `message.senderEphemeralPub` (восстановление истории, ADR-0010: помощник перезаворачивает
+         *   `message_key` под новое устройство своим эфемералом). Подпись всё равно проверяется
+         *   по оригинальному `senderEphemeralPub` (обёртки в подпись не входят). null — обычный путь.
+         */
         fun openWithWrappedKey(
             message: SealedPersonalMessage,
             myDeviceId: String,
             myDeviceKey: KodiumPrivateKey,
             senderSigningPub: ByteArray,
+            wrapEphemeralOverride: ByteArray? = null,
         ): Result<ByteArray> = runCatching {
             if (!MessageSigner.verify(senderSigningPub, message.canonicalBytes(), message.signature)) {
                 throw SecurityException("Подпись конверта не прошла проверку")
             }
             val wrapped = message.wrappedKeys[myDeviceId]
                 ?: throw IllegalStateException("Нет wrapped_key для устройства $myDeviceId")
-            val messageKey = WrappedKeyService.unwrap(myDeviceKey, message.senderEphemeralPub, wrapped).getOrThrow()
+            val wrapEphemeral = wrapEphemeralOverride ?: message.senderEphemeralPub
+            val messageKey = WrappedKeyService.unwrap(myDeviceKey, wrapEphemeral, wrapped).getOrThrow()
             EnvelopeCipher.open(messageKey, message.encryptedPayload).getOrThrow()
         }
     }

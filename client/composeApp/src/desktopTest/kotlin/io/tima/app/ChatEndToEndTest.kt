@@ -141,6 +141,53 @@ class ChatEndToEndTest {
     }
 
     @Test
+    fun `новое устройство восстанавливает личный чат у своего старого устройства`() = runBlocking {
+        val api = TimaApi(base)
+        try {
+            api.smsRequest("+79990000001")
+        } catch (e: Throwable) {
+            println("сервер недоступен ($e) — тест пропущен")
+            return@runBlocking
+        }
+        val suffix = Random.nextInt(1_000_000)
+        val alicePhone = "+7995%07d".format(suffix)
+        val alice1 = register(api, alicePhone)
+        val bob = register(api, "+7994%07d".format(suffix))
+
+        val alice1Chat = createChatClient(alice1)
+        val bobChat = createChatClient(bob)
+        try {
+            alice1Chat.start() // первое устройство Алисы — помощник, должно быть онлайн
+            bobChat.start()
+            alice1Chat.send(bob.userId, "Личное сообщение до второго устройства")
+            bobChat.send(alice1.userId, "Ответ Боба")
+
+            // Второе устройство Алисы: тот же телефон → тот же аккаунт, НОВЫЙ device без ключей
+            val alice2 = register(api, alicePhone)
+            val alice2Chat = createChatClient(alice2)
+            try {
+                alice2Chat.start()
+                assertTrue(
+                    alice2Chat.history(bob.userId).isEmpty(),
+                    "новое устройство не должно видеть личную переписку без ключей",
+                )
+                // Восстановление у своего первого устройства (свои устройства — авто-помощь)
+                val recovered = alice2Chat.recoverChatHistory(bob.userId).map { it.text }
+                assertTrue(
+                    recovered.contains("Личное сообщение до второго устройства") &&
+                        recovered.contains("Ответ Боба"),
+                    "после восстановления второе устройство читает личную переписку, было: $recovered",
+                )
+            } finally {
+                alice2Chat.close()
+            }
+        } finally {
+            alice1Chat.close()
+            bobChat.close()
+        }
+    }
+
+    @Test
     fun `новое устройство участника восстанавливает историю группы`() = runBlocking {
         val api = TimaApi(base)
         try {

@@ -338,6 +338,93 @@ type DeviceGroupKey struct {
 	Wrapped            []byte
 }
 
+// IsChatParticipant — участвовал ли пользователь в личном чате (отправитель ИЛИ
+// адресат обёрток). Право на восстановление истории чата (ADR-0010 §этап 2).
+func (s *Store) IsChatParticipant(ctx context.Context, chatID, userID string) (bool, error) {
+	var ok bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+		  SELECT 1 FROM personal_messages WHERE chat_id = $1 AND sender_id = $2
+		  UNION ALL
+		  SELECT 1 FROM personal_message_keys k
+		    JOIN devices d ON d.device_id = k.recipient
+		    WHERE k.chat_id = $1 AND d.user_id = $2
+		  LIMIT 1)`, chatID, userID).Scan(&ok)
+	return ok, err
+}
+
+// IsChatParticipantDevice — принадлежит ли устройство пользователю-участнику чата
+// (получатель обёрток восстановления должен быть стороной чата, не чужим).
+func (s *Store) IsChatParticipantDevice(ctx context.Context, chatID, deviceID string) (bool, error) {
+	var userID string
+	err := s.pool.QueryRow(ctx, `SELECT user_id FROM devices WHERE device_id = $1 AND revoked_at IS NULL`, deviceID).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return s.IsChatParticipant(ctx, chatID, userID)
+}
+
+// ChatHelper — устройство-помощник для восстановления личного чата.
+type ChatHelper struct {
+	DeviceID string
+	Own      bool // принадлежит тому же пользователю, что и запросивший (свои — без согласия)
+}
+
+// ChatHelperDevices — устройства с обёртками сообщений чата (кроме requester);
+// Own=true, если то же устройство-владелец, что у запросившего (свои устройства
+// помогают без согласия; собеседник — с согласием, ADR-0010 §защита).
+func (s *Store) ChatHelperDevices(ctx context.Context, chatID, requesterDevice, requesterUser string) ([]ChatHelper, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT k.recipient, (d.user_id = $3) AS own
+		FROM personal_message_keys k
+		JOIN devices d ON d.device_id = k.recipient AND d.revoked_at IS NULL
+		WHERE k.chat_id = $1 AND k.recipient <> $2`, chatID, requesterDevice, requesterUser)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ChatHelper
+	for rows.Next() {
+		var h ChatHelper
+		if err := rows.Scan(&h.DeviceID, &h.Own); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+// RecoveryMessageKey — обёртка ключа сообщения под устройство-получателя (от помощника).
+type RecoveryMessageKey struct {
+	MessageID          uint64
+	SenderEphemeralPub []byte
+	Wrapped            []byte
+}
+
+// SaveRecoveryMessageKeys кладёт обёртки в personal_message_keys для recipient
+// (ON CONFLICT DO NOTHING — идемпотентно).
+func (s *Store) SaveRecoveryMessageKeys(ctx context.Context, chatID, recipient string, keys []RecoveryMessageKey) error {
+	batch := &pgx.Batch{}
+	for _, k := range keys {
+		batch.Queue(`
+			INSERT INTO personal_message_keys (chat_id, message_id, recipient, wrapped, sender_ephemeral_pub)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (chat_id, message_id, recipient) DO NOTHING`,
+			chatID, k.MessageID, recipient, k.Wrapped, k.SenderEphemeralPub)
+	}
+	br := s.pool.SendBatch(ctx, batch)
+	defer br.Close()
+	for range keys {
+		if _, err := br.Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // DeviceEncryptionPub — X25519-ключ устройства (помощнику для обёртки восстановления).
 func (s *Store) DeviceEncryptionPub(ctx context.Context, deviceID string) ([]byte, error) {
 	var key []byte
@@ -551,6 +638,7 @@ func (s *Store) FindMediaByHash(ctx context.Context, contentHash []byte) (string
 type StoredMessage struct {
 	Message
 	WrappedKeyForDevice []byte
+	WrapEphemeral       []byte // эфемерал обёртки восстановления (nil → из sender_ephemeral_pub)
 }
 
 // ListMessages — история чата (новые → старые) с wrapped_key указанного устройства.
@@ -567,7 +655,7 @@ func (s *Store) ListMessages(ctx context.Context, chatID, deviceID string, befor
 		       m.created_at_unix_ms, m.reply_to, m.format_version, m.encrypted_payload,
 		       m.escrow_mlkem_ct, m.escrow_wrapped_key, m.escrow_key_version,
 		       m.sender_ephemeral_pub, COALESCE(m.ratchet_envelope, ''::bytea), m.signature,
-		       k.wrapped
+		       k.wrapped, k.sender_ephemeral_pub
 		FROM personal_messages m
 		JOIN personal_message_keys k
 		  ON k.chat_id = m.chat_id AND k.message_id = m.message_id AND k.recipient = $2
@@ -587,7 +675,7 @@ func (s *Store) ListMessages(ctx context.Context, chatID, deviceID string, befor
 			&sm.CreatedAtUnixMs, &sm.ReplyTo, &sm.FormatVersion, &sm.EncryptedPayload,
 			&sm.EscrowMlkemCt, &sm.EscrowWrappedKey, &sm.EscrowKeyVersion,
 			&sm.SenderEphemeralPub, &sm.RatchetEnvelope, &sm.Signature,
-			&sm.WrappedKeyForDevice,
+			&sm.WrappedKeyForDevice, &sm.WrapEphemeral,
 		); err != nil {
 			return nil, err
 		}

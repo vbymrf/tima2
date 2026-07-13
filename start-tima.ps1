@@ -38,6 +38,8 @@ if (-not (Test-Http "http://127.0.0.1:8080/healthz")) {
 `$env:TIMA_DEV_SMS='1'
 `$env:ESCROW_URL='http://127.0.0.1:8090'
 `$env:JWT_SIGNING_KEY='tima-dev-only-jwt-signing-key-not-for-prod'
+`$env:TIMA_RL_SMS_PER_IP='1000'
+`$env:TIMA_RL_SMS_PER_PHONE='100'
 & '$go' run ./cmd/tima serve
 "@
     Write-Host "Жду сервер..."

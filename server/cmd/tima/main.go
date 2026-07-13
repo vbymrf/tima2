@@ -106,6 +106,16 @@ func runWorker() {
 	w.Run(ctx, interval)
 }
 
+// atoiOr — целое из env или def, если не задано/не число.
+func atoiOr(name string, def int) int {
+	if v := os.Getenv(name); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
 func serve() {
 	mux := http.NewServeMux()
 	healthz := func(w http.ResponseWriter, _ *http.Request) {
@@ -134,6 +144,10 @@ func serve() {
 			Store:  st,
 			Auth:   auth.NewIssuer(key),
 			DevSMS: os.Getenv("TIMA_DEV_SMS") == "1",
+			// Переопределение лимитов auth (0 → прод-дефолт): dev/нагрузочные прогоны
+			SMSPerPhone:   atoiOr("TIMA_RL_SMS_PER_PHONE", 0),
+			SMSPerIP:      atoiOr("TIMA_RL_SMS_PER_IP", 0),
+			VerifyPerCode: atoiOr("TIMA_RL_VERIFY_PER_CODE", 0),
 		}
 		if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
 			bus, err := events.New(ctx, redisURL)
