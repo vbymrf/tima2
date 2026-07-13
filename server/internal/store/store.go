@@ -78,7 +78,7 @@ func (s *Store) Migrate(ctx context.Context, fsys fs.FS) error {
 
 // ResetForTests очищает таблицы (только интеграционные тесты; в бою не вызывается).
 func (s *Store) ResetForTests(ctx context.Context) error {
-	_, err := s.pool.Exec(ctx, `TRUNCATE personal_messages, personal_message_keys, devices, users, sms_codes, media_objects, group_key_history, group_wrapped_keys, groups, memberships, group_messages, device_events, sync_cursors, gc_state`)
+	_, err := s.pool.Exec(ctx, `TRUNCATE personal_messages, personal_message_keys, personal_message_backup, devices, users, sms_codes, media_objects, group_key_history, group_wrapped_keys, groups, memberships, group_messages, device_events, sync_cursors, gc_state`)
 	return err
 }
 
@@ -336,6 +336,55 @@ type DeviceGroupKey struct {
 	GKVersion          int32
 	SenderEphemeralPub []byte
 	Wrapped            []byte
+}
+
+// MessageBackup — резервная обёртка ключа сообщения под backup_key владельца.
+type MessageBackup struct {
+	MessageID uint64
+	Wrapped   []byte
+}
+
+// SaveMessageBackups кладёт резервные обёртки владельца (ADR-0010 §этап 4).
+func (s *Store) SaveMessageBackups(ctx context.Context, chatID, ownerID string, items []MessageBackup) error {
+	batch := &pgx.Batch{}
+	for _, it := range items {
+		batch.Queue(`
+			INSERT INTO personal_message_backup (chat_id, message_id, owner_id, wrapped)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (chat_id, message_id, owner_id) DO NOTHING`,
+			chatID, it.MessageID, ownerID, it.Wrapped)
+	}
+	br := s.pool.SendBatch(ctx, batch)
+	defer br.Close()
+	for range items {
+		if _, err := br.Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ListMessageBackups — резервные обёртки владельца для чата (новые → старые).
+func (s *Store) ListMessageBackups(ctx context.Context, chatID, ownerID string) ([]MessageBackup, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT b.message_id, b.wrapped
+		FROM personal_message_backup b
+		JOIN personal_messages m ON m.chat_id = b.chat_id AND m.message_id = b.message_id AND NOT m.deleted
+		WHERE b.chat_id = $1 AND b.owner_id = $2
+		ORDER BY b.message_id DESC`, chatID, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MessageBackup
+	for rows.Next() {
+		var it MessageBackup
+		if err := rows.Scan(&it.MessageID, &it.Wrapped); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
 }
 
 // IsChatParticipant — участвовал ли пользователь в личном чате (отправитель ИЛИ

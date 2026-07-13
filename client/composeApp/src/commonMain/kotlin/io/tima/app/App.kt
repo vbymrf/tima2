@@ -302,6 +302,7 @@ private fun CodeScreen(
                         accessToken = reg.accessToken,
                         deviceSecretB64 = b64url.encode(deviceKey.secretKey),
                         identitySecretB64 = identity.secretB64,
+                        backupSecretB64 = identity.backupB64,
                     )
                     SessionCodec.save(session)
                     // Новую фразу показываем; введённую — не повторяем
@@ -380,6 +381,14 @@ private fun HomeScreen(
         Text(session.phone, style = MaterialTheme.typography.titleMedium)
     }
     Text("Вы вошли: ${session.userId.take(8)}…", style = MaterialTheme.typography.bodyMedium)
+    Spacer(Modifier.height(16.dp))
+
+    // Заметки — личный чат с самим собой (сообщения себе, бэкап под фразу, этап 4)
+    Button(
+        onClick = { onOpen(ChatEntry(title = "Заметки", peerUserId = session.userId, chatId = "")) },
+        enabled = !busy,
+        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(vertical = 2.dp),
+    ) { Text("📝 Заметки (сообщения себе)") }
     Spacer(Modifier.height(16.dp))
 
     if (chats.isNotEmpty()) {

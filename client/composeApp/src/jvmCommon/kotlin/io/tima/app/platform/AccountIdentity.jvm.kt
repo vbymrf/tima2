@@ -23,5 +23,6 @@ private fun fromWords(words: List<String>): IdentityKeys {
         phrase = words,
         secretB64 = b64url.encode(key.secretKey),
         pubB64 = b64url.encode(key.getPublicKey().signingKey),
+        backupB64 = b64url.encode(AccountMnemonic.backupKeyFromMnemonic(words)),
     )
 }

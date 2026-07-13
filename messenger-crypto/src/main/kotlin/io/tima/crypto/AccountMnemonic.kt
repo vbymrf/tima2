@@ -83,6 +83,18 @@ object AccountMnemonic {
         return KodiumPrivateKey.fromRaw(seed)
     }
 
+    /**
+     * Симметричный ключ резервной копии из фразы (ADR-0010 §этап 4). Отдельная HKDF-метка,
+     * чтобы backup-ключ не совпадал с identity: identity подписывает, backup шифрует
+     * резервные обёртки «сообщений себе» (у self-чата нет живых источников для peer-восстановления).
+     */
+    fun backupKeyFromMnemonic(words: List<String>): ByteArray = HKDF.deriveSecrets(
+        salt = null,
+        ikm = mnemonicToEntropy(words),
+        info = "tima/account-backup/v1".encodeToByteArray(),
+        length = 32,
+    )
+
     private fun byteBits(b: Byte): String = (b.toInt() and 0xFF).toString(2).padStart(8, '0')
     private fun sha256(b: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(b)
 }

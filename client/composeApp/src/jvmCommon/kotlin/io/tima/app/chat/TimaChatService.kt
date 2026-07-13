@@ -8,6 +8,7 @@ import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import io.tima.app.api.DeviceKeyInfo
+import io.tima.app.api.BackupItemDto
 import io.tima.app.api.EscrowDto
 import io.tima.app.api.GroupMessageDto
 import io.tima.app.api.ProvideKeyDto
@@ -112,6 +113,8 @@ class TimaClient(private val session: Session) : ChatClient {
     // Ключ личности (из фразы) — для подписи запросов восстановления; null без фразы
     private val identityKey: KodiumPrivateKey? =
         session.identitySecretB64.takeIf { it.isNotEmpty() }?.let { KodiumPrivateKey.fromRaw(b64url.decode(it)) }
+    // Симметричный ключ бэкапа «сообщений себе» (этап 4); null без фразы
+    private val backupKey: ByteArray? = session.backupSecretB64.takeIf { it.isNotEmpty() }?.let { b64url.decode(it) }
     private val json = Json { ignoreUnknownKeys = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val random = SecureRandom()
@@ -265,6 +268,11 @@ class TimaClient(private val session: Session) : ChatClient {
 
     override suspend fun recoverChatHistory(peerUserId: String): List<ChatMessage> {
         val chatId = chatIdWith(peerUserId)
+        // Self-чат (заметки): восстанавливаем из бэкапа под backup_key — без онлайн-источников
+        if (peerUserId == session.userId && backupKey != null) {
+            recoverFromBackup(chatId)
+            return history(peerUserId)
+        }
         val canonical = "tima.recover.v1|$chatId|${session.deviceId}".encodeToByteArray()
         val signature = identityKey?.let { b64url.encode(MessageSigner.sign(it, canonical).getOrThrow()) } ?: ""
         val resp = api.recoverChatKeys(session.accessToken, chatId, signature)
@@ -273,6 +281,25 @@ class TimaClient(private val session: Session) : ChatClient {
             withTimeoutOrNull(20_000) { _msgRecoveryReady.first { it == chatId } }
         }
         return history(peerUserId)
+    }
+
+    /** Этап 4: скачать бэкап-обёртки, развернуть backup_key → message_key, завернуть под себя. */
+    private suspend fun recoverFromBackup(chatId: String) {
+        val key = backupKey ?: return
+        val items = api.chatBackup(session.accessToken, chatId)
+        if (items.isEmpty()) return
+        val ephemeral = Kodium.generateKeyPair()
+        val ephPub = b64url.encode(ephemeral.getPublicKey().encryptionKey)
+        val myEncPub = deviceKey.getPublicKey().encryptionKey
+        val keys = items.mapNotNull { item ->
+            val messageKey = EnvelopeCipher.open(key, b64url.decode(item.wrapped)).getOrNull() ?: return@mapNotNull null
+            val reWrapped = WrappedKeyService.wrap(ephemeral, myEncPub, messageKey).getOrNull() ?: return@mapNotNull null
+            ProvideMsgKeyDto(item.messageId, ephPub, b64url.encode(reWrapped))
+        }
+        // Кладём обёртки под СВОЁ устройство (self-provide) — дальше history их развернёт
+        if (keys.isNotEmpty()) {
+            runCatching { api.provideChatKeys(session.accessToken, chatId, session.deviceId, keys) }
+        }
     }
 
     override suspend fun approveRecovery(consent: RecoveryConsent) = provideChatKeys(consent)
@@ -316,6 +343,24 @@ class TimaClient(private val session: Session) : ChatClient {
         val payload = MessageSerializer.encodeBody(body)
         val sealed = sealer.seal(meta, payload, deviceKey, recipients).getOrThrow()
         api.postEnvelope(session.accessToken, MessageSerializer.encodeEnvelope(sealed), UUID.randomUUID().toString())
+
+        // Бэкап «сообщений себе» (этап 4): у self-чата нет живых источников, кроме бэкапа.
+        // message_key достаём из своей же обёртки, заворачиваем под backup_key из фразы.
+        if (peerUserId == session.userId && backupKey != null) {
+            val myWrap = sealed.wrappedKeys[session.deviceId]
+            if (myWrap != null) {
+                WrappedKeyService.unwrap(deviceKey, sealed.senderEphemeralPub, myWrap).getOrNull()?.let { messageKey ->
+                    EnvelopeCipher.seal(backupKey, messageKey).getOrNull()?.let { wrapped ->
+                        runCatching {
+                            api.saveChatBackup(
+                                session.accessToken, chatId,
+                                listOf(BackupItemDto(messageId.toLong(), b64url.encode(wrapped))),
+                            )
+                        }
+                    }
+                }
+            }
+        }
         return ChatMessage(
             chatId, messageId.toLong(), session.userId, body.text, now, mine = true,
             media = body.media.firstOrNull()?.toAttachment(),

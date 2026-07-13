@@ -218,6 +218,18 @@ private data class ProvideChatBody(
 )
 
 @Serializable
+data class BackupItemDto(
+    @SerialName("message_id") val messageId: Long,
+    val wrapped: String, // base64url SecretBox(message_key, backup_key)
+)
+
+@Serializable
+private data class BackupSaveBody(val items: List<BackupItemDto>)
+
+@Serializable
+private data class BackupListResponse(val items: List<BackupItemDto> = emptyList())
+
+@Serializable
 data class ProvideKeyDto(
     @SerialName("gk_version") val gkVersion: Int,
     @SerialName("sender_ephemeral_pub") val senderEphemeralPub: String,
@@ -439,6 +451,14 @@ class TimaApi(private val baseUrl: String) {
             ProvideChatBody(requesterDevice, keys),
         )
     }
+
+    /** Сохранить резервные обёртки «сообщений себе» под backup_key (ADR-0010 §этап 4). */
+    suspend fun saveChatBackup(token: String, chatId: String, items: List<BackupItemDto>) {
+        postAuthed<BackupSaveBody, JsonObject>("/api/v1/chats/$chatId/backup", token, BackupSaveBody(items))
+    }
+
+    suspend fun chatBackup(token: String, chatId: String): List<BackupItemDto> =
+        getAuthed<BackupListResponse>("/api/v1/chats/$chatId/backup", token).items
 
     /** POST /messages: конверт как protobuf; clientMsgId — дедуп повторной отправки. */
     suspend fun postEnvelope(token: String, envelope: ByteArray, clientMsgId: String) {

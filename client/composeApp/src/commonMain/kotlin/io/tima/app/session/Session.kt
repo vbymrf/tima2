@@ -27,6 +27,8 @@ data class Session(
     // Секрет ключа личности (из recovery-фразы); пусто — устройство без фразы
     // (восстановление истории недоступно, ADR-0010 §этап 3). На диске тоже под SecretVault.
     @SerialName("identity_secret_b64") val identitySecretB64: String = "",
+    // Ключ бэкапа «сообщений себе» из фразы (этап 4); пусто — без фразы. Тоже под SecretVault.
+    @SerialName("backup_secret_b64") val backupSecretB64: String = "",
     @SerialName("secret_vaulted") val secretVaulted: Boolean = false,
 )
 
@@ -56,6 +58,8 @@ object SessionCodec {
                     deviceSecretB64 = b64url.encode(SecretVault.reveal(b64url.decode(stored.deviceSecretB64))),
                     identitySecretB64 = stored.identitySecretB64.takeIf { s -> s.isNotEmpty() }
                         ?.let { s -> b64url.encode(SecretVault.reveal(b64url.decode(s))) } ?: "",
+                    backupSecretB64 = stored.backupSecretB64.takeIf { s -> s.isNotEmpty() }
+                        ?.let { s -> b64url.encode(SecretVault.reveal(b64url.decode(s))) } ?: "",
                     secretVaulted = false,
                 )
             } else {
@@ -72,6 +76,8 @@ object SessionCodec {
         val vaulted = session.copy(
             deviceSecretB64 = b64url.encode(SecretVault.protect(b64url.decode(session.deviceSecretB64))),
             identitySecretB64 = session.identitySecretB64.takeIf { it.isNotEmpty() }
+                ?.let { b64url.encode(SecretVault.protect(b64url.decode(it))) } ?: "",
+            backupSecretB64 = session.backupSecretB64.takeIf { it.isNotEmpty() }
                 ?.let { b64url.encode(SecretVault.protect(b64url.decode(it))) } ?: "",
             secretVaulted = true,
         )

@@ -17,6 +17,83 @@ import (
 	"tima/server/internal/store"
 )
 
+// chatBackupSave — POST /chats/{chatID}/backup: владелец кладёт резервные обёртки
+// ключей сообщений под свой backup_key (ADR-0010 §этап 4, «сообщения себе»).
+func (s *Server) chatBackupSave(w http.ResponseWriter, r *http.Request) {
+	chatID := r.PathValue("chatID")
+	id, _ := auth.FromContext(r.Context())
+	participant, err := s.Store.IsChatParticipant(r.Context(), chatID, id.UserID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	if !participant {
+		writeErr(w, http.StatusForbidden, "not_participant", "бэкап доступен только участнику чата")
+		return
+	}
+	var req struct {
+		Items []struct {
+			MessageID uint64 `json:"message_id"`
+			Wrapped   string `json:"wrapped"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 8<<20)).Decode(&req); err != nil || len(req.Items) == 0 {
+		writeErr(w, http.StatusBadRequest, "bad_json", "нужны items")
+		return
+	}
+	b64 := base64.RawURLEncoding
+	items := make([]store.MessageBackup, 0, len(req.Items))
+	for _, it := range req.Items {
+		wrapped, derr := b64.DecodeString(it.Wrapped)
+		if derr != nil || len(wrapped) < 24+16 {
+			writeErr(w, http.StatusBadRequest, "bad_wrapped", "некорректная обёртка бэкапа")
+			return
+		}
+		items = append(items, store.MessageBackup{MessageID: it.MessageID, Wrapped: wrapped})
+	}
+	if err := s.Store.SaveMessageBackups(r.Context(), chatID, id.UserID, items); err != nil {
+		log.Printf("chatBackupSave: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]any{"saved": len(items)})
+}
+
+// chatBackupList — GET /chats/{chatID}/backup: резервные обёртки владельца
+// (новое устройство разворачивает их backup_key из фразы и переносит историю).
+func (s *Server) chatBackupList(w http.ResponseWriter, r *http.Request) {
+	chatID := r.PathValue("chatID")
+	id, _ := auth.FromContext(r.Context())
+	participant, err := s.Store.IsChatParticipant(r.Context(), chatID, id.UserID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	if !participant {
+		writeErr(w, http.StatusForbidden, "not_participant", "бэкап доступен только участнику чата")
+		return
+	}
+	items, err := s.Store.ListMessageBackups(r.Context(), chatID, id.UserID)
+	if err != nil {
+		log.Printf("chatBackupList: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	b64 := base64.RawURLEncoding
+	type item struct {
+		MessageID uint64 `json:"message_id"`
+		Wrapped   string `json:"wrapped"`
+	}
+	out := make([]item, 0, len(items))
+	for _, it := range items {
+		out = append(out, item{MessageID: it.MessageID, Wrapped: b64.EncodeToString(it.Wrapped)})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"items": out})
+}
+
 // chatRecover — POST /chats/{chatID}/recover: запрос восстановления истории личного чата.
 func (s *Server) chatRecover(w http.ResponseWriter, r *http.Request) {
 	chatID := r.PathValue("chatID")

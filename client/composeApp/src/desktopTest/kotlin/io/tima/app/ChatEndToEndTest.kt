@@ -47,6 +47,7 @@ class ChatEndToEndTest {
             accessToken = reg.accessToken,
             deviceSecretB64 = b64url.encode(key.secretKey),
             identitySecretB64 = identity?.let { b64url.encode(it.secretKey) } ?: "",
+            backupSecretB64 = phrase?.let { b64url.encode(io.tima.crypto.AccountMnemonic.backupKeyFromMnemonic(it)) } ?: "",
         )
     }
 
@@ -137,6 +138,42 @@ class ChatEndToEndTest {
         } finally {
             aliceChat.close()
             bobChat.close()
+        }
+    }
+
+    @Test
+    fun `заметки себе восстанавливаются из бэкапа по фразе без онлайн-источников`() = runBlocking {
+        val api = TimaApi(base)
+        try {
+            api.smsRequest("+79990000001")
+        } catch (e: Throwable) {
+            println("сервер недоступен ($e) — тест пропущен")
+            return@runBlocking
+        }
+        val suffix = Random.nextInt(1_000_000)
+        val phone = "+7993%07d".format(suffix)
+        val phrase = io.tima.crypto.AccountMnemonic.generate()
+        val dev1 = register(api, phone, phrase)
+
+        val dev1Chat = createChatClient(dev1)
+        dev1Chat.start()
+        dev1Chat.send(dev1.userId, "Заметка самому себе") // self-чат → сохраняет бэкап под фразу
+        assertEquals(listOf("Заметка самому себе"), dev1Chat.history(dev1.userId).map { it.text })
+        dev1Chat.close() // первое устройство ОФЛАЙН — бэкап не зависит от него
+
+        // Новое устройство с той же фразой: своих онлайн-источников нет, только бэкап
+        val dev2 = register(api, phone, phrase)
+        val dev2Chat = createChatClient(dev2)
+        try {
+            dev2Chat.start()
+            assertTrue(dev2Chat.history(dev2.userId).isEmpty(), "новое устройство не видит заметки без ключей")
+            val recovered = dev2Chat.recoverChatHistory(dev2.userId).map { it.text }
+            assertEquals(
+                listOf("Заметка самому себе"), recovered,
+                "заметки восстановлены из бэкапа по фразе, было: $recovered",
+            )
+        } finally {
+            dev2Chat.close()
         }
     }
 
