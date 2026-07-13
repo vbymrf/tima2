@@ -72,6 +72,12 @@ android {
     }
 }
 
+// bcprov подписан: при склейке в uber-jar его *.SF/*.RSA становятся невалидными и JVM
+// не стартует (SecurityException: Invalid signature file digest) — подписи в fat-jar не нужны
+tasks.withType<Jar>().matching { it.name == "packageUberJarForCurrentOS" }.configureEach {
+    exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA", "META-INF/*.EC")
+}
+
 compose.desktop {
     application {
         mainClass = "io.tima.app.MainKt"
