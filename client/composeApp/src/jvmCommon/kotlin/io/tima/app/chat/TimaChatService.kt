@@ -154,6 +154,22 @@ class TimaClient(private val session: Session) : ChatClient {
 
     override fun chatIdWith(peerUserId: String): String = personalChatId(session.userId, peerUserId)
 
+    private val nameCache = ConcurrentHashMap<String, String>() // user_id → публичное имя
+
+    override suspend fun setMyName(name: String) {
+        api.setDisplayName(session.accessToken, name)
+        nameCache[session.userId] = name
+    }
+
+    override suspend fun resolveNames(ids: List<String>): Map<String, String> {
+        val missing = ids.distinct().filter { !nameCache.containsKey(it) }
+        if (missing.isNotEmpty()) {
+            runCatching { api.resolveNames(session.accessToken, missing) }.getOrNull()
+                ?.forEach { (id, n) -> nameCache[id] = n }
+        }
+        return ids.mapNotNull { id -> nameCache[id]?.takeIf { it.isNotEmpty() }?.let { id to it } }.toMap()
+    }
+
     private suspend fun devicesOf(userId: String): List<DeviceKeyInfo> =
         devicesCache.getOrPut(userId) { api.listDevices(session.accessToken, userId) }
 

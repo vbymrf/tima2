@@ -9,6 +9,7 @@ import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -69,6 +70,15 @@ private data class DevicesResponse(@SerialName("devices") val devices: List<Devi
 
 @Serializable
 private data class LookupResponse(@SerialName("user_id") val userId: String)
+
+@Serializable
+private data class DisplayNameBody(@SerialName("display_name") val displayName: String)
+
+@Serializable
+private data class ResolveNamesBody(val ids: List<String>)
+
+@Serializable
+private data class ResolveNamesResponse(val names: Map<String, String> = emptyMap())
 
 @Serializable
 data class EscrowPubkey(
@@ -369,6 +379,28 @@ class TimaApi(private val baseUrl: String) {
         if (response.status == HttpStatusCode.NotFound) return null
         if (!response.status.isSuccess()) fail(response)
         return response.body<LookupResponse>().userId
+    }
+
+    /** Задать своё публичное имя (показывается собеседникам вместо номера). */
+    suspend fun setDisplayName(token: String, name: String) {
+        val response = client.patch(baseUrl.trimEnd('/') + "/api/v1/users/me/name") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(DisplayNameBody(name))
+        }
+        if (!response.status.isSuccess()) fail(response)
+    }
+
+    /** Публичные имена по списку user_id (id без имени в ответ не попадает). */
+    suspend fun resolveNames(token: String, ids: List<String>): Map<String, String> {
+        if (ids.isEmpty()) return emptyMap()
+        val response = client.post(baseUrl.trimEnd('/') + "/api/v1/users/names") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(ResolveNamesBody(ids))
+        }
+        if (!response.status.isSuccess()) fail(response)
+        return response.body<ResolveNamesResponse>().names
     }
 
     suspend fun listDevices(token: String, userId: String): List<DeviceKeyInfo> {

@@ -254,6 +254,52 @@ func (s *Server) lookupUser(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"user_id": userID})
 }
 
+// setDisplayName — PATCH /users/me/name {display_name}: своё публичное имя.
+func (s *Server) setDisplayName(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		DisplayName string `json:"display_name"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
+		return
+	}
+	name := strings.TrimSpace(req.DisplayName)
+	if len(name) > 100 {
+		writeErr(w, http.StatusBadRequest, "bad_name", "имя до 100 символов")
+		return
+	}
+	id, _ := auth.FromContext(r.Context())
+	if err := s.Store.SetDisplayName(r.Context(), id.UserID, name); err != nil {
+		log.Printf("setDisplayName: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"display_name": name})
+}
+
+// resolveNames — POST /users/names {ids}: публичные имена по user_id (batch для UI).
+func (s *Server) resolveNames(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs []string `json:"ids"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil || len(req.IDs) == 0 {
+		writeErr(w, http.StatusBadRequest, "bad_json", "нужен ids")
+		return
+	}
+	if len(req.IDs) > 500 {
+		req.IDs = req.IDs[:500]
+	}
+	names, err := s.Store.DisplayNames(r.Context(), req.IDs)
+	if err != nil {
+		log.Printf("resolveNames: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"names": names})
+}
+
 // listDeviceKeys — GET /keys/devices?user_id=: публичные ключи устройств собеседника
 // (отправителю — адресаты wrapped keys; получателю — проверка подписи).
 func (s *Server) listDeviceKeys(w http.ResponseWriter, r *http.Request) {

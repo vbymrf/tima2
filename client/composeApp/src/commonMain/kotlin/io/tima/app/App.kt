@@ -36,6 +36,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -461,12 +462,34 @@ private fun HomeScreen(
         refreshVoice()
     }
 
+    var myName by remember { mutableStateOf("") }
+    var nameSaved by remember { mutableStateOf(false) }
+
     Text("TIMA", style = MaterialTheme.typography.headlineMedium)
     Spacer(Modifier.height(8.dp))
     if (session.phone.isNotEmpty()) {
         Text(session.phone, style = MaterialTheme.typography.titleMedium)
     }
     Text("Вы вошли: ${session.userId.take(8)}…", style = MaterialTheme.typography.bodyMedium)
+    Spacer(Modifier.height(8.dp))
+    // Своё публичное имя — собеседники увидят его вместо номера
+    Row(
+        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OutlinedTextField(
+            value = myName, onValueChange = { myName = it; nameSaved = false },
+            label = { Text("Ваше имя") }, singleLine = true, modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(8.dp))
+        Button(enabled = !busy && myName.isNotBlank() && client != null, onClick = {
+            busy = true
+            scope.launch {
+                try { client!!.setMyName(myName.trim()); nameSaved = true } catch (e: Throwable) { error = e.message }
+                finally { busy = false }
+            }
+        }) { Text(if (nameSaved) "✓" else "OK") }
+    }
     Spacer(Modifier.height(16.dp))
 
     // Заметки — личный чат с самим собой (сообщения себе, бэкап под фразу, этап 4)
@@ -709,11 +732,20 @@ private fun ChatScreen(
 ) {
     val chatId = remember(targetId) { if (isGroup) targetId else client.chatIdWith(targetId) }
     val messages = remember { mutableStateListOf<ChatMessage>() }
+    val names = remember { mutableStateMapOf<String, String>() } // user_id → имя (группы)
     var draft by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+
+    // Резолв имён авторов в группе
+    LaunchedEffect(messages.size) {
+        if (isGroup) {
+            val ids = messages.map { it.senderId }.distinct().filter { !names.containsKey(it) }
+            if (ids.isNotEmpty()) runCatching { client.resolveNames(ids) }.getOrNull()?.let { names.putAll(it) }
+        }
+    }
 
     fun add(msg: ChatMessage) {
         if (msg.chatId == chatId && messages.none { it.messageId == msg.messageId }) {
@@ -782,7 +814,7 @@ private fun ChatScreen(
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                             if (isGroup && !msg.mine) {
-                                Text(msg.senderId.take(8) + "…", style = MaterialTheme.typography.labelSmall)
+                                Text(names[msg.senderId] ?: (msg.senderId.take(8) + "…"), style = MaterialTheme.typography.labelSmall)
                             }
                             msg.media?.let { MediaImage(client, it) }
                             if (msg.text.isNotEmpty()) Text(msg.text)

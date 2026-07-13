@@ -137,3 +137,30 @@ func TestChannelsEndToEnd(t *testing.T) {
 		t.Fatalf("unsubscribe: %d", resp.StatusCode)
 	}
 }
+
+// TestDisplayNames — своё имя (PATCH) и batch-резолв id→имя.
+func TestDisplayNames(t *testing.T) {
+	ts, _ := setup(t)
+	alice := registerDevice(t, ts, "+79990000050")
+	bob := registerDevice(t, ts, "+79990000051")
+
+	// Алиса задаёт имя
+	if code := postAuthed(t, ts, alice.token, "PATCH", "/api/v1/users/me/name",
+		map[string]string{"display_name": "Алиса"}, nil); code != 200 {
+		t.Fatalf("setName: %d", code)
+	}
+	// Боб резолвит имена: Алиса — есть, сам Боб (без имени) — не в ответе
+	var resolved struct {
+		Names map[string]string `json:"names"`
+	}
+	if code := postAuthed(t, ts, bob.token, "POST", "/api/v1/users/names",
+		map[string][]string{"ids": {alice.userID, bob.userID}}, &resolved); code != 200 {
+		t.Fatalf("resolveNames: %d", code)
+	}
+	if resolved.Names[alice.userID] != "Алиса" {
+		t.Fatalf("имя Алисы не разрешилось: %+v", resolved.Names)
+	}
+	if _, ok := resolved.Names[bob.userID]; ok {
+		t.Fatal("Боб без имени не должен быть в ответе")
+	}
+}

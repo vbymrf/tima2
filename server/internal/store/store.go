@@ -117,6 +117,32 @@ func (s *Store) UpsertUserByPhone(ctx context.Context, phone string) (string, er
 	return userID, err
 }
 
+// SetDisplayName — своё публичное имя (показывается собеседникам вместо номера).
+func (s *Store) SetDisplayName(ctx context.Context, userID, name string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE users SET display_name = $2 WHERE user_id = $1`, userID, name)
+	return err
+}
+
+// DisplayNames — публичные имена по списку user_id (batch резолв id→имя для UI).
+// Пустые имена (не заданы) в ответ не попадают.
+func (s *Store) DisplayNames(ctx context.Context, ids []string) (map[string]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT user_id, display_name FROM users WHERE user_id = ANY($1) AND display_name <> ''`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]string)
+	for rows.Next() {
+		var id, name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		out[id] = name
+	}
+	return out, rows.Err()
+}
+
 // FindUserByPhone — user_id по телефону; ErrUserUnknown, если не зарегистрирован.
 func (s *Store) FindUserByPhone(ctx context.Context, phone string) (string, error) {
 	var userID string

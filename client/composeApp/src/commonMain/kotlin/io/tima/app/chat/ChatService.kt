@@ -60,6 +60,12 @@ interface ChatClient {
     /** Детерминированный chat_id личного чата с собеседником. */
     fun chatIdWith(peerUserId: String): String
 
+    /** Задать своё публичное имя (собеседники увидят его вместо номера). */
+    suspend fun setMyName(name: String)
+
+    /** Публичные имена по user_id (кэш); id без имени в карту не попадает. */
+    suspend fun resolveNames(ids: List<String>): Map<String, String>
+
     /** История чата с расшифровкой, старые → новые. */
     suspend fun history(peerUserId: String): List<ChatMessage>
 
