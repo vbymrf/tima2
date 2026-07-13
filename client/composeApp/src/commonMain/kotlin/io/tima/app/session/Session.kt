@@ -23,8 +23,12 @@ data class Session(
 /** Сохранённый диалог для списка чатов на главном экране. */
 @Serializable
 data class ChatEntry(
-    @SerialName("peer_phone") val peerPhone: String,
+    @SerialName("title") val title: String,          // телефон или короткий user_id, если писал незнакомец
     @SerialName("peer_user_id") val peerUserId: String,
+    @SerialName("chat_id") val chatId: String,
+    @SerialName("last_text") val lastText: String = "",
+    @SerialName("last_at_ms") val lastAtMs: Long = 0,
+    @SerialName("unread") val unread: Int = 0,
 )
 
 object SessionCodec {
@@ -48,10 +52,41 @@ object SessionCodec {
         try { json.decodeFromString<List<ChatEntry>>(it) } catch (_: Throwable) { emptyList() }
     } ?: emptyList()
 
-    /** Добавляет диалог наверх списка (последний открытый — первый). */
-    fun rememberChat(entry: ChatEntry) {
-        val rest = loadChats().filter { it.peerUserId != entry.peerUserId }
-        SessionStorage.write(CHATS, json.encodeToString(listOf(entry) + rest))
+    private fun saveChats(chats: List<ChatEntry>) =
+        SessionStorage.write(CHATS, json.encodeToString(chats))
+
+    /** Добавляет/поднимает диалог, сохраняя превью и счётчик существующей записи. */
+    fun rememberChat(entry: ChatEntry): List<ChatEntry> {
+        val existing = loadChats().firstOrNull { it.peerUserId == entry.peerUserId }
+        val merged = existing?.copy(title = entry.title) ?: entry
+        val chats = listOf(merged) + loadChats().filter { it.peerUserId != entry.peerUserId }
+        saveChats(chats)
+        return chats
+    }
+
+    /**
+     * Новое сообщение чата: превью + подъём наверх; unread растёт, если чат не открыт.
+     * Сообщение незнакомца создаёт запись (title — короткий user_id, телефон неизвестен).
+     */
+    fun noteMessage(chatId: String, peerUserId: String, text: String, atMs: Long, isOpen: Boolean): List<ChatEntry> {
+        val current = loadChats()
+        val entry = current.firstOrNull { it.chatId == chatId }
+            ?: ChatEntry(title = peerUserId.take(8) + "…", peerUserId = peerUserId, chatId = chatId)
+        val updated = entry.copy(
+            lastText = text,
+            lastAtMs = atMs,
+            unread = if (isOpen) 0 else entry.unread + 1,
+        )
+        val chats = listOf(updated) + current.filter { it.chatId != chatId }
+        saveChats(chats)
+        return chats
+    }
+
+    /** Чат открыт — непрочитанное сброшено. */
+    fun markRead(chatId: String): List<ChatEntry> {
+        val chats = loadChats().map { if (it.chatId == chatId) it.copy(unread = 0) else it }
+        saveChats(chats)
+        return chats
     }
 }
 

@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 
 /** Расшифрованное сообщение для UI. */
 data class ChatMessage(
+    val chatId: String,
     val messageId: Long,
     val senderId: String,
     val text: String,
@@ -13,26 +14,27 @@ data class ChatMessage(
 )
 
 /**
- * Чат 1-на-1: конверт по crypto-protocol.md §3 (слои 1+2+4 + подпись), история REST,
- * live-приём по WS (websocket-events.md: auth → sync.pull → события + ack).
+ * Клиент мессенджера на одну сессию устройства: ЕДИНОЕ WS-соединение
+ * (websocket-events.md: одно на устройство) с реконнектом, поток расшифрованных
+ * сообщений всех чатов; конверты — crypto-protocol.md §3 (слои 1+2+4 + подпись).
  */
-interface ChatService {
-    val chatId: String
-    val peerUserId: String
-
-    /** Открывает WS и запускает приём; вызывать один раз, после — [incoming]. */
+interface ChatClient {
+    /** Открывает WS-цикл с догоном (sync.pull) и реконнектом; вызывать один раз. */
     suspend fun start()
 
+    /** Live-поток входящих по всем чатам (уже расшифрованных). */
+    val messages: Flow<ChatMessage>
+
+    /** Детерминированный chat_id личного чата с собеседником. */
+    fun chatIdWith(peerUserId: String): String
+
     /** История чата с расшифровкой, старые → новые. */
-    suspend fun history(): List<ChatMessage>
+    suspend fun history(peerUserId: String): List<ChatMessage>
 
     /** Шифрует, подписывает и отправляет; возвращает своё сообщение для UI. */
-    suspend fun send(text: String): ChatMessage
-
-    /** Live-поток входящих (уже расшифрованных) сообщений ЭТОГО чата. */
-    val incoming: Flow<ChatMessage>
+    suspend fun send(peerUserId: String, text: String): ChatMessage
 
     fun close()
 }
 
-expect fun createChatService(session: Session, peerUserId: String): ChatService
+expect fun createChatClient(session: Session): ChatClient

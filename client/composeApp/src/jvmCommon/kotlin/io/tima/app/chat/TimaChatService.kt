@@ -25,8 +25,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -54,12 +56,7 @@ private data class WsFrame(
     val envelope: String? = null,
 )
 
-class TimaChatService(
-    private val session: Session,
-    override val peerUserId: String,
-) : ChatService {
-
-    override val chatId: String = personalChatId(session.userId, peerUserId)
+class TimaClient(private val session: Session) : ChatClient {
 
     private val api = TimaApi(session.serverUrl)
     private val deviceKey = KodiumPrivateKey.fromRaw(b64url.decode(session.deviceSecretB64))
@@ -70,8 +67,10 @@ class TimaChatService(
     private var sealer: PersonalMessageSealer? = null
     private val devicesCache = mutableMapOf<String, List<DeviceKeyInfo>>()
 
-    private val _incoming = MutableSharedFlow<ChatMessage>(extraBufferCapacity = 256)
-    override val incoming: Flow<ChatMessage> = _incoming
+    private val _messages = MutableSharedFlow<ChatMessage>(extraBufferCapacity = 256)
+    override val messages: Flow<ChatMessage> = _messages
+
+    override fun chatIdWith(peerUserId: String): String = personalChatId(session.userId, peerUserId)
 
     private suspend fun devicesOf(userId: String): List<DeviceKeyInfo> =
         devicesCache.getOrPut(userId) { api.listDevices(session.accessToken, userId) }
@@ -83,36 +82,48 @@ class TimaChatService(
             .also { sealer = it }
     }
 
+    /** Один WS на устройство: auth → sync.pull (догон) → live; обрыв → реконнект с паузой. */
     override suspend fun start() {
         scope.launch {
-            api.rawClient.webSocket(api.wsUrl()) {
-                send(Frame.Text("""{"token":"${session.accessToken}"}"""))
-                send(Frame.Text("""{"event":"sync.pull"}""")) // cursor серверный: догон пропущенного
-                for (frame in incoming) {
-                    val text = (frame as? Frame.Text)?.readText() ?: continue
-                    val f = try { json.decodeFromString<WsFrame>(text) } catch (_: Throwable) { continue }
-                    when (f.event) {
-                        "message.new" -> {
-                            f.envelope?.let { env ->
-                                decrypt(b64url.decode(env))?.let { _incoming.emit(it) }
+            var backoffMs = 1_000L
+            while (isActive) {
+                try {
+                    api.rawClient.webSocket(api.wsUrl()) {
+                        send(Frame.Text("""{"token":"${session.accessToken}"}"""))
+                        send(Frame.Text("""{"event":"sync.pull"}""")) // cursor серверный
+                        backoffMs = 1_000L
+                        for (frame in incoming) {
+                            val text = (frame as? Frame.Text)?.readText() ?: continue
+                            val f = try { json.decodeFromString<WsFrame>(text) } catch (_: Throwable) { continue }
+                            when (f.event) {
+                                "message.new" -> {
+                                    f.envelope?.let { env ->
+                                        decrypt(b64url.decode(env))?.let { _messages.emit(it) }
+                                    }
+                                    if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
+                                }
+                                "sync.gap" -> Unit // история чата и так грузится REST-ом при открытии
+                                else -> Unit
                             }
-                            if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
                         }
-                        "sync.gap" -> Unit // MVP: история и так грузится REST-ом при открытии чата
-                        else -> Unit
                     }
+                } catch (_: Throwable) {
+                    // сервер недоступен/сеть моргнула — переподключение ниже
                 }
+                delay(backoffMs)
+                backoffMs = (backoffMs * 2).coerceAtMost(30_000L)
             }
         }
     }
 
-    override suspend fun history(): List<ChatMessage> =
-        api.listMessages(session.accessToken, chatId)
+    override suspend fun history(peerUserId: String): List<ChatMessage> =
+        api.listMessages(session.accessToken, chatIdWith(peerUserId))
             .mapNotNull { decrypt(b64url.decode(it.envelope)) }
             .sortedBy { it.messageId }
 
-    override suspend fun send(text: String): ChatMessage {
+    override suspend fun send(peerUserId: String, text: String): ChatMessage {
         val sealer = ensureSealer()
+        val chatId = chatIdWith(peerUserId)
         // Обёртки: все устройства собеседника + все мои (мультиустройство и своя история)
         val recipients = (devicesOf(peerUserId) + devicesOf(session.userId)).map {
             DeviceAddress(it.deviceId, b64url.decode(it.encryptionPub))
@@ -131,14 +142,13 @@ class TimaChatService(
         val payload = MessageSerializer.encodeBody(MessageBody(text = text))
         val sealed = sealer.seal(meta, payload, deviceKey, recipients).getOrThrow()
         api.postEnvelope(session.accessToken, MessageSerializer.encodeEnvelope(sealed), UUID.randomUUID().toString())
-        return ChatMessage(messageId.toLong(), session.userId, text, now, mine = true)
+        return ChatMessage(chatId, messageId.toLong(), session.userId, text, now, mine = true)
     }
 
-    /** Путь B: подпись → wrapped_key своего устройства → конверт → body. Не наш чат/битое → null. */
+    /** Путь B: подпись → wrapped_key своего устройства → конверт → body. Битое/чужое → null. */
     private suspend fun decrypt(envelopeBytes: ByteArray): ChatMessage? {
         val sealed: SealedPersonalMessage =
             MessageSerializer.decodeEnvelope(envelopeBytes).getOrNull() ?: return null
-        if (sealed.meta.chatId != chatId) return null
         val senderSigningPub = devicesOf(sealed.meta.senderId)
             .firstOrNull { it.deviceId == sealed.meta.senderDevice }
             ?.let { b64url.decode(it.signingPub) } ?: return null
@@ -147,6 +157,7 @@ class TimaChatService(
             .getOrNull() ?: return null
         val body = MessageSerializer.decodeBody(payload).getOrNull() ?: return null
         return ChatMessage(
+            chatId = sealed.meta.chatId,
             messageId = sealed.meta.messageId.toLong(),
             senderId = sealed.meta.senderId,
             text = body.text,
@@ -160,5 +171,4 @@ class TimaChatService(
     }
 }
 
-actual fun createChatService(session: Session, peerUserId: String): ChatService =
-    TimaChatService(session, peerUserId)
+actual fun createChatClient(session: Session): ChatClient = TimaClient(session)

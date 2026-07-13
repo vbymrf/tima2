@@ -4,7 +4,7 @@ package io.tima.app
 
 import io.kodium.Kodium
 import io.tima.app.api.TimaApi
-import io.tima.app.chat.createChatService
+import io.tima.app.chat.createChatClient
 import io.tima.app.session.Session
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -59,34 +59,39 @@ class ChatEndToEndTest {
         val alice = register(api, "+7999%07d".format(suffix))
         val bob = register(api, "+7998%07d".format(suffix))
 
-        val aliceChat = createChatService(alice, bob.userId)
-        val bobChat = createChatService(bob, alice.userId)
-        assertEquals(aliceChat.chatId, bobChat.chatId, "детерминированный chat_id обязан совпасть")
+        val aliceChat = createChatClient(alice)
+        val bobChat = createChatClient(bob)
+        assertEquals(
+            aliceChat.chatIdWith(bob.userId), bobChat.chatIdWith(alice.userId),
+            "детерминированный chat_id обязан совпасть",
+        )
 
         try {
             bobChat.start() // Боб онлайн до отправки — проверяем live-доставку
             val text = "Привет, Боб! 🔐 Это конверт TIMA."
-            aliceChat.send(text)
+            aliceChat.send(bob.userId, text)
 
-            val live = withTimeout(20_000) { bobChat.incoming.first() }
+            val live = withTimeout(20_000) { bobChat.messages.first { !it.mine } }
             assertEquals(text, live.text)
             assertEquals(alice.userId, live.senderId)
-            assertTrue(!live.mine)
+            assertEquals(bobChat.chatIdWith(alice.userId), live.chatId)
 
             // История: обе стороны читают (у отправителя — обёртка своего устройства)
-            val bobHistory = bobChat.history()
+            val bobHistory = bobChat.history(alice.userId)
             assertEquals(listOf(text), bobHistory.map { it.text })
-            val aliceHistory = aliceChat.history()
+            val aliceHistory = aliceChat.history(bob.userId)
             assertEquals(listOf(text), aliceHistory.map { it.text })
             assertTrue(aliceHistory.single().mine)
 
-            // Ответ в обратную сторону тем же чатом
-            bobChat.send("И тебе привет, Алиса!")
+            // Ответ в обратную сторону тем же чатом; Боб получает эхо своего сообщения по WS
+            bobChat.send(alice.userId, "И тебе привет, Алиса!")
+            val echo = withTimeout(20_000) { bobChat.messages.first { it.mine } }
+            assertEquals("И тебе привет, Алиса!", echo.text)
             val aliceAfter = withTimeout(20_000) {
-                var h = aliceChat.history()
+                var h = aliceChat.history(bob.userId)
                 while (h.size < 2) {
                     kotlinx.coroutines.delay(300)
-                    h = aliceChat.history()
+                    h = aliceChat.history(bob.userId)
                 }
                 h
             }

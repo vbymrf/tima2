@@ -38,11 +38,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.kodium.Kodium
 import io.tima.app.api.TimaApi
+import io.tima.app.chat.ChatClient
 import io.tima.app.chat.ChatMessage
-import io.tima.app.chat.createChatService
+import io.tima.app.chat.createChatClient
 import io.tima.app.session.ChatEntry
 import io.tima.app.session.Session
 import io.tima.app.session.SessionCodec
@@ -63,12 +65,41 @@ private val b64url = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
 @Composable
 fun App() {
     var screen by remember { mutableStateOf(SessionCodec.load()?.let { Screen.Home(it) } ?: Screen.Phone) }
+    var chats by remember { mutableStateOf(SessionCodec.loadChats()) }
+
+    val session = when (val s = screen) {
+        is Screen.Home -> s.session
+        is Screen.Chat -> s.session
+        else -> null
+    }
+    // Один ChatClient (одно WS) на сессию — живёт, пока пользователь вошёл
+    val client = remember(session?.deviceId) { session?.let { createChatClient(it) } }
+    DisposableEffect(client) {
+        onDispose { client?.close() }
+    }
+    LaunchedEffect(client) {
+        val c = client ?: return@LaunchedEffect
+        c.start()
+        c.messages.collect { msg ->
+            val known = SessionCodec.loadChats().any { it.chatId == msg.chatId }
+            // Своё эхо с неизвестным чатом не создаёт запись: peer из senderId не извлечь
+            if (!known && msg.mine) return@collect
+            val isOpen = msg.mine ||
+                (screen as? Screen.Chat)?.let { c.chatIdWith(it.peerUserId) == msg.chatId } == true
+            chats = SessionCodec.noteMessage(msg.chatId, msg.senderId, msg.text, msg.createdAtMs, isOpen)
+        }
+    }
 
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             when (val s = screen) {
                 // Чат сам управляет раскладкой (LazyColumn несовместим с внешним verticalScroll)
-                is Screen.Chat -> ChatScreen(s, onBack = { screen = Screen.Home(s.session) })
+                is Screen.Chat -> ChatScreen(
+                    s,
+                    client = client ?: return@Surface,
+                    onRead = { chatId -> chats = SessionCodec.markRead(chatId) },
+                    onBack = { screen = Screen.Home(s.session) },
+                )
                 else -> Column(
                     modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -79,9 +110,16 @@ fun App() {
                         is Screen.Code -> CodeScreen(s, onHome = { screen = it }, onBack = { screen = Screen.Phone })
                         is Screen.Home -> HomeScreen(
                             s.session,
-                            onChat = { screen = it },
+                            chats = chats,
+                            client = client,
+                            onOpen = { entry ->
+                                chats = SessionCodec.markRead(entry.chatId)
+                                screen = Screen.Chat(s.session, entry.peerUserId, entry.title)
+                            },
+                            onChatsChange = { chats = it },
                             onLogout = {
                                 SessionCodec.clear()
+                                chats = emptyList()
                                 screen = Screen.Phone
                             },
                         )
@@ -194,17 +232,18 @@ private fun CodeScreen(state: Screen.Code, onHome: (Screen.Home) -> Unit, onBack
 }
 
 @Composable
-private fun HomeScreen(session: Session, onChat: (Screen.Chat) -> Unit, onLogout: () -> Unit) {
+private fun HomeScreen(
+    session: Session,
+    chats: List<ChatEntry>,
+    client: ChatClient?,
+    onOpen: (ChatEntry) -> Unit,
+    onChatsChange: (List<ChatEntry>) -> Unit,
+    onLogout: () -> Unit,
+) {
     var peerPhone by remember { mutableStateOf("+7") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    val chats = remember { mutableStateListOf<ChatEntry>().apply { addAll(SessionCodec.loadChats()) } }
     val scope = rememberCoroutineScope()
-
-    fun open(entry: ChatEntry) {
-        SessionCodec.rememberChat(entry)
-        onChat(Screen.Chat(session, entry.peerUserId, entry.peerPhone))
-    }
 
     Text("TIMA", style = MaterialTheme.typography.headlineMedium)
     Spacer(Modifier.height(8.dp))
@@ -216,10 +255,27 @@ private fun HomeScreen(session: Session, onChat: (Screen.Chat) -> Unit, onLogout
         Spacer(Modifier.height(8.dp))
         chats.forEach { entry ->
             Button(
-                onClick = { open(entry) },
+                onClick = { onOpen(entry) },
                 enabled = !busy,
                 modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(vertical = 2.dp),
-            ) { Text(entry.peerPhone) }
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(entry.title, modifier = Modifier.weight(1f))
+                        if (entry.unread > 0) {
+                            Text("● ${entry.unread}", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                    if (entry.lastText.isNotEmpty()) {
+                        Text(
+                            entry.lastText,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
         }
         Spacer(Modifier.height(16.dp))
     }
@@ -241,8 +297,10 @@ private fun HomeScreen(session: Session, onChat: (Screen.Chat) -> Unit, onLogout
                     val peer = TimaApi(session.serverUrl).lookupUser(session.accessToken, phone)
                     if (peer == null) {
                         error = "Пользователь не найден — он ещё не вошёл в TIMA"
-                    } else {
-                        open(ChatEntry(peerPhone = phone, peerUserId = peer))
+                    } else if (client != null) {
+                        val entry = ChatEntry(title = phone, peerUserId = peer, chatId = client.chatIdWith(peer))
+                        onChatsChange(SessionCodec.rememberChat(entry))
+                        onOpen(entry)
                     }
                 } catch (e: Throwable) {
                     error = e.message ?: e.toString()
@@ -258,8 +316,8 @@ private fun HomeScreen(session: Session, onChat: (Screen.Chat) -> Unit, onLogout
 }
 
 @Composable
-private fun ChatScreen(state: Screen.Chat, onBack: () -> Unit) {
-    val service = remember(state.peerUserId) { createChatService(state.session, state.peerUserId) }
+private fun ChatScreen(state: Screen.Chat, client: ChatClient, onRead: (String) -> Unit, onBack: () -> Unit) {
+    val chatId = remember(state.peerUserId) { client.chatIdWith(state.peerUserId) }
     val messages = remember { mutableStateListOf<ChatMessage>() }
     var draft by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -268,23 +326,20 @@ private fun ChatScreen(state: Screen.Chat, onBack: () -> Unit) {
     val listState = rememberLazyListState()
 
     fun add(msg: ChatMessage) {
-        if (messages.none { it.messageId == msg.messageId }) {
+        if (msg.chatId == chatId && messages.none { it.messageId == msg.messageId }) {
             messages.add(msg)
             messages.sortBy { it.messageId }
         }
     }
 
-    LaunchedEffect(service) {
+    LaunchedEffect(chatId) {
         try {
-            service.start()
-            service.history().forEach(::add)
+            client.history(state.peerUserId).forEach(::add)
         } catch (e: Throwable) {
             error = e.message ?: e.toString()
         }
-        service.incoming.collect(::add)
-    }
-    DisposableEffect(service) {
-        onDispose { service.close() }
+        onRead(chatId)
+        client.messages.collect(::add) // WS общий — здесь только фильтр своего чата
     }
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(0)
@@ -331,7 +386,7 @@ private fun ChatScreen(state: Screen.Chat, onBack: () -> Unit) {
                 busy = true; error = null
                 scope.launch {
                     try {
-                        add(service.send(text))
+                        add(client.send(state.peerUserId, text))
                         draft = ""
                     } catch (e: Throwable) {
                         error = e.message ?: e.toString()
