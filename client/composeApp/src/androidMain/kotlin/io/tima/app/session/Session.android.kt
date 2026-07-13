@@ -2,19 +2,20 @@ package io.tima.app.session
 
 import java.io.File
 
-private lateinit var sessionFile: File
+private lateinit var appFilesDir: File
 
 /** Вызывается из MainActivity до первого обращения к SessionStorage. */
 fun initSessionDir(filesDir: File) {
-    sessionFile = File(filesDir, "session.json")
+    appFilesDir = filesDir
 }
 
 actual object SessionStorage {
-    actual fun read(): String? =
-        sessionFile.takeIf { it.exists() }?.readText()
+    actual fun read(name: String): String? =
+        File(appFilesDir, name).takeIf { it.exists() }?.readText()
 
-    actual fun write(text: String?) {
-        if (text == null) sessionFile.delete() else sessionFile.writeText(text)
+    actual fun write(name: String, text: String?) {
+        val file = File(appFilesDir, name)
+        if (text == null) file.delete() else file.writeText(text)
     }
 }
 

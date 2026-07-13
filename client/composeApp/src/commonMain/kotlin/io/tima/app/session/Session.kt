@@ -20,22 +20,45 @@ data class Session(
     @SerialName("device_secret_b64") val deviceSecretB64: String,
 )
 
+/** Сохранённый диалог для списка чатов на главном экране. */
+@Serializable
+data class ChatEntry(
+    @SerialName("peer_phone") val peerPhone: String,
+    @SerialName("peer_user_id") val peerUserId: String,
+)
+
 object SessionCodec {
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
+    private const val SESSION = "session.json"
+    private const val CHATS = "chats.json"
 
-    fun load(): Session? = SessionStorage.read()?.let {
+    fun load(): Session? = SessionStorage.read(SESSION)?.let {
         try { json.decodeFromString<Session>(it) } catch (_: Throwable) { null }
     }
 
-    fun save(session: Session) = SessionStorage.write(json.encodeToString(Session.serializer(), session))
+    fun save(session: Session) = SessionStorage.write(SESSION, json.encodeToString(Session.serializer(), session))
 
-    fun clear() = SessionStorage.write(null)
+    /** Выход: сессия и список чатов стираются вместе (чаты принадлежат аккаунту). */
+    fun clear() {
+        SessionStorage.write(SESSION, null)
+        SessionStorage.write(CHATS, null)
+    }
+
+    fun loadChats(): List<ChatEntry> = SessionStorage.read(CHATS)?.let {
+        try { json.decodeFromString<List<ChatEntry>>(it) } catch (_: Throwable) { emptyList() }
+    } ?: emptyList()
+
+    /** Добавляет диалог наверх списка (последний открытый — первый). */
+    fun rememberChat(entry: ChatEntry) {
+        val rest = loadChats().filter { it.peerUserId != entry.peerUserId }
+        SessionStorage.write(CHATS, json.encodeToString(listOf(entry) + rest))
+    }
 }
 
-/** Платформенное хранилище одного файла session.json. */
+/** Платформенное хранилище именованных файлов приложения. */
 expect object SessionStorage {
-    fun read(): String?
-    fun write(text: String?)
+    fun read(name: String): String?
+    fun write(name: String, text: String?)
 }
 
 /** Адрес dev-сервера по умолчанию: эмулятор Android видит хост как 10.0.2.2. */

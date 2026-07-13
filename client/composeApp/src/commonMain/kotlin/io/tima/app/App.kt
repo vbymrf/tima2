@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -39,6 +43,7 @@ import io.kodium.Kodium
 import io.tima.app.api.TimaApi
 import io.tima.app.chat.ChatMessage
 import io.tima.app.chat.createChatService
+import io.tima.app.session.ChatEntry
 import io.tima.app.session.Session
 import io.tima.app.session.SessionCodec
 import io.tima.app.session.defaultServerUrl
@@ -193,15 +198,35 @@ private fun HomeScreen(session: Session, onChat: (Screen.Chat) -> Unit, onLogout
     var peerPhone by remember { mutableStateOf("+7") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    val chats = remember { mutableStateListOf<ChatEntry>().apply { addAll(SessionCodec.loadChats()) } }
     val scope = rememberCoroutineScope()
+
+    fun open(entry: ChatEntry) {
+        SessionCodec.rememberChat(entry)
+        onChat(Screen.Chat(session, entry.peerUserId, entry.peerPhone))
+    }
 
     Text("TIMA", style = MaterialTheme.typography.headlineMedium)
     Spacer(Modifier.height(8.dp))
     Text("Вы вошли: ${session.userId.take(8)}…", style = MaterialTheme.typography.bodyMedium)
-    Spacer(Modifier.height(24.dp))
+    Spacer(Modifier.height(16.dp))
+
+    if (chats.isNotEmpty()) {
+        Text("Чаты", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        chats.forEach { entry ->
+            Button(
+                onClick = { open(entry) },
+                enabled = !busy,
+                modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(vertical = 2.dp),
+            ) { Text(entry.peerPhone) }
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+
     OutlinedTextField(
         value = peerPhone, onValueChange = { peerPhone = it },
-        label = { Text("Телефон собеседника") }, singleLine = true,
+        label = { Text("Новый чат: телефон собеседника") }, singleLine = true,
         modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
     )
     Spacer(Modifier.height(16.dp))
@@ -212,11 +237,12 @@ private fun HomeScreen(session: Session, onChat: (Screen.Chat) -> Unit, onLogout
             busy = true; error = null
             scope.launch {
                 try {
-                    val peer = TimaApi(session.serverUrl).lookupUser(session.accessToken, peerPhone.trim())
+                    val phone = peerPhone.trim()
+                    val peer = TimaApi(session.serverUrl).lookupUser(session.accessToken, phone)
                     if (peer == null) {
                         error = "Пользователь не найден — он ещё не вошёл в TIMA"
                     } else {
-                        onChat(Screen.Chat(session, peer, peerPhone.trim()))
+                        open(ChatEntry(peerPhone = phone, peerUserId = peer))
                     }
                 } catch (e: Throwable) {
                     error = e.message ?: e.toString()
@@ -261,17 +287,23 @@ private fun ChatScreen(state: Screen.Chat, onBack: () -> Unit) {
         onDispose { service.close() }
     }
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+        if (messages.isNotEmpty()) listState.animateScrollToItem(0)
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    // safeDrawing + ime: не подлезать под статусбар и подниматься над клавиатурой (Android)
+    Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = onBack) { Text("←") }
             Spacer(Modifier.width(12.dp))
             Text("Чат с ${state.peerPhone}", style = MaterialTheme.typography.titleLarge)
         }
-        LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp)) {
-            items(messages, key = { it.messageId }) { msg ->
+        // reverseLayout: индекс 0 — низ; список сам держится за последнее сообщение
+        LazyColumn(
+            state = listState,
+            reverseLayout = true,
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp),
+        ) {
+            items(messages.asReversed(), key = { it.messageId }) { msg ->
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                     horizontalArrangement = if (msg.mine) Arrangement.End else Arrangement.Start,

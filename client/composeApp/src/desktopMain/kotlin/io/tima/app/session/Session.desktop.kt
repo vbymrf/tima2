@@ -2,16 +2,17 @@ package io.tima.app.session
 
 import java.io.File
 
-private val sessionFile: File by lazy {
-    File(System.getProperty("user.home"), ".tima").apply { mkdirs() }.resolve("session.json")
+private val appDir: File by lazy {
+    File(System.getProperty("user.home"), ".tima").apply { mkdirs() }
 }
 
 actual object SessionStorage {
-    actual fun read(): String? =
-        sessionFile.takeIf { it.exists() }?.readText()
+    actual fun read(name: String): String? =
+        appDir.resolve(name).takeIf { it.exists() }?.readText()
 
-    actual fun write(text: String?) {
-        if (text == null) sessionFile.delete() else sessionFile.writeText(text)
+    actual fun write(name: String, text: String?) {
+        val file = appDir.resolve(name)
+        if (text == null) file.delete() else file.writeText(text)
     }
 }
 
