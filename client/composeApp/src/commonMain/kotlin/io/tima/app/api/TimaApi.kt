@@ -5,6 +5,7 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.request.bearerAuth
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -243,6 +244,42 @@ private data class ProvideBody(
 )
 
 @Serializable
+data class ChannelDto(
+    @SerialName("channel_id") val channelId: String,
+    val title: String,
+    val description: String = "",
+    @SerialName("owner_id") val ownerId: String,
+    val subscribed: Boolean = false,
+    val owner: Boolean = false,
+)
+
+@Serializable
+private data class ChannelsResponse(val channels: List<ChannelDto> = emptyList())
+
+@Serializable
+private data class CreateChannelBody(val title: String, val description: String)
+
+@Serializable
+private data class ChannelIdResponse(@SerialName("channel_id") val channelId: String)
+
+@Serializable
+data class ChannelPostDto(
+    @SerialName("post_id") val postId: Long,
+    @SerialName("author_id") val authorId: String,
+    val text: String,
+    @SerialName("created_at_unix_ms") val createdAtUnixMs: Long,
+)
+
+@Serializable
+private data class ChannelPostsResponse(val posts: List<ChannelPostDto> = emptyList())
+
+@Serializable
+private data class PostTextBody(val text: String)
+
+@Serializable
+private data class PostIdResponse(@SerialName("post_id") val postId: Long)
+
+@Serializable
 private data class ApiError(val error: String = "", val message: String = "")
 
 class TimaApiException(val code: String, message: String) : Exception(message)
@@ -398,6 +435,36 @@ class TimaApi(private val baseUrl: String) {
             ProvideBody(requesterDevice, keys),
         )
     }
+
+    // ── Каналы (communities.md: вещание постов подписчикам, контент публичный) ──
+
+    suspend fun createChannel(token: String, title: String, description: String): String =
+        postAuthed<CreateChannelBody, ChannelIdResponse>(
+            "/api/v1/channels", token, CreateChannelBody(title, description),
+        ).channelId
+
+    suspend fun myChannels(token: String): List<ChannelDto> =
+        getAuthed<ChannelsResponse>("/api/v1/channels", token).channels
+
+    suspend fun discoverChannels(token: String): List<ChannelDto> =
+        getAuthed<ChannelsResponse>("/api/v1/channels/discover", token).channels
+
+    suspend fun subscribeChannel(token: String, channelId: String) {
+        postAuthed<JsonObject, JsonObject>("/api/v1/channels/$channelId/subscribe", token, JsonObject(emptyMap()))
+    }
+
+    suspend fun unsubscribeChannel(token: String, channelId: String) {
+        val response = client.delete(baseUrl.trimEnd('/') + "/api/v1/channels/$channelId/subscribe") { bearerAuth(token) }
+        if (!response.status.isSuccess()) fail(response)
+    }
+
+    suspend fun postToChannel(token: String, channelId: String, text: String): Long =
+        postAuthed<PostTextBody, PostIdResponse>(
+            "/api/v1/channels/$channelId/posts", token, PostTextBody(text),
+        ).postId
+
+    suspend fun channelPosts(token: String, channelId: String): List<ChannelPostDto> =
+        getAuthed<ChannelPostsResponse>("/api/v1/channels/$channelId/posts", token).posts
 
     // ── Media (media-storage.md: файлы ходят в MinIO напрямую, мимо бэкенда) ──
 

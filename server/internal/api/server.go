@@ -83,6 +83,13 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/media/init", s.Auth.Require(s.mediaInit))
 	mux.HandleFunc("POST /api/v1/media/complete", s.Auth.Require(s.mediaComplete))
 	mux.HandleFunc("GET /api/v1/media/{mediaID}/url", s.Auth.Require(s.mediaURL))
+	mux.HandleFunc("POST /api/v1/channels", s.Auth.Require(s.createChannel))
+	mux.HandleFunc("GET /api/v1/channels", s.Auth.Require(s.listMyChannels))
+	mux.HandleFunc("GET /api/v1/channels/discover", s.Auth.Require(s.discoverChannels))
+	mux.HandleFunc("POST /api/v1/channels/{channelID}/subscribe", s.Auth.Require(s.subscribeChannel))
+	mux.HandleFunc("DELETE /api/v1/channels/{channelID}/subscribe", s.Auth.Require(s.unsubscribeChannel))
+	mux.HandleFunc("POST /api/v1/channels/{channelID}/posts", s.Auth.Require(s.postToChannel))
+	mux.HandleFunc("GET /api/v1/channels/{channelID}/posts", s.Auth.Require(s.listChannelPosts))
 	mux.HandleFunc("GET /ws", s.handleWS) // auth — первым кадром, не Bearer (websocket-events.md)
 }
 

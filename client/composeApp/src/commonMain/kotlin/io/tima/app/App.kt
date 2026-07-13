@@ -45,6 +45,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.kodium.Kodium
+import io.tima.app.api.ChannelDto
+import io.tima.app.api.ChannelPostDto
 import io.tima.app.api.TimaApi
 import io.tima.app.chat.ChatClient
 import io.tima.app.chat.ChatMessage
@@ -72,6 +74,7 @@ private sealed interface Screen {
     data class Chat(val session: Session, val peerUserId: String, val peerPhone: String) : Screen
     data class GroupChat(val session: Session, val groupId: String, val title: String) : Screen
     data class PhraseReveal(val session: Session, val phrase: List<String>) : Screen
+    data class ChannelView(val session: Session, val channelId: String, val title: String, val owner: Boolean) : Screen
 }
 
 private val b64url = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
@@ -86,6 +89,7 @@ fun App() {
         is Screen.Home -> s.session
         is Screen.Chat -> s.session
         is Screen.GroupChat -> s.session
+        is Screen.ChannelView -> s.session
         else -> null
     }
     // Один ChatClient (одно WS) на сессию — живёт, пока пользователь вошёл
@@ -150,6 +154,7 @@ fun App() {
                     onRead = {},
                     onBack = { screen = Screen.Home(s.session) },
                 )
+                is Screen.ChannelView -> ChannelScreen(s, onBack = { screen = Screen.Home(s.session) })
                 else -> Column(
                     modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -175,6 +180,7 @@ fun App() {
                                 screen = Screen.Chat(s.session, entry.peerUserId, entry.title)
                             },
                             onOpenGroup = { g -> screen = Screen.GroupChat(s.session, g.groupId, g.title) },
+                            onOpenChannel = { c -> screen = Screen.ChannelView(s.session, c.channelId, c.title, c.owner) },
                             onChatsChange = { chats = it },
                             onLogout = {
                                 SessionCodec.clear()
@@ -353,6 +359,7 @@ private fun HomeScreen(
     client: ChatClient?,
     onOpen: (ChatEntry) -> Unit,
     onOpenGroup: (GroupSummary) -> Unit,
+    onOpenChannel: (ChannelDto) -> Unit,
     onChatsChange: (List<ChatEntry>) -> Unit,
     onLogout: () -> Unit,
 ) {
@@ -363,6 +370,11 @@ private fun HomeScreen(
     var groupTitle by remember { mutableStateOf("") }
     var groupPhones by remember { mutableStateOf("") }
     var showCreateGroup by remember { mutableStateOf(false) }
+    var myChannels by remember { mutableStateOf<List<ChannelDto>>(emptyList()) }
+    var discover by remember { mutableStateOf<List<ChannelDto>>(emptyList()) }
+    var channelTitle by remember { mutableStateOf("") }
+    var showCreateChannel by remember { mutableStateOf(false) }
+    val api = remember(session.deviceId) { TimaApi(session.serverUrl) }
     val scope = rememberCoroutineScope()
 
     suspend fun refreshGroups() {
@@ -373,7 +385,17 @@ private fun HomeScreen(
             // сервер недоступен — секция просто пуста, чаты работают из локального списка
         }
     }
-    LaunchedEffect(client) { refreshGroups() }
+    suspend fun refreshChannels() {
+        try {
+            myChannels = api.myChannels(session.accessToken)
+            discover = api.discoverChannels(session.accessToken)
+        } catch (_: Throwable) {
+        }
+    }
+    LaunchedEffect(client) {
+        refreshGroups()
+        refreshChannels()
+    }
 
     Text("TIMA", style = MaterialTheme.typography.headlineMedium)
     Spacer(Modifier.height(8.dp))
@@ -477,6 +499,65 @@ private fun HomeScreen(
         Button(onClick = { showCreateGroup = true }, enabled = !busy) { Text("Создать группу") }
         Spacer(Modifier.height(16.dp))
     }
+
+    // Каналы (вещание): мои + каталог публичных
+    Row(
+        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Каналы", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Button(enabled = !busy, onClick = { scope.launch { refreshChannels() } }) { Text("⟳") }
+    }
+    Spacer(Modifier.height(8.dp))
+    myChannels.forEach { c ->
+        Button(
+            onClick = { onOpenChannel(c) }, enabled = !busy,
+            modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(vertical = 2.dp),
+        ) { Text((if (c.owner) "📢 " else "📣 ") + c.title) }
+    }
+    if (discover.isNotEmpty()) {
+        Spacer(Modifier.height(8.dp))
+        Text("Каталог — подписаться:", style = MaterialTheme.typography.bodySmall)
+        discover.forEach { c ->
+            Row(
+                modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(c.title, modifier = Modifier.weight(1f))
+                Button(enabled = !busy, onClick = {
+                    busy = true
+                    scope.launch {
+                        try { api.subscribeChannel(session.accessToken, c.channelId); refreshChannels() }
+                        catch (e: Throwable) { error = e.message } finally { busy = false }
+                    }
+                }) { Text("Подписаться") }
+            }
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    if (showCreateChannel) {
+        OutlinedTextField(
+            value = channelTitle, onValueChange = { channelTitle = it },
+            label = { Text("Название канала") }, singleLine = true,
+            modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        Button(enabled = !busy && channelTitle.isNotBlank(), onClick = {
+            busy = true; error = null
+            scope.launch {
+                try {
+                    val id = api.createChannel(session.accessToken, channelTitle.trim(), "")
+                    showCreateChannel = false
+                    val title = channelTitle.trim(); channelTitle = ""
+                    refreshChannels()
+                    onOpenChannel(ChannelDto(channelId = id, title = title, ownerId = session.userId, subscribed = true, owner = true))
+                } catch (e: Throwable) { error = e.message } finally { busy = false }
+            }
+        }) { Text("Создать") }
+    } else {
+        Button(onClick = { showCreateChannel = true }, enabled = !busy) { Text("Создать канал") }
+    }
+    Spacer(Modifier.height(16.dp))
 
     OutlinedTextField(
         value = peerPhone, onValueChange = { peerPhone = it },
@@ -642,6 +723,67 @@ private fun ChatScreen(
                     }
                 }
             }) { Text("➤") }
+        }
+    }
+}
+
+@Composable
+private fun ChannelScreen(state: Screen.ChannelView, onBack: () -> Unit) {
+    val api = remember(state.channelId) { TimaApi(state.session.serverUrl) }
+    val posts = remember { mutableStateListOf<ChannelPostDto>() }
+    var draft by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    suspend fun reload() {
+        try {
+            val fresh = api.channelPosts(state.session.accessToken, state.channelId)
+            posts.clear(); posts.addAll(fresh.sortedBy { it.postId })
+        } catch (e: Throwable) {
+            error = e.message ?: e.toString()
+        }
+    }
+    LaunchedEffect(state.channelId) { reload() }
+
+    Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = onBack) { Text("←") }
+            Spacer(Modifier.width(12.dp))
+            Text((if (state.owner) "📢 " else "📣 ") + state.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            Button(enabled = !busy, onClick = { scope.launch { reload() } }) { Text("⟳") }
+        }
+        LazyColumn(reverseLayout = true, modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp)) {
+            items(posts.asReversed(), key = { it.postId }) { post ->
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                ) {
+                    Text(post.text, modifier = Modifier.padding(12.dp))
+                }
+            }
+        }
+        ErrorText(error)
+        if (state.owner) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = draft, onValueChange = { draft = it },
+                    label = { Text("Новый пост") }, modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(enabled = !busy && draft.isNotBlank(), onClick = {
+                    busy = true; error = null
+                    scope.launch {
+                        try {
+                            api.postToChannel(state.session.accessToken, state.channelId, draft.trim())
+                            draft = ""; reload()
+                        } catch (e: Throwable) { error = e.message } finally { busy = false }
+                    }
+                }) { Text("➤") }
+            }
+        } else {
+            Text("Читаете канал. Публикует владелец.", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
