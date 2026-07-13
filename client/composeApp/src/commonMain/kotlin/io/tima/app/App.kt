@@ -210,7 +210,7 @@ fun App() {
                     onBack = { screen = Screen.Home(s.session) },
                 )
                 is Screen.ChannelView -> ChannelScreen(s, onBack = { screen = Screen.Home(s.session) })
-                is Screen.VoiceRoom -> VoiceRoomScreen(s, onBack = { screen = Screen.Home(s.session) })
+                is Screen.VoiceRoom -> VoiceRoomScreen(s, client = client, onBack = { screen = Screen.Home(s.session) })
                 else -> Column(
                     modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -939,15 +939,34 @@ private fun CallOverlay(call: CallUi, onAccept: () -> Unit, onEnd: () -> Unit) {
     }
 }
 
-/** Экран аудио-чата: присоединение (LiveKit-токен) + состояние. Живого звука нет (WebRTC). */
+/** Экран аудио-чата с ролями: спикер говорит, слушатель поднимает руку, владелец выдаёт слово. */
 @Composable
-private fun VoiceRoomScreen(state: Screen.VoiceRoom, onBack: () -> Unit) {
+private fun VoiceRoomScreen(state: Screen.VoiceRoom, client: ChatClient?, onBack: () -> Unit) {
     val api = remember(state.roomId) { TimaApi(state.session.serverUrl) }
     var joined by remember { mutableStateOf(false) }
+    var role by remember { mutableStateOf("listener") }
+    var isOwner by remember { mutableStateOf(false) }
     var micOn by remember { mutableStateOf(true) }
+    var handRaised by remember { mutableStateOf(false) }
+    val hands = remember { mutableStateListOf<String>() } // user_id поднявших руку (владельцу)
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    suspend fun join() {
+        val r = api.joinVoiceRoom(state.session.accessToken, state.roomId)
+        role = r.role; isOwner = r.isOwner; joined = true
+    }
+    // События: поднятая рука (владельцу), выдача/отзыв слова (перезаходим за новой ролью)
+    LaunchedEffect(client, state.roomId) {
+        client?.voiceEvents?.collect { ev ->
+            if (ev.roomId != state.roomId) return@collect
+            when (ev.type) {
+                "voice.hand" -> if (ev.userId !in hands) hands.add(ev.userId)
+                "voice.granted", "voice.revoked" -> { handRaised = false; runCatching { join() } }
+            }
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(24.dp),
@@ -959,29 +978,61 @@ private fun VoiceRoomScreen(state: Screen.VoiceRoom, onBack: () -> Unit) {
             Text("🔊 ${state.title}", style = MaterialTheme.typography.titleLarge)
         }
         Spacer(Modifier.weight(1f))
-        Text("🎙️", style = MaterialTheme.typography.displayMedium)
+        Text(if (role == "speaker") "🎙️" else "🎧", style = MaterialTheme.typography.displayMedium)
         Spacer(Modifier.height(12.dp))
-        Text(if (joined) "Вы в комнате" else "Аудио-чат", style = MaterialTheme.typography.headlineSmall)
+        Text(
+            when {
+                !joined -> "Аудио-чат"
+                role == "speaker" -> if (isOwner) "Вы владелец (говорите)" else "Вы говорите"
+                else -> "Вы слушаете"
+            },
+            style = MaterialTheme.typography.headlineSmall,
+        )
         Spacer(Modifier.height(6.dp))
         Text(
-            "Сигналинг и вход в комнату работают; живой звук — на реальном устройстве (LiveKit).",
+            "Сигналинг, роли и вход в комнату работают; живой звук — на реальном устройстве (LiveKit).",
             style = MaterialTheme.typography.bodySmall, modifier = Modifier.widthIn(max = 360.dp),
         )
         ErrorText(error)
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
+
         if (!joined) {
             Button(enabled = !busy, onClick = {
                 busy = true; error = null
                 scope.launch {
-                    try { api.joinVoiceRoom(state.session.accessToken, state.roomId); joined = true }
-                    catch (e: Throwable) { error = e.message } finally { busy = false }
+                    try { join() } catch (e: Throwable) { error = e.message } finally { busy = false }
                 }
             }) { Text("Присоединиться") }
         } else {
+            // Владельцу — поднятые руки с кнопкой «Выдать слово»
+            if (isOwner && hands.isNotEmpty()) {
+                Text("Просят слово:", style = MaterialTheme.typography.titleSmall)
+                hands.toList().forEach { uid ->
+                    Row(
+                        modifier = Modifier.widthIn(max = 360.dp).fillMaxWidth().padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("✋ ${uid.take(8)}…", modifier = Modifier.weight(1f))
+                        Button(enabled = !busy, onClick = {
+                            scope.launch {
+                                runCatching { api.grantSpeaker(state.session.accessToken, state.roomId, uid) }
+                                hands.remove(uid)
+                            }
+                        }) { Text("Выдать слово") }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { micOn = !micOn }) { Text(if (micOn) "🎤 вкл" else "🔇 выкл") }
+                if (role == "speaker") {
+                    Button(onClick = { micOn = !micOn }) { Text(if (micOn) "🎤 вкл" else "🔇 выкл") }
+                } else {
+                    Button(enabled = !handRaised, onClick = {
+                        scope.launch { runCatching { api.raiseHand(state.session.accessToken, state.roomId); handRaised = true } }
+                    }) { Text(if (handRaised) "✋ рука поднята" else "✋ Поднять руку") }
+                }
                 Button(
-                    onClick = { joined = false },
+                    onClick = { joined = false; hands.clear() },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 ) { Text("Выйти") }
             }

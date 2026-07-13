@@ -120,6 +120,12 @@ private data class CallStateFrame(
     val state: String = "",
 )
 
+@Serializable
+private data class VoiceEventFrame(
+    @SerialName("room_id") val roomId: String,
+    @SerialName("user_id") val userId: String = "",
+)
+
 class TimaClient(private val session: Session) : ChatClient {
 
     private val api = TimaApi(session.serverUrl)
@@ -151,6 +157,8 @@ class TimaClient(private val session: Session) : ChatClient {
     override val incomingCalls: Flow<IncomingCall> = _incomingCalls
     private val _callStates = MutableSharedFlow<CallStateEvent>(extraBufferCapacity = 16)
     override val callStates: Flow<CallStateEvent> = _callStates
+    private val _voiceEvents = MutableSharedFlow<VoiceEvent>(extraBufferCapacity = 32)
+    override val voiceEvents: Flow<VoiceEvent> = _voiceEvents
 
     override fun chatIdWith(peerUserId: String): String = personalChatId(session.userId, peerUserId)
 
@@ -252,6 +260,11 @@ class TimaClient(private val session: Session) : ChatClient {
                                 "call.state" -> {
                                     try { json.decodeFromString<CallStateFrame>(text) } catch (_: Throwable) { null }
                                         ?.let { _callStates.emit(CallStateEvent(it.callId, it.state)) }
+                                    if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
+                                }
+                                "voice.hand", "voice.granted", "voice.revoked" -> {
+                                    try { json.decodeFromString<VoiceEventFrame>(text) } catch (_: Throwable) { null }
+                                        ?.let { _voiceEvents.emit(VoiceEvent(f.event, it.roomId, it.userId)) }
                                     if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
                                 }
                                 "sync.gap" -> Unit // история чата и так грузится REST-ом при открытии

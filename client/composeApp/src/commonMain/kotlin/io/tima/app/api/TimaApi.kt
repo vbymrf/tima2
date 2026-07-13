@@ -304,6 +304,19 @@ data class CallStartDto(
 data class CallTokenDto(val room: String, val url: String = "", val token: String, val title: String = "")
 
 @Serializable
+data class VoiceJoinDto(
+    val room: String,
+    val url: String = "",
+    val token: String,
+    val title: String = "",
+    val role: String = "listener", // speaker|listener
+    @SerialName("is_owner") val isOwner: Boolean = false,
+)
+
+@Serializable
+private data class UserIdBody(@SerialName("user_id") val userId: String)
+
+@Serializable
 private data class VoiceTitleBody(val title: String)
 
 @Serializable
@@ -546,8 +559,20 @@ class TimaApi(private val baseUrl: String) {
     suspend fun listVoiceRooms(token: String): List<VoiceRoomDto> =
         getAuthed<VoiceRoomsResponse>("/api/v1/voice-rooms", token).rooms
 
-    suspend fun joinVoiceRoom(token: String, roomId: String): CallTokenDto =
-        postAuthed<JsonObject, CallTokenDto>("/api/v1/voice-rooms/$roomId/join", token, JsonObject(emptyMap()))
+    suspend fun joinVoiceRoom(token: String, roomId: String): VoiceJoinDto =
+        postAuthed<JsonObject, VoiceJoinDto>("/api/v1/voice-rooms/$roomId/join", token, JsonObject(emptyMap()))
+
+    suspend fun raiseHand(token: String, roomId: String) {
+        runCatching { postAuthed<JsonObject, JsonObject>("/api/v1/voice-rooms/$roomId/hand", token, JsonObject(emptyMap())) }
+    }
+
+    suspend fun grantSpeaker(token: String, roomId: String, userId: String) {
+        postAuthed<UserIdBody, JsonObject>("/api/v1/voice-rooms/$roomId/grant", token, UserIdBody(userId))
+    }
+
+    suspend fun revokeSpeaker(token: String, roomId: String, userId: String) {
+        postAuthed<UserIdBody, JsonObject>("/api/v1/voice-rooms/$roomId/revoke", token, UserIdBody(userId))
+    }
 
     // ── Media (media-storage.md: файлы ходят в MinIO напрямую, мимо бэкенда) ──
 

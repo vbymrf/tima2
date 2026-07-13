@@ -108,6 +108,63 @@ func TestVoiceRoomFlow(t *testing.T) {
 	}
 }
 
+// TestVoiceRoles — роли: владелец=спикер, гость=слушатель; выдача слова → спикер.
+func TestVoiceRoles(t *testing.T) {
+	ts, _ := setupWithCalls(t)
+	owner := registerDevice(t, ts, "+79990000045")
+	guest := registerDevice(t, ts, "+79990000046")
+
+	var created struct {
+		RoomID string `json:"room_id"`
+	}
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/voice-rooms",
+		map[string]string{"title": "Дискуссия"}, &created); code != 201 {
+		t.Fatalf("createVoiceRoom: %d", code)
+	}
+	room := created.RoomID
+
+	join := func(tok string) (string, bool) {
+		var j struct {
+			Role    string `json:"role"`
+			IsOwner bool   `json:"is_owner"`
+		}
+		if code := postAuthed(t, ts, tok, "POST", "/api/v1/voice-rooms/"+room+"/join", nil, &j); code != 200 {
+			t.Fatalf("join: %d", code)
+		}
+		return j.Role, j.IsOwner
+	}
+
+	if role, isOwner := join(owner.token); role != "speaker" || !isOwner {
+		t.Fatalf("владелец: ожидался speaker/owner, получен %s/%v", role, isOwner)
+	}
+	if role, _ := join(guest.token); role != "listener" {
+		t.Fatalf("гость: ожидался listener, получен %s", role)
+	}
+
+	// Гость не может выдавать слово
+	if code := postAuthed(t, ts, guest.token, "POST", "/api/v1/voice-rooms/"+room+"/grant",
+		map[string]string{"user_id": guest.userID}, nil); code != http.StatusForbidden {
+		t.Fatalf("grant гостем: ожидался 403, получен %d", code)
+	}
+	// Владелец выдаёт гостю слово
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/voice-rooms/"+room+"/grant",
+		map[string]string{"user_id": guest.userID}, nil); code != 200 {
+		t.Fatalf("grant владельцем: %d", code)
+	}
+	// Теперь гость — спикер
+	if role, _ := join(guest.token); role != "speaker" {
+		t.Fatalf("после выдачи слова гость должен быть speaker, получен %s", role)
+	}
+	// Владелец забирает слово → снова слушатель
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/voice-rooms/"+room+"/revoke",
+		map[string]string{"user_id": guest.userID}, nil); code != 200 {
+		t.Fatalf("revoke: %d", code)
+	}
+	if role, _ := join(guest.token); role != "listener" {
+		t.Fatalf("после отзыва гость должен быть listener, получен %s", role)
+	}
+}
+
 // TestCallsUnconfigured — без LiveKit /calls отвечает 503.
 func TestCallsUnconfigured(t *testing.T) {
 	ts, _ := setup(t) // без Calls

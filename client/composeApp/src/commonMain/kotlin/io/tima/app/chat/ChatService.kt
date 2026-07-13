@@ -38,6 +38,9 @@ data class CallStateEvent(val callId: String, val state: String)
 /** Данные для подключения к комнате LiveKit (звонок или аудио-чат). */
 data class CallConnection(val callId: String, val room: String, val url: String, val token: String)
 
+/** Событие аудио-чата (WS): voice.hand (владельцу), voice.granted/revoked (адресату). */
+data class VoiceEvent(val type: String, val roomId: String, val userId: String = "")
+
 /** Что показать в списке чатов как последнее сообщение. */
 fun ChatMessage.preview(): String = when {
     media != null && text.isEmpty() -> "📷 Фото"
@@ -106,6 +109,9 @@ interface ChatClient {
 
     /** Завершить/отклонить звонок. */
     suspend fun endCall(callId: String)
+
+    /** События аудио-чатов (поднятая рука у владельца, выдача/отзыв слова у адресата). */
+    val voiceEvents: Flow<VoiceEvent>
 
     // ── Группы (crypto-protocol §4: GK генерирует клиент-админ) ──
 

@@ -158,14 +158,98 @@ func (s *Server) joinVoiceRoom(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := auth.FromContext(r.Context())
 	room := "voice-" + vr.RoomID
-	token, err := s.Calls.Token(room, s.callIdentity(id), true, 10*time.Minute, time.Now())
+	// Роль решает canPublish: спикер говорит, слушатель только слушает
+	speaker, err := s.Store.IsSpeaker(r.Context(), vr.RoomID, vr.OwnerID, id.UserID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	token, err := s.Calls.Token(room, s.callIdentity(id), speaker, 10*time.Minute, time.Now())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
 		return
 	}
+	role := "listener"
+	if speaker {
+		role = "speaker"
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"room": room, "url": s.LiveKitURL, "token": token, "title": vr.Title})
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"room": room, "url": s.LiveKitURL, "token": token, "title": vr.Title,
+		"role": role, "is_owner": vr.OwnerID == id.UserID,
+	})
 }
+
+// raiseHand — POST /voice-rooms/{id}/hand: слушатель просит слово → владельцу voice.hand.
+func (s *Server) raiseHand(w http.ResponseWriter, r *http.Request) {
+	roomID := r.PathValue("roomID")
+	vr, err := s.Store.GetVoiceRoom(r.Context(), roomID)
+	if errors.Is(err, store.ErrVoiceRoomNotFound) {
+		writeErr(w, http.StatusNotFound, "not_found", "аудио-чат не найден")
+		return
+	} else if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	id, _ := auth.FromContext(r.Context())
+	if devices, err := s.Store.ListDevices(r.Context(), vr.OwnerID); err == nil {
+		for _, d := range devices {
+			s.notify(r.Context(), d.DeviceID, "voice.hand", map[string]any{"room_id": roomID, "user_id": id.UserID})
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+// setSpeaker — POST /voice-rooms/{id}/grant|revoke {user_id}: владелец даёт/забирает слово.
+func (s *Server) setSpeaker(w http.ResponseWriter, r *http.Request, grant bool) {
+	roomID := r.PathValue("roomID")
+	vr, err := s.Store.GetVoiceRoom(r.Context(), roomID)
+	if errors.Is(err, store.ErrVoiceRoomNotFound) {
+		writeErr(w, http.StatusNotFound, "not_found", "аудио-чат не найден")
+		return
+	} else if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	id, _ := auth.FromContext(r.Context())
+	if vr.OwnerID != id.UserID {
+		writeErr(w, http.StatusForbidden, "not_owner", "слово выдаёт владелец аудио-чата")
+		return
+	}
+	var req struct {
+		UserID string `json:"user_id"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&req); err != nil || req.UserID == "" {
+		writeErr(w, http.StatusBadRequest, "bad_json", "нужен user_id")
+		return
+	}
+	if grant {
+		err = s.Store.AddSpeaker(r.Context(), roomID, req.UserID)
+	} else {
+		err = s.Store.RemoveSpeaker(r.Context(), roomID, req.UserID)
+	}
+	if err != nil {
+		log.Printf("setSpeaker: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	// Уведомляем адресата: клиент перезайдёт за токеном с новой ролью
+	event := "voice.granted"
+	if !grant {
+		event = "voice.revoked"
+	}
+	if devices, err := s.Store.ListDevices(r.Context(), req.UserID); err == nil {
+		for _, d := range devices {
+			s.notify(r.Context(), d.DeviceID, event, map[string]any{"room_id": roomID})
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+func (s *Server) grantSpeaker(w http.ResponseWriter, r *http.Request)  { s.setSpeaker(w, r, true) }
+func (s *Server) revokeSpeaker(w http.ResponseWriter, r *http.Request) { s.setSpeaker(w, r, false) }
 
 // endCall — POST /calls/{callID}/end: завершение любым участником.
 func (s *Server) endCall(w http.ResponseWriter, r *http.Request) {

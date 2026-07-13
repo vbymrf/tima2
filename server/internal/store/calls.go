@@ -80,6 +80,28 @@ func (s *Store) GetVoiceRoom(ctx context.Context, roomID string) (VoiceRoom, err
 	return v, err
 }
 
+// IsSpeaker — есть ли у пользователя право говорить (владелец — всегда спикер).
+func (s *Store) IsSpeaker(ctx context.Context, roomID, ownerID, userID string) (bool, error) {
+	if userID == ownerID {
+		return true, nil
+	}
+	var ok bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM voice_speakers WHERE room_id=$1 AND user_id=$2)`, roomID, userID).Scan(&ok)
+	return ok, err
+}
+
+func (s *Store) AddSpeaker(ctx context.Context, roomID, userID string) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO voice_speakers (room_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, roomID, userID)
+	return err
+}
+
+func (s *Store) RemoveSpeaker(ctx context.Context, roomID, userID string) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM voice_speakers WHERE room_id=$1 AND user_id=$2`, roomID, userID)
+	return err
+}
+
 // ListVoiceRooms — открытые аудио-чаты (новые → старые).
 func (s *Store) ListVoiceRooms(ctx context.Context, limit int) ([]VoiceRoom, error) {
 	if limit <= 0 || limit > 100 {

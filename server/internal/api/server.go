@@ -104,6 +104,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/voice-rooms", s.Auth.Require(s.createVoiceRoom))
 	mux.HandleFunc("GET /api/v1/voice-rooms", s.Auth.Require(s.listVoiceRooms))
 	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/join", s.Auth.Require(s.joinVoiceRoom))
+	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/hand", s.Auth.Require(s.raiseHand))
+	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/grant", s.Auth.Require(s.grantSpeaker))
+	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/revoke", s.Auth.Require(s.revokeSpeaker))
 	mux.HandleFunc("GET /ws", s.handleWS) // auth — первым кадром, не Bearer (websocket-events.md)
 }
 
