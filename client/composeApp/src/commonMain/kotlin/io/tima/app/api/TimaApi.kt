@@ -280,6 +280,36 @@ private data class PostTextBody(val text: String)
 private data class PostIdResponse(@SerialName("post_id") val postId: Long)
 
 @Serializable
+private data class StartCallBody(@SerialName("peer_id") val peerId: String, val kind: String)
+
+@Serializable
+data class CallStartDto(
+    @SerialName("call_id") val callId: String,
+    val room: String,
+    val url: String = "",
+    val token: String,
+)
+
+@Serializable
+data class CallTokenDto(val room: String, val url: String = "", val token: String, val title: String = "")
+
+@Serializable
+private data class VoiceTitleBody(val title: String)
+
+@Serializable
+private data class RoomIdResponse(@SerialName("room_id") val roomId: String)
+
+@Serializable
+data class VoiceRoomDto(
+    @SerialName("room_id") val roomId: String,
+    val title: String,
+    @SerialName("owner_id") val ownerId: String,
+)
+
+@Serializable
+private data class VoiceRoomsResponse(val rooms: List<VoiceRoomDto> = emptyList())
+
+@Serializable
 private data class ApiError(val error: String = "", val message: String = "")
 
 class TimaApiException(val code: String, message: String) : Exception(message)
@@ -465,6 +495,27 @@ class TimaApi(private val baseUrl: String) {
 
     suspend fun channelPosts(token: String, channelId: String): List<ChannelPostDto> =
         getAuthed<ChannelPostsResponse>("/api/v1/channels/$channelId/posts", token).posts
+
+    // ── Звонки и аудио-чаты (calls-livekit.md; сигналинг + LiveKit-токены) ──
+
+    suspend fun startCall(token: String, peerUserId: String, kind: String): CallStartDto =
+        postAuthed<StartCallBody, CallStartDto>("/api/v1/calls", token, StartCallBody(peerUserId, kind))
+
+    suspend fun answerCall(token: String, callId: String): CallTokenDto =
+        postAuthed<JsonObject, CallTokenDto>("/api/v1/calls/$callId/answer", token, JsonObject(emptyMap()))
+
+    suspend fun endCall(token: String, callId: String) {
+        runCatching { postAuthed<JsonObject, JsonObject>("/api/v1/calls/$callId/end", token, JsonObject(emptyMap())) }
+    }
+
+    suspend fun createVoiceRoom(token: String, title: String): String =
+        postAuthed<VoiceTitleBody, RoomIdResponse>("/api/v1/voice-rooms", token, VoiceTitleBody(title)).roomId
+
+    suspend fun listVoiceRooms(token: String): List<VoiceRoomDto> =
+        getAuthed<VoiceRoomsResponse>("/api/v1/voice-rooms", token).rooms
+
+    suspend fun joinVoiceRoom(token: String, roomId: String): CallTokenDto =
+        postAuthed<JsonObject, CallTokenDto>("/api/v1/voice-rooms/$roomId/join", token, JsonObject(emptyMap()))
 
     // ── Media (media-storage.md: файлы ходят в MinIO напрямую, мимо бэкенда) ──
 

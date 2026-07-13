@@ -29,6 +29,15 @@ data class GroupSummary(val groupId: String, val title: String, val myRole: Stri
 /** Запрос собеседника на восстановление: показать пользователю «разрешить?». */
 data class RecoveryConsent(val chatId: String, val requesterDevice: String, val requesterEncPub: String)
 
+/** Входящий звонок (WS call.incoming). */
+data class IncomingCall(val callId: String, val room: String, val kind: String, val fromUserId: String)
+
+/** Смена состояния звонка (WS call.state): answered|ended|missed. */
+data class CallStateEvent(val callId: String, val state: String)
+
+/** Данные для подключения к комнате LiveKit (звонок или аудио-чат). */
+data class CallConnection(val callId: String, val room: String, val url: String, val token: String)
+
 /** Что показать в списке чатов как последнее сообщение. */
 fun ChatMessage.preview(): String = when {
     media != null && text.isEmpty() -> "📷 Фото"
@@ -77,6 +86,20 @@ interface ChatClient {
 
     /** Согласиться отдать историю чата запросившему устройству (после подтверждения в UI). */
     suspend fun approveRecovery(consent: RecoveryConsent)
+
+    // ── Звонки 1:1 (calls-livekit.md; сигналинг + LiveKit-токен, без живого медиа) ──
+
+    val incomingCalls: Flow<IncomingCall>
+    val callStates: Flow<CallStateEvent>
+
+    /** Начать звонок собеседнику (kind: audio|video); возвращает данные подключения. */
+    suspend fun startCall(peerUserId: String, kind: String): CallConnection
+
+    /** Ответить на входящий звонок; возвращает данные подключения. */
+    suspend fun answerCall(callId: String): CallConnection
+
+    /** Завершить/отклонить звонок. */
+    suspend fun endCall(callId: String)
 
     // ── Группы (crypto-protocol §4: GK генерирует клиент-админ) ──
 

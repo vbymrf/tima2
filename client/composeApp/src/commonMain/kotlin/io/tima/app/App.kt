@@ -25,6 +25,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -48,6 +49,8 @@ import io.kodium.Kodium
 import io.tima.app.api.ChannelDto
 import io.tima.app.api.ChannelPostDto
 import io.tima.app.api.TimaApi
+import io.tima.app.api.VoiceRoomDto
+import io.tima.app.chat.CallConnection
 import io.tima.app.chat.ChatClient
 import io.tima.app.chat.ChatMessage
 import io.tima.app.chat.GroupSummary
@@ -75,6 +78,7 @@ private sealed interface Screen {
     data class GroupChat(val session: Session, val groupId: String, val title: String) : Screen
     data class PhraseReveal(val session: Session, val phrase: List<String>) : Screen
     data class ChannelView(val session: Session, val channelId: String, val title: String, val owner: Boolean) : Screen
+    data class VoiceRoom(val session: Session, val roomId: String, val title: String) : Screen
 }
 
 private val b64url = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
@@ -90,6 +94,7 @@ fun App() {
         is Screen.Chat -> s.session
         is Screen.GroupChat -> s.session
         is Screen.ChannelView -> s.session
+        is Screen.VoiceRoom -> s.session
         else -> null
     }
     // Один ChatClient (одно WS) на сессию — живёт, пока пользователь вошёл
@@ -120,6 +125,26 @@ fun App() {
         )
     }
 
+    // Активный звонок (оверлей поверх всего): входящий/исходящий/в разговоре
+    var activeCall by remember { mutableStateOf<CallUi?>(null) }
+    LaunchedEffect(client) {
+        client?.incomingCalls?.collect { inc ->
+            // Не перебиваем уже идущий звонок; иначе показываем входящий
+            if (activeCall == null) {
+                activeCall = CallUi(inc.callId, inc.fromUserId.take(8) + "…", inc.kind, CallDir.Incoming, null)
+            }
+        }
+    }
+    LaunchedEffect(client) {
+        client?.callStates?.collect { st ->
+            if (activeCall?.callId != st.callId) return@collect
+            when (st.state) {
+                "answered" -> activeCall = activeCall?.copy(direction = CallDir.Connected)
+                "ended", "missed" -> activeCall = null
+            }
+        }
+    }
+
     LaunchedEffect(client) {
         val c = client ?: return@LaunchedEffect
         c.start()
@@ -136,6 +161,27 @@ fun App() {
 
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
+            // Оверлей звонка перекрывает контент, когда звонок активен
+            activeCall?.let { call ->
+                CallOverlay(
+                    call = call,
+                    onAccept = {
+                        val c = client ?: return@CallOverlay
+                        scope.launch {
+                            runCatching { c.answerCall(call.callId) }
+                                .onSuccess { activeCall = call.copy(direction = CallDir.Connected, connection = it) }
+                                .onFailure { activeCall = null }
+                        }
+                    },
+                    onEnd = {
+                        val c = client
+                        val id = call.callId
+                        activeCall = null
+                        scope.launch { runCatching { c?.endCall(id) } }
+                    },
+                )
+                return@Surface
+            }
             when (val s = screen) {
                 // Чат сам управляет раскладкой (LazyColumn несовместим с внешним verticalScroll)
                 is Screen.Chat -> ChatScreen(
@@ -144,6 +190,14 @@ fun App() {
                     targetId = s.peerUserId,
                     isGroup = false,
                     onRead = { chatId -> chats = SessionCodec.markRead(chatId) },
+                    onCall = { kind ->
+                        val c = client ?: return@ChatScreen
+                        scope.launch {
+                            runCatching { c.startCall(s.peerUserId, kind) }
+                                .onSuccess { activeCall = CallUi(it.callId, s.peerPhone, kind, CallDir.Outgoing, it) }
+                                .onFailure { activeCall = null }
+                        }
+                    },
                     onBack = { screen = Screen.Home(s.session) },
                 )
                 is Screen.GroupChat -> ChatScreen(
@@ -155,6 +209,7 @@ fun App() {
                     onBack = { screen = Screen.Home(s.session) },
                 )
                 is Screen.ChannelView -> ChannelScreen(s, onBack = { screen = Screen.Home(s.session) })
+                is Screen.VoiceRoom -> VoiceRoomScreen(s, onBack = { screen = Screen.Home(s.session) })
                 else -> Column(
                     modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -181,6 +236,7 @@ fun App() {
                             },
                             onOpenGroup = { g -> screen = Screen.GroupChat(s.session, g.groupId, g.title) },
                             onOpenChannel = { c -> screen = Screen.ChannelView(s.session, c.channelId, c.title, c.owner) },
+                            onOpenVoice = { v -> screen = Screen.VoiceRoom(s.session, v.roomId, v.title) },
                             onChatsChange = { chats = it },
                             onLogout = {
                                 SessionCodec.clear()
@@ -360,6 +416,7 @@ private fun HomeScreen(
     onOpen: (ChatEntry) -> Unit,
     onOpenGroup: (GroupSummary) -> Unit,
     onOpenChannel: (ChannelDto) -> Unit,
+    onOpenVoice: (VoiceRoomDto) -> Unit,
     onChatsChange: (List<ChatEntry>) -> Unit,
     onLogout: () -> Unit,
 ) {
@@ -374,6 +431,9 @@ private fun HomeScreen(
     var discover by remember { mutableStateOf<List<ChannelDto>>(emptyList()) }
     var channelTitle by remember { mutableStateOf("") }
     var showCreateChannel by remember { mutableStateOf(false) }
+    var voiceRooms by remember { mutableStateOf<List<VoiceRoomDto>>(emptyList()) }
+    var voiceTitle by remember { mutableStateOf("") }
+    var showCreateVoice by remember { mutableStateOf(false) }
     val api = remember(session.deviceId) { TimaApi(session.serverUrl) }
     val scope = rememberCoroutineScope()
 
@@ -392,9 +452,13 @@ private fun HomeScreen(
         } catch (_: Throwable) {
         }
     }
+    suspend fun refreshVoice() {
+        try { voiceRooms = api.listVoiceRooms(session.accessToken) } catch (_: Throwable) {}
+    }
     LaunchedEffect(client) {
         refreshGroups()
         refreshChannels()
+        refreshVoice()
     }
 
     Text("TIMA", style = MaterialTheme.typography.headlineMedium)
@@ -559,6 +623,44 @@ private fun HomeScreen(
     }
     Spacer(Modifier.height(16.dp))
 
+    // Аудио-чаты (постоянные голосовые комнаты)
+    Row(
+        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Аудио-чаты", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Button(enabled = !busy, onClick = { scope.launch { refreshVoice() } }) { Text("⟳") }
+    }
+    Spacer(Modifier.height(8.dp))
+    voiceRooms.forEach { v ->
+        Button(
+            onClick = { onOpenVoice(v) }, enabled = !busy,
+            modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(vertical = 2.dp),
+        ) { Text("🔊 ${v.title}") }
+    }
+    if (showCreateVoice) {
+        OutlinedTextField(
+            value = voiceTitle, onValueChange = { voiceTitle = it },
+            label = { Text("Название аудио-чата") }, singleLine = true,
+            modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        Button(enabled = !busy && voiceTitle.isNotBlank(), onClick = {
+            busy = true; error = null
+            scope.launch {
+                try {
+                    val id = api.createVoiceRoom(session.accessToken, voiceTitle.trim())
+                    val title = voiceTitle.trim(); voiceTitle = ""; showCreateVoice = false
+                    refreshVoice()
+                    onOpenVoice(VoiceRoomDto(roomId = id, title = title, ownerId = session.userId))
+                } catch (e: Throwable) { error = e.message } finally { busy = false }
+            }
+        }) { Text("Создать") }
+    } else {
+        Button(onClick = { showCreateVoice = true }, enabled = !busy) { Text("Создать аудио-чат") }
+    }
+    Spacer(Modifier.height(16.dp))
+
     OutlinedTextField(
         value = peerPhone, onValueChange = { peerPhone = it },
         label = { Text("Новый чат: телефон собеседника") }, singleLine = true,
@@ -603,6 +705,7 @@ private fun ChatScreen(
     isGroup: Boolean,
     onRead: (String) -> Unit,
     onBack: () -> Unit,
+    onCall: (String) -> Unit = {}, // kind: audio|video; только личный чат
 ) {
     val chatId = remember(targetId) { if (isGroup) targetId else client.chatIdWith(targetId) }
     val messages = remember { mutableStateListOf<ChatMessage>() }
@@ -638,6 +741,12 @@ private fun ChatScreen(
             Button(onClick = onBack) { Text("←") }
             Spacer(Modifier.width(12.dp))
             Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            if (!isGroup) { // звонки — в личных чатах
+                Button(enabled = !busy, onClick = { onCall("audio") }) { Text("📞") }
+                Spacer(Modifier.width(4.dp))
+                Button(enabled = !busy, onClick = { onCall("video") }) { Text("📹") }
+                Spacer(Modifier.width(4.dp))
+            }
             // Восстановить историю: у своих устройств (авто) или собеседника/участников (согласие)
             Button(enabled = !busy, onClick = {
                 busy = true; error = null
@@ -724,6 +833,128 @@ private fun ChatScreen(
                 }
             }) { Text("➤") }
         }
+    }
+}
+
+private enum class CallDir { Outgoing, Incoming, Connected }
+
+private data class CallUi(
+    val callId: String,
+    val peerLabel: String,
+    val kind: String, // audio|video
+    val direction: CallDir,
+    val connection: CallConnection?,
+)
+
+/** Экран звонка (сигналинг). Живого медиа нет — LiveKit-подключение на реальных устройствах. */
+@Composable
+private fun CallOverlay(call: CallUi, onAccept: () -> Unit, onEnd: () -> Unit) {
+    var micOn by remember { mutableStateOf(true) }
+    var camOn by remember { mutableStateOf(call.kind == "video") }
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Column(
+            modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(if (call.kind == "video") "📹" else "📞", style = MaterialTheme.typography.displayMedium)
+            Spacer(Modifier.height(16.dp))
+            Text(call.peerLabel, style = MaterialTheme.typography.headlineMedium)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                when (call.direction) {
+                    CallDir.Outgoing -> "Звоним…"
+                    CallDir.Incoming -> "Входящий ${if (call.kind == "video") "видео" else "аудио"}звонок"
+                    CallDir.Connected -> "В разговоре"
+                },
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Сигналинг работает; живой звук/видео подключается на реальном устройстве (LiveKit).",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.widthIn(max = 360.dp),
+            )
+            Spacer(Modifier.height(32.dp))
+
+            if (call.direction == CallDir.Connected) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { micOn = !micOn }) { Text(if (micOn) "🎤 вкл" else "🔇 выкл") }
+                    if (call.kind == "video") {
+                        Button(onClick = { camOn = !camOn }) { Text(if (camOn) "📹 вкл" else "📷 выкл") }
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
+            }
+
+            when (call.direction) {
+                CallDir.Incoming -> Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Button(
+                        onClick = onAccept,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    ) { Text("Принять") }
+                    Button(
+                        onClick = onEnd,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    ) { Text("Отклонить") }
+                }
+                else -> Button(
+                    onClick = onEnd,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                ) { Text("Завершить") }
+            }
+        }
+    }
+}
+
+/** Экран аудио-чата: присоединение (LiveKit-токен) + состояние. Живого звука нет (WebRTC). */
+@Composable
+private fun VoiceRoomScreen(state: Screen.VoiceRoom, onBack: () -> Unit) {
+    val api = remember(state.roomId) { TimaApi(state.session.serverUrl) }
+    var joined by remember { mutableStateOf(false) }
+    var micOn by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    Column(
+        modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = onBack) { Text("←") }
+            Spacer(Modifier.width(12.dp))
+            Text("🔊 ${state.title}", style = MaterialTheme.typography.titleLarge)
+        }
+        Spacer(Modifier.weight(1f))
+        Text("🎙️", style = MaterialTheme.typography.displayMedium)
+        Spacer(Modifier.height(12.dp))
+        Text(if (joined) "Вы в комнате" else "Аудио-чат", style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Сигналинг и вход в комнату работают; живой звук — на реальном устройстве (LiveKit).",
+            style = MaterialTheme.typography.bodySmall, modifier = Modifier.widthIn(max = 360.dp),
+        )
+        ErrorText(error)
+        Spacer(Modifier.height(24.dp))
+        if (!joined) {
+            Button(enabled = !busy, onClick = {
+                busy = true; error = null
+                scope.launch {
+                    try { api.joinVoiceRoom(state.session.accessToken, state.roomId); joined = true }
+                    catch (e: Throwable) { error = e.message } finally { busy = false }
+                }
+            }) { Text("Присоединиться") }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = { micOn = !micOn }) { Text(if (micOn) "🎤 вкл" else "🔇 выкл") }
+                Button(
+                    onClick = { joined = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                ) { Text("Выйти") }
+            }
+        }
+        Spacer(Modifier.weight(1f))
     }
 }
 

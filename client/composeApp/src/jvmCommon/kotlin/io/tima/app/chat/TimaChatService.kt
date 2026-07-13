@@ -106,6 +106,20 @@ private data class MsgRecoveryRequestFrame(
 @Serializable
 private data class MsgRecoveryReadyFrame(@SerialName("chat_id") val chatId: String)
 
+@Serializable
+private data class CallIncomingFrame(
+    @SerialName("call_id") val callId: String,
+    val room: String = "",
+    val kind: String = "audio",
+    val from: String = "",
+)
+
+@Serializable
+private data class CallStateFrame(
+    @SerialName("call_id") val callId: String,
+    val state: String = "",
+)
+
 class TimaClient(private val session: Session) : ChatClient {
 
     private val api = TimaApi(session.serverUrl)
@@ -133,6 +147,10 @@ class TimaClient(private val session: Session) : ChatClient {
     private val _msgRecoveryReady = MutableSharedFlow<String>(extraBufferCapacity = 16)
     private val _consentRequests = MutableSharedFlow<RecoveryConsent>(extraBufferCapacity = 16)
     override val consentRequests: Flow<RecoveryConsent> = _consentRequests
+    private val _incomingCalls = MutableSharedFlow<IncomingCall>(extraBufferCapacity = 16)
+    override val incomingCalls: Flow<IncomingCall> = _incomingCalls
+    private val _callStates = MutableSharedFlow<CallStateEvent>(extraBufferCapacity = 16)
+    override val callStates: Flow<CallStateEvent> = _callStates
 
     override fun chatIdWith(peerUserId: String): String = personalChatId(session.userId, peerUserId)
 
@@ -208,6 +226,16 @@ class TimaClient(private val session: Session) : ChatClient {
                                 "recovery.msg_ready" -> {
                                     try { json.decodeFromString<MsgRecoveryReadyFrame>(text) } catch (_: Throwable) { null }
                                         ?.let { _msgRecoveryReady.emit(it.chatId) }
+                                    if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
+                                }
+                                "call.incoming" -> {
+                                    try { json.decodeFromString<CallIncomingFrame>(text) } catch (_: Throwable) { null }
+                                        ?.let { _incomingCalls.emit(IncomingCall(it.callId, it.room, it.kind, it.from)) }
+                                    if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
+                                }
+                                "call.state" -> {
+                                    try { json.decodeFromString<CallStateFrame>(text) } catch (_: Throwable) { null }
+                                        ?.let { _callStates.emit(CallStateEvent(it.callId, it.state)) }
                                     if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
                                 }
                                 "sync.gap" -> Unit // история чата и так грузится REST-ом при открытии
@@ -303,6 +331,20 @@ class TimaClient(private val session: Session) : ChatClient {
     }
 
     override suspend fun approveRecovery(consent: RecoveryConsent) = provideChatKeys(consent)
+
+    // ── Звонки 1:1 (сигналинг; медиа — LiveKit, здесь не подключается) ──
+
+    override suspend fun startCall(peerUserId: String, kind: String): CallConnection {
+        val r = api.startCall(session.accessToken, peerUserId, kind)
+        return CallConnection(r.callId, r.room, r.url, r.token)
+    }
+
+    override suspend fun answerCall(callId: String): CallConnection {
+        val r = api.answerCall(session.accessToken, callId)
+        return CallConnection(callId, r.room, r.url, r.token)
+    }
+
+    override suspend fun endCall(callId: String) = api.endCall(session.accessToken, callId)
 
     /** Помощник: разворачивает свои ключи сообщений чата и заворачивает под устройство-запросившее. */
     private suspend fun provideChatKeys(consent: RecoveryConsent) {

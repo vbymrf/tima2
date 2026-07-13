@@ -103,6 +103,70 @@ func (s *Server) answerCall(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"room": call.Room, "url": s.LiveKitURL, "token": token})
 }
 
+// ── Аудио-чаты (постоянные голосовые комнаты) ──
+
+func (s *Server) createVoiceRoom(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil || req.Title == "" {
+		writeErr(w, http.StatusBadRequest, "bad_title", "нужен title")
+		return
+	}
+	id, _ := auth.FromContext(r.Context())
+	roomID, err := s.Store.CreateVoiceRoom(r.Context(), req.Title, id.UserID)
+	if err != nil {
+		log.Printf("createVoiceRoom: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]any{"room_id": roomID})
+}
+
+func (s *Server) listVoiceRooms(w http.ResponseWriter, r *http.Request) {
+	rooms, err := s.Store.ListVoiceRooms(r.Context(), 50)
+	if err != nil {
+		log.Printf("listVoiceRooms: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	out := make([]map[string]any, 0, len(rooms))
+	for _, v := range rooms {
+		out = append(out, map[string]any{"room_id": v.RoomID, "title": v.Title, "owner_id": v.OwnerID})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"rooms": out})
+}
+
+// joinVoiceRoom — POST /voice-rooms/{id}/join: LiveKit-токен комнаты. MVP: все спикеры
+// (canPublish=true); роли спикер/слушатель — следующая итерация.
+func (s *Server) joinVoiceRoom(w http.ResponseWriter, r *http.Request) {
+	if s.Calls == nil {
+		writeErr(w, http.StatusServiceUnavailable, "no_livekit", "звонки не сконфигурированы")
+		return
+	}
+	roomID := r.PathValue("roomID")
+	vr, err := s.Store.GetVoiceRoom(r.Context(), roomID)
+	if errors.Is(err, store.ErrVoiceRoomNotFound) {
+		writeErr(w, http.StatusNotFound, "not_found", "аудио-чат не найден")
+		return
+	} else if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	id, _ := auth.FromContext(r.Context())
+	room := "voice-" + vr.RoomID
+	token, err := s.Calls.Token(room, s.callIdentity(id), true, 10*time.Minute, time.Now())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"room": room, "url": s.LiveKitURL, "token": token, "title": vr.Title})
+}
+
 // endCall — POST /calls/{callID}/end: завершение любым участником.
 func (s *Server) endCall(w http.ResponseWriter, r *http.Request) {
 	callID := r.PathValue("callID")

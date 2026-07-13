@@ -63,6 +63,51 @@ func TestCallFlow(t *testing.T) {
 	}
 }
 
+// TestVoiceRoomFlow — аудио-чат: создание, список, присоединение (LiveKit-токен).
+func TestVoiceRoomFlow(t *testing.T) {
+	ts, _ := setupWithCalls(t)
+	owner := registerDevice(t, ts, "+79990000040")
+	guest := registerDevice(t, ts, "+79990000041")
+
+	var created struct {
+		RoomID string `json:"room_id"`
+	}
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/voice-rooms",
+		map[string]string{"title": "Standup"}, &created); code != 201 {
+		t.Fatalf("createVoiceRoom: %d", code)
+	}
+	// Гость видит комнату в списке
+	var list struct {
+		Rooms []struct {
+			RoomID string `json:"room_id"`
+			Title  string `json:"title"`
+		} `json:"rooms"`
+	}
+	if code := getAuthed(t, ts, guest.token, "/api/v1/voice-rooms", &list); code != 200 {
+		t.Fatalf("listVoiceRooms: %d", code)
+	}
+	found := false
+	for _, r := range list.Rooms {
+		if r.RoomID == created.RoomID && r.Title == "Standup" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("созданный аудио-чат обязан быть в списке")
+	}
+	// Гость присоединяется → получает токен LiveKit
+	var join struct {
+		Room  string `json:"room"`
+		Token string `json:"token"`
+	}
+	if code := postAuthed(t, ts, guest.token, "POST", "/api/v1/voice-rooms/"+created.RoomID+"/join", nil, &join); code != 200 {
+		t.Fatalf("join: %d", code)
+	}
+	if join.Room == "" || join.Token == "" {
+		t.Fatalf("нет room/token: %+v", join)
+	}
+}
+
 // TestCallsUnconfigured — без LiveKit /calls отвечает 503.
 func TestCallsUnconfigured(t *testing.T) {
 	ts, _ := setup(t) // без Calls
