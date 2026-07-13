@@ -303,6 +303,109 @@ type DeviceGroupKey struct {
 	Wrapped            []byte
 }
 
+// DeviceEncryptionPub — X25519-ключ устройства (помощнику для обёртки восстановления).
+func (s *Store) DeviceEncryptionPub(ctx context.Context, deviceID string) ([]byte, error) {
+	var key []byte
+	err := s.pool.QueryRow(ctx, `
+		SELECT encryption_pub FROM devices WHERE device_id = $1 AND revoked_at IS NULL`, deviceID).Scan(&key)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrDeviceUnknown
+	}
+	return key, err
+}
+
+// MissingGKVersions — версии GK группы, для которых у устройства НЕТ обёртки
+// (история до входа устройства). Источник запроса восстановления (ADR-0010 §этап 1).
+func (s *Store) MissingGKVersions(ctx context.Context, groupID, deviceID string) ([]int32, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT h.gk_version FROM group_key_history h
+		WHERE h.group_id = $1
+		  AND NOT EXISTS (
+		    SELECT 1 FROM group_wrapped_keys w
+		    WHERE w.group_id = h.group_id AND w.gk_version = h.gk_version AND w.recipient = $2)
+		ORDER BY h.gk_version`, groupID, deviceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []int32
+	for rows.Next() {
+		var v int32
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+// HelperDevices — устройства активных участников группы (кроме requester),
+// у которых ЕСТЬ обёртка хотя бы одной из versions — кандидаты в помощники.
+func (s *Store) HelperDevices(ctx context.Context, groupID, requester string, versions []int32) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT w.recipient
+		FROM group_wrapped_keys w
+		JOIN devices d ON d.device_id = w.recipient AND d.revoked_at IS NULL
+		JOIN memberships m ON m.user_id = d.user_id
+		  AND m.target_type = 'group' AND m.target_id = w.group_id AND m.left_at IS NULL
+		WHERE w.group_id = $1 AND w.recipient <> $2 AND w.gk_version = ANY($3)`,
+		groupID, requester, versions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// IsGroupMemberDevice — принадлежит ли устройство активному участнику группы
+// (проверка и для запросившего восстановление, и для получателя обёрток).
+func (s *Store) IsGroupMemberDevice(ctx context.Context, groupID, deviceID string) (bool, error) {
+	var ok bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+		  SELECT 1 FROM devices d
+		  JOIN memberships m ON m.user_id = d.user_id
+		    AND m.target_type = 'group' AND m.target_id = $1 AND m.left_at IS NULL
+		  WHERE d.device_id = $2 AND d.revoked_at IS NULL)`, groupID, deviceID).Scan(&ok)
+	return ok, err
+}
+
+// RecoveryKey — обёртка GK версии для устройства-получателя, сделанная помощником.
+type RecoveryKey struct {
+	GKVersion          int32
+	SenderEphemeralPub []byte
+	Wrapped            []byte
+}
+
+// SaveRecoveryKeys кладёт обёртки восстановления в group_wrapped_keys для recipient.
+// Существующие не трогаются (ON CONFLICT DO NOTHING) — восстановление идемпотентно.
+func (s *Store) SaveRecoveryKeys(ctx context.Context, groupID, recipient string, keys []RecoveryKey) error {
+	batch := &pgx.Batch{}
+	for _, k := range keys {
+		batch.Queue(`
+			INSERT INTO group_wrapped_keys (group_id, gk_version, recipient, wrapped, sender_ephemeral_pub)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (group_id, gk_version, recipient) DO NOTHING`,
+			groupID, k.GKVersion, recipient, k.Wrapped, k.SenderEphemeralPub)
+	}
+	br := s.pool.SendBatch(ctx, batch)
+	defer br.Close()
+	for range keys {
+		if _, err := br.Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // CurrentGKVersion — максимальная версия GK группы (0, если ротаций не было).
 // Нужна клиенту-админу, чьё новое устройство ещё без обёрток: чтобы ротировать
 // строго current+1, а не вслепую с 0 (иначе version_conflict).
@@ -316,8 +419,9 @@ func (s *Store) CurrentGKVersion(ctx context.Context, groupID string) (int32, er
 // ListGroupKeysForDevice — версии > sinceVersion, для которых у устройства есть обёртка
 // (GET /groups/{id}/keys?since_version=). Исключённый участник новых версий не увидит.
 func (s *Store) ListGroupKeysForDevice(ctx context.Context, groupID, deviceID string, sinceVersion int32) ([]DeviceGroupKey, error) {
+	// COALESCE: обёртка восстановления несёт свой эфемерал (0008); обычная — из истории.
 	rows, err := s.pool.Query(ctx, `
-		SELECT h.gk_version, h.sender_ephemeral_pub, w.wrapped
+		SELECT h.gk_version, COALESCE(w.sender_ephemeral_pub, h.sender_ephemeral_pub), w.wrapped
 		FROM group_key_history h
 		JOIN group_wrapped_keys w
 		  ON w.group_id = h.group_id AND w.gk_version = h.gk_version AND w.recipient = $2

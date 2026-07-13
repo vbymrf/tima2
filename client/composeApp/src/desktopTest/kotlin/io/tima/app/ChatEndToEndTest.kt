@@ -133,4 +133,59 @@ class ChatEndToEndTest {
             bobChat.close()
         }
     }
+
+    @Test
+    fun `новое устройство участника восстанавливает историю группы`() = runBlocking {
+        val api = TimaApi(base)
+        try {
+            api.smsRequest("+79990000001")
+        } catch (e: Throwable) {
+            println("сервер недоступен ($e) — тест пропущен")
+            return@runBlocking
+        }
+        val suffix = Random.nextInt(1_000_000)
+        val alice = register(api, "+7997%07d".format(suffix))
+        val bobPhone = "+7996%07d".format(suffix)
+        val bob1 = register(api, bobPhone)
+
+        val aliceChat = createChatClient(alice)
+        val bob1Chat = createChatClient(bob1)
+        try {
+            aliceChat.start()
+            bob1Chat.start() // помощник обязан быть онлайн, чтобы поделиться ключом
+            val group = aliceChat.createGroup("История группы", listOf(bobPhone))
+            aliceChat.sendGroup(group.groupId, "Сообщение до входа второго устройства")
+
+            // Первое устройство Боба читает (GK v1 получен при ротации)
+            val h1 = withTimeout(20_000) {
+                var h = bob1Chat.groupHistory(group.groupId)
+                while (h.isEmpty()) { kotlinx.coroutines.delay(300); h = bob1Chat.groupHistory(group.groupId) }
+                h
+            }
+            assertEquals(listOf("Сообщение до входа второго устройства"), h1.map { it.text })
+
+            // Второе устройство Боба: тот же телефон → тот же аккаунт, НОВЫЙ device без GK v1
+            val bob2 = register(api, bobPhone)
+            val bob2Chat = createChatClient(bob2)
+            try {
+                bob2Chat.start()
+                // Без ключа история недоступна
+                assertTrue(
+                    bob2Chat.groupHistory(group.groupId).isEmpty(),
+                    "новое устройство не должно читать историю без GK",
+                )
+                // Восстановление у участников (bob1 онлайн помогает)
+                val recovered = bob2Chat.recoverGroupHistory(group.groupId)
+                assertEquals(
+                    listOf("Сообщение до входа второго устройства"), recovered.map { it.text },
+                    "после восстановления второе устройство читает историю",
+                )
+            } finally {
+                bob2Chat.close()
+            }
+        } finally {
+            aliceChat.close()
+            bob1Chat.close()
+        }
+    }
 }

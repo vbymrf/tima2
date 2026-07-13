@@ -135,6 +135,118 @@ func (s *Server) groupRotate(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"group_id": r.PathValue("groupID"), "gk_version": req.GKVersion})
 }
 
+// groupKeyRecover — POST /groups/{groupID}/keys/recover: устройство просит недостающие
+// версии GK (историю до своего входа) у участников (ADR-0010 §этап 1). Сервер находит
+// устройства-помощники, у кого эти версии есть, и рассылает им recovery.gk_request.
+// Аутентификация запроса — device JWT + членство (крипто-подпись запроса ключом
+// личности — этап 3). Согласие в группе автоматическое: помощник и так делится с
+// участником, имеющим право на историю.
+func (s *Server) groupKeyRecover(w http.ResponseWriter, r *http.Request) {
+	groupID := r.PathValue("groupID")
+	id, _ := auth.FromContext(r.Context())
+
+	role, err := s.Store.GroupRole(r.Context(), groupID, id.UserID)
+	if err != nil || role == "" {
+		writeErr(w, http.StatusForbidden, "not_member", "восстановление доступно только участникам группы")
+		return
+	}
+	missing, err := s.Store.MissingGKVersions(r.Context(), groupID, id.DeviceID)
+	if err != nil {
+		log.Printf("groupKeyRecover: missing: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	if len(missing) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"requested": 0, "helpers": 0})
+		return
+	}
+	helpers, err := s.Store.HelperDevices(r.Context(), groupID, id.DeviceID, missing)
+	if err != nil {
+		log.Printf("groupKeyRecover: helpers: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	encPub, err := s.Store.DeviceEncryptionPub(r.Context(), id.DeviceID)
+	if err != nil {
+		log.Printf("groupKeyRecover: enc pub: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	b64 := base64.RawURLEncoding
+	versions := make([]int32, len(missing))
+	copy(versions, missing)
+	for _, helper := range helpers {
+		s.notify(r.Context(), helper, "recovery.gk_request", map[string]any{
+			"group_id":          groupID,
+			"requester_device":  id.DeviceID,
+			"requester_enc_pub": b64.EncodeToString(encPub),
+			"versions":          versions,
+		})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"requested": len(missing), "helpers": len(helpers)})
+}
+
+// groupKeyProvide — POST /groups/{groupID}/keys/recover/provide: помощник присылает
+// обёртки GK под устройство-запросившее. Сервер кладёт их в group_wrapped_keys и
+// уведомляет получателя recovery.gk_ready. Проверки: помощник — участник; получатель —
+// устройство активного участника (ключи не уходят чужому).
+func (s *Server) groupKeyProvide(w http.ResponseWriter, r *http.Request) {
+	groupID := r.PathValue("groupID")
+	id, _ := auth.FromContext(r.Context())
+
+	role, err := s.Store.GroupRole(r.Context(), groupID, id.UserID)
+	if err != nil || role == "" {
+		writeErr(w, http.StatusForbidden, "not_member", "делиться ключами может только участник")
+		return
+	}
+	var req struct {
+		RequesterDevice string `json:"requester_device"`
+		Keys            []struct {
+			GKVersion          int32  `json:"gk_version"`
+			SenderEphemeralPub string `json:"sender_ephemeral_pub"`
+			Wrapped            string `json:"wrapped"`
+		} `json:"keys"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<20)).Decode(&req); err != nil || req.RequesterDevice == "" || len(req.Keys) == 0 {
+		writeErr(w, http.StatusBadRequest, "bad_json", "нужны requester_device и keys")
+		return
+	}
+	member, err := s.Store.IsGroupMemberDevice(r.Context(), groupID, req.RequesterDevice)
+	if err != nil {
+		log.Printf("groupKeyProvide: member check: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	if !member {
+		writeErr(w, http.StatusBadRequest, "not_member_device", "получатель — не устройство активного участника")
+		return
+	}
+	b64 := base64.RawURLEncoding
+	keys := make([]store.RecoveryKey, 0, len(req.Keys))
+	for _, k := range req.Keys {
+		eph, err1 := b64.DecodeString(k.SenderEphemeralPub)
+		wrapped, err2 := b64.DecodeString(k.Wrapped)
+		if err1 != nil || err2 != nil || len(eph) != 32 || len(wrapped) < 24+16+32 || k.GKVersion <= 0 {
+			writeErr(w, http.StatusBadRequest, "bad_key", "некорректная обёртка восстановления")
+			return
+		}
+		keys = append(keys, store.RecoveryKey{GKVersion: k.GKVersion, SenderEphemeralPub: eph, Wrapped: wrapped})
+	}
+	if err := s.Store.SaveRecoveryKeys(r.Context(), groupID, req.RequesterDevice, keys); err != nil {
+		log.Printf("groupKeyProvide: save: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	s.notify(r.Context(), req.RequesterDevice, "recovery.gk_ready", map[string]any{
+		"group_id": groupID, "count": len(keys),
+	})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]any{"saved": len(keys)})
+}
+
 // groupKeys — GET /groups/{groupID}/keys?since_version=: пропущенные wrapped_GK
 // для устройства из токена (догон после офлайна / нового устройства).
 // Членство не проверяется намеренно: выдаются только обёртки, адресованные

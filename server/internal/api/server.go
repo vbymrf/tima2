@@ -70,6 +70,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/groups/{groupID}/messages", s.Auth.Require(s.listGroupMessages))
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys", s.Auth.Require(s.groupRotate))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}/keys", s.Auth.Require(s.groupKeys))
+	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys/recover", s.Auth.Require(s.groupKeyRecover))
+	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys/recover/provide", s.Auth.Require(s.groupKeyProvide))
 	mux.HandleFunc("POST /api/v1/media/init", s.Auth.Require(s.mediaInit))
 	mux.HandleFunc("POST /api/v1/media/complete", s.Auth.Require(s.mediaComplete))
 	mux.HandleFunc("GET /api/v1/media/{mediaID}/url", s.Auth.Require(s.mediaURL))

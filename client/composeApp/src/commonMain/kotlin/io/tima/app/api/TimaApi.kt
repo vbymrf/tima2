@@ -192,6 +192,22 @@ private data class PostGroupMessageBody(
 private data class PostGroupMessageResponse(@SerialName("message_id") val messageId: Long)
 
 @Serializable
+data class RecoverResponse(val requested: Int = 0, val helpers: Int = 0)
+
+@Serializable
+data class ProvideKeyDto(
+    @SerialName("gk_version") val gkVersion: Int,
+    @SerialName("sender_ephemeral_pub") val senderEphemeralPub: String,
+    val wrapped: String,
+)
+
+@Serializable
+private data class ProvideBody(
+    @SerialName("requester_device") val requesterDevice: String,
+    val keys: List<ProvideKeyDto>,
+)
+
+@Serializable
 private data class ApiError(val error: String = "", val message: String = "")
 
 class TimaApiException(val code: String, message: String) : Exception(message)
@@ -332,6 +348,18 @@ class TimaApi(private val baseUrl: String) {
 
     suspend fun listGroupMessages(token: String, groupId: String, limit: Int = 100): List<GroupMessageDto> =
         getAuthed<GroupMessagesResponse>("/api/v1/groups/$groupId/messages", token, "limit" to limit.toString()).messages
+
+    /** Запрос восстановления недостающих версий GK у участников (ADR-0010 §этап 1). */
+    suspend fun recoverGroupKeys(token: String, groupId: String): RecoverResponse =
+        postAuthed<JsonObject, RecoverResponse>("/api/v1/groups/$groupId/keys/recover", token, JsonObject(emptyMap()))
+
+    /** Помощник отдаёт обёртки GK под устройство-запросившее. */
+    suspend fun provideGroupKeys(token: String, groupId: String, requesterDevice: String, keys: List<ProvideKeyDto>) {
+        postAuthed<ProvideBody, JsonObject>(
+            "/api/v1/groups/$groupId/keys/recover/provide", token,
+            ProvideBody(requesterDevice, keys),
+        )
+    }
 
     // ── Media (media-storage.md: файлы ходят в MinIO напрямую, мимо бэкенда) ──
 

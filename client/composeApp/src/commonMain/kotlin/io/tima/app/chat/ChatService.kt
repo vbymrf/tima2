@@ -73,6 +73,13 @@ interface ChatClient {
     /** История группы с расшифровкой GK нужных версий, старые → новые. */
     suspend fun groupHistory(groupId: String): List<ChatMessage>
 
+    /**
+     * Восстановление истории группы: запрос недостающих версий GK у участников
+     * (ADR-0010 §этап 1), ожидание обёрток, повторная расшифровка. Возвращает историю
+     * после восстановления.
+     */
+    suspend fun recoverGroupHistory(groupId: String): List<ChatMessage>
+
     /** Шифрует GK текущей версии, подписывает group_message_canonical и отправляет. */
     suspend fun sendGroup(groupId: String, text: String): ChatMessage
 

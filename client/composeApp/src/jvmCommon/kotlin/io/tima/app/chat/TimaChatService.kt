@@ -2,6 +2,7 @@
 
 package io.tima.app.chat
 
+import io.kodium.Kodium
 import io.kodium.KodiumPrivateKey
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.websocket.Frame
@@ -9,6 +10,7 @@ import io.ktor.websocket.readText
 import io.tima.app.api.DeviceKeyInfo
 import io.tima.app.api.EscrowDto
 import io.tima.app.api.GroupMessageDto
+import io.tima.app.api.ProvideKeyDto
 import io.tima.app.api.TimaApi
 import io.tima.app.api.TimaApiException
 import io.tima.app.api.WrappedKeyDto
@@ -21,6 +23,7 @@ import io.tima.crypto.EscrowModule
 import io.tima.crypto.GroupKeyManager
 import io.tima.crypto.GroupMessageMeta
 import io.tima.crypto.MessageSigner
+import io.tima.crypto.WrappedKeyService
 import io.tima.crypto.MediaCipher
 import io.tima.crypto.MessageSerializer
 import io.tima.crypto.PersonalMessageSealer
@@ -41,8 +44,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -77,6 +82,17 @@ private data class KeyRotatedFrame(
     @SerialName("wrapped_gk") val wrappedGk: String,
 )
 
+@Serializable
+private data class RecoveryRequestFrame(
+    @SerialName("group_id") val groupId: String,
+    @SerialName("requester_device") val requesterDevice: String,
+    @SerialName("requester_enc_pub") val requesterEncPub: String,
+    val versions: List<Int> = emptyList(),
+)
+
+@Serializable
+private data class RecoveryReadyFrame(@SerialName("group_id") val groupId: String)
+
 class TimaClient(private val session: Session) : ChatClient {
 
     private val api = TimaApi(session.serverUrl)
@@ -93,6 +109,9 @@ class TimaClient(private val session: Session) : ChatClient {
 
     private val _messages = MutableSharedFlow<ChatMessage>(extraBufferCapacity = 256)
     override val messages: Flow<ChatMessage> = _messages
+
+    // Сигнал «обёртки восстановления готовы» по group_id (recovery.gk_ready)
+    private val _recoveryReady = MutableSharedFlow<String>(extraBufferCapacity = 16)
 
     override fun chatIdWith(peerUserId: String): String = personalChatId(session.userId, peerUserId)
 
@@ -143,6 +162,17 @@ class TimaClient(private val session: Session) : ChatClient {
                                                 groupKeyCache.getOrPut(k.groupId) { mutableMapOf() }[k.gkVersion] = gk
                                             }
                                         }
+                                    if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
+                                }
+                                "recovery.gk_request" -> {
+                                    // Помощник: заворачиваю имеющиеся GK под устройство-запросившее
+                                    try { json.decodeFromString<RecoveryRequestFrame>(text) } catch (_: Throwable) { null }
+                                        ?.let { req -> provideGroupKeys(req) }
+                                    if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
+                                }
+                                "recovery.gk_ready" -> {
+                                    try { json.decodeFromString<RecoveryReadyFrame>(text) } catch (_: Throwable) { null }
+                                        ?.let { _recoveryReady.emit(it.groupId) }
                                     if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
                                 }
                                 "sync.gap" -> Unit // история чата и так грузится REST-ом при открытии
@@ -349,6 +379,33 @@ class TimaClient(private val session: Session) : ChatClient {
         api.listGroupMessages(session.accessToken, groupId)
             .mapNotNull { decryptGroup(it) }
             .sortedBy { it.messageId }
+
+    override suspend fun recoverGroupHistory(groupId: String): List<ChatMessage> {
+        val resp = api.recoverGroupKeys(session.accessToken, groupId)
+        // Есть помощники онлайн — ждём их обёртки; иначе сразу отдаём что есть.
+        if (resp.helpers > 0) {
+            withTimeoutOrNull(15_000) { _recoveryReady.first { it == groupId } }
+        }
+        fetchGroupKeys(groupId)
+        return groupHistory(groupId)
+    }
+
+    /** Помощник: заворачивает свои GK запрошенных версий под ключ устройства-запросившего. */
+    private suspend fun provideGroupKeys(req: RecoveryRequestFrame) {
+        fetchGroupKeys(req.groupId) // подтянуть свои обёртки на случай пустого кэша
+        val have = groupKeyCache[req.groupId] ?: return
+        val recipientPub = b64url.decode(req.requesterEncPub)
+        val ephemeral = Kodium.generateKeyPair()
+        val ephPub = b64url.encode(ephemeral.getPublicKey().encryptionKey)
+        val keys = req.versions.filter { have.containsKey(it) }.mapNotNull { v ->
+            WrappedKeyService.wrap(ephemeral, recipientPub, have.getValue(v)).getOrNull()?.let { wrapped ->
+                ProvideKeyDto(gkVersion = v, senderEphemeralPub = ephPub, wrapped = b64url.encode(wrapped))
+            }
+        }
+        if (keys.isNotEmpty()) {
+            runCatching { api.provideGroupKeys(session.accessToken, req.groupId, req.requesterDevice, keys) }
+        }
+    }
 
     /** Подпись по group_message_canonical → GK нужной версии → SecretBox → body. */
     private suspend fun decryptGroup(m: GroupMessageDto): ChatMessage? {
