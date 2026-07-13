@@ -14,6 +14,7 @@ import kotlinx.serialization.json.Json
 @Serializable
 data class Session(
     @SerialName("server_url") val serverUrl: String,
+    @SerialName("phone") val phone: String = "", // свой номер: показывается в UI (ВП скроют его — фаза ВП)
     @SerialName("user_id") val userId: String,
     @SerialName("device_id") val deviceId: String,
     @SerialName("access_token") val accessToken: String,

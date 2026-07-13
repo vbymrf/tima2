@@ -55,7 +55,7 @@ import kotlinx.coroutines.launch
 
 private sealed interface Screen {
     data object Phone : Screen
-    data class Code(val serverUrl: String, val requestId: String, val devCode: String?) : Screen
+    data class Code(val serverUrl: String, val phone: String, val requestId: String, val devCode: String?) : Screen
     data class Home(val session: Session) : Screen
     data class Chat(val session: Session, val peerUserId: String, val peerPhone: String) : Screen
 }
@@ -161,7 +161,7 @@ private fun PhoneScreen(onCode: (Screen.Code) -> Unit) {
             scope.launch {
                 try {
                     val resp = TimaApi(serverUrl).smsRequest(phone.trim())
-                    onCode(Screen.Code(serverUrl, resp.requestId, resp.devCode))
+                    onCode(Screen.Code(serverUrl, phone.trim(), resp.requestId, resp.devCode))
                 } catch (e: Throwable) {
                     error = e.message ?: e.toString()
                 } finally {
@@ -211,6 +211,7 @@ private fun CodeScreen(state: Screen.Code, onHome: (Screen.Home) -> Unit, onBack
                     )
                     val session = Session(
                         serverUrl = state.serverUrl,
+                        phone = state.phone,
                         userId = reg.userId,
                         deviceId = reg.deviceId,
                         accessToken = reg.accessToken,
@@ -247,6 +248,9 @@ private fun HomeScreen(
 
     Text("TIMA", style = MaterialTheme.typography.headlineMedium)
     Spacer(Modifier.height(8.dp))
+    if (session.phone.isNotEmpty()) {
+        Text(session.phone, style = MaterialTheme.typography.titleMedium)
+    }
     Text("Вы вошли: ${session.userId.take(8)}…", style = MaterialTheme.typography.bodyMedium)
     Spacer(Modifier.height(16.dp))
 
