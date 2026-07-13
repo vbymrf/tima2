@@ -26,8 +26,10 @@ cd C:\!tima2\client
 Вход по контракту Auth (api-overview.md): телефон → SMS-код (dev-сервер возвращает
 `dev_code` прямо на экран) → генерация ключей устройства (Kodium: один seed → X25519 + Ed25519)
 → `register` → device JWT. Сессия — `session.json` (Android: internal storage;
-Windows: `~/.tima`); секрет устройства пока в файле — перенос в Keystore/Secure Enclave
-записан в roadmap фазы 3.
+Windows: `~/.tima`). Секрет устройства на диске завёрнут в `SecretVault`:
+Android — AES-256-GCM ключом из **Android Keystore** (аппаратный, из устройства
+не извлекается; старые plaintext-сессии мигрируют при первом запуске);
+Windows — пока файл в профиле, DPAPI/Credential Manager — отдельная итерация.
 
 Чат 1-на-1 (`chat/TimaChatService`, общий JVM-код в `jvmCommon`): собеседник ищется
 по телефону (`/users/lookup`), `chat_id` детерминированный — sha256 доменной метки

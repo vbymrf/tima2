@@ -1,5 +1,10 @@
+@file:OptIn(ExperimentalEncodingApi::class)
+
 package io.tima.app.session
 
+import io.tima.app.platform.SecretVault
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -8,8 +13,8 @@ import kotlinx.serialization.json.Json
  * Локальная сессия устройства.
  *
  * deviceSecret — 32-байтный seed `KodiumPrivateKey` (из него выводятся и X25519, и Ed25519).
- * TODO(фаза 3 roadmap): перенести секрет в Android Keystore / Secure Enclave;
- * сейчас — файл во внутреннем хранилище приложения (dev).
+ * На диске секрет лежит завёрнутым в [SecretVault] (Android Keystore; `secret_vaulted`);
+ * в памяти — открытым (нужен конвейеру конверта).
  */
 @Serializable
 data class Session(
@@ -19,6 +24,7 @@ data class Session(
     @SerialName("device_id") val deviceId: String,
     @SerialName("access_token") val accessToken: String,
     @SerialName("device_secret_b64") val deviceSecretB64: String,
+    @SerialName("secret_vaulted") val secretVaulted: Boolean = false,
 )
 
 /** Сохранённый диалог для списка чатов на главном экране. */
@@ -34,14 +40,36 @@ data class ChatEntry(
 
 object SessionCodec {
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
+    private val b64url = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
     private const val SESSION = "session.json"
     private const val CHATS = "chats.json"
 
+    /** Возвращает сессию с открытым секретом в памяти; старый plaintext-файл мигрирует в vault. */
     fun load(): Session? = SessionStorage.read(SESSION)?.let {
-        try { json.decodeFromString<Session>(it) } catch (_: Throwable) { null }
+        try {
+            val stored = json.decodeFromString<Session>(it)
+            if (stored.secretVaulted) {
+                stored.copy(
+                    deviceSecretB64 = b64url.encode(SecretVault.reveal(b64url.decode(stored.deviceSecretB64))),
+                    secretVaulted = false,
+                )
+            } else {
+                save(stored) // миграция: перезаписать на диске завёрнутым
+                stored
+            }
+        } catch (_: Throwable) {
+            null // vault-ключ утерян или файл побит — повторный вход
+        }
     }
 
-    fun save(session: Session) = SessionStorage.write(SESSION, json.encodeToString(Session.serializer(), session))
+    /** На диск секрет уходит только через [SecretVault]. */
+    fun save(session: Session) {
+        val vaulted = session.copy(
+            deviceSecretB64 = b64url.encode(SecretVault.protect(b64url.decode(session.deviceSecretB64))),
+            secretVaulted = true,
+        )
+        SessionStorage.write(SESSION, json.encodeToString(Session.serializer(), vaulted))
+    }
 
     /** Выход: сессия и список чатов стираются вместе (чаты принадлежат аккаунту). */
     fun clear() {
