@@ -153,6 +153,27 @@ func (s *Store) FindUserByPhone(ctx context.Context, phone string) (string, erro
 	return userID, err
 }
 
+// FindUsersByPhones — телефон→user_id для зарегистрированных (contact discovery, батч).
+func (s *Store) FindUsersByPhones(ctx context.Context, phones []string) (map[string]string, error) {
+	out := make(map[string]string, len(phones))
+	if len(phones) == 0 {
+		return out, nil
+	}
+	rows, err := s.pool.Query(ctx, `SELECT phone, user_id FROM users WHERE phone = ANY($1)`, phones)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var phone, userID string
+		if err := rows.Scan(&phone, &userID); err != nil {
+			return nil, err
+		}
+		out[phone] = userID
+	}
+	return out, rows.Err()
+}
+
 // ErrIdentityMismatch — присланный ключ личности не совпал с установленным у аккаунта.
 var ErrIdentityMismatch = errors.New("ключ личности не совпадает с установленным для аккаунта")
 

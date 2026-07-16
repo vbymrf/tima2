@@ -345,6 +345,12 @@ data class AppVersionDto(
 private data class ReadBody(@SerialName("message_id") val messageId: Long)
 
 @Serializable
+private data class DiscoverBody(val phones: List<String>)
+
+@Serializable
+private data class DiscoverResponse(val matches: Map<String, String> = emptyMap())
+
+@Serializable
 private data class ApiError(val error: String = "", val message: String = "")
 
 class TimaApiException(val code: String, message: String) : Exception(message)
@@ -411,6 +417,17 @@ class TimaApi(private val baseUrl: String) {
         if (response.status == HttpStatusCode.NotFound) return null
         if (!response.status.isSuccess()) fail(response)
         return response.body<LookupResponse>().userId
+    }
+
+    /** Contact discovery: какие из телефонов зарегистрированы в TIMA (phone → user_id). */
+    suspend fun discoverContacts(token: String, phones: List<String>): Map<String, String> {
+        val response = client.post(baseUrl.trimEnd('/') + "/api/v1/users/discover") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(DiscoverBody(phones))
+        }
+        if (!response.status.isSuccess()) fail(response)
+        return response.body<DiscoverResponse>().matches
     }
 
     /** Квитанция прочтения: собеседник узнает, что прочитано до messageId (✓✓). */

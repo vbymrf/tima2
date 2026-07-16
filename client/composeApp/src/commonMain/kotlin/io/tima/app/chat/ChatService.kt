@@ -32,6 +32,9 @@ data class ChatMessage(
 /** Группа в списке на главном экране. */
 data class GroupSummary(val groupId: String, val title: String, val myRole: String)
 
+/** Контакт из телефонной книги, зарегистрированный в TIMA. */
+data class Contact(val userId: String, val phone: String, val name: String)
+
 /** Запрос собеседника на восстановление: показать пользователю «разрешить?». */
 data class RecoveryConsent(val chatId: String, val requesterDevice: String, val requesterEncPub: String)
 
@@ -85,6 +88,9 @@ interface ChatClient {
 
     /** Публичные имена по user_id (кэш); id без имени в карту не попадает. */
     suspend fun resolveNames(ids: List<String>): Map<String, String>
+
+    /** Контакты телефонной книги, зарегистрированные в TIMA (читает контакты устройства + резолв). */
+    suspend fun phoneBook(): List<Contact>
 
     /** История чата с расшифровкой, старые → новые. */
     suspend fun history(peerUserId: String): List<ChatMessage>

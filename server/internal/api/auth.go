@@ -254,6 +254,37 @@ func (s *Server) lookupUser(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"user_id": userID})
 }
 
+// discoverContacts — POST /users/discover {phones:[...]}: какие из телефонов в TIMA.
+// Возвращает {matches:{phone:user_id}}. Приватность справочника — итерация Privacy.
+func (s *Server) discoverContacts(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Phones []string `json:"phones"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
+		return
+	}
+	seen := make(map[string]bool, len(req.Phones))
+	valid := make([]string, 0, len(req.Phones))
+	for _, p := range req.Phones {
+		if phoneRe.MatchString(p) && !seen[p] {
+			seen[p] = true
+			valid = append(valid, p)
+			if len(valid) >= 2000 { // предохранитель от перебора справочника
+				break
+			}
+		}
+	}
+	matches, err := s.Store.FindUsersByPhones(r.Context(), valid)
+	if err != nil {
+		log.Printf("discoverContacts: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"matches": matches})
+}
+
 // setDisplayName — PATCH /users/me/name {display_name}: своё публичное имя.
 func (s *Server) setDisplayName(w http.ResponseWriter, r *http.Request) {
 	var req struct {

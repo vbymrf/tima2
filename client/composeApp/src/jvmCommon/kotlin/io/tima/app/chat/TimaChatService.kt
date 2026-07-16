@@ -16,6 +16,8 @@ import io.tima.app.api.ProvideMsgKeyDto
 import io.tima.app.api.TimaApi
 import io.tima.app.api.TimaApiException
 import io.tima.app.api.WrappedKeyDto
+import io.tima.app.platform.normalizePhone
+import io.tima.app.platform.readDeviceContacts
 import io.tima.app.session.Session
 import io.tima.crypto.CanonicalBytes
 import io.tima.crypto.DeviceAddress
@@ -200,6 +202,26 @@ class TimaClient(private val session: Session) : ChatClient {
                 ?.forEach { (id, n) -> nameCache[id] = n }
         }
         return ids.mapNotNull { id -> nameCache[id]?.takeIf { it.isNotEmpty() }?.let { id to it } }.toMap()
+    }
+
+    override suspend fun phoneBook(): List<Contact> {
+        val raw = readDeviceContacts()
+        if (raw.isEmpty()) return emptyList()
+        // нормализованный телефон → имя из книги (первое встреченное)
+        val byPhone = LinkedHashMap<String, String>()
+        for (c in raw) normalizePhone(c.phone)?.let { p -> byPhone.putIfAbsent(p, c.name) }
+        if (byPhone.isEmpty()) return emptyList()
+        val matches = runCatching { api.discoverContacts(session.accessToken, byPhone.keys.toList()) }
+            .getOrDefault(emptyMap())
+        val userIds = matches.values.filter { it != session.userId }.distinct()
+        val names = runCatching { resolveNames(userIds) }.getOrDefault(emptyMap())
+        return matches.mapNotNull { (phone, uid) ->
+            if (uid == session.userId) return@mapNotNull null // себя не показываем
+            val name = names[uid]?.takeIf { it.isNotEmpty() }
+                ?: byPhone[phone]?.takeIf { it.isNotEmpty() }
+                ?: phone
+            Contact(uid, phone, name)
+        }.distinctBy { it.userId }
     }
 
     private suspend fun devicesOf(userId: String): List<DeviceKeyInfo> =

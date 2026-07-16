@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -59,6 +60,7 @@ import io.tima.app.api.VoiceRoomDto
 import io.tima.app.chat.CallConnection
 import io.tima.app.chat.ChatClient
 import io.tima.app.chat.ChatMessage
+import io.tima.app.chat.Contact
 import io.tima.app.chat.GroupSummary
 import io.tima.app.chat.MediaAttachment
 import io.tima.app.chat.RecoveryConsent
@@ -69,6 +71,7 @@ import io.tima.app.chat.preview
 import io.tima.app.platform.CallEngine
 import io.tima.app.platform.CallMediaState
 import io.tima.app.platform.CallVideoView
+import io.tima.app.platform.contactsSupported
 import io.tima.app.platform.currentVersionCode
 import io.tima.app.platform.decodeImage
 import io.tima.app.platform.ensureCallPermissions
@@ -775,6 +778,47 @@ private fun HomeScreen(
                 }
             }
         }) { Text("Открыть чат") }
+    }
+    val chatClient = client
+    if (contactsSupported() && chatClient != null) {
+        var showContacts by remember { mutableStateOf(false) }
+        var contactList by remember { mutableStateOf<List<Contact>>(emptyList()) }
+        var contactsBusy by remember { mutableStateOf(false) }
+        Spacer(Modifier.height(8.dp))
+        Button(enabled = !busy, onClick = {
+            showContacts = true; contactsBusy = true
+            scope.launch {
+                contactList = runCatching { chatClient.phoneBook() }.getOrDefault(emptyList())
+                contactsBusy = false
+            }
+        }) { Text("📇 Из контактов") }
+        if (showContacts) {
+            AlertDialog(
+                onDismissRequest = { showContacts = false },
+                title = { Text("Контакты в TIMA") },
+                text = {
+                    when {
+                        contactsBusy -> CircularProgressIndicator()
+                        contactList.isEmpty() -> Text("Никого из контактов нет в TIMA (или доступ к контактам не выдан).")
+                        else -> LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                            items(contactList, key = { it.userId }) { c ->
+                                Text(
+                                    "${c.name} — ${c.phone}",
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        showContacts = false
+                                        val entry = ChatEntry(title = c.name, peerUserId = c.userId, chatId = chatClient.chatIdWith(c.userId))
+                                        onChatsChange(SessionCodec.rememberChat(entry))
+                                        onOpen(entry)
+                                    }.padding(vertical = 10.dp),
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = { Button(onClick = { showContacts = false }) { Text("Закрыть") } },
+            )
+        }
     }
     ErrorText(error)
     Spacer(Modifier.height(24.dp))
