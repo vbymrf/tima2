@@ -13,6 +13,7 @@ dependencyResolutionManagement {
     repositories {
         maven("https://maven.aliyun.com/repository/google")
         mavenCentral()
+        maven("https://jitpack.io") // audioswitch (форк davidliu) — транзитив livekit-android
     }
 }
 

@@ -7,6 +7,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import io.tima.app.platform.AndroidAppContext
 import io.tima.app.platform.AndroidImagePicker
+import io.tima.app.platform.AndroidPermissions
 import io.tima.app.platform.PickedImage
 import io.tima.app.session.initSessionDir
 import kotlinx.coroutines.CompletableDeferred
@@ -14,6 +15,7 @@ import kotlinx.coroutines.CompletableDeferred
 class MainActivity : ComponentActivity() {
 
     private var pendingPick: CompletableDeferred<PickedImage?>? = null
+    private var pendingPerm: CompletableDeferred<Boolean>? = null
 
     private val imagePicker = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         val picked = uri?.let {
@@ -25,6 +27,11 @@ class MainActivity : ComponentActivity() {
         pendingPick = null
     }
 
+    private val permLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        pendingPerm?.complete(result.values.all { it })
+        pendingPerm = null
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AndroidAppContext.app = applicationContext
@@ -33,6 +40,12 @@ class MainActivity : ComponentActivity() {
             val deferred = CompletableDeferred<PickedImage?>()
             pendingPick = deferred
             imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            deferred.await()
+        }
+        AndroidPermissions.request = { perms ->
+            val deferred = CompletableDeferred<Boolean>()
+            pendingPerm = deferred
+            permLauncher.launch(perms.toTypedArray())
             deferred.await()
         }
         setContent { App() }

@@ -52,6 +52,7 @@ kotlin {
         androidMain.dependencies {
             implementation("androidx.activity:activity-compose:1.9.3")
             implementation("androidx.core:core-ktx:1.13.1") // FileProvider для установки обновления
+            implementation("io.livekit:livekit-android:2.11.0") // живое медиа звонков/аудио-чатов (WebRTC)
             implementation("io.ktor:ktor-client-okhttp:3.5.1")
             implementation("io.tima:messenger-crypto:0.1.0") {
                 // jar zstd-jni не содержит Android-нативов — ниже подключён его AAR

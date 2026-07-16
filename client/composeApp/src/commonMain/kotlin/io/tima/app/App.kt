@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -60,8 +62,12 @@ import io.tima.app.chat.MediaAttachment
 import io.tima.app.chat.RecoveryConsent
 import io.tima.app.chat.createChatClient
 import io.tima.app.chat.preview
+import io.tima.app.platform.CallEngine
+import io.tima.app.platform.CallMediaState
+import io.tima.app.platform.CallVideoView
 import io.tima.app.platform.currentVersionCode
 import io.tima.app.platform.decodeImage
+import io.tima.app.platform.ensureCallPermissions
 import io.tima.app.platform.identityFromPhrase
 import io.tima.app.platform.installUpdate
 import io.tima.app.platform.newIdentity
@@ -920,62 +926,81 @@ private data class CallUi(
     val connection: CallConnection?,
 )
 
-/** Экран звонка (сигналинг). Живого медиа нет — LiveKit-подключение на реальных устройствах. */
+/** Экран звонка: сигналинг + живое медиа LiveKit (Android). Видео на весь экран, аудио — карточка. */
 @Composable
 private fun CallOverlay(call: CallUi, onAccept: () -> Unit, onEnd: () -> Unit) {
-    var micOn by remember { mutableStateOf(true) }
-    var camOn by remember { mutableStateOf(call.kind == "video") }
+    val engine = remember { CallEngine() }
+    val mediaState by engine.state.collectAsState()
+    val micOn by engine.micEnabled.collectAsState()
+    val camOn by engine.cameraEnabled.collectAsState()
+    val isVideo = call.kind == "video"
+    // Есть данные комнаты → подключаемся: исходящий сразу, входящий после «Принять»
+    val ringing = call.direction == CallDir.Incoming && call.connection == null
+
+    LaunchedEffect(call.connection) {
+        val conn = call.connection ?: return@LaunchedEffect
+        if (ensureCallPermissions(isVideo)) {
+            engine.connect(conn.url, conn.token, video = isVideo, publishMic = true)
+        }
+    }
+    DisposableEffect(Unit) { onDispose { engine.disconnect() } }
+
+    val onVideo = isVideo && mediaState == CallMediaState.Connected
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceVariant) {
-        Column(
-            modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text(if (call.kind == "video") "📹" else "📞", style = MaterialTheme.typography.displayMedium)
-            Spacer(Modifier.height(16.dp))
-            Text(call.peerLabel, style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.height(8.dp))
-            Text(
-                when (call.direction) {
-                    CallDir.Outgoing -> "Звоним…"
-                    CallDir.Incoming -> "Входящий ${if (call.kind == "video") "видео" else "аудио"}звонок"
-                    CallDir.Connected -> "В разговоре"
-                },
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Сигналинг работает; живой звук/видео подключается на реальном устройстве (LiveKit).",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.widthIn(max = 360.dp),
-            )
-            Spacer(Modifier.height(32.dp))
-
-            if (call.direction == CallDir.Connected) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { micOn = !micOn }) { Text(if (micOn) "🎤 вкл" else "🔇 выкл") }
-                    if (call.kind == "video") {
-                        Button(onClick = { camOn = !camOn }) { Text(if (camOn) "📹 вкл" else "📷 выкл") }
-                    }
+        Box(Modifier.fillMaxSize()) {
+            if (onVideo) CallVideoView(engine, Modifier.fillMaxSize())
+            Column(
+                modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                if (!onVideo) {
+                    Text(if (isVideo) "📹" else "📞", style = MaterialTheme.typography.displayMedium)
+                    Spacer(Modifier.height(16.dp))
+                    Text(call.peerLabel, style = MaterialTheme.typography.headlineMedium)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        when {
+                            ringing -> "Входящий ${if (isVideo) "видео" else "аудио"}звонок"
+                            mediaState == CallMediaState.Connecting -> "Соединяем…"
+                            mediaState == CallMediaState.Connected -> "В разговоре"
+                            mediaState == CallMediaState.Failed -> "Медиа недоступно — проверьте разрешения микрофона/камеры"
+                            call.direction == CallDir.Outgoing -> "Звоним…"
+                            else -> "…"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.widthIn(max = 360.dp),
+                    )
+                    Spacer(Modifier.height(32.dp))
                 }
-                Spacer(Modifier.height(20.dp))
-            }
 
-            when (call.direction) {
-                CallDir.Incoming -> Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Button(
-                        onClick = onAccept,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    ) { Text("Принять") }
+                if (mediaState == CallMediaState.Connected) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(onClick = { engine.setMic(!micOn) }) { Text(if (micOn) "🎤 вкл" else "🔇 выкл") }
+                        if (isVideo) {
+                            Button(onClick = { engine.setCamera(!camOn) }) { Text(if (camOn) "📹 вкл" else "📷 выкл") }
+                        }
+                    }
+                    Spacer(Modifier.height(20.dp))
+                }
+
+                if (ringing) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Button(
+                            onClick = onAccept,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        ) { Text("Принять") }
+                        Button(
+                            onClick = onEnd,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        ) { Text("Отклонить") }
+                    }
+                } else {
                     Button(
                         onClick = onEnd,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    ) { Text("Отклонить") }
+                    ) { Text("Завершить") }
                 }
-                else -> Button(
-                    onClick = onEnd,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                ) { Text("Завершить") }
             }
         }
     }
@@ -994,11 +1019,25 @@ private fun VoiceRoomScreen(state: Screen.VoiceRoom, client: ChatClient?, onBack
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val engine = remember { CallEngine() }
+    val mediaState by engine.state.collectAsState()
 
     suspend fun join() {
         val r = api.joinVoiceRoom(state.session.accessToken, state.roomId)
-        role = r.role; isOwner = r.isOwner; joined = true
+        role = r.role; isOwner = r.isOwner
+        if (!joined) {
+            joined = true
+            // Слушатель подключается, но микрофон не публикует; спикер/владелец — публикует
+            if (ensureCallPermissions(false)) {
+                engine.connect(r.url, r.token, video = false, publishMic = r.role == "speaker")
+            }
+        } else {
+            // Роль изменилась (выдали/забрали слово) — переключаем публикацию микрофона без переподключения
+            engine.setMic(r.role == "speaker")
+        }
+        micOn = r.role == "speaker"
     }
+    DisposableEffect(Unit) { onDispose { engine.disconnect() } }
     // События: поднятая рука (владельцу), выдача/отзыв слова (перезаходим за новой ролью)
     LaunchedEffect(client, state.roomId) {
         client?.voiceEvents?.collect { ev ->
@@ -1031,10 +1070,17 @@ private fun VoiceRoomScreen(state: Screen.VoiceRoom, client: ChatClient?, onBack
             style = MaterialTheme.typography.headlineSmall,
         )
         Spacer(Modifier.height(6.dp))
-        Text(
-            "Сигналинг, роли и вход в комнату работают; живой звук — на реальном устройстве (LiveKit).",
-            style = MaterialTheme.typography.bodySmall, modifier = Modifier.widthIn(max = 360.dp),
-        )
+        if (joined) {
+            Text(
+                when (mediaState) {
+                    CallMediaState.Connecting -> "Подключаем звук…"
+                    CallMediaState.Connected -> "Звук подключён"
+                    CallMediaState.Failed -> "Звук недоступен — проверьте разрешение микрофона"
+                    CallMediaState.Idle -> "Звук отключён"
+                },
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.widthIn(max = 360.dp),
+            )
+        }
         ErrorText(error)
         Spacer(Modifier.height(20.dp))
 
@@ -1067,14 +1113,14 @@ private fun VoiceRoomScreen(state: Screen.VoiceRoom, client: ChatClient?, onBack
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (role == "speaker") {
-                    Button(onClick = { micOn = !micOn }) { Text(if (micOn) "🎤 вкл" else "🔇 выкл") }
+                    Button(onClick = { micOn = !micOn; engine.setMic(micOn) }) { Text(if (micOn) "🎤 вкл" else "🔇 выкл") }
                 } else {
                     Button(enabled = !handRaised, onClick = {
                         scope.launch { runCatching { api.raiseHand(state.session.accessToken, state.roomId); handRaised = true } }
                     }) { Text(if (handRaised) "✋ рука поднята" else "✋ Поднять руку") }
                 }
                 Button(
-                    onClick = { joined = false; hands.clear() },
+                    onClick = { engine.disconnect(); joined = false; hands.clear() },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 ) { Text("Выйти") }
             }
