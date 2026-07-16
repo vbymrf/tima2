@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Каталог кэша, куда скачивается tima-update.apk (AppUpdate.android.kt) -->
+<!-- cache-path: раздача файлов из кэша (открытие вложений).
+     external-files-path: сюда DownloadManager кладёт скачанный APK обновления. -->
 <paths>
     <cache-path name="updates" path="." />
+    <external-files-path name="downloads" path="." />
 </paths>
