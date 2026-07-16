@@ -16,4 +16,6 @@ actual object SessionStorage {
     }
 }
 
-actual fun defaultServerUrl(): String = "http://127.0.0.1:8080"
+// Боевой сервер по умолчанию (punycode для пацак.рф). Поле «Сервер» редактируемое —
+// для локальной разработки вписать http://127.0.0.1:8080 вручную.
+actual fun defaultServerUrl(): String = "https://api.xn--80aa4ar0b.xn--p1ai"

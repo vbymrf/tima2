@@ -19,5 +19,6 @@ actual object SessionStorage {
     }
 }
 
-// Эмулятор Android видит localhost хоста как 10.0.2.2
-actual fun defaultServerUrl(): String = "http://10.0.2.2:8080"
+// Боевой сервер по умолчанию (punycode для пацак.рф). Поле «Сервер» редактируемое —
+// для локальной разработки вписать http://10.0.2.2:8080 (эмулятор) вручную.
+actual fun defaultServerUrl(): String = "https://api.xn--80aa4ar0b.xn--p1ai"
