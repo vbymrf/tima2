@@ -172,12 +172,19 @@ func serve() {
 			if bucket == "" {
 				bucket = "media"
 			}
-			bl, err := blob.New(ctx, endpoint, os.Getenv("S3_ACCESS_KEY"), os.Getenv("S3_SECRET_KEY"), bucket)
+			// S3_PUBLIC_ENDPOINT — публичный адрес MinIO для presigned URL (клиент ходит
+			// сюда). Пусто → presigned на внутреннем endpoint (dev/localhost).
+			publicEndpoint := os.Getenv("S3_PUBLIC_ENDPOINT")
+			bl, err := blob.New(ctx, endpoint, publicEndpoint, os.Getenv("S3_ACCESS_KEY"), os.Getenv("S3_SECRET_KEY"), bucket)
 			if err != nil {
 				log.Fatal(err)
 			}
 			srv.Blob = bl
-			log.Printf("Media Service подключён (bucket %s)", bucket)
+			if publicEndpoint != "" {
+				log.Printf("Media Service подключён (bucket %s, presigned → %s)", bucket, publicEndpoint)
+			} else {
+				log.Printf("Media Service подключён (bucket %s)", bucket)
+			}
 		} else {
 			log.Print("S3_ENDPOINT не задан — media-эндпоинты отвечают 503")
 		}

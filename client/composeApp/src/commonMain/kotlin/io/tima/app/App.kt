@@ -529,6 +529,12 @@ private fun HomeScreen(
 
     var myName by remember { mutableStateOf("") }
     var nameSaved by remember { mutableStateOf(false) }
+    // Подтягиваем ранее сохранённое имя с сервера, чтобы поле не выглядело пустым при входе
+    LaunchedEffect(client) {
+        val c = client ?: return@LaunchedEffect
+        runCatching { c.resolveNames(listOf(session.userId)) }.getOrNull()
+            ?.get(session.userId)?.let { if (myName.isEmpty()) { myName = it; nameSaved = true } }
+    }
 
     Text("TIMA", style = MaterialTheme.typography.headlineMedium)
     Spacer(Modifier.height(8.dp))

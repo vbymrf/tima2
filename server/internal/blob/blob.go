@@ -15,20 +15,28 @@ import (
 )
 
 type Client struct {
-	mc     *minio.Client
-	bucket string
+	mc      *minio.Client // операции backend↔MinIO: внутренний endpoint (minio:9000)
+	presign *minio.Client // ТОЛЬКО генерация presigned URL: публичный хост (s3.DOMAIN)
+	bucket  string
 }
 
-// New подключается к S3-endpoint (например http://localhost:9000) и гарантирует bucket.
-func New(ctx context.Context, endpoint, accessKey, secretKey, bucket string) (*Client, error) {
+func newMinio(endpoint, accessKey, secretKey string) (*minio.Client, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("S3_ENDPOINT: %w", err)
+		return nil, fmt.Errorf("endpoint %q: %w", endpoint, err)
 	}
-	mc, err := minio.New(u.Host, &minio.Options{
+	return minio.New(u.Host, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 		Secure: u.Scheme == "https",
 	})
+}
+
+// New: [endpoint] — внутренний адрес MinIO для операций (minio:9000); [publicEndpoint]
+// — публичный (https://s3.DOMAIN), на который должны указывать presigned URL, чтобы
+// клиент их достал. Подпись presigned считается ОФЛАЙН, поэтому publicEndpoint не
+// обязан быть доступен из бэкенда. Пусто → presigned на том же endpoint (dev).
+func New(ctx context.Context, endpoint, publicEndpoint, accessKey, secretKey, bucket string) (*Client, error) {
+	mc, err := newMinio(endpoint, accessKey, secretKey)
 	if err != nil {
 		return nil, fmt.Errorf("minio client: %w", err)
 	}
@@ -44,11 +52,18 @@ func New(ctx context.Context, endpoint, accessKey, secretKey, bucket string) (*C
 			}
 		}
 	}
-	return &Client{mc: mc, bucket: bucket}, nil
+	presign := mc
+	if publicEndpoint != "" && publicEndpoint != endpoint {
+		presign, err = newMinio(publicEndpoint, accessKey, secretKey)
+		if err != nil {
+			return nil, fmt.Errorf("minio presign client: %w", err)
+		}
+	}
+	return &Client{mc: mc, presign: presign, bucket: bucket}, nil
 }
 
 func (c *Client) PresignPut(ctx context.Context, key string, ttl time.Duration) (string, error) {
-	u, err := c.mc.PresignedPutObject(ctx, c.bucket, key, ttl)
+	u, err := c.presign.PresignedPutObject(ctx, c.bucket, key, ttl)
 	if err != nil {
 		return "", err
 	}
@@ -56,7 +71,7 @@ func (c *Client) PresignPut(ctx context.Context, key string, ttl time.Duration) 
 }
 
 func (c *Client) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
-	u, err := c.mc.PresignedGetObject(ctx, c.bucket, key, ttl, nil)
+	u, err := c.presign.PresignedGetObject(ctx, c.bucket, key, ttl, nil)
 	if err != nil {
 		return "", err
 	}
