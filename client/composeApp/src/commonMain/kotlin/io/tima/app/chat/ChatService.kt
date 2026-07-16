@@ -9,7 +9,11 @@ data class MediaAttachment(
     val mediaKey: ByteArray,
     val mime: String,
     val sizeBytes: Long,
+    val durationMs: Int = 0, // голосовые/видео
 )
+
+/** Голосовое вложение (mime начинается с audio). */
+fun MediaAttachment.isVoice(): Boolean = mime.startsWith("audio")
 
 /** Расшифрованное сообщение для UI. Для группы [chatId] = group_id, [group] = true. */
 data class ChatMessage(
@@ -43,6 +47,7 @@ data class VoiceEvent(val type: String, val roomId: String, val userId: String =
 
 /** Что показать в списке чатов как последнее сообщение. */
 fun ChatMessage.preview(): String = when {
+    media?.isVoice() == true -> "🎤 Голосовое"
     media != null && text.isEmpty() -> "📷 Фото"
     media != null -> "📷 $text"
     else -> text
@@ -80,6 +85,12 @@ interface ChatClient {
      * сообщение CK_IMAGE с MediaRef (media_key под шифрованием конверта).
      */
     suspend fun sendImage(peerUserId: String, imageBytes: ByteArray, mime: String, caption: String = ""): ChatMessage
+
+    /** Голосовое: шифрование записи → MinIO → сообщение CK_VOICE с длительностью. */
+    suspend fun sendVoice(peerUserId: String, audioBytes: ByteArray, mime: String, durationMs: Int): ChatMessage
+
+    /** Голосовое в группу (media_key под GK). */
+    suspend fun sendGroupVoice(groupId: String, audioBytes: ByteArray, mime: String, durationMs: Int): ChatMessage
 
     /** Скачивает и расшифровывает вложение (с кэшем в памяти). */
     suspend fun loadMedia(attachment: MediaAttachment): ByteArray

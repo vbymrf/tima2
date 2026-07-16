@@ -315,6 +315,48 @@ class TimaClient(private val session: Session) : ChatClient {
         return sealAndPost(peerUserId, body, kind = 3) // CK_IMAGE
     }
 
+    override suspend fun sendVoice(peerUserId: String, audioBytes: ByteArray, mime: String, durationMs: Int): ChatMessage {
+        val mediaKey = ByteArray(32).also(random::nextBytes)
+        val sealedFile = MediaCipher.seal(mediaKey, audioBytes).getOrThrow()
+        val init = api.mediaInit(session.accessToken, sealedFile.size.toLong(), mime)
+        api.putPresigned(init.uploadUrls.first(), sealedFile)
+        api.mediaComplete(session.accessToken, init.mediaId)
+        mediaCache[init.mediaId] = audioBytes
+        val body = MessageBody(
+            media = listOf(
+                MediaRef(
+                    media_id = init.mediaId,
+                    media_key = mediaKey.toByteString(),
+                    mime = mime,
+                    size_bytes = audioBytes.size.toLong(),
+                    duration_ms = durationMs,
+                ),
+            ),
+        )
+        return sealAndPost(peerUserId, body, kind = 2) // CK_VOICE
+    }
+
+    override suspend fun sendGroupVoice(groupId: String, audioBytes: ByteArray, mime: String, durationMs: Int): ChatMessage {
+        val mediaKey = ByteArray(32).also(random::nextBytes)
+        val sealedFile = MediaCipher.seal(mediaKey, audioBytes).getOrThrow()
+        val init = api.mediaInit(session.accessToken, sealedFile.size.toLong(), mime)
+        api.putPresigned(init.uploadUrls.first(), sealedFile)
+        api.mediaComplete(session.accessToken, init.mediaId)
+        mediaCache[init.mediaId] = audioBytes
+        val body = MessageBody(
+            media = listOf(
+                MediaRef(
+                    media_id = init.mediaId,
+                    media_key = mediaKey.toByteString(),
+                    mime = mime,
+                    size_bytes = audioBytes.size.toLong(),
+                    duration_ms = durationMs,
+                ),
+            ),
+        )
+        return sealAndPostGroup(groupId, body, kind = 2) // CK_VOICE
+    }
+
     override suspend fun loadMedia(attachment: MediaAttachment): ByteArray =
         mediaCache.getOrPut(attachment.mediaId) {
             val urls = api.mediaUrls(session.accessToken, attachment.mediaId)
@@ -468,6 +510,7 @@ class TimaClient(private val session: Session) : ChatClient {
         mediaKey = media_key.toByteArray(),
         mime = mime,
         sizeBytes = size_bytes,
+        durationMs = duration_ms,
     )
 
     // ── Группы (crypto-protocol §4: GK генерирует клиент-админ, сервер видит только обёртки) ──

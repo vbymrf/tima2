@@ -60,6 +60,7 @@ import io.tima.app.chat.ChatMessage
 import io.tima.app.chat.GroupSummary
 import io.tima.app.chat.MediaAttachment
 import io.tima.app.chat.RecoveryConsent
+import io.tima.app.chat.isVoice
 import io.tima.app.chat.createChatClient
 import io.tima.app.chat.preview
 import io.tima.app.platform.CallEngine
@@ -68,10 +69,16 @@ import io.tima.app.platform.CallVideoView
 import io.tima.app.platform.currentVersionCode
 import io.tima.app.platform.decodeImage
 import io.tima.app.platform.ensureCallPermissions
+import io.tima.app.platform.cancelVoiceRecording
 import io.tima.app.platform.identityFromPhrase
 import io.tima.app.platform.installUpdate
 import io.tima.app.platform.newIdentity
 import io.tima.app.platform.pickImage
+import io.tima.app.platform.playVoice
+import io.tima.app.platform.startVoiceRecording
+import io.tima.app.platform.stopVoice
+import io.tima.app.platform.stopVoiceRecording
+import io.tima.app.platform.voiceRecordingSupported
 import io.tima.app.session.ChatEntry
 import io.tima.app.session.Session
 import io.tima.app.session.SessionCodec
@@ -784,6 +791,7 @@ private fun ChatScreen(
     var draft by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var recording by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
@@ -864,7 +872,9 @@ private fun ChatScreen(
                             if (isGroup && !msg.mine) {
                                 Text(names[msg.senderId] ?: (msg.senderId.take(8) + "…"), style = MaterialTheme.typography.labelSmall)
                             }
-                            msg.media?.let { MediaImage(client, it) }
+                            msg.media?.let { m ->
+                                if (m.isVoice()) VoiceBubble(client, m) else MediaImage(client, m)
+                            }
                             if (msg.text.isNotEmpty()) Text(msg.text)
                         }
                     }
@@ -872,8 +882,9 @@ private fun ChatScreen(
             }
         }
         ErrorText(error)
+        if (recording) Text("● запись… нажмите ⏹ для отправки", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(enabled = !busy, onClick = {
+            Button(enabled = !busy && !recording, onClick = {
                 busy = true; error = null
                 scope.launch {
                     try {
@@ -892,6 +903,41 @@ private fun ChatScreen(
                 }
             }) { Text("📷") }
             Spacer(Modifier.width(8.dp))
+            // Голосовое: тап — старт записи, повторный тап — стоп и отправка (только там, где есть микрофон)
+            if (voiceRecordingSupported()) {
+                Button(
+                    enabled = !busy,
+                    colors = if (recording) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    else ButtonDefaults.buttonColors(),
+                    onClick = {
+                        if (!recording) {
+                            error = null
+                            scope.launch {
+                                if (startVoiceRecording()) recording = true
+                                else error = "Нет доступа к микрофону"
+                            }
+                        } else {
+                            recording = false
+                            busy = true; error = null
+                            scope.launch {
+                                try {
+                                    val rec = stopVoiceRecording()
+                                    if (rec != null) {
+                                        val sent = if (isGroup) client.sendGroupVoice(targetId, rec.bytes, rec.mime, rec.durationMs)
+                                        else client.sendVoice(targetId, rec.bytes, rec.mime, rec.durationMs)
+                                        add(sent)
+                                    }
+                                } catch (e: Throwable) {
+                                    error = e.message ?: e.toString()
+                                } finally {
+                                    busy = false
+                                }
+                            }
+                        }
+                    },
+                ) { Text(if (recording) "⏹" else "🎙") }
+                Spacer(Modifier.width(8.dp))
+            }
             OutlinedTextField(
                 value = draft, onValueChange = { draft = it },
                 label = { Text("Сообщение") },
@@ -1210,6 +1256,30 @@ private fun MediaImage(client: ChatClient, media: MediaAttachment) {
         )
         failed -> Text("⚠ фото не загрузилось", style = MaterialTheme.typography.bodySmall)
         else -> Text("📷 загрузка…", style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+/** Голосовое сообщение: ▶/⏹ + длительность; байты грузятся и расшифровываются по нажатию. */
+@Composable
+private fun VoiceBubble(client: ChatClient, media: MediaAttachment) {
+    var playing by remember(media.mediaId) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val secs = (media.durationMs / 1000).coerceAtLeast(1)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 2.dp)) {
+        Button(onClick = {
+            if (playing) {
+                stopVoice()
+                playing = false
+            } else {
+                scope.launch {
+                    playing = true
+                    try { playVoice(client.loadMedia(media), media.mime) } catch (_: Throwable) {}
+                    playing = false
+                }
+            }
+        }) { Text(if (playing) "⏹" else "▶") }
+        Spacer(Modifier.width(8.dp))
+        Text("🎤 ${secs}с")
     }
 }
 
