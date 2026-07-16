@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.kodium.Kodium
+import io.tima.app.api.AppVersionDto
 import io.tima.app.api.ChannelDto
 import io.tima.app.api.ChannelPostDto
 import io.tima.app.api.TimaApi
@@ -59,8 +60,10 @@ import io.tima.app.chat.MediaAttachment
 import io.tima.app.chat.RecoveryConsent
 import io.tima.app.chat.createChatClient
 import io.tima.app.chat.preview
+import io.tima.app.platform.currentVersionCode
 import io.tima.app.platform.decodeImage
 import io.tima.app.platform.identityFromPhrase
+import io.tima.app.platform.installUpdate
 import io.tima.app.platform.newIdentity
 import io.tima.app.platform.pickImage
 import io.tima.app.session.ChatEntry
@@ -122,6 +125,45 @@ fun App() {
             },
             dismissButton = {
                 Button(onClick = { consent = null }) { Text("Отклонить") }
+            },
+        )
+    }
+
+    // Авто-обновление: при входе спрашиваем сервер о последней версии клиента
+    var update by remember { mutableStateOf<AppVersionDto?>(null) }
+    var updating by remember { mutableStateOf(false) }
+    LaunchedEffect(session?.serverUrl) {
+        val url = session?.serverUrl ?: return@LaunchedEffect
+        runCatching {
+            val latest = TimaApi(url).appVersion()
+            if (latest != null && latest.url.isNotEmpty() && latest.versionCode > currentVersionCode()) {
+                update = latest
+            }
+        }
+    }
+    update?.let { u ->
+        AlertDialog(
+            onDismissRequest = { if (!updating) update = null },
+            title = { Text("Доступно обновление") },
+            text = {
+                Text(buildString {
+                    append("Новая версия ${u.versionName}.")
+                    if (u.notes.isNotEmpty()) append("\n\n${u.notes}")
+                    if (updating) append("\n\nСкачиваю…")
+                })
+            },
+            confirmButton = {
+                Button(enabled = !updating, onClick = {
+                    updating = true
+                    scope.launch {
+                        runCatching { installUpdate(u) }
+                        updating = false
+                        update = null
+                    }
+                }) { Text("Обновить") }
+            },
+            dismissButton = {
+                Button(enabled = !updating, onClick = { update = null }) { Text("Позже") }
             },
         )
     }

@@ -7,10 +7,16 @@
 #   lk.DOMAIN  — LiveKit signaling (звонки/аудио-чаты)
 
 api.{$DOMAIN} {
-	reverse_proxy /ws       backend:8080     # WebSocket Caddy проксирует сам
-	reverse_proxy /api/*    backend:8080
-	reverse_proxy /healthz  backend:8080
 	encode zstd gzip
+	# Раздача APK для авто-обновления приложения (файлы из deploy/download/)
+	handle_path /download/* {
+		root * /srv/download
+		file_server
+	}
+	# Всё остальное — на бэкенд: REST /api/*, WebSocket /ws, /healthz
+	handle {
+		reverse_proxy backend:8080
+	}
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		-Server

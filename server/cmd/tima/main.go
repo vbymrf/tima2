@@ -194,6 +194,18 @@ func serve() {
 		} else {
 			log.Print("ESCROW_URL не задан — /escrow/pubkey отвечает 503 (подними cmd/escrow-stub)")
 		}
+		// Авто-обновление клиента (self-distributed APK): версия и ссылка на APK из env.
+		if code := atoiOr("APP_LATEST_VERSION_CODE", 0); code > 0 {
+			srv.AppVer = &api.AppVersion{
+				VersionCode: code,
+				VersionName: os.Getenv("APP_LATEST_VERSION_NAME"),
+				APKUrl:      os.Getenv("APP_APK_URL"),
+				Notes:       os.Getenv("APP_UPDATE_NOTES"),
+			}
+			log.Printf("Авто-обновление: последняя версия %d (%s)", code, srv.AppVer.APKUrl)
+		} else {
+			log.Print("APP_LATEST_VERSION_CODE не задан — /app/version отдаёт 204 (обновления выключены)")
+		}
 		srv.Register(mux)
 		log.Print("Auth + Message Service подключены")
 	} else {

@@ -332,6 +332,15 @@ data class VoiceRoomDto(
 @Serializable
 private data class VoiceRoomsResponse(val rooms: List<VoiceRoomDto> = emptyList())
 
+/** Последняя версия клиента с сервера (GET /api/v1/app/version) для авто-обновления. */
+@Serializable
+data class AppVersionDto(
+    @SerialName("version_code") val versionCode: Int = 0,
+    @SerialName("version_name") val versionName: String = "",
+    val url: String = "",
+    val notes: String = "",
+)
+
 @Serializable
 private data class ApiError(val error: String = "", val message: String = "")
 
@@ -367,6 +376,13 @@ class TimaApi(private val baseUrl: String) {
             setBody(requestBody)
         }
         if (!response.status.isSuccess()) fail(response)
+        return response.body()
+    }
+
+    /** Последняя версия клиента (публичный эндпоинт). null — обновления не настроены (204). */
+    suspend fun appVersion(): AppVersionDto? {
+        val response = client.get(baseUrl.trimEnd('/') + "/api/v1/app/version")
+        if (response.status == HttpStatusCode.NoContent || !response.status.isSuccess()) return null
         return response.body()
     }
 

@@ -22,6 +22,7 @@ services:
       - "host.docker.internal:host-gateway"   # чтобы дотянуться до LiveKit (host network)
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./download:/srv/download:ro          # APK для авто-обновления (api.DOMAIN/download/*)
       - caddy-data:/data
       - caddy-config:/config
     depends_on: [backend, minio]
@@ -52,6 +53,12 @@ services:
       # TIMA_DEV_SMS=1 в .env: код придёт прямо в ответе приложения (поле «dev-код»).
       # ПЕРЕД РЕАЛЬНЫМИ ПОЛЬЗОВАТЕЛЯМИ вернуть 0 и подключить SMS-провайдер.
       TIMA_DEV_SMS: ${TIMA_DEV_SMS:-0}
+      # Авто-обновление приложения. При выпуске новой версии: положи новый APK в
+      # deploy/download/, подними числа/ссылку в .env, перезапусти backend.
+      APP_LATEST_VERSION_CODE: ${APP_LATEST_VERSION_CODE:-0}
+      APP_LATEST_VERSION_NAME: ${APP_LATEST_VERSION_NAME:-}
+      APP_APK_URL: ${APP_APK_URL:-}
+      APP_UPDATE_NOTES: ${APP_UPDATE_NOTES:-}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

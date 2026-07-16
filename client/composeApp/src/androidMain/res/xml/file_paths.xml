@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Каталог кэша, куда скачивается tima-update.apk (AppUpdate.android.kt) -->
+<paths>
+    <cache-path name="updates" path="." />
+</paths>

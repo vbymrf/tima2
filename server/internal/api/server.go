@@ -53,10 +53,14 @@ type Server struct {
 	escrowMu      sync.Mutex
 	escrowCached  []byte
 	escrowFetched time.Time
+
+	// AppVer — последняя версия клиента для авто-обновления (nil → /app/version отдаёт 204)
+	AppVer *AppVersion
 }
 
 func (s *Server) Register(mux *http.ServeMux) {
 	// Публичные (до токена)
+	mux.HandleFunc("GET /api/v1/app/version", s.appVersion)
 	mux.HandleFunc("POST /api/v1/auth/sms/request", s.smsRequest)
 	mux.HandleFunc("POST /api/v1/auth/sms/verify", s.smsVerify)
 	mux.HandleFunc("POST /api/v1/auth/register", s.register)

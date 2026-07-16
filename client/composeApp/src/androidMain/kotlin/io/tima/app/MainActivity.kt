@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import io.tima.app.platform.AndroidAppContext
 import io.tima.app.platform.AndroidImagePicker
 import io.tima.app.platform.PickedImage
 import io.tima.app.session.initSessionDir
@@ -26,6 +27,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AndroidAppContext.app = applicationContext
         initSessionDir(applicationContext.filesDir)
         AndroidImagePicker.pick = {
             val deferred = CompletableDeferred<PickedImage?>()
