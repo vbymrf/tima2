@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"syscall"
 	"time"
@@ -198,10 +200,47 @@ func serve() {
 		log.Print("DATABASE_URL не задан — поднят только healthz")
 	}
 
+	// Сервис отладки: pprof (heap/goroutine/CPU-профили) + /debug/stats.
+	// Включается TIMA_DEBUG_ADDR (напр. 127.0.0.1:6060). НЕ вешать на 0.0.0.0
+	// в проде без файрвола — профили раскрывают внутренности процесса.
+	if dbgAddr := os.Getenv("TIMA_DEBUG_ADDR"); dbgAddr != "" {
+		startDebugServer(dbgAddr)
+	}
+
 	addr := os.Getenv("LISTEN_ADDR")
 	if addr == "" {
 		addr = ":8080"
 	}
 	log.Printf("tima serve: слушаю %s", addr)
 	log.Fatal(http.ListenAndServe(addr, mux))
+}
+
+// startDebugServer поднимает отдельный HTTP-сервер отладки (pprof + краткая
+// сводка runtime). Отдельный порт/listener: диагностику видно, даже если
+// основной обработчик залип, и её легко закрыть файрволом.
+func startDebugServer(addr string) {
+	dbg := http.NewServeMux()
+	dbg.HandleFunc("/debug/pprof/", pprof.Index)
+	dbg.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	dbg.HandleFunc("/debug/pprof/profile", pprof.Profile) // CPU-профиль ?seconds=N
+	dbg.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	dbg.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	// /debug/stats — сводка одним взглядом (без инструментов): растущие
+	// NumGoroutine или HeapAlloc между запросами = утечка.
+	dbg.HandleFunc("/debug/stats", func(w http.ResponseWriter, _ *http.Request) {
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"goroutines":%d,"heap_alloc_mb":%.1f,"heap_objects":%d,"num_gc":%d,"sys_mb":%.1f}`,
+			runtime.NumGoroutine(),
+			float64(m.HeapAlloc)/1024/1024, m.HeapObjects, m.NumGC, float64(m.Sys)/1024/1024)
+	})
+
+	log.Printf("сервис отладки: слушаю %s (pprof: /debug/pprof/, сводка: /debug/stats)", addr)
+	go func() {
+		if err := http.ListenAndServe(addr, dbg); err != nil {
+			log.Printf("сервис отладки остановлен: %v", err)
+		}
+	}()
 }

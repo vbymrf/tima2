@@ -1,0 +1,14 @@
+# LiveKit SFU для звонков и аудио-чатов TIMA (ADR-0006).
+# ВАЖНО: ключ/секрет ДОЛЖНЫ совпадать с LIVEKIT_API_KEY/SECRET в deploy/.env —
+# бэкенд подписывает токены доступа этим же секретом. Подставь их вручную ниже.
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 60000
+  use_external_ip: true        # WebRTC: анонсировать публичный IP VPS
+keys:
+  # ЗАМЕНИ на значения из .env (LIVEKIT_API_KEY: LIVEKIT_API_SECRET):
+  REPLACE_LIVEKIT_API_KEY: REPLACE_LIVEKIT_API_SECRET
+turn:
+  enabled: false               # включи и настрой turn.DOMAIN, если клиенты за строгим NAT

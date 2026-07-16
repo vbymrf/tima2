@@ -15,3 +15,15 @@ Kodium git/
 
 # Зависимости (устанавливаются локально)
 node_modules/
+
+# Боевые секреты — НИКОГДА в git (шаблон: server/deploy/.env.example)
+server/deploy/.env
+**/.env
+
+# Собранные артефакты клиента
+*.apk
+client/composeApp/build/
+
+# Локальное состояние escrow-анклава (приватный ключ!)
+.tima-escrow-dev/
+**/escrow-data/

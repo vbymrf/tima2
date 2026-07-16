@@ -1,0 +1,140 @@
+# Боевой стек TIMA на одном VPS — сборка образа ПРЯМО НА СЕРВЕРЕ (без registry/CI).
+# Полная инструкция: /РАЗВЕРТЫВАНИЕ.md (в корне репозитория).
+#
+# Первый запуск (из каталога server/):
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
+#
+# Секреты — только в deploy/.env (chmod 600, в git не попадает). Шаблон: deploy/.env.example.
+name: tima
+
+services:
+  # ── Caddy: TLS-терминация (Let's Encrypt автоматически) + reverse proxy ──
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"      # HTTP/3
+    environment:
+      DOMAIN: ${DOMAIN}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # чтобы дотянуться до LiveKit (host network)
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [backend, minio]
+
+  # ── Бэкенд: serve. Миграции применяются автоматически при старте. ──
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/backend.Dockerfile
+    image: tima-backend:local        # worker переиспользует этот же образ
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: media
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+      ESCROW_URL: http://escrow-stub:8090
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      LIVEKIT_URL: wss://lk.${DOMAIN}
+      # Сервис отладки на loopback контейнера (наружу НЕ проброшен). Доступ:
+      #   docker compose -f deploy/docker-compose.prod.yml exec backend wget -qO- 127.0.0.1:6060/debug/stats
+      TIMA_DEBUG_ADDR: 127.0.0.1:6060
+      # SMS. Пока реальный провайдер не подключён — для теста на телефоне поставь
+      # TIMA_DEV_SMS=1 в .env: код придёт прямо в ответе приложения (поле «dev-код»).
+      # ПЕРЕД РЕАЛЬНЫМИ ПОЛЬЗОВАТЕЛЯМИ вернуть 0 и подключить SMS-провайдер.
+      TIMA_DEV_SMS: ${TIMA_DEV_SMS:-0}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_started }
+      escrow-stub: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── Worker: фоновый GC ретеншена (тот же бинарник, подкоманда worker) ──
+  worker:
+    image: tima-backend:local
+    command: ["worker"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    depends_on:
+      backend: { condition: service_started }
+
+  # ── Escrow-анклав (stub): изолированный контейнер, свой volume ──
+  # Доли Шамира печатаются в лог ПЕРВОГО запуска — сохрани их:
+  #   docker compose -f deploy/docker-compose.prod.yml logs escrow-stub
+  escrow-stub:
+    build:
+      context: ..
+      dockerfile: deploy/escrow-stub.Dockerfile
+    image: tima-escrow-stub:local
+    restart: unless-stopped
+    volumes:
+      - escrow-data:/data       # приватный ключ ML-KEM живёт ТОЛЬКО здесь
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      retries: 10
+    shm_size: 256mb
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+
+  # ── LiveKit (звонки/аудио-чаты): host network — реальные UDP-порты WebRTC ──
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    network_mode: host
+    command: ["--config", "/etc/livekit.yaml"]
+    volumes:
+      - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+
+volumes:
+  caddy-data:
+  caddy-config:
+  postgres-data:
+  redis-data:
+  minio-data:
+  escrow-data:

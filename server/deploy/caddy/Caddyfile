@@ -1,0 +1,31 @@
+# Caddy edge для TIMA (ADR-0008). TLS-сертификаты — Let's Encrypt автоматически,
+# продление тоже. {$DOMAIN} подставляется из окружения (см. docker-compose.prod.yml).
+#
+# Поддомены (все A-записи → IP VPS):
+#   api.DOMAIN — REST + WebSocket (/ws)
+#   s3.DOMAIN  — MinIO (клиенты ходят по presigned URL напрямую)
+#   lk.DOMAIN  — LiveKit signaling (звонки/аудио-чаты)
+
+api.{$DOMAIN} {
+	reverse_proxy /ws       backend:8080     # WebSocket Caddy проксирует сам
+	reverse_proxy /api/*    backend:8080
+	reverse_proxy /healthz  backend:8080
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}
+
+s3.{$DOMAIN} {
+	# presigned PUT/GET клиентов; подпись содержит хост — снаружи это s3.DOMAIN
+	reverse_proxy minio:9000
+	request_body {
+		max_size 2GB
+	}
+}
+
+lk.{$DOMAIN} {
+	# LiveKit слушает 7880 на host network — тянемся через host-gateway
+	reverse_proxy host.docker.internal:7880
+}
