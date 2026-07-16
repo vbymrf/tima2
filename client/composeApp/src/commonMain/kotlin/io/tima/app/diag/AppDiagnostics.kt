@@ -1,11 +1,14 @@
 package io.tima.app.diag
 
+/** Текущее время ЧЧ:ММ:СС для записей журнала (платформенно). */
+expect fun diagNow(): String
+
 /**
- * Кольцевой журнал диагностики (последние события/ошибки) для кнопки «Отправить логи».
- * Пишется из сетевого слоя (TimaApi/WS); читается на экране диагностики.
+ * Кольцевой журнал диагностики (последние события/ошибки/действия) для кнопки «Отправить логи».
+ * Пишется из сетевого слоя (TimaApi/WS) и из UI (действия пользователя).
  */
 object AppDiagnostics {
-    private const val MAX = 200
+    private const val MAX = 300
     private val lines = ArrayDeque<String>()
 
     var serverUrl: String = ""
@@ -14,7 +17,7 @@ object AppDiagnostics {
 
     @Synchronized
     fun add(msg: String) {
-        lines.addLast(msg)
+        lines.addLast("${diagNow()}  $msg")
         while (lines.size > MAX) lines.removeFirst()
     }
 

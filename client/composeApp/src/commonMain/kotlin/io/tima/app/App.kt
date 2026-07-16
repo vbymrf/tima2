@@ -80,6 +80,7 @@ import io.tima.app.platform.cancelVoiceRecording
 import io.tima.app.platform.identityFromPhrase
 import io.tima.app.platform.installUpdate
 import io.tima.app.platform.newIdentity
+import io.tima.app.platform.normalizePhone
 import io.tima.app.platform.openFile
 import io.tima.app.platform.pickFile
 import io.tima.app.platform.pickImage
@@ -262,6 +263,7 @@ fun App() {
                     onRead = { chatId -> chats = SessionCodec.markRead(chatId) },
                     onCall = { kind ->
                         val c = client ?: return@ChatScreen
+                        AppDiagnostics.add("действие: звонок ($kind) → ${s.peerUserId.take(8)}…")
                         scope.launch {
                             runCatching { c.startCall(s.peerUserId, kind) }
                                 .onSuccess { activeCall = CallUi(it.callId, s.peerPhone, kind, CallDir.Outgoing, it) }
@@ -351,8 +353,10 @@ private fun PhoneScreen(onCode: (Screen.Code) -> Unit) {
             busy = true; error = null
             scope.launch {
                 try {
-                    val resp = TimaApi(serverUrl).smsRequest(phone.trim())
-                    onCode(Screen.Code(serverUrl, phone.trim(), resp.requestId, resp.devCode))
+                    val p = normalizePhone(phone) ?: phone.trim()
+                    AppDiagnostics.add("действие: запрос кода для $p (сервер $serverUrl)")
+                    val resp = TimaApi(serverUrl).smsRequest(p)
+                    onCode(Screen.Code(serverUrl, p, resp.requestId, resp.devCode))
                 } catch (e: Throwable) {
                     error = e.message ?: e.toString()
                 } finally {
@@ -624,7 +628,7 @@ private fun HomeScreen(
         Spacer(Modifier.height(8.dp))
         chats.forEach { entry ->
             Button(
-                onClick = { onOpen(entry) },
+                onClick = { AppDiagnostics.add("действие: открыть чат «${entry.title}»"); onOpen(entry) },
                 enabled = !busy,
                 modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(vertical = 2.dp),
             ) {
@@ -816,10 +820,12 @@ private fun HomeScreen(
             busy = true; error = null
             scope.launch {
                 try {
-                    val phone = peerPhone.trim()
+                    // Нормализуем номер к E.164 (8XXX / +7XXX / с пробобелами → +7XXX), иначе сервер отдаёт 400
+                    val phone = normalizePhone(peerPhone) ?: peerPhone.trim()
+                    AppDiagnostics.add("действие: новый чат, поиск $phone")
                     val peer = TimaApi(session.serverUrl).lookupUser(session.accessToken, phone)
                     if (peer == null) {
-                        error = "Пользователь не найден — он ещё не вошёл в TIMA"
+                        error = "Пользователь не найден — он ещё не вошёл в TIMA (проверьте номер)"
                     } else if (client != null) {
                         val entry = ChatEntry(title = phone, peerUserId = peer, chatId = client.chatIdWith(peer))
                         onChatsChange(SessionCodec.rememberChat(entry))
@@ -1066,6 +1072,7 @@ private fun ChatScreen(
                     try {
                         val image = pickImage()
                         if (image != null) {
+                            AppDiagnostics.add("действие: отправка фото (${image.bytes.size / 1024} КБ)")
                             val sent = if (isGroup) client.sendGroupImage(targetId, image.bytes, image.mime, draft.trim())
                             else client.sendImage(targetId, image.bytes, image.mime, draft.trim())
                             add(sent)
@@ -1086,6 +1093,7 @@ private fun ChatScreen(
                     try {
                         val file = pickFile()
                         if (file != null) {
+                            AppDiagnostics.add("действие: отправка файла ${file.name} (${file.bytes.size / 1024} КБ)")
                             val sent = if (isGroup) client.sendGroupFile(targetId, file.bytes, file.name, file.mime)
                             else client.sendFile(targetId, file.bytes, file.name, file.mime)
                             add(sent)
@@ -1118,6 +1126,7 @@ private fun ChatScreen(
                                 try {
                                     val rec = stopVoiceRecording()
                                     if (rec != null) {
+                                        AppDiagnostics.add("действие: отправка голосового (${rec.durationMs / 1000}с, ${rec.bytes.size / 1024} КБ)")
                                         val sent = if (isGroup) client.sendGroupVoice(targetId, rec.bytes, rec.mime, rec.durationMs)
                                         else client.sendVoice(targetId, rec.bytes, rec.mime, rec.durationMs)
                                         add(sent)
@@ -1154,6 +1163,7 @@ private fun ChatScreen(
             Button(enabled = !busy && draft.isNotBlank(), onClick = {
                 val text = draft.trim()
                 busy = true; error = null
+                AppDiagnostics.add("действие: отправка текста (${if (isGroup) "группа" else "чат"} ${targetId.take(8)}…)")
                 scope.launch {
                     try {
                         add(if (isGroup) client.sendGroup(targetId, text) else client.send(targetId, text, replyingTo?.messageId ?: 0L))

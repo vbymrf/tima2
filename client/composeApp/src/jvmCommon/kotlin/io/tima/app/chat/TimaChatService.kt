@@ -255,7 +255,13 @@ class TimaClient(private val session: Session) : ChatClient {
                             when (f.event) {
                                 "message.new" -> {
                                     f.envelope?.let { env ->
-                                        decrypt(b64url.decode(env))?.let { _messages.emit(it) }
+                                        val m = decrypt(b64url.decode(env))
+                                        if (m != null) {
+                                            AppDiagnostics.add("входящее: расшифровано (chat ${m.chatId.take(8)}…, от ${m.senderId.take(8)}…)")
+                                            _messages.emit(m)
+                                        } else {
+                                            AppDiagnostics.add("входящее: НЕ расшифровано — нет ключа для этого устройства")
+                                        }
                                     }
                                     if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
                                 }
