@@ -67,6 +67,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// Под device JWT
 	mux.HandleFunc("POST /api/v1/messages", s.Auth.Require(s.postMessage))
 	mux.HandleFunc("GET /api/v1/chats/{chatID}/messages", s.Auth.Require(s.listMessages))
+	mux.HandleFunc("POST /api/v1/chats/{chatID}/read", s.Auth.Require(s.chatRead))
+	mux.HandleFunc("POST /api/v1/chats/{chatID}/typing", s.Auth.Require(s.chatTyping))
 	mux.HandleFunc("POST /api/v1/chats/{chatID}/recover", s.Auth.Require(s.chatRecover))
 	mux.HandleFunc("POST /api/v1/chats/{chatID}/recover/provide", s.Auth.Require(s.chatRecoverProvide))
 	mux.HandleFunc("POST /api/v1/chats/{chatID}/backup", s.Auth.Require(s.chatBackupSave))

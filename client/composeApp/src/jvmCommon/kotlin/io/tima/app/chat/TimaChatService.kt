@@ -126,6 +126,18 @@ private data class VoiceEventFrame(
     @SerialName("user_id") val userId: String = "",
 )
 
+@Serializable
+private data class ReceiptFrame(
+    @SerialName("chat_id") val chatId: String,
+    @SerialName("message_id") val messageId: Long,
+)
+
+@Serializable
+private data class TypingFrame(
+    @SerialName("chat_id") val chatId: String,
+    @SerialName("user_id") val userId: String = "",
+)
+
 class TimaClient(private val session: Session) : ChatClient {
 
     private val api = TimaApi(session.serverUrl)
@@ -159,6 +171,18 @@ class TimaClient(private val session: Session) : ChatClient {
     override val callStates: Flow<CallStateEvent> = _callStates
     private val _voiceEvents = MutableSharedFlow<VoiceEvent>(extraBufferCapacity = 32)
     override val voiceEvents: Flow<VoiceEvent> = _voiceEvents
+    private val _readReceipts = MutableSharedFlow<ReadReceipt>(extraBufferCapacity = 64)
+    override val readReceipts: Flow<ReadReceipt> = _readReceipts
+    private val _typingEvents = MutableSharedFlow<TypingEvent>(extraBufferCapacity = 64)
+    override val typingEvents: Flow<TypingEvent> = _typingEvents
+
+    override suspend fun markRead(chatId: String, upToMessageId: Long) {
+        runCatching { api.markChatRead(session.accessToken, chatId, upToMessageId) }
+    }
+
+    override suspend fun sendTyping(chatId: String) {
+        runCatching { api.sendTyping(session.accessToken, chatId) }
+    }
 
     override fun chatIdWith(peerUserId: String): String = personalChatId(session.userId, peerUserId)
 
@@ -266,6 +290,16 @@ class TimaClient(private val session: Session) : ChatClient {
                                     try { json.decodeFromString<VoiceEventFrame>(text) } catch (_: Throwable) { null }
                                         ?.let { _voiceEvents.emit(VoiceEvent(f.event, it.roomId, it.userId)) }
                                     if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
+                                }
+                                "receipt.read" -> {
+                                    try { json.decodeFromString<ReceiptFrame>(text) } catch (_: Throwable) { null }
+                                        ?.let { _readReceipts.emit(ReadReceipt(it.chatId, it.messageId)) }
+                                    if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
+                                }
+                                "typing" -> {
+                                    // эфемерный (event_id=0) — не ack-аем
+                                    try { json.decodeFromString<TypingFrame>(text) } catch (_: Throwable) { null }
+                                        ?.let { _typingEvents.emit(TypingEvent(it.chatId, it.userId)) }
                                 }
                                 "sync.gap" -> Unit // история чата и так грузится REST-ом при открытии
                                 else -> Unit

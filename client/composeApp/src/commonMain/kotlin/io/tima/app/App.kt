@@ -90,6 +90,8 @@ import io.tima.app.session.SessionCodec
 import io.tima.app.session.defaultServerUrl
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 private sealed interface Screen {
@@ -798,6 +800,8 @@ private fun ChatScreen(
     var busy by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf(false) }
     var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
+    var peerTyping by remember { mutableStateOf(false) }
+    var typingCooldown by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
@@ -828,13 +832,45 @@ private fun ChatScreen(
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(0)
     }
+    // ✓✓: отмечаем прочитанным до последнего сообщения собеседника (личные чаты)
+    LaunchedEffect(messages.size) {
+        if (!isGroup) {
+            messages.filter { !it.mine }.maxOfOrNull { it.messageId }?.let { client.markRead(chatId, it) }
+        }
+    }
+    // Квитанции от собеседника → отмечаем свои сообщения как прочитанные
+    LaunchedEffect(chatId) {
+        client.readReceipts.collect { r ->
+            if (r.chatId == chatId) {
+                for (i in messages.indices) {
+                    val m = messages[i]
+                    if (m.mine && !m.readByPeer && m.messageId <= r.messageId) messages[i] = m.copy(readByPeer = true)
+                }
+            }
+        }
+    }
+    // «Печатает»: показываем, пока приходят события; гаснет через 4 с тишины
+    LaunchedEffect(chatId) {
+        client.typingEvents.collectLatest { ev ->
+            if (ev.chatId == chatId) {
+                peerTyping = true
+                delay(4000)
+                peerTyping = false
+            }
+        }
+    }
 
     // safeDrawing + ime: не подлезать под статусбар и подниматься над клавиатурой (Android)
     Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = onBack) { Text("←") }
             Spacer(Modifier.width(12.dp))
-            Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (peerTyping && !isGroup) {
+                    Text("печатает…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                }
+            }
             if (!isGroup) { // звонки — в личных чатах
                 Button(enabled = !busy, onClick = { onCall("audio") }) { Text("📞") }
                 Spacer(Modifier.width(4.dp))
@@ -1000,7 +1036,19 @@ private fun ChatScreen(
                 Spacer(Modifier.width(8.dp))
             }
             OutlinedTextField(
-                value = draft, onValueChange = { draft = it },
+                value = draft,
+                onValueChange = {
+                    draft = it
+                    // «печатает» собеседнику — не чаще раза в 3 с
+                    if (!isGroup && it.isNotBlank() && !typingCooldown) {
+                        typingCooldown = true
+                        scope.launch {
+                            client.sendTyping(chatId)
+                            delay(3000)
+                            typingCooldown = false
+                        }
+                    }
+                },
                 label = { Text("Сообщение") },
                 modifier = Modifier.weight(1f),
             )

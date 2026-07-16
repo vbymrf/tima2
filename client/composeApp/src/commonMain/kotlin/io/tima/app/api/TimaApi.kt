@@ -342,6 +342,9 @@ data class AppVersionDto(
 )
 
 @Serializable
+private data class ReadBody(@SerialName("message_id") val messageId: Long)
+
+@Serializable
 private data class ApiError(val error: String = "", val message: String = "")
 
 class TimaApiException(val code: String, message: String) : Exception(message)
@@ -408,6 +411,20 @@ class TimaApi(private val baseUrl: String) {
         if (response.status == HttpStatusCode.NotFound) return null
         if (!response.status.isSuccess()) fail(response)
         return response.body<LookupResponse>().userId
+    }
+
+    /** Квитанция прочтения: собеседник узнает, что прочитано до messageId (✓✓). */
+    suspend fun markChatRead(token: String, chatId: String, messageId: Long) {
+        client.post(baseUrl.trimEnd('/') + "/api/v1/chats/$chatId/read") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(ReadBody(messageId))
+        }
+    }
+
+    /** Эфемерный сигнал «печатает» собеседнику (не персистится). */
+    suspend fun sendTyping(token: String, chatId: String) {
+        client.post(baseUrl.trimEnd('/') + "/api/v1/chats/$chatId/typing") { bearerAuth(token) }
     }
 
     /** Задать своё публичное имя (показывается собеседникам вместо номера). */

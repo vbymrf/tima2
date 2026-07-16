@@ -35,6 +35,12 @@ data class GroupSummary(val groupId: String, val title: String, val myRole: Stri
 /** Запрос собеседника на восстановление: показать пользователю «разрешить?». */
 data class RecoveryConsent(val chatId: String, val requesterDevice: String, val requesterEncPub: String)
 
+/** Квитанция: собеседник прочитал в [chatId] всё до [messageId] включительно. */
+data class ReadReceipt(val chatId: String, val messageId: Long)
+
+/** Собеседник печатает в [chatId]. */
+data class TypingEvent(val chatId: String, val userId: String)
+
 /** Входящий звонок (WS call.incoming). */
 data class IncomingCall(val callId: String, val room: String, val kind: String, val fromUserId: String)
 
@@ -118,6 +124,20 @@ interface ChatClient {
 
     /** Согласиться отдать историю чата запросившему устройству (после подтверждения в UI). */
     suspend fun approveRecovery(consent: RecoveryConsent)
+
+    // ── Статусы прочтения (✓✓) и «печатает» (личные чаты) ──
+
+    /** Квитанции: собеседник прочитал сообщения (для отметки своих ✓✓). */
+    val readReceipts: Flow<ReadReceipt>
+
+    /** События «печатает» от собеседников. */
+    val typingEvents: Flow<TypingEvent>
+
+    /** Отметить чат прочитанным до [upToMessageId] (собеседник увидит ✓✓). */
+    suspend fun markRead(chatId: String, upToMessageId: Long)
+
+    /** Эфемерно сообщить собеседнику, что печатаю (throttl-ить на стороне UI). */
+    suspend fun sendTyping(chatId: String)
 
     // ── Звонки 1:1 (calls-livekit.md; сигналинг + LiveKit-токен, без живого медиа) ──
 
