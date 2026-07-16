@@ -600,7 +600,10 @@ private fun HomeScreen(
             confirmButton = {
                 Button(onClick = {
                     val uu = u; updateInfo = null
-                    scope.launch { runCatching { installUpdate(uu) } }
+                    scope.launch {
+                        runCatching { installUpdate(uu) }
+                            .onFailure { updateMsg = it.message ?: "Не удалось установить обновление" }
+                    }
                 }) { Text("Обновить") }
             },
             dismissButton = { Button(onClick = { updateInfo = null }) { Text("Позже") } },
