@@ -16,6 +16,7 @@ import io.tima.app.api.ProvideMsgKeyDto
 import io.tima.app.api.TimaApi
 import io.tima.app.api.TimaApiException
 import io.tima.app.api.WrappedKeyDto
+import io.tima.app.diag.AppDiagnostics
 import io.tima.app.platform.normalizePhone
 import io.tima.app.platform.readDeviceContacts
 import io.tima.app.session.Session
@@ -242,10 +243,12 @@ class TimaClient(private val session: Session) : ChatClient {
             var backoffMs = 1_000L
             while (isActive) {
                 try {
+                    AppDiagnostics.add("WS: подключаюсь ${api.wsUrl()}")
                     api.rawClient.webSocket(api.wsUrl()) {
                         send(Frame.Text("""{"token":"${session.accessToken}"}"""))
                         send(Frame.Text("""{"event":"sync.pull"}""")) // cursor серверный
                         backoffMs = 1_000L
+                        AppDiagnostics.add("WS: соединение установлено")
                         for (frame in incoming) {
                             val text = (frame as? Frame.Text)?.readText() ?: continue
                             val f = try { json.decodeFromString<WsFrame>(text) } catch (_: Throwable) { continue }
@@ -328,8 +331,9 @@ class TimaClient(private val session: Session) : ChatClient {
                             }
                         }
                     }
-                } catch (_: Throwable) {
+                } catch (e: Throwable) {
                     // сервер недоступен/сеть моргнула — переподключение ниже
+                    AppDiagnostics.add("WS: обрыв — ${e.message ?: e::class.simpleName}")
                 }
                 delay(backoffMs)
                 backoffMs = (backoffMs * 2).coerceAtMost(30_000L)

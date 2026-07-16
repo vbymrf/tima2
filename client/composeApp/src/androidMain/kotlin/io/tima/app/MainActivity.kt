@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AndroidAppContext.app = applicationContext
+        io.tima.app.diag.AppDiagnostics.platform = "Android"
         initSessionDir(applicationContext.filesDir)
         AndroidImagePicker.pick = {
             val deferred = CompletableDeferred<PickedImage?>()

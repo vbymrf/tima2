@@ -68,6 +68,7 @@ import io.tima.app.chat.isFile
 import io.tima.app.chat.isVoice
 import io.tima.app.chat.createChatClient
 import io.tima.app.chat.preview
+import io.tima.app.diag.AppDiagnostics
 import io.tima.app.platform.CallEngine
 import io.tima.app.platform.CallMediaState
 import io.tima.app.platform.CallVideoView
@@ -83,6 +84,7 @@ import io.tima.app.platform.openFile
 import io.tima.app.platform.pickFile
 import io.tima.app.platform.pickImage
 import io.tima.app.platform.playVoice
+import io.tima.app.platform.shareText
 import io.tima.app.platform.startVoiceRecording
 import io.tima.app.platform.stopVoice
 import io.tima.app.platform.stopVoiceRecording
@@ -157,6 +159,8 @@ fun App() {
     var updating by remember { mutableStateOf(false) }
     LaunchedEffect(session?.serverUrl) {
         val url = session?.serverUrl ?: return@LaunchedEffect
+        AppDiagnostics.serverUrl = url
+        AppDiagnostics.appVersion = currentVersionCode()
         runCatching {
             val latest = TimaApi(url).appVersion()
             if (latest != null && latest.url.isNotEmpty() && latest.versionCode > currentVersionCode()) {
@@ -560,6 +564,47 @@ private fun HomeScreen(
                 finally { busy = false }
             }
         }) { Text(if (nameSaved) "✓" else "OK") }
+    }
+    Spacer(Modifier.height(16.dp))
+
+    // Обновление приложения (ручная проверка) + отправка логов диагностики
+    var updateInfo by remember { mutableStateOf<AppVersionDto?>(null) }
+    var updateMsg by remember { mutableStateOf<String?>(null) }
+    var checking by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Button(enabled = !checking, modifier = Modifier.weight(1f), onClick = {
+            checking = true; updateMsg = null
+            scope.launch {
+                val latest = runCatching { TimaApi(session.serverUrl).appVersion() }.getOrNull()
+                checking = false
+                when {
+                    latest == null -> updateMsg = "Обновление на сервере не настроено"
+                    latest.versionCode > currentVersionCode() -> updateInfo = latest
+                    else -> updateMsg = "Установлена последняя версия"
+                }
+            }
+        }) { Text("Обновить приложение") }
+        Button(modifier = Modifier.weight(1f), onClick = {
+            scope.launch { runCatching { shareText("TIMA диагностика", AppDiagnostics.dump()) } }
+        }) { Text("Отправить логи") }
+    }
+    updateMsg?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
+    updateInfo?.let { u ->
+        AlertDialog(
+            onDismissRequest = { updateInfo = null },
+            title = { Text("Доступно обновление") },
+            text = { Text("Версия ${u.versionName}." + if (u.notes.isNotEmpty()) "\n\n${u.notes}" else "") },
+            confirmButton = {
+                Button(onClick = {
+                    val uu = u; updateInfo = null
+                    scope.launch { runCatching { installUpdate(uu) } }
+                }) { Text("Обновить") }
+            },
+            dismissButton = { Button(onClick = { updateInfo = null }) { Text("Позже") } },
+        )
     }
     Spacer(Modifier.height(16.dp))
 

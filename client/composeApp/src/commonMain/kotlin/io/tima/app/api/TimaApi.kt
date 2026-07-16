@@ -1,5 +1,6 @@
 package io.tima.app.api
 
+import io.tima.app.diag.AppDiagnostics
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -376,6 +377,7 @@ class TimaApi(private val baseUrl: String) {
         } catch (_: Throwable) {
             ApiError("http_${response.status.value}", "HTTP ${response.status}")
         }
+        AppDiagnostics.add("API ${response.status.value} ${response.call.request.method.value} ${response.call.request.url.encodedPath} → ${err.error}")
         throw TimaApiException(err.error, err.message.ifEmpty { "HTTP ${response.status.value}" })
     }
 
