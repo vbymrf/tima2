@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalEncodingApi::class)
+@file:OptIn(ExperimentalEncodingApi::class, ExperimentalFoundationApi::class)
 
 package io.tima.app
 
@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -60,6 +62,7 @@ import io.tima.app.chat.ChatMessage
 import io.tima.app.chat.GroupSummary
 import io.tima.app.chat.MediaAttachment
 import io.tima.app.chat.RecoveryConsent
+import io.tima.app.chat.isFile
 import io.tima.app.chat.isVoice
 import io.tima.app.chat.createChatClient
 import io.tima.app.chat.preview
@@ -73,6 +76,8 @@ import io.tima.app.platform.cancelVoiceRecording
 import io.tima.app.platform.identityFromPhrase
 import io.tima.app.platform.installUpdate
 import io.tima.app.platform.newIdentity
+import io.tima.app.platform.openFile
+import io.tima.app.platform.pickFile
 import io.tima.app.platform.pickImage
 import io.tima.app.platform.playVoice
 import io.tima.app.platform.startVoiceRecording
@@ -792,6 +797,7 @@ private fun ChatScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf(false) }
+    var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
@@ -867,15 +873,40 @@ private fun ChatScreen(
                         color = if (msg.mine) MaterialTheme.colorScheme.primaryContainer
                         else MaterialTheme.colorScheme.surfaceVariant,
                         shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.combinedClickable(
+                            onClick = {},
+                            onLongClick = { if (!isGroup) replyingTo = msg }, // долгое нажатие — ответить
+                        ),
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                             if (isGroup && !msg.mine) {
                                 Text(names[msg.senderId] ?: (msg.senderId.take(8) + "…"), style = MaterialTheme.typography.labelSmall)
                             }
-                            msg.media?.let { m ->
-                                if (m.isVoice()) VoiceBubble(client, m) else MediaImage(client, m)
+                            if (msg.replyTo != 0L) {
+                                val quoted = messages.firstOrNull { it.messageId == msg.replyTo }
+                                Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.small) {
+                                    Text(
+                                        quoted?.let { (if (it.mine) "Вы: " else "↩ ") + it.preview() }?.take(70) ?: "↩ сообщение",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp).widthIn(max = 240.dp),
+                                    )
+                                }
+                                Spacer(Modifier.height(3.dp))
                             }
-                            if (msg.text.isNotEmpty()) Text(msg.text)
+                            val m = msg.media
+                            when {
+                                m == null -> if (msg.text.isNotEmpty()) Text(msg.text)
+                                m.isVoice() -> VoiceBubble(client, m)
+                                m.isFile() -> FileBubble(client, m, msg.text) // имя файла в тексте
+                                else -> {
+                                    MediaImage(client, m)
+                                    if (msg.text.isNotEmpty()) Text(msg.text)
+                                }
+                            }
+                            if (msg.mine && !isGroup && msg.readByPeer) {
+                                Text("✓✓", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
                         }
                     }
                 }
@@ -883,6 +914,17 @@ private fun ChatScreen(
         }
         ErrorText(error)
         if (recording) Text("● запись… нажмите ⏹ для отправки", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+        replyingTo?.let { r ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                Text(
+                    "↩ " + (if (r.mine) "Вы: " else "") + r.preview(),
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(onClick = { replyingTo = null }) { Text("✕") }
+            }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(enabled = !busy && !recording, onClick = {
                 busy = true; error = null
@@ -902,6 +944,25 @@ private fun ChatScreen(
                     }
                 }
             }) { Text("📷") }
+            Spacer(Modifier.width(8.dp))
+            // Файл: выбор произвольного файла, шифрование и отправка (CK_FILE)
+            Button(enabled = !busy && !recording, onClick = {
+                busy = true; error = null
+                scope.launch {
+                    try {
+                        val file = pickFile()
+                        if (file != null) {
+                            val sent = if (isGroup) client.sendGroupFile(targetId, file.bytes, file.name, file.mime)
+                            else client.sendFile(targetId, file.bytes, file.name, file.mime)
+                            add(sent)
+                        }
+                    } catch (e: Throwable) {
+                        error = e.message ?: e.toString()
+                    } finally {
+                        busy = false
+                    }
+                }
+            }) { Text("📎") }
             Spacer(Modifier.width(8.dp))
             // Голосовое: тап — старт записи, повторный тап — стоп и отправка (только там, где есть микрофон)
             if (voiceRecordingSupported()) {
@@ -949,8 +1010,9 @@ private fun ChatScreen(
                 busy = true; error = null
                 scope.launch {
                     try {
-                        add(if (isGroup) client.sendGroup(targetId, text) else client.send(targetId, text))
+                        add(if (isGroup) client.sendGroup(targetId, text) else client.send(targetId, text, replyingTo?.messageId ?: 0L))
                         draft = ""
+                        replyingTo = null
                     } catch (e: Throwable) {
                         error = e.message ?: e.toString()
                     } finally {
@@ -1280,6 +1342,31 @@ private fun VoiceBubble(client: ChatClient, media: MediaAttachment) {
         }) { Text(if (playing) "⏹" else "▶") }
         Spacer(Modifier.width(8.dp))
         Text("🎤 ${secs}с")
+    }
+}
+
+/** Файл-вложение: 📎 имя + размер + кнопка открыть (скачивает и расшифровывает по нажатию). */
+@Composable
+private fun FileBubble(client: ChatClient, media: MediaAttachment, name: String) {
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val kb = (media.sizeBytes / 1024).coerceAtLeast(1)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 2.dp).widthIn(max = 280.dp)) {
+        Text("📎", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.width(6.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(name.ifBlank { "файл" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("$kb КБ", style = MaterialTheme.typography.labelSmall)
+        }
+        Spacer(Modifier.width(6.dp))
+        Button(enabled = !busy, onClick = {
+            busy = true
+            scope.launch {
+                try { openFile(client.loadMedia(media), name.ifBlank { "file" }, media.mime) }
+                catch (_: Throwable) {}
+                finally { busy = false }
+            }
+        }) { Text("⬇") }
     }
 }
 

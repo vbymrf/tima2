@@ -289,8 +289,8 @@ class TimaClient(private val session: Session) : ChatClient {
             }
             .sortedBy { it.messageId }
 
-    override suspend fun send(peerUserId: String, text: String): ChatMessage =
-        sealAndPost(peerUserId, MessageBody(text = text), kind = 1) // CK_TEXT
+    override suspend fun send(peerUserId: String, text: String, replyTo: Long): ChatMessage =
+        sealAndPost(peerUserId, MessageBody(text = text), kind = 1, replyTo = replyTo.toULong()) // CK_TEXT
 
     override suspend fun sendImage(peerUserId: String, imageBytes: ByteArray, mime: String, caption: String): ChatMessage {
         // media_key — случайный на файл; сервер и MinIO видят только ciphertext
@@ -355,6 +355,33 @@ class TimaClient(private val session: Session) : ChatClient {
             ),
         )
         return sealAndPostGroup(groupId, body, kind = 2) // CK_VOICE
+    }
+
+    override suspend fun sendFile(peerUserId: String, bytes: ByteArray, name: String, mime: String): ChatMessage =
+        sealAndPost(peerUserId, uploadFileBody(bytes, name, mime), kind = 5) // CK_FILE
+
+    override suspend fun sendGroupFile(groupId: String, bytes: ByteArray, name: String, mime: String): ChatMessage =
+        sealAndPostGroup(groupId, uploadFileBody(bytes, name, mime), kind = 5) // CK_FILE
+
+    /** Шифрует файл, грузит в MinIO и собирает body (имя файла — в text). */
+    private suspend fun uploadFileBody(bytes: ByteArray, name: String, mime: String): MessageBody {
+        val mediaKey = ByteArray(32).also(random::nextBytes)
+        val sealedFile = MediaCipher.seal(mediaKey, bytes).getOrThrow()
+        val init = api.mediaInit(session.accessToken, sealedFile.size.toLong(), mime)
+        api.putPresigned(init.uploadUrls.first(), sealedFile)
+        api.mediaComplete(session.accessToken, init.mediaId)
+        mediaCache[init.mediaId] = bytes
+        return MessageBody(
+            text = name,
+            media = listOf(
+                MediaRef(
+                    media_id = init.mediaId,
+                    media_key = mediaKey.toByteString(),
+                    mime = mime,
+                    size_bytes = bytes.size.toLong(),
+                ),
+            ),
+        )
     }
 
     override suspend fun loadMedia(attachment: MediaAttachment): ByteArray =
@@ -435,7 +462,7 @@ class TimaClient(private val session: Session) : ChatClient {
         }
     }
 
-    private suspend fun sealAndPost(peerUserId: String, body: MessageBody, kind: Int): ChatMessage {
+    private suspend fun sealAndPost(peerUserId: String, body: MessageBody, kind: Int, replyTo: ULong = 0u): ChatMessage {
         val sealer = ensureSealer()
         val chatId = chatIdWith(peerUserId)
         // Обёртки: все устройства собеседника + все мои (мультиустройство и своя история)
@@ -452,6 +479,7 @@ class TimaClient(private val session: Session) : ChatClient {
             senderDevice = session.deviceId,
             kind = kind,
             createdAtUnixMs = now,
+            replyTo = replyTo,
         )
         val payload = MessageSerializer.encodeBody(body)
         val sealed = sealer.seal(meta, payload, deviceKey, recipients).getOrThrow()
@@ -477,6 +505,7 @@ class TimaClient(private val session: Session) : ChatClient {
         return ChatMessage(
             chatId, messageId.toLong(), session.userId, body.text, now, mine = true,
             media = body.media.firstOrNull()?.toAttachment(),
+            replyTo = replyTo.toLong(),
         )
     }
 
@@ -502,6 +531,7 @@ class TimaClient(private val session: Session) : ChatClient {
             createdAtMs = sealed.meta.createdAtUnixMs,
             mine = sealed.meta.senderId == session.userId,
             media = body.media.firstOrNull()?.toAttachment(),
+            replyTo = sealed.meta.replyTo.toLong(),
         )
     }
 

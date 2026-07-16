@@ -25,6 +25,8 @@ data class ChatMessage(
     val mine: Boolean,
     val media: MediaAttachment? = null,
     val group: Boolean = false,
+    val replyTo: Long = 0,   // message_id цитируемого сообщения; 0 — ответа нет
+    val readByPeer: Boolean = false, // ✓✓: собеседник прочитал (только для своих сообщений)
 )
 
 /** Группа в списке на главном экране. */
@@ -45,9 +47,13 @@ data class CallConnection(val callId: String, val room: String, val url: String,
 /** Событие аудио-чата (WS): voice.hand (владельцу), voice.granted/revoked (адресату). */
 data class VoiceEvent(val type: String, val roomId: String, val userId: String = "")
 
+/** Файл (не картинка и не голосовое). */
+fun MediaAttachment.isFile(): Boolean = !isVoice() && !mime.startsWith("image")
+
 /** Что показать в списке чатов как последнее сообщение. */
 fun ChatMessage.preview(): String = when {
     media?.isVoice() == true -> "🎤 Голосовое"
+    media?.isFile() == true -> "📎 " + text.ifEmpty { "Файл" }
     media != null && text.isEmpty() -> "📷 Фото"
     media != null -> "📷 $text"
     else -> text
@@ -77,8 +83,8 @@ interface ChatClient {
     /** История чата с расшифровкой, старые → новые. */
     suspend fun history(peerUserId: String): List<ChatMessage>
 
-    /** Шифрует, подписывает и отправляет; возвращает своё сообщение для UI. */
-    suspend fun send(peerUserId: String, text: String): ChatMessage
+    /** Шифрует, подписывает и отправляет; возвращает своё сообщение для UI. [replyTo] — id цитируемого. */
+    suspend fun send(peerUserId: String, text: String, replyTo: Long = 0): ChatMessage
 
     /**
      * Фото: шифрование файла (MediaCipher) → MinIO по presigned PUT →
@@ -91,6 +97,12 @@ interface ChatClient {
 
     /** Голосовое в группу (media_key под GK). */
     suspend fun sendGroupVoice(groupId: String, audioBytes: ByteArray, mime: String, durationMs: Int): ChatMessage
+
+    /** Файл-вложение (CK_FILE); имя файла едет в тексте сообщения (в MediaRef нет поля имени). */
+    suspend fun sendFile(peerUserId: String, bytes: ByteArray, name: String, mime: String): ChatMessage
+
+    /** Файл в группу (media_key под GK). */
+    suspend fun sendGroupFile(groupId: String, bytes: ByteArray, name: String, mime: String): ChatMessage
 
     /** Скачивает и расшифровывает вложение (с кэшем в памяти). */
     suspend fun loadMedia(attachment: MediaAttachment): ByteArray
