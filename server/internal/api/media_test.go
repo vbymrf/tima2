@@ -30,7 +30,8 @@ func setupWithBlob(t *testing.T) (*httptest.Server, *Server) {
 	if endpoint == "" {
 		endpoint = "http://localhost:9000"
 	}
-	bl, err := blob.New(context.Background(), endpoint, "tima-admin", "tima-dev-only", "media-test")
+	// publicEndpoint = endpoint: в тестах presigned URL никто не открывает с другого хоста
+	bl, err := blob.New(context.Background(), endpoint, endpoint, "tima-admin", "tima-dev-only", "media-test")
 	if err != nil {
 		t.Skipf("MinIO недоступен (%v) — подними deploy/docker-compose.dev.yml", err)
 	}

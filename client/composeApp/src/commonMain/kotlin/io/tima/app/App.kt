@@ -15,6 +15,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -63,6 +64,7 @@ import io.tima.app.chat.ChatMessage
 import io.tima.app.chat.Contact
 import io.tima.app.chat.GroupSummary
 import io.tima.app.chat.MediaAttachment
+import io.tima.app.chat.PeerInfo
 import io.tima.app.chat.RecoveryConsent
 import io.tima.app.chat.isFile
 import io.tima.app.chat.isVoice
@@ -104,6 +106,7 @@ private sealed interface Screen {
     data object Phone : Screen
     data class Code(val serverUrl: String, val phone: String, val requestId: String, val devCode: String?) : Screen
     data class Home(val session: Session) : Screen
+    data class Contacts(val session: Session) : Screen
     data class Chat(val session: Session, val peerUserId: String, val peerPhone: String) : Screen
     data class GroupChat(val session: Session, val groupId: String, val title: String) : Screen
     data class PhraseReveal(val session: Session, val phrase: List<String>) : Screen
@@ -112,6 +115,31 @@ private sealed interface Screen {
 }
 
 private val b64url = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
+
+/** Имя+телефон одного собеседника; null, пока сервер не ответил — тогда решает вызывающий. */
+@Composable
+private fun rememberPeer(client: ChatClient?, userId: String): PeerInfo? {
+    var info by remember(userId) { mutableStateOf<PeerInfo?>(null) }
+    LaunchedEffect(client, userId) {
+        if (client != null && userId.isNotEmpty()) {
+            info = runCatching { client.resolvePeers(listOf(userId)) }.getOrNull()?.get(userId)
+        }
+    }
+    return info
+}
+
+/** То же пачкой — для списка чатов (один запрос на все записи). */
+@Composable
+private fun rememberPeers(client: ChatClient?, userIds: List<String>): Map<String, PeerInfo> {
+    val map = remember { mutableStateMapOf<String, PeerInfo>() }
+    val key = userIds.sorted().joinToString(",")
+    LaunchedEffect(client, key) {
+        if (client != null && userIds.isNotEmpty()) {
+            runCatching { client.resolvePeers(userIds) }.getOrNull()?.let { map.putAll(it) }
+        }
+    }
+    return map
+}
 
 @Composable
 fun App() {
@@ -199,10 +227,16 @@ fun App() {
     // Активный звонок (оверлей поверх всего): входящий/исходящий/в разговоре
     var activeCall by remember { mutableStateOf<CallUi?>(null) }
     LaunchedEffect(client) {
-        client?.incomingCalls?.collect { inc ->
+        val c = client ?: return@LaunchedEffect
+        c.incomingCalls.collect { inc ->
             // Не перебиваем уже идущий звонок; иначе показываем входящий
             if (activeCall == null) {
-                activeCall = CallUi(inc.callId, inc.fromUserId.take(8) + "…", inc.kind, CallDir.Incoming, null)
+                val who = runCatching { c.resolvePeers(listOf(inc.fromUserId)) }.getOrNull()?.get(inc.fromUserId)
+                activeCall = CallUi(
+                    inc.callId,
+                    who?.label ?: (inc.fromUserId.take(8) + "…"),
+                    inc.kind, CallDir.Incoming, null,
+                )
             }
         }
     }
@@ -255,23 +289,28 @@ fun App() {
             }
             when (val s = screen) {
                 // Чат сам управляет раскладкой (LazyColumn несовместим с внешним verticalScroll)
-                is Screen.Chat -> ChatScreen(
-                    client = client ?: return@Surface,
-                    title = "Чат с ${s.peerPhone}",
-                    targetId = s.peerUserId,
-                    isGroup = false,
-                    onRead = { chatId -> chats = SessionCodec.markRead(chatId) },
-                    onCall = { kind ->
-                        val c = client ?: return@ChatScreen
-                        AppDiagnostics.add("действие: звонок ($kind) → ${s.peerUserId.take(8)}…")
-                        scope.launch {
-                            runCatching { c.startCall(s.peerUserId, kind) }
-                                .onSuccess { activeCall = CallUi(it.callId, s.peerPhone, kind, CallDir.Outgoing, it) }
-                                .onFailure { activeCall = null }
-                        }
-                    },
-                    onBack = { screen = Screen.Home(s.session) },
-                )
+                is Screen.Chat -> {
+                    // «Имя +7999…»; s.peerPhone (как чат назван локально) — пока сервер не ответил
+                    val self = s.peerUserId == s.session.userId
+                    val peerLabel = rememberPeer(client, s.peerUserId)?.label ?: s.peerPhone
+                    ChatScreen(
+                        client = client ?: return@Surface,
+                        title = if (self) "Заметки" else "Чат с $peerLabel",
+                        targetId = s.peerUserId,
+                        isGroup = false,
+                        onRead = { chatId -> chats = SessionCodec.markRead(chatId) },
+                        onCall = { kind ->
+                            val c = client ?: return@ChatScreen
+                            AppDiagnostics.add("действие: звонок ($kind) → $peerLabel")
+                            scope.launch {
+                                runCatching { c.startCall(s.peerUserId, kind) }
+                                    .onSuccess { activeCall = CallUi(it.callId, peerLabel, kind, CallDir.Outgoing, it) }
+                                    .onFailure { activeCall = null }
+                            }
+                        },
+                        onBack = { screen = Screen.Home(s.session) },
+                    )
+                }
                 is Screen.GroupChat -> ChatScreen(
                     client = client ?: return@Surface,
                     title = "Группа: ${s.title}",
@@ -282,6 +321,28 @@ fun App() {
                 )
                 is Screen.ChannelView -> ChannelScreen(s, onBack = { screen = Screen.Home(s.session) })
                 is Screen.VoiceRoom -> VoiceRoomScreen(s, client = client, onBack = { screen = Screen.Home(s.session) })
+                is Screen.Contacts -> ContactsScreen(
+                    client = client ?: return@Surface,
+                    onOpenChat = { c ->
+                        val entry = ChatEntry(
+                            title = c.name.ifBlank { c.phone },
+                            peerUserId = c.userId,
+                            chatId = client.chatIdWith(c.userId),
+                        )
+                        chats = SessionCodec.rememberChat(entry)
+                        screen = Screen.Chat(s.session, entry.peerUserId, entry.title)
+                    },
+                    onCall = { c, kind ->
+                        val label = (c.name + " " + c.phone).trim()
+                        AppDiagnostics.add("действие: звонок ($kind) → $label")
+                        scope.launch {
+                            runCatching { client.startCall(c.userId, kind) }
+                                .onSuccess { activeCall = CallUi(it.callId, label, kind, CallDir.Outgoing, it) }
+                                .onFailure { activeCall = null }
+                        }
+                    },
+                    onBack = { screen = Screen.Home(s.session) },
+                )
                 else -> Column(
                     modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -309,6 +370,7 @@ fun App() {
                             onOpenGroup = { g -> screen = Screen.GroupChat(s.session, g.groupId, g.title) },
                             onOpenChannel = { c -> screen = Screen.ChannelView(s.session, c.channelId, c.title, c.owner) },
                             onOpenVoice = { v -> screen = Screen.VoiceRoom(s.session, v.roomId, v.title) },
+                            onOpenContacts = { screen = Screen.Contacts(s.session) },
                             onChatsChange = { chats = it },
                             onLogout = {
                                 SessionCodec.clear()
@@ -316,7 +378,7 @@ fun App() {
                                 screen = Screen.Phone
                             },
                         )
-                        is Screen.Chat, is Screen.GroupChat -> Unit // обработаны выше
+                        else -> Unit // Chat/GroupChat/ChannelView/VoiceRoom/Contacts обработаны выше
                     }
                 }
             }
@@ -491,6 +553,7 @@ private fun HomeScreen(
     onOpenGroup: (GroupSummary) -> Unit,
     onOpenChannel: (ChannelDto) -> Unit,
     onOpenVoice: (VoiceRoomDto) -> Unit,
+    onOpenContacts: () -> Unit,
     onChatsChange: (List<ChatEntry>) -> Unit,
     onLogout: () -> Unit,
 ) {
@@ -540,16 +603,19 @@ private fun HomeScreen(
     // Подтягиваем ранее сохранённое имя с сервера, чтобы поле не выглядело пустым при входе
     LaunchedEffect(client) {
         val c = client ?: return@LaunchedEffect
-        runCatching { c.resolveNames(listOf(session.userId)) }.getOrNull()
-            ?.get(session.userId)?.let { if (myName.isEmpty()) { myName = it; nameSaved = true } }
+        runCatching { c.resolvePeers(listOf(session.userId)) }.getOrNull()
+            ?.get(session.userId)?.name?.takeIf { it.isNotEmpty() }
+            ?.let { if (myName.isEmpty()) { myName = it; nameSaved = true } }
     }
 
     Text("TIMA", style = MaterialTheme.typography.headlineMedium)
     Spacer(Modifier.height(8.dp))
-    if (session.phone.isNotEmpty()) {
-        Text(session.phone, style = MaterialTheme.typography.titleMedium)
-    }
-    Text("Вы вошли: ${session.userId.take(8)}…", style = MaterialTheme.typography.bodyMedium)
+    // «Имя +7999…»; пока имя не задано — только номер
+    val me = listOf(myName.trim(), session.phone).filter { it.isNotEmpty() }.joinToString(" ")
+    Text(
+        "Вы вошли: " + me.ifEmpty { session.userId.take(8) + "…" },
+        style = MaterialTheme.typography.titleMedium,
+    )
     Spacer(Modifier.height(8.dp))
     // Своё публичное имя — собеседники увидят его вместо номера
     Row(
@@ -624,17 +690,21 @@ private fun HomeScreen(
     Spacer(Modifier.height(16.dp))
 
     if (chats.isNotEmpty()) {
+        // Заголовки записей — снимок на момент создания (у незнакомца там id): показываем
+        // резолв с сервера, а сохранённый title оставляем запасным вариантом
+        val peers = rememberPeers(client, chats.map { it.peerUserId }.filter { it != session.userId })
         Text("Чаты", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
         chats.forEach { entry ->
+            val title = peers[entry.peerUserId]?.label ?: entry.title
             Button(
-                onClick = { AppDiagnostics.add("действие: открыть чат «${entry.title}»"); onOpen(entry) },
+                onClick = { AppDiagnostics.add("действие: открыть чат «$title»"); onOpen(entry) },
                 enabled = !busy,
                 modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(vertical = 2.dp),
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(entry.title, modifier = Modifier.weight(1f))
+                        Text(title, modifier = Modifier.weight(1f))
                         if (entry.unread > 0) {
                             Text("● ${entry.unread}", style = MaterialTheme.typography.labelLarge)
                         }
@@ -839,50 +909,88 @@ private fun HomeScreen(
             }
         }) { Text("Открыть чат") }
     }
-    val chatClient = client
-    if (contactsSupported() && chatClient != null) {
-        var showContacts by remember { mutableStateOf(false) }
-        var contactList by remember { mutableStateOf<List<Contact>>(emptyList()) }
-        var contactsBusy by remember { mutableStateOf(false) }
+    if (contactsSupported() && client != null) {
         Spacer(Modifier.height(8.dp))
-        Button(enabled = !busy, onClick = {
-            showContacts = true; contactsBusy = true
-            scope.launch {
-                contactList = runCatching { chatClient.phoneBook() }.getOrDefault(emptyList())
-                contactsBusy = false
-            }
-        }) { Text("📇 Из контактов") }
-        if (showContacts) {
-            AlertDialog(
-                onDismissRequest = { showContacts = false },
-                title = { Text("Контакты в TIMA") },
-                text = {
-                    when {
-                        contactsBusy -> CircularProgressIndicator()
-                        contactList.isEmpty() -> Text("Никого из контактов нет в TIMA (или доступ к контактам не выдан).")
-                        else -> LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-                            items(contactList, key = { it.userId }) { c ->
-                                Text(
-                                    "${c.name} — ${c.phone}",
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth().clickable {
-                                        showContacts = false
-                                        val entry = ChatEntry(title = c.name, peerUserId = c.userId, chatId = chatClient.chatIdWith(c.userId))
-                                        onChatsChange(SessionCodec.rememberChat(entry))
-                                        onOpen(entry)
-                                    }.padding(vertical = 10.dp),
-                                )
-                            }
-                        }
-                    }
-                },
-                confirmButton = { Button(onClick = { showContacts = false }) { Text("Закрыть") } },
-            )
-        }
+        Button(enabled = !busy, onClick = onOpenContacts) { Text("📇 Контакты") }
     }
     ErrorText(error)
     Spacer(Modifier.height(24.dp))
     Button(onClick = onLogout, enabled = !busy) { Text("Выйти") }
+}
+
+/**
+ * Контакты: те из телефонной книги, кто зарегистрирован в TIMA — каждому можно сразу
+ * написать или позвонить. Незнакомец, написавший первым, сюда не попадает: контакты —
+ * это своя записная книжка, а не список всех, кто тебя знает; он живёт в списке чатов.
+ */
+@Composable
+private fun ContactsScreen(
+    client: ChatClient,
+    onOpenChat: (Contact) -> Unit,
+    onCall: (Contact, String) -> Unit,
+    onBack: () -> Unit,
+) {
+    var all by remember { mutableStateOf<List<Contact>>(emptyList()) }
+    var busy by remember { mutableStateOf(true) }
+    var query by remember { mutableStateOf("") }
+    LaunchedEffect(client) {
+        AppDiagnostics.add("действие: открыть контакты")
+        all = runCatching { client.phoneBook() }.getOrDefault(emptyList())
+        AppDiagnostics.add("контакты: в TIMA найдено ${all.size}")
+        busy = false
+    }
+    val shown = remember(all, query) {
+        val q = query.trim()
+        val digits = q.filter { it.isDigit() }
+        all.filter { c ->
+            q.isEmpty() || c.name.contains(q, ignoreCase = true) ||
+                (digits.isNotEmpty() && c.phone.contains(digits))
+        }.sortedBy { c -> c.name.ifBlank { c.phone }.lowercase() }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = onBack) { Text("←") }
+            Spacer(Modifier.width(8.dp))
+            Text("Контакты", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = query, onValueChange = { query = it },
+            label = { Text("Найти: имя или номер") }, singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        when {
+            busy -> CircularProgressIndicator()
+            all.isEmpty() -> Text("Никого из ваших контактов нет в TIMA — либо доступ к контактам не выдан.")
+            shown.isEmpty() -> Text("Ничего не найдено")
+            else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                items(shown, key = { it.userId }) { c ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f).clickable { onOpenChat(c) }.padding(end = 8.dp),
+                        ) {
+                            Text(c.name.ifBlank { c.phone }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (c.name.isNotBlank()) {
+                                Text(c.phone, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                            }
+                        }
+                        Button(onClick = { onOpenChat(c) }, contentPadding = PaddingValues(10.dp)) { Text("💬") }
+                        Spacer(Modifier.width(4.dp))
+                        Button(onClick = { onCall(c, "audio") }, contentPadding = PaddingValues(10.dp)) { Text("📞") }
+                        Spacer(Modifier.width(4.dp))
+                        Button(onClick = { onCall(c, "video") }, contentPadding = PaddingValues(10.dp)) { Text("📹") }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** Экран переписки: личный чат ([isGroup]=false, [targetId]=peerUserId) или группа ([targetId]=groupId). */
@@ -909,11 +1017,15 @@ private fun ChatScreen(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    // Резолв имён авторов в группе
+    // Резолв авторов в группе: телефон придёт только для тех, с кем есть личная переписка,
+    // остальные подписаны именем
     LaunchedEffect(messages.size) {
         if (isGroup) {
             val ids = messages.map { it.senderId }.distinct().filter { !names.containsKey(it) }
-            if (ids.isNotEmpty()) runCatching { client.resolveNames(ids) }.getOrNull()?.let { names.putAll(it) }
+            if (ids.isNotEmpty()) {
+                runCatching { client.resolvePeers(ids) }.getOrNull()
+                    ?.forEach { (id, peer) -> names[id] = peer.label }
+            }
         }
     }
 

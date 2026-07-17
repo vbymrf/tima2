@@ -164,3 +164,34 @@ func TestDisplayNames(t *testing.T) {
 		t.Fatal("Боб без имени не должен быть в ответе")
 	}
 }
+
+// TestResolvePhones — номер отдаётся только собеседнику по личному чату: UI должен
+// показать «Имя +7999…» тому, кому написали, но не выдать номер чужому по user_id.
+func TestResolvePhones(t *testing.T) {
+	ts, _ := setup(t)
+	alice := registerDevice(t, ts, "+79990000060")
+	bob := registerDevice(t, ts, "+79990000061")
+	carol := registerDevice(t, ts, "+79990000062") // ни с кем не переписывалась
+
+	// Алиса пишет Бобу
+	env := sealEnvelope(t, alice, []*device{bob}, 2001, []byte("привет"))
+	resp := post(t, ts, env, alice.token, "eeeeeeee-0000-0000-0000-000000002001")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /messages: %d", resp.StatusCode)
+	}
+
+	var resolved struct {
+		Phones map[string]string `json:"phones"`
+	}
+	if code := postAuthed(t, ts, bob.token, "POST", "/api/v1/users/names",
+		map[string][]string{"ids": {alice.userID, carol.userID}}, &resolved); code != 200 {
+		t.Fatalf("resolveNames: %d", code)
+	}
+	if resolved.Phones[alice.userID] != "+79990000060" {
+		t.Fatalf("Боб должен видеть номер написавшей ему Алисы: %+v", resolved.Phones)
+	}
+	if _, ok := resolved.Phones[carol.userID]; ok {
+		t.Fatal("номер Кэрол не должен утекать — переписки с ней нет")
+	}
+}

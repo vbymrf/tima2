@@ -123,6 +123,40 @@ func (s *Store) SetDisplayName(ctx context.Context, userID, name string) error {
 	return err
 }
 
+// PhonesOfChatPeers — телефоны тех из ids, с кем у userID есть личная переписка:
+// он писал им (его сообщение адресовано их устройству) или они ему. Номер человека,
+// с которым переписки нет, по его user_id узнать нельзя — id утекает в группах и каналах.
+func (s *Store) PhonesOfChatPeers(ctx context.Context, userID string, ids []string) (map[string]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		WITH peers AS (
+		  SELECT m.sender_id AS peer                      -- они писали мне
+		  FROM personal_messages m
+		  JOIN personal_message_keys k ON k.chat_id = m.chat_id AND k.message_id = m.message_id
+		  JOIN devices d ON d.device_id = k.recipient AND d.user_id = $1
+		  WHERE m.sender_id = ANY($2)
+		  UNION
+		  SELECT d.user_id AS peer                        -- я писал им
+		  FROM personal_messages m
+		  JOIN personal_message_keys k ON k.chat_id = m.chat_id AND k.message_id = m.message_id
+		  JOIN devices d ON d.device_id = k.recipient
+		  WHERE m.sender_id = $1 AND d.user_id = ANY($2)
+		)
+		SELECT u.user_id, u.phone FROM users u JOIN peers p ON p.peer = u.user_id`, userID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]string)
+	for rows.Next() {
+		var id, phone string
+		if err := rows.Scan(&id, &phone); err != nil {
+			return nil, err
+		}
+		out[id] = phone
+	}
+	return out, rows.Err()
+}
+
 // DisplayNames — публичные имена по списку user_id (batch резолв id→имя для UI).
 // Пустые имена (не заданы) в ответ не попадают.
 func (s *Store) DisplayNames(ctx context.Context, ids []string) (map[string]string, error) {

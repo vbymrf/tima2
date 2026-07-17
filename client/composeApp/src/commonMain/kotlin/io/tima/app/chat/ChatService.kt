@@ -35,6 +35,21 @@ data class GroupSummary(val groupId: String, val title: String, val myRole: Stri
 /** Контакт из телефонной книги, зарегистрированный в TIMA. */
 data class Contact(val userId: String, val phone: String, val name: String)
 
+/**
+ * Как показать собеседника. [name] — имя из телефонной книги, иначе публичное имя
+ * пользователя; [phone] пуст, если личной переписки нет (сервер номер не отдаёт).
+ */
+data class PeerInfo(val userId: String, val name: String = "", val phone: String = "") {
+    /** «Имя +7999…» / «Имя» / «+7999…» / короткий id — что известно на этот момент. */
+    val label: String
+        get() = when {
+            name.isNotEmpty() && phone.isNotEmpty() -> "$name $phone"
+            name.isNotEmpty() -> name
+            phone.isNotEmpty() -> phone
+            else -> userId.take(8) + "…"
+        }
+}
+
 /** Запрос собеседника на восстановление: показать пользователю «разрешить?». */
 data class RecoveryConsent(val chatId: String, val requesterDevice: String, val requesterEncPub: String)
 
@@ -86,8 +101,8 @@ interface ChatClient {
     /** Задать своё публичное имя (собеседники увидят его вместо номера). */
     suspend fun setMyName(name: String)
 
-    /** Публичные имена по user_id (кэш); id без имени в карту не попадает. */
-    suspend fun resolveNames(ids: List<String>): Map<String, String>
+    /** Имя и телефон по user_id (кэш); id, который сервер не знает, в карту не попадает. */
+    suspend fun resolvePeers(ids: List<String>): Map<String, PeerInfo>
 
     /** Контакты телефонной книги, зарегистрированные в TIMA (читает контакты устройства + резолв). */
     suspend fun phoneBook(): List<Contact>

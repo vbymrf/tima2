@@ -78,8 +78,12 @@ private data class DisplayNameBody(@SerialName("display_name") val displayName: 
 @Serializable
 private data class ResolveNamesBody(val ids: List<String>)
 
+/** Ответ /users/names: имена по id + телефоны тех, с кем есть личная переписка. */
 @Serializable
-private data class ResolveNamesResponse(val names: Map<String, String> = emptyMap())
+data class ResolvedUsers(
+    val names: Map<String, String> = emptyMap(),
+    val phones: Map<String, String> = emptyMap(),
+)
 
 @Serializable
 data class EscrowPubkey(
@@ -456,16 +460,16 @@ class TimaApi(private val baseUrl: String) {
         if (!response.status.isSuccess()) fail(response)
     }
 
-    /** Публичные имена по списку user_id (id без имени в ответ не попадает). */
-    suspend fun resolveNames(token: String, ids: List<String>): Map<String, String> {
-        if (ids.isEmpty()) return emptyMap()
+    /** Имена и телефоны по списку user_id (id без имени в names не попадает). */
+    suspend fun resolveNames(token: String, ids: List<String>): ResolvedUsers {
+        if (ids.isEmpty()) return ResolvedUsers()
         val response = client.post(baseUrl.trimEnd('/') + "/api/v1/users/names") {
             bearerAuth(token)
             contentType(ContentType.Application.Json)
             setBody(ResolveNamesBody(ids))
         }
         if (!response.status.isSuccess()) fail(response)
-        return response.body<ResolveNamesResponse>().names
+        return response.body<ResolvedUsers>()
     }
 
     suspend fun listDevices(token: String, userId: String): List<DeviceKeyInfo> {

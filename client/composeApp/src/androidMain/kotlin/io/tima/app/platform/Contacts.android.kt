@@ -9,10 +9,14 @@ import kotlinx.coroutines.withContext
 
 actual fun contactsSupported(): Boolean = true
 
+actual fun contactsGranted(): Boolean =
+    ContextCompat.checkSelfPermission(AndroidAppContext.app, Manifest.permission.READ_CONTACTS) ==
+        PackageManager.PERMISSION_GRANTED
+
 actual suspend fun readDeviceContacts(): List<DeviceContact> {
     val ctx = AndroidAppContext.app
     // Разрешение READ_CONTACTS — через тот же мост, что микрофон/камера
-    if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+    if (!contactsGranted()) {
         val granted = AndroidPermissions.request?.invoke(listOf(Manifest.permission.READ_CONTACTS)) ?: false
         if (!granted) return emptyList()
     }

@@ -17,6 +17,7 @@ import io.tima.app.api.TimaApi
 import io.tima.app.api.TimaApiException
 import io.tima.app.api.WrappedKeyDto
 import io.tima.app.diag.AppDiagnostics
+import io.tima.app.platform.contactsGranted
 import io.tima.app.platform.normalizePhone
 import io.tima.app.platform.readDeviceContacts
 import io.tima.app.session.Session
@@ -189,20 +190,55 @@ class TimaClient(private val session: Session) : ChatClient {
 
     override fun chatIdWith(peerUserId: String): String = personalChatId(session.userId, peerUserId)
 
-    private val nameCache = ConcurrentHashMap<String, String>() // user_id → публичное имя
+    private val peerCache = ConcurrentHashMap<String, PeerInfo>() // user_id → имя+телефон
+    @Volatile private var bookNames: Map<String, String>? = null  // нормализованный телефон → имя из книги
 
     override suspend fun setMyName(name: String) {
         api.setDisplayName(session.accessToken, name)
-        nameCache[session.userId] = name
+        peerCache.remove(session.userId) // перечитаем с сервера вместе с телефоном
     }
 
-    override suspend fun resolveNames(ids: List<String>): Map<String, String> {
-        val missing = ids.distinct().filter { !nameCache.containsKey(it) }
-        if (missing.isNotEmpty()) {
-            runCatching { api.resolveNames(session.accessToken, missing) }.getOrNull()
-                ?.forEach { (id, n) -> nameCache[id] = n }
+    /**
+     * Телефонная книга как «телефон → имя», один раз за сессию. Пусто, если доступ
+     * к контактам не выдан: подстановка имени не должна поднимать системный диалог.
+     */
+    private suspend fun phoneBookNames(): Map<String, String> {
+        bookNames?.let { return it }
+        val map = if (!contactsGranted()) {
+            emptyMap()
+        } else {
+            val out = LinkedHashMap<String, String>()
+            for (c in runCatching { readDeviceContacts() }.getOrDefault(emptyList())) {
+                if (c.name.isBlank()) continue
+                normalizePhone(c.phone)?.let { out.putIfAbsent(it, c.name) }
+            }
+            out
         }
-        return ids.mapNotNull { id -> nameCache[id]?.takeIf { it.isNotEmpty() }?.let { id to it } }.toMap()
+        bookNames = map
+        return map
+    }
+
+    override suspend fun resolvePeers(ids: List<String>): Map<String, PeerInfo> {
+        val missing = ids.distinct().filter { !peerCache.containsKey(it) }
+        if (missing.isNotEmpty()) {
+            // Ошибку не кэшируем: без ответа сервера id останется нерезолвленным и повторится
+            val resolved = runCatching { api.resolveNames(session.accessToken, missing) }.getOrNull()
+            if (resolved != null) {
+                val book = phoneBookNames()
+                for (id in missing) {
+                    val phone = resolved.phones[id].orEmpty()
+                    // Как человек записан у МЕНЯ важнее того, как он назвал себя сам
+                    val name = book[phone] ?: resolved.names[id].orEmpty()
+                    peerCache[id] = PeerInfo(id, name, phone)
+                }
+            }
+        }
+        // В кэше держим и «про этого ничего не знаем» (чтобы не дёргать сервер снова),
+        // но наружу такие не отдаём: у вызывающего свой запасной вариант — введённый
+        // номер или короткий id, и он лучше, чем пустышка.
+        return ids.mapNotNull { id ->
+            peerCache[id]?.takeIf { it.name.isNotEmpty() || it.phone.isNotEmpty() }?.let { id to it }
+        }.toMap()
     }
 
     override suspend fun phoneBook(): List<Contact> {
@@ -215,13 +251,13 @@ class TimaClient(private val session: Session) : ChatClient {
         val matches = runCatching { api.discoverContacts(session.accessToken, byPhone.keys.toList()) }
             .getOrDefault(emptyMap())
         val userIds = matches.values.filter { it != session.userId }.distinct()
-        val names = runCatching { resolveNames(userIds) }.getOrDefault(emptyMap())
-        return matches.mapNotNull { (phone, uid) ->
+        val names = runCatching { api.resolveNames(session.accessToken, userIds) }.getOrNull()?.names.orEmpty()
+        // Идём в порядке книги, а не ответа сервера: у контакта с несколькими номерами
+        // побеждает первый (основной), а distinctBy убирает его же вторую строку.
+        return byPhone.mapNotNull { (phone, bookName) ->
+            val uid = matches[phone] ?: return@mapNotNull null
             if (uid == session.userId) return@mapNotNull null // себя не показываем
-            val name = names[uid]?.takeIf { it.isNotEmpty() }
-                ?: byPhone[phone]?.takeIf { it.isNotEmpty() }
-                ?: phone
-            Contact(uid, phone, name)
+            Contact(uid, phone, bookName.ifBlank { names[uid].orEmpty() })
         }.distinctBy { it.userId }
     }
 

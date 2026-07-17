@@ -6,6 +6,13 @@ class DeviceContact(val name: String, val phone: String)
 /** Поддерживается ли чтение контактов (Android — да, Desktop — нет). */
 expect fun contactsSupported(): Boolean
 
+/**
+ * Выдан ли доступ к контактам ПРЯМО СЕЙЧАС, без запроса разрешения. Подстановка
+ * имени из книги в заголовок чата не должна сама по себе поднимать системный диалог —
+ * его показывает только экран «Контакты», где пользователь этого и ждёт.
+ */
+expect fun contactsGranted(): Boolean
+
 /** Читает контакты устройства (Android запрашивает READ_CONTACTS); Desktop — пусто. */
 expect suspend fun readDeviceContacts(): List<DeviceContact>
 

@@ -310,6 +310,8 @@ func (s *Server) setDisplayName(w http.ResponseWriter, r *http.Request) {
 }
 
 // resolveNames — POST /users/names {ids}: публичные имена по user_id (batch для UI).
+// Плюс phones — но только собеседников по личным чатам: UI показывает «Имя +7999…»
+// для того, кто написал первым, а чужой номер по чужому id остаётся недоступен.
 func (s *Server) resolveNames(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		IDs []string `json:"ids"`
@@ -327,8 +329,15 @@ func (s *Server) resolveNames(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return
 	}
+	id, _ := auth.FromContext(r.Context())
+	phones, err := s.Store.PhonesOfChatPeers(r.Context(), id.UserID, req.IDs)
+	if err != nil {
+		log.Printf("resolveNames phones: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"names": names})
+	_ = json.NewEncoder(w).Encode(map[string]any{"names": names, "phones": phones})
 }
 
 // listDeviceKeys — GET /keys/devices?user_id=: публичные ключи устройств собеседника
