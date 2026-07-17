@@ -967,7 +967,8 @@ private fun BackgroundCard() {
     var alive by remember { mutableStateOf(backgroundServiceRunning()) }
     var batteryOk by remember { mutableStateOf(true) }
 
-    // Самопроверка, пока экран открыт: сервис убит системой — молча поднимаем обратно
+    // Самопроверка, пока экран открыт: сервис убит системой — молча поднимаем обратно.
+    // Раз в минуту: служба живёт часами, чаще дёргать незачем.
     LaunchedEffect(enabled) {
         while (true) {
             batteryOk = batteryOptimizationIgnored()
@@ -978,7 +979,7 @@ private fun BackgroundCard() {
                 delay(700)
                 alive = backgroundServiceRunning()
             }
-            delay(5_000)
+            delay(60_000)
         }
     }
 
