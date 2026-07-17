@@ -31,7 +31,7 @@ actual fun currentVersionCode(): Int {
     }
 }
 
-actual suspend fun installUpdate(update: AppVersionDto): Unit = withContext(Dispatchers.IO) {
+actual suspend fun installUpdate(update: AppVersionDto, onProgress: (Int) -> Unit): Unit = withContext(Dispatchers.IO) {
     val ctx = AndroidAppContext.app
     try {
         // Android 8+: без разрешения «устанавливать из этого источника» установщик молча
@@ -44,8 +44,8 @@ actual suspend fun installUpdate(update: AppVersionDto): Unit = withContext(Disp
             )
             throw IllegalStateException("Разреши установку из этого источника и нажми «Обновить» снова")
         }
-        // Системный DownloadManager: надёжно тянет большой APK, показывает прогресс в
-        // шторке, работает в фоне (простой поток на 31 МБ подвисал).
+        // Системный DownloadManager: надёжно тянет большой APK и работает в фоне
+        // (простой поток на 31 МБ подвисал).
         AppDiagnostics.add("update: качаю через DownloadManager ${update.url}")
         val apk = File(ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "tima-update.apk")
         if (apk.exists()) apk.delete()
@@ -54,7 +54,11 @@ actual suspend fun installUpdate(update: AppVersionDto): Unit = withContext(Disp
             DownloadManager.Request(Uri.parse(update.url))
                 .setTitle("TIMA ${update.versionName}")
                 .setDescription("Обновление приложения")
-                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                // ТОЛЬКО прогресс, без «нажми, чтобы открыть» после загрузки: по такому
+                // нажатию APK открывает СИСТЕМА своим обработчиком (на Samsung им
+                // оказывается посторонний компонент), и разрешение на установку она
+                // просит для него, а не для нас. Установщик запускаем сами — ниже.
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
                 .setDestinationInExternalFilesDir(ctx, Environment.DIRECTORY_DOWNLOADS, "tima-update.apk")
                 .setMimeType("application/vnd.android.package-archive"),
         )
@@ -63,13 +67,20 @@ actual suspend fun installUpdate(update: AppVersionDto): Unit = withContext(Disp
             delay(700)
             waited++
             val status = dm.query(DownloadManager.Query().setFilterById(id)).use { c ->
-                if (!c.moveToFirst()) -1 else c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                if (!c.moveToFirst()) return@use -1
+                val done = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                val total = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                // Прогресс в самом приложении: без него ждать нечего и рука тянется
+                // к уведомлению — то есть к чужому пути установки
+                if (total > 0) onProgress(((done * 100) / total).toInt().coerceIn(0, 100))
+                c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
             }
             if (status == DownloadManager.STATUS_SUCCESSFUL) break
             if (status == DownloadManager.STATUS_FAILED) throw IllegalStateException("Загрузка не удалась")
             if (status == -1) throw IllegalStateException("Загрузка пропала из очереди")
             if (waited > 170) throw IllegalStateException("Загрузка слишком долгая — проверьте сеть") // ~2 мин
         }
+        onProgress(100)
         AppDiagnostics.add("update: скачано ${apk.length()} байт, запускаю установщик")
         val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".updates", apk)
         ctx.startActivity(

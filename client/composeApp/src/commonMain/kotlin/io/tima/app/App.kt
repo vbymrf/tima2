@@ -186,6 +186,7 @@ fun App() {
     // Авто-обновление: при входе спрашиваем сервер о последней версии клиента
     var update by remember { mutableStateOf<AppVersionDto?>(null) }
     var updating by remember { mutableStateOf(false) }
+    var updatePercent by remember { mutableStateOf(0) }
     LaunchedEffect(session?.serverUrl) {
         val url = session?.serverUrl ?: return@LaunchedEffect
         AppDiagnostics.serverUrl = url
@@ -205,14 +206,16 @@ fun App() {
                 Text(buildString {
                     append("Новая версия ${u.versionName}.")
                     if (u.notes.isNotEmpty()) append("\n\n${u.notes}")
-                    if (updating) append("\n\nСкачиваю…")
+                    // Показываем процент: иначе непонятно, идёт ли что-то, и хочется
+                    // нажать на уведомление загрузки — а это чужой путь установки
+                    if (updating) append("\n\nСкачиваю… $updatePercent%")
                 })
             },
             confirmButton = {
                 Button(enabled = !updating, onClick = {
-                    updating = true
+                    updating = true; updatePercent = 0
                     scope.launch {
-                        runCatching { installUpdate(u) }
+                        runCatching { installUpdate(u) { p -> updatePercent = p } }
                         updating = false
                         update = null
                     }
@@ -662,21 +665,35 @@ private fun HomeScreen(
         }) { Text("Отправить логи") }
     }
     updateMsg?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
+    var downloading by remember { mutableStateOf(false) }
+    var percent by remember { mutableStateOf(0) }
     updateInfo?.let { u ->
         AlertDialog(
-            onDismissRequest = { updateInfo = null },
+            onDismissRequest = { if (!downloading) updateInfo = null },
             title = { Text("Доступно обновление") },
-            text = { Text("Версия ${u.versionName}." + if (u.notes.isNotEmpty()) "\n\n${u.notes}" else "") },
+            text = {
+                Text(
+                    "Версия ${u.versionName}." +
+                        (if (u.notes.isNotEmpty()) "\n\n${u.notes}" else "") +
+                        // Прогресс в приложении: чтобы не тянуться к уведомлению загрузки —
+                        // по нему APK открывает система чужим обработчиком
+                        (if (downloading) "\n\nСкачиваю… $percent%\nПо окончании откроется установщик." else ""),
+                )
+            },
             confirmButton = {
-                Button(onClick = {
-                    val uu = u; updateInfo = null
+                Button(enabled = !downloading, onClick = {
+                    downloading = true; percent = 0
                     scope.launch {
-                        runCatching { installUpdate(uu) }
+                        runCatching { installUpdate(u) { p -> percent = p } }
                             .onFailure { updateMsg = it.message ?: "Не удалось установить обновление" }
+                        downloading = false
+                        updateInfo = null
                     }
                 }) { Text("Обновить") }
             },
-            dismissButton = { Button(onClick = { updateInfo = null }) { Text("Позже") } },
+            dismissButton = {
+                Button(enabled = !downloading, onClick = { updateInfo = null }) { Text("Позже") }
+            },
         )
     }
     Spacer(Modifier.height(16.dp))

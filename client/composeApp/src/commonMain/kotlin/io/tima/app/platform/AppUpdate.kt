@@ -6,9 +6,9 @@ import io.tima.app.api.AppVersionDto
 expect fun currentVersionCode(): Int
 
 /**
- * Скачать APK обновления и запустить установку.
- *  - Android: качаем во внутренний кэш и отдаём системному установщику (FileProvider).
+ * Скачать APK обновления и запустить установку. [onProgress] — процент загрузки (0..100).
+ *  - Android: качаем системным менеджером и отдаём установщику сами (FileProvider).
  *  - Desktop: приложение ставится вручную — открываем ссылку на загрузку в браузере.
  * Бросает исключение при ошибке скачивания.
  */
-expect suspend fun installUpdate(update: AppVersionDto)
+expect suspend fun installUpdate(update: AppVersionDto, onProgress: (Int) -> Unit = {})
