@@ -9,6 +9,13 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Вибрация на входящий звонок -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Звонок продолжается при погашенном экране: без foreground-сервиса Android
+         отбирает микрофон и камеру у фонового приложения, и звук пропадает -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Телефонная книга: найти контакты, зарегистрированные в TIMA -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -30,6 +37,11 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!-- Держит звонок живым, пока экран погашен или приложение свёрнуто -->
+        <service
+            android:name=".platform.CallService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|camera" />
         <!-- adjustResize: окно ужимается под клавиатуру, чат не «уезжает» вверх -->
         <activity
             android:name=".MainActivity"

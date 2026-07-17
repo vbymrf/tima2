@@ -80,6 +80,7 @@ import io.tima.app.platform.decodeImage
 import io.tima.app.platform.ensureCallPermissions
 import io.tima.app.platform.cancelVoiceRecording
 import io.tima.app.platform.identityFromPhrase
+import io.tima.app.platform.keepScreenOn
 import io.tima.app.platform.installUpdate
 import io.tima.app.platform.newIdentity
 import io.tima.app.platform.normalizePhone
@@ -88,7 +89,9 @@ import io.tima.app.platform.pickFile
 import io.tima.app.platform.pickImage
 import io.tima.app.platform.playVoice
 import io.tima.app.platform.shareText
+import io.tima.app.platform.startRinging
 import io.tima.app.platform.startVoiceRecording
+import io.tima.app.platform.stopRinging
 import io.tima.app.platform.stopVoice
 import io.tima.app.platform.stopVoiceRecording
 import io.tima.app.platform.voiceRecordingSupported
@@ -1326,17 +1329,31 @@ private fun CallOverlay(call: CallUi, onAccept: () -> Unit, onEnd: () -> Unit) {
     val mediaState by engine.state.collectAsState()
     val micOn by engine.micEnabled.collectAsState()
     val camOn by engine.cameraEnabled.collectAsState()
+    val speakerOn by engine.speakerOn.collectAsState()
     val isVideo = call.kind == "video"
     // Есть данные комнаты → подключаемся: исходящий сразу, входящий после «Принять»
     val ringing = call.direction == CallDir.Incoming && call.connection == null
 
     LaunchedEffect(call.connection) {
         val conn = call.connection ?: return@LaunchedEffect
-        if (ensureCallPermissions(isVideo)) {
+        val granted = ensureCallPermissions(isVideo)
+        AppDiagnostics.add("звонок: разрешения (${if (isVideo) "микрофон+камера" else "микрофон"}) — ${if (granted) "выданы" else "ОТКАЗ"}")
+        if (granted) {
             engine.connect(conn.url, conn.token, video = isVideo, publishMic = true)
+            AppDiagnostics.add("звонок: медиа ${engine.state.value}")
         }
     }
-    DisposableEffect(Unit) { onDispose { engine.disconnect() } }
+    // Погасший экран = уход в фон = система глушит микрофон. Держим экран включённым,
+    // пока идёт звонок (foreground-сервис страхует, если свернули окно вручную).
+    DisposableEffect(Unit) { keepScreenOn(true); onDispose { keepScreenOn(false) } }
+    // Гудки: рингтон на входящий, «ту-ту» на исходящий; смолкают, когда пошёл разговор
+    val ringback = call.direction == CallDir.Outgoing && mediaState != CallMediaState.Connected
+    LaunchedEffect(ringing, ringback) {
+        if (ringing) startRinging(incoming = true)
+        else if (ringback) startRinging(incoming = false)
+        else stopRinging()
+    }
+    DisposableEffect(Unit) { onDispose { stopRinging(); engine.disconnect() } }
 
     val onVideo = isVideo && mediaState == CallMediaState.Connected
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -1370,6 +1387,11 @@ private fun CallOverlay(call: CallUi, onAccept: () -> Unit, onEnd: () -> Unit) {
                 if (mediaState == CallMediaState.Connected) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Button(onClick = { engine.setMic(!micOn) }) { Text(if (micOn) "🎤 вкл" else "🔇 выкл") }
+                        // Громкий динамик vs разговорный (у уха) — без этой кнопки
+                        // аудиозвонок «молчит», если держать телефон перед собой
+                        Button(onClick = { engine.setSpeaker(!speakerOn) }) {
+                            Text(if (speakerOn) "🔊 громко" else "📢 динамик")
+                        }
                         if (isVideo) {
                             Button(onClick = { engine.setCamera(!camOn) }) { Text(if (camOn) "📹 вкл" else "📷 выкл") }
                         }
@@ -1414,6 +1436,7 @@ private fun VoiceRoomScreen(state: Screen.VoiceRoom, client: ChatClient?, onBack
     val scope = rememberCoroutineScope()
     val engine = remember { CallEngine() }
     val mediaState by engine.state.collectAsState()
+    val speakerOn by engine.speakerOn.collectAsState()
 
     suspend fun join() {
         val r = api.joinVoiceRoom(state.session.accessToken, state.roomId)
@@ -1423,6 +1446,9 @@ private fun VoiceRoomScreen(state: Screen.VoiceRoom, client: ChatClient?, onBack
             // Слушатель подключается, но микрофон не публикует; спикер/владелец — публикует
             if (ensureCallPermissions(false)) {
                 engine.connect(r.url, r.token, video = false, publishMic = r.role == "speaker")
+                // Аудио-чат слушают как конференцию, а не прижав телефон к уху:
+                // разговорный динамик (умолчание LiveKit) звучит как тишина
+                engine.setSpeaker(true)
             }
         } else {
             // Роль изменилась (выдали/забрали слово) — переключаем публикацию микрофона без переподключения
@@ -1430,7 +1456,11 @@ private fun VoiceRoomScreen(state: Screen.VoiceRoom, client: ChatClient?, onBack
         }
         micOn = r.role == "speaker"
     }
-    DisposableEffect(Unit) { onDispose { engine.disconnect() } }
+    // Экран не гасим: в фоне система отбирает микрофон и аудио-чат замолкает
+    DisposableEffect(Unit) {
+        keepScreenOn(true)
+        onDispose { keepScreenOn(false); engine.disconnect() }
+    }
     // События: поднятая рука (владельцу), выдача/отзыв слова (перезаходим за новой ролью)
     LaunchedEffect(client, state.roomId) {
         client?.voiceEvents?.collect { ev ->
@@ -1505,6 +1535,9 @@ private fun VoiceRoomScreen(state: Screen.VoiceRoom, client: ChatClient?, onBack
                 Spacer(Modifier.height(12.dp))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = { engine.setSpeaker(!speakerOn) }) {
+                    Text(if (speakerOn) "🔊 громко" else "📢 динамик")
+                }
                 if (role == "speaker") {
                     Button(onClick = { micOn = !micOn; engine.setMic(micOn) }) { Text(if (micOn) "🎤 вкл" else "🔇 выкл") }
                 } else {

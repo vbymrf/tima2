@@ -58,9 +58,15 @@ class MainActivity : ComponentActivity() {
         return uri.lastPathSegment ?: "file"
     }
 
+    override fun onDestroy() {
+        if (AndroidAppContext.activity === this) AndroidAppContext.activity = null
+        super.onDestroy()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AndroidAppContext.app = applicationContext
+        AndroidAppContext.activity = this
         io.tima.app.diag.AppDiagnostics.platform = "Android"
         initSessionDir(applicationContext.filesDir)
         AndroidImagePicker.pick = {

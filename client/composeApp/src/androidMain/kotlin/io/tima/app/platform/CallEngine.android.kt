@@ -12,7 +12,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.runtime.collectAsState
+import com.twilio.audioswitch.AudioDevice
 import io.livekit.android.LiveKit
+import io.livekit.android.audio.AudioSwitchHandler
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.renderer.TextureViewRenderer
@@ -36,6 +38,8 @@ actual class CallEngine actual constructor() {
     actual val micEnabled: StateFlow<Boolean> = _mic
     private val _cam = MutableStateFlow(false)
     actual val cameraEnabled: StateFlow<Boolean> = _cam
+    private val _speaker = MutableStateFlow(false)
+    actual val speakerOn: StateFlow<Boolean> = _speaker
 
     // Треки для рендера (CallVideoView их читает)
     internal val localVideo = MutableStateFlow<VideoTrack?>(null)
@@ -44,8 +48,18 @@ actual class CallEngine actual constructor() {
     actual suspend fun connect(url: String, token: String, video: Boolean, publishMic: Boolean) {
         _state.value = CallMediaState.Connecting
         try {
+            // Поднимаем ДО подключения: пока сервис не в foreground, система вправе
+            // отобрать микрофон, как только экран погаснет
+            CallService.start(AndroidAppContext.app, video)
             val r = LiveKit.create(AndroidAppContext.app.applicationContext)
             room = r
+            // Маршрут звука. По умолчанию AudioSwitch ставит Earpiece выше Speakerphone —
+            // звонок уходит в динамик «у уха», и при взгляде на экран его не слышно
+            // (голосовые сообщения слышно, потому что они идут музыкальным потоком мимо
+            // LiveKit). Видео — сразу громкий динамик; аудио — как в телефоне, к уху,
+            // но с кнопкой переключения.
+            speakerToSpeakerphone(r, video)
+            _speaker.value = video
             scope.launch {
                 r.events.collect { ev ->
                     when (ev) {
@@ -69,6 +83,36 @@ actual class CallEngine actual constructor() {
             _state.value = CallMediaState.Failed
             disconnect()
         }
+    }
+
+    /** Переставляет порядок предпочтений AudioSwitch: гарнитура всегда важнее выбора «ухо/громкий». */
+    private fun speakerToSpeakerphone(r: Room, speaker: Boolean) {
+        val handler = r.audioHandler as? AudioSwitchHandler ?: return
+        handler.preferredDeviceList = if (speaker) {
+            listOf(
+                AudioDevice.BluetoothHeadset::class.java,
+                AudioDevice.WiredHeadset::class.java,
+                AudioDevice.Speakerphone::class.java,
+                AudioDevice.Earpiece::class.java,
+            )
+        } else {
+            listOf(
+                AudioDevice.BluetoothHeadset::class.java,
+                AudioDevice.WiredHeadset::class.java,
+                AudioDevice.Earpiece::class.java,
+                AudioDevice.Speakerphone::class.java,
+            )
+        }
+    }
+
+    actual fun setSpeaker(on: Boolean) {
+        val r = room ?: return
+        speakerToSpeakerphone(r, on)
+        // Список предпочтений влияет на ВЫБОР устройства — переключаем явно
+        val handler = r.audioHandler as? AudioSwitchHandler
+        val want = if (on) AudioDevice.Speakerphone::class.java else AudioDevice.Earpiece::class.java
+        handler?.availableAudioDevices?.firstOrNull { want.isInstance(it) }?.let { handler.selectDevice(it) }
+        _speaker.value = on
     }
 
     actual fun setMic(on: Boolean) {
@@ -95,6 +139,7 @@ actual class CallEngine actual constructor() {
         room = null
         localVideo.value = null
         remoteVideo.value = null
+        CallService.stop(AndroidAppContext.app)
         if (_state.value != CallMediaState.Failed) _state.value = CallMediaState.Idle
     }
 

@@ -1,5 +1,6 @@
 package io.tima.app.platform
 
+import android.app.Activity
 import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
@@ -18,6 +19,9 @@ import java.io.File
 /** Application Context для скачивания/установки; ставит MainActivity. */
 object AndroidAppContext {
     lateinit var app: Context
+
+    /** Текущая Activity: нужна для флагов окна (не гасить экран во время звонка). */
+    var activity: Activity? = null
 }
 
 actual fun currentVersionCode(): Int {

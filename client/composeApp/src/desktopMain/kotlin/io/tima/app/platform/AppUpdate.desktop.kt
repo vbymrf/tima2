@@ -5,7 +5,7 @@ import java.awt.Desktop
 import java.net.URI
 
 // Синхронизировать с versionCode в composeApp/build.gradle.kts при выпуске версии.
-private const val DESKTOP_VERSION_CODE = 5
+private const val DESKTOP_VERSION_CODE = 6
 
 actual fun currentVersionCode(): Int = DESKTOP_VERSION_CODE
 
