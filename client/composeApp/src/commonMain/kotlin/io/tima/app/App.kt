@@ -61,6 +61,7 @@ import io.tima.app.api.VoiceRoomDto
 import io.tima.app.chat.CallConnection
 import io.tima.app.chat.ChatClient
 import io.tima.app.chat.ChatMessage
+import io.tima.app.chat.ChatClientHolder
 import io.tima.app.chat.Contact
 import io.tima.app.chat.GroupSummary
 import io.tima.app.chat.MediaAttachment
@@ -68,7 +69,6 @@ import io.tima.app.chat.PeerInfo
 import io.tima.app.chat.RecoveryConsent
 import io.tima.app.chat.isFile
 import io.tima.app.chat.isVoice
-import io.tima.app.chat.createChatClient
 import io.tima.app.chat.preview
 import io.tima.app.diag.AppDiagnostics
 import io.tima.app.platform.CallEngine
@@ -89,8 +89,12 @@ import io.tima.app.platform.pickFile
 import io.tima.app.platform.pickImage
 import io.tima.app.platform.playVoice
 import io.tima.app.platform.shareText
+import io.tima.app.platform.batteryOptimizationIgnored
+import io.tima.app.platform.requestIgnoreBatteryOptimization
+import io.tima.app.platform.startBackgroundService
 import io.tima.app.platform.startRinging
 import io.tima.app.platform.startVoiceRecording
+import io.tima.app.platform.stopBackgroundService
 import io.tima.app.platform.stopRinging
 import io.tima.app.platform.stopVoice
 import io.tima.app.platform.stopVoiceRecording
@@ -158,11 +162,10 @@ fun App() {
         is Screen.VoiceRoom -> s.session
         else -> null
     }
-    // Один ChatClient (одно WS) на сессию — живёт, пока пользователь вошёл
-    val client = remember(session?.deviceId) { session?.let { createChatClient(it) } }
-    DisposableEffect(client) {
-        onDispose { client?.close() }
-    }
+    // Один ChatClient (одно WS) на сессию. Живёт в холдере, а не в композиции: соединение
+    // должно пережить закрытие экрана, иначе входящий звонок приходить некуда.
+    // Закрывается только при выходе из аккаунта.
+    val client = remember(session?.deviceId) { session?.let { ChatClientHolder.get(it) } }
     // Запрос собеседника на восстановление — показываем диалог согласия
     var consent by remember { mutableStateOf<RecoveryConsent?>(null) }
     LaunchedEffect(client) {
@@ -256,6 +259,10 @@ fun App() {
         }
     }
 
+    // Вошёл — поднимаем фоновую доставку (после входа сервис ещё не запущен)
+    LaunchedEffect(session?.deviceId) {
+        if (session != null) startBackgroundService()
+    }
     LaunchedEffect(client) {
         val c = client ?: return@LaunchedEffect
         c.start()
@@ -379,6 +386,8 @@ fun App() {
                             onOpenContacts = { screen = Screen.Contacts(s.session) },
                             onChatsChange = { chats = it },
                             onLogout = {
+                                stopBackgroundService()
+                                ChatClientHolder.close() // соединение живёт вне экрана — рвём явно
                                 SessionCodec.clear()
                                 chats = emptyList()
                                 screen = Screen.Phone
@@ -668,6 +677,31 @@ private fun HomeScreen(
         }) { Text("Отправить логи") }
     }
     updateMsg?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
+
+    // Оптимизация батареи усыпляет фоновое соединение — звонок просто не дойдёт.
+    // Показываем, только пока исключение не выдано.
+    var batteryOk by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) { batteryOk = batteryOptimizationIgnored() }
+    if (!batteryOk) {
+        Spacer(Modifier.height(8.dp))
+        Surface(
+            color = MaterialTheme.colorScheme.errorContainer,
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    "Звонки и сообщения могут не приходить: система усыпляет TIMA в фоне.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = {
+                    AppDiagnostics.add("действие: настройка батареи")
+                    requestIgnoreBatteryOptimization()
+                }) { Text("Разрешить работу в фоне") }
+            }
+        }
+    }
     var downloading by remember { mutableStateOf(false) }
     var percent by remember { mutableStateOf(0) }
     updateInfo?.let { u ->

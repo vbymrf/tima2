@@ -11,8 +11,11 @@ import io.tima.app.platform.AndroidAppContext
 import io.tima.app.platform.AndroidFilePicker
 import io.tima.app.platform.AndroidImagePicker
 import io.tima.app.platform.AndroidPermissions
+import io.tima.app.platform.AppForeground
 import io.tima.app.platform.PickedFile
 import io.tima.app.platform.PickedImage
+import io.tima.app.platform.TimaService
+import io.tima.app.session.SessionCodec
 import io.tima.app.session.initSessionDir
 import kotlinx.coroutines.CompletableDeferred
 
@@ -58,6 +61,17 @@ class MainActivity : ComponentActivity() {
         return uri.lastPathSegment ?: "file"
     }
 
+    override fun onResume() {
+        super.onResume()
+        AndroidAppContext.activity = this
+        AppForeground.visible = true // экран открыт — уведомления не нужны, всё видно
+    }
+
+    override fun onPause() {
+        AppForeground.visible = false
+        super.onPause()
+    }
+
     override fun onDestroy() {
         if (AndroidAppContext.activity === this) AndroidAppContext.activity = null
         super.onDestroy()
@@ -87,6 +101,9 @@ class MainActivity : ComponentActivity() {
             permLauncher.launch(perms.toTypedArray())
             deferred.await()
         }
+        // Вошёл — держим соединение живым и после сворачивания: иначе входящий звонок
+        // приходить некуда (пушей через Google у нас нет принципиально)
+        if (SessionCodec.load() != null) TimaService.start(applicationContext)
         setContent { App() }
     }
 }

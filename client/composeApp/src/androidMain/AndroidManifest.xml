@@ -16,6 +16,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Своя доставка вместо пушей Google: держим WS-соединение в фоне и после ребута -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Разбудить экран на входящий звонок -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- Просим исключить из оптимизации батареи: иначе система усыпит соединение -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Телефонная книга: найти контакты, зарегистрированные в TIMA -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -42,6 +49,20 @@
             android:name=".platform.CallService"
             android:exported="false"
             android:foregroundServiceType="microphone|camera" />
+        <!-- Наша замена пушам: держит WS-соединение, пока приложение свёрнуто.
+             dataSync — соединение с нашим сервером, никакого Google. -->
+        <service
+            android:name=".platform.TimaService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        <!-- Поднять сервис после перезагрузки телефона -->
+        <receiver
+            android:name=".platform.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
         <!-- adjustResize: окно ужимается под клавиатуру, чат не «уезжает» вверх -->
         <activity
             android:name=".MainActivity"

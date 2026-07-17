@@ -274,7 +274,11 @@ class TimaClient(private val session: Session) : ChatClient {
         sealer ?: PersonalMessageSealer(ensureEscrow()).also { sealer = it }
 
     /** Один WS на устройство: auth → sync.pull (догон) → live; обрыв → реконнект с паузой. */
+    private val started = java.util.concurrent.atomic.AtomicBoolean(false)
+
     override suspend fun start() {
+        // Зовут и экран, и сервис; второй WS-цикл был бы лишним соединением
+        if (!started.compareAndSet(false, true)) return
         scope.launch {
             var backoffMs = 1_000L
             while (isActive) {
