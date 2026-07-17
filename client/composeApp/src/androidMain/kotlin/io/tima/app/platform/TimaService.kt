@@ -37,6 +37,7 @@ class TimaService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createChannels()
         startForeground(ONGOING_ID, ongoingNotification())
+        running = true
         if (scope != null) return START_STICKY // уже работаем — повторный старт не плодит сборщиков
 
         val session = SessionCodec.load()
@@ -69,8 +70,10 @@ class TimaService : Service() {
     }
 
     override fun onDestroy() {
+        running = false
         scope?.cancel()
         scope = null
+        AppDiagnostics.add("сервис: остановлен")
         super.onDestroy()
     }
 
@@ -134,6 +137,10 @@ class TimaService : Service() {
     }
 
     companion object {
+        /** Жив ли сервис. Система может прибить его молча — приложение это проверяет. */
+        @Volatile var running: Boolean = false
+            private set
+
         private const val CH_ONGOING = "tima_ongoing"
         private const val CH_MESSAGES = "tima_messages"
         private const val CH_CALLS = "tima_incoming_calls"
@@ -150,6 +157,7 @@ class TimaService : Service() {
         }
 
         fun stop(ctx: Context) {
+            running = false
             runCatching { ctx.stopService(Intent(ctx, TimaService::class.java)) }
         }
     }

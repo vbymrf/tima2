@@ -9,6 +9,10 @@ actual fun startBackgroundService() = TimaService.start(AndroidAppContext.app)
 
 actual fun stopBackgroundService() = TimaService.stop(AndroidAppContext.app)
 
+actual fun backgroundSupported(): Boolean = true
+
+actual fun backgroundServiceRunning(): Boolean = TimaService.running
+
 actual fun batteryOptimizationIgnored(): Boolean {
     val ctx = AndroidAppContext.app
     val pm = ctx.getSystemService(PowerManager::class.java) ?: return true

@@ -6,6 +6,10 @@ actual fun startBackgroundService() = Unit
 
 actual fun stopBackgroundService() = Unit
 
+actual fun backgroundSupported(): Boolean = false
+
+actual fun backgroundServiceRunning(): Boolean = false
+
 actual fun batteryOptimizationIgnored(): Boolean = true
 
 actual fun requestIgnoreBatteryOptimization() = Unit

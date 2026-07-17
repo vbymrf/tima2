@@ -15,6 +15,7 @@ import io.tima.app.platform.AppForeground
 import io.tima.app.platform.PickedFile
 import io.tima.app.platform.PickedImage
 import io.tima.app.platform.TimaService
+import io.tima.app.session.AppPrefs
 import io.tima.app.session.SessionCodec
 import io.tima.app.session.initSessionDir
 import kotlinx.coroutines.CompletableDeferred
@@ -102,8 +103,9 @@ class MainActivity : ComponentActivity() {
             deferred.await()
         }
         // Вошёл — держим соединение живым и после сворачивания: иначе входящий звонок
-        // приходить некуда (пушей через Google у нас нет принципиально)
-        if (SessionCodec.load() != null) TimaService.start(applicationContext)
+        // приходить некуда (пушей через Google у нас нет принципиально).
+        // Усыплённый пользователем сервис не поднимаем.
+        if (SessionCodec.load() != null && AppPrefs.backgroundEnabled) TimaService.start(applicationContext)
         setContent { App() }
     }
 }

@@ -89,6 +89,8 @@ import io.tima.app.platform.pickFile
 import io.tima.app.platform.pickImage
 import io.tima.app.platform.playVoice
 import io.tima.app.platform.shareText
+import io.tima.app.platform.backgroundServiceRunning
+import io.tima.app.platform.backgroundSupported
 import io.tima.app.platform.batteryOptimizationIgnored
 import io.tima.app.platform.requestIgnoreBatteryOptimization
 import io.tima.app.platform.startBackgroundService
@@ -99,6 +101,7 @@ import io.tima.app.platform.stopRinging
 import io.tima.app.platform.stopVoice
 import io.tima.app.platform.stopVoiceRecording
 import io.tima.app.platform.voiceRecordingSupported
+import io.tima.app.session.AppPrefs
 import io.tima.app.session.ChatEntry
 import io.tima.app.session.Session
 import io.tima.app.session.SessionCodec
@@ -261,7 +264,7 @@ fun App() {
 
     // Вошёл — поднимаем фоновую доставку (после входа сервис ещё не запущен)
     LaunchedEffect(session?.deviceId) {
-        if (session != null) startBackgroundService()
+        if (session != null && AppPrefs.backgroundEnabled) startBackgroundService()
     }
     LaunchedEffect(client) {
         val c = client ?: return@LaunchedEffect
@@ -678,29 +681,9 @@ private fun HomeScreen(
     }
     updateMsg?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
 
-    // Оптимизация батареи усыпляет фоновое соединение — звонок просто не дойдёт.
-    // Показываем, только пока исключение не выдано.
-    var batteryOk by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) { batteryOk = batteryOptimizationIgnored() }
-    if (!batteryOk) {
+    if (backgroundSupported()) {
         Spacer(Modifier.height(8.dp))
-        Surface(
-            color = MaterialTheme.colorScheme.errorContainer,
-            shape = MaterialTheme.shapes.medium,
-            modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    "Звонки и сообщения могут не приходить: система усыпляет TIMA в фоне.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = {
-                    AppDiagnostics.add("действие: настройка батареи")
-                    requestIgnoreBatteryOptimization()
-                }) { Text("Разрешить работу в фоне") }
-            }
-        }
+        BackgroundCard()
     }
     var downloading by remember { mutableStateOf(false) }
     var percent by remember { mutableStateOf(0) }
@@ -970,6 +953,80 @@ private fun HomeScreen(
     ErrorText(error)
     Spacer(Modifier.height(24.dp))
     Button(onClick = onLogout, enabled = !busy) { Text("Выйти") }
+}
+
+/**
+ * Фоновая доставка: состояние, самопроверка и переключатель.
+ *
+ * Сервис может умереть молча — тогда входящие перестают приходить, а пользователь об
+ * этом не узнает. Поэтому пока экран открыт, проверяем и поднимаем заново.
+ */
+@Composable
+private fun BackgroundCard() {
+    var enabled by remember { mutableStateOf(AppPrefs.backgroundEnabled) }
+    var alive by remember { mutableStateOf(backgroundServiceRunning()) }
+    var batteryOk by remember { mutableStateOf(true) }
+
+    // Самопроверка, пока экран открыт: сервис убит системой — молча поднимаем обратно
+    LaunchedEffect(enabled) {
+        while (true) {
+            batteryOk = batteryOptimizationIgnored()
+            alive = backgroundServiceRunning()
+            if (enabled && !alive) {
+                AppDiagnostics.add("сервис: не работал — поднимаю заново")
+                startBackgroundService()
+                delay(700)
+                alive = backgroundServiceRunning()
+            }
+            delay(5_000)
+        }
+    }
+
+    val problem = enabled && (!alive || !batteryOk)
+    Surface(
+        color = if (problem) MaterialTheme.colorScheme.errorContainer
+        else MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                when {
+                    !enabled -> "🌙 Фоновый режим усыплён"
+                    !alive -> "⚠️ Фоновая служба не работает"
+                    !batteryOk -> "⚠️ Фоновый режим включён, но система может его усыпить"
+                    else -> "✅ Фоновый режим работает"
+                },
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                when {
+                    !enabled -> "Звонки и сообщения приходят, только пока приложение открыто."
+                    !batteryOk -> "Отключите оптимизацию батареи, иначе входящие будут теряться."
+                    else -> "Входящие приходят, даже когда приложение свёрнуто."
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    val next = !enabled
+                    enabled = next
+                    AppPrefs.backgroundEnabled = next
+                    AppDiagnostics.add("действие: фоновый режим — ${if (next) "включён" else "усыплён"}")
+                    if (next) startBackgroundService() else stopBackgroundService()
+                    alive = backgroundServiceRunning()
+                }) { Text(if (enabled) "🌙 Усыпить" else "▶️ Включить") }
+                if (enabled && !batteryOk) {
+                    Button(onClick = {
+                        AppDiagnostics.add("действие: настройка батареи")
+                        requestIgnoreBatteryOptimization()
+                    }) { Text("Настроить батарею") }
+                }
+            }
+        }
+    }
 }
 
 /**
