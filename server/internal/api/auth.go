@@ -207,7 +207,11 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	// Ключ личности: первое устройство устанавливает, последующие обязаны совпасть
 	// (устройство, знающее фразу, выведет тот же ключ). Расхождение → отказ.
 	if err := s.Store.SetOrCheckIdentity(r.Context(), userID, identityPub); errors.Is(err, store.ErrIdentityMismatch) {
-		writeErr(w, http.StatusForbidden, "identity_mismatch", "ключ личности не совпадает с аккаунтом")
+		// Формулировка не техническая намеренно: сюда попадает обычный случай
+		// «этот номер уже зарегистрирован, а секретную фразу не ввели». Человеку
+		// нужно знать, что делать, а не что не сошлось внутри.
+		writeErr(w, http.StatusForbidden, "identity_mismatch",
+			"Этот номер уже зарегистрирован. Введите секретную фразу того аккаунта — без неё войти нельзя.")
 		return
 	} else if err != nil {
 		log.Printf("register: identity: %v", err)

@@ -380,8 +380,16 @@ private data class DiscoverBody(val phones: List<String>)
 @Serializable
 private data class DiscoverResponse(val matches: Map<String, String> = emptyMap())
 
+/**
+ * Ошибка API. Сервер отдаёт `{"code": …, "message": …}`; поле [error] оставлено
+ * запасным вариантом. До этой правки клиент читал только `error`, поэтому код
+ * ошибки всегда приходил пустым — и ветвиться по нему было невозможно, в журнале
+ * оставалась строка «API 403 … → » без причины.
+ */
 @Serializable
-private data class ApiError(val error: String = "", val message: String = "")
+private data class ApiError(val code: String = "", val error: String = "", val message: String = "") {
+    val kind: String get() = code.ifEmpty { error }
+}
 
 class TimaApiException(val code: String, message: String) : Exception(message)
 
@@ -406,8 +414,8 @@ class TimaApi(private val baseUrl: String) {
         } catch (_: Throwable) {
             ApiError("http_${response.status.value}", "HTTP ${response.status}")
         }
-        AppDiagnostics.add("API ${response.status.value} ${response.call.request.method.value} ${response.call.request.url.encodedPath} → ${err.error}")
-        throw TimaApiException(err.error, err.message.ifEmpty { "HTTP ${response.status.value}" })
+        AppDiagnostics.add("API ${response.status.value} ${response.call.request.method.value} ${response.call.request.url.encodedPath} → ${err.kind} ${err.message}")
+        throw TimaApiException(err.kind, err.message.ifEmpty { "HTTP ${response.status.value}" })
     }
 
     private suspend inline fun <reified Req, reified Resp> post(path: String, requestBody: Req): Resp {

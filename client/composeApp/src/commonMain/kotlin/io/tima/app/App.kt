@@ -57,6 +57,7 @@ import io.tima.app.api.AppVersionDto
 import io.tima.app.api.ChannelDto
 import io.tima.app.api.ChannelPostDto
 import io.tima.app.api.TimaApi
+import io.tima.app.api.TimaApiException
 import io.tima.app.api.VoiceRoomDto
 import io.tima.app.chat.CallConnection
 import io.tima.app.chat.ChatClient
@@ -464,6 +465,9 @@ private fun CodeScreen(
 ) {
     var code by remember { mutableStateOf(state.devCode ?: "") }
     var phraseInput by remember { mutableStateOf("") }
+    // Токен регистрации переживает неудачную попытку: код из SMS одноразовый,
+    // и повторная проверка тем же кодом уже не пройдёт.
+    var regToken by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -508,7 +512,13 @@ private fun CodeScreen(
                         return@launch
                     }
                     val api = TimaApi(state.serverUrl)
-                    val token = api.smsVerify(state.requestId, code.trim()).registrationToken
+                    // Код из SMS ОДНОРАЗОВЫЙ: сервер гасит его при проверке. Раньше
+                    // проверка шла на каждое нажатие, поэтому вторая попытка (например,
+                    // после «введите фразу») упиралась в «код уже использован», а нового
+                    // кода взять было неоткуда. Проверяем один раз и держим токен — он
+                    // живёт 10 минут, этого хватает, чтобы вписать фразу и повторить.
+                    val token = regToken
+                        ?: api.smsVerify(state.requestId, code.trim()).registrationToken.also { regToken = it }
                     // Ключи устройства: один seed → X25519 (конверты) + Ed25519 (подпись)
                     val deviceKey = Kodium.generateKeyPair()
                     val pub = deviceKey.getPublicKey()
@@ -531,6 +541,19 @@ private fun CodeScreen(
                     SessionCodec.save(session)
                     // Новую фразу показываем; введённую — не повторяем
                     onRegistered(session, if (entered.isEmpty()) identity.phrase else null)
+                } catch (e: TimaApiException) {
+                    // Раньше сюда падал технический текст сервера, и человек читал
+                    // «ключ личности не совпадает с аккаунтом» — верно, но непонятно,
+                    // что делать. Переводим в действие.
+                    error = when {
+                        e.code == "identity_mismatch" && phraseInput.isBlank() ->
+                            "Этот номер уже зарегистрирован. Впишите его секретную фразу в поле выше и нажмите «Войти» ещё раз."
+                        e.code == "identity_mismatch" ->
+                            "Секретная фраза не подходит к этому номеру — проверьте слова и их порядок."
+                        e.code == "bad_code" ->
+                            "Код уже использован или просрочен — вернитесь назад и запросите новый."
+                        else -> e.message ?: e.toString()
+                    }
                 } catch (e: Throwable) {
                     error = e.message ?: e.toString()
                 } finally {
