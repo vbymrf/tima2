@@ -210,7 +210,11 @@ func serve() {
 		}
 		if escrowURL := os.Getenv("ESCROW_URL"); escrowURL != "" {
 			srv.EscrowURL = escrowURL
-			log.Printf("Escrow: публичный ключ проксируется из %s", escrowURL)
+			srv.EscrowRegion = os.Getenv("ESCROW_REGION")
+			if v := os.Getenv("ESCROW_OVERLAP_DAYS"); v != "" {
+				srv.EscrowOverlap = envDays("ESCROW_OVERLAP_DAYS", 7)
+			}
+			log.Printf("Escrow: ключи эпох из %s (регион %q)", escrowURL, srv.EscrowRegion)
 		} else {
 			log.Print("ESCROW_URL не задан — /escrow/pubkey отвечает 503 (подними cmd/escrow-stub)")
 		}

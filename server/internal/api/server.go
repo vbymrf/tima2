@@ -49,7 +49,14 @@ type Server struct {
 	LiveKitURL string
 
 	// EscrowURL — адрес stub-анклава (ESCROW_URL); "" → /escrow/pubkey отвечает 503
-	EscrowURL     string
+	EscrowURL string
+	// EscrowRegion — измерение региона в реестре ключей; "" → "ru". Заведено сразу,
+	// хотя значение пока одно: добавить измерение позже — миграция всех ссылок.
+	EscrowRegion string
+	// EscrowOverlap — за сколько до конца эпохи клиенту отдаётся и следующий ключ.
+	// 0 → неделя. Без перекрытия смена эпохи останавливает отправку у клиентов с
+	// закэшированным конфигом.
+	EscrowOverlap time.Duration
 	escrowMu      sync.Mutex
 	escrowCached  []byte
 	escrowFetched time.Time
@@ -80,6 +87,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/users/names", s.Auth.Require(s.resolveNames))
 	mux.HandleFunc("POST /api/v1/users/identities", s.Auth.Require(s.resolveIdentities))
 	mux.HandleFunc("GET /api/v1/escrow/pubkey", s.Auth.Require(s.escrowPubkey))
+	mux.HandleFunc("GET /api/v1/escrow/key", s.Auth.Require(s.escrowKeyForChat))
 	mux.HandleFunc("POST /api/v1/groups", s.Auth.Require(s.createGroup))
 	mux.HandleFunc("GET /api/v1/groups", s.Auth.Require(s.listMyGroups))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}", s.Auth.Require(s.getGroup))
@@ -352,4 +360,3 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"messages": out})
 }
-
