@@ -90,8 +90,8 @@ android {
         applicationId = "io.tima.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 13
-        versionName = "0.5.6"
+        versionCode = 14
+        versionName = "0.5.7"
         // Только arm64-v8a: реальные телефоны с ~2017. Режет APK (WebRTC/zstd — нативные
         // либы под все ABI). ВНИМАНИЕ: x86_64-эмулятор перестанет работать — тест на телефоне.
         ndk {

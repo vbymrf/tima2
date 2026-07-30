@@ -8,7 +8,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
-import androidx.core.content.FileProvider
 import io.tima.app.api.AppVersionDto
 import io.tima.app.diag.AppDiagnostics
 import kotlinx.coroutines.Dispatchers
@@ -56,8 +55,12 @@ actual suspend fun installUpdate(update: AppVersionDto, onProgress: (Int) -> Uni
         }
         // Системный DownloadManager: надёжно тянет большой APK и работает в фоне
         // (простой поток на 31 МБ подвисал).
+        AppDiagnostics.add("update: ставлю ${update.versionName} (сборка ${update.versionCode}); сейчас установлена ${currentVersionName()} (${currentVersionCode()})")
         AppDiagnostics.add("update: качаю через DownloadManager ${update.url}")
-        val apk = File(ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "tima-update.apk")
+        // Имя файла с номером сборки: при общем имени DownloadManager, увидев
+        // существующий файл, пишет рядом «-1», а мы отдавали установщику старый.
+        val name = "tima-update-${update.versionCode}.apk"
+        val apk = File(ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), name)
         if (apk.exists()) apk.delete()
         val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val id = dm.enqueue(
@@ -69,7 +72,7 @@ actual suspend fun installUpdate(update: AppVersionDto, onProgress: (Int) -> Uni
                 // оказывается посторонний компонент), и разрешение на установку она
                 // просит для него, а не для нас. Установщик запускаем сами — ниже.
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
-                .setDestinationInExternalFilesDir(ctx, Environment.DIRECTORY_DOWNLOADS, "tima-update.apk")
+                .setDestinationInExternalFilesDir(ctx, Environment.DIRECTORY_DOWNLOADS, name)
                 .setMimeType("application/vnd.android.package-archive"),
         )
         var waited = 0
@@ -91,14 +94,35 @@ actual suspend fun installUpdate(update: AppVersionDto, onProgress: (Int) -> Uni
             if (waited > 170) throw IllegalStateException("Загрузка слишком долгая — проверьте сеть") // ~2 мин
         }
         onProgress(100)
-        AppDiagnostics.add("update: скачано ${apk.length()} байт, запускаю установщик")
-        val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".updates", apk)
-        ctx.startActivity(
-            Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-            },
-        )
+        AppDiagnostics.add("update: скачано ${apk.length()} байт в $name")
+
+        // Смотрим, ЧТО именно скачали, до того как отдать установщику. Раньше файл
+        // уходил в систему непроверенным, и подмена версии или битая загрузка
+        // выглядели одинаково — «не ставится».
+        val info = UpdateInstaller.inspect(ctx, apk)
+        if (info == null) {
+            throw IllegalStateException("Скачанный файл не читается как APK — попробуйте ещё раз")
+        }
+        AppDiagnostics.add("update: в файле ${info.packageName} ${info.versionName} (${info.versionCode}), подпись ${info.certSha256.take(12)}…")
+
+        if (info.packageName != ctx.packageName) {
+            throw IllegalStateException("Скачан чужой пакет (${info.packageName}) — установка отменена")
+        }
+        val installed = UpdateInstaller.installedCertSha256(ctx)
+        AppDiagnostics.add("update: подпись установленного ${installed.take(12)}…")
+        if (installed.isNotEmpty() && info.certSha256.isNotEmpty() && installed != info.certSha256) {
+            // Android не даёт обновить приложение, подписанное другим ключом. Это не
+            // сбой загрузки и не ошибка сервера: единственный выход — удалить и
+            // поставить заново. Установщик в этом случае молча откажет, поэтому
+            // говорим прямо и сразу ведём на экран удаления.
+            AppDiagnostics.add("update: ПОДПИСЬ НЕ СОВПАЛА — обновление поверх невозможно")
+            UpdateInstaller.openUninstall(ctx)
+            throw IllegalStateException(
+                "Эта сборка подписана другим ключом. Удалите TIMA и установите заново — " +
+                    "дальше обновления будут ставиться как обычно.",
+            )
+        }
+        UpdateInstaller.install(ctx, apk)
     } catch (e: Throwable) {
         AppDiagnostics.add("update: ошибка — ${e.message ?: e::class.simpleName}")
         throw e

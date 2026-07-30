@@ -201,6 +201,13 @@ fun App() {
         val url = session?.serverUrl ?: return@LaunchedEffect
         AppDiagnostics.serverUrl = url
         AppDiagnostics.appVersion = currentVersionCode()
+        AppDiagnostics.appVersionName = currentVersionName()
+        // Идентификаторы в шапку: логи двух устройств выглядят одинаково, а по
+        // device_id я нахожу их же события в логах сервера.
+        session?.let {
+            AppDiagnostics.deviceId = it.deviceId
+            AppDiagnostics.userId = it.userId
+        }
         runCatching {
             val latest = TimaApi(url).appVersion()
             if (latest != null && latest.url.isNotEmpty() && latest.versionCode > currentVersionCode()) {
