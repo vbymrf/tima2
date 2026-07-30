@@ -1,8 +1,9 @@
 // HTTP-API stub-анклава — контракт будущего HSM/Nitro (escrow-legal-access.md §3, §7):
-//   GET  /healthz    — liveness
-//   GET  /v1/pubkey  — публичный ключ escrow (его же проксирует tima клиентам)
-//   POST /v1/unseal  — юридический доступ: k долей Шамира + blobs → ключи;
-//                      каждый вызов (включая отказ) — строка в append-only аудите
+//
+//	GET  /healthz    — liveness
+//	GET  /v1/pubkey  — публичный ключ escrow (его же проксирует tima клиентам)
+//	POST /v1/unseal  — юридический доступ: k долей Шамира + blobs → ключи;
+//	                   каждый вызов (включая отказ) — строка в append-only аудите
 package escrow
 
 import (
@@ -94,6 +95,11 @@ func (e *Enclave) audit(action, reason string, blobs int, r *http.Request) {
 		"blobs":  blobs,
 		"remote": r.RemoteAddr,
 	})
+	e.appendAudit(line)
+}
+
+// appendAudit — единственная точка записи в append-only журнал.
+func (e *Enclave) appendAudit(line []byte) {
 	f, err := os.OpenFile(filepath.Join(e.dir, auditFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		log.Printf("audit: %v", err) // аудит не должен молча теряться

@@ -1,7 +1,9 @@
 // Разделение секрета по Шамиру в GF(256) (полином AES 0x11b) — авторизация
 // unseal-операции M-of-N (escrow-legal-access.md §3: минимум 3-of-5).
 // Формат доли ФИКСИРОВАН (доли на руках у людей и переживают версии кода):
-//   tima-escrow-share-v1:<x>:<base64url(payload)>
+//
+//	tima-escrow-share-v1:<x>:<base64url(payload)>
+//
 // где x — точка доли (1..n), payload — по байту значения полинома на каждый
 // байт секрета.
 package escrow

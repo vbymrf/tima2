@@ -40,7 +40,7 @@ const (
 // (см. док пакета); unlock_hash — sha256 секрета, собираемого из долей.
 type state struct {
 	Version    int    `json:"escrow_key_version"`
-	Seed       string `json:"seed"`      // base64url, 64 байта (d‖z, FIPS 203)
+	Seed       string `json:"seed"`       // base64url, 64 байта (d‖z, FIPS 203)
 	PublicKey  string `json:"public_key"` // base64url, 1184 байта
 	UnlockHash string `json:"unlock_hash"`
 }
