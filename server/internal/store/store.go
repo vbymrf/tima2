@@ -134,29 +134,60 @@ func (s *Store) ConsumeSmsCode(ctx context.Context, requestID string, codeHash [
 	return s.pii.Open(enc)
 }
 
-// UpsertUserByPhone возвращает user_id, создавая пользователя при первом входе.
-// Конфликт разрешается по слепому индексу — открытого номера в запросе нет.
+// UpsertUserByPhone возвращает user_id ТЕКУЩЕЙ личности аккаунта с этим номером,
+// заводя аккаунт при первом входе. Открытого номера в запросах нет — только слепой
+// индекс.
+//
+// Аккаунт и личность разделены (миграция 0019): номер принадлежит аккаунту, а
+// пишет человек под текущей личностью. Поэтому «вход по номеру» — это поиск
+// аккаунта и возврат его головы цепочки, а не создание пользователя.
 func (s *Store) UpsertUserByPhone(ctx context.Context, phone string) (string, error) {
 	enc, err := s.pii.Seal(phone)
 	if err != nil {
 		return "", err
 	}
-	var userID string
-	err = s.pool.QueryRow(ctx, `
-		INSERT INTO users (phone_bidx, phone_enc) VALUES ($1, $2)
+	bidx := s.pii.BlindIndex(phone)
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // после Commit это no-op
+
+	var personID string
+	err = tx.QueryRow(ctx, `
+		INSERT INTO persons (phone_bidx, phone_enc) VALUES ($1, $2)
 		ON CONFLICT (phone_bidx) WHERE phone_bidx IS NOT NULL
 		DO UPDATE SET phone_enc = EXCLUDED.phone_enc
-		RETURNING user_id`, s.pii.BlindIndex(phone), enc).Scan(&userID)
-	return userID, err
+		RETURNING person_id`, bidx, enc).Scan(&personID)
+	if err != nil {
+		return "", err
+	}
+
+	var userID string
+	err = tx.QueryRow(ctx,
+		`SELECT user_id FROM users WHERE person_id = $1 AND valid_to IS NULL`, personID).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Аккаунт только что заведён (или остался без текущей личности) — заводим голову цепочки.
+		err = tx.QueryRow(ctx,
+			`INSERT INTO users (person_id) VALUES ($1) RETURNING user_id`, personID).Scan(&userID)
+	}
+	if err != nil {
+		return "", err
+	}
+	return userID, tx.Commit(ctx)
 }
 
 // SetDisplayName — своё публичное имя (показывается собеседникам вместо номера).
+// Имя принадлежит аккаунту, поэтому едино для всей цепочки идентификаторов.
 func (s *Store) SetDisplayName(ctx context.Context, userID, name string) error {
 	enc, err := s.pii.Seal(name)
 	if err != nil {
 		return err
 	}
-	_, err = s.pool.Exec(ctx, `UPDATE users SET name_enc = $2 WHERE user_id = $1`, userID, enc)
+	_, err = s.pool.Exec(ctx, `
+		UPDATE persons SET name_enc = $2
+		WHERE person_id = (SELECT person_id FROM users WHERE user_id = $1)`, userID, enc)
 	return err
 }
 
@@ -178,7 +209,10 @@ func (s *Store) PhonesOfChatPeers(ctx context.Context, userID string, ids []stri
 		  JOIN devices d ON d.device_id = k.recipient
 		  WHERE m.sender_id = $1 AND d.user_id = ANY($2)
 		)
-		SELECT u.user_id, u.phone_enc FROM users u JOIN peers p ON p.peer = u.user_id`, userID, ids)
+		SELECT u.user_id, pr.phone_enc
+		FROM users u
+		JOIN peers p   ON p.peer = u.user_id
+		JOIN persons pr ON pr.person_id = u.person_id`, userID, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +239,9 @@ func (s *Store) PhonesOfChatPeers(ctx context.Context, userID string, ids []stri
 // Пустые имена (не заданы) в ответ не попадают.
 func (s *Store) DisplayNames(ctx context.Context, ids []string) (map[string]string, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT user_id, name_enc FROM users WHERE user_id = ANY($1) AND name_enc IS NOT NULL`, ids)
+		SELECT u.user_id, p.name_enc
+		FROM users u JOIN persons p ON p.person_id = u.person_id
+		WHERE u.user_id = ANY($1) AND p.name_enc IS NOT NULL`, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -228,11 +264,113 @@ func (s *Store) DisplayNames(ctx context.Context, ids []string) (map[string]stri
 	return out, rows.Err()
 }
 
+// StartNewIdentity закрывает текущую личность аккаунта и заводит новую, связав её с
+// прежней. Возвращает user_id новой личности.
+//
+// Это примитив под перерегистрацию после потери ключей и под воссоединение
+// (ДОКУМЕНТАЦИЯ/02 §5–6). Прежние сообщения остаются под прежним идентификатором
+// навсегда — их подписи переписать невозможно, — а новые уходят под новым.
+//
+// proof — подпись прежним ключом личности. nil означает административную связку:
+// человек подтвердил владение номером, но не владение ключами. Разница видна
+// собеседнику (см. IdentityLink) и не должна теряться по дороге.
+func (s *Store) StartNewIdentity(ctx context.Context, personID, linkedFrom string, proof []byte) (string, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // после Commit это no-op
+
+	// Закрываем текущую. Порядок важен: частичный уникальный индекс
+	// idx_users_current_per_person не даст аккаунту иметь две текущие личности,
+	// поэтому вставка до закрытия упала бы.
+	if _, err := tx.Exec(ctx,
+		`UPDATE users SET valid_to = now() WHERE person_id = $1 AND valid_to IS NULL`, personID); err != nil {
+		return "", err
+	}
+	var userID string
+	if err := tx.QueryRow(ctx, `
+		INSERT INTO users (person_id, linked_from, link_proof)
+		VALUES ($1, $2, $3) RETURNING user_id`, personID, linkedFrom, proof).Scan(&userID); err != nil {
+		return "", err
+	}
+	return userID, tx.Commit(ctx)
+}
+
+// PersonOfUser — аккаунт, которому принадлежит личность.
+func (s *Store) PersonOfUser(ctx context.Context, userID string) (string, error) {
+	var personID string
+	err := s.pool.QueryRow(ctx, `SELECT person_id FROM users WHERE user_id = $1`, userID).Scan(&personID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrUserUnknown
+	}
+	return personID, err
+}
+
+// IdentityLink — чем подтверждена принадлежность личности аккаунту.
+type IdentityLink string
+
+const (
+	// LinkRoot — первая личность аккаунта, связывать не с чем.
+	LinkRoot IdentityLink = "root"
+	// LinkProven — связка подписана ключом прежней личности: тот же человек доказан
+	// криптографически.
+	LinkProven IdentityLink = "proven"
+	// LinkAdministrative — связку подтвердили только владением номером или решением
+	// поддержки. Доказательства нет, и собеседник ОБЯЗАН увидеть предупреждение о
+	// смене личности: иначе управляющий сервером может молча подставить постороннего
+	// в чужой контакт (ДОКУМЕНТАЦИЯ/02 §4).
+	LinkAdministrative IdentityLink = "administrative"
+)
+
+// Identity — к какому аккаунту относится личность и насколько это доказано.
+type Identity struct {
+	PersonID string       `json:"person_id"`
+	Link     IdentityLink `json:"link"`
+	Current  bool         `json:"current"` // текущая личность аккаунта (под ней пишут сейчас)
+}
+
+// IdentitiesOf — по списку user_id вернуть аккаунт каждой личности. Клиент так
+// понимает, что несколько идентификаторов в переписке — один человек, и вправе ли
+// он показать их одним контактом без предупреждения.
+func (s *Store) IdentitiesOf(ctx context.Context, ids []string) (map[string]Identity, error) {
+	out := make(map[string]Identity, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT user_id, person_id, linked_from IS NULL AS is_root,
+		       link_proof IS NOT NULL AS proven, valid_to IS NULL AS current
+		FROM users WHERE user_id = ANY($1)`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, personID string
+		var isRoot, proven, current bool
+		if err := rows.Scan(&id, &personID, &isRoot, &proven, &current); err != nil {
+			return nil, err
+		}
+		link := LinkAdministrative
+		switch {
+		case isRoot:
+			link = LinkRoot
+		case proven:
+			link = LinkProven
+		}
+		out[id] = Identity{PersonID: personID, Link: link, Current: current}
+	}
+	return out, rows.Err()
+}
+
 // FindUserByPhone — user_id по телефону; ErrUserUnknown, если не зарегистрирован.
 func (s *Store) FindUserByPhone(ctx context.Context, phone string) (string, error) {
 	var userID string
-	err := s.pool.QueryRow(ctx,
-		`SELECT user_id FROM users WHERE phone_bidx = $1`, s.pii.BlindIndex(phone)).Scan(&userID)
+	err := s.pool.QueryRow(ctx, `
+		SELECT u.user_id FROM users u
+		JOIN persons p ON p.person_id = u.person_id
+		WHERE p.phone_bidx = $1 AND u.valid_to IS NULL`, s.pii.BlindIndex(phone)).Scan(&userID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrUserUnknown
 	}
@@ -254,7 +392,9 @@ func (s *Store) FindUsersByPhones(ctx context.Context, phones []string) (map[str
 		idx = append(idx, b)
 	}
 	rows, err := s.pool.Query(ctx,
-		`SELECT phone_bidx, user_id FROM users WHERE phone_bidx = ANY($1)`, idx)
+		`SELECT p.phone_bidx, u.user_id FROM users u
+		 JOIN persons p ON p.person_id = u.person_id
+		 WHERE p.phone_bidx = ANY($1) AND u.valid_to IS NULL`, idx)
 	if err != nil {
 		return nil, err
 	}

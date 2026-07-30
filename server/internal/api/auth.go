@@ -340,6 +340,35 @@ func (s *Server) resolveNames(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"names": names, "phones": phones})
 }
 
+// resolveIdentities — POST /users/identities {ids}: к какому аккаунту относится
+// каждый из user_id и чем это подтверждено.
+//
+// Зачем клиенту: аккаунт — цепочка идентификаторов (миграция 0019), и в одной
+// переписке сообщения одного человека могут стоять под разными id. Клиент
+// группирует их в один контакт — но только если связка доказана подписью прежнего
+// ключа. Для административной связки он ОБЯЗАН показать смену личности: иначе
+// владение номером начинает подменять владение ключами.
+func (s *Server) resolveIdentities(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs []string `json:"ids"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil || len(req.IDs) == 0 {
+		writeErr(w, http.StatusBadRequest, "bad_json", "нужен ids")
+		return
+	}
+	if len(req.IDs) > 500 {
+		req.IDs = req.IDs[:500]
+	}
+	ids, err := s.Store.IdentitiesOf(r.Context(), req.IDs)
+	if err != nil {
+		log.Printf("resolveIdentities: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"identities": ids})
+}
+
 // listDeviceKeys — GET /keys/devices?user_id=: публичные ключи устройств собеседника
 // (отправителю — адресаты wrapped keys; получателю — проверка подписи).
 func (s *Server) listDeviceKeys(w http.ResponseWriter, r *http.Request) {
