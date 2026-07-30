@@ -44,6 +44,9 @@ services:
       S3_BUCKET: media
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
       ESCROW_URL: http://escrow-stub:8090
+      # Регион ключей escrow. Измерение заведено сразу, значение пока одно:
+      # добавить его позже означало бы мигрировать все ссылки на ключи разом.
+      ESCROW_REGION: ${ESCROW_REGION:-ru}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       LIVEKIT_URL: wss://lk.${DOMAIN}

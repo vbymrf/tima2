@@ -89,7 +89,7 @@ func (s *Server) escrowKeyForChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	region := s.escrowRegion()
+	region := s.EscrowRegionEffective()
 
 	current, err := s.escrowKey(r.Context(), region, escrow.EpochOf(now), chatID)
 	if err != nil {
@@ -164,7 +164,9 @@ func (s *Server) escrowKey(ctx context.Context, region, epoch, chatID string) (e
 	}, nil
 }
 
-func (s *Server) escrowRegion() string {
+// EscrowRegionEffective — регион, который реально используется (с учётом умолчания).
+// Экспортирован, чтобы старт печатал в лог действующее значение, а не переменную.
+func (s *Server) EscrowRegionEffective() string {
 	if s.EscrowRegion != "" {
 		return s.EscrowRegion
 	}

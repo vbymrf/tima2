@@ -214,7 +214,9 @@ func serve() {
 			if v := os.Getenv("ESCROW_OVERLAP_DAYS"); v != "" {
 				srv.EscrowOverlap = envDays("ESCROW_OVERLAP_DAYS", 7)
 			}
-			log.Printf("Escrow: ключи эпох из %s (регион %q)", escrowURL, srv.EscrowRegion)
+			// Печатаем ДЕЙСТВУЮЩИЙ регион, а не переменную окружения: пустая строка
+			// в логе выглядит как «регион не настроен», хотя работает умолчание.
+			log.Printf("Escrow: ключи эпох из %s (регион %s)", escrowURL, srv.EscrowRegionEffective())
 		} else {
 			log.Print("ESCROW_URL не задан — /escrow/pubkey отвечает 503 (подними cmd/escrow-stub)")
 		}
