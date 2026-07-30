@@ -60,6 +60,13 @@ services:
       APP_LATEST_VERSION_NAME: ${APP_LATEST_VERSION_NAME:-}
       APP_APK_URL: ${APP_APK_URL:-}
       APP_UPDATE_NOTES: ${APP_UPDATE_NOTES:-}
+      # Ключ шифрования персональных данных (телефон, имя). ОТДЕЛЬНЫЙ том, не том
+      # postgres: смысл схемы в том, что дамп базы номеров не содержит. В бэкапы
+      # базы этот каталог попадать не должен — бэкапить его надо отдельно, иначе
+      # потеря ключа = потеря всех номеров и имён без возможности восстановления.
+      TIMA_PII_KEY_FILE: /data/pii/pii-key.json
+    volumes:
+      - pii-data:/data/pii
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -79,6 +86,9 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      TIMA_PII_KEY_FILE: /data/pii/pii-key.json   # тот же ключ, что у backend
+    volumes:
+      - pii-data:/data/pii
     depends_on:
       backend: { condition: service_started }
 
@@ -146,3 +156,4 @@ volumes:
   redis-data:
   minio-data:
   escrow-data:
+  pii-data:      # ключ и pepper персональных данных; бэкапить ОТДЕЛЬНО от базы

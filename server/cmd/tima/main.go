@@ -21,6 +21,7 @@ import (
 	"tima/server/internal/blob"
 	"tima/server/internal/calls"
 	"tima/server/internal/events"
+	"tima/server/internal/pii"
 	"tima/server/internal/ratelimit"
 	"tima/server/internal/store"
 	"tima/server/internal/worker"
@@ -50,18 +51,48 @@ func mustStore(ctx context.Context) *store.Store {
 	if url == "" {
 		log.Fatal("DATABASE_URL не задан (dev: postgres://tima:tima-dev-only@localhost:5432/tima)")
 	}
-	st, err := store.New(ctx, url)
+	// Ключ персональных данных. Лежит ФАЙЛОМ вне PostgreSQL: смысл схемы в том,
+	// что дамп базы номеров не содержит (internal/pii). Каталог не должен попадать
+	// в бэкапы базы. Нет файла — генерируется при первом старте.
+	keyFile := os.Getenv("TIMA_PII_KEY_FILE")
+	if keyFile == "" {
+		keyFile = "./pii-data/pii-key.json"
+	}
+	cipher, err := pii.Load(keyFile)
+	if err != nil {
+		log.Fatalf("ключ персональных данных: %v", err)
+	}
+	st, err := store.New(ctx, url, cipher)
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Printf("Персональные данные: шифрование включено, ключ v%d (%s)", cipher.KeyID(), keyFile)
 	return st
+}
+
+// migrateAndBackfill применяет схему и дошифровывает персональные данные, которые
+// остались от версий до 0017. Backfill идёт кодом, а не миграцией: ключа в SQL нет.
+// Идемпотентен, поэтому вызывается из всех процессов — кто стартовал первым, тот и
+// выполнил.
+func migrateAndBackfill(ctx context.Context, st *store.Store) error {
+	if err := st.Migrate(ctx, migrations.FS); err != nil {
+		return err
+	}
+	n, err := st.BackfillPII(ctx)
+	if err != nil {
+		return fmt.Errorf("backfill персональных данных: %w", err)
+	}
+	if n > 0 {
+		log.Printf("Персональные данные: зашифровано записей — %d", n)
+	}
+	return nil
 }
 
 func migrate() {
 	ctx := context.Background()
 	st := mustStore(ctx)
 	defer st.Close()
-	if err := st.Migrate(ctx, migrations.FS); err != nil {
+	if err := migrateAndBackfill(ctx, st); err != nil {
 		log.Fatal(err)
 	}
 	log.Println("миграции применены")
@@ -90,7 +121,7 @@ func runWorker() {
 	defer stop()
 	st := mustStore(ctx)
 	defer st.Close()
-	if err := st.Migrate(ctx, migrations.FS); err != nil {
+	if err := migrateAndBackfill(ctx, st); err != nil {
 		log.Fatal(err)
 	}
 	interval := time.Hour
@@ -132,7 +163,7 @@ func serve() {
 	if os.Getenv("DATABASE_URL") != "" {
 		ctx := context.Background()
 		st := mustStore(ctx)
-		if err := st.Migrate(ctx, migrations.FS); err != nil {
+		if err := migrateAndBackfill(ctx, st); err != nil {
 			log.Fatal(err)
 		}
 		key := []byte(os.Getenv("JWT_SIGNING_KEY"))

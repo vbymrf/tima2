@@ -1,0 +1,39 @@
+# Отдельный PostgreSQL ТОЛЬКО под интеграционные тесты. Поднимается на сервере
+# рядом с боевым стеком, но это ДРУГОЙ экземпляр — не другая база в том же.
+#
+# Почему отдельный экземпляр, а не база tima_test внутри боевого postgres:
+# тесты вызывают ResetForTests → TRUNCATE по всем таблицам. Пока это один процесс
+# с боевыми данными, единственным барьером остаётся строка подключения. Отдельный
+# экземпляр делает ошибку невозможной, а не маловероятной.
+#
+# Порт слушает 127.0.0.1 сервера — снаружи VPS недоступен. С машины разработчика:
+#   ssh -N -L 55432:127.0.0.1:55432 deploy@СЕРВЕР
+#   TIMA_TEST_DATABASE_URL=postgres://tima:tima-test-only@localhost:55432/tima_test \
+#     go test ./internal/api/
+#
+# Запуск на сервере:
+#   docker compose -f deploy/docker-compose.test.yml up -d
+# Остановка (том с данными остаётся):
+#   docker compose -f deploy/docker-compose.test.yml stop
+
+name: tima-test
+
+services:
+  postgres-test:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tima
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:-tima-test-only}
+      # Имя обязано заканчиваться на _test: ResetForTests иначе откажется работать.
+      POSTGRES_DB: tima_test
+    ports: ["127.0.0.1:55432:5432"]
+    volumes: ["tima-test-postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tima -d tima_test"]
+      interval: 10s
+      retries: 10
+    shm_size: 256mb
+
+volumes:
+  tima-test-postgres:

@@ -17,6 +17,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"golang.org/x/crypto/curve25519"
@@ -26,6 +27,7 @@ import (
 
 	"tima/server/internal/auth"
 	timacrypto "tima/server/internal/crypto"
+	"tima/server/internal/pii"
 	pb "tima/server/internal/proto"
 	"tima/server/internal/store"
 	"tima/server/migrations"
@@ -51,7 +53,13 @@ func setup(t *testing.T) (*httptest.Server, *Server) {
 	if url == "" {
 		url = "postgres://tima:tima-dev-only@localhost:5432/tima_test"
 	}
-	st, err := store.New(context.Background(), url)
+	// Ключ персональных данных — свой на каждый прогон, во временном каталоге:
+	// тесты не должны зависеть от ключа dev-окружения и не должны его портить.
+	cipher, err := pii.Load(filepath.Join(t.TempDir(), "pii-key.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.New(context.Background(), url, cipher)
 	if err != nil {
 		t.Skipf("PostgreSQL недоступен (%v) — подними deploy/docker-compose.dev.yml", err)
 	}

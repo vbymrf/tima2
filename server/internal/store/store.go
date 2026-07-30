@@ -9,18 +9,28 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"tima/server/internal/pii"
 )
 
 type Store struct {
 	pool *pgxpool.Pool
+	// pii шифрует персональные поля. Единственная точка, через которую код
+	// хранилища обращается к ключу: переезд ключа к внешнему держателю — замена
+	// реализации здесь, а не правки по всему пакету (план рефакторинга §2).
+	pii *pii.Cipher
 }
 
-func New(ctx context.Context, databaseURL string) (*Store, error) {
+func New(ctx context.Context, databaseURL string, cipher *pii.Cipher) (*Store, error) {
+	if cipher == nil {
+		return nil, errors.New("store: нужен ключ персональных данных (internal/pii)")
+	}
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("подключение к PostgreSQL: %w", err)
@@ -29,7 +39,7 @@ func New(ctx context.Context, databaseURL string) (*Store, error) {
 		pool.Close()
 		return nil, fmt.Errorf("ping PostgreSQL: %w", err)
 	}
-	return &Store{pool: pool}, nil
+	return &Store{pool: pool, pii: cipher}, nil
 }
 
 func (s *Store) Close() { s.pool.Close() }
@@ -77,18 +87,32 @@ func (s *Store) Migrate(ctx context.Context, fsys fs.FS) error {
 }
 
 // ResetForTests очищает таблицы (только интеграционные тесты; в бою не вызывается).
+//
+// Отказывается работать с базой, имя которой не заканчивается на _test. Ниже
+// TRUNCATE по всем таблицам сразу, и до этой проверки единственным, что отделяло
+// его от боевых данных, была переменная окружения: забытый или опечатанный
+// TIMA_TEST_DATABASE_URL стоил бы мессенджеру всей истории.
 func (s *Store) ResetForTests(ctx context.Context) error {
+	if db := s.pool.Config().ConnConfig.Database; !strings.HasSuffix(db, "_test") {
+		return fmt.Errorf("store: ResetForTests отказано — база %q не заканчивается на _test", db)
+	}
 	_, err := s.pool.Exec(ctx, `TRUNCATE personal_messages, personal_message_keys, personal_message_backup, devices, users, sms_codes, media_objects, group_key_history, group_wrapped_keys, groups, memberships, group_messages, device_events, sync_cursors, gc_state, channels, channel_subscriptions, channel_posts, calls, voice_rooms, voice_speakers`)
 	return err
 }
 
 // ── Auth: SMS-коды и пользователи ──
 
-// SaveSmsCode кладёт hash одноразового кода.
+// SaveSmsCode кладёт hash одноразового кода. Сам номер — шифртекстом: он нужен
+// обратно при проверке кода, поэтому одним индексом не обойтись.
 func (s *Store) SaveSmsCode(ctx context.Context, requestID, phone string, codeHash []byte, ttl time.Duration) error {
-	_, err := s.pool.Exec(ctx, `
-		INSERT INTO sms_codes (request_id, phone, code_hash, expires_at)
-		VALUES ($1, $2, $3, now() + $4)`, requestID, phone, codeHash, ttl)
+	enc, err := s.pii.Seal(phone)
+	if err != nil {
+		return err
+	}
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO sms_codes (request_id, phone_bidx, phone_enc, code_hash, expires_at)
+		VALUES ($1, $2, $3, $4, now() + $5)`,
+		requestID, s.pii.BlindIndex(phone), enc, codeHash, ttl)
 	return err
 }
 
@@ -96,30 +120,43 @@ var ErrCodeInvalid = errors.New("код неверен, просрочен ил�
 
 // ConsumeSmsCode атомарно гасит код и возвращает телефон.
 func (s *Store) ConsumeSmsCode(ctx context.Context, requestID string, codeHash []byte) (string, error) {
-	var phone string
+	var enc []byte
 	err := s.pool.QueryRow(ctx, `
 		UPDATE sms_codes SET used = TRUE
 		WHERE request_id = $1 AND code_hash = $2 AND NOT used AND expires_at > now()
-		RETURNING phone`, requestID, codeHash).Scan(&phone)
+		RETURNING phone_enc`, requestID, codeHash).Scan(&enc)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrCodeInvalid
 	}
-	return phone, err
+	if err != nil {
+		return "", err
+	}
+	return s.pii.Open(enc)
 }
 
 // UpsertUserByPhone возвращает user_id, создавая пользователя при первом входе.
+// Конфликт разрешается по слепому индексу — открытого номера в запросе нет.
 func (s *Store) UpsertUserByPhone(ctx context.Context, phone string) (string, error) {
+	enc, err := s.pii.Seal(phone)
+	if err != nil {
+		return "", err
+	}
 	var userID string
-	err := s.pool.QueryRow(ctx, `
-		INSERT INTO users (phone) VALUES ($1)
-		ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone
-		RETURNING user_id`, phone).Scan(&userID)
+	err = s.pool.QueryRow(ctx, `
+		INSERT INTO users (phone_bidx, phone_enc) VALUES ($1, $2)
+		ON CONFLICT (phone_bidx) WHERE phone_bidx IS NOT NULL
+		DO UPDATE SET phone_enc = EXCLUDED.phone_enc
+		RETURNING user_id`, s.pii.BlindIndex(phone), enc).Scan(&userID)
 	return userID, err
 }
 
 // SetDisplayName — своё публичное имя (показывается собеседникам вместо номера).
 func (s *Store) SetDisplayName(ctx context.Context, userID, name string) error {
-	_, err := s.pool.Exec(ctx, `UPDATE users SET display_name = $2 WHERE user_id = $1`, userID, name)
+	enc, err := s.pii.Seal(name)
+	if err != nil {
+		return err
+	}
+	_, err = s.pool.Exec(ctx, `UPDATE users SET name_enc = $2 WHERE user_id = $1`, userID, enc)
 	return err
 }
 
@@ -141,18 +178,25 @@ func (s *Store) PhonesOfChatPeers(ctx context.Context, userID string, ids []stri
 		  JOIN devices d ON d.device_id = k.recipient
 		  WHERE m.sender_id = $1 AND d.user_id = ANY($2)
 		)
-		SELECT u.user_id, u.phone FROM users u JOIN peers p ON p.peer = u.user_id`, userID, ids)
+		SELECT u.user_id, u.phone_enc FROM users u JOIN peers p ON p.peer = u.user_id`, userID, ids)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := make(map[string]string)
 	for rows.Next() {
-		var id, phone string
-		if err := rows.Scan(&id, &phone); err != nil {
+		var id string
+		var enc []byte
+		if err := rows.Scan(&id, &enc); err != nil {
 			return nil, err
 		}
-		out[id] = phone
+		phone, err := s.pii.Open(enc)
+		if err != nil {
+			return nil, err
+		}
+		if phone != "" {
+			out[id] = phone
+		}
 	}
 	return out, rows.Err()
 }
@@ -161,18 +205,25 @@ func (s *Store) PhonesOfChatPeers(ctx context.Context, userID string, ids []stri
 // Пустые имена (не заданы) в ответ не попадают.
 func (s *Store) DisplayNames(ctx context.Context, ids []string) (map[string]string, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT user_id, display_name FROM users WHERE user_id = ANY($1) AND display_name <> ''`, ids)
+		SELECT user_id, name_enc FROM users WHERE user_id = ANY($1) AND name_enc IS NOT NULL`, ids)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := make(map[string]string)
 	for rows.Next() {
-		var id, name string
-		if err := rows.Scan(&id, &name); err != nil {
+		var id string
+		var enc []byte
+		if err := rows.Scan(&id, &enc); err != nil {
 			return nil, err
 		}
-		out[id] = name
+		name, err := s.pii.Open(enc)
+		if err != nil {
+			return nil, err
+		}
+		if name != "" {
+			out[id] = name
+		}
 	}
 	return out, rows.Err()
 }
@@ -180,7 +231,8 @@ func (s *Store) DisplayNames(ctx context.Context, ids []string) (map[string]stri
 // FindUserByPhone — user_id по телефону; ErrUserUnknown, если не зарегистрирован.
 func (s *Store) FindUserByPhone(ctx context.Context, phone string) (string, error) {
 	var userID string
-	err := s.pool.QueryRow(ctx, `SELECT user_id FROM users WHERE phone = $1`, phone).Scan(&userID)
+	err := s.pool.QueryRow(ctx,
+		`SELECT user_id FROM users WHERE phone_bidx = $1`, s.pii.BlindIndex(phone)).Scan(&userID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrUserUnknown
 	}
@@ -188,24 +240,81 @@ func (s *Store) FindUserByPhone(ctx context.Context, phone string) (string, erro
 }
 
 // FindUsersByPhones — телефон→user_id для зарегистрированных (contact discovery, батч).
+// В базу уходят только слепые индексы; обратное сопоставление делаем у себя.
 func (s *Store) FindUsersByPhones(ctx context.Context, phones []string) (map[string]string, error) {
 	out := make(map[string]string, len(phones))
 	if len(phones) == 0 {
 		return out, nil
 	}
-	rows, err := s.pool.Query(ctx, `SELECT phone, user_id FROM users WHERE phone = ANY($1)`, phones)
+	byIndex := make(map[string]string, len(phones)) // hex(bidx) → исходный номер
+	idx := make([][]byte, 0, len(phones))
+	for _, p := range phones {
+		b := s.pii.BlindIndex(p)
+		byIndex[string(b)] = p
+		idx = append(idx, b)
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT phone_bidx, user_id FROM users WHERE phone_bidx = ANY($1)`, idx)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var phone, userID string
-		if err := rows.Scan(&phone, &userID); err != nil {
+		var bidx []byte
+		var userID string
+		if err := rows.Scan(&bidx, &userID); err != nil {
 			return nil, err
 		}
-		out[phone] = userID
+		if phone, ok := byIndex[string(bidx)]; ok {
+			out[phone] = userID
+		}
 	}
 	return out, rows.Err()
+}
+
+// BackfillPII переносит открытые phone/display_name в шифртекст и слепой индекс.
+// Идемпотентна: берёт только строки, где индекса ещё нет. Живёт в коде, а не в
+// миграции, потому что ключа в SQL нет. Уйдёт вместе с миграцией 0018, которая
+// удалит открытые колонки.
+func (s *Store) BackfillPII(ctx context.Context) (int, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT user_id, phone, display_name FROM users
+		WHERE phone_bidx IS NULL AND phone IS NOT NULL`)
+	if err != nil {
+		return 0, err
+	}
+	type row struct{ id, phone, name string }
+	var pending []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.phone, &r.name); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		pending = append(pending, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	for _, r := range pending {
+		phoneEnc, err := s.pii.Seal(r.phone)
+		if err != nil {
+			return 0, err
+		}
+		nameEnc, err := s.pii.Seal(r.name)
+		if err != nil {
+			return 0, err
+		}
+		if _, err := s.pool.Exec(ctx, `
+			UPDATE users SET phone_bidx = $2, phone_enc = $3, name_enc = $4
+			WHERE user_id = $1 AND phone_bidx IS NULL`,
+			r.id, s.pii.BlindIndex(r.phone), phoneEnc, nameEnc); err != nil {
+			return 0, fmt.Errorf("backfill пользователя %s: %w", r.id, err)
+		}
+	}
+	return len(pending), nil
 }
 
 // ErrIdentityMismatch — присланный ключ личности не совпал с установленным у аккаунта.
