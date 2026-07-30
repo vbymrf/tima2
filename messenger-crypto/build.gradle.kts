@@ -1,6 +1,8 @@
 plugins {
     kotlin("jvm") version "2.3.10"
     id("com.squareup.wire") version "5.2.1" // кодоген из ../schema/proto (ADR-0009: схема — источник)
+    // Разметка сообщения (ADR-0011) — читаемый JSON внутри зашифрованного тела
+    kotlin("plugin.serialization") version "2.3.10"
 }
 
 group = "io.tima"
@@ -16,9 +18,11 @@ dependencies {
     // (см. Mlkem768.kt и поправку к ADR-0005) — BouncyCastle до исправления upstream.
     implementation("org.bouncycastle:bcprov-jdk18on:1.80")
     implementation("com.github.luben:zstd-jni:1.5.6-9") // сжатие body ДО шифрования
+    // api, а не implementation: Markup — часть публичного контракта библиотеки,
+    // клиент разбирает и собирает разметку теми же типами.
+    api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     testImplementation(kotlin("test"))
-    testImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 }
 
 wire {

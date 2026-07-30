@@ -46,12 +46,27 @@ class AccountMnemonicTest {
     }
 
     @Test
-    fun `опечатка в слове ловится контрольной суммой`() {
+    fun `опечатка в слове ловится контрольной суммой в подавляющем большинстве случаев`() {
+        // Контрольная сумма — 4 бита (128 бит энтропии / 32), поэтому НЕВЕРНОЕ слово
+        // проскакивает с вероятностью 1/16. Прежняя версия теста подменяла одно слово
+        // и требовала отказа всегда — и падала примерно в 6% прогонов без всякой вины
+        // кода. Проверяем настоящее свойство: ловится подавляющее большинство.
         val words = AccountMnemonic.generate().toMutableList()
-        // заменим слово на другое из словаря — checksum почти наверняка не сойдётся
-        val wrong = AccountMnemonic.wordlist.first { it != words[0] }
-        words[0] = wrong
-        assertFailsWith<IllegalArgumentException> { AccountMnemonic.mnemonicToEntropy(words) }
+        val original = words[0]
+        var caught = 0
+        var tried = 0
+        for (candidate in AccountMnemonic.wordlist) {
+            if (candidate == original) continue
+            tried++
+            words[0] = candidate
+            runCatching { AccountMnemonic.mnemonicToEntropy(words) }
+                .onFailure { if (it is IllegalArgumentException) caught++ }
+        }
+        // Ожидаем ~15/16 ≈ 93.75%; берём запас на случайность выбранной фразы.
+        val rate = caught.toDouble() / tried
+        assertTrue(rate > 0.85, "опечатка ловится лишь в ${"%.1f".format(rate * 100)}% случаев")
+        // И хотя бы одна подмена обязана отвергаться — иначе проверки нет вовсе.
+        assertTrue(caught > 0)
     }
 
     @Test

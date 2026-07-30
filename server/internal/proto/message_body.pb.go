@@ -106,10 +106,31 @@ func (EntityType) EnumDescriptor() ([]byte, []int) {
 }
 
 type MessageBody struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`         // UTF-8
-	Entities      []*Entity              `protobuf:"bytes,2,rep,name=entities,proto3" json:"entities,omitempty"` // offset/length — в UTF-16 code units (см. README: фикс interop)
-	Media         []*MediaRef            `protobuf:"bytes,3,rep,name=media,proto3" json:"media,omitempty"`       // вложения (media_key внутри — под шифрованием body)
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ── Формат 1 (исходный): плоский текст со смещениями ──
+	// Смещения в кодовых единицах UTF-16 расходятся между платформами на эмодзи и
+	// составных символах и требуют пересчёта при каждой правке. ADR-0011 заменяет
+	// их массивом узлов; поля 1–2 остаются как переходный и запасной путь.
+	Text     string      `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`         // UTF-8; при наличии nodes — склейка узлов для старых клиентов
+	Entities []*Entity   `protobuf:"bytes,2,rep,name=entities,proto3" json:"entities,omitempty"` // offset/length — в UTF-16 code units (см. README: фикс interop)
+	Media    []*MediaRef `protobuf:"bytes,3,rep,name=media,proto3" json:"media,omitempty"`       // вложения (media_key внутри — под шифрованием body)
+	// ── Формат 2 (ADR-0011): узлы + разметка ──
+	//
+	// Текст — массив узлов, БЕЗ якорных символов и без смещений. Разметка отдельно и
+	// ссылается на узлы по идентификаторам, а не по позиции: вставка узла в середину
+	// иначе сдвигала бы все последующие индексы и ломала ссылки из блоков, хотя сама
+	// разметка не менялась.
+	//
+	// markup пуст у обычного сообщения — а это 99% сообщений. Нет разметки — нет и
+	// идентификаторов узлов: ссылаться на них некому.
+	//
+	// ВАЖНО: у приватного сообщения разметка едет ЗДЕСЬ, внутри зашифрованного тела.
+	// Открытой она быть не может: она выведена из содержимого и раскрывает структуру,
+	// ссылки, наличие медиа и упоминания — то есть социальный граф внутри переписки.
+	Nodes []string `protobuf:"bytes,4,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	// Разметка в компактном JSON (ADR-0011 §6): один формат с читаемыми ключами,
+	// сжимается zstd вместе со всем телом. Пусто = разметки нет.
+	Markup        string `protobuf:"bytes,5,opt,name=markup,proto3" json:"markup,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -163,6 +184,20 @@ func (x *MessageBody) GetMedia() []*MediaRef {
 		return x.Media
 	}
 	return nil
+}
+
+func (x *MessageBody) GetNodes() []string {
+	if x != nil {
+		return x.Nodes
+	}
+	return nil
+}
+
+func (x *MessageBody) GetMarkup() string {
+	if x != nil {
+		return x.Markup
+	}
+	return ""
 }
 
 type Entity struct {
@@ -369,11 +404,13 @@ var File_message_body_proto protoreflect.FileDescriptor
 
 const file_message_body_proto_rawDesc = "" +
 	"\n" +
-	"\x12message_body.proto\x12\x0etima.crypto.v1\"\x85\x01\n" +
+	"\x12message_body.proto\x12\x0etima.crypto.v1\"\xb3\x01\n" +
 	"\vMessageBody\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x122\n" +
 	"\bentities\x18\x02 \x03(\v2\x16.tima.crypto.v1.EntityR\bentities\x12.\n" +
-	"\x05media\x18\x03 \x03(\v2\x18.tima.crypto.v1.MediaRefR\x05media\"\xcc\x01\n" +
+	"\x05media\x18\x03 \x03(\v2\x18.tima.crypto.v1.MediaRefR\x05media\x12\x14\n" +
+	"\x05nodes\x18\x04 \x03(\tR\x05nodes\x12\x16\n" +
+	"\x06markup\x18\x05 \x01(\tR\x06markup\"\xcc\x01\n" +
 	"\x06Entity\x12.\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x1a.tima.crypto.v1.EntityTypeR\x04type\x12\x16\n" +
 	"\x06offset\x18\x02 \x01(\rR\x06offset\x12\x16\n" +

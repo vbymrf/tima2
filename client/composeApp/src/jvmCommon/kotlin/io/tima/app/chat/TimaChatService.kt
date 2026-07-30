@@ -31,6 +31,8 @@ import io.tima.crypto.GroupMessageMeta
 import io.tima.crypto.MessageSigner
 import io.tima.crypto.WrappedKeyService
 import io.tima.crypto.MediaCipher
+import io.tima.crypto.MessageContent
+import io.tima.crypto.MessageContentCodec
 import io.tima.crypto.MessageSerializer
 import io.tima.crypto.PersonalMessageSealer
 import io.tima.crypto.SealedPersonalMessage
@@ -270,6 +272,21 @@ class TimaClient(private val session: Session) : ChatClient {
         }.distinctBy { it.userId }
     }
 
+    /**
+     * Тело сообщения из текста (ADR-0011). Кодек кладёт узлы И плоский текст:
+     * клиент, не знающий про узлы, покажет сообщение без оформления, а не пустоту.
+     */
+    private fun bodyOf(text: String): MessageBody =
+        MessageContentCodec.toBody(MessageContent.text(text))
+
+    /**
+     * Текст из тела: узлы, если они есть, иначе плоское поле. Читаем через кодек, а
+     * не напрямую, чтобы сообщение от клиента, который перестанет заполнять `text`,
+     * не превратилось в пустое.
+     */
+    private fun textOf(body: MessageBody): String =
+        MessageContentCodec.fromBody(body).plainText()
+
     private suspend fun devicesOf(userId: String): List<DeviceKeyInfo> =
         devicesCache.getOrPut(userId) { api.listDevices(session.accessToken, userId) }
 
@@ -418,7 +435,7 @@ class TimaClient(private val session: Session) : ChatClient {
             .sortedBy { it.messageId }
 
     override suspend fun send(peerUserId: String, text: String, replyTo: Long): ChatMessage =
-        sealAndPost(peerUserId, MessageBody(text = text), kind = 1, replyTo = replyTo.toULong()) // CK_TEXT
+        sealAndPost(peerUserId, bodyOf(text), kind = 1, replyTo = replyTo.toULong()) // CK_TEXT
 
     override suspend fun sendImage(peerUserId: String, imageBytes: ByteArray, mime: String, caption: String): ChatMessage {
         // media_key — случайный на файл; сервер и MinIO видят только ciphertext
@@ -631,7 +648,7 @@ class TimaClient(private val session: Session) : ChatClient {
             }
         }
         return ChatMessage(
-            chatId, messageId.toLong(), session.userId, body.text, now, mine = true,
+            chatId, messageId.toLong(), session.userId, textOf(body), now, mine = true,
             media = body.media.firstOrNull()?.toAttachment(),
             replyTo = replyTo.toLong(),
         )
@@ -655,7 +672,7 @@ class TimaClient(private val session: Session) : ChatClient {
             chatId = sealed.meta.chatId,
             messageId = sealed.meta.messageId.toLong(),
             senderId = sealed.meta.senderId,
-            text = body.text,
+            text = textOf(body),
             createdAtMs = sealed.meta.createdAtUnixMs,
             mine = sealed.meta.senderId == session.userId,
             media = body.media.firstOrNull()?.toAttachment(),
@@ -734,7 +751,7 @@ class TimaClient(private val session: Session) : ChatClient {
     }
 
     override suspend fun sendGroup(groupId: String, text: String): ChatMessage =
-        sealAndPostGroup(groupId, MessageBody(text = text), kind = 1) // CK_TEXT
+        sealAndPostGroup(groupId, bodyOf(text), kind = 1) // CK_TEXT
 
     override suspend fun sendGroupImage(groupId: String, imageBytes: ByteArray, mime: String, caption: String): ChatMessage {
         // media_key на файл; сервер и MinIO видят только ciphertext (как в личных)
@@ -782,7 +799,7 @@ class TimaClient(private val session: Session) : ChatClient {
             createdAtUnixMs = now, signature = b64url.encode(signature),
         )
         return ChatMessage(
-            groupId, messageId, session.userId, body.text, now, mine = true, group = true,
+            groupId, messageId, session.userId, textOf(body), now, mine = true, group = true,
             media = body.media.firstOrNull()?.toAttachment(),
         )
     }
@@ -840,7 +857,7 @@ class TimaClient(private val session: Session) : ChatClient {
         val body = MessageSerializer.decodeBody(plain).getOrNull() ?: return null
         return ChatMessage(
             chatId = m.groupId, messageId = m.messageId, senderId = m.senderId,
-            text = body.text, createdAtMs = m.createdAtUnixMs,
+            text = textOf(body), createdAtMs = m.createdAtUnixMs,
             mine = m.senderId == session.userId,
             media = body.media.firstOrNull()?.toAttachment(),
             group = true,
