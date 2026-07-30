@@ -19,6 +19,8 @@ actual class CallEngine actual constructor() {
     actual val cameraEnabled: StateFlow<Boolean> = _cam
     private val _speaker = MutableStateFlow(true)
     actual val speakerOn: StateFlow<Boolean> = _speaker
+    private val _peer = MutableStateFlow(false)
+    actual val peerPresent: StateFlow<Boolean> = _peer
 
     actual suspend fun connect(url: String, token: String, video: Boolean, publishMic: Boolean) {
         // no-op: на десктопе живого медиа нет

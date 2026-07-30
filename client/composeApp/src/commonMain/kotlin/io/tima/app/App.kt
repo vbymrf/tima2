@@ -1438,8 +1438,12 @@ private fun CallOverlay(call: CallUi, onAccept: () -> Unit, onEnd: () -> Unit) {
     // Погасший экран = уход в фон = система глушит микрофон. Держим экран включённым,
     // пока идёт звонок (foreground-сервис страхует, если свернули окно вручную).
     DisposableEffect(Unit) { keepScreenOn(true); onDispose { keepScreenOn(false) } }
-    // Гудки: рингтон на входящий, «ту-ту» на исходящий; смолкают, когда пошёл разговор
-    val ringback = call.direction == CallDir.Outgoing && mediaState != CallMediaState.Connected
+    // Гудок дозвона молчит, только когда собеседник ВЗЯЛ ТРУБКУ. Свой mediaState тут не
+    // указ: звонящий входит в комнату сразу, а на том конце ещё никто не ответил.
+    // Ждём либо сигнал «answered» (direction → Connected), либо реального участника
+    // в комнате — что придёт раньше.
+    val peerPresent by engine.peerPresent.collectAsState()
+    val ringback = call.direction == CallDir.Outgoing && !peerPresent
     LaunchedEffect(ringing, ringback) {
         if (ringing) startRinging(incoming = true)
         else if (ringback) startRinging(incoming = false)
@@ -1464,10 +1468,12 @@ private fun CallOverlay(call: CallUi, onAccept: () -> Unit, onEnd: () -> Unit) {
                     Text(
                         when {
                             ringing -> "Входящий ${if (isVideo) "видео" else "аудио"}звонок"
+                            // Раньше «В разговоре» загоралось, едва мы вошли в комнату —
+                            // хотя на том конце ещё никто не ответил
+                            ringback -> "Звоним…"
                             mediaState == CallMediaState.Connecting -> "Соединяем…"
                             mediaState == CallMediaState.Connected -> "В разговоре"
                             mediaState == CallMediaState.Failed -> "Медиа недоступно — проверьте разрешения микрофона/камеры"
-                            call.direction == CallDir.Outgoing -> "Звоним…"
                             else -> "…"
                         },
                         style = MaterialTheme.typography.titleMedium,

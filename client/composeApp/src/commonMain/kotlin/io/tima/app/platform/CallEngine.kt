@@ -21,6 +21,12 @@ expect class CallEngine() {
     /** Звук в громком динамике (а не в разговорном, у уха). Видеозвонок начинает с громкого. */
     val speakerOn: StateFlow<Boolean>
 
+    /**
+     * Есть ли в комнате кто-то ещё. Для звонящего «подключился» ≠ «мне ответили»:
+     * в комнату он входит сразу, а собеседник может и не взять трубку.
+     */
+    val peerPresent: StateFlow<Boolean>
+
     /** Подключиться к комнате; publishMic — публиковать ли микрофон (слушатель — нет), video — камеру. */
     suspend fun connect(url: String, token: String, video: Boolean, publishMic: Boolean)
     fun setMic(on: Boolean)

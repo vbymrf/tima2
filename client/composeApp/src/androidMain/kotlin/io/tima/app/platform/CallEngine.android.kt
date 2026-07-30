@@ -40,6 +40,8 @@ actual class CallEngine actual constructor() {
     actual val cameraEnabled: StateFlow<Boolean> = _cam
     private val _speaker = MutableStateFlow(false)
     actual val speakerOn: StateFlow<Boolean> = _speaker
+    private val _peer = MutableStateFlow(false)
+    actual val peerPresent: StateFlow<Boolean> = _peer
 
     // Треки для рендера (CallVideoView их читает)
     internal val localVideo = MutableStateFlow<VideoTrack?>(null)
@@ -65,12 +67,21 @@ actual class CallEngine actual constructor() {
                     when (ev) {
                         is RoomEvent.TrackSubscribed -> (ev.track as? VideoTrack)?.let { remoteVideo.value = it }
                         is RoomEvent.TrackUnsubscribed -> if (remoteVideo.value === ev.track) remoteVideo.value = null
-                        is RoomEvent.Disconnected -> _state.value = CallMediaState.Idle
+                        // Собеседник реально в комнате — по этому и глушим гудок дозвона
+                        is RoomEvent.ParticipantConnected -> _peer.value = true
+                        is RoomEvent.ParticipantDisconnected ->
+                            _peer.value = r.remoteParticipants.isNotEmpty()
+                        is RoomEvent.Disconnected -> {
+                            _peer.value = false
+                            _state.value = CallMediaState.Idle
+                        }
                         else -> {}
                     }
                 }
             }
             r.connect(url, token)
+            // Успели зайти вторыми — события ParticipantConnected уже не будет
+            _peer.value = r.remoteParticipants.isNotEmpty()
             r.localParticipant.setMicrophoneEnabled(publishMic)
             _mic.value = publishMic
             if (video) {
@@ -139,6 +150,7 @@ actual class CallEngine actual constructor() {
         room = null
         localVideo.value = null
         remoteVideo.value = null
+        _peer.value = false
         CallService.stop(AndroidAppContext.app)
         if (_state.value != CallMediaState.Failed) _state.value = CallMediaState.Idle
     }
