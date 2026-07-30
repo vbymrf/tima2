@@ -70,29 +70,11 @@ func mustStore(ctx context.Context) *store.Store {
 	return st
 }
 
-// migrateAndBackfill применяет схему и дошифровывает персональные данные, которые
-// остались от версий до 0017. Backfill идёт кодом, а не миграцией: ключа в SQL нет.
-// Идемпотентен, поэтому вызывается из всех процессов — кто стартовал первым, тот и
-// выполнил.
-func migrateAndBackfill(ctx context.Context, st *store.Store) error {
-	if err := st.Migrate(ctx, migrations.FS); err != nil {
-		return err
-	}
-	n, err := st.BackfillPII(ctx)
-	if err != nil {
-		return fmt.Errorf("backfill персональных данных: %w", err)
-	}
-	if n > 0 {
-		log.Printf("Персональные данные: зашифровано записей — %d", n)
-	}
-	return nil
-}
-
 func migrate() {
 	ctx := context.Background()
 	st := mustStore(ctx)
 	defer st.Close()
-	if err := migrateAndBackfill(ctx, st); err != nil {
+	if err := st.Migrate(ctx, migrations.FS); err != nil {
 		log.Fatal(err)
 	}
 	log.Println("миграции применены")
@@ -121,7 +103,7 @@ func runWorker() {
 	defer stop()
 	st := mustStore(ctx)
 	defer st.Close()
-	if err := migrateAndBackfill(ctx, st); err != nil {
+	if err := st.Migrate(ctx, migrations.FS); err != nil {
 		log.Fatal(err)
 	}
 	interval := time.Hour
@@ -163,7 +145,7 @@ func serve() {
 	if os.Getenv("DATABASE_URL") != "" {
 		ctx := context.Background()
 		st := mustStore(ctx)
-		if err := migrateAndBackfill(ctx, st); err != nil {
+		if err := st.Migrate(ctx, migrations.FS); err != nil {
 			log.Fatal(err)
 		}
 		key := []byte(os.Getenv("JWT_SIGNING_KEY"))

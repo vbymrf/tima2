@@ -272,51 +272,6 @@ func (s *Store) FindUsersByPhones(ctx context.Context, phones []string) (map[str
 	return out, rows.Err()
 }
 
-// BackfillPII переносит открытые phone/display_name в шифртекст и слепой индекс.
-// Идемпотентна: берёт только строки, где индекса ещё нет. Живёт в коде, а не в
-// миграции, потому что ключа в SQL нет. Уйдёт вместе с миграцией 0018, которая
-// удалит открытые колонки.
-func (s *Store) BackfillPII(ctx context.Context) (int, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT user_id, phone, display_name FROM users
-		WHERE phone_bidx IS NULL AND phone IS NOT NULL`)
-	if err != nil {
-		return 0, err
-	}
-	type row struct{ id, phone, name string }
-	var pending []row
-	for rows.Next() {
-		var r row
-		if err := rows.Scan(&r.id, &r.phone, &r.name); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		pending = append(pending, r)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
-
-	for _, r := range pending {
-		phoneEnc, err := s.pii.Seal(r.phone)
-		if err != nil {
-			return 0, err
-		}
-		nameEnc, err := s.pii.Seal(r.name)
-		if err != nil {
-			return 0, err
-		}
-		if _, err := s.pool.Exec(ctx, `
-			UPDATE users SET phone_bidx = $2, phone_enc = $3, name_enc = $4
-			WHERE user_id = $1 AND phone_bidx IS NULL`,
-			r.id, s.pii.BlindIndex(r.phone), phoneEnc, nameEnc); err != nil {
-			return 0, fmt.Errorf("backfill пользователя %s: %w", r.id, err)
-		}
-	}
-	return len(pending), nil
-}
-
 // ErrIdentityMismatch — присланный ключ личности не совпал с установленным у аккаунта.
 var ErrIdentityMismatch = errors.New("ключ личности не совпадает с установленным для аккаунта")
 
