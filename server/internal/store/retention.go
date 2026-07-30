@@ -162,3 +162,61 @@ func (s *Store) PurgeMessageContent(ctx context.Context, now time.Time, limit in
 	}
 	return tag.RowsAffected(), nil
 }
+
+// IdentityHistoryStart — момент самого раннего сообщения, отправленного под этой
+// личностью. Нулевое время означает «переписки под ней нет».
+func (s *Store) IdentityHistoryStart(ctx context.Context, userID string) (time.Time, error) {
+	var ms *int64
+	err := s.pool.QueryRow(ctx,
+		`SELECT min(created_at_unix_ms) FROM personal_messages WHERE sender_id = $1`, userID).Scan(&ms)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if ms == nil {
+		return time.Time{}, nil
+	}
+	return time.UnixMilli(*ms).UTC(), nil
+}
+
+// ChooseHeadIdentity выбирает, какая из двух личностей остаётся текущей при
+// воссоединении аккаунтов.
+//
+// Правило: побеждает та, под которой ДЛИННЕЕ переписка, а не просто более ранняя.
+// Обычно это одно и то же, но не всегда: человек мог завести идентификатор раньше,
+// а писать начать позже. На переписке висят членства в группах и история, и
+// переносить их на короткую сторону дороже.
+//
+// Переписки нет ни у одной — берём ту, что заведена раньше: других оснований нет.
+func (s *Store) ChooseHeadIdentity(ctx context.Context, a, b string) (string, error) {
+	startA, err := s.IdentityHistoryStart(ctx, a)
+	if err != nil {
+		return "", err
+	}
+	startB, err := s.IdentityHistoryStart(ctx, b)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case !startA.IsZero() && startB.IsZero():
+		return a, nil
+	case startA.IsZero() && !startB.IsZero():
+		return b, nil
+	case !startA.IsZero() && !startB.IsZero():
+		if startA.Before(startB) {
+			return a, nil
+		}
+		return b, nil
+	}
+	// Ни под одной не писали — сравниваем по времени заведения личности.
+	var createdA, createdB time.Time
+	if err := s.pool.QueryRow(ctx, `SELECT valid_from FROM users WHERE user_id = $1`, a).Scan(&createdA); err != nil {
+		return "", err
+	}
+	if err := s.pool.QueryRow(ctx, `SELECT valid_from FROM users WHERE user_id = $1`, b).Scan(&createdB); err != nil {
+		return "", err
+	}
+	if createdA.Before(createdB) {
+		return a, nil
+	}
+	return b, nil
+}
