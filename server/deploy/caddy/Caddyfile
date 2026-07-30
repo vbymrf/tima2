@@ -13,6 +13,12 @@ api.{$DOMAIN} {
 		root * /srv/download
 		file_server
 	}
+	# Вебхуки LiveKit приходят по петле 127.0.0.1 внутри VPS — снаружи этот путь
+	# не нужен. Подпись его и так защищает, но открытый эндпоинт, который меняет
+	# состояние звонков, лучше не выставлять вовсе.
+	handle /livekit/* {
+		respond 404
+	}
 	# Всё остальное — на бэкенд: REST /api/*, WebSocket /ws, /healthz
 	handle {
 		reverse_proxy backend:8080

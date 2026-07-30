@@ -70,6 +70,12 @@ services:
       TIMA_PII_KEY_FILE: /data/pii/pii-key.json
     volumes:
       - pii-data:/data/pii
+    # ТОЛЬКО loopback хоста. LiveKit работает в host-сети (ему нужны настоящие
+    # UDP-порты WebRTC) и поэтому не видит имён docker-compose: вебхуки на
+    # http://backend:8080 не резолвились и молча выбрасывались. Наружу порт не
+    # выставляем — снаружи всё идёт через Caddy.
+    ports:
+      - "127.0.0.1:8080:8080"
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
