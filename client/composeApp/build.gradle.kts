@@ -1,4 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import java.util.Properties  // в Gradle DSL `java` — расширение плагина, не пакет
 
 plugins {
     kotlin("multiplatform")
@@ -63,6 +64,23 @@ kotlin {
     }
 }
 
+// Стабильная подпись APK.
+//
+// Раньше сборка подписывалась отладочным ключом, а он генерируется НА КАЖДОЙ МАШИНЕ
+// свой. Приложение распространяется мимо магазина, поэтому смена машины сборки
+// означала «Приложение конфликтует с другим пакетом» у всех, у кого стоит прежняя
+// версия: Android не даёт обновить приложение с другой подписью.
+//
+// Ключ лежит в keystore/ вне гита. Потеря = все пользователи обязаны удалить и
+// поставить приложение заново. Бэкапить отдельно.
+//
+// Файла нет (свежий клон) — собираем отладочной подписью, чтобы сборка не падала.
+val keystoreProps = rootProject.file("../keystore/keystore.properties")
+val stableSigning = keystoreProps.exists()
+val ksProps = Properties().apply {
+    if (stableSigning) keystoreProps.inputStream().use { load(it) }
+}
+
 android {
     namespace = "io.tima.app"
     compileSdk = 35
@@ -72,12 +90,28 @@ android {
         applicationId = "io.tima.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 12
-        versionName = "0.5.5"
+        versionCode = 13
+        versionName = "0.5.6"
         // Только arm64-v8a: реальные телефоны с ~2017. Режет APK (WebRTC/zstd — нативные
         // либы под все ABI). ВНИМАНИЕ: x86_64-эмулятор перестанет работать — тест на телефоне.
         ndk {
             abiFilters += "arm64-v8a"
+        }
+    }
+    if (stableSigning) {
+        signingConfigs {
+            create("stable") {
+                storeFile = rootProject.file("../keystore/tima-release.jks")
+                storePassword = ksProps.getProperty("storePassword")
+                keyAlias = ksProps.getProperty("keyAlias")
+                keyPassword = ksProps.getProperty("keyPassword")
+            }
+        }
+        buildTypes {
+            // Распространяем отладочную сборку (release потребовал бы отдельной
+            // проверки R8), но подписываем её стабильным ключом.
+            getByName("debug") { signingConfig = signingConfigs.getByName("stable") }
+            getByName("release") { signingConfig = signingConfigs.getByName("stable") }
         }
     }
     compileOptions {

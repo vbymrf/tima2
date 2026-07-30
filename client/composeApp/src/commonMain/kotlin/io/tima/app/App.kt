@@ -76,6 +76,7 @@ import io.tima.app.platform.CallMediaState
 import io.tima.app.platform.CallVideoView
 import io.tima.app.platform.contactsSupported
 import io.tima.app.platform.currentVersionCode
+import io.tima.app.platform.currentVersionName
 import io.tima.app.platform.decodeImage
 import io.tima.app.platform.ensureCallPermissions
 import io.tima.app.platform.cancelVoiceRecording
@@ -412,7 +413,7 @@ private fun PhoneScreen(onCode: (Screen.Code) -> Unit) {
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    Text("TIMA", style = MaterialTheme.typography.headlineLarge)
+    Text("TIMA " + currentVersionName(), style = MaterialTheme.typography.headlineLarge)
     Spacer(Modifier.height(24.dp))
     OutlinedTextField(
         value = serverUrl, onValueChange = { serverUrl = it },
@@ -626,7 +627,7 @@ private fun HomeScreen(
             ?.let { if (myName.isEmpty()) { myName = it; nameSaved = true } }
     }
 
-    Text("TIMA", style = MaterialTheme.typography.headlineMedium)
+    Text("TIMA " + currentVersionName(), style = MaterialTheme.typography.headlineMedium)
     Spacer(Modifier.height(8.dp))
     // «Имя +7999…»; пока имя не задано — только номер
     val me = listOf(myName.trim(), session.phone).filter { it.isNotEmpty() }.joinToString(" ")

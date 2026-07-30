@@ -35,6 +35,12 @@ actual fun currentVersionCode(): Int {
     }
 }
 
+actual fun currentVersionName(): String {
+    val ctx = AndroidAppContext.app
+    return runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }
+        .getOrNull().orEmpty()
+}
+
 actual suspend fun installUpdate(update: AppVersionDto, onProgress: (Int) -> Unit): Unit = withContext(Dispatchers.IO) {
     val ctx = AndroidAppContext.app
     try {
