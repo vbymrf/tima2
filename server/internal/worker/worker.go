@@ -34,6 +34,15 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		{"group_wrapped_keys", func() (int64, error) { return w.Store.GCGroupWrappedKeys(ctx, retention) }},
 		{"excluded_group_keys", func() (int64, error) { return w.Store.GCExcludedGroupKeys(ctx, window) }},
 		{"sms_codes", func() (int64, error) { return w.Store.GCExpiredSmsCodes(ctx) }},
+		// Стирание содержимого сообщений, чьи ключи эпох уже уничтожены анклавом.
+		// Метаданные строки остаются: у них отдельный срок — они не удаляются
+		// никогда (ПЛАН-РЕФАКТОРИНГА.md §0).
+		{"message_content", func() (int64, error) {
+			return w.Store.PurgeMessageContent(ctx, time.Now(), purgeBatch)
+		}},
+		// Временные аккаунты, молчавшие дольше срока, уходят в архив. Постоянных
+		// это не касается: они по неактивности не удаляются никогда.
+		{"inactive_temporary", func() (int64, error) { return w.archiveInactive(ctx) }},
 	}
 	var firstErr error
 	for _, j := range jobs {
@@ -72,4 +81,34 @@ func (w *Worker) Run(ctx context.Context, interval time.Duration) {
 			}
 		}
 	}
+}
+
+// purgeBatch — сколько строк стираем за проход. Ограничение намеренное: стирание
+// идёт в фоне рядом с боевой нагрузкой, и длинная транзакция здесь никому не нужна.
+const purgeBatch = 500
+
+// archiveInactive переводит в архив временные аккаунты, молчавшие дольше срока.
+// Сроки берутся из таблицы политик, а не из констант: «если что изменится» должно
+// быть правкой строки в базе, а не пересборкой.
+func (w *Worker) archiveInactive(ctx context.Context) (int64, error) {
+	inactiveDays, err := w.Store.RetentionDays(ctx, "account_inactive_days")
+	if err != nil {
+		return 0, err
+	}
+	purgeDays, err := w.Store.RetentionDays(ctx, "account_purge_days")
+	if err != nil {
+		return 0, err
+	}
+	ids, err := w.Store.InactiveTemporaryAccounts(ctx, inactiveDays, purgeBatch)
+	if err != nil {
+		return 0, err
+	}
+	var n int64
+	for _, id := range ids {
+		if err := w.Store.MarkAccountDeleted(ctx, id, purgeDays); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
 }

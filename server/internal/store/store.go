@@ -96,7 +96,12 @@ func (s *Store) ResetForTests(ctx context.Context) error {
 	if db := s.pool.Config().ConnConfig.Database; !strings.HasSuffix(db, "_test") {
 		return fmt.Errorf("store: ResetForTests отказано — база %q не заканчивается на _test", db)
 	}
-	_, err := s.pool.Exec(ctx, `TRUNCATE personal_messages, personal_message_keys, personal_message_backup, devices, users, sms_codes, media_objects, group_key_history, group_wrapped_keys, groups, memberships, group_messages, device_events, sync_cursors, gc_state, channels, channel_subscriptions, channel_posts, calls, voice_rooms, voice_speakers`)
+	// persons и escrow_keys — тоже тестовые данные. Без них persons копил бы
+	// аккаунты между прогонами (и держал номера занятыми), а escrow_keys ловил бы
+	// конфликт идентификаторов с анклавом, который в каждом тесте поднимается
+	// заново и начинает нумерацию с единицы.
+	// retention_policy НЕ трогаем: там строки, засеянные миграцией.
+	_, err := s.pool.Exec(ctx, `TRUNCATE personal_messages, personal_message_keys, personal_message_backup, devices, users, persons, escrow_keys, sms_codes, media_objects, group_key_history, group_wrapped_keys, groups, memberships, group_messages, device_events, sync_cursors, gc_state, channels, channel_subscriptions, channel_posts, calls, voice_rooms, voice_speakers`)
 	return err
 }
 
@@ -155,9 +160,14 @@ func (s *Store) UpsertUserByPhone(ctx context.Context, phone string) (string, er
 	defer tx.Rollback(ctx) //nolint:errcheck // после Commit это no-op
 
 	var personID string
+	// Предикат ON CONFLICT обязан ПОБУКВЕННО совпадать с предикатом частичного
+	// индекса idx_persons_phone_bidx, иначе PostgreSQL не может вывести индекс и
+	// падает. Условие `state <> 'archived'` здесь не украшение: архивный аккаунт
+	// номер не держит, и регистрация на него заводит НОВЫЙ аккаунт, а не оживляет
+	// прежний (ДОКУМЕНТАЦИЯ/04 §5).
 	err = tx.QueryRow(ctx, `
 		INSERT INTO persons (phone_bidx, phone_enc) VALUES ($1, $2)
-		ON CONFLICT (phone_bidx) WHERE phone_bidx IS NOT NULL
+		ON CONFLICT (phone_bidx) WHERE phone_bidx IS NOT NULL AND state <> 'archived'
 		DO UPDATE SET phone_enc = EXCLUDED.phone_enc
 		RETURNING person_id`, bidx, enc).Scan(&personID)
 	if err != nil {

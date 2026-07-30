@@ -6,9 +6,11 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // EscrowKey — запись реестра. Идентификатор совпадает с escrow_key_version в блобе.
@@ -51,7 +53,22 @@ func (s *Store) SaveEscrowKey(ctx context.Context, k EscrowKey) error {
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (region, epoch, chat_id) DO NOTHING`,
 		k.ID, k.Region, k.Epoch, k.ChatID, k.PublicKey, k.ValidFrom, k.ValidTo, k.DestroyAt)
+	if err != nil && isUniqueViolation(err) {
+		// Конфликт по первичному ключу, а не по области: анклав выдал идентификатор,
+		// который в реестре уже занят другой областью. Так бывает, если состояние
+		// анклава потеряно и нумерация началась заново.
+		//
+		// Молча перезаписывать НЕЛЬЗЯ: на прежний идентификатор уже ссылаются
+		// отправленные блобы, и подмена означала бы, что их расшифруют не тем
+		// ключом. Падаем громко — это расхождение чинится руками.
+		return fmt.Errorf("реестр escrow и анклав разошлись: идентификатор %d уже занят другой областью (%w)", k.ID, err)
+	}
 	return err
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 // ExpiredEscrowKeys — ключи, чей срок вышел: их содержимое уже никем не
