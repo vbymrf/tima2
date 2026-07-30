@@ -204,7 +204,10 @@ func serve() {
 		if lk := calls.NewIssuer(os.Getenv("LIVEKIT_API_KEY"), os.Getenv("LIVEKIT_API_SECRET")); lk != nil {
 			srv.Calls = lk
 			srv.LiveKitURL = os.Getenv("LIVEKIT_URL")
-			log.Printf("Звонки: LiveKit-токены подключены (%s)", srv.LiveKitURL)
+			// Управление комнатами: адрес берём из того же LIVEKIT_URL (wss → https),
+			// чтобы не заводить второй параметр, который рассинхронизируется.
+			srv.Rooms = calls.NewRoomClient(srv.LiveKitURL, lk)
+			log.Printf("Звонки: LiveKit-токены и управление комнатами подключены (%s)", srv.LiveKitURL)
 		} else {
 			log.Print("LIVEKIT_API_KEY/SECRET не заданы — /calls отвечает 503")
 		}

@@ -271,6 +271,12 @@ func (s *Server) endCall(w http.ResponseWriter, r *http.Request) {
 	if call.State == "ringing" {
 		state = "missed"
 	}
+	// Закрываем комнату НА САМОМ ДЕЛЕ. Без этого «завершить» меняло состояние у нас
+	// и рассылало уведомление, а комната жила до empty_timeout: клиент, который
+	// уведомление не получил или проигнорировал, продолжал публиковать звук.
+	if err := s.Rooms.DeleteRoom(r.Context(), call.Room); err != nil {
+		log.Printf("endCall: комната %s не закрылась: %v", call.Room, err)
+	}
 	_ = s.Store.SetCallState(r.Context(), callID, state)
 	other := call.PeerID
 	if id.UserID == call.PeerID {

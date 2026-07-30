@@ -101,7 +101,7 @@ func (s *Store) ResetForTests(ctx context.Context) error {
 	// конфликт идентификаторов с анклавом, который в каждом тесте поднимается
 	// заново и начинает нумерацию с единицы.
 	// retention_policy НЕ трогаем: там строки, засеянные миграцией.
-	_, err := s.pool.Exec(ctx, `TRUNCATE personal_messages, personal_message_keys, personal_message_backup, devices, users, persons, escrow_keys, sms_codes, media_objects, group_key_history, group_wrapped_keys, groups, memberships, group_messages, device_events, sync_cursors, gc_state, channels, channel_subscriptions, channel_posts, calls, voice_rooms, voice_speakers`)
+	_, err := s.pool.Exec(ctx, `TRUNCATE personal_messages, personal_message_keys, personal_message_backup, devices, users, persons, escrow_keys, sms_codes, media_objects, group_key_history, group_wrapped_keys, groups, memberships, group_messages, device_events, sync_cursors, gc_state, channels, channel_subscriptions, channel_posts, calls, call_participants, voice_rooms, voice_speakers`)
 	return err
 }
 

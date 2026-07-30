@@ -47,6 +47,10 @@ type Server struct {
 	// для подключения к SFU.
 	Calls      *calls.Issuer
 	LiveKitURL string
+	// Rooms — управление комнатами LiveKit (закрыть, выкинуть участника).
+	// nil → «завершить звонок» меняет только наше состояние, комната живёт до
+	// empty_timeout, и клиент, не услышавший уведомление, продолжает публиковать.
+	Rooms *calls.RoomClient
 
 	// EscrowURL — адрес stub-анклава (ESCROW_URL); "" → /escrow/pubkey отвечает 503
 	EscrowURL string
@@ -117,6 +121,11 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/calls", s.Auth.Require(s.startCall))
 	mux.HandleFunc("POST /api/v1/calls/{callID}/answer", s.Auth.Require(s.answerCall))
 	mux.HandleFunc("POST /api/v1/calls/{callID}/end", s.Auth.Require(s.endCall))
+	mux.HandleFunc("POST /api/v1/calls/group", s.Auth.Require(s.startGroupCall))
+	mux.HandleFunc("POST /api/v1/calls/{callID}/join", s.Auth.Require(s.joinCall))
+	// Вебхуки LiveKit — без device JWT: подпись проверяется секретом LiveKit,
+	// а сам SFU нашего токена не имеет и иметь не должен.
+	mux.HandleFunc("POST /livekit/webhook", s.livekitWebhook)
 	mux.HandleFunc("POST /api/v1/voice-rooms", s.Auth.Require(s.createVoiceRoom))
 	mux.HandleFunc("GET /api/v1/voice-rooms", s.Auth.Require(s.listVoiceRooms))
 	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/join", s.Auth.Require(s.joinVoiceRoom))

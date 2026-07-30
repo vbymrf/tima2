@@ -15,6 +15,7 @@ import (
 type VideoGrant struct {
 	Room         string `json:"room,omitempty"`
 	RoomJoin     bool   `json:"roomJoin,omitempty"`
+	RoomAdmin    bool   `json:"roomAdmin,omitempty"` // управление комнатой, НЕ подключение к медиа
 	CanPublish   *bool  `json:"canPublish,omitempty"`
 	CanSubscribe *bool  `json:"canSubscribe,omitempty"`
 }
@@ -52,6 +53,27 @@ func (i *Issuer) Token(room, identity string, canPublish bool, ttl time.Duration
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    i.APIKey, // LiveKit: iss = API key
 			Subject:   identity, // identity = user_id:device_id
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+			NotBefore: jwt.NewNumericDate(now.Add(-10 * time.Second)),
+			IssuedAt:  jwt.NewNumericDate(now),
+		},
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, c).SignedString([]byte(i.APISecret))
+}
+
+// RoomAdminToken — токен для управления комнатой (RoomService): закрыть её,
+// выкинуть участника. Права намеренно другие, чем у Token: roomAdmin без roomJoin,
+// то есть подключиться к медиа по нему нельзя. Если такой токен утечёт, им можно
+// сломать звонок, но не подслушать его.
+func (i *Issuer) RoomAdminToken(room string, ttl time.Duration, now time.Time) (string, error) {
+	if i == nil {
+		return "", ErrNotConfigured
+	}
+	c := claims{
+		Video: VideoGrant{Room: room, RoomAdmin: true},
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    i.APIKey,
+			Subject:   "tima-backend",
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 			NotBefore: jwt.NewNumericDate(now.Add(-10 * time.Second)),
 			IssuedAt:  jwt.NewNumericDate(now),
