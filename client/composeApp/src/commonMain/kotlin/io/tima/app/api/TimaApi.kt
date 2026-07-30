@@ -91,6 +91,31 @@ data class EscrowPubkey(
     @SerialName("public_key") val publicKey: String, // base64url, 1184 B (ML-KEM-768)
 )
 
+/**
+ * Ключ escrow области «чат × эпоха» (ADR-0012). Один ключ на чат и календарный
+ * месяц: утечка вскрывает один чат за один месяц, а не всю историю навсегда.
+ */
+@Serializable
+data class EscrowScopedKey(
+    val id: Long, // → EscrowBlob.escrow_key_version
+    val epoch: String, // 'YYYY-MM'
+    @SerialName("public_key") val publicKey: String, // base64url, 1184 B
+    @SerialName("valid_from") val validFrom: String,
+    @SerialName("valid_to") val validTo: String, // после этого шифровать на него нельзя
+)
+
+/**
+ * Ответ GET /escrow/key: ключ текущей эпохи и — у границы эпохи — следующий.
+ * [next] приходит заранее, чтобы смена месяца не останавливала отправку у клиента
+ * с закэшированным ключом.
+ */
+@Serializable
+data class EscrowKeyBundle(
+    val region: String,
+    val current: EscrowScopedKey,
+    val next: EscrowScopedKey? = null,
+)
+
 @Serializable
 data class HistoryItem(
     @SerialName("message_id") val messageId: Long,
@@ -483,6 +508,16 @@ class TimaApi(private val baseUrl: String) {
 
     suspend fun escrowPubkey(token: String): EscrowPubkey {
         val response = client.get(baseUrl.trimEnd('/') + "/api/v1/escrow/pubkey") { bearerAuth(token) }
+        if (!response.status.isSuccess()) fail(response)
+        return response.body()
+    }
+
+    /** Ключ escrow для чата на текущую эпоху (ADR-0012). Один запрос на чат в месяц. */
+    suspend fun escrowKey(token: String, chatId: String): EscrowKeyBundle {
+        val response = client.get(baseUrl.trimEnd('/') + "/api/v1/escrow/key") {
+            bearerAuth(token)
+            parameter("chat_id", chatId)
+        }
         if (!response.status.isSuccess()) fail(response)
         return response.body()
     }

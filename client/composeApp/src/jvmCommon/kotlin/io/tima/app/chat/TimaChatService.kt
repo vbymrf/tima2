@@ -73,6 +73,14 @@ fun personalChatId(userA: String, userB: String): String {
     return "${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}"
 }
 
+/**
+ * Момент из RFC-3339 в миллисекунды. Сервер отдаёт окна валидности ключей escrow
+ * в этом виде. Не разобралось — считаем ключ просроченным (0): лучше лишний запрос,
+ * чем шифрование на ключ с неизвестным сроком.
+ */
+private fun parseInstantMs(value: String): Long =
+    runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrDefault(0L)
+
 @Serializable
 private data class WsFrame(
     val event: String = "",
@@ -155,8 +163,9 @@ class TimaClient(private val session: Session) : ChatClient {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val random = SecureRandom()
 
-    private var escrowModule: EscrowModule? = null
-    private var sealer: PersonalMessageSealer? = null
+    // chat_id → ключ escrow текущей эпохи. Ключ у каждой пары «чат × месяц» свой,
+    // поэтому кэш по чатам, а не один модуль на клиента.
+    private val escrowByChat = ConcurrentHashMap<String, CachedEscrowKey>()
     private val devicesCache = mutableMapOf<String, List<DeviceKeyInfo>>()
     private val mediaCache = ConcurrentHashMap<String, ByteArray>() // media_id → plaintext (на сессию)
     private val groupKeyCache = ConcurrentHashMap<String, MutableMap<Int, ByteArray>>() // group_id → версия → GK
@@ -264,14 +273,27 @@ class TimaClient(private val session: Session) : ChatClient {
     private suspend fun devicesOf(userId: String): List<DeviceKeyInfo> =
         devicesCache.getOrPut(userId) { api.listDevices(session.accessToken, userId) }
 
-    /** Escrow-модуль лениво: публичный ML-KEM-ключ анклава берётся с сервера. */
-    private suspend fun ensureEscrow(): EscrowModule = escrowModule ?: run {
-        val pub = api.escrowPubkey(session.accessToken)
-        EscrowModule(b64url.decode(pub.publicKey), pub.version).also { escrowModule = it }
+    /**
+     * Escrow-модуль для чата на текущую эпоху (ADR-0012).
+     *
+     * Ключ свой у каждой пары «чат × месяц», поэтому единого модуля на клиента
+     * больше нет. Кэш держим до конца окна валидности: сервер отдаёт `valid_to`,
+     * и по его истечении ключ перезапрашивается — иначе на смене месяца мы бы
+     * шифровали на закрывшееся окно.
+     */
+    private suspend fun escrowFor(chatId: String): EscrowModule {
+        escrowByChat[chatId]?.let { if (System.currentTimeMillis() < it.validToMs) return it.module }
+        val bundle = api.escrowKey(session.accessToken, chatId)
+        val module = EscrowModule(b64url.decode(bundle.current.publicKey), bundle.current.id.toInt())
+        escrowByChat[chatId] = CachedEscrowKey(module, parseInstantMs(bundle.current.validTo))
+        return module
     }
 
-    private suspend fun ensureSealer(): PersonalMessageSealer =
-        sealer ?: PersonalMessageSealer(ensureEscrow()).also { sealer = it }
+    private suspend fun sealerFor(chatId: String): PersonalMessageSealer =
+        PersonalMessageSealer(escrowFor(chatId))
+
+    /** Ключ escrow чата с кэшем до конца эпохи. */
+    private data class CachedEscrowKey(val module: EscrowModule, val validToMs: Long)
 
     /** Один WS на устройство: auth → sync.pull (догон) → live; обрыв → реконнект с паузой. */
     private val started = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -569,8 +591,8 @@ class TimaClient(private val session: Session) : ChatClient {
     }
 
     private suspend fun sealAndPost(peerUserId: String, body: MessageBody, kind: Int, replyTo: ULong = 0u): ChatMessage {
-        val sealer = ensureSealer()
         val chatId = chatIdWith(peerUserId)
+        val sealer = sealerFor(chatId)
         // Обёртки: все устройства собеседника + все мои (мультиустройство и своя история)
         val recipients = (devicesOf(peerUserId) + devicesOf(session.userId)).map {
             DeviceAddress(it.deviceId, b64url.decode(it.encryptionPub))
@@ -674,7 +696,8 @@ class TimaClient(private val session: Session) : ChatClient {
         val devices = members.flatMap { devicesOf(it.userId) }.map {
             DeviceAddress(it.deviceId, b64url.decode(it.encryptionPub))
         }
-        val rotation = GroupKeyManager(ensureEscrow()).rotate(currentVersion, devices).getOrThrow()
+        // Групповой ключ депонируется на ключ эпохи ЭТОЙ группы: область та же, что у чата.
+        val rotation = GroupKeyManager(escrowFor(groupId)).rotate(currentVersion, devices).getOrThrow()
         api.rotateGroupKey(
             session.accessToken, groupId, rotation.gkVersion, reason,
             senderEphemeralPub = b64url.encode(rotation.senderEphemeralPub),
