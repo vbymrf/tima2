@@ -189,7 +189,7 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return
 	}
-	cb := timacrypto.CanonicalBytes(env.GetFormatVersion(), timacrypto.EnvelopeMeta{
+	cb := timacrypto.CanonicalBytesV2(env.GetFormatVersion(), timacrypto.EnvelopeMeta{
 		MessageID:       meta.GetMessageId(),
 		ChatID:          meta.GetChatId(),
 		SenderID:        meta.GetSenderId(),
@@ -202,6 +202,7 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 		append(append([]byte{}, env.GetEscrow().GetMlkemCt()...), env.GetEscrow().GetWrappedMessageKey()...),
 		env.GetSenderEphemeralPub(),
 		env.GetRatchetEnvelope(),
+		env.GetKeyCommitment(),
 	)
 	if !timacrypto.VerifyEnvelopeSignature(signingPub, cb, env.GetSignature()) {
 		writeErr(w, http.StatusForbidden, "bad_signature", "подпись конверта не прошла проверку")
@@ -234,6 +235,7 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 		SenderEphemeralPub: env.GetSenderEphemeralPub(),
 		RatchetEnvelope:    env.GetRatchetEnvelope(),
 		Signature:          env.GetSignature(),
+		KeyCommitment:      env.GetKeyCommitment(),
 		WrappedKeys:        wrapped,
 	})
 	if errors.Is(err, store.ErrDuplicate) {
@@ -269,8 +271,18 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 // validateEnvelope — жёсткие инварианты wire-формата (envelope.proto). Пустая строка = ок.
 func validateEnvelope(env *pb.Envelope) string {
 	switch {
-	case env.GetFormatVersion() != timacrypto.FormatVersion:
+	// Принимаем и старую версию: пока в пути есть сообщения от необновлённых
+	// клиентов, отказ означал бы их потерю. Отзовём приём v1 отдельным релизом,
+	// когда все перейдут (двухфазная выкатка, ADR-0013).
+	case env.GetFormatVersion() != timacrypto.FormatVersion && env.GetFormatVersion() != timacrypto.FormatVersionLegacy:
 		return "неподдерживаемый format_version"
+	// Сервер не знает message_key и проверить ЗНАЧЕНИЕ обязательства не может —
+	// но обязан требовать его наличия и правильной длины. Само значение защищено
+	// подписью: оно входит в canonical_bytes.
+	case env.GetFormatVersion() >= timacrypto.FormatVersion && len(env.GetKeyCommitment()) != timacrypto.CommitmentSize:
+		return "key_commitment должен быть 32 байта при format_version >= 2"
+	case env.GetFormatVersion() < timacrypto.FormatVersion && len(env.GetKeyCommitment()) != 0:
+		return "key_commitment не место в конверте версии 1"
 	case env.GetMeta() == nil:
 		return "нет meta"
 	case env.GetMeta().GetChatId() == "" || env.GetMeta().GetSenderId() == "" || env.GetMeta().GetSenderDevice() == "":
@@ -335,6 +347,7 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
 				ReplyTo:         m.ReplyTo,
 			},
 			EncryptedPayload: m.EncryptedPayload,
+			KeyCommitment:    m.KeyCommitment,
 			Escrow: &pb.EscrowBlob{
 				MlkemCt:           m.EscrowMlkemCt,
 				WrappedMessageKey: m.EscrowWrappedKey,

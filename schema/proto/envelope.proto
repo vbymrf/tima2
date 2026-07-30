@@ -22,6 +22,18 @@ message Envelope {
   bytes ratchet_envelope = 6;        // opaque Kodium RatchetMessage; пусто, если сессии нет (путь A)
   bytes signature = 7;               // Ed25519 detached над canonical_bytes (см. proto/README.md)
   repeated WrappedKey wrapped_keys = 8; // по одному на устройство получателя И отправителя (план Б)
+
+  // Обязательство по ключу сообщения: HKDF-SHA256(message_key, info="tima/commit/v1"), 32 B.
+  // Обязательно при format_version >= 2, входит в canonical_bytes (ADR-0013).
+  //
+  // message_key едет получателю тремя независимыми путями — ratchet, wrapped_key и
+  // escrow_blob, — и ни один не доказывает, что остальные ведут к тому же ключу:
+  // Poly1305 не является key-committing, поэтому один шифртекст может валидно
+  // раскрыться под ДВУМЯ разными ключами. Без обязательства отправитель мог бы
+  // собрать сообщение так, что по ордеру расшифруется один текст, а у получателя на
+  // экране будет другой. Получатель пересчитывает обязательство из добытого ключа на
+  // ЛЮБОМ пути и сверяет; расхождение — отказ.
+  bytes key_commitment = 9;
 }
 
 message Metadata {

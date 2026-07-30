@@ -101,8 +101,19 @@ type Envelope struct {
 	RatchetEnvelope    []byte                 `protobuf:"bytes,6,opt,name=ratchet_envelope,json=ratchetEnvelope,proto3" json:"ratchet_envelope,omitempty"`            // opaque Kodium RatchetMessage; пусто, если сессии нет (путь A)
 	Signature          []byte                 `protobuf:"bytes,7,opt,name=signature,proto3" json:"signature,omitempty"`                                               // Ed25519 detached над canonical_bytes (см. proto/README.md)
 	WrappedKeys        []*WrappedKey          `protobuf:"bytes,8,rep,name=wrapped_keys,json=wrappedKeys,proto3" json:"wrapped_keys,omitempty"`                        // по одному на устройство получателя И отправителя (план Б)
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Обязательство по ключу сообщения: HKDF-SHA256(message_key, info="tima/commit/v1"), 32 B.
+	// Обязательно при format_version >= 2, входит в canonical_bytes (ADR-0013).
+	//
+	// message_key едет получателю тремя независимыми путями — ratchet, wrapped_key и
+	// escrow_blob, — и ни один не доказывает, что остальные ведут к тому же ключу:
+	// Poly1305 не является key-committing, поэтому один шифртекст может валидно
+	// раскрыться под ДВУМЯ разными ключами. Без обязательства отправитель мог бы
+	// собрать сообщение так, что по ордеру расшифруется один текст, а у получателя на
+	// экране будет другой. Получатель пересчитывает обязательство из добытого ключа на
+	// ЛЮБОМ пути и сверяет; расхождение — отказ.
+	KeyCommitment []byte `protobuf:"bytes,9,opt,name=key_commitment,json=keyCommitment,proto3" json:"key_commitment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Envelope) Reset() {
@@ -187,6 +198,13 @@ func (x *Envelope) GetSignature() []byte {
 func (x *Envelope) GetWrappedKeys() []*WrappedKey {
 	if x != nil {
 		return x.WrappedKeys
+	}
+	return nil
+}
+
+func (x *Envelope) GetKeyCommitment() []byte {
+	if x != nil {
+		return x.KeyCommitment
 	}
 	return nil
 }
@@ -401,7 +419,7 @@ var File_envelope_proto protoreflect.FileDescriptor
 
 const file_envelope_proto_rawDesc = "" +
 	"\n" +
-	"\x0eenvelope.proto\x12\x0etima.crypto.v1\"\xfa\x02\n" +
+	"\x0eenvelope.proto\x12\x0etima.crypto.v1\"\xa1\x03\n" +
 	"\bEnvelope\x12%\n" +
 	"\x0eformat_version\x18\x01 \x01(\rR\rformatVersion\x12,\n" +
 	"\x04meta\x18\x02 \x01(\v2\x18.tima.crypto.v1.MetadataR\x04meta\x12+\n" +
@@ -410,7 +428,8 @@ const file_envelope_proto_rawDesc = "" +
 	"\x14sender_ephemeral_pub\x18\x05 \x01(\fR\x12senderEphemeralPub\x12)\n" +
 	"\x10ratchet_envelope\x18\x06 \x01(\fR\x0fratchetEnvelope\x12\x1c\n" +
 	"\tsignature\x18\a \x01(\fR\tsignature\x12=\n" +
-	"\fwrapped_keys\x18\b \x03(\v2\x1a.tima.crypto.v1.WrappedKeyR\vwrappedKeys\"\xfd\x01\n" +
+	"\fwrapped_keys\x18\b \x03(\v2\x1a.tima.crypto.v1.WrappedKeyR\vwrappedKeys\x12%\n" +
+	"\x0ekey_commitment\x18\t \x01(\fR\rkeyCommitment\"\xfd\x01\n" +
 	"\bMetadata\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\x04R\tmessageId\x12\x17\n" +
@@ -436,8 +455,8 @@ const file_envelope_proto_rawDesc = "" +
 	"\bCK_IMAGE\x10\x03\x12\f\n" +
 	"\bCK_VIDEO\x10\x04\x12\v\n" +
 	"\aCK_FILE\x10\x05\x12\r\n" +
-	"\tCK_SYSTEM\x10\x06B\x99\x01\n" +
-	"\x12com.tima.crypto.v1B\rEnvelopeProtoP\x01Z\x1atima/server/internal/proto\xa2\x02\x03TCX\xaa\x02\x0eTima.Crypto.V1\xca\x02\x0eTima\\Crypto\\V1\xe2\x02\x1aTima\\Crypto\\V1\\GPBMetadata\xea\x02\x10Tima::Crypto::V1b\x06proto3"
+	"\tCK_SYSTEM\x10\x06B\x18\n" +
+	"\x14io.tima.crypto.protoP\x01b\x06proto3"
 
 var (
 	file_envelope_proto_rawDescOnce sync.Once

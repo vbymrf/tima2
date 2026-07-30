@@ -182,6 +182,9 @@ func sealEnvelope(t *testing.T, sender *device, recipients []*device, messageID 
 		Kind:            pb.ContentKind_CK_TEXT,
 		CreatedAtUnixMs: 1_750_000_000_000,
 	}
+	// Обязательство по ключу (ADR-0013): получатель пересчитает его из ключа,
+	// добытого любым путём, и сверит. Здесь считаем так же, как это делает клиент.
+	commitment := timacrypto.KeyCommitment(messageKey[:])
 	env := &pb.Envelope{
 		FormatVersion:      timacrypto.FormatVersion,
 		Meta:               meta,
@@ -189,11 +192,12 @@ func sealEnvelope(t *testing.T, sender *device, recipients []*device, messageID 
 		Escrow:             &pb.EscrowBlob{MlkemCt: escrowCt, WrappedMessageKey: escrowWrapped, EscrowKeyVersion: 1},
 		SenderEphemeralPub: ephPub[:],
 		WrappedKeys:        wrappedKeys,
+		KeyCommitment:      commitment,
 	}
-	cb := timacrypto.CanonicalBytes(env.FormatVersion, timacrypto.EnvelopeMeta{
+	cb := timacrypto.CanonicalBytesV2(env.FormatVersion, timacrypto.EnvelopeMeta{
 		MessageID: messageID, ChatID: chatID, SenderID: sender.userID, SenderDevice: sender.id,
 		Kind: uint32(meta.Kind), CreatedAtUnixMs: meta.CreatedAtUnixMs,
-	}, payload, append(append([]byte{}, escrowCt...), escrowWrapped...), ephPub[:], nil)
+	}, payload, append(append([]byte{}, escrowCt...), escrowWrapped...), ephPub[:], nil, commitment)
 	env.Signature = ed25519.Sign(sender.signKey, cb)
 	return env
 }

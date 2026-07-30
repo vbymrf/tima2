@@ -413,8 +413,8 @@ const file_message_body_proto_rawDesc = "" +
 	"\x12\x0e\n" +
 	"\n" +
 	"ET_HASHTAG\x10\v\x12\f\n" +
-	"\bET_MEDIA\x10\fB\x9c\x01\n" +
-	"\x12com.tima.crypto.v1B\x10MessageBodyProtoP\x01Z\x1atima/server/internal/proto\xa2\x02\x03TCX\xaa\x02\x0eTima.Crypto.V1\xca\x02\x0eTima\\Crypto\\V1\xe2\x02\x1aTima\\Crypto\\V1\\GPBMetadata\xea\x02\x10Tima::Crypto::V1b\x06proto3"
+	"\bET_MEDIA\x10\fB\x18\n" +
+	"\x14io.tima.crypto.protoP\x01b\x06proto3"
 
 var (
 	file_message_body_proto_rawDescOnce sync.Once

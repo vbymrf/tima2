@@ -23,7 +23,10 @@ func TestSealOpenRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Seal(%q): %v", plain, err)
 		}
-		if bytes.Contains(sealed, []byte(plain)) {
+		// Проверку «открытый текст не виден» делаем только на достаточно длинных
+		// значениях. Для однобайтового текста случайный nonce содержит тот же байт
+		// примерно в 20% прогонов — тест был бы нестабильным без всякой вины кода.
+		if len(plain) >= 8 && bytes.Contains(sealed, []byte(plain)) {
 			t.Fatalf("Seal(%q): открытый текст виден в шифртексте", plain)
 		}
 		got, err := c.Open(sealed)
