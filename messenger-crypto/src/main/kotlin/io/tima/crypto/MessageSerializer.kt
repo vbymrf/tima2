@@ -72,6 +72,10 @@ object MessageSerializer {
         wrapped_keys = wrappedKeys.map { (recipient, wrapped) ->
             WrappedKey(recipient = recipient, wrapped = wrapped.toByteString())
         },
+        // Обязательство по ключу (ADR-0013). Без него подписанные байты версии 2
+        // содержали бы значение, которого нет на проводе, и приёмная сторона
+        // отвергла бы сообщение.
+        key_commitment = keyCommitment.toByteString(),
     )
 
     private fun Envelope.toSealed(): SealedPersonalMessage {
@@ -98,6 +102,7 @@ object MessageSerializer {
             ratchetEnvelope = ratchet_envelope.toByteArray(),
             signature = signature.toByteArray(),
             wrappedKeys = wrapped_keys.associate { it.recipient to it.wrapped.toByteArray() },
+            keyCommitment = key_commitment.toByteArray(),
         )
     }
 }

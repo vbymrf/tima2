@@ -278,3 +278,46 @@ func TestMLKEM768Vector(t *testing.T) {
 		t.Fatalf("decapsulate не восстановил shared (err=%v)", err)
 	}
 }
+
+// TestCanonicalBytesV2Vector — раскладка версии 2 заморожена вектором, как и v1.
+// Блобы пустые: вектор проверяет именно хвост с обязательством, а не работу с
+// полезной нагрузкой (её покрывает вектор v1).
+func TestCanonicalBytesV2Vector(t *testing.T) {
+	vectors := loadVectors(t)
+	v := vec[struct {
+		Inputs struct {
+			FormatVersion   uint32 `json:"format_version"`
+			MessageID       uint64 `json:"message_id"`
+			ChatID          string `json:"chat_id"`
+			SenderID        string `json:"sender_id"`
+			SenderDevice    string `json:"sender_device"`
+			Kind            uint32 `json:"kind"`
+			CreatedAtUnixMs int64  `json:"created_at_unix_ms"`
+			ReplyTo         uint64 `json:"reply_to"`
+			MessageKeyHex   string `json:"message_key_hex"`
+		} `json:"inputs"`
+		KeyCommitmentHex  string `json:"key_commitment_hex"`
+		CanonicalBytesHex string `json:"canonical_bytes_hex"`
+		Sha256Hex         string `json:"sha256_hex"`
+	}](t, vectors, "canonical_bytes_v2")
+
+	messageKey, err := hex.DecodeString(v.Inputs.MessageKeyHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commit := KeyCommitment(messageKey)
+	assertHex(t, v.KeyCommitmentHex, commit, "key_commitment")
+
+	cb := CanonicalBytesV2(v.Inputs.FormatVersion, EnvelopeMeta{
+		MessageID:       v.Inputs.MessageID,
+		ChatID:          v.Inputs.ChatID,
+		SenderID:        v.Inputs.SenderID,
+		SenderDevice:    v.Inputs.SenderDevice,
+		Kind:            v.Inputs.Kind,
+		CreatedAtUnixMs: v.Inputs.CreatedAtUnixMs,
+		ReplyTo:         v.Inputs.ReplyTo,
+	}, nil, nil, nil, nil, commit)
+	assertHex(t, v.CanonicalBytesHex, cb, "canonical_bytes_v2")
+	digest := sha256.Sum256(cb)
+	assertHex(t, v.Sha256Hex, digest[:], "sha256(canonical_bytes_v2)")
+}

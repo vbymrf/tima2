@@ -22,6 +22,8 @@ class SealedPersonalMessage(
     val ratchetEnvelope: ByteArray,
     val signature: ByteArray,
     val wrappedKeys: Map<String, ByteArray>,
+    /** Обязательство по ключу (ADR-0013); пусто в конвертах версии 1. */
+    val keyCommitment: ByteArray = CanonicalBytes.EMPTY,
 ) {
     fun canonicalBytes(): ByteArray = CanonicalBytes.build(
         meta = meta,
@@ -30,6 +32,7 @@ class SealedPersonalMessage(
         senderEphemeralPub = senderEphemeralPub,
         ratchetEnvelope = ratchetEnvelope,
         formatVersion = formatVersion,
+        keyCommitment = keyCommitment,
     )
 }
 
@@ -56,6 +59,9 @@ class PersonalMessageSealer(private val escrowModule: EscrowModule) {
         val messageKey = Kodium.generateHighEntropyKey()
 
         val encryptedPayload = EnvelopeCipher.seal(messageKey, payloadPlaintext).getOrThrow() // слой 1
+        // Обязательство считаем ОДИН раз от того же ключа, которым шифровали: все
+        // пути доставки обязаны привести получателя ровно к нему.
+        val commitment = CanonicalBytes.keyCommitment(messageKey)
         val escrowBlob = escrowModule.wrap(messageKey).getOrThrow()                           // слой 2
 
         val senderEphemeral = Kodium.generateKeyPair()                                        // слой 4
@@ -72,6 +78,7 @@ class PersonalMessageSealer(private val escrowModule: EscrowModule) {
             ratchetEnvelope = CanonicalBytes.EMPTY,
             signature = CanonicalBytes.EMPTY,
             wrappedKeys = wrappedKeys,
+            keyCommitment = commitment,
         )
         val signature = MessageSigner.sign(senderDeviceKey, message.canonicalBytes()).getOrThrow()
 
@@ -84,6 +91,7 @@ class PersonalMessageSealer(private val escrowModule: EscrowModule) {
             ratchetEnvelope = message.ratchetEnvelope,
             signature = signature,
             wrappedKeys = wrappedKeys,
+            keyCommitment = message.keyCommitment,
         )
     }
 
@@ -115,6 +123,15 @@ class PersonalMessageSealer(private val escrowModule: EscrowModule) {
                 ?: throw IllegalStateException("Нет wrapped_key для устройства $myDeviceId")
             val wrapEphemeral = wrapEphemeralOverride ?: message.senderEphemeralPub
             val messageKey = WrappedKeyService.unwrap(myDeviceKey, wrapEphemeral, wrapped).getOrThrow()
+            // Сверка обязательства (ADR-0013). Ключ добыт ОДНИМ из путей доставки,
+            // и без этой проверки нечем убедиться, что остальные пути ведут к нему же.
+            // Без неё отправитель мог бы сделать так, что по ордеру расшифруется
+            // один текст, а здесь на экране — другой.
+            if (message.formatVersion >= CanonicalBytes.FORMAT_VERSION &&
+                !CanonicalBytes.commitmentMatches(messageKey, message.keyCommitment)
+            ) {
+                throw SecurityException("Обязательство по ключу не сошлось: пути доставки ведут к разным ключам")
+            }
             EnvelopeCipher.open(messageKey, message.encryptedPayload).getOrThrow()
         }
     }

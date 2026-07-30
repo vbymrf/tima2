@@ -43,7 +43,54 @@ data class GroupMessageMeta(
 )
 
 object CanonicalBytes {
-    const val FORMAT_VERSION = 1
+    /**
+     * v1 — исходная раскладка.
+     * v2 — добавлен `key_commitment` ХВОСТОМ preimage (ADR-0013). Раскладка v1
+     *      осталась байт-в-байт прежней, поэтому старые векторы сходятся.
+     */
+    const val FORMAT_VERSION = 2
+
+    /** Версия, которую приёмная сторона обязана принимать на время перехода. */
+    const val FORMAT_VERSION_LEGACY = 1
+
+    /** Длина обязательства по ключу. */
+    const val COMMITMENT_SIZE = 32
+
+    /** Доменная метка деривации обязательства; отличается от escrow-инфо намеренно. */
+    private const val COMMITMENT_INFO = "tima/commit/v1"
+
+    /**
+     * Обязательство по ключу сообщения.
+     *
+     * `message_key` едет получателю тремя независимыми путями — ratchet, wrapped_key
+     * и escrow_blob, — и ни один не доказывает, что остальные ведут к тому же ключу.
+     * Poly1305 в SecretBox не является key-committing: один шифртекст может валидно
+     * раскрыться под ДВУМЯ разными ключами. Без обязательства отправитель мог бы
+     * собрать сообщение так, что по ордеру расшифруется один текст, а у получателя
+     * на экране будет другой.
+     *
+     * Значение входит в подписываемые байты, поэтому подменить его нельзя. Получатель
+     * на ЛЮБОМ пути пересчитывает его из добытого ключа и сверяет.
+     */
+    fun keyCommitment(messageKey: ByteArray): ByteArray =
+        io.kodium.ratchet.HKDF.deriveSecrets(
+            salt = null,
+            ikm = messageKey,
+            info = COMMITMENT_INFO.encodeToByteArray(),
+            length = COMMITMENT_SIZE,
+        )
+
+    /**
+     * Сверка обязательства в постоянное время. Расхождение означает, что путь
+     * доставки ключа привёл не к тому ключу — сообщение принимать нельзя.
+     */
+    fun commitmentMatches(messageKey: ByteArray, expected: ByteArray?): Boolean {
+        if (expected == null || expected.size != COMMITMENT_SIZE) return false
+        val got = keyCommitment(messageKey)
+        var diff = 0
+        for (i in got.indices) diff = diff or (got[i].toInt() xor expected[i].toInt())
+        return diff == 0
+    }
 
     /** Доменная метка preimage сообщения группы; несёт версию раскладки. */
     const val GROUP_MESSAGE_DOMAIN = "tima.group_message.v1"
@@ -61,6 +108,7 @@ object CanonicalBytes {
         senderEphemeralPub: ByteArray,
         ratchetEnvelope: ByteArray = EMPTY,
         formatVersion: Int = FORMAT_VERSION,
+        keyCommitment: ByteArray = EMPTY,
     ): ByteArray =
         u32le(formatVersion) +
             u64le(meta.messageId.toLong()) +
@@ -73,7 +121,10 @@ object CanonicalBytes {
             sha256(encryptedPayload) +
             sha256(escrowBytes) +
             sha256(senderEphemeralPub) +
-            sha256(ratchetEnvelope)
+            sha256(ratchetEnvelope) +
+            // Хвост версии 2. В версии 1 добавлять нечего — раскладка обязана
+            // остаться прежней, иначе старые подписи перестанут проверяться.
+            (if (formatVersion >= FORMAT_VERSION) keyCommitment else EMPTY)
 
     /**
      * Preimage подписи сообщения группы — schema/proto/README.md

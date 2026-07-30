@@ -117,6 +117,41 @@ class VectorsTest {
     }
 
     @Test
+    fun `canonical_bytes_v2 - обязательство по ключу совпадает байт-в-байт с Go`() {
+        val v = vector("canonical_bytes_v2")
+        val inputs = v["inputs"]!!.jsonObject
+
+        // Само обязательство тоже заморожено вектором: деривация обязана совпадать
+        // с серверной, иначе получатель отвергнет валидные сообщения.
+        val messageKey = inputs["message_key_hex"]!!.jsonPrimitive.content.hexToBytes()
+        val commitment = CanonicalBytes.keyCommitment(messageKey)
+        assertEquals(v["key_commitment_hex"]!!.jsonPrimitive.content, commitment.toHex())
+
+        val meta = EnvelopeMeta(
+            messageId = inputs["message_id"]!!.jsonPrimitive.long.toULong(),
+            chatId = inputs["chat_id"]!!.jsonPrimitive.content,
+            senderId = inputs["sender_id"]!!.jsonPrimitive.content,
+            senderDevice = inputs["sender_device"]!!.jsonPrimitive.content,
+            kind = inputs["kind"]!!.jsonPrimitive.int,
+            createdAtUnixMs = inputs["created_at_unix_ms"]!!.jsonPrimitive.long,
+            replyTo = inputs["reply_to"]!!.jsonPrimitive.long.toULong(),
+        )
+        // Блобы пустые: вектор проверяет хвост с обязательством, а не работу с
+        // полезной нагрузкой — её покрывает вектор версии 1.
+        val cb = CanonicalBytes.build(
+            meta = meta,
+            encryptedPayload = CanonicalBytes.EMPTY,
+            escrowBytes = CanonicalBytes.EMPTY,
+            senderEphemeralPub = CanonicalBytes.EMPTY,
+            ratchetEnvelope = CanonicalBytes.EMPTY,
+            formatVersion = inputs["format_version"]!!.jsonPrimitive.int,
+            keyCommitment = commitment,
+        )
+        assertEquals(v["canonical_bytes_hex"]!!.jsonPrimitive.content, cb.toHex())
+        assertEquals(v["sha256_hex"]!!.jsonPrimitive.content, sha256(cb).toHex())
+    }
+
+    @Test
     fun `group_message_canonical - preimage подписи сообщения группы совпадает байт-в-байт`() {
         val v = vector("group_message_canonical")
         val inputs = v["inputs"]!!.jsonObject
@@ -165,10 +200,11 @@ class VectorsTest {
     }
 
     @Test
-    fun `все девять векторов присутствуют`() {
+    fun `состав векторов не менялся молча`() {
         val expected = setOf(
             "secretbox", "box_wrap", "ed25519", "hkdf_sha256", "media_chunk_keys",
-            "canonical_bytes", "message_body", "mlkem768_escrow", "group_message_canonical",
+            "canonical_bytes", "canonical_bytes_v2", "message_body", "mlkem768_escrow",
+            "group_message_canonical",
         )
         assertEquals(expected, vectors.keys, "Состав vectors.json изменился — обнови KAT")
     }
