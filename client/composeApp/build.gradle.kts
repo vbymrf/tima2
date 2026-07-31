@@ -42,6 +42,9 @@ kotlin {
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation("io.tima:messenger-crypto:0.1.0") // подменяется composite build
+                // SQLite для локального хранилища. На Android он встроен в систему,
+                // здесь нужен драйвер (ADR-0016).
+                implementation("org.xerial:sqlite-jdbc:3.46.1.3")
             }
         }
         val desktopTest by getting {
