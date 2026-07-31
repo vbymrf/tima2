@@ -1,10 +1,7 @@
 package io.tima.app.api
 
 import io.tima.app.diag.AppDiagnostics
-import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -20,7 +17,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
-import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -399,14 +396,39 @@ class TimaApi(private val baseUrl: String) {
     private val json = Json { ignoreUnknownKeys = true }
 
     /** Общий HTTP/WS-клиент; WS-сессию чата открывает ChatService через [rawClient]. */
-    val rawClient = HttpClient {
-        install(ContentNegotiation) { json(json) }
-        install(WebSockets)
-    }
+    val rawClient = createHttpClient(json)
     private val client get() = rawClient
 
     /** ws://-адрес /ws из базового http(s)://-адреса. */
     fun wsUrl(): String = baseUrl.trimEnd('/').replaceFirst("http", "ws") + "/ws"
+
+    /**
+     * Повтор при СЕТЕВОМ сбое (обрыв, срок ожидания). Ответ сервера с кодом ошибки —
+     * [TimaApiException] — не повторяем: сервер нас услышал и отказал, повтор ничего
+     * не изменит.
+     *
+     * Оборачивать этим можно только то, что безопасно повторить. Отправка сообщения
+     * безопасна не по случайности: сервер отсекает повтор по `client_msg_id` и на
+     * второй попытке отвечает `{"duplicate": true}`. Без повтора одна потерянная
+     * посылка в мобильной сети означала потерянное сообщение — человеку приходилось
+     * набирать заново.
+     */
+    private suspend fun <T> retryOnNetwork(attempts: Int = 3, block: suspend () -> T): T {
+        var pauseMs = 800L
+        repeat(attempts - 1) {
+            try {
+                return block()
+            } catch (e: TimaApiException) {
+                throw e
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                AppDiagnostics.add("сеть: повтор после «${e.message ?: e::class.simpleName}»")
+                delay(pauseMs)
+                pauseMs *= 2
+            }
+        }
+        return block()
+    }
 
     private suspend fun fail(response: HttpResponse): Nothing {
         val err = try {
@@ -505,13 +527,13 @@ class TimaApi(private val baseUrl: String) {
         return response.body<ResolvedUsers>()
     }
 
-    suspend fun listDevices(token: String, userId: String): List<DeviceKeyInfo> {
+    suspend fun listDevices(token: String, userId: String): List<DeviceKeyInfo> = retryOnNetwork {
         val response = client.get(baseUrl.trimEnd('/') + "/api/v1/keys/devices") {
             bearerAuth(token)
             parameter("user_id", userId)
         }
         if (!response.status.isSuccess()) fail(response)
-        return response.body<DevicesResponse>().devices
+        response.body<DevicesResponse>().devices
     }
 
     suspend fun escrowPubkey(token: String): EscrowPubkey {
@@ -520,23 +542,24 @@ class TimaApi(private val baseUrl: String) {
         return response.body()
     }
 
-    /** Ключ escrow для чата на текущую эпоху (ADR-0012). Один запрос на чат в месяц. */
-    suspend fun escrowKey(token: String, chatId: String): EscrowKeyBundle {
+    /** Ключ escrow для чата на текущую эпоху (ADR-0012). Один запрос на чат в месяц.
+     *  Повтор обязателен: escrow работает fail-closed — нет ключа, нет отправки. */
+    suspend fun escrowKey(token: String, chatId: String): EscrowKeyBundle = retryOnNetwork {
         val response = client.get(baseUrl.trimEnd('/') + "/api/v1/escrow/key") {
             bearerAuth(token)
             parameter("chat_id", chatId)
         }
         if (!response.status.isSuccess()) fail(response)
-        return response.body()
+        response.body()
     }
 
-    suspend fun listMessages(token: String, chatId: String, limit: Int = 100): List<HistoryItem> {
+    suspend fun listMessages(token: String, chatId: String, limit: Int = 100): List<HistoryItem> = retryOnNetwork {
         val response = client.get(baseUrl.trimEnd('/') + "/api/v1/chats/$chatId/messages") {
             bearerAuth(token)
             parameter("limit", limit)
         }
         if (!response.status.isSuccess()) fail(response)
-        return response.body<HistoryResponse>().messages
+        response.body<HistoryResponse>().messages
     }
 
     // ── Группы (api-overview §Группы; крипто — crypto-protocol §4) ──
@@ -701,17 +724,18 @@ class TimaApi(private val baseUrl: String) {
         return response.body<MediaUrlResponse>().urls
     }
 
-    /** Загрузка ciphertext по presigned PUT (без Bearer — подпись в самом URL). */
-    suspend fun putPresigned(url: String, bytes: ByteArray) {
+    /** Загрузка ciphertext по presigned PUT (без Bearer — подпись в самом URL).
+     *  Повтор безопасен: тот же ключ объекта, та же запись. */
+    suspend fun putPresigned(url: String, bytes: ByteArray) = retryOnNetwork {
         val response = client.put(url) { setBody(bytes) }
         if (!response.status.isSuccess()) throw TimaApiException("upload_failed", "MinIO PUT: HTTP ${response.status.value}")
     }
 
     /** Скачивание ciphertext по presigned GET. */
-    suspend fun getPresigned(url: String): ByteArray {
+    suspend fun getPresigned(url: String): ByteArray = retryOnNetwork {
         val response = client.get(url)
         if (!response.status.isSuccess()) throw TimaApiException("download_failed", "MinIO GET: HTTP ${response.status.value}")
-        return response.body()
+        response.body()
     }
 
     /** Запрос восстановления истории личного чата (ADR-0010 §этап 2). */
@@ -735,7 +759,7 @@ class TimaApi(private val baseUrl: String) {
         getAuthed<BackupListResponse>("/api/v1/chats/$chatId/backup", token).items
 
     /** POST /messages: конверт как protobuf; clientMsgId — дедуп повторной отправки. */
-    suspend fun postEnvelope(token: String, envelope: ByteArray, clientMsgId: String) {
+    suspend fun postEnvelope(token: String, envelope: ByteArray, clientMsgId: String) = retryOnNetwork {
         val response = client.post(baseUrl.trimEnd('/') + "/api/v1/messages") {
             bearerAuth(token)
             header("X-Client-Msg-Id", clientMsgId)

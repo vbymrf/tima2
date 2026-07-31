@@ -659,6 +659,7 @@ private fun HomeScreen(
 
     Text("TIMA " + currentVersionName(), style = MaterialTheme.typography.headlineMedium)
     Spacer(Modifier.height(8.dp))
+    ConnectionBanner(client)
     // «Имя +7999…»; пока имя не задано — только номер
     val me = listOf(myName.trim(), session.phone).filter { it.isNotEmpty() }.joinToString(" ")
     Text(
@@ -992,6 +993,43 @@ private fun HomeScreen(
  * Сервис может умереть молча — тогда входящие перестают приходить, а пользователь об
  * этом не узнает. Поэтому пока экран открыт, проверяем и поднимаем заново.
  */
+/**
+ * Полоска «нет связи». Появляется, только когда соединения нет, и не раньше чем через
+ * пару секунд после обрыва — короткие моргания сети происходят постоянно, и мигающая
+ * плашка раздражала бы сильнее самой проблемы.
+ *
+ * Без этого признака приложение в плохой сети выглядит просто молчащим: человек не
+ * может отличить «никто не пишет» от «мы отвалились». Именно это и было главной
+ * жалобой при испытаниях в мобильной сети.
+ */
+@Composable
+private fun ConnectionBanner(client: ChatClient?) {
+    client ?: return
+    val online by client.online.collectAsState()
+    var show by remember { mutableStateOf(false) }
+    LaunchedEffect(online) {
+        if (online) {
+            show = false
+        } else {
+            delay(3_000)
+            show = true
+        }
+    }
+    if (!show) return
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+    ) {
+        Text(
+            "⚠️ Нет связи с сервером — переподключаюсь…",
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        )
+    }
+    Spacer(Modifier.height(8.dp))
+}
+
 @Composable
 private fun BackgroundCard() {
     var enabled by remember { mutableStateOf(AppPrefs.backgroundEnabled) }
@@ -1253,6 +1291,8 @@ private fun ChatScreen(
                 }
             }) { Text("⟲") }
         }
+        Spacer(Modifier.height(8.dp))
+        ConnectionBanner(client)
         // reverseLayout: индекс 0 — низ; список сам держится за последнее сообщение
         LazyColumn(
             state = listState,

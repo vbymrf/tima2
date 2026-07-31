@@ -20,9 +20,15 @@ import (
 	"tima/server/internal/auth"
 )
 
+// Сроки рассчитаны на мобильную сеть. Прежние значения (5 с на pong, 10 с на запись)
+// молча рвали соединение у клиента в 4G: под нагрузкой оператора оборот пакета
+// доходит до нескольких секунд, и сервер закрывал вполне живого собеседника. Клиент
+// переподключался, снова не укладывался — и так по кругу.
 const (
-	wsAuthTimeout  = 10 * time.Second
+	wsAuthTimeout  = 20 * time.Second
 	wsPingInterval = 30 * time.Second // websocket-events.md: ping/pong каждые 30 с
+	wsPongTimeout  = 20 * time.Second // ответ на ping; меньше интервала, иначе очередь ping-ов
+	wsWriteTimeout = 30 * time.Second // отдача кадра клиенту
 )
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
@@ -104,7 +110,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-ping.C:
-			pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			pingCtx, cancel := context.WithTimeout(ctx, wsPongTimeout)
 			err := conn.Ping(pingCtx)
 			cancel()
 			if err != nil {
@@ -115,7 +121,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 				conn.Close(websocket.StatusGoingAway, "шина событий закрылась")
 				return
 			}
-			wctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			wctx, cancel := context.WithTimeout(ctx, wsWriteTimeout)
 			err := conn.Write(wctx, websocket.MessageText, []byte(msg.Payload))
 			cancel()
 			if err != nil {
@@ -211,7 +217,7 @@ func writeJSON(ctx context.Context, conn *websocket.Conn, v any) error {
 	if err != nil {
 		return err
 	}
-	wctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	wctx, cancel := context.WithTimeout(ctx, wsWriteTimeout)
 	defer cancel()
 	return conn.Write(wctx, websocket.MessageText, raw)
 }

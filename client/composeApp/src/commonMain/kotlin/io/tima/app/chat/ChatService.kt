@@ -2,6 +2,7 @@ package io.tima.app.chat
 
 import io.tima.app.session.Session
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 
 /** Вложение сообщения; media_key пришёл под шифрованием конверта. */
 data class MediaAttachment(
@@ -94,6 +95,13 @@ interface ChatClient {
 
     /** Live-поток входящих по всем чатам (уже расшифрованных). */
     val messages: Flow<ChatMessage>
+
+    /**
+     * Есть ли живое соединение с сервером. Нужно, чтобы человек в плохой сети видел
+     * разницу между «никто не пишет» и «мы отвалились»: без этого признака молчащее
+     * приложение выглядит одинаково в обоих случаях.
+     */
+    val online: StateFlow<Boolean>
 
     /** Детерминированный chat_id личного чата с собеседником. */
     fun chatIdWith(peerUserId: String): String

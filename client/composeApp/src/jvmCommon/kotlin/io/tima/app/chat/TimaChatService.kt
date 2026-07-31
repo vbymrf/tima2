@@ -52,6 +52,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -174,6 +176,11 @@ class TimaClient(private val session: Session) : ChatClient {
 
     private val _messages = MutableSharedFlow<ChatMessage>(extraBufferCapacity = 256)
     override val messages: Flow<ChatMessage> = _messages
+
+    // Есть ли живое соединение. Без этого человек в плохой сети видит просто
+    // молчащее приложение и не может отличить «никто не пишет» от «мы отвалились».
+    private val _online = MutableStateFlow(false)
+    override val online: StateFlow<Boolean> = _online
 
     // Сигналы «обёртки восстановления готовы» по group_id / chat_id
     private val _recoveryReady = MutableSharedFlow<String>(extraBufferCapacity = 16)
@@ -327,6 +334,7 @@ class TimaClient(private val session: Session) : ChatClient {
                         send(Frame.Text("""{"token":"${session.accessToken}"}"""))
                         send(Frame.Text("""{"event":"sync.pull"}""")) // cursor серверный
                         backoffMs = 1_000L
+                        _online.value = true
                         AppDiagnostics.add("WS: соединение установлено")
                         for (frame in incoming) {
                             val text = (frame as? Frame.Text)?.readText() ?: continue
@@ -419,9 +427,14 @@ class TimaClient(private val session: Session) : ChatClient {
                 } catch (e: Throwable) {
                     // сервер недоступен/сеть моргнула — переподключение ниже
                     AppDiagnostics.add("WS: обрыв — ${e.message ?: e::class.simpleName}")
+                } finally {
+                    _online.value = false
                 }
                 delay(backoffMs)
-                backoffMs = (backoffMs * 2).coerceAtMost(30_000L)
+                // Потолок паузы 15 с, а не 30: в мобильной сети связь возвращается
+                // рывками, и полминуты ожидания после её возврата человек читает как
+                // «приложение сломалось».
+                backoffMs = (backoffMs * 2).coerceAtMost(15_000L)
             }
         }
     }
