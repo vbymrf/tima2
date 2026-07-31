@@ -369,6 +369,15 @@ data class AppVersionDto(
 )
 
 @Serializable
+private data class DeleteAccountResponse(
+    val deleted: Boolean = false,
+    @SerialName("purge_after_days") val purgeAfterDays: Int = 0,
+)
+
+@Serializable
+private data class ArchivedChatsResponse(val chats: List<String> = emptyList())
+
+@Serializable
 private data class ReadBody(@SerialName("message_id") val messageId: Long)
 
 @Serializable
@@ -490,6 +499,32 @@ class TimaApi(private val baseUrl: String) {
         if (!response.status.isSuccess()) fail(response)
         return response.body<DiscoverResponse>().matches
     }
+
+    // ── Свой аккаунт и архив чатов (Р4, ADR-0015) ──
+
+    /**
+     * Пометить свой аккаунт удалённым. Возвращает срок до физического стирания.
+     *
+     * Удаление в два шага: пометка сейчас, стирание по сроку. Номер освобождается
+     * сразу — архивный аккаунт его больше не держит.
+     */
+    suspend fun deleteMyAccount(token: String): Int {
+        val response = client.delete(baseUrl.trimEnd('/') + "/api/v1/users/me") { bearerAuth(token) }
+        if (!response.status.isSuccess()) fail(response)
+        return response.body<DeleteAccountResponse>().purgeAfterDays
+    }
+
+    /** Убрать чат в архив или вернуть обратно. Архив личный: у каждого свой. */
+    suspend fun setChatArchived(token: String, chatId: String, archived: Boolean) {
+        val url = baseUrl.trimEnd('/') + "/api/v1/chats/$chatId/archive"
+        val response = if (archived) client.put(url) { bearerAuth(token) }
+        else client.delete(url) { bearerAuth(token) }
+        if (!response.status.isSuccess()) fail(response)
+    }
+
+    /** Что я убрал в архив. */
+    suspend fun archivedChats(token: String): List<String> =
+        getAuthed<ArchivedChatsResponse>("/api/v1/chats/archived", token).chats
 
     /** Квитанция прочтения: собеседник узнает, что прочитано до messageId (✓✓). */
     suspend fun markChatRead(token: String, chatId: String, messageId: Long) {

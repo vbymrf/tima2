@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -799,12 +800,47 @@ private fun HomeScreen(
         val peers = rememberPeers(client, chats.map { it.peerUserId }.filter { it != session.userId })
         Text("Чаты", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
+        // Чат, убранный в архив: долгое нажатие. Архив ЛИЧНЫЙ — у собеседника
+        // переписка остаётся, а к удалению чат готов только когда его убрали все
+        // участники (миграция 0024).
+        var archiveTarget by remember { mutableStateOf<ChatEntry?>(null) }
+        archiveTarget?.let { target ->
+            AlertDialog(
+                onDismissRequest = { archiveTarget = null },
+                title = { Text("Убрать чат?") },
+                text = {
+                    Text(
+                        "Чат уйдёт с глаз у вас. У собеседника он останется. " +
+                            "Переписка удалится только если её уберут все участники и пройдёт срок хранения.",
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val e = target
+                        archiveTarget = null
+                        scope.launch {
+                            runCatching { api.setChatArchived(session.accessToken, e.chatId, true) }
+                                .onSuccess {
+                                    AppDiagnostics.add("действие: чат убран в архив")
+                                    onChatsChange(chats.filter { it.chatId != e.chatId })
+                                }
+                                .onFailure { error = it.message }
+                        }
+                    }) { Text("Убрать") }
+                },
+                dismissButton = { TextButton(onClick = { archiveTarget = null }) { Text("Отмена") } },
+            )
+        }
         chats.forEach { entry ->
             val title = peers[entry.peerUserId]?.label ?: entry.title
             Button(
                 onClick = { AppDiagnostics.add("действие: открыть чат «$title»"); onOpen(entry) },
                 enabled = !busy,
-                modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(vertical = 2.dp),
+                modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(vertical = 2.dp)
+                    .combinedClickable(
+                        onClick = { AppDiagnostics.add("действие: открыть чат «$title»"); onOpen(entry) },
+                        onLongClick = { if (entry.chatId.isNotEmpty()) archiveTarget = entry },
+                    ),
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1020,6 +1056,50 @@ private fun HomeScreen(
     ErrorText(error)
     Spacer(Modifier.height(24.dp))
     Button(onClick = onLogout, enabled = !busy) { Text("Выйти") }
+
+    Spacer(Modifier.height(16.dp))
+    // Удаление аккаунта. До этого его не существовало как действия человека: аккаунт
+    // умел уходить в архив только сам, по неактивности (ADR-0015).
+    var confirmDelete by remember { mutableStateOf(false) }
+    TextButton(onClick = { confirmDelete = true }, enabled = !busy) {
+        Text("Удалить аккаунт", color = MaterialTheme.colorScheme.error)
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Удалить аккаунт?") },
+            text = {
+                Column {
+                    Text("Номер освободится сразу — на него сможет зарегистрироваться кто угодно, включая вас заново.")
+                    Spacer(Modifier.height(8.dp))
+                    Text("Переписка перестанет открываться. Через установленный срок она стирается физически и не восстанавливается ничем.")
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "История на этом устройстве останется, пока вы не удалите приложение.",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    busy = true; error = null
+                    scope.launch {
+                        try {
+                            val days = api.deleteMyAccount(session.accessToken)
+                            AppDiagnostics.add("действие: аккаунт удалён, стирание через $days дн.")
+                            onLogout()
+                        } catch (e: Throwable) {
+                            error = e.message ?: e.toString()
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }) { Text("Удалить", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Отмена") } },
+        )
+    }
 }
 
 /**
