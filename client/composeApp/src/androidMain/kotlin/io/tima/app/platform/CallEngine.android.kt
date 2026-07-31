@@ -1,12 +1,21 @@
 package io.tima.app.platform
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -47,6 +56,34 @@ actual class CallEngine actual constructor() {
     internal val localVideo = MutableStateFlow<VideoTrack?>(null)
     internal val remoteVideo = MutableStateFlow<VideoTrack?>(null)
 
+    /**
+     * Все удалённые участники с их видео. Для звонка один на один хватало одного
+     * трека, для группового — нет: второй вошедший затирал первого, и на экране
+     * оставался кто-то один.
+     *
+     * Ключ — identity участника из токена LiveKit (там лежит user_id).
+     */
+    private val _participants = MutableStateFlow<List<CallParticipant>>(emptyList())
+    actual val participants: StateFlow<List<CallParticipant>> = _participants
+
+    private fun refreshParticipants(r: Room) {
+        _participants.value = r.remoteParticipants.values.map { p ->
+            CallParticipant(
+                identity = p.identity?.value.orEmpty(),
+                name = p.name.orEmpty(),
+                speaking = p.isSpeaking,
+                micOn = p.getTrackPublication(Track.Source.MICROPHONE)?.muted == false,
+            )
+        }
+        remoteTracks.value = r.remoteParticipants.values.mapNotNull { p ->
+            val t = p.getTrackPublication(Track.Source.CAMERA)?.track as? VideoTrack ?: return@mapNotNull null
+            (p.identity?.value.orEmpty()) to t
+        }
+    }
+
+    /** identity → видеотрек; читает сетка участников. */
+    internal val remoteTracks = MutableStateFlow<List<Pair<String, VideoTrack>>>(emptyList())
+
     actual suspend fun connect(url: String, token: String, video: Boolean, publishMic: Boolean) {
         _state.value = CallMediaState.Connecting
         try {
@@ -65,14 +102,31 @@ actual class CallEngine actual constructor() {
             scope.launch {
                 r.events.collect { ev ->
                     when (ev) {
-                        is RoomEvent.TrackSubscribed -> (ev.track as? VideoTrack)?.let { remoteVideo.value = it }
-                        is RoomEvent.TrackUnsubscribed -> if (remoteVideo.value === ev.track) remoteVideo.value = null
+                        is RoomEvent.TrackSubscribed -> {
+                            (ev.track as? VideoTrack)?.let { remoteVideo.value = it }
+                            refreshParticipants(r)
+                        }
+                        is RoomEvent.TrackUnsubscribed -> {
+                            if (remoteVideo.value === ev.track) remoteVideo.value = null
+                            refreshParticipants(r)
+                        }
                         // Собеседник реально в комнате — по этому и глушим гудок дозвона
-                        is RoomEvent.ParticipantConnected -> _peer.value = true
-                        is RoomEvent.ParticipantDisconnected ->
+                        is RoomEvent.ParticipantConnected -> {
+                            _peer.value = true
+                            refreshParticipants(r)
+                        }
+                        is RoomEvent.ParticipantDisconnected -> {
                             _peer.value = r.remoteParticipants.isNotEmpty()
+                            refreshParticipants(r)
+                        }
+                        // Кто говорит — подсветка в сетке. В группе из пяти человек
+                        // без неё непонятно, кого слушаешь.
+                        is RoomEvent.ActiveSpeakersChanged -> refreshParticipants(r)
+                        is RoomEvent.TrackMuted, is RoomEvent.TrackUnmuted -> refreshParticipants(r)
                         is RoomEvent.Disconnected -> {
                             _peer.value = false
+                            _participants.value = emptyList()
+                            remoteTracks.value = emptyList()
                             _state.value = CallMediaState.Idle
                         }
                         else -> {}
@@ -82,6 +136,7 @@ actual class CallEngine actual constructor() {
             r.connect(url, token)
             // Успели зайти вторыми — события ParticipantConnected уже не будет
             _peer.value = r.remoteParticipants.isNotEmpty()
+            refreshParticipants(r)
             r.localParticipant.setMicrophoneEnabled(publishMic)
             _mic.value = publishMic
             if (video) {
@@ -176,6 +231,76 @@ actual fun CallVideoView(engine: CallEngine, modifier: Modifier) {
                     Modifier.align(Alignment.BottomEnd).padding(12.dp).size(110.dp, 150.dp),
                 )
             }
+        }
+    }
+}
+
+/**
+ * Сетка участников. Плиток столько же, сколько людей в звонке, — включая тех, у
+ * кого камера выключена: иначе в аудиозвонке экран пустой и непонятно, кто здесь.
+ *
+ * Раскладка простая: чем больше народу, тем больше столбцов. Ограничение комнаты
+ * — 20 человек (livekit.yaml), при таком числе плитки становятся мелкими, но
+ * читаемыми.
+ */
+@Composable
+actual fun CallGridView(engine: CallEngine, names: Map<String, String>, modifier: Modifier) {
+    val people by engine.participants.collectAsState()
+    val tracks by engine.remoteTracks.collectAsState()
+    val local by engine.localVideo.collectAsState()
+    val byIdentity = remember(tracks) { tracks.toMap() }
+
+    val columns = when {
+        people.size <= 1 -> 1
+        people.size <= 3 -> 2
+        else -> 3
+    }
+    Column(modifier) {
+        // Своё видео отдельной строкой сверху — так же, как в звонке один на один
+        // человек привык видеть себя.
+        local?.let { track ->
+            key(track) {
+                TrackRenderer(engine, track, Modifier.fillMaxWidth().height(120.dp).padding(2.dp))
+            }
+        }
+        people.chunked(columns).forEach { row ->
+            Row(Modifier.fillMaxWidth().weight(1f, fill = false)) {
+                row.forEach { p ->
+                    val label = names[p.identity] ?: p.name.ifEmpty { p.identity.take(8) + "…" }
+                    Box(
+                        Modifier.weight(1f).padding(2.dp).height(160.dp)
+                            .background(
+                                if (p.speaking) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant,
+                            ),
+                    ) {
+                        byIdentity[p.identity]?.let { track ->
+                            key(track) { TrackRenderer(engine, track, Modifier.fillMaxSize()) }
+                        }
+                        Row(
+                            Modifier.align(Alignment.BottomStart).padding(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (!p.micOn) Text("🔇 ", style = MaterialTheme.typography.labelSmall)
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+                // Добиваем ряд пустотой, иначе последняя плитка растянется на всю ширину
+                repeat(columns - row.size) { Box(Modifier.weight(1f)) }
+            }
+        }
+        if (people.isEmpty()) {
+            Text(
+                "Пока никто не подключился",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(16.dp),
+            )
         }
     }
 }

@@ -21,6 +21,7 @@ actual class CallEngine actual constructor() {
     actual val speakerOn: StateFlow<Boolean> = _speaker
     private val _peer = MutableStateFlow(false)
     actual val peerPresent: StateFlow<Boolean> = _peer
+    actual val participants: StateFlow<List<CallParticipant>> = MutableStateFlow(emptyList())
 
     actual suspend fun connect(url: String, token: String, video: Boolean, publishMic: Boolean) {
         // no-op: на десктопе живого медиа нет
@@ -37,5 +38,12 @@ actual suspend fun ensureCallPermissions(video: Boolean): Boolean = true
 actual fun CallVideoView(engine: CallEngine, modifier: Modifier) {
     Box(modifier, contentAlignment = Alignment.Center) {
         Text("Видео работает на телефоне (Android)")
+    }
+}
+
+@Composable
+actual fun CallGridView(engine: CallEngine, names: Map<String, String>, modifier: Modifier) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Text("Групповой звонок работает на телефоне (Android)")
     }
 }

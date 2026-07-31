@@ -68,7 +68,14 @@ data class ReadReceipt(val chatId: String, val messageId: Long)
 data class TypingEvent(val chatId: String, val userId: String)
 
 /** Входящий звонок (WS call.incoming). */
-data class IncomingCall(val callId: String, val room: String, val kind: String, val fromUserId: String)
+data class IncomingCall(
+    val callId: String,
+    val room: String,
+    val kind: String,
+    val fromUserId: String,
+    /** Групповой звонок: отвечать входом в комнату, а не «взять трубку». */
+    val group: Boolean = false,
+)
 
 /** Смена состояния звонка (WS call.state): answered|ended|missed. */
 data class CallStateEvent(val callId: String, val state: String)
@@ -194,6 +201,15 @@ interface ChatClient {
 
     /** Завершить/отклонить звонок. */
     suspend fun endCall(callId: String)
+
+    /** Начать групповой звонок: приглашение уходит всем участникам группы. */
+    suspend fun startGroupCall(groupId: String, kind: String): CallConnection
+
+    /**
+     * Войти в групповой звонок — и впервые, и после обрыва: ручка одна.
+     * Окно на возвращение задаёт SFU (`departure_timeout`), своих таймеров не заводим.
+     */
+    suspend fun joinCall(callId: String): CallConnection
 
     /** События аудио-чатов (поднятая рука у владельца, выдача/отзыв слова у адресата). */
     val voiceEvents: Flow<VoiceEvent>

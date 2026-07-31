@@ -90,7 +90,10 @@ func (s *Server) startGroupCall(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"call_id": callID, "room": room, "token": token, "livekit_url": s.LiveKitURL, "type": "group",
+		// url — то же имя, что и у звонка один на один. Разнобой в именах уже стоил
+		// бы клиенту пустого адреса и молчаливого «не подключается».
+		"call_id": callID, "room": room, "token": token,
+		"url": s.LiveKitURL, "livekit_url": s.LiveKitURL, "type": "group",
 	})
 }
 
@@ -138,7 +141,8 @@ func (s *Server) joinCall(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"call_id": callID, "room": c.Room, "token": token, "livekit_url": s.LiveKitURL, "kind": c.Kind,
+		"call_id": callID, "room": c.Room, "token": token,
+		"url": s.LiveKitURL, "livekit_url": s.LiveKitURL, "kind": c.Kind,
 	})
 }
 

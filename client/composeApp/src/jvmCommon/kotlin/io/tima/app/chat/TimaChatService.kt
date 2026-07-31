@@ -138,6 +138,10 @@ private data class CallIncomingFrame(
     val room: String = "",
     val kind: String = "audio",
     val from: String = "",
+    // "group" — приглашение в групповой звонок. Отвечать на него надо входом
+    // в комнату, а не «взять трубку»: у группового звонка ручка другая.
+    val type: String = "",
+    @SerialName("group_id") val groupId: String = "",
 )
 
 @Serializable
@@ -464,7 +468,7 @@ class TimaClient(private val session: Session) : ChatClient {
                                 }
                                 "call.incoming" -> {
                                     try { json.decodeFromString<CallIncomingFrame>(text) } catch (_: Throwable) { null }
-                                        ?.let { _incomingCalls.emit(IncomingCall(it.callId, it.room, it.kind, it.from)) }
+                                        ?.let { _incomingCalls.emit(IncomingCall(it.callId, it.room, it.kind, it.from, group = it.type == "group")) }
                                     if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
                                 }
                                 "call.state" -> {
@@ -808,12 +812,24 @@ class TimaClient(private val session: Session) : ChatClient {
 
     override suspend fun startCall(peerUserId: String, kind: String): CallConnection {
         val r = api.startCall(session.accessToken, peerUserId, kind)
-        return CallConnection(r.callId, r.room, r.url, r.token)
+        return CallConnection(r.callId, r.room, r.mediaUrl, r.token)
     }
 
     override suspend fun answerCall(callId: String): CallConnection {
         val r = api.answerCall(session.accessToken, callId)
-        return CallConnection(callId, r.room, r.url, r.token)
+        return CallConnection(callId, r.room, r.mediaUrl, r.token)
+    }
+
+    override suspend fun startGroupCall(groupId: String, kind: String): CallConnection {
+        val r = api.startGroupCall(session.accessToken, groupId, kind)
+        AppDiagnostics.add("действие: групповой звонок ($kind) в группе ${groupId.take(8)}…")
+        return CallConnection(r.callId, r.room, r.mediaUrl, r.token)
+    }
+
+    override suspend fun joinCall(callId: String): CallConnection {
+        val r = api.joinCall(session.accessToken, callId)
+        AppDiagnostics.add("действие: вход в групповой звонок ${callId.take(8)}…")
+        return CallConnection(callId, r.room, r.mediaUrl, r.token)
     }
 
     override suspend fun endCall(callId: String) = api.endCall(session.accessToken, callId)

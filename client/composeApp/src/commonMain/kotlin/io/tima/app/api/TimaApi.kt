@@ -320,15 +320,31 @@ private data class PostIdResponse(@SerialName("post_id") val postId: Long)
 private data class StartCallBody(@SerialName("peer_id") val peerId: String, val kind: String)
 
 @Serializable
+private data class GroupCallBody(@SerialName("group_id") val groupId: String, val kind: String)
+
+@Serializable
 data class CallStartDto(
     @SerialName("call_id") val callId: String,
     val room: String,
     val url: String = "",
+    // Групповые ручки исторически звали это поле иначе. Читаем оба и берём то,
+    // что не пусто: пустой адрес означал бы молчаливое «не подключается».
+    @SerialName("livekit_url") val livekitUrl: String = "",
     val token: String,
-)
+) {
+    val mediaUrl: String get() = url.ifEmpty { livekitUrl }
+}
 
 @Serializable
-data class CallTokenDto(val room: String, val url: String = "", val token: String, val title: String = "")
+data class CallTokenDto(
+    val room: String,
+    val url: String = "",
+    @SerialName("livekit_url") val livekitUrl: String = "",
+    val token: String,
+    val title: String = "",
+) {
+    val mediaUrl: String get() = url.ifEmpty { livekitUrl }
+}
 
 @Serializable
 data class VoiceJoinDto(
@@ -702,6 +718,17 @@ class TimaApi(private val baseUrl: String) {
 
     suspend fun startCall(token: String, peerUserId: String, kind: String): CallStartDto =
         postAuthed<StartCallBody, CallStartDto>("/api/v1/calls", token, StartCallBody(peerUserId, kind))
+
+    /** Начать групповой звонок: приглашаются все участники группы. */
+    suspend fun startGroupCall(token: String, groupId: String, kind: String): CallStartDto =
+        postAuthed<GroupCallBody, CallStartDto>("/api/v1/calls/group", token, GroupCallBody(groupId, kind))
+
+    /**
+     * Войти в групповой звонок — и первый раз, и после обрыва: эндпоинт один.
+     * Для звонка один на один сервер отвечает отказом: там повторного входа нет.
+     */
+    suspend fun joinCall(token: String, callId: String): CallTokenDto =
+        postAuthed<JsonObject, CallTokenDto>("/api/v1/calls/$callId/join", token, JsonObject(emptyMap()))
 
     suspend fun answerCall(token: String, callId: String): CallTokenDto =
         postAuthed<JsonObject, CallTokenDto>("/api/v1/calls/$callId/answer", token, JsonObject(emptyMap()))

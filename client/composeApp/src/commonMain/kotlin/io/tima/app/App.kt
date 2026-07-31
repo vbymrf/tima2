@@ -77,6 +77,7 @@ import io.tima.app.diag.checkConnectivity
 import io.tima.app.net.LinkState
 import io.tima.app.platform.CallEngine
 import io.tima.app.platform.CallMediaState
+import io.tima.app.platform.CallGridView
 import io.tima.app.platform.CallVideoView
 import io.tima.app.platform.contactsSupported
 import io.tima.app.platform.currentVersionCode
@@ -259,7 +260,7 @@ fun App() {
                 activeCall = CallUi(
                     inc.callId,
                     who?.label ?: (inc.fromUserId.take(8) + "…"),
-                    inc.kind, CallDir.Incoming, null,
+                    inc.kind, CallDir.Incoming, null, group = inc.group,
                 )
             }
         }
@@ -301,7 +302,10 @@ fun App() {
                     onAccept = {
                         val c = client ?: return@CallOverlay
                         scope.launch {
-                            runCatching { c.answerCall(call.callId) }
+                            // В группе «ответить» — это вход в комнату, и той же ручкой
+                            // происходит возвращение после обрыва. В звонке один на один
+                            // повторного входа нет вовсе, там своя ручка.
+                            runCatching { if (call.group) c.joinCall(call.callId) else c.answerCall(call.callId) }
                                 .onSuccess { activeCall = call.copy(direction = CallDir.Connected, connection = it) }
                                 .onFailure { activeCall = null }
                         }
@@ -345,6 +349,17 @@ fun App() {
                     targetId = s.groupId,
                     isGroup = true,
                     onRead = {},
+                    onCall = { kind ->
+                        val c = client ?: return@ChatScreen
+                        AppDiagnostics.add("действие: групповой звонок ($kind) — ${s.title}")
+                        scope.launch {
+                            runCatching { c.startGroupCall(s.groupId, kind) }
+                                .onSuccess {
+                                    activeCall = CallUi(it.callId, s.title, kind, CallDir.Outgoing, it, group = true)
+                                }
+                                .onFailure { activeCall = null }
+                        }
+                    },
                     onBack = { screen = Screen.Home(s.session) },
                 )
                 is Screen.ChannelView -> ChannelScreen(s, onBack = { screen = Screen.Home(s.session) })
@@ -1397,12 +1412,12 @@ private fun ChatScreen(
                     Text("печатает…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 }
             }
-            if (!isGroup) { // звонки — в личных чатах
-                Button(enabled = !busy, onClick = { onCall("audio") }) { Text("📞") }
-                Spacer(Modifier.width(4.dp))
-                Button(enabled = !busy, onClick = { onCall("video") }) { Text("📹") }
-                Spacer(Modifier.width(4.dp))
-            }
+            // Звонки и в личных чатах, и в группах: в группе приглашение уходит
+            // всем участникам, вход в уже идущий звонок — той же кнопкой.
+            Button(enabled = !busy, onClick = { onCall("audio") }) { Text("📞") }
+            Spacer(Modifier.width(4.dp))
+            Button(enabled = !busy, onClick = { onCall("video") }) { Text("📹") }
+            Spacer(Modifier.width(4.dp))
             // Восстановить историю: у своих устройств (авто) или собеседника/участников (согласие)
             Button(enabled = !busy, onClick = {
                 busy = true; error = null
@@ -1620,6 +1635,8 @@ private data class CallUi(
     val kind: String, // audio|video
     val direction: CallDir,
     val connection: CallConnection?,
+    /** Групповой: показываем сетку участников вместо одного собеседника. */
+    val group: Boolean = false,
 )
 
 /** Экран звонка: сигналинг + живое медиа LiveKit (Android). Видео на весь экран, аудио — карточка. */
@@ -1662,13 +1679,19 @@ private fun CallOverlay(call: CallUi, onAccept: () -> Unit, onEnd: () -> Unit) {
     val onVideo = isVideo && mediaState == CallMediaState.Connected
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceVariant) {
         Box(Modifier.fillMaxSize()) {
-            if (onVideo) CallVideoView(engine, Modifier.fillMaxSize())
+            // В группе — сетка участников, и она нужна даже в аудиозвонке: без неё
+            // непонятно, кто вообще в разговоре и кто сейчас говорит.
+            if (call.group && mediaState == CallMediaState.Connected) {
+                CallGridView(engine, names = emptyMap(), modifier = Modifier.fillMaxSize())
+            } else if (onVideo) {
+                CallVideoView(engine, Modifier.fillMaxSize())
+            }
             Column(
                 modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                if (!onVideo) {
+                if (!onVideo && !(call.group && mediaState == CallMediaState.Connected)) {
                     Text(if (isVideo) "📹" else "📞", style = MaterialTheme.typography.displayMedium)
                     Spacer(Modifier.height(16.dp))
                     Text(call.peerLabel, style = MaterialTheme.typography.headlineMedium)
