@@ -46,8 +46,20 @@ data class StoredMessage(
     val state: MsgState,
     val replyTo: Long = 0,
     val text: String = "",
-    /** Ссылка на вложение в виде JSON; пусто — вложения нет. */
+    /**
+     * Ссылка на УЖЕ выложенное вложение. Заполняется после успешной выгрузки —
+     * повторная попытка отправки не выкладывает файл заново.
+     */
     val mediaJson: String = "",
+    /** Вид сообщения: 1 текст, 2 голосовое, 3 фото, 5 файл (crypto-protocol CK_*). */
+    val kind: Int = 1,
+    /**
+     * Описание ждущего вложения. САМИ БАЙТЫ здесь не лежат: файл бывает на десятки
+     * мегабайт, а список чата читается на каждое открытие экрана — держать их в
+     * каждой строке значило бы поднимать всю переписку в память.
+     * Байты берутся отдельно, [MessageStore.attachmentBytes], только на отправку.
+     */
+    val attachment: OutboxAttachment? = null,
 ) {
     /** Своё ли это сообщение (в отличие от пришедшего). */
     val mine: Boolean get() = state != MsgState.INCOMING
@@ -55,6 +67,14 @@ data class StoredMessage(
     /** Ждёт отправки — экран показывает часики, а не галочку. */
     val pending: Boolean get() = state == MsgState.QUEUED || state == MsgState.SENDING
 }
+
+/** Описание вложения, ждущего отправки. Без байтов — они хранятся отдельно. */
+data class OutboxAttachment(
+    val mime: String,
+    val name: String = "",
+    val durationMs: Int = 0,
+    val sizeBytes: Long = 0,
+)
 
 /** Чат так, как он лежит на устройстве. [title] расшифрован. */
 data class StoredChat(

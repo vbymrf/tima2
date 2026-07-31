@@ -3,11 +3,13 @@ package io.tima.app
 import io.tima.app.store.LocalDb
 import io.tima.app.store.MessageStore
 import io.tima.app.store.MsgState
+import io.tima.app.store.OutboxAttachment
 import io.tima.app.store.StoredChat
 import io.tima.app.store.StoredMessage
 import java.io.File
 import java.sql.DriverManager
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -125,6 +127,81 @@ class MessageStoreTest {
         // Соседний чат не тронут.
         assertEquals(1, s.messages("chat-2").size)
         s.close()
+    }
+
+    @Test
+    fun `вложение ждёт в очереди вместе с байтами и переживает перезапуск`() {
+        val f = tempDbFile()
+        val file = ByteArray(200_000) { (it % 251).toByte() }
+        val id = store(f).let { s ->
+            val localId = s.put(
+                msg("photo", text = "подпись").copy(
+                    kind = 3,
+                    attachment = OutboxAttachment(mime = "image/jpeg", sizeBytes = file.size.toLong()),
+                ),
+                attachmentBytes = file,
+            )
+            s.close()
+            localId
+        }
+        val after = store(f)
+        val queued = after.queued().single()
+        assertEquals(3, queued.kind)
+        assertEquals("image/jpeg", queued.attachment?.mime)
+        // Байты в общую выборку не попадают — иначе открытие чата поднимало бы
+        // в память все вложения разом.
+        assertTrue(after.messages("chat-1").single().attachment?.mime == "image/jpeg")
+        assertContentEquals(file, after.attachmentBytes(id))
+        after.close()
+    }
+
+    @Test
+    fun `после выгрузки байты стёрты, а ссылка сохранена`() {
+        val f = tempDbFile()
+        val s = store(f)
+        val id = s.put(
+            msg("photo").copy(kind = 3, attachment = OutboxAttachment(mime = "image/jpeg")),
+            attachmentBytes = ByteArray(50_000) { 7 },
+        )
+        s.attachmentUploaded(id, "media-1|a2V5|image/jpeg|50000|0", "подпись")
+        // Повторная попытка отправки не должна выкладывать файл заново: по мобильной
+        // сети это минута работы и трафик.
+        assertEquals(null, s.attachmentBytes(id))
+        val m = s.messages("chat-1").single()
+        assertEquals("media-1|a2V5|image/jpeg|50000|0", m.mediaJson)
+        assertEquals("подпись", m.text)
+        s.close()
+    }
+
+    @Test
+    fun `смена состояния не стирает байты вложения`() {
+        val s = store(tempDbFile())
+        val id = s.put(
+            msg("photo").copy(kind = 3, attachment = OutboxAttachment(mime = "image/jpeg")),
+            attachmentBytes = ByteArray(1000) { 3 },
+        )
+        // «в очереди → отправляется» проходит через тот же put/UPDATE. Если бы он
+        // обнулял байты, файл терялся бы ровно в момент начала отправки.
+        s.setState(id, MsgState.SENDING)
+        s.requeueStuck()
+        assertEquals(1000, s.attachmentBytes(id)?.size)
+        s.close()
+    }
+
+    @Test
+    fun `байты вложения не лежат на диске открытыми`() {
+        val f = tempDbFile()
+        val marker = "СЕКРЕТНОЕ-СОДЕРЖИМОЕ-ФАЙЛА".encodeToByteArray()
+        store(f).let { s ->
+            s.put(
+                msg("doc").copy(kind = 5, attachment = OutboxAttachment(mime = "text/plain", name = "тайна.txt")),
+                attachmentBytes = marker + ByteArray(500),
+            )
+            s.close()
+        }
+        val raw = f.readBytes().decodeToString(throwOnInvalidSequence = false)
+        assertFalse(raw.contains("СЕКРЕТНОЕ-СОДЕРЖИМОЕ-ФАЙЛА"), "содержимое файла видно в базе")
+        assertFalse(raw.contains("тайна.txt"), "имя файла видно в базе")
     }
 
     @Test

@@ -56,6 +56,7 @@ import io.tima.app.net.classifyFailure
 import io.tima.app.net.observeNetworkChanges
 import io.tima.app.store.MessageStore
 import io.tima.app.store.MsgState
+import io.tima.app.store.OutboxAttachment
 import io.tima.app.store.StoredChat
 import io.tima.app.store.StoredMessage
 import io.tima.app.store.openLocalDb
@@ -559,7 +560,23 @@ class TimaClient(private val session: Session) : ChatClient {
                 senderId = m.senderId, isGroup = m.group, createdAtMs = m.createdAtMs,
                 state = if (m.mine) MsgState.SENT else MsgState.INCOMING,
                 replyTo = m.replyTo, text = m.text,
+                // Ссылку на вложение храним вместе с сообщением — иначе офлайн
+                // от фото осталась бы одна подпись, а сам файл было бы не открыть.
+                mediaJson = m.media?.let(::packAttachment).orEmpty(),
             ),
+        )
+    }
+
+    private fun packAttachment(a: MediaAttachment): String = listOf(
+        a.mediaId, b64url.encode(a.mediaKey), a.mime, a.sizeBytes.toString(), a.durationMs.toString(),
+    ).joinToString("|")
+
+    private fun unpackAttachment(s: String): MediaAttachment? {
+        val p = s.split("|")
+        if (p.size < 5) return null
+        return MediaAttachment(
+            mediaId = p[0], mediaKey = b64url.decode(p[1]), mime = p[2],
+            sizeBytes = p[3].toLongOrNull() ?: 0, durationMs = p[4].toIntOrNull() ?: 0,
         )
     }
 
@@ -567,6 +584,10 @@ class TimaClient(private val session: Session) : ChatClient {
         chatId = chatId, messageId = messageId, senderId = senderId, text = text,
         createdAtMs = createdAtMs, mine = mine, group = isGroup, replyTo = replyTo,
         readByPeer = state == MsgState.READ, pending = pending, clientMsgId = clientMsgId,
+        media = mediaJson.takeIf { it.isNotEmpty() }?.let(::unpackAttachment)
+        // Вложение ещё ждёт отправки — показываем его из описания, чтобы своё фото
+        // было видно в чате сразу, а не появлялось только после ухода на сервер.
+            ?: attachment?.let { MediaAttachment("", ByteArray(0), it.mime, it.sizeBytes, it.durationMs) },
     )
 
     /**
@@ -618,20 +639,20 @@ class TimaClient(private val session: Session) : ChatClient {
             val pending = runCatching { store.queued() }.getOrDefault(emptyList())
             for (m in pending) {
                 if (!isActive) break
+                val peer = peerOf(m.chatId) ?: continue
                 store.setState(m.localId, MsgState.SENDING)
                 try {
                     val id = sealAndPost(
-                        peerUserId = peerOf(m.chatId) ?: continue,
-                        body = bodyOf(m.text), kind = 1, replyTo = m.replyTo.toULong(),
-                        clientMsgId = m.clientMsgId,
+                        peerUserId = peer, body = bodyFor(m), kind = m.kind,
+                        replyTo = m.replyTo.toULong(), clientMsgId = m.clientMsgId,
                     )
                     store.markSent(m.localId, id)
                     _linkState.value = LinkState.ONLINE
                     // Тем же client_msg_id — экран заменит часики галочкой, а не
-                    // покажет второе такое же сообщение рядом.
-                    _messages.emit(
-                        m.copy(messageId = id, state = MsgState.SENT).toChatMessage(),
-                    )
+                    // покажет второе такое же сообщение рядом. Перечитываем из базы:
+                    // у вложения там уже лежит ссылка на выложенный файл.
+                    val sent = store.messages(m.chatId).firstOrNull { it.clientMsgId == m.clientMsgId }
+                    _messages.emit((sent ?: m.copy(messageId = id, state = MsgState.SENT)).toChatMessage())
                 } catch (e: Throwable) {
                     // Обратно в очередь — без ошибки на экране. Сервер отсекает
                     // повтор по client_msg_id, так что досылать можно смело.
@@ -646,6 +667,29 @@ class TimaClient(private val session: Session) : ChatClient {
     }
 
     /**
+     * Тело сообщения из очереди. У текста собирается сразу; у вложения сперва
+     * выкладывается файл — но только если он ещё не выложен.
+     *
+     * Ссылку на выложенный файл запоминаем, а байты стираем. Иначе выгрузка на
+     * 11 МБ повторялась бы при каждой неудачной посылке, а по мобильной сети это
+     * минута работы и заметный расход трафика.
+     */
+    private suspend fun bodyFor(m: StoredMessage): MessageBody {
+        if (m.kind == 1) return bodyOf(m.text)
+        val existing = m.mediaJson.takeIf { it.isNotEmpty() }?.let(::unpackMediaRef)
+        val ref = existing ?: run {
+            val bytes = store.attachmentBytes(m.localId)
+                ?: throw IllegalStateException("байты вложения потерялись")
+            val a = m.attachment
+            val fresh = uploadMedia(bytes, a?.mime ?: "application/octet-stream", a?.durationMs ?: 0)
+            store.attachmentUploaded(m.localId, packMediaRef(fresh), m.text)
+            AppDiagnostics.add("очередь: выложено вложение ${bytes.size / 1024} КБ")
+            fresh
+        }
+        return MessageBody(text = m.text, media = listOf(ref))
+    }
+
+    /**
      * Собеседник по chat_id. Идентификатор чата — свёртка пары и обратно не
      * разворачивается, поэтому связь хранится рядом с чатом.
      *
@@ -656,48 +700,14 @@ class TimaClient(private val session: Session) : ChatClient {
     private fun peerOf(chatId: String): String? =
         store.chats().firstOrNull { it.chatId == chatId && it.peerUserId.isNotEmpty() }?.peerUserId
 
-    override suspend fun sendImage(peerUserId: String, imageBytes: ByteArray, mime: String, caption: String): ChatMessage {
-        // media_key — случайный на файл; сервер и MinIO видят только ciphertext
-        val mediaKey = ByteArray(32).also(random::nextBytes)
-        val sealedFile = MediaCipher.seal(mediaKey, imageBytes).getOrThrow()
-        val init = api.mediaInit(session.accessToken, sealedFile.size.toLong(), mime)
-        api.putPresigned(init.uploadUrls.first(), sealedFile)
-        api.mediaComplete(session.accessToken, init.mediaId)
-
-        val body = MessageBody(
-            text = caption,
-            media = listOf(
-                MediaRef(
-                    media_id = init.mediaId,
-                    media_key = mediaKey.toByteString(),
-                    mime = mime,
-                    size_bytes = imageBytes.size.toLong(),
-                ),
-            ),
-        )
-        mediaCache[init.mediaId] = imageBytes // своё фото не перекачивать
-        return sealAndPostNow(peerUserId, body, kind = 3) // CK_IMAGE
-    }
+    // Вложения идут через ту же очередь, что и текст: выбрал фото в метро — ушло
+    // само, когда появилась связь. Файл выкладывается не здесь, а отправителем:
+    // до появления связи выкладывать некуда (ADR-0016).
+    override suspend fun sendImage(peerUserId: String, imageBytes: ByteArray, mime: String, caption: String): ChatMessage =
+        enqueueAttachment(peerUserId, imageBytes, mime, kind = 3, caption = caption) // CK_IMAGE
 
     override suspend fun sendVoice(peerUserId: String, audioBytes: ByteArray, mime: String, durationMs: Int): ChatMessage {
-        val mediaKey = ByteArray(32).also(random::nextBytes)
-        val sealedFile = MediaCipher.seal(mediaKey, audioBytes).getOrThrow()
-        val init = api.mediaInit(session.accessToken, sealedFile.size.toLong(), mime)
-        api.putPresigned(init.uploadUrls.first(), sealedFile)
-        api.mediaComplete(session.accessToken, init.mediaId)
-        mediaCache[init.mediaId] = audioBytes
-        val body = MessageBody(
-            media = listOf(
-                MediaRef(
-                    media_id = init.mediaId,
-                    media_key = mediaKey.toByteString(),
-                    mime = mime,
-                    size_bytes = audioBytes.size.toLong(),
-                    duration_ms = durationMs,
-                ),
-            ),
-        )
-        return sealAndPostNow(peerUserId, body, kind = 2) // CK_VOICE
+        return enqueueAttachment(peerUserId, audioBytes, mime, kind = 2, durationMs = durationMs) // CK_VOICE
     }
 
     override suspend fun sendGroupVoice(groupId: String, audioBytes: ByteArray, mime: String, durationMs: Int): ChatMessage {
@@ -722,7 +732,7 @@ class TimaClient(private val session: Session) : ChatClient {
     }
 
     override suspend fun sendFile(peerUserId: String, bytes: ByteArray, name: String, mime: String): ChatMessage =
-        sealAndPostNow(peerUserId, uploadFileBody(bytes, name, mime), kind = 5) // CK_FILE
+        enqueueAttachment(peerUserId, bytes, mime, kind = 5, name = name) // CK_FILE
 
     override suspend fun sendGroupFile(groupId: String, bytes: ByteArray, name: String, mime: String): ChatMessage =
         sealAndPostGroup(groupId, uploadFileBody(bytes, name, mime), kind = 5) // CK_FILE
@@ -880,12 +890,70 @@ class TimaClient(private val session: Session) : ChatClient {
     }
 
     /**
-     * Отправка «сейчас же» — для вложений: они пока не проходят через очередь.
-     *
-     * Вложение нельзя просто положить в очередь текстом: в очереди должны были бы
-     * лежать и сами байты файла. Это следующий срез; пока фото, голосовое и файл
-     * уходят прежним путём и без связи честно не отправляются.
+     * Ссылка на выложенный файл в одну строку — ложится туда же, где текст, и так
+     * же под шифрованием хранилища. Отдельной таблицы не завожу: полей пять, и
+     * читает их только отправитель.
      */
+    private fun packMediaRef(m: MediaRef): String = listOf(
+        m.media_id, b64url.encode(m.media_key.toByteArray()), m.mime,
+        m.size_bytes.toString(), m.duration_ms.toString(),
+    ).joinToString("|")
+
+    private fun unpackMediaRef(s: String): MediaRef? {
+        val p = s.split("|")
+        if (p.size < 5) return null
+        return MediaRef(
+            media_id = p[0], media_key = b64url.decode(p[1]).toByteString(), mime = p[2],
+            size_bytes = p[3].toLongOrNull() ?: 0, duration_ms = p[4].toIntOrNull() ?: 0,
+        )
+    }
+
+    /**
+     * Выложить файл в хранилище медиа. Зовёт ОТПРАВИТЕЛЬ, а не тот, кто выбрал файл:
+     * до появления связи выкладывать некуда.
+     */
+    private suspend fun uploadMedia(bytes: ByteArray, mime: String, durationMs: Int): MediaRef {
+        val mediaKey = ByteArray(32).also(random::nextBytes)
+        val sealedFile = MediaCipher.seal(mediaKey, bytes).getOrThrow()
+        val init = api.mediaInit(session.accessToken, sealedFile.size.toLong(), mime)
+        api.putPresigned(init.uploadUrls.first(), sealedFile)
+        api.mediaComplete(session.accessToken, init.mediaId)
+        mediaCache[init.mediaId] = bytes // своё вложение не перекачивать
+        return MediaRef(
+            media_id = init.mediaId, media_key = mediaKey.toByteString(), mime = mime,
+            size_bytes = bytes.size.toLong(), duration_ms = durationMs,
+        )
+    }
+
+    /**
+     * Положить вложение в очередь: байты ложатся на диск под шифрованием и ждут
+     * связи наравне с текстом.
+     */
+    private fun enqueueAttachment(
+        peerUserId: String, bytes: ByteArray, mime: String, kind: Int,
+        caption: String = "", name: String = "", durationMs: Int = 0,
+    ): ChatMessage {
+        val chatId = chatIdWith(peerUserId)
+        val clientMsgId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        val text = if (kind == 5) name else caption // у файла в тексте едет имя
+        store.upsertChat(StoredChat(chatId = chatId, peerUserId = peerUserId, lastText = text, lastAtMs = now))
+        store.put(
+            StoredMessage(
+                chatId = chatId, clientMsgId = clientMsgId, senderId = session.userId,
+                createdAtMs = now, state = MsgState.QUEUED, text = text, kind = kind,
+                attachment = OutboxAttachment(mime, name, durationMs, bytes.size.toLong()),
+            ),
+            attachmentBytes = bytes,
+        )
+        nudge()
+        return ChatMessage(
+            chatId = chatId, messageId = 0, senderId = session.userId, text = text,
+            createdAtMs = now, mine = true, pending = true, clientMsgId = clientMsgId,
+        )
+    }
+
+    /** Отправка «сейчас же» — осталась для групповых вложений. */
     private suspend fun sealAndPostNow(
         peerUserId: String, body: MessageBody, kind: Int, replyTo: ULong = 0u,
     ): ChatMessage {
