@@ -44,10 +44,11 @@ object UpdateInstaller {
 
     /** Сведения об APK-файле: версия и отпечаток подписи. */
     fun inspect(ctx: Context, apk: File): ApkInfo? {
+        // Оба флага сразу: см. signaturesOf — у файла новый источник подписи бывает пуст.
+        @Suppress("DEPRECATION")
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            PackageManager.GET_SIGNING_CERTIFICATES
+            PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES
         } else {
-            @Suppress("DEPRECATION")
             PackageManager.GET_SIGNATURES
         }
         val info = ctx.packageManager.getPackageArchiveInfo(apk.absolutePath, flags) ?: return null
@@ -78,13 +79,19 @@ object UpdateInstaller {
         return certDigest(signaturesOf(info))
     }
 
-    private fun signaturesOf(info: android.content.pm.PackageInfo): Array<Signature>? =
+    /**
+     * Подписи из PackageInfo. У APK-ФАЙЛА `signingInfo` бывает пустым даже на Android 9+
+     * — это и произошло на Xiaomi: в журнале осталась строка «подпись …» без значения,
+     * то есть сверить подпись скачанного файла было не с чем и проверка молча
+     * пропускалась. Поэтому при пустом signingInfo спускаемся к прежнему полю.
+     */
+    private fun signaturesOf(info: android.content.pm.PackageInfo): Array<Signature>? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            info.signingInfo?.apkContentsSigners
-        } else {
-            @Suppress("DEPRECATION")
-            info.signatures
+            info.signingInfo?.apkContentsSigners?.takeIf { it.isNotEmpty() }?.let { return it }
         }
+        @Suppress("DEPRECATION")
+        return info.signatures
+    }
 
     private fun certDigest(sigs: Array<Signature>?): String {
         val first = sigs?.firstOrNull() ?: return ""
@@ -106,7 +113,40 @@ object UpdateInstaller {
      * Ставит APK через PackageInstaller. Результат приходит широковещательно и
      * попадает в диагностику — в отличие от ACTION_VIEW, который ничего не сообщает.
      */
+    /** Файл текущей установки — нужен запасному пути, если сессию отклонили. */
+    @Volatile
+    private var pendingApk: File? = null
+
+    /**
+     * Запасной путь: отдать APK системному установщику как content://.
+     *
+     * Нужен из-за прошивок, которые запрещают установку через сессии PackageInstaller
+     * своей надстройкой поверх Android. На MIUI это видно как
+     * `INSTALL_FAILED_INTERNAL_ERROR: Permission Denied` — притом что системное
+     * разрешение «устанавливать из этого источника» выдано и проверено строкой выше.
+     * Отказывает не Android, а прошивка.
+     *
+     * Штатным путём это остаться не может: обратной связи здесь нет никакой — ровно
+     * та беда, ради которой сессии и заводились. Поэтому сначала сессия, и только
+     * после её отказа — этот экран.
+     */
+    fun installViaSystemUi(ctx: Context, apk: File) {
+        val uri = runCatching {
+            androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.updates", apk)
+        }.getOrElse {
+            AppDiagnostics.add("update: не отдать файл установщику — ${it.message}")
+            return
+        }
+        val intent = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        runCatching { ctx.startActivity(intent) }
+            .onSuccess { AppDiagnostics.add("update: открыл системный установщик — подтвердите установку на экране") }
+            .onFailure { AppDiagnostics.add("update: системный установщик не открылся — ${it.message}") }
+    }
+
     fun install(ctx: Context, apk: File) {
+        pendingApk = apk
         registerStatusReceiver(ctx)
         val installer = ctx.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
@@ -153,11 +193,20 @@ object UpdateInstaller {
                         runCatching { c.startActivity(confirm) }
                             .onFailure { AppDiagnostics.add("update: не открылось подтверждение — ${it.message}") }
                     }
-                    PackageInstaller.STATUS_SUCCESS ->
+                    PackageInstaller.STATUS_SUCCESS -> {
+                        pendingApk = null
                         AppDiagnostics.add("update: установлено успешно")
-                    else ->
+                    }
+                    else -> {
                         // ВОТ РАДИ ЧЕГО ВСЁ ЭТО: до сих пор причина отказа не была видна нигде.
-                        AppDiagnostics.add("update: установка отклонена, код $status — ${explain(status)}${if (msg.isNotEmpty()) " ($msg)" else ""}")
+                        AppDiagnostics.add("update: установка отклонена, код $status — ${explain(status, msg)}${if (msg.isNotEmpty()) " ($msg)" else ""}")
+                        // Отказ прошивки, а не Android: пробуем через системный установщик.
+                        // При несовпавшей подписи (CONFLICT) и отмене пользователем
+                        // (ABORTED) пробовать нечего — второй путь откажет так же.
+                        if (status == PackageInstaller.STATUS_FAILURE || status == PackageInstaller.STATUS_FAILURE_BLOCKED) {
+                            pendingApk?.let { installViaSystemUi(c, it) }
+                        }
+                    }
                 }
             }
         }
@@ -170,13 +219,19 @@ object UpdateInstaller {
         }
     }
 
-    private fun explain(status: Int): String = when (status) {
-        PackageInstaller.STATUS_FAILURE_ABORTED -> "отменено пользователем"
-        PackageInstaller.STATUS_FAILURE_BLOCKED -> "заблокировано системой или защитой"
-        PackageInstaller.STATUS_FAILURE_CONFLICT -> "конфликт с установленным (обычно другая подпись — нужно удалить приложение)"
-        PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> "несовместимо с устройством"
-        PackageInstaller.STATUS_FAILURE_INVALID -> "файл повреждён или неверный"
-        PackageInstaller.STATUS_FAILURE_STORAGE -> "не хватает места"
+    private fun explain(status: Int, message: String = ""): String = when {
+        status == PackageInstaller.STATUS_FAILURE_ABORTED -> "отменено пользователем"
+        status == PackageInstaller.STATUS_FAILURE_BLOCKED -> "заблокировано системой или защитой"
+        status == PackageInstaller.STATUS_FAILURE_CONFLICT -> "конфликт с установленным (обычно другая подпись — нужно удалить приложение)"
+        status == PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> "несовместимо с устройством"
+        status == PackageInstaller.STATUS_FAILURE_INVALID -> "файл повреждён или неверный"
+        status == PackageInstaller.STATUS_FAILURE_STORAGE -> "не хватает места"
+        // Отказ надстройки прошивки поверх Android. Системное разрешение при этом
+        // выдано — проверяется до скачивания, иначе сюда бы не дошли. На Xiaomi
+        // лечится выключением «Оптимизация MIUI» в параметрах разработчика.
+        message.contains("INSTALL_FAILED_INTERNAL_ERROR") ->
+            "запретила прошивка (на Xiaomi — выключите «Оптимизация MIUI» в параметрах разработчика); открываю системный установщик"
+        status == PackageInstaller.STATUS_FAILURE -> "общий отказ установщика; открываю системный установщик"
         else -> "неизвестная причина"
     }
 }
