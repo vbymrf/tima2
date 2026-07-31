@@ -170,7 +170,8 @@ class TimaClient(private val session: Session) : ChatClient {
     // chat_id → ключ escrow текущей эпохи. Ключ у каждой пары «чат × месяц» свой,
     // поэтому кэш по чатам, а не один модуль на клиента.
     private val escrowByChat = ConcurrentHashMap<String, CachedEscrowKey>()
-    private val devicesCache = mutableMapOf<String, List<DeviceKeyInfo>>()
+    // ConcurrentHashMap, а не обычная карта: список читают и обновляют разные корутины
+    private val devicesCache = ConcurrentHashMap<String, CachedDevices>()
     private val mediaCache = ConcurrentHashMap<String, ByteArray>() // media_id → plaintext (на сессию)
     private val groupKeyCache = ConcurrentHashMap<String, MutableMap<Int, ByteArray>>() // group_id → версия → GK
 
@@ -294,8 +295,37 @@ class TimaClient(private val session: Session) : ChatClient {
     private fun textOf(body: MessageBody): String =
         MessageContentCodec.fromBody(body).plainText()
 
-    private suspend fun devicesOf(userId: String): List<DeviceKeyInfo> =
-        devicesCache.getOrPut(userId) { api.listDevices(session.accessToken, userId) }
+    /** Список устройств с временем, когда он получен. */
+    private data class CachedDevices(val devices: List<DeviceKeyInfo>, val atMs: Long)
+
+    /**
+     * Сколько живёт список устройств собеседника.
+     *
+     * Раньше он кэшировался НАВСЕГДА — до перезапуска приложения. А приложение держит
+     * фоновую службу сутками, то есть «навсегда» и означало «навсегда». Последствие
+     * серьёзное: устройство, зарегистрированное позже, для собеседника не
+     * существовало — тот продолжал шифровать на прежний список, и на новое устройство
+     * не приходило НИЧЕГО. Именно так выглядел вход с ПК: телефон отвечал, ответы
+     * уходили пяти старым устройствам и ни одного — новому.
+     */
+    private val devicesTtlMs = 5 * 60 * 1000L
+
+    private suspend fun devicesOf(userId: String): List<DeviceKeyInfo> {
+        val now = System.currentTimeMillis()
+        devicesCache[userId]?.let { if (now - it.atMs < devicesTtlMs) return it.devices }
+        val fresh = api.listDevices(session.accessToken, userId)
+        devicesCache[userId] = CachedDevices(fresh, now)
+        return fresh
+    }
+
+    /**
+     * Сообщение пришло с устройства, которого нет в нашем списке, — значит список
+     * устарел прямо сейчас. Признак бесплатный и точный, ждать истечения срока незачем.
+     */
+    private fun noticeSenderDevice(userId: String, deviceId: String) {
+        val cached = devicesCache[userId] ?: return
+        if (cached.devices.none { it.deviceId == deviceId }) devicesCache.remove(userId)
+    }
 
     /**
      * Escrow-модуль для чата на текущую эпоху (ADR-0012).
@@ -674,6 +704,10 @@ class TimaClient(private val session: Session) : ChatClient {
     private suspend fun decrypt(envelopeBytes: ByteArray, wrapEphemeral: ByteArray? = null): ChatMessage? {
         val sealed: SealedPersonalMessage =
             MessageSerializer.decodeEnvelope(envelopeBytes).getOrNull() ?: return null
+        // Устройства отправителя нет в списке — список устарел, а не сообщение чужое.
+        // Обновляемся и пробуем ещё раз: иначе первое сообщение с только что
+        // заведённого устройства собеседника не проходило проверку подписи.
+        noticeSenderDevice(sealed.meta.senderId, sealed.meta.senderDevice)
         val senderSigningPub = devicesOf(sealed.meta.senderId)
             .firstOrNull { it.deviceId == sealed.meta.senderDevice }
             ?.let { b64url.decode(it.signingPub) } ?: return null
@@ -855,6 +889,7 @@ class TimaClient(private val session: Session) : ChatClient {
     /** Подпись по group_message_canonical → GK нужной версии → SecretBox → body. */
     private suspend fun decryptGroup(m: GroupMessageDto): ChatMessage? {
         val payload = b64url.decode(m.payload)
+        noticeSenderDevice(m.senderId, m.senderDevice) // то же, что и в личном чате
         val senderPub = devicesOf(m.senderId).firstOrNull { it.deviceId == m.senderDevice }
             ?.let { b64url.decode(it.signingPub) } ?: return null
         val meta = GroupMessageMeta(
