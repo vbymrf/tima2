@@ -72,6 +72,7 @@ import io.tima.app.chat.isFile
 import io.tima.app.chat.isVoice
 import io.tima.app.chat.preview
 import io.tima.app.diag.AppDiagnostics
+import io.tima.app.diag.checkConnectivity
 import io.tima.app.platform.CallEngine
 import io.tima.app.platform.CallMediaState
 import io.tima.app.platform.CallVideoView
@@ -712,6 +713,39 @@ private fun HomeScreen(
         }) { Text("Отправить логи") }
     }
     updateMsg?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
+
+    // Самопроверка связи по шагам: имя → TCP → TLS → HTTP → WebSocket.
+    // «Не достучаться до сервера» — это пять разных поломок, различить их снаружи
+    // нельзя, а SIM-карта есть только у испытателя. Пусть телефон назовёт шаг сам.
+    var netCheck by remember { mutableStateOf<List<String>>(emptyList()) }
+    var netBusy by remember { mutableStateOf(false) }
+    Spacer(Modifier.height(4.dp))
+    Row(modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
+        Button(modifier = Modifier.weight(1f), enabled = !netBusy, onClick = {
+            netCheck = emptyList()
+            netBusy = true
+            scope.launch {
+                runCatching {
+                    checkConnectivity(session.serverUrl) { line ->
+                        netCheck = netCheck + line
+                        AppDiagnostics.add("связь: $line")
+                    }
+                }.onFailure { netCheck = netCheck + "проверка сорвалась: ${it.message}" }
+                netBusy = false
+            }
+        }) { Text(if (netBusy) "Проверяю связь…" else "Проверить связь") }
+    }
+    if (netCheck.isNotEmpty()) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(top = 4.dp),
+        ) {
+            Column(modifier = Modifier.padding(8.dp)) {
+                netCheck.forEach { Text(it, style = MaterialTheme.typography.labelSmall) }
+            }
+        }
+    }
 
     if (backgroundSupported()) {
         Spacer(Modifier.height(8.dp))
