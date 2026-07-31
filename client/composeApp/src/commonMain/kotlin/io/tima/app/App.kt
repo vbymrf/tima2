@@ -73,6 +73,7 @@ import io.tima.app.chat.isVoice
 import io.tima.app.chat.preview
 import io.tima.app.diag.AppDiagnostics
 import io.tima.app.diag.checkConnectivity
+import io.tima.app.net.LinkState
 import io.tima.app.platform.CallEngine
 import io.tima.app.platform.CallMediaState
 import io.tima.app.platform.CallVideoView
@@ -1040,6 +1041,7 @@ private fun HomeScreen(
 private fun ConnectionBanner(client: ChatClient?) {
     client ?: return
     val online by client.online.collectAsState()
+    val link by client.linkState.collectAsState()
     var show by remember { mutableStateOf(false) }
     LaunchedEffect(online) {
         if (online) {
@@ -1049,14 +1051,17 @@ private fun ConnectionBanner(client: ChatClient?) {
             show = true
         }
     }
-    if (!show) return
+    if (!show || link == LinkState.ONLINE) return
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
         shape = MaterialTheme.shapes.small,
         modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
     ) {
+        // Текст берём у состояния связи, а не пишем здесь: «нет сети» и «сеть есть,
+        // но сервер недоступен» — разные вещи, и человеку важно знать, какая из них.
+        // Про причину недоступности не гадаем: сегодня одна, завтра другая (ADR-0016).
         Text(
-            "⚠️ Нет связи с сервером — переподключаюсь…",
+            "⚠️ " + link.message,
             style = MaterialTheme.typography.labelLarge,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
         )
@@ -1244,11 +1249,21 @@ private fun ChatScreen(
         }
     }
 
+    /**
+     * Устойчивый ключ сообщения. Серверного номера у ждущего отправки сообщения ещё
+     * нет — он ноль у всех сразу, поэтому по нему нельзя ни отличать, ни сортировать.
+     * Свой идентификатор есть с момента написания и переживает отправку.
+     */
+    fun keyOf(m: ChatMessage): String = m.clientMsgId.ifEmpty { "srv-${m.messageId}" }
+
     fun add(msg: ChatMessage) {
-        if (msg.chatId == chatId && messages.none { it.messageId == msg.messageId }) {
-            messages.add(msg)
-            messages.sortBy { it.messageId }
-        }
+        if (msg.chatId != chatId) return
+        val at = messages.indexOfFirst { keyOf(it) == keyOf(msg) }
+        // Пришло то же сообщение, но уже отправленное — заменяем, а не добавляем
+        // вторым: иначе рядом с часиками появилась бы его копия с галочкой.
+        if (at >= 0) messages[at] = msg else messages.add(msg)
+        // По времени, а не по номеру: у ждущих номера нет, и они уехали бы в начало.
+        messages.sortBy { it.createdAtMs }
     }
 
     LaunchedEffect(chatId) {
@@ -1333,7 +1348,7 @@ private fun ChatScreen(
             reverseLayout = true,
             modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp),
         ) {
-            items(messages.asReversed(), key = { it.messageId }) { msg ->
+            items(messages.asReversed(), key = { keyOf(it) }) { msg ->
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                     horizontalArrangement = if (msg.mine) Arrangement.End else Arrangement.Start,
@@ -1373,7 +1388,15 @@ private fun ChatScreen(
                                     if (msg.text.isNotEmpty()) Text(msg.text)
                                 }
                             }
-                            if (msg.mine && !isGroup && msg.readByPeer) {
+                            // Часики — «лежит в очереди, уйдёт, когда появится связь».
+                            // Это не ошибка и не повод тревожить человека всплывающим окном.
+                            if (msg.mine && msg.pending) {
+                                Text(
+                                    "🕐 ждёт отправки",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else if (msg.mine && !isGroup && msg.readByPeer) {
                                 Text("✓✓", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             }
                         }

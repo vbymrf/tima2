@@ -51,6 +51,15 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import io.tima.app.net.LinkState
+import io.tima.app.net.classifyFailure
+import io.tima.app.net.observeNetworkChanges
+import io.tima.app.store.MessageStore
+import io.tima.app.store.MsgState
+import io.tima.app.store.StoredChat
+import io.tima.app.store.StoredMessage
+import io.tima.app.store.openLocalDb
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -182,6 +191,30 @@ class TimaClient(private val session: Session) : ChatClient {
     // молчащее приложение и не может отличить «никто не пишет» от «мы отвалились».
     private val _online = MutableStateFlow(false)
     override val online: StateFlow<Boolean> = _online
+
+    private val _linkState = MutableStateFlow(LinkState.ONLINE)
+    override val linkState: StateFlow<LinkState> = _linkState
+
+    /**
+     * Локальное хранилище — источник правды для экрана (ADR-0016). База своя у
+     * каждого устройства: имя содержит device_id, иначе два аккаунта на одном ПК
+     * читали бы переписку друг друга.
+     */
+    private val store = MessageStore(
+        openLocalDb("tima-${session.deviceId.take(8)}.db"),
+        b64url.decode(session.deviceSecretB64),
+    )
+
+    // Будильники: «появилось что слать» и «пора переподключиться». Каналы РАЗНЫЕ —
+    // на одном сигнал достался бы только одной из петель, и вторая продолжала бы спать.
+    private val wakeSender = Channel<Unit>(Channel.CONFLATED)
+    private val wakeSocket = Channel<Unit>(Channel.CONFLATED)
+
+    /** Разбудить обе петли: что-то переменилось — сеть или содержимое очереди. */
+    private fun nudge() {
+        wakeSender.trySend(Unit)
+        wakeSocket.trySend(Unit)
+    }
 
     // Сигналы «обёртки восстановления готовы» по group_id / chat_id
     private val _recoveryReady = MutableSharedFlow<String>(extraBufferCapacity = 16)
@@ -355,6 +388,7 @@ class TimaClient(private val session: Session) : ChatClient {
     override suspend fun start() {
         // Зовут и экран, и сервис; второй WS-цикл был бы лишним соединением
         if (!started.compareAndSet(false, true)) return
+        startSender() // очередь разгребается независимо от соединения
         scope.launch {
             var backoffMs = 1_000L
             while (isActive) {
@@ -365,6 +399,8 @@ class TimaClient(private val session: Session) : ChatClient {
                         send(Frame.Text("""{"event":"sync.pull"}""")) // cursor серверный
                         backoffMs = 1_000L
                         _online.value = true
+                        _linkState.value = LinkState.ONLINE
+                        nudge() // связь вернулась — разгрести очередь немедленно
                         AppDiagnostics.add("WS: соединение установлено")
                         for (frame in incoming) {
                             val text = (frame as? Frame.Text)?.readText() ?: continue
@@ -375,6 +411,7 @@ class TimaClient(private val session: Session) : ChatClient {
                                         val m = decrypt(b64url.decode(env))
                                         if (m != null) {
                                             AppDiagnostics.add("входящее: расшифровано (chat ${m.chatId.take(8)}…, от ${m.senderId.take(8)}…)")
+                                            remember(m)
                                             _messages.emit(m)
                                         } else {
                                             AppDiagnostics.add("входящее: НЕ расшифровано — нет ключа для этого устройства")
@@ -456,29 +493,168 @@ class TimaClient(private val session: Session) : ChatClient {
                     }
                 } catch (e: Throwable) {
                     // сервер недоступен/сеть моргнула — переподключение ниже
-                    AppDiagnostics.add("WS: обрыв — ${e.message ?: e::class.simpleName}")
+                    _linkState.value = classifyFailure(e)
+                    AppDiagnostics.add("WS: обрыв — ${e.message ?: e::class.simpleName} (${_linkState.value})")
                 } finally {
                     _online.value = false
                 }
-                delay(backoffMs)
-                // Потолок паузы 15 с, а не 30: в мобильной сети связь возвращается
-                // рывками, и полминуты ожидания после её возврата человек читает как
-                // «приложение сломалось».
+                // Пауза зависит от состояния связи, а не от одного счётчика: когда
+                // соединение устанавливается, а содержимое не проходит, это стена на
+                // часы, и долбиться в неё раз в 15 секунд — только севшая батарея.
+                // Просыпаемся раньше, если сеть переменилась (ADR-0016 §4).
+                val pause = maxOf(backoffMs, _linkState.value.retryDelayMs)
+                withTimeoutOrNull(pause) { wakeSocket.receive() }
                 backoffMs = (backoffMs * 2).coerceAtMost(15_000L)
             }
         }
     }
 
-    override suspend fun history(peerUserId: String): List<ChatMessage> =
-        api.listMessages(session.accessToken, chatIdWith(peerUserId))
-            .mapNotNull { item ->
-                val wrapEph = item.wrapEphemeral.takeIf { it.isNotEmpty() }?.let { b64url.decode(it) }
-                decrypt(b64url.decode(item.envelope), wrapEph)
-            }
-            .sortedBy { it.messageId }
+    /**
+     * История чата — из локального хранилища, мгновенно и без сети (ADR-0016).
+     *
+     * Раньше здесь был поход на сервер, поэтому без связи не открывался ни один чат:
+     * человек не мог прочесть даже то, что читал минуту назад. Теперь сеть догоняет
+     * в фоне и дописывает недостающее, а экран не ждёт её вовсе.
+     */
+    override suspend fun history(peerUserId: String): List<ChatMessage> {
+        val chatId = chatIdWith(peerUserId)
+        store.upsertChat(StoredChat(chatId = chatId, peerUserId = peerUserId))
+        scope.launch { runCatching { pullHistory(chatId) } }
+        return store.messages(chatId).map { it.toChatMessage() }
+    }
 
-    override suspend fun send(peerUserId: String, text: String, replyTo: Long): ChatMessage =
-        sealAndPost(peerUserId, bodyOf(text), kind = 1, replyTo = replyTo.toULong()) // CK_TEXT
+    /** Догон истории с сервера в хранилище. Молча ничего не делает без связи. */
+    private suspend fun pullHistory(chatId: String) {
+        val fetched = try {
+            api.listMessages(session.accessToken, chatId)
+        } catch (e: Throwable) {
+            _linkState.value = classifyFailure(e)
+            return
+        }
+        _linkState.value = LinkState.ONLINE
+        var added = 0
+        for (item in fetched) {
+            val wrapEph = item.wrapEphemeral.takeIf { it.isNotEmpty() }?.let { b64url.decode(it) }
+            val m = decrypt(b64url.decode(item.envelope), wrapEph) ?: continue
+            remember(m)
+            added++
+            _messages.emit(m)
+        }
+        if (added > 0) AppDiagnostics.add("история: добавлено $added (чат ${chatId.take(8)}…)")
+    }
+
+    /**
+     * Положить сообщение в хранилище.
+     *
+     * Ключ записи — `client_msg_id`. У своих сообщений он свой и сохраняется с
+     * момента написания; у чужих его нет, поэтому берём серверный номер — догон
+     * истории постоянно пересекается с live-потоком, и без общего ключа в чате
+     * появлялись бы видимые глазом дубли.
+     */
+    private fun remember(m: ChatMessage) {
+        val cmid = m.clientMsgId.ifEmpty { "srv-${m.messageId}" }
+        store.put(
+            StoredMessage(
+                chatId = m.chatId, messageId = m.messageId, clientMsgId = cmid,
+                senderId = m.senderId, isGroup = m.group, createdAtMs = m.createdAtMs,
+                state = if (m.mine) MsgState.SENT else MsgState.INCOMING,
+                replyTo = m.replyTo, text = m.text,
+            ),
+        )
+    }
+
+    private fun StoredMessage.toChatMessage() = ChatMessage(
+        chatId = chatId, messageId = messageId, senderId = senderId, text = text,
+        createdAtMs = createdAtMs, mine = mine, group = isGroup, replyTo = replyTo,
+        readByPeer = state == MsgState.READ, pending = pending, clientMsgId = clientMsgId,
+    )
+
+    /**
+     * Кладёт сообщение в очередь и сразу возвращает — отправкой занимается [senderLoop].
+     *
+     * Ошибки сети здесь не бывает по устройству: не ушло — лежит и ждёт. Раньше
+     * неудачная посылка выбрасывала исключение, человек видел `Read timed out`, а
+     * набранный текст пропадал совсем.
+     *
+     * Шифруем не здесь, а в момент отправки. За время ожидания успевает смениться
+     * ключ эпохи escrow и список устройств собеседника — заранее запечатанный
+     * конверт ушёл бы мимо адресата (ADR-0016 §3).
+     */
+    override suspend fun send(peerUserId: String, text: String, replyTo: Long): ChatMessage {
+        val chatId = chatIdWith(peerUserId)
+        val clientMsgId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        // Собеседника запоминаем рядом с чатом — по chat_id его не восстановить.
+        store.upsertChat(
+            StoredChat(chatId = chatId, peerUserId = peerUserId, lastText = text, lastAtMs = now),
+        )
+        store.put(
+            StoredMessage(
+                chatId = chatId, clientMsgId = clientMsgId, senderId = session.userId,
+                createdAtMs = now, state = MsgState.QUEUED, replyTo = replyTo, text = text,
+            ),
+        )
+        nudge()
+        return ChatMessage(
+            chatId = chatId, messageId = 0, senderId = session.userId, text = text,
+            createdAtMs = now, mine = true, replyTo = replyTo,
+            pending = true, clientMsgId = clientMsgId,
+        )
+    }
+
+    /**
+     * Разгребает очередь. Просыпается, когда появилось что слать или вернулась связь;
+     * иначе спит столько, сколько велит состояние связи.
+     *
+     * В [LinkState.BLOCKED] пауза длинная намеренно: когда соединение устанавливается,
+     * а содержимое не проходит, это не мигание сети на секунду, а стена на часы.
+     * Прежние 15 секунд в этом состоянии давали только севшую батарею.
+     */
+    private fun startSender() = scope.launch {
+        val requeued = store.requeueStuck()
+        if (requeued > 0) AppDiagnostics.add("очередь: вернул в ожидание $requeued (приложение закрыли при отправке)")
+        observeNetworkChanges { nudge() }
+        while (isActive) {
+            val pending = runCatching { store.queued() }.getOrDefault(emptyList())
+            for (m in pending) {
+                if (!isActive) break
+                store.setState(m.localId, MsgState.SENDING)
+                try {
+                    val id = sealAndPost(
+                        peerUserId = peerOf(m.chatId) ?: continue,
+                        body = bodyOf(m.text), kind = 1, replyTo = m.replyTo.toULong(),
+                        clientMsgId = m.clientMsgId,
+                    )
+                    store.markSent(m.localId, id)
+                    _linkState.value = LinkState.ONLINE
+                    // Тем же client_msg_id — экран заменит часики галочкой, а не
+                    // покажет второе такое же сообщение рядом.
+                    _messages.emit(
+                        m.copy(messageId = id, state = MsgState.SENT).toChatMessage(),
+                    )
+                } catch (e: Throwable) {
+                    // Обратно в очередь — без ошибки на экране. Сервер отсекает
+                    // повтор по client_msg_id, так что досылать можно смело.
+                    store.setState(m.localId, MsgState.QUEUED)
+                    _linkState.value = classifyFailure(e)
+                    AppDiagnostics.add("очередь: не ушло, жду (${_linkState.value})")
+                    break
+                }
+            }
+            withTimeoutOrNull(_linkState.value.retryDelayMs) { wakeSender.receive() }
+        }
+    }
+
+    /**
+     * Собеседник по chat_id. Идентификатор чата — свёртка пары и обратно не
+     * разворачивается, поэтому связь хранится рядом с чатом.
+     *
+     * Именно в хранилище, а не в памяти: очередь обязана пережить перезапуск, а
+     * запомненное в памяти после него исчезнет — и сообщение осталось бы лежать
+     * вечно, не зная, кому оно адресовано.
+     */
+    private fun peerOf(chatId: String): String? =
+        store.chats().firstOrNull { it.chatId == chatId && it.peerUserId.isNotEmpty() }?.peerUserId
 
     override suspend fun sendImage(peerUserId: String, imageBytes: ByteArray, mime: String, caption: String): ChatMessage {
         // media_key — случайный на файл; сервер и MinIO видят только ciphertext
@@ -500,7 +676,7 @@ class TimaClient(private val session: Session) : ChatClient {
             ),
         )
         mediaCache[init.mediaId] = imageBytes // своё фото не перекачивать
-        return sealAndPost(peerUserId, body, kind = 3) // CK_IMAGE
+        return sealAndPostNow(peerUserId, body, kind = 3) // CK_IMAGE
     }
 
     override suspend fun sendVoice(peerUserId: String, audioBytes: ByteArray, mime: String, durationMs: Int): ChatMessage {
@@ -521,7 +697,7 @@ class TimaClient(private val session: Session) : ChatClient {
                 ),
             ),
         )
-        return sealAndPost(peerUserId, body, kind = 2) // CK_VOICE
+        return sealAndPostNow(peerUserId, body, kind = 2) // CK_VOICE
     }
 
     override suspend fun sendGroupVoice(groupId: String, audioBytes: ByteArray, mime: String, durationMs: Int): ChatMessage {
@@ -546,7 +722,7 @@ class TimaClient(private val session: Session) : ChatClient {
     }
 
     override suspend fun sendFile(peerUserId: String, bytes: ByteArray, name: String, mime: String): ChatMessage =
-        sealAndPost(peerUserId, uploadFileBody(bytes, name, mime), kind = 5) // CK_FILE
+        sealAndPostNow(peerUserId, uploadFileBody(bytes, name, mime), kind = 5) // CK_FILE
 
     override suspend fun sendGroupFile(groupId: String, bytes: ByteArray, name: String, mime: String): ChatMessage =
         sealAndPostGroup(groupId, uploadFileBody(bytes, name, mime), kind = 5) // CK_FILE
@@ -650,7 +826,17 @@ class TimaClient(private val session: Session) : ChatClient {
         }
     }
 
-    private suspend fun sealAndPost(peerUserId: String, body: MessageBody, kind: Int, replyTo: ULong = 0u): ChatMessage {
+    /**
+     * Запечатывает и отправляет. Возвращает серверный идентификатор сообщения.
+     *
+     * [clientMsgId] приходит снаружи, когда сообщение уже лежит в очереди: он
+     * рождается вместе с сообщением и переживает перезапуск, поэтому повторная
+     * посылка после сбоя не создаёт дубля — сервер отсекает её по этому полю.
+     */
+    private suspend fun sealAndPost(
+        peerUserId: String, body: MessageBody, kind: Int, replyTo: ULong = 0u,
+        clientMsgId: String = UUID.randomUUID().toString(),
+    ): Long {
         val chatId = chatIdWith(peerUserId)
         val sealer = sealerFor(chatId)
         // Обёртки: все устройства собеседника + все мои (мультиустройство и своя история)
@@ -671,7 +857,7 @@ class TimaClient(private val session: Session) : ChatClient {
         )
         val payload = MessageSerializer.encodeBody(body)
         val sealed = sealer.seal(meta, payload, deviceKey, recipients).getOrThrow()
-        api.postEnvelope(session.accessToken, MessageSerializer.encodeEnvelope(sealed), UUID.randomUUID().toString())
+        api.postEnvelope(session.accessToken, MessageSerializer.encodeEnvelope(sealed), clientMsgId)
 
         // Бэкап «сообщений себе» (этап 4): у self-чата нет живых источников, кроме бэкапа.
         // message_key достаём из своей же обёртки, заворачиваем под backup_key из фразы.
@@ -690,8 +876,31 @@ class TimaClient(private val session: Session) : ChatClient {
                 }
             }
         }
+        return messageId.toLong()
+    }
+
+    /**
+     * Отправка «сейчас же» — для вложений: они пока не проходят через очередь.
+     *
+     * Вложение нельзя просто положить в очередь текстом: в очереди должны были бы
+     * лежать и сами байты файла. Это следующий срез; пока фото, голосовое и файл
+     * уходят прежним путём и без связи честно не отправляются.
+     */
+    private suspend fun sealAndPostNow(
+        peerUserId: String, body: MessageBody, kind: Int, replyTo: ULong = 0u,
+    ): ChatMessage {
+        val id = sealAndPost(peerUserId, body, kind, replyTo)
+        val chatId = chatIdWith(peerUserId)
+        val now = System.currentTimeMillis()
+        store.put(
+            StoredMessage(
+                chatId = chatId, messageId = id, clientMsgId = "sent-$id",
+                senderId = session.userId, createdAtMs = now, state = MsgState.SENT,
+                replyTo = replyTo.toLong(), text = textOf(body),
+            ),
+        )
         return ChatMessage(
-            chatId, messageId.toLong(), session.userId, textOf(body), now, mine = true,
+            chatId, id, session.userId, textOf(body), now, mine = true,
             media = body.media.firstOrNull()?.toAttachment(),
             replyTo = replyTo.toLong(),
         )
@@ -914,6 +1123,7 @@ class TimaClient(private val session: Session) : ChatClient {
 
     override fun close() {
         scope.cancel()
+        runCatching { store.close() }
     }
 }
 

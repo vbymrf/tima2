@@ -1,5 +1,6 @@
 package io.tima.app.chat
 
+import io.tima.app.net.LinkState
 import io.tima.app.session.Session
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +29,12 @@ data class ChatMessage(
     val group: Boolean = false,
     val replyTo: Long = 0,   // message_id цитируемого сообщения; 0 — ответа нет
     val readByPeer: Boolean = false, // ✓✓: собеседник прочитал (только для своих сообщений)
+    // Ждёт отправки: лежит в очереди на устройстве и уйдёт, когда появится связь.
+    // Экран показывает часики вместо галочки (ADR-0016).
+    val pending: Boolean = false,
+    // Свой идентификатор сообщения. Рождается вместе с сообщением, переживает
+    // перезапуск; по нему сервер отсекает повтор, поэтому досылать безопасно.
+    val clientMsgId: String = "",
 )
 
 /** Группа в списке на главном экране. */
@@ -102,6 +109,12 @@ interface ChatClient {
      * приложение выглядит одинаково в обоих случаях.
      */
     val online: StateFlow<Boolean>
+
+    /**
+     * Состояние связи (ADR-0016). Отличает «сети нет» от «сеть есть, но не пускают»:
+     * во втором случае долбиться раз в несколько секунд бессмысленно и вредно.
+     */
+    val linkState: StateFlow<LinkState>
 
     /** Детерминированный chat_id личного чата с собеседником. */
     fun chatIdWith(peerUserId: String): String
