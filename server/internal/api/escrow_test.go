@@ -4,6 +4,7 @@ package api
 // stub-анклава, клиентский encapsulate на него работает.
 
 import (
+	"crypto/ed25519"
 	"crypto/mlkem"
 	"encoding/base64"
 	"net/http"
@@ -35,6 +36,7 @@ func TestEscrowPubkeyProxy(t *testing.T) {
 	var resp struct {
 		Version   int    `json:"escrow_key_version"`
 		PublicKey string `json:"public_key"`
+		Signature string `json:"signature"`
 	}
 	if code := authedJSON(t, ts, "GET", "/api/v1/escrow/pubkey", user.token, nil, &resp); code != http.StatusOK {
 		t.Fatalf("pubkey через tima: %d", code)
@@ -46,6 +48,16 @@ func TestEscrowPubkeyProxy(t *testing.T) {
 	// Клиент сможет инкапсулировать на этот ключ (слой 2 конверта)
 	if _, err := mlkem.NewEncapsulationKey768(pubKey); err != nil {
 		t.Fatalf("ключ не годится для encapsulate: %v", err)
+	}
+
+	// Подпись анклава (Р2) проходит через tima без изменений — проверяется тем же
+	// публичным ключом, каким подписывал сам анклав.
+	sig, err := base64.RawURLEncoding.DecodeString(resp.Signature)
+	if err != nil {
+		t.Fatalf("signature не base64url: %v", err)
+	}
+	if !ed25519.Verify(enc.SigningPublicKey(), escrow.PubkeySigningBytes(resp.Version, pubKey), sig) {
+		t.Fatal("подпись, пришедшая через tima, не проходит проверку")
 	}
 
 	// Кэш: анклав погашен, ключ всё ещё отдаётся

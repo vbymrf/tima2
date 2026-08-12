@@ -205,6 +205,30 @@ class MessageStoreTest {
     }
 
     @Test
+    fun `разметка переживает перезапуск и лежит на диске зашифрованной`() {
+        val f = tempDbFile()
+        val markup = """{"version":1,"n":[1],"blocks":[{"type":"heading","nodes":[1],"level":1}]}"""
+        store(f).let { s ->
+            s.put(msg("a", text = "Заголовок").copy(markup = markup))
+            s.close()
+        }
+        val after = store(f)
+        assertEquals(markup, after.messages("chat-1").single().markup)
+
+        val raw = f.readBytes().decodeToString(throwOnInvalidSequence = false)
+        assertFalse(raw.contains("heading"), "разметка видна в файле базы")
+        after.close()
+    }
+
+    @Test
+    fun `сообщение без разметки хранит пустую строку`() {
+        val s = store(tempDbFile())
+        s.put(msg("a"))
+        assertEquals("", s.messages("chat-1").single().markup)
+        s.close()
+    }
+
+    @Test
     fun `отметка о прочтении не трогает чужие и неотправленные`() {
         val s = store(tempDbFile())
         s.put(msg("sent-1", state = MsgState.SENT, at = 1).copy(messageId = 100))

@@ -4,22 +4,62 @@
 
 ## 1. Идентификация и устройства
 
+> **Обновлено 2026-08-11** под [ADR-0014](../adr/0014-identity-chain.md) (миграция
+> `0019`): аккаунт и личность, под которой подписаны сообщения, — разные сущности
+> с разными жизненными циклами. Причина техническая, не организационная:
+> идентификатор автора входит в подпись сообщения, и переписать его задним числом
+> невозможно (правка ломает подпись). Потеря ключей или уход номера другому
+> человеку не могут «переименовать» пользователя — они заводят НОВЫЙ
+> идентификатор, а прежние остаются жить вместе со своими сообщениями. Ниже —
+> фактически реализованная схема, не устаревший однотабличный `users` до неё.
+
 ```sql
+-- Аккаунт — человек. Телефон и профиль принадлежат ему целиком, а не отдельной
+-- личности: сменилась личность (см. users ниже) — телефон и имя те же.
+CREATE TABLE persons (
+    person_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    phone_bidx      BYTEA,                         -- HMAC-SHA256(pepper, E.164); слепой индекс, не сам номер
+    phone_enc       BYTEA,                         -- key_id ‖ nonce ‖ box; NULL — временный аккаунт без телефона
+    name_enc        BYTEA,
+    account_state   TEXT NOT NULL DEFAULT 'temporary', -- 'temporary'|'permanent'|'archived' (Р4, ADR-0015)
+    deleted_at      TIMESTAMPTZ,                   -- пометка удаления; данные ещё на месте
+    purge_after     TIMESTAMPTZ,                   -- срок физического стирания
+    last_active_at  TIMESTAMPTZ,                   -- temporary: архивация после срока неактивности
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Уникальность номера — частичная, ТОЛЬКО среди неархивных: архивный аккаунт
+-- номер не держит (иначе повторная регистрация ждала бы всю выдержку стирания).
+CREATE UNIQUE INDEX idx_persons_phone_bidx ON persons(phone_bidx)
+    WHERE phone_bidx IS NOT NULL AND account_state <> 'archived';
+
+-- Личность в конкретный период — под ней подписаны сообщения. Аккаунт — цепочка
+-- таких строк; текущая (valid_to IS NULL) ровно одна, инвариант держит частичный
+-- уникальный индекс, а не соглашение в коде.
 CREATE TABLE users (
     user_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    person_id       UUID NOT NULL REFERENCES persons,
     account_type    TEXT NOT NULL DEFAULT 'full',  -- 'full' | 'temporary' | 'virtual' (§10)
     owner_user_id   UUID REFERENCES users,         -- только для virtual: владелец (известен лишь серверу)
-    phone           TEXT UNIQUE,                   -- E.164; NULL для temporary/virtual
-    email           TEXT UNIQUE,                   -- обязателен для full (проверка на уровне приложения)
     username        TEXT UNIQUE,                   -- @упоминания
     display_name    TEXT NOT NULL,
     avatar_media_id UUID,
     bio             TEXT,
     invisible_mode  BOOLEAN DEFAULT FALSE,
-    last_active_at  TIMESTAMPTZ,                   -- temporary: удаление после 30 дней неактивности
+    identity_pub    BYTEA,                         -- Ed25519 из секретной фразы; NULL — устройство без фразы
+    valid_from      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    valid_to        TIMESTAMPTZ,                   -- NULL = текущая личность аккаунта
+    linked_from     UUID REFERENCES users,         -- чьим ключом подписана связка (не САМА подпись — см. link_proof)
+    link_proof      BYTEA,                         -- подпись прежним ключом личности; NULL = административная связка
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at      TIMESTAMPTZ                    -- удаление с задержкой 30 дней
 );
+CREATE UNIQUE INDEX idx_users_current_per_person ON users(person_id) WHERE valid_to IS NULL;
+CREATE INDEX idx_users_person ON users(person_id);
+-- Доказанная связка (link_proof заполнен) — собеседник видит один контакт.
+-- Административная (link_proof NULL — только владение номером) — новый контакт
+-- с явным предупреждением о смене личности: иначе управляющий сервером мог бы
+-- молча подставить постороннего в чужой контакт.
+
 -- Временный аккаунт: одно устройство, нет recovery и мультиустройства;
 -- апгрейд до full = привязка phone+email (key-lifecycle.md §7)
 
@@ -376,6 +416,15 @@ CREATE INDEX idx_media_cas ON media_objects (content_hash) WHERE content_hash IS
 
 Ключи шифрования медиа не хранятся здесь — они внутри `encrypted_payload` сообщений либо в wrapped keys ([media-storage.md](../04-data/media-storage.md)).
 
+> **Реализовано иначе, чем ниже** для сообщений (не для медиа-периодов из этой
+> таблицы): вместо `escrow_periods` по `scope_type` — реестр `escrow_keys`
+> (миграция `0020`+`0025`, `server/internal/store/escrow_keys.go`), ключ на пару
+> «чат × календарный месяц», с подписью Ed25519 самого анклава поверх записи
+> ([ADR-0012](../adr/0012-escrow-key-epochs.md)). Публичная часть и `destroy_at`
+> кэшируются у бэкенда; приватный материал остаётся только в анклаве. Схема ниже
+> (`escrow_periods`) — для медиа вне сообщений (коллекции, истории), где `scope_id`
+> задаёт произвольную область, а не привязку к чату.
+
 ```sql
 -- Escrow «по периоду» для медиа вне сообщений (коллекции, истории) и вложений:
 -- один blob на период, не на файл (crypto-protocol.md §6, escrow-legal-access.md §5)
@@ -394,15 +443,22 @@ CREATE TABLE escrow_periods (
 
 ```sql
 -- === Подсистема publications: все публикации (посты каналов, медиа-посты, статьи, стена) ===
--- Формат контента: plain text + entities (module-boundaries.md §5)
+-- Формат контента (обновлено под ADR-0011, Р5б): узлы + разметка, не плоский
+-- текст со смещениями entities. Публичный контур — nodes/markup лежат открытым
+-- текстом (сервер вправе индексировать и искать); закрытый каталог типов —
+-- messenger-crypto/MarkupTypes.kt. Уже реализовано для channel_posts
+-- (миграция 0026, server/internal/store/channels.go) — здесь та же модель для
+-- будущей единой таблицы всех публикаций.
 CREATE TABLE posts (
     post_id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     author_type     TEXT NOT NULL,                 -- 'user'|'channel' (ВП и «псевдонимы» = 'user', §10)
     author_id       UUID NOT NULL,
     kind            TEXT NOT NULL,                 -- text|article|photo|video
     title           TEXT,                          -- статьи
-    body            TEXT,
-    entities        JSONB,                         -- [{type, offset, length, ...}] — bold, heading, link, mention, hashtag, media…
+    body            TEXT,                          -- переходное поле: склейка nodes для старых клиентов (ADR-0011 «Последствия»)
+    nodes           TEXT[],                        -- текст узлами, без якорей и смещений
+    markup          JSONB,                         -- сущности/блоки/стили; NULL — без оформления (большинство постов)
+    markup_version  INT DEFAULT 1,                 -- типизированная колонка метаданных (ADR-0011 §5), не поле в JSONB
     media_ids       UUID[],
     status          TEXT NOT NULL DEFAULT 'published', -- 'pending' (премодерация) | 'published' | 'scheduled'
     scheduled_at    TIMESTAMPTZ,                   -- отложенная публикация

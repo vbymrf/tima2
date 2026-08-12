@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.kodium.Kodium
+import io.kodium.KodiumPrivateKey
 import io.tima.app.api.AppVersionDto
 import io.tima.app.api.ChannelDto
 import io.tima.app.api.ChannelPostDto
@@ -72,6 +73,7 @@ import io.tima.app.chat.RecoveryConsent
 import io.tima.app.chat.isFile
 import io.tima.app.chat.isVoice
 import io.tima.app.chat.preview
+import io.tima.app.chat.renderMessageContent
 import io.tima.app.diag.AppDiagnostics
 import io.tima.app.diag.checkConnectivity
 import io.tima.app.net.LinkState
@@ -86,6 +88,7 @@ import io.tima.app.platform.decodeImage
 import io.tima.app.platform.ensureCallPermissions
 import io.tima.app.platform.cancelVoiceRecording
 import io.tima.app.platform.identityFromPhrase
+import io.tima.crypto.MessageSigner
 import io.tima.app.platform.keepScreenOn
 import io.tima.app.platform.installUpdate
 import io.tima.app.platform.newIdentity
@@ -174,7 +177,7 @@ fun App() {
     // Один ChatClient (одно WS) на сессию. Живёт в холдере, а не в композиции: соединение
     // должно пережить закрытие экрана, иначе входящий звонок приходить некуда.
     // Закрывается только при выходе из аккаунта.
-    val client = remember(session?.deviceId) { session?.let { ChatClientHolder.get(it) } }
+    val client = remember(session?.deviceId, session?.userId) { session?.let { ChatClientHolder.get(it) } }
     // Запрос собеседника на восстановление — показываем диалог согласия
     var consent by remember { mutableStateOf<RecoveryConsent?>(null) }
     LaunchedEffect(client) {
@@ -422,6 +425,15 @@ fun App() {
                                 chats = emptyList()
                                 screen = Screen.Phone
                             },
+                            onSessionUpdated = { updated ->
+                                // Воссоединение (Р4): device_id тот же, user_id и access_token
+                                // новые. Клиент держит одно WS-соединение на процесс
+                                // (ChatClientHolder) — со старой личностью его продолжать
+                                // нельзя, закрываем явно, новое поднимется само от нового client.
+                                ChatClientHolder.close()
+                                SessionCodec.save(updated)
+                                screen = Screen.Home(updated)
+                            },
                         )
                         else -> Unit // Chat/GroupChat/ChannelView/VoiceRoom/Contacts обработаны выше
                     }
@@ -488,7 +500,107 @@ private fun CodeScreen(
     var regToken by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    // Занятый номер (ДОКУМЕНТАЦИЯ/02 §8): вместо текста ошибки под полем — явный
+    // выбор, а не догадки о том, что делать дальше.
+    var numberTaken by remember { mutableStateOf(false) }
+    var confirmStartFresh by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    // Общий путь для «Войти», «Знаю секретную фразу» и «Начать заново» — три кнопки,
+    // отличающиеся только forceNew и (для «начать заново») очищенным полем фразы.
+    suspend fun doRegister(forceNew: Boolean) {
+        busy = true; error = null
+        try {
+            // Ключ личности: введённая фраза (воссоединение/новое устройство) или новая (регистрация)
+            val entered = phraseInput.trim()
+            val identity = if (entered.isEmpty()) newIdentity()
+            else identityFromPhrase(entered.split(Regex("\\s+")))
+            if (identity == null) {
+                error = "Неверная секретная фраза — проверьте слова"
+                return
+            }
+            val api = TimaApi(state.serverUrl)
+            // Код из SMS ОДНОРАЗОВЫЙ: сервер гасит его при проверке. Раньше проверка
+            // шла на каждое нажатие, поэтому вторая попытка (например, после «введите
+            // фразу») упиралась в «код уже использован», а нового кода взять было
+            // неоткуда. Проверяем один раз и держим токен — он живёт 10 минут, этого
+            // хватает, чтобы разобраться с конфликтом и повторить.
+            val token = regToken
+                ?: api.smsVerify(state.requestId, code.trim()).registrationToken.also { regToken = it }
+            // Ключи устройства: один seed → X25519 (конверты) + Ed25519 (подпись)
+            val deviceKey = Kodium.generateKeyPair()
+            val pub = deviceKey.getPublicKey()
+            val reg = api.register(
+                registrationToken = token,
+                encryptionPub = b64url.encode(pub.encryptionKey),
+                signingPub = b64url.encode(pub.signingKey),
+                identityPub = identity.pubB64,
+                forceNewIdentity = forceNew,
+            )
+            val session = Session(
+                serverUrl = state.serverUrl,
+                phone = state.phone,
+                userId = reg.userId,
+                deviceId = reg.deviceId,
+                accessToken = reg.accessToken,
+                deviceSecretB64 = b64url.encode(deviceKey.secretKey),
+                identitySecretB64 = identity.secretB64,
+                backupSecretB64 = identity.backupB64,
+            )
+            SessionCodec.save(session)
+            numberTaken = false
+            // Новую фразу показываем; введённую — не повторяем
+            onRegistered(session, if (entered.isEmpty()) identity.phrase else null)
+        } catch (e: TimaApiException) {
+            if (e.code == "identity_mismatch" && !forceNew) {
+                // Раньше здесь падал технический текст под полем. Теперь — явный
+                // выбор между «знаю фразу» и «начать заново», а не догадки.
+                numberTaken = true
+            } else {
+                error = when (e.code) {
+                    "bad_code" -> "Код уже использован или просрочен — вернитесь назад и запросите новый."
+                    else -> e.message ?: e.toString()
+                }
+            }
+        } catch (e: Throwable) {
+            error = e.message ?: e.toString()
+        } finally {
+            busy = false
+        }
+    }
+
+    if (numberTaken) {
+        NumberTakenScreen(
+            phraseInput = phraseInput,
+            onPhraseChange = { phraseInput = it },
+            busy = busy,
+            error = error,
+            onKnowPhrase = { scope.launch { doRegister(forceNew = false) } },
+            onStartFresh = { confirmStartFresh = true },
+            onBack = { numberTaken = false; error = null; phraseInput = "" },
+        )
+        if (confirmStartFresh) {
+            AlertDialog(
+                onDismissRequest = { confirmStartFresh = false },
+                title = { Text("Начать заново?") },
+                text = {
+                    Text(
+                        "Прежняя переписка станет недоступна. Восстановить её нельзя — " +
+                            "ни поддержкой, ни повторным вводом номера.",
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmStartFresh = false
+                        phraseInput = "" // новая личность получает свою свежую фразу
+                        scope.launch { doRegister(forceNew = true) }
+                    }) { Text("Начать заново", color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = { TextButton(onClick = { confirmStartFresh = false }) { Text("Отмена") } },
+            )
+        }
+        return
+    }
 
     Text("Код из SMS", style = MaterialTheme.typography.headlineMedium)
     if (state.devCode != null) {
@@ -516,69 +628,65 @@ private fun CodeScreen(
     if (busy) {
         CircularProgressIndicator()
     } else {
-        Button(onClick = {
-            busy = true; error = null
-            scope.launch {
-                try {
-                    // Ключ личности: введённая фраза (новое устройство) или новая (регистрация)
-                    val entered = phraseInput.trim()
-                    val identity = if (entered.isEmpty()) newIdentity()
-                    else identityFromPhrase(entered.split(Regex("\\s+")))
-                    if (identity == null) {
-                        error = "Неверная секретная фраза — проверьте слова"
-                        busy = false
-                        return@launch
-                    }
-                    val api = TimaApi(state.serverUrl)
-                    // Код из SMS ОДНОРАЗОВЫЙ: сервер гасит его при проверке. Раньше
-                    // проверка шла на каждое нажатие, поэтому вторая попытка (например,
-                    // после «введите фразу») упиралась в «код уже использован», а нового
-                    // кода взять было неоткуда. Проверяем один раз и держим токен — он
-                    // живёт 10 минут, этого хватает, чтобы вписать фразу и повторить.
-                    val token = regToken
-                        ?: api.smsVerify(state.requestId, code.trim()).registrationToken.also { regToken = it }
-                    // Ключи устройства: один seed → X25519 (конверты) + Ed25519 (подпись)
-                    val deviceKey = Kodium.generateKeyPair()
-                    val pub = deviceKey.getPublicKey()
-                    val reg = api.register(
-                        registrationToken = token,
-                        encryptionPub = b64url.encode(pub.encryptionKey),
-                        signingPub = b64url.encode(pub.signingKey),
-                        identityPub = identity.pubB64,
-                    )
-                    val session = Session(
-                        serverUrl = state.serverUrl,
-                        phone = state.phone,
-                        userId = reg.userId,
-                        deviceId = reg.deviceId,
-                        accessToken = reg.accessToken,
-                        deviceSecretB64 = b64url.encode(deviceKey.secretKey),
-                        identitySecretB64 = identity.secretB64,
-                        backupSecretB64 = identity.backupB64,
-                    )
-                    SessionCodec.save(session)
-                    // Новую фразу показываем; введённую — не повторяем
-                    onRegistered(session, if (entered.isEmpty()) identity.phrase else null)
-                } catch (e: TimaApiException) {
-                    // Раньше сюда падал технический текст сервера, и человек читал
-                    // «ключ личности не совпадает с аккаунтом» — верно, но непонятно,
-                    // что делать. Переводим в действие.
-                    error = when {
-                        e.code == "identity_mismatch" && phraseInput.isBlank() ->
-                            "Этот номер уже зарегистрирован. Впишите его секретную фразу в поле выше и нажмите «Войти» ещё раз."
-                        e.code == "identity_mismatch" ->
-                            "Секретная фраза не подходит к этому номеру — проверьте слова и их порядок."
-                        e.code == "bad_code" ->
-                            "Код уже использован или просрочен — вернитесь назад и запросите новый."
-                        else -> e.message ?: e.toString()
-                    }
-                } catch (e: Throwable) {
-                    error = e.message ?: e.toString()
-                } finally {
-                    busy = false
-                }
-            }
-        }) { Text("Войти") }
+        Button(onClick = { scope.launch { doRegister(forceNew = false) } }) { Text("Войти") }
+    }
+    Spacer(Modifier.height(8.dp))
+    Button(onClick = onBack, enabled = !busy) { Text("Назад") }
+    ErrorText(error)
+}
+
+/**
+ * Экран занятого номера (ДОКУМЕНТАЦИЯ/02-приложение/перенос-аккаунта-на-новое-устройство.md §8):
+ * явный выбор вместо текста ошибки под полем.
+ *
+ * QR-перенос с другого живого устройства (§2) в этой сборке недоступен — задизейблен
+ * намеренно, не забыт: требует камеры и живого второго устройства, непроверяемо в
+ * этой среде (см. ФАЗА-1-СТАТУС.md). Криптографически подпись из секретной фразы
+ * ничем не слабее подписи «живым» устройством — тот же ключ, та же проверка, — так
+ * что «Знаю секретную фразу» закрывает тот же сценарий без камеры.
+ */
+@Composable
+private fun NumberTakenScreen(
+    phraseInput: String,
+    onPhraseChange: (String) -> Unit,
+    busy: Boolean,
+    error: String?,
+    onKnowPhrase: () -> Unit,
+    onStartFresh: () -> Unit,
+    onBack: () -> Unit,
+) {
+    Text("Номер уже используется", style = MaterialTheme.typography.headlineMedium)
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Этот номер уже зарегистрирован. Выберите, что сделать дальше.",
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.widthIn(max = 420.dp),
+    )
+    Spacer(Modifier.height(20.dp))
+
+    Button(onClick = {}, enabled = false, modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
+        Text("Перенести с другого устройства (QR) — пока недоступно")
+    }
+    Spacer(Modifier.height(16.dp))
+
+    Text("Знаю секретную фразу", style = MaterialTheme.typography.titleMedium)
+    Spacer(Modifier.height(8.dp))
+    OutlinedTextField(
+        value = phraseInput, onValueChange = onPhraseChange,
+        label = { Text("Секретная фраза того аккаунта") },
+        enabled = !busy,
+        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+    )
+    Spacer(Modifier.height(8.dp))
+    if (busy) {
+        CircularProgressIndicator()
+    } else {
+        Button(onClick = onKnowPhrase, enabled = phraseInput.isNotBlank()) { Text("Доказать и войти") }
+    }
+    Spacer(Modifier.height(24.dp))
+
+    TextButton(onClick = onStartFresh, enabled = !busy) {
+        Text("Начать заново", color = MaterialTheme.colorScheme.error)
     }
     Spacer(Modifier.height(8.dp))
     Button(onClick = onBack, enabled = !busy) { Text("Назад") }
@@ -623,6 +731,7 @@ private fun HomeScreen(
     onOpenContacts: () -> Unit,
     onChatsChange: (List<ChatEntry>) -> Unit,
     onLogout: () -> Unit,
+    onSessionUpdated: (Session) -> Unit,
 ) {
     var peerPhone by remember { mutableStateOf("+7") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -1073,6 +1182,87 @@ private fun HomeScreen(
     Button(onClick = onLogout, enabled = !busy) { Text("Выйти") }
 
     Spacer(Modifier.height(16.dp))
+    // Присоединить прежний аккаунт (Р4, ДОКУМЕНТАЦИЯ/02 §5, окно воссоединения):
+    // подпись из секретной фразы доказывает владение прежним ключом личности так же,
+    // как подпись «живым» устройством из §2 — тот же ключ, та же проверка. Прежняя
+    // (доказанная) личность становится текущей, интерим-форк (если он был) — нет.
+    var showReidentify by remember { mutableStateOf(false) }
+    TextButton(onClick = { showReidentify = true }, enabled = !busy) {
+        Text("Присоединить прежний аккаунт")
+    }
+    if (showReidentify) {
+        var reidentifyPhrase by remember { mutableStateOf("") }
+        var reidentifyError by remember { mutableStateOf<String?>(null) }
+        var reidentifyBusy by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { if (!reidentifyBusy) showReidentify = false },
+            title = { Text("Присоединить прежний аккаунт") },
+            text = {
+                Column {
+                    Text(
+                        "Введите секретную фразу прежнего аккаунта. Если ключ совпадёт, " +
+                            "он станет текущим, и переписка под ним снова откроется.",
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = reidentifyPhrase, onValueChange = { reidentifyPhrase = it },
+                        label = { Text("Секретная фраза") },
+                        enabled = !reidentifyBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    ErrorText(reidentifyError)
+                    if (reidentifyBusy) {
+                        Spacer(Modifier.height(8.dp))
+                        CircularProgressIndicator()
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !reidentifyBusy && reidentifyPhrase.isNotBlank(), onClick = {
+                    reidentifyBusy = true; reidentifyError = null
+                    scope.launch {
+                        try {
+                            val identity = identityFromPhrase(reidentifyPhrase.trim().split(Regex("\\s+")))
+                                ?: throw IllegalArgumentException("Неверная секретная фраза — проверьте слова")
+                            val challenge = api.reidentifyChallenge(session.accessToken)
+                            val privKey = KodiumPrivateKey.fromRaw(b64url.decode(identity.secretB64))
+                            val signature = MessageSigner.sign(privKey, challenge.encodeToByteArray()).getOrThrow()
+                            val result = api.reidentify(
+                                session.accessToken, challenge, identity.pubB64, b64url.encode(signature),
+                            )
+                            AppDiagnostics.add("действие: воссоединение личности выполнено")
+                            showReidentify = false
+                            onSessionUpdated(
+                                session.copy(
+                                    userId = result.userId,
+                                    accessToken = result.accessToken,
+                                    identitySecretB64 = identity.secretB64,
+                                    backupSecretB64 = identity.backupB64,
+                                ),
+                            )
+                        } catch (e: TimaApiException) {
+                            reidentifyError = when (e.code) {
+                                "not_found" -> "Эта фраза не подходит ни одной прежней личности этого аккаунта."
+                                "bad_signature" -> "Подпись не сошлась — попробуйте ещё раз."
+                                "bad_challenge" -> "Истёк срок ожидания — начните заново."
+                                "already_current" -> "Вы уже под этой личностью."
+                                else -> e.message ?: e.toString()
+                            }
+                        } catch (e: Throwable) {
+                            reidentifyError = e.message ?: e.toString()
+                        } finally {
+                            reidentifyBusy = false
+                        }
+                    }
+                }) { Text("Присоединить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReidentify = false }, enabled = !reidentifyBusy) { Text("Отмена") }
+            },
+        )
+    }
+
+    Spacer(Modifier.height(16.dp))
     // Удаление аккаунта. До этого его не существовало как действия человека: аккаунт
     // умел уходить в архив только сам, по неактивности (ADR-0015).
     var confirmDelete by remember { mutableStateOf(false) }
@@ -1475,12 +1665,12 @@ private fun ChatScreen(
                             }
                             val m = msg.media
                             when {
-                                m == null -> if (msg.text.isNotEmpty()) Text(msg.text)
+                                m == null -> if (msg.text.isNotEmpty()) Text(renderMessageContent(msg.text, msg.markup))
                                 m.isVoice() -> VoiceBubble(client, m)
                                 m.isFile() -> FileBubble(client, m, msg.text) // имя файла в тексте
                                 else -> {
                                     MediaImage(client, m)
-                                    if (msg.text.isNotEmpty()) Text(msg.text)
+                                    if (msg.text.isNotEmpty()) Text(renderMessageContent(msg.text, msg.markup))
                                 }
                             }
                             // Часики — «лежит в очереди, уйдёт, когда появится связь».
@@ -1917,7 +2107,10 @@ private fun ChannelScreen(state: Screen.ChannelView, onBack: () -> Unit) {
                     shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                 ) {
-                    Text(post.text, modifier = Modifier.padding(12.dp))
+                    Text(
+                        renderMessageContent(post.text, post.markup?.toString().orEmpty()),
+                        modifier = Modifier.padding(12.dp),
+                    )
                 }
             }
         }

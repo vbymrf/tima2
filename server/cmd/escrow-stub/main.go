@@ -5,6 +5,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log"
 	"net/http"
@@ -56,6 +57,11 @@ func main() {
 	}
 	log.Printf("escrow-stub: слушаю %s (state: %s), срок хранения %v, legacy-ключ v%d",
 		addr, dir, retention, enc.Version())
+	// Ключ подписи конфига (Р2) — не секрет, печатаем при каждом старте: оператор
+	// сверяет его с тем, что зашито в официальной сборке клиента, и замечает
+	// расхождение сразу, а не когда об этом сообщит пользователь.
+	log.Printf("escrow-stub: ключ подписи конфига (Ed25519, зашить в клиент): %s",
+		base64.RawURLEncoding.EncodeToString(enc.SigningPublicKey()))
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
 

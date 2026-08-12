@@ -317,6 +317,35 @@ func (s *Store) PersonOfUser(ctx context.Context, userID string) (string, error)
 	return personID, err
 }
 
+// ErrIdentityNotFound — ни одна личность аккаунта не подписана этим ключом.
+var ErrIdentityNotFound = errors.New("личность с этим ключом не найдена в цепочке аккаунта")
+
+// FindPriorIdentity ищет в цепочке аккаунта личность, чей ключ совпадает с
+// identityPub (ДОКУМЕНТАЦИЯ/02 §5, воссоединение по секретной фразе). Клиент
+// выводит ключ из фразы и подписывает им челлендж — сервер должен понять, какой
+// именно ПРЕЖНЕЙ личности этого же аккаунта принадлежит ключ, прежде чем принять
+// связку как доказанную. Совпадение с чужим аккаунтом не считается: person_id
+// в условии — это и есть граница поиска.
+func (s *Store) FindPriorIdentity(ctx context.Context, personID string, identityPub []byte) (string, error) {
+	var userID string
+	err := s.pool.QueryRow(ctx,
+		`SELECT user_id FROM users WHERE person_id = $1 AND identity_pub = $2 ORDER BY valid_from DESC LIMIT 1`,
+		personID, identityPub).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrIdentityNotFound
+	}
+	return userID, err
+}
+
+// MoveDeviceToUser переносит устройство на новую личность аккаунта. После
+// воссоединения устройство, которым человек только что доказал владение прежним
+// ключом, должно писать под новой (только что заведённой, проверенной) личностью,
+// а не оставаться приписанным к той, что StartNewIdentity уже закрыл.
+func (s *Store) MoveDeviceToUser(ctx context.Context, deviceID, newUserID string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE devices SET user_id = $2 WHERE device_id = $1`, deviceID, newUserID)
+	return err
+}
+
 // IdentityLink — чем подтверждена принадлежность личности аккаунту.
 type IdentityLink string
 

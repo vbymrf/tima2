@@ -33,6 +33,7 @@ func (e *Enclave) handlePubkey(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"escrow_key_version": e.version,
 		"public_key":         base64.RawURLEncoding.EncodeToString(e.pubKey),
+		"signature":          e.sign(PubkeySigningBytes(e.version, e.pubKey)),
 	})
 }
 

@@ -10,6 +10,8 @@ import io.ktor.websocket.readText
 import io.tima.app.api.DeviceKeyInfo
 import io.tima.app.api.BackupItemDto
 import io.tima.app.api.EscrowDto
+import io.tima.app.api.EscrowScopedKey
+import io.tima.app.api.EscrowTrust
 import io.tima.app.api.GroupMessageDto
 import io.tima.app.api.ProvideKeyDto
 import io.tima.app.api.ProvideMsgKeyDto
@@ -25,6 +27,8 @@ import io.tima.crypto.CanonicalBytes
 import io.tima.crypto.DeviceAddress
 import io.tima.crypto.EnvelopeCipher
 import io.tima.crypto.EnvelopeMeta
+import io.tima.crypto.EscrowConfigSignature
+import io.tima.crypto.EscrowKeyMeta
 import io.tima.crypto.EscrowModule
 import io.tima.crypto.GroupKeyManager
 import io.tima.crypto.GroupMessageMeta
@@ -33,6 +37,7 @@ import io.tima.crypto.WrappedKeyService
 import io.tima.crypto.MediaCipher
 import io.tima.crypto.MessageContent
 import io.tima.crypto.MessageContentCodec
+import io.tima.crypto.Markup
 import io.tima.crypto.MessageSerializer
 import io.tima.crypto.PersonalMessageSealer
 import io.tima.crypto.SealedPersonalMessage
@@ -333,6 +338,15 @@ class TimaClient(private val session: Session) : ChatClient {
     private fun textOf(body: MessageBody): String =
         MessageContentCodec.fromBody(body).plainText()
 
+    /**
+     * Разметка из тела (ADR-0011, Р5б) для локального хранилища — компактный JSON,
+     * пусто у сообщения без оформления (подавляющее большинство). Испорченная
+     * разметка уже отфильтрована кодеком (Markup.decode → null) на уровне
+     * MessageContent — здесь просто кодируем обратно то, что он вернул.
+     */
+    private fun markupOf(body: MessageBody): String =
+        MessageContentCodec.fromBody(body).markup?.let { Markup.encode(it) }.orEmpty()
+
     /** Список устройств с временем, когда он получен. */
     private data class CachedDevices(val devices: List<DeviceKeyInfo>, val atMs: Long)
 
@@ -376,9 +390,33 @@ class TimaClient(private val session: Session) : ChatClient {
     private suspend fun escrowFor(chatId: String): EscrowModule {
         escrowByChat[chatId]?.let { if (System.currentTimeMillis() < it.validToMs) return it.module }
         val bundle = api.escrowKey(session.accessToken, chatId)
+        verifyEscrowSignature(bundle.region, chatId, bundle.current)
         val module = EscrowModule(b64url.decode(bundle.current.publicKey), bundle.current.id.toInt())
         escrowByChat[chatId] = CachedEscrowKey(module, parseInstantMs(bundle.current.validTo))
         return module
+    }
+
+    /**
+     * Подпись анклава (Р2): без неё скомпрометированный бэкенд мог бы подсунуть
+     * чужой публичный ключ, и шифрование ушло бы в обход анклава и всего
+     * механизма контролируемого доступа. Без зашитого ключа ([EscrowTrust])
+     * проверять нечем — деградация до сегодняшнего поведения, не тихий регресс
+     * (подписи не было нигде до Р2). Если ключ зашит, несовпадение — жёсткий
+     * отказ: escrow и так работает fail-closed, тут тот же принцип.
+     */
+    private fun verifyEscrowSignature(region: String, chatId: String, key: EscrowScopedKey) {
+        val trusted = EscrowTrust.ENCLAVE_SIGNING_PUBLIC_KEY ?: return
+        val meta = EscrowKeyMeta(
+            id = key.id, region = region, epoch = key.epoch, chatId = chatId,
+            publicKey = b64url.decode(key.publicKey),
+            validFromUnixMs = parseInstantMs(key.validFrom),
+            validToUnixMs = parseInstantMs(key.validTo),
+            destroyAtUnixMs = parseInstantMs(key.destroyAt),
+        )
+        val message = EscrowConfigSignature.keyMetaSigningBytes(meta)
+        val verified = runCatching { EscrowConfigSignature.verify(trusted, message, b64url.decode(key.signature)) }
+            .getOrDefault(false)
+        check(verified) { "escrow: подпись анклава не сходится для чата $chatId — похоже на подмену ключа" }
     }
 
     private suspend fun sealerFor(chatId: String): PersonalMessageSealer =
@@ -563,7 +601,7 @@ class TimaClient(private val session: Session) : ChatClient {
                 chatId = m.chatId, messageId = m.messageId, clientMsgId = cmid,
                 senderId = m.senderId, isGroup = m.group, createdAtMs = m.createdAtMs,
                 state = if (m.mine) MsgState.SENT else MsgState.INCOMING,
-                replyTo = m.replyTo, text = m.text,
+                replyTo = m.replyTo, text = m.text, markup = m.markup,
                 // Ссылку на вложение храним вместе с сообщением — иначе офлайн
                 // от фото осталась бы одна подпись, а сам файл было бы не открыть.
                 mediaJson = m.media?.let(::packAttachment).orEmpty(),
@@ -585,7 +623,7 @@ class TimaClient(private val session: Session) : ChatClient {
     }
 
     private fun StoredMessage.toChatMessage() = ChatMessage(
-        chatId = chatId, messageId = messageId, senderId = senderId, text = text,
+        chatId = chatId, messageId = messageId, senderId = senderId, text = text, markup = markup,
         createdAtMs = createdAtMs, mine = mine, group = isGroup, replyTo = replyTo,
         readByPeer = state == MsgState.READ, pending = pending, clientMsgId = clientMsgId,
         media = mediaJson.takeIf { it.isNotEmpty() }?.let(::unpackAttachment)
@@ -980,13 +1018,13 @@ class TimaClient(private val session: Session) : ChatClient {
             StoredMessage(
                 chatId = chatId, messageId = id, clientMsgId = "sent-$id",
                 senderId = session.userId, createdAtMs = now, state = MsgState.SENT,
-                replyTo = replyTo.toLong(), text = textOf(body),
+                replyTo = replyTo.toLong(), text = textOf(body), markup = markupOf(body),
             ),
         )
         return ChatMessage(
             chatId, id, session.userId, textOf(body), now, mine = true,
             media = body.media.firstOrNull()?.toAttachment(),
-            replyTo = replyTo.toLong(),
+            replyTo = replyTo.toLong(), markup = markupOf(body),
         )
     }
 
@@ -1013,6 +1051,7 @@ class TimaClient(private val session: Session) : ChatClient {
             messageId = sealed.meta.messageId.toLong(),
             senderId = sealed.meta.senderId,
             text = textOf(body),
+            markup = markupOf(body),
             createdAtMs = sealed.meta.createdAtUnixMs,
             mine = sealed.meta.senderId == session.userId,
             media = body.media.firstOrNull()?.toAttachment(),
@@ -1140,7 +1179,7 @@ class TimaClient(private val session: Session) : ChatClient {
         )
         return ChatMessage(
             groupId, messageId, session.userId, textOf(body), now, mine = true, group = true,
-            media = body.media.firstOrNull()?.toAttachment(),
+            media = body.media.firstOrNull()?.toAttachment(), markup = markupOf(body),
         )
     }
 
@@ -1198,7 +1237,7 @@ class TimaClient(private val session: Session) : ChatClient {
         val body = MessageSerializer.decodeBody(plain).getOrNull() ?: return null
         return ChatMessage(
             chatId = m.groupId, messageId = m.messageId, senderId = m.senderId,
-            text = textOf(body), createdAtMs = m.createdAtUnixMs,
+            text = textOf(body), markup = markupOf(body), createdAtMs = m.createdAtUnixMs,
             mine = m.senderId == session.userId,
             media = body.media.firstOrNull()?.toAttachment(),
             group = true,

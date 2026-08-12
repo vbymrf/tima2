@@ -4,6 +4,8 @@
 package api
 
 import (
+	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -174,6 +176,12 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		EncryptionPub     string `json:"encryption_pub"`         // base64url, X25519 32 B
 		SigningPub        string `json:"signing_pub"`            // base64url, Ed25519 32 B
 		IdentityPub       string `json:"identity_pub,omitempty"` // base64url, Ed25519 32 B — ключ личности из фразы
+		// ForceNewIdentity — «Начать заново» на экране занятого номера (ДОКУМЕНТАЦИЯ/02
+		// §8): человек явно подтвердил, что прежней фразы у него нет, и согласен, что
+		// прежняя переписка станет недоступна. Форкает цепочку административно (без
+		// подписи) — ровно то же самое право, что уже даёт обращение в поддержку
+		// (ДОКУМЕНТАЦИЯ/02 §7), просто без участия человека на той стороне.
+		ForceNewIdentity bool `json:"force_new_identity,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -203,6 +211,14 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		log.Printf("register: upsert user: %v", err)
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return
+	}
+	if req.ForceNewIdentity {
+		userID, err = s.forceNewIdentityIfConflict(r.Context(), userID, identityPub)
+		if err != nil {
+			log.Printf("register: force new identity: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
 	}
 	// Ключ личности: первое устройство устанавливает, последующие обязаны совпасть
 	// (устройство, знающее фразу, выведет тот же ключ). Расхождение → отказ.
@@ -234,6 +250,29 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"user_id": userID, "device_id": deviceID, "access_token": access,
 	})
+}
+
+// forceNewIdentityIfConflict — «Начать заново» форкает цепочку, только если
+// конфликт настоящий: у аккаунта уже установлен identity_pub и он не совпадает с
+// присланным. Без этой проверки кнопка форкала бы аккаунт и в тех случаях, где
+// register() и так прошёл бы штатно (фраза не задана вовсе, или уже совпала) —
+// человек лишился бы своей же истории без всякой причины.
+func (s *Server) forceNewIdentityIfConflict(ctx context.Context, userID string, identityPub []byte) (string, error) {
+	existing, err := s.Store.IdentityPub(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	if len(existing) == 0 || bytes.Equal(existing, identityPub) {
+		return userID, nil // конфликта нет — форкать нечего
+	}
+	personID, err := s.Store.PersonOfUser(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	// proof = nil: административная связка (ДОКУМЕНТАЦИЯ/02 §7) — доказательства
+	// владения прежним ключом нет, собеседники обязаны увидеть предупреждение о
+	// смене личности (ADR-0014 §3).
+	return s.Store.StartNewIdentity(ctx, personID, userID, nil)
 }
 
 // lookupUser — GET /users/lookup?phone=: user_id по телефону (contact discovery MVP).

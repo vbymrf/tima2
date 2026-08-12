@@ -30,6 +30,9 @@ type ChannelPost struct {
 	PostID          uint64
 	AuthorID        string
 	Text            string
+	Nodes           []string // ADR-0011 §4: публичный контур, узлы открытым текстом
+	Markup          []byte   // компактный JSON (ADR-0011 §6); nil = без разметки
+	MarkupVersion   int32
 	CreatedAtUnixMs int64
 }
 
@@ -156,12 +159,22 @@ func (s *Store) SubscriberIDs(ctx context.Context, channelID string) ([]string, 
 	return out, rows.Err()
 }
 
+// CreatePost — ADR-0011 §4: публичный контур хранит nodes/markup открытым текстом
+// отдельными колонками (в отличие от приватного, где они едут внутри
+// зашифрованной нагрузки и база их не видит вовсе).
 func (s *Store) CreatePost(ctx context.Context, p ChannelPost) (uint64, error) {
+	// markup — JSONB; nil-слайс обязан лечь как SQL NULL, а не как bytea (у bytea
+	// нет приведения к jsonb) и не как пустая строка (не валидный JSON). string —
+	// то, что pgx приводит к text, а PostgreSQL умеет неявно привести text к jsonb.
+	var markupParam any
+	if len(p.Markup) > 0 {
+		markupParam = string(p.Markup)
+	}
 	var id uint64
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO channel_posts (channel_id, author_id, text, created_at_unix_ms)
-		VALUES ($1,$2,$3,$4) RETURNING post_id`,
-		p.ChannelID, p.AuthorID, p.Text, p.CreatedAtUnixMs).Scan(&id)
+		INSERT INTO channel_posts (channel_id, author_id, text, nodes, markup, markup_version, created_at_unix_ms)
+		VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING post_id`,
+		p.ChannelID, p.AuthorID, p.Text, p.Nodes, markupParam, p.MarkupVersion, p.CreatedAtUnixMs).Scan(&id)
 	return id, err
 }
 
@@ -174,7 +187,7 @@ func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, 
 		before = ^uint64(0) >> 1
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT channel_id, post_id, author_id, text, created_at_unix_ms
+		SELECT channel_id, post_id, author_id, text, nodes, markup, markup_version, created_at_unix_ms
 		FROM channel_posts
 		WHERE channel_id = $1 AND post_id < $2 AND NOT deleted
 		ORDER BY post_id DESC LIMIT $3`, channelID, before, limit)
@@ -185,7 +198,8 @@ func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, 
 	var out []ChannelPost
 	for rows.Next() {
 		var p ChannelPost
-		if err := rows.Scan(&p.ChannelID, &p.PostID, &p.AuthorID, &p.Text, &p.CreatedAtUnixMs); err != nil {
+		if err := rows.Scan(&p.ChannelID, &p.PostID, &p.AuthorID, &p.Text, &p.Nodes, &p.Markup,
+			&p.MarkupVersion, &p.CreatedAtUnixMs); err != nil {
 			return nil, err
 		}
 		out = append(out, p)

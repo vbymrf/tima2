@@ -21,6 +21,7 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
 @Serializable
@@ -47,6 +48,9 @@ data class RegisterBody(
     @SerialName("encryption_pub") val encryptionPub: String, // base64url, X25519 32 B
     @SerialName("signing_pub") val signingPub: String,       // base64url, Ed25519 32 B
     @SerialName("identity_pub") val identityPub: String = "", // base64url, Ed25519 32 B — ключ личности
+    // «Начать заново» на экране занятого номера (Р4, ДОКУМЕНТАЦИЯ/02 §8): форкает
+    // цепочку административно, если конфликт настоящий; без конфликта — не влияет.
+    @SerialName("force_new_identity") val forceNewIdentity: Boolean = false,
 )
 
 @Serializable
@@ -86,19 +90,26 @@ data class ResolvedUsers(
 data class EscrowPubkey(
     @SerialName("escrow_key_version") val version: Int,
     @SerialName("public_key") val publicKey: String, // base64url, 1184 B (ML-KEM-768)
+    val signature: String = "", // base64url, подпись анклава Ed25519 (Р2)
 )
 
 /**
  * Ключ escrow области «чат × эпоха» (ADR-0012). Один ключ на чат и календарный
  * месяц: утечка вскрывает один чат за один месяц, а не всю историю навсегда.
+ *
+ * [signature] и [destroyAt] нужны для проверки подписи анклава (Р2, EscrowTrust) —
+ * оба поля входят в подписываемые байты (EscrowConfigSignature.keyMetaSigningBytes
+ * в messenger-crypto), поэтому без destroyAt подпись было бы нечем проверить.
  */
 @Serializable
 data class EscrowScopedKey(
     val id: Long, // → EscrowBlob.escrow_key_version
     val epoch: String, // 'YYYY-MM'
     @SerialName("public_key") val publicKey: String, // base64url, 1184 B
+    val signature: String = "", // base64url, подпись анклава Ed25519 (Р2)
     @SerialName("valid_from") val validFrom: String,
     @SerialName("valid_to") val validTo: String, // после этого шифровать на него нельзя
+    @SerialName("destroy_at") val destroyAt: String = "",
 )
 
 /**
@@ -304,6 +315,11 @@ data class ChannelPostDto(
     @SerialName("post_id") val postId: Long,
     @SerialName("author_id") val authorId: String,
     val text: String,
+    // Публичный контур (ADR-0011 §4, Р5б): узлы и разметка открытым текстом.
+    // Пусто у постов, отправленных без узлов (переходный путь) — тогда nodes
+    // приходит от сервера как один узел из text (server/internal/api/channels.go).
+    val nodes: List<String> = emptyList(),
+    val markup: JsonElement? = null,
     @SerialName("created_at_unix_ms") val createdAtUnixMs: Long,
 )
 
@@ -388,6 +404,23 @@ data class AppVersionDto(
 private data class DeleteAccountResponse(
     val deleted: Boolean = false,
     @SerialName("purge_after_days") val purgeAfterDays: Int = 0,
+)
+
+@Serializable
+private data class ReidentifyChallengeResponse(@SerialName("challenge_token") val challengeToken: String)
+
+@Serializable
+private data class ReidentifyBody(
+    @SerialName("challenge_token") val challengeToken: String,
+    @SerialName("identity_pub") val identityPub: String,
+    val signature: String,
+)
+
+/** Ответ «Присоединить прежний аккаунт»: новая, проверяемая голова цепочки аккаунта. */
+@Serializable
+data class ReidentifyResponse(
+    @SerialName("user_id") val userId: String,
+    @SerialName("access_token") val accessToken: String,
 )
 
 @Serializable
@@ -489,8 +522,12 @@ class TimaApi(private val baseUrl: String) {
 
     suspend fun register(
         registrationToken: String, encryptionPub: String, signingPub: String, identityPub: String = "",
+        forceNewIdentity: Boolean = false,
     ): RegisterResponse =
-        post("/api/v1/auth/register", RegisterBody(registrationToken, encryptionPub, signingPub, identityPub))
+        post(
+            "/api/v1/auth/register",
+            RegisterBody(registrationToken, encryptionPub, signingPub, identityPub, forceNewIdentity),
+        )
 
     // ── Под device JWT ──
 
@@ -528,6 +565,37 @@ class TimaApi(private val baseUrl: String) {
         val response = client.delete(baseUrl.trimEnd('/') + "/api/v1/users/me") { bearerAuth(token) }
         if (!response.status.isSuccess()) fail(response)
         return response.body<DeleteAccountResponse>().purgeAfterDays
+    }
+
+    /**
+     * «Присоединить прежний аккаунт» (Р4, ДОКУМЕНТАЦИЯ/02 §5) — шаг 1: короткоживущий
+     * челлендж, привязанный к текущей сессии. Подписывается ключом личности,
+     * выведенным из секретной фразы, и возвращается в [reidentify].
+     */
+    suspend fun reidentifyChallenge(token: String): String {
+        val response = client.post(baseUrl.trimEnd('/') + "/api/v1/users/me/reidentify/challenge") {
+            bearerAuth(token)
+        }
+        if (!response.status.isSuccess()) fail(response)
+        return response.body<ReidentifyChallengeResponse>().challengeToken
+    }
+
+    /**
+     * Шаг 2: подпись челленджа доказывает владение прежним ключом личности — сервер
+     * заводит новую, ПРОВЕРЯЕМУЮ голову цепочки аккаунта (StartNewIdentity с proof).
+     * Возвращает новые user_id/access_token — прежний токен после этого не про ту
+     * личность, что стала текущей.
+     */
+    suspend fun reidentify(
+        token: String, challengeToken: String, identityPub: String, signature: String,
+    ): ReidentifyResponse {
+        val response = client.post(baseUrl.trimEnd('/') + "/api/v1/users/me/reidentify") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(ReidentifyBody(challengeToken, identityPub, signature))
+        }
+        if (!response.status.isSuccess()) fail(response)
+        return response.body<ReidentifyResponse>()
     }
 
     /** Убрать чат в архив или вернуть обратно. Архив личный: у каждого свой. */

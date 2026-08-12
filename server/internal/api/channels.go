@@ -132,14 +132,32 @@ func (s *Server) postToChannel(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Text string `json:"text"`
+		// Nodes/Markup — ADR-0011 §4: публичный контур, узлы и разметка открытым
+		// текстом. Пусто — клиент старого формата: заворачиваем text в один узел,
+		// тот же переходный путь, что и у личных сообщений.
+		Nodes  []string `json:"nodes,omitempty"`
+		Markup string   `json:"markup,omitempty"` // компактный JSON (ADR-0011 §6); пусто = без разметки
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&req); err != nil || req.Text == "" {
 		writeErr(w, http.StatusBadRequest, "bad_text", "нужен непустой text")
 		return
 	}
+	nodes := req.Nodes
+	if len(nodes) == 0 {
+		nodes = []string{req.Text}
+	}
+	var markup []byte
+	if req.Markup != "" {
+		if !json.Valid([]byte(req.Markup)) {
+			writeErr(w, http.StatusBadRequest, "bad_markup", "markup должен быть валидным JSON")
+			return
+		}
+		markup = []byte(req.Markup)
+	}
 	now := time.Now().UnixMilli()
 	postID, err := s.Store.CreatePost(r.Context(), store.ChannelPost{
-		ChannelID: channelID, AuthorID: id.UserID, Text: req.Text, CreatedAtUnixMs: now,
+		ChannelID: channelID, AuthorID: id.UserID, Text: req.Text,
+		Nodes: nodes, Markup: markup, MarkupVersion: 1, CreatedAtUnixMs: now,
 	})
 	if err != nil {
 		log.Printf("postToChannel: %v", err)
@@ -149,7 +167,10 @@ func (s *Server) postToChannel(w http.ResponseWriter, r *http.Request) {
 	// Fan-out: событие channel.post устройствам всех подписчиков
 	post := map[string]any{
 		"channel_id": channelID, "post_id": postID, "author_id": id.UserID,
-		"text": req.Text, "created_at_unix_ms": now,
+		"text": req.Text, "nodes": nodes, "created_at_unix_ms": now,
+	}
+	if len(markup) > 0 {
+		post["markup"] = json.RawMessage(markup)
 	}
 	if subs, err := s.Store.SubscriberIDs(r.Context(), channelID); err == nil {
 		for _, uid := range subs {
@@ -197,10 +218,14 @@ func (s *Server) listChannelPosts(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]map[string]any, 0, len(posts))
 	for _, p := range posts {
-		out = append(out, map[string]any{
+		item := map[string]any{
 			"post_id": p.PostID, "author_id": p.AuthorID, "text": p.Text,
-			"created_at_unix_ms": p.CreatedAtUnixMs,
-		})
+			"nodes": p.Nodes, "created_at_unix_ms": p.CreatedAtUnixMs,
+		}
+		if len(p.Markup) > 0 {
+			item["markup"] = json.RawMessage(p.Markup)
+		}
+		out = append(out, item)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"channel": channelJSON(store.ChannelView{Channel: ch}), "posts": out})

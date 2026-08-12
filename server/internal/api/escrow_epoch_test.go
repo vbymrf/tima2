@@ -4,6 +4,7 @@ package api
 // проверяем реальный путь «клиент → tima → анклав → реестр», а не заглушку.
 
 import (
+	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -17,7 +18,8 @@ import (
 const testChatID = "bbbbbbbb-0000-0000-0000-0000000000e1"
 
 // withEnclave поднимает stub-анклав со связкой ключей и подключает его к серверу.
-func withEnclave(t *testing.T, srv *Server) *escrow.Keyring {
+// Возвращает и Enclave — тестам подписи (Р2) нужен его публичный ключ подписи.
+func withEnclave(t *testing.T, srv *Server) (*escrow.Enclave, *escrow.Keyring) {
 	t.Helper()
 	dir := t.TempDir()
 	enc, _, err := escrow.Open(dir)
@@ -34,7 +36,7 @@ func withEnclave(t *testing.T, srv *Server) *escrow.Keyring {
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
 	srv.EscrowURL = ts.URL
-	return ring
+	return enc, ring
 }
 
 type escrowKeyResp struct {
@@ -43,8 +45,10 @@ type escrowKeyResp struct {
 		ID        uint32    `json:"id"`
 		Epoch     string    `json:"epoch"`
 		PublicKey string    `json:"public_key"`
+		Signature string    `json:"signature"`
 		ValidFrom time.Time `json:"valid_from"`
 		ValidTo   time.Time `json:"valid_to"`
+		DestroyAt time.Time `json:"destroy_at"`
 	} `json:"current"`
 	Next *struct {
 		ID    uint32 `json:"id"`
@@ -157,6 +161,56 @@ func TestEscrowKeyRejectsBadChat(t *testing.T) {
 			t.Fatalf("chat_id %q принят с кодом %d", bad, code)
 		}
 	}
+}
+
+// Подпись анклава (Р2) обязана проходить через tima неповреждённой — и на пути
+// «анклав → tima → клиент» напрямую, и позже, когда tima отдаёт из своего кэша
+// (escrow_keys), не спрашивая анклав заново.
+func TestEscrowKeySignaturePassesThroughAndCaches(t *testing.T) {
+	ts, srv := setup(t)
+	enc, _ := withEnclave(t, srv)
+	d := registerDevice(t, ts, "+79990040005")
+
+	verify := func(t *testing.T, region string, cur struct {
+		ID        uint32    `json:"id"`
+		Epoch     string    `json:"epoch"`
+		PublicKey string    `json:"public_key"`
+		Signature string    `json:"signature"`
+		ValidFrom time.Time `json:"valid_from"`
+		ValidTo   time.Time `json:"valid_to"`
+		DestroyAt time.Time `json:"destroy_at"`
+	}) {
+		t.Helper()
+		sig, err := base64.RawURLEncoding.DecodeString(cur.Signature)
+		if err != nil || len(sig) == 0 {
+			t.Fatalf("signature: %v", err)
+		}
+		meta := escrow.KeyMeta{
+			ID: cur.ID, Region: region, Epoch: cur.Epoch, ChatID: testChatID,
+			PublicKey: cur.PublicKey, ValidFrom: cur.ValidFrom, ValidTo: cur.ValidTo, DestroyAt: cur.DestroyAt,
+		}
+		msg, err := escrow.KeyMetaSigningBytes(meta)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ed25519.Verify(enc.SigningPublicKey(), msg, sig) {
+			t.Fatal("подпись не проходит проверку зашитым публичным ключом анклава")
+		}
+	}
+
+	// Первый запрос идёт к анклаву напрямую.
+	first, code := getEscrowKey(t, ts, d.token, testChatID)
+	if code != 200 {
+		t.Fatalf("/escrow/key: %d", code)
+	}
+	verify(t, first.Region, first.Current)
+
+	// Второй — из кэша tima (escrow_keys); подпись должна остаться той же.
+	second, _ := getEscrowKey(t, ts, d.token, testChatID)
+	if second.Current.Signature != first.Current.Signature {
+		t.Fatal("подпись изменилась при отдаче из кэша")
+	}
+	verify(t, second.Region, second.Current)
 }
 
 // Без анклава эндпоинт честно отвечает 503, а не отдаёт что-нибудь.

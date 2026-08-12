@@ -20,6 +20,7 @@ type EscrowKey struct {
 	Epoch     string    `json:"epoch"`
 	ChatID    string    `json:"chat_id"`
 	PublicKey []byte    `json:"-"`
+	Signature []byte    `json:"-"` // подпись анклава Ed25519 над записью (Р2)
 	ValidFrom time.Time `json:"valid_from"`
 	ValidTo   time.Time `json:"valid_to"`
 	DestroyAt time.Time `json:"destroy_at"`
@@ -31,10 +32,10 @@ var ErrEscrowKeyUnknown = errors.New("ключ escrow не найден")
 func (s *Store) FindEscrowKey(ctx context.Context, region, epoch, chatID string) (EscrowKey, error) {
 	var k EscrowKey
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, region, epoch, chat_id, public_key, valid_from, valid_to, destroy_at
+		SELECT id, region, epoch, chat_id, public_key, signature, valid_from, valid_to, destroy_at
 		FROM escrow_keys WHERE region = $1 AND epoch = $2 AND chat_id = $3`,
 		region, epoch, chatID).Scan(&k.ID, &k.Region, &k.Epoch, &k.ChatID,
-		&k.PublicKey, &k.ValidFrom, &k.ValidTo, &k.DestroyAt)
+		&k.PublicKey, &k.Signature, &k.ValidFrom, &k.ValidTo, &k.DestroyAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return EscrowKey{}, ErrEscrowKeyUnknown
 	}
@@ -49,10 +50,10 @@ func (s *Store) FindEscrowKey(ctx context.Context, region, epoch, chatID string)
 // сослались отправленные блобы.
 func (s *Store) SaveEscrowKey(ctx context.Context, k EscrowKey) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO escrow_keys (id, region, epoch, chat_id, public_key, valid_from, valid_to, destroy_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO escrow_keys (id, region, epoch, chat_id, public_key, signature, valid_from, valid_to, destroy_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (region, epoch, chat_id) DO NOTHING`,
-		k.ID, k.Region, k.Epoch, k.ChatID, k.PublicKey, k.ValidFrom, k.ValidTo, k.DestroyAt)
+		k.ID, k.Region, k.Epoch, k.ChatID, k.PublicKey, k.Signature, k.ValidFrom, k.ValidTo, k.DestroyAt)
 	if err != nil && isUniqueViolation(err) {
 		// Конфликт по первичному ключу, а не по области: анклав выдал идентификатор,
 		// который в реестре уже занят другой областью. Так бывает, если состояние

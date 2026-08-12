@@ -52,14 +52,16 @@ func (s *Server) escrowPubkey(w http.ResponseWriter, r *http.Request) {
 		var got struct {
 			Version   int    `json:"escrow_key_version"`
 			PublicKey string `json:"public_key"`
+			Signature string `json:"signature"` // подпись анклава Ed25519 (Р2) — проверяет клиент
 		}
-		if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&got) != nil || got.PublicKey == "" {
+		if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&got) != nil ||
+			got.PublicKey == "" || got.Signature == "" {
 			log.Printf("escrowPubkey: статус %d", resp.StatusCode)
 			writeErr(w, http.StatusBadGateway, "escrow_bad_response", "escrow-анклав ответил некорректно")
 			return
 		}
 		raw, _ := json.Marshal(map[string]any{
-			"escrow_key_version": got.Version, "public_key": got.PublicKey,
+			"escrow_key_version": got.Version, "public_key": got.PublicKey, "signature": got.Signature,
 		})
 		s.escrowMu.Lock()
 		s.escrowCached, s.escrowFetched = raw, time.Now()
@@ -114,12 +116,20 @@ func (s *Server) escrowKeyForChat(w http.ResponseWriter, r *http.Request) {
 }
 
 // escrowKeyView — то, что видит клиент. Приватной части здесь нет и быть не может.
+//
+// DestroyAt — не приватность, а материал подписи (Р2): клиент проверяет подпись
+// анклава над KeyMetaSigningBytes, а туда входит destroy_at. Без этого поля
+// проверить подпись было бы нечем — пришлось бы либо не подписывать destroy_at
+// (и тогда его можно подменить в обход подписи), либо не отдавать его клиенту
+// вовсе (тогда клиент не может проверить остальное).
 type escrowKeyView struct {
 	ID        uint32    `json:"id"` // → EscrowBlob.escrow_key_version
 	Epoch     string    `json:"epoch"`
 	PublicKey string    `json:"public_key"` // base64url, ML-KEM-768
+	Signature string    `json:"signature"`  // base64url, подпись анклава Ed25519 (Р2)
 	ValidFrom time.Time `json:"valid_from"`
 	ValidTo   time.Time `json:"valid_to"`
+	DestroyAt time.Time `json:"destroy_at"`
 }
 
 // escrowKey — ключ области из кэша, иначе у анклава (и в кэш).
@@ -128,7 +138,8 @@ func (s *Server) escrowKey(ctx context.Context, region, epoch, chatID string) (e
 		return escrowKeyView{
 			ID: k.ID, Epoch: k.Epoch,
 			PublicKey: base64.RawURLEncoding.EncodeToString(k.PublicKey),
-			ValidFrom: k.ValidFrom, ValidTo: k.ValidTo,
+			Signature: base64.RawURLEncoding.EncodeToString(k.Signature),
+			ValidFrom: k.ValidFrom, ValidTo: k.ValidTo, DestroyAt: k.DestroyAt,
 		}, nil
 	} else if !errors.Is(err, store.ErrEscrowKeyUnknown) {
 		return escrowKeyView{}, err
@@ -144,7 +155,13 @@ func (s *Server) escrowKey(ctx context.Context, region, epoch, chatID string) (e
 	if resp.StatusCode != http.StatusOK {
 		return escrowKeyView{}, fmt.Errorf("анклав ответил %d", resp.StatusCode)
 	}
-	var meta escrow.KeyMeta
+	// Подпись летит в том же JSON, что и KeyMeta (signedKeyMeta на стороне
+	// анклава), но escrow.KeyMeta о подписи не знает — decode в локальную
+	// обёртку, а не расширяет тип, который переиспользует и Keyring.
+	var meta struct {
+		escrow.KeyMeta
+		Signature string `json:"signature"`
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&meta); err != nil {
 		return escrowKeyView{}, err
 	}
@@ -152,15 +169,19 @@ func (s *Server) escrowKey(ctx context.Context, region, epoch, chatID string) (e
 	if err != nil {
 		return escrowKeyView{}, err
 	}
+	sig, err := base64.RawURLEncoding.DecodeString(meta.Signature)
+	if err != nil || len(sig) == 0 {
+		return escrowKeyView{}, fmt.Errorf("анклав не подписал ключ")
+	}
 	if err := s.Store.SaveEscrowKey(ctx, store.EscrowKey{
 		ID: meta.ID, Region: meta.Region, Epoch: meta.Epoch, ChatID: meta.ChatID,
-		PublicKey: pub, ValidFrom: meta.ValidFrom, ValidTo: meta.ValidTo, DestroyAt: meta.DestroyAt,
+		PublicKey: pub, Signature: sig, ValidFrom: meta.ValidFrom, ValidTo: meta.ValidTo, DestroyAt: meta.DestroyAt,
 	}); err != nil {
 		return escrowKeyView{}, err
 	}
 	return escrowKeyView{
-		ID: meta.ID, Epoch: meta.Epoch, PublicKey: meta.PublicKey,
-		ValidFrom: meta.ValidFrom, ValidTo: meta.ValidTo,
+		ID: meta.ID, Epoch: meta.Epoch, PublicKey: meta.PublicKey, Signature: meta.Signature,
+		ValidFrom: meta.ValidFrom, ValidTo: meta.ValidTo, DestroyAt: meta.DestroyAt,
 	}, nil
 }
 

@@ -79,10 +79,13 @@ data class Markup(
     }
 }
 
-/** Инлайн-сущность внутри узла. Границы — в символах ЭТОГО узла, не всего текста. */
+/**
+ * Инлайн-сущность внутри узла. Границы — в символах ЭТОГО узла, не всего текста.
+ * [type] — закрытый каталог ([EntityType], ADR-0011 «Что осталось за рамками»).
+ */
 @Serializable
 data class MarkupEntity(
-    val type: String, // bold | italic | code | link | mention | hashtag | …
+    val type: EntityType,
     @SerialName("node") val nodeId: Int,
     val start: Int = 0,
     val length: Int = 0,
@@ -93,11 +96,11 @@ data class MarkupEntity(
 
 /**
  * Блок документа. Ссылается на узлы по идентификаторам; [children] позволяет
- * вложенность (контейнер → абзац → узлы).
+ * вложенность (контейнер → абзац → узлы). [type] — закрытый каталог ([BlockType]).
  */
 @Serializable
 data class MarkupBlock(
-    val type: String, // paragraph | heading | quote | list | list_item | container | table | row | cell
+    val type: BlockType,
     @SerialName("nodes") val nodeIds: List<Int> = emptyList(),
     val children: List<MarkupBlock> = emptyList(),
     /** Уровень заголовка, номер колонки и подобное — по типу блока. */

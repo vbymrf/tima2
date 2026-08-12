@@ -43,17 +43,17 @@ class MessageContentTest {
         val markup = Markup(
             n = listOf(7, 3),
             blocks = listOf(
-                MarkupBlock(type = "heading", nodeIds = listOf(7), level = 1),
-                MarkupBlock(type = "paragraph", nodeIds = listOf(3)),
+                MarkupBlock(type = BlockType.HEADING, nodeIds = listOf(7), level = 1),
+                MarkupBlock(type = BlockType.PARAGRAPH, nodeIds = listOf(3)),
             ),
-            entities = listOf(MarkupEntity(type = "link", nodeId = 3, start = 0, length = 4, url = "https://tima")),
+            entities = listOf(MarkupEntity(type = EntityType.LINK, nodeId = 3, start = 0, length = 4, url = "https://tima")),
         )
         val c = MessageContent(nodes = listOf("Заголовок", "текст со ссылкой"), markup = markup)
 
         val back = MessageContentCodec.fromBody(MessageContentCodec.toBody(c))
         assertEquals(c.nodes, back.nodes)
         assertEquals(markup.n, back.markup?.n)
-        assertEquals("heading", back.markup?.blocks?.first()?.type)
+        assertEquals(BlockType.HEADING, back.markup?.blocks?.first()?.type)
         assertEquals("https://tima", back.markup?.entities?.first()?.url)
     }
 
@@ -61,7 +61,7 @@ class MessageContentTest {
     fun `идентификаторы узлов переживают вставку в середину`() {
         val markup = Markup(
             n = listOf(7, 3),
-            blocks = listOf(MarkupBlock(type = "heading", nodeIds = listOf(7))),
+            blocks = listOf(MarkupBlock(type = BlockType.HEADING, nodeIds = listOf(7))),
         )
         // Вставляем узел В НАЧАЛО: позиции всех последующих сдвинулись.
         val afterInsert = markup.copy(n = listOf(Markup.nextId(markup)) + markup.n)
@@ -91,6 +91,22 @@ class MessageContentTest {
         val raw = """{"version":1,"n":[1],"чего-то_новое":{"a":1},"blocks":[]}"""
         val m = Markup.decode(raw)
         assertEquals(listOf(1), m?.n)
+    }
+
+    @Test
+    fun `незнакомый тип блока не ломает разбор - деградирует до UNKNOWN`() {
+        // Разметка от более новой версии клиента: тип блока, которого эта версия
+        // ещё не знает, не должен ронять сообщение целиком.
+        val raw = """{"version":1,"n":[1],"blocks":[{"type":"widget_of_the_future","nodes":[1]}]}"""
+        val m = Markup.decode(raw)
+        assertEquals(BlockType.UNKNOWN, m?.blocks?.first()?.type)
+    }
+
+    @Test
+    fun `незнакомый тип сущности не ломает разбор - деградирует до UNKNOWN`() {
+        val raw = """{"version":1,"n":[1],"entities":[{"type":"future_effect","node":1}]}"""
+        val m = Markup.decode(raw)
+        assertEquals(EntityType.UNKNOWN, m?.entities?.first()?.type)
     }
 
     @Test

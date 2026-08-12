@@ -10,6 +10,7 @@
 package escrow
 
 import (
+	"crypto/ed25519"
 	"crypto/mlkem"
 	"crypto/rand"
 	"crypto/sha256"
@@ -38,19 +39,31 @@ const (
 
 // state — что лежит на диске stub-анклава. Seed здесь = уровень изоляции stub
 // (см. док пакета); unlock_hash — sha256 секрета, собираемого из долей.
+//
+// SigningSeed/SigningPub — ключ подписи конфига (Р2): анклав подписывает всё, что
+// отдаёт клиентам через бэкенд (public_key области, легаси-pubkey), приватным
+// ключом Ed25519, который живёт только здесь. Без этого компрометация бэкенда
+// позволяет подменить public_key, который клиент получает по пути — тот
+// зашифрует сообщение на чужой ключ в обход анклава и всего механизма
+// контролируемого доступа. Поле отдельное от ML-KEM ключа: разные роли, разная
+// подпись не должна годиться в двух местах.
 type state struct {
-	Version    int    `json:"escrow_key_version"`
-	Seed       string `json:"seed"`       // base64url, 64 байта (d‖z, FIPS 203)
-	PublicKey  string `json:"public_key"` // base64url, 1184 байта
-	UnlockHash string `json:"unlock_hash"`
+	Version     int    `json:"escrow_key_version"`
+	Seed        string `json:"seed"`       // base64url, 64 байта (d‖z, FIPS 203)
+	PublicKey   string `json:"public_key"` // base64url, 1184 байта
+	UnlockHash  string `json:"unlock_hash"`
+	SigningSeed string `json:"signing_seed"` // base64url, 32 байта (ed25519 seed)
+	SigningPub  string `json:"signing_pub"`  // base64url, 32 байта
 }
 
 type Enclave struct {
-	dir     string
-	version int
-	seed    []byte
-	pubKey  []byte
-	unlock  []byte // sha256(unlock-секрет)
+	dir         string
+	version     int
+	seed        []byte
+	pubKey      []byte
+	unlock      []byte // sha256(unlock-секрет)
+	signingPriv ed25519.PrivateKey
+	signingPub  ed25519.PublicKey
 }
 
 // Open загружает состояние анклава; если его нет — генерирует ключ и доли.
@@ -78,7 +91,43 @@ func Open(dir string) (enc *Enclave, newShares []string, err error) {
 	if err1 != nil || err2 != nil || err3 != nil || len(seed) != 64 || len(pub) != PubKeySize || len(unlock) != 32 {
 		return nil, nil, fmt.Errorf("%s: некорректные поля", stateFile)
 	}
-	return &Enclave{dir: dir, version: st.Version, seed: seed, pubKey: pub, unlock: unlock}, nil, nil
+	signingPriv, signingPub, err := loadOrCreateSigningKey(&st, path)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &Enclave{dir: dir, version: st.Version, seed: seed, pubKey: pub, unlock: unlock,
+		signingPriv: signingPriv, signingPub: signingPub}, nil, nil
+}
+
+// loadOrCreateSigningKey — ключ подписи конфига (Р2). Состояния анклава, заведённые
+// до этого поля, ключа подписи не имеют: генерируем и дописываем state-файл, а не
+// падаем — приватный ML-KEM ключ и доли Шамира при этом не трогаются никак.
+func loadOrCreateSigningKey(st *state, path string) (ed25519.PrivateKey, ed25519.PublicKey, error) {
+	b64 := base64.RawURLEncoding
+	if st.SigningSeed != "" {
+		seed, err := b64.DecodeString(st.SigningSeed)
+		if err != nil || len(seed) != ed25519.SeedSize {
+			return nil, nil, fmt.Errorf("%s: некорректный signing_seed", stateFile)
+		}
+		priv := ed25519.NewKeyFromSeed(seed)
+		return priv, priv.Public().(ed25519.PublicKey), nil
+	}
+	seed := make([]byte, ed25519.SeedSize)
+	if _, err := rand.Read(seed); err != nil {
+		return nil, nil, err
+	}
+	priv := ed25519.NewKeyFromSeed(seed)
+	pub := priv.Public().(ed25519.PublicKey)
+	st.SigningSeed = b64.EncodeToString(seed)
+	st.SigningPub = b64.EncodeToString(pub)
+	raw, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		return nil, nil, err
+	}
+	return priv, pub, nil
 }
 
 func initialize(dir, path string) (*Enclave, []string, error) {
@@ -102,21 +151,37 @@ func initialize(dir, path string) (*Enclave, []string, error) {
 	}
 	unlockHash := sha256.Sum256(unlockSecret)
 
+	signingSeed := make([]byte, ed25519.SeedSize)
+	if _, err := rand.Read(signingSeed); err != nil {
+		return nil, nil, err
+	}
+	signingPriv := ed25519.NewKeyFromSeed(signingSeed)
+	signingPub := signingPriv.Public().(ed25519.PublicKey)
+
 	b64 := base64.RawURLEncoding
 	raw, _ := json.MarshalIndent(state{
-		Version:    1,
-		Seed:       b64.EncodeToString(seed),
-		PublicKey:  b64.EncodeToString(pub),
-		UnlockHash: b64.EncodeToString(unlockHash[:]),
+		Version:     1,
+		Seed:        b64.EncodeToString(seed),
+		PublicKey:   b64.EncodeToString(pub),
+		UnlockHash:  b64.EncodeToString(unlockHash[:]),
+		SigningSeed: b64.EncodeToString(signingSeed),
+		SigningPub:  b64.EncodeToString(signingPub),
 	}, "", "  ")
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		return nil, nil, err
 	}
-	return &Enclave{dir: dir, version: 1, seed: seed, pubKey: pub, unlock: unlockHash[:]}, shares, nil
+	return &Enclave{dir: dir, version: 1, seed: seed, pubKey: pub, unlock: unlockHash[:],
+		signingPriv: signingPriv, signingPub: signingPub}, shares, nil
 }
 
 func (e *Enclave) Version() int      { return e.version }
 func (e *Enclave) PublicKey() []byte { return e.pubKey }
+
+// SigningPublicKey — публичный ключ подписи конфига (Р2). Не секрет: можно
+// печатать в лог при каждом старте, чтобы оператор мог зашить его в официальную
+// сборку клиента (тот же приём, что и с долями Шамира при инициализации, только
+// без разового окна — значение не меняется между перезапусками).
+func (e *Enclave) SigningPublicKey() []byte { return e.signingPub }
 
 var ErrUnauthorized = errors.New("доли не восстанавливают unlock-секрет")
 

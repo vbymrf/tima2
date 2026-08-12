@@ -15,11 +15,13 @@ import (
 )
 
 const (
-	ScopeAccess   = "access"
-	ScopeRegister = "register"
+	ScopeAccess     = "access"
+	ScopeRegister   = "register"
+	ScopeReidentify = "reidentify"
 
-	AccessTTL   = 24 * time.Hour
-	RegisterTTL = 10 * time.Minute
+	AccessTTL     = 24 * time.Hour
+	RegisterTTL   = 10 * time.Minute
+	ReidentifyTTL = 5 * time.Minute
 )
 
 type Claims struct {
@@ -54,6 +56,23 @@ func (i *Issuer) IssueRegister(phone string) (string, error) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   phone,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(RegisterTTL)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	})
+}
+
+// IssueReidentifyChallenge — короткоживущий токен «докажи владение прежним ключом
+// личности» (ДОКУМЕНТАЦИЯ/02 §5, воссоединение по секретной фразе). Subject —
+// user_id ТЕКУЩЕЙ личности, запросившей челлендж: проверяющий обязан сверить,
+// что подтверждение пришло от той же сессии, что и запрос, а не переиспользовано
+// откуда-то ещё. Короткий TTL — тот же принцип, что у RegisterTTL: окно, в
+// котором подпись имеет смысл, должно быть маленьким.
+func (i *Issuer) IssueReidentifyChallenge(userID string) (string, error) {
+	return i.sign(Claims{
+		Scope: ScopeReidentify,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ReidentifyTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	})

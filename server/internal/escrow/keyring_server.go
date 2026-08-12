@@ -36,6 +36,21 @@ func (e *Enclave) RegisterKeyring(mux *http.ServeMux, k *Keyring) {
 	})
 }
 
+// signedKeyMeta — то, что реально уходит клиенту: KeyMeta + подпись анклава
+// (Р2). Keyring подписи не знает — приватный ключ Ed25519 есть только у Enclave.
+type signedKeyMeta struct {
+	KeyMeta
+	Signature string `json:"signature"`
+}
+
+func (e *Enclave) signKeyMeta(meta KeyMeta) (signedKeyMeta, error) {
+	msg, err := KeyMetaSigningBytes(meta)
+	if err != nil {
+		return signedKeyMeta{}, err
+	}
+	return signedKeyMeta{KeyMeta: meta, Signature: e.sign(msg)}, nil
+}
+
 func (e *Enclave) handleKey(w http.ResponseWriter, r *http.Request, k *Keyring) {
 	var req struct {
 		Region string `json:"region"`
@@ -55,8 +70,14 @@ func (e *Enclave) handleKey(w http.ResponseWriter, r *http.Request, k *Keyring) 
 		httpErr(w, http.StatusInternalServerError, "internal")
 		return
 	}
+	signed, err := e.signKeyMeta(meta)
+	if err != nil {
+		log.Printf("keyring: подпись: %v", err)
+		httpErr(w, http.StatusInternalServerError, "internal")
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(meta)
+	_ = json.NewEncoder(w).Encode(signed)
 }
 
 func (e *Enclave) handleKeyMeta(w http.ResponseWriter, r *http.Request, k *Keyring) {
@@ -75,8 +96,14 @@ func (e *Enclave) handleKeyMeta(w http.ResponseWriter, r *http.Request, k *Keyri
 		httpErr(w, http.StatusInternalServerError, "internal")
 		return
 	}
+	signed, err := e.signKeyMeta(meta)
+	if err != nil {
+		log.Printf("keyring: подпись: %v", err)
+		httpErr(w, http.StatusInternalServerError, "internal")
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(meta)
+	_ = json.NewEncoder(w).Encode(signed)
 }
 
 // handleUnsealScoped — юридический доступ по блобам эпох. Каждый блоб несёт свой

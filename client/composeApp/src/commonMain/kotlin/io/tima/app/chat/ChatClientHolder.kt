@@ -13,16 +13,22 @@ import io.tima.app.session.Session
  */
 object ChatClientHolder {
     private var deviceId: String? = null
+    // Воссоединение (Р4, «Присоединить прежний аккаунт») меняет user_id, оставляя
+    // deviceId прежним — то же физическое устройство, та же пара ключей, но пишет
+    // теперь под другой личностью. Ключ кэша обязан учитывать оба поля, иначе клиент
+    // продолжил бы жить под старым (уже неактуальным) access-токеном.
+    private var userId: String? = null
     private var current: ChatClient? = null
 
-    /** Клиент текущей сессии; при смене устройства старый закрывается. */
+    /** Клиент текущей сессии; при смене устройства или личности старый закрывается. */
     fun get(session: Session): ChatClient {
         val existing = current
-        if (existing != null && deviceId == session.deviceId) return existing
+        if (existing != null && deviceId == session.deviceId && userId == session.userId) return existing
         existing?.close()
         return createChatClient(session).also {
             current = it
             deviceId = session.deviceId
+            userId = session.userId
         }
     }
 
@@ -34,5 +40,6 @@ object ChatClientHolder {
         current?.close()
         current = null
         deviceId = null
+        userId = null
     }
 }

@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -135,6 +136,89 @@ func TestChannelsEndToEnd(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Fatalf("unsubscribe: %d", resp.StatusCode)
+	}
+}
+
+// Публичный контур узлов и разметки (ADR-0011 §4/§5, Р5б): пост хранит nodes и
+// markup открытым текстом, и оба доходят до читателя лентой. Старый клиент, не
+// приславший nodes, получает один узел — тот же переходный путь, что у личных
+// сообщений.
+func TestChannelPostNodesAndMarkup(t *testing.T) {
+	ts, srv := setup(t)
+	ctx := context.Background()
+	owner := registerDevice(t, ts, "+79990000070")
+
+	var created struct {
+		ChannelID string `json:"channel_id"`
+	}
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/channels",
+		map[string]string{"title": "С разметкой"}, &created); code != 201 {
+		t.Fatalf("createChannel: %d", code)
+	}
+	ch := created.ChannelID
+
+	markup := `{"version":1,"n":[1],"blocks":[{"type":"heading","nodes":[1],"level":1}]}`
+	var posted struct {
+		PostID uint64 `json:"post_id"`
+	}
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/channels/"+ch+"/posts", map[string]any{
+		"text": "Заголовок", "nodes": []string{"Заголовок"}, "markup": markup,
+	}, &posted); code != 201 {
+		t.Fatalf("post с разметкой: %d", code)
+	}
+
+	var feed struct {
+		Posts []struct {
+			Text   string          `json:"text"`
+			Nodes  []string        `json:"nodes"`
+			Markup json.RawMessage `json:"markup"`
+		} `json:"posts"`
+	}
+	if code := getAuthed(t, ts, owner.token, "/api/v1/channels/"+ch+"/posts", &feed); code != 200 {
+		t.Fatalf("feed: %d", code)
+	}
+	if len(feed.Posts) != 1 {
+		t.Fatalf("лента: %+v", feed.Posts)
+	}
+	got := feed.Posts[0]
+	if len(got.Nodes) != 1 || got.Nodes[0] != "Заголовок" {
+		t.Fatalf("nodes не дошли до ленты: %+v", got.Nodes)
+	}
+	if string(got.Markup) == "" || string(got.Markup) == "null" {
+		t.Fatal("markup не дошла до ленты")
+	}
+
+	// Хранилище тоже видит открытым текстом — это и есть смысл публичного контура.
+	posts, err := srv.Store.ListPosts(ctx, ch, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(posts) != 1 || len(posts[0].Nodes) != 1 || posts[0].Nodes[0] != "Заголовок" {
+		t.Fatalf("реестр: %+v", posts)
+	}
+	if len(posts[0].Markup) == 0 {
+		t.Fatal("markup не попала в реестр")
+	}
+
+	// Пост без nodes (старый клиент) — один узел из text, не пустая лента.
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/channels/"+ch+"/posts",
+		map[string]string{"text": "Простой пост"}, nil); code != 201 {
+		t.Fatalf("post без nodes: %d", code)
+	}
+	posts, err = srv.Store.ListPosts(ctx, ch, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain := posts[0] // новые первые
+	if len(plain.Nodes) != 1 || plain.Nodes[0] != "Простой пост" {
+		t.Fatalf("пост без nodes не завернулся в один узел: %+v", plain.Nodes)
+	}
+
+	// Битый markup — отказ, а не порча ленты.
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/channels/"+ch+"/posts", map[string]any{
+		"text": "плохая разметка", "markup": "{это не json",
+	}, nil); code != http.StatusBadRequest {
+		t.Fatalf("битый markup: код %d, ожидали 400", code)
 	}
 }
 

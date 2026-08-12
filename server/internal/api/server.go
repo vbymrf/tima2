@@ -94,6 +94,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/chats/{chatID}/archive", s.Auth.Require(s.setChatArchived))
 	mux.HandleFunc("POST /api/v1/users/names", s.Auth.Require(s.resolveNames))
 	mux.HandleFunc("POST /api/v1/users/identities", s.Auth.Require(s.resolveIdentities))
+	mux.HandleFunc("POST /api/v1/users/me/reidentify/challenge", s.Auth.Require(s.reidentifyChallenge))
+	mux.HandleFunc("POST /api/v1/users/me/reidentify", s.Auth.Require(s.reidentify))
 	mux.HandleFunc("GET /api/v1/escrow/pubkey", s.Auth.Require(s.escrowPubkey))
 	mux.HandleFunc("GET /api/v1/escrow/key", s.Auth.Require(s.escrowKeyForChat))
 	mux.HandleFunc("POST /api/v1/groups", s.Auth.Require(s.createGroup))
