@@ -1,0 +1,46 @@
+---
+description: Require tested repository launchers for TIMA runtime processes
+alwaysApply: true
+---
+
+# Runtime launchers
+
+- Agents must start TIMA runtime processes through a launcher in the repository
+  root, not by invoking a packaged executable, `go run`, or a reconstructed set
+  of environment variables.
+- The launchers, each a `.bat` wrapper over the `.ps1` beside it:
+  - `ЗАПУСК-TIMA.bat` (`start-tima.ps1`) — Docker, dev stack, escrow stub,
+    server, packaged desktop app
+  - `ОБНОВИТЬ-И-ЗАПУСТИТЬ-ПК.bat` (`update-and-run-desktop.ps1`) — desktop peer
+    rebuilt from current sources
+  - `ПРИЛОЖЕНИЕ-ПК.bat` — already packaged `TIMA.exe`, no build
+  - `ЗАПУСК-ANDROID.bat` (`start-android.ps1`) — AVD `tima_test`, adb reverse,
+    install, launch
+  - `ОБНОВИТЬ-ТЕЛЕФОН.bat` (`update-and-install-phone.ps1`) — build and install
+    on a USB phone
+  - `ОТЛАДКА-TIMA.bat` (`debug-tima.ps1`) — diagnostics; `-Clean` and `-FreeRam`
+    change state and need approval
+- Check for an existing instance before starting anything: duplicate listeners on
+  a stack port are what `debug-tima.ps1` reports in red. One dev stack, one
+  emulator, one visible desktop peer.
+- `start-tima.ps1` currently hardcodes tool paths that do not exist on this
+  machine (Go, Docker Desktop, Gradle). Repair the launcher — resolving tools via
+  `Get-Command` rather than adding new absolute paths — instead of starting the
+  server or enclave by hand. Never hide a failed launcher by launching the target
+  manually.
+- If a runtime target has no launcher, create one before the first agent-driven
+  launch. It must resolve the repository root from its own location, validate
+  prerequisites, keep development environment variables process-local, refuse a
+  duplicate instance, and preserve production fail-closed defaults.
+- Test a new or changed launcher before relying on it: parse it, exercise its
+  validation path, perform one real startup with a health or window probe, and
+  prove it refuses a duplicate start.
+- Never persist secrets in launcher files, command lines, logs, or global/user
+  environment variables. The development credentials already present in the
+  launchers are dev-only and must never be reused for anything reachable from
+  outside this machine.
+- There is no acceptance harness in this repository. A live journey is manual,
+  is reported as such together with the commit it ran against, and is never
+  described as harness or formal evidence. Ad-hoc UI or clipboard automation is a
+  last resort to be stated explicitly, and never carries secrets, credentials,
+  OTP, link payloads, tokens, or keys.
