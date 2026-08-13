@@ -133,10 +133,13 @@ func registerDevice(t *testing.T, ts *httptest.Server, phone string) *device {
 		DeviceID    string `json:"device_id"`
 		AccessToken string `json:"access_token"`
 	}
+	// platform=android: тестовое устройство изображает телефон — только он вправе
+	// подтверждать привязку по QR (key-lifecycle.md §2, миграция 0029).
 	if code := postJSON(t, ts, "/api/v1/auth/register", map[string]string{
 		"registration_token": verifyResp.RegistrationToken,
 		"encryption_pub":     b64.EncodeToString(d.encPub[:]),
 		"signing_pub":        b64.EncodeToString(d.signKey.Public().(ed25519.PublicKey)),
+		"platform":           "android",
 	}, &regResp); code != 201 {
 		t.Fatalf("register: %d", code)
 	}

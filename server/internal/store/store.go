@@ -486,11 +486,14 @@ func (s *Store) IdentityPub(ctx context.Context, userID string) ([]byte, error) 
 }
 
 // NewDevice регистрирует устройство пользователя, device_id назначает база.
-func (s *Store) NewDevice(ctx context.Context, userID string, encryptionPub, signingPub []byte) (string, error) {
+// platform — самообъявление клиента ('' допустимо: старые сборки его не шлют),
+// нужна для правила «подтверждать QR может только телефон» (миграция 0029).
+func (s *Store) NewDevice(ctx context.Context, userID string, encryptionPub, signingPub []byte, platform string) (string, error) {
 	var deviceID string
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO devices (user_id, encryption_pub, signing_pub)
-		VALUES ($1, $2, $3) RETURNING device_id`, userID, encryptionPub, signingPub).Scan(&deviceID)
+		INSERT INTO devices (user_id, encryption_pub, signing_pub, platform)
+		VALUES ($1, $2, $3, $4) RETURNING device_id`,
+		userID, encryptionPub, signingPub, platform).Scan(&deviceID)
 	return deviceID, err
 }
 

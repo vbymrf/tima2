@@ -86,3 +86,16 @@ func (s *Store) GCExpiredSmsCodes(ctx context.Context) (int64, error) {
 		`DELETE FROM sms_codes WHERE expires_at < now() - interval '24 hours'`)
 	return ct.RowsAffected(), err
 }
+
+// GCExpiredLinkSessions удаляет сессии привязки устройства, просроченные больше
+// суток назад. Живут они 5 минут, но сутки запаса дают возможность посмотреть в
+// таблицу при разборе жалобы «привязка не сработала».
+//
+// Забранные (claimed) сессии тоже уходят: устройство уже заведено в devices,
+// строка сессии дальше не нужна — а хранить в ней хэши секретов дольше
+// необходимого незачем.
+func (s *Store) GCExpiredLinkSessions(ctx context.Context) (int64, error) {
+	ct, err := s.pool.Exec(ctx,
+		`DELETE FROM device_link_sessions WHERE expires_at < now() - interval '24 hours'`)
+	return ct.RowsAffected(), err
+}

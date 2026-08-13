@@ -126,6 +126,27 @@ private data class RecoveryRequestFrame(
 @Serializable
 private data class RecoveryReadyFrame(@SerialName("group_id") val groupId: String)
 
+/** Сервер просит сменить GK (отозвано устройство участника) — key-lifecycle.md §5. */
+@Serializable
+private data class RotationNeededFrame(
+    @SerialName("group_id") val groupId: String,
+    val reason: String = "",
+)
+
+/**
+ * Размер страницы при обходе всей истории чата (выдача ключей помощником).
+ * 200 — потолок, выше которого сервер молча срезает до 50 (`store.ListMessages`);
+ * просить больше бессмысленно, просить меньше — лишние обращения.
+ */
+private const val HISTORY_PAGE = 200
+
+/**
+ * Потолок страниц за один догон истории (200 × 20 = до 4000 сообщений).
+ * Предохранитель, а не ограничение возможностей: обход идёт от свежих к старым,
+ * уже сохранённое остаётся в хранилище, и следующий вызов продолжит глубже.
+ */
+private const val HISTORY_MAX_PAGES = 20
+
 @Serializable
 private data class MsgRecoveryRequestFrame(
     @SerialName("chat_id") val chatId: String,
@@ -479,6 +500,30 @@ class TimaClient(private val session: Session) : ChatClient {
                                         }
                                     if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
                                 }
+                                "group.rotation_needed" -> {
+                                    // Отозвали устройство участника: ключ у него на руках остался,
+                                    // и пока версия текущая — всё под ней для него читаемо. Меняем
+                                    // GK: новый заворачивается только на действующие устройства.
+                                    // Сервер сам этого сделать не может — ключа он не видит.
+                                    try { json.decodeFromString<RotationNeededFrame>(text) } catch (_: Throwable) { null }
+                                        ?.let { req ->
+                                            try {
+                                                val current = api.groupKeys(session.accessToken, req.groupId, 0)
+                                                rotateGroup(req.groupId, current.currentVersion, req.reason)
+                                                AppDiagnostics.add("GK группы ${req.groupId.take(8)}… сменён после отзыва устройства")
+                                            } catch (e: TimaApiException) {
+                                                // Просьба уходит всем админским устройствам сразу, поэтому
+                                                // гонка здесь штатна: кто-то успел первым, версия занята.
+                                                // Это успех системы, а не сбой — цель достигнута.
+                                                if (e.code != "version_conflict") {
+                                                    AppDiagnostics.add("ротация GK после отзыва не удалась: ${e.message}")
+                                                }
+                                            } catch (e: Throwable) {
+                                                AppDiagnostics.add("ротация GK после отзыва не удалась: ${e.message}")
+                                            }
+                                        }
+                                    if (f.eventId > 0) send(Frame.Text("""{"event":"ack","event_id":${f.eventId}}"""))
+                                }
                                 "recovery.gk_request" -> {
                                     // Помощник: заворачиваю имеющиеся GK под устройство-запросившее
                                     try { json.decodeFromString<RecoveryRequestFrame>(text) } catch (_: Throwable) { null }
@@ -566,22 +611,41 @@ class TimaClient(private val session: Session) : ChatClient {
         return store.messages(chatId).map { it.toChatMessage() }
     }
 
-    /** Догон истории с сервера в хранилище. Молча ничего не делает без связи. */
+    /**
+     * Догон истории с сервера в хранилище. Молча ничего не делает без связи.
+     *
+     * Идёт страницами, а не одной выдачей: после привязки нового устройства по QR
+     * телефон отдаёт ему ключи ВСЕЙ переписки (`shareHistoryWithDevice`), и
+     * одностраничный догон показал бы только последнюю сотню — остальное лежало
+     * бы на сервере с готовыми обёртками и не появлялось на экране.
+     *
+     * Потолок [HISTORY_MAX_PAGES] — предохранитель от бесконечного обхода очень
+     * длинной переписки при первом запуске; следующий вызов продолжит с того же
+     * места, потому что уже сохранённое в хранилище не перезапрашивается заново.
+     */
     private suspend fun pullHistory(chatId: String) {
-        val fetched = try {
-            api.listMessages(session.accessToken, chatId)
-        } catch (e: Throwable) {
-            _linkState.value = classifyFailure(e)
-            return
-        }
-        _linkState.value = LinkState.ONLINE
+        var before = 0L
         var added = 0
-        for (item in fetched) {
-            val wrapEph = item.wrapEphemeral.takeIf { it.isNotEmpty() }?.let { b64url.decode(it) }
-            val m = decrypt(b64url.decode(item.envelope), wrapEph) ?: continue
-            remember(m)
-            added++
-            _messages.emit(m)
+        var pages = 0
+        while (pages < HISTORY_MAX_PAGES) {
+            val fetched = try {
+                api.listMessages(session.accessToken, chatId, limit = HISTORY_PAGE, before = before)
+            } catch (e: Throwable) {
+                _linkState.value = classifyFailure(e)
+                return
+            }
+            _linkState.value = LinkState.ONLINE
+            if (fetched.isEmpty()) break
+            for (item in fetched) {
+                val wrapEph = item.wrapEphemeral.takeIf { it.isNotEmpty() }?.let { b64url.decode(it) }
+                val m = decrypt(b64url.decode(item.envelope), wrapEph) ?: continue
+                remember(m)
+                added++
+                _messages.emit(m)
+            }
+            before = fetched.minOf { it.messageId }
+            pages++
+            if (fetched.size < HISTORY_PAGE) break
         }
         if (added > 0) AppDiagnostics.add("история: добавлено $added (чат ${chatId.take(8)}…)")
     }
@@ -844,7 +908,35 @@ class TimaClient(private val session: Session) : ChatClient {
         }
     }
 
-    override suspend fun approveRecovery(consent: RecoveryConsent) = provideChatKeys(consent)
+    override suspend fun approveRecovery(consent: RecoveryConsent) {
+        provideChatKeys(consent)
+    }
+
+    /**
+     * Отдать историю всех личных чатов только что подключённому по QR устройству.
+     *
+     * Механизм тот же, что у восстановления (`provideChatKeys`): для каждого
+     * сообщения снимаем обёртку своим ключом устройства, достаём `message_key` и
+     * заворачиваем его заново под X25519-ключ нового устройства. Сам ключ
+     * личности из фразы новому устройству не передаётся — оно получает доступ к
+     * содержимому переписки, но не право выступать от имени аккаунта.
+     *
+     * Групповые чаты сюда не входят: там доступ даёт `GK` версии, а не обёртка на
+     * сообщение, и путь выдачи отдельный (`provideGroupKeys`). Новое устройство
+     * получит групповые ключи обычным порядком — при первой же ротации.
+     */
+    override suspend fun shareHistoryWithDevice(deviceId: String, deviceEncPub: String): Int {
+        var shared = 0
+        for (chat in store.chats()) {
+            if (chat.isGroup) continue
+            val keys = runCatching {
+                provideChatKeys(RecoveryConsent(chat.chatId, deviceId, deviceEncPub))
+            }.getOrDefault(0)
+            if (keys > 0) shared++
+        }
+        AppDiagnostics.add("привязка: история отдана новому устройству по $shared чатам")
+        return shared
+    }
 
     // ── Звонки 1:1 (сигналинг; медиа — LiveKit, здесь не подключается) ──
 
@@ -873,21 +965,50 @@ class TimaClient(private val session: Session) : ChatClient {
     override suspend fun endCall(callId: String) = api.endCall(session.accessToken, callId)
 
     /** Помощник: разворачивает свои ключи сообщений чата и заворачивает под устройство-запросившее. */
-    private suspend fun provideChatKeys(consent: RecoveryConsent) {
+    /**
+     * Отдаёт ключи ВСЕЙ переписки, а не только последней страницы.
+     *
+     * Раньше здесь был один вызов `listMessages` с умолчанием в 100 сообщений:
+     * человек восстанавливал историю и получал её хвост, молча и без признака,
+     * что остальное осталось недоступным. Сервер отдаёт страницами (`before` —
+     * идентификатор, ниже которого брать; порядок по убыванию), поэтому идём
+     * страницами до пустой выдачи.
+     *
+     * @return сколько ключей сообщений реально отдано (0 — отдавать было нечего).
+     */
+    private suspend fun provideChatKeys(consent: RecoveryConsent): Int {
         val recipientPub = b64url.decode(consent.requesterEncPub)
         val ephemeral = Kodium.generateKeyPair()
         val ephPub = b64url.encode(ephemeral.getPublicKey().encryptionKey)
-        val keys = api.listMessages(session.accessToken, consent.chatId).mapNotNull { item ->
-            val sealed = MessageSerializer.decodeEnvelope(b64url.decode(item.envelope)).getOrNull() ?: return@mapNotNull null
-            val wrapped = sealed.wrappedKeys[session.deviceId] ?: return@mapNotNull null
-            val wrapEph = item.wrapEphemeral.takeIf { it.isNotEmpty() }?.let { b64url.decode(it) } ?: sealed.senderEphemeralPub
-            val messageKey = WrappedKeyService.unwrap(deviceKey, wrapEph, wrapped).getOrNull() ?: return@mapNotNull null
-            val reWrapped = WrappedKeyService.wrap(ephemeral, recipientPub, messageKey).getOrNull() ?: return@mapNotNull null
-            ProvideMsgKeyDto(item.messageId, ephPub, b64url.encode(reWrapped))
+        var before = 0L // 0 — с самого свежего
+        var provided = 0
+        while (true) {
+            val page = api.listMessages(session.accessToken, consent.chatId, limit = HISTORY_PAGE, before = before)
+            if (page.isEmpty()) break
+            val keys = page.mapNotNull { item ->
+                val sealed = MessageSerializer.decodeEnvelope(b64url.decode(item.envelope)).getOrNull() ?: return@mapNotNull null
+                val wrapped = sealed.wrappedKeys[session.deviceId] ?: return@mapNotNull null
+                val wrapEph = item.wrapEphemeral.takeIf { it.isNotEmpty() }?.let { b64url.decode(it) } ?: sealed.senderEphemeralPub
+                val messageKey = WrappedKeyService.unwrap(deviceKey, wrapEph, wrapped).getOrNull() ?: return@mapNotNull null
+                val reWrapped = WrappedKeyService.wrap(ephemeral, recipientPub, messageKey).getOrNull() ?: return@mapNotNull null
+                ProvideMsgKeyDto(item.messageId, ephPub, b64url.encode(reWrapped))
+            }
+            if (keys.isNotEmpty()) {
+                // Ошибку глушим намеренно: это фоновая любезность помощника, а не
+                // действие человека — запросивший просто попробует ещё раз. Но
+                // страницы дальше не идём: раз посылка не прошла, следующая скорее
+                // всего тоже не пройдёт, а перебирать всю переписку впустую незачем.
+                val ok = runCatching {
+                    api.provideChatKeys(session.accessToken, consent.chatId, consent.requesterDevice, keys)
+                }.isSuccess
+                if (!ok) break
+                provided += keys.size
+            }
+            // Следующая страница — строго старше самого старого в этой.
+            before = page.minOf { it.messageId }
+            if (page.size < HISTORY_PAGE) break // страница неполная — дальше пусто
         }
-        if (keys.isNotEmpty()) {
-            runCatching { api.provideChatKeys(session.accessToken, consent.chatId, consent.requesterDevice, keys) }
-        }
+        return provided
     }
 
     /**

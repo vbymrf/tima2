@@ -23,6 +23,7 @@ ping/pong каждые 30 с; reconnect с экспоненциальным back
 | `typing` | chat_id, user_id, kind: typing\|watching | TTL 5 с, не персистится |
 | `presence` | user_id, online\|offline\|invisible-скрыт | По подписке на видимые чаты |
 | `key.rotated` | group_id, gk_version, wrapped_gk | Ротация GK |
+| `group.rotation_needed` | group_id, reason | Просьба админу сменить GK (`reason=device_revoked` — отозвано устройство участника). Сервер GK не видит и ротировать не может, поэтому просит того, у кого ключ есть. Уходит всем админским устройствам: первое успевает, остальные получают `version_conflict` — это штатная гонка |
 | `key.changed` | user_id, device_id | Смена identity собеседника → UI-предупреждение |
 | `chat.updated` | chat/group метаданные, роли | |
 | `call.incoming` | call_id, from, kind, room_token | Параллельно push |

@@ -51,6 +51,9 @@ data class RegisterBody(
     // «Начать заново» на экране занятого номера (Р4, ДОКУМЕНТАЦИЯ/02 §8): форкает
     // цепочку административно, если конфликт настоящий; без конфликта — не влияет.
     @SerialName("force_new_identity") val forceNewIdentity: Boolean = false,
+    // Платформа устройства: сервер по ней решает, вправе ли оно подтверждать
+    // привязку по QR (только телефон, key-lifecycle.md §2).
+    val platform: String = "",
 )
 
 @Serializable
@@ -423,6 +426,72 @@ data class ReidentifyResponse(
     @SerialName("access_token") val accessToken: String,
 )
 
+// ── Привязка нового устройства по QR (key-lifecycle.md §2) ──
+
+@Serializable
+private data class LinkStartBody(
+    @SerialName("encryption_pub") val encryptionPub: String, // base64url, X25519 32 B
+    @SerialName("signing_pub") val signingPub: String,       // base64url, Ed25519 32 B
+    @SerialName("device_name") val deviceName: String,
+)
+
+/** Ответ /link/start — payload QR (для отображения) и claim_token (хранится у нового устройства). */
+@Serializable
+data class LinkStartResponse(
+    @SerialName("session_id") val sessionId: String,
+    @SerialName("qr_payload") val qrPayload: String,
+    @SerialName("claim_token") val claimToken: String,
+    @SerialName("expires_at") val expiresAt: String,
+)
+
+@Serializable
+private data class LinkConfirmBody(
+    @SerialName("session_id") val sessionId: String,
+    val secret: String,
+    val signature: String,
+)
+
+/**
+ * Ответ /link/confirm. [deviceId] — адрес нового устройства: подтвердившее
+ * устройство сразу перезаворачивает на него ключи истории (тот же путь, что у
+ * восстановления). Само новое устройство запросить историю не может — у него нет
+ * ключа личности из фразы, которым `chatRecover` требует подписать запрос.
+ */
+@Serializable
+data class LinkConfirmResponse(
+    val status: String = "",
+    @SerialName("device_id") val deviceId: String = "",
+)
+
+@Serializable
+private data class LinkClaimBody(
+    @SerialName("session_id") val sessionId: String,
+    @SerialName("claim_token") val claimToken: String,
+)
+
+/** Устройство аккаунта в списке настроек (key-lifecycle.md §5). */
+@Serializable
+data class MyDevice(
+    @SerialName("device_id") val deviceId: String,
+    val name: String = "",
+    @SerialName("created_at") val createdAt: String = "",
+    val current: Boolean = false,
+)
+
+@Serializable
+private data class MyDevicesResponse(val devices: List<MyDevice> = emptyList())
+
+@Serializable
+private data class PlatformBody(val platform: String)
+
+/** Ответ /link/claim — то же самое, что при обычной регистрации: сессия готова. */
+@Serializable
+data class LinkClaimResponse(
+    @SerialName("user_id") val userId: String,
+    @SerialName("device_id") val deviceId: String,
+    @SerialName("access_token") val accessToken: String,
+)
+
 @Serializable
 private data class ArchivedChatsResponse(val chats: List<String> = emptyList())
 
@@ -522,12 +591,43 @@ class TimaApi(private val baseUrl: String) {
 
     suspend fun register(
         registrationToken: String, encryptionPub: String, signingPub: String, identityPub: String = "",
-        forceNewIdentity: Boolean = false,
+        forceNewIdentity: Boolean = false, platform: String = "",
     ): RegisterResponse =
         post(
             "/api/v1/auth/register",
-            RegisterBody(registrationToken, encryptionPub, signingPub, identityPub, forceNewIdentity),
+            RegisterBody(registrationToken, encryptionPub, signingPub, identityPub, forceNewIdentity, platform),
         )
+
+    /**
+     * Объявить платформу этого устройства. Клиент делает это при запуске: у
+     * устройств, зарегистрированных до появления колонки `platform`, она пустая,
+     * и без объявления они не смогли бы подтверждать привязку по QR.
+     */
+    suspend fun declarePlatform(token: String, platform: String) {
+        val response = client.put(baseUrl.trimEnd('/') + "/api/v1/devices/me/platform") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(PlatformBody(platform))
+        }
+        if (!response.status.isSuccess()) fail(response)
+    }
+
+    /**
+     * Привязка нового устройства по QR (key-lifecycle.md §2) — шаг 1: новое устройство
+     * (аккаунта ещё нет) заводит сессию и получает QR для показа + claim_token для
+     * себя. Опрашивается [linkClaim], пока другое, уже авторизованное устройство не
+     * подтвердит [linkConfirm].
+     */
+    suspend fun linkStart(encryptionPub: String, signingPub: String, deviceName: String): LinkStartResponse =
+        post("/api/v1/link/start", LinkStartBody(encryptionPub, signingPub, deviceName))
+
+    /**
+     * Шаг 3: новое устройство обменивает claim_token на свою сессию — но только
+     * после того, как [linkConfirm] уже случился. До этого сервер отвечает
+     * `not_ready` (403) — не ошибка, а сигнал продолжать опрос.
+     */
+    suspend fun linkClaim(sessionId: String, claimToken: String): LinkClaimResponse =
+        post("/api/v1/link/claim", LinkClaimBody(sessionId, claimToken))
 
     // ── Под device JWT ──
 
@@ -596,6 +696,39 @@ class TimaApi(private val baseUrl: String) {
         }
         if (!response.status.isSuccess()) fail(response)
         return response.body<ReidentifyResponse>()
+    }
+
+    /**
+     * Шаг 2: уже авторизованное доверенное устройство, отсканировавшее QR другого
+     * устройства, подтверждает привязку. signature — Ed25519 над
+     * `DeviceLinkSignature.signingBytes` (messenger-crypto) собственным ключом ЭТОГО
+     * устройства; сервер проверяет её по signing_pub, уже сохранённому при регистрации.
+     */
+    suspend fun linkConfirm(
+        token: String, sessionId: String, secret: String, signature: String,
+    ): LinkConfirmResponse {
+        val response = client.post(baseUrl.trimEnd('/') + "/api/v1/link/confirm") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(LinkConfirmBody(sessionId, secret, signature))
+        }
+        if (!response.status.isSuccess()) fail(response)
+        return response.body<LinkConfirmResponse>()
+    }
+
+    /** Свои активные устройства (key-lifecycle.md §5). */
+    suspend fun myDevices(token: String): List<MyDevice> {
+        val response = client.get(baseUrl.trimEnd('/') + "/api/v1/devices") { bearerAuth(token) }
+        if (!response.status.isSuccess()) fail(response)
+        return response.body<MyDevicesResponse>().devices
+    }
+
+    /** Отозвать своё устройство. Последнее сервер отозвать не даст (`last_device`). */
+    suspend fun revokeDevice(token: String, deviceId: String) {
+        val response = client.delete(baseUrl.trimEnd('/') + "/api/v1/devices/$deviceId") {
+            bearerAuth(token)
+        }
+        if (!response.status.isSuccess()) fail(response)
     }
 
     /** Убрать чат в архив или вернуть обратно. Архив личный: у каждого свой. */
@@ -672,10 +805,20 @@ class TimaApi(private val baseUrl: String) {
         response.body()
     }
 
-    suspend fun listMessages(token: String, chatId: String, limit: Int = 100): List<HistoryItem> = retryOnNetwork {
+    /**
+     * История чата, страницами от свежих к старым.
+     *
+     * @param before брать строго старше этого message_id; 0 — с самых свежих.
+     *   Сервер режет limit до 200 (`store.ListMessages`), поэтому обойти всю
+     *   переписку можно только страницами — см. `provideChatKeys`.
+     */
+    suspend fun listMessages(
+        token: String, chatId: String, limit: Int = 100, before: Long = 0,
+    ): List<HistoryItem> = retryOnNetwork {
         val response = client.get(baseUrl.trimEnd('/') + "/api/v1/chats/$chatId/messages") {
             bearerAuth(token)
             parameter("limit", limit)
+            if (before > 0) parameter("before", before)
         }
         if (!response.status.isSuccess()) fail(response)
         response.body<HistoryResponse>().messages

@@ -182,6 +182,10 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		// подписи) — ровно то же самое право, что уже даёт обращение в поддержку
 		// (ДОКУМЕНТАЦИЯ/02 §7), просто без участия человека на той стороне.
 		ForceNewIdentity bool `json:"force_new_identity,omitempty"`
+		// Platform — самообъявление клиента ('android'/'ios'/'desktop'). Нужна для
+		// правила «подтверждать привязку по QR может только телефон»
+		// (key-lifecycle.md §2). До аттестации непроверяема — см. миграцию 0029.
+		Platform string `json:"platform,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -234,7 +238,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return
 	}
-	deviceID, err := s.Store.NewDevice(r.Context(), userID, enc, sig)
+	deviceID, err := s.Store.NewDevice(r.Context(), userID, enc, sig, normalizePlatform(req.Platform))
 	if err != nil {
 		log.Printf("register: new device: %v", err)
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")

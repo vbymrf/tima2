@@ -34,6 +34,7 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		{"group_wrapped_keys", func() (int64, error) { return w.Store.GCGroupWrappedKeys(ctx, retention) }},
 		{"excluded_group_keys", func() (int64, error) { return w.Store.GCExcludedGroupKeys(ctx, window) }},
 		{"sms_codes", func() (int64, error) { return w.Store.GCExpiredSmsCodes(ctx) }},
+		{"device_link_sessions", func() (int64, error) { return w.Store.GCExpiredLinkSessions(ctx) }},
 		// Стирание содержимого сообщений, чьи ключи эпох уже уничтожены анклавом.
 		// Метаданные строки остаются: у них отдельный срок — они не удаляются
 		// никогда (ПЛАН-РЕФАКТОРИНГА.md §0).

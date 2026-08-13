@@ -63,19 +63,46 @@ CREATE INDEX idx_users_person ON users(person_id);
 -- Временный аккаунт: одно устройство, нет recovery и мультиустройства;
 -- апгрейд до full = привязка phone+email (key-lifecycle.md §7)
 
+-- ФАКТИЧЕСКАЯ раскладка (миграции 0001, 0002, 0028, 0029). Сверено 2026-08-12:
+-- прежний вариант в этом документе был проектным и разошёлся с кодом — там
+-- значились is_trust_anchor, attested_at, push_token, last_seen_at (ни одного в
+-- базе нет) и identity_pub вместо encryption_pub.
 CREATE TABLE devices (
-    device_id       UUID PRIMARY KEY,
-    user_id         UUID NOT NULL REFERENCES users,
-    platform        TEXT NOT NULL,                 -- 'android'|'ios'|'windows'|'web' (web — в планах)
-    identity_pub    BYTEA NOT NULL,                -- X25519 public (KodiumPublicKey.encryptionKey)
-    signing_pub     BYTEA NOT NULL,                -- Ed25519 public (KodiumPublicKey.signingKey)
+    device_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),  -- назначает сервер
+    user_id         UUID NOT NULL,
+    encryption_pub  BYTEA NOT NULL CHECK (octet_length(encryption_pub) = 32),  -- X25519
+    signing_pub     BYTEA NOT NULL CHECK (octet_length(signing_pub) = 32),     -- Ed25519
     -- обе части — из ОДНОЙ KodiumPrivateKey устройства (общий seed); crypto-protocol §2
-    is_trust_anchor BOOLEAN DEFAULT FALSE,         -- телефон-якорь
-    attested_at     TIMESTAMPTZ,                   -- прошёл аттестацию
-    push_token      TEXT,
-    last_seen_at    TIMESTAMPTZ,
-    revoked_at      TIMESTAMPTZ
+    name            TEXT NOT NULL DEFAULT '',      -- 0028: показывается в списке устройств
+    platform        TEXT NOT NULL DEFAULT ''       -- 0029: ''|android|ios|desktop
+                    CHECK (platform IN ('', 'android', 'ios', 'desktop')),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at      TIMESTAMPTZ                    -- отзыв: доступ к API закрыт
 );
+
+-- platform самообъявленная: устройство сообщает её при регистрации или через
+-- PUT /devices/me/platform. Нужна для правила «подтверждать привязку по QR может
+-- только телефон» (key-lifecycle.md §2). До аттестации непроверяема — правило
+-- порядка, а не граница безопасности. Пустая строка = устройство, заведённое до
+-- миграции 0029; подтверждать не может, пока не объявит платформу.
+
+-- Привязка нового устройства по QR (0027). Секреты — только хэшами, как sms-коды:
+-- qr_payload и claim_token в базе не лежат.
+CREATE TABLE device_link_sessions (
+    session_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    encryption_pub   BYTEA NOT NULL,               -- ключи НОВОГО устройства (32 B)
+    signing_pub      BYTEA NOT NULL,
+    device_name      TEXT NOT NULL,                -- 1..100, переезжает в devices.name
+    secret_hash      BYTEA NOT NULL,               -- SHA-256 секрета из QR
+    claim_token_hash BYTEA NOT NULL,               -- SHA-256 токена, который держит новое устройство
+    user_id          UUID,                         -- заполняются при confirm
+    linked_device_id UUID REFERENCES devices(device_id),
+    expires_at       TIMESTAMPTZ NOT NULL,         -- 5 минут
+    confirmed_at     TIMESTAMPTZ,                  -- телефон подтвердил
+    claimed_at       TIMESTAMPTZ,                  -- новое устройство забрало сессию (одноразово)
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Просроченные строки убирает воркер (GCExpiredLinkSessions), сутки запаса на разбор.
 
 CREATE TABLE prekeys (                             -- X3DH bundles (фаза ratchet)
     device_id       UUID REFERENCES devices,

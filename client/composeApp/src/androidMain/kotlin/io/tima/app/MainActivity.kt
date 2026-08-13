@@ -7,10 +7,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import io.tima.app.platform.AndroidAppContext
 import io.tima.app.platform.AndroidFilePicker
 import io.tima.app.platform.AndroidImagePicker
 import io.tima.app.platform.AndroidPermissions
+import io.tima.app.platform.AndroidQrScanner
 import io.tima.app.platform.AppForeground
 import io.tima.app.platform.PickedFile
 import io.tima.app.platform.PickedImage
@@ -25,6 +28,7 @@ class MainActivity : ComponentActivity() {
     private var pendingPick: CompletableDeferred<PickedImage?>? = null
     private var pendingPerm: CompletableDeferred<Boolean>? = null
     private var pendingFile: CompletableDeferred<PickedFile?>? = null
+    private var pendingScan: CompletableDeferred<String?>? = null
 
     private val imagePicker = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         val picked = uri?.let {
@@ -49,6 +53,13 @@ class MainActivity : ComponentActivity() {
     private val permLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         pendingPerm?.complete(result.values.all { it })
         pendingPerm = null
+    }
+
+    // Привязка нового устройства по QR (key-lifecycle.md §2): готовая Activity с
+    // камерой из zxing-android-embedded, разбор кадров не пишем сами.
+    private val qrScanner = registerForActivityResult(ScanContract()) { result ->
+        pendingScan?.complete(result.contents)
+        pendingScan = null
     }
 
     /** Человекочитаемое имя файла из content:// URI. */
@@ -100,6 +111,17 @@ class MainActivity : ComponentActivity() {
             val deferred = CompletableDeferred<Boolean>()
             pendingPerm = deferred
             permLauncher.launch(perms.toTypedArray())
+            deferred.await()
+        }
+        AndroidQrScanner.scan = {
+            val deferred = CompletableDeferred<String?>()
+            pendingScan = deferred
+            qrScanner.launch(
+                ScanOptions()
+                    .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                    .setBeepEnabled(false)
+                    .setOrientationLocked(true),
+            )
             deferred.await()
         }
         // Вошёл — держим соединение живым и после сворачивания: иначе входящий звонок

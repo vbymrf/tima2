@@ -35,6 +35,10 @@ kotlin {
                 // Движок HTTP/WS общий для Android и Desktop: сроки ожидания задаются
                 // на нём (NetworkClient.jvm.kt), значит и объявлен он должен быть здесь.
                 implementation("io.ktor:ktor-client-okhttp:3.5.1")
+                // QR привязки нового устройства (key-lifecycle.md §2): чистый Java, без
+                // нативов и без Android-специфичных API — рисуем сами через Canvas
+                // (QrCodeImage.jvm.kt), поэтому Android-обёртки zxing не нужны.
+                implementation("com.google.zxing:core:3.5.3")
             }
         }
         val desktopMain by getting {
@@ -45,6 +49,9 @@ kotlin {
                 // SQLite для локального хранилища. На Android он встроен в систему,
                 // здесь нужен драйвер (ADR-0016).
                 implementation("org.xerial:sqlite-jdbc:3.46.1.3")
+                // DPAPI для SecretVault на Windows (Crypt32Util): ключ привязан к
+                // учётной записи Windows, своего управления ключами не требует.
+                implementation("net.java.dev.jna:jna-platform:5.14.0")
             }
         }
         val desktopTest by getting {
@@ -59,6 +66,10 @@ kotlin {
             implementation("androidx.activity:activity-compose:1.9.3")
             implementation("androidx.core:core-ktx:1.13.1") // FileProvider для установки обновления
             implementation("io.livekit:livekit-android:2.11.0") // живое медиа звонков/аудио-чатов (WebRTC)
+            // Сканер QR привязки нового устройства (key-lifecycle.md §2): готовая
+            // Activity с камерой поверх CameraX, не пишем разбор кадров сами —
+            // без визуального цикла разработки это неоправданный риск.
+            implementation("com.journeyapps:zxing-android-embedded:4.3.0")
             implementation("io.tima:messenger-crypto:0.1.0") {
                 // jar zstd-jni не содержит Android-нативов — ниже подключён его AAR
                 exclude(group = "com.github.luben", module = "zstd-jni")

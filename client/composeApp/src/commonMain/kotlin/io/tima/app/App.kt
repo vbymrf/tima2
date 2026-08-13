@@ -58,9 +58,13 @@ import io.kodium.KodiumPrivateKey
 import io.tima.app.api.AppVersionDto
 import io.tima.app.api.ChannelDto
 import io.tima.app.api.ChannelPostDto
+import io.tima.app.api.DeviceLinkQr
+import io.tima.app.api.LinkStartResponse
+import io.tima.app.api.MyDevice
 import io.tima.app.api.TimaApi
 import io.tima.app.api.TimaApiException
 import io.tima.app.api.VoiceRoomDto
+import io.tima.app.api.parseDeviceLinkQr
 import io.tima.app.chat.CallConnection
 import io.tima.app.chat.ChatClient
 import io.tima.app.chat.ChatMessage
@@ -69,6 +73,7 @@ import io.tima.app.chat.Contact
 import io.tima.app.chat.GroupSummary
 import io.tima.app.chat.MediaAttachment
 import io.tima.app.chat.PeerInfo
+import io.tima.app.chat.QrCodeImage
 import io.tima.app.chat.RecoveryConsent
 import io.tima.app.chat.isFile
 import io.tima.app.chat.isVoice
@@ -85,9 +90,13 @@ import io.tima.app.platform.contactsSupported
 import io.tima.app.platform.currentVersionCode
 import io.tima.app.platform.currentVersionName
 import io.tima.app.platform.decodeImage
+import io.tima.app.platform.deviceLinkScanSupported
+import io.tima.app.platform.devicePlatform
 import io.tima.app.platform.ensureCallPermissions
 import io.tima.app.platform.cancelVoiceRecording
 import io.tima.app.platform.identityFromPhrase
+import io.tima.app.platform.scanDeviceLinkQr
+import io.tima.crypto.DeviceLinkSignature
 import io.tima.crypto.MessageSigner
 import io.tima.app.platform.keepScreenOn
 import io.tima.app.platform.installUpdate
@@ -131,6 +140,7 @@ private sealed interface Screen {
     data class PhraseReveal(val session: Session, val phrase: List<String>) : Screen
     data class ChannelView(val session: Session, val channelId: String, val title: String, val owner: Boolean) : Screen
     data class VoiceRoom(val session: Session, val roomId: String, val title: String) : Screen
+    data class LinkNewDevice(val serverUrl: String) : Screen
 }
 
 private val b64url = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT)
@@ -221,6 +231,13 @@ fun App() {
             if (latest != null && latest.url.isNotEmpty() && latest.versionCode > currentVersionCode()) {
                 update = latest
             }
+        }
+        // Объявляем платформу: у устройств, зарегистрированных до появления
+        // колонки `platform`, она пустая, и телефон без объявления не смог бы
+        // подтвердить привязку по QR. Молча — это самолечение, а не действие
+        // человека, и показывать тут нечего.
+        session?.let { s ->
+            runCatching { TimaApi(url).declarePlatform(s.accessToken, devicePlatform()) }
         }
     }
     update?.let { u ->
@@ -395,7 +412,15 @@ fun App() {
                     verticalArrangement = Arrangement.Center,
                 ) {
                     when (s) {
-                        is Screen.Phone -> PhoneScreen(onCode = { screen = it })
+                        is Screen.Phone -> PhoneScreen(
+                            onCode = { screen = it },
+                            onLinkQr = { url -> screen = Screen.LinkNewDevice(url) },
+                        )
+                        is Screen.LinkNewDevice -> LinkNewDeviceScreen(
+                            s,
+                            onLinked = { session -> screen = Screen.Home(session) },
+                            onBack = { screen = Screen.Phone },
+                        )
                         is Screen.Code -> CodeScreen(
                             s,
                             onRegistered = { session, newPhrase ->
@@ -444,7 +469,7 @@ fun App() {
 }
 
 @Composable
-private fun PhoneScreen(onCode: (Screen.Code) -> Unit) {
+private fun PhoneScreen(onCode: (Screen.Code) -> Unit, onLinkQr: (String) -> Unit) {
     var serverUrl by remember { mutableStateOf(defaultServerUrl()) }
     var phone by remember { mutableStateOf("+7") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -484,6 +509,131 @@ private fun PhoneScreen(onCode: (Screen.Code) -> Unit) {
             }
         }) { Text("Получить код") }
     }
+    Spacer(Modifier.height(8.dp))
+    // Вход по QR (key-lifecycle.md §2): другое, уже авторизованное устройство
+    // подтверждает это одним сканом — не нужен ни SMS-код на ЭТОМ устройстве,
+    // ни секретная фраза.
+    Button(
+        onClick = { onLinkQr(serverUrl) }, enabled = !busy,
+        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+    ) { Text("Войти по QR с другого устройства") }
+    ErrorText(error)
+}
+
+/**
+ * Вход по QR (key-lifecycle.md §2) — устройство без аккаунта заводит сессию
+ * `/link/start`, показывает QR, опрашивает `/link/claim`, пока другое, уже
+ * авторизованное устройство не подтвердит привязку сканированием (HomeScreen →
+ * «Устройства» → «Подключить устройство»).
+ */
+@Composable
+private fun LinkNewDeviceScreen(
+    state: Screen.LinkNewDevice,
+    onLinked: (Session) -> Unit,
+    onBack: () -> Unit,
+) {
+    var deviceName by remember { mutableStateOf("") }
+    var start by remember { mutableStateOf<LinkStartResponse?>(null) }
+    var deviceKey by remember { mutableStateOf<KodiumPrivateKey?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var linked by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // Опрос /link/claim, пока сессия жива на сервере (linkSessionTTL = 5 минут,
+    // device_link.go) — 150 попыток по 2 секунды даёт тот же запас.
+    LaunchedEffect(start) {
+        val s = start ?: return@LaunchedEffect
+        val api = TimaApi(state.serverUrl)
+        repeat(150) {
+            delay(2000)
+            try {
+                val claim = api.linkClaim(s.sessionId, s.claimToken)
+                val key = deviceKey ?: return@LaunchedEffect
+                val session = Session(
+                    serverUrl = state.serverUrl,
+                    userId = claim.userId,
+                    deviceId = claim.deviceId,
+                    accessToken = claim.accessToken,
+                    deviceSecretB64 = b64url.encode(key.secretKey),
+                )
+                SessionCodec.save(session)
+                linked = true
+                onLinked(session)
+                return@LaunchedEffect
+            } catch (e: TimaApiException) {
+                if (e.code != "not_ready") {
+                    error = e.message ?: e.toString()
+                    return@LaunchedEffect
+                }
+                // not_ready — другое устройство ещё не отсканировало, продолжаем опрос
+            } catch (e: Throwable) {
+                error = e.message ?: e.toString()
+                return@LaunchedEffect
+            }
+        }
+        if (!linked) error = "QR истёк — попробуйте ещё раз"
+    }
+
+    if (start == null) {
+        Text("Вход по QR", style = MaterialTheme.typography.headlineMedium)
+        Spacer(Modifier.height(16.dp))
+        OutlinedTextField(
+            value = deviceName, onValueChange = { deviceName = it },
+            label = { Text("Название этого устройства") }, singleLine = true,
+            modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+        )
+        Spacer(Modifier.height(16.dp))
+        if (busy) {
+            CircularProgressIndicator()
+        } else {
+            Button(onClick = {
+                busy = true; error = null
+                scope.launch {
+                    try {
+                        val key = Kodium.generateKeyPair()
+                        val pub = key.getPublicKey()
+                        val resp = TimaApi(state.serverUrl).linkStart(
+                            encryptionPub = b64url.encode(pub.encryptionKey),
+                            signingPub = b64url.encode(pub.signingKey),
+                            deviceName = deviceName.trim().ifEmpty { "Устройство" },
+                        )
+                        deviceKey = key
+                        start = resp
+                    } catch (e: Throwable) {
+                        error = e.message ?: e.toString()
+                    } finally {
+                        busy = false
+                    }
+                }
+            }) { Text("Показать QR") }
+        }
+    } else {
+        Text("Отсканируйте с телефона", style = MaterialTheme.typography.headlineMedium)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "На телефоне, где уже есть аккаунт: Устройства → «Подключить устройство».",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.widthIn(max = 420.dp),
+        )
+        Spacer(Modifier.height(8.dp))
+        // Без этой строки экран — тупик для тех, у кого телефона нет: код висел бы
+        // до истечения срока, и почему он не срабатывает, было бы неоткуда узнать.
+        Text(
+            "Подтвердить может только телефон. Если телефона под рукой нет — вернитесь " +
+                "назад и войдите по номеру: с секретной фразой это тот же аккаунт.",
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.widthIn(max = 420.dp),
+        )
+        Spacer(Modifier.height(16.dp))
+        QrCodeImage(start!!.qrPayload)
+        Spacer(Modifier.height(16.dp))
+        CircularProgressIndicator()
+        Spacer(Modifier.height(8.dp))
+        Text("Ждём подтверждения…", style = MaterialTheme.typography.bodySmall)
+    }
+    Spacer(Modifier.height(16.dp))
+    Button(onClick = onBack, enabled = !busy) { Text("Назад") }
     ErrorText(error)
 }
 
@@ -536,6 +686,7 @@ private fun CodeScreen(
                 signingPub = b64url.encode(pub.signingKey),
                 identityPub = identity.pubB64,
                 forceNewIdentity = forceNew,
+                platform = devicePlatform(),
             )
             val session = Session(
                 serverUrl = state.serverUrl,
@@ -639,11 +790,12 @@ private fun CodeScreen(
  * Экран занятого номера (ДОКУМЕНТАЦИЯ/02-приложение/перенос-аккаунта-на-новое-устройство.md §8):
  * явный выбор вместо текста ошибки под полем.
  *
- * QR-перенос с другого живого устройства (§2) в этой сборке недоступен — задизейблен
- * намеренно, не забыт: требует камеры и живого второго устройства, непроверяемо в
- * этой среде (см. ФАЗА-1-СТАТУС.md). Криптографически подпись из секретной фразы
- * ничем не слабее подписи «живым» устройством — тот же ключ, та же проверка, — так
- * что «Знаю секретную фразу» закрывает тот же сценарий без камеры.
+ * QR (key-lifecycle.md §2) сюда не заведён отдельной кнопкой намеренно: вход по
+ * QR — это отдельная ветка ДО ввода телефона (PhoneScreen → «Войти по QR с
+ * другого устройства»), а не решение конфликта занятого номера. Криптографически
+ * подпись из секретной фразы ничем не слабее подписи «живым» устройством — тот
+ * же ключ, та же проверка, — так что «Знаю секретную фразу» ниже закрывает тот
+ * же сценарий и для тех, кто уже успел ввести номер.
  */
 @Composable
 private fun NumberTakenScreen(
@@ -662,12 +814,14 @@ private fun NumberTakenScreen(
         style = MaterialTheme.typography.bodyMedium,
         modifier = Modifier.widthIn(max = 420.dp),
     )
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Есть другое устройство с этим аккаунтом под рукой? Нажмите «Назад» и выберите " +
+            "«Войти по QR с другого устройства» — не понадобится ни фраза, ни этот номер.",
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.widthIn(max = 420.dp),
+    )
     Spacer(Modifier.height(20.dp))
-
-    Button(onClick = {}, enabled = false, modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth()) {
-        Text("Перенести с другого устройства (QR) — пока недоступно")
-    }
-    Spacer(Modifier.height(16.dp))
 
     Text("Знаю секретную фразу", style = MaterialTheme.typography.titleMedium)
     Spacer(Modifier.height(8.dp))
@@ -1260,6 +1414,193 @@ private fun HomeScreen(
                 TextButton(onClick = { showReidentify = false }, enabled = !reidentifyBusy) { Text("Отмена") }
             },
         )
+    }
+
+    // Подключить устройство по QR (key-lifecycle.md §2): другое устройство БЕЗ
+    // аккаунта (PhoneScreen → «Войти по QR с другого устройства») показывает QR,
+    // это устройство сканирует его камерой и одним действием добавляет владельца
+    // QR как своё новое устройство — не нужны ни SMS, ни фраза на той стороне.
+    // Только там, где есть камера (десктоп — deviceLinkScanSupported() == false).
+    Spacer(Modifier.height(16.dp))
+    var devices by remember { mutableStateOf<List<MyDevice>>(emptyList()) }
+    var devicesError by remember { mutableStateOf<String?>(null) }
+    var linkScanDone by remember { mutableStateOf<String?>(null) }
+    var revoking by remember { mutableStateOf<MyDevice?>(null) }
+
+    suspend fun refreshDevices() {
+        devices = try {
+            api.myDevices(session.accessToken)
+        } catch (_: Throwable) {
+            emptyList() // сервер недоступен — раздел просто пуст, остальное работает
+        }
+    }
+    LaunchedEffect(session.deviceId, linkScanDone) { refreshDevices() }
+
+    if (devices.size > 1) {
+        Text("Устройства", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        for (d in devices) {
+            Row(
+                modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(d.name.ifBlank { "Устройство " + d.deviceId.take(8) + "…" })
+                    if (d.current) {
+                        Text("это устройство", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                if (!d.current) {
+                    TextButton(onClick = { revoking = d }) {
+                        Text("Отключить", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        }
+        ErrorText(devicesError)
+    }
+    revoking?.let { target ->
+        AlertDialog(
+            onDismissRequest = { revoking = null },
+            title = { Text("Отключить устройство?") },
+            text = {
+                Text(
+                    "«${target.name.ifBlank { "Устройство" }}» потеряет доступ к аккаунту. " +
+                        "Переписка, уже скачанная на него, останется в его памяти — " +
+                        "отзыв закрывает доступ к новому, но не стирает старое на чужой стороне.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = target.deviceId
+                    revoking = null
+                    scope.launch {
+                        devicesError = null
+                        try {
+                            api.revokeDevice(session.accessToken, id)
+                            AppDiagnostics.add("действие: устройство ${id.take(8)}… отключено")
+                            refreshDevices()
+                        } catch (e: TimaApiException) {
+                            devicesError = if (e.code == "last_device") {
+                                "Это единственное устройство — отключить его нельзя."
+                            } else {
+                                e.message ?: e.toString()
+                            }
+                        } catch (e: Throwable) {
+                            devicesError = e.message ?: e.toString()
+                        }
+                    }
+                }) { Text("Отключить", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { revoking = null }) { Text("Отмена") } },
+        )
+    }
+
+    if (deviceLinkScanSupported()) {
+        Spacer(Modifier.height(8.dp))
+        var linkScanError by remember { mutableStateOf<String?>(null) }
+        var linkScanBusy by remember { mutableStateOf(false) }
+        // Отсканированный, но ЕЩЁ НЕ подтверждённый код. Скан и подтверждение
+        // разделены намеренно (doc/doc_UI/24-device-linking.md): скан — это не
+        // решение. Код можно подсунуть в переписке или наклеить где угодно, и без
+        // этого шага наведение камеры немедленно отдавало бы чужому устройству
+        // доступ к аккаунту и всей переписке.
+        var pendingLink by remember { mutableStateOf<DeviceLinkQr?>(null) }
+
+        TextButton(enabled = !linkScanBusy, onClick = {
+            linkScanBusy = true; linkScanError = null; linkScanDone = null
+            scope.launch {
+                try {
+                    val payload = scanDeviceLinkQr()
+                    if (payload != null) {
+                        pendingLink = parseDeviceLinkQr(payload)
+                            ?: throw IllegalArgumentException("Это не QR привязки TIMA")
+                    }
+                } catch (e: Throwable) {
+                    linkScanError = e.message ?: e.toString()
+                } finally {
+                    linkScanBusy = false
+                }
+            }
+        }) { Text(if (linkScanBusy) "Сканирую…" else "Подключить устройство (QR)") }
+
+        pendingLink?.let { qr ->
+            var confirmBusy by remember(qr.sessionId) { mutableStateOf(false) }
+            AlertDialog(
+                onDismissRequest = { if (!confirmBusy) pendingLink = null },
+                title = { Text("Подключить устройство?") },
+                text = {
+                    Column {
+                        Text(qr.deviceName, style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Это устройство войдёт в ваш аккаунт и получит доступ к переписке, " +
+                                "включая уже накопленную.",
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Подтверждайте, только если код показан на вашем собственном " +
+                                "устройстве и прямо сейчас. Отключить можно в этом же разделе.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        if (confirmBusy) {
+                            Spacer(Modifier.height(8.dp))
+                            CircularProgressIndicator()
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(enabled = !confirmBusy, onClick = {
+                        confirmBusy = true; linkScanError = null
+                        scope.launch {
+                            try {
+                                val privKey = KodiumPrivateKey.fromRaw(b64url.decode(session.deviceSecretB64))
+                                val signingBytes = DeviceLinkSignature.signingBytes(
+                                    qr.sessionId, qr.secret,
+                                    b64url.decode(qr.encryptionPubB64), b64url.decode(qr.signingPubB64),
+                                )
+                                val signature = MessageSigner.sign(privKey, signingBytes).getOrThrow()
+                                val confirmed = api.linkConfirm(
+                                    session.accessToken, qr.sessionId, qr.secret, b64url.encode(signature),
+                                )
+                                AppDiagnostics.add("действие: устройство «${qr.deviceName}» подключено по QR")
+                                // Историю отдаём сразу: новое устройство само её попросить
+                                // не может (нет ключа личности из фразы — chatRecover
+                                // откажет), а без этого шага оно увидело бы переписку
+                                // только с этого момента. Согласие получено выше.
+                                val shared = client?.shareHistoryWithDevice(
+                                    confirmed.deviceId, qr.encryptionPubB64,
+                                ) ?: 0
+                                linkScanDone = "Устройство «${qr.deviceName}» подключено" +
+                                    if (shared > 0) ", история отдана по $shared чатам." else "."
+                                pendingLink = null
+                            } catch (e: TimaApiException) {
+                                linkScanError = when (e.code) {
+                                    "bad_session" -> "QR устарел или уже использован — попросите показать заново."
+                                    "bad_signature" -> "Не удалось проверить подпись — попробуйте ещё раз."
+                                    "not_a_phone" -> "Подтвердить подключение можно только с телефона."
+                                    else -> e.message ?: e.toString()
+                                }
+                                pendingLink = null
+                            } catch (e: Throwable) {
+                                linkScanError = e.message ?: e.toString()
+                                pendingLink = null
+                            } finally {
+                                confirmBusy = false
+                            }
+                        }
+                    }) { Text("Подключить") }
+                },
+                dismissButton = {
+                    TextButton(enabled = !confirmBusy, onClick = { pendingLink = null }) { Text("Отмена") }
+                },
+            )
+        }
+
+        linkScanDone?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.widthIn(max = 420.dp))
+        }
+        ErrorText(linkScanError)
     }
 
     Spacer(Modifier.height(16.dp))

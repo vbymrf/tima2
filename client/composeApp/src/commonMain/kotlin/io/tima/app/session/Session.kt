@@ -54,7 +54,7 @@ object SessionCodec {
         try {
             val stored = json.decodeFromString<Session>(it)
             if (stored.secretVaulted) {
-                stored.copy(
+                val opened = stored.copy(
                     deviceSecretB64 = b64url.encode(SecretVault.reveal(b64url.decode(stored.deviceSecretB64))),
                     identitySecretB64 = stored.identitySecretB64.takeIf { s -> s.isNotEmpty() }
                         ?.let { s -> b64url.encode(SecretVault.reveal(b64url.decode(s))) } ?: "",
@@ -62,6 +62,16 @@ object SessionCodec {
                         ?.let { s -> b64url.encode(SecretVault.reveal(b64url.decode(s))) } ?: "",
                     secretVaulted = false,
                 )
+                // Перезапись при каждом запуске нужна ради десктопа: там `secretVaulted`
+                // уже стоял у сессий, записанных версией, где vault ничего не шифровал
+                // (protect возвращал вход как есть). Отличить такую запись снаружи
+                // нельзя — reveal распознаёт её по отсутствию метки и отдаёт как есть,
+                // а перезапись превращает её в настоящую защищённую. Без этого шага
+                // старые установки остались бы с открытым секретом навсегда.
+                // runCatching: сбой записи не должен выкидывать из аккаунта — сессия
+                // в памяти уже рабочая.
+                runCatching { save(opened) }
+                opened
             } else {
                 save(stored) // миграция: перезаписать на диске завёрнутым
                 stored

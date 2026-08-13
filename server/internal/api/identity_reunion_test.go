@@ -54,6 +54,7 @@ func registerRaw(t *testing.T, ts *httptest.Server, phone string, identityPub []
 		"encryption_pub":     b64.EncodeToString(d.encPub[:]),
 		"signing_pub":        b64.EncodeToString(d.signKey.Public().(ed25519.PublicKey)),
 		"force_new_identity": forceNew,
+		"platform":           "android",
 	}
 	if len(identityPub) > 0 {
 		body["identity_pub"] = b64.EncodeToString(identityPub)
