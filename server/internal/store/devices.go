@@ -45,6 +45,19 @@ func (s *Store) DevicePlatform(ctx context.Context, deviceID string) (string, er
 	return platform, err
 }
 
+// IsActiveDevice reports whether the device JWT still represents an active
+// device of its claimed user. It is checked on every authenticated HTTP route,
+// so revoking a device invalidates already-issued access tokens immediately.
+func (s *Store) IsActiveDevice(ctx context.Context, userID, deviceID string) (bool, error) {
+	var active bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM devices
+			WHERE user_id = $1 AND device_id = $2 AND revoked_at IS NULL
+		)`, userID, deviceID).Scan(&active)
+	return active, err
+}
+
 // UserDevice — строка списка устройств для настроек.
 type UserDevice struct {
 	DeviceID  string

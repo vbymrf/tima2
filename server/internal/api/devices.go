@@ -4,6 +4,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -100,6 +101,16 @@ func (s *Server) revokeDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	owned, err := s.Store.IsActiveDevice(ctx, id.UserID, deviceID)
+	if err != nil {
+		log.Printf("revokeDevice: ownership: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	if !owned {
+		writeErr(w, http.StatusNotFound, "device_not_found", "устройство не найдено или уже отозвано")
+		return
+	}
 	active, err := s.Store.CountActiveDevices(ctx, id.UserID)
 	if err != nil {
 		log.Printf("revokeDevice: count: %v", err)
