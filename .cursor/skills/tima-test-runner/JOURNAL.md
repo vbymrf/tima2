@@ -78,4 +78,17 @@ Return exactly one line to the caller, nothing else:
 
 ## Entries
 
-(none yet — next code: TEST-004)
+## TEST-004: Go build failure — missing import + type mismatch in new server API
+- type: go
+- count: 1
+- first_seen: 2026-08-14
+- last_seen: 2026-08-14
+- status: RESOLVED
+- symptom: `go build ./...` exits 1 with two errors: (1) `undefined: context` in a new .go file that omitted the import; (2) `cannot use string as []byte` where the call site passed `req.SessionID string` but the store method signature expected `[]byte` — later corrected to `string` before the build was verified
+- context: server build gate on branch feature/device-link-qr; commit 9b181e3 noted explicitly "не собиралось и не прогонялось" — build was not run before commit
+- notes: both failures appeared together in the first post-commit `go build ./...`; by the time verification ran the code was already corrected (build and vet pass, all tests green)
+
+### Solution (only after confirmed success)
+- fix: repaired missing context import, corrected ConfirmLinkSession session-id type (string not []byte), added device_link_sessions cleanup to ResetForTests, fixed revoke authorization order, and added active-device validation after JWT authentication
+- verify: fresh `go build ./...`, `go vet ./...`, and `TIMA_TEST_DATABASE_URL=postgres://tima:tima-test-only@localhost:55432/tima_test go test ./...` from C:\!TIMA2\server all exited 0; internal/api passed in 23.008s; all Go packages passed or had no test files
+- verified_on: 2026-08-14
