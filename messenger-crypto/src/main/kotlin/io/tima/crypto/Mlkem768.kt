@@ -77,9 +77,9 @@ object Mlkem768 {
     /** Отдаёт байты из фиксированного буфера последовательно — независимо от разбивки запросов. */
     private class FixedRandom(buffer: ByteArray) : RandomProvider {
         private val remaining = ArrayDeque(buffer.toList())
-        override fun fillWithRandom(bytes: ByteArray) {
-            for (i in bytes.indices) {
-                bytes[i] = remaining.removeFirstOrNull()
+        override fun fillWithRandom(byteArray: ByteArray) {
+            for (i in byteArray.indices) {
+                byteArray[i] = remaining.removeFirstOrNull()
                     ?: throw IllegalStateException("KeyGen запросил больше случайности, чем задано")
             }
         }
@@ -88,6 +88,6 @@ object Mlkem768 {
     /** CSPRNG-провайдер на случай, если понадобится явный источник. */
     internal object SecureRandomProvider : RandomProvider {
         private val random = SecureRandom()
-        override fun fillWithRandom(bytes: ByteArray) = random.nextBytes(bytes)
+        override fun fillWithRandom(byteArray: ByteArray) = random.nextBytes(byteArray)
     }
 }
