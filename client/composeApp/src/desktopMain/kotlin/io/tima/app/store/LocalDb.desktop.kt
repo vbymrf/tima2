@@ -79,5 +79,6 @@ actual class LocalDb(private val conn: Connection) {
 actual fun openLocalDb(name: String): LocalDb {
     val dir = File(System.getProperty("user.home"), ".tima").apply { mkdirs() }
     val conn = DriverManager.getConnection("jdbc:sqlite:${File(dir, name).absolutePath}")
+    conn.createStatement().use { it.execute("PRAGMA journal_mode=WAL") }
     return LocalDb(conn)
 }

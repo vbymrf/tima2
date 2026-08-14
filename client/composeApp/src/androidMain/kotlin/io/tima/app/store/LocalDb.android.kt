@@ -62,5 +62,9 @@ actual class LocalDb(private val db: SQLiteDatabase) {
 actual fun openLocalDb(name: String): LocalDb {
     val file = AndroidAppContext.app.getDatabasePath(name)
     file.parentFile?.mkdirs()
-    return LocalDb(SQLiteDatabase.openOrCreateDatabase(file, null))
+    val db = SQLiteDatabase.openOrCreateDatabase(file, null)
+    // WAL включается системным вызовом: «PRAGMA journal_mode=WAL» возвращает строку,
+    // а execSQL такие запросы отклоняет исключением.
+    db.enableWriteAheadLogging()
+    return LocalDb(db)
 }

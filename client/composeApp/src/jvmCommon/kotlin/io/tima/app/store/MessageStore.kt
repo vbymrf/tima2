@@ -34,7 +34,6 @@ class MessageStore(private val db: LocalDb, deviceSecret: ByteArray) {
     )
 
     init {
-        db.exec("PRAGMA journal_mode=WAL")
         db.exec(
             """
             CREATE TABLE IF NOT EXISTS messages (

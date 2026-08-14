@@ -30,6 +30,7 @@
 
     <!-- usesCleartextTraffic: dev-сервер на http://; прод пойдёт через Caddy по TLS -->
     <application
+        android:name=".TimaApp"
         android:label="TIMA"
         android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
