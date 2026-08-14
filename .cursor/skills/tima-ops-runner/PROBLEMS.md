@@ -8,7 +8,7 @@ Apply only entries whose cause is demonstrated. Format is
 - Symptom: Git refuses operations because the intended checkout has dubious
   ownership.
 - Check: confirm the current path is the intended checkout and who owns it. The
-  primary checkout `C:\!TIMA2` is owned by the current user and needs no
+  the primary checkout is owned by the current user and needs no
   override; this appears when working from the VMware shared drive `Z:` or from
   a copy created by another account.
 - Cause: VMware shared-folder ownership cannot be mapped normally, or the
@@ -61,7 +61,8 @@ Apply only entries whose cause is demonstrated. Format is
 - Symptom: Docker, JDK, Git, Gradle, Go, or an Android SDK component is
   reported missing.
 - Check: `Get-Command` plus the version flag for that tool, and the expected
-  location — Go at `C:\Program Files\Go`, Gradle at
+  location. Conventional locations, to be confirmed against the local
+  environment note rather than assumed — Go at `C:\Program Files\Go`, Gradle at
   `%LOCALAPPDATA%\Programs\Gradle\gradle-8.14.3`, Android SDK at
   `%LOCALAPPDATA%\Android\Sdk`.
 - Cause: the package is absent, is the wrong version, or the current process
@@ -74,7 +75,8 @@ Apply only entries whose cause is demonstrated. Format is
 ## Go is unavailable for server tests
 
 - Symptom: `go` raises `CommandNotFoundException` and server tests do not start.
-- Check: `Get-Command go`, `go version`, and `C:\Program Files\Go\bin\go.exe`.
+- Check: `Get-Command go`, `go version`, and the Go path from the local
+  environment note.
 - Cause: Go is absent or not on this process's PATH.
 - Fix: request approval, install Go 1.25.x persistently, refresh PATH. If Go is
   present but a launcher cannot find it, the launcher's hardcoded path is the

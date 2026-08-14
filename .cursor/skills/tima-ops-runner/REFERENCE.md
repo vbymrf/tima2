@@ -1,6 +1,7 @@
 # TIMA Windows operations reference
 
-Run from the repository root (`C:\!TIMA2`) in PowerShell. Inspect before
+Run from the repository root. Tool locations and what is installed differ per
+machine — they live in the untracked local environment note, not here. Inspect before
 changing state.
 
 There is no `infra/` directory and no installer script in this repository.
@@ -13,7 +14,7 @@ operation script it creates — never in the repository root.
 
 ```powershell
 docker compose -f server/deploy/docker-compose.dev.yml ps
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" devices -l
+adb devices -l    # путь к SDK — из ANDROID_HOME, не зашивать
 Get-Process TIMA,emulator,qemu-system-x86_64,java,go -ErrorAction SilentlyContinue
 Get-PSDrive C
 go version
@@ -46,8 +47,9 @@ and platform 35, AVD `tima_test`, Docker Desktop with the WSL2 backend.
 Verify with `Get-Command` and the version flags above. There is no
 `setup-windows` script here: install one missing component at a time after
 approval, verify it before continuing, then refresh the current process PATH.
-Record what was installed and where, because the launchers hardcode some paths
-(see "Known launcher defects").
+Record what was installed and where **in the local environment note**, not here:
+the launchers hardcode some paths (see "Launcher defect class"), and the next
+agent on this machine needs the real locations without re-deriving them.
 
 WSL is not a TIMA command surface, but Docker Desktop needs its WSL2 backend:
 
@@ -135,25 +137,24 @@ Before starting anything, check for an existing instance. Duplicate listeners on
 a stack port are exactly what `debug-tima.ps1` flags in red. Stopping a stale
 process needs approval.
 
-## Known launcher defects
+## Launcher defect class
 
-`start-tima.ps1` hardcodes three paths that do not exist on this machine, so it
-fails partway on a fresh setup:
+`start-tima.ps1`, `debug-tima.ps1 -Clean` and `start-android.ps1` contain
+absolute paths to Go, Docker Desktop and Gradle. Whether any given one is
+correct depends on the machine, so this file does not claim which are broken —
+that is an observation about one setup and belongs in the untracked local
+environment note, where it can be kept current.
 
-- Go at `%USERPROFILE%\go-toolchain\bin\go.exe` — actually `C:\Program Files\Go\bin\go.exe`
-- Docker Desktop at `C:\Program Files\Docker\Docker\Docker Desktop.exe` —
-  actually `%LOCALAPPDATA%\Programs\DockerDesktop\Docker Desktop.exe`
-- a Gradle hint at `%USERPROFILE%\gradle-8.14.3\bin\gradle` — actually
-  `%LOCALAPPDATA%\Programs\Gradle\gradle-8.14.3\bin\gradle.bat`
+What is true everywhere: **an absolute path baked into a launcher is the defect
+itself.** One machine's layout becomes everyone's failure, and the failure looks
+like a missing tool rather than a wrong assumption.
 
-`debug-tima.ps1 -Clean` calls the same stale Gradle path, so it silently fails to
-stop daemons. `start-android.ps1` prints the stale Gradle path in its
-build hint only.
+Fix by resolving through `Get-Command` or a documented environment variable, not
+by substituting a different absolute path. A failed launcher is a launcher defect
+to repair, never a reason to start the server or enclave by hand.
 
-Fix the launcher rather than working around it, and prefer resolving tools via
-`Get-Command` over new absolute paths. Until it is fixed, a failed
-`start-tima.ps1` is a launcher defect to repair, not a reason to start the
-server by hand.
+Before repairing, check the local environment note: the tool may be genuinely
+absent here, and the work belongs on another machine.
 
 ## Android emulator and app
 
@@ -161,8 +162,8 @@ Start the emulator only when `adb devices -l` shows no intended device; the
 launcher already does this check.
 
 ```powershell
-$sdk = "$env:LOCALAPPDATA\Android\Sdk"
-& "$sdk\emulator\emulator.exe" -avd tima_test -gpu auto
+# $sdk — из ANDROID_HOME или локальной заметки об окружении, не зашивать
+& "$sdk\emulator\emulator.exe" -avd $avd -gpu auto
 & "$sdk\platform-tools\adb.exe" reverse tcp:8080 tcp:8080
 & "$sdk\platform-tools\adb.exe" reverse tcp:9000 tcp:9000
 ```

@@ -43,9 +43,10 @@ until its stated cause is demonstrated.
 ## Go command is unavailable
 
 - Symptom: server test command raises `CommandNotFoundException`.
-- Check: `Get-Command go`, `go version`, and
-  `C:\Program Files\Go\bin\go.exe`.
-- Cause: Go is missing or absent from this process's PATH.
+- Check: `Get-Command go`, `go version`, and the Go path recorded in the local
+  environment note.
+- Cause: Go is missing, or absent from this process's PATH — a freshly installed
+  tool does not appear in an already-open shell.
 - Fix: hand installation or a PATH refresh to `tima-ops-runner`.
 - Verify: `go version` reports 1.25.x and the narrow package command executes.
 
@@ -56,7 +57,7 @@ until its stated cause is demonstrated.
   matched.
 - Check: the working directory of the invocation, and whether a
   `settings.gradle.kts` exists there.
-- Cause: `C:\!TIMA2` has no settings script. The only Gradle builds are
+- Cause: the repository root has no settings script. The only Gradle builds are
   `client/` and `messenger-crypto/`; the vendored copy under `Kodium git/` is
   not ours and must never be built.
 - Fix: `Push-Location client` or `Push-Location messenger-crypto` first, run the

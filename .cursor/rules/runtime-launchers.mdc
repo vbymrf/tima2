@@ -23,10 +23,13 @@ alwaysApply: true
 - Check for an existing instance before starting anything: duplicate listeners on
   a stack port are what `debug-tima.ps1` reports in red. One dev stack, one
   emulator, one visible desktop peer.
-- `start-tima.ps1` currently hardcodes tool paths that do not exist on this
-  machine (Go, Docker Desktop, Gradle). Repair the launcher — resolving tools via
-  `Get-Command` rather than adding new absolute paths — instead of starting the
-  server or enclave by hand. Never hide a failed launcher by launching the target
+- Launchers must resolve tools via `Get-Command` or a documented environment
+  variable, never via an absolute path baked into the script: what exists differs
+  per machine, and a hardcoded path turns one machine's layout into everyone's
+  failure. If a launcher fails because a tool is missing, check the local
+  environment note first — the tool may be genuinely absent on this machine and
+  the work belongs elsewhere. Repair the launcher rather than starting the server
+  or enclave by hand, and never hide a failed launcher by launching the target
   manually.
 - If a runtime target has no launcher, create one before the first agent-driven
   launch. It must resolve the repository root from its own location, validate

@@ -1,7 +1,11 @@
 # TIMA test reference
 
-All paths are relative to the repository root (`C:\!TIMA2`). Use PowerShell on
-Windows. Read only the sections for the requested tier.
+All paths are relative to the repository root. Shell examples are PowerShell;
+adapt them if this machine uses another. Read only the sections for the
+requested tier.
+
+Tool locations and what is or is not installed here are **not** in this file:
+they differ per machine. They live in the untracked local environment note.
 
 ## What this repository actually contains
 
@@ -40,11 +44,12 @@ git status --short --branch
 Get-PSDrive C
 ```
 
-Required: Go 1.25.x, JDK 17, Gradle 8.14+ (or the checked-in `gradlew`). For an
-Android tier also check `ANDROID_HOME` and:
+Required: Go 1.25.x, JDK 17, Gradle 8.14+ (or the checked-in `gradlew`). A
+machine may have none of them — check the local environment note before
+concluding that a tier failed. For an Android tier also check `ANDROID_HOME`:
 
 ```powershell
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" devices -l
+adb devices -l
 Get-Process emulator,qemu-system-x86_64,TIMA -ErrorAction SilentlyContinue
 ```
 
@@ -83,6 +88,9 @@ table.
 
 ```powershell
 docker compose -f server/deploy/docker-compose.test.yml up -d
+# Пользователь, пароль и порт заданы в docker-compose.test.yml; пароль по
+# умолчанию переопределяется TEST_POSTGRES_PASSWORD. Строка ниже — копия для
+# удобства: при расхождении верен compose, а не этот файл.
 $env:TIMA_TEST_DATABASE_URL = "postgres://tima:tima-test-only@localhost:55432/tima_test"
 Push-Location server
 go test ./internal/api
@@ -112,6 +120,7 @@ Both services come from the dev stack:
 
 ```powershell
 docker compose -f server/deploy/docker-compose.dev.yml up -d
+# То же: значения — из compose, здесь копия.
 $env:TIMA_TEST_DATABASE_URL = "postgres://tima:tima-test-only@localhost:55432/tima_test"
 Push-Location server
 go test ./...

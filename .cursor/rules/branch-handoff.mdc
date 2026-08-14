@@ -1,0 +1,60 @@
+---
+description: Branch handoff between writer and verifier, and server-client compatibility
+alwaysApply: true
+---
+
+# Branch handoff
+
+Full rules live in `ПРАВИЛА-РАБОТЫ.md`. This file carries only what must be in
+context before the first action. **Do not duplicate the content** — duplicated
+text drifts, and within a month two agents work from two different versions.
+
+## Before touching a branch
+
+Read `СОСТОЯНИЕ-ВЕТКИ.md`.
+
+- **A lock is held and it is not mine** → do not publish to that branch. Work
+  locally or in `work/<topic>`.
+- **No lock** → `git pull --rebase`, then proceed freely.
+
+Roles are assigned per cycle and they swap. Which role I hold *right now* is
+recorded in that file, never assumed.
+
+## When I am the verifier
+
+1. Take the lock: an entry in `СОСТОЯНИЕ-ВЕТКИ.md`, committed and pushed. If the
+   push is rejected as non-fast-forward, someone already holds it —
+   `git pull --rebase` and see who.
+2. Build and run the tests.
+3. Commit repairs with a prefix:
+   - `fix(build):` — did not compile
+   - `fix(test):` — test environment, fixtures, state reset
+   - `fix(behavior):` — **product behaviour changed**; the writer must read it
+4. Release the lock and append a journal line: verdict and the tip after repairs.
+
+**If the branch moved while locked, the result is void.** Do not resume:
+re-run against the new tip, or branch off into `verify/<sha>`; either way take
+the lock again.
+
+## Always
+
+**"Verified" refers to a commit, never to a branch.** A report without a hash is
+a report about nothing.
+
+**Do not commit or push unless asked.** Pushing is an outward-facing action.
+
+## Server and client compatibility
+
+> The server must keep working with an old client.
+
+- Migrations are additive only: `DEFAULT` or `NULL`. Removal goes one release
+  later.
+- The API only widens: new fields are optional, existing meanings never change.
+- Deployment order is **server before client**, without exception.
+- Data erasure ships as its own step, never together with a feature.
+
+## Not tracked by git
+
+`doc_add/` is entirely in `.gitignore` — drafts, technical documentation, test
+harnesses. Anything written there will not reach the other machine. If a result
+is needed there, put it somewhere tracked and say so.

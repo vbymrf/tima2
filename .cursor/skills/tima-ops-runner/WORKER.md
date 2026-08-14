@@ -17,7 +17,8 @@ below is standing policy.
 
 ## Execution rules
 
-- Work from the repository root (`C:\!TIMA2`) in PowerShell.
+- Work from the repository root. Tool locations come from the untracked local
+  environment note, never from this file.
 - Stay strictly within the allowed actions from the caller's prompt. Stop and
   report BLOCKED on an authorization prompt, a destructive requirement, an
   unknown root cause, or repeated failure. Allow at most two evidence-based

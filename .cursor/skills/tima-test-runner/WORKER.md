@@ -16,7 +16,7 @@ report paths; everything below is standing policy.
 
 ## Execution rules
 
-- Work from the repository root (`C:\!TIMA2`) in PowerShell, entering `server`,
+- Work from the repository root, entering `server`,
   `client`, or `messenger-crypto` only for the documented command and returning
   with `Pop-Location`.
 - Create a `.ps1` or `.bat` script when it makes a multi-step, repeatable, or
