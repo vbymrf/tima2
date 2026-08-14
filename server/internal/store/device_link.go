@@ -67,7 +67,7 @@ func (s *Store) GetLinkSessionForConfirm(ctx context.Context, sessionID string) 
 // Перечитывает сессию FOR UPDATE: между GetLinkSessionForConfirm и этим вызовом
 // её мог confirm'ить кто-то другой (два человека сканируют один QR одновременно) —
 // вторая попытка должна проиграть, а не завести второе устройство.
-func (s *Store) ConfirmLinkSession(ctx context.Context, sessionID, secretHash []byte, userID string) (deviceID string, err error) {
+func (s *Store) ConfirmLinkSession(ctx context.Context, sessionID string, secretHash []byte, userID string) (deviceID string, err error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return "", err
