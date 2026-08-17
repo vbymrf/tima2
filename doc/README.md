@@ -22,7 +22,8 @@
 | [06-realtime/](./06-realtime/) | Звонки (LiveKit), политика записи |
 | [07-deployment/](./07-deployment/) | Развертывание серверов (VPS + docker-compose), путь масштабирования |
 | [adr/](./adr/) | Architecture Decision Records |
-| [doc_UI/](./doc_UI/00-index.md) | UI-ТЗ: 32 спецификации экранов (WireMD) |
+| [doc_UI/](./doc_UI/00-index.md) | UI-ТЗ: 32 спецификации экранов (WireMD) — замысел |
+| [макет-ui/](./макет-ui/README.md) | Макет UI: интерфейс, который собран сейчас — окна, подокна, переходы (HTML, открывается в браузере) |
 
 ## Ключевые документы для входа в проект
 
