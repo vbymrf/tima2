@@ -1,0 +1,527 @@
+/*
+ * Стиль «Семафор_2». Вторая редакция пятого предложения.
+ *
+ * ── ЧТО ИЗМЕНИЛОСЬ ОТНОСИТЕЛЬНО ПЕРВОЙ РЕДАКЦИИ ───────────────────────────
+ *
+ * ФОРМЫ. Аватары и логотипы — квадраты со скруглёнными краями (10 px; мелкие 8,
+ * крупные 16). Кнопки — круглые и полностью округлённые. Противопоставление
+ * остаётся читаемым: квадрат означает «кто-то или что-то», круг — «нажми», а
+ * скругление снимает жёсткость, не стирая различия. Раньше квадратными были
+ * карточки, а аватары круглыми; теперь наоборот.
+ *
+ * ФОН ФУНКЦИОНАЛЬНЫХ ОБЛАСТЕЙ. Шапка с логотипом, вкладки и строка ввода
+ * («написать комментарий», «сообщение») лежат на подложке #f7f7f7 — нейтральный
+ * серый 3 % (проба 03, см. пробы.html). Салатовые тинты пробовались и отклонены:
+ * подложка не должна нести оттенок навигации.
+ * Содержимое — лента и переписка — остаётся на чистом фоне. Так видно, где
+ * приложение показывает, а где им управляют.
+ *
+ * ЦВЕТ. Салатовый забрал роли навигации и действия:
+ *
+ *   #8ac44a  салатовый   НАВИГАЦИЯ И ДЕЙСТВИЕ
+ *                        логотип, выделение текущего окна и вкладки,
+ *                        «назад», «отправить», «написать».
+ *   #febb02  янтарь      АКТИВНОСТЬ
+ *                        новые сообщения, комментарии, непрочитанное.
+ *   #3bb300  зелёный     ПОДТВЕРЖДЕНО
+ *                        доставлено, прочитано, E2E.
+ *   #bfbfbf  серый       ФОН МОИХ СООБЩЕНИЙ
+ *   #ffffff  белый       ФОН СООБЩЕНИЙ АВТОРА и общий фон окна
+ *   #000000  чёрный      ТЕКСТ
+ *
+ * #0077cc и #196dff в этой редакции остались БЕЗ НАЗНАЧЕНИЯ и не используются:
+ * салатовый забрал и «действие», и «место». Если понадобится развести их
+ * обратно — это единственное осмысленное место, куда вернуть синие.
+ *
+ * ФОН ОКНА — белый, а не серая подложка. Из этого следует всё остальное:
+ * карточек на подложке больше нет, разделять приходится линиями и рамками.
+ *
+ * ── ДВЕ СТРУКТУРНЫЕ ПРАВКИ ────────────────────────────────────────────────
+ *
+ * 1. В личной переписке аватар живёт ВНУТРИ сообщения и обтекается текстом
+ *    (float), а не стоит рядом с пузырём. У сообщений есть рамка.
+ * 2. Новостные записи рамок не имеют — только линия между ними на общем белом.
+ *
+ * Отсюда правило, по которому здесь всё разделяется:
+ *    рамка — у сообщения переписки;
+ *    линия — между записями списка и ленты;
+ *    заливка — только там, где цвет что-то означает.
+ */
+
+:root {
+  /* ── Цвет ─────────────────────────────────────────────────────────────── */
+  --навигация: #8ac44a;      /* логотип, текущее окно, назад, отправить, написать */
+  --активность: #febb02;     /* новое сообщение, комментарий, непрочитанное */
+  --подтверждено: #3bb300;   /* доставлено, прочитано, E2E */
+  --мои: #bfbfbf;            /* фон моих сообщений */
+  --автор: #ffffff;          /* фон сообщений автора */
+  --текст: #000000;
+  --поверхность: #ffffff;
+
+  /* Серые — чёрный на прозрачности */
+  --чёрный-70: rgba(0, 0, 0, 0.70);
+  --чёрный-50: rgba(0, 0, 0, 0.62);   /* #616161 — 6,19:1 на белом */
+  --чёрный-35: rgba(0, 0, 0, 0.35);
+  --чёрный-12: rgba(0, 0, 0, 0.14);
+  --чёрный-6: rgba(0, 0, 0, 0.06);
+  --подложка: #ffffff;
+  --рамка: rgba(0, 0, 0, 0.28);
+  /* Фон областей с функциональным действием: шапка с логотипом, вкладки,
+     строка ввода и «написать комментарий». Лента и переписка остаются чистыми. */
+  --функц: #f7f7f7;          /* проба 03: нейтральный 3 % — выбрано */
+
+  /* ── Эмоции: чёрным. Цвет занят кодом ─────────────────────────────────── */
+  --одобрение: #111111; --презрение: #111111; --смех: #111111; --боль: #111111;
+  --ярость: #111111; --страх: #111111; --интерес: #111111; --скука: #111111;
+  --спокойствие: #111111;
+
+  /* ── Совместимость с разметкой ─────────────────────────────────────────── */
+  --бумага: var(--поверхность);
+  --лист: var(--поверхность);
+  --лист-2: var(--чёрный-6);
+  --линия: var(--чёрный-12);
+  --чернила: var(--текст);
+  --чернила-2: var(--чёрный-70);
+  --чернила-3: var(--чёрный-50);
+  --действие: var(--навигация);
+  --место: var(--навигация);
+  --требует: var(--активность);
+  --живое: var(--навигация);
+  --акцент: var(--навигация);
+  --акцент-тёмный: var(--текст);
+  --акцент-мягкий: rgba(138, 196, 74, 0.20);
+  --на-акценте: #ffffff;   /* текст на зелёном — белый (2,08:1; решение заказчика) */
+  --опасно: var(--текст);
+  --прочитано: var(--подтверждено);
+  --тьма: var(--текст);
+  --тьма-2: rgba(255, 255, 255, 0.08);
+  --на-тьме: var(--поверхность);
+  --на-тьме-2: rgba(255, 255, 255, 0.55);
+  --контур: var(--рамка);
+  --контур-слабый: var(--чёрный-12);
+
+  /* ── Шрифт ────────────────────────────────────────────────────────────── */
+  --шрифт: Inter, "Helvetica Neue", Arial, "Segoe UI", system-ui, sans-serif;
+  --щ1: 30px; --щ2: 22px; --щ3: 17px; --щ4: 15px; --щ5: 13px; --щ6: 11px;
+
+  --о1: 4px; --о2: 8px; --о3: 12px; --о4: 16px; --о5: 22px; --о6: 28px;
+  --радиус-круг: 999px;      /* кнопки */
+  --радиус: 16px;            /* пузырь */
+  --радиус-мал: 12px;
+  --радиус-квадрат: 10px;      /* аватары и логотипы — квадрат со скруглёнными краями */
+  --радиус-квадрат-мал: 8px;
+  --радиус-квадрат-бол: 16px;
+  --зона1: 56px; --зона4: 62px; --ава: 42px;
+}
+
+/* ── Документ ────────────────────────────────────────────────────────────── */
+
+body {
+  margin: 0; padding: 26px;
+  background: #eceef1; color: var(--текст);
+  font-family: var(--шрифт); font-size: 15px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.лист-док { max-width: 1180px; margin: 0 auto; }
+
+.путь { font-size: 12px; color: var(--чёрный-50); margin-bottom: 6px; }
+.путь a { color: var(--чёрный-50); }
+
+h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; margin: 0 0 8px; }
+h2 {
+  font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.10em;
+  margin: 30px 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--текст);
+}
+.подзаголовок { color: var(--чёрный-70); margin: 0 0 24px; max-width: 72ch; }
+
+.вид {
+  display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 10px;
+  vertical-align: 3px; border-radius: var(--радиус-круг);
+  background: var(--навигация); color: #ffffff;
+}
+.вид.подокно { background: var(--чёрный-12); color: var(--текст); }
+
+.экраны { display: flex; flex-wrap: wrap; gap: 30px; align-items: flex-start; }
+.разбор { flex: 1 1 320px; min-width: 300px; }
+
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--чёрный-12); }
+th { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 2px solid var(--текст); }
+ul.кратко { margin: 0; padding-left: 20px; font-size: 14px; color: var(--чёрный-70); }
+ul.кратко li { margin: 6px 0; }
+ul.кратко b { color: var(--текст); font-weight: 700; }
+code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: var(--чёрный-6); padding: 2px 6px; border-radius: 5px; }
+a { color: var(--текст); }
+
+.оговорка {
+  background: var(--поверхность); border-radius: var(--радиус-мал);
+  border-left: 6px solid var(--активность);
+  padding: 13px 17px; margin: 14px 0; font-size: 14px; color: var(--чёрный-70);
+}
+.оговорка b { color: var(--текст); font-weight: 700; }
+
+/* ── Рамка устройства ───────────────────────────────────────────────────── */
+
+.тел { flex: 0 0 auto; }
+
+.окно {
+  width: 380px; height: 800px;
+  background: var(--поверхность); color: var(--текст);
+  border: 3px solid var(--текст); border-radius: 26px;
+  overflow: hidden; display: flex; flex-direction: column;
+  font-size: var(--щ4);
+}
+.окно.темь { background: var(--текст); color: var(--поверхность); }
+
+.статус {
+  flex: 0 0 26px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 var(--о4); font-size: 10px; font-weight: 700; color: var(--чёрный-50);
+  background: var(--поверхность);
+}
+.темь .статус { background: var(--текст); color: var(--на-тьме-2); }
+
+.дом-полоса { flex: 0 0 16px; display: flex; align-items: center; justify-content: center; background: var(--поверхность); }
+.дом-полоса::after { content: ""; width: 108px; height: 4px; border-radius: 2px; background: var(--текст); }
+.темь .дом-полоса { background: var(--текст); }
+.темь .дом-полоса::after { background: var(--поверхность); }
+
+.подпись { width: 380px; text-align: center; font-size: 11.5px; font-weight: 600; color: var(--чёрный-50); margin-top: 10px; }
+
+/* ── ЗОНА 1 ─────────────────────────────────────────────────────────────── */
+
+/* Шапка: название окна плашкой во всю ширину (проба 10).
+   Плашка — псевдоэлемент, поэтому разметка не менялась, а полоса
+   функциональной подложки под ней сохранилась. */
+.зона-1 {
+  position: relative;
+  flex: 0 0 auto; min-height: var(--зона1);
+  display: flex; align-items: center; gap: var(--о3);
+  padding: 8px 22px; background: var(--функц);
+  border: none; border-bottom: 1px solid var(--чёрный-12);
+}
+.зона-1::before {
+  content: ""; position: absolute; inset: 8px 12px;
+  background: var(--навигация); border-radius: 8px;
+}
+.зона-1 > * { position: relative; z-index: 1; }
+
+/* Плашка — признак ОСНОВНОГО окна. У подокон шапка остаётся полосой на
+   функциональной подложке: зелёная плашка там означала бы «вы в окне», а вы в
+   подокне, и выход отсюда — «назад», а не переключение окон. */
+.зона-1.подокно::before { display: none; }
+.зона-1.подокно { padding: 0 var(--о4); }
+.зона-1.подокно .икона { background: var(--чёрный-6); color: var(--текст); }
+.зона-1.подокно .икона.жив { background: var(--навигация); color: #ffffff; }
+.зона-1.подокно .ава { background: var(--чёрный-6); color: var(--текст); }
+.зона-1.подокно .трет { color: var(--чёрный-50); }
+.зона-1.подокно .имя-окна { color: var(--текст); }
+.темь .зона-1 { background: var(--текст); border-bottom-color: rgba(255,255,255,0.16); }
+
+/* Логотип и название — одна область нажатия, от края плашки до кнопок.
+   Нажатие открывает переключение окон: то, что говорит «где я», и должно
+   вести туда, где это меняют. */
+.переход-окон {
+  display: flex; align-items: center; gap: var(--о3);
+  min-width: 0; text-decoration: none; color: inherit;
+}
+
+/* Логотип — квадрат со скруглением, белый: он внутри салатовой плашки */
+.лого {
+  width: 30px; height: 30px; flex: 0 0 30px; border-radius: var(--радиус-квадрат-мал);
+  background: #ffffff; color: var(--навигация);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 800; text-decoration: none;
+}
+
+.имя-окна {
+  font-size: var(--щ3); font-weight: 800; letter-spacing: -0.02em;
+  color: #ffffff;   /* белым по плашке: 2,08:1 — см. пробы-название.html */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.тянуть { flex: 1 1 auto; min-width: 0; }
+
+/* Кнопка-иконка — КРУГ */
+.икона {
+  width: 36px; height: 36px; flex: 0 0 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; color: var(--текст); text-decoration: none;
+  background: var(--чёрный-6);
+}
+/* Кнопки внутри плашки — белые круги */
+.зона-1 .икона { background: #ffffff; color: var(--текст); }
+.зона-1 .ава { background: rgba(255, 255, 255, 0.9); color: var(--текст); }
+.зона-1 .трет { color: rgba(0, 0, 0, 0.7); }
+/* «Отправить» и прочие главные действия — салатовые */
+.икона.жив { background: var(--навигация); color: #ffffff; }
+/* …но внутри плашки всё белое: салатовое на салатовом не видно */
+.зона-1 .икона.жив { background: #ffffff; color: var(--текст); }
+.темь .икона { background: rgba(255,255,255,0.12); color: var(--поверхность); }
+.темь .икона.жив { background: var(--навигация); color: #ffffff; }
+
+/* ── Табы: текущее окно — салатовой заливкой ───────────────────────────── */
+
+.табы {
+  flex: 0 0 auto; display: flex; gap: var(--о2); padding: var(--о2) var(--о4);
+  background: var(--функц); border: none; border-bottom: 1px solid var(--чёрный-12);
+}
+.таб {
+  padding: 6px 14px; font-size: var(--щ5); font-weight: 700; color: var(--чёрный-50);
+  border: none; border-radius: var(--радиус-круг); text-decoration: none;
+}
+.таб.тек { background: var(--навигация); color: #ffffff; }
+
+.режимы { display: flex; background: var(--чёрный-6); border-radius: var(--радиус-круг); padding: 3px; }
+.режим { padding: 5px 12px; font-size: var(--щ6); font-weight: 700; border-radius: var(--радиус-круг); color: var(--чёрный-50); text-decoration: none; }
+.режим.тек { background: var(--навигация); color: #ffffff; }
+
+/* ── ЗОНА 2 ─────────────────────────────────────────────────────────────── */
+
+.зона-2 { flex: 1 1 auto; overflow: auto; position: relative; background: var(--поверхность); }
+.темь .зона-2 { background: var(--текст); }
+.зона-2.вокруг { padding: var(--о4); }
+
+.раздел {
+  padding: var(--о4) var(--о4) var(--о2);
+  font-size: var(--щ6); font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.10em; color: var(--чёрный-50);
+}
+
+/* Строка списка: линия снизу, без карточки и без фона */
+.строка {
+  display: flex; align-items: center; gap: var(--о3);
+  padding: var(--о3) var(--о4); background: none;
+  border: none; border-bottom: 1px solid var(--чёрный-12); border-radius: 0;
+  text-decoration: none; color: inherit;
+}
+.темь .строка { background: none; border-bottom-color: rgba(255,255,255,0.14); }
+
+/* Аватар — КВАДРАТ */
+.ава {
+  width: var(--ава); height: var(--ава); flex: 0 0 var(--ава);
+  border-radius: var(--радиус-квадрат); background: var(--чёрный-6); border: none;
+  color: var(--текст); display: flex; align-items: center; justify-content: center;
+  font-size: var(--щ5); font-weight: 800;
+}
+.ава.бол { width: 80px; height: 80px; flex-basis: 80px; font-size: var(--щ2); border-radius: var(--радиус-квадрат-бол); }
+.ава.мал { width: 32px; height: 32px; flex-basis: 32px; font-size: 10px; border-radius: var(--радиус-квадрат-мал); }
+.темь .ава { background: rgba(255,255,255,0.14); color: var(--поверхность); }
+
+.имя { font-size: var(--щ4); font-weight: 700; }
+.втор { font-size: var(--щ5); color: var(--чёрный-70); }
+.трет { font-size: var(--щ6); font-weight: 600; color: var(--чёрный-50); }
+.обрез { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.мета { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex: 0 0 auto; }
+
+/* Активность — янтарь */
+.счёт {
+  min-width: 22px; height: 22px; padding: 0 7px; border-radius: var(--радиус-круг);
+  background: var(--активность); color: var(--текст);
+  font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+}
+.замок { font-size: 10px; color: var(--текст); }
+
+.чип {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: var(--радиус-круг);
+  background: var(--чёрный-6); color: var(--чёрный-70);
+  font-size: var(--щ6); font-weight: 700; text-decoration: none; border: none;
+}
+.чип.акц { background: var(--навигация); color: #ffffff; }
+.чип.е2е { background: var(--подтверждено); color: #ffffff; }
+.чип.откр { background: var(--чёрный-6); color: var(--чёрный-50); }
+
+/* Кнопки — круглые. Салатовая = навигация и действие */
+.кн {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 42px; padding: 0 20px; border-radius: var(--радиус-круг);
+  background: var(--навигация); color: #ffffff; border: none;
+  font-size: var(--щ5); font-weight: 700; text-decoration: none; box-sizing: border-box;
+}
+.кн.тихая { background: var(--чёрный-6); color: var(--текст); }
+.кн.контур { background: none; color: var(--текст); border: 2px solid var(--текст); }
+.кн.беда { background: none; color: var(--текст); border: 2px solid var(--текст); }
+.кн.вширь { display: flex; width: 100%; }
+.темь .кн { background: var(--навигация); color: #ffffff; }
+.темь .кн.тихая { background: rgba(255,255,255,0.14); color: var(--поверхность); }
+
+/* ПРАВКА 2: новостная запись — без рамки, только линия между записями */
+.карта {
+  background: none; border: none; border-radius: 0;
+  border-bottom: 1px solid var(--чёрный-12);
+  padding: var(--о4); margin: 0;
+}
+.темь .карта { border-bottom-color: rgba(255,255,255,0.14); }
+/* Исключение: карточка с явной рамкой — статистика блогера, форма бага */
+.карта.в-рамке { border: 2px solid var(--текст); border-radius: var(--радиус-мал); margin-bottom: var(--о3); }
+
+.медиа {
+  background: var(--чёрный-6); border-radius: var(--радиус-мал);
+  color: var(--чёрный-50); display: flex; align-items: center; justify-content: center;
+  font-size: var(--щ6); font-weight: 700;
+}
+
+.эмоции { display: flex; gap: var(--о3); flex-wrap: wrap; font-size: var(--щ6); font-weight: 700; color: var(--текст); }
+.эм { display: inline-flex; align-items: center; gap: 4px; }
+
+.плюс-минус { display: flex; gap: var(--о1); }
+.пм {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: none; background: var(--чёрный-6);
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--щ4); font-weight: 800; color: var(--текст); text-decoration: none;
+}
+.пм.выбран { background: var(--текст); color: var(--поверхность); }
+
+/* ── ЗОНА 3 ─────────────────────────────────────────────────────────────── */
+
+.зона-3 {
+  position: absolute; right: var(--о4); bottom: var(--о4);
+  display: flex; flex-direction: column; gap: var(--о2); align-items: flex-end;
+}
+.круг {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--поверхность); border: 2px solid var(--текст);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; color: var(--текст); text-decoration: none;
+}
+/* «Написать» — салатовая */
+.круг.акц { background: var(--навигация); border-color: var(--навигация); color: #ffffff; }
+.круг .бирка {
+  position: absolute; transform: translate(17px, -17px);
+  background: var(--активность); color: var(--текст);
+  font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: var(--радиус-круг);
+}
+
+/* ── ЗОНА 4 ─────────────────────────────────────────────────────────────── */
+
+.зона-4 {
+  flex: 0 0 auto; display: flex; align-items: center; gap: var(--о2);
+  padding: var(--о2) var(--о3) var(--о3);
+  background: var(--функц); border: none; border-top: 1px solid var(--чёрный-12);
+}
+.ввод {
+  flex: 1 1 auto; min-height: 42px; display: flex; align-items: center;
+  padding: 0 var(--о4); border-radius: var(--радиус-круг);
+  background: none; border: 1px solid var(--рамка);
+  color: var(--чёрный-50); font-size: var(--щ5);
+}
+.темь .зона-4 { background: var(--текст); border-top-color: rgba(255,255,255,0.16); }
+.темь .ввод { border-color: rgba(255,255,255,0.35); color: var(--на-тьме-2); }
+
+/* ── ПРАВКА 1: переписка — аватар внутри сообщения, текст обтекает ──────── */
+
+.поток { display: flex; flex-direction: column; gap: var(--о3); padding: var(--о4); }
+.реплика { display: flex; }
+.реплика.моя { justify-content: flex-end; }
+
+/* У сообщения ЕСТЬ рамка */
+.пузырь {
+  max-width: 290px; padding: 11px 14px; border-radius: var(--радиус);
+  background: var(--автор); border: 1px solid var(--рамка); color: var(--текст);
+  overflow: hidden;   /* обтекание не должно вылезать за рамку */
+}
+/* Фон моих сообщений */
+.реплика.моя .пузырь { background: var(--мои); border-color: var(--рамка); }
+
+/* Аватар ВНУТРИ пузыря: квадрат слева, текст огибает справа */
+.пузырь > .ава {
+  float: left; margin: 0 10px 4px 0;
+  width: 36px; height: 36px; flex-basis: auto;
+  border-radius: var(--радиус-квадрат);
+  background: rgba(0,0,0,0.10); color: var(--текст);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800;
+}
+.реплика.моя .пузырь > .ава { background: rgba(0,0,0,0.14); }
+
+.низ-пузыря {
+  display: flex; gap: 6px; align-items: center; justify-content: flex-end;
+  margin-top: 4px; clear: both;
+  font-size: 10.5px; font-weight: 700; color: var(--чёрный-50);
+}
+/* Доставлено и прочитано — зелёным, заливкой: буквами на белом слабо */
+.галки {
+  color: #ffffff; background: var(--подтверждено);
+  border-radius: var(--радиус-круг); padding: 0 6px;
+  font-size: 11px; font-weight: 800;
+}
+.ветка {
+  border-left: 3px solid var(--навигация); padding-left: var(--о2); margin-bottom: 5px;
+  font-size: var(--щ6); font-weight: 600; color: var(--чёрный-70);
+}
+.системное {
+  text-align: center; font-size: var(--щ6); font-weight: 700; color: var(--чёрный-50);
+}
+
+/* ── Подокно ────────────────────────────────────────────────────────────── */
+
+.поверх {
+  flex: 1 1 auto; position: relative; display: flex;
+  align-items: center; justify-content: center; padding: var(--о4);
+  background: none;
+}
+.поверх::before { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+.поверх.к-низу { align-items: flex-end; padding: 0; }
+.фон-подпись { position: absolute; top: 12px; left: 0; right: 0; text-align: center; font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.85); }
+.фон-подпись a { color: var(--поверхность); }
+
+.модалка {
+  position: relative; width: 100%;
+  background: var(--поверхность); border: 2px solid var(--текст); border-radius: var(--радиус-мал);
+  overflow: hidden;
+}
+.модалка.снизу { border-radius: var(--радиус-мал) var(--радиус-мал) 0 0; border-bottom: none; }
+.шапка-модалки {
+  display: flex; align-items: center; gap: var(--о3);
+  padding: var(--о4); border-bottom: 1px solid var(--чёрный-12);
+}
+.пункт {
+  display: flex; align-items: center; gap: var(--о3);
+  padding: 13px var(--о4); border-bottom: 1px solid var(--чёрный-12);
+  text-decoration: none; color: inherit; font-size: var(--щ4); font-weight: 600;
+}
+.пункт:last-child { border-bottom: none; }
+.пункт.беда { color: var(--текст); box-shadow: inset 4px 0 0 var(--активность); }
+.пункт .знак { width: 22px; text-align: center; }
+.пункт .усл { margin-left: auto; font-size: var(--щ6); font-weight: 700; color: var(--чёрный-50); }
+
+/* ── Сетки, истории ────────────────────────────────────────────────────── */
+
+.сетка-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--о3); padding: var(--о4); }
+.сетка-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; padding: 4px; }
+
+.истории { display: flex; gap: var(--о3); padding: var(--о2) var(--о4) var(--о3); overflow: auto; background: var(--поверхность); border: none; border-bottom: 1px solid var(--чёрный-12); }
+.история { flex: 0 0 auto; text-align: center; width: 60px; }
+/* История — КВАДРАТ. Непросмотренная — янтарная рамка */
+.кольцо {
+  width: 56px; height: 56px; border-radius: var(--радиус-квадрат); padding: 3px; box-sizing: border-box;
+  background: var(--активность);
+}
+.кольцо > div {
+  width: 100%; height: 100%; border-radius: var(--радиус-квадрат-мал);
+  background: var(--чёрный-6); border: none; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--щ6); font-weight: 800; color: var(--текст);
+}
+
+/* ── Карта на индексе ───────────────────────────────────────────────────── */
+
+.карта-окон { display: flex; flex-wrap: wrap; gap: 14px; }
+.ветвь {
+  flex: 1 1 300px; background: var(--поверхность); border: none;
+  border-radius: var(--радиус-мал); padding: 17px 19px;
+}
+.ветвь h3 { margin: 0 0 5px; font-size: 15px; font-weight: 800; }
+.ветвь .назн { font-size: 13px; color: var(--чёрный-70); margin-bottom: 9px; }
+.ветвь ul { margin: 0; padding-left: 14px; list-style: none; font-size: 13px; }
+.ветвь li { margin: 4px 0; color: var(--чёрный-70); }
+.ветвь li::before { content: "└ "; color: var(--чёрный-35); }
+
+.палитра { display: flex; flex-wrap: wrap; gap: 12px; }
+.мазок { width: 132px; font-size: 11px; font-weight: 600; color: var(--чёрный-70); }
+.мазок > i {
+  display: block; height: 54px; border-radius: var(--радиус-квадрат);
+  box-shadow: inset 0 0 0 1px var(--чёрный-12); margin-bottom: 6px;
+}
+.мазок b { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--текст); }

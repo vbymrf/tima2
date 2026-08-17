@@ -1,0 +1,477 @@
+/*
+ * Стиль «Оттиск». Четвёртое предложение — и первое, где меняется не палитра, а
+ * состав элементов.
+ *
+ * Три предыдущих варианта — «Бумага», «Холод», «Тепло» — стояли на одном
+ * скелете: панель с названием, вкладки-пилюли, карточки, пузыри, эмодзи вместо
+ * подписей. Различались краска и радиусы. Здесь скелета нет.
+ *
+ * Пять решений, и каждое отнимает что-то привычное:
+ *
+ * 1. Иконок нет. Всё названо словом. Эмодзи остаются ровно там, где они
+ *    содержание, а не украшение, — в шкале эмоций из ТЗ. Причина: значок учат
+ *    один раз и молча, слово читается сразу. Цена — слова занимают место и
+ *    ломаются при переводе.
+ * 2. Аватаров как картинок нет. Человек — это его инициалы, набранные шрифтом,
+ *    без круга и подложки. Цена — лица не узнаются мельком.
+ * 3. Пузырей нет. Переписка набрана как стенограмма: имя в левом поле, реплика
+ *    справа, никакого «своё справа, чужое слева». Цена — теряется мгновенное
+ *    различение по стороне; выигрыш — длинная реплика получает всю ширину, а в
+ *    группе всегда видно, кто говорит.
+ * 4. Два шрифта, две роли. Хром — узкий гротеск прописными, тесно; содержимое —
+ *    антиква, как в книге. Разница между «интерфейсом» и «речью» делается
+ *    начертанием, а не рамкой.
+ * 5. Красный один. Он означает «сейчас» и «необратимо» одновременно, а
+ *    различаются они словом и местом. Цена — опасное не выделяется оттенком.
+ *
+ * Ни скруглений, ни теней, ни заливок, кроме инверсии. Только линии.
+ *
+ * Разметка страниц не менялась структурно: классы названы по сущностям
+ * приложения, поэтому «пузырь» здесь просто перестал быть пузырём.
+ */
+
+:root {
+  /* ── Два цвета и один сигнал ───────────────────────────────────────────── */
+  --оттиск: #131211;              /* краска */
+  --бумага-л: #efede6;            /* лист */
+  --бумага-2: #f7f6f1;            /* выворотка светлее листа */
+  --серый: #6e6b62;
+  --серый-2: #a29e94;
+  --сигнал: #d6421f;              /* «сейчас» и «необратимо» */
+
+  --линия-1: rgba(19, 18, 17, 0.15);
+  --линия-2: rgba(19, 18, 17, 0.30);
+  --линия-жирная: var(--оттиск);
+
+  /* ── Эмоции: содержание, а не оформление. Приглушены до печатных ───────── */
+  --одобрение: #4f6b3a;
+  --презрение: #6f6a58;
+  --смех: #a8791b;
+  --боль: #96603c;
+  --ярость: #a8331c;
+  --страх: #5c5170;
+  --интерес: #2f5f6e;
+  --скука: #7c776d;
+  --спокойствие: #4a6f68;
+
+  /* ── Совместимость с разметкой ─────────────────────────────────────────── */
+  --бумага: var(--бумага-л);
+  --лист: transparent;
+  --лист-2: rgba(19, 18, 17, 0.05);
+  --линия: var(--линия-1);
+  --чернила: var(--оттиск);
+  --чернила-2: var(--серый);
+  --чернила-3: var(--серый-2);
+  --акцент: var(--сигнал);
+  --акцент-тёмный: var(--оттиск);
+  --акцент-мягкий: transparent;
+  --на-акценте: var(--бумага-л);
+  --опасно: var(--сигнал);
+  --прочитано: var(--серый);
+  --тьма: var(--оттиск);
+  --тьма-2: transparent;
+  --на-тьме: var(--бумага-л);
+  --на-тьме-2: rgba(239, 237, 230, 0.55);
+  --контур: var(--линия-2);
+  --контур-слабый: var(--линия-1);
+
+  /* ── Шрифты: две роли ─────────────────────────────────────────────────── */
+  --шрифт-хром: "Helvetica Neue", Arial, "Segoe UI", system-ui, sans-serif;
+  --шрифт-текст: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  --шрифт: var(--шрифт-текст);
+
+  --щ1: 34px; --щ2: 23px; --щ3: 17px; --щ4: 16px; --щ5: 14px; --щ6: 10px;
+
+  --о1: 4px; --о2: 8px; --о3: 12px; --о4: 18px; --о5: 24px; --о6: 30px;
+  --радиус: 0; --радиус-мал: 0; --радиус-ава: 0; --радиус-круг: 0;
+  --зона1: 52px; --зона4: 58px; --ава: 40px;
+}
+
+/* Хром: прописные, тесно, с разрядкой */
+.хром, .икона, .таб, .режим, .кн, .чип, .счёт, .раздел, .системное,
+.низ-пузыря, .трет, .метка, .подпись, .вид, th, .путь, code, .мазок,
+.кнопки-диалога, .пм, .круг, .ввод, .пункт .усл {
+  font-family: var(--шрифт-хром);
+}
+
+/* ── Документ ────────────────────────────────────────────────────────────── */
+
+body {
+  margin: 0; padding: 28px;
+  background: #e7e5dd; color: var(--оттиск);
+  font-family: var(--шрифт-текст); font-size: 16px; line-height: 1.55;
+}
+
+.лист-док { max-width: 1180px; margin: 0 auto; }
+
+.путь { font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--серый); margin-bottom: 10px; }
+.путь a { color: var(--серый); }
+
+h1 {
+  font-family: var(--шрифт-хром); font-size: 30px; font-weight: 700;
+  letter-spacing: -0.02em; margin: 0 0 10px; text-transform: uppercase;
+}
+h2 {
+  font-family: var(--шрифт-хром); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.18em;
+  margin: 34px 0 14px; padding-bottom: 6px;
+  border-bottom: 2px solid var(--линия-жирная);
+}
+.подзаголовок { color: var(--серый); margin: 0 0 26px; max-width: 68ch; font-size: 16px; }
+
+.вид {
+  display: inline-block; font-size: 9px; padding: 3px 7px; vertical-align: 4px;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  border: 1px solid var(--оттиск); color: var(--оттиск); background: none;
+}
+.вид.подокно { border-style: dashed; }
+
+.экраны { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; }
+.разбор { flex: 1 1 320px; min-width: 300px; }
+
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--линия-1); }
+th { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--оттиск); border-bottom: 1px solid var(--оттиск); font-weight: 700; }
+ul.кратко { margin: 0; padding-left: 0; list-style: none; font-size: 15px; color: var(--серый); }
+ul.кратко li { margin: 10px 0; padding-left: 16px; border-left: 1px solid var(--линия-1); }
+ul.кратко b { color: var(--оттиск); font-weight: 700; }
+code { font-size: 11px; letter-spacing: 0.04em; background: none; border-bottom: 1px solid var(--линия-2); padding: 0; color: var(--оттиск); }
+a { color: var(--оттиск); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+
+.оговорка {
+  border-top: 2px solid var(--сигнал); border-bottom: 1px solid var(--линия-1);
+  padding: 12px 0; margin: 16px 0; font-size: 15px; color: var(--серый);
+  background: none;
+}
+.оговорка b { color: var(--оттиск); font-weight: 700; }
+
+/* ── Рамка устройства ───────────────────────────────────────────────────── */
+
+.тел { flex: 0 0 auto; }
+
+.окно {
+  width: 380px; height: 800px;
+  background: var(--бумага-л); color: var(--оттиск);
+  border: 1px solid var(--оттиск); border-radius: 0;
+  overflow: hidden; display: flex; flex-direction: column;
+  font-size: var(--щ4);
+}
+.окно.темь { background: var(--оттиск); color: var(--бумага-л); }
+
+.статус {
+  flex: 0 0 24px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 var(--о4); font-family: var(--шрифт-хром);
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--серый-2);
+  border-bottom: 1px solid var(--линия-1);
+}
+.темь .статус { color: rgba(239,237,230,0.45); border-bottom-color: rgba(239,237,230,0.18); }
+
+.дом-полоса { flex: 0 0 14px; border-top: 1px solid var(--линия-1); }
+.темь .дом-полоса { border-top-color: rgba(239,237,230,0.18); }
+
+.подпись {
+  width: 380px; text-align: left; margin-top: 10px;
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--серый);
+}
+
+/* ── ЗОНА 1: шапка ──────────────────────────────────────────────────────── */
+
+.зона-1 {
+  flex: 0 0 auto; min-height: var(--зона1);
+  display: flex; align-items: center; gap: var(--о3);
+  padding: var(--о2) var(--о4);
+  background: none; border-bottom: 2px solid var(--линия-жирная);
+}
+.темь .зона-1 { background: none; border-bottom-color: rgba(239,237,230,0.35); }
+
+/* Логотип — номер окна и точка. Единственная краска на экране */
+.лого {
+  width: auto; height: auto; flex: 0 0 auto; border-radius: 0;
+  background: none; color: var(--сигнал);
+  font-family: var(--шрифт-хром); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.14em; text-decoration: none;
+  border-bottom: 2px solid var(--сигнал); padding-bottom: 1px;
+}
+
+.имя-окна {
+  font-family: var(--шрифт-хром); font-size: 15px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.тянуть { flex: 1 1 auto; min-width: 0; }
+
+/* Действие — слово, а не значок */
+.икона {
+  width: auto; height: auto; flex: 0 0 auto; border-radius: 0; background: none;
+  font-family: var(--шрифт-хром); font-size: 9.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.10em;
+  color: var(--оттиск); text-decoration: none; padding: 4px 0;
+  display: inline-flex; align-items: center;
+}
+.икона.жив { color: var(--сигнал); border-bottom: 1px solid var(--сигнал); }
+.темь .икона { color: var(--бумага-л); }
+
+/* ── Табы: номера и слова, без пилюль ───────────────────────────────────── */
+
+.табы {
+  flex: 0 0 auto; display: flex; gap: var(--о4); padding: var(--о2) var(--о4);
+  background: none; border-bottom: 1px solid var(--линия-1);
+}
+.таб {
+  padding: 2px 0; font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--серый-2); border: none; text-decoration: none;
+}
+.таб.тек { color: var(--оттиск); border-bottom: 2px solid var(--оттиск); }
+
+.режимы { display: flex; gap: var(--о3); border: none; padding: 0; background: none; }
+.режим {
+  padding: 2px 0; font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--серый-2); text-decoration: none; border-radius: 0;
+}
+.режим.тек { color: var(--оттиск); border-bottom: 2px solid var(--оттиск); background: none; }
+.темь .режим.тек { color: var(--бумага-л); border-bottom-color: var(--бумага-л); }
+
+/* ── ЗОНА 2 ─────────────────────────────────────────────────────────────── */
+
+.зона-2 { flex: 1 1 auto; overflow: auto; position: relative; }
+.зона-2.вокруг { padding: var(--о4); }
+
+.раздел {
+  padding: var(--о5) var(--о4) var(--о2);
+  font-size: 9px; color: var(--серый); text-transform: uppercase; letter-spacing: 0.18em;
+  border-bottom: 1px solid var(--линия-1);
+}
+
+/* Строка списка: только линия снизу. Ни карточки, ни фона */
+.строка {
+  display: flex; align-items: baseline; gap: var(--о3);
+  padding: var(--о3) var(--о4); background: none;
+  border-bottom: 1px solid var(--линия-1); border-radius: 0;
+  text-decoration: none; color: inherit;
+}
+.темь .строка { background: none; border-bottom-color: rgba(239,237,230,0.18); }
+
+/* Человек — это инициалы, набранные шрифтом. Ни круга, ни подложки */
+.ава {
+  width: var(--ава); height: auto; flex: 0 0 var(--ава);
+  border-radius: 0; background: none; border: none;
+  color: var(--оттиск); display: block;
+  font-family: var(--шрифт-хром); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.ава.бол { width: auto; flex-basis: auto; font-size: 30px; letter-spacing: 0.02em; }
+.ава.мал { width: 30px; flex-basis: 30px; font-size: 9.5px; }
+.темь .ава { color: var(--бумага-л); }
+
+.имя { font-family: var(--шрифт-текст); font-size: var(--щ4); font-weight: 400; }
+.втор { font-family: var(--шрифт-текст); font-size: var(--щ5); color: var(--серый); }
+.трет { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.10em; color: var(--серый-2); }
+.обрез { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.мета { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: 0 0 auto; }
+
+.счёт {
+  min-width: auto; height: auto; padding: 0; border-radius: 0; background: none;
+  color: var(--сигнал); font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+  display: block;
+}
+.замок { font-size: 9px; color: var(--серый); }
+
+.чип {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 0; border-radius: 0; background: none; border: none;
+  border-bottom: 1px solid var(--линия-2);
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.10em;
+  color: var(--серый); text-decoration: none;
+}
+.чип.акц { color: var(--сигнал); border-bottom-color: var(--сигнал); }
+.чип.е2е { color: var(--оттиск); border-bottom-color: var(--оттиск); }
+.чип.откр { color: var(--серый-2); border-bottom-style: dashed; }
+
+.кн {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 36px; padding: 0 16px; border-radius: 0;
+  background: var(--оттиск); color: var(--бумага-л); border: none;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em;
+  text-decoration: none; box-sizing: border-box;
+}
+.кн.тихая { background: none; color: var(--оттиск); border: 1px solid var(--оттиск); }
+.кн.контур { background: none; color: var(--оттиск); border: 1px solid var(--оттиск); }
+.кн.беда { background: none; color: var(--сигнал); border: 1px solid var(--сигнал); }
+.кн.вширь { display: flex; width: 100%; }
+.темь .кн { background: var(--бумага-л); color: var(--оттиск); }
+.темь .кн.тихая { background: none; color: var(--бумага-л); border-color: var(--бумага-л); }
+
+/* Карточка = блок между линиями */
+.карта {
+  background: none; border: none; border-bottom: 1px solid var(--линия-1);
+  border-radius: 0; padding: var(--о4); margin: 0;
+}
+.карта.в-рамке { border: 1px solid var(--линия-2); margin-bottom: var(--о3); }
+
+.медиа {
+  background: none; border: 1px solid var(--линия-2); border-radius: 0;
+  color: var(--серый); display: flex; align-items: center; justify-content: center;
+  font-family: var(--шрифт-хром); font-size: 9px; text-transform: uppercase; letter-spacing: 0.18em;
+}
+
+.эмоции { display: flex; gap: var(--о4); flex-wrap: wrap; font-size: 10px; color: var(--серый); font-family: var(--шрифт-хром); letter-spacing: 0.06em; }
+.эм { display: inline-flex; align-items: center; gap: 4px; }
+
+.плюс-минус { display: flex; gap: var(--о2); }
+.пм {
+  width: auto; height: auto; padding: 0; border: none; border-radius: 0; background: none;
+  font-size: 13px; font-weight: 700; color: var(--серый-2); text-decoration: none;
+  display: inline-flex; align-items: center;
+}
+.пм.выбран { color: var(--сигнал); border-bottom: 2px solid var(--сигнал); background: none; }
+
+/* ── ЗОНА 3: не гроздь, а строка слов у нижнего края ────────────────────── */
+
+.зона-3 {
+  position: absolute; right: var(--о4); bottom: var(--о3); left: var(--о4);
+  display: flex; flex-direction: row; justify-content: flex-end; gap: var(--о4);
+  align-items: baseline;
+  background: var(--бумага-л); border-top: 1px solid var(--оттиск); padding-top: var(--о2);
+}
+.темь .зона-3 { background: var(--оттиск); border-top-color: var(--бумага-л); }
+.круг {
+  width: auto; height: auto; border-radius: 0; background: none; border: none;
+  font-family: var(--шрифт-хром); font-size: 9.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.10em;
+  color: var(--оттиск); text-decoration: none; box-shadow: none;
+  display: inline-flex; align-items: baseline; position: relative;
+}
+.круг.акц { color: var(--сигнал); }
+.темь .круг { color: var(--бумага-л); }
+.круг .бирка {
+  position: static; transform: none; background: none; color: var(--сигнал);
+  font-size: 9.5px; padding: 0 0 0 3px; border-radius: 0;
+}
+
+/* ── ЗОНА 4: ввод ───────────────────────────────────────────────────────── */
+
+.зона-4 {
+  flex: 0 0 auto; display: flex; align-items: center; gap: var(--о4);
+  padding: var(--о3) var(--о4);
+  background: none; border-top: 2px solid var(--линия-жирная);
+}
+.темь .зона-4 { border-top-color: rgba(239,237,230,0.35); }
+.ввод {
+  flex: 1 1 auto; min-height: auto; display: flex; align-items: center;
+  padding: 0 0 4px; border-radius: 0; background: none;
+  border-bottom: 1px solid var(--линия-2);
+  font-family: var(--шрифт-текст); color: var(--серый-2); font-size: var(--щ5);
+}
+
+/* ── Стенограмма вместо пузырей ─────────────────────────────────────────── */
+
+.поток { display: flex; flex-direction: column; gap: var(--о5); padding: var(--о4); }
+
+.реплика { display: flex; flex-direction: row; gap: var(--о3); align-items: flex-start; }
+/* Своя реплика не уходит вправо: имя в поле, как у всех. Различает слово «я» */
+.реплика.моя { flex-direction: row; }
+.реплика.моя::before {
+  content: "я"; flex: 0 0 30px;
+  font-family: var(--шрифт-хром); font-size: 9.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--сигнал);
+  padding-top: 2px;
+}
+.реплика > .ава.мал { padding-top: 2px; }
+
+.пузырь {
+  max-width: none; flex: 1 1 auto; padding: 0; border-radius: 0;
+  background: none; border: none;
+  font-family: var(--шрифт-текст); font-size: var(--щ4); line-height: 1.5;
+}
+.реплика.моя .пузырь { background: none; border: none; }
+
+.низ-пузыря {
+  display: flex; gap: var(--о2); align-items: baseline; justify-content: flex-start;
+  margin-top: 5px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--серый-2);
+}
+.галки { color: var(--серый); font-size: 9px; letter-spacing: 0; }
+.ветка {
+  border-left: 2px solid var(--линия-2); padding-left: var(--о3); margin-bottom: 6px;
+  font-family: var(--шрифт-текст); font-size: var(--щ5); font-style: italic; color: var(--серый);
+}
+.системное {
+  text-align: left; font-size: 9px; color: var(--серый-2);
+  text-transform: uppercase; letter-spacing: 0.18em;
+  border-top: 1px solid var(--линия-1); padding-top: var(--о2);
+}
+
+/* ── Подокно: лист поверх листа, без затемнения ─────────────────────────── */
+
+.поверх {
+  flex: 1 1 auto; position: relative; display: flex;
+  align-items: center; justify-content: center; padding: var(--о4);
+  background: none;
+}
+.поверх::before { content: ""; position: absolute; inset: 0; background: rgba(19,18,17,0.55); }
+.поверх.к-низу { align-items: flex-end; padding: 0; }
+.фон-подпись {
+  position: absolute; top: var(--о3); left: var(--о4); right: var(--о4); text-align: left;
+  font-family: var(--шрифт-хром); font-size: 9px; text-transform: uppercase;
+  letter-spacing: 0.16em; color: rgba(239,237,230,0.7);
+}
+.фон-подпись a { color: var(--бумага-л); }
+
+.модалка {
+  position: relative; width: 100%;
+  background: var(--бумага-2); border: 1px solid var(--оттиск); border-radius: 0;
+  overflow: hidden;
+}
+.модалка.снизу { border-radius: 0; border-bottom: none; }
+.шапка-модалки {
+  display: flex; align-items: baseline; gap: var(--о3);
+  padding: var(--о4); border-bottom: 2px solid var(--линия-жирная);
+}
+.пункт {
+  display: flex; align-items: baseline; gap: var(--о3);
+  padding: var(--о3) var(--о4); border-bottom: 1px solid var(--линия-1);
+  text-decoration: none; color: inherit;
+  font-family: var(--шрифт-хром); font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.10em;
+}
+.пункт:last-child { border-bottom: none; }
+.пункт.беда { color: var(--сигнал); }
+.пункт .знак { display: none; }         /* значков нет — только слова */
+.пункт .усл { margin-left: auto; font-size: 9.5px; letter-spacing: 0.08em; color: var(--серый-2); }
+.кнопки-диалога { display: flex; justify-content: flex-start; gap: var(--о4); padding-top: var(--о4); }
+
+/* ── Сетки, истории ────────────────────────────────────────────────────── */
+
+.сетка-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--о4); padding: var(--о4); }
+.сетка-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; padding: 1px; background: var(--линия-2); }
+
+.истории {
+  display: flex; gap: var(--о4); padding: var(--о3) var(--о4); overflow: auto;
+  background: none; border-bottom: 1px solid var(--линия-1);
+}
+.история { flex: 0 0 auto; text-align: left; width: 62px; }
+/* История — не кружок, а помеченное имя */
+.кольцо { width: auto; height: auto; border-radius: 0; padding: 0; background: none !important; box-shadow: none; }
+.кольцо > div {
+  width: auto; height: auto; border-radius: 0; background: none !important;
+  border: none; border-top: 2px solid var(--сигнал); padding-top: 5px;
+  display: block; text-align: left;
+  font-family: var(--шрифт-хром); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--оттиск);
+}
+
+/* ── Карта на индексе ───────────────────────────────────────────────────── */
+
+.карта-окон { display: flex; flex-wrap: wrap; gap: 1px; background: var(--линия-2); }
+.ветвь {
+  flex: 1 1 300px; background: var(--бумага-л); border: none; border-radius: 0;
+  padding: 18px 20px;
+}
+.ветвь h3 { font-family: var(--шрифт-хром); margin: 0 0 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.10em; }
+.ветвь .назн { font-size: 14px; color: var(--серый); margin-bottom: 10px; }
+.ветвь ul { margin: 0; padding-left: 0; list-style: none; font-size: 13px; }
+.ветвь li { margin: 5px 0; color: var(--серый); padding-left: 14px; border-left: 1px solid var(--линия-1); }
+.ветвь li::before { content: ""; }
+
+.палитра { display: flex; flex-wrap: wrap; gap: 1px; background: var(--линия-2); }
+.мазок { width: 112px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--серый); background: var(--бумага-л); padding: 8px; }
+.мазок > i { display: block; height: 48px; border: 1px solid var(--линия-2); margin-bottom: 7px; border-radius: 0; }

@@ -1,0 +1,454 @@
+/*
+ * Стиль «Семафор». Пятое предложение — на заданной палитре из шести насыщенных
+ * цветов.
+ *
+ * Задача обратная первым четырём. Там цвет был дефицитом: один акцент, и всё
+ * остальное различалось формой. Здесь цветов шесть, и они яркие. Единственный
+ * способ, чтобы это не стало цирком, — закрепить за каждым ОДИН смысл и никогда
+ * не использовать его иначе. Тогда цвет перестаёт быть украшением и начинает
+ * работать как код, который можно выучить за минуту и потом читать не думая.
+ *
+ * ── КОД ────────────────────────────────────────────────────────────────────
+ *
+ *   #196dff  синий     ДЕЙСТВИЕ        главное действие экрана: послать,
+ *                                      создать, принять. Не все кнопки —
+ *                                      только главная.
+ *   #0077cc  синий 2   МЕСТО           где я нахожусь: активная вкладка,
+ *                                      название окна, номер окна.
+ *   #febb02  янтарь    ТРЕБУЕТ МЕНЯ    непрочитанное, упоминание, запрос,
+ *                                      пропущенный звонок.
+ *   #3bb300  зелёный   ПОДТВЕРЖДЕНО    доставлено, прочитано, E2E, готово.
+ *   #8ac44a  зелёный 2 ЖИВОЕ СЕЙЧАС    в сети, идёт разговор, печатает.
+ *   #000000  чёрный    ТЕКСТ И Я       содержимое и собственный голос.
+ *   #ffffff  белый     ПОВЕРХНОСТЬ
+ *
+ * Серые — это чёрный на прозрачности, отдельного серого в палитре нет.
+ *
+ * ── ЧЕГО В ПАЛИТРЕ НЕТ ─────────────────────────────────────────────────────
+ *
+ * Красного. Значит, опасное не может опираться на цвет: удаление, отзыв
+ * устройства и выход обозначаются словом, чёрной обводкой и последним местом в
+ * списке. Это главная плата за палитру, и она названа здесь, а не спрятана.
+ *
+ * ── ЭМОЦИИ ─────────────────────────────────────────────────────────────────
+ *
+ * Восемь эмоций набраны чёрным: различает их значок, а не цвет. Цвет в этом
+ * варианте занят — он несёт состояние интерфейса, и одолжить его шкале нельзя,
+ * не сломав код.
+ *
+ * Ни градиентов, ни теней. Плоские блоки, белые промежутки, жирный гротеск.
+ */
+
+:root {
+  /* ── Палитра, как задана ───────────────────────────────────────────────── */
+  --действие: #196dff;
+  --место: #0077cc;
+  --требует: #febb02;
+  --подтверждено: #3bb300;
+  --живое: #8ac44a;
+  --текст: #000000;
+  --поверхность: #ffffff;
+
+  /* Серые — чёрный на прозрачности */
+  --чёрный-70: rgba(0, 0, 0, 0.70);
+  --чёрный-50: rgba(0, 0, 0, 0.62);   /* было 0.50 = #808080 = 3,95:1 на белом — мало для мелкого текста */
+  --чёрный-35: rgba(0, 0, 0, 0.35);
+  --чёрный-12: rgba(0, 0, 0, 0.12);
+  --чёрный-6: rgba(0, 0, 0, 0.06);
+  --подложка: #f3f4f6;
+
+  /* ── Эмоции: чёрным. Цвет занят кодом ─────────────────────────────────── */
+  --одобрение: #111111; --презрение: #111111; --смех: #111111; --боль: #111111;
+  --ярость: #111111; --страх: #111111; --интерес: #111111; --скука: #111111;
+  --спокойствие: #111111;
+
+  /* ── Совместимость с разметкой ─────────────────────────────────────────── */
+  --бумага: var(--подложка);
+  --лист: var(--поверхность);
+  --лист-2: var(--чёрный-6);
+  --линия: var(--чёрный-12);
+  --чернила: var(--текст);
+  --чернила-2: var(--чёрный-70);
+  --чернила-3: var(--чёрный-50);
+  --акцент: var(--действие);
+  --акцент-тёмный: var(--место);
+  --акцент-мягкий: rgba(25, 109, 255, 0.12);
+  --на-акценте: var(--поверхность);
+  --опасно: var(--текст);          /* красного в палитре нет — см. заголовок */
+  --прочитано: var(--подтверждено);
+  --тьма: var(--текст);
+  --тьма-2: rgba(255, 255, 255, 0.08);
+  --на-тьме: var(--поверхность);
+  --на-тьме-2: rgba(255, 255, 255, 0.55);
+  --контур: var(--чёрный-35);
+  --контур-слабый: var(--чёрный-12);
+
+  /* ── Шрифт ────────────────────────────────────────────────────────────── */
+  --шрифт: Inter, "Helvetica Neue", Arial, "Segoe UI", system-ui, sans-serif;
+  --щ1: 30px; --щ2: 22px; --щ3: 17px; --щ4: 15px; --щ5: 13px; --щ6: 11px;
+
+  --о1: 4px; --о2: 8px; --о3: 12px; --о4: 16px; --о5: 22px; --о6: 28px;
+  --радиус: 14px;
+  --радиус-мал: 10px;
+  --радиус-круг: 999px;
+  --радиус-ава: 50%;
+  --зона1: 56px; --зона4: 62px; --ава: 42px;
+}
+
+/* ── Документ ────────────────────────────────────────────────────────────── */
+
+body {
+  margin: 0; padding: 26px;
+  background: linear-gradient(180deg, #ffffff 0%, #eef0f3 100%);
+  background-attachment: fixed;
+  color: var(--текст);
+  font-family: var(--шрифт); font-size: 15px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.лист-док { max-width: 1180px; margin: 0 auto; }
+
+.путь { font-size: 12px; color: var(--чёрный-50); margin-bottom: 6px; }
+.путь a { color: var(--чёрный-50); }
+
+h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; margin: 0 0 8px; }
+h2 {
+  font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.10em;
+  margin: 30px 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--текст);
+}
+.подзаголовок { color: var(--чёрный-70); margin: 0 0 24px; max-width: 72ch; }
+
+.вид {
+  display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 10px;
+  vertical-align: 3px; border-radius: var(--радиус-круг);
+  background: var(--место); color: var(--поверхность);
+}
+.вид.подокно { background: var(--текст); }
+
+.экраны { display: flex; flex-wrap: wrap; gap: 30px; align-items: flex-start; }
+.разбор { flex: 1 1 320px; min-width: 300px; }
+
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--чёрный-12); }
+th { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 2px solid var(--текст); }
+ul.кратко { margin: 0; padding-left: 20px; font-size: 14px; color: var(--чёрный-70); }
+ul.кратко li { margin: 6px 0; }
+ul.кратко b { color: var(--текст); font-weight: 700; }
+code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: var(--чёрный-6); padding: 2px 6px; border-radius: 5px; }
+a { color: var(--место); }
+
+.оговорка {
+  background: var(--поверхность); border-radius: var(--радиус);
+  border-left: 6px solid var(--требует);
+  padding: 13px 17px; margin: 14px 0; font-size: 14px; color: var(--чёрный-70);
+}
+.оговорка b { color: var(--текст); font-weight: 700; }
+
+/* ── Рамка устройства ───────────────────────────────────────────────────── */
+
+.тел { flex: 0 0 auto; }
+
+.окно {
+  width: 380px; height: 800px;
+  background: var(--подложка); color: var(--текст);
+  border: 3px solid var(--текст); border-radius: 26px;
+  overflow: hidden; display: flex; flex-direction: column;
+  font-size: var(--щ4);
+}
+.окно.темь { background: var(--текст); color: var(--поверхность); }
+
+.статус {
+  flex: 0 0 26px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 var(--о4); font-size: 10px; font-weight: 700; color: var(--чёрный-50);
+  background: var(--поверхность);
+}
+.темь .статус { background: var(--текст); color: var(--на-тьме-2); }
+
+.дом-полоса { flex: 0 0 16px; display: flex; align-items: center; justify-content: center; background: var(--поверхность); }
+.дом-полоса::after { content: ""; width: 108px; height: 4px; border-radius: 2px; background: var(--текст); }
+.темь .дом-полоса { background: var(--текст); }
+.темь .дом-полоса::after { background: var(--поверхность); }
+
+.подпись { width: 380px; text-align: center; font-size: 11.5px; font-weight: 600; color: var(--чёрный-50); margin-top: 10px; }
+
+/* ── ЗОНА 1 ─────────────────────────────────────────────────────────────── */
+
+.зона-1 {
+  flex: 0 0 var(--зона1); display: flex; align-items: center; gap: var(--о3);
+  padding: 0 var(--о4); background: var(--поверхность); border: none;
+}
+.темь .зона-1 { background: var(--текст); }
+
+/* Логотип — «где я»: цвет места */
+.лого {
+  width: 34px; height: 34px; flex: 0 0 34px; border-radius: var(--радиус-мал);
+  background: var(--место); color: var(--поверхность);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 800; text-decoration: none;
+}
+
+.имя-окна { font-size: var(--щ3); font-weight: 800; letter-spacing: -0.02em; color: var(--место); }
+.темь .имя-окна { color: var(--поверхность); }
+.тянуть { flex: 1 1 auto; min-width: 0; }
+
+/* Иконка — нейтральна. Синим набрано только главное действие экрана */
+.икона {
+  width: 36px; height: 36px; flex: 0 0 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; color: var(--текст); text-decoration: none;
+  background: var(--чёрный-6);
+}
+.икона.жив { background: var(--действие); color: var(--поверхность); }
+.темь .икона { background: rgba(255,255,255,0.12); color: var(--поверхность); }
+
+/* ── Табы: активная — цветом места ──────────────────────────────────────── */
+
+.табы {
+  flex: 0 0 auto; display: flex; gap: var(--о2); padding: 0 var(--о4) var(--о3);
+  background: var(--поверхность); border: none;
+}
+.таб {
+  padding: 6px 14px; font-size: var(--щ5); font-weight: 700; color: var(--чёрный-50);
+  border: none; border-radius: var(--радиус-круг); text-decoration: none;
+}
+.таб.тек { background: var(--место); color: var(--поверхность); }
+
+.режимы { display: flex; background: var(--чёрный-6); border-radius: var(--радиус-круг); padding: 3px; }
+.режим { padding: 5px 12px; font-size: var(--щ6); font-weight: 700; border-radius: var(--радиус-круг); color: var(--чёрный-50); text-decoration: none; }
+.режим.тек { background: var(--место); color: var(--поверхность); }
+
+/* ── ЗОНА 2 ─────────────────────────────────────────────────────────────── */
+
+.зона-2 { flex: 1 1 auto; overflow: auto; position: relative; }
+.зона-2.вокруг { padding: var(--о4); }
+
+.раздел {
+  padding: var(--о4) var(--о4) var(--о2);
+  font-size: var(--щ6); font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.10em; color: var(--чёрный-50);
+}
+
+/* Строка списка: белый блок. Состояние — полосой слева, а не цветом текста */
+.строка {
+  display: flex; align-items: center; gap: var(--о3);
+  padding: var(--о3); background: var(--поверхность);
+  border: none; border-radius: var(--радиус-мал);
+  text-decoration: none; color: inherit;
+}
+.зона-2 > .строка { margin: 0 var(--о4) var(--о2); }
+.зона-2 > .строка:first-child { margin-top: var(--о2); }
+.темь .строка { background: rgba(255,255,255,0.08); }
+
+.ава {
+  width: var(--ава); height: var(--ава); flex: 0 0 var(--ава);
+  border-radius: 50%; background: var(--чёрный-6); border: none;
+  color: var(--текст); display: flex; align-items: center; justify-content: center;
+  font-size: var(--щ5); font-weight: 800;
+}
+.ава.бол { width: 80px; height: 80px; flex-basis: 80px; font-size: var(--щ2); }
+.ава.мал { width: 30px; height: 30px; flex-basis: 30px; font-size: 10px; }
+.темь .ава { background: rgba(255,255,255,0.14); color: var(--поверхность); }
+
+.имя { font-size: var(--щ4); font-weight: 700; }
+.втор { font-size: var(--щ5); color: var(--чёрный-70); }
+.трет { font-size: var(--щ6); font-weight: 600; color: var(--чёрный-50); }
+.обрез { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.мета { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex: 0 0 auto; }
+
+/* Непрочитанное — «требует меня» */
+.счёт {
+  min-width: 22px; height: 22px; padding: 0 7px; border-radius: var(--радиус-круг);
+  background: var(--требует); color: var(--текст);
+  font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+}
+.замок { font-size: 10px; color: var(--подтверждено); }
+
+.чип {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: var(--радиус-круг);
+  background: var(--чёрный-6); color: var(--чёрный-70);
+  font-size: var(--щ6); font-weight: 700; text-decoration: none; border: none;
+}
+.чип.акц { background: var(--действие); color: var(--поверхность); }
+.чип.е2е { background: var(--подтверждено); color: #000000; }   /* чёрным: белое на #3bb300 даёт 2,75:1 */
+.чип.откр { background: var(--чёрный-6); color: var(--чёрный-50); }
+
+/* Кнопка — главное действие. Остальные тише */
+.кн {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 42px; padding: 0 20px; border-radius: var(--радиус-круг);
+  background: var(--действие); color: var(--поверхность); border: none;
+  font-size: var(--щ5); font-weight: 700; text-decoration: none; box-sizing: border-box;
+}
+.кн.тихая { background: var(--чёрный-6); color: var(--текст); }
+.кн.контур { background: none; color: var(--текст); border: 2px solid var(--текст); }
+/* Опасное: красного в палитре нет. Обводка, слово и место в конце списка */
+.кн.беда { background: none; color: var(--текст); border: 2px solid var(--текст); }
+.кн.вширь { display: flex; width: 100%; }
+.темь .кн.тихая { background: rgba(255,255,255,0.14); color: var(--поверхность); }
+
+.карта {
+  background: var(--поверхность); border: none; border-radius: var(--радиус);
+  padding: var(--о4); margin: 0 var(--о4) var(--о3);
+}
+.карта.в-рамке { border: 2px solid var(--текст); }
+.зона-2 > .карта:first-child { margin-top: var(--о3); }
+
+.медиа {
+  background: var(--чёрный-6); border-radius: var(--радиус-мал);
+  color: var(--чёрный-50); display: flex; align-items: center; justify-content: center;
+  font-size: var(--щ6); font-weight: 700;
+}
+
+/* Эмоции — чёрным: различает значок, а не цвет */
+.эмоции { display: flex; gap: var(--о3); flex-wrap: wrap; font-size: var(--щ6); font-weight: 700; color: var(--текст); }
+.эм { display: inline-flex; align-items: center; gap: 4px; }
+
+.плюс-минус { display: flex; gap: var(--о1); }
+.пм {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: none; background: var(--чёрный-6);
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--щ4); font-weight: 800; color: var(--текст); text-decoration: none;
+}
+.пм.выбран { background: var(--текст); color: var(--поверхность); }
+
+/* ── ЗОНА 3 ─────────────────────────────────────────────────────────────── */
+
+.зона-3 {
+  position: absolute; right: var(--о4); bottom: var(--о4);
+  display: flex; flex-direction: column; gap: var(--о2); align-items: flex-end;
+}
+.круг {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--поверхность); border: 2px solid var(--текст);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; color: var(--текст); text-decoration: none;
+}
+.круг.акц { background: var(--действие); border-color: var(--действие); color: var(--поверхность); }
+.круг .бирка {
+  position: absolute; transform: translate(17px, -17px);
+  background: var(--требует); color: var(--текст);
+  font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: var(--радиус-круг);
+}
+
+/* ── ЗОНА 4 ─────────────────────────────────────────────────────────────── */
+
+.зона-4 {
+  flex: 0 0 auto; display: flex; align-items: center; gap: var(--о2);
+  padding: var(--о2) var(--о3) var(--о3);
+  background: var(--поверхность); border: none;
+}
+.ввод {
+  flex: 1 1 auto; min-height: 42px; display: flex; align-items: center;
+  padding: 0 var(--о4); border-radius: var(--радиус-круг);
+  background: var(--чёрный-6); color: var(--чёрный-50); font-size: var(--щ5);
+}
+.темь .зона-4 { background: var(--текст); }
+.темь .ввод { background: rgba(255,255,255,0.12); color: var(--на-тьме-2); }
+
+/* ── Пузыри: монохромные. Цвет появляется только там, где что-то значит ─── */
+
+.поток { display: flex; flex-direction: column; gap: var(--о3); padding: var(--о4); }
+.реплика { display: flex; gap: var(--о2); align-items: flex-end; }
+.реплика.моя { flex-direction: row-reverse; }
+
+.пузырь {
+  max-width: 252px; padding: 10px 14px; border-radius: var(--радиус);
+  background: var(--поверхность); border: none; color: var(--текст);
+}
+/* Своё — чёрным: чёрный в этом коде означает «я» */
+.реплика.моя .пузырь { background: var(--текст); color: var(--поверхность); border-radius: var(--радиус); }
+.реплика.моя .пузырь .трет { color: rgba(255,255,255,0.6); }
+
+.низ-пузыря { display: flex; gap: 6px; align-items: center; justify-content: flex-end; margin-top: 4px; font-size: 10.5px; font-weight: 700; color: var(--чёрный-50); }
+.реплика.моя .низ-пузыря { color: rgba(255,255,255,0.55); }
+/* Доставлено и прочитано — «подтверждено» */
+.галки {                       /* зелёное на белом — 2,75:1, поэтому заливкой */
+  color: #000000; background: var(--подтверждено);
+  border-radius: var(--радиус-круг); padding: 0 6px;
+  font-size: 11px; font-weight: 800;
+}
+.реплика.моя .галки { color: var(--живое); }
+.ветка {
+  border-left: 3px solid var(--место); padding-left: var(--о2); margin-bottom: 5px;
+  font-size: var(--щ6); font-weight: 600; color: var(--чёрный-70);
+}
+.реплика.моя .ветка { border-left-color: var(--живое); color: rgba(255,255,255,0.7); }
+.системное {
+  text-align: center; font-size: var(--щ6); font-weight: 700; color: var(--чёрный-50);
+  text-transform: none; letter-spacing: 0;
+}
+
+/* ── Подокно ────────────────────────────────────────────────────────────── */
+
+.поверх {
+  flex: 1 1 auto; position: relative; display: flex;
+  align-items: center; justify-content: center; padding: var(--о4);
+  background: none;
+}
+.поверх::before { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+.поверх.к-низу { align-items: flex-end; padding: 0; }
+.фон-подпись { position: absolute; top: 12px; left: 0; right: 0; text-align: center; font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.85); }
+.фон-подпись a { color: var(--поверхность); }
+
+.модалка {
+  position: relative; width: 100%;
+  background: var(--поверхность); border: none; border-radius: var(--радиус);
+  overflow: hidden;
+}
+.модалка.снизу { border-radius: var(--радиус) var(--радиус) 0 0; }
+.шапка-модалки {
+  display: flex; align-items: center; gap: var(--о3);
+  padding: var(--о4); border-bottom: 2px solid var(--текст);
+}
+.пункт {
+  display: flex; align-items: center; gap: var(--о3);
+  padding: 13px var(--о4); border-bottom: 1px solid var(--чёрный-12);
+  text-decoration: none; color: inherit; font-size: var(--щ4); font-weight: 600;
+}
+.пункт:last-child { border-bottom: none; }
+/* Опасное — без цвета: чёрный текст и янтарная метка слева */
+.пункт.беда { color: var(--текст); box-shadow: inset 4px 0 0 var(--требует); }
+.пункт .знак { width: 22px; text-align: center; }
+.пункт .усл { margin-left: auto; font-size: var(--щ6); font-weight: 700; color: var(--чёрный-50); }
+
+/* ── Сетки, истории ────────────────────────────────────────────────────── */
+
+.сетка-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--о3); padding: var(--о4); }
+.сетка-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; padding: 4px; }
+
+.истории { display: flex; gap: var(--о3); padding: var(--о2) var(--о4) var(--о3); overflow: auto; background: var(--поверхность); border: none; }
+.история { flex: 0 0 auto; text-align: center; width: 60px; }
+/* Непросмотренная история — «требует меня» */
+.кольцо {
+  width: 56px; height: 56px; border-radius: 50%; padding: 3px; box-sizing: border-box;
+  background: var(--требует);
+}
+.кольцо > div {
+  width: 100%; height: 100%; border-radius: 50%;
+  background: var(--чёрный-6); border: 2px solid var(--поверхность); box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--щ6); font-weight: 800; color: var(--текст);
+}
+
+/* ── Карта на индексе ───────────────────────────────────────────────────── */
+
+.карта-окон { display: flex; flex-wrap: wrap; gap: 14px; }
+.ветвь {
+  flex: 1 1 300px; background: var(--поверхность); border: none;
+  border-radius: var(--радиус); padding: 17px 19px;
+}
+.ветвь h3 { margin: 0 0 5px; font-size: 15px; font-weight: 800; }
+.ветвь .назн { font-size: 13px; color: var(--чёрный-70); margin-bottom: 9px; }
+.ветвь ul { margin: 0; padding-left: 14px; list-style: none; font-size: 13px; }
+.ветвь li { margin: 4px 0; color: var(--чёрный-70); }
+.ветвь li::before { content: "└ "; color: var(--чёрный-35); }
+
+.палитра { display: flex; flex-wrap: wrap; gap: 12px; }
+.мазок { width: 132px; font-size: 11px; font-weight: 600; color: var(--чёрный-70); }
+.мазок > i {
+  display: block; height: 54px; border-radius: var(--радиус-мал);
+  box-shadow: inset 0 0 0 1px var(--чёрный-12); margin-bottom: 6px;
+}
+.мазок b { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--текст); }
