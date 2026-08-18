@@ -40,7 +40,7 @@
  *
  * 1. В личной переписке аватар живёт ВНУТРИ сообщения и обтекается текстом
  *    (float), а не стоит рядом с пузырём. У сообщений есть рамка.
- * 2. Новостные записи рамок не имеют — только линия между ними на общем белом.
+ * 2. Записи социальной ленты рамок не имеют — только линия между ними.
  *
  * Отсюда правило, по которому здесь всё разделяется:
  *    рамка — у сообщения переписки;
@@ -212,6 +212,8 @@ a { color: var(--текст); }
 .зона-1.подокно::before { display: none; }
 .зона-1.подокно { padding: 0 var(--о4); }
 .зона-1.подокно .икона { background: var(--чёрный-6); color: var(--текст); }
+/* «Назад» — салатовая: это навигация, и она главная кнопка шапки подокна */
+.зона-1.подокно .икона:first-child { background: var(--навигация); color: #ffffff; }
 .зона-1.подокно .икона.жив { background: var(--навигация); color: #ffffff; }
 .зона-1.подокно .ава { background: var(--чёрный-6); color: var(--текст); }
 .зона-1.подокно .трет { color: var(--чёрный-50); }
@@ -373,6 +375,23 @@ a { color: var(--текст); }
 }
 .пм.выбран { background: var(--текст); color: var(--поверхность); }
 
+/* Стрелка «вниз» со счётчиком новых — у нижнего края области сообщений.
+   Появляется, когда прокрутка ушла от края; в макете показана постоянно.
+   Тонкая обводка и белая заливка, а не салатовая кнопка: это не действие
+   экрана, а указатель положения в ленте. */
+.стрелка-вниз {
+  position: relative;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--поверхность); border: 1px solid var(--чёрный-35);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; color: var(--чёрный-70); text-decoration: none;
+}
+.стрелка-вниз .бирка-новых {
+  position: absolute; top: -5px; right: -5px;
+  background: var(--активность); color: var(--текст);
+  font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 999px;
+}
+
 /* ── ЗОНА 3 ─────────────────────────────────────────────────────────────── */
 
 .зона-3 {
@@ -414,38 +433,102 @@ a { color: var(--текст); }
 .поток { display: flex; flex-direction: column; gap: var(--о3); padding: var(--о4); }
 .реплика { display: flex; }
 .реплика.моя { justify-content: flex-end; }
+/* Поставленные эмоции — ВНУТРИ пузыря, отдельной строкой, прижатой вправо.
+   Наполнение построчное: когда их много, строка переносится, пузырь растёт
+   вниз, а не вширь. */
+.эм-обёртка {
+  display: flex; justify-content: flex-end; flex-wrap: wrap;
+  gap: 4px; margin-top: 4px; clear: both;
+}
 
 /* У сообщения ЕСТЬ рамка */
+/* ── Переписка ────────────────────────────────────────────────────────────
+   Полоса автора — ЛЕВАЯ ГРАНИЦА пузыря, а не подложка под ней: поэтому она
+   сама огибает оба скругления. Цвет берётся из --полоса, объявленной на
+   реплике; клиент присваивает его при входе в чат, человек может сменить.
+   Аватар стоит справа от полосы и перекрывает всё, что за ним. */
 .пузырь {
+  position: relative;
+  box-sizing: border-box;   /* max-width считаем вместе с рамкой и полем:
+                               справа от пузыря должно остаться место кнопке */
   max-width: 290px; padding: 11px 14px; border-radius: var(--радиус);
   background: var(--автор); border: 1px solid var(--рамка); color: var(--текст);
-  overflow: hidden;   /* обтекание не должно вылезать за рамку */
+  overflow: visible;   /* аватар выступает вверх, в зазор между репликами */
+}
+.реплика:not(.моя) .пузырь {
+  border-left: 4px solid var(--полоса, var(--навигация));
+  padding-left: 12px;
 }
 /* Фон моих сообщений */
 .реплика.моя .пузырь { background: var(--мои); border-color: var(--рамка); }
 
-/* Аватар ВНУТРИ пузыря: квадрат слева, текст огибает справа */
-.пузырь > .ава {
-  float: left; margin: 0 10px 4px 0;
-  width: 36px; height: 36px; flex-basis: auto;
-  border-radius: var(--радиус-квадрат);
-  background: rgba(0,0,0,0.10); color: var(--текст);
+/* Аватар: справа от полосы, выступает вверх, занимает строку имени.
+   Обтекания нет — имя отходит на его ширину, текст идёт во всю ширину. */
+.реплика:not(.моя) .пузырь > .ава {
+  position: absolute; float: none; margin: 0; box-sizing: border-box;
+  left: -1px; top: -12px; width: 40px; height: 40px; flex-basis: auto;
+  border-radius: var(--радиус-квадрат); border: 1px solid var(--рамка);
+  /* Заливка НЕПРОЗРАЧНАЯ: аватар должен перекрывать полосу и угол рамки,
+     а не просвечивать их. Полупрозрачный тон здесь читается как брак. */
+  background: var(--автор); color: var(--текст);
   display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 800;
+  font-size: 10px; font-weight: 800; z-index: 1;
 }
-.реплика.моя .пузырь > .ава { background: rgba(0,0,0,0.14); }
+.реплика:not(.моя) .автор {
+  display: block; padding-left: 33px;
+  font-size: 11px; font-weight: 800; line-height: 16px;
+  color: var(--чёрный-70); margin-bottom: 3px;
+}
+/* Продолжение серии: у сообщения, перед которым есть предыдущее от того же
+   автора, аватара и имени нет — вопроса «кто это» оно не задаёт. */
+.реплика.продолжение .пузырь > .ава,
+.реплика.продолжение .автор { display: none; }
 
+/* Нижняя строка пузыря: эмоции, точка, время, галочки — одним рядом справа.
+   Наполнение построчное: когда эмоций много, ряд переносится, а пузырь не
+   растягивается отдельными блоками. */
 .низ-пузыря {
   display: flex; gap: 6px; align-items: center; justify-content: flex-end;
-  margin-top: 4px; clear: both;
+  flex-wrap: wrap; margin-top: 4px; clear: both;
   font-size: 10.5px; font-weight: 700; color: var(--чёрный-50);
 }
-/* Доставлено и прочитано — зелёным, заливкой: буквами на белом слабо */
-.галки {
-  color: #ffffff; background: var(--подтверждено);
-  border-radius: var(--радиус-круг); padding: 0 6px;
-  font-size: 11px; font-weight: 800;
+/* Метка эмоции — серый контур, без заливки: она сообщает, а не действует */
+.метка-эмоции {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 8px; border-radius: 999px;
+  background: none; border: 1px solid var(--рамка); color: var(--текст);
+  font-size: 10.5px; font-weight: 700; white-space: nowrap;
 }
+/* Кнопка эмоции — только значок, без подложки и рамки, СПРАВА ОТ пузыря,
+   выровнена по его нижнему краю. Внутри пузыря она отнимала бы место у
+   служебной строки, снаружи — занимает поле, которое и так пустует.
+   Кнопки «ответить» нет: ответ живёт в окне по нажатию на сообщение и в
+   долгом нажатии на этой кнопке. Рисовать её отдельно значит занимать место
+   ради действия, которое и так под рукой. */
+.кн-эмоция {
+  position: absolute; bottom: 0; right: -34px;
+  width: 28px; height: 28px;
+  background: none; border: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 20px; line-height: 1;
+  color: var(--чёрный-50); text-decoration: none;
+}
+/* У своих сообщений кнопки нет: сами себя не оценивают.
+   Метка при этом остаётся — её ставят другие. */
+.реплика.моя .кн-эмоция { display: none; }
+/* Доставлено — одна галочка, прочитано — две. Зелёным, без подложки.
+   На белом это 2,75:1: знак мелкий, и читаемость тут принесена в жертву
+   тишине. В тёмной теме то же зелёное даёт 7,63:1. */
+.галки {
+  color: var(--подтверждено); background: none; padding: 0;
+  font-size: 12px; font-weight: 700; letter-spacing: -1px;
+}
+/* Место под точку «я это видел» у чужих сообщений. Состояние считает клиент. */
+.точка {
+  width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px;
+  background: var(--чёрный-35);
+}
+.точка.видел { background: var(--подтверждено); }
 .ветка {
   border-left: 3px solid var(--навигация); padding-left: var(--о2); margin-bottom: 5px;
   font-size: var(--щ6); font-weight: 600; color: var(--чёрный-70);
@@ -525,3 +608,162 @@ a { color: var(--текст); }
   box-shadow: inset 0 0 0 1px var(--чёрный-12); margin-bottom: 6px;
 }
 .мазок b { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--текст); }
+
+/* ── РАЗДЕЛЫ ──────────────────────────────────────────────────────────────
+ *
+ * Сквозная раскладка по темам: doc/01-product/разделы.md.
+ * Правее вкладок — два независимых тумблера: «полоса» и «ярлычки». Четыре их
+ * сочетания дают четыре исполнения одного экрана, а не четыре разных экрана.
+ *
+ * Цифры у раздела: зелёная — сколько объектов, янтарная — сколько объектов
+ * с новыми сообщениями. Обе заливкой: ни зелёный, ни янтарь не читаются как
+ * мелкий текст на белом (2,4 : 1 и 1,7 : 1).
+ */
+
+.кнопки-вида { margin-left: auto; display: inline-flex; gap: 5px; }
+.кн-тумблер {
+  width: 27px; height: 27px; border-radius: var(--радиус-круг);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--чёрный-6); color: var(--чёрный-50);
+  font-size: 12px; text-decoration: none; border: none;
+}
+.кн-тумблер.нажата { background: var(--навигация); color: #ffffff; }
+
+/* Полоса разделов — ряд под вкладками. Прокрутка есть, полосы прокрутки нет:
+   тянут пальцем, на компьютере мышью. Стрелки были бы вторым способом для
+   одного действия и лишним элементом на телефоне. */
+.полоса-разделов {
+  flex: 0 0 auto; display: flex; align-items: stretch; gap: 2px;
+  padding: 0 10px; background: var(--функц);
+  border-bottom: 1px solid var(--чёрный-12);
+  overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
+  cursor: grab; user-select: none;
+}
+.полоса-разделов::-webkit-scrollbar { display: none; }
+.полоса-разделов:active { cursor: grabbing; }
+
+.чип-разд {
+  position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
+  padding: 9px 11px 7px; border-bottom: 2px solid transparent;
+  font-size: 13px; font-weight: 700; color: var(--чёрный-50);
+  text-decoration: none; white-space: nowrap;
+}
+.чип-ярлык {
+  position: relative; flex: 0 0 auto; display: inline-flex; flex-direction: column;
+  align-items: center; gap: 1px; min-width: 54px;
+  padding: 5px 8px 4px; border-bottom: 2px solid transparent;
+  text-decoration: none; color: var(--чёрный-50); white-space: nowrap;
+}
+.чип-ярлык > .знак-чипа { font-size: 18px; line-height: 20px; }
+.чип-ярлык > .подпись-чипа { font-size: 9.5px; font-weight: 700; }
+/* Выбор подчёркнут, но не залит: заливка занята текущей вкладкой, и вкладка
+   главнее — она про то, откуда содержимое, а раздел про то, о чём оно. */
+.чип-разд.тек, .чип-ярлык.тек { color: var(--текст); border-bottom-color: var(--навигация); }
+.чип-разд > .счёт, .чип-ярлык > .счёт {
+  position: static; min-width: 17px; height: 16px; padding: 0 5px;
+  font-size: 9.5px; border-radius: var(--радиус-круг);
+}
+.чип-ярлык > .счёт { position: absolute; top: 2px; right: 4px; }
+
+/* Плитка ярлычков */
+.плитка { display: grid; gap: 12px 10px; padding: 14px; grid-template-columns: repeat(4, 1fr); }
+.ярлык { position: relative; text-align: center; text-decoration: none; color: inherit; }
+.ярлык > .значок {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  aspect-ratio: 1 / 1; border-radius: var(--радиус-квадрат);
+  background: var(--чёрный-6); font-size: 22px; margin-bottom: 5px;
+}
+.ярлык > .подпись-ярлыка {
+  font-size: 10.5px; font-weight: 700; line-height: 1.2; display: block;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ярлык > .значок > .счёт {
+  position: absolute; top: -6px; right: -6px; min-width: auto; height: auto;
+  background: var(--активность); color: var(--текст);
+  font-size: 9px; font-weight: 800; padding: 1px 5px;
+  border-radius: var(--радиус-круг); display: inline-block;
+}
+.счёт.мелкий { min-width: 20px; height: 18px; font-size: 10px; padding: 0 6px; }
+/* Сколько объектов — зелёное, нижний угол. Текст белый: салатовое поле. */
+.счёт-об {
+  position: absolute; right: -5px; bottom: -5px;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--радиус-круг);
+  background: var(--подтверждено); color: #ffffff;
+  font-size: 9.5px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 2px solid var(--поверхность); box-sizing: content-box;
+}
+.ярлык.всё > .значок { background: var(--навигация); color: #ffffff; }
+.ярлык.свой > .значок { border: 1px dashed var(--чёрный-35); background: none; }
+.ярлык.пустой > .значок { opacity: 0.45; }
+.ярлык.добавить > .значок {
+  border: 1px dashed var(--чёрный-35); background: none;
+  color: var(--чёрный-50); font-size: 26px; font-weight: 300;
+}
+.ярлык.добавить > .подпись-ярлыка { color: var(--чёрный-50); }
+
+/* Гармошка: две цели в одной строке, разведённые по краям.
+   Слева значок, счёт объектов и название — уводит внутрь раздела.
+   Справа янтарь и круглый шеврон — сворачивает и разворачивает. */
+.разд {
+  display: flex; align-items: center; background: var(--функц);
+  border-top: 1px solid var(--чёрный-12);
+  border-bottom: 1px solid var(--чёрный-12);
+}
+.цель-раздел {
+  display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0;
+  padding: 7px 8px 7px var(--о4); text-decoration: none; color: inherit;
+}
+.цель-свернуть {
+  display: flex; align-items: center; gap: 7px; flex: 0 0 auto;
+  padding: 7px 14px 7px 8px; text-decoration: none; color: inherit;
+}
+.разд .знак { font-size: 13px; line-height: 1; }
+.разд .имя-разд {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--чёрный-50);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Шеврон круглый и плотный: это кнопка, а не украшение строки */
+.шеврон {
+  width: 24px; height: 24px; flex: 0 0 24px; border-radius: var(--радиус-круг);
+  background: var(--чёрный-12); color: var(--чёрный-70);
+  font-size: 12px; font-weight: 900; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+/* Зелёный кружок — сразу после значка, перед названием */
+.круг-об {
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--радиус-круг);
+  background: var(--подтверждено); color: #ffffff;
+  font-size: 10px; font-weight: 800; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.разд.добавить { background: none; border-top: none; }
+.разд.добавить .имя-разд { color: var(--навигация); text-transform: none; font-size: 13px; letter-spacing: 0; }
+.разд.добавить .плюс {
+  width: 20px; height: 20px; border-radius: var(--радиус-круг);
+  border: 1px dashed var(--навигация); color: var(--навигация); font-size: 13px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* Объект, который разворачивается сам: сообщество держит внутри группы и
+   каналы. Маркер тот же круглый шеврон, что у раздела — одинаковое действие
+   показываем одинаково. */
+.объект-раскрыв { display: flex; align-items: stretch; border-bottom: 1px solid var(--чёрный-12); }
+.объект-раскрыв > .строка { flex: 1 1 auto; min-width: 0; border-bottom: none; }
+.объект-раскрыв > .цель-свернуть { padding: 0 14px 0 4px; }
+.вложенные { padding-left: 20px; background: rgba(0, 0, 0, 0.02); }
+.вложенные .ава {
+  width: 32px; height: 32px; flex-basis: 32px;
+  font-size: 10px; border-radius: var(--радиус-квадрат-мал);
+}
+
+/* Внутри раздела: ряд вкладок не удваивается, а меняет содержимое */
+.табы.в-разделе { display: flex; align-items: center; gap: 9px; padding: 6px var(--о4); }
+.кн-назад {
+  width: 28px; height: 28px; flex: 0 0 28px; border-radius: var(--радиус-круг);
+  background: var(--навигация); color: #ffffff; text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 800;
+}
+.имя-раздела { font-size: var(--щ4); font-weight: 800; }

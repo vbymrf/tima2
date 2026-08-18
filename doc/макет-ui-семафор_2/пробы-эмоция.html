@@ -1,0 +1,265 @@
+<meta charset="utf-8">
+<title>Пробы: эмоция под сообщением</title>
+<link rel="stylesheet" href="стиль.css">
+<style>
+  .срез { height: auto; width: 344px; border-width: 2px; border-radius: 20px; }
+  .срез .зона-2 { flex: 0 0 auto; overflow: visible; }
+  .срез .поток { padding: 20px 14px 24px; gap: 22px; }
+  .срез .пузырь { max-width: 252px; }
+
+  /* Метка эмоции. Форма и привязка задаются вариантом. */
+  .метка-эмоции {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 999px;
+    background: var(--поверхность); border: 1px solid var(--рамка);
+    font-size: 11px; font-weight: 700; color: var(--текст);
+    white-space: nowrap;
+  }
+  .метка-эмоции .счёт-эмоции { color: var(--чёрный-70); }
+
+  .проба { padding: 20px 0 24px; border-bottom: 1px solid var(--чёрный-12); }
+  .проба:target { box-shadow: inset 6px 0 0 var(--навигация); padding-left: 16px; }
+  .шапка-пробы { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .номер { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+  .опис { font-size: 13.5px; color: var(--чёрный-70); }
+  .свет { font-size: 12px; color: var(--чёрный-50); }
+
+  .навигация-проб { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+  .навигация-проб a {
+    display: inline-flex; align-items: center; padding: 7px 13px; border-radius: 999px;
+    border: 1px solid var(--чёрный-12); text-decoration: none; color: var(--текст);
+    font-size: 12.5px; font-weight: 700;
+  }
+  .навигация-проб a.выбор { border-color: var(--навигация); border-width: 2px; }
+
+  /* ── 01 · внутри пузыря, в строке времени ─────────────────────────────── */
+  .в01 .метка-эмоции { border: none; background: none; padding: 0; }
+
+  /* ── 02 · ВНУТРИ пузыря, отдельной строкой, прижата вправо ────────────── */
+  .в02 .эм-обёртка { display: flex; justify-content: flex-end; margin-top: 4px; }
+
+  /* ── 03 · внутри пузыря, строкой, прижата влево ───────────────────────── */
+  .в03 .эм-обёртка { display: flex; justify-content: flex-start; margin-top: 4px; }
+
+  /* ── 04 · врезана в нижнюю рамку справа — как аватар в верхнюю ────────── */
+  .в04 .реплика { position: relative; }
+  .в04 .эм-обёртка { position: absolute; right: 10px; bottom: -11px; }
+  .в04 .метка-эмоции { background: var(--автор); }
+
+  /* ── 05 · то же, но выступает за угол наполовину ──────────────────────── */
+  .в05 .реплика { position: relative; }
+  .в05 .эм-обёртка { position: absolute; right: -8px; bottom: -11px; }
+  .в05 .метка-эмоции { background: var(--автор); }
+
+  /* ── 06 · с выноской вверх, под правым углом ──────────────────────────── */
+  .в06 .реплика { position: relative; }
+  .в06 .эм-обёртка { position: absolute; right: 8px; bottom: -26px; }
+  .в06 .метка-эмоции { position: relative; }
+  .в06 .метка-эмоции::before {
+    content: ""; position: absolute; right: 12px; top: -5px;
+    width: 8px; height: 8px; background: var(--поверхность);
+    border-left: 1px solid var(--рамка); border-top: 1px solid var(--рамка);
+    transform: rotate(45deg);
+  }
+
+  /* ── 07 · круглая, только значок ──────────────────────────────────────── */
+  .в07 .реплика { position: relative; }
+  .в07 .эм-обёртка { position: absolute; right: 10px; bottom: -13px; }
+  .в07 .метка-эмоции {
+    width: 26px; height: 26px; padding: 0; justify-content: center;
+    border-radius: 50%; background: var(--автор);
+  }
+  .в07 .метка-эмоции .счёт-эмоции { display: none; }
+
+  /* ── 08 · квадрат со скруглением, как аватар ──────────────────────────── */
+  .в08 .реплика { position: relative; }
+  .в08 .эм-обёртка { position: absolute; right: 10px; bottom: -13px; }
+  .в08 .метка-эмоции {
+    height: 26px; padding: 0 7px; border-radius: var(--радиус-квадрат-мал);
+    background: var(--автор);
+  }
+
+  /* ── 09 · несколько эмоций подряд ─────────────────────────────────────── */
+  .в09 .эм-обёртка { display: flex; justify-content: flex-end; gap: 4px; margin-top: 4px; }
+
+  /* ── 10 · внутри пузыря, отдельной строкой снизу ──────────────────────── */
+  .в10 .эм-обёртка { display: flex; justify-content: flex-end; margin-top: 6px; }
+  .в10 .метка-эмоции { background: var(--чёрный-6); border: none; }
+</style>
+
+<div class="лист-док">
+
+<div class="путь"><a href="индекс.html">макет-ui-семафор_2</a> / пробы-эмоция.html</div>
+<h1>Пробы: эмоция под сообщением</h1>
+<p class="подзаголовок">
+  Как показать поставленную эмоцию у реплики в чате. Речь именно о переписке — в
+  каналах и статьях эмоции собираются в строку под содержимым и работают иначе.
+  Кнопки, которыми эмоцию ставят, разобраны отдельно:
+  <a href="пробы-кнопки.html">пробы-кнопки.html</a>.
+</p>
+
+<div class="оговорка">
+  <b>Форма уже задана принятыми решениями.</b> Аватар врезан в верхнюю рамку и
+  выступает наружу; логично, что метка эмоции делает то же самое у нижней. Тогда у
+  пузыря появляется правило: <b>сверху слева — кто сказал, снизу справа — как
+  приняли.</b> Два угла заняты, оба выступом, и это читается как одна система, а не
+  как две находки.
+  <br><br>
+  Варианты 04, 05, 07 и 08 идут по этому пути и выносят метку за рамку. Варианты
+  01, 02, 03, 09 и 10 держат её внутри пузыря — <b>принят 02</b>: отдельная строка
+  внутри рамки, прижатая вправо, метка в сером контуре без заливки.
+  <br><br>
+  <b>Эмоция одна.</b> По ТЗ выбрать можно одну из восьми, поэтому метка обычно
+  одиночная; вариант 09 показывает, как выглядит агрегат, когда эмоции ставят
+  несколько участников группы.
+</div>
+
+<h2>Ссылки на варианты</h2>
+<div class="навигация-проб">
+  <a href="#в01">01 · в строке времени</a>
+  <a href="#в02" class="выбор">02 · внутри пузыря, строкой ★</a>
+  <a href="#в03">03 · под пузырём, влево</a>
+  <a href="#в04">04 · врезана в рамку</a>
+  <a href="#в05">05 · выступает за угол</a>
+  <a href="#в06">06 · с выноской</a>
+  <a href="#в07">07 · круглая, без числа</a>
+  <a href="#в08">08 · квадрат со скруглением</a>
+  <a href="#в09">09 · несколько эмоций</a>
+  <a href="#в10">10 · строкой внутри пузыря</a>
+</div>
+
+<div class="проба" id="в01">
+  <div class="шапка-пробы"><span class="номер">01</span><span class="опис">в строке времени, без подложки</span><span class="свет">тише всех, но теряется среди служебного</span></div>
+  <div class="окно срез в01">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span><span class="эм-обёртка"><span class="метка-эмоции">👍 <span class="счёт-эмоции">2</span></span></span></div></div></div>
+      <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span><span class="эм-обёртка"><span class="метка-эмоции">🔍 <span class="счёт-эмоции">1</span></span></span></div></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в02">
+  <div class="шапка-пробы"><span class="номер">02 ★</span><span class="опис">внутри пузыря, отдельной строкой справа — <b>принято</b></span><span class="свет">занимает строку — лента растёт в высоту</span></div>
+  <div class="окно срез в02">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div><span class="эм-обёртка"><span class="метка-эмоции">👍 <span class="счёт-эмоции">2</span></span></span></div></div>
+      <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div><span class="эм-обёртка"><span class="метка-эмоции">🔍 <span class="счёт-эмоции">1</span></span></span></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в03">
+  <div class="шапка-пробы"><span class="номер">03</span><span class="опис">внутри пузыря, строкой, прижата влево</span><span class="свет">спорит с полосой автора</span></div>
+  <div class="окно срез в03">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div><span class="эм-обёртка"><span class="метка-эмоции">👍 <span class="счёт-эмоции">2</span></span></span></div></div>
+      <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div><span class="эм-обёртка"><span class="метка-эмоции">🔍 <span class="счёт-эмоции">1</span></span></span></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в04">
+  <div class="шапка-пробы"><span class="номер">04</span><span class="опис">врезана в нижнюю рамку справа</span><span class="свет">зеркало аватара: сверху слева кто, снизу справа как приняли</span></div>
+  <div class="окно срез в04">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал — миграции вынесены отдельной строкой.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div></div><span class="эм-обёртка"><span class="метка-эмоции">👍 <span class="счёт-эмоции">2</span></span></span></div>
+      <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div><span class="эм-обёртка"><span class="метка-эмоции">🔍 <span class="счёт-эмоции">1</span></span></span></div>
+      <div class="реплика" style="--полоса:#d9713c"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М.</div>Согласен.<div class="низ-пузыря"><span class="точка"></span><span>10:17</span></div></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+  <div class="трет" style="margin-top:8px">третья реплика без эмоции — видно, что метка появляется только когда есть что показывать</div>
+</div>
+
+<div class="проба" id="в05">
+  <div class="шапка-пробы"><span class="номер">05</span><span class="опис">выступает за угол наполовину</span><span class="свет">сильнее заметна, но лезет в соседнюю реплику</span></div>
+  <div class="окно срез в05">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div></div><span class="эм-обёртка"><span class="метка-эмоции">👍 <span class="счёт-эмоции">2</span></span></span></div>
+      <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div><span class="эм-обёртка"><span class="метка-эмоции">🔍 <span class="счёт-эмоции">1</span></span></span></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в06">
+  <div class="шапка-пробы"><span class="номер">06</span><span class="опис">с выноской вверх</span><span class="свет">выноска обещает всплывающее окно, которого нет</span></div>
+  <div class="окно срез в06">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div></div><span class="эм-обёртка"><span class="метка-эмоции">👍 <span class="счёт-эмоции">2</span></span></span></div>
+      <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div><span class="эм-обёртка"><span class="метка-эмоции">🔍 <span class="счёт-эмоции">1</span></span></span></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в07">
+  <div class="шапка-пробы"><span class="номер">07</span><span class="опис">круглая, только значок</span><span class="свет">без числа — не видно, сколько человек поставили</span></div>
+  <div class="окно срез в07">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div></div><span class="эм-обёртка"><span class="метка-эмоции">👍 <span class="счёт-эмоции">2</span></span></span></div>
+      <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div><span class="эм-обёртка"><span class="метка-эмоции">🔍 <span class="счёт-эмоции">1</span></span></span></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в08">
+  <div class="шапка-пробы"><span class="номер">08</span><span class="опис">квадрат со скруглением, как аватар</span><span class="свет">форма повторяет аватар — второй угол той же семьи</span></div>
+  <div class="окно срез в08">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div></div><span class="эм-обёртка"><span class="метка-эмоции">👍 <span class="счёт-эмоции">2</span></span></span></div>
+      <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div><span class="эм-обёртка"><span class="метка-эмоции">🔍 <span class="счёт-эмоции">1</span></span></span></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в09">
+  <div class="шапка-пробы"><span class="номер">09</span><span class="опис">несколько эмоций подряд</span><span class="свет">так выглядит агрегат в группе</span></div>
+  <div class="окно срез в09">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div><span class="эм-обёртка"><span class="метка-эмоции">👍 <span class="счёт-эмоции">2</span></span><span class="метка-эмоции">🔍 <span class="счёт-эмоции">1</span></span><span class="метка-эмоции">😑 <span class="счёт-эмоции">1</span></span></span></div></div>
+      <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div><span class="эм-обёртка"><span class="метка-эмоции">🔍 <span class="счёт-эмоции">1</span></span></span></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в10">
+  <div class="шапка-пробы"><span class="номер">10</span><span class="опис">строкой внутри пузыря, серым полем</span><span class="свет">не трогает рамку, но раздувает пузырь</span></div>
+  <div class="окно срез в10">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div><span class="эм-обёртка"><span class="метка-эмоции">👍 <span class="счёт-эмоции">2</span></span></span></div></div>
+      <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div><span class="эм-обёртка"><span class="метка-эмоции">🔍 <span class="счёт-эмоции">1</span></span></span></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<h2>На что смотреть</h2>
+<ul class="кратко">
+  <li><b>Два угла — одна система.</b> Аватар выступает из верхнего левого, метка эмоции из нижнего правого. Пузырь получает читаемое правило: сверху кто сказал, снизу как приняли. Варианты, где метка внутри (01, 10) или под пузырём (02, 03), этого правила не дают.</li>
+  <li><b>Высота ленты.</b> Метка под пузырём (02, 03) добавляет строку каждой оценённой реплике. Врезанная в угол (04, 08) не добавляет ничего: она стоит в зазоре, который и так есть.</li>
+  <li><b>Выноска обещает лишнее.</b> В 06 хвостик читается как «нажми — раскроется», а раскрываться нечему: список поставивших живёт в отдельном окне. Приём выглядит богаче, но врёт.</li>
+  <li><b>Число нужно.</b> В 07 его нет, и в группе непонятно, один человек поставил или пятеро. В личном чате разница не видна, а в группе существенна.</li>
+</ul>
+
+<h2>Что применить</h2>
+<p>Метка — один элемент с абсолютной привязкой к нижнему правому углу реплики,
+плюс правило «нет эмоции — нет элемента». В теме её пока нет: сначала выбор.</p>
+
+</div>
