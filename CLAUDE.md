@@ -47,8 +47,8 @@
 | `messenger-crypto/**`, `server/internal/crypto/**`, `schema/**` | `.cursor/rules/crypto-invariants.mdc` |
 | `server/migrations/**`, `server/internal/store/**`, `server/internal/api/**` | `.cursor/rules/server-compatibility.mdc` |
 | запуск сервера, стека, эмулятора, десктопа | `.cursor/rules/runtime-launchers.mdc` |
-| прогон тестов | `.cursor/skills/tima-test-runner/` |
-| починка окружения | `.cursor/skills/tima-ops-runner/` |
+| прогон тестов, сборка, проверка результата | `.cursor/skills/adaptive-test-runner/` |
+| починка окружения, запуск служб, эмулятор | `.cursor/skills/adaptive-ops-runner/` |
 | выкатка на сервер | `ПЕРЕУСТАНОВКА-СЕРВЕРА.md`, `СТЕНД.md` |
 
 Формат `.mdc` — цурсоровский, содержание общее. Читать их как обычный markdown.
