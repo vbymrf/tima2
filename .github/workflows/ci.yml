@@ -27,6 +27,25 @@ on:
   workflow_dispatch:
 
 jobs:
+  # ── Заслон: бит исполнения у gradlew ──────────────────────────────────────
+  # За одну смену это ломало прогон трижды: git на Windows не хранит бит
+  # исполнения, файл коммитится как 100644, и задача падает с «Permission
+  # denied» — то есть красным становится не код, а обёртка. Проверка стоит
+  # секунду и ловит это до того, как сгорит цикл CI.
+  guard-exec-bits:
+    name: 'заслон · биты исполнения'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 'gradlew обязан быть исполняемым'
+        run: |
+          bad=$(git ls-files -s '*gradlew' | awk '$1 != "100755" {print $4}')
+          if [ -n "$bad" ]; then
+            echo "::error::не исполняемые gradlew:%0A$(echo "$bad" | awk '{printf "%s%%0A", $0}')%0AПочинить: git update-index --chmod=+x <файл>"
+            exit 1
+          fi
+          echo "все gradlew исполняемые: $(git ls-files '*gradlew' | wc -l) шт."
+
   # ── Клиент v2: общий код и JVM-таргет ──────────────────────────────────────
   client-jvm:
     name: client · JVM
