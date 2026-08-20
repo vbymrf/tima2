@@ -33,7 +33,10 @@ class DepsSpikeTest {
 
     @Test
     fun wire_рантайм_кодирует_и_разбирает() {
-        val bytes = ProtoAdapter.STRING.encode("узлы вместо плоского текста")
-        assertEquals("узлы вместо плоского текста", ProtoAdapter.STRING.decode(bytes))
+        // INT32, а не STRING: varint самоограничен, поэтому round-trip не зависит
+        // от того, есть ли вокруг значения длина или тег. У STRING зависит, и
+        // проверка превратилась бы в тест на понимание чужого фрейминга.
+        val bytes = ProtoAdapter.INT32.encode(300)
+        assertEquals(300, ProtoAdapter.INT32.decode(bytes))
     }
 }

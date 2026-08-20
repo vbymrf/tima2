@@ -49,6 +49,18 @@ jobs:
           msg=$(grep -aE 'error:|FAILURE:|What went wrong|Caused by|not found|Could not|Unresolved|Cannot|^> |^e: ' /tmp/gradle.log | tail -n 30 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
           if [ -z "$msg" ]; then msg=$(tail -n 25 /tmp/gradle.log | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}'); fi
           echo "::error::${msg}"
+      - name: 'jvm · упавшие тесты в аннотацию'
+        if: failure()
+        working-directory: client
+        run: |
+          # Имена и сообщения упавших тестов из XML-отчётов. В выводе Gradle их нет:
+          # он говорит «There were failing tests. See the report at file://…», а файл
+          # на раннере мне недоступен.
+          f=$(find . -path '*/build/test-results/*' -name '*.xml' 2>/dev/null | head -n 40)
+          [ -z "$f" ] && { echo "::error::XML-отчётов тестов не найдено"; exit 0; }
+          msg=$(grep -ho 'testcase name="[^"]*"' $f | head -n 8 | tr -d '\r' | awk '{printf "%s%%0A", $0}')
+          det=$(grep -hoE '(message|type)="[^"]{0,200}"' $f | grep -v 'type="junit' | head -n 10 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
+          echo "::error::упавшие тесты:%0A${msg}%0A${det}"
 
   # ── Клиент v2: iOS ────────────────────────────────────────────────────────
   client-ios:
