@@ -37,7 +37,7 @@ macOS runner, with a locally published `keccak` that has Apple targets enabled:
 ./gradlew iosSimulatorArm64Test
 ```
 
-Result: **pass**. (Run log: <вставьте ссылку на прогон>)
+Result: **pass** — `BUILD SUCCESSFUL in 25m 14s` (the KAT vectors are slow). Run log: https://github.com/vbymrf/tima2/actions/runs/32409748566/job/96557153508
 
 The workflow used is included as `verify-apple-targets.yml` if you want the same check
 on every push — macOS runners are free for public repositories.

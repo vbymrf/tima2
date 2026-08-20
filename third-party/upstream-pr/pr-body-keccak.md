@@ -30,7 +30,7 @@ I ran the test suite on an iOS simulator using a GitHub-hosted macOS runner:
 ./gradlew iosSimulatorArm64Test
 ```
 
-Result: **pass**. (Run log: <вставьте ссылку на прогон>)
+Result: **pass** — `BUILD SUCCESSFUL in 3m 9s`. Run log: https://github.com/vbymrf/tima2/actions/runs/32409748566/job/96557153508
 
 To keep that verification permanently, and for free, you can add the workflow from
 `verify-apple-targets.yml` — GitHub-hosted macOS runners are free for public
