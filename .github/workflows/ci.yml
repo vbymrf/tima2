@@ -5,15 +5,18 @@
 #
 # ── КАК ЗДЕСЬ УСТРОЕНА ДИАГНОСТИКА ────────────────────────────────────────────
 # Логи прогонов через API отдаются только с токеном; без токена доступны состояния
-# шагов и АННОТАЦИИ. Поэтому:
+# шагов и АННОТАЦИИ. Отсюда три приёма, и каждый добыт разбором предыдущего
+# прогона, а не выбран заранее:
 #
 #   1. шаг делает по одному действию и назван тем, что делает — имя упавшего шага
-#      локализует поломку;
-#   2. вывод Gradle перехватывается, и при падении его хвост печатается командами
-#      `::error::` — то есть превращается в аннотации, читаемые без токена.
-#
-# Это не стилистика: без этого падение выглядит как «exit code 1» и не говорит
-# ничего. Проверено на первом прогоне.
+#      локализует поломку. Так нашлось, что «упали тесты крипто» — это `exit 126`,
+#      то есть отсутствие бита исполнения у gradlew;
+#   2. вывод Gradle перехватывается в файл и при падении печатается командой
+#      `::error::`, потому что «Process completed with exit code 1» не говорит
+#      ничего;
+#   3. аннотаций на шаг отдаётся не больше десяти, и по строке на аннотацию их
+#      съедает баннер загрузки Gradle. Поэтому значимые строки собираются в ОДНО
+#      сообщение через %0A.
 
 name: CI
 
@@ -40,21 +43,17 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew build --console=plain 2>&1 | tee /tmp/gradle.log
-      - name: 'jvm · вывод Gradle в аннотации'
+      - name: 'jvm · вывод Gradle в аннотацию'
         if: failure()
-        run: tail -n 50 /tmp/gradle.log | while IFS= read -r l; do echo "::error::$l"; done
+        run: |
+          msg=$(grep -aE 'error:|FAILURE:|What went wrong|Caused by|not found|Could not|Unresolved|Cannot|^> |^e: ' /tmp/gradle.log | tail -n 30 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
+          if [ -z "$msg" ]; then msg=$(tail -n 25 /tmp/gradle.log | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}'); fi
+          echo "::error::${msg}"
 
   # ── Клиент v2: iOS ────────────────────────────────────────────────────────
-  # Матрица по задачам: видно не «iOS упал», а какая именно задача упала.
   client-ios:
-    name: 'client · iOS ${{ matrix.task }}'
+    name: 'client · iOS'
     runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        task:
-          - ':core:core-model:compileKotlinIosSimulatorArm64'
-          - ':core:core-model:iosSimulatorArm64Test'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v5
@@ -67,40 +66,27 @@ jobs:
           echo "arch: $(uname -m)"
           xcodebuild -version || echo "xcodebuild отсутствует"
           xcrun --sdk iphonesimulator --show-sdk-version || echo "SDK симулятора отсутствует"
-      - name: 'ios · ${{ matrix.task }}'
+      # Имена задач Kotlin/Native не угадываем: спрашиваем у Gradle и печатаем
+      # ответ аннотацией. В прогоне 2 `compileKotlinIosSimulatorArm64` упал, а
+      # зависящий от него `iosSimulatorArm64Test` прошёл — значит имя не то.
+      - name: 'ios · какие задачи вообще есть'
         working-directory: client
         run: |
           set -o pipefail
-          ./gradlew ${{ matrix.task }} --console=plain 2>&1 | tee /tmp/gradle.log
-      - name: 'ios · вывод Gradle в аннотации'
-        if: failure()
-        run: tail -n 60 /tmp/gradle.log | while IFS= read -r l; do echo "::error::$l"; done
-
-  # ── Спайк К1.4: зависимости крипто под iOS ────────────────────────────────
-  spike-ios-deps:
-    name: 'спайк · ${{ matrix.task }}'
-    runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        task:
-          - ':core:spike-ios-deps:jvmTest'
-          - ':core:spike-ios-deps:iosSimulatorArm64Test'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
-      - name: 'спайк · ${{ matrix.task }}'
+          ./gradlew :core:core-model:tasks --all --console=plain 2>&1 | tee /tmp/tasks.log || true
+          msg=$(grep -aiE '^(compile|link|ios)[A-Za-z0-9]*' /tmp/tasks.log | head -n 25 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
+          echo "::notice::задачи core-model:%0A${msg}"
+      - name: 'ios · тесты на симуляторе'
         working-directory: client
         run: |
           set -o pipefail
-          ./gradlew ${{ matrix.task }} --console=plain 2>&1 | tee /tmp/gradle.log
-      - name: 'спайк · вывод Gradle в аннотации'
+          ./gradlew iosSimulatorArm64Test --console=plain 2>&1 | tee /tmp/gradle.log
+      - name: 'ios · вывод Gradle в аннотацию'
         if: failure()
-        run: tail -n 60 /tmp/gradle.log | while IFS= read -r l; do echo "::error::$l"; done
+        run: |
+          msg=$(grep -aE 'error:|FAILURE:|What went wrong|Caused by|not found|Could not|Unresolved|Cannot|^> |^e: ' /tmp/gradle.log | tail -n 30 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
+          if [ -z "$msg" ]; then msg=$(tail -n 25 /tmp/gradle.log | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}'); fi
+          echo "::error::${msg}"
 
   # ── Архитектурные правила (Plan.md §2.2) ──────────────────────────────────
   architecture:
@@ -118,9 +104,12 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew :architecture-tests:test --console=plain 2>&1 | tee /tmp/gradle.log
-      - name: 'правила · вывод в аннотации'
+      - name: 'правила · вывод в аннотацию'
         if: failure()
-        run: tail -n 60 /tmp/gradle.log | while IFS= read -r l; do echo "::error::$l"; done
+        run: |
+          msg=$(grep -aE 'Нарушений|нарушение|error:|FAILURE:|What went wrong|Caused by|not found|Could not|^> |^e: ' /tmp/gradle.log | tail -n 30 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
+          if [ -z "$msg" ]; then msg=$(tail -n 25 /tmp/gradle.log | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}'); fi
+          echo "::error::${msg}"
 
   # ── Крипто-ядро: не тронуто рефакторингом, служит опорной точкой ───────────
   crypto:
@@ -133,30 +122,23 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: 'крипто · компиляция'
-        working-directory: messenger-crypto
-        run: |
-          set -o pipefail
-          ./gradlew compileTestKotlin --console=plain 2>&1 | tee /tmp/gradle.log
       - name: 'крипто · тесты, включая сверку с BouncyCastle'
         working-directory: messenger-crypto
         run: |
           set -o pipefail
-          ./gradlew test --console=plain 2>&1 | tee -a /tmp/gradle.log
-      - name: 'крипто · вывод Gradle в аннотации'
+          ./gradlew test --console=plain 2>&1 | tee /tmp/gradle.log
+      - name: 'крипто · вывод Gradle в аннотацию'
         if: failure()
-        run: tail -n 60 /tmp/gradle.log | while IFS= read -r l; do echo "::error::$l"; done
-      - name: 'крипто · упавшие тесты в аннотации'
+        run: |
+          msg=$(grep -aE 'error:|FAILURE:|What went wrong|Caused by|not found|Could not|^> |^e: ' /tmp/gradle.log | tail -n 30 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
+          if [ -z "$msg" ]; then msg=$(tail -n 25 /tmp/gradle.log | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}'); fi
+          echo "::error::${msg}"
+      - name: 'крипто · упавшие тесты в аннотацию'
         if: failure()
         working-directory: messenger-crypto
         run: |
-          for f in build/test-results/test/*.xml; do
-            [ -f "$f" ] || continue
-            grep -q '<failure' "$f" || continue
-            echo "::error::упал класс $(basename "$f")"
-            grep -o '<failure message="[^"]\{0,300\}"' "$f" | head -3 |
-              while IFS= read -r l; do echo "::error::$l"; done
-          done
+          msg=$(grep -ho '<failure message="[^"]\{0,200\}"' build/test-results/test/*.xml 2>/dev/null | head -n 10 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
+          if [ -n "$msg" ]; then echo "::error::упавшие тесты:%0A${msg}"; fi
 
   # ── Сервер: сборка и статический разбор ───────────────────────────────────
   server:
