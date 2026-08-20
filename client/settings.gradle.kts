@@ -25,3 +25,7 @@ dependencyResolutionManagement {
 // ради полноты схемы дают минуты ожидания Gradle и ноль изоляции.
 
 include(":core:core-model")
+
+// Спайк К1.4 — временный: проверяет, собираются ли зависимости крипто под iOS.
+// Удаляется в К2 вместе с получением ответа (Plan.md К2).
+include(":core:spike-ios-deps")

@@ -3,8 +3,11 @@
 # машине сборки. Здесь это исправляется, и заодно CI становится ОСНОВНЫМ гейтом:
 # на машине разработки нет ни Android SDK, ни Go, ни железа Apple.
 #
-# Задачи-джобы независимы намеренно: падение клиента не должно скрывать состояние
-# сервера, и наоборот.
+# ── ПОЧЕМУ ШАГИ ТАКИЕ МЕЛКИЕ ───────────────────────────────────────────────────
+# Логи прогонов через API отдаются только с токеном, а состояние шагов — без него.
+# Поэтому шаг делает по одному действию и назван тем, что делает: имя упавшего
+# шага само локализует поломку, без чтения логов. Это не стиль, это единственный
+# доступный здесь способ диагностики.
 
 name: CI
 
@@ -26,17 +29,32 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Сборка и тесты
+      - name: 'jvm · разбор проекта (tasks)'
         working-directory: client
-        run: ./gradlew build --stacktrace
+        run: ./gradlew tasks --all --console=plain
+      - name: 'jvm · компиляция common'
+        working-directory: client
+        run: ./gradlew :core:core-model:compileKotlinJvm --console=plain
+      - name: 'jvm · тесты core-model'
+        working-directory: client
+        run: ./gradlew :core:core-model:jvmTest --console=plain
+      - name: 'jvm · сборка целиком'
+        working-directory: client
+        run: ./gradlew build --console=plain
 
-  # ── Клиент v2: iOS-таргет ─────────────────────────────────────────────────
-  # Требует macOS: Kotlin/Native под iOS собирается только там. Для публичных
-  # репозиториев раннеры macOS бесплатны, поэтому «iOS держим компилируемым»
-  # проверяется машиной, а не обещанием.
+  # ── Клиент v2: iOS ────────────────────────────────────────────────────────
+  # Матрица по задачам: каждая нога — отдельная запись в списке задач прогона,
+  # поэтому видно не «iOS упал», а какая именно задача упала.
   client-ios:
-    name: client · iOS klib
+    name: 'client · iOS ${{ matrix.task }}'
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        task:
+          - ':core:core-model:compileKotlinIosSimulatorArm64'
+          - ':core:core-model:compileKotlinIosArm64'
+          - ':core:core-model:iosSimulatorArm64Test'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -44,14 +62,38 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Компиляция под iOS
+      - name: 'ios · окружение (xcode, arch)'
+        run: |
+          uname -m
+          xcodebuild -version || echo "xcodebuild отсутствует"
+          xcrun --sdk iphonesimulator --show-sdk-version || echo "SDK симулятора отсутствует"
+      - name: 'ios · ${{ matrix.task }}'
         working-directory: client
-        run: ./gradlew compileKotlinIosSimulatorArm64 compileKotlinIosArm64 --stacktrace
-      - name: Тесты на симуляторе iOS
+        run: ./gradlew ${{ matrix.task }} --console=plain
+
+  # ── Спайк К1.4: зависимости крипто под iOS ────────────────────────────────
+  # Отдельной задачей от core-model: если упадёт именно спайк, это новость про
+  # зависимости, а не про каркас.
+  spike-ios-deps:
+    name: 'спайк · ${{ matrix.task }}'
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        task:
+          - ':core:spike-ios-deps:compileKotlinIosSimulatorArm64'
+          - ':core:spike-ios-deps:jvmTest'
+          - ':core:spike-ios-deps:iosSimulatorArm64Test'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 'спайк · ${{ matrix.task }}'
         working-directory: client
-        # Прогон, а не только компиляция: если он проходит, долг К2-iOS
-        # (векторы крипто на iOS) закрывается без покупки железа.
-        run: ./gradlew iosSimulatorArm64Test --stacktrace
+        run: ./gradlew ${{ matrix.task }} --console=plain
 
   # ── Крипто-ядро: не тронуто рефакторингом, служит опорной точкой ───────────
   crypto:
@@ -64,9 +106,38 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Тесты крипто, включая сверку с BouncyCastle
+      - name: 'крипто · кодоген Wire из schema/proto'
         working-directory: messenger-crypto
-        run: ./gradlew test --stacktrace
+        run: ./gradlew generateProtos --console=plain
+      - name: 'крипто · компиляция'
+        working-directory: messenger-crypto
+        run: ./gradlew compileKotlin --console=plain
+      - name: 'крипто · компиляция тестов'
+        working-directory: messenger-crypto
+        run: ./gradlew compileTestKotlin --console=plain
+      - name: 'крипто · тесты'
+        working-directory: messenger-crypto
+        run: ./gradlew test --console=plain
+      - name: 'крипто · отчёт о падении в сводку'
+        if: failure()
+        working-directory: messenger-crypto
+        # Сводка видна на странице прогона. Логи через API без токена не отдаются,
+        # поэтому имена упавших тестов вытаскиваются из XML-отчётов сюда.
+        run: |
+          echo '## Упавшие тесты' >> "$GITHUB_STEP_SUMMARY"
+          for f in build/test-results/test/*.xml; do
+            [ -f "$f" ] || continue
+            grep -l '<failure' "$f" >/dev/null 2>&1 || continue
+            echo "### $(basename "$f")" >> "$GITHUB_STEP_SUMMARY"
+            grep -o 'testcase name="[^"]*"' "$f" >> "$GITHUB_STEP_SUMMARY" || true
+            grep -o '<failure message="[^"]*"' "$f" | head -5 >> "$GITHUB_STEP_SUMMARY" || true
+          done
+      - name: 'крипто · отчёты как артефакт'
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crypto-test-reports
+          path: messenger-crypto/build/reports/tests/test
 
   # ── Сервер: сборка и статический разбор ───────────────────────────────────
   # Без `go test`: часть тестов ждёт живую БД, и падение из-за её отсутствия
@@ -80,9 +151,9 @@ jobs:
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
-      - name: Сборка
+      - name: 'сервер · сборка'
         working-directory: server
         run: go build ./...
-      - name: Статический разбор
+      - name: 'сервер · vet'
         working-directory: server
         run: go vet ./...
