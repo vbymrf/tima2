@@ -1,0 +1,348 @@
+<meta charset="utf-8">
+<title>Разделы: четыре исполнения</title>
+<link rel="stylesheet" href="стиль.css">
+<link rel="stylesheet" href="тьма.css">
+
+<div class="лист-док">
+<div class="путь"><a href="индекс.html">Layout-UI-dark</a> / разделы.html</div>
+<h1>Разделы <span class="вид подокно">общее</span></h1>
+<p class="подзаголовок">
+  Сквозная раскладка по темам — одна на все окна
+  (<a href="../01-product/разделы.md">01-product/разделы.md</a>). Правее вкладок
+  стоят два независимых тумблера: <b>полоса</b> и <b>ярлычки</b>. Четыре их
+  сочетания дают четыре исполнения одного экрана. Исполнение <b>Б</b> собрано
+  в <a href="окна/новости.html">окне «Социум»</a>, здесь — остальные три и
+  переход внутрь раздела.
+</p>
+
+<table>
+  <tr><th></th><th>ярлычки отжаты</th><th>ярлычки нажаты</th></tr>
+  <tr><th>полоса отжата</th><td><a href="окна/новости.html">Б · гармошка — в окне «Социум»</a></td><td><a href="#А">А · плитка ярлычков</a></td></tr>
+  <tr><th>полоса нажата</th><td><a href="#Г">Г · полоса текстом</a></td><td><a href="#В">В · полоса ярлычками</a></td></tr>
+</table>
+
+<div class="экраны">
+
+<div class="тел" id="А">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+    <div class="зона-1">
+      <a class="переход-окон тянуть" href="подокна/переключение-окон.html">
+        <span class="лого">Т</span>
+        <span class="имя-окна">Социум</span>
+      </a>
+      <a class="икона" href="#">🔍</a>
+      <a class="икона" href="подокна/настройки.html">⚙</a>
+    </div>
+    <div class="табы">
+      <a class="таб" href="#">Общая</a>
+      <a class="таб" href="#">Друзья</a>
+      <a class="таб тек" href="#">Каталог</a>
+      <span class="кнопки-вида">
+        <a class="кн-тумблер" href="#В" title="полоса разделов">▬</a>
+        <a class="кн-тумблер нажата" href="окна/новости.html" title="ярлычки">▦</a>
+      </span>
+    </div>
+    <div class="зона-2">
+      <div class="плитка">
+        <a class="ярлык всё" href="#"><span class="значок">✦<span class="счёт-об">57</span><span class="счёт">11</span></span><span class="подпись-ярлыка">Всё</span></a>
+        <a class="ярлык" href="#внутри"><span class="значок">💼<span class="счёт-об">12</span><span class="счёт">3</span></span><span class="подпись-ярлыка">Работа</span></a>
+        <a class="ярлык" href="#"><span class="значок">🏠<span class="счёт-об">4</span><span class="счёт">1</span></span><span class="подпись-ярлыка">Дом</span></a>
+        <a class="ярлык" href="#"><span class="значок">📰<span class="счёт-об">9</span><span class="счёт">2</span></span><span class="подпись-ярлыка">Новости</span></a>
+        <a class="ярлык" href="#"><span class="значок">🎓<span class="счёт-об">3</span></span><span class="подпись-ярлыка">Учёба</span></a>
+        <a class="ярлык пустой" href="#"><span class="значок">⚽<span class="счёт-об">0</span></span><span class="подпись-ярлыка">Спорт</span></a>
+        <a class="ярлык" href="#"><span class="значок">🎬<span class="счёт-об">6</span><span class="счёт">4</span></span><span class="подпись-ярлыка">Досуг</span></a>
+        <a class="ярлык свой" href="#"><span class="значок">🛠<span class="счёт-об">2</span></span><span class="подпись-ярлыка">Гараж</span></a>
+        <a class="ярлык" href="#"><span class="значок">📦<span class="счёт-об">21</span><span class="счёт">2</span></span><span class="подпись-ярлыка">Общий</span></a>
+        <a class="ярлык добавить" href="#"><span class="значок">+</span><span class="подпись-ярлыка">Добавить</span></a>
+      </div>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">А · плитка ярлычков: «Всё» первым, «Добавить» последним</div>
+</div>
+
+<div class="тел" id="внутри">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+    <div class="зона-1">
+      <a class="переход-окон тянуть" href="подокна/переключение-окон.html">
+        <span class="лого">Т</span>
+        <span class="имя-окна">Социум</span>
+      </a>
+      <a class="икона" href="#">🔍</a>
+      <a class="икона" href="подокна/настройки.html">⚙</a>
+    </div>
+    <div class="табы в-разделе">
+      <a class="кн-назад" href="#А">←</a>
+      <span class="имя-раздела">💼 Работа</span>
+      <span class="тянуть"></span>
+      <span class="круг-об">12</span><span class="счёт мелкий">3</span>
+    </div>
+    <div class="зона-2">
+      <a class="строка" href="подокна/чат.html">
+        <div class="ава">КР</div>
+        <div class="тянуть">
+          <div class="имя обрез">Команда разработки</div>
+          <div class="втор обрез">публичная группа · 3 участника</div>
+        </div>
+        <div class="мета"><span class="трет">14:32</span><span class="счёт">7</span></div>
+      </a>
+      <a class="строка" href="подокна/чат.html">
+        <div class="ава">ПС</div>
+        <div class="тянуть">
+          <div class="имя обрез">Проект «Север»</div>
+          <div class="втор обрез">закрытая группа · 8 участников</div>
+        </div>
+        <div class="мета"><span class="трет">11:48</span><span class="счёт">4</span></div>
+      </a>
+      <a class="строка" href="подокна/чат.html">
+        <div class="ава">ОТ</div>
+        <div class="тянуть">
+          <div class="имя обрез">Отдел тестирования</div>
+          <div class="втор обрез">публичная группа · 24 участника</div>
+        </div>
+        <div class="мета"><span class="трет">10:14</span><span class="счёт">2</span></div>
+      </a>
+      <div class="объект-раскрыв">
+        <a class="строка" href="#">
+          <div class="ава">СГ</div>
+          <div class="тянуть">
+            <div class="имя обрез">Северная группа</div>
+            <div class="втор обрез">сообщество · 4 группы, 2 канала</div>
+          </div>
+          <div class="мета"><span class="трет">13:12</span></div>
+        </a>
+        <a class="цель-свернуть" href="#"><span class="шеврон">▾</span></a>
+      </div>
+      <div class="вложенные">
+        <a class="строка" href="подокна/чат.html">
+          <div class="ава">СМ</div>
+          <div class="тянуть">
+            <div class="имя обрез">Смежники</div>
+            <div class="втор обрез">публичная группа · 17 участников</div>
+          </div>
+          <div class="мета"><span class="трет">12:40</span></div>
+        </a>
+        <a class="строка" href="подокна/чат.html">
+          <div class="ава">ОБ</div>
+          <div class="тянуть">
+            <div class="имя обрез">Объявления</div>
+            <div class="втор обрез">канал · 340 подписчиков</div>
+          </div>
+          <div class="мета"><span class="трет">вчера</span></div>
+        </a>
+      </div>
+      <a class="строка" href="подокна/чат.html">
+        <div class="ава">РН</div>
+        <div class="тянуть">
+          <div class="имя обрез">Разбор недели</div>
+          <div class="втор обрез">канал · 10 500 подписчиков</div>
+        </div>
+        <div class="мета"><span class="трет">12:05</span></div>
+      </a>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">внутри раздела: вкладки заменены на «назад» и название — экран один на все исполнения</div>
+</div>
+
+<div class="тел" id="В">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+    <div class="зона-1">
+      <a class="переход-окон тянуть" href="подокна/переключение-окон.html">
+        <span class="лого">Т</span>
+        <span class="имя-окна">Социум</span>
+      </a>
+      <a class="икона" href="#">🔍</a>
+      <a class="икона" href="подокна/настройки.html">⚙</a>
+    </div>
+    <div class="табы">
+      <a class="таб" href="#">Общая</a>
+      <a class="таб" href="#">Друзья</a>
+      <a class="таб тек" href="#">Каталог</a>
+      <span class="кнопки-вида">
+        <a class="кн-тумблер нажата" href="окна/новости.html" title="полоса разделов">▬</a>
+        <a class="кн-тумблер нажата" href="#Г" title="ярлычки">▦</a>
+      </span>
+    </div>
+    <div class="полоса-разделов">
+      <a class="чип-ярлык" href="#"><span class="знак-чипа">✦</span><span class="подпись-чипа">Всё</span><span class="счёт">11</span></a>
+      <a class="чип-ярлык тек" href="#"><span class="знак-чипа">💼</span><span class="подпись-чипа">Работа</span><span class="счёт">3</span></a>
+      <a class="чип-ярлык" href="#"><span class="знак-чипа">🏠</span><span class="подпись-чипа">Дом</span><span class="счёт">1</span></a>
+      <a class="чип-ярлык" href="#"><span class="знак-чипа">📰</span><span class="подпись-чипа">Новости</span><span class="счёт">2</span></a>
+      <a class="чип-ярлык" href="#"><span class="знак-чипа">🎓</span><span class="подпись-чипа">Учёба</span></a>
+      <a class="чип-ярлык" href="#"><span class="знак-чипа">⚽</span><span class="подпись-чипа">Спорт</span></a>
+      <a class="чип-ярлык" href="#"><span class="знак-чипа">🎬</span><span class="подпись-чипа">Досуг</span><span class="счёт">4</span></a>
+      <a class="чип-ярлык" href="#"><span class="знак-чипа">🛠</span><span class="подпись-чипа">Гараж</span></a>
+      <a class="чип-ярлык" href="#"><span class="знак-чипа">📦</span><span class="подпись-чипа">Общий</span><span class="счёт">2</span></a>
+    </div>
+    <div class="зона-2">
+      <a class="строка" href="подокна/чат.html">
+        <div class="ава">КР</div>
+        <div class="тянуть">
+          <div class="имя обрез">Команда разработки</div>
+          <div class="втор обрез">публичная группа · 3 участника</div>
+        </div>
+        <div class="мета"><span class="трет">14:32</span><span class="счёт">7</span></div>
+      </a>
+      <a class="строка" href="подокна/чат.html">
+        <div class="ава">ПС</div>
+        <div class="тянуть">
+          <div class="имя обрез">Проект «Север»</div>
+          <div class="втор обрез">закрытая группа · 8 участников</div>
+        </div>
+        <div class="мета"><span class="трет">11:48</span><span class="счёт">4</span></div>
+      </a>
+      <a class="строка" href="подокна/чат.html">
+        <div class="ава">ОТ</div>
+        <div class="тянуть">
+          <div class="имя обрез">Отдел тестирования</div>
+          <div class="втор обрез">публичная группа · 24 участника</div>
+        </div>
+        <div class="мета"><span class="трет">10:14</span><span class="счёт">2</span></div>
+      </a>
+      <a class="строка" href="подокна/чат.html">
+        <div class="ава">РН</div>
+        <div class="тянуть">
+          <div class="имя обрез">Разбор недели</div>
+          <div class="втор обрез">канал · 10 500 подписчиков</div>
+        </div>
+        <div class="мета"><span class="трет">12:05</span></div>
+      </a>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">В · полоса ярлычками: выбрана «Работа», ниже только её объекты. Полосу тянут пальцем или мышью</div>
+</div>
+
+<div class="тел" id="Г">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+    <div class="зона-1">
+      <a class="переход-окон тянуть" href="подокна/переключение-окон.html">
+        <span class="лого">Т</span>
+        <span class="имя-окна">Социум</span>
+      </a>
+      <a class="икона" href="#">🔍</a>
+      <a class="икона" href="подокна/настройки.html">⚙</a>
+    </div>
+    <div class="табы">
+      <a class="таб" href="#">Общая</a>
+      <a class="таб" href="#">Друзья</a>
+      <a class="таб тек" href="#">Каталог</a>
+      <span class="кнопки-вида">
+        <a class="кн-тумблер нажата" href="окна/новости.html" title="полоса разделов">▬</a>
+        <a class="кн-тумблер" href="#В" title="ярлычки">▦</a>
+      </span>
+    </div>
+    <div class="полоса-разделов">
+      <a class="чип-разд тек" href="#">Всё <span class="счёт">11</span></a>
+      <a class="чип-разд" href="#">Работа <span class="счёт">3</span></a>
+      <a class="чип-разд" href="#">Дом <span class="счёт">1</span></a>
+      <a class="чип-разд" href="#">Новости <span class="счёт">2</span></a>
+      <a class="чип-разд" href="#">Учёба</a>
+      <a class="чип-разд" href="#">Спорт</a>
+      <a class="чип-разд" href="#">Досуг <span class="счёт">4</span></a>
+      <a class="чип-разд" href="#">Гараж</a>
+      <a class="чип-разд" href="#">Общий <span class="счёт">2</span></a>
+    </div>
+    <div class="зона-2">
+      <a class="строка" href="подокна/чат.html">
+        <div class="ава">КР</div>
+        <div class="тянуть">
+          <div class="имя обрез">Команда разработки</div>
+          <div class="втор обрез">публичная группа · 3 участника</div>
+        </div>
+        <div class="мета"><span class="трет">14:32</span><span class="счёт">7</span></div>
+      </a>
+      <a class="строка" href="подокна/чат.html">
+        <div class="ава">ГН</div>
+        <div class="тянуть">
+          <div class="имя обрез">Городские новости</div>
+          <div class="втор обрез">канал · 88 000 подписчиков</div>
+        </div>
+        <div class="мета"><span class="трет">13:50</span><span class="счёт">3</span></div>
+      </a>
+      <a class="строка" href="подокна/чат.html">
+        <div class="ава">КВ</div>
+        <div class="тянуть">
+          <div class="имя обрез">Кино на вечер</div>
+          <div class="втор обрез">публичная группа · 214 участников</div>
+        </div>
+        <div class="мета"><span class="трет">11:20</span><span class="счёт">12</span></div>
+      </a>
+      <a class="строка" href="подокна/чат.html">
+        <div class="ава">СС</div>
+        <div class="тянуть">
+          <div class="имя обрез">Соседи по дому</div>
+          <div class="втор обрез">публичная группа · 41 участник</div>
+        </div>
+        <div class="мета"><span class="трет">вт</span></div>
+      </a>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">Г · полоса текстом: выбрано «Всё» — список идёт сплошным, без разделов</div>
+</div>
+
+<div class="разбор">
+
+<h2>Что здесь</h2>
+<ul class="кратко">
+  <li><b>Две кнопки, а не переключатель.</b> «Полоса» добавляет ряд разделов под вкладками, «ярлычки» меняет слова на значки. Кнопки независимы, поэтому исполнений четыре, а экран остаётся один.</li>
+  <li><b>Полоса — фильтр, а не переход.</b> В А и Б человек уходит внутрь раздела и возвращается кнопкой «назад»; в В и Г он остаётся на том же экране, вкладки на месте, а возврат — чип «Всё».</li>
+  <li><b>Пока полоса нажата, разделов в списке нет.</b> Иначе одно и то же было бы сказано дважды: сверху выбранный раздел, снизу его же заголовок.</li>
+  <li><b>Выбор на полосе подчёркнут, но не залит.</b> Заливка занята текущей вкладкой, и вкладка главнее: она про то, откуда содержимое, а раздел — про то, о чём оно.</li>
+  <li><b>Полосы прокрутки нет.</b> Разделы, которые не поместились, вытягивают движением — пальцем или мышью с зажатой кнопкой. Стрелки были бы вторым способом для одного действия и лишним элементом на телефоне.</li>
+  <li><b>«Добавить» есть в А и Б, на полосе его нет.</b> Полоса про переключение, а не про заведение.</li>
+</ul>
+
+<h2>Цифры</h2>
+<table>
+  <tr><th>Где</th><th>Зелёное</th><th>Янтарное</th></tr>
+  <tr><td>у раздела</td><td>сколько в нём объектов</td><td>сколько объектов с новыми сообщениями</td></tr>
+  <tr><td>у объекта</td><td>—</td><td>сколько в нём новых сообщений</td></tr>
+</table>
+<ul class="кратко">
+  <li>Раздел считает объекты, а не сообщения: «три чата ждут» — это дело на три захода, а «двадцать восемь сообщений» не говорит ни о времени, ни о срочности.</li>
+  <li>Обе цифры заливкой: ни зелёный, ни янтарь не читаются как мелкий текст на белом — 2,4 : 1 и 1,7 : 1 при пороге 4,5 : 1.</li>
+  <li>В плитке они разведены по углам значка: объекты вниз, ждущее вверх. На полосе зелёной цифры нет — там переключают, и важно «где ждут», а не «сколько всего».</li>
+</ul>
+
+<h2>Ведёт в</h2>
+<ul class="кратко">
+  <li>Ярлык или чип раздела → внутрь раздела: <a href="#внутри">второй экран</a>.</li>
+  <li>Строка объекта → <a href="подокна/чат.html">чат</a> группы, канала или голосовой комнаты.</li>
+  <li>Гармошка, исполнение Б → <a href="окна/новости.html">окно «Социум»</a>.</li>
+  <li>Разбор понятия и правила → <a href="../01-product/разделы.md">01-product/разделы.md</a>.</li>
+  <li>Как выбирали → пробники <a href="../Layout-UI-light/пробы-разделы.html">1</a>, <a href="../Layout-UI-light/пробы-разделы-2.html">2</a>, <a href="../Layout-UI-light/пробы-разделы-3.html">3</a>.</li>
+</ul>
+
+</div>
+</div>
+</div>
+
+<script>
+  // Полоса тянется мышью: на телефоне это родное поведение, на компьютере нет,
+  // а стрелки ставить не хотим — одно движение на всех устройствах.
+  document.querySelectorAll('.полоса-разделов').forEach(function (лента) {
+    var тянем = false, началX = 0, началScroll = 0, сдвиг = 0;
+    лента.addEventListener('pointerdown', function (e) {
+      тянем = true; сдвиг = 0;
+      началX = e.clientX; началScroll = лента.scrollLeft;
+      лента.setPointerCapture(e.pointerId);
+    });
+    лента.addEventListener('pointermove', function (e) {
+      if (!тянем) return;
+      var д = e.clientX - началX;
+      сдвиг = Math.max(сдвиг, Math.abs(д));
+      лента.scrollLeft = началScroll - д;
+    });
+    лента.addEventListener('pointerup', function () { тянем = false; });
+    лента.addEventListener('click', function (e) {
+      if (сдвиг > 5) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
+  });
+</script>

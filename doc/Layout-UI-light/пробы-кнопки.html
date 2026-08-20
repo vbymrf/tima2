@@ -1,0 +1,271 @@
+<meta charset="utf-8">
+<title>Пробы: кнопки у сообщения</title>
+<link rel="stylesheet" href="стиль.css">
+<style>
+  .срез { height: auto; width: 344px; border-width: 2px; border-radius: 20px; }
+  .срез .зона-2 { flex: 0 0 auto; overflow: visible; position: relative; }
+  .срез .поток { padding: 20px 14px 24px; gap: 20px; }
+  .срез .пузырь { max-width: 252px; }
+
+  /* Кнопка действия у сообщения: серый контур, ничего не заливаем */
+  .кн-действие {
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    height: 26px; padding: 0 9px; border-radius: 999px;
+    border: 1px solid var(--чёрный-35); background: var(--поверхность);
+    color: var(--чёрный-70); font-size: 12px; font-weight: 700;
+    text-decoration: none; box-sizing: border-box;
+  }
+  .кн-действие.круглая { width: 26px; padding: 0; }
+  .кн-действие.выбрана { border-color: var(--навигация); color: var(--текст); }
+  .ряд-действий { display: flex; gap: 6px; align-items: center; }
+
+  /* Стрелки прокрутки */
+  .стрелки {
+    position: absolute; display: flex; gap: 8px; z-index: 3;
+  }
+  .стрелка {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--поверхность); border: 1px solid var(--чёрный-35);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 13px; color: var(--чёрный-70); text-decoration: none;
+    position: relative;
+  }
+  .стрелка .бирка-новых {
+    position: absolute; top: -5px; right: -5px;
+    background: var(--активность); color: var(--текст);
+    font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 999px;
+  }
+  .низ-центр { left: 0; right: 0; bottom: 10px; justify-content: center; }
+  .низ-право { right: 12px; bottom: 10px; }
+
+  .проба { padding: 20px 0 24px; border-bottom: 1px solid var(--чёрный-12); }
+  .проба:target { box-shadow: inset 6px 0 0 var(--навигация); padding-left: 16px; }
+  .шапка-пробы { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .номер { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+  .опис { font-size: 13.5px; color: var(--чёрный-70); }
+  .свет { font-size: 12px; color: var(--чёрный-50); }
+  .срезы { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .с-подписью > .трет { margin-top: 8px; }
+
+  .навигация-проб { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+  .навигация-проб a {
+    display: inline-flex; align-items: center; padding: 7px 13px; border-radius: 999px;
+    border: 1px solid var(--чёрный-12); text-decoration: none; color: var(--текст);
+    font-size: 12.5px; font-weight: 700;
+  }
+  .навигация-проб a.выбор { border-color: var(--навигация); border-width: 2px; }
+
+  /* размещения ряда действий */
+  .д-угол .реплика { position: relative; }
+  .д-угол .ряд-действий { position: absolute; right: 8px; bottom: -13px; }
+  .д-строка .ряд-действий { margin-top: 6px; justify-content: flex-end; }
+  .д-внутри .ряд-действий { margin-top: 6px; }
+</style>
+
+<div class="лист-док">
+
+<div class="путь"><a href="индекс.html">Layout-UI-light</a> / пробы-кнопки.html</div>
+<h1>Пробы: кнопки у сообщения</h1>
+<p class="подзаголовок">
+  Три действия и стрелки прокрутки. Как показывать уже поставленную эмоцию —
+  отдельно: <a href="пробы-эмоция.html">пробы-эмоция.html</a>.
+</p>
+
+<div class="оговорка">
+  <b>Три разных действия, и их нельзя валить в один ряд.</b>
+  <br><br>
+  <b>Ответить</b> — про переписку, есть везде.
+  <b>Эмоция</b> — про то, как я это принял; одна из восьми, есть везде.
+  <b>Одобрить (+/−)</b> — <b>не оценка, а голос</b>: он решает, показывать ли это в
+  общей ленте, и потому осмыслен только для публичного содержимого — каналов,
+  публичных групп, медиа. В личной переписке и в личных группах его быть не должно:
+  одобрять сообщение друга некуда, ленты из него не собирается.
+  <br><br>
+  <b>Что не так сейчас.</b> Кнопка эмоции живёт в плавающей грозди, которая ездит
+  по экрану и наезжает на содержимое. Плавающий элемент оправдан для действия, не
+  привязанного к месту, — «написать». Эмоция привязана к конкретной реплике, и
+  плавать ей незачем.
+  <br><br>
+  <b>Предложение.</b> Кнопки — серый контур, без заливки: они не действие экрана, а
+  возможность у реплики. Заливка в этой системе означает «главное действие», а
+  главное действие в чате одно — отправить.
+  <br><br>
+  <b>Стрелки — другое дело.</b> Они про положение в ленте, а не про реплику,
+  поэтому им место у нижнего края области сообщений, и появляться они должны
+  только когда прокрутка ушла от края.
+</div>
+
+<h2>Ссылки на варианты</h2>
+<div class="навигация-проб">
+  <a href="#в01">01 · у угла, по касанию</a>
+  <a href="#в02">02 · строкой под пузырём</a>
+  <a href="#в03" class="выбор">03 · только эмоция ★</a>
+  <a href="#в04">04 · сердечко вместо смайла</a>
+  <a href="#в05">05 · публичный контекст: +/−</a>
+  <a href="#в06">06 · стрелки по центру</a>
+  <a href="#в07">07 · стрелки справа</a>
+  <a href="#в08" class="выбор">08 · только «вниз» со счётчиком ★</a>
+</div>
+
+<h2>А · кнопки у сообщения</h2>
+
+<div class="проба" id="в01">
+  <div class="шапка-пробы"><span class="номер">01</span><span class="опис">у нижнего правого угла, появляются по касанию</span><span class="свет">в макете показаны у первой реплики, у второй скрыты</span></div>
+  <div class="окно срез д-угол">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал — миграции вынесены отдельной строкой.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div></div>
+        <span class="ряд-действий"><span class="кн-действие круглая">☺</span><span class="кн-действие">Ответить</span></span>
+      </div>
+      <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+      <div class="реплика" style="--полоса:#d9713c"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М.</div>Согласен.<div class="низ-пузыря"><span class="точка"></span><span>10:17</span></div></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в02">
+  <div class="шапка-пробы"><span class="номер">02</span><span class="опис">строкой под пузырём, всегда видны</span><span class="свет">лента вырастает вдвое — у каждой реплики своя строка кнопок</span></div>
+  <div class="окно срез д-строка">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div></div>
+        <span class="ряд-действий"><span class="кн-действие круглая">☺</span><span class="кн-действие">Ответить</span></span>
+      </div>
+      <div class="реплика" style="--полоса:#d9713c"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М.</div>Согласен.<div class="низ-пузыря"><span class="точка"></span><span>10:17</span></div></div>
+        <span class="ряд-действий"><span class="кн-действие круглая">☺</span><span class="кн-действие">Ответить</span></span>
+      </div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в03">
+  <div class="шапка-пробы"><span class="номер">03 ★</span><span class="опис">только эмоция — <b>принято</b>, но без рамки: серое пятно</span><span class="свет">тише, но ответ становится скрытым знанием</span></div>
+  <div class="окно срез д-угол">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал — миграции вынесены отдельной строкой.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div></div>
+        <span class="ряд-действий"><span class="кн-действие круглая">☺</span></span>
+      </div>
+      <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в04">
+  <div class="шапка-пробы"><span class="номер">04</span><span class="опис">сердечко вместо смайла</span><span class="свет">сердце обещает «нравится», а у нас восемь состояний, включая боль и скуку</span></div>
+  <div class="окно срез д-угол">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал — миграции вынесены отдельной строкой.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div></div>
+        <span class="ряд-действий"><span class="кн-действие круглая">♡</span><span class="кн-действие">Ответить</span></span>
+      </div>
+      <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в05">
+  <div class="шапка-пробы"><span class="номер">05</span><span class="опис">публичный контекст: добавляется «+ / −»</span><span class="свет">слева канал, справа личная группа — в группе голоса нет</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез д-строка">
+        <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">РН</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Разбор недели</div><div class="трет">канал · 10 500 подписчиков</div></div><span class="икона">•••</span></div>
+        <div class="зона-2"><div class="поток">
+          <div class="реплика" style="--полоса:#7a8a99"><div class="пузырь" style="max-width:100%"><div class="автор">Разбор недели</div>Оценка задачи — это не измерение, а обещание.<div class="низ-пузыря"><span>12:00</span></div></div>
+            <span class="ряд-действий"><span class="кн-действие круглая">☺</span><span class="кн-действие">Ответить</span><span class="кн-действие круглая">+</span><span class="кн-действие круглая">−</span></span>
+          </div>
+        </div></div>
+        <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Комментарий…</div><span class="икона жив">➤</span></div>
+      </div>
+      <div class="трет">канал — голос за ленту есть</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез д-строка">
+        <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">ПИ</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Поход в июне</div><div class="трет">личная группа · E2E</div></div><span class="икона">📞</span></div>
+        <div class="зона-2"><div class="поток">
+          <div class="реплика" style="--полоса:#2f9c8f"><div class="пузырь"><div class="ава мал">АК</div><div class="автор">Анна Ковалёва</div>Палатку беру я, котелок за Петром.<div class="низ-пузыря"><span class="точка видел"></span><span>12:00</span></div></div>
+            <span class="ряд-действий"><span class="кн-действие круглая">☺</span><span class="кн-действие">Ответить</span></span>
+          </div>
+        </div></div>
+        <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+      </div>
+      <div class="трет">личная группа — голоса нет</div>
+    </div>
+  </div>
+</div>
+
+<h2>Б · стрелки прокрутки</h2>
+<p style="max-width:74ch;color:var(--чёрный-70);margin-top:-4px">
+  Они относятся к ленте, а не к реплике, поэтому стоят у нижнего края области
+  сообщений и появляются только когда прокрутка ушла от края. В макете показаны
+  постоянно.
+</p>
+
+<div class="проба" id="в06">
+  <div class="шапка-пробы"><span class="номер">06</span><span class="опис">по центру над строкой ввода</span><span class="свет">не заслоняет текст, но делит экран пополам</span></div>
+  <div class="окно срез">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2">
+      <div class="поток">
+        <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div></div></div>
+        <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+        <div class="реплика" style="--полоса:#d9713c"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М.</div>Согласен.<div class="низ-пузыря"><span class="точка"></span><span>10:17</span></div></div></div>
+      </div>
+      <div class="стрелки низ-центр"><span class="стрелка">↑</span><span class="стрелка">↓<span class="бирка-новых">5</span></span></div>
+    </div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в07">
+  <div class="шапка-пробы"><span class="номер">07</span><span class="опис">справа у нижнего края</span><span class="свет">на месте прежней грозди, но прижаты и не ездят</span></div>
+  <div class="окно срез">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2">
+      <div class="поток">
+        <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div></div></div>
+        <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+        <div class="реплика" style="--полоса:#d9713c"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М.</div>Согласен.<div class="низ-пузыря"><span class="точка"></span><span>10:17</span></div></div></div>
+      </div>
+      <div class="стрелки низ-право"><span class="стрелка">↑</span><span class="стрелка">↓<span class="бирка-новых">5</span></span></div>
+    </div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в08">
+  <div class="шапка-пробы"><span class="номер">08 ★</span><span class="опис">только «вниз» со счётчиком — <b>принято</b></span><span class="свет">«вверх» убрано: к началу переписки не прокручиваются, ищут поиском</span></div>
+  <div class="окно срез">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2">
+      <div class="поток">
+        <div class="реплика" style="--полоса:#5b73c9"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович</div>Смотри расписание релизов на квартал.<div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div></div></div>
+        <div class="реплика моя"><div class="пузырь">Посмотрел. Июль поедет, если не закрыть миграции.<div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+        <div class="реплика" style="--полоса:#d9713c"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М.</div>Согласен.<div class="низ-пузыря"><span class="точка"></span><span>10:17</span></div></div></div>
+      </div>
+      <div class="стрелки низ-право"><span class="стрелка">↓<span class="бирка-новых">5</span></span></div>
+    </div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<h2>На что смотреть</h2>
+<ul class="кратко">
+  <li><b>Контур против заливки.</b> Кнопки у реплики — серый контур. Заливка в этой системе означает «главное действие экрана», а оно в чате одно: отправить. Если эмоцию залить, она начнёт спорить с отправкой за одно и то же значение.</li>
+  <li><b>Смайл или сердце.</b> Сердце (04) обещает «нравится», а шкала у нас из восьми состояний и включает боль, страх и скуку. Пустой смайл честнее: он означает «есть что сказать без слов», не предрешая что.</li>
+  <li><b>«+ / −» появляется от контекста, а не от настройки.</b> В канале голос есть, в личной группе нет — сравнение в 05. Это не режим, который человек включает, а свойство места, где он находится.</li>
+  <li><b>Всегда видимые кнопки удваивают ленту.</b> В 02 у каждой реплики своя строка кнопок, и переписка растягивается вдвое. Появление по касанию (01) этого не делает, но требует, чтобы человек догадался коснуться.</li>
+  <li><b>«Вверх» под вопросом.</b> К началу переписки не прокручиваются — туда попадают поиском. Проба 08 показывает, как выглядит лента, если оставить только «вниз».</li>
+</ul>
+
+<h2>Что применить</h2>
+<p>Кнопки — один ряд с абсолютной привязкой к нижнему правому углу реплики,
+видимость по касанию. Стрелки — отдельный слой у нижнего края области сообщений,
+показывается при прокрутке. В теме пока ни того, ни другого нет: плавающая гроздь
+из <a href="подокна/чат.html">чата</a> останется, пока не выбран вариант.</p>
+
+</div>

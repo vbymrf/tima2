@@ -1,0 +1,250 @@
+<meta charset="utf-8">
+<title>Пробы названия окна</title>
+<link rel="stylesheet" href="стиль.css">
+<style>
+  .срез { height: auto; width: 360px; border-width: 2px; border-radius: 20px; }
+  .срез .зона-2 { flex: 0 0 auto; overflow: visible; }
+
+  /* Название окна плашкой: цвет фона задан, радиус — переменной варианта */
+  .плашка-имени {
+    display: inline-flex; align-items: center;
+    background: var(--навигация); color: #ffffff;
+    padding: 5px 12px; border-radius: var(--рад, 0);
+    font-size: var(--щ3); font-weight: 800; letter-spacing: -0.02em;
+  }
+  .плашка-имени.чёрным { color: #000000; }
+  .плашка-имени.вширь { display: flex; justify-content: flex-start; }
+
+  .проба { padding: 18px 0 22px; border-bottom: 1px solid var(--чёрный-12); }
+  .проба:target { box-shadow: inset 6px 0 0 var(--навигация); padding-left: 16px; }
+  .шапка-пробы { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .номер { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+  .опис { font-size: 13.5px; color: var(--чёрный-70); }
+  .свет { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--чёрный-50); }
+  .срезы { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .с-подписью > .трет { margin-top: 8px; }
+
+  .навигация-проб { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+  .навигация-проб a {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 7px 13px; border-radius: 999px; border: 1px solid var(--чёрный-12);
+    text-decoration: none; color: var(--текст); font-size: 12.5px; font-weight: 700;
+  }
+  .навигация-проб a.выбор { border-color: var(--навигация); border-width: 2px; }
+
+  /* Тема уже рисует плашку в .зона-1 — на этой странице её гасим,
+     иначе каждый вариант показывал бы её поверх собственной пробы. */
+  .проба .зона-1::before { display: none; }
+  .проба .зона-1 { padding: 0 var(--о4); }
+  .проба .зона-1 .икона { background: var(--чёрный-6); color: var(--текст); }
+  /* Кроме варианта 10 и контроля К2 — там плашка и есть предмет пробы */
+  #в10 .зона-1 { padding: 8px 12px; }
+  /* К1 показывает прежнее состояние: салатовые буквы без подложки */
+  #к1 .имя-окна { color: var(--навигация); }
+</style>
+
+<div class="лист-док">
+
+<div class="путь"><a href="индекс.html">Layout-UI-light</a> / пробы-название.html</div>
+<h1>Пробы: название окна плашкой</h1>
+<p class="подзаголовок">
+  Название окна — белым по салатовой плашке <code>#8ac44a</code>, со скруглением и
+  без. Десять вариантов: восемь по радиусу и два по устройству плашки. Ниже — два
+  контрольных: как сейчас и с чёрным текстом. Соседние пробы —
+  <a href="пробы.html">заливка функциональных областей</a> и
+  <a href="пробы-чат.html">аватар в групповом чате</a>. Тёмная тема —
+  <a href="../Layout-UI-dark/пробы-название.html">свои пробы</a>.
+</p>
+
+<h2>Ссылки на варианты</h2>
+<div class="навигация-проб">
+  <a href="#в01">01 · радиус 0</a>
+  <a href="#в02">02 · 2 px</a>
+  <a href="#в03">03 · 4 px</a>
+  <a href="#в04">04 · 6 px</a>
+  <a href="#в05">05 · 8 px</a>
+  <a href="#в06">06 · 10 px</a>
+  <a href="#в07">07 · 14 px</a>
+  <a href="#в08">08 · пилюля</a>
+  <a href="#в09">09 · вместе с логотипом</a>
+  <a href="#в10" class="выбор">10 · во всю ширину ★</a>
+  <a href="#к1">К1 · как сейчас</a>
+  <a href="#к2">К2 · чёрным</a>
+</div>
+
+<div class="оговорка">
+  <b>★ Выбрано: 10 — плашка во всю ширину шапки, скругление 8 px.</b> Логотип внутри
+  неё белым квадратом, кнопки поиска и настроек — белыми кругами. Перенесено в тему:
+  плашка сделана псевдоэлементом <code>.зона-1::before</code>, поэтому разметка не
+  менялась, а полоса функциональной подложки под ней осталась.
+  <br><br>
+  Я предлагал 05 — короткую плашку по ширине слова. Разница: короткая читается как
+  ярлык рядом с логотипом, широкая — как шапка приложения. Вторая заметно сильнее и
+  съедает больше внимания; на окнах с длинным названием она же ведёт себя ровнее.
+  <br><br>
+  <b>Цифра, которую нельзя не назвать:</b> белый на <code>#8ac44a</code> даёт
+  <b>2,08 : 1</b>. Плашка чинит главную беду прежнего решения — зелёные буквы на
+  светлом фоне давали 1,95 : 1 и терялись, — но сама остаётся ниже порога 3 : 1 для
+  крупного полужирного. На большом кегле и коротком слове это переживаемо, и в
+  тёмной теме выглядит лучше, чем в светлой.
+  <br><br>
+  <b>Если важна читаемость, а не только цвет</b> — контроль <a href="#к2">К2</a>:
+  тот же салатовый фон, но текст чёрный, <b>10,08 : 1</b>. Разница на экране
+  заметна сразу.
+</div>
+
+<!-- ── 01 ─────────────────────────────────────────────────────────────── -->
+<div class="проба" id="в01" style="--рад:0">
+  <div class="шапка-пробы"><span class="номер">01</span><span class="опис">радиус 0 — строгий квадрат</span><span class="свет">белый на #8ac44a · 2,08 : 1</span></div>
+  <div class="срез окно">
+    <div class="зона-1"><a class="лого" href="#в01">Т</a><span class="плашка-имени">Телефон</span><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+    <div class="табы"><span class="таб тек">Чаты</span><span class="таб">Книга</span><span class="таб">Звонки</span></div>
+    <div class="зона-2"><div class="строка"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">завтра в семь</div></div><div class="мета"><span class="счёт">2</span></div></div></div>
+  </div>
+</div>
+
+<!-- ── 02 ─────────────────────────────────────────────────────────────── -->
+<div class="проба" id="в02" style="--рад:2px">
+  <div class="шапка-пробы"><span class="номер">02</span><span class="опис">скругление 2 px</span><span class="свет">едва заметно</span></div>
+  <div class="срез окно">
+    <div class="зона-1"><a class="лого" href="#в02">Т</a><span class="плашка-имени">Телефон</span><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+    <div class="табы"><span class="таб тек">Чаты</span><span class="таб">Книга</span><span class="таб">Звонки</span></div>
+    <div class="зона-2"><div class="строка"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">завтра в семь</div></div><div class="мета"><span class="счёт">2</span></div></div></div>
+  </div>
+</div>
+
+<!-- ── 03 ─────────────────────────────────────────────────────────────── -->
+<div class="проба" id="в03" style="--рад:4px">
+  <div class="шапка-пробы"><span class="номер">03</span><span class="опис">скругление 4 px</span><span class="свет">угол смягчён, форма ещё квадратная</span></div>
+  <div class="срез окно">
+    <div class="зона-1"><a class="лого" href="#в03">Т</a><span class="плашка-имени">Телефон</span><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+    <div class="табы"><span class="таб тек">Чаты</span><span class="таб">Книга</span><span class="таб">Звонки</span></div>
+    <div class="зона-2"><div class="строка"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">завтра в семь</div></div><div class="мета"><span class="счёт">2</span></div></div></div>
+  </div>
+</div>
+
+<!-- ── 04 ─────────────────────────────────────────────────────────────── -->
+<div class="проба" id="в04" style="--рад:6px">
+  <div class="шапка-пробы"><span class="номер">04</span><span class="опис">скругление 6 px</span><span class="свет">—</span></div>
+  <div class="срез окно">
+    <div class="зона-1"><a class="лого" href="#в04">Т</a><span class="плашка-имени">Телефон</span><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+    <div class="табы"><span class="таб тек">Чаты</span><span class="таб">Книга</span><span class="таб">Звонки</span></div>
+    <div class="зона-2"><div class="строка"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">завтра в семь</div></div><div class="мета"><span class="счёт">2</span></div></div></div>
+  </div>
+</div>
+
+<!-- ── 05 ───────────────────────────────────────────────────────────── -->
+<div class="проба" id="в05" style="--рад:8px">
+  <div class="шапка-пробы"><span class="номер">05</span><span class="опис">скругление 8 px</span><span class="свет">то же семейство, что аватары (10 px)</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="срез окно">
+        <div class="зона-1"><a class="лого" href="#в05">Т</a><span class="плашка-имени">Телефон</span><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+        <div class="табы"><span class="таб тек">Чаты</span><span class="таб">Книга</span><span class="таб">Звонки</span></div>
+        <div class="зона-2">
+          <div class="строка"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">завтра в семь</div></div><div class="мета"><span class="счёт">2</span></div></div>
+          <div class="строка"><div class="ава">БП</div><div class="тянуть"><div class="имя обрез">Борис Петрович</div><div class="втор обрез">Файл · смета.pdf</div></div><div class="мета"><span class="трет">11:04</span></div></div>
+        </div>
+      </div>
+      <div class="трет">окно Телефон</div>
+    </div>
+    <div class="с-подписью">
+      <div class="срез окно">
+        <div class="зона-1"><a class="лого" href="#в05">Т</a><span class="плашка-имени">Социальная лента</span><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+        <div class="табы"><span class="таб тек">Общая</span><span class="таб">Друзья</span><span class="таб">Каталог</span></div>
+        <div class="зона-2"><div class="карта"><div class="строка" style="padding:0 0 8px;border:none"><span class="ава мал">РН</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Разбор недели</div><div class="трет">канал · 2 часа назад</div></div></div><div class="втор">Почему сроки всегда врут</div></div></div>
+      </div>
+      <div class="трет">длинное название — «Социальная лента»</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 06 ─────────────────────────────────────────────────────────────── -->
+<div class="проба" id="в06" style="--рад:10px">
+  <div class="шапка-пробы"><span class="номер">06</span><span class="опис">скругление 10 px — ровно как у аватаров</span><span class="свет">на невысокой плашке читается мягче, чем нужно</span></div>
+  <div class="срез окно">
+    <div class="зона-1"><a class="лого" href="#в06">Т</a><span class="плашка-имени">Телефон</span><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+    <div class="табы"><span class="таб тек">Чаты</span><span class="таб">Книга</span><span class="таб">Звонки</span></div>
+    <div class="зона-2"><div class="строка"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">завтра в семь</div></div><div class="мета"><span class="счёт">2</span></div></div></div>
+  </div>
+</div>
+
+<!-- ── 07 ─────────────────────────────────────────────────────────────── -->
+<div class="проба" id="в07" style="--рад:14px">
+  <div class="шапка-пробы"><span class="номер">07</span><span class="опис">скругление 14 px</span><span class="свет">форма уходит от квадрата</span></div>
+  <div class="срез окно">
+    <div class="зона-1"><a class="лого" href="#в07">Т</a><span class="плашка-имени">Телефон</span><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+    <div class="табы"><span class="таб тек">Чаты</span><span class="таб">Книга</span><span class="таб">Звонки</span></div>
+    <div class="зона-2"><div class="строка"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">завтра в семь</div></div><div class="мета"><span class="счёт">2</span></div></div></div>
+  </div>
+</div>
+
+<!-- ── 08 ─────────────────────────────────────────────────────────────── -->
+<div class="проба" id="в08" style="--рад:999px">
+  <div class="шапка-пробы"><span class="номер">08</span><span class="опис">полная пилюля</span><span class="свет">выглядит кнопкой, а нажимать нечего</span></div>
+  <div class="срез окно">
+    <div class="зона-1"><a class="лого" href="#в08">Т</a><span class="плашка-имени">Телефон</span><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+    <div class="табы"><span class="таб тек">Чаты</span><span class="таб">Книга</span><span class="таб">Звонки</span></div>
+    <div class="зона-2"><div class="строка"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">завтра в семь</div></div><div class="мета"><span class="счёт">2</span></div></div></div>
+  </div>
+</div>
+
+<!-- ── 09 ─────────────────────────────────────────────────────────────── -->
+<div class="проба" id="в09" style="--рад:8px">
+  <div class="шапка-пробы"><span class="номер">09</span><span class="опис">логотип и название — одна плашка</span><span class="свет">логотип теряет самостоятельность</span></div>
+  <div class="срез окно">
+    <div class="зона-1">
+      <a class="плашка-имени" href="#в09" style="gap:10px;padding-left:8px;text-decoration:none">
+        <span style="display:inline-flex;width:26px;height:26px;border-radius:6px;background:#ffffff;color:var(--навигация);align-items:center;justify-content:center;font-size:13px">Т</span>
+        Телефон
+      </a>
+      <span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span>
+    </div>
+    <div class="табы"><span class="таб тек">Чаты</span><span class="таб">Книга</span><span class="таб">Звонки</span></div>
+    <div class="зона-2"><div class="строка"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">завтра в семь</div></div><div class="мета"><span class="счёт">2</span></div></div></div>
+  </div>
+</div>
+
+<!-- ── 10 ★ ─────────────────────────────────────────────────────────────── -->
+<div class="проба" id="в10" style="--рад:8px">
+  <div class="шапка-пробы"><span class="номер">10 ★</span><span class="опис">плашка во всю ширину шапки — <b>выбрано</b></span><span class="свет">кнопки внутри — белые круги</span></div>
+  <div class="срез окно">
+    <div class="зона-1" style="padding:8px 12px"><span class="плашка-имени вширь" style="width:100%;gap:10px;padding:8px 12px">
+      <span style="display:inline-flex;width:26px;height:26px;border-radius:6px;background:#ffffff;color:var(--навигация);align-items:center;justify-content:center;font-size:13px">Т</span>
+      Телефон
+      <span class="тянуть"></span>
+      <span style="font-size:14px">🔍</span><span style="font-size:14px">⚙</span>
+    </span></div>
+    <div class="табы"><span class="таб тек">Чаты</span><span class="таб">Книга</span><span class="таб">Звонки</span></div>
+    <div class="зона-2"><div class="строка"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">завтра в семь</div></div><div class="мета"><span class="счёт">2</span></div></div></div>
+  </div>
+</div>
+
+<h2>Контрольные</h2>
+
+<!-- ── К1 ─────────────────────────────────────────────────────────────── -->
+<div class="проба" id="к1">
+  <div class="шапка-пробы"><span class="номер">К1</span><span class="опис">как было до плашки — салатовые буквы</span><span class="свет">1,95 : 1 на шапке #f7f7f7</span></div>
+  <div class="срез окно">
+    <div class="зона-1"><a class="лого" href="#к1">Т</a><div class="имя-окна тянуть">Телефон</div><span class="икона">🔍</span><span class="икона">⚙</span></div>
+    <div class="табы"><span class="таб тек">Чаты</span><span class="таб">Книга</span><span class="таб">Звонки</span></div>
+    <div class="зона-2"><div class="строка"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">завтра в семь</div></div><div class="мета"><span class="счёт">2</span></div></div></div>
+  </div>
+</div>
+
+<!-- ── К2 ─────────────────────────────────────────────────────────────── -->
+<div class="проба" id="к2" style="--рад:8px">
+  <div class="шапка-пробы"><span class="номер">К2</span><span class="опис">та же плашка, но текст чёрный</span><span class="свет">10,08 : 1 — единственный вариант выше порога</span></div>
+  <div class="срез окно">
+    <div class="зона-1"><a class="лого" href="#к2">Т</a><span class="плашка-имени чёрным">Телефон</span><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+    <div class="табы"><span class="таб тек">Чаты</span><span class="таб">Книга</span><span class="таб">Звонки</span></div>
+    <div class="зона-2"><div class="строка"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">завтра в семь</div></div><div class="мета"><span class="счёт">2</span></div></div></div>
+  </div>
+</div>
+
+<h2>Что применить</h2>
+<p>Радиус плашки — одна строка в <a href="стиль.css">стиль.css</a>. Сама плашка
+пока живёт только здесь: в макетах название окна по-прежнему набрано салатовыми
+буквами без подложки. Скажете номер — перенесу в тему.</p>
+
+</div>
