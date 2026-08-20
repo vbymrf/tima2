@@ -1,0 +1,33 @@
+# Verify Apple targets on a GitHub-hosted macOS runner.
+#
+# macOS runners are free for public repositories, so this gives you the one thing
+# klib cross-compilation cannot: actually running the tests on an iOS simulator.
+#
+# Place this file at .github/workflows/verify-apple-targets.yml
+
+name: Apple targets
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ios-simulator:
+    name: iOS simulator tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Show toolchain
+        run: |
+          uname -m
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version
+      - name: Compile Apple targets
+        run: ./gradlew compileKotlinIosArm64 compileKotlinIosSimulatorArm64 --console=plain
+      - name: Run tests on the simulator
+        run: ./gradlew iosSimulatorArm64Test --console=plain

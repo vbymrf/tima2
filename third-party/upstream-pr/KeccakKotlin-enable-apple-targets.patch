@@ -1,0 +1,15 @@
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -34,9 +34,9 @@
+     linuxX64()
+     //linuxArm64()
+     mingwX64()
+-    //iosArm64()
+-    //iosX64()
+-    //iosSimulatorArm64()
++    iosArm64()
++    iosX64()
++    iosSimulatorArm64()
+     androidNativeArm32()
+     androidNativeArm64()
+     androidNativeX64()
