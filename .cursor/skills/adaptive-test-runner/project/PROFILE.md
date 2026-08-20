@@ -1,3 +1,10 @@
+> **⚠ УСТАРЕЛО В ЧАСТИ КЛИЕНТА · 2026-08-20.** Дерево `client/` удалено (этап К0.4
+> [дорожной карты](../../../../doc_mig/ДОРОЖНАЯ-КАРТА.md)); клиент строится заново по
+> [Plan.md](../../../../doc_mig/Plan.md). Все тиры и команды, упоминающие
+> `client/` или `:composeApp`, **не работают** — их регистр переписывается на этапе
+> К1.8 вместе с появлением CI. Тиры `go-unit` и `messenger-crypto` действуют:
+> ни сервер, ни крипто-модуль не тронуты. Исходники v1 — тег `ref/client-v1`.
+
 # TIMA test tier registry
 
 Written by the main model and read by the worker. Work from the repository
