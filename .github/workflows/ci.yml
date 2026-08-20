@@ -152,6 +152,43 @@ jobs:
           msg=$(grep -ho '<failure message="[^"]\{0,200\}"' build/test-results/test/*.xml 2>/dev/null | head -n 10 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
           if [ -n "$msg" ]; then echo "::error::упавшие тесты:%0A${msg}"; fi
 
+
+  # ── Проверка форков крипто-библиотек под iOS (вариант B) ──────────────────
+  # Задача одна и та же для двух целей: разблокировать К2 у нас и приложить
+  # доказательство к PR в апстрим (вариант D). Автор библиотек, судя по
+  # закомментированным таргетам, не может прогнать их на симуляторе — а мы можем.
+  third-party-ios:
+    name: 'форки крипто · iOS'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: 'keccak · тесты на симуляторе iOS'
+        working-directory: third-party/KeccakKotlin
+        run: |
+          set -o pipefail
+          ./gradlew iosSimulatorArm64Test --console=plain 2>&1 | tee /tmp/gradle.log
+      - name: 'keccak · публикация в mavenLocal'
+        working-directory: third-party/KeccakKotlin
+        # Кyber берёт keccak как обычную зависимость; вариантов Apple в Central нет,
+        # поэтому свой keccak сначала кладём в локальный репозиторий.
+        run: |
+          set -o pipefail
+          ./gradlew publishToMavenLocal --console=plain 2>&1 | tee -a /tmp/gradle.log
+      - name: 'kyber · тесты на симуляторе iOS'
+        working-directory: third-party/KyberKotlin
+        run: |
+          set -o pipefail
+          ./gradlew iosSimulatorArm64Test --console=plain 2>&1 | tee -a /tmp/gradle.log
+      - name: 'форки · вывод Gradle в аннотацию'
+        if: failure()
+        run: |
+          msg=$(grep -aE 'error:|FAILURE:|What went wrong|Caused by|not found|Could not|Unresolved|no matching|Cannot|^> |^e: ' /tmp/gradle.log | tail -n 30 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
+          if [ -z "$msg" ]; then msg=$(tail -n 25 /tmp/gradle.log | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}'); fi
+          echo "::error::${msg}"
   # ── Сервер: сборка и статический разбор ───────────────────────────────────
   server:
     name: server · build + vet
