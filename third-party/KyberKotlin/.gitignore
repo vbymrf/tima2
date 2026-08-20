@@ -45,7 +45,11 @@ bin/
 /maven/
 /.gnupg/
 /.env
-gradle.properties
+# ПРАВКА ФОРКА: gradle.properties обязан отслеживаться.
+# В нём версия Kotlin (kmm=2.2.21), которую читает settings.gradle.kts, и без
+# файла сборка падает с «Cannot get non-null property kmm». Строку подписи
+# автора мы из файла убрали, так что секрета в нём нет.
+#gradle.properties
 /.idea/
 /npm/kotlin/
 /npm/package.json
