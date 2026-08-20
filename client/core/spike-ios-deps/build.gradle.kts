@@ -2,14 +2,25 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
 }
 
-// СПАЙК К1.4, а не модуль продукта. Единственная задача: выяснить, собираются ли
-// зависимости крипто-ядра под iOS — ДО того, как от этого зависит гейт К2.
+// СПАЙК К1.4, а не модуль продукта. Задача: выяснить, собираются ли зависимости
+// крипто-ядра под iOS — ДО того, как от этого зависит гейт К2.
 //
-// В v1 крипто было `kotlin("jvm")`, и вопрос «а поедет ли это на iOS» никогда не
-// задавался коду. Если ответ «нет», это меняет план, и узнать надо на первой
-// неделе, а не через два месяца.
+// ── ОТВЕТ ПОЛУЧЕН 2026-08-20 ──────────────────────────────────────────────────
 //
-// Модуль удаляется, как только ответ получен: смысл спайка в ответе, а не в коде.
+//   Kodium (NaCl: SecretBox, Box, Ed25519, HKDF)  — iOS ЕСТЬ
+//   Wire runtime (protobuf)                        — iOS ЕСТЬ
+//   KyberKotlin (ML-KEM-768, escrow)               — iOS НЕТ
+//   keccak (SHAKE, зависимость KyberKotlin)        — iOS НЕТ
+//
+// Проверено листингом Maven Central, а не предположено: у `asia.hombre:kyber`
+// опубликованы androidNative, js, jvm, linuxX64, mingwX64, windows — и ни одного
+// артефакта Apple. У `keccak` то же самое. Сборка падала на
+// «Unresolved platforms: [iosArm64, iosSimulatorArm64]».
+//
+// Поэтому здесь KyberKotlin вынесен в jvmMain: спайк доказывает, что две из трёх
+// зависимостей работают на iOS, а третья названа блокером явно, а не оставлена
+// красной сборкой без объяснения. Решение по ML-KEM на iOS — за заказчиком,
+// варианты в отчёте doc_mig/отчёты/2026-08-20-К0-К1.md.
 kotlin {
     jvmToolchain(17)
 
@@ -19,18 +30,18 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            // NaCl-слой: SecretBox, Box, Ed25519, HKDF. Единственная криптобиблиотека
-            // проекта (crypto-invariants). Заявлен мультиплатформенным — проверяем.
+            // NaCl-слой: единственная криптобиблиотека проекта (crypto-invariants).
+            // Артефакты iosArm64 / iosSimulatorArm64 / iosX64 опубликованы.
             implementation("eu.livotov.labs:kodium:1.0.0")
-            // ML-KEM-768 для escrow. Взят вместо сломанной реализации в Kodium
-            // (ADR-0005 Поправка-1), заявлена поддержка KMP — проверяем.
-            implementation("asia.hombre:kyber:2.0.1")
-            // Конверт и тело сообщения: protobuf через Wire. Кодоген в К2, здесь
-            // проверяется только рантайм.
+            // Конверт и тело сообщения. Артефакты Apple опубликованы.
             implementation("com.squareup.wire:wire-runtime:5.2.1")
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+        }
+        jvmMain.dependencies {
+            // ML-KEM-768 для escrow. Только JVM: артефактов Apple у библиотеки нет.
+            implementation("asia.hombre:kyber:2.0.1")
         }
     }
 }
