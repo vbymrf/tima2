@@ -1,0 +1,16 @@
+# Единый каталог версий. Версии взяты из v1 (тег ref/client-v1) — они собирались,
+# а не выбраны по свежести: замена версии здесь становится отдельной задачей с
+# проверкой в CI, а не побочным эффектом чужой правки.
+
+[versions]
+kotlin = "2.3.10"
+agp = "8.7.3"
+compose = "1.11.1"
+
+[plugins]
+kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+androidApplication = { id = "com.android.application", version.ref = "agp" }
+androidLibrary = { id = "com.android.library", version.ref = "agp" }
+composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose" }
+composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

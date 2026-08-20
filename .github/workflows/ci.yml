@@ -1,0 +1,88 @@
+# CI проекта TIMA. До 2026-08-20 в репозитории не было ни одного прогона:
+# «Konsist в CI» из канона запускать было негде, а клиент собирался только на
+# машине сборки. Здесь это исправляется, и заодно CI становится ОСНОВНЫМ гейтом:
+# на машине разработки нет ни Android SDK, ни Go, ни железа Apple.
+#
+# Задачи-джобы независимы намеренно: падение клиента не должно скрывать состояние
+# сервера, и наоборот.
+
+name: CI
+
+on:
+  push:
+    branches: [stand, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # ── Клиент v2: общий код и JVM-таргет ──────────────────────────────────────
+  client-jvm:
+    name: client · JVM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Сборка и тесты
+        working-directory: client
+        run: ./gradlew build --stacktrace
+
+  # ── Клиент v2: iOS-таргет ─────────────────────────────────────────────────
+  # Требует macOS: Kotlin/Native под iOS собирается только там. Для публичных
+  # репозиториев раннеры macOS бесплатны, поэтому «iOS держим компилируемым»
+  # проверяется машиной, а не обещанием.
+  client-ios:
+    name: client · iOS klib
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Компиляция под iOS
+        working-directory: client
+        run: ./gradlew compileKotlinIosSimulatorArm64 compileKotlinIosArm64 --stacktrace
+      - name: Тесты на симуляторе iOS
+        working-directory: client
+        # Прогон, а не только компиляция: если он проходит, долг К2-iOS
+        # (векторы крипто на iOS) закрывается без покупки железа.
+        run: ./gradlew iosSimulatorArm64Test --stacktrace
+
+  # ── Крипто-ядро: не тронуто рефакторингом, служит опорной точкой ───────────
+  crypto:
+    name: messenger-crypto
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Тесты крипто, включая сверку с BouncyCastle
+        working-directory: messenger-crypto
+        run: ./gradlew test --stacktrace
+
+  # ── Сервер: сборка и статический разбор ───────────────────────────────────
+  # Без `go test`: часть тестов ждёт живую БД, и падение из-за её отсутствия
+  # сказало бы не о коде. Тестовый тир добавляется отдельной задачей.
+  server:
+    name: server · build + vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Сборка
+        working-directory: server
+        run: go build ./...
+      - name: Статический разбор
+        working-directory: server
+        run: go vet ./...
