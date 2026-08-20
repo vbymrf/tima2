@@ -35,6 +35,10 @@ kotlin {
             implementation("eu.livotov.labs:kodium:1.0.0")
             // Конверт и тело сообщения. Артефакты Apple опубликованы.
             implementation("com.squareup.wire:wire-runtime:5.2.1")
+            // zstd для всех таргетов, включая iOS: артефакты iosArm64,
+            // iosSimulatorArm64, iosX64, android, jvm опубликованы. Спайк проверяет,
+            // что низкоуровневый потоковый API пригоден для наших нужд.
+            implementation("com.squareup.zstd:zstd-kmp:0.4.0")
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
