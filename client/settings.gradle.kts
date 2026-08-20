@@ -32,3 +32,6 @@ include(":core:spike-ios-deps")
 
 // Архитектурные правила Plan.md §2.2, проверяемые в CI.
 include(":architecture-tests")
+
+// Вход для ПК. К1.9: доказать, что тулчейн Compose собирается и окно открывается.
+include(":app-desktop")
