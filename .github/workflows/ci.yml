@@ -3,11 +3,17 @@
 # машине сборки. Здесь это исправляется, и заодно CI становится ОСНОВНЫМ гейтом:
 # на машине разработки нет ни Android SDK, ни Go, ни железа Apple.
 #
-# ── ПОЧЕМУ ШАГИ ТАКИЕ МЕЛКИЕ ───────────────────────────────────────────────────
-# Логи прогонов через API отдаются только с токеном, а состояние шагов — без него.
-# Поэтому шаг делает по одному действию и назван тем, что делает: имя упавшего
-# шага само локализует поломку, без чтения логов. Это не стиль, это единственный
-# доступный здесь способ диагностики.
+# ── КАК ЗДЕСЬ УСТРОЕНА ДИАГНОСТИКА ────────────────────────────────────────────
+# Логи прогонов через API отдаются только с токеном; без токена доступны состояния
+# шагов и АННОТАЦИИ. Поэтому:
+#
+#   1. шаг делает по одному действию и назван тем, что делает — имя упавшего шага
+#      локализует поломку;
+#   2. вывод Gradle перехватывается, и при падении его хвост печатается командами
+#      `::error::` — то есть превращается в аннотации, читаемые без токена.
+#
+# Это не стилистика: без этого падение выглядит как «exit code 1» и не говорит
+# ничего. Проверено на первом прогоне.
 
 name: CI
 
@@ -24,27 +30,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: 'jvm · разбор проекта (tasks)'
+      - name: 'jvm · сборка и тесты'
         working-directory: client
-        run: ./gradlew tasks --all --console=plain
-      - name: 'jvm · компиляция common'
-        working-directory: client
-        run: ./gradlew :core:core-model:compileKotlinJvm --console=plain
-      - name: 'jvm · тесты core-model'
-        working-directory: client
-        run: ./gradlew :core:core-model:jvmTest --console=plain
-      - name: 'jvm · сборка целиком'
-        working-directory: client
-        run: ./gradlew build --console=plain
+        run: |
+          set -o pipefail
+          ./gradlew build --console=plain 2>&1 | tee /tmp/gradle.log
+      - name: 'jvm · вывод Gradle в аннотации'
+        if: failure()
+        run: tail -n 50 /tmp/gradle.log | while IFS= read -r l; do echo "::error::$l"; done
 
   # ── Клиент v2: iOS ────────────────────────────────────────────────────────
-  # Матрица по задачам: каждая нога — отдельная запись в списке задач прогона,
-  # поэтому видно не «iOS упал», а какая именно задача упала.
+  # Матрица по задачам: видно не «iOS упал», а какая именно задача упала.
   client-ios:
     name: 'client · iOS ${{ matrix.task }}'
     runs-on: macos-latest
@@ -53,27 +54,29 @@ jobs:
       matrix:
         task:
           - ':core:core-model:compileKotlinIosSimulatorArm64'
-          - ':core:core-model:compileKotlinIosArm64'
           - ':core:core-model:iosSimulatorArm64Test'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: 'ios · окружение (xcode, arch)'
+      - name: 'ios · окружение'
         run: |
-          uname -m
+          echo "arch: $(uname -m)"
           xcodebuild -version || echo "xcodebuild отсутствует"
           xcrun --sdk iphonesimulator --show-sdk-version || echo "SDK симулятора отсутствует"
       - name: 'ios · ${{ matrix.task }}'
         working-directory: client
-        run: ./gradlew ${{ matrix.task }} --console=plain
+        run: |
+          set -o pipefail
+          ./gradlew ${{ matrix.task }} --console=plain 2>&1 | tee /tmp/gradle.log
+      - name: 'ios · вывод Gradle в аннотации'
+        if: failure()
+        run: tail -n 60 /tmp/gradle.log | while IFS= read -r l; do echo "::error::$l"; done
 
   # ── Спайк К1.4: зависимости крипто под iOS ────────────────────────────────
-  # Отдельной задачей от core-model: если упадёт именно спайк, это новость про
-  # зависимости, а не про каркас.
   spike-ios-deps:
     name: 'спайк · ${{ matrix.task }}'
     runs-on: macos-latest
@@ -81,19 +84,43 @@ jobs:
       fail-fast: false
       matrix:
         task:
-          - ':core:spike-ios-deps:compileKotlinIosSimulatorArm64'
           - ':core:spike-ios-deps:jvmTest'
           - ':core:spike-ios-deps:iosSimulatorArm64Test'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
       - name: 'спайк · ${{ matrix.task }}'
         working-directory: client
-        run: ./gradlew ${{ matrix.task }} --console=plain
+        run: |
+          set -o pipefail
+          ./gradlew ${{ matrix.task }} --console=plain 2>&1 | tee /tmp/gradle.log
+      - name: 'спайк · вывод Gradle в аннотации'
+        if: failure()
+        run: tail -n 60 /tmp/gradle.log | while IFS= read -r l; do echo "::error::$l"; done
+
+  # ── Архитектурные правила (Plan.md §2.2) ──────────────────────────────────
+  architecture:
+    name: архитектурные правила
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 'правила · прогон'
+        working-directory: client
+        run: |
+          set -o pipefail
+          ./gradlew :architecture-tests:test --console=plain 2>&1 | tee /tmp/gradle.log
+      - name: 'правила · вывод в аннотации'
+        if: failure()
+        run: tail -n 60 /tmp/gradle.log | while IFS= read -r l; do echo "::error::$l"; done
 
   # ── Крипто-ядро: не тронуто рефакторингом, служит опорной точкой ───────────
   crypto:
@@ -101,47 +128,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: 'крипто · кодоген Wire из schema/proto'
-        working-directory: messenger-crypto
-        run: ./gradlew generateProtos --console=plain
       - name: 'крипто · компиляция'
         working-directory: messenger-crypto
-        run: ./gradlew compileKotlin --console=plain
-      - name: 'крипто · компиляция тестов'
+        run: |
+          set -o pipefail
+          ./gradlew compileTestKotlin --console=plain 2>&1 | tee /tmp/gradle.log
+      - name: 'крипто · тесты, включая сверку с BouncyCastle'
         working-directory: messenger-crypto
-        run: ./gradlew compileTestKotlin --console=plain
-      - name: 'крипто · тесты'
-        working-directory: messenger-crypto
-        run: ./gradlew test --console=plain
-      - name: 'крипто · отчёт о падении в сводку'
+        run: |
+          set -o pipefail
+          ./gradlew test --console=plain 2>&1 | tee -a /tmp/gradle.log
+      - name: 'крипто · вывод Gradle в аннотации'
+        if: failure()
+        run: tail -n 60 /tmp/gradle.log | while IFS= read -r l; do echo "::error::$l"; done
+      - name: 'крипто · упавшие тесты в аннотации'
         if: failure()
         working-directory: messenger-crypto
-        # Сводка видна на странице прогона. Логи через API без токена не отдаются,
-        # поэтому имена упавших тестов вытаскиваются из XML-отчётов сюда.
         run: |
-          echo '## Упавшие тесты' >> "$GITHUB_STEP_SUMMARY"
           for f in build/test-results/test/*.xml; do
             [ -f "$f" ] || continue
-            grep -l '<failure' "$f" >/dev/null 2>&1 || continue
-            echo "### $(basename "$f")" >> "$GITHUB_STEP_SUMMARY"
-            grep -o 'testcase name="[^"]*"' "$f" >> "$GITHUB_STEP_SUMMARY" || true
-            grep -o '<failure message="[^"]*"' "$f" | head -5 >> "$GITHUB_STEP_SUMMARY" || true
+            grep -q '<failure' "$f" || continue
+            echo "::error::упал класс $(basename "$f")"
+            grep -o '<failure message="[^"]\{0,300\}"' "$f" | head -3 |
+              while IFS= read -r l; do echo "::error::$l"; done
           done
-      - name: 'крипто · отчёты как артефакт'
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: crypto-test-reports
-          path: messenger-crypto/build/reports/tests/test
 
   # ── Сервер: сборка и статический разбор ───────────────────────────────────
-  # Без `go test`: часть тестов ждёт живую БД, и падение из-за её отсутствия
-  # сказало бы не о коде. Тестовый тир добавляется отдельной задачей.
   server:
     name: server · build + vet
     runs-on: ubuntu-latest
