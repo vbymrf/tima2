@@ -150,6 +150,7 @@ ul.кратко b { color: #ffffff; }
 
 .чип { background: rgba(255, 255, 255, 0.12); color: rgba(255, 255, 255, 0.85); }
 .чип.акц { background: #8ac44a; color: #ffffff; }
+.чип.выбран { background: #8ac44a; color: #ffffff; }
 .чип.е2е { background: #3bb300; color: #ffffff; }
 .чип.откр { background: rgba(255, 255, 255, 0.10); color: rgba(255, 255, 255, 0.55); }
 

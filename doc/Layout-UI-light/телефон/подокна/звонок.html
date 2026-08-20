@@ -1,0 +1,122 @@
+<meta charset="utf-8">
+<title>Звонок</title>
+<link rel="stylesheet" href="../../стиль.css">
+
+<div class="лист-док">
+<div class="путь"><a href="../../индекс.html">Layout-UI-light</a> / подокна / звонок.html</div>
+<h1>Звонок <span class="вид подокно">подокно</span></h1>
+<p class="подзаголовок">
+  Чёрное поле, как в слайдах: главное — лицо и голос. Цветные метки при этом остаются: зелёный «подтверждено», салатовый «идёт сейчас». Вытесняет окно
+  целиком, но не насовсем — сворачивается в полоску, и переписку можно продолжить
+  во время разговора.
+</p>
+
+<div class="экраны">
+
+<div class="тел">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span>E2E · сигналинг</span></div>
+    <div class="зона-2" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center">
+      <div class="ава бол" style="background:var(--чёрный-6);color:var(--текст);width:88px;height:88px;flex-basis:88px;border-radius:24px;font-size:var(--щ1)">АК</div>
+      <div style="font-size:var(--щ2);font-weight:600;margin-top:16px">Анна Ковалёва</div>
+      <div style="color:var(--чёрный-50);font-size:var(--щ5);margin-top:4px">Входящий аудиозвонок</div>
+
+      <div style="display:flex;gap:14px;margin-top:36px">
+        <a class="кн" href="#в-разговоре" style="min-height:46px;padding:0 22px">Принять</a>
+        <a class="кн" href="../окна/телефон.html" style="min-height:46px;padding:0 22px;background:var(--опасно)">Отклонить</a>
+      </div>
+      <a class="чип" href="#" style="margin-top:18px;background:var(--чёрный-6);color:var(--чёрный-70)">Ответить сообщением</a>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">входящий</div>
+</div>
+
+<div class="тел" id="в-разговоре">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span>E2E · сигналинг</span></div>
+
+    <div class="зона-1 подокно" style="background:transparent;border:none">
+      <a class="икона" href="чат.html">⌄</a>
+      <div class="тянуть" style="text-align:center">
+        <div class="имя" style="font-size:var(--щ5)">Анна Ковалёва</div>
+        <div class="трет">14:02</div>
+      </div>
+      <a class="икона" href="переходы.html">•••</a>
+    </div>
+
+    <div class="зона-2" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px">
+      <div class="ава бол" style="background:var(--чёрный-6);color:var(--текст);width:88px;height:88px;flex-basis:88px;border-radius:24px;font-size:var(--щ1)">АК</div>
+      <div style="color:var(--чёрный-50);font-size:var(--щ5);margin-top:14px">Разговор идёт</div>
+    </div>
+
+    <div style="padding:0 24px 20px">
+      <div style="display:flex;gap:10px;justify-content:center;margin-bottom:18px">
+        <a class="круг" href="#" style="background:var(--чёрный-6);border-color:transparent;color:var(--текст)">🎤</a>
+        <a class="круг" href="#" style="background:var(--текст);border-color:transparent;color:var(--поверхность)">🔊</a>
+        <a class="круг" href="#" style="background:var(--чёрный-6);border-color:transparent;color:var(--текст)">📹</a>
+        <a class="круг" href="чат.html" style="background:var(--чёрный-6);border-color:transparent;color:var(--текст)">💬</a>
+      </div>
+      <a class="кн вширь" href="../окна/телефон.html" style="background:var(--опасно);min-height:46px">Завершить</a>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">разговор: включённое — залито, выключенное — прозрачное</div>
+</div>
+
+<div class="тел">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+
+    <div class="зона-2" style="padding:0;position:relative;display:flex;align-items:center;justify-content:center;background:#101214">
+      <span style="color:rgba(255,255,255,0.5);font-size:11px">ВИДЕО собеседника — на весь экран</span>
+
+      <div style="position:absolute;top:12px;right:12px;width:78px;height:104px;border-radius:12px;background:rgba(255,255,255,0.10);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.5);font-size:10px">вы</div>
+
+      <div style="position:absolute;top:14px;left:14px;background:rgba(16,18,20,0.55);border-radius:16px;padding:5px 12px;font-size:12px">Анна · 14:02</div>
+
+      <div style="position:absolute;left:20px;right:20px;bottom:18px">
+        <div style="display:flex;gap:10px;justify-content:center;margin-bottom:14px">
+          <a class="круг" href="#" style="background:rgba(255,255,255,0.14);border-color:transparent;color:var(--на-тьме)">🎤</a>
+          <a class="круг" href="#" style="background:rgba(255,255,255,0.14);border-color:transparent;color:var(--на-тьме)">🔄</a>
+          <a class="круг" href="#" style="background:var(--на-тьме);border-color:transparent;color:var(--тьма)">📹</a>
+          <a class="круг" href="чат.html" style="background:rgba(255,255,255,0.14);border-color:transparent;color:var(--на-тьме)">💬</a>
+        </div>
+        <a class="кн вширь" href="../окна/телефон.html" style="background:var(--опасно);min-height:44px">Завершить</a>
+      </div>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">видео: своя картинка углом, кнопки поверх кадра</div>
+</div>
+
+<div class="разбор">
+
+<h2>Что здесь</h2>
+<ul class="кратко">
+  <li><b>Фон идёт от темы</b>, как везде: в светлой белый, в тёмной чёрный. Прежде звонок был чёрным в обеих — «погружение». Отказались: тема — это обещание, и экран, который его нарушает, читается как чужой.</li>
+  <li>Тёмным остаётся только сам кадр видео: это картинка, а не поверхность. Поэтому кнопки поверх кадра белые в обеих темах, а кнопки аудиозвонка — серые по теме.</li>
+  <li>Состояние кнопки — заливкой, а не подписью: включённое залито салатовым, выключенное — серым. Читается, не читая.</li>
+  <li>«⌄» слева сверху сворачивает звонок в полоску и возвращает в чат: разговор не должен занимать приложение целиком.</li>
+  <li>«💬» ведёт в переписку с тем же человеком, не разрывая звонок.</li>
+  <li>«Завершить» — во всю ширину и красным, единственная кнопка такого размера: её нажимают не глядя.</li>
+  <li>У входящего есть «Ответить сообщением» — на случай, когда взять трубку нельзя, а промолчать неудобно.</li>
+  <li>«E2E · сигналинг» в статусной строке — честно: шифруется установление связи, само медиа идёт через сервер (ADR-0006). Обещать сквозное шифрование там, где его нет, нельзя.</li>
+</ul>
+
+<h2>Из чего открывается</h2>
+<ul class="кратко">
+  <li>«📞» в зоне 1 <a href="чат.html">чата</a>, из книги контактов <a href="../окна/телефон.html">окна 1</a>, «Войти» в голосовую комнату группы.</li>
+  <li>Входящий приходит поверх любого окна, без спроса.</li>
+</ul>
+
+<h2>Ведёт в</h2>
+<ul class="кратко">
+  <li>«⌄» и «💬» → <a href="чат.html">чат</a>, звонок сворачивается в полоску.</li>
+  <li>«•••» → <a href="переходы.html">окно переходов</a>.</li>
+  <li>«Завершить» → туда, откуда пришли.</li>
+</ul>
+
+</div>
+</div>
+</div>

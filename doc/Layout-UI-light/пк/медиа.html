@@ -1,0 +1,403 @@
+<meta charset="utf-8">
+<title>Медиа-лента — широкий макет</title>
+<link rel="stylesheet" href="../стиль.css">
+<link rel="stylesheet" href="../широкий.css">
+
+<div class="лист-док">
+<div class="путь"><a href="../индекс-пк.html">Layout-UI-light</a> / <a href="../индекс-пк.html">пк</a> / медиа.html</div>
+<h1>Медиа-лента <span class="вид">ПК · 1440×900</span></h1>
+<p class="подзаголовок">
+  Окно 3 на настольном экране. Лента остаётся карточками — она и есть окно, а
+  окно переехало в колонку; в главной области идёт коллекция сеткой или кадр
+  слайдом, а третья полоса показывает страницу того, что открыто: коллекции в
+  первой рамке, автора во второй. Планшетный вариант —
+  <a href="../планшет/медиа.html">планшет/медиа.html</a>, телефонный —
+  <a href="../телефон/окна/медиа.html">телефон/окна/медиа.html</a>.
+</p>
+
+<div class="экраны">
+
+<div class="широк" id="пк">
+  <div class="окно пк">
+    <div class="стан">
+
+      <div class="рейка">
+        <div class="шапка-рейки">
+          <span class="лого">Т</span>
+          <span class="имя-приложения">TIMA</span>
+        </div>
+        <a class="окно-рейки" href="телефон.html">📞<span class="подпись-рейки">Телефон</span><span class="счёт">3</span></a>
+        <a class="окно-рейки" href="новости.html">📰<span class="подпись-рейки">Социум</span><span class="счёт">12</span></a>
+        <a class="окно-рейки тек" href="медиа.html">🖼<span class="подпись-рейки">Медиа-лента</span></a>
+        <a class="окно-рейки" href="общение.html">💬<span class="подпись-рейки">Общение</span><span class="счёт">5</span></a>
+        <a class="окно-рейки" href="страница.html">👤<span class="подпись-рейки">Личная страница</span></a>
+        <div class="разделитель-рейки"></div>
+        <a class="окно-рейки" href="блогер.html">📈<span class="подпись-рейки">Медиа-блогер</span></a>
+        <div class="низ-рейки">
+          <div class="разделитель-рейки"></div>
+          <a class="окно-рейки" href="настройки.html">⚙<span class="подпись-рейки">Настройки</span></a>
+        </div>
+      </div>
+
+      <div class="колонка-списка">
+        <div class="зона-1">
+          <span class="имя-окна тянуть">Медиа</span>
+          <div class="режимы знаками">
+            <a class="режим тек" href="#" title="лента">▤</a>
+            <a class="режим" href="#" title="слайды">▣</a>
+          </div>
+          <a class="икона" href="поиск.html">🔍</a>
+          <a class="икона" href="настройки.html">⚙</a>
+        </div>
+        <div class="табы">
+          <a class="таб" href="#">Общая</a>
+          <a class="таб" href="#">Друзья</a>
+          <a class="таб тек" href="#">Каталог</a>
+          <span class="кнопки-вида">
+            <a class="кн-тумблер" href="разделы.html" title="полоса разделов">▬</a>
+            <a class="кн-тумблер" href="разделы.html" title="ярлычки">▦</a>
+          </span>
+        </div>
+        <div class="зона-2">
+          <div class="разд">
+            <a class="цель-раздел" href="#"><span class="знак">🌲</span><span class="круг-об">14</span><span class="имя-разд">Природа</span></a>
+            <a class="цель-свернуть" href="#"><span class="счёт мелкий">2</span><span class="шеврон">▾</span></a>
+          </div>
+          <a class="строка" href="#" style="background:var(--акцент-мягкий)">
+            <div class="ава">🏔</div>
+            <div class="тянуть">
+              <div class="имя обрез">Карелия, сентябрь</div>
+              <div class="втор обрез">коллекция · 128 кадров</div>
+            </div>
+            <div class="мета"><span class="счёт">4</span></div>
+          </a>
+          <a class="строка" href="#">
+            <div class="ава">🌊</div>
+            <div class="тянуть">
+              <div class="имя обрез">Вода и туман</div>
+              <div class="втор обрез">коллекция · 64 кадра</div>
+            </div>
+          </a>
+
+          <div class="разд">
+            <a class="цель-раздел" href="#"><span class="знак">💼</span><span class="круг-об">6</span><span class="имя-разд">Работа</span></a>
+            <a class="цель-свернуть" href="#"><span class="шеврон">▸</span></a>
+          </div>
+          <div class="разд">
+            <a class="цель-раздел" href="#"><span class="знак">🏠</span><span class="круг-об">9</span><span class="имя-разд">Дом</span></a>
+            <a class="цель-свернуть" href="#"><span class="счёт мелкий">2</span><span class="шеврон">▸</span></a>
+          </div>
+          <div class="разд">
+            <a class="цель-раздел" href="#"><span class="знак">🎬</span><span class="круг-об">31</span><span class="имя-разд">Досуг</span></a>
+            <a class="цель-свернуть" href="#"><span class="шеврон">▸</span></a>
+          </div>
+          <div class="разд добавить">
+            <a class="цель-раздел" href="#"><span class="плюс">+</span><span class="имя-разд">Добавить раздел</span></a>
+          </div>
+        </div>
+        <div class="низ-колонки">
+          <a class="круг акц" href="#" title="создать коллекцию">＋</a>
+          <span class="подпись-кнопки">Создать коллекцию</span>
+        </div>
+      </div>
+
+      <div class="главная">
+        <div class="зона-1 подокно">
+          <a class="ава мал" href="#">🏔</a>
+          <a class="тянуть" href="#" style="text-decoration:none;color:inherit">
+            <div class="имя обрез" style="font-size:var(--щ5)">Карелия, сентябрь</div>
+            <div class="трет">коллекция · Лена Г. · 128 кадров</div>
+          </a>
+          <span class="чип откр">публичная</span>
+          <a class="икона" href="#">•••</a>
+        </div>
+
+        <div class="зона-2">
+          <div class="сетка-медиа">
+            <a class="плитка-медиа" href="#">
+              <div class="медиа">ФОТО · 3</div>
+              <div class="строка" style="padding:0;border:none;background:none;gap:7px">
+                <div class="трет тянуть обрез">2 часа назад</div>
+                <span class="трет">💬 8</span>
+              </div>
+            </a>
+            <a class="плитка-медиа" href="#">
+              <div class="медиа">ВИДЕО · 3:45</div>
+              <div class="строка" style="padding:0;border:none;background:none;gap:7px">
+                <div class="трет тянуть обрез">3 часа назад</div>
+                <span class="трет">💬 2</span>
+              </div>
+            </a>
+            <a class="плитка-медиа" href="#">
+              <div class="медиа">ФОТО</div>
+              <div class="строка" style="padding:0;border:none;background:none;gap:7px">
+                <div class="трет тянуть обрез">вчера</div>
+                <span class="трет">💬 14</span>
+              </div>
+            </a>
+            <a class="плитка-медиа" href="#">
+              <div class="медиа">ФОТО · 7</div>
+              <div class="строка" style="padding:0;border:none;background:none;gap:7px">
+                <div class="трет тянуть обрез">вчера</div>
+                <span class="трет">💬 5</span>
+              </div>
+            </a>
+            <a class="плитка-медиа" href="#">
+              <div class="медиа">ВИДЕО · 0:41</div>
+              <div class="строка" style="padding:0;border:none;background:none;gap:7px">
+                <div class="трет тянуть обрез">пн</div>
+                <span class="трет">💬 1</span>
+              </div>
+            </a>
+            <a class="плитка-медиа" href="#">
+              <div class="медиа">ФОТО</div>
+              <div class="строка" style="padding:0;border:none;background:none;gap:7px">
+                <div class="трет тянуть обрез">пн</div>
+                <span class="трет">💬 3</span>
+              </div>
+            </a>
+            <a class="плитка-медиа" href="#">
+              <div class="медиа">ФОТО · 2</div>
+              <div class="строка" style="padding:0;border:none;background:none;gap:7px">
+                <div class="трет тянуть обрез">12 мая</div>
+                <span class="трет">💬 6</span>
+              </div>
+            </a>
+            <a class="плитка-медиа" href="#">
+              <div class="медиа">ВИДЕО · 1:12</div>
+              <div class="строка" style="padding:0;border:none;background:none;gap:7px">
+                <div class="трет тянуть обрез">12 мая</div>
+                <span class="трет">💬 4</span>
+              </div>
+            </a>
+          </div>
+
+          <div class="зона-3">
+            <a class="круг" href="#">↑</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="правая-панель">
+        <div class="шапка-страницы">
+          <div class="ава бол">🏔</div>
+          <div class="имя" style="font-size:var(--щ2)">Карелия, сентябрь</div>
+          <div class="трет">коллекция · Лена Г.</div>
+          <div class="втор" style="margin-top:6px">Три дня по берегу: туман к утру, вода как стекло. Снято на плёнку и телефон.</div>
+          <div style="margin-top:8px"><span class="чип откр">публичная</span> <span class="чип">раздел «Природа»</span></div>
+        </div>
+        <div class="тело-панели">
+          <div class="числа-страницы">
+            <div><div class="имя">128</div><div class="трет">кадров</div></div>
+            <div><div class="имя">12</div><div class="трет">видео</div></div>
+            <div><div class="имя">2,4</div><div class="трет">ГБ</div></div>
+          </div>
+
+          <div class="раздел">Автор</div>
+          <a class="строка" href="страница.html">
+            <div class="ава">ЛГ</div>
+            <div class="тянуть">
+              <div class="имя обрез">Лена Г.</div>
+              <div class="втор обрез">@lena · 3 400 подписчиков</div>
+            </div>
+            <div class="мета"><span class="чип акц">подписан</span></div>
+          </a>
+
+          <div class="раздел">Управление</div>
+          <a class="пункт" href="#"><span class="знак">🔔</span> Уведомления <span class="усл">о новых кадрах</span></a>
+          <a class="пункт" href="#"><span class="знак">🔇</span> Выключить звук</a>
+          <a class="пункт" href="#"><span class="знак">✍</span> Мои комментарии <span class="усл">разрешены</span></a>
+          <a class="пункт" href="#"><span class="знак">⤓</span> Скачать коллекцию <span class="усл">2,4 ГБ</span></a>
+          <a class="пункт беда" href="#"><span class="знак">🚪</span> Отписаться от коллекции</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="подпись">коллекция раскрыта сеткой в главной области, справа — её страница: числа содержимого, автор и управление</div>
+</div>
+
+<div class="широк">
+  <div class="окно пк">
+    <div class="стан">
+
+      <div class="рейка">
+        <div class="шапка-рейки">
+          <span class="лого">Т</span>
+          <span class="имя-приложения">TIMA</span>
+        </div>
+        <a class="окно-рейки" href="телефон.html">📞<span class="подпись-рейки">Телефон</span><span class="счёт">3</span></a>
+        <a class="окно-рейки" href="новости.html">📰<span class="подпись-рейки">Социум</span><span class="счёт">12</span></a>
+        <a class="окно-рейки тек" href="медиа.html">🖼<span class="подпись-рейки">Медиа-лента</span></a>
+        <a class="окно-рейки" href="общение.html">💬<span class="подпись-рейки">Общение</span><span class="счёт">5</span></a>
+        <a class="окно-рейки" href="страница.html">👤<span class="подпись-рейки">Личная страница</span></a>
+        <div class="разделитель-рейки"></div>
+        <a class="окно-рейки" href="блогер.html">📈<span class="подпись-рейки">Медиа-блогер</span></a>
+        <div class="низ-рейки">
+          <div class="разделитель-рейки"></div>
+          <a class="окно-рейки" href="настройки.html">⚙<span class="подпись-рейки">Настройки</span></a>
+        </div>
+      </div>
+
+      <div class="колонка-списка">
+        <div class="зона-1">
+          <span class="имя-окна тянуть">Медиа</span>
+          <div class="режимы знаками">
+            <a class="режим" href="#" title="лента">▤</a>
+            <a class="режим тек" href="#" title="слайды">▣</a>
+          </div>
+          <a class="икона" href="поиск.html">🔍</a>
+          <a class="икона" href="настройки.html">⚙</a>
+        </div>
+        <div class="табы">
+          <a class="таб тек" href="#">Общая</a>
+          <a class="таб" href="#">Друзья</a>
+          <a class="таб" href="#">Каталог</a>
+        </div>
+        <div class="зона-2">
+          <div class="карта" style="background:var(--акцент-мягкий)">
+            <div class="строка" style="padding:0 0 7px;border:none;background:none">
+              <a class="ава мал" href="#">ЛГ</a>
+              <div class="тянуть">
+                <a class="имя обрез" href="#" style="text-decoration:none;color:inherit">Лена Г.</a>
+                <div class="трет">2 часа назад</div>
+              </div>
+              <a class="ещё-в-ленте" href="#" title="другие действия">⋮</a>
+            </div>
+            <div class="слайд в-ленте низкий">
+              <span style="color:rgba(255,255,255,0.45);font-size:11px">ФОТО · 3 вложения</span>
+            </div>
+            <div class="блок-откликов растущий">
+              <div class="секция эмоции-слева">
+                <span class="эмоции-рамка">
+                  <a class="эмоция моя" href="#">🧘 24</a>
+                  <a class="эмоция" href="#">🔍 9</a>
+                </span>
+              </div>
+              <div class="секция комментарии-справа">
+                <a class="отклик" href="#">💬 8</a>
+              </div>
+            </div>
+          </div>
+          <div class="карта">
+            <div class="строка" style="padding:0 0 7px;border:none;background:none">
+              <a class="ава мал" href="#">МК</a>
+              <div class="тянуть">
+                <a class="имя обрез" href="#" style="text-decoration:none;color:inherit">Миша К.</a>
+                <div class="трет">3 часа назад</div>
+              </div>
+              <a class="ещё-в-ленте" href="#" title="другие действия">⋮</a>
+            </div>
+            <div class="слайд в-ленте низкий">
+              <span style="color:rgba(255,255,255,0.45);font-size:11px">ВИДЕО · превью</span>
+            </div>
+            <div class="блок-откликов растущий">
+              <div class="секция эмоции-слева">
+                <span class="эмоции-рамка">
+                  <a class="эмоция" href="#">👍 12</a>
+                </span>
+              </div>
+              <div class="секция комментарии-справа">
+                <a class="отклик" href="#">💬 2</a>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="низ-колонки">
+          <a class="круг акц" href="#" title="выложить">＋</a>
+          <span class="подпись-кнопки">Выложить</span>
+        </div>
+      </div>
+
+      <div class="главная">
+        <div class="слайд">
+          <span style="color:rgba(255,255,255,0.45);font-size:11px">ФОТО — во всю главную область</span>
+          <a class="ещё-слайда" href="#" title="другие действия">⋮</a>
+          <div class="действия-слайда">
+            <a href="#" title="поддержать">＋</a>
+            <a href="#" title="не показывать такое">−</a>
+          </div>
+          <a class="текст-на-кадре" href="#">Три дня по берегу: туман к утру, вода как стекло, и ни одного человека до самого мыса</a>
+        </div>
+        <div class="низ-слайда">
+          <div class="прогресс-слайда под-кадром">
+            <div class="время">
+              <span></span>
+              <span class="точки-слайда"><i class="тек"></i><i></i><i></i></span>
+              <span></span>
+            </div>
+          </div>
+          <div class="блок-откликов">
+            <div class="секция эмоции-слева">
+              <span class="эмоции-рамка">
+                <a class="эмоция моя" href="#">🧘 24</a>
+                <a class="эмоция" href="#">🔍 9</a>
+                <a class="эмоция" href="#">😂 4</a>
+                <a class="эмоция" href="#">👍 12</a>
+              </span>
+            </div>
+            <div class="секция комментарии-справа">
+              <a class="отклик" href="#">💬 8</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="правая-панель">
+        <div class="шапка-страницы">
+          <div class="ава бол">ЛГ</div>
+          <div class="имя" style="font-size:var(--щ2)">Лена Г.</div>
+          <div class="трет">@lena · 3 400 подписчиков</div>
+          <div class="втор" style="margin-top:6px">Снимаю воду и туман. Плёнка, телефон, ничего сложного.</div>
+          <div style="margin-top:8px"><span class="чип акц">подписан</span> <span class="чип">раздел «Природа»</span></div>
+        </div>
+        <div class="тело-панели">
+          <div class="числа-страницы">
+            <div><div class="имя">612</div><div class="трет">кадров</div></div>
+            <div><div class="имя">9</div><div class="трет">коллекций</div></div>
+            <div><div class="имя">48</div><div class="трет">видео</div></div>
+          </div>
+
+          <div class="раздел">Коллекции автора</div>
+          <a class="строка" href="#">
+            <div class="ава">🏔</div>
+            <div class="тянуть">
+              <div class="имя обрез">Карелия, сентябрь</div>
+              <div class="втор обрез">128 кадров · публичная</div>
+            </div>
+          </a>
+          <a class="строка" href="#">
+            <div class="ава">🌊</div>
+            <div class="тянуть">
+              <div class="имя обрез">Вода и туман</div>
+              <div class="втор обрез">64 кадра · публичная</div>
+            </div>
+          </a>
+
+          <div class="раздел">Управление</div>
+          <a class="пункт" href="#"><span class="знак">🔔</span> Уведомления <span class="усл">о новых кадрах</span></a>
+          <a class="пункт" href="#"><span class="знак">💬</span> Написать <span class="усл">открыт для писем</span></a>
+          <a class="пункт беда" href="#"><span class="знак">🚪</span> Отписаться</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="подпись">кадр раскрыт слайдом: тёмный только он сам, рейка и колонка остаются светлыми. Справа страница автора — то, куда на телефоне ведёт нажатие на имя под кадром</div>
+</div>
+
+<div class="разбор">
+
+<h2>Что здесь</h2>
+<ul class="кратко">
+  <li><b>Лента осталась карточками и осталась в колонке.</b> Она и есть окно, а окно на широком переезжает в колонку целиком — вместе с переключателем «Лента | Слайды», вкладками и настройками. Ширина колонки почти телефонная, поэтому карточка не переделывается вовсе.</li>
+  <li><b>Сеткой раскладывается то, что открыто в главной области</b> — коллекция или каталог: там ширина есть, и одна колонка оставила бы половину поля пустой. Четыре плитки на ПК, три на планшете.</li>
+  <li><b>Кадр в главной области занимает её целиком.</b> Тёмный по-прежнему только сам кадр — это фотография, а не поверхность; рейка и колонка остаются светлыми. Кнопки «назад» нет: лента слева, возвращаться некуда.</li>
+  <li><b>Комментарии открываются листом снизу поверх главной области</b>, как на телефоне: «💬 8» под кадром — та же кнопка и то же поведение. Сбоку их нет, и это намеренно: ответы — содержимое поста, а не сведения о его авторе.</li>
+  <li><b>Третья полоса — страница коллекции:</b> обложка, описание, раздел, числа содержимого, автор и управление подпиской, звуком, уведомлениями, скачиванием. Ничего про открытый кадр здесь нет.</li>
+  <li><b>«Выложить» опустилось вниз колонки</b> и меняется вместе с вкладкой: на ленте это «выложить», в каталоге — «создать коллекцию». Кнопка та же круглая, что висела над списком.</li>
+  <li>Обе кнопки вида — «полоса разделов» и «ярлычки» — стоят в каталоге там же, где на телефоне.</li>
+</ul>
+
+</div>
+</div>

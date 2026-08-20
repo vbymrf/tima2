@@ -1,0 +1,404 @@
+<meta charset="utf-8">
+<title>Пробы: разделы, круг 2 — навигация и место</title>
+<link rel="stylesheet" href="../стиль.css">
+<style>
+  .срез { height: auto; width: 344px; border-width: 2px; border-radius: 20px; }
+  .срез .зона-2 { flex: 0 0 auto; overflow: visible; }
+  /* Для сравнения по высоте нужен настоящий обрез, а не «сколько нарисовали» */
+  .срез.мерка { height: 430px; }
+  .срез.мерка .зона-2 { flex: 1 1 auto; overflow: hidden; }
+
+  /* ── Разделитель раздела: узкое серое слово ─────────────────────────────
+     Это не кнопка и не заголовок-плашка. Это шов между кусками списка,
+     который заодно умеет сворачиваться. Поэтому он тише всего, что вокруг. */
+  .разд {
+    display: flex; align-items: center; gap: 7px;
+    padding: 5px 16px; background: var(--функц);
+    border-top: 1px solid var(--чёрный-12);
+    border-bottom: 1px solid var(--чёрный-12);
+    text-decoration: none; color: inherit;
+  }
+  .разд > .знак { font-size: 12px; line-height: 1; }
+  .разд > .имя-разд {
+    font-size: 11px; font-weight: 800; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--чёрный-50);
+  }
+  .разд > .тянуть { flex: 1 1 auto; }
+  .разд > .шеврон { font-size: 9px; color: var(--чёрный-35); }
+
+  /* Плотнее и тише */
+  .разд.уже { padding: 3px 16px; gap: 6px; }
+  .разд.уже > .имя-разд { font-size: 10px; }
+  .разд.уже > .знак { font-size: 11px; }
+  .разд.совсем { padding: 2px 16px; background: none; border-top: none; }
+  .разд.совсем > .имя-разд { font-size: 9.5px; letter-spacing: 0.09em; }
+  .разд.совсем > .знак { display: none; }
+
+  /* ── Две цифры ──────────────────────────────────────────────────────────
+     А — сколько объектов. Величина постоянная, состоянием не является.
+     Б — сколько нового. Состояние, и потому янтарь по коду. */
+  .цифра-об {
+    font-size: 11px; font-weight: 800; color: var(--чёрный-50);
+    font-variant-numeric: tabular-nums;
+  }
+  .цифра-об.зелёная {
+    background: var(--подтверждено); color: #ffffff;
+    min-width: 20px; height: 18px; padding: 0 6px; border-radius: 999px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .счёт.мелкий { min-width: 20px; height: 18px; font-size: 10px; padding: 0 6px; }
+  .цифры-текстом { font-size: 11px; font-weight: 800; color: var(--чёрный-50); }
+  .цифры-текстом b { color: var(--текст); }
+
+  /* ── Строка «я внутри раздела»: вкладок больше нет ───────────────────── */
+  .в-разделе { display: flex; align-items: center; gap: 9px; padding: 6px var(--о4); }
+  .кн-назад {
+    width: 28px; height: 28px; flex: 0 0 28px; border-radius: 999px;
+    background: var(--навигация); color: #ffffff; text-decoration: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 800;
+  }
+  .имя-раздела { font-size: var(--щ4); font-weight: 800; }
+
+  /* ── Ярлычки и строка со значком: два вида, оба из настроек ──────────── */
+  .плитка { display: grid; gap: 10px; padding: 14px; grid-template-columns: repeat(4, 1fr); }
+  .ярлык { text-align: center; text-decoration: none; color: inherit; position: relative; }
+  .ярлык > .значок {
+    display: flex; align-items: center; justify-content: center;
+    aspect-ratio: 1 / 1; border-radius: var(--радиус-квадрат);
+    background: var(--чёрный-6); font-size: 22px; margin-bottom: 5px;
+  }
+  .ярлык > .подпись-ярлыка {
+    font-size: 10.5px; font-weight: 700; line-height: 1.2; display: block;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ярлык > .подпись-ярлыка > .цифра-об { font-weight: 800; }
+  .ярлык > .счёт {
+    position: absolute; top: -5px; right: -5px; min-width: auto; height: auto;
+    background: var(--активность); color: var(--текст);
+    font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 999px;
+    display: inline-block;
+  }
+  .ярлык.свой > .значок { border: 1px dashed var(--чёрный-35); background: none; }
+  .ярлык.пустой > .значок { opacity: 0.45; }
+
+  .строка-разд {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; border-bottom: 1px solid var(--чёрный-12);
+    text-decoration: none; color: inherit;
+  }
+  .строка-разд > .значок-мал {
+    width: 28px; height: 28px; flex: 0 0 28px; border-radius: var(--радиус-квадрат-мал);
+    background: var(--чёрный-6); display: inline-flex; align-items: center;
+    justify-content: center; font-size: 14px;
+  }
+  .строка-разд > .имя-строки { flex: 1 1 auto; font-size: var(--щ4); font-weight: 700; }
+  .строка-разд.свой > .значок-мал { border: 1px dashed var(--чёрный-35); background: none; }
+
+  .навигация-проб { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+  .навигация-проб a {
+    display: inline-flex; align-items: center; padding: 7px 13px; border-radius: 999px;
+    border: 1px solid var(--чёрный-12); text-decoration: none; color: var(--текст);
+    font-size: 12.5px; font-weight: 700;
+  }
+  .навигация-проб a.выбор { border-color: var(--навигация); border-width: 2px; }
+
+  .проба { padding: 20px 0 24px; border-bottom: 1px solid var(--чёрный-12); }
+  .шапка-пробы { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .номер { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+  .опис { font-size: 15px; font-weight: 700; }
+  .свет { font-size: 13px; color: var(--чёрный-50); }
+  .срезы { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .с-подписью { display: flex; flex-direction: column; gap: 7px; max-width: 344px; }
+  .ряд-проб { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--чёрный-12); border-radius: 12px; overflow: hidden; width: 344px; }
+</style>
+
+<div class="лист-док">
+
+<div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-разделы-2.html</div>
+
+<h1>Разделы, круг 2: навигация и место</h1>
+<p class="подзаголовок">Первый круг —
+<a href="пробы-разделы.html">пробы-разделы.html</a> — отвечал на вопрос «как это
+выглядит». Здесь другой вопрос: <b>как этим ходят и сколько это стоит по высоте
+экрана.</b> Понятие целиком — в
+<a href="../../01-product/разделы.md">01-product/разделы.md</a>.</p>
+
+<h2>Что уже решено</h2>
+<ul class="кратко">
+  <li><b>Раздел — тихий серый шов, а не заголовок.</b> Узкая строка, по ней же сворачивают и разворачивают. Кликабельность у неё слабая намеренно: это разделение, а не действие.</li>
+  <li><b>Вид переключают на экране, а не в настройках.</b> <i>Уточнено в <a href="пробы-разделы-3.html">круге 3</a>: правее вкладок стоят две кнопки — «полоса» и «ярлычки», и вместе они дают четыре исполнения. Пробы 06 и 07 ниже показывают только два из них.</i></li>
+  <li><b>Переход в раздел освобождает ряд.</b> Вкладки заменяются на «назад» и название раздела. Это и есть смысл перехода — не вид, а высота.</li>
+  <li><b>Две цифры.</b> Зелёная — сколько объектов, янтарная — сколько объектов с новыми сообщениями (<i>уточнено в <a href="пробы-разделы-3.html">круге 3</a>: считаем объекты, а не сообщения</i>).</li>
+  <li><b>Показываются все добавленные разделы, включая пустые.</b> Заданный набор — меню, из которого берут; что взял, то и видно.</li>
+</ul>
+
+<div class="оговорка">
+  <b>Что осталось выбрать здесь:</b> плотность шва (05), подача двух цифр (04) и
+  состав заданного набора — значки с названиями в пробах выдуманы, чтобы было на
+  что смотреть.
+</div>
+
+<div class="навигация-проб">
+  <a href="#в01">01 · список со швами</a>
+  <a href="#в02">02 · гармошка</a>
+  <a href="#в03" class="выбор">03 · вход в раздел ★</a>
+  <a href="#в04">04 · две цифры</a>
+  <a href="#в05">05 · плотность шва</a>
+  <a href="#в06">06 · ярлычки</a>
+  <a href="#в07">07 · строка со значком</a>
+  <a href="#в08">08 · свой раздел</a>
+  <a href="#в09">09 · Телефон и Медиа</a>
+</div>
+
+<div class="проба" id="в01">
+  <div class="шапка-пробы"><span class="номер">01</span><span class="опис">список со швами — как выглядит по умолчанию</span><span class="свет">объекты идут подряд, раздел их только разделяет</span></div>
+  <div class="окно срез">
+    <div class="зона-1"><a class="переход-окон" href="../телефон/подокна/переключение-окон.html"><span class="лого">Т</span><span class="имя-окна">Социум</span></a><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+    <div class="табы">
+      <span class="таб">Общая</span><span class="таб">Друзья</span><span class="таб тек">Каталог</span>
+    </div>
+    <div class="зона-2">
+      <a class="разд" href="#"><span class="знак">💼</span><span class="имя-разд">Работа</span><span class="тянуть"></span><span class="цифра-об">12</span><span class="счёт мелкий">7</span><span class="шеврон">▾</span></a>
+      <a class="строка" href="../телефон/подокна/чат.html"><span class="ава">КР</span><span class="тянуть"><span class="имя обрез">Команда разработки</span><span class="втор обрез">публичная группа · 3 участника</span></span><span class="мета"><span class="счёт">7</span></span></a>
+      <a class="строка" href="../телефон/подокна/чат.html"><span class="ава">РН</span><span class="тянуть"><span class="имя обрез">Разбор недели</span><span class="втор обрез">канал · 10 500 подписчиков</span></span></a>
+      <a class="разд" href="#"><span class="знак">🏠</span><span class="имя-разд">Дом</span><span class="тянуть"></span><span class="цифра-об">4</span><span class="шеврон">▾</span></a>
+      <a class="строка" href="../телефон/подокна/чат.html"><span class="ава">СС</span><span class="тянуть"><span class="имя обрез">Соседи по дому</span><span class="втор обрез">публичная группа · 41 участник</span></span></a>
+      <a class="разд" href="#"><span class="знак">📰</span><span class="имя-разд">Новости</span><span class="тянуть"></span><span class="цифра-об">9</span><span class="счёт мелкий">3</span><span class="шеврон">▾</span></a>
+      <a class="строка" href="../телефон/подокна/чат.html"><span class="ава">ГН</span><span class="тянуть"><span class="имя обрез">Городские новости</span><span class="втор обрез">канал · 88 000 подписчиков</span></span><span class="мета"><span class="счёт">3</span></span></a>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="трет" style="margin-top:8px">шов забирает 27 px против 56 px у карточки — раздел почти ничего не стоит</div>
+</div>
+
+<div class="проба" id="в02">
+  <div class="шапка-пробы"><span class="номер">02</span><span class="опис">гармошка</span><span class="свет">свёрнутость — свойство одного раздела; список, где все раскрыты, и есть прежнее поведение</span></div>
+  <div class="окно срез">
+    <div class="зона-1"><a class="переход-окон" href="../телефон/подокна/переключение-окон.html"><span class="лого">Т</span><span class="имя-окна">Социум</span></a><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+    <div class="табы">
+      <span class="таб">Общая</span><span class="таб">Друзья</span><span class="таб тек">Каталог</span>
+    </div>
+    <div class="зона-2">
+      <a class="разд" href="#"><span class="знак">💼</span><span class="имя-разд">Работа</span><span class="тянуть"></span><span class="цифра-об">12</span><span class="счёт мелкий">7</span><span class="шеврон">▾</span></a>
+      <a class="строка" href="../телефон/подокна/чат.html"><span class="ава">КР</span><span class="тянуть"><span class="имя обрез">Команда разработки</span><span class="втор обрез">публичная группа · 3 участника</span></span><span class="мета"><span class="счёт">7</span></span></a>
+      <a class="строка" href="../телефон/подокна/чат.html"><span class="ава">РН</span><span class="тянуть"><span class="имя обрез">Разбор недели</span><span class="втор обрез">канал · 10 500 подписчиков</span></span></a>
+      <a class="разд" href="#"><span class="знак">🏠</span><span class="имя-разд">Дом</span><span class="тянуть"></span><span class="цифра-об">4</span><span class="шеврон">▸</span></a>
+      <a class="разд" href="#"><span class="знак">📰</span><span class="имя-разд">Новости</span><span class="тянуть"></span><span class="цифра-об">9</span><span class="счёт мелкий">3</span><span class="шеврон">▸</span></a>
+      <a class="разд" href="#"><span class="знак">🎓</span><span class="имя-разд">Учёба</span><span class="тянуть"></span><span class="цифра-об">3</span><span class="шеврон">▸</span></a>
+      <a class="разд" href="#"><span class="знак">🎬</span><span class="имя-разд">Досуг</span><span class="тянуть"></span><span class="цифра-об">6</span><span class="счёт мелкий">12</span><span class="шеврон">▸</span></a>
+      <a class="разд" href="#"><span class="знак">📦</span><span class="имя-разд">Общий</span><span class="тянуть"></span><span class="цифра-об">21</span><span class="счёт мелкий">2</span><span class="шеврон">▸</span></a>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="трет" style="margin-top:8px">свернув всё, получаем оглавление — и это не третий вид, а то же состояние швов</div>
+</div>
+
+<div class="проба" id="в03">
+  <div class="шапка-пробы"><span class="номер">03 ★</span><span class="опис">вход в раздел — ряд вкладок уходит</span><span class="свет">слева каталог целиком, справа — внутри «Работы»; оба среза одной высоты, обрез настоящий</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез мерка">
+        <div class="зона-1"><a class="переход-окон" href="#"><span class="лого">Т</span><span class="имя-окна">Социум</span></a><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+        <div class="табы">
+          <span class="таб">Общая</span><span class="таб">Друзья</span><span class="таб тек">Каталог</span>
+        </div>
+        <div class="зона-2">
+          <a class="разд" href="#"><span class="знак">💼</span><span class="имя-разд">Работа</span><span class="тянуть"></span><span class="цифра-об">12</span><span class="счёт мелкий">7</span><span class="шеврон">▾</span></a>
+          <a class="строка" href="#"><span class="ава">КР</span><span class="тянуть"><span class="имя обрез">Команда разработки</span><span class="втор обрез">публичная группа</span></span><span class="мета"><span class="счёт">7</span></span></a>
+          <a class="строка" href="#"><span class="ава">РН</span><span class="тянуть"><span class="имя обрез">Разбор недели</span><span class="втор обрез">канал</span></span></a>
+          <a class="строка" href="#"><span class="ава">ПС</span><span class="тянуть"><span class="имя обрез">Проект «Север»</span><span class="втор обрез">закрытая группа</span></span></a>
+          <a class="строка" href="#"><span class="ава">ПЛ</span><span class="тянуть"><span class="имя обрез">Планёрка</span><span class="втор обрез">голосовой чат</span></span></a>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="трет">вкладки на месте — видно четыре объекта</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез мерка">
+        <div class="зона-1"><a class="переход-окон" href="#"><span class="лого">Т</span><span class="имя-окна">Социум</span></a><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+        <div class="табы в-разделе">
+          <a class="кн-назад" href="#">←</a>
+          <span class="имя-раздела">💼 Работа</span>
+          <span class="тянуть"></span>
+          <span class="цифра-об">12</span><span class="счёт мелкий">7</span>
+        </div>
+        <div class="зона-2">
+          <a class="строка" href="#"><span class="ава">КР</span><span class="тянуть"><span class="имя обрез">Команда разработки</span><span class="втор обрез">публичная группа</span></span><span class="мета"><span class="счёт">7</span></span></a>
+          <a class="строка" href="#"><span class="ава">РН</span><span class="тянуть"><span class="имя обрез">Разбор недели</span><span class="втор обрез">канал</span></span></a>
+          <a class="строка" href="#"><span class="ава">ПС</span><span class="тянуть"><span class="имя обрез">Проект «Север»</span><span class="втор обрез">закрытая группа</span></span></a>
+          <a class="строка" href="#"><span class="ава">ПЛ</span><span class="тянуть"><span class="имя обрез">Планёрка</span><span class="втор обрез">голосовой чат</span></span></a>
+          <a class="строка" href="#"><span class="ава">ДК</span><span class="тянуть"><span class="имя обрез">Договоры и акты</span><span class="втор обрез">закрытая группа</span></span></a>
+          <a class="строка" href="#"><span class="ава">ОТ</span><span class="тянуть"><span class="имя обрез">Отдел тестирования</span><span class="втор обрез">публичная группа</span></span></a>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="трет">вкладки заменены на «назад» и название — видно шесть</div>
+    </div>
+  </div>
+  <div class="трет" style="margin-top:10px">
+    Ряд вкладок не удвоился, а сменил содержимое: одна и та же строка, одна и та
+    же высота. Плюс два объекта на экран — и ни одного нового элемента в шапке.
+  </div>
+</div>
+
+<div class="проба" id="в04">
+  <div class="шапка-пробы"><span class="номер">04</span><span class="опис">две цифры — как их подать</span><span class="свет">одна строка, четыре подачи</span></div>
+  <div class="ряд-проб">
+    <a class="разд" href="#"><span class="знак">💼</span><span class="имя-разд">а · две пилюли</span><span class="тянуть"></span><span class="цифра-об зелёная">12</span><span class="счёт мелкий">7</span></a>
+    <a class="разд" href="#"><span class="знак">💼</span><span class="имя-разд">б · серое число и янтарь</span><span class="тянуть"></span><span class="цифра-об">12</span><span class="счёт мелкий">7</span></a>
+    <a class="разд" href="#"><span class="знак">💼</span><span class="имя-разд">в · текстом через точку</span><span class="тянуть"></span><span class="цифры-текстом">12 · <b>7</b></span></a>
+    <a class="разд" href="#"><span class="знак">💼</span><span class="имя-разд">г · нового нет — цифра одна</span><span class="тянуть"></span><span class="цифра-об">12</span></a>
+  </div>
+  <div class="оговорка" style="max-width:640px">
+    <b>Зелёная цифра текстом невозможна.</b> <code>#3bb300</code> на белом даёт
+    2,4 : 1 — это ниже порога для мелкого шрифта. Значит, зелёный здесь бывает
+    только заливкой с белым текстом (а), иначе цифра А остаётся нейтральной (б).
+    <br><b>Рекомендую «б».</b> Количество объектов — величина постоянная, она не
+    состояние; в коде «Семафора» зелёный означает «подтверждено», и второе
+    значение ему ни к чему. Янтарь остаётся один на экране и потому виден.
+  </div>
+</div>
+
+<div class="проба" id="в05">
+  <div class="шапка-пробы"><span class="номер">05</span><span class="опис">плотность шва</span><span class="свет">«я бы его ещё уже сделал» — вот три степени</span></div>
+  <div class="ряд-проб">
+    <a class="разд" href="#"><span class="знак">💼</span><span class="имя-разд">обычный · 27 px</span><span class="тянуть"></span><span class="цифра-об">12</span><span class="счёт мелкий">7</span><span class="шеврон">▾</span></a>
+    <a class="строка" href="#"><span class="ава">КР</span><span class="тянуть"><span class="имя обрез">Команда разработки</span><span class="втор обрез">публичная группа</span></span></a>
+    <a class="разд уже" href="#"><span class="знак">🏠</span><span class="имя-разд">уже · 22 px</span><span class="тянуть"></span><span class="цифра-об">4</span><span class="шеврон">▾</span></a>
+    <a class="строка" href="#"><span class="ава">СС</span><span class="тянуть"><span class="имя обрез">Соседи по дому</span><span class="втор обрез">публичная группа</span></span></a>
+    <a class="разд совсем" href="#"><span class="имя-разд">совсем тихо · 17 px, без фона</span><span class="тянуть"></span><span class="цифра-об">9</span><span class="счёт мелкий">3</span></a>
+    <a class="строка" href="#"><span class="ава">ГН</span><span class="тянуть"><span class="имя обрез">Городские новости</span><span class="втор обрез">канал</span></span></a>
+  </div>
+  <div class="трет" style="margin-top:8px">
+    у третьего исчезает и фон, и значок: остаётся только слово. Дальше сужать
+    нечего — следующий шаг это убрать шов совсем.
+  </div>
+</div>
+
+<div class="проба" id="в06">
+  <div class="шапка-пробы"><span class="номер">06</span><span class="опис">вид «ярлычки»</span><span class="свет">здесь показаны все добавленные разделы, включая пустые; в круге 3 к этому добавились «Всё» и «Добавить»</span></div>
+  <div class="окно срез">
+    <div class="зона-1"><a class="переход-окон" href="#"><span class="лого">Т</span><span class="имя-окна">Социум</span></a><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+    <div class="табы">
+      <span class="таб">Общая</span><span class="таб">Друзья</span><span class="таб тек">Каталог</span>
+    </div>
+    <div class="зона-2">
+      <div class="плитка">
+        <a class="ярлык" href="#"><span class="значок">💼</span><span class="подпись-ярлыка">Работа <span class="цифра-об">12</span></span><span class="счёт">7</span></a>
+        <a class="ярлык" href="#"><span class="значок">🏠</span><span class="подпись-ярлыка">Дом <span class="цифра-об">4</span></span></a>
+        <a class="ярлык" href="#"><span class="значок">📰</span><span class="подпись-ярлыка">Новости <span class="цифра-об">9</span></span><span class="счёт">3</span></a>
+        <a class="ярлык" href="#"><span class="значок">🎓</span><span class="подпись-ярлыка">Учёба <span class="цифра-об">3</span></span></a>
+        <a class="ярлык пустой" href="#"><span class="значок">⚽</span><span class="подпись-ярлыка">Спорт <span class="цифра-об">0</span></span></a>
+        <a class="ярлык" href="#"><span class="значок">🎬</span><span class="подпись-ярлыка">Досуг <span class="цифра-об">6</span></span><span class="счёт">12</span></a>
+        <a class="ярлык свой" href="#"><span class="значок">🛠</span><span class="подпись-ярлыка">Гараж <span class="цифра-об">2</span></span></a>
+        <a class="ярлык" href="#"><span class="значок">📦</span><span class="подпись-ярлыка">Общий <span class="цифра-об">21</span></span><span class="счёт">2</span></a>
+      </div>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="трет" style="margin-top:8px">«Спорт» пуст и всё равно виден: его добавили осознанно. Бледный значок говорит «пока пусто», а не прячет раздел.</div>
+</div>
+
+<div class="проба" id="в07">
+  <div class="шапка-пробы"><span class="номер">07</span><span class="опис">вид «строка со значком и названием»</span><span class="свет">второе положение кнопки «ярлычки»</span></div>
+  <div class="окно срез">
+    <div class="зона-1"><a class="переход-окон" href="#"><span class="лого">Т</span><span class="имя-окна">Социум</span></a><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+    <div class="табы">
+      <span class="таб">Общая</span><span class="таб">Друзья</span><span class="таб тек">Каталог</span>
+    </div>
+    <div class="зона-2">
+      <a class="строка-разд" href="#"><span class="значок-мал">💼</span><span class="имя-строки">Работа</span><span class="цифра-об">12</span><span class="счёт мелкий">7</span></a>
+      <a class="строка-разд" href="#"><span class="значок-мал">🏠</span><span class="имя-строки">Дом</span><span class="цифра-об">4</span></a>
+      <a class="строка-разд" href="#"><span class="значок-мал">📰</span><span class="имя-строки">Новости</span><span class="цифра-об">9</span><span class="счёт мелкий">3</span></a>
+      <a class="строка-разд" href="#"><span class="значок-мал">🎓</span><span class="имя-строки">Учёба</span><span class="цифра-об">3</span></a>
+      <a class="строка-разд" href="#"><span class="значок-мал">⚽</span><span class="имя-строки">Спорт</span><span class="цифра-об">0</span></a>
+      <a class="строка-разд свой" href="#"><span class="значок-мал">🛠</span><span class="имя-строки">Гараж</span><span class="цифра-об">2</span></a>
+      <a class="строка-разд" href="#"><span class="значок-мал">📦</span><span class="имя-строки">Общий</span><span class="цифра-об">21</span><span class="счёт мелкий">2</span></a>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="трет" style="margin-top:8px">длинные названия здесь целы — плитка их обрезает; это и есть повод держать обе формы</div>
+</div>
+
+<div class="проба" id="в08">
+  <div class="шапка-пробы"><span class="номер">08</span><span class="опис">свой раздел и добавление</span><span class="свет">пунктир говорит «не из заданного набора»; цвет для этого занят кодом</span></div>
+  <div class="окно срез">
+    <div class="зона-1"><a class="переход-окон" href="#"><span class="лого">Т</span><span class="имя-окна">Социум</span></a><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+    <div class="табы в-разделе">
+      <a class="кн-назад" href="#">←</a>
+      <span class="имя-раздела">Разделы</span>
+      <span class="тянуть"></span>
+      <span class="икона жив">+</span>
+    </div>
+    <div class="зона-2">
+      <a class="строка-разд" href="#"><span class="значок-мал">💼</span><span class="имя-строки">Работа</span><span class="цифра-об">12</span></a>
+      <a class="строка-разд свой" href="#"><span class="значок-мал">🛠</span><span class="имя-строки">Гараж</span><span class="цифра-об">2</span></a>
+      <a class="строка-разд свой" href="#"><span class="значок-мал">🐟</span><span class="имя-строки">Рыбалка</span><span class="цифра-об">0</span></a>
+      <a class="строка-разд" href="#"><span class="значок-мал">📦</span><span class="имя-строки">Общий</span><span class="цифра-об">21</span></a>
+      <div class="разд совсем"><span class="имя-разд">из заданного набора — не добавлены</span></div>
+      <a class="строка-разд" href="#" style="opacity:.5"><span class="значок-мал">🎓</span><span class="имя-строки">Учёба</span><span class="цифра-об">+</span></a>
+      <a class="строка-разд" href="#" style="opacity:.5"><span class="значок-мал">✈</span><span class="имя-строки">Поездки</span><span class="цифра-об">+</span></a>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="трет" style="margin-top:8px">заданный набор — меню, из которого берут; «Общий» стоит последним и из списка не убирается</div>
+</div>
+
+<div class="проба" id="в09">
+  <div class="шапка-пробы"><span class="номер">09</span><span class="опис">то же в окне «Телефон»</span><span class="свет">проверка сквозного: значки и названия те же, наполнение своё</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1"><a class="переход-окон" href="#"><span class="лого">Т</span><span class="имя-окна">Телефон</span></a><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+        <div class="табы">
+          <span class="таб тек">Чаты</span><span class="таб">Контакты</span><span class="таб">Звонки</span>
+        </div>
+        <div class="зона-2">
+          <a class="разд" href="#"><span class="знак">💼</span><span class="имя-разд">Работа</span><span class="тянуть"></span><span class="цифра-об">5</span><span class="счёт мелкий">2</span><span class="шеврон">▾</span></a>
+          <a class="строка" href="../телефон/подокна/чат.html"><span class="ава">БМ</span><span class="тянуть"><span class="имя обрез">Борис Мельник</span><span class="втор обрез">Отправил договор</span></span><span class="мета"><span class="счёт">2</span></span></a>
+          <a class="строка" href="../телефон/подокна/чат.html"><span class="ава">АК</span><span class="тянуть"><span class="имя обрез">Анна Ковалёва</span><span class="втор обрез">Хорошо, до завтра</span></span></a>
+          <a class="разд" href="#"><span class="знак">🏠</span><span class="имя-разд">Дом</span><span class="тянуть"></span><span class="цифра-об">3</span><span class="шеврон">▾</span></a>
+          <a class="строка" href="../телефон/подокна/чат.html"><span class="ава">МА</span><span class="тянуть"><span class="имя обрез">Мама</span><span class="втор обрез">Позвони как сможешь</span></span></a>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="трет">контакты и личные чаты — теми же разделами</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1"><a class="переход-окон" href="#"><span class="лого">Т</span><span class="имя-окна">Медиа</span></a><span class="тянуть"></span><span class="икона">🔍</span><span class="икона">⚙</span></div>
+        <div class="табы в-разделе">
+          <a class="кн-назад" href="#">←</a>
+          <span class="имя-раздела">🎬 Досуг</span>
+          <span class="тянуть"></span>
+          <span class="цифра-об">6</span><span class="счёт мелкий">12</span>
+        </div>
+        <div class="зона-2">
+          <a class="строка" href="#"><span class="ава">ФТ</span><span class="тянуть"><span class="имя обрез">Фотографии с моря</span><span class="втор обрез">коллекция · 143 файла</span></span></a>
+          <a class="строка" href="#"><span class="ава">КН</span><span class="тянуть"><span class="имя обрез">Кино на вечер</span><span class="втор обрез">коллекция · 22 файла</span></span><span class="мета"><span class="счёт">12</span></span></a>
+          <a class="строка" href="#"><span class="ава">ММ</span><span class="тянуть"><span class="имя обрез">Мемы</span><span class="втор обрез">коллекция · 400 файлов</span></span></a>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="трет">в «Медиа» тот же раздел наполнен коллекциями</div>
+    </div>
+  </div>
+</div>
+
+<h2>На что смотреть</h2>
+<ul class="кратко">
+  <li><b>Шов и вход в раздел — не два вида, а два состояния одного экрана.</b> Пока раздел просто разделяет, вкладки на месте. Вошёл в раздел — вкладки не нужны, и ряд отдаётся объектам.</li>
+  <li><b>Ничего не прибавилось в шапке.</b> Строка вкладок одна и та же; в ней меняется содержимое. Кнопка «назад» появляется там, где вкладки исчезли, и потому не стоит ни пикселя.</li>
+  <li><b>Зелёная цифра — вопрос, а не решение.</b> Текстом на белом она не читается, а заливкой начинает спорить с «подтверждено» из кода. Проба 04 «б» уходит от обоих (см. <a href="../../01-product/разделы.md">разделы.md</a>).</li>
+  <li><b>Пустой раздел виден.</b> Его добавили осознанно; прятать его — значит спорить с решением человека.</li>
+  <li><b>«Папка» в разговоре — то же самое.</b> В документах и в интерфейсе слово одно — «раздел», чтобы в коде не завелись две сущности.</li>
+</ul>
+
+<h2>Что дальше</h2>
+<p>После выбора по 04 и 05 раскладка переносится в
+<a href="../телефон/окна/новости.html">окно «Социум»</a> и далее в «Телефон» и «Медиа».
+Остаётся открытым состав заданного набора: какие разделы даём готовыми и с
+какими значками.</p>
+
+</div>

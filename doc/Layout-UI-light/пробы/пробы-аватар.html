@@ -1,0 +1,302 @@
+<meta charset="utf-8">
+<title>Пробы: аватар заподлицо</title>
+<link rel="stylesheet" href="../стиль.css">
+<style>
+  .срез { height: auto; width: 344px; border-width: 2px; border-radius: 20px; }
+  .срез .зона-2 { flex: 0 0 auto; overflow: visible; }
+  /* Зазор между репликами — то самое место, куда аватар выступает вверх */
+  .срез .поток { padding: 16px 14px; gap: 16px; }
+  .срез .пузырь { max-width: 252px; position: relative; overflow: visible; }
+
+  .автор {
+    display: block; font-size: 11px; font-weight: 800; line-height: 16px;
+    color: var(--чёрный-70); margin-bottom: 3px;
+  }
+  .текст { display: block; }
+  .время { display: none; font-weight: 600; color: var(--чёрный-50); }
+  /* Обтекания нет ни в одном варианте: тема кладёт float — гасим */
+  .срез .пузырь > .ава { float: none; margin: 0; position: absolute; }
+
+  .проба { padding: 20px 0 24px; border-bottom: 1px solid var(--чёрный-12); }
+  .проба:target { box-shadow: inset 6px 0 0 var(--навигация); padding-left: 16px; }
+  .шапка-пробы { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .номер { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+  .опис { font-size: 13.5px; color: var(--чёрный-70); }
+  .свет { font-size: 12px; color: var(--чёрный-50); }
+  .с-подписью > .трет { margin-top: 8px; }
+
+  .навигация-проб { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+  .навигация-проб a {
+    display: inline-flex; align-items: center; padding: 7px 13px; border-radius: 999px;
+    border: 1px solid var(--чёрный-12); text-decoration: none; color: var(--текст);
+    font-size: 12.5px; font-weight: 700;
+  }
+  .навигация-проб a.выбор { border-color: var(--навигация); border-width: 2px; }
+
+  /* ── 01 — как описано: заподлицо слева, выступ вверх, строка имени ────── */
+  .в01 .реплика:not(.моя) .пузырь > .ава {
+    left: -1px; top: -9px; width: 36px; height: 36px; border-radius: 9px; font-size: 10px;
+  }
+  .в01 .реплика:not(.моя) .автор { padding-left: 44px; }
+
+  /* ── 02 — выступ до самой рамки предыдущего сообщения ─────────────────── */
+  .в02 .реплика:not(.моя) .пузырь > .ава {
+    left: -1px; top: -16px; width: 44px; height: 44px; border-radius: 11px; font-size: 11px;
+  }
+  .в02 .реплика:not(.моя) .автор { padding-left: 52px; }
+
+  /* ── 03 — без выступа: аватар целиком в строке имени ──────────────────── */
+  .в03 .реплика:not(.моя) .пузырь > .ава {
+    left: -1px; top: 11px; width: 18px; height: 18px; border-radius: 5px; font-size: 8px;
+  }
+  .в03 .реплика:not(.моя) .автор { padding-left: 26px; line-height: 18px; }
+
+  /* ── 04 — как 01, но аватар обведён: отделяется от чужой рамки ────────── */
+  .в04 .реплика:not(.моя) .пузырь > .ава {
+    left: -1px; top: -9px; width: 36px; height: 36px; border-radius: 9px; font-size: 10px;
+    box-shadow: 0 0 0 1px var(--рамка);
+  }
+  .в04 .реплика:not(.моя) .автор { padding-left: 44px; }
+
+  /* ── 05 — то же зеркально: заподлицо справа ───────────────────────────── */
+  .в05 .реплика:not(.моя) .пузырь > .ава {
+    right: -1px; left: auto; top: -9px; width: 36px; height: 36px; border-radius: 9px; font-size: 10px;
+  }
+  .в05 .реплика:not(.моя) .автор { padding-right: 44px; }
+
+  /* ── 06 — «ушко»: нижний левый угол прямой, аватар прирос к рамке ─────── */
+  .в06 .реплика:not(.моя) .пузырь > .ава {
+    left: -1px; top: -12px; width: 38px; height: 38px; font-size: 10px;
+    border-radius: 12px 9px 9px 0;
+  }
+  .в06 .реплика:not(.моя) .автор { padding-left: 46px; }
+
+  /* ── 07 — без аватара: полоса слева во всю высоту ─────────────────────── */
+  .в07 .пузырь > .ава { display: none; }
+  .в07 .реплика:not(.моя) .пузырь { border-left: 4px solid var(--навигация); padding-left: 12px; }
+  .в07 .автор { color: var(--текст); }
+
+  /* ── 08 — аватар и имя вынесены над пузырём, на фон ленты ─────────────── */
+  .в08 .реплика:not(.моя) { margin-top: 12px; }
+  .в08 .реплика:not(.моя) .пузырь > .ава {
+    left: -1px; top: -26px; width: 20px; height: 20px; border-radius: 6px; font-size: 8px;
+  }
+  .в08 .реплика:not(.моя) .автор {
+    position: absolute; top: -26px; left: 26px; margin: 0; line-height: 20px; white-space: nowrap;
+  }
+
+  /* ── 09 — 01 плюс серия: аватар и имя только у первой реплики подряд ──── */
+  .в09 .реплика:not(.моя) .пузырь > .ава {
+    left: -1px; top: -9px; width: 36px; height: 36px; border-radius: 9px; font-size: 10px;
+  }
+  .в09 .реплика:not(.моя) .автор { padding-left: 44px; }
+  .в09 .реплика.продолжение .пузырь > .ава,
+  .в09 .реплика.продолжение .автор { display: none; }
+
+  /* ── 10 — строка имени несёт и время, из низа пузыря оно убрано ───────── */
+  .в10 .реплика:not(.моя) .пузырь > .ава {
+    left: -1px; top: -9px; width: 36px; height: 36px; border-radius: 9px; font-size: 10px;
+  }
+  .в10 .реплика:not(.моя) .автор { padding-left: 44px; }
+  .в10 .реплика:not(.моя) .время { display: inline; margin-left: 6px; }
+  .в10 .реплика:not(.моя) .низ-пузыря { display: none; }
+</style>
+
+<div class="лист-док">
+
+<div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-аватар.html</div>
+<h1>Пробы: аватар заподлицо, выступом вверх</h1>
+<p class="подзаголовок">
+  Вторая серия проб по групповому чату. Первая —
+  <a href="пробы-чат.html">пробы-чат.html</a>, там сравнивались положения аватара
+  вообще. Здесь разобран один приём и его развитие.
+</p>
+
+<div class="оговорка">
+  <b>Приём.</b> Аватар лежит <b>внутри</b> пузыря и прижат <b>заподлицо к левой
+  рамке</b> — влево не выходит и ширину не отнимает. Вверх он <b>выступает в зазор
+  между сообщениями</b>, до рамки предыдущего. По высоте он занимает ровно
+  <b>строку имени</b> и ниже неё не спускается, поэтому текст идёт во всю ширину
+  пузыря.
+  <br><br>
+  <b>Обтекания нет ни в одном варианте.</b> Плавающий элемент ломается на коротких
+  репликах, на медиа, на цитате и на длинном имени — вместо него строка имени
+  просто знает ширину аватара и отходит на неё. Ниже строки имени о нём никто не
+  знает.
+  <br><br>
+  <b>★ Как рабочий брал бы 09</b> — тот же приём плюс группировка: аватар и имя
+  только у первой реплики в серии подряд. Второе сообщение того же человека не
+  задаёт вопроса «кто это», и отвечать на него второй раз незачем. Простая форма —
+  <b>01</b>, разница между ними в одном условии.
+</div>
+
+<h2>Ссылки на варианты</h2>
+<div class="навигация-проб">
+  <a href="#в01">01 · как описано</a>
+  <a href="#в02">02 · выступ до рамки</a>
+  <a href="#в03">03 · без выступа</a>
+  <a href="#в04">04 · с обводкой</a>
+  <a href="#в05">05 · заподлицо справа</a>
+  <a href="#в06">06 · ушко</a>
+  <a href="#в07">07 · полоса вместо аватара</a>
+  <a href="#в08">08 · над пузырём</a>
+  <a href="#в09" class="выбор">09 · + серия ★</a>
+  <a href="#в10">10 · время в строке имени</a>
+</div>
+
+<div class="проба" id="в01">
+  <div class="шапка-пробы"><span class="номер">01</span><span class="опис">как описано: 36 px, выступ вверх 9 px</span><span class="свет">имя отходит на 44 px, текст во всю ширину</span></div>
+  <div class="окно срез в01">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович <span class="время">10:15</span></div><div class="текст">Смотри расписание релизов на квартал — миграции вынесены отдельной строкой, чтобы было видно, что от чего зависит.</div><div class="низ-пузыря"><span>10:15</span></div></div></div>
+      <div class="реплика моя"><div class="пузырь"><div class="текст">Посмотрел. Июль поедет, если не закрыть миграции.</div><div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+      <div class="реплика"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:17</span></div><div class="текст">Согласен.</div><div class="низ-пузыря"><span>10:17</span></div></div></div>
+      <div class="реплика продолжение"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:18</span></div><div class="текст">Могу собрать цифры к пятнице.</div><div class="низ-пузыря"><span>10:18</span></div></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+  <div class="трет" style="margin-top:8px">короткая реплика «Согласен» — проверка того, что раскладка не разъезжается</div>
+</div>
+
+<div class="проба" id="в02">
+  <div class="шапка-пробы"><span class="номер">02</span><span class="опис">аватар 44 px, выступ до рамки предыдущего</span><span class="свет">зазор занят целиком</span></div>
+  <div class="окно срез в02">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович <span class="время">10:15</span></div><div class="текст">Смотри расписание релизов на квартал — миграции вынесены отдельной строкой.</div><div class="низ-пузыря"><span>10:15</span></div></div></div>
+      <div class="реплика моя"><div class="пузырь"><div class="текст">Посмотрел. Июль поедет, если не закрыть миграции.</div><div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+      <div class="реплика"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:17</span></div><div class="текст">Согласен.</div><div class="низ-пузыря"><span>10:17</span></div></div></div>
+      <div class="реплика продолжение"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:18</span></div><div class="текст">Могу собрать цифры к пятнице.</div><div class="низ-пузыря"><span>10:18</span></div></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в03">
+  <div class="шапка-пробы"><span class="номер">03</span><span class="опис">без выступа: 18 px целиком в строке имени</span><span class="свет">зазор не трогается вовсе</span></div>
+  <div class="окно срез в03">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович <span class="время">10:15</span></div><div class="текст">Смотри расписание релизов на квартал — миграции вынесены отдельной строкой.</div><div class="низ-пузыря"><span>10:15</span></div></div></div>
+      <div class="реплика моя"><div class="пузырь"><div class="текст">Посмотрел. Июль поедет, если не закрыть миграции.</div><div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+      <div class="реплика"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:17</span></div><div class="текст">Согласен.</div><div class="низ-пузыря"><span>10:17</span></div></div></div>
+      <div class="реплика продолжение"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:18</span></div><div class="текст">Могу собрать цифры к пятнице.</div><div class="низ-пузыря"><span>10:18</span></div></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в04">
+  <div class="шапка-пробы"><span class="номер">04</span><span class="опис">как 01, аватар обведён</span><span class="свет">обводка отделяет его от рамки предыдущего сообщения</span></div>
+  <div class="окно срез в04">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович <span class="время">10:15</span></div><div class="текст">Смотри расписание релизов на квартал — миграции вынесены отдельной строкой.</div><div class="низ-пузыря"><span>10:15</span></div></div></div>
+      <div class="реплика моя"><div class="пузырь"><div class="текст">Посмотрел. Июль поедет, если не закрыть миграции.</div><div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+      <div class="реплика"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:17</span></div><div class="текст">Согласен.</div><div class="низ-пузыря"><span>10:17</span></div></div></div>
+      <div class="реплика продолжение"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:18</span></div><div class="текст">Могу собрать цифры к пятнице.</div><div class="низ-пузыря"><span>10:18</span></div></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в05">
+  <div class="шапка-пробы"><span class="номер">05</span><span class="опис">зеркально: заподлицо справа</span><span class="свет">имя начинается у левого края, аватар в конце строки</span></div>
+  <div class="окно срез в05">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович <span class="время">10:15</span></div><div class="текст">Смотри расписание релизов на квартал — миграции вынесены отдельной строкой.</div><div class="низ-пузыря"><span>10:15</span></div></div></div>
+      <div class="реплика моя"><div class="пузырь"><div class="текст">Посмотрел. Июль поедет, если не закрыть миграции.</div><div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+      <div class="реплика"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:17</span></div><div class="текст">Согласен.</div><div class="низ-пузыря"><span>10:17</span></div></div></div>
+      <div class="реплика продолжение"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:18</span></div><div class="текст">Могу собрать цифры к пятнице.</div><div class="низ-пузыря"><span>10:18</span></div></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в06">
+  <div class="шапка-пробы"><span class="номер">06</span><span class="опис">«ушко»: нижний левый угол прямой</span><span class="свет">аватар выглядит приросшим к рамке, а не лежащим на ней</span></div>
+  <div class="окно срез в06">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович <span class="время">10:15</span></div><div class="текст">Смотри расписание релизов на квартал — миграции вынесены отдельной строкой.</div><div class="низ-пузыря"><span>10:15</span></div></div></div>
+      <div class="реплика моя"><div class="пузырь"><div class="текст">Посмотрел. Июль поедет, если не закрыть миграции.</div><div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+      <div class="реплика"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:17</span></div><div class="текст">Согласен.</div><div class="низ-пузыря"><span>10:17</span></div></div></div>
+      <div class="реплика продолжение"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:18</span></div><div class="текст">Могу собрать цифры к пятнице.</div><div class="низ-пузыря"><span>10:18</span></div></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в07">
+  <div class="шапка-пробы"><span class="номер">07</span><span class="опис">аватара нет: полоса слева во всю высоту</span><span class="свет">различает не лицо, а имя и цвет полосы</span></div>
+  <div class="окно срез в07">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович <span class="время">10:15</span></div><div class="текст">Смотри расписание релизов на квартал — миграции вынесены отдельной строкой.</div><div class="низ-пузыря"><span>10:15</span></div></div></div>
+      <div class="реплика моя"><div class="пузырь"><div class="текст">Посмотрел. Июль поедет, если не закрыть миграции.</div><div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+      <div class="реплика"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:17</span></div><div class="текст">Согласен.</div><div class="низ-пузыря"><span>10:17</span></div></div></div>
+      <div class="реплика продолжение"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:18</span></div><div class="текст">Могу собрать цифры к пятнице.</div><div class="низ-пузыря"><span>10:18</span></div></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в08">
+  <div class="шапка-пробы"><span class="номер">08</span><span class="опис">аватар и имя вынесены над пузырём</span><span class="свет">внутри рамки только речь</span></div>
+  <div class="окно срез в08">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович <span class="время">10:15</span></div><div class="текст">Смотри расписание релизов на квартал — миграции вынесены отдельной строкой.</div><div class="низ-пузыря"><span>10:15</span></div></div></div>
+      <div class="реплика моя"><div class="пузырь"><div class="текст">Посмотрел. Июль поедет, если не закрыть миграции.</div><div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+      <div class="реплика"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:17</span></div><div class="текст">Согласен.</div><div class="низ-пузыря"><span>10:17</span></div></div></div>
+      <div class="реплика продолжение"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:18</span></div><div class="текст">Могу собрать цифры к пятнице.</div><div class="низ-пузыря"><span>10:18</span></div></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в09">
+  <div class="шапка-пробы"><span class="номер">09 ★</span><span class="опис">01 плюс серия — <b>рекомендую</b></span><span class="свет">у второй реплики Сергея аватара и имени нет</span></div>
+  <div class="окно срез в09">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович <span class="время">10:15</span></div><div class="текст">Смотри расписание релизов на квартал — миграции вынесены отдельной строкой, чтобы было видно, что от чего зависит.</div><div class="низ-пузыря"><span>10:15</span></div></div></div>
+      <div class="реплика моя"><div class="пузырь"><div class="текст">Посмотрел. Июль поедет, если не закрыть миграции.</div><div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+      <div class="реплика"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:17</span></div><div class="текст">Согласен.</div><div class="низ-пузыря"><span>10:17</span></div></div></div>
+      <div class="реплика продолжение"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:18</span></div><div class="текст">Могу собрать цифры к пятнице.</div><div class="низ-пузыря"><span>10:18</span></div></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<div class="проба" id="в10">
+  <div class="шапка-пробы"><span class="номер">10</span><span class="опис">строка имени несёт и время</span><span class="свет">из низа пузыря время убрано — экономит строку</span></div>
+  <div class="окно срез в10">
+    <div class="зона-1 подокно"><span class="икона">‹</span><span class="ава мал">КР</span><div class="тянуть"><div class="имя обрез" style="font-size:13px">Команда разработки</div><div class="трет">3 участника</div></div><span class="икона">📞</span></div>
+    <div class="зона-2"><div class="поток">
+      <div class="реплика"><div class="пузырь"><div class="ава мал">БП</div><div class="автор">Борис Петрович <span class="время">10:15</span></div><div class="текст">Смотри расписание релизов на квартал — миграции вынесены отдельной строкой.</div><div class="низ-пузыря"><span>10:15</span></div></div></div>
+      <div class="реплика моя"><div class="пузырь"><div class="текст">Посмотрел. Июль поедет, если не закрыть миграции.</div><div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div></div></div>
+      <div class="реплика"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:17</span></div><div class="текст">Согласен.</div><div class="низ-пузыря"><span>10:17</span></div></div></div>
+      <div class="реплика продолжение"><div class="пузырь"><div class="ава мал">СМ</div><div class="автор">Сергей М. <span class="время">10:18</span></div><div class="текст">Могу собрать цифры к пятнице.</div><div class="низ-пузыря"><span>10:18</span></div></div></div>
+    </div></div>
+    <div class="зона-4"><span class="икона">⊕</span><div class="ввод">Сообщение…</div><span class="икона жив">➤</span></div>
+  </div>
+</div>
+
+<h2>Что здесь проверялось помимо вида</h2>
+<ul class="кратко">
+  <li><b>Короткая реплика.</b> «Согласен» — одно слово: у обтекания на такой строке аватар вылезает за низ пузыря, у этой раскладки нет, потому что аватар про строку имени и ни про что больше.</li>
+  <li><b>Выступ и зазор связаны.</b> Насколько аватар выше рамки — столько же должно оставаться до предыдущего сообщения. В 01 выступ 9 px при зазоре 16, в 02 выступ равен зазору целиком: дальше сообщения начнут наезжать друг на друга.</li>
+  <li><b>Ширина не теряется нигде.</b> Во всех вариантах, кроме 05, текст идёт от левой рамки; аватар отнимает место только у строки имени.</li>
+</ul>
+
+<h2>Что применить</h2>
+<p>Раскладка — десяток строк в <a href="../стиль.css">стиль.css</a>: положение аватара
+и отступ строки имени. В теме сейчас стоит обтекание (вариант 01 из
+<a href="пробы-чат.html">первой серии</a>). Вариант 09 дополнительно требует
+признака «продолжение серии» в разметке: тот же автор и разница во времени меньше
+выбранного окна.</p>
+
+</div>
