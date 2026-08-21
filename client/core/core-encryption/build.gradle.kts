@@ -26,6 +26,8 @@ kotlin {
             // реализует объявленное выше — то же направление, что у core-database с OutboxStore.
             api(projects.domain.domainAccount)
             api(projects.domain.domainChat)
+            // Запечатывание отдаётся насосу очереди, а значит принимает её запись.
+            api(projects.core.coreOutbox)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
