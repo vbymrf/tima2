@@ -21,7 +21,12 @@
 --    серверных идентификаторов.
 
 CREATE TABLE messages (
-    local_id        INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    -- Ровно «INTEGER PRIMARY KEY AUTOINCREMENT», без NOT NULL между ними.
+    -- Найдено прогоном на iOS-симуляторе: SQLite распознаёт псевдоним rowid только
+    -- по этому написанию, и NOT NULL посередине ломает разбор. На JVM проходило —
+    -- sqlite-jdbc несёт свежую сборку SQLite, в iOS она системная и старее.
+    -- NOT NULL здесь и не нужен: INTEGER PRIMARY KEY нулём быть не может.
+    local_id        INTEGER PRIMARY KEY AUTOINCREMENT,
     -- Ключ идемпотентности, назначенный клиентом ДО первой попытки отправки.
     dedup_key       TEXT    NOT NULL UNIQUE,
     -- Приходит с подтверждением сервера; NULL — ещё не отправлено.
