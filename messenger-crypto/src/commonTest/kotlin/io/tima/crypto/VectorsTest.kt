@@ -20,10 +20,7 @@ import kotlin.test.fail
  */
 class VectorsTest {
 
-    private val vectors = Json.parseToJsonElement(
-        javaClass.getResourceAsStream("/vectors.json")?.readBytes()?.decodeToString()
-            ?: fail("vectors.json не найден в тест-ресурсах (../schema/test-vectors)"),
-    ).jsonObject["vectors"]!!.jsonObject
+    private val vectors = Vectors.all
 
     private fun vector(name: String) = vectors[name]?.jsonObject ?: fail("Вектор '$name' отсутствует")
     private fun kotlinx.serialization.json.JsonObject.hex(field: String) =

@@ -1,6 +1,5 @@
 package io.tima.crypto
 
-import com.github.luben.zstd.Zstd
 import io.tima.crypto.proto.ContentKind
 import io.tima.crypto.proto.Envelope
 import io.tima.crypto.proto.EscrowBlob as ProtoEscrowBlob
@@ -21,9 +20,6 @@ import okio.ByteString.Companion.toByteString
  */
 object MessageSerializer {
 
-    /** Уровень zstd; на вывод не влияет ни один контракт — только распаковка нормативна. */
-    private const val ZSTD_LEVEL = 3
-
     /** Потолок распакованного body — защита от zstd-бомбы в конверте. */
     const val MAX_BODY_BYTES: Long = 16L * 1024 * 1024
 
@@ -31,13 +27,20 @@ object MessageSerializer {
 
     /** `zstd(protobuf(body))` — вход для [EnvelopeCipher.seal]. */
     fun encodeBody(body: MessageBody): ByteArray =
-        Zstd.compress(MessageBody.ADAPTER.encode(body), ZSTD_LEVEL)
+        Zstd.compress(MessageBody.ADAPTER.encode(body))
 
-    /** Обратный ход после [EnvelopeCipher.open]: `parse(unzstd(payload))`. */
+    /**
+     * Обратный ход после [EnvelopeCipher.open]: `parse(unzstd(payload))`.
+     *
+     * **Проверка потолка переехала внутрь распаковки** (К2, переход на zstd-kmp).
+     * Раньше здесь спрашивали `Zstd.getFrameContentSize` и сверяли заявленный
+     * размер с [MAX_BODY_BYTES] ДО распаковки. В zstd-kmp такой функции нет, и
+     * это к лучшему: заголовок кадра приходит от отправителя, то есть доверие к
+     * нему было доверием к данным противника. Теперь потолок стоит на
+     * фактическом выходе — обмануть его нечем.
+     */
     fun decodeBody(payload: ByteArray): Result<MessageBody> = runCatching {
-        val size = Zstd.getFrameContentSize(payload)
-        check(size in 0..MAX_BODY_BYTES) { "Недопустимый размер body: $size байт (max $MAX_BODY_BYTES)" }
-        MessageBody.ADAPTER.decode(Zstd.decompress(payload, size.toInt()))
+        MessageBody.ADAPTER.decode(Zstd.decompress(payload, MAX_BODY_BYTES))
     }
 
     // ── Envelope: protobuf (без сжатия) ──

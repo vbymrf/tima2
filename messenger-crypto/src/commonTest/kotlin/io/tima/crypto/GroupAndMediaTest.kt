@@ -72,10 +72,7 @@ class GroupAndMediaTest {
 
     @Test
     fun `media_chunk_keys - деривация ключей чанков совпадает с вектором байт-в-байт`() {
-        val vectors = Json.parseToJsonElement(
-            javaClass.getResourceAsStream("/vectors.json")!!.readBytes().decodeToString(),
-        ).jsonObject["vectors"]!!.jsonObject
-        val v = vectors["media_chunk_keys"]?.jsonObject ?: fail("Вектор 'media_chunk_keys' отсутствует")
+        val v = Vectors["media_chunk_keys"]
         val mediaKey = v["media_key"]!!.jsonPrimitive.content.hexToBytes()
 
         for ((field, index) in listOf("chunk_0" to 0, "chunk_1" to 1, "chunk_10" to 10)) {

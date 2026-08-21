@@ -1,6 +1,5 @@
 package io.tima.crypto
 
-import com.github.luben.zstd.Zstd
 import io.kodium.Kodium
 import io.tima.crypto.proto.Entity
 import io.tima.crypto.proto.EntityType
@@ -21,10 +20,7 @@ import kotlin.test.fail
  */
 class SerializerTest {
 
-    private val vectors = Json.parseToJsonElement(
-        javaClass.getResourceAsStream("/vectors.json")?.readBytes()?.decodeToString()
-            ?: fail("vectors.json не найден в тест-ресурсах"),
-    ).jsonObject["vectors"]!!.jsonObject
+    private val vectors = Vectors.all
 
     companion object {
         // Канонический body KAT-вектора `message_body`. Все offset/length — UTF-16 code units;
@@ -113,7 +109,7 @@ class SerializerTest {
 
     @Test
     fun `zstd-бомба - decodeBody отклоняет body больше лимита`() {
-        val bomb = Zstd.compress(ByteArray(MessageSerializer.MAX_BODY_BYTES.toInt() + 1), 3)
+        val bomb = Zstd.compress(ByteArray(MessageSerializer.MAX_BODY_BYTES.toInt() + 1))
         assertTrue(bomb.size < 1024 * 1024, "бомба должна быть маленькой на проводе")
         assertTrue(MessageSerializer.decodeBody(bomb).isFailure)
     }

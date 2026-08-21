@@ -1,6 +1,5 @@
 package io.tima.crypto
 
-import java.security.MessageDigest
 
 /**
  * Привязка нового устройства по QR (key-lifecycle.md §2; ПЛАН-РЕФАКТОРИНГА.md).
@@ -21,15 +20,16 @@ object DeviceLinkSignature {
 
     /** Подписываемые байты confirm — домен-разделитель + session_id + secret + ключи нового устройства. */
     fun signingBytes(sessionId: String, secret: String, encryptionPub: ByteArray, signingPub: ByteArray): ByteArray {
-        val digest = MessageDigest.getInstance("SHA-256")
-        digest.update("TIMA-DEVICE-LINK-v1".encodeToByteArray())
-        digest.update(byteArrayOf(0))
-        digest.update(sessionId.encodeToByteArray())
-        digest.update(byteArrayOf(0))
-        digest.update(secret.encodeToByteArray())
-        digest.update(byteArrayOf(0))
-        digest.update(encryptionPub)
-        digest.update(signingPub)
-        return digest.digest()
+        // Раньше здесь был пошаговый MessageDigest.update. Заменено на сборку
+        // буфера и один sha256: результат тот же байт в байт — SHA-256 от
+        // склейки равен SHA-256, посчитанному по частям, — а API нужен один
+        // вместо двух, и он общий для всех платформ.
+        val nul = byteArrayOf(0)
+        return sha256(
+            "TIMA-DEVICE-LINK-v1".encodeToByteArray() + nul +
+                sessionId.encodeToByteArray() + nul +
+                secret.encodeToByteArray() + nul +
+                encryptionPub + signingPub,
+        )
     }
 }

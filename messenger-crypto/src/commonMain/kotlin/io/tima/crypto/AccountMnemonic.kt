@@ -2,8 +2,7 @@ package io.tima.crypto
 
 import io.kodium.KodiumPrivateKey
 import io.kodium.ratchet.HKDF
-import java.security.MessageDigest
-import java.security.SecureRandom
+import io.kodium.Kodium
 
 /**
  * Recovery-фраза и ключ личности аккаунта (ADR-0010 §этап 3).
@@ -39,9 +38,28 @@ object AccountMnemonic {
         return words
     }
 
-    /** Новая случайная фраза (12 слов). */
-    fun generate(random: SecureRandom = SecureRandom()): List<String> =
-        entropyToMnemonic(ByteArray(ENTROPY_BYTES).also(random::nextBytes))
+    /**
+     * Новая случайная фраза (12 слов).
+     *
+     * Источник случайности — Kodium: он уже единственный CSPRNG в этом модуле
+     * (им же генерируются ключи), работает на всех таргетах, и второго вводить
+     * незачем. `java.security.SecureRandom` не годится: общий код обязан
+     * компилироваться под iOS.
+     *
+     * Энтропию можно передать явно — этим пользуются проверки по векторам, где
+     * случайность недопустима.
+     */
+    fun generate(entropy: ByteArray = freshEntropy()): List<String> =
+        entropyToMnemonic(entropy)
+
+    private fun freshEntropy(): ByteArray {
+        val key = Kodium.generateHighEntropyKey()
+        require(key.size >= ENTROPY_BYTES) {
+            "Kodium вернул ${key.size} байт, нужно не меньше $ENTROPY_BYTES"
+        }
+        // Префикс равномерно случайных байт остаётся равномерно случайным.
+        return key.copyOf(ENTROPY_BYTES)
+    }
 
     fun entropyToMnemonic(entropy: ByteArray): List<String> {
         require(entropy.size == ENTROPY_BYTES) { "энтропия должна быть $ENTROPY_BYTES байт" }
@@ -96,5 +114,6 @@ object AccountMnemonic {
     )
 
     private fun byteBits(b: Byte): String = (b.toInt() and 0xFF).toString(2).padStart(8, '0')
-    private fun sha256(b: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(b)
+    // sha256 берётся общий, из Bytes.kt: два разных вычисления одного хеша в одном
+    // модуле — это способ однажды получить два разных ответа.
 }

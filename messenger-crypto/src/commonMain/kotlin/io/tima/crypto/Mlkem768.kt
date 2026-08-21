@@ -5,7 +5,6 @@ import asia.hombre.kyber.KyberDecapsulationKey
 import asia.hombre.kyber.KyberEncapsulationKey
 import asia.hombre.kyber.api.MLKEM_768
 import asia.hombre.kyber.interfaces.RandomProvider
-import java.security.SecureRandom
 
 /**
  * ML-KEM-768 (FIPS 203) для escrow-слоя — провайдер KyberKotlin
@@ -85,9 +84,9 @@ object Mlkem768 {
         }
     }
 
-    /** CSPRNG-провайдер на случай, если понадобится явный источник. */
-    internal object SecureRandomProvider : RandomProvider {
-        private val random = SecureRandom()
-        override fun fillWithRandom(byteArray: ByteArray) = random.nextBytes(byteArray)
-    }
+    // Здесь был SecureRandomProvider «на случай, если понадобится явный
+     // источник». Удалён при переводе на KMP: его не вызывала ни одна строка —
+    // keyPair() отдаёт случайность самому MLKEM_768, а KAT-проверки идут через
+    // FixedRandom. Мёртвый код с java.security.SecureRandom внутри мешал бы
+    // компиляции под iOS ради ничего.
 }
