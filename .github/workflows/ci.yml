@@ -57,6 +57,24 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+      # ── Форки крипто в mavenLocal ────────────────────────────────────────
+      # Появилось в К3, когда клиент получил core-encryption и через него
+      # composite-зависимость на messenger-crypto.
+      #
+      # Почему это нужно ЗДЕСЬ, а не только в messenger-crypto: composite build
+      # подставляет проект вместо зависимости, но транзитивные зависимости этого
+      # проекта резолвятся репозиториями ПОТРЕБИТЕЛЯ. Без публикации клиент
+      # найдёт asia.hombre:kyber в mavenCentral — без вариантов под Apple, — и
+      # падение будет выглядеть как «No matching variant of asia.hombre:kyber»,
+      # то есть укажет куда угодно, кроме пропущенного шага.
+      #
+      # Тесты форков здесь НЕ гоняются: их гоняет задача «крипто · iOS-симулятор».
+      # publishToMavenLocal без тестов занимает минуты, с ними — полчаса.
+      - name: 'форки крипто · в mavenLocal'
+        run: |
+          set -o pipefail
+          (cd third-party/KeccakKotlin && ./gradlew publishToMavenLocal --console=plain -x test) 2>&1 | tail -3
+          (cd third-party/KyberKotlin  && ./gradlew publishToMavenLocal --console=plain -x test) 2>&1 | tail -3
       - name: 'jvm · сборка и тесты'
         working-directory: client
         run: |
@@ -92,6 +110,24 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+      # ── Форки крипто в mavenLocal ────────────────────────────────────────
+      # Появилось в К3, когда клиент получил core-encryption и через него
+      # composite-зависимость на messenger-crypto.
+      #
+      # Почему это нужно ЗДЕСЬ, а не только в messenger-crypto: composite build
+      # подставляет проект вместо зависимости, но транзитивные зависимости этого
+      # проекта резолвятся репозиториями ПОТРЕБИТЕЛЯ. Без публикации клиент
+      # найдёт asia.hombre:kyber в mavenCentral — без вариантов под Apple, — и
+      # падение будет выглядеть как «No matching variant of asia.hombre:kyber»,
+      # то есть укажет куда угодно, кроме пропущенного шага.
+      #
+      # Тесты форков здесь НЕ гоняются: их гоняет задача «крипто · iOS-симулятор».
+      # publishToMavenLocal без тестов занимает минуты, с ними — полчаса.
+      - name: 'форки крипто · в mavenLocal'
+        run: |
+          set -o pipefail
+          (cd third-party/KeccakKotlin && ./gradlew publishToMavenLocal --console=plain -x test) 2>&1 | tail -3
+          (cd third-party/KyberKotlin  && ./gradlew publishToMavenLocal --console=plain -x test) 2>&1 | tail -3
       - name: 'ios · окружение'
         run: |
           echo "arch: $(uname -m)"
