@@ -14,15 +14,20 @@ import app.cash.sqldelight.db.SqlDriver
  * симуляторе в CI — не «дополнительная уверенность», а единственное место, где
  * проверяется нативный драйвер.
  */
+/**
+ * **Схема уже создана.** Контракт именно такой, и он стоил упавшего прогона: на iOS
+ * `inMemoryDriver(Schema)` создаёт схему сам, и повторный `Schema.create` валит все
+ * тесты сообщением «table messages already exists». На JVM драйвер схему не создаёт,
+ * поэтому её создаёт платформенная реализация.
+ *
+ * Иначе говоря, «создать схему» — обязанность платформы, а не общего кода: только
+ * платформа знает, сделал ли это уже её драйвер.
+ */
 expect fun testDriver(): SqlDriver
 
-/** База с применённой схемой — на пустом драйвере. */
-fun testDatabase(): TimaDatabase {
-    val driver = testDriver()
-    TimaDatabase.Schema.create(driver)
-    return TimaDatabase(driver)
-}
+/** База на готовом драйвере. */
+fun testDatabase(): TimaDatabase = TimaDatabase(testDriver())
 
-/** База с применённой схемой и настройками — как в бою, только в памяти. */
+/** База с настройками — как в бою, только в памяти. */
 fun testDatabaseWithPragmas(): TimaDatabase =
-    TimaDatabaseFactory.open(testDriver(), createSchema = true)
+    TimaDatabaseFactory.open(testDriver(), createSchema = false)

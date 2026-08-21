@@ -13,3 +13,5 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
  */
 actual fun testDriver(): SqlDriver =
     JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY + "?secure_delete=true&foreign_keys=true")
+        // Схему создаёт платформа: этот драйвер её не создаёт, в отличие от нативного.
+        .also { TimaDatabase.Schema.create(it) }

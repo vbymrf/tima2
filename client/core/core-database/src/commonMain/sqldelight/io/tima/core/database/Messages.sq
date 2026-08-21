@@ -21,11 +21,14 @@
 --    серверных идентификаторов.
 
 CREATE TABLE messages (
-    -- Ровно «INTEGER PRIMARY KEY AUTOINCREMENT», без NOT NULL между ними.
-    -- Найдено прогоном на iOS-симуляторе: SQLite распознаёт псевдоним rowid только
-    -- по этому написанию, и NOT NULL посередине ломает разбор. На JVM проходило —
-    -- sqlite-jdbc несёт свежую сборку SQLite, в iOS она системная и старее.
-    -- NOT NULL здесь и не нужен: INTEGER PRIMARY KEY нулём быть не может.
+    -- Каноническое написание из документации SQLite. NOT NULL здесь не нужен:
+    -- INTEGER PRIMARY KEY — псевдоним rowid, нулём он быть не может.
+    --
+    -- Поправка: сначала я решил, что прежнее «INTEGER NOT NULL PRIMARY KEY
+    -- AUTOINCREMENT» и было причиной падения на iOS. Это оказалось неверно —
+    -- настоящая ошибка лежала двумя строками ниже в том же выводе и звучала
+    -- «table messages already exists». Написание оставлено каноническим, но
+    -- виновато было не оно.
     local_id        INTEGER PRIMARY KEY AUTOINCREMENT,
     -- Ключ идемпотентности, назначенный клиентом ДО первой попытки отправки.
     dedup_key       TEXT    NOT NULL UNIQUE,

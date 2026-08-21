@@ -16,7 +16,7 @@ class PragmaVerificationTest {
     fun правильно_настроенный_драйвер_проходит() {
         // testDriver задаёт настройки в строке подключения — как обязан делать
         // платформенный код в бою.
-        TimaDatabaseFactory.open(testDriver(), createSchema = true)
+        TimaDatabaseFactory.open(testDriver(), createSchema = false)
     }
 
     @Test
