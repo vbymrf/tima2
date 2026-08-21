@@ -37,16 +37,58 @@ frozen:    —
 runs_unfrozen: 0
 
 ## tier: crypto-jvm
-proves:    The messenger-crypto Kotlin/JVM library tests pass.
+proves:    The messenger-crypto library tests pass on the JVM target, BouncyCastle cross-check included.
 stack:     gradle
 setup:     none
 run:
-  - Push-Location messenger-crypto; .\gradlew --no-daemon --rerun-tasks test; Pop-Location
-artifact:  messenger-crypto/build/test-results/test/TEST-*.xml
+  - Push-Location messenger-crypto; .\gradlew --no-daemon --rerun-tasks jvmTest; Pop-Location
+artifact:  messenger-crypto/build/test-results/jvmTest/TEST-*.xml
 requires:  JDK 17; no concurrent Gradle invocation in client
-forbids:   running Gradle from the repository root or a temporary toolchain
+forbids:   running Gradle from the repository root or a temporary toolchain; invoking the task as `test`
+expects:   85 tests, 0 failures, 0 errors, 0 skipped, across 12 classes (measured 2026-08-21)
 frozen:    —
 runs_unfrozen: 0
+
+> **The task is `jvmTest`, not `test`.** Since К2 the module is a Kotlin Multiplatform
+> build and has no aggregate `test` task: the old command fails with "task not found",
+> which reads as a broken module rather than a wrong command. The report path moved
+> for the same reason — `build/test-results/jvmTest/`.
+>
+> **BouncyCastle lives only in `jvmTest`**, deliberately: it is an independent oracle,
+> it never ships, and it does not exist on Apple targets. A run of this tier is
+> therefore the only place where two ML-KEM implementations are compared.
+
+## tier: crypto-ios
+proves:    The canonical test vectors match BYTE FOR BYTE on an iOS simulator — the gate of К2.
+stack:     gradle
+setup:     none
+run:
+  - # macOS only. The order is mandatory: forks must reach mavenLocal first.
+  - Push-Location third-party/KeccakKotlin; .\gradlew publishToMavenLocal; Pop-Location
+  - Push-Location third-party/KyberKotlin;  .\gradlew publishToMavenLocal; Pop-Location
+  - Push-Location messenger-crypto; .\gradlew iosSimulatorArm64Test; Pop-Location
+artifact:  messenger-crypto/build/test-results/iosSimulatorArm64Test/TEST-*.xml
+requires:  macOS with Xcode; JDK 17; both forks in mavenLocal under the upstream coordinates
+forbids:   treating successful compilation as proof; calling the tier skipped on a machine without Xcode
+expects:   at least 70 tests, 0 failures, 0 errors, 0 skipped. Fewer than jvmTest — CrossImplementationTest is JVM-only
+frozen:    —
+runs_unfrozen: 0
+
+> **Compilation proves nothing here, and the project has a scar to show it.** In v1
+> the ML-KEM implementation inside Kodium compiled, passed its own tests, and filled
+> the matrix with 3 % entropy (ADR-0005 Поправка-1). The claim «crypto works on iOS»
+> is earned by vectors matching byte for byte, never by a green build.
+>
+> **Why the forks are published first.** Upstream `asia.hombre:kyber` and
+> `asia.hombre:keccak` publish no Apple artifacts; the forks in `third-party/` carry
+> the same coordinates and differ only by enabled targets. `mavenLocal` precedes
+> `mavenCentral` in `messenger-crypto/settings.gradle.kts` for exactly this reason.
+> Skip the publish and the failure reads as «no variant for iosSimulatorArm64» —
+> pointing anywhere except at the missing step.
+>
+> On Windows this tier cannot run: linking and simulator runs need a Mac. Klib
+> cross-compilation does work, so `compileTestKotlinIosSimulatorArm64` is the most a
+> development machine can claim — and that is not this tier.
 
 ## tier: client-desktop
 proves:    Compose desktop tests pass, including shared client and composite crypto code.
