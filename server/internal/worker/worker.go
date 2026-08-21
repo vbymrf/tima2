@@ -14,15 +14,39 @@ import (
 )
 
 type Worker struct {
-	Store        *store.Store
-	Retention    time.Duration // конверты/события: 90 дней (sync-offline.md §1)
+	Store *store.Store
+	// Retention и AppealWindow — ЗАПАС, а не источник истины. С миграции 0030
+	// сроки берутся из retention_policy: смена требования должна быть правкой
+	// строки в базе, а не перевыкаткой. Эти поля работают только когда строки
+	// политики нет — то есть на базе, где 0030 не применена.
+	Retention    time.Duration // обёртки ключей и журнал событий: 90 дней (sync-offline.md §1)
 	AppealWindow time.Duration // wrapped_GK исключённых: 30 дней (crypto-protocol §4.2)
+}
+
+// wholeDays — длительность в целых сутках. Сроки задаются днями и в переменных
+// окружения, и в retention_policy; дробных суток здесь не бывает.
+func wholeDays(d time.Duration) int { return int(d / (24 * time.Hour)) }
+
+// retentionSeconds — сроки уборки в секундах, из таблицы политик.
+func (w *Worker) retentionSeconds(ctx context.Context) (retention, window int64, err error) {
+	rd, err := w.Store.RetentionDaysOr(ctx, "delivery_retention_days", wholeDays(w.Retention))
+	if err != nil {
+		return 0, 0, fmt.Errorf("политика delivery_retention_days: %w", err)
+	}
+	wd, err := w.Store.RetentionDaysOr(ctx, "appeal_window_days", wholeDays(w.AppealWindow))
+	if err != nil {
+		return 0, 0, fmt.Errorf("политика appeal_window_days: %w", err)
+	}
+	const day = int64(24 * 60 * 60)
+	return int64(rd) * day, int64(wd) * day, nil
 }
 
 // RunOnce прогоняет все GC-задачи один раз; ошибки задач не прерывают остальные.
 func (w *Worker) RunOnce(ctx context.Context) error {
-	retention := int64(w.Retention / time.Second)
-	window := int64(w.AppealWindow / time.Second)
+	retention, window, err := w.retentionSeconds(ctx)
+	if err != nil {
+		return err
+	}
 
 	type job struct {
 		name string
@@ -64,8 +88,14 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 
 // Run — RunOnce сразу и далее по интервалу до отмены ctx.
 func (w *Worker) Run(ctx context.Context, interval time.Duration) {
-	log.Printf("worker: GC каждые %s (ретеншен %s, окно апелляции %s)",
-		interval, w.Retention, w.AppealWindow)
+	// Печатаем то, что будет применено, а не поля структуры: с 0030 сроки берутся
+	// из базы, и поля могут с ними расходиться.
+	if rs, ws, err := w.retentionSeconds(ctx); err == nil {
+		log.Printf("worker: GC каждые %s (ретеншен %d дн., окно апелляции %d дн.)",
+			interval, rs/86400, ws/86400)
+	} else {
+		log.Printf("worker: GC каждые %s (сроки прочитать не удалось: %v)", interval, err)
+	}
 	if err := w.RunOnce(ctx); err != nil {
 		log.Printf("worker: %v", err)
 	}

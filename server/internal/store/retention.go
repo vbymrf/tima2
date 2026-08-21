@@ -27,6 +27,19 @@ const (
 	StateArchived AccountState = "archived"
 )
 
+// RetentionDaysOr — то же, но при отсутствии строки возвращает запасное значение
+// вместо ошибки. Нужен для сроков, переехавших в базу из переменных окружения
+// (миграция 0030): на базе, где миграция ещё не применена, сервер обязан работать
+// по-старому, а не падать на каждом проходе уборки.
+func (s *Store) RetentionDaysOr(ctx context.Context, name string, fallback int) (int, error) {
+	var days int
+	err := s.pool.QueryRow(ctx, `SELECT days FROM retention_policy WHERE name = $1`, name).Scan(&days)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fallback, nil
+	}
+	return days, err
+}
+
 // RetentionDays — срок политики в днях. Сроки живут в базе, а не в коде: смена
 // требования должна быть правкой строки, а не пересборкой (решение 3 плана).
 func (s *Store) RetentionDays(ctx context.Context, name string) (int, error) {

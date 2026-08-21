@@ -62,8 +62,35 @@ func TestWorkerGCAndSyncGap(t *testing.T) {
 		t.Fatalf("активный участник должен сохранить 2 версии, есть %d", len(keys))
 	}
 
-	// Полный GC с нулевым ретеншеном — «всё старше сейчас»
-	w := &worker.Worker{Store: srv.Store, Retention: 0, AppealWindow: 0}
+	// Полный GC с нулевым ретеншеном — «всё старше сейчас». Ноль ставится в
+	// retention_policy, а не в полях воркера: с миграции 0030 сроки берутся из
+	// базы, а поля — только запас для базы без этих строк. Запас здесь намеренно
+	// огромный: если воркер политику не прочитает, не удалится ничего и тест
+	// упадёт. То есть это заодно проверка, что источник сроков — база.
+	//
+	// Значения возвращаются на место в Cleanup: ResetForTests НЕ трогает
+	// retention_policy (там строки, засеянные миграцией), поэтому испорченные
+	// сроки утекли бы в следующие прогоны на этой же базе. Раньше это было
+	// безобидно, теперь от этих строк зависит поведение уборки.
+	for _, name := range []string{"delivery_retention_days", "appeal_window_days"} {
+		was, err := srv.Store.RetentionDays(context.Background(), name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if err := srv.Store.SetRetentionDays(context.Background(), name, was); err != nil {
+				t.Errorf("вернуть %s=%d: %v", name, was, err)
+			}
+		})
+		if err := srv.Store.SetRetentionDays(context.Background(), name, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w := &worker.Worker{
+		Store:        srv.Store,
+		Retention:    999 * 24 * time.Hour,
+		AppealWindow: 999 * 24 * time.Hour,
+	}
 	if err := w.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
