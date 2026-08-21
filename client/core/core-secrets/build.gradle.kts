@@ -16,6 +16,11 @@ kotlin {
     iosSimulatorArm64()
 
     sourceSets {
+        commonMain.dependencies {
+            // Порт регистрации объявлен в domain-account, реализация здесь: слой данных
+            // реализует объявленное выше — то же направление, что у core-database с OutboxStore.
+            api(projects.domain.domainAccount)
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
         }

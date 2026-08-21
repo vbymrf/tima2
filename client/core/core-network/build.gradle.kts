@@ -19,6 +19,9 @@ kotlin {
             // второй набор тех же четырёх исходов ради «чистоты слоёв» значило бы
             // писать преобразование, которое однажды разойдётся с оригиналом.
             api(projects.core.coreOutbox)
+            // Порт регистрации объявлен в domain-account, реализация здесь: слой данных
+            // реализует объявленное выше — то же направление, что у core-database с OutboxStore.
+            api(projects.domain.domainAccount)
             implementation(libs.ktor.client.core)
             // Тело ошибки сервера — {code, message}. Разбирается напрямую, без
             // ktor-content-negotiation: одна структура не стоит плагина.
