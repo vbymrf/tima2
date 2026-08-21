@@ -208,19 +208,128 @@ jobs:
           msg=$(grep -aE 'error:|FAILURE:|What went wrong|Caused by|not found|Could not|Unresolved|no matching|Cannot|^> |^e: ' /tmp/gradle.log | tail -n 30 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
           if [ -z "$msg" ]; then msg=$(tail -n 25 /tmp/gradle.log | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}'); fi
           echo "::error::${msg}"
-  # ── Сервер: сборка и статический разбор ───────────────────────────────────
+  # ── Сервер: сборка, разбор и ВСЕ тесты ────────────────────────────────────
+  # До 2026-08-21 здесь были только build и vet, а 118 тестов шли на одной машине
+  # разработки. То есть зелёный CI не означал, что сервер проверен. Хуже: прогон
+  # без базы ВЫХОДИТ С НУЛЁМ — internal/api/api_test.go:52 при недоступном
+  # PostgreSQL делает t.Skipf, и 70 тестов из 118 просто не выполняются.
+  #
+  # Отсюда две особенности этой задачи:
+  #   1. службы поднимаются здесь же — Docker на раннере есть, и он нужен только
+  #      раннеру, не машине разработки;
+  #   2. пропуск считается ПАДЕНИЕМ. Гейт, который зеленеет на пропусках, —
+  #      это не гейт.
   server:
-    name: server · build + vet
+    name: server · сборка, vet и все тесты
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: tima
+          POSTGRES_PASSWORD: tima-dev-only
+          # Суффикс _test обязателен: ResetForTests отказывается работать на базе
+          # без него, и это защита, а не формальность — setup труncate-ит таблицы.
+          POSTGRES_DB: tima_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U tima -d tima_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+
+    env:
+      TIMA_TEST_DATABASE_URL: postgres://tima:tima-dev-only@localhost:5432/tima_test
+      # Пароля НЕТ намеренно. redis:7 поднимается без пароля, а тест по умолчанию
+      # идёт на redis://:tima-dev-only@… и получает «ERR Client sent AUTH, but no
+      # password is set». Ошибку он трактует как «Redis недоступен» и пропускается:
+      # живая служба читается как отсутствующая.
+      TIMA_TEST_REDIS_URL: redis://localhost:6379
+      TIMA_TEST_S3_ENDPOINT: http://127.0.0.1:9000
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
+
+      # MinIO не может быть service container: образу нужна команда `server /data`,
+      # а service container команду задать не даёт — только образ, env и options.
+      # Поэтому обычным docker run. Бакет media-test создаёт сам тест (blob.New).
+      - name: 'сервер · поднять MinIO'
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=tima-admin \
+            -e MINIO_ROOT_PASSWORD=tima-dev-only \
+            minio/minio:latest server /data
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:9000/minio/health/live >/dev/null; then
+              echo "MinIO готов на попытке $i"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::MinIO не поднялся за 60 с%0A$(docker logs minio 2>&1 | tail -n 20 | awk '{printf "%s%%0A", $0}')"
+          exit 1
+
       - name: 'сервер · сборка'
         working-directory: server
         run: go build ./...
       - name: 'сервер · vet'
         working-directory: server
         run: go vet ./...
+
+      - name: 'сервер · все тесты'
+        working-directory: server
+        run: |
+          set -o pipefail
+          go test -count=1 -v ./... 2>&1 | tee /tmp/go-test.log
+
+      # Отдельный шаг, и он ГЛАВНЫЙ. `go test` печатает «ok» для пакета, в котором
+      # всё пропущено, поэтому итог предыдущего шага сам по себе ничего не
+      # доказывает. Ожидаемые числа — в тире server-full
+      # (.cursor/skills/adaptive-test-runner/project/PROFILE.md).
+      - name: 'сервер · пересчёт: пропуск = падение'
+        if: always()
+        run: |
+          if [ ! -s /tmp/go-test.log ]; then
+            echo "::error::/tmp/go-test.log пуст или отсутствует — шаг тестов не дошёл до запуска. Смотреть шаги сборки и vet выше"
+            exit 1
+          fi
+          run=$(grep -cE '^=== RUN   Test' /tmp/go-test.log || true)
+          pass=$(grep -cE '^--- PASS' /tmp/go-test.log || true)
+          fail=$(grep -cE '^--- FAIL' /tmp/go-test.log || true)
+          skip=$(grep -cE '^--- SKIP' /tmp/go-test.log || true)
+          echo "RUN=$run PASS=$pass FAIL=$fail SKIP=$skip"
+          echo "### сервер: RUN $run · PASS $pass · FAIL $fail · SKIP $skip" >> "$GITHUB_STEP_SUMMARY"
+          bad=0
+          if [ "$skip" -ne 0 ]; then
+            why=$(grep -B2 -E '^--- SKIP' /tmp/go-test.log | grep -oE '(PostgreSQL|Redis|MinIO) недоступен' | sort -u | tr '\n' ' ')
+            names=$(grep -E '^--- SKIP' /tmp/go-test.log | sed 's/^--- SKIP: //' | head -n 8 | awk '{printf "%s%%0A", $0}')
+            echo "::error::пропущено тестов: $skip — для гейта это падение.%0AПричины: ${why:-неизвестны}%0A${names}"
+            bad=1
+          fi
+          if [ "$fail" -ne 0 ]; then
+            names=$(grep -E '^--- FAIL' /tmp/go-test.log | sed 's/^--- FAIL: //' | head -n 10 | awk '{printf "%s%%0A", $0}')
+            echo "::error::упавшие тесты: $fail%0A${names}"
+            bad=1
+          fi
+          # Нижняя граница ловит случай «тесты вообще не запустились»: пакет не
+          # собрался, а пропусков и падений при этом ноль.
+          if [ "$run" -lt 110 ]; then
+            echo "::error::запущено всего $run тестов — ожидалось не меньше 110. Похоже, пакет не собрался"
+            bad=1
+          fi
+          exit $bad
+
+      - name: 'сервер · вывод go test в аннотацию'
+        if: failure()
+        run: |
+          msg=$(grep -aE '^(FAIL|# |.*\.go:[0-9]+:)' /tmp/go-test.log | tail -n 30 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
+          if [ -z "$msg" ]; then msg=$(tail -n 25 /tmp/go-test.log | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}'); fi
+          echo "::error::${msg}"
