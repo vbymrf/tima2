@@ -1,0 +1,116 @@
+-- Локальное хранилище сообщений — Plan.md §3.4.2.
+--
+-- ── ЧТО ЗДЕСЬ РЕШЕНО И ПОЧЕМУ ───────────────────────────────────────────────
+--
+-- 1. Очередь исходящих — СТОЛБЦЫ ЭТОЙ ТАБЛИЦЫ (state, attempts, next_attempt_at,
+--    dedup_key), а не отдельная таблица. Иначе у одного сообщения снова два
+--    источника правды: в v1 список чатов лежал одновременно в SQLite и в
+--    chats.json, и они расходились.
+--
+-- 2. body_enc — те же байты, что уйдут в конверт: zstd(protobuf(MessageBody)),
+--    только под локальным ключом вместо ключа сообщения. Один кодек на провод и на
+--    диск. В v1 packBody склеивал текст и вложения разделителем \n\0, и nodes с
+--    markup через него не проходили вовсе.
+--
+-- 3. dedup_key UNIQUE — защита от двойной записи, когда догон истории пересёкся с
+--    живым каналом. Приём из v1, работает: повторная вставка становится ошибкой
+--    уникальности, а не дублем.
+--
+-- 4. Порядок в чате — по server_ts, если он есть, иначе по client_ts, затем по
+--    local_id. Иначе офлайн-сообщения прыгают в списке в момент получения
+--    серверных идентификаторов.
+
+CREATE TABLE messages (
+    local_id        INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    -- Ключ идемпотентности, назначенный клиентом ДО первой попытки отправки.
+    dedup_key       TEXT    NOT NULL UNIQUE,
+    -- Приходит с подтверждением сервера; NULL — ещё не отправлено.
+    server_id       INTEGER,
+    chat_id         TEXT    NOT NULL,
+    sender_id       TEXT    NOT NULL,
+    -- Часы устройства: они врут, но других на момент составления нет.
+    client_ts       INTEGER NOT NULL,
+    server_ts       INTEGER,
+    -- Состояние машины Outbox (core-outbox, OutboxState.ordinal).
+    state           INTEGER NOT NULL,
+    attempts        INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at INTEGER,
+    reply_to        INTEGER,
+    -- Идентификатор ключа эпохи escrow, под который собран конверт; NULL — конверта
+    -- нет. Позднее запечатывание: конверт в базе НЕ хранится.
+    sealed_epoch    INTEGER,
+    body_enc        BLOB    NOT NULL
+);
+
+-- Порядок в чате. Индекс повторяет правило сортировки, иначе список чата на
+-- нескольких тысячах сообщений начинает сортироваться в памяти.
+CREATE INDEX idx_messages_chat_order ON messages(chat_id, server_ts, client_ts, local_id);
+
+-- Очередь: выборка идёт по состоянию и сроку. Без индекса каждый проход отправки
+-- читает всю таблицу.
+CREATE INDEX idx_messages_queue ON messages(state, next_attempt_at);
+
+-- ── Очередь исходящих ───────────────────────────────────────────────────────
+
+insertQueued:
+INSERT OR IGNORE INTO messages(dedup_key, chat_id, sender_id, client_ts, state, attempts, next_attempt_at, reply_to, body_enc)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Сколько строк затронула последняя вставка: 0 означает, что dedup_key уже был.
+-- Отличать «поставили» от «уже было» обязательно — иначе повторная постановка
+-- сбросит счётчик попыток.
+changes:
+SELECT changes();
+
+byDedupKey:
+SELECT * FROM messages WHERE dedup_key = ?;
+
+-- Готовое к запечатыванию: в очереди и срок пришёл.
+nextQueued:
+SELECT * FROM messages
+WHERE state = ? AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+ORDER BY local_id
+LIMIT 1;
+
+-- Запечатанное, ждущее отправки.
+nextSealed:
+SELECT * FROM messages WHERE state = ? ORDER BY local_id LIMIT 1;
+
+updateState:
+UPDATE messages
+SET state = ?, attempts = ?, next_attempt_at = ?, sealed_epoch = ?, server_id = ?
+WHERE dedup_key = ?;
+
+-- Возврат зависшего при старте: SENDING и SEALED снова в очередь. Без этого
+-- убитое посреди отправки сообщение остаётся висеть навсегда — дефект v1.
+requeueStuck:
+UPDATE messages SET state = ?, sealed_epoch = NULL WHERE state IN (?, ?);
+
+pending:
+SELECT * FROM messages WHERE state IN (?, ?, ?) ORDER BY local_id;
+
+-- ── Чтение переписки ────────────────────────────────────────────────────────
+
+-- Порядок: server_ts, если есть, иначе client_ts; при равенстве — local_id.
+-- COALESCE, а не два запроса: смешанный список офлайн- и серверных сообщений
+-- обязан быть устойчивым.
+chatPage:
+SELECT * FROM messages
+WHERE chat_id = ?
+ORDER BY COALESCE(server_ts, client_ts) DESC, local_id DESC
+LIMIT ?;
+
+markSent:
+UPDATE messages SET state = ?, server_id = ?, server_ts = ?, sealed_epoch = NULL
+WHERE dedup_key = ?;
+
+-- ── Стирание ────────────────────────────────────────────────────────────────
+
+-- Физическое удаление одной переписки. Работает вместе с PRAGMA secure_delete:
+-- без него DELETE оставляет страницы читаемыми, и «удалено» означает только
+-- «не показывается» (ADR-0015).
+deleteChat:
+DELETE FROM messages WHERE chat_id = ?;
+
+countAll:
+SELECT count(*) FROM messages;

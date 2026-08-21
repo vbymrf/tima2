@@ -7,6 +7,9 @@ kotlin = "2.3.10"
 agp = "8.13.2"
 compose = "1.11.1"
 activityCompose = "1.9.3"
+# SQLDelight — выбран ADR-0001. Версии из v1 здесь нет: v1 работал с sqlite-jdbc
+# напрямую, то есть наследовать было нечего. Взята последняя 2.x на 2026-08-21.
+sqldelight = "2.3.2"
 
 [plugins]
 kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
@@ -16,6 +19,12 @@ androidApplication = { id = "com.android.application", version.ref = "agp" }
 androidLibrary = { id = "com.android.library", version.ref = "agp" }
 composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose" }
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
+# Драйверы по платформам: своя реализация под каждую, общего кода они не касаются.
+sqldelight-driver-jvm = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
+sqldelight-driver-native = { module = "app.cash.sqldelight:native-driver", version.ref = "sqldelight" }
+sqldelight-driver-android = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
