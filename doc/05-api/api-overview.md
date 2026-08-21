@@ -9,9 +9,9 @@
 
 | Метод | Путь | Назначение |
 |-------|------|-----------|
-| POST | `/auth/sms/request` | Запрос SMS-кода (регистрация/вход) |
-| POST | `/auth/sms/verify` | Проверка кода → временный токен |
-| POST | `/auth/register` | Завершение регистрации: профиль + публичные ключи устройства; в ответе — 10 резервных кодов (один раз) |
+| POST | `/auth/sms/request` | ✅ Запрос SMS-кода (регистрация/вход) |
+| POST | `/auth/sms/verify` | ✅ Проверка кода → временный токен |
+| POST | `/auth/register` | ✅ Завершение регистрации: профиль + публичные ключи устройства; в ответе — 10 резервных кодов (один раз) |
 | POST | `/auth/guest` | Временный аккаунт: без телефона/email, одно устройство, TTL 30 дней неактивности |
 | POST | `/auth/upgrade` | Апгрейд временного аккаунта до полного (телефон + email + резервные коды) |
 | POST | `/auth/login` | Вход существующего устройства (пароль/биометрия локально) |
@@ -25,8 +25,16 @@
 | POST | `/link/claim` | ✅ **Без авторизации.** Новое устройство меняет `claim_token` на сессию. До подтверждения — 403 `not_ready` (сигнал продолжать опрос, не ошибка) |
 | POST | `/attest/ios` · `/attest/android` | Верификация аттестации |
 
-> ✅ — реализовано и покрыто тестами (`api/device_link_test.go`, `api/devices_test.go`).
-> Строки без пометки в этом документе — проектные, кода за ними может не быть.
+> ✅ — маршрут есть в коде. Пометки сверены целиком 2026-08-21 по
+> `mux.HandleFunc` в `server/internal/api/*.go`; до сверки их несли шесть строк из
+> двадцати шести реализованных. Где реализована **часть** склеенной строки, это
+> сказано в самой строке словами — молчаливое ✅ на «`join` · `/leave`» означало бы,
+> что есть оба.
+>
+> Строки без пометки — проектные, кода за ними может не быть. **Обратное молчание
+> опаснее и оговоркой не покрывается:** кода без строки в каталоге оказалось 45
+> маршрутов из 71. Полный список, извлечённый из кода, — в приложении в конце
+> документа.
 >
 > Раньше здесь значился `POST /link/init` — такой ручки не существует, привязка
 > устроена в три шага (`start` → `confirm` → `claim`), потому что новое устройство
@@ -79,11 +87,11 @@
 | GET/POST | `/chats` | Список / создание чата 1:1 |
 | PATCH | `/chats/{id}/settings` | Пер-пользовательские настройки чата/сущности: архив, закрепление, `block_messages` (запрет карточек от сущности; уведомления — отдельно в `/notifications/settings`) |
 | POST/DELETE | `/messages/{id}/pin` | Закрепить/открепить сообщение |
-| POST | `/messages` | Отправка конверта (payload+escrow+wrapped keys, `client_msg_id` для дедупликации) |
-| GET | `/chats/{id}/messages?before=&limit=` | История (конверты + wrapped keys для устройства) |
+| POST | `/messages` | ✅ Отправка конверта (payload+escrow+wrapped keys, `client_msg_id` для дедупликации) |
+| GET | `/chats/{id}/messages?before=&limit=` | ✅ История (конверты + wrapped keys для устройства) |
 | POST | `/messages/{id}/receipt` | delivered / read / listened |
 | DELETE | `/messages/{id}?scope=me\|all` | Удаление (all = soft delete) |
-| GET | `/keys/devices?user_id=` | Публичные ключи устройств собеседника; для ВП возвращает его identity-ключ (виртуальное «устройство» = vu_id) |
+| GET | `/keys/devices?user_id=` | ✅ Публичные ключи устройств собеседника; для ВП возвращает его identity-ключ (виртуальное «устройство» = vu_id) |
 | GET/PUT | `/keys/prekeys` | PreKey bundles (фаза ratchet) |
 
 ## Сообщества
@@ -105,22 +113,22 @@
 
 | Метод | Путь | Назначение |
 |-------|------|-----------|
-| POST | `/groups` | Создание: `{kind: private\|public, title, community_id?, community_access?, slow_mode_sec, premoderation, threads_only}` ([33-create-group-channel](../doc_UI/33-create-group-channel.md)) |
+| POST | `/groups` | ✅ Создание: `{kind: private\|public, title, community_id?, community_access?, slow_mode_sec, premoderation, threads_only}` ([33-create-group-channel](../doc_UI/33-create-group-channel.md)) |
 | GET/PATCH/DELETE | `/groups/{id}` | Инфо / настройки / удаление (owner) |
 | GET/POST/DELETE | `/groups/{id}/members` | Участники; PUT `…/{uid}/role` (admin/moderator/member); POST `…/{uid}/ban` |
-| POST | `/groups/{id}/messages` | Сообщение (private: SecretBox(GK); public: plaintext; премодерация → pending) |
-| GET | `/groups/{id}/messages` · `?thread=` | История, ветки |
-| POST | `/groups/{id}/keys` | Ротация GK: wrapped_GK[] + escrow_blob |
-| GET | `/groups/{id}/keys?since_version=` | Пропущенные wrapped_GK для устройства |
+| POST | `/groups/{id}/messages` | ✅ Сообщение (private: SecretBox(GK); public: plaintext; премодерация → pending) |
+| GET | `/groups/{id}/messages` · `?thread=` | ✅ История, ветки. Фильтр `?thread=` есть (`listGroupMessages`), как и `?before=` и `?limit=` |
+| POST | `/groups/{id}/keys` | ✅ Ротация GK: wrapped_GK[] + escrow_blob |
+| GET | `/groups/{id}/keys?since_version=` | ✅ Пропущенные wrapped_GK для устройства |
 
 ## Каналы (публикации)
 
 | Метод | Путь | Назначение |
 |-------|------|-----------|
-| POST | `/channels` | Создание: `{title, community_id?, community_access?, who_can_post, premoderation}` |
+| POST | `/channels` | ✅ Создание: `{title, community_id?, community_access?, who_can_post, premoderation}` |
 | GET/PATCH/DELETE | `/channels/{id}` | Инфо / настройки / удаление |
 | GET/POST/DELETE | `/channels/{id}/members` | Роли: owner/admin/author (PUT `…/{uid}/role`) |
-| GET | `/channels/{id}/posts?cursor=` | Лента постов канала (выдача из `publications`) |
+| GET | `/channels/{id}/posts?cursor=` | ✅ Лента постов канала (выдача из `publications`) |
 | GET | `/channels/{id}/stats` | Статистика (по правам) |
 
 > Контент канала создаётся через `/posts` с `author_type='channel'` — сообщений у канала нет.
@@ -129,9 +137,9 @@
 
 | Метод | Путь | Назначение |
 |-------|------|-----------|
-| POST | `/voice-rooms` | Создание: `{title, community_id \| auto_create_community, attached?: {type, id}, speak_policy}` — `community_id` обязателен |
+| POST | `/voice-rooms` | ✅ Создание: `{title, community_id \| auto_create_community, attached?: {type, id}, speak_policy}` — `community_id` обязателен |
 | GET/PATCH/DELETE | `/voice-rooms/{id}` | Инфо / настройки / удаление |
-| POST | `/voice-rooms/{id}/join` · `/leave` | Вход/выход (LiveKit-токен) |
+| POST | `/voice-rooms/{id}/join` · `/leave` | ✅ **только `join`**. `/leave` маршрута нет: выход определяется вебхуком LiveKit, а не запросом клиента |
 | GET | `/voice-rooms/{id}/participants` | Кто в эфире (live, из LiveKit/Redis) |
 | PUT | `/voice-rooms/{id}/members/{uid}/role` | speaker (при speak_policy='by_role') |
 
@@ -169,9 +177,9 @@
 
 | Метод | Путь | Назначение |
 |-------|------|-----------|
-| POST | `/media/init` | Presigned upload / CAS-дедуп (публичное) |
-| POST | `/media/complete` | Фиксация метаданных |
-| GET | `/media/{id}/url` | Presigned download (TTL 10 мин) |
+| POST | `/media/init` | ✅ Presigned upload / CAS-дедуп (публичное) |
+| POST | `/media/complete` | ✅ Фиксация метаданных |
+| GET | `/media/{id}/url` | ✅ Presigned download (TTL 10 мин) |
 
 ## Ленты, посты, реакции
 
@@ -201,8 +209,8 @@
 
 | Метод | Путь | Назначение |
 |-------|------|-----------|
-| POST | `/calls` | Инициировать: создание LiveKit-room + токены |
-| POST | `/calls/{id}/answer` · `/decline` · `/end` | Управление |
+| POST | `/calls` | ✅ Инициировать: создание LiveKit-room + токены |
+| POST | `/calls/{id}/answer` · `/decline` · `/end` | ✅ **`answer` и `end`**; `/decline` маршрута нет — отказ выражается через `end` |
 | GET | `/calls/history` | История звонков |
 
 ## Поиск, уведомления, прочее
@@ -215,3 +223,131 @@
 | POST | `/reports` | Жалоба |
 | GET | `/stats?virtual_user=&period=` | Статистика блогера / ВП |
 | POST | `/bugs` | Баг-репорт из приложения |
+
+---
+
+# Приложение. Фактическая поверхность API · сверено 2026-08-21
+
+> **Зачем приложение, если выше уже каталог.** Каталог — карта **замысла**: он
+> описывает весь ТЗ, включая то, чего на сервере нет. Это законно и в нём же
+> оговорено. Но обратное молчание — код без строки в каталоге — оговоркой не
+> покрывается, а его оказалось больше, чем описанного.
+>
+> Сверка Д3 дала числа:
+>
+> | | |
+> |---|---|
+> | маршрутов в коде | **71** |
+> | из них описано в каталоге выше | **26** |
+> | из этих 26 помечено ✅ «реализовано» | **6** |
+> | есть в коде, но в каталоге **отсутствует** | **45** |
+> | описано в каталоге, кода нет (замысел) | **47** |
+>
+> То есть карта покрывала треть территории, а пометка «реализовано» — двенадцатую
+> часть. Клиент, который на К3 писал бы сеть по этому каталогу, не нашёл бы
+> `POST /chats/{chatID}/read` вовсе.
+>
+> Поэтому ниже — **полный список, извлечённый из кода**, а не написанный руками.
+> Он воспроизводится одной командой, и расхождение ловится её повторным запуском:
+>
+> ```bash
+> grep -rhoE 'mux\.HandleFunc\("[^"]+",[^)]*\)+' server/internal/api/*.go \
+>   | sed -E 's/mux\.HandleFunc\("//; s/",[[:space:]]*/|/; s/\)+$//' \
+>   | sed -E 's#/api/v1##' | sort
+> ```
+>
+> Столбец «токен» означает обёртку `requireActiveDevice`: она требует **живую
+> запись устройства**, а не просто действительный JWT. Отозванное устройство
+> теряет доступ немедленно, не дожидаясь истечения токена.
+
+## Без токена — восемь маршрутов
+
+Список короткий намеренно: каждый пункт здесь — это поверхность, доступная кому
+угодно, и её стоит знать наизусть.
+
+| Метод и путь | Обработчик | Почему без токена |
+|---|---|---|
+| `GET /app/version` | `appVersion` | клиент спрашивает до входа |
+| `GET /ws` | `handleWS` | токен проверяется внутри, при рукопожатии |
+| `POST /auth/sms/request` | `smsRequest` | вход начинается здесь |
+| `POST /auth/sms/verify` | `smsVerify` | то же |
+| `POST /auth/register` | `register` | устройства ещё не существует |
+| `POST /link/start` | `linkStart` | у нового устройства нет аккаунта |
+| `POST /link/claim` | `linkClaim` | оно же опрашивает результат подтверждения |
+| `POST /livekit/webhook` | `livekitWebhook` | зовёт LiveKit; проверяется подписью вебхука, а не токеном |
+
+## Все 71 маршрут
+
+| Метод и путь | Обработчик | Токен |
+|---|---|---|
+| `DELETE /channels/{channelID}/subscribe` | `unsubscribeChannel` | да |
+| `DELETE /chats/{chatID}/archive` | `setChatArchived` | да |
+| `DELETE /devices/{deviceID}` | `revokeDevice` | да |
+| `DELETE /groups/{groupID}/members/{userID}` | `removeGroupMember` | да |
+| `DELETE /groups/{groupID}` | `deleteGroup` | да |
+| `DELETE /users/me` | `deleteAccount` | да |
+| `GET /app/version` | `appVersion` | **нет** |
+| `GET /channels/discover` | `discoverChannels` | да |
+| `GET /channels/{channelID}/posts` | `listChannelPosts` | да |
+| `GET /channels` | `listMyChannels` | да |
+| `GET /chats/archived` | `listArchivedChats` | да |
+| `GET /chats/{chatID}/backup` | `chatBackupList` | да |
+| `GET /chats/{chatID}/messages` | `listMessages` | да |
+| `GET /devices` | `listMyDevices` | да |
+| `GET /escrow/key` | `escrowKeyForChat` | да |
+| `GET /escrow/pubkey` | `escrowPubkey` | да |
+| `GET /groups/{groupID}/keys` | `groupKeys` | да |
+| `GET /groups/{groupID}/members` | `listGroupMembers` | да |
+| `GET /groups/{groupID}/messages` | `listGroupMessages` | да |
+| `GET /groups/{groupID}` | `getGroup` | да |
+| `GET /groups` | `listMyGroups` | да |
+| `GET /keys/devices` | `listDeviceKeys` | да |
+| `GET /media/{mediaID}/url` | `mediaURL` | да |
+| `GET /users/lookup` | `lookupUser` | да |
+| `GET /voice-rooms` | `listVoiceRooms` | да |
+| `GET /ws` | `handleWS` | **нет** |
+| `PATCH /groups/{groupID}` | `patchGroup` | да |
+| `PATCH /users/me/name` | `setDisplayName` | да |
+| `POST /auth/register` | `register` | **нет** |
+| `POST /auth/sms/request` | `smsRequest` | **нет** |
+| `POST /auth/sms/verify` | `smsVerify` | **нет** |
+| `POST /calls/group` | `startGroupCall` | да |
+| `POST /calls/{callID}/answer` | `answerCall` | да |
+| `POST /calls/{callID}/end` | `endCall` | да |
+| `POST /calls/{callID}/join` | `joinCall` | да |
+| `POST /calls` | `startCall` | да |
+| `POST /channels/{channelID}/posts` | `postToChannel` | да |
+| `POST /channels/{channelID}/subscribe` | `subscribeChannel` | да |
+| `POST /channels` | `createChannel` | да |
+| `POST /chats/{chatID}/backup` | `chatBackupSave` | да |
+| `POST /chats/{chatID}/read` | `chatRead` | да |
+| `POST /chats/{chatID}/recover/provide` | `chatRecoverProvide` | да |
+| `POST /chats/{chatID}/recover` | `chatRecover` | да |
+| `POST /chats/{chatID}/typing` | `chatTyping` | да |
+| `POST /groups/{groupID}/keys/recover/provide` | `groupKeyProvide` | да |
+| `POST /groups/{groupID}/keys/recover` | `groupKeyRecover` | да |
+| `POST /groups/{groupID}/keys` | `groupRotate` | да |
+| `POST /groups/{groupID}/members/{userID}/ban` | `banGroupMember` | да |
+| `POST /groups/{groupID}/members` | `addGroupMember` | да |
+| `POST /groups/{groupID}/messages` | `postGroupMessage` | да |
+| `POST /groups` | `createGroup` | да |
+| `POST /link/claim` | `linkClaim` | **нет** |
+| `POST /link/confirm` | `linkConfirm` | да |
+| `POST /link/start` | `linkStart` | **нет** |
+| `POST /livekit/webhook` | `livekitWebhook` | **нет** |
+| `POST /media/complete` | `mediaComplete` | да |
+| `POST /media/init` | `mediaInit` | да |
+| `POST /messages` | `postMessage` | да |
+| `POST /users/discover` | `discoverContacts` | да |
+| `POST /users/identities` | `resolveIdentities` | да |
+| `POST /users/me/reidentify/challenge` | `reidentifyChallenge` | да |
+| `POST /users/me/reidentify` | `reidentify` | да |
+| `POST /users/names` | `resolveNames` | да |
+| `POST /voice-rooms/{roomID}/grant` | `grantSpeaker` | да |
+| `POST /voice-rooms/{roomID}/hand` | `raiseHand` | да |
+| `POST /voice-rooms/{roomID}/join` | `joinVoiceRoom` | да |
+| `POST /voice-rooms/{roomID}/revoke` | `revokeSpeaker` | да |
+| `POST /voice-rooms` | `createVoiceRoom` | да |
+| `PUT /chats/{chatID}/archive` | `setChatArchived` | да |
+| `PUT /devices/me/platform` | `setMyPlatform` | да |
+| `PUT /groups/{groupID}/members/{userID}/role` | `setGroupRole` | да |
