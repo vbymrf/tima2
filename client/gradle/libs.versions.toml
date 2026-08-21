@@ -10,6 +10,12 @@ activityCompose = "1.9.3"
 # SQLDelight — выбран ADR-0001. Версии из v1 здесь нет: v1 работал с sqlite-jdbc
 # напрямую, то есть наследовать было нечего. Взята последняя 2.x на 2026-08-21.
 sqldelight = "2.3.2"
+# Ktor — версия из v1 (тег ref/client-v1, composeApp/build.gradle.kts): она
+# собиралась и работала в живой сети. Замена — отдельная задача с прогоном.
+ktor = "3.5.1"
+# Корутины нужны только тестам транспорта: сам он suspend-функции берёт от Ktor.
+coroutines = "1.10.2"
+serialization = "1.7.3"
 
 [plugins]
 kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
@@ -28,3 +34,11 @@ sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sq
 sqldelight-driver-jvm = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
 sqldelight-driver-native = { module = "app.cash.sqldelight:native-driver", version.ref = "sqldelight" }
 sqldelight-driver-android = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+# Движки: OkHttp на JVM и Android, Darwin на Apple. Общий код их не видит.
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
+# MockEngine: проверка транспорта без сети и без сервера.
+ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
