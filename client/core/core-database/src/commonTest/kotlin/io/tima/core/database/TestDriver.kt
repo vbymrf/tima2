@@ -28,6 +28,6 @@ expect fun testDriver(): SqlDriver
 /** База на готовом драйвере. */
 fun testDatabase(): TimaDatabase = TimaDatabase(testDriver())
 
-/** База с настройками — как в бою, только в памяти. */
+/** База с проверкой настроек — как в бою, только в памяти. */
 fun testDatabaseWithPragmas(): TimaDatabase =
     TimaDatabaseFactory.open(testDriver(), createSchema = false)
