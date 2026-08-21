@@ -13,6 +13,9 @@ sqldelight = "2.3.2"
 # Ktor — версия из v1 (тег ref/client-v1, composeApp/build.gradle.kts): она
 # собиралась и работала в живой сети. Замена — отдельная задача с прогоном.
 ktor = "3.5.1"
+# jna-platform несёт готовый Crypt32Util (DPAPI): в JDK такого API нет, а JNI-обвязка
+# ради двух вызовов означала бы свой двоичный артефакт в сборке.
+jna = "5.14.0"
 # Корутины нужны только тестам транспорта: сам он suspend-функции берёт от Ktor.
 coroutines = "1.10.2"
 serialization = "1.7.3"
@@ -39,6 +42,7 @@ ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 # MockEngine: проверка транспорта без сети и без сервера.
+jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
