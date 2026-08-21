@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 
 /**
  * Выход этапа К3 звучит буквально: «Outbox не теряет и не дублирует **ни в одном
- * состоянии**». Здесь это и проверяется — по состоянию на тест, а не одним «путь
+ * состоянии**». Здесь это проверяется по состоянию на тест, а не одним «путь
  * туда-обратно работает».
  *
  * Часы поддельные и управляются вручную: правильность машины зависит от порядка
@@ -23,10 +23,22 @@ class OutboxTest {
     private val store = InMemoryOutboxStore()
     private val outbox = Outbox(store, nowMs = { время })
 
-    private val конверт = byteArrayOf(1, 2, 3)
+    private val тело = byteArrayOf(1, 2, 3)
 
-    private fun поставить(id: String = "cmid-1") =
-        outbox.enqueue(id, chatId = "chat-1", envelope = конверт)
+    /** Счётчик запечатываний: по нему видно, сработал ли кэш конвертов. */
+    private var запечатано = 0
+    private val запечатать: (OutboxEntry) -> ByteArray = {
+        запечатано++
+        byteArrayOf(0x10, 0x20) + it.body
+    }
+
+    private fun поставить(id: String = "dedup-1") = outbox.enqueue(id, "chat-1", тело)
+
+    /** Полный путь до SENDING: запечатать под эпоху и забрать. */
+    private fun довести(эпоха: Int = 1): ReadyToSend? {
+        outbox.sealNext(эпоха, запечатать)
+        return outbox.claimForSend()
+    }
 
     // ── не теряет ────────────────────────────────────────────────────────────
 
@@ -35,91 +47,172 @@ class OutboxTest {
         // Инвентарь, пункт 7: в v1 такое сообщение оставалось в SENDING навсегда —
         // то есть пропадало без следа для человека.
         поставить()
-        val взято = outbox.next()
-        assertNotNull(взято)
-        assertEquals(OutboxState.SENDING, store.byClientMsgId("cmid-1")?.state)
+        assertNotNull(довести())
+        assertEquals(OutboxState.SENDING, store.byDedupKey("dedup-1")?.state)
 
-        // Здесь процесс умирает: результата попытки нет и не будет.
-        val вернулось = outbox.recoverOnStart()
+        val вернулось = outbox.recoverOnStart() // здесь процесс умер
 
-        assertEquals(1, вернулось, "зависшее в SENDING обязано вернуться в очередь")
-        assertEquals(OutboxState.QUEUED, store.byClientMsgId("cmid-1")?.state)
-        assertNotNull(outbox.next(), "после перезапуска сообщение снова готово к отправке")
+        assertEquals(1, вернулось)
+        assertEquals(OutboxState.QUEUED, store.byDedupKey("dedup-1")?.state)
+        assertNotNull(довести(), "после перезапуска сообщение снова доходит до отправки")
+    }
+
+    @Test
+    fun убитое_в_состоянии_запечатано_тоже_возвращается() {
+        // SEALED не переживает перезапуск по определению: конверт держится в памяти.
+        // Значит запись обязана вернуться в очередь, а не остаться «запечатанной» без
+        // конверта — иначе она не уйдёт никогда.
+        поставить()
+        outbox.sealNext(1, запечатать)
+        assertEquals(OutboxState.SEALED, store.byDedupKey("dedup-1")?.state)
+
+        assertEquals(1, outbox.recoverOnStart())
+        assertEquals(OutboxState.QUEUED, store.byDedupKey("dedup-1")?.state)
+        assertEquals(0, outbox.cachedEnvelopeCount(), "кэш конвертов обязан быть пуст")
     }
 
     @Test
     fun временный_отказ_возвращает_в_очередь_а_не_теряет() {
         поставить()
-        outbox.next()
-        outbox.onOutcome("cmid-1", SendOutcome.Retry(afterMs = 0))
+        довести()
+        outbox.onOutcome("dedup-1", SendOutcome.Retry())
 
-        val запись = store.byClientMsgId("cmid-1")!!
+        val запись = store.byDedupKey("dedup-1")!!
         assertEquals(OutboxState.QUEUED, запись.state)
         assertEquals(1, запись.attempts)
+        assertNull(запись.sealedForEpoch, "конверт больше не считается годным")
         assertEquals(1, outbox.pending().size)
     }
 
     @Test
-    fun запись_в_очереди_переживает_любое_число_перезапусков() {
+    fun запись_переживает_любое_число_перезапусков() {
         поставить()
         repeat(5) {
-            outbox.next()
-            outbox.recoverOnStart() // падение до получения результата
+            довести()
+            outbox.recoverOnStart()
         }
-        assertEquals(OutboxState.QUEUED, store.byClientMsgId("cmid-1")?.state)
+        assertEquals(OutboxState.QUEUED, store.byDedupKey("dedup-1")?.state)
         assertEquals(1, store.all().size, "перезапуски не должны размножать запись")
     }
 
     // ── не дублирует ─────────────────────────────────────────────────────────
 
     @Test
-    fun повторная_постановка_того_же_идентификатора_не_даёт_второй_записи() {
-        // Инвентарь, пункт 8: догон истории пересекается с живым каналом, и без
-        // уникальности своего идентификатора это давало дубль.
-        assertTrue(поставить("cmid-1"))
-        assertFalse(поставить("cmid-1"), "второй раз — не поставлено")
+    fun повторная_постановка_того_же_ключа_не_даёт_второй_записи() {
+        // Инвентарь, пункт 8: догон истории пересекается с живым каналом.
+        assertTrue(поставить("dedup-1"))
+        assertFalse(поставить("dedup-1"))
         assertEquals(1, store.all().size)
     }
 
     @Test
     fun повторная_постановка_не_сбрасывает_счётчик_попыток() {
-        // Иначе сообщение, которое не уходит, вечно начинало бы отсчёт заново — и
-        // лестница задержек никогда не доросла бы до двух минут.
+        // Иначе неотправляемое сообщение вечно начинало бы отсчёт заново, и лестница
+        // задержек никогда не доросла бы до двух минут.
         поставить()
-        outbox.next()
-        outbox.onOutcome("cmid-1", SendOutcome.Retry(afterMs = 0))
-        val было = store.byClientMsgId("cmid-1")!!
+        довести()
+        outbox.onOutcome("dedup-1", SendOutcome.Retry())
+        val было = store.byDedupKey("dedup-1")!!
 
-        поставить() // повтор
-        val стало = store.byClientMsgId("cmid-1")!!
+        поставить()
 
+        val стало = store.byDedupKey("dedup-1")!!
         assertEquals(было.attempts, стало.attempts)
         assertEquals(было.nextAttemptAtMs, стало.nextAttemptAtMs)
     }
 
     @Test
-    fun взятое_на_отправку_второй_раз_не_берётся() {
+    fun запечатанное_второй_раз_не_берётся() {
         // Между «выбрал» и «пометил» нельзя оказаться: иначе два вызова возьмут одну
-        // запись, и сообщение уйдёт дважды.
+        // запись и сообщение уйдёт дважды.
         поставить()
-        assertNotNull(outbox.next())
-        assertNull(outbox.next(), "запись в SENDING не должна выдаваться снова")
+        outbox.sealNext(1, запечатать)
+        assertNotNull(outbox.claimForSend())
+        assertNull(outbox.claimForSend())
         assertEquals(1, store.claims)
     }
 
     @Test
     fun ответ_дубликат_считается_успехом_а_не_поводом_повторять() {
-        // Сервер дедуплицирует по client_msg_id. Если считать это ошибкой, клиент
-        // будет повторять вечно сообщение, которое давно дошло.
         поставить()
-        outbox.next()
-        outbox.onOutcome("cmid-1", SendOutcome.Duplicate(serverMessageId = 77))
+        довести()
+        outbox.onOutcome("dedup-1", SendOutcome.Duplicate(serverMessageId = 77))
 
-        val запись = store.byClientMsgId("cmid-1")!!
+        val запись = store.byDedupKey("dedup-1")!!
         assertEquals(OutboxState.SENT, запись.state)
         assertEquals(77L, запись.serverMessageId)
-        assertNull(outbox.next(), "отправленное больше не берётся")
         assertEquals(0, outbox.pending().size)
+        assertEquals(0, outbox.cachedEnvelopeCount(), "конверт отправленного не держим")
+    }
+
+    // ── позднее запечатывание и эпохи escrow ─────────────────────────────────
+
+    @Test
+    fun в_очереди_лежит_тело_а_не_конверт() {
+        // Суть позднего запечатывания: пока сообщение ждёт, конверта не существует.
+        поставить()
+        val запись = store.byDedupKey("dedup-1")!!
+        assertEquals(OutboxState.QUEUED, запись.state)
+        assertNull(запись.sealedForEpoch)
+        assertEquals(0, запечатано, "запечатывать до попытки отправки нельзя")
+        assertEquals(0, outbox.cachedEnvelopeCount())
+    }
+
+    @Test
+    fun смена_эпохи_отменяет_запечатанное() {
+        // ADR-0016: за время ожидания успевает смениться ключ эпохи escrow, и заранее
+        // собранный конверт унёс бы устаревший ключ — сообщение стало бы недоступно по
+        // ордеру молча.
+        поставить()
+        outbox.sealNext(эпоха(1), запечатать)
+        assertEquals(1, запечатано)
+
+        outbox.onEpochChanged(эпоха(2))
+
+        assertEquals(OutboxState.QUEUED, store.byDedupKey("dedup-1")?.state)
+        assertNull(store.byDedupKey("dedup-1")?.sealedForEpoch)
+        assertEquals(0, outbox.cachedEnvelopeCount())
+
+        // И запечатывается заново — уже под новую эпоху.
+        val снова = outbox.sealNext(эпоха(2), запечатать)
+        assertEquals(2, запечатано)
+        assertEquals(2, снова?.sealedForEpoch)
+    }
+
+    @Test
+    fun внутри_одной_эпохи_повтор_не_шифрует_заново_лишний_раз() {
+        // Кэш существует ровно для этого: повторы внутри эпохи не должны платить
+        // запечатыванием каждый раз.
+        поставить()
+        outbox.sealNext(1, запечатать)
+        assertEquals(1, запечатано)
+
+        val первый = outbox.claimForSend()
+        assertNotNull(первый)
+        // Тот же конверт, взятый повторно из кэша, без нового запечатывания.
+        assertEquals(1, запечатано)
+        assertEquals(1, outbox.cachedEnvelopeCount())
+    }
+
+    @Test
+    fun запечатанное_под_чужую_эпоху_без_конверта_возвращается_в_очередь() {
+        // Крайний случай: состояние SEALED в базе есть, конверта в кэше нет. Молча
+        // отправлять нечего, и терять запись нельзя.
+        поставить()
+        outbox.sealNext(1, запечатать)
+        outbox.recoverOnStart() // кэш пуст, запись вернулась
+        store.update(store.byDedupKey("dedup-1")!!.copy(state = OutboxState.SEALED))
+
+        assertNull(outbox.claimForSend(), "конверта нет — отправлять нечего")
+        assertEquals(OutboxState.QUEUED, store.byDedupKey("dedup-1")?.state)
+    }
+
+    @Test
+    fun пустой_конверт_от_запечатывания_отвергается() {
+        поставить()
+        assertFailsWith<IllegalArgumentException> {
+            outbox.sealNext(1) { ByteArray(0) }
+        }
     }
 
     // ── лестница задержек ────────────────────────────────────────────────────
@@ -128,101 +221,92 @@ class OutboxTest {
     fun задержки_растут_по_измеренной_лестнице_и_упираются_в_последнюю() {
         // Значения из живых испытаний v1: секунда, пять, две минуты (LinkState).
         поставить()
-        val ожидаемые = listOf(1_000L, 5_000L, 120_000L, 120_000L)
-        for (задержка in ожидаемые) {
-            время += задержка // дождались прошлой
-            val взято = outbox.next()
-            assertNotNull(взято, "на задержке $задержка запись должна была стать готовой")
-            outbox.onOutcome("cmid-1", SendOutcome.Retry(afterMs = 0))
-            assertEquals(
-                время + задержка,
-                store.byClientMsgId("cmid-1")!!.nextAttemptAtMs,
-                "неверная задержка после ${store.byClientMsgId("cmid-1")!!.attempts} попыток",
-            )
+        for (задержка in listOf(1_000L, 5_000L, 120_000L, 120_000L)) {
+            время += задержка
+            assertNotNull(довести(), "на задержке $задержка запись должна была стать готовой")
+            outbox.onOutcome("dedup-1", SendOutcome.Retry())
+            assertEquals(время + задержка, store.byDedupKey("dedup-1")!!.nextAttemptAtMs)
         }
     }
 
     @Test
-    fun до_срока_запись_не_выдаётся() {
+    fun до_срока_запись_не_запечатывается() {
         поставить()
-        outbox.next()
-        outbox.onOutcome("cmid-1", SendOutcome.Retry(afterMs = 0))
+        довести()
+        outbox.onOutcome("dedup-1", SendOutcome.Retry())
 
-        assertNull(outbox.next(), "секунда ещё не прошла")
+        assertNull(outbox.sealNext(1, запечатать), "секунда ещё не прошла")
         время += 1_000
-        assertNotNull(outbox.next())
+        assertNotNull(outbox.sealNext(1, запечатать))
     }
 
     @Test
     fun подсказка_сервера_сильнее_нашей_лестницы() {
-        // Retry-After: сервер знает про свою перегрузку больше нас.
         поставить()
-        outbox.next()
-        outbox.onOutcome("cmid-1", SendOutcome.Retry(afterMs = 30_000))
-        assertEquals(время + 30_000, store.byClientMsgId("cmid-1")!!.nextAttemptAtMs)
+        довести()
+        outbox.onOutcome("dedup-1", SendOutcome.Retry(afterMs = 30_000))
+        assertEquals(время + 30_000, store.byDedupKey("dedup-1")!!.nextAttemptAtMs)
     }
 
     // ── терминальные состояния и защита от неверных вызовов ──────────────────
 
     @Test
-    fun отказ_по_сути_не_повторяется() {
+    fun отказ_по_сути_уводит_в_dead_и_не_повторяется() {
         поставить()
-        outbox.next()
-        outbox.onOutcome("cmid-1", SendOutcome.Permanent("подпись не сошлась"))
+        довести()
+        outbox.onOutcome("dedup-1", SendOutcome.Permanent("подпись не сошлась"))
 
-        assertEquals(OutboxState.FAILED, store.byClientMsgId("cmid-1")?.state)
-        assertNull(outbox.next())
-        assertEquals(0, outbox.pending().size, "FAILED — не «в очереди», человеку это видно иначе")
+        assertEquals(OutboxState.DEAD, store.byDedupKey("dedup-1")?.state)
+        assertNull(outbox.sealNext(1, запечатать))
+        assertEquals(0, outbox.pending().size, "DEAD — не «в очереди», человеку это видно иначе")
     }
 
     @Test
     fun результат_без_попытки_отвергается() {
-        // Результат приходит только на то, что было взято. Иначе запись, лежащая в
-        // очереди, могла бы «стать отправленной» из-за путаницы в идентификаторах.
         поставить()
+        outbox.sealNext(1, запечатать) // SEALED, но не SENDING
         assertFailsWith<IllegalArgumentException> {
-            outbox.onOutcome("cmid-1", SendOutcome.Accepted(1))
+            outbox.onOutcome("dedup-1", SendOutcome.Accepted(1))
         }
     }
 
     @Test
-    fun результат_на_чужой_идентификатор_отвергается() {
+    fun результат_на_чужой_ключ_отвергается() {
         поставить()
-        outbox.next()
+        довести()
         assertFailsWith<IllegalStateException> {
-            outbox.onOutcome("cmid-которого-нет", SendOutcome.Accepted(1))
+            outbox.onOutcome("dedup-которого-нет", SendOutcome.Accepted(1))
         }
     }
 
     @Test
-    fun пустой_идентификатор_и_пустой_конверт_не_принимаются() {
-        // Пустой clientMsgId лишает сервер возможности опознать повтор, а пустой
-        // конверт — это отправка ничего, которую заметят только у получателя.
-        assertFailsWith<IllegalArgumentException> { outbox.enqueue("", "chat-1", конверт) }
-        assertFailsWith<IllegalArgumentException> { outbox.enqueue("cmid-2", "chat-1", ByteArray(0)) }
+    fun пустой_ключ_и_пустое_тело_не_принимаются() {
+        assertFailsWith<IllegalArgumentException> { outbox.enqueue("", "chat-1", тело) }
+        assertFailsWith<IllegalArgumentException> { outbox.enqueue("dedup-2", "chat-1", ByteArray(0)) }
     }
 
     // ── порядок ──────────────────────────────────────────────────────────────
 
     @Test
     fun очередь_отдаёт_в_порядке_постановки() {
-        поставить("cmid-1")
-        поставить("cmid-2")
-        поставить("cmid-3")
-
-        assertEquals("cmid-1", outbox.next()?.clientMsgId)
-        assertEquals("cmid-2", outbox.next()?.clientMsgId)
-        assertEquals("cmid-3", outbox.next()?.clientMsgId)
+        поставить("dedup-1")
+        поставить("dedup-2")
+        assertEquals("dedup-1", довести()?.entry?.dedupKey)
+        outbox.onOutcome("dedup-1", SendOutcome.Accepted(1))
+        assertEquals("dedup-2", довести()?.entry?.dedupKey)
     }
 
     @Test
     fun отложенная_запись_не_загораживает_готовую() {
         // Иначе одно неотправляемое сообщение остановило бы всю переписку.
-        поставить("cmid-1")
-        outbox.next()
-        outbox.onOutcome("cmid-1", SendOutcome.Retry(afterMs = 60_000))
+        поставить("dedup-1")
+        довести()
+        outbox.onOutcome("dedup-1", SendOutcome.Retry(afterMs = 60_000))
 
-        поставить("cmid-2")
-        assertEquals("cmid-2", outbox.next()?.clientMsgId)
+        поставить("dedup-2")
+        assertEquals("dedup-2", довести()?.entry?.dedupKey)
     }
+
+    /** Читается как «эпоха N»: идентификатор ключа эпохи escrow. */
+    private fun эпоха(n: Int) = n
 }
