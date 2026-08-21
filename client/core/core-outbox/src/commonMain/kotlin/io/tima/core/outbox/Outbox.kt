@@ -210,6 +210,9 @@ class Outbox(
      * переживший перезапуск, унёс бы ключ эпохи, которой уже нет.
      *
      * Смысл кэша один: не шифровать заново на каждом повторе **внутри одной эпохи**.
+     * Отсюда следствие, которое стоит держать в голове: запись в `QUEUED` с непустым
+     * `sealedForEpoch` — законное состояние. Оно означает «ждёт повтора, конверт ещё
+     * годен», и `sealNext` его узнаёт.
      */
     private val sealedEnvelopes = HashMap<String, ByteArray>()
 
@@ -262,9 +265,16 @@ class Outbox(
         cachedEpoch = epochKeyId
 
         val entry = store.nextQueued(nowMs()) ?: return null
-        val envelope = seal(entry)
-        require(envelope.isNotEmpty()) { "запечатывание вернуло пустой конверт" }
-        sealedEnvelopes[entry.dedupKey] = envelope
+        // Повтор внутри одной эпохи берёт готовый конверт — ровно для этого кэш и
+        // существует. Годность проверяется по записи, а не по cachedEpoch: cachedEpoch
+        // к этой строке уже равен epochKeyId, а под какую эпоху собран конверт — свойство
+        // записи. Те же байты на повторе — это и есть повтор: сервер опознаёт его по
+        // dedup_key, поэтому пересобирать конверт незачем.
+        val готовый = if (entry.sealedForEpoch == epochKeyId) sealedEnvelopes[entry.dedupKey] else null
+        val envelope = готовый ?: seal(entry).also {
+            require(it.isNotEmpty()) { "запечатывание вернуло пустой конверт" }
+            sealedEnvelopes[entry.dedupKey] = it
+        }
         val updated = entry.copy(state = OutboxState.SEALED, sealedForEpoch = epochKeyId)
         store.update(updated)
         return updated
@@ -313,8 +323,12 @@ class Outbox(
             is SendOutcome.Retry -> entry.copy(
                 // В QUEUED, а не в SEALED: пока запись ждёт, эпоха может смениться, и
                 // решать это должен sealNext, а не память о прошлом конверте.
+                //
+                // Но sealedForEpoch и конверт в кэше **сохраняются**. Иначе кэш не
+                // выполняет того, для чего заведён: повтор внутри той же эпохи платил бы
+                // упаковкой ключа на каждое устройство получателя заново. Смена эпохи
+                // очистит и поле, и кэш — discardSealed.
                 state = OutboxState.QUEUED,
-                sealedForEpoch = null,
                 attempts = entry.attempts + 1,
                 nextAttemptAtMs = nowMs() + delayFor(entry.attempts, outcome.afterMs),
             )

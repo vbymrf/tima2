@@ -16,8 +16,15 @@ kotlin {
     iosSimulatorArm64()
 
     sourceSets {
+        commonMain.dependencies {
+            // Корутины нужны ТОЛЬКО насосу: сами машины состояний синхронные и
+            // остаются такими. Ограничение одновременных отправок и паузы между
+            // попытками без планировщика не сделать.
+            implementation(libs.kotlinx.coroutines.core)
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }

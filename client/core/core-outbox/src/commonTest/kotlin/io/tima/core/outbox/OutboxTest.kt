@@ -80,7 +80,7 @@ class OutboxTest {
         val запись = store.byDedupKey("dedup-1")!!
         assertEquals(OutboxState.QUEUED, запись.state)
         assertEquals(1, запись.attempts)
-        assertNull(запись.sealedForEpoch, "конверт больше не считается годным")
+        assertEquals(1, запись.sealedForEpoch, "эпоха та же — конверт ещё годен")
         assertEquals(1, outbox.pending().size)
     }
 
@@ -180,18 +180,26 @@ class OutboxTest {
     }
 
     @Test
-    fun внутри_одной_эпохи_повтор_не_шифрует_заново_лишний_раз() {
-        // Кэш существует ровно для этого: повторы внутри эпохи не должны платить
-        // запечатыванием каждый раз.
+    fun внутри_одной_эпохи_повтор_не_шифрует_заново() {
+        // Кэш существует ровно для этого: повтор внутри эпохи не должен платить
+        // запечатыванием заново — а это упаковка ключа на каждое устройство получателя.
         поставить()
         outbox.sealNext(1, запечатать)
-        assertEquals(1, запечатано)
-
         val первый = outbox.claimForSend()
         assertNotNull(первый)
-        // Тот же конверт, взятый повторно из кэша, без нового запечатывания.
         assertEquals(1, запечатано)
-        assertEquals(1, outbox.cachedEnvelopeCount())
+
+        // Круг целиком: сеть отказала, срок пришёл, отправляем снова.
+        outbox.onOutcome("dedup-1", SendOutcome.Retry())
+        время += 10_000
+        val второй = outbox.sealNext(1, запечатать)
+
+        assertEquals(1, запечатано, "конверт взят из кэша, а не собран заново")
+        assertEquals(OutboxState.SEALED, второй?.state)
+        assertTrue(
+            первый.envelope.contentEquals(outbox.claimForSend()!!.envelope),
+            "на повтор уходят те же байты: сервер опознаёт повтор по dedup_key",
+        )
     }
 
     @Test
