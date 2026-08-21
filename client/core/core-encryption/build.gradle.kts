@@ -25,6 +25,7 @@ kotlin {
             // Порт регистрации объявлен в domain-account, реализация здесь: слой данных
             // реализует объявленное выше — то же направление, что у core-database с OutboxStore.
             api(projects.domain.domainAccount)
+            api(projects.domain.domainChat)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

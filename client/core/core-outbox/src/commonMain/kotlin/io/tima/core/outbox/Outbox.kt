@@ -1,5 +1,7 @@
 package io.tima.core.outbox
 
+import io.tima.domain.chat.OutgoingQueue
+
 /**
  * Состояние исходящего сообщения — [Plan.md §3.4](../../../../../../../../doc_mig/Plan.md).
  *
@@ -203,7 +205,7 @@ class Outbox(
      * (`LinkState.retryDelayMs`): секунда, пять, две минуты. Последняя повторяется.
      */
     private val backoffMs: List<Long> = listOf(1_000, 5_000, 120_000),
-) {
+) : OutgoingQueue {
 
     /**
      * Кэш конвертов, привязанный к эпохе. **В памяти, а не в базе** — конверт,
@@ -219,7 +221,7 @@ class Outbox(
     /** Эпоха, под которую собран кэш. `null` — кэш пуст. */
     private var cachedEpoch: Int? = null
 
-    fun enqueue(dedupKey: String, chatId: String, body: ByteArray): Boolean {
+    override fun enqueue(dedupKey: String, chatId: String, body: ByteArray): Boolean {
         require(dedupKey.isNotBlank()) { "dedupKey пустой: по нему опознаётся повтор" }
         require(body.isNotEmpty()) { "тело пустое" }
         val now = nowMs()
