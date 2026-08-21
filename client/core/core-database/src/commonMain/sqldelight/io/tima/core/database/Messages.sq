@@ -31,7 +31,14 @@ CREATE TABLE messages (
     -- Часы устройства: они врут, но других на момент составления нет.
     client_ts       INTEGER NOT NULL,
     server_ts       INTEGER,
-    -- Состояние машины Outbox (core-outbox, OutboxState.ordinal).
+    -- Направление: 0 — исходящее, 1 — входящее. Столбец обязателен, а не выводится
+    -- из данных: у исходящих и входящих РАЗНЫЕ машины состояний, и нумерация у них
+    -- совпадает. Без направления состояние 1 означало бы одновременно SEALED у
+    -- исходящего и UNDECRYPTABLE у входящего — то есть очередь забирала бы на
+    -- отправку нерасшифрованные чужие сообщения.
+    direction       INTEGER NOT NULL DEFAULT 0,
+    -- Состояние своей машины: OutboxState.ordinal либо IncomingState.ordinal,
+    -- смотря по direction.
     state           INTEGER NOT NULL,
     attempts        INTEGER NOT NULL DEFAULT 0,
     next_attempt_at INTEGER,
@@ -39,6 +46,9 @@ CREATE TABLE messages (
     -- Идентификатор ключа эпохи escrow, под который собран конверт; NULL — конверта
     -- нет. Позднее запечатывание: конверт в базе НЕ хранится.
     sealed_epoch    INTEGER,
+    -- Почему входящее не расшифровалось: для диагностики и для показа человеку.
+    -- NULL у исходящих и у прочитанных.
+    undecryptable_reason TEXT,
     body_enc        BLOB    NOT NULL
 );
 
@@ -46,15 +56,15 @@ CREATE TABLE messages (
 -- нескольких тысячах сообщений начинает сортироваться в памяти.
 CREATE INDEX idx_messages_chat_order ON messages(chat_id, server_ts, client_ts, local_id);
 
--- Очередь: выборка идёт по состоянию и сроку. Без индекса каждый проход отправки
--- читает всю таблицу.
-CREATE INDEX idx_messages_queue ON messages(state, next_attempt_at);
+-- Очередь: выборка идёт по направлению, состоянию и сроку. Без индекса каждый проход
+-- отправки читает всю таблицу.
+CREATE INDEX idx_messages_queue ON messages(direction, state, next_attempt_at);
 
 -- ── Очередь исходящих ───────────────────────────────────────────────────────
 
 insertQueued:
-INSERT OR IGNORE INTO messages(dedup_key, chat_id, sender_id, client_ts, state, attempts, next_attempt_at, reply_to, body_enc)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT OR IGNORE INTO messages(dedup_key, chat_id, sender_id, client_ts, direction, state, attempts, next_attempt_at, reply_to, body_enc)
+VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?);
 
 -- Сколько строк затронула последняя вставка: 0 означает, что dedup_key уже был.
 -- Отличать «поставили» от «уже было» обязательно — иначе повторная постановка
@@ -68,13 +78,13 @@ SELECT * FROM messages WHERE dedup_key = ?;
 -- Готовое к запечатыванию: в очереди и срок пришёл.
 nextQueued:
 SELECT * FROM messages
-WHERE state = ? AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+WHERE direction = 0 AND state = ? AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
 ORDER BY local_id
 LIMIT 1;
 
 -- Запечатанное, ждущее отправки.
 nextSealed:
-SELECT * FROM messages WHERE state = ? ORDER BY local_id LIMIT 1;
+SELECT * FROM messages WHERE direction = 0 AND state = ? ORDER BY local_id LIMIT 1;
 
 updateState:
 UPDATE messages
@@ -84,10 +94,10 @@ WHERE dedup_key = ?;
 -- Возврат зависшего при старте: SENDING и SEALED снова в очередь. Без этого
 -- убитое посреди отправки сообщение остаётся висеть навсегда — дефект v1.
 requeueStuck:
-UPDATE messages SET state = ?, sealed_epoch = NULL WHERE state IN (?, ?);
+UPDATE messages SET state = ?, sealed_epoch = NULL WHERE direction = 0 AND state IN (?, ?);
 
 pending:
-SELECT * FROM messages WHERE state IN (?, ?, ?) ORDER BY local_id;
+SELECT * FROM messages WHERE direction = 0 AND state IN (?, ?, ?) ORDER BY local_id;
 
 -- ── Чтение переписки ────────────────────────────────────────────────────────
 
@@ -114,3 +124,33 @@ DELETE FROM messages WHERE chat_id = ?;
 
 countAll:
 SELECT count(*) FROM messages;
+
+-- ── Входящие ────────────────────────────────────────────────────────────────
+--
+-- Живут в той же таблице и отличаются направлением. Ключом уникальности служит
+-- тот же dedup_key: для входящего в него кладётся "chat_id/message_id", то есть
+-- идентификатор, назначенный ОТПРАВИТЕЛЕМ и входящий в подпись. Подделать его
+-- нельзя, значит по нему и опознаётся повтор — то же сообщение из живого канала и
+-- из догона истории даёт одну строку (инвентарь, пункт 8).
+--
+-- Отдельного индекса под входящие не нужно: idx_messages_queue начинается с
+-- direction, и обе выборки идут по нему.
+
+insertIncoming:
+INSERT OR IGNORE INTO messages(dedup_key, server_id, chat_id, sender_id, client_ts, direction, state, attempts, body_enc)
+VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?);
+
+nextReceived:
+SELECT * FROM messages WHERE direction = 1 AND state = ? ORDER BY local_id LIMIT 1;
+
+undecryptable:
+SELECT * FROM messages WHERE direction = 1 AND state = ? ORDER BY local_id;
+
+incomingPending:
+SELECT * FROM messages WHERE direction = 1 AND state IN (?, ?) ORDER BY local_id;
+
+-- Смена состояния входящего. Причина нечитаемости пишется в отдельный столбец, а не
+-- подмешивается в body_enc: тело — шифртекст, и текстовая пометка в нём была бы
+-- байтами, которые никто не сможет расшифровать.
+updateIncoming:
+UPDATE messages SET state = ?, attempts = ?, undecryptable_reason = ? WHERE dedup_key = ?;
