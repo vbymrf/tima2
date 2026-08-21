@@ -1,5 +1,8 @@
 package io.tima.core.network
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
 /**
  * Как обращаться к серверу: конфигурация, а не константы в коде.
  *
@@ -7,6 +10,7 @@ package io.tima.core.network
  * Отсюда и форма: всё, что определяет адрес, лежит в [RouteConfig], а код умеет
  * только собрать из него адреса. Ни одного имени хоста в исходниках нет.
  */
+@Serializable
 data class RouteConfig(
     /**
      * Имя, введённое человеком. Может быть кириллическим (`пацак.рф`) — перевод в
@@ -18,7 +22,7 @@ data class RouteConfig(
      * 404**, и это измерено, а не предположено (`arhiv/СТЕНД.md`). `null` — API
      * прямо на [host].
      */
-    val apiSubdomain: String? = "api",
+    @SerialName("api_subdomain") val apiSubdomain: String? = "api",
     /** `false` только для локальной отладки: боевой стенд без TLS не отвечает. */
     val secure: Boolean = true,
     /** Явный порт; `null` — по схеме (443/80). */
@@ -37,6 +41,7 @@ data class RouteConfig(
  * иначе Caddy на стенде не найдёт сайт и отдаст 404, а выглядеть это будет как
  * «сервер потерял API».
  */
+@Serializable
 data class ProxyConfig(
     val host: String,
     val port: Int,

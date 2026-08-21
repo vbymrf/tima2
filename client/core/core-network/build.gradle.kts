@@ -26,6 +26,10 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            // Только в тестах: подписанный конфиг маршрутов проверяется настоящей
+            // Ed25519, а не заглушкой. Боевой код криптографии не знает — проверка
+            // приходит в SignatureCheck, чтобы сетевой слой не тянул крипто-библиотеку.
+            implementation(projects.core.coreEncryption)
             implementation(libs.ktor.client.mock)
             implementation(libs.kotlinx.coroutines.test)
         }
