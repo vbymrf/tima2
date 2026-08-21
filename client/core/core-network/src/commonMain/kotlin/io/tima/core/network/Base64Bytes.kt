@@ -24,3 +24,14 @@ internal fun encodeBase64(bytes: ByteArray): String = Base64.encode(bytes)
  */
 internal fun encodeBase64Url(bytes: ByteArray): String =
     Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT).encode(bytes)
+
+/**
+ * Разбор base64url без выравнивания — то, чем сервер кодирует ключи
+ * (`base64.RawURLEncoding`). Отдельно от обычного: алфавиты разные, и обычный разбор
+ * на «-» и «_» споткнётся.
+ *
+ * @return `null` на негодном входе: ключи приходят из сети, то есть вход недоверенный.
+ */
+internal fun decodeBase64Url(text: String): ByteArray? = runCatching {
+    Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT).decode(text)
+}.getOrNull()

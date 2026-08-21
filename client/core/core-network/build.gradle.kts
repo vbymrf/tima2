@@ -26,6 +26,9 @@ kotlin {
             // Тело ошибки сервера — {code, message}. Разбирается напрямую, без
             // ktor-content-negotiation: одна структура не стоит плагина.
             implementation(libs.kotlinx.serialization.json)
+            // Время — kotlinx-datetime: сервер отдаёт RFC3339, а в подпись анклава входят
+            // миллисекунды. java.time запрещён правилом — он падает на iOS.
+            implementation(libs.kotlinx.datetime)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

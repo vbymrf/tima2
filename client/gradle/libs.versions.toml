@@ -16,6 +16,9 @@ ktor = "3.5.1"
 # jna-platform несёт готовый Crypt32Util (DPAPI): в JDK такого API нет, а JNI-обвязка
 # ради двух вызовов означала бы свой двоичный артефакт в сборке.
 jna = "5.14.0"
+# Время в общем коде — kotlinx-datetime, java.time запрещён архитектурным правилом:
+# он компилируется на JVM и падает на iOS, то есть ошибка находится позже всего.
+datetime = "0.6.2"
 # Корутины нужны только тестам транспорта: сам он suspend-функции берёт от Ktor.
 coroutines = "1.10.2"
 serialization = "1.7.3"
@@ -45,5 +48,6 @@ ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "kto
 jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "datetime" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
