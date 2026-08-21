@@ -8,7 +8,7 @@
 |-----------|-------|-----------|
 | Язык / шаринг кода | Kotlin Multiplatform | [ADR-0001](../adr/0001-kmp-compose-client.md) |
 | UI | Compose Multiplatform | Android, iOS, Desktop (Windows) |
-| Локальная БД | SQLDelight | + SQLite FTS5 для локального поиска |
+| Локальная БД | SQLDelight | ~~+ SQLite FTS5 для локального поиска~~ — **не действует, сверено 2026-08-21.** Принят вариант A шифрования покоя ([Plan.md §3.4.3](../../doc_mig/Plan.md)): содержимое лежит зашифрованным, а FTS5 индексирует только то, что видит. Индекс по расшифрованному тексту — это второй, незашифрованный экземпляр переписки на диске. Поиск идёт расшифровкой на лету |
 | HTTP/WS | Ktor Client | |
 | DI | Koin | |
 | Сериализация | kotlinx.serialization + Protobuf | Конверты — Protobuf ([crypto-protocol.md](../03-security/crypto-protocol.md)) |
