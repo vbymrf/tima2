@@ -21,7 +21,7 @@ class ContentProfileTest {
     }
 
     @Test
-    fun `широкая таблица прокручивается в пузыре, но не в публикации`() {
+    fun `широкая таблица прокручивается в пузыре но не в публикации`() {
         val markup = Markup(blocks = listOf(table(columns = 5)))
         val bubble = ContentProfiles.apply(markup, ContentProfile.BUBBLE).first { it.block.type == BlockType.TABLE }
         val publication = ContentProfiles.apply(markup, ContentProfile.PUBLICATION).first { it.block.type == BlockType.TABLE }
@@ -30,7 +30,7 @@ class ContentProfileTest {
     }
 
     @Test
-    fun `глубокий контейнер упрощается в пузыре, дети не разворачиваются`() {
+    fun `глубокий контейнер упрощается в пузыре дети не разворачиваются`() {
         // container(0) → container(1) → container(2, за пределом BUBBLE.maxContainerDepth=2) → paragraph
         val deep = MarkupBlock(
             type = BlockType.CONTAINER,

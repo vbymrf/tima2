@@ -172,7 +172,7 @@ class VectorsTest {
     }
 
     @Test
-    fun `mlkem768 - keygen из seed детерминирован, escrow round-trip`() {
+    fun `mlkem768 - keygen из seed детерминирован escrow round-trip`() {
         val v = vector("mlkem768_escrow")
         val seed = v.hex("keygen_seed") // 64 байта, layout noble/FIPS 203: d(32) ‖ z(32)
 

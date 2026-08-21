@@ -77,7 +77,10 @@ object StyleCascade {
         // приоритет (инлайн раньше приложения), здесь он просто применяется.
         for (layer in layers) {
             for ((key, value) in layer) {
-                resolved.putIfAbsent(key, value)
+                // getOrPut, а не putIfAbsent: последний — метод java.util.Map, и в
+                // общий код он попадал без импорта. Смысл тот же: первый слой,
+                // задавший свойство, побеждает.
+                resolved.getOrPut(key) { value }
             }
         }
         return applyFloor(resolved, backgroundHex)

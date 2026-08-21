@@ -31,7 +31,7 @@ class StyleCascadeTest {
     }
 
     @Test
-    fun `READER - документ и пространство игнорируются, побеждает только приложение`() {
+    fun `READER - документ и пространство игнорируются побеждает только приложение`() {
         val resolved = StyleCascade.resolve(
             mode = ReaderMode.READER,
             inline = mapOf("font-size" to "40"),
@@ -44,7 +44,7 @@ class StyleCascadeTest {
     }
 
     @Test
-    fun `DEFAULT - ни один слой не участвует, даже приложение`() {
+    fun `DEFAULT - ни один слой не участвует даже приложение`() {
         val resolved = StyleCascade.resolve(
             mode = ReaderMode.DEFAULT,
             inline = mapOf("font-size" to "40"),
@@ -73,7 +73,7 @@ class StyleCascadeTest {
     }
 
     @Test
-    fun `защитный пол - кегль ниже минимума поднимается, выше минимума не трогается`() {
+    fun `защитный пол - кегль ниже минимума поднимается выше минимума не трогается`() {
         val tooSmall = StyleCascade.resolve(mode = ReaderMode.AS_AUTHOR, inline = mapOf(StyleCascade.KEY_FONT_SIZE to "4"))
         assertEquals(StyleCascade.MIN_FONT_SIZE_SP.toString(), tooSmall[StyleCascade.KEY_FONT_SIZE])
 

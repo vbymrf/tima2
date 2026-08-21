@@ -117,7 +117,7 @@ class PersonalMessageSealer(private val escrowModule: EscrowModule) {
             wrapEphemeralOverride: ByteArray? = null,
         ): Result<ByteArray> = runCatching {
             if (!MessageSigner.verify(senderSigningPub, message.canonicalBytes(), message.signature)) {
-                throw SecurityException("Подпись конверта не прошла проверку")
+                throw VerificationFailure("Подпись конверта не прошла проверку")
             }
             val wrapped = message.wrappedKeys[myDeviceId]
                 ?: throw IllegalStateException("Нет wrapped_key для устройства $myDeviceId")
@@ -130,7 +130,7 @@ class PersonalMessageSealer(private val escrowModule: EscrowModule) {
             if (message.formatVersion >= CanonicalBytes.FORMAT_VERSION &&
                 !CanonicalBytes.commitmentMatches(messageKey, message.keyCommitment)
             ) {
-                throw SecurityException("Обязательство по ключу не сошлось: пути доставки ведут к разным ключам")
+                throw VerificationFailure("Обязательство по ключу не сошлось: пути доставки ведут к разным ключам")
             }
             EnvelopeCipher.open(messageKey, message.encryptedPayload).getOrThrow()
         }

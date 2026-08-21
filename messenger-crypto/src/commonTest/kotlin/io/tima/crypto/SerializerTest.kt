@@ -69,7 +69,7 @@ class SerializerTest {
     }
 
     @Test
-    fun `body - zstd roundtrip (сжатый вид по байтам не нормативен)`() {
+    fun `body - zstd roundtrip сжатый вид по байтам не нормативен`() {
         val payload = MessageSerializer.encodeBody(FROZEN_BODY)
         assertTrue(payload.size < MessageBody.ADAPTER.encode(FROZEN_BODY).size + 100, "zstd-оверхед подозрительно велик")
         assertEquals(FROZEN_BODY, MessageSerializer.decodeBody(payload).getOrThrow())
@@ -115,7 +115,7 @@ class SerializerTest {
     }
 
     @Test
-    fun `мусор на входе - decodeBody и decodeEnvelope падают, не бросая наружу`() {
+    fun `мусор на входе - decodeBody и decodeEnvelope падают не бросая наружу`() {
         assertTrue(MessageSerializer.decodeBody(ByteArray(64) { 0x5a }).isFailure)
         assertTrue(MessageSerializer.decodeEnvelope(ByteArray(64) { 0x5a }).isFailure)
     }

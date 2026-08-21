@@ -15,7 +15,7 @@ class AccountMnemonicTest {
     }
 
     @Test
-    fun `фраза - энтропия - фраза (roundtrip)`() {
+    fun `фраза - энтропия - фраза roundtrip`() {
         val words = AccountMnemonic.generate()
         assertEquals(12, words.size)
         val entropy = AccountMnemonic.mnemonicToEntropy(words)
@@ -64,7 +64,9 @@ class AccountMnemonicTest {
         }
         // Ожидаем ~15/16 ≈ 93.75%; берём запас на случайность выбранной фразы.
         val rate = caught.toDouble() / tried
-        assertTrue(rate > 0.85, "опечатка ловится лишь в ${"%.1f".format(rate * 100)}% случаев")
+        // Без String.format: он только на JVM. Целые проценты здесь достаточны —
+        // проверяется порог 85, а не десятые доли.
+        assertTrue(rate > 0.85, "опечатка ловится лишь в ${(rate * 100).toInt()}% случаев")
         // И хотя бы одна подмена обязана отвергаться — иначе проверки нет вовсе.
         assertTrue(caught > 0)
     }

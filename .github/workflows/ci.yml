@@ -153,11 +153,33 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: 'крипто · тесты, включая сверку с BouncyCastle'
+      # Задача называется jvmTest, а не test: с К2 модуль стал multiplatform, и
+      # общей задачи 'test' в нём больше нет. Прежняя команда падала бы с
+      # «task not found», а не с ошибкой в коде.
+      - name: 'крипто · тесты JVM, включая сверку с BouncyCastle'
         working-directory: messenger-crypto
         run: |
           set -o pipefail
-          ./gradlew test --console=plain 2>&1 | tee /tmp/gradle.log
+          ./gradlew jvmTest --console=plain 2>&1 | tee /tmp/gradle.log
+      # Пересчёт по тем же правилам, что у сервера: «BUILD SUCCESSFUL» само по себе
+      # не доказывает, что тесты шли. Нижняя граница ловит «ни один не запустился».
+      - name: 'крипто · пересчёт'
+        if: always()
+        working-directory: messenger-crypto
+        run: |
+          x=build/test-results/jvmTest
+          [ -d "$x" ] || { echo "::error::каталог $x отсутствует — тесты не запускались"; exit 1; }
+          t=$(grep -ho 'tests="[0-9]*"' $x/*.xml | grep -oE '[0-9]+' | awk '{s+=$1} END {print s+0}')
+          f=$(grep -ho 'failures="[0-9]*"' $x/*.xml | grep -oE '[0-9]+' | awk '{s+=$1} END {print s+0}')
+          e=$(grep -ho 'errors="[0-9]*"' $x/*.xml | grep -oE '[0-9]+' | awk '{s+=$1} END {print s+0}')
+          k=$(grep -ho 'skipped="[0-9]*"' $x/*.xml | grep -oE '[0-9]+' | awk '{s+=$1} END {print s+0}')
+          echo "JVM: тестов=$t падений=$f ошибок=$e пропущено=$k"
+          echo "### крипто JVM: $t тестов, $f падений, $e ошибок, $k пропущено" >> "$GITHUB_STEP_SUMMARY"
+          bad=0
+          [ "$f" -ne 0 ] || [ "$e" -ne 0 ] && bad=1
+          if [ "$k" -ne 0 ]; then echo "::error::пропущено тестов: $k — для гейта это падение"; bad=1; fi
+          if [ "$t" -lt 80 ]; then echo "::error::запущено всего $t тестов, ожидалось не меньше 80"; bad=1; fi
+          exit $bad
       - name: 'крипто · вывод Gradle в аннотацию'
         if: failure()
         run: |
@@ -168,16 +190,25 @@ jobs:
         if: failure()
         working-directory: messenger-crypto
         run: |
-          msg=$(grep -ho '<failure message="[^"]\{0,200\}"' build/test-results/test/*.xml 2>/dev/null | head -n 10 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
+          msg=$(grep -ho '<failure message="[^"]\{0,200\}"' build/test-results/jvmTest/*.xml 2>/dev/null | head -n 10 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
           if [ -n "$msg" ]; then echo "::error::упавшие тесты:%0A${msg}"; fi
 
 
-  # ── Проверка форков крипто-библиотек под iOS (вариант B) ──────────────────
-  # Задача одна и та же для двух целей: разблокировать К2 у нас и приложить
-  # доказательство к PR в апстрим (вариант D). Автор библиотек, судя по
-  # закомментированным таргетам, не может прогнать их на симуляторе — а мы можем.
+  # ── ГЕЙТ К2: крипто на iOS-симуляторе ─────────────────────────────────────
+  # Здесь закрывается главное условие К2: тест-векторы обязаны сойтись БАЙТ В
+  # БАЙТ на iOS, а не только скомпилироваться. «Компилируется» ничего не
+  # доказывает — в v1 реализация ML-KEM в Kodium компилировалась, проходила
+  # тесты и при этом заполняла матрицу энтропией на 3 % (ADR-0005 Поправка-1).
+  #
+  # Три шага в одной задаче, и порядок обязателен: форки публикуются в
+  # mavenLocal, потом messenger-crypto их оттуда берёт. Разные задачи GitHub
+  # Actions не делят mavenLocal — на отдельном раннере кэша не будет.
+  #
+  # Прогон самих форков заодно служит доказательством к PR в апстрим (вариант D):
+  # автор, судя по закомментированным таргетам, прогнать их на симуляторе не
+  # может, а мы можем.
   third-party-ios:
-    name: 'форки крипто · iOS'
+    name: 'крипто · iOS-симулятор (гейт К2)'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -202,6 +233,39 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew iosSimulatorArm64Test --console=plain 2>&1 | tee -a /tmp/gradle.log
+      # Публикация kyber была пропущена: keccak публиковался, а kyber только
+       # тестировался. messenger-crypto зависит именно от kyber, поэтому без этого
+      # шага он на iOS не собрался бы — и причина выглядела бы как «нет варианта
+      # под iosSimulatorArm64», то есть указывала бы куда угодно, кроме сюда.
+      - name: 'kyber · публикация в mavenLocal'
+        working-directory: third-party/KyberKotlin
+        run: |
+          set -o pipefail
+          ./gradlew publishToMavenLocal --console=plain 2>&1 | tee -a /tmp/gradle.log
+      - name: 'крипто · ВЕКТОРЫ на симуляторе iOS'
+        working-directory: messenger-crypto
+        run: |
+          set -o pipefail
+          ./gradlew iosSimulatorArm64Test --console=plain 2>&1 | tee -a /tmp/gradle.log
+      - name: 'крипто · пересчёт прогона на iOS'
+        if: always()
+        working-directory: messenger-crypto
+        run: |
+          x=build/test-results/iosSimulatorArm64Test
+          [ -d "$x" ] || { echo "::error::каталог $x отсутствует — на симуляторе не запускалось ничего"; exit 1; }
+          t=$(grep -ho 'tests="[0-9]*"' $x/*.xml | grep -oE '[0-9]+' | awk '{s+=$1} END {print s+0}')
+          f=$(grep -ho 'failures="[0-9]*"' $x/*.xml | grep -oE '[0-9]+' | awk '{s+=$1} END {print s+0}')
+          e=$(grep -ho 'errors="[0-9]*"' $x/*.xml | grep -oE '[0-9]+' | awk '{s+=$1} END {print s+0}')
+          k=$(grep -ho 'skipped="[0-9]*"' $x/*.xml | grep -oE '[0-9]+' | awk '{s+=$1} END {print s+0}')
+          echo "iOS: тестов=$t падений=$f ошибок=$e пропущено=$k"
+          echo "### крипто iOS-симулятор: $t тестов, $f падений, $e ошибок, $k пропущено" >> "$GITHUB_STEP_SUMMARY"
+          bad=0
+          [ "$f" -ne 0 ] || [ "$e" -ne 0 ] && bad=1
+          if [ "$k" -ne 0 ]; then echo "::error::пропущено тестов на iOS: $k — для гейта это падение"; bad=1; fi
+          # На iOS идёт commonTest без jvmTest, поэтому граница ниже, чем у JVM:
+          # CrossImplementationTest с BouncyCastle там не существует.
+          if [ "$t" -lt 70 ]; then echo "::error::на симуляторе запущено всего $t тестов, ожидалось не меньше 70"; bad=1; fi
+          exit $bad
       - name: 'форки · вывод Gradle в аннотацию'
         if: failure()
         run: |

@@ -24,7 +24,7 @@ class GroupAndMediaTest {
         pairs.map { (id, key) -> DeviceAddress(id, key.getPublicKey().encryptionKey) }
 
     @Test
-    fun `ротация - все устройства разворачивают GK, версия растёт`() {
+    fun `ротация - все устройства разворачивают GK версия растёт`() {
         val rotation = manager.rotate(currentVersion = 0, devices = devices("alice-1" to alice, "bob-1" to bob)).getOrThrow()
         assertEquals(1, rotation.gkVersion)
         assertEquals(setOf("alice-1", "bob-1"), rotation.wrappedKeys.keys)

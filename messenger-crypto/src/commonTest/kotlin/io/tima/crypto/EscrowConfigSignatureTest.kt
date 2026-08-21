@@ -40,7 +40,7 @@ class EscrowConfigSignatureTest {
     }
 
     @Test
-    fun `подмена public_key ломает проверку - ровно то, что защита должна ловить`() {
+    fun `подмена public_key ломает проверку - ровно то что защита должна ловить`() {
         val original = meta()
         val sig = sign(original)
 

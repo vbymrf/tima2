@@ -70,7 +70,7 @@ class ProtocolRoundTripTest {
     }
 
     @Test
-    fun `подмена payload - подпись не проходит, расшифровка не выполняется`() {
+    fun `подмена payload - подпись не проходит расшифровка не выполняется`() {
         val message = seal()
         val tampered = SealedPersonalMessage(
             formatVersion = message.formatVersion,
@@ -86,7 +86,7 @@ class ProtocolRoundTripTest {
             tampered, "recipient-dev-1", recipientDeviceKey, senderDeviceKey.getPublicKey().signingKey,
         )
         assertTrue(result.isFailure, "Повреждённый payload обязан провалить подпись")
-        assertTrue(result.exceptionOrNull() is SecurityException)
+        assertTrue(result.exceptionOrNull() is VerificationFailure)
     }
 
     @Test
@@ -106,11 +106,11 @@ class ProtocolRoundTripTest {
             tampered, "recipient-dev-1", recipientDeviceKey, senderDeviceKey.getPublicKey().signingKey,
         )
         assertTrue(result.isFailure)
-        assertTrue(result.exceptionOrNull() is SecurityException)
+        assertTrue(result.exceptionOrNull() is VerificationFailure)
     }
 
     @Test
-    fun `подмена wrapped_key - провал расшифровки, не поддельный текст`() {
+    fun `подмена wrapped_key - провал расшифровки не поддельный текст`() {
         val message = seal()
         val foreign = WrappedKeyService.wrap(
             Kodium.generateKeyPair(), recipientDeviceKey.getPublicKey().encryptionKey, Kodium.generateHighEntropyKey(),
@@ -154,7 +154,7 @@ class ProtocolRoundTripTest {
     }
 
     @Test
-    fun `повреждённый escrow_blob - unwrap падает, а не возвращает мусор`() {
+    fun `повреждённый escrow_blob - unwrap падает а не возвращает мусор`() {
         val message = seal()
         val damaged = EscrowBlob(
             mlkemCt = message.escrow.mlkemCt.copyOf().also { it[100] = (it[100].toInt() xor 1).toByte() },
