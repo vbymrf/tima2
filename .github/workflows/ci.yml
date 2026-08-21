@@ -68,13 +68,16 @@ jobs:
       # падение будет выглядеть как «No matching variant of asia.hombre:kyber»,
       # то есть укажет куда угодно, кроме пропущенного шага.
       #
-      # Тесты форков здесь НЕ гоняются: их гоняет задача «крипто · iOS-симулятор».
-      # publishToMavenLocal без тестов занимает минуты, с ними — полчаса.
+      # Тесты форков здесь не идут, и исключать их не надо: publishToMavenLocal от
+      # тестовых задач не зависит. Первая версия этого шага звала «-x test» — и
+      # падала, потому что в multiplatform-модуле задачи с именем «test» нет вовсе, а
+      # Gradle на исключении несуществующей задачи останавливается. Прогон форков на
+      # симуляторе делает отдельная задача «крипто · iOS-симулятор».
       - name: 'форки крипто · в mavenLocal'
         run: |
           set -o pipefail
-          (cd third-party/KeccakKotlin && ./gradlew publishToMavenLocal --console=plain -x test) 2>&1 | tail -3
-          (cd third-party/KyberKotlin  && ./gradlew publishToMavenLocal --console=plain -x test) 2>&1 | tail -3
+          (cd third-party/KeccakKotlin && ./gradlew publishToMavenLocal --console=plain) 2>&1 | tail -3
+          (cd third-party/KyberKotlin  && ./gradlew publishToMavenLocal --console=plain) 2>&1 | tail -3
       - name: 'jvm · сборка и тесты'
         working-directory: client
         run: |
@@ -121,13 +124,16 @@ jobs:
       # падение будет выглядеть как «No matching variant of asia.hombre:kyber»,
       # то есть укажет куда угодно, кроме пропущенного шага.
       #
-      # Тесты форков здесь НЕ гоняются: их гоняет задача «крипто · iOS-симулятор».
-      # publishToMavenLocal без тестов занимает минуты, с ними — полчаса.
+      # Тесты форков здесь не идут, и исключать их не надо: publishToMavenLocal от
+      # тестовых задач не зависит. Первая версия этого шага звала «-x test» — и
+      # падала, потому что в multiplatform-модуле задачи с именем «test» нет вовсе, а
+      # Gradle на исключении несуществующей задачи останавливается. Прогон форков на
+      # симуляторе делает отдельная задача «крипто · iOS-симулятор».
       - name: 'форки крипто · в mavenLocal'
         run: |
           set -o pipefail
-          (cd third-party/KeccakKotlin && ./gradlew publishToMavenLocal --console=plain -x test) 2>&1 | tail -3
-          (cd third-party/KyberKotlin  && ./gradlew publishToMavenLocal --console=plain -x test) 2>&1 | tail -3
+          (cd third-party/KeccakKotlin && ./gradlew publishToMavenLocal --console=plain) 2>&1 | tail -3
+          (cd third-party/KyberKotlin  && ./gradlew publishToMavenLocal --console=plain) 2>&1 | tail -3
       - name: 'ios · окружение'
         run: |
           echo "arch: $(uname -m)"
