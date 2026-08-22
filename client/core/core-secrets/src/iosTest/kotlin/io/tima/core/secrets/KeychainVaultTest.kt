@@ -44,7 +44,9 @@ class KeychainVaultTest {
      * хранилищем пользоваться»: пользоваться им можно, только если можно ПИСАТЬ.
      */
     private val доступен: Boolean = try {
-        val проба = SecretAlias("проба.v1")
+        // Имя латиницей: собственная проверка имён кириллицу запрещает — на разных
+        // файловых системах она ведёт себя по-разному. Я на это и наступил.
+        val проба = SecretAlias("probe.v1")
         KeychainVault(служба).put(проба, byteArrayOf(1))
         KeychainVault(служба).remove(проба)
         true
@@ -91,7 +93,7 @@ class KeychainVaultTest {
     fun отсутствующий_секрет_это_null_а_не_беда() {
         // Первый запуск устройства выглядит именно так, и это обычный путь.
         if (!доступен) return проверитьВнятныйОтказ()
-        assertNull(vault.get(SecretAlias("никогда-не-писали.v1")))
+        assertNull(vault.get(SecretAlias("never-written.v1")))
     }
 
     @Test

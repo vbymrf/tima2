@@ -154,6 +154,29 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew iosSimulatorArm64Test --console=plain 2>&1 | tee /tmp/gradle.log
+      - name: 'ios · упавшие тесты в аннотацию'
+        if: failure()
+        # Gradle для Kotlin/Native печатает только имя класса исключения, без сообщения.
+        # Сообщения лежат в XML-отчётах, и без них диагноз ставится гаданием: за один
+        # день я дважды объяснил падение неверной причиной, имея на руках только хвост
+        # журнала.
+        run: |
+          отчёты=$(find client -path '*test-results*' -name '*.xml' 2>/dev/null)
+          if [ -n "$отчёты" ]; then
+            msg=$(grep -ah -A 2 '<failure' $отчёты | sed 's/%/%25/g' | tr -d '\r' \
+              | head -n 60 | awk '{printf "%s%%0A", $0}')
+            [ -n "$msg" ] && echo "::error::упавшие проверки:%0A${msg}"
+          fi
+      - name: 'ios · отчёты тестов артефактом'
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-reports
+          path: |
+            client/**/build/test-results/**/*.xml
+            client/**/build/reports/tests/**
+          retention-days: 7
+          if-no-files-found: ignore
       - name: 'ios · вывод Gradle в аннотацию'
         if: failure()
         run: |
