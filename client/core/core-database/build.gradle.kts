@@ -24,9 +24,13 @@ kotlin {
         commonMain.dependencies {
             api(projects.core.coreOutbox)
             implementation(libs.sqldelight.runtime)
+            // Поток из запроса: экран обновляется от самой базы, а не по таймеру.
+            implementation(libs.sqldelight.coroutines)
+            api(projects.domain.domainChat)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
         jvmMain.dependencies {
             implementation(libs.sqldelight.driver.jvm)

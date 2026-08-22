@@ -16,6 +16,11 @@ kotlin {
     iosSimulatorArm64()
 
     sourceSets {
+        commonMain.dependencies {
+            // Поток, а не список: экран обязан обновляться сам, когда приходит
+            // сообщение. Опрос по таймеру давал в v1 и задержку, и лишние пробуждения.
+            api(libs.kotlinx.coroutines.core)
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
