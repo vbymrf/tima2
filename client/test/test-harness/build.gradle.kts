@@ -18,6 +18,18 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
 
+    // Бинари Apple линкуются с СИСТЕМНЫМ sqlite3 явно.
+    //
+    // Драйвер Kotlin/Native приносит обёртки SQLiter, и они попадают в объектный файл,
+    // а флаг `-lsqlite3` до линковки тестового бинаря не доезжает: обёртки есть,
+    // библиотеки, где живут сами `sqlite3_*`, нет — линковщик валится списком в сотню
+    // имён вида `_sqlite3_bind_blob`. В core-database этого не видно, потому что там
+    // драйвер используется в `iosTest`, а здесь — в `iosMain`: тестовый бинарь получает
+    // его через главный klib, и флаг по дороге теряется.
+    targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>().configureEach {
+        binaries.all { linkerOpts("-lsqlite3") }
+    }
+
     sourceSets {
         commonMain.dependencies {
             api(projects.core.coreOutbox)
