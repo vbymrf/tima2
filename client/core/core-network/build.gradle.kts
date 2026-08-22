@@ -23,6 +23,8 @@ kotlin {
             // реализует объявленное выше — то же направление, что у core-database с OutboxStore.
             api(projects.domain.domainAccount)
             implementation(libs.ktor.client.core)
+            // Живой канал: один сокет на устройство (websocket-events.md).
+            implementation(libs.ktor.client.websockets)
             // Тело ошибки сервера — {code, message}. Разбирается напрямую, без
             // ktor-content-negotiation: одна структура не стоит плагина.
             implementation(libs.kotlinx.serialization.json)
