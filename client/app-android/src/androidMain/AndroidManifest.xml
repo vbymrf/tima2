@@ -7,6 +7,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application
+        android:name=".TimaApplication"
         android:label="TIMA v2"
         android:supportsRtl="true">
 

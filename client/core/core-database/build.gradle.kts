@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
+    alias(libs.plugins.androidLibrary)
     alias(libs.plugins.sqldelight)
 }
 
@@ -13,6 +14,9 @@ kotlin {
     jvmToolchain(17)
 
     jvm()
+    // Android-таргет нужен не для полноты: драйвер здесь ОБЯЗАН быть своим.
+    // jvm-вариант принёс бы sqlite-jdbc, то есть чужой SQLite рядом с системным.
+    androidTarget()
     iosArm64()
     iosSimulatorArm64()
 
@@ -27,6 +31,18 @@ kotlin {
         jvmMain.dependencies {
             implementation(libs.sqldelight.driver.jvm)
         }
+        androidMain.dependencies {
+            implementation(libs.sqldelight.driver.android)
+        }
+        androidUnitTest.dependencies {
+            // Хостовые проверки: системного SQLite Android на машине сборки нет.
+            implementation(libs.sqldelight.driver.jvm)
+        }
+        androidInstrumentedTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.androidx.test.runner)
+            implementation(libs.androidx.test.core)
+        }
         jvmTest.dependencies {
             implementation(libs.sqldelight.driver.jvm)
         }
@@ -39,6 +55,29 @@ kotlin {
         }
     }
 }
+
+android {
+    namespace = "io.tima.core.database"
+    compileSdk = 35
+
+    defaultConfig {
+        minSdk = 26
+        // Настройки соединения проверяются НА УСТРОЙСТВЕ: на JVM ровно эта проверка и
+        // поймала ложное обещание secure_delete.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // Линт AGP выключен по той же причине, что и в app-android: у него свой встроенный
+    // Kotlin, он отстаёт от проектного и падает на метаданных, а не на коде.
+    lint { abortOnError = false }
+}
+
+tasks.matching { it.name.startsWith("lint") }.configureEach { enabled = false }
 
 sqldelight {
     databases {

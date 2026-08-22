@@ -5,6 +5,9 @@
 [versions]
 kotlin = "2.3.10"
 agp = "8.13.2"
+# Инструментальные проверки: AndroidKeyStore нельзя изобразить, только запустить.
+androidxTest = "1.6.2"
+androidxTestCore = "1.6.1"
 compose = "1.11.1"
 activityCompose = "1.9.3"
 # SQLDelight — выбран ADR-0001. Версии из v1 здесь нет: v1 работал с sqlite-jdbc
@@ -34,6 +37,8 @@ composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "k
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
 
 [libraries]
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTest" }
+androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
 # Драйверы по платформам: своя реализация под каждую, общего кода они не касаются.

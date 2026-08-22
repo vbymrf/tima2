@@ -26,6 +26,12 @@ kotlin {
             implementation(compose.material3)
             implementation(libs.androidx.activity.compose)
             implementation(project(":core:core-model"))
+            // Хранилище секретов и база — те модули, у которых на Android СВОЁ
+            // поведение: AndroidKeyStore вместо DPAPI, AndroidSqliteDriver вместо
+            // sqlite-jdbc. Остальные модули приезжают jvm-вариантом, и это правильно:
+            // движок сети на Android тот же OkHttp.
+            implementation(project(":core:core-secrets"))
+            implementation(project(":core:core-database"))
         }
     }
 }
