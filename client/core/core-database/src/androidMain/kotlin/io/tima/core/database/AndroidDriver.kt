@@ -37,7 +37,16 @@ fun androidDatabaseDriver(
 
         override fun onOpen(db: SupportSQLiteDatabase) {
             super.onOpen(db)
-            db.execSQL("PRAGMA secure_delete = ON")
+            // query, а НЕ execSQL. Android отказывает execSQL на любом выражении,
+            // возвращающем строку («Queries can be performed using SQLiteDatabase
+            // query or rawQuery methods only»), а `PRAGMA secure_delete = ON` строку
+            // возвращает — новое значение. Найдено прогоном на устройстве: собиралось
+            // и выглядело правильным, а падало на открытии базы.
+            //
+            // Это третий поворот одного правила: общего способа задать настройку базы
+            // не существует. На JVM PRAGMA строк не возвращает и запрос падает; на
+            // Apple и на Android — наоборот.
+            db.query("PRAGMA secure_delete = ON").use { it.moveToFirst() }
         }
     }
     return AndroidSqliteDriver(
