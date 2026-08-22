@@ -87,8 +87,14 @@ object Secrets {
     val DEVICE_SECRET = SecretAlias("device-secret.v1")
 }
 
-/** Хранилище недоступно или отказало. Отдельный тип: это не логическая ошибка кода. */
-class SecretVaultFailure(message: String, cause: Throwable? = null) : Exception(message, cause)
+/**
+ * Хранилище недоступно или отказало. Отдельный тип: это не логическая ошибка кода.
+ *
+ * `open`, потому что у платформ бывают отказы, которые вызывающий обязан различать —
+ * например «хранилище этому процессу недоступно вообще» против «конкретная запись не
+ * читается». Первое лечится окружением, второе — переустановкой.
+ */
+open class SecretVaultFailure(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /**
  * Хранилище платформы.

@@ -74,9 +74,7 @@ internal class KeychainVault(private val service: String) : SecretVault {
             CFDictionarySetValue(query, kSecValueData, data)
             CFDictionarySetValue(query, kSecAttrAccessible, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly)
             val status = SecItemAdd(query, null)
-            if (status != errSecSuccess) {
-                throw SecretVaultFailure("Keychain отказал при записи ${alias.value}: OSStatus $status")
-            }
+            if (status != errSecSuccess) отказ("записи", alias, status)
         } finally {
             CFRelease(data)
             CFRelease(query)
@@ -92,12 +90,10 @@ internal class KeychainVault(private val service: String) : SecretVault {
                 val holder = alloc<CFTypeRefVar>()
                 val status = SecItemCopyMatching(query, holder.ptr)
                 if (status == errSecItemNotFound) return null
-                if (status != errSecSuccess) {
-                    // Не `null`: «нет секрета» означает первый запуск и рождение нового
-                    // ключа. Принять за первый запуск отказ Keychain значило бы молча
-                    // выбросить локальную переписку.
-                    throw SecretVaultFailure("Keychain отказал при чтении ${alias.value}: OSStatus $status")
-                }
+                // Не `null`: «нет секрета» означает первый запуск и рождение нового
+                // ключа. Принять за первый запуск отказ Keychain значило бы молча
+                // выбросить локальную переписку.
+                if (status != errSecSuccess) отказ("чтении", alias, status)
                 val data: CFDataRef = holder.value?.reinterpret()
                     ?: throw SecretVaultFailure("Keychain вернул успех без данных")
                 try {
@@ -117,11 +113,34 @@ internal class KeychainVault(private val service: String) : SecretVault {
             val status = SecItemDelete(query)
             if (status == errSecSuccess) return true
             if (status == errSecItemNotFound) return false
-            throw SecretVaultFailure("Keychain отказал при удалении ${alias.value}: OSStatus $status")
+            отказ("удалении", alias, status)
         } finally {
             CFRelease(query)
         }
     }
+
+    /**
+     * Отказ Keychain с разбором того, чей он.
+     *
+     * `errSecMissingEntitlement` (-34018) означает, что **этому двоичному файлу**
+     * Keychain недоступен в принципе: у процесса нет права `application-identifier`,
+     * которое выдаётся подписанному приложению. Так выглядит прогон тестов
+     * Kotlin/Native в симуляторе — это отдельный исполняемый файл, а не приложение.
+     *
+     * Различать это от «запись не читается» обязательно: первое лечится окружением
+     * (прогон внутри приложения), второе — переустановкой у человека. Одно сообщение
+     * на два случая отправило бы искать причину не там.
+     */
+    private fun отказ(действие: String, alias: SecretAlias, status: Int): Nothing =
+        if (status == MISSING_ENTITLEMENT) {
+            throw KeychainUnavailable(
+                "Keychain недоступен этому процессу (OSStatus $status): нет права " +
+                    "application-identifier. Так ведёт себя отдельный двоичный файл — " +
+                    "например прогон тестов в симуляторе вне приложения",
+            )
+        } else {
+            throw SecretVaultFailure("Keychain отказал при $действие ${alias.value}: OSStatus $status")
+        }
 
     /** Общая часть запроса: класс, служба, имя. Освобождать обязан вызывающий. */
     private fun запрос(alias: SecretAlias, capacity: Int): CFMutableDictionaryRef {
@@ -147,6 +166,19 @@ internal class KeychainVault(private val service: String) : SecretVault {
         return query
     }
 }
+
+/**
+ * Keychain недоступен процессу целиком. Не «запись испорчена» и не «нет секрета»:
+ * лечится окружением, а не данными.
+ */
+class KeychainUnavailable(message: String) : SecretVaultFailure(message)
+
+/**
+ * `errSecMissingEntitlement`. Числом, а не константой фреймворка: в заголовках
+ * Security она объявлена не для всех платформ одинаково, и промах по имени сломал бы
+ * сборку там, где её нет.
+ */
+private const val MISSING_ENTITLEMENT: Int = -34018
 
 private fun String.toCFString(): CFStringRef? =
     CFStringCreateWithCString(kCFAllocatorDefault, this, kCFStringEncodingUTF8)
