@@ -21,6 +21,9 @@ kotlin {
             api(projects.core.coreNetwork)
             api(projects.core.coreEncryption)
             api(projects.domain.domainChat)
+            // Признак готовности К4 сформулирован через Store — значит сценарий обязан
+            // идти через него, а не мимо.
+            api(projects.feature.featureChat)
             implementation(libs.sqldelight.runtime)
             implementation(libs.kotlinx.coroutines.core)
         }
