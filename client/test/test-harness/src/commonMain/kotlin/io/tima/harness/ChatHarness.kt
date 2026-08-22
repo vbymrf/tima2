@@ -10,6 +10,8 @@ import io.tima.core.outbox.Outbox
 import io.tima.core.outbox.OutboxEntry
 import io.tima.core.outbox.OutboxPump
 import io.tima.core.outbox.OutboxState
+import io.tima.core.outbox.ReadyToSend
+import io.tima.core.outbox.SendOutcome
 import io.tima.core.outbox.UuidDedupKeys
 import io.tima.domain.chat.SendMessage
 import io.tima.domain.chat.SendMessageResult
@@ -74,8 +76,18 @@ class ChatHarness(
     /** Ставит сообщение в очередь — как нажатие «отправить». */
     fun send(chatId: String, text: String): SendMessageResult = sender.send(chatId, text)
 
-    /** Один проход насоса: запечатать готовое и отдать транспорту. */
+    /** Один проход насоса: запечатать готовое и отдать фейковому транспорту. */
     suspend fun pumpOnce(): Int = pump.runOnce(epochKeyId, ::seal, transport::send)
+
+    /**
+     * Проход через **чужой** транспорт — например настоящий HTTP против стенда.
+     *
+     * Отдельным методом, а не подменой поля: сценарии без сервера и прогон по стенду
+     * должны различаться в одном месте и явно, иначе однажды окажется, что «тест без
+     * сети» ходил в сеть.
+     */
+    suspend fun pumpVia(send: suspend (ReadyToSend) -> SendOutcome): Int =
+        pump.runOnce(epochKeyId, ::seal, send)
 
     /** Прошло время: сроки повторов наступили. */
     fun passTime(ms: Long) {
