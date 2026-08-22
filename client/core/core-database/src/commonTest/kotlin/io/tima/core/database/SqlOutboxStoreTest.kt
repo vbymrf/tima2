@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
 class SqlOutboxStoreTest {
 
     private val db = testDatabase()
-    private val store = SqlOutboxStore(db)
+    private val store = SqlOutboxStore(db, тестовыйШифр())
 
     private var время = 1_000L
     private val outbox = Outbox(store, nowMs = { время })

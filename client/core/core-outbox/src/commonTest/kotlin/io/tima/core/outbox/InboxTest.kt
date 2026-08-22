@@ -26,8 +26,6 @@ class InboxTest {
     private val тело = byteArrayOf(1, 2)
 
     /** Куда ложится разобранное; заодно счётчик — по нему видно лишние записи. */
-    private val записано = mutableMapOf<String, ByteArray>()
-    private val положить: (IncomingEntry, ByteArray) -> Unit = { e, b -> записано[e.key] = b }
 
     private fun принять(id: Long = 5) = inbox.receive("chat-1", id, конверт)
 
@@ -59,7 +57,7 @@ class InboxTest {
         assertNotNull(e)
         assertEquals(IncomingState.RECEIVED, e.state)
         assertTrue(конверт.contentEquals(e.envelope), "исходник нужен второй попытке")
-        assertEquals(0, записано.size, "разбирать до записи нельзя")
+        assertEquals(null, store.body("chat-1", 5), "разбирать до записи нельзя")
     }
 
     // ── разбор ──────────────────────────────────────────────────────────────
@@ -67,11 +65,11 @@ class InboxTest {
     @Test
     fun разобранное_становится_сохранённым() {
         принять()
-        val после = inbox.openNext({ OpenOutcome.Opened(тело) }, положить)
+        val после = inbox.openNext({ OpenOutcome.Opened(тело) })
 
         assertEquals(IncomingState.STORED, после?.state)
-        assertTrue(тело.contentEquals(записано["chat-1/5"] ?: ByteArray(0)))
-        assertNull(inbox.openNext({ OpenOutcome.Opened(тело) }, положить), "разбирать больше нечего")
+        assertTrue(тело.contentEquals(store.body("chat-1", 5) ?: ByteArray(0)))
+        assertNull(inbox.openNext({ OpenOutcome.Opened(тело) }), "разбирать больше нечего")
     }
 
     @Test
@@ -80,7 +78,7 @@ class InboxTest {
         // обёртка для этого устройства ещё не пришла, групповой ключ ротировался,
         // история опередила ключи.
         принять()
-        val после = inbox.openNext({ OpenOutcome.NoKey("обёртки для устройства нет") }, положить)
+        val после = inbox.openNext({ OpenOutcome.NoKey("обёртки для устройства нет") })
 
         assertEquals(IncomingState.UNDECRYPTABLE, после?.state)
         assertEquals(1, после?.attempts)
@@ -92,14 +90,14 @@ class InboxTest {
     @Test
     fun появился_ключ_и_нечитаемое_разбирается_снова() {
         принять()
-        inbox.openNext({ OpenOutcome.NoKey("нет ключа") }, положить)
+        inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
 
         assertEquals(1, inbox.retryUndecryptable(), "вернуться должно одно")
         assertEquals(IncomingState.RECEIVED, store.byKey("chat-1", 5)?.state)
 
-        val после = inbox.openNext({ OpenOutcome.Opened(тело) }, положить)
+        val после = inbox.openNext({ OpenOutcome.Opened(тело) })
         assertEquals(IncomingState.STORED, после?.state)
-        assertTrue(тело.contentEquals(записано["chat-1/5"]!!))
+        assertTrue(тело.contentEquals(store.body("chat-1", 5)!!))
     }
 
     @Test
@@ -107,12 +105,12 @@ class InboxTest {
         // Молчаливое исчезновение — худший вариант: подмена становится незаметной.
         // Человек должен видеть, что сообщение было и что оно не прошло проверку.
         принять()
-        val после = inbox.openNext({ OpenOutcome.Rejected("подпись не сошлась") }, положить)
+        val после = inbox.openNext({ OpenOutcome.Rejected("подпись не сошлась") })
 
         assertEquals(IncomingState.UNDECRYPTABLE, после?.state)
         assertEquals("подпись не сошлась", после?.undecryptableReason)
         assertEquals(1, store.all().size)
-        assertEquals(0, записано.size, "содержимое отвергнутого не записывается")
+        assertEquals(null, store.body("chat-1", 5), "содержимое отвергнутого не записывается")
     }
 
     @Test
@@ -121,10 +119,15 @@ class InboxTest {
         // так: если запись упала, состояние обязано остаться RECEIVED.
         принять()
         assertFailsWith<IllegalStateException> {
-            inbox.openNext({ OpenOutcome.Opened(тело) }) { _, _ -> error("диск полон") }
+            store.падатьНаЗаписиТела = true
+            try {
+                inbox.openNext { OpenOutcome.Opened(тело) }
+            } finally {
+                store.падатьНаЗаписиТела = false
+            }
         }
         assertEquals(IncomingState.RECEIVED, store.byKey("chat-1", 5)?.state)
-        assertNotNull(inbox.openNext({ OpenOutcome.Opened(тело) }, положить), "разбирается снова")
+        assertNotNull(inbox.openNext({ OpenOutcome.Opened(тело) }), "разбирается снова")
     }
 
     @Test
@@ -133,10 +136,10 @@ class InboxTest {
         // как «не удаётся прочитать», а не молчание.
         принять()
         repeat(3) {
-            inbox.openNext({ OpenOutcome.NoKey("нет ключа") }, положить)
+            inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
             inbox.retryUndecryptable()
         }
-        inbox.openNext({ OpenOutcome.NoKey("нет ключа") }, положить)
+        inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
         assertEquals(4, store.byKey("chat-1", 5)?.attempts)
     }
 
@@ -148,7 +151,7 @@ class InboxTest {
         // Пока не разобрано — читать нечего, и это ошибка вызывающего.
         assertFailsWith<IllegalArgumentException> { inbox.markRead("chat-1", 5) }
 
-        inbox.openNext({ OpenOutcome.Opened(тело) }, положить)
+        inbox.openNext({ OpenOutcome.Opened(тело) })
         inbox.markRead("chat-1", 5)
 
         assertEquals(IncomingState.READ, store.byKey("chat-1", 5)?.state)

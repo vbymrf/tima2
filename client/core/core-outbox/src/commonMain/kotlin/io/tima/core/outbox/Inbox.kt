@@ -116,6 +116,21 @@ interface InboxStore {
 
     fun update(entry: IncomingEntry)
 
+    /**
+     * Записать разобранное содержимое.
+     *
+     * До этого в строке лежал конверт: он нужен, пока разбор не удался, — по нему идёт
+     * повтор, когда появится ключ. После успешного разбора его место занимает тело, и
+     * именно тело показывает экран.
+     *
+     * **Раньше это был параметр-функция у [Inbox.openNext], и ровно поэтому не работало.**
+     * Каждый вызывающий передавал пустую лямбду — во всех проверках, в харнессе и в
+     * прогоне по стенду, — то есть содержимое не записывалось нигде, а состояние `STORED`
+     * означало «разобрано и потеряно». Обязанность, которую можно передать пустой
+     * лямбдой, однажды передадут пустой лямбдой везде.
+     */
+    fun storeBody(chatId: String, messageId: Long, body: ByteArray)
+
     /** Незавершённое — что видно как «принято» и «нечитаемое». */
     fun pending(): List<IncomingEntry>
 }
@@ -161,19 +176,16 @@ class Inbox(
      *
      * @param open расшифровка — это `core-encryption`; очередь про криптографию
      *   ничего не знает.
-     * @param persist куда лечь разобранному содержимому. Вызывается **до** смены
-     *   состояния: если запись содержимого упала, сообщение останется `RECEIVED` и
-     *   будет разобрано снова.
      * @return запись после перехода, либо `null`, если разбирать нечего.
+     *
+     * Содержимое записывается через [InboxStore.storeBody] и **до** смены состояния: если
+     * запись упала, сообщение останется `RECEIVED` и будет разобрано снова.
      */
-    fun openNext(
-        open: (IncomingEntry) -> OpenOutcome,
-        persist: (IncomingEntry, ByteArray) -> Unit,
-    ): IncomingEntry? {
+    fun openNext(open: (IncomingEntry) -> OpenOutcome): IncomingEntry? {
         val entry = store.nextReceived() ?: return null
         val updated = when (val outcome = open(entry)) {
             is OpenOutcome.Opened -> {
-                persist(entry, outcome.body)
+                store.storeBody(entry.chatId, entry.messageId, outcome.body)
                 entry.copy(state = IncomingState.STORED, undecryptableReason = null)
             }
             is OpenOutcome.NoKey -> entry.copy(

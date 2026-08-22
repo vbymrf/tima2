@@ -32,7 +32,7 @@ class StoreScenarioTest {
     private var эпоха = 1
 
     private val db = TimaDatabase(harnessDriver())
-    private val outbox = Outbox(SqlOutboxStore(db), nowMs = { время })
+    private val outbox = Outbox(SqlOutboxStore(db, харнессШифр()), nowMs = { время })
     private val transport = FakeTransport()
     private val pump = OutboxPump(outbox, maxConcurrent = 3)
 
@@ -43,7 +43,7 @@ class StoreScenarioTest {
 
     private fun store(scope: kotlinx.coroutines.CoroutineScope) = ChatStore(
         chatId = "chat-1",
-        observe = ObserveChat(SqlChatFeed(db, TextBodyCodec)),
+        observe = ObserveChat(SqlChatFeed(db, TextBodyCodec, харнессШифр())),
         send = SendMessage(queue = outbox, codec = TextBodyCodec, keys = UuidDedupKeys),
         scope = scope,
     )

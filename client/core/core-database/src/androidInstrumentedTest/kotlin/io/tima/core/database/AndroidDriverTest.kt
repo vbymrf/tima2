@@ -41,7 +41,7 @@ class AndroidDriverTest {
     @Test
     fun стёртая_переписка_не_находится_в_файле() {
         val db = androidDatabase(context, имяБазы)
-        val store = SqlOutboxStore(db)
+        val store = SqlOutboxStore(db, тестовыйШифр())
         val отпечаток = "секретная-строка-переписки-для-поиска-в-файле"
 
         store.putIfAbsent(
@@ -68,11 +68,11 @@ class AndroidDriverTest {
     @Test
     fun запись_переживает_переоткрытие_базы() {
         // Файл, а не память: локальная база обязана переживать перезапуск приложения.
-        SqlOutboxStore(androidDatabase(context, имяБазы)).putIfAbsent(
+        SqlOutboxStore(androidDatabase(context, имяБазы), тестовыйШифр()).putIfAbsent(
             OutboxEntry(dedupKey = "dedup-1", chatId = "chat-1", body = byteArrayOf(1)),
         )
 
-        val снова = SqlOutboxStore(androidDatabase(context, имяБазы))
+        val снова = SqlOutboxStore(androidDatabase(context, имяБазы), тестовыйШифр())
 
         assertEquals("chat-1", снова.byDedupKey("dedup-1")?.chatId)
     }

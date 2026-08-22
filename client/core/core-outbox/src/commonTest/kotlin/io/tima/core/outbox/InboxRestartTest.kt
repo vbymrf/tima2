@@ -28,7 +28,6 @@ class InboxRestartTest {
     /** Новая машина над тем же хранилищем — то же, что запуск приложения. */
     private fun послеПерезапуска() = Inbox(store, nowMs = { 5_000 })
 
-    private val положить: (IncomingEntry, ByteArray) -> Unit = { _, _ -> }
 
     @Test
     fun убитое_до_разбора_разбирается_после_перезапуска() {
@@ -37,7 +36,7 @@ class InboxRestartTest {
         Inbox(store, nowMs = { 1_000 }).receive("chat-1", 5, конверт)
 
         val после = послеПерезапуска()
-        val разобрано = после.openNext({ OpenOutcome.Opened(тело) }, положить)
+        val разобрано = после.openNext({ OpenOutcome.Opened(тело) })
 
         assertNotNull(разобрано)
         assertEquals(IncomingState.STORED, разобрано.state)
@@ -47,19 +46,20 @@ class InboxRestartTest {
     @Test
     fun убитое_посреди_записи_содержимого_остаётся_на_разбор() {
         // Запись содержимого идёт ДО смены состояния — ровно чтобы падение здесь не
-        // теряло сообщение. Изображаем падение исключением из persist.
+        // теряло сообщение. Отказ изображает хранилище: обязанность записать тело
+        // принадлежит ему, а не переданной лямбде.
         val inbox = Inbox(store, nowMs = { 1_000 })
         inbox.receive("chat-1", 5, конверт)
 
-        runCatching {
-            inbox.openNext({ OpenOutcome.Opened(тело) }) { _, _ -> error("диск отказал") }
-        }
+        store.падатьНаЗаписиТела = true
+        runCatching { inbox.openNext { OpenOutcome.Opened(тело) } }
+        store.падатьНаЗаписиТела = false
 
         assertEquals(IncomingState.RECEIVED, store.byKey("chat-1", 5)?.state)
         // И после перезапуска разбирается заново, без потерь.
         assertEquals(
             IncomingState.STORED,
-            послеПерезапуска().openNext({ OpenOutcome.Opened(тело) }, положить)?.state,
+            послеПерезапуска().openNext({ OpenOutcome.Opened(тело) })?.state,
         )
     }
 
@@ -69,11 +69,11 @@ class InboxRestartTest {
         // разбор при каждом запуске значит жечь батарею впустую.
         val inbox = Inbox(store, nowMs = { 1_000 })
         inbox.receive("chat-1", 5, конверт)
-        inbox.openNext({ OpenOutcome.NoKey("ключ эпохи не пришёл") }, положить)
+        inbox.openNext({ OpenOutcome.NoKey("ключ эпохи не пришёл") })
 
         val после = послеПерезапуска()
 
-        assertNull(после.openNext({ OpenOutcome.Opened(тело) }, положить), "разбирать нечего")
+        assertNull(после.openNext({ OpenOutcome.Opened(тело) }), "разбирать нечего")
         val запись = store.byKey("chat-1", 5)
         assertEquals(IncomingState.UNDECRYPTABLE, запись?.state)
         assertEquals("ключ эпохи не пришёл", запись?.undecryptableReason, "причина не теряется")
@@ -83,7 +83,7 @@ class InboxRestartTest {
         assertEquals(1, после.retryUndecryptable())
         assertEquals(
             IncomingState.STORED,
-            после.openNext({ OpenOutcome.Opened(тело) }, положить)?.state,
+            после.openNext({ OpenOutcome.Opened(тело) })?.state,
         )
     }
 
@@ -92,13 +92,13 @@ class InboxRestartTest {
         val inbox = Inbox(store, nowMs = { 1_000 })
         inbox.receive("chat-1", 5, конверт)
         inbox.receive("chat-1", 6, конверт)
-        inbox.openNext({ OpenOutcome.Opened(тело) }, положить)
-        inbox.openNext({ OpenOutcome.Opened(тело) }, положить)
+        inbox.openNext({ OpenOutcome.Opened(тело) })
+        inbox.openNext({ OpenOutcome.Opened(тело) })
         inbox.markRead("chat-1", 5)
 
         val после = послеПерезапуска()
 
-        assertNull(после.openNext({ OpenOutcome.Opened(тело) }, положить), "заново разбирать нечего")
+        assertNull(после.openNext({ OpenOutcome.Opened(тело) }), "заново разбирать нечего")
         assertEquals(IncomingState.READ, store.byKey("chat-1", 5)?.state)
         assertEquals(IncomingState.STORED, store.byKey("chat-1", 6)?.state)
     }
@@ -130,7 +130,7 @@ class InboxRestartTest {
         val inbox = Inbox(store, nowMs = { 1_000 })
         inbox.receive("chat-1", 5, конверт)
         inbox.receive("chat-1", 6, конверт)
-        inbox.openNext({ OpenOutcome.NoKey("нет ключа") }, положить)
+        inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
 
         // Всё незавершённое остаётся видимым человеку и после перезапуска.
         assertEquals(2, послеПерезапуска().pending().size)

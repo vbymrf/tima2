@@ -36,6 +36,7 @@ anything; it makes the old data unreadable and the old keys unrecognisable.
 | `KodiumPrivateKey.fromRaw(seed)` semantics | device and identity keys | **every device's keys change** — an account migration, not a refactor |
 | `AccountMnemonic` wordlist and index order | 12-word phrases | already-issued phrases stop resolving |
 | HKDF labels `tima/escrow/v1`, `tima/account-identity/v1`, `tima/account-backup/v1` | escrow, identity, backup | existing escrow blobs and backups unreadable |
+| HKDF label `tima/local-store/v1` | `LocalStoreCipher` — at-rest key of the local database | **every local conversation becomes unreadable** on every device: the key is derived, not stored, so there is nothing to migrate from |
 | `chunk:<i>` derivation | media chunks | stored media unreadable |
 | Canonical byte layout | envelope signatures | every stored signature fails verification |
 

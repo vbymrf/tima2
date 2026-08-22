@@ -7,6 +7,7 @@ import io.tima.core.database.TimaDatabase
 import io.tima.core.encryption.DeviceIdentity
 import io.tima.core.encryption.DeviceKeyFactoryOverKodium
 import io.tima.core.encryption.EscrowKeyVerifier
+import io.tima.core.encryption.LocalStoreFieldCipher
 import io.tima.core.encryption.OutgoingSealer
 import io.tima.core.encryption.PersonalMessages
 import io.tima.core.encryption.RecipientDevice
@@ -126,6 +127,8 @@ object StandRun {
         val deviceId: String,
         val accessToken: String,
         val identity: DeviceIdentity,
+        /** Секрет устройства: из него выводится и ключ покоя локальной базы. */
+        val secret: ByteArray,
     )
 
     private suspend fun завести(
@@ -175,6 +178,7 @@ object StandRun {
             deviceId = ответ.deviceId,
             accessToken = ответ.accessToken,
             identity = deviceIdentityFrom(материал.secret),
+            secret = материал.secret,
         )
     }
 
@@ -245,8 +249,13 @@ object StandRun {
         }
 
         // Приём вторым устройством: живой канал того же сервера.
+        // Шифр покоя выводится из НАСТОЯЩЕГО секрета устройства, а не из постоянного
+        // харнессного: прогон по стенду проверяет то, что поедет на устройство, включая
+        // ключ локальной базы.
+        val шифрБ = LocalStoreFieldCipher(Б.secret)
+        val базаБ = TimaDatabase(harnessDriver())
         val inbox = Inbox(
-            SqlInboxStore(TimaDatabase(harnessDriver())),
+            SqlInboxStore(базаБ, шифрБ),
             nowMs = { System.currentTimeMillis() },
         )
         // Ждём до первого дошедшего, а не до конца тайм-аута: канал сам не закрывается.
@@ -267,8 +276,18 @@ object StandRun {
                             onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },
                         )
                     },
-                    persist = { _, тело -> дошло.complete(тело.decodeToString()) },
-                )
+                )?.let { запись ->
+                    // Текст берётся ИЗ БАЗЫ, а не из лямбды: прогон обязан доказать, что
+                    // сообщение доехало туда, откуда его читает экран. Раньше здесь была
+                    // лямбда persist, и она же скрывала, что в базу тело не ложилось.
+                    if (запись.state == io.tima.core.outbox.IncomingState.STORED) {
+                        val строка = базаБ.messagesQueries
+                            .byDedupKey("${запись.chatId}/${запись.messageId}")
+                            .executeAsOneOrNull()
+                        val тело = строка?.body_enc?.let { шифрБ.open(it) }
+                        if (тело != null) дошло.complete(тело.decodeToString())
+                    }
+                }
             }
         }
         val прочитано = withTimeoutOrNull(30_000) { дошло.await() }

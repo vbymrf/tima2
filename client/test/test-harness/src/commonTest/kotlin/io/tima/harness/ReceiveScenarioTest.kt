@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
 class ReceiveScenarioTest {
 
     private val db = TimaDatabase(harnessDriver())
-    private val store = SqlInboxStore(db)
+    private val store = SqlInboxStore(db, харнессШифр())
     private val inbox = Inbox(store, nowMs = { 1_000 })
     private val h = ReceiveHarness(inbox)
 

@@ -1,6 +1,7 @@
 package io.tima.core.database
 
 import io.tima.core.outbox.OutboxEntry
+import io.tima.core.outbox.FieldCipher
 import io.tima.core.outbox.OutboxState
 import io.tima.core.outbox.OutboxStore
 
@@ -18,7 +19,14 @@ import io.tima.core.outbox.OutboxStore
  * [OutboxState] менять нельзя, а добавлять новые значения — только в конец. Проверка
  * этого — тест [io.tima.core.database.OutboxStateOrdinalTest].
  */
-class SqlOutboxStore(private val db: TimaDatabase) : OutboxStore {
+class SqlOutboxStore(
+    private val db: TimaDatabase,
+    /**
+     * Шифр покоя. Обязателен: столбец `body_enc` **всегда** закрыт, и «пока без
+     * шифрования» тут не бывает — ровно так обещание и теряется.
+     */
+    private val cipher: FieldCipher,
+) : OutboxStore {
 
     private val q get() = db.messagesQueries
 
@@ -34,7 +42,7 @@ class SqlOutboxStore(private val db: TimaDatabase) : OutboxStore {
             attempts = entry.attempts.toLong(),
             next_attempt_at = entry.nextAttemptAtMs,
             reply_to = null,
-            body_enc = entry.body,
+            body_enc = cipher.seal(entry.body),
         )
         // INSERT OR IGNORE молчит при конфликте, поэтому «поставили» отличается от
         // «уже было» только числом затронутых строк. Без этой проверки повторная
@@ -89,7 +97,13 @@ class SqlOutboxStore(private val db: TimaDatabase) : OutboxStore {
     private fun Messages.toEntry() = OutboxEntry(
         dedupKey = dedup_key,
         chatId = chat_id,
-        body = body_enc,
+        // Не открылось — значит база не наша: ключ покоя выводится из секрета устройства,
+        // и чужой секрет означает чужую установку. Здесь падаем громко, а не отдаём пустое
+        // тело: пустое ушло бы на сервер как сообщение. У переписки (SqlChatFeed) правило
+        // обратное — там одна нечитаемая строка не должна лишать человека всей истории.
+        body = requireNotNull(cipher.open(body_enc)) {
+            "тело $dedup_key не открывается ключом покоя: база принадлежит другой установке"
+        },
         state = stateOf(state),
         attempts = attempts.toInt(),
         nextAttemptAtMs = next_attempt_at ?: 0,

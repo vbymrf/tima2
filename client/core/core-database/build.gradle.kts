@@ -31,6 +31,11 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
+            // Настоящий шифр покоя, а не подделка. Подделка здесь была бы прямой дорогой
+            // к тому, от чего этот шифр и защищает: «пока без шифрования» однажды уезжает
+            // в бой. Заодно проверка «в файле базы нет открытого текста» имеет смысл
+            // только с настоящим шифром.
+            implementation(projects.core.coreEncryption)
         }
         jvmMain.dependencies {
             implementation(libs.sqldelight.driver.jvm)
@@ -44,6 +49,7 @@ kotlin {
         }
         androidInstrumentedTest.dependencies {
             implementation(kotlin("test"))
+            implementation(projects.core.coreEncryption)
             implementation(libs.androidx.test.runner)
             implementation(libs.androidx.test.core)
         }

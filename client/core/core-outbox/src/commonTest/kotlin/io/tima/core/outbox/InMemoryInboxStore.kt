@@ -10,6 +10,15 @@ package io.tima.core.outbox
 class InMemoryInboxStore : InboxStore {
 
     private val rows = LinkedHashMap<String, IncomingEntry>()
+    private val тела = LinkedHashMap<String, ByteArray>()
+
+    /**
+     * Отказ записи содержимого — для проверки «убили посреди записи».
+     *
+     * Раньше падение изображали лямбдой, переданной в `openNext`. Лямбды больше нет:
+     * обязанность записать тело принадлежит хранилищу, значит и отказ изображает оно.
+     */
+    var падатьНаЗаписиТела: Boolean = false
 
     private fun key(chatId: String, messageId: Long) = "$chatId/$messageId"
 
@@ -30,6 +39,14 @@ class InMemoryInboxStore : InboxStore {
     override fun update(entry: IncomingEntry) {
         rows[entry.key] = entry
     }
+
+    override fun storeBody(chatId: String, messageId: Long, body: ByteArray) {
+        if (падатьНаЗаписиТела) error("диск отказал")
+        тела[key(chatId, messageId)] = body
+    }
+
+    /** Записанное тело — чтобы проверка могла убедиться, что оно действительно легло. */
+    fun body(chatId: String, messageId: Long): ByteArray? = тела[key(chatId, messageId)]
 
     override fun pending(): List<IncomingEntry> = rows.values.filter {
         it.state == IncomingState.RECEIVED || it.state == IncomingState.UNDECRYPTABLE

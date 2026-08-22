@@ -97,7 +97,7 @@ class FullCircleTest {
 
     /** Своя база получателя: у него отдельное устройство, значит и хранилище своё. */
     private val база_получателя = TimaDatabase(harnessDriver())
-    private val у_получателя = Inbox(SqlInboxStore(база_получателя), nowMs = { сейчас })
+    private val у_получателя = Inbox(SqlInboxStore(база_получателя, харнессШифр()), nowMs = { сейчас })
 
     @Test
     fun текст_доходит_до_собеседника_целиком() = runTest {
@@ -115,7 +115,6 @@ class FullCircleTest {
         у_получателя.receive("chat-1", messageId = 1, envelope = конверт)
 
         // 4. Получатель открыл его своим ключом.
-        var прочитано: String? = null
         у_получателя.openNext(
             open = { запись ->
                 PersonalMessages.open(
@@ -128,13 +127,12 @@ class FullCircleTest {
                     onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },
                 )
             },
-            persist = { _, тело -> прочитано = тело.decodeToString() },
         )
 
-        assertEquals(текст, прочитано, "до собеседника обязан дойти тот же текст")
+        assertEquals(текст, теломПолучателя(1), "до собеседника обязан дойти тот же текст")
         assertEquals(
             IncomingState.STORED,
-            SqlInboxStore(база_получателя).byKey("chat-1", 1)?.state,
+            SqlInboxStore(база_получателя, харнессШифр()).byKey("chat-1", 1)?.state,
         )
     }
 
@@ -158,12 +156,11 @@ class FullCircleTest {
                         onFailure = { OpenOutcome.NoKey("нет обёртки для этого устройства") },
                     )
             },
-            persist = { _, _ -> },
         )
 
         assertEquals(
             IncomingState.UNDECRYPTABLE,
-            SqlInboxStore(база_получателя).byKey("chat-1", 1)?.state,
+            SqlInboxStore(база_получателя, харнессШифр()).byKey("chat-1", 1)?.state,
             "нечитаемое остаётся видимым, а не исчезает",
         )
     }
@@ -192,7 +189,6 @@ class FullCircleTest {
         )
 
         у_получателя.receive("chat-1", 1, у_отправителя.transport.attempts[1].envelope)
-        var прочитано: String? = null
         у_получателя.openNext(
             open = { запись ->
                 PersonalMessages.open(запись.envelope, "устройство-получателя", получатель, отправитель.signingPublic)
@@ -201,10 +197,9 @@ class FullCircleTest {
                         onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },
                     )
             },
-            persist = { _, тело -> прочитано = тело.decodeToString() },
         )
 
-        assertEquals("после обрыва", прочитано)
+        assertEquals("после обрыва", теломПолучателя(1))
         assertEquals(0, у_отправителя.pending().size, "у отправителя очередь пуста")
     }
 
@@ -245,5 +240,20 @@ class FullCircleTest {
         assertEquals(OutboxState.SENT, переписка.single().state)
         assertTrue(переписка.single().outgoing)
         assertEquals(0, у_отправителя.pending().size)
+    }
+
+    /**
+     * Тело, ЛЕЖАЩЕЕ В БАЗЕ получателя.
+     *
+     * Раньше здесь проверялась переменная, в которую писала лямбда `persist`. Она и
+     * скрывала настоящую поломку: лямбда была у каждого вызывающего своя и всюду пустая
+     * или тестовая, а в базу тело не ложилось вовсе — состояние `STORED` означало
+     * «разобрано и потеряно». Теперь проверка смотрит туда, откуда читает экран.
+     */
+    private fun теломПолучателя(messageId: Long): String? {
+        val строка = база_получателя.messagesQueries
+            .byDedupKey("chat-1/$messageId")
+            .executeAsOneOrNull() ?: return null
+        return харнессШифр().open(строка.body_enc)?.decodeToString()
     }
 }

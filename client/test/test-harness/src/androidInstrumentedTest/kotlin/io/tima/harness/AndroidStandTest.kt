@@ -29,6 +29,7 @@ import io.tima.core.network.SmsVerifyResult
 import io.tima.core.network.httpEngine
 import io.tima.core.network.timaDefaults
 import io.tima.core.outbox.Inbox
+import io.tima.core.outbox.IncomingState
 import io.tima.core.outbox.OpenOutcome
 import io.tima.core.secrets.AndroidSecrets
 import io.tima.core.secrets.Secrets
@@ -168,8 +169,10 @@ class AndroidStandTest {
         assertTrue(harness.pending().isEmpty(), "сообщение не ушло: ${harness.pending()}")
 
         // ── приём вторым устройством по живому каналу ─────────────────────────
+        val шифрБ = харнессШифр()
+        val базаБ = TimaDatabase(harnessDriver())
         val inbox = Inbox(
-            SqlInboxStore(TimaDatabase(harnessDriver())),
+            SqlInboxStore(базаБ, шифрБ),
             nowMs = { System.currentTimeMillis() },
         )
         // Ждём ДО первого дошедшего сообщения, а не до конца тайм-аута: живой канал
@@ -191,8 +194,17 @@ class AndroidStandTest {
                             onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },
                         )
                     },
-                    persist = { _, тело -> дошло.complete(тело.decodeToString()) },
-                )
+                )?.let { запись ->
+                    // Текст берётся ИЗ БАЗЫ УСТРОЙСТВА: прогон на телефоне обязан
+                    // доказать, что сообщение доехало туда, откуда его читает экран.
+                    if (запись.state == IncomingState.STORED) {
+                        val строка = базаБ.messagesQueries
+                            .byDedupKey("${запись.chatId}/${запись.messageId}")
+                            .executeAsOneOrNull()
+                        val тело = строка?.body_enc?.let { шифрБ.open(it) }
+                        if (тело != null) дошло.complete(тело.decodeToString())
+                    }
+                }
             }
         }
         val прочитано = withTimeoutOrNull(60_000) { дошло.await() }

@@ -23,9 +23,13 @@ import kotlin.test.assertTrue
 class SqlChatFeedTest {
 
     private val db = testDatabase()
-    private val outbox = SqlOutboxStore(db)
-    private val inbox = SqlInboxStore(db)
-    private val feed = SqlChatFeed(db, Кодек)
+    private val шифр = тестовыйШифр()
+
+    /** Байты, которые кодек телом не признает: так выглядит конверт до разбора. */
+    private val конвертБезТела = Кодек.НЕЧИТАЕМОЕ
+    private val outbox = SqlOutboxStore(db, шифр)
+    private val inbox = SqlInboxStore(db, шифр)
+    private val feed = SqlChatFeed(db, Кодек, шифр)
     private val chat = ObserveChat(feed)
 
     private fun исходящее(
@@ -162,6 +166,28 @@ class SqlChatFeedTest {
         assertEquals(null, строки.single { !it.outgoing }.text)
         assertEquals(MessageDisplay.UNREADABLE, строки.single { !it.outgoing }.display)
         assertEquals("привет", строки.single { it.outgoing }.text, "соседнее читается как обычно")
+    }
+
+    /**
+     * У входящего текст появляется **только после разбора**.
+     *
+     * Пока разбор не удался, в столбце лежит конверт, а не тело: по нему идёт повтор,
+     * когда появится ключ. Разбирать конверт кодеком тела незачем — это не тело, и до
+     * этой правки строка молча выходила нечитаемой навсегда, потому что тело не
+     * записывалось вообще нигде.
+     */
+    @Test
+    fun текст_входящего_появляется_только_после_разбора() = runTest {
+        val машина = io.tima.core.outbox.Inbox(inbox, nowMs = { 2_000 })
+        машина.receive("chat-1", 42, конвертБезТела)
+
+        assertEquals(null, chat.page("chat-1").first().single().text, "конверт — это ещё не текст")
+
+        машина.openNext { io.tima.core.outbox.OpenOutcome.Opened(Кодек.encodeText("и тебе")) }
+
+        val строка = chat.page("chat-1").first().single()
+        assertEquals("и тебе", строка.text, "после разбора тело обязано быть в строке")
+        assertEquals(MessageDisplay.RECEIVED, строка.display)
     }
 
     // ── порядок ──────────────────────────────────────────────────────────────

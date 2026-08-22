@@ -58,8 +58,10 @@ class ChatHarness(
 
     private val db = TimaDatabase(driver)
 
-    val outbox = Outbox(SqlOutboxStore(db), nowMs = { time })
-    val inbox = Inbox(SqlInboxStore(db), nowMs = { time })
+    private val шифр = харнессШифр()
+
+    val outbox = Outbox(SqlOutboxStore(db, шифр), nowMs = { time })
+    val inbox = Inbox(SqlInboxStore(db, шифр), nowMs = { time })
 
     /**
      * Транспорт. Один на харнесс и **не переживает перезапуск** — как настоящее

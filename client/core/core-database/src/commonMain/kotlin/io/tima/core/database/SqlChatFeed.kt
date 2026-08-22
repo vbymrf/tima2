@@ -2,6 +2,7 @@ package io.tima.core.database
 
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
+import io.tima.core.outbox.FieldCipher
 import io.tima.core.outbox.IncomingState
 import io.tima.core.outbox.OutboxState
 import io.tima.domain.chat.ChatFeed
@@ -40,6 +41,8 @@ class SqlChatFeed(
      * готовой.
      */
     private val codec: MessageBodyCodec,
+    /** Шифр покоя: в столбце лежат закрытые байты, и открыть их надо прежде разбора. */
+    private val cipher: FieldCipher,
 ) : ChatFeed {
 
     override fun page(chatId: String, limit: Int): Flow<List<ChatLine>> =
@@ -54,15 +57,34 @@ class SqlChatFeed(
         dedupKey = dedup_key,
         chatId = chat_id,
         display = displayOf(direction, state),
-        // Нечитаемое тело даёт null и НЕ роняет страницу: одна испорченная запись не
-        // должна лишать человека всей переписки.
-        text = codec.decodeText(body_enc),
+        // Два шага, и порядок обязателен: сначала открыть поле ключом покоя, потом
+        // разобрать тело кодеком. Любой из шагов может не удаться, и тогда текста нет —
+        // строка остаётся в переписке нечитаемой. Одна испорченная запись не должна
+        // лишать человека всей истории.
+        text = текстСтроки(direction, state, body_enc),
         outgoing = direction == OUTGOING,
         // Серверное время, если сообщение дошло; иначе часы устройства. Они врут, но
         // других на момент составления нет.
         atMs = server_ts ?: client_ts,
         localId = local_id,
     )
+
+    /**
+     * Текст строки — или его отсутствие.
+     *
+     * У входящего в столбце лежит **конверт**, пока разбор не удался: тело появляется там
+     * только после успешной расшифровки. Поэтому у непринятого и нечитаемого текста нет
+     * по определению, и пытаться разобрать конверт кодеком незачем — это не тело.
+     */
+    private fun текстСтроки(direction: Long, state: Long, поле: ByteArray): String? {
+        if (direction != OUTGOING) {
+            val состояние = IncomingState.entries.getOrNull(state.toInt())
+            val разобрано = состояние == IncomingState.STORED || состояние == IncomingState.READ
+            if (!разобрано) return null
+        }
+        val открытое = cipher.open(поле) ?: return null
+        return codec.decodeText(открытое)
+    }
 
     private companion object {
         const val OUTGOING = 0L

@@ -25,8 +25,9 @@ import kotlin.test.assertTrue
 class SqlInboxStoreTest {
 
     private val db = testDatabase()
-    private val inboxStore = SqlInboxStore(db)
-    private val outboxStore = SqlOutboxStore(db)
+    private val шифр = тестовыйШифр()
+    private val inboxStore = SqlInboxStore(db, шифр)
+    private val outboxStore = SqlOutboxStore(db, шифр)
 
     private var время = 1_000L
     private val inbox = Inbox(inboxStore, nowMs = { время })
@@ -34,9 +35,6 @@ class SqlInboxStoreTest {
 
     private val конверт = byteArrayOf(5, 6, 7)
     private val тело = byteArrayOf(1)
-    private val записано = mutableMapOf<String, ByteArray>()
-    private val положить: (io.tima.core.outbox.IncomingEntry, ByteArray) -> Unit =
-        { e, b -> записано[e.key] = b }
 
     @Test
     fun приём_и_чтение_возвращают_то_же_самое() {
@@ -67,7 +65,7 @@ class SqlInboxStoreTest {
         // Она пишется отдельным столбцом, а не подмешивается в тело: тело шифртекст, и
         // текстовая пометка внутри стала бы байтами, которых никто не расшифрует.
         inbox.receive("chat-1", 42, конверт)
-        inbox.openNext({ OpenOutcome.NoKey("обёртки для устройства нет") }, положить)
+        inbox.openNext({ OpenOutcome.NoKey("обёртки для устройства нет") })
 
         val e = inboxStore.byKey("chat-1", 42)!!
         assertEquals(IncomingState.UNDECRYPTABLE, e.state)
@@ -78,14 +76,25 @@ class SqlInboxStoreTest {
     @Test
     fun появился_ключ_и_разбор_повторяется() {
         inbox.receive("chat-1", 42, конверт)
-        inbox.openNext({ OpenOutcome.NoKey("нет ключа") }, положить)
+        inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
 
         assertEquals(1, inbox.retryUndecryptable())
         assertEquals(IncomingState.RECEIVED, inboxStore.byKey("chat-1", 42)?.state)
 
-        inbox.openNext({ OpenOutcome.Opened(тело) }, положить)
+        inbox.openNext({ OpenOutcome.Opened(тело) })
         assertEquals(IncomingState.STORED, inboxStore.byKey("chat-1", 42)?.state)
-        assertTrue(тело.contentEquals(записано["chat-1/42"]!!))
+        // Тело проверяется В БАЗЕ, а не в тестовой переменной: раньше запись содержимого
+        // была лямбдой, и все вызывающие передавали пустую — состояние STORED означало
+        // «разобрано и потеряно». Теперь строка обязана содержать тело, и закрытое.
+        val строка = db.messagesQueries.byDedupKey("chat-1/42").executeAsOne()
+        assertFalse(
+            тело.contentEquals(строка.body_enc),
+            "тело легло в базу открытым — шифрование покоя не сработало",
+        )
+        assertTrue(
+            тело.contentEquals(шифр.open(строка.body_enc)!!),
+            "разобранное тело обязано лечь в строку",
+        )
     }
 
     // ── главное: две машины в одном столбце ─────────────────────────────────
@@ -95,7 +104,7 @@ class SqlInboxStoreTest {
         // Входящее в состоянии UNDECRYPTABLE имеет state = 1 — то же число, что SEALED
         // у исходящего. Без direction очередь забрала бы его на отправку.
         inbox.receive("chat-1", 42, конверт)
-        inbox.openNext({ OpenOutcome.NoKey("нет ключа") }, положить)
+        inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
         assertEquals(1L, IncomingState.UNDECRYPTABLE.ordinal.toLong(), "предпосылка теста")
         assertEquals(1L, OutboxState.SEALED.ordinal.toLong(), "предпосылка теста")
 
@@ -128,7 +137,7 @@ class SqlInboxStoreTest {
         outbox.sealNext(1) { byteArrayOf(1) }
         outbox.claimForSend()
         outbox.onOutcome("d-1", SendOutcome.Accepted(serverMessageId = 100))
-        inbox.openNext({ OpenOutcome.Opened(тело) }, положить)
+        inbox.openNext({ OpenOutcome.Opened(тело) })
 
         assertEquals(OutboxState.SENT, outboxStore.byDedupKey("d-1")?.state)
         assertEquals(IncomingState.STORED, inboxStore.byKey("chat-1", 42)?.state)

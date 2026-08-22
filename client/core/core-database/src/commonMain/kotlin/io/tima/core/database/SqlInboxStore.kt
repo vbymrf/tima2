@@ -1,5 +1,6 @@
 package io.tima.core.database
 
+import io.tima.core.outbox.FieldCipher
 import io.tima.core.outbox.InboxStore
 import io.tima.core.outbox.IncomingEntry
 import io.tima.core.outbox.IncomingState
@@ -24,7 +25,11 @@ import io.tima.core.outbox.IncomingState
  * есть, тем самым обслуживает и требование инвентаря о догоне истории — без второго
  * индекса и без второй проверки в коде.
  */
-class SqlInboxStore(private val db: TimaDatabase) : InboxStore {
+class SqlInboxStore(
+    private val db: TimaDatabase,
+    /** Шифр покоя: и конверт, и разобранное тело лежат в столбце закрытыми. */
+    private val cipher: FieldCipher,
+) : InboxStore {
 
     private val q get() = db.messagesQueries
 
@@ -40,7 +45,7 @@ class SqlInboxStore(private val db: TimaDatabase) : InboxStore {
             client_ts = entry.receivedAtMs,
             state = entry.state.ordinal.toLong(),
             attempts = entry.attempts.toLong(),
-            body_enc = entry.envelope,
+            body_enc = cipher.seal(entry.envelope),
         )
         q.changes().executeAsOne() > 0
     }
@@ -64,6 +69,17 @@ class SqlInboxStore(private val db: TimaDatabase) : InboxStore {
         )
     }
 
+    /**
+     * Разобранное тело на место конверта.
+     *
+     * Конверт до этого нужен: по нему идёт повтор разбора, когда появится ключ. После
+     * успешного разбора он больше не нужен, а тело — нужно: его показывает экран. Пока
+     * этой записи не было, состояние `STORED` означало «разобрано и потеряно».
+     */
+    override fun storeBody(chatId: String, messageId: Long, body: ByteArray) {
+        q.updateBody(body_enc = cipher.seal(body), dedup_key = keyOf(chatId, messageId))
+    }
+
     override fun pending(): List<IncomingEntry> = q.incomingPending(
         state = IncomingState.RECEIVED.ordinal.toLong(),
         state_ = IncomingState.UNDECRYPTABLE.ordinal.toLong(),
@@ -74,7 +90,10 @@ class SqlInboxStore(private val db: TimaDatabase) : InboxStore {
         messageId = requireNotNull(server_id) {
             "входящее без server_id: строка $dedup_key записана не как входящее"
         },
-        envelope = body_enc,
+        // Не открылось — отдаём как есть: разбор такого конверта провалится и строка
+        // станет нечитаемой, что и есть правда о ней. Падать здесь нельзя: одна чужая
+        // строка не должна лишать человека всей переписки.
+        envelope = cipher.open(body_enc) ?: ByteArray(0),
         state = incomingStateOf(state),
         attempts = attempts.toInt(),
         receivedAtMs = client_ts,
