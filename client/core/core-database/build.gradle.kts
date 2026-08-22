@@ -53,6 +53,11 @@ kotlin {
             implementation(libs.androidx.test.runner)
             implementation(libs.androidx.test.core)
         }
+        jvmMain.dependencies {
+            // Боевой драйвер ПК. До него у JVM были только тестовые, в памяти, — то есть
+            // приложение для ПК не могло открыть базу вовсе.
+            implementation(libs.sqldelight.driver.jvm)
+        }
         jvmTest.dependencies {
             implementation(libs.sqldelight.driver.jvm)
         }

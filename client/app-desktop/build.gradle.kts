@@ -7,9 +7,8 @@ plugins {
 // Вход для ПК. Здесь и только здесь разрешено знать о платформе как о платформе
 // (Plan.md §1.3): окно, трей, автозапуск, файловые диалоги.
 //
-// Приложение намеренно пустое: задача К1.9 — доказать, что тулчейн Compose
-// собирается и запускается, а не показать интерфейс. Интерфейс приезжает в К5,
-// по макету, из готовой дизайн-системы.
+// Здесь же — единственное место, где всё соединяется: секрет устройства из хранилища
+// платформы, база с диска, очередь, экраны. Ни один модуль ниже не знает, кто его собрал.
 kotlin {
     jvmToolchain(17)
     jvm()
@@ -17,17 +16,22 @@ kotlin {
     sourceSets {
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
-            // Аксессор compose.material3 объявлен deprecated в Compose 1.11
-            // («Specify dependency directly»), и предупреждение мы терпим осознанно:
-            // прямая координата org.jetbrains.compose.material3:material3 в линии
-            // 1.11 существует ТОЛЬКО в alpha (1.11.0-alpha01…07), а последняя
-            // стабильная — 1.9.0. То есть «починка» означала бы либо alpha в
-            // зависимостях, либо расхождение версий с рантаймом Compose 1.11.1.
-            // Аксессор этим и ценен: он всегда даёт версию плагина.
-            implementation(compose.material3)
-            // Без type-safe accessors: их нужно включать feature preview в settings,
-            // а лишний переключатель ради красоты записи — цена без выгоды.
+            // material3 больше не нужен и убран: у нас своя система форм и цветов, и
+            // единственным его потребителем был пустой каркас К1.9. Заодно ушло
+            // предупреждение об устаревшем аксессоре, которое приходилось терпеть.
             implementation(project(":core:core-model"))
+            // Дизайн-система, экраны и весь стек хранения. Приложение только соединяет.
+            implementation(project(":core:core-ui"))
+            implementation(project(":core:core-database"))
+            implementation(project(":core:core-encryption"))
+            implementation(project(":core:core-secrets"))
+            implementation(project(":feature:feature-chat"))
+        }
+        // Сборку приложения можно проверить без окна: секрет, база и очередь — обычный
+        // код. Именно здесь ломается первый живой запуск, а не в отрисовке.
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }
