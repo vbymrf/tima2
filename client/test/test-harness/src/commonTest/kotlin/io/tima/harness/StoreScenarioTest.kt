@@ -43,7 +43,7 @@ class StoreScenarioTest {
 
     private fun store(scope: kotlinx.coroutines.CoroutineScope) = ChatStore(
         chatId = "chat-1",
-        observe = ObserveChat(SqlChatFeed(db)),
+        observe = ObserveChat(SqlChatFeed(db, TextBodyCodec)),
         send = SendMessage(queue = outbox, codec = TextBodyCodec, keys = UuidDedupKeys),
         scope = scope,
     )

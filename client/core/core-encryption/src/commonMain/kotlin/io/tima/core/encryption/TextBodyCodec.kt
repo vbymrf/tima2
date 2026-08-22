@@ -29,6 +29,15 @@ object TextBodyCodec : MessageBodyCodec {
      *   сообщение — обычное состояние входящей машины ([io.tima.core.outbox.Inbox]),
      *   а не поломка.
      */
+    /**
+     * Текст для показа на экране.
+     *
+     * Берётся плоская склейка узлов: клиент, не знающий про узлы, покажет сообщение без
+     * оформления — это хуже, чем с оформлением, и несравнимо лучше, чем пустое место.
+     * Разметка приедет вместе с редактором.
+     */
+    override fun decodeText(body: ByteArray): String? = decode(body).getOrNull()?.plainText()
+
     fun decode(payload: ByteArray): Result<MessageContent> =
         MessageSerializer.decodeBody(payload).map { MessageContentCodec.fromBody(it) }
 }

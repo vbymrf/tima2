@@ -6,6 +6,7 @@ import io.tima.core.outbox.IncomingState
 import io.tima.core.outbox.OutboxState
 import io.tima.domain.chat.ChatFeed
 import io.tima.domain.chat.ChatLine
+import io.tima.domain.chat.MessageBodyCodec
 import io.tima.domain.chat.MessageDisplay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -28,7 +29,18 @@ import kotlinx.coroutines.flow.map
  * иначе местное; при равенстве — порядок появления» повторено индексом, иначе список
  * на нескольких тысячах сообщений сортируется в памяти.
  */
-class SqlChatFeed(private val db: TimaDatabase) : ChatFeed {
+class SqlChatFeed(
+    private val db: TimaDatabase,
+    /**
+     * Кодек тела — порт `domain-chat`, а не своя распаковка.
+     *
+     * Тело записано тем же кодеком, которым уходит на провод, и читать его чем-то
+     * другим означало бы завести второе представление текста. Порт при этом остаётся
+     * доменным: техника (zstd, protobuf) живёт в `core-encryption`, а сюда приезжает
+     * готовой.
+     */
+    private val codec: MessageBodyCodec,
+) : ChatFeed {
 
     override fun page(chatId: String, limit: Int): Flow<List<ChatLine>> =
         db.messagesQueries.chatPage(chatId, limit.toLong())
@@ -42,6 +54,9 @@ class SqlChatFeed(private val db: TimaDatabase) : ChatFeed {
         dedupKey = dedup_key,
         chatId = chat_id,
         display = displayOf(direction, state),
+        // Нечитаемое тело даёт null и НЕ роняет страницу: одна испорченная запись не
+        // должна лишать человека всей переписки.
+        text = codec.decodeText(body_enc),
         outgoing = direction == OUTGOING,
         // Серверное время, если сообщение дошло; иначе часы устройства. Они врут, но
         // других на момент составления нет.

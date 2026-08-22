@@ -38,7 +38,10 @@ class ChatStoreTest {
                 очередь += ключ
                 ключ !in занятые
             },
-            codec = MessageBodyCodec { ByteArray(размерТела) },
+            codec = object : MessageBodyCodec {
+                override fun encodeText(text: String) = ByteArray(размерТела)
+                override fun decodeText(body: ByteArray): String? = null
+            },
             keys = DedupKeys { "d-${очередь.size + 1}" },
             maxBodyBytes = 100,
         ),

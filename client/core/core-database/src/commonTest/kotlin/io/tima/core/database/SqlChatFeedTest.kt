@@ -4,6 +4,7 @@ import io.tima.core.outbox.IncomingEntry
 import io.tima.core.outbox.IncomingState
 import io.tima.core.outbox.OutboxEntry
 import io.tima.core.outbox.OutboxState
+import io.tima.domain.chat.MessageBodyCodec
 import io.tima.domain.chat.MessageDisplay
 import io.tima.domain.chat.ObserveChat
 import kotlinx.coroutines.flow.first
@@ -24,7 +25,7 @@ class SqlChatFeedTest {
     private val db = testDatabase()
     private val outbox = SqlOutboxStore(db)
     private val inbox = SqlInboxStore(db)
-    private val feed = SqlChatFeed(db)
+    private val feed = SqlChatFeed(db, Кодек)
     private val chat = ObserveChat(feed)
 
     private fun исходящее(
@@ -32,12 +33,13 @@ class SqlChatFeedTest {
         state: OutboxState,
         clientTs: Long = 1_000,
         serverTs: Long? = null,
+        тело: ByteArray = Кодек.encodeText("привет"),
     ) {
         outbox.putIfAbsent(
             OutboxEntry(
                 dedupKey = dedupKey,
                 chatId = "chat-1",
-                body = byteArrayOf(1),
+                body = тело,
                 state = OutboxState.QUEUED,
                 createdAtMs = clientTs,
             ),
@@ -54,12 +56,17 @@ class SqlChatFeedTest {
         }
     }
 
-    private fun входящее(messageId: Long, state: IncomingState, ts: Long = 2_000) {
+    private fun входящее(
+        messageId: Long,
+        state: IncomingState,
+        ts: Long = 2_000,
+        тело: ByteArray = Кодек.encodeText("ответ"),
+    ) {
         inbox.putIfAbsent(
             IncomingEntry(
                 chatId = "chat-1",
                 messageId = messageId,
-                envelope = byteArrayOf(9),
+                envelope = тело,
                 state = IncomingState.RECEIVED,
                 receivedAtMs = ts,
             ),
@@ -125,6 +132,36 @@ class SqlChatFeedTest {
 
         assertEquals(0, outbox.pending().size, "в очереди его уже нет: DEAD терминален")
         assertEquals(1, chat.page("chat-1").first().size, "а в переписке есть")
+    }
+
+    // ── текст ────────────────────────────────────────────────────────────────
+
+    @Test
+    fun текст_доезжает_до_строки() = runTest {
+        // Экран переписки без текста не бывает, а тело лежит в базе упакованным. Читает
+        // его переходник — тем же кодеком, которым тело уходит на провод.
+        исходящее("d-1", OutboxState.SENT, serverTs = 5_000, тело = Кодек.encodeText("привет"))
+        входящее(7, IncomingState.STORED, тело = Кодек.encodeText("и тебе"))
+
+        val строки = chat.page("chat-1").first()
+
+        assertEquals("привет", строки.single { it.outgoing }.text)
+        assertEquals("и тебе", строки.single { !it.outgoing }.text)
+    }
+
+    @Test
+    fun нечитаемое_тело_не_роняет_страницу() = runTest {
+        // Одна испорченная запись не должна лишать человека всей переписки: страница
+        // приходит целиком, а у нечитаемой строки текста просто нет.
+        входящее(1, IncomingState.UNDECRYPTABLE, тело = Кодек.НЕЧИТАЕМОЕ)
+        исходящее("d-1", OutboxState.SENT, serverTs = 5_000)
+
+        val строки = chat.page("chat-1").first()
+
+        assertEquals(2, строки.size, "нечитаемое остаётся строкой: человек видит, что сообщение было")
+        assertEquals(null, строки.single { !it.outgoing }.text)
+        assertEquals(MessageDisplay.UNREADABLE, строки.single { !it.outgoing }.display)
+        assertEquals("привет", строки.single { it.outgoing }.text, "соседнее читается как обычно")
     }
 
     // ── порядок ──────────────────────────────────────────────────────────────
@@ -202,4 +239,21 @@ class SqlChatFeedTest {
         assertEquals(1, строки.size)
         assertTrue(строки.all { it.chatId == "chat-1" })
     }
+}
+
+/**
+ * Кодек-подделка: тело — просто UTF-8.
+ *
+ * Настоящий кодек (`zstd(protobuf(…))`) живёт в `core-encryption`, и `core-database` о нём
+ * не знает — сюда приезжает доменный порт. Проверяется здесь не упаковка, а то, что
+ * переходник тело читает и что нечитаемое не роняет страницу.
+ */
+private object Кодек : MessageBodyCodec {
+    /** Тело, которое кодек читать отказывается: у входящего это «ключа нет». */
+    val НЕЧИТАЕМОЕ: ByteArray = byteArrayOf(-1)
+
+    override fun encodeText(text: String): ByteArray = text.encodeToByteArray()
+
+    override fun decodeText(body: ByteArray): String? =
+        if (body.contentEquals(НЕЧИТАЕМОЕ)) null else body.decodeToString()
 }

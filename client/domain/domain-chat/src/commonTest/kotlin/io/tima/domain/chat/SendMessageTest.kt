@@ -26,6 +26,11 @@ class SendMessageTest {
             вызовов++
             return размер?.let { ByteArray(it) } ?: ("zstd:$text").encodeToByteArray()
         }
+
+        // Обратный ход здесь не проверяется: SendMessage только пишет. Подделка честная —
+        // снимает ту же приставку, которую ставит.
+        override fun decodeText(body: ByteArray): String? =
+            body.decodeToString().removePrefix("zstd:")
     }
 
     private class Ключи(vararg ключи: String) : DedupKeys {
