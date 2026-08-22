@@ -122,21 +122,25 @@ internal class KeychainVault(private val service: String) : SecretVault {
     /**
      * Отказ Keychain с разбором того, чей он.
      *
-     * `errSecMissingEntitlement` (-34018) означает, что **этому двоичному файлу**
-     * Keychain недоступен в принципе: у процесса нет права `application-identifier`,
-     * которое выдаётся подписанному приложению. Так выглядит прогон тестов
-     * Kotlin/Native в симуляторе — это отдельный исполняемый файл, а не приложение.
+     * **Недоступность хранилища — это два кода, и оба измерены, а не предположены.**
      *
-     * Различать это от «запись не читается» обязательно: первое лечится окружением
-     * (прогон внутри приложения), второе — переустановкой у человека. Одно сообщение
-     * на два случая отправило бы искать причину не там.
+     * - `errSecNotAvailable` (-25291) — связки ключей у процесса нет вовсе. Именно так
+     *   отвечает симулятор прогону тестов Kotlin/Native: это отдельный исполняемый
+     *   файл, а не приложение, и своей связки у него не появляется.
+     * - `errSecMissingEntitlement` (-34018) — связка есть, но у процесса нет права
+     *   `application-identifier`, которое выдаётся подписанному приложению.
+     *
+     * Оба означают одно для вызывающего: **лечится окружением, а не данными**. Всё
+     * остальное — «эта запись не читается», и лечится переустановкой у человека. Одно
+     * сообщение на два случая отправило бы искать причину не там.
      */
     private fun отказ(действие: String, alias: SecretAlias, status: Int): Nothing =
-        if (status == MISSING_ENTITLEMENT) {
+        if (status == NOT_AVAILABLE || status == MISSING_ENTITLEMENT) {
             throw KeychainUnavailable(
-                "Keychain недоступен этому процессу (OSStatus $status): нет права " +
-                    "application-identifier. Так ведёт себя отдельный двоичный файл — " +
-                    "например прогон тестов в симуляторе вне приложения",
+                "Keychain недоступен этому процессу (OSStatus $status): " +
+                    (if (status == NOT_AVAILABLE) "связки ключей у процесса нет" else "нет права application-identifier") +
+                    ". Так ведёт себя отдельный двоичный файл — например прогон тестов " +
+                    "в симуляторе вне приложения",
             )
         } else {
             throw SecretVaultFailure("Keychain отказал при $действие ${alias.value}: OSStatus $status")
@@ -174,10 +178,13 @@ internal class KeychainVault(private val service: String) : SecretVault {
 class KeychainUnavailable(message: String) : SecretVaultFailure(message)
 
 /**
- * `errSecMissingEntitlement`. Числом, а не константой фреймворка: в заголовках
- * Security она объявлена не для всех платформ одинаково, и промах по имени сломал бы
- * сборку там, где её нет.
+ * Коды недоступности связки ключей. Числами, а не константами фреймворка: в
+ * заголовках Security они объявлены не для всех платформ одинаково, и промах по имени
+ * сломал бы сборку там, где имени нет.
+ *
+ * `-25291` — тот, что реально приходит в симуляторе; измерен прогоном 2026-08-22.
  */
+private const val NOT_AVAILABLE: Int = -25291
 private const val MISSING_ENTITLEMENT: Int = -34018
 
 private fun String.toCFString(): CFStringRef? =

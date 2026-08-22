@@ -161,9 +161,9 @@ jobs:
         # день я дважды объяснил падение неверной причиной, имея на руках только хвост
         # журнала.
         run: |
-          отчёты=$(find client -path '*test-results*' -name '*.xml' 2>/dev/null)
-          if [ -n "$отчёты" ]; then
-            msg=$(grep -ah -A 2 '<failure' $отчёты | sed 's/%/%25/g' | tr -d '\r' \
+          reports=$(find client -path '*test-results*' -name '*.xml' 2>/dev/null)
+          if [ -n "$reports" ]; then
+            msg=$(grep -ah -A 2 '<failure' $reports | sed 's/%/%25/g' | tr -d '\r' \
               | head -n 60 | awk '{printf "%s%%0A", $0}')
             [ -n "$msg" ] && echo "::error::упавшие проверки:%0A${msg}"
           fi
