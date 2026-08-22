@@ -29,5 +29,11 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
+        // Снимки (У.3) рисуются только на JVM: Compose Desktop умеет отрисовать
+        // композицию в картинку без устройства и без эмулятора — ImageComposeScene.
+        // Компоненты общие, так что расхождение с макетом видно и здесь.
+        jvmTest.dependencies {
+            implementation(compose.desktop.currentOs)
+        }
     }
 }
