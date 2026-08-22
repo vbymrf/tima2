@@ -13,9 +13,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -48,7 +45,7 @@ fun ШапкаОкна(
         modifier = modifier
             .fillMaxWidth()
             .background(цвета.функц)
-            .нижняяЛиния(цвета.линия)
+            .линияСнизу(цвета.линия)
             .padding(horizontal = 12.dp, vertical = TimaSpacing.о2),
     ) {
         Row(
@@ -120,7 +117,7 @@ fun ШапкаПодокна(
         modifier = modifier
             .fillMaxWidth()
             .background(цвета.функц)
-            .нижняяЛиния(цвета.линия)
+            .линияСнизу(цвета.линия)
             .heightIn(min = TimaZones.зона1)
             .padding(horizontal = TimaSpacing.о4),
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о3),
@@ -133,15 +130,4 @@ fun ШапкаПодокна(
         }
         справа?.invoke()
     }
-}
-
-/** Линия под шапкой: `border-bottom: 1px`. */
-private fun Modifier.нижняяЛиния(цвет: Color): Modifier = drawBehind {
-    val толщина = 1.dp.toPx()
-    drawLine(
-        color = цвет,
-        start = Offset(0f, size.height - толщина / 2),
-        end = Offset(size.width, size.height - толщина / 2),
-        strokeWidth = толщина,
-    )
 }
