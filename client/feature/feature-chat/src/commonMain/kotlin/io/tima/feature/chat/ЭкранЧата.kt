@@ -38,9 +38,6 @@ import io.tima.core.ui.ШапкаПодокна
 import io.tima.core.ui.Чип
 import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.MessageDisplay
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 
 /**
  * Окно переписки — К5.2, первый экран.
@@ -160,18 +157,6 @@ private fun отметка(вид: MessageDisplay): ВидОтметки? = when
     MessageDisplay.SENT -> ВидОтметки.Ушло
     MessageDisplay.FAILED -> ВидОтметки.НеУшло
     MessageDisplay.RECEIVED, MessageDisplay.UNREADABLE -> null
-}
-
-/**
- * Время реплики — часы и минуты местного времени.
- *
- * Дата не показывается: её место — разделитель дня, и он приезжает вместе с историей.
- */
-private fun время(atMs: Long): String {
-    val местное = Instant.fromEpochMilliseconds(atMs).toLocalDateTime(TimeZone.currentSystemDefault())
-    val час = местное.hour.toString().padStart(2, '0')
-    val минута = местное.minute.toString().padStart(2, '0')
-    return "$час:$минута"
 }
 
 /**
