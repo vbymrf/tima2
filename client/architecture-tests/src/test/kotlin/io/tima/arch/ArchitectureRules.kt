@@ -17,6 +17,15 @@ data class Rule(
     val forbiddenImportPrefixes: List<String> = emptyList(),
     /** Запрещённые суффиксы имени файла (для правила про jvmCommon). */
     val forbiddenFileSuffixes: List<String> = emptyList(),
+    /**
+     * Запрещённые куски текста в файле — для правил, которые нельзя выразить импортом.
+     *
+     * Пример: зашитый цвет в дизайн-системе. Импорт `Color` там законен, а вот
+     * `Color(0xFF…)` вне файла токенов означает компонент, который не следует теме.
+     */
+    val forbiddenContent: List<String> = emptyList(),
+    /** Файлы, которым это правило не адресовано: имя файла содержит любую из строк. */
+    val exceptFiles: List<String> = emptyList(),
     /** Почему запрещено — попадает в текст падения: правило без причины отключают. */
     val why: String,
 )
@@ -69,6 +78,19 @@ object ArchitectureRules {
                 "(драйвер, JNI-обёртка), и логики в нём не бывает (Plan.md §3.2).",
         ),
         Rule(
+            name = "в дизайн-системе нет зашитых цветов",
+            // Только боевой код: в проверках чистый чёрный и белый нужны законно —
+            // это концы шкалы контраста, 21 : 1.
+            appliesToPathContaining = listOf("/core/core-ui/src/commonMain/"),
+            forbiddenContent = listOf("Color(0x", "Color.White", "Color.Black"),
+            // Токены — единственное место, где цвет записывается значением.
+            exceptFiles = listOf("Tokens.kt"),
+            why = "Признак готовности У.2 звучит как «компонент рисуется в двух темах без " +
+                "правки кода экрана», и держится он ровно на этом: цвет берётся из темы. " +
+                "Зашитый Color(0x…) выглядит безобидно и работает — в одной теме. В другой " +
+                "он остаётся прежним, и находят это глазами на чужом устройстве.",
+        ),
+        Rule(
             name = "core-model без зависимостей",
             appliesToPathContaining = listOf("/core/core-model/"),
             forbiddenImportPrefixes = listOf("io.", "kotlinx.", "com.", "app.", "org.", "java.", "javax."),
@@ -113,6 +135,15 @@ object ArchitectureRules {
             out += Violation(relative, rule.name, "имя файла кончается на $suffix", rule.why)
         }
 
+        if (rule.forbiddenContent.isNotEmpty() && rule.exceptFiles.none { file.name.contains(it) }) {
+            val текст = file.readText()
+            for (кусок in rule.forbiddenContent) {
+                if (текст.contains(кусок)) {
+                    out += Violation(relative, rule.name, "найдено «$кусок»", rule.why)
+                }
+            }
+        }
+
         if (rule.forbiddenImportPrefixes.isNotEmpty()) {
             for (line in file.readLines()) {
                 val trimmed = line.trim()
@@ -127,6 +158,13 @@ object ArchitectureRules {
                 // kotlin.jvm.* — аннотации вроде @JvmInline: на iOS они просто ничего не
                 // значат, поэтому в общем коде допустимы и запретом не считаются.
                 if (imported.startsWith("kotlin.jvm.")) continue
+                // androidx.compose.* — Compose Multiplatform, а не Android. Запрет на
+                // androidx писался тогда, когда префикс означал «только Android»; Compose
+                // под этим же именем собирается и под iOS, и под ПК. Смысл правила —
+                // «не тащить в общий код то, что упадёт на iOS», и Compose ему не
+                // противоречит. Настоящий заслон здесь всё равно компилятор:
+                // платформенные части Compose (LocalContext и подобные) он не соберёт.
+                if (imported.startsWith("androidx.compose.")) continue
                 if (imported.startsWith("io.tima.core.model.")) continue
                 val hit = rule.forbiddenImportPrefixes.firstOrNull { imported.startsWith(it) }
                 if (hit != null) {
