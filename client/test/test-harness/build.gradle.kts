@@ -17,6 +17,8 @@ kotlin {
         commonMain.dependencies {
             api(projects.core.coreOutbox)
             api(projects.core.coreDatabase)
+            // Разбор кадров живого канала: сценарий приёма пишется на кадрах сервера.
+            api(projects.core.coreNetwork)
             api(projects.core.coreEncryption)
             api(projects.domain.domainChat)
             implementation(libs.sqldelight.runtime)
