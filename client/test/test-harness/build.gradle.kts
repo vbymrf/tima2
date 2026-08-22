@@ -56,6 +56,13 @@ kotlin {
         iosMain.dependencies {
             implementation(libs.sqldelight.driver.native)
         }
+        iosTest.dependencies {
+            // Тот же драйвер и в тестовом наборе — как в core-database. Без него сборка
+            // тестового бинаря не находит символы sqlite3_*: линковка системного sqlite3
+            // приезжает вместе с этой зависимостью, и только в ту компиляцию, где она
+            // объявлена.
+            implementation(libs.sqldelight.driver.native)
+        }
     }
 }
 
