@@ -1,0 +1,33 @@
+plugins {
+    alias(libs.plugins.kotlinMultiplatform)
+    alias(libs.plugins.composeMultiplatform)
+    alias(libs.plugins.composeCompiler)
+}
+
+// core-ui — дизайн-система из макета: токены, тема, компоненты (Plan.md §2.2, дорожка У).
+//
+// Единственная крупная работа, которую можно вести без готового ядра, — и наоборот:
+// экраны без неё собирать нечем. Источник значений — doc/Layout-UI-light/стиль.css и
+// слой переопределений doc/Layout-UI-dark/тьма.css; один набор токенов, две темы.
+//
+// Зависимостей на данные здесь нет и не будет: дизайн-система ничего не знает ни о
+// сети, ни о базе, ни о крипто. Это проверяют архитектурные правила.
+kotlin {
+    jvmToolchain(17)
+
+    jvm()
+    iosArm64()
+    iosSimulatorArm64()
+
+    sourceSets {
+        commonMain.dependencies {
+            implementation(compose.runtime)
+            // foundation, а не material3: у нас своя система форм и цветов, и брать
+            // чужую тему значило бы спорить с макетом в каждом компоненте.
+            implementation(compose.foundation)
+        }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
+    }
+}
