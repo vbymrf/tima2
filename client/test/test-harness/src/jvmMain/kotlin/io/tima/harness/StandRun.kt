@@ -28,6 +28,8 @@ import io.tima.core.network.timaDefaults
 import io.tima.core.outbox.Inbox
 import io.tima.core.outbox.OpenOutcome
 import io.tima.crypto.PersonalChatId
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -247,9 +249,10 @@ object StandRun {
             SqlInboxStore(TimaDatabase(harnessDriver())),
             nowMs = { System.currentTimeMillis() },
         )
-        var прочитано: String? = null
+        // Ждём до первого дошедшего, а не до конца тайм-аута: канал сам не закрывается.
+        val дошло = CompletableDeferred<String>()
 
-        withTimeoutOrNull(30_000) {
+        val канал = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
             EventStream(route, client, token = { Б.accessToken }).run(cursor = null) { событие ->
                 inbox.receive(событие.chatId, событие.messageId, событие.envelope)
                 inbox.openNext(
@@ -264,10 +267,12 @@ object StandRun {
                             onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },
                         )
                     },
-                    persist = { _, тело -> прочитано = тело.decodeToString() },
+                    persist = { _, тело -> дошло.complete(тело.decodeToString()) },
                 )
             }
         }
+        val прочитано = withTimeoutOrNull(30_000) { дошло.await() }
+        канал.cancel()
 
         if (прочитано == текст) {
             шаг("ПРИНЯТО", "текст сошёлся целиком")
