@@ -266,20 +266,3 @@ class SqlChatFeedTest {
         assertTrue(строки.all { it.chatId == "chat-1" })
     }
 }
-
-/**
- * Кодек-подделка: тело — просто UTF-8.
- *
- * Настоящий кодек (`zstd(protobuf(…))`) живёт в `core-encryption`, и `core-database` о нём
- * не знает — сюда приезжает доменный порт. Проверяется здесь не упаковка, а то, что
- * переходник тело читает и что нечитаемое не роняет страницу.
- */
-private object Кодек : MessageBodyCodec {
-    /** Тело, которое кодек читать отказывается: у входящего это «ключа нет». */
-    val НЕЧИТАЕМОЕ: ByteArray = byteArrayOf(-1)
-
-    override fun encodeText(text: String): ByteArray = text.encodeToByteArray()
-
-    override fun decodeText(body: ByteArray): String? =
-        if (body.contentEquals(НЕЧИТАЕМОЕ)) null else body.decodeToString()
-}
