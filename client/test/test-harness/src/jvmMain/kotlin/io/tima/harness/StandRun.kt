@@ -230,7 +230,12 @@ object StandRun {
         harness.send(chatId, текст)
 
         val transport = HttpMessageTransport(route, client, token = { А.accessToken })
-        val отправлено = harness.pumpVia { готовое -> transport.send(готовое.entry.dedupKey, готовое.envelope) }
+        val отправлено = harness.pumpVia { готовое ->
+            val исход = transport.send(готовое.entry.dedupKey, готовое.envelope)
+            // Исход печатается всегда: «сообщение не ушло» без причины — отчёт ни о чём.
+            шаг("исход отправки", исход.toString() + ", конверт " + готовое.envelope.size + " байт")
+            исход
+        }
         шаг("отправка", "исходов: $отправлено, в очереди осталось ${harness.pending().size}")
         if (harness.pending().isNotEmpty()) {
             провал("отправка", "сообщение не ушло: ${harness.pending()}")
