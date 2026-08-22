@@ -78,10 +78,17 @@ object ArchitectureRules {
                 "(драйвер, JNI-обёртка), и логики в нём не бывает (Plan.md §3.2).",
         ),
         Rule(
-            name = "в дизайн-системе нет зашитых цветов",
+            name = "в дизайн-системе и на экранах нет зашитых цветов",
             // Только боевой код: в проверках чистый чёрный и белый нужны законно —
             // это концы шкалы контраста, 21 : 1.
-            appliesToPathContaining = listOf("/core/core-ui/src/commonMain/"),
+            //
+            // Экраны попали под то же правило, как только появились: зашитый цвет на
+            // экране — та же поломка, что в компоненте, и находят её так же — глазами
+            // на чужом устройстве.
+            appliesToPathContaining = listOf(
+                "/core/core-ui/src/commonMain/",
+                "/feature/",
+            ),
             forbiddenContent = listOf("Color(0x", "Color.White", "Color.Black"),
             // Токены — единственное место, где цвет записывается значением.
             exceptFiles = listOf("Tokens.kt"),

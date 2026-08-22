@@ -123,7 +123,11 @@ fun ШапкаПодокна(
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        КнопкаИконка(знак = "‹", onClick = onНазад, живая = true)
+        // «Назад» рисуется, а не набирается глифом: «‹» есть не во всяком шрифте, а
+        // пропавший знак навигации — это кнопка без надписи. См. Знаки.kt.
+        КругКнопка(onClick = onНазад, живая = true) {
+            Стрелка(Сторона.Влево, цвет = цвета.наАкценте)
+        }
         androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
             Подпись(название, кегль = TimaType.щ3, вес = FontWeight.ExtraBold, однойСтрокой = true)
             подпись?.let { Третьестепенное(it) }

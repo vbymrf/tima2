@@ -33,7 +33,7 @@ kotlin {
         // композицию в картинку без устройства и без эмулятора — ImageComposeScene.
         // Компоненты общие, так что расхождение с макетом видно и здесь.
         jvmTest.dependencies {
-            implementation(compose.desktop.currentOs)
+            implementation(projects.test.testUi)
         }
     }
 }
