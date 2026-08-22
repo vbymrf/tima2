@@ -36,6 +36,14 @@ class ChatHarness(
     private val driver: SqlDriver,
     startTime: Long = 1_000L,
     startEpoch: Int = 1,
+    /**
+     * Чем запечатывать. По умолчанию — пометка эпохи и тело: сценарии очереди проверяют
+     * очередь, и настоящая криптография в них только мешала бы понять, что сломалось.
+     *
+     * Настоящий сборщик конвертов подставляется отдельным сценарием — тем, который
+     * проверяет весь круг: текст → тело → очередь → конверт → приём → текст.
+     */
+    private val sealWith: ((OutboxEntry) -> ByteArray)? = null,
 ) {
 
     /** Искусственные часы. Сдвигаются [passTime]. */
@@ -83,7 +91,7 @@ class ChatHarness(
      */
     fun restart(): ChatHarness {
         val прежнийСервер = transport
-        return ChatHarness(driver, startTime = time, startEpoch = epochKeyId).also {
+        return ChatHarness(driver, startTime = time, startEpoch = epochKeyId, sealWith = sealWith).also {
             it.transport = прежнийСервер
             it.outbox.recoverOnStart()
         }
@@ -132,5 +140,5 @@ class ChatHarness(
     )
 
     private fun seal(entry: OutboxEntry): ByteArray =
-        "эпоха=$epochKeyId|".encodeToByteArray() + entry.body
+        sealWith?.invoke(entry) ?: ("эпоха=$epochKeyId|".encodeToByteArray() + entry.body)
 }
