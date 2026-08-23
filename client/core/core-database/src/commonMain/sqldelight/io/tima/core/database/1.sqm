@@ -1,0 +1,10 @@
+-- Схема 1 → 2: групповые ключи.
+--
+-- Аддитивная миграция: новая таблица, существующие не тронуты. Так и должно быть — база на
+-- устройстве человека уже содержит его переписку, и правка схемы не имеет права её касаться.
+CREATE TABLE group_keys (
+    group_id TEXT    NOT NULL,
+    version  INTEGER NOT NULL,
+    key_enc  BLOB    NOT NULL,
+    PRIMARY KEY (group_id, version)
+);
