@@ -77,7 +77,13 @@ data class OutboxEntry(
     val nextAttemptAtMs: Long = 0,
     val createdAtMs: Long = 0,
     val serverMessageId: Long? = null,
-    val sealedForEpoch: Int? = null,
+    /**
+     * Тип — `Long`, как у сервера (`escrow.key.id`). В первой редакции здесь стоял `Int`, и
+     * приложению пришлось бы сужать серверное число приведением — то есть однажды
+     * записать не тот идентификатор эпохи и собрать конверт под чужой ключ. Столбец в базе
+     * и так INTEGER, то есть 64-битный.
+     */
+    val sealedForEpoch: Long? = null,
 ) {
     override fun equals(other: Any?): Boolean = other is OutboxEntry &&
         dedupKey == other.dedupKey && chatId == other.chatId &&
@@ -95,7 +101,7 @@ data class OutboxEntry(
         h = 31 * h + nextAttemptAtMs.hashCode()
         h = 31 * h + createdAtMs.hashCode()
         h = 31 * h + (serverMessageId?.hashCode() ?: 0)
-        h = 31 * h + (sealedForEpoch ?: 0)
+        h = 31 * h + (sealedForEpoch ?: 0L).hashCode()
         return h
     }
 }
@@ -125,8 +131,16 @@ sealed interface SendOutcome {
      */
     data class Duplicate(val serverMessageId: Long) : SendOutcome
 
-    /** Временный отказ: сеть, 5xx, таймаут. Вернётся в очередь. */
-    data class Retry(val afterMs: Long = 0) : SendOutcome
+    /**
+     * Временный отказ: сеть, 5xx, таймаут. Вернётся в очередь.
+     *
+     * @param reason **причина словами** — только для диагностики, на решение очереди она
+     *   не влияет. Без неё «не ушло» неотличимо от «не ушло»: 401 с просроченным токеном,
+     *   500 на сервере и неизвестный ответ посредника выглядят одинаково, а искать их надо
+     *   в разных местах. Первый же прогон по стенду после её появления показал, что
+     *   выяснять причину нечем — потому она и появилась.
+     */
+    data class Retry(val afterMs: Long = 0, val reason: String = "") : SendOutcome
 
     /**
      * Отказ по сути: подпись не сходится, конверт не проходит проверку сервера.
@@ -236,7 +250,7 @@ class Outbox(
      * двумя переписками выбрасывало бы кэш на каждом шаге, а `sealedForEpoch` записывался
      * бы чужим числом.
      */
-    private val cachedEpochs = HashMap<String, Int>()
+    private val cachedEpochs = HashMap<String, Long>()
 
     override fun enqueue(dedupKey: String, chatId: String, body: ByteArray): Boolean {
         require(dedupKey.isNotBlank()) { "dedupKey пустой: по нему опознаётся повтор" }
@@ -287,7 +301,7 @@ class Outbox(
      *   криптографию ничего не знает и знать не должна.
      * @return `null`, если сейчас нечего: очередь этой переписки пуста либо срок не пришёл.
      */
-    fun sealNext(chatId: String, epochKeyId: Int, seal: (OutboxEntry) -> ByteArray): OutboxEntry? {
+    fun sealNext(chatId: String, epochKeyId: Long, seal: (OutboxEntry) -> ByteArray): OutboxEntry? {
         val прошлая = cachedEpochs[chatId]
         if (прошлая != null && прошлая != epochKeyId) discardSealed(chatId)
         cachedEpochs[chatId] = epochKeyId
@@ -376,7 +390,7 @@ class Outbox(
      * Переписка в подписи по той же причине, что и там: ключ эпохи у каждой свой, и
      * выбрасывать чужие конверты не за что.
      */
-    fun onEpochChanged(chatId: String, newEpochKeyId: Int) {
+    fun onEpochChanged(chatId: String, newEpochKeyId: Long) {
         if (cachedEpochs[chatId] == newEpochKeyId) return
         discardSealed(chatId)
         cachedEpochs[chatId] = newEpochKeyId

@@ -5,6 +5,7 @@ import app.cash.sqldelight.coroutines.mapToList
 import io.tima.core.outbox.FieldCipher
 import io.tima.core.outbox.IncomingState
 import io.tima.domain.chat.ChatKind
+import io.tima.domain.chat.ChatBook
 import io.tima.domain.chat.ChatSummary
 import io.tima.domain.chat.ChatsFeed
 import io.tima.domain.chat.MessageBodyCodec
@@ -75,5 +76,28 @@ class SqlChatsFeed(
     private companion object {
         /** `kind` из схемы: 0 — личная, 1 — группа. */
         const val ГРУППА = 1L
+    }
+}
+
+/**
+ * Запись имени переписки — переходник к порту `domain-chat`.
+ *
+ * «Запомнить», а не «создать»: список переписок выводится из сообщений, и строка здесь
+ * необязательна — она добавляет переписке имя и собеседника. Имя ложится **под шифром
+ * покоя**, тем же, что тело сообщения: имя собеседника — это содержимое переписки, а не
+ * метаданные.
+ */
+class SqlChatBook(
+    private val db: TimaDatabase,
+    private val cipher: FieldCipher,
+) : ChatBook {
+
+    override fun remember(chatId: String, kind: ChatKind, title: String?, peerId: String?) {
+        db.chatsQueries.upsertChat(
+            chat_id = chatId,
+            kind = if (kind == ChatKind.Group) 1L else 0L,
+            title_enc = title?.let { cipher.seal(it.encodeToByteArray()) },
+            peer_id = peerId,
+        )
     }
 }

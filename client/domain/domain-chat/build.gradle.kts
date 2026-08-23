@@ -23,6 +23,9 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            // Начало переписки спрашивает справочник по сети — то есть случай
+            // использования стал suspend, и проверкам нужен runTest.
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }

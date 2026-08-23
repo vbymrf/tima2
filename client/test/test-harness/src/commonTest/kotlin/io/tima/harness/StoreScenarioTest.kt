@@ -42,7 +42,7 @@ class StoreScenarioTest {
     // Эпоха раздаётся по перепискам: ключ escrow у каждой свой, и насос просит его на
     // каждую. Здесь переписка одна.
     private suspend fun прокрутить(): Int =
-        pump.runOnce(mapOf("chat-1" to эпоха), ::seal, transport::send)
+        pump.runOnce(mapOf("chat-1" to эпоха.toLong()), ::seal, transport::send)
 
     private fun store(scope: kotlinx.coroutines.CoroutineScope) = ChatStore(
         chatId = "chat-1",

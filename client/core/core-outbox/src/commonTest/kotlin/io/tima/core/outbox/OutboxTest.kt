@@ -42,7 +42,7 @@ class OutboxTest {
      * на ДВЕ переписки есть, и он про то, что кэш эпох у них раздельный.
      */
     private fun Outbox.sealNext(эпоха: Int, seal: (OutboxEntry) -> ByteArray) =
-        sealNext(ЧАТ, эпоха, seal)
+        sealNext(ЧАТ, эпоха.toLong(), seal)
 
     /** Полный путь до SENDING: запечатать под эпоху и забрать. */
     private fun довести(эпоха: Int = 1): ReadyToSend? {
@@ -177,7 +177,7 @@ class OutboxTest {
         outbox.sealNext(эпоха(1), запечатать)
         assertEquals(1, запечатано)
 
-        outbox.onEpochChanged(ЧАТ, эпоха(2))
+        outbox.onEpochChanged(ЧАТ, эпоха(2).toLong())
 
         assertEquals(OutboxState.QUEUED, store.byDedupKey("dedup-1")?.state)
         assertNull(store.byDedupKey("dedup-1")?.sealedForEpoch)
@@ -342,13 +342,13 @@ class OutboxTest {
         outbox.enqueue("d-1", "chat-1", тело)
         outbox.enqueue("d-2", "chat-2", тело)
 
-        val первое = outbox.sealNext("chat-1", 11, запечатать)
-        val второе = outbox.sealNext("chat-2", 22, запечатать)
+        val первое = outbox.sealNext("chat-1", 11L, запечатать)
+        val второе = outbox.sealNext("chat-2", 22L, запечатать)
 
         assertEquals("d-1", первое?.dedupKey, "у переписки берётся ЕЁ сообщение")
         assertEquals("d-2", второе?.dedupKey)
-        assertEquals(11, первое?.sealedForEpoch)
-        assertEquals(22, второе?.sealedForEpoch)
+        assertEquals(11L, первое?.sealedForEpoch)
+        assertEquals(22L, второе?.sealedForEpoch)
         assertEquals(2, outbox.cachedEnvelopeCount())
     }
 
@@ -363,17 +363,17 @@ class OutboxTest {
     fun смена_эпохи_в_одной_переписке_не_пересобирает_чужие_конверты() {
         outbox.enqueue("d-1", "chat-1", тело)
         outbox.enqueue("d-2", "chat-2", тело)
-        outbox.sealNext("chat-1", 11, запечатать)
-        outbox.sealNext("chat-2", 22, запечатать)
+        outbox.sealNext("chat-1", 11L, запечатать)
+        outbox.sealNext("chat-2", 22L, запечатать)
         assertEquals(2, запечатано)
 
         // У первой переписки сменилась эпоха: её конверт негоден.
-        outbox.sealNext("chat-1", 12, запечатать)
+        outbox.sealNext("chat-1", 12L, запечатать)
 
         assertEquals(3, запечатано, "пересобран обязан быть ровно один конверт — свой")
         val чужое = store.byDedupKey("d-2")
         assertEquals(OutboxState.SEALED, чужое?.state, "чужое запечатанное осталось запечатанным")
-        assertEquals(22, чужое?.sealedForEpoch, "и под своей эпохой")
+        assertEquals(22L, чужое?.sealedForEpoch, "и под своей эпохой")
     }
 
     /** Пустая очередь этой переписки — не повод трогать чужую. */
@@ -381,7 +381,7 @@ class OutboxTest {
     fun в_чужой_переписке_запечатывать_нечего() {
         outbox.enqueue("d-1", "chat-1", тело)
 
-        assertNull(outbox.sealNext("chat-2", 22, запечатать), "в этой переписке нет ничего")
+        assertNull(outbox.sealNext("chat-2", 22L, запечатать), "в этой переписке нет ничего")
         assertEquals(0, запечатано)
         assertEquals(OutboxState.QUEUED, store.byDedupKey("d-1")?.state)
     }

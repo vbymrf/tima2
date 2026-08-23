@@ -56,7 +56,7 @@ class OutboxPump(
      * @return сколько сообщений получили исход за этот проход.
      */
     suspend fun runOnce(
-        эпохи: Map<String, Int>,
+        эпохи: Map<String, Long>,
         seal: (OutboxEntry) -> ByteArray,
         send: suspend (ReadyToSend) -> SendOutcome,
     ): Int {

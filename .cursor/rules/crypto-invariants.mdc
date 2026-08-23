@@ -71,6 +71,16 @@ Change one side, change the other in the same commit, and prove it with a vector
   a seed of 64 identical bytes, so it cannot detect a swapped `d`/`z` order —
   that had to be found by a separate cross-check.
 
+## message_id fits a signed int64
+
+On the wire `message_id` is `uint64`; the server stores it in `bigint`, which is **signed**.
+A value with the top bit set travels the wire fine and then fails on write — Postgres
+answers with an encoding error and the server returns `500`.
+
+`OutgoingSealer.messageIdOf` therefore clears the top bit. This was found by a stand run:
+exactly half the messages were accepted and half got `500`, because the top bit of a random
+UUID is set half the time — which is also why the previous run looked green.
+
 ## Secrets
 
 Never log, print, or put into a summary: message keys, group keys, media keys,

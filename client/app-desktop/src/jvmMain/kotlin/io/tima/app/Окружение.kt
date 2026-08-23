@@ -11,6 +11,10 @@ import io.tima.core.encryption.LocalStoreFieldCipher
 import io.tima.core.encryption.TextBodyCodec
 import io.tima.core.network.AccountApiOverHttp
 import io.tima.core.network.AuthApi
+import io.tima.core.network.EscrowApi
+import io.tima.core.network.HttpMessageTransport
+import io.tima.core.network.KeysApi
+import io.tima.core.network.UsersApi
 import io.tima.core.network.RouteConfig
 import io.tima.core.network.ServerRoute
 import io.tima.core.network.httpEngine
@@ -22,6 +26,7 @@ import io.tima.core.secrets.SecretVault
 import io.tima.core.secrets.VaultSecretStore
 import io.tima.core.secrets.platformVault
 import io.tima.domain.account.RegisterDevice
+import io.tima.domain.account.Session
 import io.tima.domain.chat.ObserveChat
 import io.tima.domain.chat.ObserveChats
 import io.tima.domain.chat.SendMessage
@@ -46,17 +51,23 @@ class Вход private constructor(
 ) {
 
     /**
-     * Устройство заведено — то есть у нас есть **сессия**, а не только секрет.
+     * Заведённое устройство: секрет **и** сессия.
      *
      * Различие не формальное. Секрет пишется ДО вызова сервера (иначе умри процесс между
      * «сервер завёл устройство» и «мы сохранили ключ» — и устройство осталось бы на
      * сервере навсегда без ключа). Значит секрет без сессии означает незаконченный вход, и
      * пускать по нему в приложение нельзя: сервер про такое устройство не знает.
      *
-     * @return секрет для ключа покоя базы, либо `null` — надо входить.
+     * @return `null` — надо входить.
      */
-    fun секретЗаведённого(): ByteArray? =
-        if (секреты.session() == null) null else секреты.deviceSecret()
+    fun заведённое(): Устройство? {
+        val сессия = секреты.session() ?: return null
+        val секрет = секреты.deviceSecret() ?: return null
+        return Устройство(секрет, сессия)
+    }
+
+    /** Всё, что нужно приложению после входа: ключ покоя базы и кто мы для сервера. */
+    class Устройство(val секрет: ByteArray, val сессия: Session)
 
     companion object {
 
@@ -90,6 +101,38 @@ class Вход private constructor(
 
         /** Стенд: единственный существующий сервер. Punycode — тот же, что в харнессе. */
         const val СТЕНД: String = "xn--80aa4ar0b.xn--p1ai"
+    }
+}
+
+
+/**
+ * Сеть заведённого устройства: то, что требует токена.
+ *
+ * Отдельно от [Вход], потому что здесь нужна сессия, а у входа её ещё нет. Токен берётся
+ * **на каждый вызов**, а не один раз: он живёт меньше приложения.
+ */
+class Сеть(
+    route: ServerRoute,
+    client: HttpClient,
+    сессия: Session,
+) {
+    val ключи: KeysApi = KeysApi(route, client, token = { сессия.accessToken })
+    val escrow: EscrowApi = EscrowApi(route, client, token = { сессия.accessToken })
+    val транспорт: HttpMessageTransport = HttpMessageTransport(route, client, token = { сессия.accessToken })
+
+    /** Справочник: кто скрывается за номером телефона. Нужен, чтобы начать переписку. */
+    val справочник: UsersApi = UsersApi(route, client, token = { сессия.accessToken })
+
+    companion object {
+        /** Тот же адрес и тот же клиент, что у входа: сервер один. */
+        fun создать(
+            сессия: Session,
+            host: String = System.getenv("TIMA_STAND_HOST")?.takeIf { it.isNotBlank() } ?: Вход.СТЕНД,
+        ): Сеть = Сеть(
+            route = ServerRoute.from(RouteConfig(host = host)),
+            client = HttpClient(httpEngine()) { timaDefaults() },
+            сессия = сессия,
+        )
     }
 }
 

@@ -8,20 +8,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import io.tima.core.ui.Беда
 import io.tima.core.ui.ВидКнопки
 import io.tima.core.ui.Второстепенное
 import io.tima.core.ui.Кнопка
+import io.tima.core.ui.Поле
 import io.tima.core.ui.Подпись
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
@@ -83,8 +79,8 @@ private fun Телефон(состояние: AuthState.Телефон, onНо�
 
     Поле(
         значение = состояние.номер,
-        подсказка = "+7…",
         onИзменение = onНомер,
+        подсказка = "+7…",
         числовое = true,
     )
 
@@ -109,8 +105,8 @@ private fun Код(
 
     Поле(
         значение = состояние.код,
-        подсказка = "······",
         onИзменение = onКод,
+        подсказка = "······",
         числовое = true,
         поЦентру = true,
     )
@@ -132,61 +128,4 @@ private fun Код(
         вид = ВидКнопки.Тихая,
         modifier = Modifier.fillMaxWidth(),
     )
-}
-
-/**
- * Поле ввода: пилюля на тихой подложке.
- *
- * `BasicTextField` из foundation, а не готовое поле material3: у нас своя система форм и
- * цветов, и брать чужую значило бы спорить с макетом в каждом состоянии поля.
- */
-@Composable
-private fun Поле(
-    значение: String,
-    подсказка: String,
-    onИзменение: (String) -> Unit,
-    числовое: Boolean = false,
-    поЦентру: Boolean = false,
-) {
-    val цвета = Тима.цвета
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(цвета.акцентМягкий, CircleShape)
-            .padding(horizontal = TimaSpacing.о5, vertical = 14.dp),
-        contentAlignment = if (поЦентру) Alignment.Center else Alignment.CenterStart,
-    ) {
-        if (значение.isEmpty()) {
-            Подпись(подсказка, кегль = TimaType.щ3, цвет = цвета.текст3)
-        }
-        BasicTextField(
-            value = значение,
-            onValueChange = onИзменение,
-            textStyle = TextStyle(
-                fontSize = TimaType.щ3,
-                color = цвета.текст,
-                textAlign = if (поЦентру) TextAlign.Center else TextAlign.Start,
-            ),
-            keyboardOptions = KeyboardOptions(
-                keyboardType = if (числовое) KeyboardType.Number else KeyboardType.Text,
-            ),
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
-}
-
-/**
- * Отказ словами.
- *
- * **Без красного**: красного в палитре нет вовсе, и опасное отличается словом и местом.
- * На этом экране беда и без цвета заметна — она единственное, что изменилось.
- */
-@Composable
-private fun Беда(текст: String) = Box(
-    modifier = Modifier
-        .fillMaxWidth()
-        .background(Тима.цвета.акцентМягкий, CircleShape)
-        .padding(horizontal = TimaSpacing.о4, vertical = TimaSpacing.о2),
-) {
-    Подпись(текст, кегль = TimaType.щ5, вес = FontWeight.Bold)
 }

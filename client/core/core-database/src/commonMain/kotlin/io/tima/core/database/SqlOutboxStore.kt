@@ -92,7 +92,7 @@ class SqlOutboxStore(
             state = entry.state.ordinal.toLong(),
             attempts = entry.attempts.toLong(),
             next_attempt_at = entry.nextAttemptAtMs,
-            sealed_epoch = entry.sealedForEpoch?.toLong(),
+            sealed_epoch = entry.sealedForEpoch,
             server_id = entry.serverMessageId,
             dedup_key = entry.dedupKey,
         )
@@ -113,7 +113,7 @@ class SqlOutboxStore(
         nextAttemptAtMs = next_attempt_at ?: 0,
         createdAtMs = client_ts,
         serverMessageId = server_id,
-        sealedForEpoch = sealed_epoch?.toInt(),
+        sealedForEpoch = sealed_epoch,
     )
 
     private companion object {

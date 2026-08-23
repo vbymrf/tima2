@@ -134,7 +134,7 @@ class SqlInboxStoreTest {
 
         assertEquals(2L, db.messagesQueries.countAll().executeAsOne())
 
-        outbox.sealNext("chat-1", 1) { byteArrayOf(1) }
+        outbox.sealNext("chat-1", 1L) { byteArrayOf(1) }
         outbox.claimForSend()
         outbox.onOutcome("d-1", SendOutcome.Accepted(serverMessageId = 100))
         inbox.openNext({ OpenOutcome.Opened(тело) })

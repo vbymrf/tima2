@@ -32,7 +32,7 @@ class OutboxPumpTest {
         эпоха: Int,
         seal: (OutboxEntry) -> ByteArray,
         send: suspend (ReadyToSend) -> SendOutcome,
-    ) = runOnce(mapOf(ЧАТ to эпоха), seal, send)
+    ) = runOnce(mapOf(ЧАТ to эпоха.toLong()), seal, send)
 
     @Test
     fun одновременных_отправок_не_больше_предела() = runTest {
@@ -140,7 +140,7 @@ class OutboxPumpTest {
         assertEquals(2, запечатано)
 
         время += 1_000
-        outbox.onEpochChanged(ЧАТ, 2)
+        outbox.onEpochChanged(ЧАТ, 2L)
         OutboxPump(outbox, maxConcurrent = 2).runOnce(эпоха = 2, seal = считающий) {
             SendOutcome.Accepted(1)
         }

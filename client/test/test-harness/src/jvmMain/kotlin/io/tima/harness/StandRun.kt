@@ -22,6 +22,7 @@ import io.tima.core.network.KeysApi
 import io.tima.core.network.RegisterResult
 import io.tima.core.network.RouteConfig
 import io.tima.core.network.ServerRoute
+import io.tima.core.network.UsersApi
 import io.tima.core.network.SmsRequestResult
 import io.tima.core.network.SmsVerifyResult
 import io.tima.core.network.httpEngine
@@ -29,6 +30,7 @@ import io.tima.core.network.timaDefaults
 import io.tima.core.outbox.Inbox
 import io.tima.core.outbox.OpenOutcome
 import io.tima.crypto.PersonalChatId
+import io.tima.domain.chat.UserLookup
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -88,6 +90,20 @@ object StandRun {
         try {
             val А = завести(client, route, телефонА, "устройство А") ?: return@runBlocking
             val Б = завести(client, route, телефонБ, "устройство Б") ?: return@runBlocking
+
+            // Так переписку начинает приложение: по НОМЕРУ, а не по внутреннему
+            // идентификатору. Проверяем справочник против живого сервера — единственное
+            // место, где это вообще можно проверить.
+            val найденБ = UsersApi(route, client, token = { А.accessToken }).byPhone(телефонБ)
+            if (найденБ !is UserLookup.Found) {
+                провал("поиск Б по номеру", найденБ.toString())
+                return@runBlocking
+            }
+            if (найденБ.userId != Б.userId) {
+                провал("поиск Б по номеру", "нашёлся другой: ${найденБ.userId} вместо ${Б.userId}")
+                return@runBlocking
+            }
+            шаг("поиск по номеру", "нашёлся тот же user_id, имя от сервера: ${найденБ.name ?: "нет"}")
 
             val chatId = PersonalChatId.of(А.userId, Б.userId)
             шаг("chat_id", "$chatId (выведен из пары user_id, сервер его не назначает)")

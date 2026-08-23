@@ -37,7 +37,7 @@ import io.tima.domain.chat.SendMessageResult
 class ChatHarness(
     private val driver: SqlDriver,
     startTime: Long = 1_000L,
-    startEpoch: Int = 1,
+    startEpoch: Long = 1,
     /**
      * Чем запечатывать. По умолчанию — пометка эпохи и тело: сценарии очереди проверяют
      * очередь, и настоящая криптография в них только мешала бы понять, что сломалось.
@@ -53,7 +53,7 @@ class ChatHarness(
         private set
 
     /** Текущая эпоха escrow. Меняется [changeEpoch]. */
-    var epochKeyId: Int = startEpoch
+    var epochKeyId: Long = startEpoch
         private set
 
     private val db = TimaDatabase(driver)
@@ -85,7 +85,7 @@ class ChatHarness(
      * просит её **на каждую переписку**: ключ escrow спрашивается у сервера по `chat_id`.
      * Поэтому одно значение раздаётся всем перепискам, у которых есть что отправлять.
      */
-    private fun эпохи(): Map<String, Int> =
+    private fun эпохи(): Map<String, Long> =
         outbox.pending().map { it.chatId }.distinct().associateWith { epochKeyId }
 
     /** Один проход насоса: запечатать готовое и отдать фейковому транспорту. */
@@ -122,7 +122,7 @@ class ChatHarness(
     }
 
     /** Смена эпохи escrow: запечатанное под прошлую негодно (ADR-0016). */
-    fun changeEpoch(next: Int) {
+    fun changeEpoch(next: Long) {
         epochKeyId = next
         // По каждой переписке отдельно: эпоха у них своя, и очередь про это теперь знает.
         for (chatId in outbox.pending().map { it.chatId }.distinct()) {

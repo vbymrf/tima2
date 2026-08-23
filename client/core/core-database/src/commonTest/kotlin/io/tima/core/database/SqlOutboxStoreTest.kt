@@ -149,5 +149,5 @@ class SqlOutboxStoreTest {
      * Настоящая подпись просит переписку: ключ эпохи escrow у каждой свой.
      */
     private fun Outbox.sealNext(эпоха: Int, seal: (OutboxEntry) -> ByteArray): OutboxEntry? =
-        this.sealNext("chat-1", эпоха, seal)
+        this.sealNext("chat-1", эпоха.toLong(), seal)
 }
