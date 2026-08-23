@@ -40,8 +40,16 @@ class AccountApiOverHttp(private val auth: AuthApi) : AccountApi {
         signingPub: ByteArray,
         identityPub: ByteArray?,
         platform: String,
+        forceNewIdentity: Boolean,
     ): DeviceCreateStep = when (
-        val исход = auth.register(registrationToken, encryptionPub, signingPub, identityPub, platform)
+        val исход = auth.register(
+            registrationToken = registrationToken,
+            encryptionPub = encryptionPub,
+            signingPub = signingPub,
+            identityPub = identityPub,
+            platform = platform,
+            forceNewIdentity = forceNewIdentity,
+        )
     ) {
         is RegisterResult.Registered ->
             DeviceCreateStep.Created(исход.userId, исход.deviceId, исход.accessToken)

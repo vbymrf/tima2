@@ -104,6 +104,11 @@ class AuthApi(
      * @param identityPub ключ личности из фразы аккаунта. `null` для нового аккаунта;
      *   для возврата на новом устройстве он и решает, что личность та же.
      * @param platform для показа в списке устройств. Не проверяется сервером.
+     * @param forceNewIdentity «Начать заново»: человек явно подтвердил, что прежней фразы
+     *   у него нет и что прежняя переписка станет недоступна. Сервер форкает цепочку
+     *   личности административно, и **собеседники увидят предупреждение о смене личности**
+     *   (ADR-0014 §3). Поэтому флаг ставится только по прямому подтверждению человека, а не
+     *   «на всякий случай, чтобы прошло».
      */
     suspend fun register(
         registrationToken: String,
@@ -111,6 +116,7 @@ class AuthApi(
         signingPub: ByteArray,
         identityPub: ByteArray? = null,
         platform: String? = null,
+        forceNewIdentity: Boolean = false,
     ): RegisterResult {
         require(encryptionPub.size == KEY_BYTES) { "encryption_pub обязан быть $KEY_BYTES байт" }
         require(signingPub.size == KEY_BYTES) { "signing_pub обязан быть $KEY_BYTES байт" }
@@ -124,6 +130,7 @@ class AuthApi(
             add(""""signing_pub":"${encodeBase64Url(signingPub)}"""")
             if (identityPub != null) add(""""identity_pub":"${encodeBase64Url(identityPub)}"""")
             if (platform != null) add(""""platform":"$platform"""")
+            if (forceNewIdentity) add(""""force_new_identity":true""")
         }
         val response = try {
             client.post(route.api("/api/v1/auth/register")) {

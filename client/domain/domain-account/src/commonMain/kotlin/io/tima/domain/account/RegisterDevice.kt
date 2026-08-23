@@ -42,19 +42,24 @@ class RegisterDevice(
      *   умолчанию **запрещено**: случайный повторный вызов оставил бы на сервере
      *   устройство, к которому у нас больше нет закрытого ключа, — то есть тихого
      *   зомби в списке устройств человека.
+     * @param forceNewIdentity «Начать заново»: у человека нет прежней фразы, и он согласен,
+     *   что прежняя переписка станет недоступна. Собеседники увидят предупреждение о смене
+     *   личности, поэтому флаг ставится **только по прямому подтверждению**.
      */
     suspend fun confirm(
         requestId: String,
         code: String,
         identityPub: ByteArray? = null,
         replaceExisting: Boolean = false,
+        forceNewIdentity: Boolean = false,
     ): RegistrationStep {
         if (!replaceExisting && secrets.hasDevice()) {
             return RegistrationStep.AlreadyRegistered
         }
 
         when (val проверка = api.submitCode(requestId, code)) {
-            is CodeSubmitStep.Accepted -> return завести(проверка.registrationToken, identityPub)
+            is CodeSubmitStep.Accepted ->
+                return завести(проверка.registrationToken, identityPub, forceNewIdentity)
             CodeSubmitStep.WrongCode -> return RegistrationStep.WrongCode
             is CodeSubmitStep.Offline -> return RegistrationStep.Offline(проверка.retryAfterMs)
             is CodeSubmitStep.Refused -> return RegistrationStep.Refused(проверка.reason)
@@ -64,6 +69,7 @@ class RegisterDevice(
     private suspend fun завести(
         registrationToken: String,
         identityPub: ByteArray?,
+        forceNewIdentity: Boolean,
     ): RegistrationStep {
         val материал = keys.newDeviceKeys()
 
@@ -82,6 +88,7 @@ class RegisterDevice(
             signingPub = материал.signingPub,
             identityPub = identityPub,
             platform = platform,
+            forceNewIdentity = forceNewIdentity,
         )) {
             is DeviceCreateStep.Created -> {
                 // Токен — после успеха: до него он не существует, а его наличие и есть
@@ -162,6 +169,7 @@ interface AccountApi {
         signingPub: ByteArray,
         identityPub: ByteArray?,
         platform: String,
+        forceNewIdentity: Boolean = false,
     ): DeviceCreateStep
 }
 
@@ -195,6 +203,36 @@ fun interface DeviceKeyFactory {
     fun newDeviceKeys(): DeviceKeyMaterial
 }
 
+/**
+ * Личность аккаунта — **секретная фраза**. Реализуется `core-encryption` над
+ * `AccountMnemonic` (ADR-0010).
+ *
+ * Зачем она вообще: устройство теряется, и без личности аккаунта доказать серверу, что
+ * аккаунт твой, нечем — телефон подтверждает только номер, а номер бывает перевыпущен.
+ * Фраза же выводит тот же ключ на любом устройстве и не хранится нигде, кроме головы и
+ * бумажки человека.
+ *
+ * **Слова — секрет.** Их не пишут в журнал, не сохраняют в хранилище и не отправляют на
+ * сервер: серверу уходит только публичная часть.
+ */
+interface AccountIdentities {
+
+    /** Новая личность: слова человеку, публичный ключ серверу. */
+    fun fresh(): NewAccountIdentity
+
+    /**
+     * Возврат по фразе.
+     *
+     * @return публичный ключ личности, либо `null` — фраза не та: не то число слов, слово
+     *   не из списка, контрольная сумма не сошлась. Различать эти случаи человеку незачем,
+     *   ему надо перепроверить фразу.
+     */
+    fun fromWords(words: List<String>): ByteArray?
+}
+
+/** Свежая личность аккаунта: слова показать один раз, публичный ключ отправить серверу. */
+class NewAccountIdentity(val words: List<String>, val identityPub: ByteArray)
+
 /** Кто мы для сервера после регистрации. */
 data class Session(val userId: String, val deviceId: String, val accessToken: String)
 
@@ -203,7 +241,15 @@ data class Session(val userId: String, val deviceId: String, val accessToken: St
  * Keystore.
  */
 interface DeviceSecretStore {
-    /** Есть ли уже заведённое устройство. */
+    /**
+     * Есть ли уже заведённое устройство — то есть **есть ли сессия**.
+     *
+     * Одного секрета для этого мало: он пишется до вызова сервера (см. [RegisterDevice]),
+     * и без сессии остался от прерванной попытки, которую следующая перезапишет. Ответь
+     * здесь «секрет есть — значит заведено», и вход по секретной фразе оборвётся на
+     * «Устройство уже заведено»: фразу вводят как раз после неудавшейся попытки, чей
+     * секрет уже лежит в хранилище.
+     */
     fun hasDevice(): Boolean
     fun saveDeviceSecret(secret: ByteArray)
     fun saveSession(session: Session)

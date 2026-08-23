@@ -1,5 +1,6 @@
 package io.tima.feature.auth
 
+import io.tima.domain.account.AccountIdentities
 import io.tima.domain.account.AccountApi
 import io.tima.domain.account.CodeRequestStep
 import io.tima.domain.account.CodeSubmitStep
@@ -7,12 +8,14 @@ import io.tima.domain.account.DeviceCreateStep
 import io.tima.domain.account.DeviceKeyFactory
 import io.tima.domain.account.DeviceKeyMaterial
 import io.tima.domain.account.DeviceSecretStore
+import io.tima.domain.account.NewAccountIdentity
 import io.tima.domain.account.RegisterDevice
 import io.tima.domain.account.Session
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -26,8 +29,11 @@ class AuthStoreTest {
     private val api = ПоддельныйApi()
     private val хранилище = ПамятныеСекреты()
 
+    private val личности = ПоддельныеЛичности()
+
     private fun store(scope: kotlinx.coroutines.CoroutineScope) = AuthStore(
         register = RegisterDevice(api, ключи, хранилище, platform = "проба"),
+        identities = личности,
         scope = scope,
     )
 
@@ -113,17 +119,122 @@ class AuthStoreTest {
 
     // ── исходы ──────────────────────────────────────────────────────────────
 
+    /**
+     * Успех ведёт к **показу фразы**, а не сразу в приложение.
+     *
+     * Это единственный момент, когда человек может её записать: слова не хранятся ни у
+     * нас, ни на сервере. Проскочить его нельзя — дальше только по кнопке «Записал».
+     */
     @Test
-    fun успех_доводит_до_готово() = runTest {
+    fun успех_показывает_фразу_и_только_потом_готово() = runTest {
         val store = дошлиДоКода(backgroundScope)
         store.кодИзменён("111111")
 
         store.подтвердить()
 
+        val фраза = store.state.first { it is AuthState.Фраза }
+        assertIs<AuthState.Фраза>(фраза)
+        assertEquals(СЛОВА, фраза.слова, "показать надо ровно ту фразу, что ушла на сервер")
+
+        store.фразаСохранена()
+
+        val готово = store.state.value
+        assertIs<AuthState.Готово>(готово)
+        assertEquals("u-1", готово.userId)
+        assertEquals("d-1", готово.deviceId)
+    }
+
+    /**
+     * **Личность аккаунта уходит на сервер при первой же регистрации.**
+     *
+     * Без неё аккаунт остаётся без фразы навсегда, и вернуться в него после потери
+     * телефона нечем: номер подтверждает только номер, а номера перевыпускают.
+     */
+    @Test
+    fun при_регистрации_серверу_уходит_личность_аккаунта() = runTest {
+        val store = дошлиДоКода(backgroundScope)
+        store.кодИзменён("111111")
+
+        store.подтвердить()
+        store.state.first { it is AuthState.Фраза }
+
+        assertContentEquals(ПУБЛИЧНЫЙ, api.посланныйIdentity, "identity_pub обязан быть послан")
+        assertEquals(false, api.посланныйФорк, "форк цепочки без просьбы человека недопустим")
+    }
+
+    // ── возврат по фразе ────────────────────────────────────────────────────
+
+    /**
+     * Занятый номер ведёт к вводу фразы, а не к отказу.
+     *
+     * Аккаунт существует, и владение им доказывает фраза. Код при этом уже подтверждён и
+     * не спрашивается заново: человек не виноват в том, что у него есть аккаунт.
+     */
+    @Test
+    fun занятый_номер_ведёт_к_вводу_фразы() = runTest {
+        api.наПроверкуКода = { CodeSubmitStep.Accepted("t-1") }
+        api.наЗаведение = { DeviceCreateStep.IdentityMismatch }
+        val store = дошлиДоКода(backgroundScope)
+        store.кодИзменён("111111")
+
+        store.подтвердить()
+
+        val состояние = store.state.first { it is AuthState.ВводФразы }
+        assertIs<AuthState.ВводФразы>(состояние)
+        assertEquals(ТЕЛЕФОН, состояние.телефон)
+        assertEquals("111111", состояние.код, "код помнится: второй раз SMS просить не за что")
+    }
+
+    /** Неверная фраза до сети не доходит: проверить её можно на месте. */
+    @Test
+    fun неверная_фраза_до_сети_не_доходит() = runTest {
+        val store = дошлиДоВводаФразы(backgroundScope)
+        личности.признаёт = false
+        val былоЗаведений = api.заведений
+
+        store.фразаИзменена("не та фраза совсем")
+        store.войтиПоФразе()
+
+        val состояние = store.state.value
+        assertIs<AuthState.ВводФразы>(состояние)
+        assertEquals("Фраза не та — проверьте запись", состояние.беда)
+        assertEquals("не та фраза совсем", состояние.фраза, "набранное не отбираем")
+        assertEquals(былоЗаведений, api.заведений, "сеть на неверной фразе не тревожим")
+    }
+
+    /** Верная фраза заводит устройство — и фразу больше не показывает: она у человека есть. */
+    @Test
+    fun верная_фраза_заводит_устройство_без_показа_фразы() = runTest {
+        val store = дошлиДоВводаФразы(backgroundScope)
+        api.наЗаведение = { DeviceCreateStep.Created("u-1", "d-2", "a-2") }
+
+        store.фразаИзменена(СЛОВА.joinToString(" "))
+        store.войтиПоФразе()
+
         val состояние = store.state.first { it is AuthState.Готово }
         assertIs<AuthState.Готово>(состояние)
-        assertEquals("u-1", состояние.userId)
-        assertEquals("d-1", состояние.deviceId)
+        assertEquals("d-2", состояние.deviceId)
+        assertContentEquals(ПУБЛИЧНЫЙ, api.посланныйIdentity)
+    }
+
+    /**
+     * «Начать заново» форкает личность **только по прямому нажатию**.
+     *
+     * Собеседники увидят предупреждение о смене личности, а прежняя переписка не вернётся.
+     * Поэтому флаг не ставится «чтобы прошло»: он ставится, когда человек сказал, что
+     * фразы у него нет.
+     */
+    @Test
+    fun начать_заново_форкает_личность_и_показывает_новую_фразу() = runTest {
+        val store = дошлиДоВводаФразы(backgroundScope)
+        api.наЗаведение = { DeviceCreateStep.Created("u-2", "d-3", "a-3") }
+
+        store.начатьЗаново()
+
+        val фраза = store.state.first { it is AuthState.Фраза }
+        assertIs<AuthState.Фраза>(фраза)
+        assertEquals(СЛОВА, фраза.слова, "новая личность — новая фраза, и показать её обязательно")
+        assertEquals(true, api.посланныйФорк)
     }
 
     /**
@@ -170,31 +281,22 @@ class AuthStoreTest {
         assertEquals("Код просрочен — запросите новый", состояние.беда)
     }
 
+    /**
+     * Уже заведённое устройство — не отказ.
+     *
+     * «Заведено» значит **есть сессия**: сервер выдал устройству токен. Одного секрета
+     * мало — секрет пишется до вызова сервера, и без сессии он остался от прерванной
+     * попытки, которую следующая перезапишет.
+     */
     @Test
     fun уже_заведённое_устройство_это_не_отказ() = runTest {
-        хранилище.секрет = ByteArray(32)
+        хранилище.сессия = Session(userId = "u-1", deviceId = "d-1", accessToken = "a-1")
         val store = дошлиДоКода(backgroundScope)
         store.кодИзменён("111111")
 
         store.подтвердить()
 
         assertEquals(AuthState.УжеЗаведено, store.state.first { it is AuthState.УжеЗаведено })
-    }
-
-    @Test
-    fun чужая_личность_объясняется_словами_про_фразу() = runTest {
-        api.наПроверкуКода = { CodeSubmitStep.Accepted("t-1") }
-        api.наЗаведение = { DeviceCreateStep.IdentityMismatch }
-        val store = дошлиДоКода(backgroundScope)
-        store.кодИзменён("111111")
-
-        store.подтвердить()
-
-        val состояние = store.state.first { it is AuthState.Код && !it.ждём }
-        assertTrue(
-            состояние.беда.orEmpty().contains("секретной фразе"),
-            "человеку надо сказать, куда идти: ${состояние.беда}",
-        )
     }
 
     @Test
@@ -211,6 +313,16 @@ class AuthStoreTest {
 
     // ── помощники ───────────────────────────────────────────────────────────
 
+    private suspend fun дошлиДоВводаФразы(scope: kotlinx.coroutines.CoroutineScope): AuthStore {
+        api.наПроверкуКода = { CodeSubmitStep.Accepted("t-1") }
+        api.наЗаведение = { DeviceCreateStep.IdentityMismatch }
+        val store = дошлиДоКода(scope)
+        store.кодИзменён("111111")
+        store.подтвердить()
+        store.state.first { it is AuthState.ВводФразы }
+        return store
+    }
+
     private suspend fun дошлиДоКода(scope: kotlinx.coroutines.CoroutineScope): AuthStore {
         val store = store(scope)
         store.номерИзменён(ТЕЛЕФОН)
@@ -219,10 +331,26 @@ class AuthStoreTest {
         return store
     }
 
+    /**
+     * Поддельные личности: фраза постоянная, признание — переключателем.
+     *
+     * Настоящий вывод (HKDF из двенадцати слов) проверен векторами в `messenger-crypto`.
+     * Здесь проверяется не он, а поведение экрана: что фраза показывается, что неверная не
+     * доходит до сети, что форк требует нажатия.
+     */
+    private class ПоддельныеЛичности : AccountIdentities {
+        var признаёт = true
+        override fun fresh() = NewAccountIdentity(words = СЛОВА, identityPub = ПУБЛИЧНЫЙ)
+        override fun fromWords(words: List<String>): ByteArray? = if (признаёт) ПУБЛИЧНЫЙ else null
+    }
+
     private class ПоддельныйApi : AccountApi {
         var запросовКода = 0
+        var заведений = 0
         var наЗапросКода: suspend () -> CodeRequestStep = { CodeRequestStep.CodeRequested("r-1") }
         var наПроверкуКода: suspend () -> CodeSubmitStep = { CodeSubmitStep.Accepted("t-1") }
+        var посланныйIdentity: ByteArray? = null
+        var посланныйФорк: Boolean = false
         var наЗаведение: suspend () -> DeviceCreateStep = {
             DeviceCreateStep.Created(userId = "u-1", deviceId = "d-1", accessToken = "a-1")
         }
@@ -240,13 +368,22 @@ class AuthStoreTest {
             signingPub: ByteArray,
             identityPub: ByteArray?,
             platform: String,
-        ): DeviceCreateStep = наЗаведение()
+            forceNewIdentity: Boolean,
+        ): DeviceCreateStep {
+            заведений++
+            посланныйIdentity = identityPub
+            посланныйФорк = forceNewIdentity
+            return наЗаведение()
+        }
     }
 
     private class ПамятныеСекреты : DeviceSecretStore {
         var секрет: ByteArray? = null
         var сессия: Session? = null
-        override fun hasDevice(): Boolean = секрет != null
+        // Секрет без сессии — прерванная попытка, а не заведённое устройство. Настоящее
+        // хранилище отвечает именно так; подделка, отвечавшая «секрет есть — значит
+        // заведено», обрывала вход по фразе на «Устройство уже заведено».
+        override fun hasDevice(): Boolean = сессия != null
         override fun saveDeviceSecret(secret: ByteArray) { секрет = secret }
         override fun saveSession(session: Session) { сессия = session }
         override fun session(): Session? = сессия
@@ -254,6 +391,13 @@ class AuthStoreTest {
 
     private companion object {
         const val ТЕЛЕФОН = "+79990000001"
+
+        /** Двенадцать слов: их показывают человеку и по ним он возвращается. */
+        val СЛОВА = listOf(
+            "абажур", "берег", "ветер", "город", "дерево", "ель",
+            "жизнь", "заря", "игла", "камень", "лето", "море",
+        )
+        val ПУБЛИЧНЫЙ = ByteArray(32) { 7 }
 
         val ключи = DeviceKeyFactory {
             DeviceKeyMaterial(

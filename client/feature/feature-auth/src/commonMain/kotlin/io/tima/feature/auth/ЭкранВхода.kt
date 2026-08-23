@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
@@ -47,6 +49,10 @@ fun ЭкранВхода(
     onПодтвердить: () -> Unit,
     onНазад: () -> Unit,
     modifier: Modifier = Modifier,
+    onФраза: (String) -> Unit = {},
+    onВойтиПоФразе: () -> Unit = {},
+    onНачатьЗаново: () -> Unit = {},
+    onФразаСохранена: () -> Unit = {},
 ) {
     val цвета = Тима.цвета
     Box(
@@ -63,6 +69,8 @@ fun ЭкранВхода(
             when (состояние) {
                 is AuthState.Телефон -> Телефон(состояние, onНомер, onЗапросить)
                 is AuthState.Код -> Код(состояние, onКод, onПодтвердить, onНазад)
+                is AuthState.Фраза -> Фраза(состояние, onФразаСохранена)
+                is AuthState.ВводФразы -> ВводФразы(состояние, onФраза, onВойтиПоФразе, onНачатьЗаново)
                 // Оба конечных состояния экран не рисует: приложение уже ушло дальше.
                 // Показывать «готово» было бы лишним шагом на пути, который человек и так
                 // прошёл.
@@ -126,6 +134,103 @@ private fun Код(
         надпись = "Изменить номер",
         onClick = onНазад,
         вид = ВидКнопки.Тихая,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/**
+ * Секретная фраза — **показывается один раз**.
+ *
+ * Это единственный момент, когда человек может её записать: слова не хранятся ни у нас, ни
+ * на сервере — из них выводится ключ, и второй раз показать их будет нечем. Поэтому здесь
+ * нет ни «пропустить», ни «потом»: только кнопка «Записал».
+ *
+ * Слова набраны крупно и по три в ряд: их переписывают на бумагу, а не читают. Порядок
+ * важен, и номер у каждого слова стоит именно поэтому.
+ */
+@Composable
+private fun Фраза(состояние: AuthState.Фраза, onСохранена: () -> Unit) {
+    Подпись("Секретная фраза", кегль = TimaType.щ2, вес = FontWeight.ExtraBold)
+    Второстепенное(
+        "Двенадцать слов — единственный способ вернуться в аккаунт, если телефон потерян. " +
+            "Запишите их по порядку и держите отдельно от телефона.",
+    )
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
+    ) {
+        состояние.слова.chunked(3).forEachIndexed { ряд, слова ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
+            ) {
+                слова.forEachIndexed { место, слово ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(Тима.цвета.акцентМягкий, CircleShape)
+                            .padding(vertical = TimaSpacing.о2),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        // Номер слова: фраза восстанавливается по порядку, и человек
+                        // переписывает её строками. Без номеров он собьётся на девятом.
+                        Подпись(
+                            текст = "${ряд * 3 + место + 1}. $слово",
+                            кегль = TimaType.щ5,
+                            вес = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    Кнопка(надпись = "Записал", onClick = onСохранена, modifier = Modifier.fillMaxWidth())
+}
+
+/**
+ * Возврат по фразе: номер занят другой личностью.
+ *
+ * **Это не отказ, а другой путь.** Аккаунт существует, и владение им доказывает фраза —
+ * номер этого не доказывает, номера перевыпускают. Код при этом уже подтверждён и не
+ * спрашивается заново: человек не виноват в том, что у него есть аккаунт.
+ *
+ * «Начать заново» стоит здесь же, но последним и со сказанной ценой: собеседники увидят
+ * предупреждение о смене личности, а прежняя переписка не вернётся.
+ */
+@Composable
+private fun ВводФразы(
+    состояние: AuthState.ВводФразы,
+    onФраза: (String) -> Unit,
+    onВойти: () -> Unit,
+    onЗаново: () -> Unit,
+) {
+    Подпись("Вход по фразе", кегль = TimaType.щ2, вес = FontWeight.ExtraBold)
+    Второстепенное("У номера ${состояние.телефон} уже есть аккаунт. Введите его секретную фразу — двенадцать слов через пробел.")
+
+    Поле(
+        значение = состояние.фраза,
+        onИзменение = onФраза,
+        подсказка = "слово слово слово…",
+    )
+
+    состояние.беда?.let { Беда(it) }
+
+    Кнопка(
+        надпись = if (состояние.ждём) "Проверяем…" else "Войти",
+        onClick = onВойти,
+        modifier = Modifier.fillMaxWidth(),
+    )
+
+    Третьестепенное(
+        "Фразы нет? Можно начать заново: прежняя переписка не вернётся, а собеседники " +
+            "увидят предупреждение о смене личности.",
+    )
+    Кнопка(
+        надпись = "Начать заново",
+        onClick = onЗаново,
+        вид = ВидКнопки.Опасная,
         modifier = Modifier.fillMaxWidth(),
     )
 }

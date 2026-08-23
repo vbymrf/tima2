@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import io.tima.core.encryption.AccountIdentitiesOverKodium
 import io.tima.core.encryption.PersonalChatIdsOverKodium
 import io.tima.core.encryption.deviceIdentityFrom
 import io.tima.core.database.SqlChatBook
@@ -78,7 +79,7 @@ fun Корень(вход: Вход, базаУстройства: () -> TimaDat
 @Composable
 private fun Вхождение(вход: Вход, onВошли: () -> Unit) {
     val scope = rememberCoroutineScope()
-    val store = remember { AuthStore(вход.регистрация, scope) }
+    val store = remember { AuthStore(вход.регистрация, AccountIdentitiesOverKodium, scope) }
     val состояние by store.state.collectAsState()
 
     // Оба конечных состояния означают одно: устройство есть. «Готово» и «уже заведено»
@@ -92,6 +93,10 @@ private fun Вхождение(вход: Вход, onВошли: () -> Unit) {
         onЗапросить = store::запроситьКод,
         onПодтвердить = store::подтвердить,
         onНазад = store::назад,
+        onФраза = store::фразаИзменена,
+        onВойтиПоФразе = store::войтиПоФразе,
+        onНачатьЗаново = store::начатьЗаново,
+        onФразаСохранена = store::фразаСохранена,
     )
 }
 

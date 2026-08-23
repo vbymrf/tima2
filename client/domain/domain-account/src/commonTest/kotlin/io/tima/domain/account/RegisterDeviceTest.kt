@@ -47,6 +47,7 @@ class RegisterDeviceTest {
         var посланныеКлючи: Pair<ByteArray, ByteArray>? = null
         var посланныйIdentity: ByteArray? = null
         var посланнаяПлатформа: String? = null
+        var посланныйФорк: Boolean = false
 
         override suspend fun requestCode(phone: String): CodeRequestStep {
             вызовы += "запрос"
@@ -62,11 +63,13 @@ class RegisterDeviceTest {
             signingPub: ByteArray,
             identityPub: ByteArray?,
             platform: String,
+            forceNewIdentity: Boolean,
         ): DeviceCreateStep {
             вызовы += "заведение"
             посланныеКлючи = encryptionPub to signingPub
             посланныйIdentity = identityPub
             посланнаяПлатформа = platform
+            посланныйФорк = forceNewIdentity
             return заведение
         }
     }
