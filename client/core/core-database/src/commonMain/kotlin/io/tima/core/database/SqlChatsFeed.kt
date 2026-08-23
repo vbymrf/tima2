@@ -3,11 +3,13 @@ package io.tima.core.database
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import io.tima.core.outbox.FieldCipher
+import io.tima.core.outbox.Inbox
 import io.tima.core.outbox.IncomingState
 import io.tima.domain.chat.ChatKind
 import io.tima.domain.chat.ChatBook
 import io.tima.domain.chat.ChatSummary
 import io.tima.domain.chat.ChatsFeed
+import io.tima.domain.chat.ReadMarks
 import io.tima.domain.chat.MessageBodyCodec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -104,4 +106,14 @@ class SqlChatBook(
             peer_id = peerId,
         )
     }
+}
+
+/**
+ * Отметки прочтения — переходник к порту `domain-chat`.
+ *
+ * Переход делает машина входящих: предусловие «прочитанным становится разобранное»
+ * принадлежит ей, и обходить её запросом напрямую значило бы держать правило в двух местах.
+ */
+class SqlReadMarks(private val inbox: Inbox) : ReadMarks {
+    override fun markChatRead(chatId: String): Int = inbox.markChatRead(chatId)
 }

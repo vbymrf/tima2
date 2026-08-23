@@ -7,6 +7,7 @@ import io.tima.core.database.SqlChatFeed
 import io.tima.core.database.SqlChatsFeed
 import io.tima.core.database.SqlInboxStore
 import io.tima.core.database.SqlOutboxStore
+import io.tima.core.database.SqlReadMarks
 import io.tima.core.database.TimaDatabase
 import io.tima.core.encryption.DeviceKeyFactoryOverKodium
 import io.tima.core.encryption.LocalStoreFieldCipher
@@ -30,6 +31,7 @@ import io.tima.core.secrets.VaultSecretStore
 import io.tima.core.secrets.platformVault
 import io.tima.domain.account.RegisterDevice
 import io.tima.domain.account.Session
+import io.tima.domain.chat.MarkRead
 import io.tima.domain.chat.ObserveChat
 import io.tima.domain.chat.ObserveChats
 import io.tima.domain.chat.SendMessage
@@ -178,6 +180,9 @@ class Окружение private constructor(
     val переписки: ObserveChats = ObserveChats(SqlChatsFeed(db, TextBodyCodec, шифр, myUserId))
 
     val переписка: ObserveChat = ObserveChat(SqlChatFeed(db, TextBodyCodec, шифр, myUserId))
+
+    /** Открытая переписка прочитана: счётчик непрочитанного обязан гаснуть. */
+    val прочтение: MarkRead = MarkRead(SqlReadMarks(входящие))
 
     val отправка: SendMessage = SendMessage(
         queue = очередь,

@@ -179,5 +179,12 @@ SELECT * FROM messages WHERE direction = 1 AND state IN (?, ?) ORDER BY local_id
 updateParsed:
 UPDATE messages SET body_enc = ?, sender_id = ? WHERE dedup_key = ?;
 
+-- Прочитано: всё разобранное этой переписки. Предусловие в самом запросе — переход идёт
+-- ТОЛЬКО из STORED, потому что прочитанным становится разобранное. Неразобранное и
+-- нечитаемое остаются непрочитанными: человек их не читал.
+markChatRead:
+UPDATE messages SET state = :read
+WHERE direction = 1 AND chat_id = :chatId AND state = :stored;
+
 updateIncoming:
 UPDATE messages SET state = ?, attempts = ?, undecryptable_reason = ? WHERE dedup_key = ?;

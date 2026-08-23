@@ -84,6 +84,15 @@ class SqlInboxStore(
         )
     }
 
+    override fun markChatRead(chatId: String): Int = db.transactionWithResult {
+        q.markChatRead(
+            read = IncomingState.READ.ordinal.toLong(),
+            chatId = chatId,
+            stored = IncomingState.STORED.ordinal.toLong(),
+        )
+        q.changes().executeAsOne().toInt()
+    }
+
     override fun pending(): List<IncomingEntry> = q.incomingPending(
         state = IncomingState.RECEIVED.ordinal.toLong(),
         state_ = IncomingState.UNDECRYPTABLE.ordinal.toLong(),

@@ -233,6 +233,7 @@ private fun Переписка(
             observe = окружение.переписка,
             send = окружение.отправка,
             scope = scope,
+            markRead = окружение.прочтение,
         )
     }
     val состояние by store.state.collectAsState()

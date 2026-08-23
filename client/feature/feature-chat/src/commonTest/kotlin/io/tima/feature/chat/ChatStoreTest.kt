@@ -3,7 +3,9 @@ package io.tima.feature.chat
 import io.tima.domain.chat.ChatFeed
 import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.DedupKeys
+import io.tima.domain.chat.MarkRead
 import io.tima.domain.chat.MessageBodyCodec
+import io.tima.domain.chat.ReadMarks
 import io.tima.domain.chat.MessageDisplay
 import io.tima.domain.chat.ObserveChat
 import io.tima.domain.chat.OutgoingQueue
@@ -56,6 +58,41 @@ class ChatStoreTest {
         atMs = 1_000,
         localId = 1,
     )
+
+    /**
+     * **Открытая переписка отмечается прочитанной — и на каждом обновлении.**
+     *
+     * Не только при открытии: пока переписка на экране, приходящее человек видит, и
+     * держать при этом янтарную точку значит врать ему. Проверяется числом вызовов, а не
+     * фактом одного: «отметили один раз при открытии» — это другое поведение.
+     */
+    @Test
+    fun открытая_переписка_отмечается_прочитанной() = runTest {
+        val отмечено = mutableListOf<String>()
+        val store = ChatStore(
+            chatId = "chat-1",
+            observe = ObserveChat(feed),
+            send = SendMessage(
+                queue = OutgoingQueue { _, _, _ -> true },
+                codec = object : MessageBodyCodec {
+                    override fun encodeText(text: String) = ByteArray(1)
+                    override fun decodeText(body: ByteArray): String? = null
+                },
+                keys = DedupKeys { "d-1" },
+            ),
+            scope = backgroundScope,
+            markRead = MarkRead(ReadMarks { chatId -> отмечено += chatId; 1 }),
+        )
+
+        поток.value = listOf(строка("d-1", MessageDisplay.RECEIVED))
+        store.state.first { it.lines.isNotEmpty() }
+
+        поток.value = listOf(строка("d-1", MessageDisplay.RECEIVED), строка("d-2", MessageDisplay.RECEIVED))
+        store.state.first { it.lines.size == 2 }
+
+        assertTrue(отмечено.size >= 2, "отмечать надо и при открытии, и на каждом обновлении: $отмечено")
+        assertTrue(отмечено.all { it == "chat-1" }, "чужую переписку отмечать нечем: $отмечено")
+    }
 
     @Test
     fun удачная_отправка_чистит_поле() = runTest {

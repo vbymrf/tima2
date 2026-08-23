@@ -5,6 +5,7 @@ import io.tima.core.outbox.IncomingState
 import io.tima.core.outbox.OutboxEntry
 import io.tima.core.outbox.OutboxState
 import io.tima.domain.chat.ChatKind
+import io.tima.domain.chat.MarkRead
 import io.tima.domain.chat.MessageDisplay
 import io.tima.domain.chat.ObserveChats
 import kotlinx.coroutines.flow.first
@@ -225,6 +226,57 @@ class SqlChatsFeedTest {
         val список = chats.list().first().associateBy { it.chatId }
 
         assertEquals(1, список["chat-1"]?.unread)
+        assertEquals(1, список["chat-2"]?.unread)
+    }
+
+    /**
+     * **Открытая переписка гасит счётчик.**
+     *
+     * До этой правки `markRead` не вызывал никто: янтарная точка висела навсегда, и человек
+     * видел «непрочитанное» в переписке, которую только что прочитал.
+     */
+    @Test
+    fun прочтение_переписки_гасит_счётчик() = runTest {
+        входящее("chat-1", 1, "раз", ts = 1_000)
+        входящее("chat-1", 2, "два", ts = 2_000)
+        assertEquals(2, chats.list().first().single().unread)
+
+        val прочитано = MarkRead(SqlReadMarks(io.tima.core.outbox.Inbox(inbox, nowMs = { 3_000 })))
+            .chat("chat-1")
+
+        assertEquals(2, прочитано)
+        assertEquals(0, chats.list().first().single().unread)
+    }
+
+    /**
+     * Прочитанным становится **только разобранное**.
+     *
+     * Неразобранное и нечитаемое человек не читал: у первого текста ещё нет, у второго его
+     * может не быть никогда. Погаси их — и человек не узнает, что сообщение было.
+     */
+    @Test
+    fun неразобранное_и_нечитаемое_остаются_непрочитанными() = runTest {
+        входящее("chat-1", 1, "разобранное", ts = 1_000)
+        входящее("chat-1", 2, текст = null, ts = 2_000, state = IncomingState.RECEIVED)
+        входящее("chat-1", 3, текст = null, ts = 3_000, state = IncomingState.UNDECRYPTABLE)
+
+        val прочитано = MarkRead(SqlReadMarks(io.tima.core.outbox.Inbox(inbox, nowMs = { 4_000 })))
+            .chat("chat-1")
+
+        assertEquals(1, прочитано, "погасить можно только то, что человек мог прочитать")
+        assertEquals(2, chats.list().first().single().unread)
+    }
+
+    /** Чужая переписка от прочтения этой не гаснет. */
+    @Test
+    fun прочтение_не_трогает_другую_переписку() = runTest {
+        входящее("chat-1", 1, "раз", ts = 1_000)
+        входящее("chat-2", 2, "два", ts = 2_000)
+
+        MarkRead(SqlReadMarks(io.tima.core.outbox.Inbox(inbox, nowMs = { 3_000 }))).chat("chat-1")
+
+        val список = chats.list().first().associateBy { it.chatId }
+        assertEquals(0, список["chat-1"]?.unread)
         assertEquals(1, список["chat-2"]?.unread)
     }
 

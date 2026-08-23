@@ -1,6 +1,7 @@
 package io.tima.feature.chat
 
 import io.tima.domain.chat.ChatLine
+import io.tima.domain.chat.MarkRead
 import io.tima.domain.chat.ObserveChat
 import io.tima.domain.chat.SendMessage
 import io.tima.domain.chat.SendMessageResult
@@ -31,6 +32,15 @@ class ChatStore(
     observe: ObserveChat,
     private val send: SendMessage,
     scope: CoroutineScope,
+    /**
+     * Отметить прочитанным. `null` — не отмечать: так делают проверки, которым интересна
+     * только отправка.
+     *
+     * Правило: **открытая переписка прочитана**. Отмечается не только при открытии, но и
+     * на каждом обновлении списка реплик — пока переписка на экране, приходящее человек
+     * видит, и держать при этом янтарную точку значит врать ему.
+     */
+    private val markRead: MarkRead? = null,
     /** Сколько строк держать на экране. Столько же просит и запрос к базе. */
     pageSize: Int = ObserveChat.DEFAULT_PAGE,
 ) {
@@ -42,7 +52,12 @@ class ChatStore(
         // Список приходит потоком: обновление от самой базы, а не по нажатию. Значит
         // пришедшее сообщение и смена состояния отправки появляются на экране сами.
         observe.page(chatId, pageSize)
-            .onEach { строки -> _state.value = _state.value.copy(lines = строки) }
+            .onEach { строки ->
+                _state.value = _state.value.copy(lines = строки)
+                // Переписка на экране — значит прочитана. Порядок именно такой: сначала
+                // показать, потом отметить; иначе отметка обгонит то, что человек увидит.
+                markRead?.chat(chatId)
+            }
             .launchIn(scope)
     }
 

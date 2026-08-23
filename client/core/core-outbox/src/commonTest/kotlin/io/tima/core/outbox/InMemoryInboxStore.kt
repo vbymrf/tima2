@@ -53,6 +53,14 @@ class InMemoryInboxStore : InboxStore {
     /** Записанное тело — чтобы проверка могла убедиться, что оно действительно легло. */
     fun body(chatId: String, messageId: Long): ByteArray? = тела[key(chatId, messageId)]
 
+    override fun markChatRead(chatId: String): Int {
+        val разобранные = rows.values.filter {
+            it.chatId == chatId && it.state == IncomingState.STORED
+        }
+        for (запись in разобранные) rows[запись.key] = запись.copy(state = IncomingState.READ)
+        return разобранные.size
+    }
+
     override fun pending(): List<IncomingEntry> = rows.values.filter {
         it.state == IncomingState.RECEIVED || it.state == IncomingState.UNDECRYPTABLE
     }
