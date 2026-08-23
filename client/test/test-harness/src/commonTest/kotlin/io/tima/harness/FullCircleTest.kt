@@ -128,7 +128,7 @@ class FullCircleTest {
                     senderSigningPublic = отправитель.signingPublic,
                 ).fold(
                     // Байты тела, как пришли: столбец читается кодеком, и текстом писать нельзя.
-                            onSuccess = { OpenOutcome.Opened(it.body) },
+                            onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId) },
                     onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },
                 )
             },
@@ -157,7 +157,7 @@ class FullCircleTest {
             open = { запись ->
                 PersonalMessages.open(запись.envelope, "посторонний", посторонний, отправитель.signingPublic)
                     .fold(
-                        onSuccess = { OpenOutcome.Opened(byteArrayOf()) },
+                        onSuccess = { OpenOutcome.Opened(byteArrayOf(), it.meta.senderId) },
                         onFailure = { OpenOutcome.NoKey("нет обёртки для этого устройства") },
                     )
             },
@@ -199,7 +199,7 @@ class FullCircleTest {
                 PersonalMessages.open(запись.envelope, "устройство-получателя", получатель, отправитель.signingPublic)
                     .fold(
                         // Байты тела, как пришли: столбец читается кодеком, и текстом писать нельзя.
-                            onSuccess = { OpenOutcome.Opened(it.body) },
+                            onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId) },
                         onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },
                     )
             },
@@ -266,7 +266,7 @@ class FullCircleTest {
      * прогоне приложения; проверка, читающая как экран, поймала бы это сразу.
      */
     private suspend fun теломПолучателя(messageId: Long): String? =
-        ObserveChat(SqlChatFeed(база_получателя, TextBodyCodec, харнессШифр()))
+        ObserveChat(SqlChatFeed(база_получателя, TextBodyCodec, харнессШифр(), "u-получатель"))
             .page("chat-1")
             .first()
             .firstOrNull { it.dedupKey == "chat-1/$messageId" }

@@ -72,6 +72,7 @@ SELECT
     m.local_id          AS last_local_id,
     m.direction         AS last_direction,
     m.state             AS last_state,
+    m.sender_id         AS last_sender,
     m.body_enc          AS last_body,
     COALESCE(m.server_ts, m.client_ts) AS last_at,
     c.kind              AS kind,

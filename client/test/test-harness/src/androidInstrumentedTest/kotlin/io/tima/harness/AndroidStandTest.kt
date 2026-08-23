@@ -192,7 +192,7 @@ class AndroidStandTest {
                             senderSigningPublic = А.identity.signingPublic,
                         ).fold(
                             // Байты тела, как пришли: столбец читается кодеком, и текстом писать нельзя.
-                            onSuccess = { OpenOutcome.Opened(it.body) },
+                            onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId) },
                             onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },
                         )
                     },

@@ -34,7 +34,7 @@ class ПриёмникTest {
     private fun приёмник(myDeviceId: String): Приёмник {
         val сессия = Session(userId = "u-я", deviceId = myDeviceId, accessToken = "t")
         return Приёмник(
-            окружение = Окружение.открыть(desktopDatabase(File(каталог, "tima.db")), СЕКРЕТ),
+            окружение = Окружение.открыть(desktopDatabase(File(каталог, "tima.db")), СЕКРЕТ, сессия.userId),
             сеть = Сеть.создать(сессия),
             сессия = сессия,
             личность = deviceIdentityFrom(СЕКРЕТ),

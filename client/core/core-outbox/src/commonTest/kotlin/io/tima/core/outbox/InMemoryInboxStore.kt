@@ -11,6 +11,7 @@ class InMemoryInboxStore : InboxStore {
 
     private val rows = LinkedHashMap<String, IncomingEntry>()
     private val тела = LinkedHashMap<String, ByteArray>()
+    private val авторы = LinkedHashMap<String, String>()
 
     /**
      * Отказ записи содержимого — для проверки «убили посреди записи».
@@ -40,10 +41,14 @@ class InMemoryInboxStore : InboxStore {
         rows[entry.key] = entry
     }
 
-    override fun storeBody(chatId: String, messageId: Long, body: ByteArray) {
+    override fun storeParsed(chatId: String, messageId: Long, body: ByteArray, senderId: String) {
         if (падатьНаЗаписиТела) error("диск отказал")
         тела[key(chatId, messageId)] = body
+        авторы[key(chatId, messageId)] = senderId
     }
+
+    /** Записанный автор — проверка обязана видеть, что он вообще записан. */
+    fun author(chatId: String, messageId: Long): String? = авторы[key(chatId, messageId)]
 
     /** Записанное тело — чтобы проверка могла убедиться, что оно действительно легло. */
     fun body(chatId: String, messageId: Long): ByteArray? = тела[key(chatId, messageId)]

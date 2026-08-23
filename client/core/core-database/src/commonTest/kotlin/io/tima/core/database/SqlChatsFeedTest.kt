@@ -28,7 +28,7 @@ class SqlChatsFeedTest {
     private val шифр = тестовыйШифр()
     private val outbox = SqlOutboxStore(db, шифр)
     private val inbox = SqlInboxStore(db, шифр)
-    private val chats = ObserveChats(SqlChatsFeed(db, Кодек, шифр))
+    private val chats = ObserveChats(SqlChatsFeed(db, Кодек, шифр, Я))
 
     private fun исходящее(chatId: String, текст: String, ts: Long, state: OutboxState = OutboxState.SENT) {
         outbox.putIfAbsent(
@@ -49,6 +49,7 @@ class SqlChatsFeedTest {
         текст: String?,
         ts: Long,
         state: IncomingState = IncomingState.STORED,
+        автор: String = СОБЕСЕДНИК,
     ) {
         inbox.putIfAbsent(
             IncomingEntry(
@@ -58,7 +59,7 @@ class SqlChatsFeedTest {
                 receivedAtMs = ts,
             ),
         )
-        if (текст != null) inbox.storeBody(chatId, messageId, Кодек.encodeText(текст))
+        if (текст != null) inbox.storeParsed(chatId, messageId, Кодек.encodeText(текст), автор)
         val запись = inbox.byKey(chatId, messageId)!!
         inbox.update(запись.copy(state = state))
     }
@@ -169,6 +170,22 @@ class SqlChatsFeedTest {
         assertTrue(!строка.lastOutgoing)
     }
 
+    /**
+     * Последнее сообщение со своего второго устройства — своё, и в списке тоже.
+     *
+     * Правило одно на переписку и на список: разойдись они, человек увидел бы у строки
+     * отметку отправки там, где в чате чужой пузырь, — и наоборот.
+     */
+    @Test
+    fun последнее_от_себя_же_считается_своим() = runTest {
+        входящее("chat-1", 1, "со телефона", ts = 1_000, автор = Я)
+
+        val строка = chats.list().first().single()
+
+        assertTrue(строка.lastOutgoing, "написанное мною с другого устройства — моё")
+        assertEquals("со телефона", строка.preview)
+    }
+
     // ── непрочитанное ───────────────────────────────────────────────────────
 
     @Test
@@ -238,5 +255,10 @@ class SqlChatsFeedTest {
 
         assertEquals(0, chats.list().first().size)
         assertNull(db.chatsQueries.chatById("chat-1").executeAsOneOrNull())
+    }
+
+    private companion object {
+        const val Я = "u-я"
+        const val СОБЕСЕДНИК = "u-аня"
     }
 }

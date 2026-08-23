@@ -36,7 +36,7 @@ class InboxRestartTest {
         Inbox(store, nowMs = { 1_000 }).receive("chat-1", 5, конверт)
 
         val после = послеПерезапуска()
-        val разобрано = после.openNext({ OpenOutcome.Opened(тело) })
+        val разобрано = после.openNext({ OpenOutcome.Opened(тело, "u-автор") })
 
         assertNotNull(разобрано)
         assertEquals(IncomingState.STORED, разобрано.state)
@@ -52,14 +52,14 @@ class InboxRestartTest {
         inbox.receive("chat-1", 5, конверт)
 
         store.падатьНаЗаписиТела = true
-        runCatching { inbox.openNext { OpenOutcome.Opened(тело) } }
+        runCatching { inbox.openNext { OpenOutcome.Opened(тело, "u-автор") } }
         store.падатьНаЗаписиТела = false
 
         assertEquals(IncomingState.RECEIVED, store.byKey("chat-1", 5)?.state)
         // И после перезапуска разбирается заново, без потерь.
         assertEquals(
             IncomingState.STORED,
-            послеПерезапуска().openNext({ OpenOutcome.Opened(тело) })?.state,
+            послеПерезапуска().openNext({ OpenOutcome.Opened(тело, "u-автор") })?.state,
         )
     }
 
@@ -73,7 +73,7 @@ class InboxRestartTest {
 
         val после = послеПерезапуска()
 
-        assertNull(после.openNext({ OpenOutcome.Opened(тело) }), "разбирать нечего")
+        assertNull(после.openNext({ OpenOutcome.Opened(тело, "u-автор") }), "разбирать нечего")
         val запись = store.byKey("chat-1", 5)
         assertEquals(IncomingState.UNDECRYPTABLE, запись?.state)
         assertEquals("ключ эпохи не пришёл", запись?.undecryptableReason, "причина не теряется")
@@ -83,7 +83,7 @@ class InboxRestartTest {
         assertEquals(1, после.retryUndecryptable())
         assertEquals(
             IncomingState.STORED,
-            после.openNext({ OpenOutcome.Opened(тело) })?.state,
+            после.openNext({ OpenOutcome.Opened(тело, "u-автор") })?.state,
         )
     }
 
@@ -92,13 +92,13 @@ class InboxRestartTest {
         val inbox = Inbox(store, nowMs = { 1_000 })
         inbox.receive("chat-1", 5, конверт)
         inbox.receive("chat-1", 6, конверт)
-        inbox.openNext({ OpenOutcome.Opened(тело) })
-        inbox.openNext({ OpenOutcome.Opened(тело) })
+        inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") })
+        inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") })
         inbox.markRead("chat-1", 5)
 
         val после = послеПерезапуска()
 
-        assertNull(после.openNext({ OpenOutcome.Opened(тело) }), "заново разбирать нечего")
+        assertNull(после.openNext({ OpenOutcome.Opened(тело, "u-автор") }), "заново разбирать нечего")
         assertEquals(IncomingState.READ, store.byKey("chat-1", 5)?.state)
         assertEquals(IncomingState.STORED, store.byKey("chat-1", 6)?.state)
     }

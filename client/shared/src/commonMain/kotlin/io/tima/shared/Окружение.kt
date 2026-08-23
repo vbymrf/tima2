@@ -160,6 +160,8 @@ class Сеть(
 class Окружение private constructor(
     val db: TimaDatabase,
     val шифр: FieldCipher,
+    /** Кто я: по этому отличается своё сообщение со второго устройства от чужого. */
+    private val myUserId: String,
 ) {
 
     /** Очередь исходящих: одна на приложение, потому что одна на базу. */
@@ -173,9 +175,9 @@ class Окружение private constructor(
      */
     val входящие: Inbox = Inbox(SqlInboxStore(db, шифр), nowMs = { сейчасМс() })
 
-    val переписки: ObserveChats = ObserveChats(SqlChatsFeed(db, TextBodyCodec, шифр))
+    val переписки: ObserveChats = ObserveChats(SqlChatsFeed(db, TextBodyCodec, шифр, myUserId))
 
-    val переписка: ObserveChat = ObserveChat(SqlChatFeed(db, TextBodyCodec, шифр))
+    val переписка: ObserveChat = ObserveChat(SqlChatFeed(db, TextBodyCodec, шифр, myUserId))
 
     val отправка: SendMessage = SendMessage(
         queue = очередь,
@@ -196,8 +198,10 @@ class Окружение private constructor(
          *   Ключ покоя базы выводится из них же, поэтому **чужой секрет означает
          *   нечитаемую базу**, а не ошибку: строки на месте, содержимое не открыть.
          *   Порождает секрет только регистрация — см. [Вход].
+         * @param myUserId кто я. Нужен переписке: входящее от себя же — своё сообщение,
+         *   написанное с другого своего устройства.
          */
-        fun открыть(db: TimaDatabase, секретУстройства: ByteArray): Окружение =
-            Окружение(db, LocalStoreFieldCipher(секретУстройства))
+        fun открыть(db: TimaDatabase, секретУстройства: ByteArray, myUserId: String): Окружение =
+            Окружение(db, LocalStoreFieldCipher(секретУстройства), myUserId)
     }
 }

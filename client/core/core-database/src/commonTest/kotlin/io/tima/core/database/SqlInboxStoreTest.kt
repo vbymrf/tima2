@@ -81,7 +81,7 @@ class SqlInboxStoreTest {
         assertEquals(1, inbox.retryUndecryptable())
         assertEquals(IncomingState.RECEIVED, inboxStore.byKey("chat-1", 42)?.state)
 
-        inbox.openNext({ OpenOutcome.Opened(тело) })
+        inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") })
         assertEquals(IncomingState.STORED, inboxStore.byKey("chat-1", 42)?.state)
         // Тело проверяется В БАЗЕ, а не в тестовой переменной: раньше запись содержимого
         // была лямбдой, и все вызывающие передавали пустую — состояние STORED означало
@@ -137,7 +137,7 @@ class SqlInboxStoreTest {
         outbox.sealNext("chat-1", 1L) { byteArrayOf(1) }
         outbox.claimForSend()
         outbox.onOutcome("d-1", SendOutcome.Accepted(serverMessageId = 100))
-        inbox.openNext({ OpenOutcome.Opened(тело) })
+        inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") })
 
         assertEquals(OutboxState.SENT, outboxStore.byDedupKey("d-1")?.state)
         assertEquals(IncomingState.STORED, inboxStore.byKey("chat-1", 42)?.state)

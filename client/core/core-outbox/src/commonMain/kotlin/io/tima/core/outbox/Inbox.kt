@@ -82,10 +82,16 @@ data class IncomingEntry(
 /** Чем закончилась попытка разобрать конверт. */
 sealed interface OpenOutcome {
     /**
-     * Разобрано. [body] — те же байты, что лягут в `body_enc` под локальным ключом:
-     * один кодек на провод и на диск.
+     * Разобрано.
+     *
+     * @param body те же байты, что лягут в `body_enc` под локальным ключом: один кодек на
+     *   провод и на диск.
+     * @param senderId кто написал — **проверенный** отправитель, а не то, что было
+     *   написано в открытой части конверта: досюда доходит только конверт с сошедшейся
+     *   подписью. До этого поля столбец `sender_id` оставался пустым навсегда, и узнать
+     *   автора было нельзя ни в группе, ни у сообщения со своего второго устройства.
      */
-    data class Opened(val body: ByteArray) : OpenOutcome
+    data class Opened(val body: ByteArray, val senderId: String) : OpenOutcome
 
     /**
      * Ключа нет — попробуем позже. Не ошибка данных: обёртка для этого устройства
@@ -117,11 +123,15 @@ interface InboxStore {
     fun update(entry: IncomingEntry)
 
     /**
-     * Записать разобранное содержимое.
+     * Записать разобранное: тело **и проверенного автора**.
      *
      * До этого в строке лежал конверт: он нужен, пока разбор не удался, — по нему идёт
      * повтор, когда появится ключ. После успешного разбора его место занимает тело, и
      * именно тело показывает экран.
+     *
+     * Автор пишется здесь и только здесь, потому что до разбора он неизвестен: в открытой
+     * части конверта он есть, но верить ей нельзя — доверенным он становится после
+     * проверки подписи.
      *
      * **Раньше это был параметр-функция у [Inbox.openNext], и ровно поэтому не работало.**
      * Каждый вызывающий передавал пустую лямбду — во всех проверках, в харнессе и в
@@ -129,7 +139,7 @@ interface InboxStore {
      * означало «разобрано и потеряно». Обязанность, которую можно передать пустой
      * лямбдой, однажды передадут пустой лямбдой везде.
      */
-    fun storeBody(chatId: String, messageId: Long, body: ByteArray)
+    fun storeParsed(chatId: String, messageId: Long, body: ByteArray, senderId: String)
 
     /** Незавершённое — что видно как «принято» и «нечитаемое». */
     fun pending(): List<IncomingEntry>
@@ -185,7 +195,7 @@ class Inbox(
         val entry = store.nextReceived() ?: return null
         val updated = when (val outcome = open(entry)) {
             is OpenOutcome.Opened -> {
-                store.storeBody(entry.chatId, entry.messageId, outcome.body)
+                store.storeParsed(entry.chatId, entry.messageId, outcome.body, outcome.senderId)
                 entry.copy(state = IncomingState.STORED, undecryptableReason = null)
             }
             is OpenOutcome.NoKey -> entry.copy(

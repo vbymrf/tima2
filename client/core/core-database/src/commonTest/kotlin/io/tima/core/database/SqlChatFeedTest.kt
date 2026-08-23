@@ -29,7 +29,7 @@ class SqlChatFeedTest {
     private val конвертБезТела = Кодек.НЕЧИТАЕМОЕ
     private val outbox = SqlOutboxStore(db, шифр)
     private val inbox = SqlInboxStore(db, шифр)
-    private val feed = SqlChatFeed(db, Кодек, шифр)
+    private val feed = SqlChatFeed(db, Кодек, шифр, Я)
     private val chat = ObserveChat(feed)
 
     private fun исходящее(
@@ -183,11 +183,52 @@ class SqlChatFeedTest {
 
         assertEquals(null, chat.page("chat-1").first().single().text, "конверт — это ещё не текст")
 
-        машина.openNext { io.tima.core.outbox.OpenOutcome.Opened(Кодек.encodeText("и тебе")) }
+        машина.openNext { io.tima.core.outbox.OpenOutcome.Opened(Кодек.encodeText("и тебе"), СОБЕСЕДНИК) }
 
         val строка = chat.page("chat-1").first().single()
         assertEquals("и тебе", строка.text, "после разбора тело обязано быть в строке")
         assertEquals(MessageDisplay.RECEIVED, строка.display)
+    }
+
+    /**
+     * **Сообщение со своего второго устройства — своё.**
+     *
+     * Оно приходит входящим: его принёс живой канал. Но написал его человек сам, с
+     * телефона, и на ПК он хочет видеть его справа и без имени автора. Отличить можно
+     * только по проверенному отправителю — потому он и записывается.
+     */
+    @Test
+    fun входящее_от_себя_же_считается_своим() = runTest {
+        val машина = io.tima.core.outbox.Inbox(inbox, nowMs = { 2_000 })
+        машина.receive("chat-1", 42, конвертБезТела)
+        машина.openNext { io.tima.core.outbox.OpenOutcome.Opened(Кодек.encodeText("со телефона"), Я) }
+
+        val строка = chat.page("chat-1").first().single()
+
+        assertTrue(строка.outgoing, "написанное мною с другого устройства — моё")
+        assertEquals("со телефона", строка.text)
+    }
+
+    @Test
+    fun входящее_от_собеседника_остаётся_чужим() = runTest {
+        val машина = io.tima.core.outbox.Inbox(inbox, nowMs = { 2_000 })
+        машина.receive("chat-1", 42, конвертБезТела)
+        машина.openNext { io.tima.core.outbox.OpenOutcome.Opened(Кодек.encodeText("привет"), СОБЕСЕДНИК) }
+
+        assertTrue(!chat.page("chat-1").first().single().outgoing)
+    }
+
+    /**
+     * Неразобранное входящее своим не считается.
+     *
+     * Автора у него ещё нет — `sender_id` пуст, и это единственное честное значение: до
+     * сошедшейся подписи мы не знаем, кто написал.
+     */
+    @Test
+    fun неразобранное_входящее_не_своё() = runTest {
+        io.tima.core.outbox.Inbox(inbox, nowMs = { 2_000 }).receive("chat-1", 42, конвертБезТела)
+
+        assertTrue(!chat.page("chat-1").first().single().outgoing)
     }
 
     // ── порядок ──────────────────────────────────────────────────────────────
@@ -264,5 +305,11 @@ class SqlChatFeedTest {
 
         assertEquals(1, строки.size)
         assertTrue(строки.all { it.chatId == "chat-1" })
+    }
+
+    private companion object {
+        /** Кто я и кто собеседник: своё сообщение отличается от чужого отправителем. */
+        const val Я = "u-я"
+        const val СОБЕСЕДНИК = "u-аня"
     }
 }

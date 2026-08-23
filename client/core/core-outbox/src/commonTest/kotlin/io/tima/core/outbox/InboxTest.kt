@@ -65,11 +65,11 @@ class InboxTest {
     @Test
     fun разобранное_становится_сохранённым() {
         принять()
-        val после = inbox.openNext({ OpenOutcome.Opened(тело) })
+        val после = inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") })
 
         assertEquals(IncomingState.STORED, после?.state)
         assertTrue(тело.contentEquals(store.body("chat-1", 5) ?: ByteArray(0)))
-        assertNull(inbox.openNext({ OpenOutcome.Opened(тело) }), "разбирать больше нечего")
+        assertNull(inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") }), "разбирать больше нечего")
     }
 
     @Test
@@ -95,7 +95,7 @@ class InboxTest {
         assertEquals(1, inbox.retryUndecryptable(), "вернуться должно одно")
         assertEquals(IncomingState.RECEIVED, store.byKey("chat-1", 5)?.state)
 
-        val после = inbox.openNext({ OpenOutcome.Opened(тело) })
+        val после = inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") })
         assertEquals(IncomingState.STORED, после?.state)
         assertTrue(тело.contentEquals(store.body("chat-1", 5)!!))
     }
@@ -121,13 +121,13 @@ class InboxTest {
         assertFailsWith<IllegalStateException> {
             store.падатьНаЗаписиТела = true
             try {
-                inbox.openNext { OpenOutcome.Opened(тело) }
+                inbox.openNext { OpenOutcome.Opened(тело, "u-автор") }
             } finally {
                 store.падатьНаЗаписиТела = false
             }
         }
         assertEquals(IncomingState.RECEIVED, store.byKey("chat-1", 5)?.state)
-        assertNotNull(inbox.openNext({ OpenOutcome.Opened(тело) }), "разбирается снова")
+        assertNotNull(inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") }), "разбирается снова")
     }
 
     @Test
@@ -151,7 +151,7 @@ class InboxTest {
         // Пока не разобрано — читать нечего, и это ошибка вызывающего.
         assertFailsWith<IllegalArgumentException> { inbox.markRead("chat-1", 5) }
 
-        inbox.openNext({ OpenOutcome.Opened(тело) })
+        inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") })
         inbox.markRead("chat-1", 5)
 
         assertEquals(IncomingState.READ, store.byKey("chat-1", 5)?.state)

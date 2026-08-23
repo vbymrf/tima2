@@ -31,6 +31,8 @@ class SqlChatsFeed(
     private val db: TimaDatabase,
     private val codec: MessageBodyCodec,
     private val cipher: FieldCipher,
+    /** Кто я: последнее сообщение может быть своим, пришедшим со второго устройства. */
+    private val myUserId: String,
 ) : ChatsFeed {
 
     override fun list(limit: Int): Flow<List<ChatSummary>> =
@@ -54,7 +56,9 @@ class SqlChatsFeed(
         kind = if (kind == ГРУППА) ChatKind.Group else ChatKind.Personal,
         peerId = peer_id,
         preview = превью(last_direction, last_state, last_body),
-        lastOutgoing = last_direction == ИСХОДЯЩЕЕ,
+        // То же правило, что в переписке: входящее от себя же — своё.
+        lastOutgoing = last_direction == ИСХОДЯЩЕЕ ||
+            (last_sender.isNotEmpty() && last_sender == myUserId),
         lastDisplay = displayOf(last_direction, last_state),
         atMs = last_at ?: 0,
         unread = unread.toInt(),

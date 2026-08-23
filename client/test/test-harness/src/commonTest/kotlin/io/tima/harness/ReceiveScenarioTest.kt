@@ -119,7 +119,7 @@ class ReceiveScenarioTest {
 
         // Одно расшифровалось, второму нет ключа.
         val разобрано = h.openAll { запись ->
-            if (запись.messageId == 1L) OpenOutcome.Opened(тело) else OpenOutcome.NoKey("нет ключа эпохи")
+            if (запись.messageId == 1L) OpenOutcome.Opened(тело, "u-автор") else OpenOutcome.NoKey("нет ключа эпохи")
         }
 
         assertEquals(2, разобрано, "оба получили исход")

@@ -70,14 +70,18 @@ class SqlInboxStore(
     }
 
     /**
-     * Разобранное тело на место конверта.
+     * Разобранное тело и проверенный автор на место конверта.
      *
      * Конверт до этого нужен: по нему идёт повтор разбора, когда появится ключ. После
      * успешного разбора он больше не нужен, а тело — нужно: его показывает экран. Пока
      * этой записи не было, состояние `STORED` означало «разобрано и потеряно».
      */
-    override fun storeBody(chatId: String, messageId: Long, body: ByteArray) {
-        q.updateBody(body_enc = cipher.seal(body), dedup_key = keyOf(chatId, messageId))
+    override fun storeParsed(chatId: String, messageId: Long, body: ByteArray, senderId: String) {
+        q.updateParsed(
+            body_enc = cipher.seal(body),
+            sender_id = senderId,
+            dedup_key = keyOf(chatId, messageId),
+        )
     }
 
     override fun pending(): List<IncomingEntry> = q.incomingPending(
