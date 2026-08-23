@@ -13,6 +13,7 @@ import io.tima.domain.chat.ReadMarks
 import io.tima.domain.chat.MessageBodyCodec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
 /**
@@ -28,6 +29,12 @@ import kotlinx.coroutines.flow.map
  * сообщения, имя — строка `chats`. И то и другое лежит под ключом покоя, потому что и то
  * и другое — содержимое переписки, а не метаданные. Не открылось — значит нет: строка
  * остаётся, текста нет.
+ *
+ * **Пустые переписки показываются тоже.** Группу создают заранее, и до первого сообщения в
+ * ней ничего нет; не показать её значит потерять то, что человек только что сделал своими
+ * руками. Правило «превью и непрочитанное выводятся из сообщений» при этом не тронуто: у
+ * пустой переписки их просто нет. Пустые идут первыми — времени у них нет, а появились они
+ * только что.
  */
 class SqlChatsFeed(
     private val db: TimaDatabase,
@@ -37,8 +44,8 @@ class SqlChatsFeed(
     private val myUserId: String,
 ) : ChatsFeed {
 
-    override fun list(limit: Int): Flow<List<ChatSummary>> =
-        db.chatsQueries.chatList(
+    override fun list(limit: Int): Flow<List<ChatSummary>> {
+        val сСообщениями = db.chatsQueries.chatList(
             readState = IncomingState.READ.ordinal.toLong(),
             limit = limit.toLong(),
         )
@@ -46,7 +53,13 @@ class SqlChatsFeed(
             // список переехал сам, без опроса по таймеру.
             .asFlow()
             .mapToList(Dispatchers.Default)
-            .map { строки -> строки.map { it.toSummary() } }
+
+        val пустые = db.chatsQueries.emptyChats().asFlow().mapToList(Dispatchers.Default)
+
+        return сСообщениями.combine(пустые) { строки, пустышки ->
+            пустышки.map { it.toSummary() } + строки.map { it.toSummary() }
+        }
+    }
 
     private fun ChatList.toSummary() = ChatSummary(
         chatId = chat_id,
@@ -64,6 +77,25 @@ class SqlChatsFeed(
         lastDisplay = displayOf(last_direction, last_state),
         atMs = last_at ?: 0,
         unread = unread.toInt(),
+    )
+
+    /**
+     * Пустая переписка: имя есть, сообщений нет.
+     *
+     * Превью `null`, время нулевое, непрочитанных нет — и это не заглушки, а правда о ней.
+     * Придумывать здесь «нет сообщений» текстом нельзя: текст сообщения и подпись «сообщений
+     * нет» человек различает по виду, а не по содержанию, и решает это экран.
+     */
+    private fun Chats.toSummary() = ChatSummary(
+        chatId = chat_id,
+        title = title_enc?.let { cipher.open(it) }?.decodeToString(),
+        kind = if (kind == ГРУППА) ChatKind.Group else ChatKind.Personal,
+        peerId = peer_id,
+        preview = null,
+        lastOutgoing = false,
+        lastDisplay = null,
+        atMs = null,
+        unread = 0,
     )
 
     /**
