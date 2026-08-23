@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
+    alias(libs.plugins.androidLibrary)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
 }
@@ -19,6 +20,17 @@ kotlin {
     jvmToolchain(17)
 
     jvm()
+    // ANDROID-ТАРГЕТ ОБЯЗАТЕЛЕН, И ЭТО НЕ ФОРМАЛЬНОСТЬ.
+    //
+    // Без него Android-приложение забирает **jvm-вариант** этого модуля — то есть код,
+    // собранный против Compose для ПК. Собирается, ставится, запускается; падает на
+    // первом же вызове, у которого реализация платформенная: `Path()` на ПК приводит к
+    // skiko, и на телефоне это `NoClassDefFoundError: SkiaBackedPath_skikoKt`.
+    //
+    // Поймано живым прогоном: вход и список нарисовались, а первый пузырь переписки уронил
+    // приложение. Compose Multiplatform совпадает по именам классов, поэтому подмена
+    // варианта видна только там, где реализация действительно разная.
+    androidTarget()
     iosArm64()
     iosSimulatorArm64()
 
@@ -39,3 +51,20 @@ kotlin {
         }
     }
 }
+
+android {
+    namespace = "io.tima.feature.auth"
+    compileSdk = 35
+    defaultConfig { minSdk = 26 }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    lint { abortOnError = false }
+}
+
+tasks.matching { it.name.startsWith("lint") }.configureEach { enabled = false }
+
+// Хостовые unit-тесты Android не нужны: они наследуют commonTest и прогнали бы то же
+// самое, что уже идёт на таргете jvm. Платформенного у этого модуля нет вовсе.
+tasks.matching { it.name.endsWith("UnitTest") }.configureEach { enabled = false }

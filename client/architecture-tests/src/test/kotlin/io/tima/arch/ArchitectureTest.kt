@@ -45,6 +45,49 @@ class ArchitectureTest {
         assertTrue(found.single().detail.contains("io.ktor"), "не тот импорт: ${found.single()}")
     }
 
+    /**
+     * **У модуля с Compose обязан быть Android-таргет.**
+     *
+     * Правило проверяет файлы сборки, а не код, и появилось после падения на живом
+     * телефоне. Модуль без `androidTarget()` попадает в Android-приложение **jvm-вариантом**
+     * — то есть кодом, собранным против Compose для ПК. Собирается, ставится, запускается;
+     * падает на первом же вызове, у которого реализация платформенная: `Path()` на ПК
+     * приводит к skiko, и на телефоне это `NoClassDefFoundError: SkiaBackedPath_skikoKt`.
+     *
+     * Компилятор такого не видит: у Compose Multiplatform имена классов совпадают, и
+     * подмена варианта заметна только там, где реализация действительно разная. Вход и
+     * список переписок нарисовались, а первый пузырь уронил приложение.
+     *
+     * Исключение одно — **вход для ПК**: он и есть платформа, Android ему не нужен.
+     */
+    @Test
+    fun у_модуля_с_compose_есть_android_таргет() {
+        val файлы = clientRoot.walkTopDown()
+            .onEnter { it.name !in setOf("build", ".gradle", ".kotlin", ".git") }
+            .filter { it.isFile && it.name == "build.gradle.kts" }
+            // Корневой файл сборки не модуль: он объявляет плагины с `apply false`, то
+            // есть только версии, и таргетов у него не бывает вовсе.
+            .filter { it.parentFile != clientRoot }
+            .toList()
+
+        val нарушители = файлы.filter { файл ->
+            val текст = файл.readText()
+            val compose = текст.contains("composeMultiplatform")
+            val мультиплатформа = текст.contains("kotlinMultiplatform")
+            // Вход для ПК — платформенный по определению: у него `compose.desktop`.
+            val входДляПК = текст.contains("compose.desktop")
+            compose && мультиплатформа && !входДляПК && !текст.contains("androidTarget()")
+        }
+
+        assertTrue(
+            нарушители.isEmpty(),
+            "модули с Compose без androidTarget(): " +
+                нарушители.joinToString { it.parentFile.name } +
+                ". Android-приложение заберёт их jvm-вариантом и упадёт на первом " +
+                "платформенном вызове Compose — проверено живым телефоном",
+        )
+    }
+
     @Test
     fun у_каждого_правила_есть_причина() {
         // Правило без объяснения снимают при первом же неудобстве, потому что никто
