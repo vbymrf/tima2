@@ -2,15 +2,24 @@ package io.tima.crypto
 
 import io.kodium.Kodium
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /**
  * Привязка нового устройства по QR. Раскладка байт здесь обязана совпадать с
- * server/internal/api/device_link.go (linkSigningBytes) байт-в-байт — этот тест
- * проверяет то, что доступно без запуска Go: подпись реально покрывает все поля
- * (тамперинг любого из них ловится), а не какую-то фиксированную заглушку.
+ * server/internal/api/device_link.go (linkSigningBytes) байт-в-байт.
+ *
+ * Проверяется двумя способами, и они дополняют друг друга:
+ *
+ * 1. **Вектор** — закреплённый sha256 подписываемых байт. Он посчитан не нашим кодом, а
+ *    сторонним sha256 по раскладке, выписанной из исходника Go. Без него все остальные
+ *    проверки согласованы сами с собой: подпись сойдётся с проверкой, обе будут считать
+ *    одни и те же неверные байты, и узнается это отказом сервера `bad_signature` — без
+ *    единого указания на причину. Правило `crypto-invariants.mdc` требует ровно этого:
+ *    «change one side, change the other in the same commit, and prove it with a vector».
+ * 2. **Тамперинг** — подпись реально покрывает все поля, а не какую-то их часть.
  */
 class DeviceLinkSignatureTest {
 
@@ -24,6 +33,23 @@ class DeviceLinkSignatureTest {
 
     private fun sign(sid: String = sessionId, sec: String = secret, enc: ByteArray = encPub, sig: ByteArray = signPub) =
         MessageSigner.sign(phoneKey, DeviceLinkSignature.signingBytes(sid, sec, enc, sig)).getOrThrow()
+
+    /**
+     * Вектор: sha256 подписываемых байт для закреплённого входа.
+     *
+     * Значение получено сторонним sha256 по раскладке из `linkSigningBytes`:
+     * `"TIMA-DEVICE-LINK-v1" || 0 || session_id || 0 || secret || 0 || enc_pub || sign_pub`
+     * (136 байт для этого входа). Не сходится — неверна наша раскладка, а не вектор.
+     */
+    @Test
+    fun `подписываемые байты сходятся с вектором из раскладки Go`() {
+        val байты = DeviceLinkSignature.signingBytes(sessionId, secret, encPub, signPub)
+        assertEquals(
+            "a58c45b77742af8860fbf8c9404e9b9d5a9d2e0dfa446768311dca341d8a634e",
+            байты.joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') },
+            "раскладка подписи разошлась с серверной: сервер ответит bad_signature",
+        )
+    }
 
     @Test
     fun `подпись проходит проверку по ключу подтверждающего устройства`() {
