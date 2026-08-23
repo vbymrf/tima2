@@ -9,16 +9,22 @@ import io.tima.core.database.SqlInboxStore
 import io.tima.core.database.SqlOutboxStore
 import io.tima.core.database.SqlReadMarks
 import io.tima.core.database.TimaDatabase
+import io.tima.core.encryption.DeviceIdentity
 import io.tima.core.encryption.DeviceKeyFactoryOverKodium
+import io.tima.core.encryption.LinkSignerOverKodium
 import io.tima.core.encryption.LocalStoreFieldCipher
 import io.tima.core.encryption.TextBodyCodec
 import io.tima.core.network.AccountApiOverHttp
 import io.tima.core.network.AuthApi
+import io.tima.core.network.DeviceLinkConfirmOverHttp
+import io.tima.core.network.DeviceLinkStartOverHttp
 import io.tima.core.network.DevicesApi
 import io.tima.core.network.EscrowApi
 import io.tima.core.network.HttpMessageTransport
 import io.tima.core.network.KeysApi
 import io.tima.core.network.UsersApi
+import io.tima.core.network.LinkConfirmApi
+import io.tima.core.network.LinkStartApi
 import io.tima.core.network.RouteConfig
 import io.tima.core.network.ServerRoute
 import io.tima.core.network.httpEngine
@@ -30,6 +36,8 @@ import io.tima.core.outbox.UuidDedupKeys
 import io.tima.core.secrets.SecretVault
 import io.tima.core.secrets.VaultSecretStore
 import io.tima.core.secrets.platformVault
+import io.tima.domain.account.ConfirmDeviceLink
+import io.tima.domain.account.LinkNewDevice
 import io.tima.domain.account.RegisterDevice
 import io.tima.domain.account.Session
 import io.tima.domain.chat.MarkRead
@@ -52,6 +60,13 @@ import io.tima.domain.chat.SendMessage
  */
 class Вход private constructor(
     val регистрация: RegisterDevice,
+    /**
+     * Привязка к аккаунту, который уже есть на другом устройстве.
+     *
+     * Живёт здесь, а не в [Сеть], потому что нужна **до** входа: у нового устройства ещё
+     * нет ни аккаунта, ни токена, и весь смысл привязки — получить их без SMS.
+     */
+    val привязка: LinkNewDevice,
     /** Адрес сервера: он же понадобится сети после входа. */
     val host: String,
     /** На чём мы работаем. Приложение объявляет это серверу при каждом запуске. */
@@ -108,9 +123,15 @@ class Вход private constructor(
             val route = ServerRoute.from(RouteConfig(host = host))
             val client = HttpClient(httpEngine()) { timaDefaults() }
             val секреты = VaultSecretStore(хранилищеСекретов)
+            val секретыУстройства = секреты
             return Вход(
                 host = host,
                 платформа = платформа,
+                привязка = LinkNewDevice(
+                    api = DeviceLinkStartOverHttp(LinkStartApi(route, client)),
+                    keys = DeviceKeyFactoryOverKodium,
+                    secrets = секретыУстройства,
+                ),
                 регистрация = RegisterDevice(
                     api = AccountApiOverHttp(AuthApi(route, client)),
                     keys = DeviceKeyFactoryOverKodium,
@@ -147,6 +168,17 @@ class Сеть(
 
     /** Устройства аккаунта. Пока одно дело: объявить платформу — см. [Платформа]. */
     val устройства: DevicesApi = DevicesApi(route, client, token = { сессия.accessToken })
+
+    /**
+     * Подтверждение привязки нового устройства.
+     *
+     * Требует ключа этого устройства: подпись над данными из кода делается им. Ключ даёт
+     * приложение, потому что он живёт в хранилище платформы, а не в сети.
+     */
+    fun подтверждениеПривязки(личность: DeviceIdentity): ConfirmDeviceLink = ConfirmDeviceLink(
+        api = DeviceLinkConfirmOverHttp(LinkConfirmApi(route, client, token = { сессия.accessToken })),
+        signer = LinkSignerOverKodium(личность),
+    )
 
     companion object {
         /** Тот же адрес и тот же клиент, что у входа: сервер один. */

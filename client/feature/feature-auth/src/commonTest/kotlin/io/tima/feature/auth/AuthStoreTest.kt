@@ -8,6 +8,10 @@ import io.tima.domain.account.DeviceCreateStep
 import io.tima.domain.account.DeviceKeyFactory
 import io.tima.domain.account.DeviceKeyMaterial
 import io.tima.domain.account.DeviceSecretStore
+import io.tima.domain.account.DeviceLinkStart
+import io.tima.domain.account.LinkClaimStep
+import io.tima.domain.account.LinkNewDevice
+import io.tima.domain.account.LinkStartStep
 import io.tima.domain.account.NewAccountIdentity
 import io.tima.domain.account.RegisterDevice
 import io.tima.domain.account.Session
@@ -31,10 +35,14 @@ class AuthStoreTest {
 
     private val личности = ПоддельныеЛичности()
 
+    private val привязка = ПоддельныйСтарт()
+
     private fun store(scope: kotlinx.coroutines.CoroutineScope) = AuthStore(
         register = RegisterDevice(api, ключи, хранилище, platform = "проба"),
         identities = личности,
         scope = scope,
+        link = LinkNewDevice(привязка, ключи, хранилище),
+        имяУстройства = "Компьютер",
     )
 
     // ── набранное не теряется ────────────────────────────────────────────────
@@ -299,6 +307,68 @@ class AuthStoreTest {
         assertEquals(AuthState.УжеЗаведено, store.state.first { it is AuthState.УжеЗаведено })
     }
 
+    // ── привязка к существующему аккаунту ───────────────────────────────────
+
+    /**
+     * Код показывается, и **имя устройства уходит серверу**.
+     *
+     * Имя увидит человек на телефоне перед «Доверить» — по нему он и отличит свой ПК от
+     * чужого кода, подсунутого в переписке.
+     */
+    @Test
+    fun подключение_показывает_код() = runTest {
+        val store = store(backgroundScope)
+
+        store.подключиться()
+
+        val состояние = store.state.first { it is AuthState.ПоказКода && it.код != null }
+        assertIs<AuthState.ПоказКода>(состояние)
+        assertEquals("tima://link/v1?session_id=s-1", состояние.код)
+        assertEquals("Компьютер", привязка.посланноеИмя)
+    }
+
+    /** Подтвердили на телефоне — устройство заведено, и без всякой SMS. */
+    @Test
+    fun подтверждение_на_телефоне_доводит_до_готово() = runTest {
+        привязка.наОпрос = { LinkClaimStep.Claimed("u-1", "d-9", "a-9") }
+        val store = store(backgroundScope)
+
+        store.подключиться()
+
+        val состояние = store.state.first { it is AuthState.Готово }
+        assertIs<AuthState.Готово>(состояние)
+        assertEquals("d-9", состояние.deviceId)
+        assertEquals(0, api.запросовКода, "привязка идёт без SMS — в этом весь её смысл")
+    }
+
+    /**
+     * Срок кода вышел — «попросите новый», а не «ошибка».
+     *
+     * Человек мог просто не успеть дойти до телефона: сессия живёт пять минут.
+     */
+    @Test
+    fun вышедший_срок_просит_новый_код() = runTest {
+        привязка.наОпрос = { LinkClaimStep.NotReady }
+        val store = store(backgroundScope)
+
+        store.подключиться()
+
+        val состояние = store.state.first { it is AuthState.ПоказКода && it.беда != null }
+        assertTrue(состояние.беда.orEmpty().contains("новый"), "беда: ${состояние.беда}")
+    }
+
+    /** «Назад» с показа кода возвращает к номеру: путь по SMS никуда не делся. */
+    @Test
+    fun назад_с_кода_возвращает_к_номеру() = runTest {
+        val store = store(backgroundScope)
+        store.подключиться()
+        store.state.first { it is AuthState.ПоказКода }
+
+        store.назад()
+
+        assertIs<AuthState.Телефон>(store.state.value)
+    }
+
     @Test
     fun плохой_номер_отсекается_до_сети() = runTest {
         api.наЗапросКода = { CodeRequestStep.BadPhone("не E.164") }
@@ -342,6 +412,25 @@ class AuthStoreTest {
         var признаёт = true
         override fun fresh() = NewAccountIdentity(words = СЛОВА, identityPub = ПУБЛИЧНЫЙ)
         override fun fromWords(words: List<String>): ByteArray? = if (признаёт) ПУБЛИЧНЫЙ else null
+    }
+
+    private class ПоддельныйСтарт : DeviceLinkStart {
+        var посланноеИмя: String? = null
+        var наСтарт: suspend () -> LinkStartStep = {
+            LinkStartStep.Started("s-1", "tima://link/v1?session_id=s-1", "c-1")
+        }
+        var наОпрос: suspend () -> LinkClaimStep = { LinkClaimStep.NotReady }
+
+        override suspend fun start(
+            encryptionPub: ByteArray,
+            signingPub: ByteArray,
+            deviceName: String,
+        ): LinkStartStep {
+            посланноеИмя = deviceName
+            return наСтарт()
+        }
+
+        override suspend fun claim(sessionId: String, claimToken: String): LinkClaimStep = наОпрос()
     }
 
     private class ПоддельныйApi : AccountApi {

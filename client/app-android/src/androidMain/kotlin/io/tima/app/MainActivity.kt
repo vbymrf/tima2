@@ -1,9 +1,11 @@
 package io.tima.app
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import io.tima.core.database.androidDatabase
 import io.tima.core.ui.TimaTheme
@@ -27,17 +29,45 @@ import io.tima.shared.Корень
  * Файл этим и ценен: он короткий. Стало длинно — значит в него протекло общее.
  */
 class MainActivity : ComponentActivity() {
+
+    /**
+     * Код привязки, пришедший **снаружи**.
+     *
+     * Своего сканера QR у приложения нет и не нужно: штатная камера телефона уже умеет
+     * читать коды, видит в нашем `tima://link/v1?…` ссылку и открывает нас. Свой сканер
+     * потребовал бы доступа к камере — то есть вопроса человеку, — и делал бы ровно то же
+     * самое.
+     *
+     * Состояние, а не разовое чтение: приложение может быть уже запущено, и тогда код
+     * приезжает в [onNewIntent], а не в [onCreate].
+     */
+    private val код = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        код.value = кодИз(intent)
         setContent {
             val вход = remember { Вход.создать(Платформа.Андроид) }
             TimaTheme(dark = isSystemInDarkTheme()) {
                 // База телефона: имя файла в песочнице приложения, а не путь. Каталог
                 // выбирает Android, и это правильно — он же его и стирает при удалении.
-                Корень(вход) { androidDatabase(applicationContext, ИМЯ_БАЗЫ) }
+                Корень(
+                    вход = вход,
+                    базаУстройства = { androidDatabase(applicationContext, ИМЯ_БАЗЫ) },
+                    кодПривязки = код.value,
+                )
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        кодИз(intent)?.let { код.value = it }
+    }
+
+    /** Наш ли это переход. Чужие ссылки нас не касаются, даже если система их принесла. */
+    private fun кодИз(intent: Intent?): String? =
+        intent?.data?.toString()?.takeIf { it.startsWith("tima://link/") }
 
     private companion object {
         const val ИМЯ_БАЗЫ = "tima.db"

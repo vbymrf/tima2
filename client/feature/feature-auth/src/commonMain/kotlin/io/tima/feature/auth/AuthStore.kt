@@ -2,6 +2,9 @@ package io.tima.feature.auth
 
 import io.tima.domain.account.AccountIdentities
 import io.tima.domain.account.CodeRequestStep
+import io.tima.domain.account.LinkAwaitStep
+import io.tima.domain.account.LinkBeginStep
+import io.tima.domain.account.LinkNewDevice
 import io.tima.domain.account.NewAccountIdentity
 import io.tima.domain.account.RegisterDevice
 import io.tima.domain.account.RegistrationStep
@@ -33,6 +36,13 @@ class AuthStore(
     private val register: RegisterDevice,
     private val identities: AccountIdentities,
     private val scope: CoroutineScope,
+    /**
+     * Привязка к уже существующему аккаунту. `null` — путь недоступен, и кнопки не будет:
+     * обещать человеку то, чего нет, дороже, чем не обещать.
+     */
+    private val link: LinkNewDevice? = null,
+    /** Как это устройство назовётся человеку на телефоне. Он увидит имя перед «Доверить». */
+    private val имяУстройства: String = "Устройство",
 ) {
 
     /**
@@ -227,8 +237,55 @@ class AuthStore(
         _state.value = AuthState.Готово(текущее.userId, текущее.deviceId)
     }
 
+    /**
+     * «Подключить к аккаунту, который уже есть» — путь без SMS и без фразы.
+     *
+     * Доверие приносит телефон, который отсканирует код. Здесь только показ кода и
+     * ожидание; всё остальное решается на том конце, и решается человеком.
+     */
+    fun подключиться() {
+        val привязка = link ?: return
+        if (_state.value is AuthState.ПоказКода) return
+        _state.value = AuthState.ПоказКода(код = null)
+
+        scope.launch {
+            when (val шаг = привязка.begin(имяУстройства)) {
+                is LinkBeginStep.ShowCode -> {
+                    _state.value = AuthState.ПоказКода(код = шаг.code)
+                    ждать(привязка, шаг.sessionId, шаг.claimToken)
+                }
+                LinkBeginStep.AlreadyRegistered -> _state.value = AuthState.УжеЗаведено
+                is LinkBeginStep.Offline -> _state.value =
+                    AuthState.ПоказКода(код = null, беда = нетСвязи(шаг.retryAfterMs))
+                is LinkBeginStep.Refused -> _state.value =
+                    AuthState.ПоказКода(код = null, беда = шаг.reason)
+            }
+        }
+    }
+
+    /**
+     * Ожидание подтверждения.
+     *
+     * Срок вышел — не беда, а «покажите новый код»: сессия живёт пять минут, и человек мог
+     * просто не успеть дойти до телефона.
+     */
+    private suspend fun ждать(привязка: LinkNewDevice, sessionId: String, claimToken: String) {
+        _state.value = when (val шаг = привязка.await(sessionId, claimToken)) {
+            is LinkAwaitStep.Linked -> AuthState.Готово(шаг.userId, шаг.deviceId)
+            LinkAwaitStep.Expired -> AuthState.ПоказКода(
+                код = null,
+                беда = "Срок кода вышел — попросите новый",
+            )
+            is LinkAwaitStep.Refused -> AuthState.ПоказКода(код = null, беда = шаг.reason)
+        }
+    }
+
     /** «Назад» с экрана кода: номер сохраняется — его уже набрали. */
     fun назад() {
+        if (_state.value is AuthState.ПоказКода) {
+            _state.value = AuthState.Телефон()
+            return
+        }
         val текущее = _state.value as? AuthState.Код ?: return
         _state.value = AuthState.Телефон(номер = текущее.телефон)
     }
@@ -312,6 +369,18 @@ sealed interface AuthState {
     ) : AuthState {
         fun копияСБедой(текст: String) = copy(беда = текст, ждём = false)
     }
+
+    /**
+     * Код привязки на экране: ждём телефон.
+     *
+     * @param код `null` — кода ещё нет: либо просим его у сервера, либо просить нечем
+     *   (тогда сказано в [беда]). Пустой строки здесь не бывает намеренно: пустой QR
+     *   человек попробует отсканировать.
+     */
+    data class ПоказКода(
+        val код: String?,
+        override val беда: String? = null,
+    ) : AuthState
 
     /** Устройство заведено. Дальше — окно переписок. */
     data class Готово(val userId: String, val deviceId: String) : AuthState {

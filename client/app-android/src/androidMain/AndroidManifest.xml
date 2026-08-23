@@ -34,6 +34,22 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!--
+              Переход по нашей схеме — вместо доступа к камере.
+              Код привязки выглядит как `tima://link/v1?session_id=…`. Штатная камера
+              телефона читает QR сама, видит ссылку и открывает нас; свой сканер
+              потребовал бы разрешения на камеру, то есть вопроса человеку, и делал бы
+              ровно то же самое. `BROWSABLE` обязателен: без него система ссылку нам не
+              отдаст. Схема своя, а не https — подтверждение привязки не должно уводить
+              человека в браузер, если приложение почему-то не стоит.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="tima" android:host="link" />
+            </intent-filter>
         </activity>
 
     </application>

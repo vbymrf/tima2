@@ -48,7 +48,7 @@ fun main() = application {
         title = "TIMA",
     ) {
         TimaTheme(dark = isSystemInDarkTheme()) {
-            Корень(вход) { desktopDatabase(File(каталогДанных(), ИМЯ_БАЗЫ)) }
+            Корень(вход = вход, базаУстройства = { desktopDatabase(File(каталогДанных(), ИМЯ_БАЗЫ)) })
         }
     }
 }
