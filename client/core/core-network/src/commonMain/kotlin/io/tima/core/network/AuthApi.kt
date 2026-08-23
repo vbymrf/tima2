@@ -4,14 +4,9 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Регистрация устройства — К4.3, водопровод без экранов.
@@ -163,14 +158,6 @@ class AuthApi(
             else -> RegisterResult.Refused(response.status.value, code)
         }
     }
-
-    private suspend fun HttpResponse.jsonBody(): JsonObject? =
-        runCatching { Json.parseToJsonElement(bodyAsText()) as JsonObject }.getOrNull()
-
-    private fun JsonObject?.codeOf(): String = this?.str("code") ?: "без кода"
-
-    private fun JsonObject.str(name: String): String? =
-        runCatching { this[name]?.jsonPrimitive?.content }.getOrNull()
 
     private fun HttpStatusCode.isSuccess(): Boolean = value in 200..299
 

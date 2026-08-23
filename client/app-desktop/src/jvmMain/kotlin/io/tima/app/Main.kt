@@ -12,6 +12,7 @@ import androidx.compose.ui.window.rememberWindowState
 import io.tima.core.database.desktopDatabase
 import io.tima.core.ui.TimaTheme
 import io.tima.shared.Вход
+import io.tima.shared.Платформа
 import io.tima.shared.Корень
 import java.io.File
 
@@ -29,7 +30,10 @@ fun main() = application {
     // Переменная окружения читается ЗДЕСЬ: на ПК она есть, в общем коде её нет вовсе —
     // `System.getenv` отсутствует на iOS. Адрес по умолчанию — стенд.
     val вход = remember {
-        Вход.создать(host = System.getenv("TIMA_STAND_HOST")?.takeIf { it.isNotBlank() } ?: Вход.СТЕНД)
+        Вход.создать(
+            платформа = Платформа.ПК,
+            host = System.getenv("TIMA_STAND_HOST")?.takeIf { it.isNotBlank() } ?: Вход.СТЕНД,
+        )
     }
     val состояниеОкна = rememberWindowState(
         // Планшетный формат по умолчанию: три полосы влезают, и сразу видно, что раскладку

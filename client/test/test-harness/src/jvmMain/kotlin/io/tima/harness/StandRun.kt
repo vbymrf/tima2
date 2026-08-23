@@ -15,11 +15,13 @@ import io.tima.core.encryption.RecipientDevice
 import io.tima.core.encryption.deviceIdentityFrom
 import io.tima.core.network.AuthApi
 import io.tima.core.network.DeviceKeysResult
+import io.tima.core.network.DevicesApi
 import io.tima.core.network.EscrowApi
 import io.tima.core.network.EscrowKeyResult
 import io.tima.core.network.EventStream
 import io.tima.core.network.HttpMessageTransport
 import io.tima.core.network.KeysApi
+import io.tima.core.network.PlatformResult
 import io.tima.core.network.RegisterResult
 import io.tima.core.network.RouteConfig
 import io.tima.core.network.ServerRoute
@@ -91,6 +93,8 @@ object StandRun {
         try {
             val А = завести(client, route, телефонА, "устройство А") ?: return@runBlocking
             val Б = завести(client, route, телефонБ, "устройство Б") ?: return@runBlocking
+
+            объявитьПлатформу(client, route, А)
 
             // Так переписку начинает приложение: по НОМЕРУ, а не по внутреннему
             // идентификатору. Проверяем справочник против живого сервера — единственное
@@ -197,6 +201,33 @@ object StandRun {
             identity = deviceIdentityFrom(материал.secret),
             secret = материал.secret,
         )
+    }
+
+    /**
+     * Самообъявление платформы — то, что приложение делает при каждом запуске.
+     *
+     * Ручка выглядит служебной, а решает продуктовое: подтвердить привязку нового
+     * устройства по QR сервер разрешает **только телефону**, и знает он это по колонке
+     * `platform`. Поэтому проверяются оба исхода: доброе значение принято тем самым
+     * словом, каким его понял сервер, а незнакомое отвергнуто — молчаливое «ну ладно»
+     * здесь означало бы, что опечатка в платформе выяснится через неделю на привязке.
+     */
+    private suspend fun объявитьПлатформу(client: HttpClient, route: ServerRoute, устройство: Заведённое) {
+        val ручка = DevicesApi(route, client, token = { устройство.accessToken })
+
+        val доброе = ручка.declarePlatform("desktop")
+        if (доброе is PlatformResult.Declared && доброе.platform == "desktop") {
+            шаг("платформа объявлена", "сервер понял её как «${доброе.platform}»")
+        } else {
+            провал("платформа объявлена", доброе.toString())
+        }
+
+        val незнакомое = ручка.declarePlatform("харнесс")
+        if (незнакомое is PlatformResult.Refused && незнакомое.code == "bad_platform") {
+            шаг("незнакомая платформа", "отказ ${незнакомое.status} ${незнакомое.code}")
+        } else {
+            провал("незнакомая платформа", "ожидали 400 bad_platform, пришло: $незнакомое")
+        }
     }
 
     // ── отправка и приём ─────────────────────────────────────────────────────

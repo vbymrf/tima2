@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import io.tima.core.database.androidDatabase
 import io.tima.core.ui.TimaTheme
 import io.tima.shared.Вход
+import io.tima.shared.Платформа
 import io.tima.shared.Корень
 
 /**
@@ -29,7 +30,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val вход = remember { Вход.создать() }
+            val вход = remember { Вход.создать(Платформа.Андроид) }
             TimaTheme(dark = isSystemInDarkTheme()) {
                 // База телефона: имя файла в песочнице приложения, а не путь. Каталог
                 // выбирает Android, и это правильно — он же его и стирает при удалении.

@@ -98,6 +98,19 @@ object ArchitectureRules {
                 "он остаётся прежним, и находят это глазами на чужом устройстве.",
         ),
         Rule(
+            name = "платформа не называется строкой в общем коде",
+            appliesToPathContaining = listOf("/src/commonMain/"),
+            forbiddenContent = listOf("platform = \""),
+            // Единственное место, где эти три строки записаны значением, — сам перечень.
+            exceptFiles = listOf("Платформа.kt"),
+            why = "Строка platform = \"desktop\" стояла в commonMain, то есть телефон " +
+                "объявлял себя ПК. Отказ при этом тихий: регистрация проходит, сообщения " +
+                "ходят — а подтвердить привязку нового устройства по QR сервер разрешает " +
+                "только телефону (key-lifecycle.md §2), и телефон получал бы not_a_phone. " +
+                "По симптому это неотличимо от поломки самого QR. Платформу объявляет " +
+                "платформенный вход, перечнем Платформа, а не строкой в общем коде.",
+        ),
+        Rule(
             name = "core-model без зависимостей",
             appliesToPathContaining = listOf("/core/core-model/"),
             forbiddenImportPrefixes = listOf("io.", "kotlinx.", "com.", "app.", "org.", "java.", "javax."),

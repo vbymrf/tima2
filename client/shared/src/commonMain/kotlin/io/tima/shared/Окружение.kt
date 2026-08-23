@@ -14,6 +14,7 @@ import io.tima.core.encryption.LocalStoreFieldCipher
 import io.tima.core.encryption.TextBodyCodec
 import io.tima.core.network.AccountApiOverHttp
 import io.tima.core.network.AuthApi
+import io.tima.core.network.DevicesApi
 import io.tima.core.network.EscrowApi
 import io.tima.core.network.HttpMessageTransport
 import io.tima.core.network.KeysApi
@@ -53,6 +54,8 @@ class Вход private constructor(
     val регистрация: RegisterDevice,
     /** Адрес сервера: он же понадобится сети после входа. */
     val host: String,
+    /** На чём мы работаем. Приложение объявляет это серверу при каждом запуске. */
+    val платформа: Платформа,
     private val секреты: VaultSecretStore,
 ) {
 
@@ -87,7 +90,18 @@ class Вход private constructor(
          * приложение для ПК. `System.getenv` в общем коде нет — его нет на iOS, и попытка
          * прочитать окружение здесь была первой же ошибкой при выносе сборки в общий модуль.
          */
+        /**
+         * @param платформа объявляется **вызывающим**, и умолчания у неё нет. Умолчание
+         *   здесь уже было — `"desktop"`, — и телефон объявлял себя ПК: см. [Платформа].
+         *
+         * `scope` хранилища остаётся строкой `"desktop"` на всех платформах намеренно.
+         * Это имя раздела внутри хранилища самой платформы (у Android — своё, у iOS —
+         * своё), то есть значение опаковое; переименовать его сейчас значило бы оставить
+         * секреты каждой уже существующей установки в разделе, куда никто больше не
+         * заглянет — то есть потребовать перерегистрации без всякой пользы.
+         */
         fun создать(
+            платформа: Платформа,
             host: String = СТЕНД,
             хранилищеСекретов: SecretVault = platformVault(scope = "desktop"),
         ): Вход {
@@ -96,11 +110,12 @@ class Вход private constructor(
             val секреты = VaultSecretStore(хранилищеСекретов)
             return Вход(
                 host = host,
+                платформа = платформа,
                 регистрация = RegisterDevice(
                     api = AccountApiOverHttp(AuthApi(route, client)),
                     keys = DeviceKeyFactoryOverKodium,
                     secrets = секреты,
-                    platform = "desktop",
+                    platform = платформа.серверу,
                 ),
                 секреты = секреты,
             )
@@ -129,6 +144,9 @@ class Сеть(
 
     /** Справочник: кто скрывается за номером телефона. Нужен, чтобы начать переписку. */
     val справочник: UsersApi = UsersApi(route, client, token = { сессия.accessToken })
+
+    /** Устройства аккаунта. Пока одно дело: объявить платформу — см. [Платформа]. */
+    val устройства: DevicesApi = DevicesApi(route, client, token = { сессия.accessToken })
 
     companion object {
         /** Тот же адрес и тот же клиент, что у входа: сервер один. */
