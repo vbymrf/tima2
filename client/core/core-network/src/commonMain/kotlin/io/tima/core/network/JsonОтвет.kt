@@ -34,3 +34,7 @@ internal fun JsonElement.jsonArrayOrNull(): List<JsonElement>? =
 
 internal fun JsonElement.jsonObjectOrNull(): JsonObject? =
     runCatching { this as JsonObject }.getOrNull()
+
+/** Целое поле. `null` — поля нет или это не число: придумывать здесь ноль нельзя. */
+internal fun JsonObject.int(name: String): Int? =
+    runCatching { this[name]?.jsonPrimitive?.content?.toInt() }.getOrNull()
