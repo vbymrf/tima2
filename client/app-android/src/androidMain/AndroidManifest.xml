@@ -19,8 +19,15 @@
         android:label="TIMA v2"
         android:supportsRtl="true">
 
+        <!--
+          NoActionBar: у приложения своя шапка — салатовая плашка с названием окна. Со
+          системной полосой их получалось две, и верхняя повторяла то, что и так написано
+          ниже. Тема устройства, а не своя: светлую и тёмную решает человек в настройках
+          телефона, и наш `isSystemInDarkTheme()` читает то же самое.
+        -->
         <activity
             android:name=".MainActivity"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode">
             <intent-filter>

@@ -88,13 +88,43 @@ class PersonalMessages(escrowKey: EscrowEpochKey) {
                 senderSigningPub = senderSigningPublic,
             ).getOrThrow()
             val body = MessageSerializer.decodeBody(payload).getOrThrow()
-            ReceivedMessage(meta = sealed.meta, content = MessageContentCodec.fromBody(body))
+            ReceivedMessage(
+                meta = sealed.meta,
+                content = MessageContentCodec.fromBody(body),
+                // Байты тела отдаются как пришли — уже упакованными. Хранилищу нужны
+                // именно они: один кодек на провод и на диск. Пересобрать их из
+                // содержимого нельзя без потерь, а записать текстом — значит записать в
+                // другом формате, чем читает экран.
+                body = payload,
+            )
         }
     }
 }
 
-/** Разобранное сообщение: что пришло и от кого. */
+/**
+ * Разобранное сообщение: что пришло и от кого.
+ *
+ * [body] — **байты тела, как они пришли**: `zstd(protobuf(MessageBody))`. Ровно их и
+ * записывает хранилище, потому что кодек один на провод и на диск.
+ *
+ * **Поле появилось после живого прогона, и это была настоящая поломка.** Приёмник писал в
+ * базу `content.plainText()` — простой текст, — а экран читал столбец кодеком и получал
+ * «сообщение не читается». Сообщение при этом было расшифровано и записано: состояние
+ * `STORED`, причины нечитаемости нет. Поймать это могла только проверка, читающая ТАК ЖЕ,
+ * КАК ЭКРАН; сценарий сравнивал байты напрямую и потому был зелёным.
+ */
 data class ReceivedMessage(
     val meta: EnvelopeMeta,
     val content: MessageContent,
-)
+    val body: ByteArray,
+) {
+    override fun equals(other: Any?): Boolean = other is ReceivedMessage &&
+        meta == other.meta && content == other.content && body.contentEquals(other.body)
+
+    override fun hashCode(): Int {
+        var h = meta.hashCode()
+        h = 31 * h + content.hashCode()
+        h = 31 * h + body.contentHashCode()
+        return h
+    }
+}

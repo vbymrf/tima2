@@ -1,5 +1,6 @@
 package io.tima.harness
 
+import io.tima.core.database.SqlChatFeed
 import io.tima.core.database.SqlInboxStore
 import io.tima.core.database.TimaDatabase
 import io.tima.core.encryption.DeviceIdentity
@@ -7,15 +8,18 @@ import io.tima.core.encryption.EscrowEpochKey
 import io.tima.core.encryption.EscrowKeyVerifier
 import io.tima.core.encryption.OutgoingSealer
 import io.tima.core.encryption.PersonalMessages
+import io.tima.core.encryption.TextBodyCodec
 import io.tima.core.encryption.RecipientDevice
 import io.tima.core.outbox.Inbox
 import io.tima.core.outbox.IncomingState
 import io.tima.core.outbox.OpenOutcome
+import io.tima.domain.chat.ObserveChat
 import io.tima.core.outbox.OutboxState
 import io.tima.crypto.EscrowConfigSignature
 import io.tima.crypto.EscrowKeyMeta
 import io.tima.crypto.Mlkem768
 import io.kodium.Kodium
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -123,7 +127,8 @@ class FullCircleTest {
                     me = получатель,
                     senderSigningPublic = отправитель.signingPublic,
                 ).fold(
-                    onSuccess = { OpenOutcome.Opened(it.content.plainText().encodeToByteArray()) },
+                    // Байты тела, как пришли: столбец читается кодеком, и текстом писать нельзя.
+                            onSuccess = { OpenOutcome.Opened(it.body) },
                     onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },
                 )
             },
@@ -193,7 +198,8 @@ class FullCircleTest {
             open = { запись ->
                 PersonalMessages.open(запись.envelope, "устройство-получателя", получатель, отправитель.signingPublic)
                     .fold(
-                        onSuccess = { OpenOutcome.Opened(it.content.plainText().encodeToByteArray()) },
+                        // Байты тела, как пришли: столбец читается кодеком, и текстом писать нельзя.
+                            onSuccess = { OpenOutcome.Opened(it.body) },
                         onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },
                     )
             },
@@ -250,10 +256,19 @@ class FullCircleTest {
      * или тестовая, а в базу тело не ложилось вовсе — состояние `STORED` означало
      * «разобрано и потеряно». Теперь проверка смотрит туда, откуда читает экран.
      */
-    private fun теломПолучателя(messageId: Long): String? {
-        val строка = база_получателя.messagesQueries
-            .byDedupKey("chat-1/$messageId")
-            .executeAsOneOrNull() ?: return null
-        return харнессШифр().open(строка.body_enc)?.decodeToString()
-    }
+    /**
+     * Текст у получателя — **прочитанный ТАК ЖЕ, КАК ЧИТАЕТ ЭКРАН**.
+     *
+     * Через `SqlChatFeed`, а не разбором столбца вручную. Это не педантизм: пока проверка
+     * сравнивала байты напрямую, она была зелёной при **несовпадении форматов** — приёмник
+     * записывал простой текст, а экран читал столбец кодеком и показывал «сообщение не
+     * читается». Сообщение при этом было расшифровано и записано. Нашлось на живом
+     * прогоне приложения; проверка, читающая как экран, поймала бы это сразу.
+     */
+    private suspend fun теломПолучателя(messageId: Long): String? =
+        ObserveChat(SqlChatFeed(база_получателя, TextBodyCodec, харнессШифр()))
+            .page("chat-1")
+            .first()
+            .firstOrNull { it.dedupKey == "chat-1/$messageId" }
+            ?.text
 }

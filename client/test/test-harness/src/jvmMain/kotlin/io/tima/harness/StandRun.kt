@@ -10,6 +10,7 @@ import io.tima.core.encryption.EscrowKeyVerifier
 import io.tima.core.encryption.LocalStoreFieldCipher
 import io.tima.core.encryption.OutgoingSealer
 import io.tima.core.encryption.PersonalMessages
+import io.tima.core.encryption.TextBodyCodec
 import io.tima.core.encryption.RecipientDevice
 import io.tima.core.encryption.deviceIdentityFrom
 import io.tima.core.network.AuthApi
@@ -288,7 +289,8 @@ object StandRun {
                             me = Б.identity,
                             senderSigningPublic = А.identity.signingPublic,
                         ).fold(
-                            onSuccess = { OpenOutcome.Opened(it.content.plainText().encodeToByteArray()) },
+                            // Байты тела, как пришли: столбец читается кодеком, и текстом писать нельзя.
+                            onSuccess = { OpenOutcome.Opened(it.body) },
                             onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },
                         )
                     },
@@ -301,7 +303,11 @@ object StandRun {
                             .byDedupKey("${запись.chatId}/${запись.messageId}")
                             .executeAsOneOrNull()
                         val тело = строка?.body_enc?.let { шифрБ.open(it) }
-                        if (тело != null) дошло.complete(тело.decodeToString())
+                        // Тело читается КОДЕКОМ, как его читает экран: столбец хранит
+                        // упакованное тело, а не текст. Прежняя проверка сравнивала байты
+                        // напрямую и потому не заметила, что приёмник писал текстом.
+                        val текстСтроки = тело?.let { TextBodyCodec.decode(it).getOrNull()?.plainText() }
+                        if (текстСтроки != null) дошло.complete(текстСтроки)
                     }
                 }
             }
