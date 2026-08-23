@@ -142,3 +142,16 @@ tasks.register<JavaExec>("phraseRun") {
     jvmArgs("-Dfile.encoding=UTF-8", "-Dsun.stdout.encoding=UTF-8", "-Dsun.stderr.encoding=UTF-8")
     environment(System.getenv())
 }
+
+// Привязка устройства против стенда. Требует ВТОРОГО настоящего устройства: подтверждает
+// телефон, у которого уже есть аккаунт. Поэтому руками и только по стенду.
+tasks.register<JavaExec>("linkRun") {
+    group = "проверка"
+    description = "Привязка устройства: код от сервера, подтверждение с телефона"
+    mainClass.set("io.tima.harness.LinkRunKt")
+    classpath = kotlin.targets.getByName("jvm").compilations.getByName("main").let {
+        it.output.allOutputs + it.runtimeDependencyFiles!!
+    }
+    jvmArgs("-Dfile.encoding=UTF-8", "-Dsun.stdout.encoding=UTF-8", "-Dsun.stderr.encoding=UTF-8")
+    environment(System.getenv())
+}

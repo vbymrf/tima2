@@ -130,7 +130,8 @@ fun ШапкаПодокна(
         }
         androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
             Подпись(название, кегль = TimaType.щ3, вес = FontWeight.ExtraBold, однойСтрокой = true)
-            подпись?.let { Третьестепенное(it) }
+            // Подпись шапки — одна строка: шапка не растёт от длинного имени.
+            подпись?.let { Третьестепенное(it, однойСтрокой = true) }
         }
         справа?.invoke()
     }
