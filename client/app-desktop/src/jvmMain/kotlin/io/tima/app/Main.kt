@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -19,6 +20,9 @@ import androidx.compose.ui.window.rememberWindowState
 import io.tima.core.ui.Стан
 import io.tima.core.ui.TimaTheme
 import io.tima.domain.chat.ChatSummary
+import io.tima.feature.auth.AuthState
+import io.tima.feature.auth.AuthStore
+import io.tima.feature.auth.ЭкранВхода
 import io.tima.feature.chat.ChatStore
 import io.tima.feature.chat.ChatsStore
 import io.tima.feature.chat.ЭкранПереписок
@@ -30,19 +34,18 @@ import io.tima.feature.chat.ЭкранЧата
  * Здесь и только здесь разрешено знать о платформе как о платформе (Plan.md §1.3): окно,
  * тема системы, каталоги. Всё остальное — общий код, тот же, что поедет на телефон.
  *
- * **Что уже работает и чего ещё нет.** Работает переписка на диске: список читается из
- * базы, набранное ложится в очередь, и то и другое переживает закрытие приложения. Сети
- * нет — регистрация устройства и вход это К5.1, — поэтому сообщение остаётся в очереди со
- * отметкой «ждёт». Это видно на экране, и так и должно быть: очередь честно показывает,
- * что сообщение не ушло.
+ * **Что работает и чего ещё нет.** Работает вход по телефону против живого сервера,
+ * переписка на диске, ввод и очередь. Не работает отправка в сеть: насос очереди
+ * подключается вместе с транспортом, следующим срезом. Поэтому сообщение честно висит с
+ * отметкой «ждёт» — так и должно быть, очередь не скрывает, что оно не ушло.
  */
 fun main() = application {
-    val окружение = remember { Окружение.открыть() }
+    val вход = remember { Вход.создать() }
     val состояниеОкна = rememberWindowState(
         // Планшетный формат по умолчанию: три полосы влезают, и сразу видно, что раскладку
         // решает ширина окна, а не устройство. Окно можно сузить — станет телефонным.
         size = DpSize(1100.dp, 820.dp),
-        position = WindowPosition.Aligned(androidx.compose.ui.Alignment.Center),
+        position = WindowPosition.Aligned(Alignment.Center),
     )
 
     Window(
@@ -51,9 +54,51 @@ fun main() = application {
         title = "TIMA",
     ) {
         TimaTheme(dark = isSystemInDarkTheme()) {
-            Приложение(окружение)
+            Корень(вход)
         }
     }
+}
+
+/**
+ * Корень: вход или приложение.
+ *
+ * Развилка ровно одна, и решает её **заведённое устройство**, а не флаг «вошли»: флаг
+ * живёт в памяти и врёт после перезапуска. Заведённое означает сессию, а не только секрет
+ * — секрет пишется до вызова сервера, и секрет без сессии это незаконченный вход.
+ */
+@Composable
+private fun Корень(вход: Вход) {
+    var секрет by remember { mutableStateOf(вход.секретЗаведённого()) }
+
+    val текущий = секрет
+    if (текущий == null) {
+        Вхождение(вход) { секрет = вход.секретЗаведённого() }
+        return
+    }
+
+    // remember по секрету: другое устройство — другая база и другой ключ покоя.
+    val окружение = remember(текущий) { Окружение.открыть(текущий) }
+    Приложение(окружение)
+}
+
+@Composable
+private fun Вхождение(вход: Вход, onВошли: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val store = remember { AuthStore(вход.регистрация, scope) }
+    val состояние by store.state.collectAsState()
+
+    // Оба конечных состояния означают одно: устройство есть. «Готово» и «уже заведено»
+    // различаются только тем, кто его завёл, а приложению дальше всё равно.
+    if (состояние is AuthState.Готово || состояние is AuthState.УжеЗаведено) onВошли()
+
+    ЭкранВхода(
+        состояние = состояние,
+        onНомер = store::номерИзменён,
+        onКод = store::кодИзменён,
+        onЗапросить = store::запроситьКод,
+        onПодтвердить = store::подтвердить,
+        onНазад = store::назад,
+    )
 }
 
 /**

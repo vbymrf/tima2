@@ -1,7 +1,5 @@
 package io.tima.app
 
-import io.tima.core.secrets.SecretAlias
-import io.tima.core.secrets.SecretVault
 import io.tima.domain.chat.SendMessageResult
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -19,8 +17,8 @@ import kotlin.test.assertTrue
  * на базе, которую нельзя открыть второй раз, и на ключе покоя, привязанном к устройству.
  * Всё это обычный код, и проверить его можно здесь, а не глазами на чужой машине.
  *
- * Хранилище секретов подменено — не чтобы обойти DPAPI, а чтобы не писать в хранилище
- * живой машины: сам DPAPI проверен там, где ему место, по файлу.
+ * Секрет передаётся прямо: настоящий порождает регистрация, а DPAPI проверен по файлу
+ * там, где ему место. Здесь проверяется то, что стоит между ними, — база на диске.
  */
 class ОкружениеTest {
 
@@ -29,8 +27,6 @@ class ОкружениеTest {
         it.mkdirs()
         it
     }
-
-    private val хранилище = ПамятноеХранилище()
 
     @AfterTest
     fun убрать() {
@@ -46,10 +42,10 @@ class ОкружениеTest {
      */
     @Test
     fun второй_запуск_видит_написанное_в_первый() = runTest {
-        val первое = Окружение.открыть(каталог, хранилище)
+        val первое = Окружение.открыть(СЕКРЕТ, каталог)
         assertTrue(первое.отправка.send("chat-1", "привет") is SendMessageResult.Queued)
 
-        val второе = Окружение.открыть(каталог, хранилище)
+        val второе = Окружение.открыть(СЕКРЕТ, каталог)
         val список = второе.переписки.list().first()
 
         assertEquals(1, список.size)
@@ -64,7 +60,7 @@ class ОкружениеTest {
      */
     @Test
     fun без_сети_сообщение_ждёт_в_очереди_а_не_исчезает() = runTest {
-        val окружение = Окружение.открыть(каталог, хранилище)
+        val окружение = Окружение.открыть(СЕКРЕТ, каталог)
         окружение.отправка.send("chat-1", "привет")
 
         val строка = окружение.переписка.page("chat-1").first().single()
@@ -84,24 +80,24 @@ class ОкружениеTest {
      */
     @Test
     fun с_чужим_секретом_переписка_не_читается() = runTest {
-        Окружение.открыть(каталог, хранилище).отправка.send("chat-1", "привет")
+        Окружение.открыть(СЕКРЕТ, каталог).отправка.send("chat-1", "привет")
 
-        val чужое = Окружение.открыть(каталог, ПамятноеХранилище())
+        val чужое = Окружение.открыть(ЧУЖОЙ_СЕКРЕТ, каталог)
         val список = чужое.переписки.list().first()
 
         assertEquals(1, список.size, "строка остаётся: метаданные вариант A не закрывает")
         assertNull(список.single().preview, "а содержимое чужим ключом не открывается")
     }
 
-    /** Хранилище секретов в памяти: проверке не нужен DPAPI, ей нужен секрет. */
-    private class ПамятноеХранилище : SecretVault {
-        private val значения = mutableMapOf<String, ByteArray>()
-        override fun put(alias: SecretAlias, secret: ByteArray) {
-            значения[alias.value] = secret
-        }
-
-        override fun get(alias: SecretAlias): ByteArray? = значения[alias.value]
-
-        override fun remove(alias: SecretAlias): Boolean = значения.remove(alias.value) != null
+    private companion object {
+        /**
+         * Секрет устройства для проверок.
+         *
+         * Настоящий секрет порождает регистрация — она же единственное место, где это
+         * вообще происходит. Проверке нужен не DPAPI (он проверен по файлу там, где ему
+         * место), а ровно 32 байта, из которых выводится ключ покоя.
+         */
+        val СЕКРЕТ: ByteArray = ByteArray(32) { (it + 3).toByte() }
+        val ЧУЖОЙ_СЕКРЕТ: ByteArray = ByteArray(32) { (it + 77).toByte() }
     }
 }

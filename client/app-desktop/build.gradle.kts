@@ -26,6 +26,11 @@ kotlin {
             implementation(project(":core:core-encryption"))
             implementation(project(":core:core-secrets"))
             implementation(project(":feature:feature-chat"))
+            implementation(project(":feature:feature-auth"))
+            // Сеть: регистрация устройства идёт по HTTP. Движок выбирает core-network,
+            // здесь только его подключение.
+            implementation(project(":core:core-network"))
+            implementation(libs.ktor.client.core)
         }
         // Сборку приложения можно проверить без окна: секрет, база и очередь — обычный
         // код. Именно здесь ломается первый живой запуск, а не в отрисовке.
