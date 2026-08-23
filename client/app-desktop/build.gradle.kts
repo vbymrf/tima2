@@ -31,6 +31,8 @@ kotlin {
             // здесь только его подключение.
             implementation(project(":core:core-network"))
             implementation(libs.ktor.client.core)
+            // Живой канал событий: тот же клиент, что и для REST.
+            implementation(libs.ktor.client.websockets)
         }
         // Сборку приложения можно проверить без окна: секрет, база и очередь — обычный
         // код. Именно здесь ломается первый живой запуск, а не в отрисовке.

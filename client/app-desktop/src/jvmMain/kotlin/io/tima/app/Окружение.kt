@@ -1,8 +1,11 @@
 package io.tima.app
 
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.websocket.WebSockets
+import io.ktor.client.plugins.HttpTimeout
 import io.tima.core.database.SqlChatFeed
 import io.tima.core.database.SqlChatsFeed
+import io.tima.core.database.SqlInboxStore
 import io.tima.core.database.SqlOutboxStore
 import io.tima.core.database.TimaDatabase
 import io.tima.core.database.desktopDatabase
@@ -20,6 +23,7 @@ import io.tima.core.network.ServerRoute
 import io.tima.core.network.httpEngine
 import io.tima.core.network.timaDefaults
 import io.tima.core.outbox.FieldCipher
+import io.tima.core.outbox.Inbox
 import io.tima.core.outbox.Outbox
 import io.tima.core.outbox.UuidDedupKeys
 import io.tima.core.secrets.SecretVault
@@ -112,9 +116,9 @@ class Вход private constructor(
  * **на каждый вызов**, а не один раз: он живёт меньше приложения.
  */
 class Сеть(
-    route: ServerRoute,
-    client: HttpClient,
-    сессия: Session,
+    val route: ServerRoute,
+    val client: HttpClient,
+    val сессия: Session,
 ) {
     val ключи: KeysApi = KeysApi(route, client, token = { сессия.accessToken })
     val escrow: EscrowApi = EscrowApi(route, client, token = { сессия.accessToken })
@@ -130,7 +134,12 @@ class Сеть(
             host: String = System.getenv("TIMA_STAND_HOST")?.takeIf { it.isNotBlank() } ?: Вход.СТЕНД,
         ): Сеть = Сеть(
             route = ServerRoute.from(RouteConfig(host = host)),
-            client = HttpClient(httpEngine()) { timaDefaults() },
+            // WebSockets ставится сразу: живой канал — не отдельный клиент, а тот же
+            // самый. Второй клиент означал бы второй набор настроек, и они разошлись бы.
+            client = HttpClient(httpEngine()) {
+                timaDefaults()
+                install(WebSockets)
+            },
             сессия = сессия,
         )
     }
@@ -154,6 +163,14 @@ class Окружение private constructor(
 
     /** Очередь исходящих: одна на приложение, потому что одна на базу. */
     val очередь: Outbox = Outbox(SqlOutboxStore(db, шифр), nowMs = { System.currentTimeMillis() })
+
+    /**
+     * Машина входящих. Одна на приложение по той же причине: одна база.
+     *
+     * Конверт записывается ДО попытки разбора — иначе падение расшифровки теряет
+     * сообщение навсегда, живой канал его больше не пришлёт.
+     */
+    val входящие: Inbox = Inbox(SqlInboxStore(db, шифр), nowMs = { System.currentTimeMillis() })
 
     val переписки: ObserveChats = ObserveChats(SqlChatsFeed(db, TextBodyCodec, шифр))
 

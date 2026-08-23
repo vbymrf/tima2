@@ -1,6 +1,7 @@
 package io.tima.core.encryption
 
 import io.tima.core.outbox.OutboxEntry
+import io.tima.crypto.MessageSerializer
 import io.tima.crypto.Mlkem768
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -85,6 +86,48 @@ class OutgoingSealerTest {
         )
 
         assertTrue(исход.isFailure)
+    }
+
+    /**
+     * **Кто прислал — видно из конверта до расшифровки**, и получателю это нужно.
+     *
+     * Живой канал приносит только `chat_id`, `message_id` и байты конверта — отправителя в
+     * событии нет. Открыть же конверт можно, лишь зная ключ подписи отправителя. Выход
+     * один: прочитать открытую часть конверта, спросить по ней ключ и проверить подпись.
+     *
+     * Имя из конверта при этом **подсказка, а не утверждение**: доверенным оно становится
+     * после проверки подписи. Соври отправитель чужим идентификатором — мы спросим чужой
+     * ключ, подпись не сойдётся, и сообщение станет нечитаемым, а не «чужим».
+     */
+    @Test
+    fun отправитель_читается_из_конверта_до_расшифровки() {
+        val конверт = sealer.sealerFor(escrowKey, адресаты)(запись())
+
+        val разобранный = MessageSerializer.decodeEnvelope(конверт).getOrThrow()
+
+        assertEquals("0f8fad5b-d9cb-469f-a165-70867728950e", разобранный.meta.senderId)
+        assertEquals("7c9e6679-7425-40de-944b-e07fc1f90ae7", разобранный.meta.senderDevice)
+        assertEquals("bbbbbbbb-0000-0000-0000-0000000000e1", разобранный.meta.chatId)
+    }
+
+    /**
+     * Подмена отправителя не проходит: подпись проверяется тем ключом, который назвали.
+     *
+     * Это и есть цена подсказки из открытой части — её проверяет подпись, а не доверие.
+     */
+    @Test
+    fun чужим_ключом_подписи_конверт_не_открывается() {
+        val конверт = sealer.sealerFor(escrowKey, адресаты)(запись())
+        val посторонний = DeviceIdentity.generate()
+
+        val исход = PersonalMessages.open(
+            envelopeBytes = конверт,
+            myDeviceId = "устройство-получателя",
+            me = получатель,
+            senderSigningPublic = посторонний.signingPublic,
+        )
+
+        assertTrue(исход.isFailure, "подпись обязана не сойтись")
     }
 
     @Test

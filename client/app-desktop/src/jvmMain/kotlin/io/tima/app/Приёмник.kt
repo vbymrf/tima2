@@ -1,0 +1,146 @@
+package io.tima.app
+
+import io.tima.core.database.SqlChatBook
+import io.tima.core.encryption.DeviceIdentity
+import io.tima.core.encryption.PersonalMessages
+import io.tima.core.network.DeviceKeysResult
+import io.tima.core.network.EventStream
+import io.tima.core.outbox.IncomingEntry
+import io.tima.core.outbox.OpenOutcome
+import io.tima.crypto.MessageSerializer
+import io.tima.domain.account.Session
+import io.tima.domain.chat.ChatKind
+import kotlinx.coroutines.delay
+
+/**
+ * Приём по живому каналу.
+ *
+ * ── ПОРЯДОК, КОТОРЫЙ ВАЖНЕЕ КОДА ────────────────────────────────────────────
+ *
+ * 1. **Конверт записывается ДО попытки разбора.** Разбор падает по любой причине — нет
+ *    ключа, повреждённые байты, ошибка в нашем коде, — и если сначала разбирать, а
+ *    записывать потом, каждое такое падение теряет сообщение безвозвратно: живой канал его
+ *    больше не пришлёт. Этим занимается [io.tima.core.outbox.Inbox], здесь только вызовы в
+ *    правильном порядке.
+ * 2. **Имя отправителя из конверта — подсказка, а не утверждение.** Оно лежит в открытой
+ *    части конверта, и до проверки подписи ему верить нельзя. Пользуемся им ровно для
+ *    одного: какой ключ спрашивать у сервера. Соври отправитель чужим именем — подпись не
+ *    сойдётся, и сообщение станет нечитаемым, а не «чужим».
+ * 3. **Переписка от незнакомого номера всё равно появляется.** Строка `chats` заводится по
+ *    отправителю: без неё в списке была бы переписка без имени — а человеку надо видеть,
+ *    кто написал.
+ *
+ * **Переподключение решает вызывающий, а не канал.** [EventStream] возвращает исход и
+ * заканчивается; политика повторов — здесь, потому что здесь известно, сколько ждать.
+ */
+class Приёмник(
+    private val окружение: Окружение,
+    private val сеть: Сеть,
+    private val сессия: Session,
+    private val личность: DeviceIdentity,
+) {
+
+    /** Что случилось с каналом в последний раз. Для диагностики, не для решений. */
+    var последнийИсход: String? = null
+        private set
+
+    /** Ключи подписи по устройству отправителя: спрашиваются один раз на устройство. */
+    private val ключиОтправителей = HashMap<String, ByteArray>()
+
+    private val книга = SqlChatBook(окружение.db, окружение.шифр)
+
+    /**
+     * Держать канал, пока приложение живо.
+     *
+     * Бесконечный цикл здесь на месте: канал — это и есть «пока живо». Пауза между
+     * попытками берётся из состояния связи, а не из общего «подождём пять секунд».
+     */
+    suspend fun держать() {
+        while (true) {
+            val исход = runCatching {
+                EventStream(сеть.route, сеть.client, token = { сессия.accessToken })
+                    .run(cursor = null) { событие -> принять(событие.chatId, событие.messageId, событие.envelope) }
+            }
+            последнийИсход = исход.fold(
+                onSuccess = { it.toString() },
+                onFailure = { "канал упал: ${it::class.simpleName}: ${it.message}" },
+            )
+            delay(ПАУЗА_ПЕРЕД_ПОВТОРОМ_МС)
+        }
+    }
+
+    /**
+     * Одно событие: записать конверт, потом попытаться разобрать.
+     *
+     * Возвращается **только после записи**: подтверждение уходит сразу после нас, а
+     * подтверждённое сервер больше не пришлёт.
+     */
+    private suspend fun принять(chatId: String, messageId: Long, envelope: ByteArray) {
+        окружение.входящие.receive(chatId, messageId, envelope)
+
+        // Разбор — уже после записи. Упадёт — сообщение останется на повтор.
+        val отправитель = отправительКонверта(envelope)
+        val ключ = отправитель?.let { ключПодписи(it.userId, it.deviceId) }
+
+        окружение.входящие.openNext { запись ->
+            when {
+                отправитель == null -> OpenOutcome.Rejected("конверт не разбирается")
+                ключ == null -> OpenOutcome.NoKey("ключ подписи отправителя не получен")
+                else -> открыть(запись, ключ)
+            }
+        }
+
+        // Переписка от незнакомого — со своим именем: иначе в списке появится строка без
+        // имени, и человек не узнает, кто написал.
+        if (отправитель != null && окружение.db.chatsQueries.chatById(chatId).executeAsOneOrNull() == null) {
+            книга.remember(
+                chatId = chatId,
+                kind = ChatKind.Personal,
+                title = сеть.справочник.имяИлиНомер(отправитель.userId),
+                peerId = отправитель.userId,
+            )
+        }
+    }
+
+    private fun открыть(запись: IncomingEntry, ключПодписи: ByteArray): OpenOutcome =
+        PersonalMessages.open(
+            envelopeBytes = запись.envelope,
+            myDeviceId = сессия.deviceId,
+            me = личность,
+            senderSigningPublic = ключПодписи,
+        ).fold(
+            onSuccess = { OpenOutcome.Opened(it.content.plainText().encodeToByteArray()) },
+            // Подпись не сошлась или обёртки для нас нет — разные беды, и причина
+            // доносится дословно: человеку видно «не читается», нам — почему.
+            onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },
+        )
+
+    /** Кто прислал — по открытой части конверта. Доверенным станет после проверки подписи. */
+    private fun отправительКонверта(envelope: ByteArray): Отправившее? =
+        MessageSerializer.decodeEnvelope(envelope).getOrNull()?.meta?.let {
+            Отправившее(userId = it.senderId, deviceId = it.senderDevice)
+        }
+
+    private suspend fun ключПодписи(userId: String, deviceId: String): ByteArray? {
+        ключиОтправителей[deviceId]?.let { return it }
+        val исход = сеть.ключи.devicesOf(userId)
+        if (исход !is DeviceKeysResult.Devices) return null
+        for (устройство in исход.devices) {
+            ключиОтправителей[устройство.deviceId] = устройство.signingPub
+        }
+        return ключиОтправителей[deviceId]
+    }
+
+    private class Отправившее(val userId: String, val deviceId: String)
+
+    private companion object {
+        /**
+         * Пауза перед новой попыткой канала.
+         *
+         * Две секунды: канал рвётся в мобильной сети постоянно, и возвращается быстро.
+         * Дольше — человек видит задержку доставки, короче — молотим сервер на каждом
+         * переключении вышки.
+         */
+        const val ПАУЗА_ПЕРЕД_ПОВТОРОМ_МС = 2_000L
+    }
+}

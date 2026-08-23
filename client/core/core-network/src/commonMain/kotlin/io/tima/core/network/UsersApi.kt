@@ -65,6 +65,15 @@ class UsersApi(
         return UserLookup.Found(userId = userId, name = имя(userId))
     }
 
+    /**
+     * Имя или номер собеседника — чем назвать переписку.
+     *
+     * Сервер отдаёт номера **только по собеседникам своих переписок** (`PhonesOfChatPeers`),
+     * и это его решение, а не наше упущение: справочник целиком он не раскрывает. Поэтому
+     * ответ бывает пустым, и это не отказ — переписка называется тем, что известно.
+     */
+    suspend fun имяИлиНомер(userId: String): String? = имя(userId) ?: номер(userId)
+
     /** Отображаемое имя, если сервер его знает и вправе отдать. */
     private suspend fun имя(userId: String): String? {
         val response = try {
@@ -83,6 +92,24 @@ class UsersApi(
         if (response.status != HttpStatusCode.OK) return null
         val body = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull()
         return body?.get("names")?.let { (it as? JsonObject) }
+            ?.get(userId)?.jsonPrimitive?.content
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    /** Номер — вторым выбором: он известен только по собеседникам своих переписок. */
+    private suspend fun номер(userId: String): String? {
+        val response = try {
+            client.post(route.api("/api/v1/users/names")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { putJsonArray("ids") { add(userId) } }.toString())
+            }
+        } catch (e: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        val body = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull()
+        return body?.get("phones")?.let { (it as? JsonObject) }
             ?.get(userId)?.jsonPrimitive?.content
             ?.takeIf { it.isNotBlank() }
     }
