@@ -16,13 +16,17 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
- * Самообъявление платформы.
+ * Устройства аккаунта: самообъявление платформы, список, отзыв.
  *
- * Ручка выглядит служебной, а решает продуктовое: **подтвердить привязку нового
+ * Самообъявление выглядит служебным, а решает продуктовое: **подтвердить привязку нового
  * устройства по QR вправе только телефон**, и знает об этом сервер по колонке `platform`.
  * Устройство, объявившее себя не тем, получит отказ в привязке — по симптому неотличимый
- * от поломки самого QR. Поэтому здесь проверяется не «код 200», а что уходит и что
- * возвращается.
+ * от поломки самого QR.
+ *
+ * Список и отзыв — вторая половина привязки: подключить устройство стало делом одного
+ * скана, значит отключать человек должен уметь сам. Проверяется не «код 200», а что уходит,
+ * что возвращается и **чем отличаются отказы**: «последнее устройство» надо сказать
+ * словами, а «уже отозвано» бедой не является.
  *
  * Форма ответов взята из `internal/api/devices.go` дословно.
  */
@@ -88,6 +92,71 @@ class DevicesApiTest {
         assertIs<PlatformResult.Refused>(исход)
         assertEquals(400, исход.status)
         assertEquals("bad_platform", исход.code)
+    }
+
+    // ── список и отзыв ──────────────────────────────────────────────────────
+
+    /** Список разбирается, и своё устройство в нём помечено: по этой пометке его не отключат. */
+    @Test
+    fun список_устройств_разбирается() = runTest {
+        val api = api(
+            json(
+                """{"devices":[""" +
+                    """{"device_id":"d-1","name":"Телефон","created_at":"2026-08-20T10:00:00Z","current":true},""" +
+                    """{"device_id":"d-2","name":"Компьютер","created_at":"2026-08-23T10:00:00Z","current":false}""" +
+                    """]}""",
+            ),
+        )
+
+        val исход = api.mine()
+
+        assertIs<MyDevicesResult.Devices>(исход)
+        assertEquals(2, исход.devices.size)
+        assertEquals("Телефон", исход.devices[0].name)
+        assertTrue(исход.devices[0].current, "своё устройство обязано быть помечено")
+        assertEquals(false, исход.devices[1].current)
+        assertEquals("2026-08-23T10:00:00Z", исход.devices[1].createdAt)
+    }
+
+    /** Строка без device_id пропускается, а не роняет разбор всего списка. */
+    @Test
+    fun строка_без_идентификатора_не_роняет_список() = runTest {
+        val api = api(json("""{"devices":[{"name":"Без id"},{"device_id":"d-1","name":"Телефон"}]}"""))
+
+        val исход = api.mine()
+
+        assertIs<MyDevicesResult.Devices>(исход)
+        assertEquals(1, исход.devices.size)
+    }
+
+    @Test
+    fun отзыв_идёт_delete_с_токеном() = runTest {
+        val api = api(json("""{"revoked":true,"device_id":"d-2"}"""))
+
+        assertEquals(RevokeResult.Revoked, api.revoke("d-2"))
+
+        val запрос = engine.requestHistory.single()
+        assertEquals("DELETE", запрос.method.value)
+        assertTrue(запрос.url.encodedPath.endsWith("/api/v1/devices/d-2"), "не тот путь: ${запрос.url}")
+        assertEquals("Bearer t-1", запрос.headers["Authorization"])
+    }
+
+    /**
+     * Последнее устройство и «уже отозвано» — разные исходы.
+     *
+     * Первое надо сказать словами: без единственного устройства входить в аккаунт нечем.
+     * Второе бедой не является — список просто устарел.
+     */
+    @Test
+    fun отказы_отзыва_не_слипаются() = runTest {
+        assertEquals(
+            RevokeResult.LastDevice,
+            api(json("""{"code":"last_device"}""", HttpStatusCode.Conflict)).revoke("d-1"),
+        )
+        assertEquals(
+            RevokeResult.Gone,
+            api(json("""{"code":"device_not_found"}""", HttpStatusCode.NotFound)).revoke("d-9"),
+        )
     }
 
     /** Сети нет — это отдельный исход: его повторяют, а отказ сервера повторять нечего. */

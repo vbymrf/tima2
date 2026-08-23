@@ -3,6 +3,8 @@ package io.tima.core.network
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -22,3 +24,13 @@ internal fun JsonObject?.codeOf(): String = this?.str("code") ?: "без код�
 
 internal fun JsonObject.str(name: String): String? =
     runCatching { this[name]?.jsonPrimitive?.content }.getOrNull()
+
+internal fun JsonObject.bool(name: String): Boolean? =
+    runCatching { this[name]?.jsonPrimitive?.content?.toBooleanStrictOrNull() }.getOrNull()
+
+/** Массив или `null`: сервер мог ответить чем угодно, и падать на этом незачем. */
+internal fun JsonElement.jsonArrayOrNull(): List<JsonElement>? =
+    runCatching { (this as JsonArray).toList() }.getOrNull()
+
+internal fun JsonElement.jsonObjectOrNull(): JsonObject? =
+    runCatching { this as JsonObject }.getOrNull()

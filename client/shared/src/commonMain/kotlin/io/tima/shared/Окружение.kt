@@ -18,6 +18,7 @@ import io.tima.core.network.AccountApiOverHttp
 import io.tima.core.network.AuthApi
 import io.tima.core.network.DeviceLinkConfirmOverHttp
 import io.tima.core.network.DeviceLinkStartOverHttp
+import io.tima.core.network.DeviceBookOverHttp
 import io.tima.core.network.DevicesApi
 import io.tima.core.network.EscrowApi
 import io.tima.core.network.HttpMessageTransport
@@ -38,6 +39,7 @@ import io.tima.core.secrets.VaultSecretStore
 import io.tima.core.secrets.platformVault
 import io.tima.domain.account.ConfirmDeviceLink
 import io.tima.domain.account.LinkNewDevice
+import io.tima.domain.account.MyDevices
 import io.tima.domain.account.RegisterDevice
 import io.tima.domain.account.Session
 import io.tima.domain.chat.MarkRead
@@ -166,8 +168,16 @@ class Сеть(
     /** Справочник: кто скрывается за номером телефона. Нужен, чтобы начать переписку. */
     val справочник: UsersApi = UsersApi(route, client, token = { сессия.accessToken })
 
-    /** Устройства аккаунта. Пока одно дело: объявить платформу — см. [Платформа]. */
+    /** Устройства аккаунта: объявить платформу, показать список, отключить. */
     val устройства: DevicesApi = DevicesApi(route, client, token = { сессия.accessToken })
+
+    /**
+     * Свои устройства как случай использования.
+     *
+     * Появилось вместе с привязкой: подключить устройство стало делом одного скана, значит
+     * отключать человек должен уметь сам.
+     */
+    val мойПарк: MyDevices = MyDevices(DeviceBookOverHttp(устройства))
 
     /**
      * Подтверждение привязки нового устройства.

@@ -245,7 +245,10 @@ class AuthStore(
      */
     fun подключиться() {
         val привязка = link ?: return
-        if (_state.value is AuthState.ПоказКода) return
+        // Повторно — только если прежний код уже мёртв: живой код рядом с кнопкой
+        // «новый» означал бы, что человек может обнулить работающий код одним промахом.
+        val текущее = _state.value
+        if (текущее is AuthState.ПоказКода && !(текущее.код == null && текущее.беда != null)) return
         _state.value = AuthState.ПоказКода(код = null)
 
         scope.launch {

@@ -1,7 +1,9 @@
 package io.tima.feature.auth
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -13,6 +15,7 @@ import io.tima.core.ui.ВидКнопки
 import io.tima.core.ui.Кнопка
 import io.tima.core.ui.Подпись
 import io.tima.core.ui.TimaSpacing
+import io.tima.core.ui.Тима
 import io.tima.core.ui.Третьестепенное
 
 /**
@@ -32,7 +35,10 @@ fun ЭкранПривязки(
     onОтмена: () -> Unit,
     modifier: Modifier = Modifier,
 ) = Column(
-    modifier = modifier.fillMaxWidth().padding(TimaSpacing.о4),
+    modifier = modifier
+        .fillMaxSize()
+        .background(Тима.цвета.поверхность)
+        .padding(TimaSpacing.о4),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.о3),
 ) {
     when (состояние) {

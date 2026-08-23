@@ -369,6 +369,30 @@ class AuthStoreTest {
         assertIs<AuthState.Телефон>(store.state.value)
     }
 
+    /**
+     * После просроченного кода можно попросить новый — и только тогда.
+     *
+     * Живой код рядом с кнопкой «новый» означал бы, что промах по экрану обнуляет
+     * работающий код, а телефон на том конце покажет отказ.
+     */
+    @Test
+    fun новый_код_просится_только_вместо_мёртвого() = runTest {
+        привязка.наОпрос = { LinkClaimStep.NotReady }
+        val store = store(backgroundScope)
+
+        store.подключиться()
+        store.state.first { it is AuthState.ПоказКода && it.код != null }
+        val сессийПоказано = привязка.стартов
+        store.подключиться()
+        assertEquals(сессийПоказано, привязка.стартов, "живой код не сбрасывается вторым нажатием")
+
+        store.state.first { it is AuthState.ПоказКода && it.беда != null }
+        store.подключиться()
+
+        store.state.first { it is AuthState.ПоказКода && it.код != null }
+        assertEquals(сессийПоказано + 1, привязка.стартов, "после просрочки новый код обязан прийти")
+    }
+
     @Test
     fun плохой_номер_отсекается_до_сети() = runTest {
         api.наЗапросКода = { CodeRequestStep.BadPhone("не E.164") }
@@ -415,6 +439,7 @@ class AuthStoreTest {
     }
 
     private class ПоддельныйСтарт : DeviceLinkStart {
+        var стартов = 0
         var посланноеИмя: String? = null
         var наСтарт: suspend () -> LinkStartStep = {
             LinkStartStep.Started("s-1", "tima://link/v1?session_id=s-1", "c-1")
@@ -426,6 +451,7 @@ class AuthStoreTest {
             signingPub: ByteArray,
             deviceName: String,
         ): LinkStartStep {
+            стартов++
             посланноеИмя = deviceName
             return наСтарт()
         }

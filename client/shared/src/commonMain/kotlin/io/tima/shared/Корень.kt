@@ -24,6 +24,8 @@ import io.tima.feature.auth.AuthState
 import io.tima.feature.auth.AuthStore
 import io.tima.feature.auth.ПривязкаStore
 import io.tima.feature.auth.ЭкранПривязки
+import io.tima.feature.auth.УстройстваStore
+import io.tima.feature.auth.ЭкранУстройств
 import io.tima.feature.auth.ЭкранВхода
 import io.tima.feature.chat.ChatStore
 import io.tima.feature.chat.ChatsStore
@@ -142,6 +144,16 @@ private sealed interface Куда {
      * на каждом телефоне, а свой потребовал бы доступа к камере и объяснений, зачем он.
      */
     data class Привязка(val код: String) : Куда
+
+    /**
+     * Свои устройства.
+     *
+     * Открывается кнопкой настроек в шапке, и это **не подмена**: настроек как экрана
+     * (`doc_UI/25`) пока нет, а из всех их разделов существует ровно один — устройства.
+     * Экран назван своим именем, поэтому человек видит, куда попал; когда разделов станет
+     * больше, между ними встанет список разделов.
+     */
+    data object Устройства : Куда
 }
 
 /**
@@ -225,6 +237,7 @@ private fun Приложение(
                 состояние = состояниеСписка,
                 onОткрыть = { куда = Куда.Переписка(it.chatId, it.title) },
                 onНовая = { куда = Куда.Новая },
+                onНастройки = { куда = Куда.Устройства },
             )
         },
         главная = when (val текущее = куда) {
@@ -241,6 +254,12 @@ private fun Приложение(
                             новая.сброс()
                         },
                     )
+                }
+            }
+
+            Куда.Устройства -> {
+                {
+                    Устройства(сеть = сеть, scope = scope, onНазад = { куда = Куда.Ничего })
                 }
             }
 
@@ -362,4 +381,18 @@ private fun ПодтверждениеПривязки(
     }
     val состояние by store.state.collectAsState()
     ЭкранПривязки(состояние = состояние, onДоверить = store::доверить, onОтмена = onЗакрыть)
+}
+
+/** Свои устройства: список, отключение и вопрос перед ним. */
+@Composable
+private fun Устройства(сеть: Сеть, scope: kotlinx.coroutines.CoroutineScope, onНазад: () -> Unit) {
+    val store = remember { УстройстваStore(сеть.мойПарк, scope) }
+    val состояние by store.state.collectAsState()
+    ЭкранУстройств(
+        состояние = состояние,
+        onНазад = onНазад,
+        onСпросить = store::спросить,
+        onПодтвердить = store::отключить,
+        onПередумал = store::передумал,
+    )
 }
