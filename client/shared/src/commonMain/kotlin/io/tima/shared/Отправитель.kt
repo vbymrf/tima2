@@ -1,4 +1,4 @@
-package io.tima.app
+package io.tima.shared
 
 import io.tima.core.encryption.DeviceIdentity
 import io.tima.core.encryption.EscrowKeyVerifier
@@ -138,7 +138,7 @@ class Отправитель(
             validFromMs = ключ.validFromMs,
             validToMs = ключ.validToMs,
             destroyAtMs = ключ.destroyAtMs,
-            nowMs = System.currentTimeMillis(),
+            nowMs = сейчасМс(),
         ).getOrElse {
             // Подпись не сошлась — это не «повторим позже», а подмена или наша ошибка.
             последняяБеда = "подпись анклава не сошлась: ${it.message}"

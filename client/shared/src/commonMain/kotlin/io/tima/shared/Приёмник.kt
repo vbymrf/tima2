@@ -1,4 +1,4 @@
-package io.tima.app
+package io.tima.shared
 
 import io.tima.core.database.SqlChatBook
 import io.tima.core.encryption.DeviceIdentity

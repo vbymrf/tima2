@@ -1,4 +1,4 @@
-package io.tima.app
+package io.tima.shared
 
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.WebSockets
@@ -8,7 +8,6 @@ import io.tima.core.database.SqlChatsFeed
 import io.tima.core.database.SqlInboxStore
 import io.tima.core.database.SqlOutboxStore
 import io.tima.core.database.TimaDatabase
-import io.tima.core.database.desktopDatabase
 import io.tima.core.encryption.DeviceKeyFactoryOverKodium
 import io.tima.core.encryption.LocalStoreFieldCipher
 import io.tima.core.encryption.TextBodyCodec
@@ -34,7 +33,6 @@ import io.tima.domain.account.Session
 import io.tima.domain.chat.ObserveChat
 import io.tima.domain.chat.ObserveChats
 import io.tima.domain.chat.SendMessage
-import java.io.File
 
 /**
  * Вход: то, что работает **до** появления устройства.
@@ -51,6 +49,8 @@ import java.io.File
  */
 class Вход private constructor(
     val регистрация: RegisterDevice,
+    /** Адрес сервера: он же понадобится сети после входа. */
+    val host: String,
     private val секреты: VaultSecretStore,
 ) {
 
@@ -76,23 +76,24 @@ class Вход private constructor(
     companion object {
 
         /**
-         * @param host адрес сервера.
+         * @param host адрес сервера. По умолчанию стенд: другого сервера пока не
+         *   существует.
          *
-         * Берётся из окружения, а по умолчанию — стенд: другого сервера пока не
-         * существует. Боевой способ — подписанный конфиг маршрутов (К3.3), и он написан;
-         * ключ выпуска ещё не выдан, поэтому обновление маршрутов **отвергается целиком**,
-         * и подставить адрес снаружи нельзя. Здесь честный временный путь: переменная
-         * окружения, названная вслух.
+         * Боевой способ — подписанный конфиг маршрутов (К3.3), и он написан; ключ выпуска
+         * ещё не выдан, поэтому обновление маршрутов **отвергается целиком**. Подменять
+         * адрес снаружи умеет только платформа: на ПК это переменная окружения, и читает её
+         * приложение для ПК. `System.getenv` в общем коде нет — его нет на iOS, и попытка
+         * прочитать окружение здесь была первой же ошибкой при выносе сборки в общий модуль.
          */
         fun создать(
-            host: String = System.getenv("TIMA_STAND_HOST")?.takeIf { it.isNotBlank() }
-                ?: СТЕНД,
+            host: String = СТЕНД,
             хранилищеСекретов: SecretVault = platformVault(scope = "desktop"),
         ): Вход {
             val route = ServerRoute.from(RouteConfig(host = host))
             val client = HttpClient(httpEngine()) { timaDefaults() }
             val секреты = VaultSecretStore(хранилищеСекретов)
             return Вход(
+                host = host,
                 регистрация = RegisterDevice(
                     api = AccountApiOverHttp(AuthApi(route, client)),
                     keys = DeviceKeyFactoryOverKodium,
@@ -131,7 +132,7 @@ class Сеть(
         /** Тот же адрес и тот же клиент, что у входа: сервер один. */
         fun создать(
             сессия: Session,
-            host: String = System.getenv("TIMA_STAND_HOST")?.takeIf { it.isNotBlank() } ?: Вход.СТЕНД,
+            host: String = Вход.СТЕНД,
         ): Сеть = Сеть(
             route = ServerRoute.from(RouteConfig(host = host)),
             // WebSockets ставится сразу: живой канал — не отдельный клиент, а тот же
@@ -162,7 +163,7 @@ class Окружение private constructor(
 ) {
 
     /** Очередь исходящих: одна на приложение, потому что одна на базу. */
-    val очередь: Outbox = Outbox(SqlOutboxStore(db, шифр), nowMs = { System.currentTimeMillis() })
+    val очередь: Outbox = Outbox(SqlOutboxStore(db, шифр), nowMs = { сейчасМс() })
 
     /**
      * Машина входящих. Одна на приложение по той же причине: одна база.
@@ -170,7 +171,7 @@ class Окружение private constructor(
      * Конверт записывается ДО попытки разбора — иначе падение расшифровки теряет
      * сообщение навсегда, живой канал его больше не пришлёт.
      */
-    val входящие: Inbox = Inbox(SqlInboxStore(db, шифр), nowMs = { System.currentTimeMillis() })
+    val входящие: Inbox = Inbox(SqlInboxStore(db, шифр), nowMs = { сейчасМс() })
 
     val переписки: ObserveChats = ObserveChats(SqlChatsFeed(db, TextBodyCodec, шифр))
 
@@ -185,26 +186,18 @@ class Окружение private constructor(
     companion object {
 
         /**
-         * Открыть базу устройства.
+         * Открыть окружение над **уже открытой базой**.
+         *
+         * База приходит снаружи, и это единственное, что осталось платформенным: на ПК её
+         * открывает `desktopDatabase(файл)`, на Android — `androidDatabase(context, имя)`.
+         * Правила поведения от этого не зависят вовсе, поэтому и живут здесь.
          *
          * @param секретУстройства те самые 32 байта, из которых выведены ключи устройства.
          *   Ключ покоя базы выводится из них же, поэтому **чужой секрет означает
          *   нечитаемую базу**, а не ошибку: строки на месте, содержимое не открыть.
          *   Порождает секрет только регистрация — см. [Вход].
          */
-        fun открыть(секретУстройства: ByteArray, каталог: File = каталогДанных()): Окружение {
-            val db = desktopDatabase(File(каталог, ИМЯ_БАЗЫ))
-            return Окружение(db, LocalStoreFieldCipher(секретУстройства))
-        }
-
-        /** `%LOCALAPPDATA%\TIMA` — рядом с секретами, но не вместе с ними. */
-        fun каталогДанных(): File {
-            val base = System.getenv("LOCALAPPDATA")
-                ?: System.getProperty("user.home")
-                ?: error("непонятно, где держать данные: ни LOCALAPPDATA, ни user.home")
-            return File(base, "TIMA")
-        }
-
-        private const val ИМЯ_БАЗЫ = "tima.db"
+        fun открыть(db: TimaDatabase, секретУстройства: ByteArray): Окружение =
+            Окружение(db, LocalStoreFieldCipher(секретУстройства))
     }
 }

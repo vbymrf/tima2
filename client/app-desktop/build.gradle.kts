@@ -19,27 +19,13 @@ kotlin {
             // material3 больше не нужен и убран: у нас своя система форм и цветов, и
             // единственным его потребителем был пустой каркас К1.9. Заодно ушло
             // предупреждение об устаревшем аксессоре, которое приходилось терпеть.
-            implementation(project(":core:core-model"))
-            // Дизайн-система, экраны и весь стек хранения. Приложение только соединяет.
-            implementation(project(":core:core-ui"))
+            // Всё общее — одним модулем. Платформенного здесь два: драйвер базы и
+            // окно.
+            implementation(project(":shared"))
             implementation(project(":core:core-database"))
-            implementation(project(":core:core-encryption"))
-            implementation(project(":core:core-secrets"))
-            implementation(project(":feature:feature-chat"))
-            implementation(project(":feature:feature-auth"))
-            // Сеть: регистрация устройства идёт по HTTP. Движок выбирает core-network,
-            // здесь только его подключение.
-            implementation(project(":core:core-network"))
-            implementation(libs.ktor.client.core)
-            // Живой канал событий: тот же клиент, что и для REST.
-            implementation(libs.ktor.client.websockets)
+            implementation(project(":core:core-ui"))
         }
-        // Сборку приложения можно проверить без окна: секрет, база и очередь — обычный
-        // код. Именно здесь ломается первый живой запуск, а не в отрисовке.
-        jvmTest.dependencies {
-            implementation(kotlin("test"))
-            implementation(libs.kotlinx.coroutines.test)
-        }
+
     }
 }
 

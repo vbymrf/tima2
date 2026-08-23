@@ -8,30 +8,25 @@ plugins {
 // Вход для Android. Здесь и только здесь разрешено знать о платформе как о
 // платформе (Plan.md §1.3): Activity, манифест, разрешения, push, сервисы.
 //
-// Приложение намеренно пустое: задача К1.9 — доказать, что тулчейн AGP + Compose
-// собирается. Интерфейс приезжает в К5, по макету и из дизайн-системы.
+// Приложение здесь тонкое намеренно: интерфейс, навигация и правила поведения живут в
+// `shared`, общие для ПК и телефона. В v1 сборка приложения была по копии на платформу, и
+// Android с Desktop разошлись молча — одна платформа получала починку, другая нет.
 kotlin {
     jvmToolchain(17)
     androidTarget()
 
     sourceSets {
         androidMain.dependencies {
-            // Аксессор compose.material3 объявлен deprecated в Compose 1.11
-            // («Specify dependency directly»), и предупреждение мы терпим осознанно:
-            // прямая координата org.jetbrains.compose.material3:material3 в линии
-            // 1.11 существует ТОЛЬКО в alpha (1.11.0-alpha01…07), а последняя
-            // стабильная — 1.9.0. То есть «починка» означала бы либо alpha в
-            // зависимостях, либо расхождение версий с рантаймом Compose 1.11.1.
-            // Аксессор этим и ценен: он всегда даёт версию плагина.
-            implementation(compose.material3)
-            implementation(libs.androidx.activity.compose)
-            implementation(project(":core:core-model"))
-            // Хранилище секретов и база — те модули, у которых на Android СВОЁ
-            // поведение: AndroidKeyStore вместо DPAPI, AndroidSqliteDriver вместо
-            // sqlite-jdbc. Остальные модули приезжают jvm-вариантом, и это правильно:
-            // движок сети на Android тот же OkHttp.
-            implementation(project(":core:core-secrets"))
+            // Всё общее — одним модулем. Платформенного здесь два: драйвер базы и
+            // Activity. material3 больше не нужен: у нас своя система форм и цветов.
+            implementation(project(":shared"))
             implementation(project(":core:core-database"))
+            implementation(project(":core:core-ui"))
+            // Хранилищу секретов нужен контекст: AndroidKeyStore вместо DPAPI.
+            implementation(project(":core:core-secrets"))
+            implementation(libs.androidx.activity.compose)
+            // foundation нужен самой Activity: тема системы (isSystemInDarkTheme) живёт там.
+            implementation(compose.foundation)
         }
     }
 }
