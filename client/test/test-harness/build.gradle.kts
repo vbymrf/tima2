@@ -128,3 +128,17 @@ tasks.register<JavaExec>("standRun") {
     // TIMA_ESCROW_SIGNING_PUB, TIMA_PHONE_A, TIMA_PHONE_B.
     environment(System.getenv())
 }
+
+// Живая проверка секретной фразы. Тоже руками и тоже по стенду: она заводит настоящие
+// аккаунты и — намеренно — форкает цепочку личности, то есть делает на сервере то, что
+// в проде необратимо.
+tasks.register<JavaExec>("phraseRun") {
+    group = "проверка"
+    description = "Секретная фраза против стенда: вход по фразе, отказ чужой, форк по просьбе"
+    mainClass.set("io.tima.harness.PhraseRunKt")
+    classpath = kotlin.targets.getByName("jvm").compilations.getByName("main").let {
+        it.output.allOutputs + it.runtimeDependencyFiles!!
+    }
+    jvmArgs("-Dfile.encoding=UTF-8", "-Dsun.stdout.encoding=UTF-8", "-Dsun.stderr.encoding=UTF-8")
+    environment(System.getenv())
+}
