@@ -143,6 +143,11 @@ class SqlOutboxStoreTest {
         assertTrue(ошибка.message.orEmpty().contains("99"), "в сообщении должно быть значение")
     }
 
-    private fun Outbox.sealNext(эпоха: Int, seal: (OutboxEntry) -> ByteArray) =
-        this.sealNext(эпоха, seal)
+    /**
+     * Запечатать в единственной здешней переписке.
+     *
+     * Настоящая подпись просит переписку: ключ эпохи escrow у каждой свой.
+     */
+    private fun Outbox.sealNext(эпоха: Int, seal: (OutboxEntry) -> ByteArray): OutboxEntry? =
+        this.sealNext("chat-1", эпоха, seal)
 }

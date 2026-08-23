@@ -83,6 +83,15 @@ SELECT changes();
 byDedupKey:
 SELECT * FROM messages WHERE dedup_key = ?;
 
+-- То же в пределах одной переписки: ключ эпохи escrow спрашивается по chat_id, то есть
+-- у каждой переписки он свой, и запечатывать «следующее любое» под ключ одной из них
+-- значит собрать конверт не тем ключом.
+nextQueuedInChat:
+SELECT * FROM messages
+WHERE direction = 0 AND chat_id = ? AND state = ? AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+ORDER BY local_id
+LIMIT 1;
+
 -- Готовое к запечатыванию: в очереди и срок пришёл.
 nextQueued:
 SELECT * FROM messages

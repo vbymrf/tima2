@@ -161,6 +161,16 @@ interface OutboxStore {
     fun nextQueued(nowMs: Long): OutboxEntry?
 
     /**
+     * То же, но **в пределах одной переписки**.
+     *
+     * Нужно потому, что ключ эпохи escrow — свойство ПЕРЕПИСКИ (`GET /escrow/key`
+     * спрашивается по `chat_id`), а не приложения. Пока переписка была одна, разницы не
+     * было; с двумя запечатывание «следующего любого» под ключ одной из них собирает
+     * конверт не тем ключом.
+     */
+    fun nextQueued(chatId: String, nowMs: Long): OutboxEntry?
+
+    /**
      * Забирает запечатанную запись и переводит её в [OutboxState.SENDING].
      *
      * Взятие и перевод — **одно действие**: между «выбрал» и «пометил» нельзя
@@ -218,8 +228,15 @@ class Outbox(
      */
     private val sealedEnvelopes = HashMap<String, ByteArray>()
 
-    /** Эпоха, под которую собран кэш. `null` — кэш пуст. */
-    private var cachedEpoch: Int? = null
+    /**
+     * Эпоха, под которую собран кэш, — **по переписке**.
+     *
+     * Одного значения на всю очередь не хватает: ключ эпохи escrow спрашивается у сервера
+     * по `chat_id`, и у каждой переписки он свой. С одним значением переключение между
+     * двумя переписками выбрасывало бы кэш на каждом шаге, а `sealedForEpoch` записывался
+     * бы чужим числом.
+     */
+    private val cachedEpochs = HashMap<String, Int>()
 
     override fun enqueue(dedupKey: String, chatId: String, body: ByteArray): Boolean {
         require(dedupKey.isNotBlank()) { "dedupKey пустой: по нему опознаётся повтор" }
@@ -248,25 +265,34 @@ class Outbox(
      */
     fun recoverOnStart(): Int {
         sealedEnvelopes.clear()
-        cachedEpoch = null
+        cachedEpochs.clear()
         return store.requeueStuck()
     }
 
     /**
-     * Запечатывает следующее готовое сообщение под **текущую** эпоху escrow.
+     * Запечатывает следующее готовое сообщение **этой переписки** под её текущую эпоху
+     * escrow.
      *
-     * @param epochKeyId идентификатор ключа эпохи, полученный от сервера
-     *   (`GET /api/v1/escrow/key`). Смена значения обнуляет кэш и возвращает
-     *   запечатанное в очередь: конверт под прошлую эпоху негоден.
+     * **Переписка в подписи не для порядка.** Ключ эпохи escrow спрашивается у сервера по
+     * `chat_id`, то есть у каждой переписки он свой. В первой редакции здесь была одна
+     * эпоха на всю очередь, и с двумя переписками это означало конверт, собранный под
+     * ключ чужой переписки, — причём кэш конвертов сбрасывался бы на каждом переключении
+     * между ними. Пока переписка была одна, разницы не было видно.
+     *
+     * @param chatId переписка, чьё сообщение запечатываем.
+     * @param epochKeyId идентификатор ключа эпохи ЭТОЙ переписки, полученный от сервера
+     *   (`GET /api/v1/escrow/key`). Смена значения обнуляет кэш этой переписки и
+     *   возвращает её запечатанное в очередь: конверт под прошлую эпоху негоден.
      * @param seal собирает конверт из тела. Здесь это `core-encryption`; очередь про
      *   криптографию ничего не знает и знать не должна.
-     * @return `null`, если сейчас нечего: очередь пуста либо срок не пришёл.
+     * @return `null`, если сейчас нечего: очередь этой переписки пуста либо срок не пришёл.
      */
-    fun sealNext(epochKeyId: Int, seal: (OutboxEntry) -> ByteArray): OutboxEntry? {
-        if (cachedEpoch != null && cachedEpoch != epochKeyId) discardSealed()
-        cachedEpoch = epochKeyId
+    fun sealNext(chatId: String, epochKeyId: Int, seal: (OutboxEntry) -> ByteArray): OutboxEntry? {
+        val прошлая = cachedEpochs[chatId]
+        if (прошлая != null && прошлая != epochKeyId) discardSealed(chatId)
+        cachedEpochs[chatId] = epochKeyId
 
-        val entry = store.nextQueued(nowMs()) ?: return null
+        val entry = store.nextQueued(chatId, nowMs()) ?: return null
         // Повтор внутри одной эпохи берёт готовый конверт — ровно для этого кэш и
         // существует. Годность проверяется по записи, а не по cachedEpoch: cachedEpoch
         // к этой строке уже равен epochKeyId, а под какую эпоху собран конверт — свойство
@@ -343,16 +369,17 @@ class Outbox(
     }
 
     /**
-     * Эпоха escrow сменилась: кэш конвертов негоден целиком.
+     * Эпоха escrow сменилась у **этой переписки**: её конверты негодны.
      *
-     * Вызывать при получении нового `key_id` от сервера. Отдельный метод, а не
-     * побочный эффект [sealNext], потому что смена может прийти событием, когда
-     * отправлять нечего.
+     * Вызывать при получении нового `key_id` от сервера. Отдельный метод, а не побочный
+     * эффект [sealNext], потому что смена может прийти событием, когда отправлять нечего.
+     * Переписка в подписи по той же причине, что и там: ключ эпохи у каждой свой, и
+     * выбрасывать чужие конверты не за что.
      */
-    fun onEpochChanged(newEpochKeyId: Int) {
-        if (cachedEpoch == newEpochKeyId) return
-        discardSealed()
-        cachedEpoch = newEpochKeyId
+    fun onEpochChanged(chatId: String, newEpochKeyId: Int) {
+        if (cachedEpochs[chatId] == newEpochKeyId) return
+        discardSealed(chatId)
+        cachedEpochs[chatId] = newEpochKeyId
     }
 
     /** Незавершённое: что человек видит как «в очереди» и «отправляется». */
@@ -361,9 +388,15 @@ class Outbox(
     /** Сколько конвертов держится в памяти — для проверок и диагностики. */
     fun cachedEnvelopeCount(): Int = sealedEnvelopes.size
 
-    private fun discardSealed() {
-        sealedEnvelopes.clear()
+    /**
+     * Выбросить запечатанное **одной переписки**: у остальных эпоха не менялась, и их
+     * конверты годны. Выбрасывать всё значило бы пересобирать чужие конверты при каждой
+     * смене эпохи в одной переписке.
+     */
+    private fun discardSealed(chatId: String) {
         for (entry in store.pending()) {
+            if (entry.chatId != chatId) continue
+            sealedEnvelopes.remove(entry.dedupKey)
             if (entry.state == OutboxState.SEALED) {
                 store.update(entry.copy(state = OutboxState.QUEUED, sealedForEpoch = null))
             }

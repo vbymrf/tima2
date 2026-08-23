@@ -25,7 +25,14 @@ class OutboxPumpTest {
 
     private val запечатать: (OutboxEntry) -> ByteArray = { byteArrayOf(0x7F) + it.body }
 
-    private fun поставить(n: Int) = repeat(n) { outbox.enqueue("d-$it", "chat-1", тело) }
+    private fun поставить(n: Int) = repeat(n) { outbox.enqueue("d-$it", ЧАТ, тело) }
+
+    /** Проход по единственной переписке: настоящая подпись просит эпоху на каждую. */
+    private suspend fun OutboxPump.runOnce(
+        эпоха: Int,
+        seal: (OutboxEntry) -> ByteArray,
+        send: suspend (ReadyToSend) -> SendOutcome,
+    ) = runOnce(mapOf(ЧАТ to эпоха), seal, send)
 
     @Test
     fun одновременных_отправок_не_больше_предела() = runTest {
@@ -40,7 +47,7 @@ class OutboxPumpTest {
         // планировщик не считает работой, и advanceUntilIdle объявил бы простой, ни разу
         // не дав проходу начаться (пик остался бы нулём — так и было).
         val проход = async {
-            насос.runOnce(epochKeyId = 1, seal = запечатать) {
+            насос.runOnce(эпоха = 1, seal = запечатать) {
                 сейчас++
                 пик = maxOf(пик, сейчас)
                 // Все отправки висят, пока не отпустим: так пик виден целиком, а не
@@ -133,8 +140,8 @@ class OutboxPumpTest {
         assertEquals(2, запечатано)
 
         время += 1_000
-        outbox.onEpochChanged(2)
-        OutboxPump(outbox, maxConcurrent = 2).runOnce(epochKeyId = 2, seal = считающий) {
+        outbox.onEpochChanged(ЧАТ, 2)
+        OutboxPump(outbox, maxConcurrent = 2).runOnce(эпоха = 2, seal = считающий) {
             SendOutcome.Accepted(1)
         }
 
@@ -160,5 +167,9 @@ class OutboxPumpTest {
         // И запись осталась в SENDING — её вернёт recoverOnStart, а не молчание.
         assertEquals(1, store.countBy(OutboxState.SENDING))
         assertEquals(1, outbox.recoverOnStart())
+    }
+
+    private companion object {
+        const val ЧАТ = "chat-1"
     }
 }

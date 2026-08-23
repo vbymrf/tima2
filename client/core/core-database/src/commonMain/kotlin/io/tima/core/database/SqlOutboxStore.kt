@@ -56,6 +56,10 @@ class SqlOutboxStore(
     override fun nextQueued(nowMs: Long): OutboxEntry? =
         q.nextQueued(OutboxState.QUEUED.ordinal.toLong(), nowMs).executeAsOneOrNull()?.toEntry()
 
+    override fun nextQueued(chatId: String, nowMs: Long): OutboxEntry? =
+        q.nextQueuedInChat(chatId, OutboxState.QUEUED.ordinal.toLong(), nowMs)
+            .executeAsOneOrNull()?.toEntry()
+
     override fun claimSealed(): OutboxEntry? = db.transactionWithResult {
         val row = q.nextSealed(OutboxState.SEALED.ordinal.toLong()).executeAsOneOrNull()
             ?: return@transactionWithResult null

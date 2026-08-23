@@ -45,15 +45,18 @@ class OutboxPump(
      * возможности остановиться, а остановка нужна — при потере сети, при уходе
      * приложения в фон, при выходе из аккаунта.
      *
-     * @param epochKeyId текущая эпоха escrow. Её смена отменяет запечатанное:
-     *   конверт под прошлую эпоху негоден (ADR-0016).
+     * @param эпохи ключ эпохи escrow **по переписке**: у каждой он свой, потому что
+     *   спрашивается у сервера по `chat_id`. Смена значения отменяет запечатанное этой
+     *   переписки: конверт под прошлую эпоху негоден (ADR-0016). Переписок в отображении
+     *   ровно столько, для скольких вызывающий сумел взять ключ, — у остальных сообщения
+     *   просто ждут следующего прохода, и это правильнее, чем собирать конверт наугад.
      * @param seal сборка конверта — `core-encryption`.
      * @param send отправка — `core-network`. Обязана не бросать исключений: беда
      *   должна приходить исходом, иначе одно упавшее сообщение останавливает проход.
      * @return сколько сообщений получили исход за этот проход.
      */
     suspend fun runOnce(
-        epochKeyId: Int,
+        эпохи: Map<String, Int>,
         seal: (OutboxEntry) -> ByteArray,
         send: suspend (ReadyToSend) -> SendOutcome,
     ): Int {
@@ -61,9 +64,11 @@ class OutboxPump(
         // запечатывание синхронное и быстрое, а отправка ждёт сеть. Смешав их, мы бы
         // держали открытым окно, в которое может попасть смена эпохи.
         val готовые = mutableListOf<ReadyToSend>()
-        while (готовые.size < BATCH_LIMIT) {
-            outbox.sealNext(epochKeyId, seal) ?: break
-            готовые += outbox.claimForSend() ?: break
+        for ((chatId, epochKeyId) in эпохи) {
+            while (готовые.size < BATCH_LIMIT) {
+                outbox.sealNext(chatId, epochKeyId, seal) ?: break
+                готовые += outbox.claimForSend() ?: break
+            }
         }
         if (готовые.isEmpty()) return 0
 

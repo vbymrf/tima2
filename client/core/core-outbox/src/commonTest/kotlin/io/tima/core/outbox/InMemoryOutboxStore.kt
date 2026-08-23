@@ -31,6 +31,10 @@ class InMemoryOutboxStore : OutboxStore {
         it.state == OutboxState.QUEUED && it.nextAttemptAtMs <= nowMs
     }
 
+    override fun nextQueued(chatId: String, nowMs: Long): OutboxEntry? = rows.values.firstOrNull {
+        it.chatId == chatId && it.state == OutboxState.QUEUED && it.nextAttemptAtMs <= nowMs
+    }
+
     override fun claimSealed(): OutboxEntry? {
         val ready = rows.values.firstOrNull { it.state == OutboxState.SEALED } ?: return null
         val claimed = ready.copy(state = OutboxState.SENDING)

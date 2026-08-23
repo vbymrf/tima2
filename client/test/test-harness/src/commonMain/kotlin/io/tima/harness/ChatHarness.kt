@@ -78,8 +78,18 @@ class ChatHarness(
     /** Ставит сообщение в очередь — как нажатие «отправить». */
     fun send(chatId: String, text: String): SendMessageResult = sender.send(chatId, text)
 
+    /**
+     * Эпохи по перепискам.
+     *
+     * У харнесса эпоха одна на всё — он изображает не сервер, а очередь, — но насос
+     * просит её **на каждую переписку**: ключ escrow спрашивается у сервера по `chat_id`.
+     * Поэтому одно значение раздаётся всем перепискам, у которых есть что отправлять.
+     */
+    private fun эпохи(): Map<String, Int> =
+        outbox.pending().map { it.chatId }.distinct().associateWith { epochKeyId }
+
     /** Один проход насоса: запечатать готовое и отдать фейковому транспорту. */
-    suspend fun pumpOnce(): Int = pump.runOnce(epochKeyId, ::seal, transport::send)
+    suspend fun pumpOnce(): Int = pump.runOnce(эпохи(), ::seal, transport::send)
 
     /**
      * Проход через **чужой** транспорт — например настоящий HTTP против стенда.
@@ -89,7 +99,7 @@ class ChatHarness(
      * сети» ходил в сеть.
      */
     suspend fun pumpVia(send: suspend (ReadyToSend) -> SendOutcome): Int =
-        pump.runOnce(epochKeyId, ::seal, send)
+        pump.runOnce(эпохи(), ::seal, send)
 
     /** Прошло время: сроки повторов наступили. */
     fun passTime(ms: Long) {
@@ -114,7 +124,10 @@ class ChatHarness(
     /** Смена эпохи escrow: запечатанное под прошлую негодно (ADR-0016). */
     fun changeEpoch(next: Int) {
         epochKeyId = next
-        outbox.onEpochChanged(next)
+        // По каждой переписке отдельно: эпоха у них своя, и очередь про это теперь знает.
+        for (chatId in outbox.pending().map { it.chatId }.distinct()) {
+            outbox.onEpochChanged(chatId, next)
+        }
     }
 
     /**
