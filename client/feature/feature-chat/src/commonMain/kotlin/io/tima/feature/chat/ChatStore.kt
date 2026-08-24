@@ -3,6 +3,8 @@ package io.tima.feature.chat
 import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.MarkRead
 import io.tima.domain.chat.ObserveChat
+import io.tima.domain.chat.RequestGroupKeys
+import io.tima.domain.chat.RequestKeysStep
 import io.tima.domain.chat.SendMessage
 import io.tima.domain.chat.SendMessageResult
 import kotlinx.coroutines.CoroutineScope
@@ -31,7 +33,7 @@ class ChatStore(
     private val chatId: String,
     observe: ObserveChat,
     private val send: SendMessage,
-    scope: CoroutineScope,
+    private val scope: CoroutineScope,
     /**
      * Отметить прочитанным. `null` — не отмечать: так делают проверки, которым интересна
      * только отправка.
@@ -41,11 +43,18 @@ class ChatStore(
      * видит, и держать при этом янтарную точку значит врать ему.
      */
     private val markRead: MarkRead? = null,
+    /**
+     * Запрос недостающих версий группового ключа. `null` — переписка личная: там нечего
+     * запрашивать, и кнопки на экране быть не должно.
+     */
+    private val requestKeys: RequestGroupKeys? = null,
     /** Сколько строк держать на экране. Столько же просит и запрос к базе. */
     pageSize: Int = ObserveChat.DEFAULT_PAGE,
 ) {
 
-    private val _state = MutableStateFlow(ChatState())
+    // Признак берётся из наличия случая, а не задаётся отдельно: два источника одной
+    // правды разошлись бы, и кнопка появилась бы там, где нажимать её нечем.
+    private val _state = MutableStateFlow(ChatState(можноПроситьКлюч = requestKeys != null))
     val state: StateFlow<ChatState> = _state.asStateFlow()
 
     init {
@@ -94,6 +103,40 @@ class ChatStore(
     }
 
     /** Человек закрыл сообщение о беде. */
+    /**
+     * Человек нажал «запросить ключ» на нечитаемом сообщении.
+     *
+     * **Делает это человек, а не приложение фоном.** Просьба уходит чужим устройствам и
+     * означает «дайте мне историю до моего прихода»: решать за человека, что он этого
+     * хочет, и будить ради этого чужие устройства — не наше дело.
+     *
+     * `null` в [requestKeys] означает, что переписка не групповая: у личной такой
+     * возможности нет, и кнопки на экране тоже не будет.
+     */
+    fun запроситьКлюч() {
+        val случай = requestKeys ?: return
+        if (_state.value.ждёмКлюч) return
+        _state.value = _state.value.copy(ждёмКлюч = true, notice = null)
+
+        scope.launch {
+            val исход = случай.запросить(chatId)
+            _state.value = _state.value.copy(
+                ждёмКлюч = false,
+                notice = when (исход) {
+                    is RequestKeysStep.Asked -> ChatNotice.KeysAsked(исход.устройствам)
+                    RequestKeysStep.NoHelpers -> ChatNotice.KeysNoHelpers
+                    RequestKeysStep.NothingMissing -> ChatNotice.KeysNothingMissing
+                    RequestKeysStep.NeedsSecretPhrase -> ChatNotice.KeysNeedPhrase
+                    RequestKeysStep.NotMember -> ChatNotice.KeysRefused("Вы больше не участник этой группы")
+                    is RequestKeysStep.Offline -> ChatNotice.KeysRefused(
+                        "Нет связи с сервером — повторите через ${(исход.retryAfterMs / 1000).coerceAtLeast(1)} с",
+                    )
+                    is RequestKeysStep.Refused -> ChatNotice.KeysRefused(исход.reason)
+                },
+            )
+        }
+    }
+
     fun noticeDismissed() {
         _state.value = _state.value.copy(notice = null)
     }
@@ -106,6 +149,10 @@ data class ChatState(
     /** Набранное, но не отправленное. Живёт до подтверждения постановки в очередь. */
     val draft: String = "",
     val notice: ChatNotice? = null,
+    /** Запрос ключа в пути: второе нажатие не шлёт вторую просьбу чужим устройствам. */
+    val ждёмКлюч: Boolean = false,
+    /** Можно ли просить ключ: у личной переписки такой возможности нет. */
+    val можноПроситьКлюч: Boolean = false,
 )
 
 /**
@@ -116,4 +163,18 @@ data class ChatState(
 sealed interface ChatNotice {
     /** Слишком большое. Числа в сообщении нужны: «слишком большое» без размера бесполезно. */
     data class TooLarge(val bytes: Int, val limit: Int) : ChatNotice
+
+    /** Просьба ушла: ключи приедут, когда ответит кто-то из этих устройств. */
+    data class KeysAsked(val устройствам: Int) : ChatNotice
+
+    /** Просить некого: нужных версий нет ни у кого из участников. Ждать бесполезно. */
+    data object KeysNoHelpers : ChatNotice
+
+    /** Недостающих версий нет — значит, сообщение не читается по другой причине. */
+    data object KeysNothingMissing : ChatNotice
+
+    /** Нужна секретная фраза: аккаунт защищён ею от угона номера. */
+    data object KeysNeedPhrase : ChatNotice
+
+    data class KeysRefused(val текст: String) : ChatNotice
 }
