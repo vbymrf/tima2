@@ -31,6 +31,7 @@ kotlin {
             api(projects.core.coreSecrets)
             api(projects.core.coreNetwork)
             api(projects.feature.featureChat)
+            api(projects.feature.featureGroup)
             api(projects.feature.featureAuth)
             implementation(compose.runtime)
             implementation(compose.foundation)

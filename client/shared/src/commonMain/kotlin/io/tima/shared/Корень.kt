@@ -15,6 +15,18 @@ import io.tima.core.encryption.PersonalChatIdsOverKodium
 import io.tima.core.encryption.deviceIdentityFrom
 import io.tima.core.network.PlatformResult
 import io.tima.core.database.SqlChatBook
+import io.tima.core.database.SqlGroupKeys
+import io.tima.core.network.GroupKeyRecoveryOverHttp
+import io.tima.core.network.GroupsOverHttp
+import io.tima.domain.chat.ChatKind
+import io.tima.domain.chat.ChatNames
+import io.tima.domain.chat.CreateGroupChat
+import io.tima.domain.chat.ManageGroupMembers
+import io.tima.domain.chat.RequestGroupKeys
+import io.tima.feature.group.НоваяГруппаStore
+import io.tima.feature.group.СоставStore
+import io.tima.feature.group.ЭкранНовойГруппы
+import io.tima.feature.group.ЭкранСостава
 import io.tima.core.database.TimaDatabase
 import io.tima.core.ui.Стан
 import io.tima.core.ui.TimaTheme
@@ -144,6 +156,17 @@ private sealed interface Куда {
     /** Подокно «новая переписка». */
     data object Новая : Куда
 
+    /** Подокно «новая группа». */
+    data object НоваяГруппа : Куда
+
+    /**
+     * Подокно «участники группы».
+     *
+     * Открывается из окна переписки, а не из списка: состав — свойство открытой группы, и
+     * попасть в него, не открыв её, значит спрашивать «чей состав».
+     */
+    data class Состав(val groupId: String, val имя: String?) : Куда
+
     /** Переписка. Имя хранится здесь, потому что строка в списке появится позже — потоком. */
     data class Переписка(val chatId: String, val имя: String?) : Куда
 
@@ -250,6 +273,7 @@ private fun Приложение(
                 состояние = состояниеСписка,
                 onОткрыть = { куда = Куда.Переписка(it.chatId, it.title) },
                 onНовая = { куда = Куда.Новая },
+                onНоваяГруппа = { куда = Куда.НоваяГруппа },
                 onНастройки = { куда = Куда.Устройства },
             )
         },
@@ -297,6 +321,7 @@ private fun Приложение(
                 {
                     Переписка(
                         окружение = окружение,
+                        сеть = сеть,
                         chatId = текущее.chatId,
                         // Имя из списка, если строка уже пришла потоком; иначе то, с чем
                         // переписку открыли. Пустое место читалось бы как поломка.
@@ -304,6 +329,32 @@ private fun Приложение(
                             ?: текущее.имя,
                         scope = scope,
                         onНазад = { куда = Куда.Ничего },
+                        onСостав = { куда = Куда.Состав(текущее.chatId, текущее.имя) },
+                    )
+                }
+            }
+
+            Куда.НоваяГруппа -> {
+                {
+                    НоваяГруппа(
+                        окружение = окружение,
+                        сеть = сеть,
+                        scope = scope,
+                        onНазад = { куда = Куда.Ничего },
+                        onСоздана = { groupId, название -> куда = Куда.Переписка(groupId, название) },
+                    )
+                }
+            }
+
+            is Куда.Состав -> {
+                {
+                    Состав(
+                        окружение = окружение,
+                        сеть = сеть,
+                        сессия = сессия,
+                        groupId = текущее.groupId,
+                        scope = scope,
+                        onНазад = { куда = Куда.Переписка(текущее.groupId, текущее.имя) },
                     )
                 }
             }
@@ -314,11 +365,19 @@ private fun Приложение(
 @Composable
 private fun Переписка(
     окружение: Окружение,
+    сеть: Сеть,
     chatId: String,
     имя: String?,
     scope: kotlinx.coroutines.CoroutineScope,
     onНазад: () -> Unit,
+    onСостав: () -> Unit,
 ) {
+    // Групповая ли переписка — решает столбец `kind`, а не догадка по идентификатору.
+    // От этого зависит трое: показывать ли автора у реплик, спрашивать ли имена и есть ли
+    // вход в состав.
+    val группа = remember(chatId) {
+        окружение.db.chatsQueries.chatById(chatId).executeAsOneOrNull()?.kind?.toInt() == ChatKind.Group.ordinal
+    }
     // Store живёт столько, сколько открыта переписка: ключ по chatId, чтобы при переходе в
     // другую он пересоздался, а не показал реплики предыдущей.
     val store = remember(chatId) {
@@ -328,6 +387,18 @@ private fun Переписка(
             send = окружение.отправка,
             scope = scope,
             markRead = окружение.прочтение,
+            // Запрос недостающего ключа и имена авторов — только у группы: у личной
+            // переписки просить не у кого, а собеседник назван в шапке.
+            requestKeys = if (группа) {
+                RequestGroupKeys(GroupKeyRecoveryOverHttp(сеть.восстановлениеКлючей))
+            } else {
+                null
+            },
+            names = if (группа) {
+                ChatNames { userId -> сеть.справочник.имяИлиНомер(userId) ?: userId }
+            } else {
+                null
+            },
         )
     }
     val состояние by store.state.collectAsState()
@@ -338,6 +409,9 @@ private fun Переписка(
         onОтправить = { store.sendPressed() },
         onНазад = onНазад,
         onЗакрытьСообщение = store::noticeDismissed,
+        onЗапроситьКлюч = store::запроситьКлюч,
+        onФраза = store::фразаИзменена,
+        onСостав = if (группа) onСостав else null,
     )
 }
 
@@ -418,5 +492,107 @@ private fun Устройства(
         onПодтвердить = store::отключить,
         onПередумал = store::передумал,
         версияСборки = версияСборки,
+    )
+}
+
+/**
+ * Новая группа: подокно создания.
+ *
+ * Собирается здесь, потому что случай использования требует троих сразу — групп на
+ * сервере, справочника и книги переписок. Домен их объявляет, а сводит приложение.
+ */
+@Composable
+private fun НоваяГруппа(
+    окружение: Окружение,
+    сеть: Сеть,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onНазад: () -> Unit,
+    onСоздана: (String, String) -> Unit,
+) {
+    val store = remember {
+        НоваяГруппаStore(
+            создание = CreateGroupChat(
+                groups = GroupsOverHttp(сеть.группы),
+                directory = сеть.справочник,
+                chats = SqlChatBook(окружение.db, окружение.шифр),
+            ),
+            scope = scope,
+        )
+    }
+    val состояние by store.state.collectAsState()
+
+    // Группа создана — открываем её. Оставаться на экране создания нечем: он своё сделал,
+    // а человек ждёт переписку, а не подтверждение.
+    LaunchedEffect(состояние.создана) {
+        состояние.создана?.let { groupId ->
+            // Непозванные показываются на самом экране; если они есть, переход не спешим
+            // делать — иначе список номеров мелькнёт и исчезнет.
+            if (состояние.непозванные.isEmpty()) {
+                onСоздана(groupId, состояние.название)
+                store.сброс()
+            }
+        }
+    }
+
+    ЭкранНовойГруппы(
+        состояние = состояние,
+        onНазвание = store::названиеИзменено,
+        onНомер = store::номерИзменён,
+        onДобавитьНомер = store::добавитьНомер,
+        onУбратьНомер = store::убратьНомер,
+        onСоздать = store::создать,
+        onНазад = {
+            onНазад()
+            store.сброс()
+        },
+    )
+}
+
+/**
+ * Состав группы: подокно участников.
+ *
+ * Ротация ключа при смене состава собирается здесь же — ей нужны escrow, крипта, сеть и
+ * хранилище разом, то есть ровно то, чего домен не видит.
+ */
+@Composable
+private fun Состав(
+    окружение: Окружение,
+    сеть: Сеть,
+    сессия: Session,
+    groupId: String,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onНазад: () -> Unit,
+) {
+    val store = remember(groupId) {
+        СоставStore(
+            участники = ManageGroupMembers(
+                groups = GroupsOverHttp(сеть.группы),
+                directory = сеть.справочник,
+                rotator = РотацияГрупповогоКлюча(
+                    группы = сеть.группы,
+                    ключиУстройств = сеть.ключи,
+                    escrow = сеть.escrow,
+                    ключиГрупп = сеть.ключиГрупп,
+                    книга = SqlGroupKeys(окружение.db, окружение.шифр),
+                    сейчасМс = ::сейчасМс,
+                ),
+            ),
+            groupId = groupId,
+            myUserId = сессия.userId,
+            scope = scope,
+        )
+    }
+    val состояние by store.state.collectAsState()
+
+    // Состав спрашивается при открытии: он меняется чужими руками, и показывать
+    // вчерашний список значит показывать неправду.
+    LaunchedEffect(groupId) { store.обновить() }
+
+    ЭкранСостава(
+        состояние = состояние,
+        onНомер = store::номерИзменён,
+        onПозвать = store::позвать,
+        onИсключить = store::исключить,
+        onНазад = onНазад,
     )
 }
