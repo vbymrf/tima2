@@ -149,6 +149,8 @@ class SyncGroupKeysTest {
         override fun versions(groupId: String): List<Int> =
             хранилище.keys.filter { it.first == groupId }.map { it.second }.sorted()
 
+        override fun отметитьОтправку(groupId: String, version: Int): Int = 0
+
         override fun forget(groupId: String) {
             хранилище.keys.filter { it.first == groupId }.forEach { хранилище.remove(it) }
         }

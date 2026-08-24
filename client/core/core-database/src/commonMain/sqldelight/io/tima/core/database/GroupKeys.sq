@@ -21,6 +21,10 @@ CREATE TABLE group_keys (
     version  INTEGER NOT NULL,
     -- Сам ключ под шифром покоя (LocalStoreCipher).
     key_enc  BLOB    NOT NULL,
+    -- Сколько сообщений мы отправили под этой версией (ADR-0017 §1). Порог в 10 000
+    -- ограничивает объём, который раскроется при утечке ключа; это оптимизация, а не
+    -- гарантия — гарантию даёт ротация по смене эпохи escrow.
+    sent_count INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (group_id, version)
 );
 
@@ -50,3 +54,12 @@ SELECT version FROM group_keys WHERE group_id = ? ORDER BY version;
 -- по ключу читается вся история.
 deleteGroupKeys:
 DELETE FROM group_keys WHERE group_id = ?;
+
+-- Отметить отправку под текущей версией. Растёт только у той версии, которой
+-- зашифровано: счётчик привязан к ключу, а не к группе.
+bumpSentCount:
+UPDATE group_keys SET sent_count = sent_count + 1 WHERE group_id = ? AND version = ?;
+
+-- Сколько отправлено под версией. Нужен, чтобы решить, не пора ли ротировать.
+sentCount:
+SELECT sent_count FROM group_keys WHERE group_id = ? AND version = ?;

@@ -36,5 +36,14 @@ internal fun JsonElement.jsonObjectOrNull(): JsonObject? =
     runCatching { this as JsonObject }.getOrNull()
 
 /** Целое поле. `null` — поля нет или это не число: придумывать здесь ноль нельзя. */
+/**
+ * Число, не влезающее в Int: `message_id` сервера — bigint.
+ *
+ * Отдельно от [int], потому что молчаливое сужение здесь означало бы перепутанные
+ * идентификаторы сообщений на больших значениях.
+ */
+internal fun JsonObject.long(name: String): Long? =
+    runCatching { this[name]?.jsonPrimitive?.content?.toLong() }.getOrNull()
+
 internal fun JsonObject.int(name: String): Int? =
     runCatching { this[name]?.jsonPrimitive?.content?.toInt() }.getOrNull()
