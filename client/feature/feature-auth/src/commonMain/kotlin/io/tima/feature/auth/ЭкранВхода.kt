@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +46,8 @@ import io.tima.core.ui.Тима
 fun ЭкранВхода(
     состояние: AuthState,
     onНомер: (String) -> Unit,
+    /** Код страны отдельным полем: см. пояснение у [Телефон]. */
+    onКодСтраны: (String) -> Unit,
     onКод: (String) -> Unit,
     onЗапросить: () -> Unit,
     onПодтвердить: () -> Unit,
@@ -77,7 +80,7 @@ fun ЭкранВхода(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             when (состояние) {
-                is AuthState.Телефон -> Телефон(состояние, onНомер, onЗапросить, onПодключиться)
+                is AuthState.Телефон -> Телефон(состояние, onНомер, onКодСтраны, onЗапросить, onПодключиться)
                 is AuthState.Код -> Код(состояние, onКод, onПодтвердить, onНазад)
                 is AuthState.Фраза -> Фраза(состояние, onФразаСохранена)
                 is AuthState.ВводФразы -> ВводФразы(состояние, onФраза, onВойтиПоФразе, onНачатьЗаново)
@@ -102,18 +105,46 @@ fun ЭкранВхода(
 private fun Телефон(
     состояние: AuthState.Телефон,
     onНомер: (String) -> Unit,
+    onКодСтраны: (String) -> Unit,
     onЗапросить: () -> Unit,
     onПодключиться: (() -> Unit)?,
 ) {
     Подпись("Добро пожаловать", кегль = TimaType.щ2, вес = FontWeight.ExtraBold)
     Второстепенное("Введите номер телефона — пришлём код")
 
-    Поле(
-        значение = состояние.номер,
-        onИзменение = onНомер,
-        подсказка = "+7…",
-        числовое = true,
-    )
+    // ── ДВА ПОЛЯ, А НЕ ОДНО ──────────────────────────────────────────────────
+    //
+    // Раньше поле было одно, а «+7» стоял подсказкой. Подсказка выглядит как уже
+    // введённое значение: человек видел «+7», набирал номер без кода страны и получал
+    // отказ сервера — при том, что на экране всё выглядело правильно.
+    //
+    // Код страны и номер — разные величины и для человека: код меняется раз в жизни,
+    // номер набирают каждый раз. Слитое поле заставляло стирать «+7» вместе с номером.
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Плюс нарисован, а не введён: в значении его нет, иначе «+7» и «7» стали бы
+        // разными кодами одной страны.
+        Подпись("+", кегль = TimaType.щ3, вес = FontWeight.ExtraBold)
+        Box(Modifier.width(72.dp)) {
+            Поле(
+                значение = состояние.кодСтраны,
+                onИзменение = onКодСтраны,
+                подсказка = "7",
+                числовое = true,
+            )
+        }
+        Box(Modifier.weight(1f)) {
+            Поле(
+                значение = состояние.номер,
+                onИзменение = onНомер,
+                подсказка = "999 000 00 00",
+                числовое = true,
+            )
+        }
+    }
 
     состояние.беда?.let { Беда(it) }
 
