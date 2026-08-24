@@ -31,6 +31,9 @@ class ReceiveHarness(private val inbox: Inbox) {
     /** Кадры, которые пропустили, и почему. */
     val skipped = mutableListOf<String>()
 
+    /** Кадры про групповые ключи: что пришло. Выполнение — не дело стенда. */
+    val проКлючи = mutableListOf<String>()
+
     /**
      * Обрабатывает кадр сервера так, как это делает живой канал.
      *
@@ -56,6 +59,25 @@ class ReceiveHarness(private val inbox: Inbox) {
 
             is EventStreamProtocol.Decision.SyncDone ->
                 if (решение.more) sent += protocol.pullFrame(решение.nextCursor)
+
+            // Кадры про групповые ключи стенд подтверждает и запоминает, но не
+            // выполняет: ротация требует escrow, крипты и сети, а предмет этой проверки —
+            // порядок «запись, потом подтверждение». Подтвердить всё же обязаны: иначе
+            // курсор застрянет, и следующие сообщения не приедут.
+            is EventStreamProtocol.Decision.KeysArrived -> {
+                проКлючи += "keys:${решение.groupId}"
+                решение.eventId?.let { sent += protocol.ackFrame(it) }
+            }
+
+            is EventStreamProtocol.Decision.ShareKeys -> {
+                проКлючи += "share:${решение.groupId}:${решение.versions.joinToString(",")}"
+                решение.eventId?.let { sent += protocol.ackFrame(it) }
+            }
+
+            is EventStreamProtocol.Decision.RotationNeeded -> {
+                проКлючи += "rotate:${решение.groupId}:${решение.reason}"
+                решение.eventId?.let { sent += protocol.ackFrame(it) }
+            }
 
             is EventStreamProtocol.Decision.NeedHistory,
             is EventStreamProtocol.Decision.ServerTrouble,
