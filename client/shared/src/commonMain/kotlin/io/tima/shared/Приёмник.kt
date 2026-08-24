@@ -4,7 +4,10 @@ import io.tima.core.database.SqlChatBook
 import io.tima.core.database.SqlGroupKeys
 import io.tima.core.encryption.GroupKeyUnwrapOverKodium
 import io.tima.core.encryption.GroupKeyWrapOverKodium
+import io.tima.core.encryption.GroupMessages
+import io.tima.core.encryption.SealedGroupMessage
 import io.tima.core.network.EventStreamProtocol
+import io.tima.core.network.GroupFrame
 import io.tima.core.network.GroupKeyRecoveryOverHttp
 import io.tima.core.network.GroupKeyWrapsOverHttp
 import io.tima.domain.chat.ShareGroupKeys
@@ -15,6 +18,7 @@ import io.tima.core.network.DeviceKeysResult
 import io.tima.core.network.EventStream
 import io.tima.core.outbox.IncomingEntry
 import io.tima.core.outbox.OpenOutcome
+import io.tima.crypto.GroupMessageMeta
 import io.tima.crypto.MessageSerializer
 import io.tima.domain.account.Session
 import io.tima.domain.chat.ChatKind
@@ -108,6 +112,70 @@ class Приёмник(
     }
 
     /**
+     * Сообщение группы: записать кадр, потом попытаться открыть.
+     *
+     * **Нет ключа этой версии — не поломка.** Сообщение отправлено до нашего прихода в
+     * группу либо ключ ещё не доехал; строка остаётся нечитаемой, и человек видит на
+     * экране «сообщение недоступно» с предложением запросить ключ. Именно поэтому здесь
+     * `NoKey`, а не `Rejected`: первое означает «попробуем ещё», второе — «никогда».
+     */
+    private suspend fun принятьГрупповое(groupId: String, messageId: Long, кадр: ByteArray) {
+        val разобранный = GroupFrame.parse(кадр)
+        окружение.входящие.receive(groupId, messageId, кадр)
+
+        // Ключ подписи спрашивается до разбора: сам разбор синхронный, и ходить за ним
+        // изнутри нельзя. Промах кэша означает лишь, что сообщение откроется следующей
+        // попыткой — оно уже записано и не потеряется.
+        if (разобранный != null) ключПодписи(разобранный.senderId, разобранный.senderDevice)
+
+        окружение.входящие.openNext { запись ->
+            if (!GroupFrame.isGroupFrame(запись.envelope)) {
+                // Очередь отдала не групповую запись: её откроет свой путь. Причина
+                // называется словами, чтобы это не выглядело потерей ключа.
+                OpenOutcome.NoKey("запись не групповая — ждёт своего разбора")
+            } else {
+                открытьГрупповое(запись)
+            }
+        }
+
+        // Группа в списке переписок: без строки человек не увидит, куда пришло сообщение.
+        if (окружение.db.chatsQueries.chatById(groupId).executeAsOneOrNull() == null) {
+            книга.remember(chatId = groupId, kind = ChatKind.Group, title = "Группа", peerId = null)
+        }
+    }
+
+    private fun открытьГрупповое(запись: IncomingEntry): OpenOutcome {
+        val кадр = GroupFrame.parse(запись.envelope)
+            ?: return OpenOutcome.Rejected("кадр группы не разбирается")
+        val ключГруппы = ключиГруппы.key(кадр.groupId, кадр.gkVersion)
+            ?: return OpenOutcome.NoKey("нет ключа версии ${кадр.gkVersion}")
+        val ключПодписи = ключиОтправителей[кадр.senderDevice]
+            ?: return OpenOutcome.NoKey("ключ подписи отправителя не получен")
+
+        return GroupMessages.open(
+            sealed = SealedGroupMessage(
+                meta = GroupMessageMeta(
+                    groupId = кадр.groupId,
+                    senderId = кадр.senderId,
+                    senderDevice = кадр.senderDevice,
+                    kind = кадр.kind,
+                    createdAtUnixMs = кадр.createdAtUnixMs,
+                    threadRoot = кадр.threadRoot.toULong(),
+                    replyTo = кадр.replyTo.toULong(),
+                    gkVersion = кадр.gkVersion,
+                ),
+                payload = кадр.payload,
+                signature = кадр.signature,
+            ),
+            senderSigningPublic = ключПодписи,
+            groupKey = ключГруппы,
+        ).fold(
+            onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId) },
+            onFailure = { OpenOutcome.Rejected("сообщение группы не открылось: ${it.message}") },
+        )
+    }
+
+    /**
      * Кадр про групповые ключи.
      *
      * **Ни один из трёх исходов не роняет канал.** Ключи — работа рядом с доставкой, а не
@@ -148,6 +216,13 @@ class Приёмник(
      * подтверждённое сервер больше не пришлёт.
      */
     private suspend fun принять(chatId: String, messageId: Long, envelope: ByteArray) {
+        // Групповое сообщение приходит тем же путём, но открывается иначе: у него нет
+        // конверта, а подпись считается по метаданным вместе с payload.
+        if (GroupFrame.isGroupFrame(envelope)) {
+            принятьГрупповое(chatId, messageId, envelope)
+            return
+        }
+
         val отправитель = отправительКонверта(envelope)
 
         // Своя копия с ЭТОГО ЖЕ устройства — не входящее сообщение, а эхо: сервер

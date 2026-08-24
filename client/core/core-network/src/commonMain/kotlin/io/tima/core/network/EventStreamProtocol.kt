@@ -181,6 +181,29 @@ class EventStreamProtocol {
                 fromCursor = json["next_cursor"]?.jsonPrimitive?.longOrNull ?: 0,
             )
 
+            // Сообщение группы кладётся тем же путём, что личное: хранилище принимает
+            // непрозрачные байты, и различать их — работа разбора, а не канала. Кадр
+            // сохраняется целиком: подпись группового сообщения считается по метаданным
+            // вместе с payload, и без них его не открыть и не проверить.
+            "message.group" -> {
+                val frame = GroupFrame.fromJson(json)
+                if (eventId == null || frame == null) {
+                    Decision.Skip("message.group без обязательных полей", eventId)
+                } else {
+                    Decision.Deliver(
+                        IncomingEvent(
+                            eventId = eventId,
+                            chatId = frame.groupId,
+                            messageId = frame.messageId,
+                            // Сохраняем ИСХОДНЫЙ json сервера, а не пересобранный из полей:
+                            // подпись считается по тем значениям, что пришли, и наша
+                            // пересборка могла бы их незаметно нормализовать.
+                            envelope = GroupFrame.toStored(json.toString()),
+                        ),
+                    )
+                }
+            }
+
             // Ключ группы сменился или приехали недостающие обёртки — идём за ними.
             "key.rotated", "recovery.gk_ready" ->
                 json.string("group_id")?.let { Decision.KeysArrived(it, eventId) }
