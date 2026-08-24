@@ -6,15 +6,20 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/nacl/box"
 	"golang.org/x/crypto/nacl/secretbox"
+
+	"tima/server/internal/escrow"
+	"tima/server/internal/store"
 )
 
 // doRotate повторяет клиентский GroupKeyManager.rotate на Go.
@@ -111,13 +116,15 @@ func TestGroupKeysRotationAndCatchUp(t *testing.T) {
 	addMemberAPI(t, ts, admin.token, groupID, member.userID, "member")
 	addMemberAPI(t, ts, admin.token, groupID, outcast.userID, "member")
 
-	// Права: обычный участник и не-участник ротировать не могут
-	if _, code := doRotate(t, ts, member.token, groupID, 1, "periodic", []*device{admin, member}); code != http.StatusForbidden {
-		t.Fatalf("ротация участником: ожидался 403, получен %d", code)
-	}
+	// Права участника проверяются отдельно (TestGroupKeyRotationRightsAndReasons):
+	// с ADR-0017 ротировать может любой действующий участник, и здесь такая проверка
+	// заняла бы версию, ломая счёт версий этого сценария.
 	outsider := registerDevice(t, ts, "+79992220009")
-	if _, code := doRotate(t, ts, outsider.token, groupID, 1, "periodic", []*device{admin}); code != http.StatusForbidden {
-		t.Fatalf("ротация не-участником: ожидался 403, получен %d", code)
+	// Не-участник получает 404, а не 403: приватная группа для постороннего неотличима
+	// от несуществующей — так отвечают getGroup и postGroupMessage, и ротация была
+	// единственным местом, выбивавшимся из этого соглашения.
+	if _, code := doRotate(t, ts, outsider.token, groupID, 1, "periodic", []*device{admin}); code != http.StatusNotFound {
+		t.Fatalf("ротация не-участником: ожидался 404, получен %d", code)
 	}
 	// Обёртка на устройство не-участника → 400
 	if _, code := doRotate(t, ts, admin.token, groupID, 1, "periodic", []*device{admin, outsider}); code != http.StatusBadRequest {
@@ -181,5 +188,73 @@ func TestGroupKeysRotationAndCatchUp(t *testing.T) {
 	// Догон с since_version=1 → пусто
 	if rest := fetchGroupKeys(t, ts, outcast.token, groupID, 1); len(rest) != 0 {
 		t.Fatalf("outcast since=1: ожидалось 0, получено %d", len(rest))
+	}
+}
+
+// TestGroupKeyRotationRightsAndReasons — права и проверка причины (ADR-0017 §5, §7).
+//
+// Ротировать может любой действующий участник: эпохальный триггер привязан к
+// календарю, и право, привязанное к присутствию админа, сделало бы гарантию
+// зависимой от того, в сети ли конкретный человек.
+func TestGroupKeyRotationRightsAndReasons(t *testing.T) {
+	ts, srv := setup(t)
+	owner := registerDevice(t, ts, "+79993330001")
+	member := registerDevice(t, ts, "+79993330002")
+	banned := registerDevice(t, ts, "+79993330003")
+
+	groupID := createGroupAPI(t, ts, owner.token)
+	addMemberAPI(t, ts, owner.token, groupID, member.userID, "member")
+	addMemberAPI(t, ts, owner.token, groupID, banned.userID, "member")
+
+	все := []*device{owner, member, banned}
+
+	// Участник ротирует — это и есть изменение ADR-0017 §5.
+	if _, code := doRotate(t, ts, member.token, groupID, 1, "member_join", все); code != http.StatusCreated {
+		t.Fatalf("ротация участником: ожидался 201, получен %d", code)
+	}
+
+	// Заблокированный не ротирует: бан отнимает право писать, а ротация — запись,
+	// которую получат все устройства группы.
+	if code := jsonAuth(t, ts, "POST", "/api/v1/groups/"+groupID+"/members/"+banned.userID+"/ban",
+		owner.token, map[string]any{"seconds": 3600}, nil); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("бан участника: %d", code)
+	}
+	if _, code := doRotate(t, ts, banned.token, groupID, 2, "member_join", все); code != http.StatusForbidden {
+		t.Fatalf("ротация заблокированным: ожидался 403, получен %d", code)
+	}
+
+	// Неизвестная причина отвергается: причина — не пояснение, по ней сервер решает,
+	// действует ли порог и нужна ли ротация вообще.
+	if _, code := doRotate(t, ts, member.token, groupID, 2, "потому что", все); code != http.StatusBadRequest {
+		t.Fatalf("неизвестная причина: ожидался 400, получен %d", code)
+	}
+
+	// Порог частоты для несрочной причины. Первая ротация уже была, вторая подряд
+	// отвергается — иначе право ротации у каждого означало бы фан-аут по требованию.
+	if _, code := doRotate(t, ts, member.token, groupID, 2, "periodic", все); code != http.StatusTooManyRequests {
+		t.Fatalf("вторая periodic подряд: ожидался 429, получен %d", code)
+	}
+
+	// Срочная причина из-под порога выведена: задержка исключения означает, что
+	// исключённый читает переписку ещё пятнадцать минут.
+	if _, code := doRotate(t, ts, member.token, groupID, 2, "member_leave", все); code != http.StatusCreated {
+		t.Fatalf("member_leave под порогом: ожидался 201, получен %d", code)
+	}
+
+	// Эпоха: ротация не нужна, если ключ уже привязан к текущей. Для этого в кэше
+	// ключей должна быть запись, на которую ссылается escrow_key_version ротации.
+	if err := srv.Store.SaveEscrowKey(context.Background(), store.EscrowKey{
+		ID: 1, Region: "ru", Epoch: escrow.EpochOf(time.Now()), ChatID: groupID,
+		PublicKey: bytes.Repeat([]byte{0xAB}, 1184), Signature: bytes.Repeat([]byte{0xCD}, 64),
+		ValidFrom: time.Now().Add(-time.Hour), ValidTo: time.Now().Add(time.Hour),
+		DestroyAt: time.Now().Add(240 * time.Hour),
+	}); err != nil {
+		t.Fatalf("кэш ключа эпохи: %v", err)
+	}
+	if _, code := doRotate(t, ts, member.token, groupID, 3, "member_join", все); code != http.StatusCreated {
+		t.Fatalf("ротация с известной эпохой: %d", code)
+	}
+	if _, code := doRotate(t, ts, member.token, groupID, 4, "epoch", все); code != http.StatusConflict {
+		t.Fatalf("epoch при совпадающей эпохе: ожидался 409 rotation_not_needed, получен %d", code)
 	}
 }

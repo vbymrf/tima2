@@ -48,6 +48,23 @@ func (s *Store) FindEscrowKey(ctx context.Context, region, epoch, chatID string)
 // выдаёт один и тот же ключ, а если запись уже есть — она и верна. Перезаписывать
 // опаснее: гонка двух запросов подменила бы идентификатор, на который уже
 // сослались отправленные блобы.
+// EscrowKeyEpoch — эпоха ключа по его идентификатору (ADR-0017).
+//
+// Нужна при ротации GK: записать надо эпоху ТОГО ключа, которым клиент завернул
+// блоб, а не текущую по часам сервера. Клиент мог зашифровать на устаревший ключ —
+// и тогда «сейчас» было бы неправдой, записанной в историю навсегда.
+//
+// Ищется в кэше публичных частей; отсутствие там — не ошибка, а повод спросить
+// анклав.
+func (s *Store) EscrowKeyEpoch(ctx context.Context, id uint32) (string, error) {
+	var epoch string
+	err := s.pool.QueryRow(ctx, `SELECT epoch FROM escrow_keys WHERE id = $1`, id).Scan(&epoch)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrEscrowKeyUnknown
+	}
+	return epoch, err
+}
+
 func (s *Store) SaveEscrowKey(ctx context.Context, k EscrowKey) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO escrow_keys (id, region, epoch, chat_id, public_key, signature, valid_from, valid_to, destroy_at)

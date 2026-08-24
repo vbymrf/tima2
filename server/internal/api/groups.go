@@ -1,9 +1,11 @@
 // API групповых ключей (api-overview.md §Группы; crypto-protocol.md §4).
 // Серверная сторона клиентского GroupKeyManager: приём ротации GK и выдача
 // пропущенных wrapped_GK. Сервер сами GK не видит — только escrow и обёртки.
-// Права: ротирует owner|admin private-группы (crypto-protocol §4.2: GK
-// генерирует админ-устройство); получатели обёрток — устройства активных
-// участников (membership — group_service.go).
+// Права: ротирует ЛЮБОЙ действующий участник private-группы (ADR-0017 §5) —
+// эпохальный триггер привязан к календарю, и право, привязанное к присутствию
+// админа, сделало бы гарантию зависимой от чужого отпуска. Ротация прав не выдаёт:
+// она заново заворачивает ключ на тот же состав, который знает сервер.
+// Получатели обёрток — устройства активных участников (membership — group_service.go).
 package api
 
 import (
@@ -15,9 +17,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"tima/server/internal/auth"
 	timacrypto "tima/server/internal/crypto"
+	"tima/server/internal/escrow"
 	"tima/server/internal/store"
 )
 
@@ -80,8 +84,63 @@ func (s *Server) groupRotate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "not_e2e", "GK есть только у private-групп")
 		return
 	}
-	if roleRank[role] < rankAdmin {
-		writeErr(w, http.StatusForbidden, "not_group_admin", "GK ротируют owner и admin группы")
+	if role == "" {
+		writeErr(w, http.StatusNotFound, "group_not_found", "группа не найдена")
+		return
+	}
+	// Заблокированный не ротирует: бан снимает право писать, а ротация — это запись,
+	// которую увидят все устройства группы.
+	id, _ := auth.FromContext(r.Context())
+	if _, bannedUntil, err := s.Store.GroupMemberInfo(r.Context(), r.PathValue("groupID"), id.UserID); err != nil {
+		log.Printf("groupRotate: member info: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	} else if bannedUntil != nil && bannedUntil.After(time.Now()) {
+		writeErr(w, http.StatusForbidden, "banned", "заблокированный участник не ротирует ключ")
+		return
+	}
+
+	// ── Причина и частота (ADR-0017 §7) ──────────────────────────────────────
+	//
+	// Проверка причины важнее порога: после успешной эпохальной ротации условие
+	// перестаёт выполняться само, и одновременные попытки остальных участников
+	// отвергаются как ненужные. При праве ротации у каждого это главная защита.
+	if !допустимаяПричина(reason) {
+		writeErr(w, http.StatusBadRequest, "bad_reason", "неизвестная причина ротации: "+reason)
+		return
+	}
+	последняя, err := s.Store.LatestGroupRotation(r.Context(), r.PathValue("groupID"))
+	if err != nil {
+		log.Printf("groupRotate: последняя ротация: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	// Конфликт версии проверяется ПЕРВЫМ, раньше эпохи и порога. Эти отказы клиент
+	// обрабатывает по-разному: version_conflict означает «кто-то ротировал раньше, цель
+	// достигнута, перечитай», а rotation_too_soon — «повтори позже». Ответь мы порогом
+	// на устаревшую версию, клиент ждал бы пятнадцать минут ради ротации, которая уже
+	// произошла. Окончательная проверка всё равно идёт под блокировкой в хранилище —
+	// здесь ранний выход, а не замена ей.
+	if req.GKVersion != последняя.GKVersion+1 {
+		writeErr(w, http.StatusConflict, "version_conflict",
+			"текущая "+strconv.Itoa(int(последняя.GKVersion))+", предложена "+strconv.Itoa(int(req.GKVersion)))
+		return
+	}
+	текущаяЭпоха := escrow.EpochOf(time.Now())
+	if reason == причинаЭпоха && последняя.EscrowEpoch == текущаяЭпоха {
+		// Не отказ по существу: ключ уже привязан к текущей эпохе, цель достигнута.
+		// Клиент обязан считать это успехом (ADR-0017 §7).
+		writeErr(w, http.StatusConflict, "rotation_not_needed", "ключ уже привязан к эпохе "+текущаяЭпоха)
+		return
+	}
+	// Порог — подстраховка на случай ошибки в проверке причины, поэтому он только для
+	// несрочных. Задержка ротации по составу означала бы, что исключённый читает
+	// переписку ещё пятнадцать минут.
+	if несрочная(reason) && !последняя.RotatedAt.IsZero() &&
+		time.Since(последняя.RotatedAt) < порогРотации {
+		w.Header().Set("Retry-After", strconv.Itoa(int(порогРотации.Seconds())))
+		writeErr(w, http.StatusTooManyRequests, "rotation_too_soon",
+			"предыдущая ротация моложе "+порогРотации.String())
 		return
 	}
 	// Получатели wrapped_GK — действующие устройства активных участников
@@ -101,7 +160,36 @@ func (s *Server) groupRotate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, _ := auth.FromContext(r.Context())
+	// Полнота получателей (ADR-0017 §6). Пока считаем и пишем в журнал, не отвергая:
+	// сегодняшний клиент такую ротацию присылать может, а сервер обязан работать со
+	// старым клиентом. Отказ missing_recipients включается после выката клиента.
+	if все, err := s.Store.ActiveMemberDevices(r.Context(), r.PathValue("groupID"), ""); err != nil {
+		log.Printf("groupRotate: устройства участников: %v", err)
+	} else {
+		непокрытые := make([]string, 0)
+		for _, устройство := range все {
+			if _, есть := wrapped[устройство]; !есть {
+				непокрытые = append(непокрытые, устройство)
+			}
+		}
+		if len(непокрытые) > 0 {
+			// Это не мелочь: устройство без обёртки перестаёт читать группу молча —
+			// для человека это выглядит как «в группе тихо», а не как отказ.
+			log.Printf("groupRotate: группа %s версия %d — без обёрток остались устройства: %s",
+				r.PathValue("groupID"), req.GKVersion, strings.Join(непокрытые, ", "))
+		}
+	}
+
+	// Эпоха берётся у ТОГО ключа, которым клиент завернул блоб, а не по часам сервера:
+	// клиент мог зашифровать на устаревший ключ, и «сейчас» стало бы неправдой в
+	// истории. Неизвестная эпоха записывается пустой — тогда группа честно ротируется
+	// при первой же активности, потому что пусто никогда не равно текущей эпохе.
+	эпохаКлюча, err := s.Store.EscrowKeyEpoch(r.Context(), uint32(req.Escrow.EscrowKeyVersion))
+	if err != nil {
+		log.Printf("groupRotate: эпоха ключа %d неизвестна: %v", req.Escrow.EscrowKeyVersion, err)
+		эпохаКлюча = ""
+	}
+
 	err = s.Store.SaveGroupRotation(r.Context(), store.GroupRotation{
 		GroupID:            r.PathValue("groupID"),
 		GKVersion:          req.GKVersion,
@@ -110,6 +198,7 @@ func (s *Server) groupRotate(w http.ResponseWriter, r *http.Request) {
 		EscrowMlkemCt:      mlkemCt,
 		EscrowWrappedKey:   escrowWrapped,
 		EscrowKeyVersion:   req.Escrow.EscrowKeyVersion,
+		EscrowEpoch:        эпохаКлюча,
 		Reason:             reason,
 		WrappedKeys:        wrapped,
 	})
@@ -312,6 +401,47 @@ func (s *Server) groupKeys(w http.ResponseWriter, r *http.Request) {
 	for _, k := range keys {
 		out = append(out, item{k.GKVersion, b64.EncodeToString(k.SenderEphemeralPub), b64.EncodeToString(k.Wrapped)})
 	}
+	// escrow_epoch — эпоха, на которую завёрнут блоб последней версии (ADR-0017 §3).
+	// Без неё клиент не может заметить устаревание сам и зависел бы только от события,
+	// которое можно пропустить, будучи офлайн. Поле аддитивное: старый клиент его не
+	// читает. Пусто — ротаций не было либо они были до введения правила.
+	последняя, err := s.Store.LatestGroupRotation(r.Context(), groupID)
+	if err != nil {
+		log.Printf("groupKeys: последняя ротация: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"keys": out, "current_version": current})
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"keys":            out,
+		"current_version": current,
+		"escrow_epoch":    последняя.EscrowEpoch,
+	})
 }
+
+// ── Ротация: причины и порог (ADR-0017 §7) ──────────────────────────────────
+
+const (
+	причинаЭпоха       = "epoch"
+	причинаСчётчик     = "periodic"
+	причинаВход        = "member_join"
+	причинаВыход       = "member_leave"
+	причинаКомпромисса = "compromise"
+
+	// Подстраховка на случай ошибки в проверке причины. Упереться в неё законной
+	// ротацией по счётчику означало бы 11 сообщений в секунду непрерывно.
+	порогРотации = 15 * time.Minute
+)
+
+func допустимаяПричина(r string) bool {
+	switch r {
+	case причинаЭпоха, причинаСчётчик, причинаВход, причинаВыход, причинаКомпромисса:
+		return true
+	}
+	return false
+}
+
+// несрочная — та, задержка которой ничего не открывает постороннему. Ротации по
+// составу и по компрометации срочные: там пятнадцать минут означают пятнадцать минут
+// чтения переписки тем, кого уже исключили.
+func несрочная(r string) bool { return r == причинаЭпоха || r == причинаСчётчик }

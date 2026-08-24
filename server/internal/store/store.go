@@ -614,8 +614,12 @@ type GroupRotation struct {
 	EscrowMlkemCt      []byte
 	EscrowWrappedKey   []byte
 	EscrowKeyVersion   int32
-	Reason             string
-	WrappedKeys        map[string][]byte // recipient device_id/vu_id → wrapped_GK
+	// EscrowEpoch — эпоха ключа, которым завёрнут escrow-блоб (ADR-0017). Берётся из
+	// метаданных анклава по EscrowKeyVersion, а не из часов сервера: клиент мог
+	// зашифровать на устаревший ключ, и записать «сейчас» значило бы записать неправду.
+	EscrowEpoch string
+	Reason      string
+	WrappedKeys map[string][]byte // recipient device_id/vu_id → wrapped_GK
 }
 
 var ErrVersionConflict = errors.New("gk_version не следует за текущей версией")
@@ -641,12 +645,18 @@ func (s *Store) SaveGroupRotation(ctx context.Context, rot GroupRotation) error 
 	if rot.GKVersion != current+1 {
 		return fmt.Errorf("%w: текущая %d, предложена %d", ErrVersionConflict, current, rot.GKVersion)
 	}
+	// Пустая эпоха пишется как NULL, а не как пустая строка: NULL никогда не равен
+	// текущей эпохе, поэтому такая группа честно ротируется при первой активности.
+	var epoch any
+	if rot.EscrowEpoch != "" {
+		epoch = rot.EscrowEpoch
+	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO group_key_history (group_id, gk_version, rotated_by, sender_ephemeral_pub,
-			escrow_mlkem_ct, escrow_wrapped_key, escrow_key_version, reason)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+			escrow_mlkem_ct, escrow_wrapped_key, escrow_key_version, escrow_epoch, reason)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
 		rot.GroupID, rot.GKVersion, rot.RotatedBy, rot.SenderEphemeralPub,
-		rot.EscrowMlkemCt, rot.EscrowWrappedKey, rot.EscrowKeyVersion, rot.Reason); err != nil {
+		rot.EscrowMlkemCt, rot.EscrowWrappedKey, rot.EscrowKeyVersion, epoch, rot.Reason); err != nil {
 		return err
 	}
 	for recipient, wrapped := range rot.WrappedKeys {
@@ -657,6 +667,40 @@ func (s *Store) SaveGroupRotation(ctx context.Context, rot GroupRotation) error 
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+// LatestGroupRotation — последняя ротация группы: версия, эпоха escrow, причина и
+// время. По ней сервер решает три вещи (ADR-0017): нужна ли ротация по эпохе, не
+// слишком ли часто ротируют и что отдать клиенту в GET /keys.
+//
+// Группа без ротаций возвращает нулевую версию и пустую эпоху — это не ошибка, а
+// нормальное состояние только что созданной группы.
+type GroupRotationInfo struct {
+	GKVersion   int32
+	EscrowEpoch string // пусто — ротация была до введения ADR-0017 либо ротаций не было
+	Reason      string
+	RotatedAt   time.Time
+}
+
+func (s *Store) LatestGroupRotation(ctx context.Context, groupID string) (GroupRotationInfo, error) {
+	var info GroupRotationInfo
+	var epoch *string
+	err := s.pool.QueryRow(ctx, `
+		SELECT gk_version, escrow_epoch, reason, rotated_at
+		FROM group_key_history
+		WHERE group_id = $1
+		ORDER BY gk_version DESC
+		LIMIT 1`, groupID).Scan(&info.GKVersion, &epoch, &info.Reason, &info.RotatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return GroupRotationInfo{}, nil
+	}
+	if err != nil {
+		return GroupRotationInfo{}, err
+	}
+	if epoch != nil {
+		info.EscrowEpoch = *epoch
+	}
+	return info, nil
 }
 
 // DeviceGroupKey — wrapped_GK одной версии для конкретного устройства.
