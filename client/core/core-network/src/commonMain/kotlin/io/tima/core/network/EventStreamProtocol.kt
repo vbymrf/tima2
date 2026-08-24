@@ -1,7 +1,9 @@
 package io.tima.core.network
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 
@@ -64,6 +66,37 @@ class EventStreamProtocol {
 
         /** Сервер сообщил о своей беде. Не наша: повторить позже. */
         data class ServerTrouble(val code: String) : Decision
+
+        /**
+         * Ключи группы изменились или приехали: `key.rotated`, `recovery.gk_ready`.
+         *
+         * Оба события означают для нас одно — сходить за обёртками. Различать их
+         * незачем: работа одна, а два пути к ней разошлись бы при первой же правке.
+         */
+        data class KeysArrived(val groupId: String, val eventId: Long?) : Decision
+
+        /**
+         * Участник просит недостающие версии ключа (`recovery.gk_request`).
+         *
+         * Просьба адресована нам, потому что сервер знает: эти версии у нас есть.
+         * Отвечать или нет — не вопрос вежливости: просящий имеет право на историю
+         * группы, и молчание оставит его ждать вечно.
+         */
+        data class ShareKeys(
+            val groupId: String,
+            val requesterDevice: String,
+            val requesterEncryptionPub: ByteArray,
+            val versions: List<Int>,
+            val eventId: Long?,
+        ) : Decision
+
+        /**
+         * Сервер просит ротировать ключ (`group.rotation_needed`): сменилась эпоха
+         * escrow либо отозвано устройство участника.
+         *
+         * Сервер сделать этого не может — ключа он не видит (ADR-0017 §3).
+         */
+        data class RotationNeeded(val groupId: String, val reason: String, val eventId: Long?) : Decision
 
         /** Кадр не наш или испорчен — пропускаем, но курсор двигаем (правило 3). */
         data class Skip(val reason: String, val eventId: Long?) : Decision
@@ -147,6 +180,30 @@ class EventStreamProtocol {
             "sync.gap" -> Decision.NeedHistory(
                 fromCursor = json["next_cursor"]?.jsonPrimitive?.longOrNull ?: 0,
             )
+
+            // Ключ группы сменился или приехали недостающие обёртки — идём за ними.
+            "key.rotated", "recovery.gk_ready" ->
+                json.string("group_id")?.let { Decision.KeysArrived(it, eventId) }
+                    ?: Decision.Skip("$event без group_id", eventId)
+
+            "recovery.gk_request" -> {
+                val groupId = json.string("group_id")
+                val requester = json.string("requester_device")
+                val encPub = json.string("requester_enc_pub")?.let { decodeBase64Url(it) }
+                val versions = runCatching {
+                    (json["versions"] as JsonArray).mapNotNull { it.jsonPrimitive.intOrNull }
+                }.getOrNull()
+                if (groupId == null || requester == null || encPub == null || versions.isNullOrEmpty()) {
+                    Decision.Skip("recovery.gk_request без обязательных полей", eventId)
+                } else {
+                    Decision.ShareKeys(groupId, requester, encPub, versions, eventId)
+                }
+            }
+
+            "group.rotation_needed" ->
+                json.string("group_id")?.let {
+                    Decision.RotationNeeded(it, json.string("reason") ?: "epoch", eventId)
+                } ?: Decision.Skip("group.rotation_needed без group_id", eventId)
 
             "error" -> Decision.ServerTrouble(json.string("code") ?: "без кода")
 

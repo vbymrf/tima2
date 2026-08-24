@@ -39,6 +39,15 @@ class EventStream(
     suspend fun run(
         cursor: Long?,
         persist: suspend (EventStreamProtocol.IncomingEvent) -> Unit,
+        /**
+         * Кадры про групповые ключи: ротация, приезд обёрток, просьба поделиться.
+         *
+         * Отдаются наружу, а не выполняются здесь: канал занимается доставкой, а
+         * ротация ключа требует escrow, крипты, сети и хранилища разом — то есть
+         * ровно того, чего в транспорте быть не должно. По умолчанию ничего: канал
+         * обязан работать и там, где ключами никто не занимается (проверки).
+         */
+        onGroupKeys: suspend (EventStreamProtocol.Decision) -> Unit = {},
     ): StreamOutcome {
         var последний = cursor
         // Локальная переменная, а не поле: `webSocket` возвращает Unit, и вынести исход
@@ -66,6 +75,26 @@ class EventStream(
 
                         is EventStreamProtocol.Decision.SyncDone -> if (решение.more) {
                             send(Frame.Text(protocol.pullFrame(решение.nextCursor)))
+                        }
+
+                        // Подтверждаем и отдаём наружу: событие обработано каналом в
+                        // том смысле, что доставлено. Не подтвердить — значит получать
+                        // его снова при каждом подключении.
+                        is EventStreamProtocol.Decision.KeysArrived,
+                        is EventStreamProtocol.Decision.ShareKeys,
+                        is EventStreamProtocol.Decision.RotationNeeded,
+                        -> {
+                            onGroupKeys(решение)
+                            val идентификатор = when (решение) {
+                                is EventStreamProtocol.Decision.KeysArrived -> решение.eventId
+                                is EventStreamProtocol.Decision.ShareKeys -> решение.eventId
+                                is EventStreamProtocol.Decision.RotationNeeded -> решение.eventId
+                                else -> null
+                            }
+                            идентификатор?.let {
+                                последний = it
+                                send(Frame.Text(protocol.ackFrame(it)))
+                            }
                         }
 
                         is EventStreamProtocol.Decision.NeedHistory -> {

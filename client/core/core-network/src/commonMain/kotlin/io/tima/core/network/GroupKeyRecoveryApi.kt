@@ -9,7 +9,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 
 /**
- * Запрос недостающих версий группового ключа (ADR-0010 §этап 1).
+ * Недостающие версии группового ключа: попросить и отдать (ADR-0010 §этап 1).
  *
  * **Какие версии недостают, решает сервер, а не мы.** Он знает и историю ротаций, и то,
  * какие обёртки выданы этому устройству; наш список был бы вторым мнением, которое
@@ -38,7 +38,7 @@ class GroupKeyRecoveryApi(
      *   base64url. `null` — у аккаунта нет фразы либо она сейчас недоступна.
      */
     suspend fun request(groupId: String, signature: String? = null): RecoverResult {
-        val тело = if (signature == null) "{}" else """{"signature":"$signature"}"""
+        val тело = if (signature == null) "{}" else "{\"signature\":\"" + signature + "\"}"
         val response = try {
             client.post(route.api("/api/v1/groups/$groupId/keys/recover")) {
                 header("Authorization", "Bearer ${token()}")
@@ -62,6 +62,48 @@ class GroupKeyRecoveryApi(
             else -> RecoverResult.Refused(response.status.value, body.codeOf())
         }
     }
+
+    /**
+     * `POST /api/v1/groups/{id}/keys/recover/provide` — отдать обёртки просящему.
+     *
+     * Отдаётся **старая** версия, уже существующая у нас: новых версий здесь не
+     * появляется, состав группы не меняется, номер текущей версии остаётся прежним.
+     * Своя эфемерная пара на каждую обёртку — иначе компрометация одной раскрыла бы всю
+     * отданную историю разом.
+     */
+    suspend fun provide(
+        groupId: String,
+        requesterDevice: String,
+        keys: List<ProvidedKey>,
+    ): ProvideResult {
+        require(keys.isNotEmpty()) { "отдавать нечего — вызывать не следовало" }
+        val элементы = keys.joinToString(",") { ключ ->
+            "{\"gk_version\":" + ключ.gkVersion +
+                ",\"sender_ephemeral_pub\":\"" + encodeBase64Url(ключ.senderEphemeralPub) +
+                "\",\"wrapped\":\"" + encodeBase64Url(ключ.wrapped) + "\"}"
+        }
+        val тело = "{\"requester_device\":\"" + requesterDevice + "\",\"keys\":[" + элементы + "]}"
+        val response = try {
+            client.post(route.api("/api/v1/groups/$groupId/keys/recover/provide")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody(тело)
+            }
+        } catch (e: Throwable) {
+            return ProvideResult.NoConnection(classifyFailure(e))
+        }
+        if (response.status == HttpStatusCode.OK) return ProvideResult.Provided(keys.size)
+        return ProvideResult.Refused(response.status.value, response.jsonBody().codeOf())
+    }
+}
+
+/** Обёртка версии GK, отдаваемая просящему устройству. */
+class ProvidedKey(val gkVersion: Int, val senderEphemeralPub: ByteArray, val wrapped: ByteArray)
+
+sealed interface ProvideResult {
+    data class Provided(val versions: Int) : ProvideResult
+    data class Refused(val status: Int, val code: String) : ProvideResult
+    data class NoConnection(val link: LinkState) : ProvideResult
 }
 
 sealed interface RecoverResult {
