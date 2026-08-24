@@ -3,6 +3,7 @@ package io.tima.feature.chat
 import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.MarkRead
 import io.tima.domain.chat.ObserveChat
+import io.tima.domain.chat.ChatNames
 import io.tima.domain.chat.RequestGroupKeys
 import io.tima.domain.chat.RequestKeysStep
 import io.tima.domain.chat.SendMessage
@@ -48,13 +49,20 @@ class ChatStore(
      * запрашивать, и кнопки на экране быть не должно.
      */
     private val requestKeys: RequestGroupKeys? = null,
+    /**
+     * Имена авторов. `null` — переписка личная: там собеседник один, и подписывать
+     * каждую его реплику именем значит шуметь.
+     */
+    private val names: ChatNames? = null,
     /** Сколько строк держать на экране. Столько же просит и запрос к базе. */
     pageSize: Int = ObserveChat.DEFAULT_PAGE,
 ) {
 
     // Признак берётся из наличия случая, а не задаётся отдельно: два источника одной
     // правды разошлись бы, и кнопка появилась бы там, где нажимать её нечем.
-    private val _state = MutableStateFlow(ChatState(можноПроситьКлюч = requestKeys != null))
+    private val _state = MutableStateFlow(
+        ChatState(можноПроситьКлюч = requestKeys != null, группа = names != null),
+    )
     val state: StateFlow<ChatState> = _state.asStateFlow()
 
     init {
@@ -63,6 +71,19 @@ class ChatStore(
         observe.page(chatId, pageSize)
             .onEach { строки ->
                 _state.value = _state.value.copy(lines = строки)
+                // Имена спрашиваются по одному разу на автора и только в группе: список
+                // обновляется на каждое сообщение, и поход за именем на каждой строке
+                // означал бы запрос к серверу на каждую реплику.
+                names?.let { справочник ->
+                    val новые = строки.mapNotNull { it.senderId }
+                        .distinct()
+                        .filter { it !in _state.value.имена }
+                    if (новые.isNotEmpty()) {
+                        val дополненные = _state.value.имена.toMutableMap()
+                        for (кто in новые) дополненные[кто] = справочник.имя(кто)
+                        _state.value = _state.value.copy(имена = дополненные)
+                    }
+                }
                 // Переписка на экране — значит прочитана. Порядок именно такой: сначала
                 // показать, потом отметить; иначе отметка обгонит то, что человек увидит.
                 markRead?.chat(chatId)
@@ -169,6 +190,13 @@ data class ChatState(
     val можноПроситьКлюч: Boolean = false,
     /** Набранная секретная фраза. Пусто — запрос уйдёт без подписи. */
     val фраза: String = "",
+    /**
+     * Групповая ли переписка. От этого зависит показ автора у каждой реплики: в личной
+     * он лишний, в групповой без него сообщение теряет половину смысла.
+     */
+    val группа: Boolean = false,
+    /** Имена авторов по идентификатору. Пусто для личной переписки. */
+    val имена: Map<String, String> = emptyMap(),
 )
 
 /**
