@@ -35,14 +35,21 @@ android {
     namespace = "io.tima.app"
     compileSdk = 35
 
+    // BuildConfig генерируется по требованию (AGP 8). Нужен ровно для одного: показать
+
+    // номер сборки на экране входа — иначе «обновление доехало» проверяется на слово.
+
+    buildFeatures { buildConfig = true }
+
+
     defaultConfig {
         applicationId = "io.tima.app"
         // API 26+ — из tech-stack.md. Пересмотр минимума — отдельное решение,
         // а не побочный эффект правки сборки.
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "2.0.0-dev"
+        versionCode = 2
+        versionName = "2.0.1-dev"
 
         // ── ABI намеренно НЕ ограничен ──────────────────────────────────────
         // В v1 стоял abiFilters = arm64-v8a, и там же капсом было записано

@@ -55,6 +55,10 @@ class MainActivity : ComponentActivity() {
                     вход = вход,
                     базаУстройства = { androidDatabase(applicationContext, ИМЯ_БАЗЫ) },
                     кодПривязки = код.value,
+                    // Имя и номер разом: имя говорит, что за версия, номер — что
+                    // установка действительно сменилась. По одному имени обновление
+                    // «2.0.0-dev → 2.0.0-dev» неотличимо от его отсутствия.
+                    версияСборки = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
                 )
             }
         }
