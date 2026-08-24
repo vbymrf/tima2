@@ -148,10 +148,12 @@ class AuthStore(
 
                 // Не отказ, а другой путь: аккаунт существует, и владение им доказывает
                 // фраза. Номер этого не доказывает — его перевыпускают.
-                RegistrationStep.IdentityMismatch -> AuthState.ВводФразы(
+                is RegistrationStep.IdentityMismatch -> AuthState.ВводФразы(
                     requestId = текущее.requestId,
                     телефон = текущее.телефон,
-                    код = текущее.код,
+                    // Дальше идём с токеном: код погашен проверкой и второй раз не
+                    // сработает. Именно это и ломало вход по фразе.
+                    registrationToken = шаг.registrationToken,
                 )
 
                 is RegistrationStep.Offline -> текущее.копияСБедой(нетСвязи(шаг.retryAfterMs))
@@ -180,15 +182,17 @@ class AuthStore(
         _state.value = текущее.copy(ждём = true, беда = null)
 
         scope.launch {
-            _state.value = when (val шаг = register.confirm(текущее.requestId, текущее.код, ключ)) {
+            _state.value = when (val шаг = register.continueWithToken(текущее.registrationToken, ключ)) {
                 // Фразу показывать не надо: она у человека есть, он её только что ввёл.
                 is RegistrationStep.Registered -> AuthState.Готово(шаг.userId, шаг.deviceId)
                 RegistrationStep.AlreadyRegistered -> AuthState.УжеЗаведено
-                RegistrationStep.IdentityMismatch -> текущее.копияСБедой("Фраза не та — проверьте запись")
+                is RegistrationStep.IdentityMismatch -> текущее.копияСБедой("Фраза не та — проверьте запись")
                 RegistrationStep.WrongCode -> текущее.копияСБедой("Код неверен или просрочен")
+                // Токен живёт десять минут. Истёк — начинать с запроса кода, и сказать об
+                // этом надо именно так: «введите фразу заново» здесь бесполезно.
                 RegistrationStep.CodeExpired -> AuthState.Телефон(
                     номер = текущее.телефон,
-                    беда = "Код просрочен — запросите новый",
+                    беда = "Время истекло — запросите код заново",
                 )
                 is RegistrationStep.Offline -> текущее.копияСБедой(нетСвязи(шаг.retryAfterMs))
                 is RegistrationStep.Refused -> текущее.копияСБедой(шаг.reason)
@@ -212,9 +216,10 @@ class AuthStore(
         scope.launch {
             val личность = identities.fresh().also { свежая = it }
             _state.value = when (
-                val шаг = register.confirm(
-                    requestId = текущее.requestId,
-                    code = текущее.код,
+                // Тем же токеном, что и вход по фразе: код погашен проверкой, и «начать
+                // заново» с ним упиралось бы в ту же ошибку.
+                val шаг = register.continueWithToken(
+                    registrationToken = текущее.registrationToken,
                     identityPub = личность.identityPub,
                     forceNewIdentity = true,
                 )
@@ -230,9 +235,9 @@ class AuthStore(
                 RegistrationStep.WrongCode -> текущее.копияСБедой("Код неверен или просрочен")
                 RegistrationStep.CodeExpired -> AuthState.Телефон(
                     номер = текущее.телефон,
-                    беда = "Код просрочен — запросите новый",
+                    беда = "Время истекло — запросите код заново",
                 )
-                RegistrationStep.IdentityMismatch -> текущее.копияСБедой("Сервер отказал в смене личности")
+                is RegistrationStep.IdentityMismatch -> текущее.копияСБедой("Сервер отказал в смене личности")
                 is RegistrationStep.Offline -> текущее.копияСБедой(нетСвязи(шаг.retryAfterMs))
                 is RegistrationStep.Refused -> текущее.копияСБедой(шаг.reason)
             }
@@ -408,7 +413,14 @@ sealed interface AuthState {
     data class ВводФразы(
         val requestId: String,
         val телефон: String,
-        val код: String,
+        /**
+         * `registration_token`, полученный при проверке кода.
+         *
+         * Именно он, а не код: код одноразовый и гасится проверкой. Вход по фразе с
+         * кодом отвечал «неверен или просрочен» и не мог сработать никогда — найдено
+         * живым прогоном.
+         */
+        val registrationToken: String,
         val фраза: String = "",
         override val беда: String? = null,
         val ждём: Boolean = false,

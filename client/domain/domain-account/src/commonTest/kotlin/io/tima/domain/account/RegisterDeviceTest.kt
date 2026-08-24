@@ -4,6 +4,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -174,7 +175,10 @@ class RegisterDeviceTest {
             Сервер(заведение = DeviceCreateStep.IdentityMismatch),
         )
 
-        assertEquals(RegistrationStep.IdentityMismatch, регистрация.confirm("r-1", "123456"))
+        // Исход несёт registration_token: дальше — вход по фразе или «начать заново», и
+        // оба идут с ним, потому что код к этому моменту погашен проверкой.
+        val шаг = assertIs<RegistrationStep.IdentityMismatch>(регистрация.confirm("r-1", "123456"))
+        assertTrue(шаг.registrationToken.isNotBlank(), "без токена продолжить вход нечем")
 
         assertNotNull(хранилище.секрет, "секрет остаётся: он ещё пригодится")
         assertNull(хранилище.сессия, "а сессии нет — устройство не заведено")

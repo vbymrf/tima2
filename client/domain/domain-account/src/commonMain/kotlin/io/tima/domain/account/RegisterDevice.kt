@@ -66,6 +66,23 @@ class RegisterDevice(
         }
     }
 
+    /**
+     * Продолжить с УЖЕ полученным `registration_token`, не трогая код.
+     *
+     * **Код одноразовый**, и это правильно: он гасится в `/auth/verify` первым же
+     * обращением. Отсюда следует, что второй шаг того же входа — возврат по фразе или
+     * «начать заново» — обязан идти с токеном, а не с кодом.
+     *
+     * Найдено живым прогоном: вход по фразе отвечал «код неверен или просрочен» и не мог
+     * сработать никогда. Симптом указывал на срок, а причина была в повторном
+     * использовании: первый confirm сжигал код, второй приходил с ним же.
+     */
+    suspend fun continueWithToken(
+        registrationToken: String,
+        identityPub: ByteArray? = null,
+        forceNewIdentity: Boolean = false,
+    ): RegistrationStep = завести(registrationToken, identityPub, forceNewIdentity)
+
     private suspend fun завести(
         registrationToken: String,
         identityPub: ByteArray?,
@@ -100,7 +117,9 @@ class RegisterDevice(
             }
             // Телефон связан с другой личностью. Секрет оставляем: ключи ещё понадобятся
             // тому пути, который человек выберет дальше (возврат по фразе).
-            DeviceCreateStep.IdentityMismatch -> RegistrationStep.IdentityMismatch
+            // Токен отдаётся наружу: следующий шаг (фраза или «начать заново») пойдёт с
+            // ним, потому что кода больше нет — он погашен при проверке.
+            DeviceCreateStep.IdentityMismatch -> RegistrationStep.IdentityMismatch(registrationToken)
             DeviceCreateStep.TokenExpired -> RegistrationStep.CodeExpired
             is DeviceCreateStep.Offline -> RegistrationStep.Offline(ответ.retryAfterMs)
             is DeviceCreateStep.Refused -> RegistrationStep.Refused(ответ.reason)
@@ -131,8 +150,13 @@ sealed interface RegistrationStep {
     /** `registration_token` истёк: начинать с запроса кода. */
     data object CodeExpired : RegistrationStep
 
-    /** Телефон связан с другой личностью: путь возврата по фразе, а не ошибка. */
-    data object IdentityMismatch : RegistrationStep
+    /**
+     * Телефон связан с другой личностью: путь возврата по фразе, а не ошибка.
+     *
+     * @param registrationToken то, с чем идти дальше. Код к этому моменту уже погашен
+     *   проверкой и второй раз не сработает — это и ломало вход по фразе.
+     */
+    data class IdentityMismatch(val registrationToken: String) : RegistrationStep
     data class Offline(val retryAfterMs: Long) : RegistrationStep
     data class Refused(val reason: String) : RegistrationStep
 }
