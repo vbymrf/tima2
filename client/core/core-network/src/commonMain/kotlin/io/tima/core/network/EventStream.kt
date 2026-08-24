@@ -38,7 +38,6 @@ class EventStream(
      */
     suspend fun run(
         cursor: Long?,
-        persist: suspend (EventStreamProtocol.IncomingEvent) -> Unit,
         /**
          * Кадры про групповые ключи: ротация, приезд обёрток, просьба поделиться.
          *
@@ -46,8 +45,13 @@ class EventStream(
          * ротация ключа требует escrow, крипты, сети и хранилища разом — то есть
          * ровно того, чего в транспорте быть не должно. По умолчанию ничего: канал
          * обязан работать и там, где ключами никто не занимается (проверки).
+         *
+         * Стоит ПЕРЕД [persist] намеренно: хвостовая лямбда вызова обязана означать
+         * запись сообщения, как и раньше. Поставь эту ручку последней — и каждый
+         * существующий вызов молча сменил бы смысл.
          */
         onGroupKeys: suspend (EventStreamProtocol.Decision) -> Unit = {},
+        persist: suspend (EventStreamProtocol.IncomingEvent) -> Unit,
     ): StreamOutcome {
         var последний = cursor
         // Локальная переменная, а не поле: `webSocket` возвращает Unit, и вынести исход

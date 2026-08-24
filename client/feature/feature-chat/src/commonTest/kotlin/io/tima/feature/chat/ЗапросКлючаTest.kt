@@ -41,7 +41,7 @@ class ЗапросКлючаTest {
 
     @Test
     fun просьба_ушла_и_названо_скольким() = runTest {
-        val store = store(backgroundScope, запрос = RequestGroupKeys { RecoveryStep.Requested(2, 3) })
+        val store = store(backgroundScope, запрос = RequestGroupKeys { _, _ -> RecoveryStep.Requested(2, 3) })
         assertTrue(store.state.value.можноПроситьКлюч)
 
         store.запроситьКлюч()
@@ -56,7 +56,7 @@ class ЗапросКлючаTest {
     fun просить_некого_говорится_отдельно() = runTest {
         // Ждать бесполезно: нужных версий нет ни у кого. «Повторите позже» тут было бы
         // прямой неправдой.
-        val store = store(backgroundScope, запрос = RequestGroupKeys { RecoveryStep.Requested(2, 0) })
+        val store = store(backgroundScope, запрос = RequestGroupKeys { _, _ -> RecoveryStep.Requested(2, 0) })
         store.запроситьКлюч()
         runCurrent()
         assertIs<ChatNotice.KeysNoHelpers>(store.state.value.notice)
@@ -64,7 +64,7 @@ class ЗапросКлючаTest {
 
     @Test
     fun нужна_фраза_это_не_ошибка() = runTest {
-        val store = store(backgroundScope, запрос = RequestGroupKeys { RecoveryStep.NeedsSecretPhrase })
+        val store = store(backgroundScope, запрос = RequestGroupKeys { _, _ -> RecoveryStep.NeedsSecretPhrase })
         store.запроситьКлюч()
         runCurrent()
         assertIs<ChatNotice.KeysNeedPhrase>(store.state.value.notice)
@@ -75,7 +75,7 @@ class ЗапросКлючаTest {
         // Просьба уходит живым устройствам участников. Дублировать её из-за нетерпения —
         // значит будить чужие телефоны второй раз без всякой пользы.
         var просьб = 0
-        val store = store(backgroundScope, запрос = RequestGroupKeys { просьб++; RecoveryStep.Requested(1, 1) })
+        val store = store(backgroundScope, запрос = RequestGroupKeys { _, _ -> просьб++; RecoveryStep.Requested(1, 1) })
         store.запроситьКлюч()
         store.запроситьКлюч()
         runCurrent()

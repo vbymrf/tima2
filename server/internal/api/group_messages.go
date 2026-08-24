@@ -9,6 +9,7 @@
 package api
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -20,6 +21,7 @@ import (
 
 	"tima/server/internal/auth"
 	timacrypto "tima/server/internal/crypto"
+	"tima/server/internal/escrow"
 	"tima/server/internal/store"
 )
 
@@ -199,6 +201,12 @@ func (s *Server) postGroupMessage(w http.ResponseWriter, r *http.Request) {
 		s.notify(r.Context(), dev, "message.group", eventPayload)
 	}
 
+	// Инвариант ADR-0017 §2: в группе, где в эту эпоху была отправка, последняя версия
+	// GK обязана быть завёрнута на текущую эпоху. Отправка только что произошла — самое
+	// время проверить. Сервер ротировать не может (ключа он не видит), поэтому просит
+	// участников: кто первым откроет приложение, тот и сменит.
+	s.напомнитьОРотации(r.Context(), groupID, append(devices, id.DeviceID))
+
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{"message_id": messageID})
 }
@@ -253,4 +261,44 @@ func (s *Server) listGroupMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"messages": out})
+}
+
+// напомнитьОРотации рассылает group.rotation_needed, если ключ группы завёрнут на
+// прошлую эпоху (ADR-0017 §3).
+//
+// **Не чаще раза в час на группу и эпоху.** Иначе каждое сообщение в группе с устаревшим
+// ключом порождало бы фан-аут события на все устройства — то есть наказывало бы за
+// разговорчивость. Одного напоминания достаточно: получивший его клиент ротирует, и
+// условие перестанет выполняться само.
+//
+// Без Redis (dev) напоминание уходит на каждое сообщение: это шумно, но честнее, чем
+// молчать о невыполнимом ордере.
+func (s *Server) напомнитьОРотации(ctx context.Context, groupID string, devices []string) {
+	последняя, err := s.Store.LatestGroupRotation(ctx, groupID)
+	if err != nil {
+		log.Printf("напомнитьОРотации: последняя ротация: %v", err)
+		return
+	}
+	// Группа без ротаций ключа не имеет вовсе — напоминать не о чем: первую версию
+	// выпустят при первой отправке в private-группу.
+	if последняя.GKVersion == 0 {
+		return
+	}
+	эпоха := escrow.EpochOf(time.Now())
+	if последняя.EscrowEpoch == эпоха {
+		return
+	}
+	if s.Limit != nil {
+		ok, _, err := s.Limit.Allow(ctx, "gk_epoch_notify:"+groupID+":"+эпоха, 1, time.Hour)
+		if err != nil || !ok {
+			return
+		}
+	}
+	for _, dev := range devices {
+		s.notify(ctx, dev, "group.rotation_needed", map[string]any{
+			"group_id": groupID,
+			"reason":   "epoch",
+			"epoch":    эпоха,
+		})
+	}
 }

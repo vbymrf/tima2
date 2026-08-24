@@ -113,15 +113,29 @@ class ChatStore(
      * `null` в [requestKeys] означает, что переписка не групповая: у личной такой
      * возможности нет, и кнопки на экране тоже не будет.
      */
+    /** Человек набирает секретную фразу — её просят только после отказа по подписи. */
+    fun фразаИзменена(текст: String) {
+        _state.value = _state.value.copy(фраза = текст)
+    }
+
     fun запроситьКлюч() {
         val случай = requestKeys ?: return
         if (_state.value.ждёмКлюч) return
+        // Слова берутся из поля и дальше нигде не сохраняются: держать их значило бы
+        // отдать вместе с устройством и тот заслон, ради которого фразу спрашивают.
+        val слова = _state.value.фраза.trim()
+            .split(Regex("""\s+"""))
+            .filter { it.isNotBlank() }
+            .takeIf { it.isNotEmpty() }
         _state.value = _state.value.copy(ждёмКлюч = true, notice = null)
 
         scope.launch {
-            val исход = случай.запросить(chatId)
+            val исход = случай.запросить(chatId, слова)
             _state.value = _state.value.copy(
                 ждёмКлюч = false,
+                // Набранная фраза живёт до успеха и стирается сразу после него: держать
+                // её на экране дольше нужного незачем.
+                фраза = if (исход is RequestKeysStep.Asked) "" else _state.value.фраза,
                 notice = when (исход) {
                     is RequestKeysStep.Asked -> ChatNotice.KeysAsked(исход.устройствам)
                     RequestKeysStep.NoHelpers -> ChatNotice.KeysNoHelpers
@@ -153,6 +167,8 @@ data class ChatState(
     val ждёмКлюч: Boolean = false,
     /** Можно ли просить ключ: у личной переписки такой возможности нет. */
     val можноПроситьКлюч: Boolean = false,
+    /** Набранная секретная фраза. Пусто — запрос уйдёт без подписи. */
+    val фраза: String = "",
 )
 
 /**

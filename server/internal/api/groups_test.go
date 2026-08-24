@@ -229,15 +229,39 @@ func TestGroupKeyRotationRightsAndReasons(t *testing.T) {
 		t.Fatalf("неизвестная причина: ожидался 400, получен %d", code)
 	}
 
-	// Порог частоты для несрочной причины. Первая ротация уже была, вторая подряд
-	// отвергается — иначе право ротации у каждого означало бы фан-аут по требованию.
+	// Причина проверяется по состоянию группы: «много сообщений» в группе, где после
+	// прошлой ротации не было ни одного, — заведомая неправда, и это отвергается раньше
+	// порога. Иначе злоупотребление стоило бы всего лишь ожидания.
+	if _, code := doRotate(t, ts, member.token, groupID, 2, "periodic", все); code != http.StatusConflict {
+		t.Fatalf("periodic без сообщений: ожидался 409 rotation_not_needed, получен %d", code)
+	}
+
+	// А вот при живой переписке причина подтверждается — и тогда работает порог: вторая
+	// ротация подряд отвергается, потому что право ротации есть у каждого участника, и
+	// без порога группа из ста человек породила бы сто фан-аутов.
+	if code, _ := sendGroupMessage(t, ts, member, groupID, groupMsg{
+		ClientMsgID: "11111111-1111-1111-1111-111111111111",
+		Kind:        1,
+		GKVersion:   1,
+		Payload:     bytes.Repeat([]byte{0x11}, 96),
+	}, false); code != http.StatusCreated {
+		t.Fatalf("отправка в группу для подтверждения причины: %d", code)
+	}
 	if _, code := doRotate(t, ts, member.token, groupID, 2, "periodic", все); code != http.StatusTooManyRequests {
-		t.Fatalf("вторая periodic подряд: ожидался 429, получен %d", code)
+		t.Fatalf("periodic при живой переписке: ожидался 429, получен %d", code)
 	}
 
 	// Срочная причина из-под порога выведена: задержка исключения означает, что
-	// исключённый читает переписку ещё пятнадцать минут.
-	if _, code := doRotate(t, ts, member.token, groupID, 2, "member_leave", все); code != http.StatusCreated {
+	// исключённый читает переписку ещё пятнадцать минут. Исключаем по-настоящему —
+	// иначе причина не подтвердится, и проверка порога ничего не покажет.
+	if code := jsonAuth(t, ts, "DELETE", "/api/v1/groups/"+groupID+"/members/"+banned.userID,
+		owner.token, nil, nil); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("исключение участника: %d", code)
+	}
+	// Получатели — без исключённого: обёртка его устройству была бы выдачей доступа
+	// тому, кого только что убрали, и сервер такую ротацию отвергает.
+	оставшиеся := []*device{owner, member}
+	if _, code := doRotate(t, ts, member.token, groupID, 2, "member_leave", оставшиеся); code != http.StatusCreated {
 		t.Fatalf("member_leave под порогом: ожидался 201, получен %d", code)
 	}
 
@@ -251,10 +275,15 @@ func TestGroupKeyRotationRightsAndReasons(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("кэш ключа эпохи: %v", err)
 	}
-	if _, code := doRotate(t, ts, member.token, groupID, 3, "member_join", все); code != http.StatusCreated {
+	// Причина должна быть правдой и здесь: зовём нового участника, и только тогда
+	// member_join подтверждается состоянием группы.
+	новичок := registerDevice(t, ts, "+79993330004")
+	addMemberAPI(t, ts, owner.token, groupID, новичок.userID, "member")
+	сНовичком := []*device{owner, member, новичок}
+	if _, code := doRotate(t, ts, member.token, groupID, 3, "member_join", сНовичком); code != http.StatusCreated {
 		t.Fatalf("ротация с известной эпохой: %d", code)
 	}
-	if _, code := doRotate(t, ts, member.token, groupID, 4, "epoch", все); code != http.StatusConflict {
+	if _, code := doRotate(t, ts, member.token, groupID, 4, "epoch", сНовичком); code != http.StatusConflict {
 		t.Fatalf("epoch при совпадающей эпохе: ожидался 409 rotation_not_needed, получен %d", code)
 	}
 }

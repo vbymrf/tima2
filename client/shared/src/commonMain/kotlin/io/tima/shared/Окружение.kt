@@ -21,6 +21,9 @@ import io.tima.core.network.DeviceLinkStartOverHttp
 import io.tima.core.network.DeviceBookOverHttp
 import io.tima.core.network.DevicesApi
 import io.tima.core.network.EscrowApi
+import io.tima.core.network.GroupKeyRecoveryApi
+import io.tima.core.network.GroupKeysApi
+import io.tima.core.network.GroupsApi
 import io.tima.core.network.HttpMessageTransport
 import io.tima.core.network.KeysApi
 import io.tima.core.network.UsersApi
@@ -170,6 +173,21 @@ class Сеть(
 
     /** Устройства аккаунта: объявить платформу, показать список, отключить. */
     val устройства: DevicesApi = DevicesApi(route, client, token = { сессия.accessToken })
+
+    /** Группы: создание, состав, роли. */
+    val группы: GroupsApi = GroupsApi(route, client, token = { сессия.accessToken })
+
+    /** Групповые ключи: ротация и выдача обёрток этому устройству. */
+    val ключиГрупп: GroupKeysApi = GroupKeysApi(route, client, token = { сессия.accessToken })
+
+    /**
+     * Недостающие версии ключа: попросить и отдать.
+     *
+     * Отдельно от [ключиГрупп], потому что это другая работа: там выпуск новой версии,
+     * здесь передача уже существующей тому, кому её не выдавали.
+     */
+    val восстановлениеКлючей: GroupKeyRecoveryApi =
+        GroupKeyRecoveryApi(route, client, token = { сессия.accessToken })
 
     /**
      * Свои устройства как случай использования.

@@ -26,6 +26,7 @@ import io.tima.core.ui.ВидЧипа
 import io.tima.core.ui.Кнопка
 import io.tima.core.ui.КругКнопка
 import io.tima.core.ui.Отметка
+import io.tima.core.ui.Поле
 import io.tima.core.ui.Подпись
 import io.tima.core.ui.Пузырь
 import io.tima.core.ui.Сторона
@@ -73,6 +74,8 @@ fun ЭкранЧата(
      * переписки с нечитаемыми сообщениями: у личной просить нечего и не у кого.
      */
     onЗапроситьКлюч: () -> Unit = {},
+    /** Человек набирает секретную фразу для подписи запроса. */
+    onФраза: (String) -> Unit = {},
 ) {
     val цвета = Тима.цвета
     Column(modifier.fillMaxSize().background(цвета.поверхность)) {
@@ -94,7 +97,15 @@ fun ЭкранЧата(
         if (состояние.можноПроситьКлюч &&
             состояние.lines.any { it.display == MessageDisplay.UNREADABLE }
         ) {
-            НедоступнаяИстория(ждём = состояние.ждёмКлюч, onЗапросить = onЗапроситьКлюч)
+            НедоступнаяИстория(
+                ждём = состояние.ждёмКлюч,
+                // Поле фразы появляется только после отказа по подписи: спрашивать её
+                // заранее значило бы требовать секрет там, где он может не понадобиться.
+                нуженВводФразы = состояние.notice is ChatNotice.KeysNeedPhrase,
+                фраза = состояние.фраза,
+                onФраза = onФраза,
+                onЗапросить = onЗапроситьКлюч,
+            )
         }
 
         состояние.notice?.let { Беда(it, onЗакрытьСообщение) }
@@ -289,8 +300,23 @@ private fun Беда(беда: ChatNotice, onЗакрыть: () -> Unit) {
  * как задумано — и одновременно спрятать единственное доступное ему действие.
  */
 @Composable
-private fun НедоступнаяИстория(ждём: Boolean, onЗапросить: () -> Unit) {
+private fun НедоступнаяИстория(
+    ждём: Boolean,
+    нуженВводФразы: Boolean,
+    фраза: String,
+    onФраза: (String) -> Unit,
+    onЗапросить: () -> Unit,
+) {
     val цвета = Тима.цвета
+    Column(modifier = Modifier.fillMaxWidth().background(цвета.функц)) {
+        if (нуженВводФразы) {
+            Поле(
+                значение = фраза,
+                onИзменение = onФраза,
+                подсказка = "Двенадцать слов через пробел",
+                modifier = Modifier.padding(horizontal = TimaSpacing.о4, vertical = TimaSpacing.о2),
+            )
+        }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -305,5 +331,6 @@ private fun НедоступнаяИстория(ждём: Boolean, onЗапро
             modifier = Modifier.weight(1f),
         )
         Кнопка(надпись = if (ждём) "Просим…" else "Запросить ключ", onClick = onЗапросить)
+    }
     }
 }

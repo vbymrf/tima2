@@ -20,8 +20,14 @@ class RequestGroupKeys(private val recovery: GroupKeyRecovery) {
      * @return что сказать человеку. Ноль помощников — не ошибка: значит, нужных версий нет
      *   ни у кого из участников, и ждать бесполезно.
      */
-    suspend fun запросить(groupId: String): RequestKeysStep =
-        when (val ответ = recovery.request(groupId)) {
+    /**
+     * @param фраза двенадцать слов аккаунта. `null` — пробуем без подписи: у аккаунта
+     *   без секретной фразы восстановление идёт по членству. Слова сюда попадают из
+     *   поля ввода и дальше не сохраняются нигде: держать их значило бы отдать вместе с
+     *   устройством и заслон против угона номера.
+     */
+    suspend fun запросить(groupId: String, фраза: List<String>? = null): RequestKeysStep =
+        when (val ответ = recovery.request(groupId, фраза)) {
             is RecoveryStep.Requested -> when {
                 ответ.versions == 0 -> RequestKeysStep.NothingMissing
                 ответ.helpers == 0 -> RequestKeysStep.NoHelpers
@@ -36,7 +42,8 @@ class RequestGroupKeys(private val recovery: GroupKeyRecovery) {
 
 /** Порт запроса ключей. Реализуется `core-network`. */
 fun interface GroupKeyRecovery {
-    suspend fun request(groupId: String): RecoveryStep
+    /** @param фраза слова аккаунта для подписи запроса; `null` — без подписи. */
+    suspend fun request(groupId: String, фраза: List<String>?): RecoveryStep
 }
 
 sealed interface RecoveryStep {

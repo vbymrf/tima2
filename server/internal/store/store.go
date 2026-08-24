@@ -703,6 +703,36 @@ func (s *Store) LatestGroupRotation(ctx context.Context, groupID string) (GroupR
 	return info, nil
 }
 
+// RotationEvidence — то, чем сервер подтверждает названную причину ротации
+// (ADR-0017 §7). Считается по состоянию сервера, а не со слов клиента.
+type RotationEvidence struct {
+	MessagesSince int  // сообщений в группе после последней ротации
+	Joined        bool // кто-то вошёл после неё
+	Left          bool // кто-то вышел или исключён после неё
+	DeviceRevoked bool // у кого-то из участников отозвано устройство
+}
+
+// RotationEvidenceSince собирает подтверждения одним походом в базу.
+//
+// Момент отсчёта — время последней ротации. До первой ротации подтверждать нечего:
+// вызывающий такую группу не проверяет вовсе, потому что первая версия ключа нужна ей
+// в любом случае.
+func (s *Store) RotationEvidenceSince(ctx context.Context, groupID string, since time.Time) (RotationEvidence, error) {
+	var e RotationEvidence
+	err := s.pool.QueryRow(ctx, `
+		SELECT
+			(SELECT count(*) FROM group_messages WHERE group_id = $1 AND created_at > $2),
+			EXISTS (SELECT 1 FROM memberships
+			        WHERE target_type = 'group' AND target_id = $1 AND joined_at > $2),
+			EXISTS (SELECT 1 FROM memberships
+			        WHERE target_type = 'group' AND target_id = $1 AND left_at > $2),
+			EXISTS (SELECT 1 FROM devices d
+			        JOIN memberships m ON m.user_id = d.user_id
+			        WHERE m.target_type = 'group' AND m.target_id = $1 AND d.revoked_at > $2)
+	`, groupID, since).Scan(&e.MessagesSince, &e.Joined, &e.Left, &e.DeviceRevoked)
+	return e, err
+}
+
 // DeviceGroupKey — wrapped_GK одной версии для конкретного устройства.
 type DeviceGroupKey struct {
 	GKVersion          int32
