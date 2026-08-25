@@ -22,6 +22,11 @@ kotlin {
             // Порт регистрации объявлен в domain-account, реализация здесь: слой данных
             // реализует объявленное выше — то же направление, что у core-database с OutboxStore.
             api(projects.domain.domainAccount)
+            // api, а не implementation: типы domain-chat стоят в ПУБЛИЧНЫХ сигнатурах
+            // адаптеров этого модуля — тот, кто вызывает транспорт, обязан их видеть.
+            // До 2026-08-25 ребро было теневым: компилировалось через api-экспорт
+            // core-outbox, и перевод его в implementation ронял бы core-network.
+            api(projects.domain.domainChat)
             implementation(libs.ktor.client.core)
             // Живой канал: один сокет на устройство (websocket-events.md).
             implementation(libs.ktor.client.websockets)

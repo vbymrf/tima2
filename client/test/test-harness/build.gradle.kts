@@ -37,6 +37,10 @@ kotlin {
             // Разбор кадров живого канала: сценарий приёма пишется на кадрах сервера.
             api(projects.core.coreNetwork)
             api(projects.core.coreEncryption)
+            // Объявлено по факту: сценарий стенда работает с крипто-типами напрямую
+            // (StandRun.kt берёт PersonalChatId). Компилировалось это через api-экспорт
+            // core-encryption — теневое ребро, которое ломалось бы при его сужении.
+            implementation("io.tima:messenger-crypto")
             // Хранилище платформы: на устройстве проверяется весь стек, включая его.
             api(projects.core.coreSecrets)
             api(projects.domain.domainChat)

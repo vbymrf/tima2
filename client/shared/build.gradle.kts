@@ -25,14 +25,28 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            api(projects.core.coreUi)
-            api(projects.core.coreDatabase)
-            api(projects.core.coreEncryption)
-            api(projects.core.coreSecrets)
-            api(projects.core.coreNetwork)
-            api(projects.feature.featureChat)
-            api(projects.feature.featureGroup)
-            api(projects.feature.featureAuth)
+            // ── ПОЧЕМУ implementation, А НЕ api ───────────────────────────────
+            //
+            // Раньше shared переэкспортировал все восемь зависимостей. Смысла в
+            // этом нет: оба входа (app-android, app-desktop) объявляют нужное им
+            // сами. Зато цена есть — переэкспорт делает чужой публичный API
+            // частью своего, и модуль, который взял shared, незаметно получает
+            // право импортировать что угодно из восьми модулей. Так и появляются
+            // теневые рёбра: код компилируется, а в манифесте о зависимости
+            // ничего не сказано.
+            implementation(projects.core.coreUi)
+            implementation(projects.core.coreDatabase)
+            implementation(projects.core.coreEncryption)
+            implementation(projects.core.coreSecrets)
+            implementation(projects.core.coreNetwork)
+            implementation(projects.feature.featureChat)
+            implementation(projects.feature.featureGroup)
+            implementation(projects.feature.featureAuth)
+            // Объявлено по факту использования: типы этих модулей стоят в коде
+            // shared, а компилировалось это через чужой api-экспорт.
+            implementation(projects.core.coreOutbox)
+            implementation(projects.domain.domainAccount)
+            implementation(projects.domain.domainChat)
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(libs.ktor.client.core)

@@ -37,14 +37,10 @@ class ЗависимостиTest {
      * коммит, иначе тест упадёт на «долг погашен, а запись осталась».
      */
     private val допущенныеДолги = setOf(
-        "core-network -> domain-chat",   // гасится шагом 2
-        "shared -> core-outbox",         // гасится шагом 2
-        "shared -> domain-account",      // гасится шагом 2
-        "shared -> domain-chat",         // гасится шагом 2
-        "shared -> messenger-crypto",    // гасится шагом 3
-        // В программе не назван: test-harness не входил в инвентарь модулей.
-        // Крипто-типы он берёт через api-экспорт core-encryption. Гасится шагом 2.
-        "test-harness -> messenger-crypto",
+        // Шаг 2 погасил пять рёбер: core-network -> domain-chat, три ребра shared
+        // и test-harness -> messenger-crypto. Остался один долг — он умрёт не
+        // объявлением зависимости, а её исчезновением.
+        "shared -> messenger-crypto",    // гасится шагом 3: два импорта в Приёмник.kt
     )
 
     @Test
