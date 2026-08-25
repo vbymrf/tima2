@@ -54,170 +54,176 @@ const (
 // linkStart — POST /api/v1/link/start, без авторизации: у нового устройства
 // аккаунта ещё нет. Тело — те же ключи, что при обычной регистрации, но без
 // SMS/фразы: доверие принесёт confirm с другого устройства.
-func (s *Server) linkStart(w http.ResponseWriter, r *http.Request) {
-	if !s.rateLimit(w, r, "link:start:"+clientIP(r), rlLinkStartPerIP) {
-		return
+func linkStart(д устройстваDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !ограничитьЧастоту(д.лимит(), w, r, "link:start:"+clientIP(r), rlLinkStartPerIP) {
+			return
+		}
+		var req struct {
+			EncryptionPub string `json:"encryption_pub"` // base64url, X25519 32 B
+			SigningPub    string `json:"signing_pub"`    // base64url, Ed25519 32 B
+			DeviceName    string `json:"device_name"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
+			return
+		}
+		enc, err1 := base64.RawURLEncoding.DecodeString(req.EncryptionPub)
+		sig, err2 := base64.RawURLEncoding.DecodeString(req.SigningPub)
+		if err1 != nil || err2 != nil || len(enc) != 32 || len(sig) != ed25519.PublicKeySize ||
+			req.DeviceName == "" || len(req.DeviceName) > 100 {
+			writeErr(w, http.StatusBadRequest, "bad_request",
+				"нужны encryption_pub/signing_pub (32 байта base64url) и device_name (1..100 символов)")
+			return
+		}
+		secret, err := randomLinkToken()
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal", "нет энтропии")
+			return
+		}
+		claimToken, err := randomLinkToken()
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal", "нет энтропии")
+			return
+		}
+		expires := time.Now().UTC().Add(linkSessionTTL)
+		sessionID, err := д.хранилище.CreateLinkSession(r.Context(), enc, sig, req.DeviceName,
+			hashLinkToken(secret), hashLinkToken(claimToken), expires)
+		if err != nil {
+			log.Printf("linkStart: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		// Формат QR-payload нормативен наравне с linkSigningBytes — подтверждающее
+		// устройство разбирает его руками (без общей proto-схемы, значения короткие).
+		qrPayload := "tima://link/v1?session_id=" + sessionID + "&secret=" + secret +
+			"&encryption_key=" + req.EncryptionPub + "&signing_key=" + req.SigningPub +
+			"&name=" + base64.RawURLEncoding.EncodeToString([]byte(req.DeviceName))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"session_id":  sessionID,
+			"qr_payload":  qrPayload,
+			"claim_token": claimToken,
+			"expires_at":  expires.Format(time.RFC3339),
+		})
 	}
-	var req struct {
-		EncryptionPub string `json:"encryption_pub"` // base64url, X25519 32 B
-		SigningPub    string `json:"signing_pub"`    // base64url, Ed25519 32 B
-		DeviceName    string `json:"device_name"`
-	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
-		return
-	}
-	enc, err1 := base64.RawURLEncoding.DecodeString(req.EncryptionPub)
-	sig, err2 := base64.RawURLEncoding.DecodeString(req.SigningPub)
-	if err1 != nil || err2 != nil || len(enc) != 32 || len(sig) != ed25519.PublicKeySize ||
-		req.DeviceName == "" || len(req.DeviceName) > 100 {
-		writeErr(w, http.StatusBadRequest, "bad_request",
-			"нужны encryption_pub/signing_pub (32 байта base64url) и device_name (1..100 символов)")
-		return
-	}
-	secret, err := randomLinkToken()
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "internal", "нет энтропии")
-		return
-	}
-	claimToken, err := randomLinkToken()
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "internal", "нет энтропии")
-		return
-	}
-	expires := time.Now().UTC().Add(linkSessionTTL)
-	sessionID, err := s.Store.CreateLinkSession(r.Context(), enc, sig, req.DeviceName,
-		hashLinkToken(secret), hashLinkToken(claimToken), expires)
-	if err != nil {
-		log.Printf("linkStart: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	// Формат QR-payload нормативен наравне с linkSigningBytes — подтверждающее
-	// устройство разбирает его руками (без общей proto-схемы, значения короткие).
-	qrPayload := "tima://link/v1?session_id=" + sessionID + "&secret=" + secret +
-		"&encryption_key=" + req.EncryptionPub + "&signing_key=" + req.SigningPub +
-		"&name=" + base64.RawURLEncoding.EncodeToString([]byte(req.DeviceName))
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"session_id":  sessionID,
-		"qr_payload":  qrPayload,
-		"claim_token": claimToken,
-		"expires_at":  expires.Format(time.RFC3339),
-	})
 }
 
 // linkConfirm — POST /api/v1/link/confirm, авторизовано: вызывает уже доверенное
 // устройство, отсканировавшее QR.
-func (s *Server) linkConfirm(w http.ResponseWriter, r *http.Request) {
-	id, _ := auth.FromContext(r.Context())
-	var req struct {
-		SessionID string `json:"session_id"`
-		Secret    string `json:"secret"`
-		Signature string `json:"signature"` // base64url, 64 B
+func linkConfirm(д устройстваDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		var req struct {
+			SessionID string `json:"session_id"`
+			Secret    string `json:"secret"`
+			Signature string `json:"signature"` // base64url, 64 B
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
+			return
+		}
+		sig, err := base64.RawURLEncoding.DecodeString(req.Signature)
+		if err != nil || len(sig) != ed25519.SignatureSize || req.SessionID == "" || req.Secret == "" {
+			writeErr(w, http.StatusBadRequest, "bad_request",
+				"нужны session_id, secret и signature (64 байта base64url)")
+			return
+		}
+		ctx := r.Context()
+		ls, err := д.хранилище.GetLinkSessionForConfirm(ctx, req.SessionID)
+		if errors.Is(err, store.ErrLinkSessionInvalid) {
+			writeErr(w, http.StatusForbidden, "bad_session", "сессия привязки не найдена, просрочена или уже подтверждена")
+			return
+		} else if err != nil {
+			log.Printf("linkConfirm: get session: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		// Подтверждать вправе только телефон (key-lifecycle.md §2): якорь доверия —
+		// аттестуемое устройство, десктоп своё доверие наследует, а не раздаёт дальше.
+		// Платформа самообъявленная и до аттестации непроверяема (миграция 0029) —
+		// правило порядка, а не граница безопасности. Пустая платформа (регистрация
+		// до 0029) тоже отказ: клиент объявляет её при запуске и чинится сам.
+		platform, err := д.хранилище.DevicePlatform(ctx, id.DeviceID)
+		if err != nil {
+			log.Printf("linkConfirm: platform: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		if !store.PlatformPhone[platform] {
+			writeErr(w, http.StatusForbidden, "not_a_phone",
+				"Подтвердить подключение может только телефон — на нём откройте «Устройства» и отсканируйте код.")
+			return
+		}
+		signingPub, err := д.хранилище.SigningKey(ctx, id.DeviceID, id.UserID)
+		if err != nil {
+			log.Printf("linkConfirm: signing key: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		if !ed25519.Verify(signingPub, linkSigningBytes(req.SessionID, req.Secret, ls.EncryptionPub, ls.SigningPub), sig) {
+			writeErr(w, http.StatusForbidden, "bad_signature", "подпись не сходится")
+			return
+		}
+		newDeviceID, err := д.хранилище.ConfirmLinkSession(ctx, req.SessionID, hashLinkToken(req.Secret), id.UserID)
+		if errors.Is(err, store.ErrLinkSessionInvalid) {
+			writeErr(w, http.StatusForbidden, "bad_session", "сессия привязки не найдена, просрочена или уже подтверждена")
+			return
+		} else if err != nil {
+			log.Printf("linkConfirm: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		log.Printf("linkConfirm: устройство %s подтвердило %q (%s) для %s",
+			id.DeviceID, ls.DeviceName, newDeviceID, id.UserID)
+		// device_id возвращается не для отчётности: подтвердившее устройство сразу
+		// перезаворачивает на него ключи истории (ADR-0010 §этап 2, тот же путь, что
+		// у восстановления), а для этого нужен адрес получателя обёрток. Само новое
+		// устройство запросить историю не может — у него нет ключа личности из фразы,
+		// которым chatRecover требует подписать запрос.
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status": "confirmed", "device_id": newDeviceID,
+		})
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
-		return
-	}
-	sig, err := base64.RawURLEncoding.DecodeString(req.Signature)
-	if err != nil || len(sig) != ed25519.SignatureSize || req.SessionID == "" || req.Secret == "" {
-		writeErr(w, http.StatusBadRequest, "bad_request",
-			"нужны session_id, secret и signature (64 байта base64url)")
-		return
-	}
-	ctx := r.Context()
-	ls, err := s.Store.GetLinkSessionForConfirm(ctx, req.SessionID)
-	if errors.Is(err, store.ErrLinkSessionInvalid) {
-		writeErr(w, http.StatusForbidden, "bad_session", "сессия привязки не найдена, просрочена или уже подтверждена")
-		return
-	} else if err != nil {
-		log.Printf("linkConfirm: get session: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	// Подтверждать вправе только телефон (key-lifecycle.md §2): якорь доверия —
-	// аттестуемое устройство, десктоп своё доверие наследует, а не раздаёт дальше.
-	// Платформа самообъявленная и до аттестации непроверяема (миграция 0029) —
-	// правило порядка, а не граница безопасности. Пустая платформа (регистрация
-	// до 0029) тоже отказ: клиент объявляет её при запуске и чинится сам.
-	platform, err := s.Store.DevicePlatform(ctx, id.DeviceID)
-	if err != nil {
-		log.Printf("linkConfirm: platform: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	if !store.PlatformPhone[platform] {
-		writeErr(w, http.StatusForbidden, "not_a_phone",
-			"Подтвердить подключение может только телефон — на нём откройте «Устройства» и отсканируйте код.")
-		return
-	}
-	signingPub, err := s.Store.SigningKey(ctx, id.DeviceID, id.UserID)
-	if err != nil {
-		log.Printf("linkConfirm: signing key: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	if !ed25519.Verify(signingPub, linkSigningBytes(req.SessionID, req.Secret, ls.EncryptionPub, ls.SigningPub), sig) {
-		writeErr(w, http.StatusForbidden, "bad_signature", "подпись не сходится")
-		return
-	}
-	newDeviceID, err := s.Store.ConfirmLinkSession(ctx, req.SessionID, hashLinkToken(req.Secret), id.UserID)
-	if errors.Is(err, store.ErrLinkSessionInvalid) {
-		writeErr(w, http.StatusForbidden, "bad_session", "сессия привязки не найдена, просрочена или уже подтверждена")
-		return
-	} else if err != nil {
-		log.Printf("linkConfirm: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	log.Printf("linkConfirm: устройство %s подтвердило %q (%s) для %s",
-		id.DeviceID, ls.DeviceName, newDeviceID, id.UserID)
-	// device_id возвращается не для отчётности: подтвердившее устройство сразу
-	// перезаворачивает на него ключи истории (ADR-0010 §этап 2, тот же путь, что
-	// у восстановления), а для этого нужен адрес получателя обёрток. Само новое
-	// устройство запросить историю не может — у него нет ключа личности из фразы,
-	// которым chatRecover требует подписать запрос.
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"status": "confirmed", "device_id": newDeviceID,
-	})
 }
 
 // linkClaim — POST /api/v1/link/claim, без авторизации: у нового устройства
 // аккаунта ещё нет, claim_token и есть его пропуск (как registration_token при
 // обычной регистрации).
-func (s *Server) linkClaim(w http.ResponseWriter, r *http.Request) {
-	if !s.rateLimit(w, r, "link:claim:"+clientIP(r), rlLinkClaimPerIP) {
-		return
+func linkClaim(д устройстваDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !ограничитьЧастоту(д.лимит(), w, r, "link:claim:"+clientIP(r), rlLinkClaimPerIP) {
+			return
+		}
+		var req struct {
+			SessionID  string `json:"session_id"`
+			ClaimToken string `json:"claim_token"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&req); err != nil ||
+			req.SessionID == "" || req.ClaimToken == "" {
+			writeErr(w, http.StatusBadRequest, "bad_request", "нужны session_id и claim_token")
+			return
+		}
+		userID, deviceID, err := д.хранилище.ClaimLinkSession(r.Context(), req.SessionID, hashLinkToken(req.ClaimToken))
+		if errors.Is(err, store.ErrLinkSessionInvalid) {
+			writeErr(w, http.StatusForbidden, "not_ready", "устройство ещё не подтверждено — попробуйте ещё раз через пару секунд")
+			return
+		} else if err != nil {
+			log.Printf("linkClaim: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		access, err := д.выдачаТокенов().IssueAccess(userID, deviceID)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"user_id": userID, "device_id": deviceID, "access_token": access,
+		})
 	}
-	var req struct {
-		SessionID  string `json:"session_id"`
-		ClaimToken string `json:"claim_token"`
-	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&req); err != nil ||
-		req.SessionID == "" || req.ClaimToken == "" {
-		writeErr(w, http.StatusBadRequest, "bad_request", "нужны session_id и claim_token")
-		return
-	}
-	userID, deviceID, err := s.Store.ClaimLinkSession(r.Context(), req.SessionID, hashLinkToken(req.ClaimToken))
-	if errors.Is(err, store.ErrLinkSessionInvalid) {
-		writeErr(w, http.StatusForbidden, "not_ready", "устройство ещё не подтверждено — попробуйте ещё раз через пару секунд")
-		return
-	} else if err != nil {
-		log.Printf("linkClaim: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	access, err := s.Auth.IssueAccess(userID, deviceID)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"user_id": userID, "device_id": deviceID, "access_token": access,
-	})
 }
 
 func randomLinkToken() (string, error) {

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"tima/server/internal/auth"
+	"tima/server/internal/ratelimit"
 	"tima/server/internal/store"
 )
 
@@ -51,11 +52,18 @@ func orDefault(v, def int) int64 {
 // rateLimit — попытка по ключу; false = ответ 429 уже записан. Без Redis
 // (Limit == nil, dev) лимитов нет. Ошибка Redis = fail-open с логом:
 // недоступность шины не должна класть вход целиком.
+// rateLimit — обёртка для handler-ов, оставшихся на Server (вход и SMS).
 func (s *Server) rateLimit(w http.ResponseWriter, r *http.Request, key string, limit int64) bool {
-	if s.Limit == nil {
+	return ограничитьЧастоту(s.Limit, w, r, key, limit)
+}
+
+// ограничитьЧастоту — свободная функция: ею пользуются и Server, и registrar-ы.
+// Ограничителя нет (dev без Redis) — пропускаем: это осознанный режим, а не отказ.
+func ограничитьЧастоту(lim *ratelimit.Limiter, w http.ResponseWriter, r *http.Request, key string, limit int64) bool {
+	if lim == nil {
 		return true
 	}
-	ok, retryAfter, err := s.Limit.Allow(r.Context(), key, limit, rlWindow)
+	ok, retryAfter, err := lim.Allow(r.Context(), key, limit, rlWindow)
 	if err != nil {
 		log.Printf("ratelimit %s: %v", key, err)
 		return true

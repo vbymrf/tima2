@@ -119,12 +119,10 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/users/identities", s.requireActiveDevice(s.resolveIdentities))
 	mux.HandleFunc("POST /api/v1/users/me/reidentify/challenge", s.requireActiveDevice(s.reidentifyChallenge))
 	mux.HandleFunc("POST /api/v1/users/me/reidentify", s.requireActiveDevice(s.reidentify))
-	mux.HandleFunc("POST /api/v1/link/start", s.linkStart)
-	mux.HandleFunc("POST /api/v1/link/confirm", s.requireActiveDevice(s.linkConfirm))
-	mux.HandleFunc("POST /api/v1/link/claim", s.linkClaim)
-	mux.HandleFunc("GET /api/v1/devices", s.requireActiveDevice(s.listMyDevices))
-	mux.HandleFunc("PUT /api/v1/devices/me/platform", s.requireActiveDevice(s.setMyPlatform))
-	mux.HandleFunc("DELETE /api/v1/devices/{deviceID}", s.requireActiveDevice(s.revokeDevice))
+	// Устройства и привязка по QR (шаг 4). link/start и link/claim идут без
+	// requireDevice: их зовёт устройство, у которого токена ещё нет.
+	RegisterDevices(mux, s.Store, func() *ratelimit.Limiter { return s.Limit },
+		func() ВыдачаТокенов { return s.Auth }, s.notifier(), s.requireActiveDevice)
 	mux.HandleFunc("GET /api/v1/escrow/pubkey", s.requireActiveDevice(s.escrowPubkey))
 	mux.HandleFunc("GET /api/v1/escrow/key", s.requireActiveDevice(s.escrowKeyForChat))
 	// Группы: состав, сообщения и ключи (шаг 4). Три файла держатся вместе
