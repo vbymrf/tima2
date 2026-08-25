@@ -2,7 +2,9 @@ package io.tima.shared
 
 import io.tima.core.database.SqlChatFeed
 import io.tima.core.database.SqlChatFacts
+import io.tima.core.database.SqlContacts
 import io.tima.domain.chat.ChatFacts
+import io.tima.domain.chat.ObserveContacts
 import io.tima.core.database.SqlChatsFeed
 import io.tima.core.database.SqlInboxStore
 import io.tima.core.database.SqlOutboxStore
@@ -280,6 +282,9 @@ class Окружение private constructor(
     val фактыПереписок: ChatFacts = SqlChatFacts(db)
 
     val переписки: ObserveChats = ObserveChats(SqlChatsFeed(db, TextBodyCodec, шифр, myUserId))
+
+    /** Книга: люди, с которыми уже есть переписка. Другого источника у неё нет. */
+    val контакты: ObserveContacts = ObserveContacts(SqlContacts(db, шифр))
 
     val переписка: ObserveChat = ObserveChat(SqlChatFeed(db, TextBodyCodec, шифр, myUserId))
 

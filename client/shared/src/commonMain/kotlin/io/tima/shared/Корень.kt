@@ -18,6 +18,8 @@ import io.tima.core.database.SqlGroupKeys
 import io.tima.core.network.GroupKeyRecoveryOverHttp
 import io.tima.core.network.GroupsOverHttp
 import io.tima.domain.chat.ChatKind
+import io.tima.domain.chat.ChatSummary
+import io.tima.domain.chat.Contact
 import io.tima.domain.chat.ChatNames
 import io.tima.domain.chat.CreateGroupChat
 import io.tima.domain.chat.ManageGroupMembers
@@ -40,12 +42,17 @@ import io.tima.feature.auth.ЭкранВхода
 import io.tima.feature.chat.ChatStore
 import io.tima.feature.chat.ChatsState
 import io.tima.feature.chat.ChatsStore
+import io.tima.feature.chat.КнигаState
+import io.tima.feature.chat.КнигаStore
+import io.tima.feature.chat.ЭкранКниги
 import io.tima.feature.shell.Окно
 import io.tima.feature.shell.ОкноМедиа
 import io.tima.feature.shell.ОкноОбщение
 import io.tima.feature.shell.ОкноСоциум
 import io.tima.feature.shell.ОкноСтраница
+import io.tima.feature.shell.КаркасОкна
 import io.tima.feature.shell.Рейка
+import io.tima.feature.shell.ЗаглушкаВкладки
 import io.tima.feature.shell.ЭкранПереключенияОкон
 import io.tima.feature.chat.НоваяПерепискаStore
 import io.tima.feature.chat.ЭкранНовойПереписки
@@ -198,6 +205,11 @@ private fun Приложение(
     var окно by remember { mutableStateOf(Окно.Телефон) }
     var переключательОкон by remember { mutableStateOf(false) }
 
+    // Книга: люди, с которыми уже есть переписка. Поток из базы — новая переписка
+    // появляется в книге сама.
+    val книга = remember { КнигаStore(окружение.контакты, scope) }
+    var вкладкаТелефона by remember { mutableStateOf("Чаты") }
+
     val новая = remember {
         НоваяПерепискаStore(
             start = StartPersonalChat(
@@ -217,6 +229,7 @@ private fun Приложение(
     }
 
     val состояниеСписка by список.state.collectAsState()
+    val состояниеКниги by книга.state.collectAsState()
     val состояниеНовой by новая.state.collectAsState()
 
     // Переписка начата — открываем её. Один и тот же признак ведёт и к открытию, и к
@@ -271,9 +284,14 @@ private fun Приложение(
         },
         колонка = {
             when (окно) {
-                Окно.Телефон -> ЭкранПереписок(
-                    состояние = состояниеСписка,
+                Окно.Телефон -> ОкноТелефон(
+                    вкладка = вкладкаТелефона,
+                    onВкладка = { вкладкаТелефона = it },
+                    список = состояниеСписка,
+                    книга = состояниеКниги,
+                    onПоискВКниге = книга::поискИзменён,
                     onОткрыть = { куда = Куда.Переписка(it.chatId, it.title) },
+                    onОткрытьЧеловека = { куда = Куда.Переписка(it.chatId, it.name) },
                     onНовая = { куда = Куда.Новая },
                     onНоваяГруппа = { куда = Куда.НоваяГруппа },
                     onНастройки = { куда = Куда.Устройства },
@@ -601,4 +619,58 @@ private fun Состав(
 private fun счётчикиОкон(список: ChatsState): Map<Окно, Int> {
     val непрочитано = список.chats.sumOf { it.unread }
     return if (непрочитано > 0) mapOf(Окно.Телефон to непрочитано) else emptyMap()
+}
+
+/**
+ * Окно «Телефон» — три вкладки макета.
+ *
+ * «Чаты» и «Книга» построены, «Звонки» ждут К7 и говорят об этом словами: кнопка,
+ * которая ничего не делает, обещает больше, чем есть.
+ *
+ * Вкладка запоминается вызывающим, а не этим экраном: «единая сессия» из `§1` требует,
+ * чтобы окно возвращалось туда, где его оставили, — в том числе после захода в подокно.
+ */
+@Composable
+private fun ОкноТелефон(
+    вкладка: String,
+    onВкладка: (String) -> Unit,
+    список: ChatsState,
+    книга: КнигаState,
+    onПоискВКниге: (String) -> Unit,
+    onОткрыть: (ChatSummary) -> Unit,
+    onОткрытьЧеловека: (Contact) -> Unit,
+    onНовая: () -> Unit,
+    onНоваяГруппа: () -> Unit,
+    onНастройки: () -> Unit,
+    onПереключитьОкна: () -> Unit,
+) = КаркасОкна(
+    окно = Окно.Телефон,
+    вкладки = listOf("Чаты", "Книга", "Звонки"),
+    выбрана = вкладка,
+    onВкладка = onВкладка,
+    onПереключитьОкна = onПереключитьОкна,
+    onПоиск = {},
+    onНастройки = onНастройки,
+) {
+    when (вкладка) {
+        "Чаты" -> ЭкранПереписок(
+            состояние = список,
+            onОткрыть = onОткрыть,
+            onНовая = onНовая,
+            onНоваяГруппа = onНоваяГруппа,
+            onНастройки = onНастройки,
+        )
+
+        "Книга" -> ЭкранКниги(
+            состояние = книга,
+            onПоиск = onПоискВКниге,
+            onОткрыть = onОткрытьЧеловека,
+        )
+
+        else -> ЗаглушкаВкладки(
+            чтоБудет = "Здесь будет журнал звонков",
+            чемДержится = "Входящие, исходящие и пропущенные, с фильтрами. " +
+                "Звонков нет: клиент LiveKit — задача К7.",
+        )
+    }
 }
