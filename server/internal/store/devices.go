@@ -34,7 +34,7 @@ func (s *Store) SetDevicePlatform(ctx context.Context, deviceID, platform string
 	return err
 }
 
-// DevicePlatform — платформа устройства ('' — не объявлена).
+// DevicePlatform — платформа устройства (” — не объявлена).
 func (s *Store) DevicePlatform(ctx context.Context, deviceID string) (string, error) {
 	var platform string
 	err := s.pool.QueryRow(ctx, `
@@ -119,4 +119,73 @@ func (s *Store) CountActiveDevices(ctx context.Context, userID string) (int, err
 		return 0, nil
 	}
 	return n, err
+}
+
+// ── Перенесено из store.go 2026-08-25 ──
+
+// NewDevice регистрирует устройство пользователя, device_id назначает база.
+// platform — самообъявление клиента (” допустимо: старые сборки его не шлют),
+// нужна для правила «подтверждать QR может только телефон» (миграция 0029).
+func (s *Store) NewDevice(ctx context.Context, userID string, encryptionPub, signingPub []byte, platform string) (string, error) {
+	var deviceID string
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO devices (user_id, encryption_pub, signing_pub, platform)
+		VALUES ($1, $2, $3, $4) RETURNING device_id`,
+		userID, encryptionPub, signingPub, platform).Scan(&deviceID)
+	return deviceID, err
+}
+
+// ListDevices — неотозванные устройства пользователя с публичными ключами
+// (GET /keys/devices: отправителю — для обёрток, получателю — для проверки подписи).
+func (s *Store) ListDevices(ctx context.Context, userID string) ([]Device, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT device_id, user_id, encryption_pub, signing_pub
+		FROM devices WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Device
+	for rows.Next() {
+		var d Device
+		if err := rows.Scan(&d.DeviceID, &d.UserID, &d.EncryptionPub, &d.SigningPub); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// ── Устройства ──
+type Device struct {
+	DeviceID      string
+	UserID        string
+	EncryptionPub []byte
+	SigningPub    []byte
+}
+
+// SigningKey возвращает Ed25519-ключ неотозванного устройства пользователя.
+func (s *Store) SigningKey(ctx context.Context, deviceID, userID string) ([]byte, error) {
+	var key []byte
+	err := s.pool.QueryRow(ctx, `
+		SELECT signing_pub FROM devices
+		WHERE device_id = $1 AND user_id = $2 AND revoked_at IS NULL`,
+		deviceID, userID).Scan(&key)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrDeviceUnknown
+	}
+	return key, err
+}
+
+var ErrDeviceUnknown = errors.New("устройство не зарегистрировано или отозвано")
+
+// DeviceEncryptionPub — X25519-ключ устройства (помощнику для обёртки восстановления).
+func (s *Store) DeviceEncryptionPub(ctx context.Context, deviceID string) ([]byte, error) {
+	var key []byte
+	err := s.pool.QueryRow(ctx, `
+		SELECT encryption_pub FROM devices WHERE device_id = $1 AND revoked_at IS NULL`, deviceID).Scan(&key)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrDeviceUnknown
+	}
+	return key, err
 }
