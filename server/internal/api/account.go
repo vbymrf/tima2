@@ -19,29 +19,31 @@ import (
 // Удаление в два шага (ADR-0015): пометка, потом физическое стирание по сроку.
 // Помеченный аккаунт уже недоступен, но данные могут понадобиться по юридически
 // обязывающему запросу в пределах срока хранения.
-func (s *Server) deleteAccount(w http.ResponseWriter, r *http.Request) {
-	id, _ := auth.FromContext(r.Context())
-	personID, err := s.Store.PersonOfUser(r.Context(), id.UserID)
-	if err != nil {
-		writeErr(w, http.StatusNotFound, "no_account", "аккаунт не найден")
-		return
+func deleteAccount(д людиDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		personID, err := д.хранилище.PersonOfUser(r.Context(), id.UserID)
+		if err != nil {
+			writeErr(w, http.StatusNotFound, "no_account", "аккаунт не найден")
+			return
+		}
+		// Срок берётся из настроек, а не из константы: требование поменяется — поменяем
+		// строку в таблице, а не соберём приложение заново.
+		days, err := д.хранилище.RetentionDays(r.Context(), "account_purge_days")
+		if err != nil {
+			log.Printf("deleteAccount: срок: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		if err := д.хранилище.MarkAccountDeleted(r.Context(), personID, days); err != nil {
+			log.Printf("deleteAccount: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		log.Printf("аккаунт %s помечен удалённым, стирание через %d дней", personID, days)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"deleted": true, "purge_after_days": days})
 	}
-	// Срок берётся из настроек, а не из константы: требование поменяется — поменяем
-	// строку в таблице, а не соберём приложение заново.
-	days, err := s.Store.RetentionDays(r.Context(), "account_purge_days")
-	if err != nil {
-		log.Printf("deleteAccount: срок: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	if err := s.Store.MarkAccountDeleted(r.Context(), personID, days); err != nil {
-		log.Printf("deleteAccount: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	log.Printf("аккаунт %s помечен удалённым, стирание через %d дней", personID, days)
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"deleted": true, "purge_after_days": days})
 }
 
 // setChatArchived — PUT/DELETE /chats/{chatID}/archive.

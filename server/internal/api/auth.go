@@ -290,109 +290,117 @@ func (s *Server) forceNewIdentityIfConflict(ctx context.Context, userID string, 
 // lookupUser — GET /users/lookup?phone=: user_id по телефону (contact discovery MVP).
 // Только под Bearer; отвечает 404 без деталей. Приватность справочника (rate limit
 // на перебор, скрытие по настройке) — итерация Privacy вместе с контактами.
-func (s *Server) lookupUser(w http.ResponseWriter, r *http.Request) {
-	phone := r.URL.Query().Get("phone")
-	if !phoneRe.MatchString(phone) {
-		writeErr(w, http.StatusBadRequest, "bad_phone", "нужен телефон в формате E.164")
-		return
+func lookupUser(д людиDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		phone := r.URL.Query().Get("phone")
+		if !phoneRe.MatchString(phone) {
+			writeErr(w, http.StatusBadRequest, "bad_phone", "нужен телефон в формате E.164")
+			return
+		}
+		userID, err := д.хранилище.FindUserByPhone(r.Context(), phone)
+		if errors.Is(err, store.ErrUserUnknown) {
+			writeErr(w, http.StatusNotFound, "user_not_found", "пользователь не найден")
+			return
+		} else if err != nil {
+			log.Printf("lookupUser: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"user_id": userID})
 	}
-	userID, err := s.Store.FindUserByPhone(r.Context(), phone)
-	if errors.Is(err, store.ErrUserUnknown) {
-		writeErr(w, http.StatusNotFound, "user_not_found", "пользователь не найден")
-		return
-	} else if err != nil {
-		log.Printf("lookupUser: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"user_id": userID})
 }
 
 // discoverContacts — POST /users/discover {phones:[...]}: какие из телефонов в TIMA.
 // Возвращает {matches:{phone:user_id}}. Приватность справочника — итерация Privacy.
-func (s *Server) discoverContacts(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Phones []string `json:"phones"`
-	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
-		return
-	}
-	seen := make(map[string]bool, len(req.Phones))
-	valid := make([]string, 0, len(req.Phones))
-	for _, p := range req.Phones {
-		if phoneRe.MatchString(p) && !seen[p] {
-			seen[p] = true
-			valid = append(valid, p)
-			if len(valid) >= 2000 { // предохранитель от перебора справочника
-				break
+func discoverContacts(д людиDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Phones []string `json:"phones"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
+			return
+		}
+		seen := make(map[string]bool, len(req.Phones))
+		valid := make([]string, 0, len(req.Phones))
+		for _, p := range req.Phones {
+			if phoneRe.MatchString(p) && !seen[p] {
+				seen[p] = true
+				valid = append(valid, p)
+				if len(valid) >= 2000 { // предохранитель от перебора справочника
+					break
+				}
 			}
 		}
+		matches, err := д.хранилище.FindUsersByPhones(r.Context(), valid)
+		if err != nil {
+			log.Printf("discoverContacts: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"matches": matches})
 	}
-	matches, err := s.Store.FindUsersByPhones(r.Context(), valid)
-	if err != nil {
-		log.Printf("discoverContacts: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"matches": matches})
 }
 
 // setDisplayName — PATCH /users/me/name {display_name}: своё публичное имя.
-func (s *Server) setDisplayName(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		DisplayName string `json:"display_name"`
+func setDisplayName(д людиDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			DisplayName string `json:"display_name"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
+			return
+		}
+		name := strings.TrimSpace(req.DisplayName)
+		if len(name) > 100 {
+			writeErr(w, http.StatusBadRequest, "bad_name", "имя до 100 символов")
+			return
+		}
+		id, _ := auth.FromContext(r.Context())
+		if err := д.хранилище.SetDisplayName(r.Context(), id.UserID, name); err != nil {
+			log.Printf("setDisplayName: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"display_name": name})
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
-		return
-	}
-	name := strings.TrimSpace(req.DisplayName)
-	if len(name) > 100 {
-		writeErr(w, http.StatusBadRequest, "bad_name", "имя до 100 символов")
-		return
-	}
-	id, _ := auth.FromContext(r.Context())
-	if err := s.Store.SetDisplayName(r.Context(), id.UserID, name); err != nil {
-		log.Printf("setDisplayName: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"display_name": name})
 }
 
 // resolveNames — POST /users/names {ids}: публичные имена по user_id (batch для UI).
 // Плюс phones — но только собеседников по личным чатам: UI показывает «Имя +7999…»
 // для того, кто написал первым, а чужой номер по чужому id остаётся недоступен.
-func (s *Server) resolveNames(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		IDs []string `json:"ids"`
+func resolveNames(д людиDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			IDs []string `json:"ids"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil || len(req.IDs) == 0 {
+			writeErr(w, http.StatusBadRequest, "bad_json", "нужен ids")
+			return
+		}
+		if len(req.IDs) > 500 {
+			req.IDs = req.IDs[:500]
+		}
+		names, err := д.хранилище.DisplayNames(r.Context(), req.IDs)
+		if err != nil {
+			log.Printf("resolveNames: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		id, _ := auth.FromContext(r.Context())
+		phones, err := д.хранилище.PhonesOfChatPeers(r.Context(), id.UserID, req.IDs)
+		if err != nil {
+			log.Printf("resolveNames phones: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"names": names, "phones": phones})
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil || len(req.IDs) == 0 {
-		writeErr(w, http.StatusBadRequest, "bad_json", "нужен ids")
-		return
-	}
-	if len(req.IDs) > 500 {
-		req.IDs = req.IDs[:500]
-	}
-	names, err := s.Store.DisplayNames(r.Context(), req.IDs)
-	if err != nil {
-		log.Printf("resolveNames: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	id, _ := auth.FromContext(r.Context())
-	phones, err := s.Store.PhonesOfChatPeers(r.Context(), id.UserID, req.IDs)
-	if err != nil {
-		log.Printf("resolveNames phones: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"names": names, "phones": phones})
 }
 
 // resolveIdentities — POST /users/identities {ids}: к какому аккаунту относится
@@ -403,25 +411,27 @@ func (s *Server) resolveNames(w http.ResponseWriter, r *http.Request) {
 // группирует их в один контакт — но только если связка доказана подписью прежнего
 // ключа. Для административной связки он ОБЯЗАН показать смену личности: иначе
 // владение номером начинает подменять владение ключами.
-func (s *Server) resolveIdentities(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		IDs []string `json:"ids"`
+func resolveIdentities(д людиDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			IDs []string `json:"ids"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil || len(req.IDs) == 0 {
+			writeErr(w, http.StatusBadRequest, "bad_json", "нужен ids")
+			return
+		}
+		if len(req.IDs) > 500 {
+			req.IDs = req.IDs[:500]
+		}
+		ids, err := д.хранилище.IdentitiesOf(r.Context(), req.IDs)
+		if err != nil {
+			log.Printf("resolveIdentities: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"identities": ids})
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil || len(req.IDs) == 0 {
-		writeErr(w, http.StatusBadRequest, "bad_json", "нужен ids")
-		return
-	}
-	if len(req.IDs) > 500 {
-		req.IDs = req.IDs[:500]
-	}
-	ids, err := s.Store.IdentitiesOf(r.Context(), req.IDs)
-	if err != nil {
-		log.Printf("resolveIdentities: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"identities": ids})
 }
 
 // listDeviceKeys — GET /keys/devices?user_id=: публичные ключи устройств собеседника

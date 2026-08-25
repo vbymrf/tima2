@@ -106,14 +106,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// Чаты: архив, копии и восстановление истории (шаг 4).
 	RegisterChats(mux, s.Store, s.notifier(), s.requireActiveDevice)
 	mux.HandleFunc("GET /api/v1/keys/devices", s.requireActiveDevice(s.listDeviceKeys))
-	mux.HandleFunc("GET /api/v1/users/lookup", s.requireActiveDevice(s.lookupUser))
-	mux.HandleFunc("POST /api/v1/users/discover", s.requireActiveDevice(s.discoverContacts))
-	mux.HandleFunc("PATCH /api/v1/users/me/name", s.requireActiveDevice(s.setDisplayName))
-	mux.HandleFunc("DELETE /api/v1/users/me", s.requireActiveDevice(s.deleteAccount))
-	mux.HandleFunc("POST /api/v1/users/names", s.requireActiveDevice(s.resolveNames))
-	mux.HandleFunc("POST /api/v1/users/identities", s.requireActiveDevice(s.resolveIdentities))
-	mux.HandleFunc("POST /api/v1/users/me/reidentify/challenge", s.requireActiveDevice(s.reidentifyChallenge))
-	mux.HandleFunc("POST /api/v1/users/me/reidentify", s.requireActiveDevice(s.reidentify))
+	// Люди и аккаунт (шаг 4): справочник, имена, личности, удаление.
+	RegisterUsers(mux, s.Store, func() ТокеныЛичности { return s.Auth }, s.requireActiveDevice)
 	// Устройства и привязка по QR (шаг 4). link/start и link/claim идут без
 	// requireDevice: их зовёт устройство, у которого токена ещё нет.
 	RegisterDevices(mux, s.Store, func() *ratelimit.Limiter { return s.Limit },
