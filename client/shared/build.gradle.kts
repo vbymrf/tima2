@@ -42,6 +42,7 @@ kotlin {
             implementation(projects.feature.featureChat)
             implementation(projects.feature.featureGroup)
             implementation(projects.feature.featureAuth)
+            implementation(projects.feature.featureShell)
             // Объявлено по факту использования: типы этих модулей стоят в коде
             // shared, а компилировалось это через чужой api-экспорт.
             implementation(projects.core.coreOutbox)
