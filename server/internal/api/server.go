@@ -146,13 +146,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/media/init", s.requireActiveDevice(s.mediaInit))
 	mux.HandleFunc("POST /api/v1/media/complete", s.requireActiveDevice(s.mediaComplete))
 	mux.HandleFunc("GET /api/v1/media/{mediaID}/url", s.requireActiveDevice(s.mediaURL))
-	mux.HandleFunc("POST /api/v1/channels", s.requireActiveDevice(s.createChannel))
-	mux.HandleFunc("GET /api/v1/channels", s.requireActiveDevice(s.listMyChannels))
-	mux.HandleFunc("GET /api/v1/channels/discover", s.requireActiveDevice(s.discoverChannels))
-	mux.HandleFunc("POST /api/v1/channels/{channelID}/subscribe", s.requireActiveDevice(s.subscribeChannel))
-	mux.HandleFunc("DELETE /api/v1/channels/{channelID}/subscribe", s.requireActiveDevice(s.unsubscribeChannel))
-	mux.HandleFunc("POST /api/v1/channels/{channelID}/posts", s.requireActiveDevice(s.postToChannel))
-	mux.HandleFunc("GET /api/v1/channels/{channelID}/posts", s.requireActiveDevice(s.listChannelPosts))
+	// Каналы — первая группа, вынесенная в registrar (шаг 4 программы). Дальше
+	// сюда добавляются вызовы Register<Группа>, а не строки маршрутов.
+	RegisterChannels(mux, s.Store, s.notifier(), s.requireActiveDevice)
 	mux.HandleFunc("POST /api/v1/calls", s.requireActiveDevice(s.startCall))
 	mux.HandleFunc("POST /api/v1/calls/{callID}/answer", s.requireActiveDevice(s.answerCall))
 	mux.HandleFunc("POST /api/v1/calls/{callID}/end", s.requireActiveDevice(s.endCall))
@@ -168,6 +164,18 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/grant", s.requireActiveDevice(s.grantSpeaker))
 	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/revoke", s.requireActiveDevice(s.revokeSpeaker))
 	mux.HandleFunc("GET /ws", s.handleWS) // auth — первым кадром, не Bearer (websocket-events.md)
+}
+
+// notifier — уведомитель для registrar-ов: тот же порядок доставки, что у notify,
+// но без доступа к остальным полям Server.
+func (s *Server) notifier() *Notifier {
+	n := &Notifier{store: s.Store}
+	// Events — конкретный тип с указателем: nil-указатель в интерфейсе перестал бы
+	// быть nil при сравнении, и «шины нет» превратилось бы в панику на Publish.
+	if s.Events != nil {
+		n.events = s.Events
+	}
+	return n
 }
 
 // notify — доставка события устройству (sync-offline.md §2): сначала в
