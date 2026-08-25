@@ -33,11 +33,15 @@ class ПриёмникTest {
 
     private fun приёмник(myDeviceId: String): Приёмник {
         val сессия = Session(userId = "u-я", deviceId = myDeviceId, accessToken = "t")
+        val окружение = Окружение.открыть(desktopDatabase(File(каталог, "tima.db")), СЕКРЕТ, сессия.userId)
+        val сеть = Сеть.создать(сессия)
+        val личность = deviceIdentityFrom(СЕКРЕТ)
         return Приёмник(
-            окружение = Окружение.открыть(desktopDatabase(File(каталог, "tima.db")), СЕКРЕТ, сессия.userId),
-            сеть = Сеть.создать(сессия),
+            окружение = окружение,
+            сеть = сеть,
             сессия = сессия,
-            личность = deviceIdentityFrom(СЕКРЕТ),
+            личность = личность,
+            оркестрКлючей = ОркестрГрупповыхКлючей(окружение, сеть, личность, сейчасМс = { 0L }),
         )
     }
 

@@ -1,16 +1,9 @@
 package io.tima.shared
 
 import io.tima.core.database.SqlChatBook
-import io.tima.core.database.SqlGroupKeys
-import io.tima.core.encryption.GroupKeyUnwrapOverKodium
-import io.tima.core.encryption.GroupKeyWrapOverKodium
 import io.tima.core.encryption.GroupMessages
 import io.tima.core.network.EventStreamProtocol
 import io.tima.core.network.GroupFrame
-import io.tima.core.network.GroupKeyRecoveryOverHttp
-import io.tima.core.network.GroupKeyWrapsOverHttp
-import io.tima.domain.chat.ShareGroupKeys
-import io.tima.domain.chat.SyncGroupKeys
 import io.tima.core.encryption.DeviceIdentity
 import io.tima.core.encryption.PersonalMessages
 import io.tima.core.network.DeviceKeysResult
@@ -47,6 +40,7 @@ class Приёмник(
     private val сеть: Сеть,
     private val сессия: Session,
     private val личность: DeviceIdentity,
+    private val оркестрКлючей: ОркестрГрупповыхКлючей,
 ) {
 
     /** Что случилось с каналом в последний раз. Для диагностики, не для решений. */
@@ -60,30 +54,9 @@ class Приёмник(
 
     // ── Групповые ключи ──────────────────────────────────────────────────────
     //
-    // Собирается здесь, а не в домене: ротации нужны escrow, крипта, сеть и хранилище
-    // разом. Канал только приносит кадры — выполняет их эта сторона.
-    private val ключиГруппы = SqlGroupKeys(окружение.db, окружение.шифр)
-
-    private val сверкаКлючей = SyncGroupKeys(
-        wraps = GroupKeyWrapsOverHttp(сеть.ключиГрупп),
-        unwrap = GroupKeyUnwrapOverKodium(личность),
-        keys = ключиГруппы,
-    )
-
-    private val раздачаКлючей = ShareGroupKeys(
-        keys = ключиГруппы,
-        wrap = GroupKeyWrapOverKodium,
-        upload = GroupKeyRecoveryOverHttp(сеть.восстановлениеКлючей),
-    )
-
-    private val ротацияКлюча = РотацияГрупповогоКлюча(
-        группы = сеть.группы,
-        ключиУстройств = сеть.ключи,
-        escrow = сеть.escrow,
-        ключиГрупп = сеть.ключиГрупп,
-        книга = ключиГруппы,
-        сейчасМс = ::сейчасМс,
-    )
+    // Собираются НЕ здесь: канал только приносит кадры, а выполняет их работа, которой
+    // нужны escrow, крипта, сеть и хранилище разом. Приёмник получает готовый оркестр.
+    private val ключиГруппы get() = оркестрКлючей.ключи
 
     /**
      * Держать канал, пока приложение живо.
@@ -170,38 +143,9 @@ class Приёмник(
         )
     }
 
-    /**
-     * Кадр про групповые ключи.
-     *
-     * **Ни один из трёх исходов не роняет канал.** Ключи — работа рядом с доставкой, а не
-     * вместо неё: не удалось сходить за обёртками — сообщения всё равно должны идти.
-     * Поэтому провал остаётся в диагностике, а не выбрасывается наверх.
-     */
+    /** Кадр про групповые ключи: исход остаётся в диагностике, канал не роняется. */
     private suspend fun проКлючи(решение: EventStreamProtocol.Decision) {
-        runCatching {
-            when (решение) {
-                // Ротация и приезд обёрток означают одно: сходить за тем, чего у нас нет.
-                is EventStreamProtocol.Decision.KeysArrived ->
-                    последнийИсход = "ключи группы: ${сверкаКлючей.обновить(решение.groupId)}"
-
-                // Просят у нас — значит, у нас эти версии есть. Молчание оставит человека
-                // ждать вечно: другого способа получить историю до своего прихода у него нет.
-                is EventStreamProtocol.Decision.ShareKeys ->
-                    последнийИсход = "отдали ключи: " + раздачаКлючей.поделиться(
-                        groupId = решение.groupId,
-                        requesterDevice = решение.requesterDevice,
-                        requesterEncryptionPub = решение.requesterEncryptionPub,
-                        versions = решение.versions,
-                    )
-
-                // Сервер сам ротировать не может — ключа он не видит (ADR-0017 §3).
-                is EventStreamProtocol.Decision.RotationNeeded ->
-                    последнийИсход = "ротация по просьбе сервера (${решение.reason}): " +
-                        ротацияКлюча.ротировать(решение.groupId)
-
-                else -> Unit
-            }
-        }.onFailure { последнийИсход = "кадр про ключи не обработан: ${it.message}" }
+        оркестрКлючей.обработать(решение)?.let { последнийИсход = it }
     }
 
     /**
