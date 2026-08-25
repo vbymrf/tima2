@@ -49,31 +49,42 @@ func (s *Server) deleteAccount(w http.ResponseWriter, r *http.Request) {
 // Архив ЛИЧНЫЙ: «убрать с глаз». Чат становится готов к удалению только когда его
 // убрали все участники — уборка одного человека не назначает удаление переписки
 // другому (миграция 0024).
-func (s *Server) setChatArchived(w http.ResponseWriter, r *http.Request) {
-	chatID := r.PathValue("chatID")
-	id, _ := auth.FromContext(r.Context())
-	archived := r.Method == http.MethodPut
-	if err := s.Store.SetChatArchived(r.Context(), chatID, id.UserID, archived); err != nil {
-		log.Printf("setChatArchived: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
+// archiveChat и unarchiveChat — два входа в одно действие. Раньше это был один
+// handler, различавший PUT и DELETE по r.Method; при регистрации по глаголам
+// такая проверка внутри — лишний шаг, о котором надо помнить.
+func archiveChat(д чатыDeps) http.HandlerFunc { return установитьАрхив(д, true) }
+func unarchiveChat(д чатыDeps) http.HandlerFunc {
+	return установитьАрхив(д, false)
+}
+
+func установитьАрхив(д чатыDeps, archived bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		chatID := r.PathValue("chatID")
+		id, _ := auth.FromContext(r.Context())
+		if err := д.хранилище.SetChatArchived(r.Context(), chatID, id.UserID, archived); err != nil {
+			log.Printf("setChatArchived: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"chat_id": chatID, "archived": archived})
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"chat_id": chatID, "archived": archived})
 }
 
 // listArchivedChats — GET /chats/archived: что человек убрал у себя.
-func (s *Server) listArchivedChats(w http.ResponseWriter, r *http.Request) {
-	id, _ := auth.FromContext(r.Context())
-	ids, err := s.Store.ArchivedChatsFor(r.Context(), id.UserID)
-	if err != nil {
-		log.Printf("listArchivedChats: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
+func listArchivedChats(д чатыDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		ids, err := д.хранилище.ArchivedChatsFor(r.Context(), id.UserID)
+		if err != nil {
+			log.Printf("listArchivedChats: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		if ids == nil {
+			ids = []string{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"chats": ids})
 	}
-	if ids == nil {
-		ids = []string{}
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"chats": ids})
 }
