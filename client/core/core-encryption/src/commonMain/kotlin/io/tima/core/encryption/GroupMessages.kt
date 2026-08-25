@@ -92,6 +92,55 @@ object GroupMessages {
             body = plaintext,
         )
     }
+
+    /**
+     * То же открытие, но **по полям кадра**, как они пришли с сервера.
+     *
+     * Появилось 2026-08-25. До этого приёмник собирал [GroupMessageMeta] сам — восемь
+     * полей в правильном порядке и с правильными типами, — и ради этого импортировал
+     * крипто-типы в composition root. Плата была не в строчках: раскладка метаданных
+     * входит в подписываемые байты, значит любое её изменение обязано было править и
+     * приёмник, а забытая правка даёт не ошибку сборки, а сообщение, которое не
+     * открывается ни у кого.
+     *
+     * Теперь meta собирается здесь, рядом с `CanonicalBytes`, — в том же модуле, что
+     * и правило её раскладки.
+     *
+     * @param threadRoot и [replyTo] — беззнаковые в протоколе, но приходят из транспорта
+     *   знаковыми `Long`: преобразование сделано здесь, чтобы вызывающий о нём не знал.
+     */
+    @Suppress("LongParameterList")
+    fun open(
+        groupId: String,
+        senderId: String,
+        senderDevice: String,
+        kind: Int,
+        createdAtUnixMs: Long,
+        threadRoot: Long,
+        replyTo: Long,
+        gkVersion: Int,
+        payload: ByteArray,
+        signature: ByteArray,
+        senderSigningPublic: ByteArray,
+        groupKey: ByteArray,
+    ): Result<ReceivedGroupMessage> = open(
+        sealed = SealedGroupMessage(
+            meta = GroupMessageMeta(
+                groupId = groupId,
+                senderId = senderId,
+                senderDevice = senderDevice,
+                kind = kind,
+                createdAtUnixMs = createdAtUnixMs,
+                threadRoot = threadRoot.toULong(),
+                replyTo = replyTo.toULong(),
+                gkVersion = gkVersion,
+            ),
+            payload = payload,
+            signature = signature,
+        ),
+        senderSigningPublic = senderSigningPublic,
+        groupKey = groupKey,
+    )
 }
 
 /** Готовое к отправке сообщение группы: то, что уходит в `POST /groups/{id}/messages`. */

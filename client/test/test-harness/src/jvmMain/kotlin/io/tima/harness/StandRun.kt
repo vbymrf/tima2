@@ -9,6 +9,7 @@ import io.tima.core.encryption.DeviceKeyFactoryOverKodium
 import io.tima.core.encryption.EscrowKeyVerifier
 import io.tima.core.encryption.LocalStoreFieldCipher
 import io.tima.core.encryption.OutgoingSealer
+import io.tima.core.encryption.PersonalChatIdsOverKodium
 import io.tima.core.encryption.PersonalMessages
 import io.tima.core.encryption.TextBodyCodec
 import io.tima.core.encryption.RecipientDevice
@@ -32,7 +33,6 @@ import io.tima.core.network.httpEngine
 import io.tima.core.network.timaDefaults
 import io.tima.core.outbox.Inbox
 import io.tima.core.outbox.OpenOutcome
-import io.tima.crypto.PersonalChatId
 import io.tima.domain.chat.UserLookup
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
@@ -110,7 +110,7 @@ object StandRun {
             }
             шаг("поиск по номеру", "нашёлся тот же user_id, имя от сервера: ${найденБ.name ?: "нет"}")
 
-            val chatId = PersonalChatId.of(А.userId, Б.userId)
+            val chatId = PersonalChatIdsOverKodium.personalChatId(А.userId, Б.userId)
             шаг("chat_id", "$chatId (выведен из пары user_id, сервер его не назначает)")
 
             val ключиБ = KeysApi(route, client, token = { А.accessToken }).devicesOf(Б.userId)

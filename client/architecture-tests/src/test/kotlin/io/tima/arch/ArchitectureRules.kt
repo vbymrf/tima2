@@ -114,8 +114,6 @@ object ArchitectureRules {
             name = "shared не обходит крипто-фасад",
             appliesToPathContaining = listOf("/shared/src/commonMain/"),
             forbiddenImportPrefixes = listOf("io.tima.crypto."),
-            // Временное исключение до шага 3 программы; удаляется вместе с ним.
-            exceptFiles = listOf("Приёмник.kt"),
             why = "Смена крипто-DTO или сериализатора должна быть правкой одного " +
                 "модуля. Каждый импорт io.tima.crypto выше core-encryption добавляет " +
                 "место, которое правится синхронно и однажды будет забыто.",

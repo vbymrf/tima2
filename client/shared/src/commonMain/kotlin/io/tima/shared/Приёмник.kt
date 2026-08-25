@@ -5,7 +5,6 @@ import io.tima.core.database.SqlGroupKeys
 import io.tima.core.encryption.GroupKeyUnwrapOverKodium
 import io.tima.core.encryption.GroupKeyWrapOverKodium
 import io.tima.core.encryption.GroupMessages
-import io.tima.core.encryption.SealedGroupMessage
 import io.tima.core.network.EventStreamProtocol
 import io.tima.core.network.GroupFrame
 import io.tima.core.network.GroupKeyRecoveryOverHttp
@@ -18,8 +17,6 @@ import io.tima.core.network.DeviceKeysResult
 import io.tima.core.network.EventStream
 import io.tima.core.outbox.IncomingEntry
 import io.tima.core.outbox.OpenOutcome
-import io.tima.crypto.GroupMessageMeta
-import io.tima.crypto.MessageSerializer
 import io.tima.domain.account.Session
 import io.tima.domain.chat.ChatKind
 import kotlinx.coroutines.delay
@@ -152,21 +149,19 @@ class Приёмник(
         val ключПодписи = ключиОтправителей[кадр.senderDevice]
             ?: return OpenOutcome.NoKey("ключ подписи отправителя не получен")
 
+        // Метаданные собирает фасад: их раскладка входит в подписываемые байты, и
+        // собирать её здесь значило бы держать копию правила вдали от него самого.
         return GroupMessages.open(
-            sealed = SealedGroupMessage(
-                meta = GroupMessageMeta(
-                    groupId = кадр.groupId,
-                    senderId = кадр.senderId,
-                    senderDevice = кадр.senderDevice,
-                    kind = кадр.kind,
-                    createdAtUnixMs = кадр.createdAtUnixMs,
-                    threadRoot = кадр.threadRoot.toULong(),
-                    replyTo = кадр.replyTo.toULong(),
-                    gkVersion = кадр.gkVersion,
-                ),
-                payload = кадр.payload,
-                signature = кадр.signature,
-            ),
+            groupId = кадр.groupId,
+            senderId = кадр.senderId,
+            senderDevice = кадр.senderDevice,
+            kind = кадр.kind,
+            createdAtUnixMs = кадр.createdAtUnixMs,
+            threadRoot = кадр.threadRoot,
+            replyTo = кадр.replyTo,
+            gkVersion = кадр.gkVersion,
+            payload = кадр.payload,
+            signature = кадр.signature,
             senderSigningPublic = ключПодписи,
             groupKey = ключГруппы,
         ).fold(
@@ -290,8 +285,8 @@ class Приёмник(
 
     /** Кто прислал — по открытой части конверта. Доверенным станет после проверки подписи. */
     private fun отправительКонверта(envelope: ByteArray): Отправившее? =
-        MessageSerializer.decodeEnvelope(envelope).getOrNull()?.meta?.let {
-            Отправившее(userId = it.senderId, deviceId = it.senderDevice)
+        PersonalMessages.peekSender(envelope)?.let {
+            Отправившее(userId = it.userId, deviceId = it.deviceId)
         }
 
     private suspend fun ключПодписи(userId: String, deviceId: String): ByteArray? {
