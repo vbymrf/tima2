@@ -99,10 +99,13 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/sms/verify", s.smsVerify)
 	mux.HandleFunc("POST /api/v1/auth/register", s.register)
 	// Под device JWT
-	mux.HandleFunc("POST /api/v1/messages", s.requireActiveDevice(s.postMessage))
-	mux.HandleFunc("GET /api/v1/chats/{chatID}/messages", s.requireActiveDevice(s.listMessages))
-	mux.HandleFunc("POST /api/v1/chats/{chatID}/read", s.requireActiveDevice(s.chatRead))
-	mux.HandleFunc("POST /api/v1/chats/{chatID}/typing", s.requireActiveDevice(s.chatTyping))
+	// Личные сообщения и состояния переписки (шаг 4).
+	RegisterMessages(mux, s.Store, func() Publisher {
+		if s.Events == nil {
+			return nil
+		}
+		return s.Events
+	}, s.notifier(), s.requireActiveDevice)
 	// Чаты: архив, копии и восстановление истории (шаг 4).
 	RegisterChats(mux, s.Store, s.notifier(), s.requireActiveDevice)
 	mux.HandleFunc("GET /api/v1/keys/devices", s.requireActiveDevice(s.listDeviceKeys))
@@ -177,117 +180,119 @@ func writeErr(w http.ResponseWriter, status int, code, msg string) {
 }
 
 // postMessage — приём конверта: protobuf → валидация размеров → подпись → хранение.
-func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxEnvelopeBytes+1))
-	if err != nil || len(body) > maxEnvelopeBytes {
-		writeErr(w, http.StatusRequestEntityTooLarge, "envelope_too_large", "конверт больше 4 MiB")
-		return
-	}
-	var env pb.Envelope
-	if err := proto.Unmarshal(body, &env); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_protobuf", "конверт не парсится")
-		return
-	}
-	if msg := validateEnvelope(&env); msg != "" {
-		writeErr(w, http.StatusBadRequest, "bad_envelope", msg)
-		return
-	}
-	meta := env.GetMeta()
-
-	// Отправитель конверта обязан совпадать с владельцем токена: чужим именем не подписаться
-	id, _ := auth.FromContext(r.Context())
-	if meta.GetSenderId() != id.UserID || meta.GetSenderDevice() != id.DeviceID {
-		writeErr(w, http.StatusForbidden, "sender_mismatch", "sender_id/sender_device не совпадают с токеном")
-		return
-	}
-
-	// Подпись: ключ устройства отправителя обязан существовать и принадлежать sender_id
-	signingPub, err := s.Store.SigningKey(r.Context(), meta.GetSenderDevice(), meta.GetSenderId())
-	if errors.Is(err, store.ErrDeviceUnknown) {
-		writeErr(w, http.StatusForbidden, "unknown_device", "устройство отправителя не зарегистрировано")
-		return
-	} else if err != nil {
-		log.Printf("postMessage: signing key: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	cb := timacrypto.CanonicalBytesV2(env.GetFormatVersion(), timacrypto.EnvelopeMeta{
-		MessageID:       meta.GetMessageId(),
-		ChatID:          meta.GetChatId(),
-		SenderID:        meta.GetSenderId(),
-		SenderDevice:    meta.GetSenderDevice(),
-		Kind:            uint32(meta.GetKind()),
-		CreatedAtUnixMs: meta.GetCreatedAtUnixMs(),
-		ReplyTo:         meta.GetReplyTo(),
-	},
-		env.GetEncryptedPayload(),
-		append(append([]byte{}, env.GetEscrow().GetMlkemCt()...), env.GetEscrow().GetWrappedMessageKey()...),
-		env.GetSenderEphemeralPub(),
-		env.GetRatchetEnvelope(),
-		env.GetKeyCommitment(),
-	)
-	if !timacrypto.VerifyEnvelopeSignature(signingPub, cb, env.GetSignature()) {
-		writeErr(w, http.StatusForbidden, "bad_signature", "подпись конверта не прошла проверку")
-		return
-	}
-
-	wrapped := make(map[string][]byte, len(env.GetWrappedKeys()))
-	for _, wk := range env.GetWrappedKeys() {
-		wrapped[wk.GetRecipient()] = wk.GetWrapped()
-	}
-	clientMsgID := r.Header.Get("X-Client-Msg-Id") // дедупликация повторной отправки (api-overview: client_msg_id)
-	if clientMsgID == "" {
-		writeErr(w, http.StatusBadRequest, "no_client_msg_id", "нужен заголовок X-Client-Msg-Id (UUID)")
-		return
-	}
-	err = s.Store.SaveMessage(r.Context(), store.Message{
-		ChatID:             meta.GetChatId(),
-		MessageID:          meta.GetMessageId(),
-		ClientMsgID:        clientMsgID,
-		SenderID:           meta.GetSenderId(),
-		SenderDevice:       meta.GetSenderDevice(),
-		Kind:               int32(meta.GetKind()),
-		CreatedAtUnixMs:    meta.GetCreatedAtUnixMs(),
-		ReplyTo:            meta.GetReplyTo(),
-		FormatVersion:      int32(env.GetFormatVersion()),
-		EncryptedPayload:   env.GetEncryptedPayload(),
-		EscrowMlkemCt:      env.GetEscrow().GetMlkemCt(),
-		EscrowWrappedKey:   env.GetEscrow().GetWrappedMessageKey(),
-		EscrowKeyVersion:   int32(env.GetEscrow().GetEscrowKeyVersion()),
-		SenderEphemeralPub: env.GetSenderEphemeralPub(),
-		RatchetEnvelope:    env.GetRatchetEnvelope(),
-		Signature:          env.GetSignature(),
-		KeyCommitment:      env.GetKeyCommitment(),
-		WrappedKeys:        wrapped,
-	})
-	if errors.Is(err, store.ErrDuplicate) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"duplicate": true, "message_id": meta.GetMessageId()})
-		return
-	} else if err != nil {
-		log.Printf("postMessage: save: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	// Доставка адресатам: event log (+ live онлайн-устройствам) — конверт
-	// с единственной обёрткой адресата. Push-очередь офлайн — итерация worker-а.
-	for _, wk := range env.GetWrappedKeys() {
-		single := proto.Clone(&env).(*pb.Envelope)
-		single.WrappedKeys = []*pb.WrappedKey{wk}
-		raw, err := proto.Marshal(single)
-		if err != nil {
-			continue
+func postMessage(д сообщенияDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxEnvelopeBytes+1))
+		if err != nil || len(body) > maxEnvelopeBytes {
+			writeErr(w, http.StatusRequestEntityTooLarge, "envelope_too_large", "конверт больше 4 MiB")
+			return
 		}
-		s.notify(r.Context(), wk.GetRecipient(), "message.new", map[string]any{
-			"chat_id":    meta.GetChatId(),
-			"message_id": meta.GetMessageId(),
-			"envelope":   base64.RawURLEncoding.EncodeToString(raw),
-		})
-	}
+		var env pb.Envelope
+		if err := proto.Unmarshal(body, &env); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_protobuf", "конверт не парсится")
+			return
+		}
+		if msg := validateEnvelope(&env); msg != "" {
+			writeErr(w, http.StatusBadRequest, "bad_envelope", msg)
+			return
+		}
+		meta := env.GetMeta()
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(map[string]any{"message_id": meta.GetMessageId()})
+		// Отправитель конверта обязан совпадать с владельцем токена: чужим именем не подписаться
+		id, _ := auth.FromContext(r.Context())
+		if meta.GetSenderId() != id.UserID || meta.GetSenderDevice() != id.DeviceID {
+			writeErr(w, http.StatusForbidden, "sender_mismatch", "sender_id/sender_device не совпадают с токеном")
+			return
+		}
+
+		// Подпись: ключ устройства отправителя обязан существовать и принадлежать sender_id
+		signingPub, err := д.хранилище.SigningKey(r.Context(), meta.GetSenderDevice(), meta.GetSenderId())
+		if errors.Is(err, store.ErrDeviceUnknown) {
+			writeErr(w, http.StatusForbidden, "unknown_device", "устройство отправителя не зарегистрировано")
+			return
+		} else if err != nil {
+			log.Printf("postMessage: signing key: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		cb := timacrypto.CanonicalBytesV2(env.GetFormatVersion(), timacrypto.EnvelopeMeta{
+			MessageID:       meta.GetMessageId(),
+			ChatID:          meta.GetChatId(),
+			SenderID:        meta.GetSenderId(),
+			SenderDevice:    meta.GetSenderDevice(),
+			Kind:            uint32(meta.GetKind()),
+			CreatedAtUnixMs: meta.GetCreatedAtUnixMs(),
+			ReplyTo:         meta.GetReplyTo(),
+		},
+			env.GetEncryptedPayload(),
+			append(append([]byte{}, env.GetEscrow().GetMlkemCt()...), env.GetEscrow().GetWrappedMessageKey()...),
+			env.GetSenderEphemeralPub(),
+			env.GetRatchetEnvelope(),
+			env.GetKeyCommitment(),
+		)
+		if !timacrypto.VerifyEnvelopeSignature(signingPub, cb, env.GetSignature()) {
+			writeErr(w, http.StatusForbidden, "bad_signature", "подпись конверта не прошла проверку")
+			return
+		}
+
+		wrapped := make(map[string][]byte, len(env.GetWrappedKeys()))
+		for _, wk := range env.GetWrappedKeys() {
+			wrapped[wk.GetRecipient()] = wk.GetWrapped()
+		}
+		clientMsgID := r.Header.Get("X-Client-Msg-Id") // дедупликация повторной отправки (api-overview: client_msg_id)
+		if clientMsgID == "" {
+			writeErr(w, http.StatusBadRequest, "no_client_msg_id", "нужен заголовок X-Client-Msg-Id (UUID)")
+			return
+		}
+		err = д.хранилище.SaveMessage(r.Context(), store.Message{
+			ChatID:             meta.GetChatId(),
+			MessageID:          meta.GetMessageId(),
+			ClientMsgID:        clientMsgID,
+			SenderID:           meta.GetSenderId(),
+			SenderDevice:       meta.GetSenderDevice(),
+			Kind:               int32(meta.GetKind()),
+			CreatedAtUnixMs:    meta.GetCreatedAtUnixMs(),
+			ReplyTo:            meta.GetReplyTo(),
+			FormatVersion:      int32(env.GetFormatVersion()),
+			EncryptedPayload:   env.GetEncryptedPayload(),
+			EscrowMlkemCt:      env.GetEscrow().GetMlkemCt(),
+			EscrowWrappedKey:   env.GetEscrow().GetWrappedMessageKey(),
+			EscrowKeyVersion:   int32(env.GetEscrow().GetEscrowKeyVersion()),
+			SenderEphemeralPub: env.GetSenderEphemeralPub(),
+			RatchetEnvelope:    env.GetRatchetEnvelope(),
+			Signature:          env.GetSignature(),
+			KeyCommitment:      env.GetKeyCommitment(),
+			WrappedKeys:        wrapped,
+		})
+		if errors.Is(err, store.ErrDuplicate) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"duplicate": true, "message_id": meta.GetMessageId()})
+			return
+		} else if err != nil {
+			log.Printf("postMessage: save: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		// Доставка адресатам: event log (+ live онлайн-устройствам) — конверт
+		// с единственной обёрткой адресата. Push-очередь офлайн — итерация worker-а.
+		for _, wk := range env.GetWrappedKeys() {
+			single := proto.Clone(&env).(*pb.Envelope)
+			single.WrappedKeys = []*pb.WrappedKey{wk}
+			raw, err := proto.Marshal(single)
+			if err != nil {
+				continue
+			}
+			д.уведомитель.Device(r.Context(), wk.GetRecipient(), "message.new", map[string]any{
+				"chat_id":    meta.GetChatId(),
+				"message_id": meta.GetMessageId(),
+				"envelope":   base64.RawURLEncoding.EncodeToString(raw),
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"message_id": meta.GetMessageId()})
+	}
 }
 
 // validateEnvelope — жёсткие инварианты wire-формата (envelope.proto). Пустая строка = ок.
@@ -333,65 +338,67 @@ func validateEnvelope(env *pb.Envelope) string {
 }
 
 // listMessages — история чата: конверт (protobuf, base64url) + wrapped_key устройства.
-func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
-	id, _ := auth.FromContext(r.Context())
-	deviceID := id.DeviceID
-	var before uint64
-	if v := r.URL.Query().Get("before"); v != "" {
-		before, _ = strconv.ParseUint(v, 10, 64)
-	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-
-	msgs, err := s.Store.ListMessages(r.Context(), r.PathValue("chatID"), deviceID, before, limit)
-	if err != nil {
-		log.Printf("listMessages: %v", err)
-		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-		return
-	}
-	b64 := base64.RawURLEncoding
-	type item struct {
-		MessageID  uint64 `json:"message_id"`
-		Envelope   string `json:"envelope"`                 // base64url(protobuf Envelope) с единственной обёрткой устройства
-		WrappedKey string `json:"wrapped_key"`              // base64url — дублирует обёртку из конверта для удобства
-		WrapEph    string `json:"wrap_ephemeral,omitempty"` // эфемерал обёртки восстановления (иначе — sender_ephemeral_pub конверта)
-	}
-	out := make([]item, 0, len(msgs))
-	for _, m := range msgs {
-		env := &pb.Envelope{
-			FormatVersion: uint32(m.FormatVersion),
-			Meta: &pb.Metadata{
-				MessageId:       m.MessageID,
-				ChatId:          m.ChatID,
-				SenderId:        m.SenderID,
-				SenderDevice:    m.SenderDevice,
-				Kind:            pb.ContentKind(m.Kind),
-				CreatedAtUnixMs: m.CreatedAtUnixMs,
-				ReplyTo:         m.ReplyTo,
-			},
-			EncryptedPayload: m.EncryptedPayload,
-			KeyCommitment:    m.KeyCommitment,
-			Escrow: &pb.EscrowBlob{
-				MlkemCt:           m.EscrowMlkemCt,
-				WrappedMessageKey: m.EscrowWrappedKey,
-				EscrowKeyVersion:  uint32(m.EscrowKeyVersion),
-			},
-			SenderEphemeralPub: m.SenderEphemeralPub,
-			RatchetEnvelope:    m.RatchetEnvelope,
-			Signature:          m.Signature,
-			WrappedKeys:        []*pb.WrappedKey{{Recipient: deviceID, Wrapped: m.WrappedKeyForDevice}},
+func listMessages(д сообщенияDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		deviceID := id.DeviceID
+		var before uint64
+		if v := r.URL.Query().Get("before"); v != "" {
+			before, _ = strconv.ParseUint(v, 10, 64)
 		}
-		raw, err := proto.Marshal(env)
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+
+		msgs, err := д.хранилище.ListMessages(r.Context(), r.PathValue("chatID"), deviceID, before, limit)
 		if err != nil {
-			log.Printf("listMessages: marshal: %v", err)
-			writeErr(w, http.StatusInternalServerError, "internal", "ошибка сериализации")
+			log.Printf("listMessages: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		it := item{MessageID: m.MessageID, Envelope: b64.EncodeToString(raw), WrappedKey: b64.EncodeToString(m.WrappedKeyForDevice)}
-		if len(m.WrapEphemeral) == 32 {
-			it.WrapEph = b64.EncodeToString(m.WrapEphemeral)
+		b64 := base64.RawURLEncoding
+		type item struct {
+			MessageID  uint64 `json:"message_id"`
+			Envelope   string `json:"envelope"`                 // base64url(protobuf Envelope) с единственной обёрткой устройства
+			WrappedKey string `json:"wrapped_key"`              // base64url — дублирует обёртку из конверта для удобства
+			WrapEph    string `json:"wrap_ephemeral,omitempty"` // эфемерал обёртки восстановления (иначе — sender_ephemeral_pub конверта)
 		}
-		out = append(out, it)
+		out := make([]item, 0, len(msgs))
+		for _, m := range msgs {
+			env := &pb.Envelope{
+				FormatVersion: uint32(m.FormatVersion),
+				Meta: &pb.Metadata{
+					MessageId:       m.MessageID,
+					ChatId:          m.ChatID,
+					SenderId:        m.SenderID,
+					SenderDevice:    m.SenderDevice,
+					Kind:            pb.ContentKind(m.Kind),
+					CreatedAtUnixMs: m.CreatedAtUnixMs,
+					ReplyTo:         m.ReplyTo,
+				},
+				EncryptedPayload: m.EncryptedPayload,
+				KeyCommitment:    m.KeyCommitment,
+				Escrow: &pb.EscrowBlob{
+					MlkemCt:           m.EscrowMlkemCt,
+					WrappedMessageKey: m.EscrowWrappedKey,
+					EscrowKeyVersion:  uint32(m.EscrowKeyVersion),
+				},
+				SenderEphemeralPub: m.SenderEphemeralPub,
+				RatchetEnvelope:    m.RatchetEnvelope,
+				Signature:          m.Signature,
+				WrappedKeys:        []*pb.WrappedKey{{Recipient: deviceID, Wrapped: m.WrappedKeyForDevice}},
+			}
+			raw, err := proto.Marshal(env)
+			if err != nil {
+				log.Printf("listMessages: marshal: %v", err)
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка сериализации")
+				return
+			}
+			it := item{MessageID: m.MessageID, Envelope: b64.EncodeToString(raw), WrappedKey: b64.EncodeToString(m.WrappedKeyForDevice)}
+			if len(m.WrapEphemeral) == 32 {
+				it.WrapEph = b64.EncodeToString(m.WrapEphemeral)
+			}
+			out = append(out, it)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"messages": out})
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"messages": out})
 }
