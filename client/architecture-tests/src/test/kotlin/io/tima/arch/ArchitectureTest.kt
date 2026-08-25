@@ -35,7 +35,9 @@ class ArchitectureTest {
     @Test
     fun проверка_действительно_ловит_нарушение() {
         val domainRule = ArchitectureRules.rules.single { it.name.startsWith("domain") }
+        // Образцов в каталоге несколько — берём тот, который заведён под это правило.
         val found = ArchitectureRules.violationsIn(fixtures, domainRule)
+            .filter { it.file == "ОбразецUseCase.kt" }
 
         assertEquals(
             1,
@@ -43,6 +45,31 @@ class ArchitectureTest {
             "Ожидалось ровно одно нарушение в образце, найдено ${found.size}: $found",
         )
         assertTrue(found.single().detail.contains("io.ktor"), "не тот импорт: ${found.single()}")
+    }
+
+    /**
+     * То же доказательство для трёх правил шага 1 программы: крипто-фасад, SQLDelight
+     * и Ktor. Каждое из них живёт с временными исключениями, а правило с исключениями
+     * особенно легко превратить в правило, которое не ловит ничего.
+     *
+     * Образец нарушает все три сразу — по одному импорту на правило.
+     */
+    @Test
+    fun правила_шага_1_ловят_нарушения() {
+        val ожидания = mapOf(
+            "shared не обходит крипто-фасад" to "io.tima.crypto",
+            "SQLDelight не выходит за core-database" to "app.cash.sqldelight",
+            "Ktor не поднимается выше core-network" to "io.ktor",
+        )
+
+        for ((имя, признак) in ожидания) {
+            val rule = ArchitectureRules.rules.single { it.name == имя }
+            val found = ArchitectureRules.violationsIn(fixtures, rule)
+            assertTrue(
+                found.any { it.detail.contains(признак) },
+                "правило «$имя» не поймало $признак в образце: $found",
+            )
+        }
     }
 
     /**

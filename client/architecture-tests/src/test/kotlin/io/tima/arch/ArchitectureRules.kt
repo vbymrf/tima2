@@ -111,6 +111,43 @@ object ArchitectureRules {
                 "платформенный вход, перечнем Платформа, а не строкой в общем коде.",
         ),
         Rule(
+            name = "shared не обходит крипто-фасад",
+            appliesToPathContaining = listOf("/shared/src/commonMain/"),
+            forbiddenImportPrefixes = listOf("io.tima.crypto."),
+            // Временное исключение до шага 3 программы; удаляется вместе с ним.
+            exceptFiles = listOf("Приёмник.kt"),
+            why = "Смена крипто-DTO или сериализатора должна быть правкой одного " +
+                "модуля. Каждый импорт io.tima.crypto выше core-encryption добавляет " +
+                "место, которое правится синхронно и однажды будет забыто.",
+        ),
+        Rule(
+            name = "SQLDelight не выходит за core-database",
+            appliesToPathContaining = listOf("/shared/", "/feature/"),
+            forbiddenImportPrefixes = listOf("app.cash.sqldelight."),
+            forbiddenContent = listOf(".chatsQueries", ".outboxQueries"),
+            // Временные исключения: прямые запросы сегодня есть в трёх файлах shared;
+            // удаляются в шаге 5 вместе с портами ChatKindReader/ChatBook.
+            //
+            // Отправитель.kt в программе назван не был — найден при выполнении шага 1:
+            // `Отправитель.kt:98` берёт peer_id тем же прямым запросом.
+            exceptFiles = listOf("Корень.kt", "Приёмник.kt", "Отправитель.kt"),
+            why = "Прямой запрос из shared делает схему базы публичным API: миграция " +
+                "схемы превращается в правку экранов и приёмника.",
+        ),
+        Rule(
+            name = "Ktor не поднимается выше core-network",
+            appliesToPathContaining = listOf("/shared/src/commonMain/"),
+            forbiddenImportPrefixes = listOf("io.ktor."),
+            // Пока Сеть публикует HttpClient — Окружение обязано его видеть.
+            // Исключение удаляется в шаге 5 вместе с публичным client.
+            //
+            // Приёмник.kt в программе назван вторым исключением — по факту он Ktor не
+            // импортирует вовсе, поэтому исключение здесь одно.
+            exceptFiles = listOf("Окружение.kt"),
+            why = "Публичный HttpClient в Сеть делает транспорт частью API shared: " +
+                "смена движка или политики токенов задевает всех потребителей.",
+        ),
+        Rule(
             name = "core-model без зависимостей",
             appliesToPathContaining = listOf("/core/core-model/"),
             forbiddenImportPrefixes = listOf("io.", "kotlinx.", "com.", "app.", "org.", "java.", "javax."),
@@ -151,11 +188,16 @@ object ArchitectureRules {
     private fun check(file: File, relative: String, rule: Rule): List<Violation> {
         val out = mutableListOf<Violation>()
 
+        // Исключение относится к ФАЙЛУ, а не к виду проверки. До 2026-08-25 оно
+        // действовало только на forbiddenContent, и правило с exceptFiles по импортам
+        // падало на собственном исключении — то есть было невыразимо.
+        if (rule.exceptFiles.any { file.name.contains(it) }) return out
+
         rule.forbiddenFileSuffixes.firstOrNull { file.name.endsWith(it) }?.let { suffix ->
             out += Violation(relative, rule.name, "имя файла кончается на $suffix", rule.why)
         }
 
-        if (rule.forbiddenContent.isNotEmpty() && rule.exceptFiles.none { file.name.contains(it) }) {
+        if (rule.forbiddenContent.isNotEmpty()) {
             val текст = file.readText()
             for (кусок in rule.forbiddenContent) {
                 if (текст.contains(кусок)) {
