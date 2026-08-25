@@ -365,7 +365,7 @@ private fun Приложение(
 @Composable
 private fun Переписка(
     окружение: Окружение,
-    сеть: Сеть,
+    сеть: ПортыПереписок,
     chatId: String,
     имя: String?,
     scope: kotlinx.coroutines.CoroutineScope,
@@ -436,7 +436,7 @@ private const val ПОВТОРЫ_КАЖДЫЕ_МС = 5_000L
  * Повторы — только для отказа связи: запуск и есть тот момент, когда сети чаще всего
  * ещё нет. Отказ сервера повторять нечего: он не изменится.
  */
-private suspend fun объявитьПлатформу(сеть: Сеть, платформа: Платформа) {
+private suspend fun объявитьПлатформу(сеть: ПортыУстройств, платформа: Платформа) {
     repeat(ПОПЫТОК_ОБЪЯВЛЕНИЯ) { попытка ->
         when (сеть.устройства.declarePlatform(платформа.серверу)) {
             is PlatformResult.Declared -> return
@@ -458,7 +458,7 @@ private const val МЕЖДУ_ОБЪЯВЛЕНИЯМИ_МС = 2_000L
  */
 @Composable
 private fun ПодтверждениеПривязки(
-    сеть: Сеть,
+    сеть: ПортыУстройств,
     секретУстройства: ByteArray,
     код: String,
     scope: kotlinx.coroutines.CoroutineScope,
@@ -478,7 +478,7 @@ private fun ПодтверждениеПривязки(
 /** Свои устройства: список, отключение и вопрос перед ним. */
 @Composable
 private fun Устройства(
-    сеть: Сеть,
+    сеть: ПортыУстройств,
     scope: kotlinx.coroutines.CoroutineScope,
     версияСборки: String,
     onНазад: () -> Unit,
@@ -504,7 +504,7 @@ private fun Устройства(
 @Composable
 private fun НоваяГруппа(
     окружение: Окружение,
-    сеть: Сеть,
+    сеть: ПортыГрупп,
     scope: kotlinx.coroutines.CoroutineScope,
     onНазад: () -> Unit,
     onСоздана: (String, String) -> Unit,
@@ -557,7 +557,7 @@ private fun НоваяГруппа(
 @Composable
 private fun Состав(
     окружение: Окружение,
-    сеть: Сеть,
+    сеть: ПортыГрупп,
     сессия: Session,
     groupId: String,
     scope: kotlinx.coroutines.CoroutineScope,

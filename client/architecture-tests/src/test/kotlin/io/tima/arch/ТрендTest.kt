@@ -107,7 +107,9 @@ class ТрендTest {
             if (строка == "}") break
             // Только собственные свойства класса: отступ ровно четыре пробела.
             // `val` внутри метода стоит глубже и хабом не является.
-            if (!строка.startsWith("    val ")) continue
+            // override val считается наравне с val: свойство остаётся публичным.
+            // Разница в другом — теперь его объявляет ПОРТ, а не сам класс.
+            if (!строка.startsWith("    val ") && !строка.startsWith("    override val ")) continue
             if (строка.startsWith("    private") || строка.startsWith("    internal")) continue
             счёт++
         }

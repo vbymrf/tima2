@@ -136,12 +136,6 @@ object ArchitectureRules {
             name = "Ktor не поднимается выше core-network",
             appliesToPathContaining = listOf("/shared/src/commonMain/"),
             forbiddenImportPrefixes = listOf("io.ktor."),
-            // Пока Сеть публикует HttpClient — Окружение обязано его видеть.
-            // Исключение удаляется в шаге 5 вместе с публичным client.
-            //
-            // Приёмник.kt в программе назван вторым исключением — по факту он Ktor не
-            // импортирует вовсе, поэтому исключение здесь одно.
-            exceptFiles = listOf("Окружение.kt"),
             why = "Публичный HttpClient в Сеть делает транспорт частью API shared: " +
                 "смена движка или политики токенов задевает всех потребителей.",
         ),

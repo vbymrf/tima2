@@ -4,6 +4,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.websocket.WebSockets
 
 /**
  * Настройки клиента, которые не зависят от платформы — К3.2.
@@ -60,6 +61,23 @@ fun timaHttpClient(tuning: TransportTuning = TransportTuning()): HttpClient =
     HttpClient(httpEngine()) { timaDefaults(tuning) }
 
 /**
+ * Тот же клиент, но с живым каналом.
+ *
+ * **Websockets ставится сразу, и клиент остаётся один.** Второй клиент означал бы
+ * второй набор настроек — таймауты, повторы, движок, — и однажды они разошлись бы:
+ * запрос ходил бы по одним правилам, живой канал по другим, а выглядело бы это как
+ * «сообщения приходят, а уведомления нет».
+ *
+ * Живёт здесь, а не в композиции приложения: `HttpClient` не должен подниматься выше
+ * этого модуля, иначе смена движка или политики токенов задевает всех потребителей.
+ */
+fun timaHttpClientСКаналом(tuning: TransportTuning = TransportTuning()): HttpClient =
+    HttpClient(httpEngine()) {
+        timaDefaults(tuning)
+        install(WebSockets)
+    }
+
+/**
  * Движок по платформе — единственное, что здесь платформенное.
  *
  * OkHttp на JVM (Desktop и Android — один и тот же движок, чтобы поведение сети не
@@ -67,3 +85,23 @@ fun timaHttpClient(tuning: TransportTuning = TransportTuning()): HttpClient =
  * уважает настройки VPN и доверие к сертификатам, заданные на устройстве.
  */
 expect fun httpEngine(): HttpClientEngineFactory<*>
+
+/**
+ * Соединение с сервером: адрес и клиент, собранные вместе.
+ *
+ * Заведено, чтобы **Ktor не поднимался выше этого модуля**. Композиция приложения
+ * берёт готовое соединение и передаёт его дальше, ни разу не называя ни `HttpClient`,
+ * ни движок: смена того и другого остаётся правкой одного модуля.
+ */
+class ServerLink(val route: ServerRoute, val client: HttpClient) {
+    companion object {
+        /**
+         * @param живойКанал ставить ли WebSockets. Клиент при этом остаётся ОДИН:
+         *   второй означал бы второй набор настроек, и они разошлись бы.
+         */
+        fun открыть(host: String, живойКанал: Boolean = false): ServerLink = ServerLink(
+            route = ServerRoute.from(RouteConfig(host = host)),
+            client = if (живойКанал) timaHttpClientСКаналом() else timaHttpClient(),
+        )
+    }
+}

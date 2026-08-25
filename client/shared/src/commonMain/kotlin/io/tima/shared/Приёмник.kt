@@ -94,7 +94,7 @@ class Приёмник(
     suspend fun держать() {
         while (true) {
             val исход = runCatching {
-                EventStream(сеть.route, сеть.client, token = { сессия.accessToken })
+                сеть.каналСобытий()
                     .run(
                         cursor = null,
                         onGroupKeys = { решение -> проКлючи(решение) },

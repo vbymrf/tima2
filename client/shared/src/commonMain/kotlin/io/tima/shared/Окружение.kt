@@ -1,8 +1,5 @@
 package io.tima.shared
 
-import io.ktor.client.HttpClient
-import io.ktor.client.plugins.websocket.WebSockets
-import io.ktor.client.plugins.HttpTimeout
 import io.tima.core.database.SqlChatFeed
 import io.tima.core.database.SqlChatsFeed
 import io.tima.core.database.SqlInboxStore
@@ -21,6 +18,7 @@ import io.tima.core.network.DeviceLinkStartOverHttp
 import io.tima.core.network.DeviceBookOverHttp
 import io.tima.core.network.DevicesApi
 import io.tima.core.network.EscrowApi
+import io.tima.core.network.EventStream
 import io.tima.core.network.GroupKeyRecoveryApi
 import io.tima.core.network.GroupKeysApi
 import io.tima.core.network.GroupsApi
@@ -31,6 +29,7 @@ import io.tima.core.network.LinkConfirmApi
 import io.tima.core.network.LinkStartApi
 import io.tima.core.network.RouteConfig
 import io.tima.core.network.ServerRoute
+import io.tima.core.network.ServerLink
 import io.tima.core.network.httpEngine
 import io.tima.core.network.timaDefaults
 import io.tima.core.outbox.FieldCipher
@@ -125,8 +124,9 @@ class Вход private constructor(
             host: String = СТЕНД,
             хранилищеСекретов: SecretVault = platformVault(scope = "desktop"),
         ): Вход {
-            val route = ServerRoute.from(RouteConfig(host = host))
-            val client = HttpClient(httpEngine()) { timaDefaults() }
+            val связь = ServerLink.открыть(host)
+            val route = связь.route
+            val client = связь.client
             val секреты = VaultSecretStore(хранилищеСекретов)
             val секретыУстройства = секреты
             return Вход(
@@ -160,25 +160,24 @@ class Вход private constructor(
  * **на каждый вызов**, а не один раз: он живёт меньше приложения.
  */
 class Сеть(
-    val route: ServerRoute,
-    val client: HttpClient,
-    val сессия: Session,
-) {
-    val ключи: KeysApi = KeysApi(route, client, token = { сессия.accessToken })
-    val escrow: EscrowApi = EscrowApi(route, client, token = { сессия.accessToken })
-    val транспорт: HttpMessageTransport = HttpMessageTransport(route, client, token = { сессия.accessToken })
+    private val связь: ServerLink,
+    private val сессия: Session,
+) : ПортыПереписок, ПортыГрупп, ПортыУстройств {
+    override val ключи: KeysApi = KeysApi(связь.route, связь.client, token = { сессия.accessToken })
+    override val escrow: EscrowApi = EscrowApi(связь.route, связь.client, token = { сессия.accessToken })
+    val транспорт: HttpMessageTransport = HttpMessageTransport(связь.route, связь.client, token = { сессия.accessToken })
 
     /** Справочник: кто скрывается за номером телефона. Нужен, чтобы начать переписку. */
-    val справочник: UsersApi = UsersApi(route, client, token = { сессия.accessToken })
+    override val справочник: UsersApi = UsersApi(связь.route, связь.client, token = { сессия.accessToken })
 
     /** Устройства аккаунта: объявить платформу, показать список, отключить. */
-    val устройства: DevicesApi = DevicesApi(route, client, token = { сессия.accessToken })
+    override val устройства: DevicesApi = DevicesApi(связь.route, связь.client, token = { сессия.accessToken })
 
     /** Группы: создание, состав, роли. */
-    val группы: GroupsApi = GroupsApi(route, client, token = { сессия.accessToken })
+    override val группы: GroupsApi = GroupsApi(связь.route, связь.client, token = { сессия.accessToken })
 
     /** Групповые ключи: ротация и выдача обёрток этому устройству. */
-    val ключиГрупп: GroupKeysApi = GroupKeysApi(route, client, token = { сессия.accessToken })
+    override val ключиГрупп: GroupKeysApi = GroupKeysApi(связь.route, связь.client, token = { сессия.accessToken })
 
     /**
      * Недостающие версии ключа: попросить и отдать.
@@ -186,8 +185,8 @@ class Сеть(
      * Отдельно от [ключиГрупп], потому что это другая работа: там выпуск новой версии,
      * здесь передача уже существующей тому, кому её не выдавали.
      */
-    val восстановлениеКлючей: GroupKeyRecoveryApi =
-        GroupKeyRecoveryApi(route, client, token = { сессия.accessToken })
+    override val восстановлениеКлючей: GroupKeyRecoveryApi =
+        GroupKeyRecoveryApi(связь.route, связь.client, token = { сессия.accessToken })
 
     /**
      * Свои устройства как случай использования.
@@ -195,7 +194,7 @@ class Сеть(
      * Появилось вместе с привязкой: подключить устройство стало делом одного скана, значит
      * отключать человек должен уметь сам.
      */
-    val мойПарк: MyDevices = MyDevices(DeviceBookOverHttp(устройства))
+    override val мойПарк: MyDevices = MyDevices(DeviceBookOverHttp(устройства))
 
     /**
      * Подтверждение привязки нового устройства.
@@ -203,10 +202,19 @@ class Сеть(
      * Требует ключа этого устройства: подпись над данными из кода делается им. Ключ даёт
      * приложение, потому что он живёт в хранилище платформы, а не в сети.
      */
-    fun подтверждениеПривязки(личность: DeviceIdentity): ConfirmDeviceLink = ConfirmDeviceLink(
-        api = DeviceLinkConfirmOverHttp(LinkConfirmApi(route, client, token = { сессия.accessToken })),
+    override fun подтверждениеПривязки(личность: DeviceIdentity): ConfirmDeviceLink = ConfirmDeviceLink(
+        api = DeviceLinkConfirmOverHttp(LinkConfirmApi(связь.route, связь.client, token = { сессия.accessToken })),
         signer = LinkSignerOverKodium(личность),
     )
+
+    /**
+     * Живой канал событий.
+     *
+     * Собирается здесь, а не у приёмника: адрес и клиент стали приватными, и это
+     * было целью — Ktor не поднимается выше core-network. Приёмник получает готовый
+     * поток и про транспорт не знает.
+     */
+    fun каналСобытий(): EventStream = EventStream(связь.route, связь.client, token = { сессия.accessToken })
 
     companion object {
         /** Тот же адрес и тот же клиент, что у входа: сервер один. */
@@ -214,13 +222,10 @@ class Сеть(
             сессия: Session,
             host: String = Вход.СТЕНД,
         ): Сеть = Сеть(
-            route = ServerRoute.from(RouteConfig(host = host)),
-            // WebSockets ставится сразу: живой канал — не отдельный клиент, а тот же
-            // самый. Второй клиент означал бы второй набор настроек, и они разошлись бы.
-            client = HttpClient(httpEngine()) {
-                timaDefaults()
-                install(WebSockets)
-            },
+            // Соединение собирает core-network: Ktor выше него не поднимается. Живой
+            // канал ставится на тот же клиент — второй означал бы второй набор
+            // настроек, и они разошлись бы.
+            связь = ServerLink.открыть(host, живойКанал = true),
             сессия = сессия,
         )
     }
