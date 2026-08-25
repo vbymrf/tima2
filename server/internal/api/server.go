@@ -143,9 +143,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/groups/{groupID}/keys", s.requireActiveDevice(s.groupKeys))
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys/recover", s.requireActiveDevice(s.groupKeyRecover))
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys/recover/provide", s.requireActiveDevice(s.groupKeyProvide))
-	mux.HandleFunc("POST /api/v1/media/init", s.requireActiveDevice(s.mediaInit))
-	mux.HandleFunc("POST /api/v1/media/complete", s.requireActiveDevice(s.mediaComplete))
-	mux.HandleFunc("GET /api/v1/media/{mediaID}/url", s.requireActiveDevice(s.mediaURL))
+	// Медиа (шаг 4): вместе с маршрутами уехало поле Blob.
+	RegisterMedia(mux, s.Store, func() *blob.Client { return s.Blob }, s.requireActiveDevice)
 	// Каналы — первая группа, вынесенная в registrar (шаг 4 программы). Дальше
 	// сюда добавляются вызовы Register<Группа>, а не строки маршрутов.
 	RegisterChannels(mux, s.Store, s.notifier(), s.requireActiveDevice)
