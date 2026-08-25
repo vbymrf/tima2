@@ -7,6 +7,7 @@ import io.tima.core.outbox.Inbox
 import io.tima.core.outbox.IncomingState
 import io.tima.domain.chat.ChatKind
 import io.tima.domain.chat.ChatBook
+import io.tima.domain.chat.ChatFacts
 import io.tima.domain.chat.ChatSummary
 import io.tima.domain.chat.ChatsFeed
 import io.tima.domain.chat.ReadMarks
@@ -148,4 +149,23 @@ class SqlChatBook(
  */
 class SqlReadMarks(private val inbox: Inbox) : ReadMarks {
     override fun markChatRead(chatId: String): Int = inbox.markChatRead(chatId)
+}
+
+/**
+ * Чтение фактов о переписке — переходник к порту `domain-chat`.
+ *
+ * Один запрос на все три вопроса: строка либо есть, либо нет, и брать её трижды
+ * значило бы три похода в базу там, где хватает одного.
+ */
+class SqlChatFacts(private val db: TimaDatabase) : ChatFacts {
+
+    override fun kindOf(chatId: String): ChatKind? = строка(chatId)?.let {
+        if (it.kind.toInt() == ChatKind.Group.ordinal) ChatKind.Group else ChatKind.Personal
+    }
+
+    override fun peerOf(chatId: String): String? = строка(chatId)?.peer_id
+
+    override fun knows(chatId: String): Boolean = строка(chatId) != null
+
+    private fun строка(chatId: String) = db.chatsQueries.chatById(chatId).executeAsOneOrNull()
 }

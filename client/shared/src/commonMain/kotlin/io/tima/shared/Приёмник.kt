@@ -136,7 +136,7 @@ class Приёмник(
         }
 
         // Группа в списке переписок: без строки человек не увидит, куда пришло сообщение.
-        if (окружение.db.chatsQueries.chatById(groupId).executeAsOneOrNull() == null) {
+        if (!окружение.фактыПереписок.knows(groupId)) {
             книга.remember(chatId = groupId, kind = ChatKind.Group, title = "Группа", peerId = null)
         }
     }
@@ -247,7 +247,7 @@ class Приёмник(
 
         // Переписка от незнакомого — со своим именем: иначе в списке появится строка без
         // имени, и человек не узнает, кто написал.
-        if (отправитель != null && окружение.db.chatsQueries.chatById(chatId).executeAsOneOrNull() == null) {
+        if (отправитель != null && !окружение.фактыПереписок.knows(chatId)) {
             книга.remember(
                 chatId = chatId,
                 kind = ChatKind.Personal,

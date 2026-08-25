@@ -1,6 +1,8 @@
 package io.tima.shared
 
 import io.tima.core.database.SqlChatFeed
+import io.tima.core.database.SqlChatFacts
+import io.tima.domain.chat.ChatFacts
 import io.tima.core.database.SqlChatsFeed
 import io.tima.core.database.SqlInboxStore
 import io.tima.core.database.SqlOutboxStore
@@ -259,6 +261,14 @@ class Окружение private constructor(
      * сообщение навсегда, живой канал его больше не пришлёт.
      */
     val входящие: Inbox = Inbox(SqlInboxStore(db, шифр), nowMs = { сейчасМс() })
+
+    /**
+     * Факты о переписке: вид, собеседник, знаем ли о ней вообще.
+     *
+     * Порт вместо прямого запроса: схема базы перестала быть публичным API — до этого
+     * миграция столбца была правкой экранов и приёмника.
+     */
+    val фактыПереписок: ChatFacts = SqlChatFacts(db)
 
     val переписки: ObserveChats = ObserveChats(SqlChatsFeed(db, TextBodyCodec, шифр, myUserId))
 

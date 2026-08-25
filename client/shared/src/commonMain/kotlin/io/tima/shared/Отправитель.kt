@@ -95,7 +95,7 @@ class Отправитель(
             return null
         }
 
-        val собеседник = окружение.db.chatsQueries.chatById(chatId).executeAsOneOrNull()?.peer_id
+        val собеседник = окружение.фактыПереписок.peerOf(chatId)
         if (собеседник == null) {
             последняяБеда = "у переписки $chatId неизвестен собеседник — некому адресовать"
             return null

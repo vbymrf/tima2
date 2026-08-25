@@ -123,12 +123,6 @@ object ArchitectureRules {
             appliesToPathContaining = listOf("/shared/", "/feature/"),
             forbiddenImportPrefixes = listOf("app.cash.sqldelight."),
             forbiddenContent = listOf(".chatsQueries", ".outboxQueries"),
-            // Временные исключения: прямые запросы сегодня есть в трёх файлах shared;
-            // удаляются в шаге 5 вместе с портами ChatKindReader/ChatBook.
-            //
-            // Отправитель.kt в программе назван не был — найден при выполнении шага 1:
-            // `Отправитель.kt:98` берёт peer_id тем же прямым запросом.
-            exceptFiles = listOf("Корень.kt", "Приёмник.kt", "Отправитель.kt"),
             why = "Прямой запрос из shared делает схему базы публичным API: миграция " +
                 "схемы превращается в правку экранов и приёмника.",
         ),

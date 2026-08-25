@@ -376,7 +376,7 @@ private fun Переписка(
     // От этого зависит трое: показывать ли автора у реплик, спрашивать ли имена и есть ли
     // вход в состав.
     val группа = remember(chatId) {
-        окружение.db.chatsQueries.chatById(chatId).executeAsOneOrNull()?.kind?.toInt() == ChatKind.Group.ordinal
+        окружение.фактыПереписок.kindOf(chatId) == ChatKind.Group
     }
     // Store живёт столько, сколько открыта переписка: ключ по chatId, чтобы при переходе в
     // другую он пересоздался, а не показал реплики предыдущей.
