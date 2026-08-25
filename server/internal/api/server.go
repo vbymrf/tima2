@@ -149,21 +149,16 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// Каналы — первая группа, вынесенная в registrar (шаг 4 программы). Дальше
 	// сюда добавляются вызовы Register<Группа>, а не строки маршрутов.
 	RegisterChannels(mux, s.Store, s.notifier(), s.requireActiveDevice)
-	mux.HandleFunc("POST /api/v1/calls", s.requireActiveDevice(s.startCall))
-	mux.HandleFunc("POST /api/v1/calls/{callID}/answer", s.requireActiveDevice(s.answerCall))
-	mux.HandleFunc("POST /api/v1/calls/{callID}/end", s.requireActiveDevice(s.endCall))
-	mux.HandleFunc("POST /api/v1/calls/group", s.requireActiveDevice(s.startGroupCall))
-	mux.HandleFunc("POST /api/v1/calls/{callID}/join", s.requireActiveDevice(s.joinCall))
-	// Вебхуки LiveKit — без device JWT: подпись проверяется секретом LiveKit,
-	// а сам SFU нашего токена не имеет и иметь не должен.
-	mux.HandleFunc("POST /livekit/webhook", s.livekitWebhook)
-	mux.HandleFunc("POST /api/v1/voice-rooms", s.requireActiveDevice(s.createVoiceRoom))
-	mux.HandleFunc("GET /api/v1/voice-rooms", s.requireActiveDevice(s.listVoiceRooms))
-	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/join", s.requireActiveDevice(s.joinVoiceRoom))
-	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/hand", s.requireActiveDevice(s.raiseHand))
-	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/grant", s.requireActiveDevice(s.grantSpeaker))
-	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/revoke", s.requireActiveDevice(s.revokeSpeaker))
+	// Звонки, групповые звонки и аудио-комнаты (шаг 4): сюда же уехали поля
+	// Calls, Rooms и LiveKitURL — их видят только эти двенадцать маршрутов.
+	RegisterCalls(mux, s.Store, s.настройкиLiveKit, s.notifier(), s.requireActiveDevice)
 	mux.HandleFunc("GET /ws", s.handleWS) // auth — первым кадром, не Bearer (websocket-events.md)
+}
+
+// настройкиLiveKit — снимок полей звонков НА МОМЕНТ ВЫЗОВА. Передаётся функцией, а
+// не значением: cmd/tima и тесты заполняют эти поля уже после Register.
+func (s *Server) настройкиLiveKit() LiveKitНастройки {
+	return LiveKitНастройки{Выдача: s.Calls, Комнаты: s.Rooms, Адрес: s.LiveKitURL}
 }
 
 // notifier — уведомитель для registrar-ов: тот же порядок доставки, что у notify,
