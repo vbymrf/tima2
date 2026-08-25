@@ -3,6 +3,7 @@ package io.tima.feature.shell
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -54,6 +55,13 @@ fun КаркасОкна(
     modifier: Modifier = Modifier,
     /** Второй ряд: подвкладки, фильтры, режимы. Есть не у всех окон. */
     второйРяд: (@Composable () -> Unit)? = null,
+    /**
+     * Соседние окна: свайп по средней зоне содержимого.
+     *
+     * `null` — свайпа нет. Так на широких форматах: там окна меняют рейкой, и
+     * горизонталь содержимого принадлежит содержимому целиком.
+     */
+    onСоседнееОкно: ((ВСторону) -> Unit)? = null,
     содержимое: @Composable () -> Unit,
 ) {
     val цвета = Тима.цвета
@@ -73,9 +81,29 @@ fun КаркасОкна(
         РядВкладок(вкладки, выбрана, onВкладка)
         второйРяд?.invoke()
 
-        содержимое()
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .свайпОкон(
+                    onВлево = { onСоседнееОкно?.invoke(ВСторону.Следующее) },
+                    onВправо = { onСоседнееОкно?.invoke(ВСторону.Предыдущее) },
+                    // На широком формате окна меняют рейкой, и горизонталь содержимого
+                    // принадлежит содержимому целиком. Правило живёт здесь, а не у
+                    // каждого вызывающего: пять копий одного условия разошлись бы.
+                    включён = onСоседнееОкно != null && LocalРаскладка.current.телефон,
+                ),
+        ) { содержимое() }
     }
 }
+
+/**
+ * Куда ведёт свайп.
+ *
+ * Названо по порядку окон, а не по стороне движения: палец идёт влево, а окно
+ * приходит следующее — и путать эти два направления в вызывающем коде дороже, чем
+ * завести перечень из двух слов.
+ */
+enum class ВСторону { Предыдущее, Следующее }
 
 /**
  * Ряд вкладок.
