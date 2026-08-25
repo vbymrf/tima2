@@ -111,6 +111,31 @@ object ArchitectureRules {
                 "платформенный вход, перечнем Платформа, а не строкой в общем коде.",
         ),
         Rule(
+            name = "feature не импортирует чужой feature",
+            appliesToPathContaining = listOf("/feature/"),
+            forbiddenImportPrefixes = listOf("io.tima.feature."),
+            // Свой пакет разрешён механикой check(): импорт, начинающийся с пакета
+            // собственного модуля, нарушением не считается.
+            why = "Раздел разрабатывается независимо ровно до тех пор, пока не трогает " +
+                "чужие экраны. Импорт соседнего feature связывает два раздела навсегда: " +
+                "их больше нельзя ни раздать двум людям, ни выкатить порознь. Общее " +
+                "выносится в domain или core, а не импортируется у соседа.",
+        ),
+        Rule(
+            name = "feature не знает адаптеров сети и базы",
+            appliesToPathContaining = listOf("/feature/"),
+            forbiddenImportPrefixes = listOf(
+                "io.tima.core.network.",
+                "io.tima.core.database.",
+                "io.tima.core.encryption.",
+            ),
+            why = "Feature говорит с миром через порты domain, которые наполняет " +
+                "адаптерами композиция. Прямой импорт GroupsOverHttp или Sql* из feature " +
+                "делает транспорт и схему базы частью экрана: миграция схемы или смена " +
+                "транспорта превращается в правку UI. Сегодня это держит только узкий " +
+                "манифест — до первой строки, добавленной соседом.",
+        ),
+        Rule(
             name = "shared не обходит крипто-фасад",
             appliesToPathContaining = listOf("/shared/src/commonMain/"),
             forbiddenImportPrefixes = listOf("io.tima.crypto."),
@@ -171,6 +196,23 @@ object ArchitectureRules {
             .flatMap { check(it, it.name, rule).asSequence() }
             .toList()
 
+    /**
+     * Пакет модуля, выведенный из пути файла: `/feature/feature-chat/` →
+     * `io.tima.feature.chat.`
+     *
+     * Нужен правилу «feature не импортирует чужой feature»: запрет на префикс
+     * `io.tima.feature.` без этого запретил бы модулю его собственные импорты, то есть
+     * оказался бы невыполним и был бы снят первым же человеком, который его встретил.
+     */
+    private fun свойПакет(path: String): String? {
+        // Слой и имя модуля совпадают по построению: /feature/feature-chat/.
+        val m = Regex("""/(feature|core|domain)/\1-([a-z0-9-]+)/""").find(path)
+            ?: return null
+        val слой = m.groupValues[1]
+        val имя = m.groupValues[2].replace("-", "")
+        return "io.tima.$слой.$имя."
+    }
+
     private fun check(file: File, relative: String, rule: Rule): List<Violation> {
         val out = mutableListOf<Violation>()
 
@@ -213,7 +255,10 @@ object ArchitectureRules {
                 // противоречит. Настоящий заслон здесь всё равно компилятор:
                 // платформенные части Compose (LocalContext и подобные) он не соберёт.
                 if (imported.startsWith("androidx.compose.")) continue
-                if (imported.startsWith("io.tima.core.model.")) continue
+                // Свой пакет — не чужая зависимость. Частный случай core-model был
+                // записан отдельной строкой; теперь это общее правило для всех слоёв.
+                val свой = свойПакет(file.absolutePath.replace('\\', '/'))
+                if (свой != null && imported.startsWith(свой)) continue
                 val hit = rule.forbiddenImportPrefixes.firstOrNull { imported.startsWith(it) }
                 if (hit != null) {
                     out += Violation(relative, rule.name, "импорт $imported", rule.why)

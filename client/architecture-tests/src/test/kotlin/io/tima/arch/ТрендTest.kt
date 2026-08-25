@@ -54,6 +54,21 @@ class ТрендTest {
                 "строки import",
                 считатьВФайле(корень(), Regex("""^import """)),
             ),
+            Счётчик(
+                "Чужих модулей видит `shared`",
+                "различные io.tima.* модули в импортах production-файлов shared",
+                размахShared(),
+            ),
+            Счётчик(
+                "Классов `*Api` в core-network",
+                "объявления class …Api",
+                считатьВКаталоге(
+                    File(clientRoot, "core/core-network/src/commonMain"), "kt",
+                    // Скобка обязательна: без неё в счёт попадал LinkApiTest —
+                    // тестовый класс, к размеру поверхности отношения не имеющий.
+                    Regex("""^(internal )?class [A-Za-z0-9_]+Api\("""),
+                ),
+            ),
         )
 
         val отчёт = buildString {
@@ -74,6 +89,33 @@ class ТрендTest {
     }
 
     private data class Счётчик(val имя: String, val как: String, val сколько: Int)
+
+    /**
+     * Сколько чужих модулей видит композиция.
+     *
+     * Растёт ровно тогда, когда новая функция врастает в общий контур вместо своего
+     * модуля: каждый новый импорт из чужого пакета — это ещё одна связь, которую
+     * потом придётся распутывать при разделении работы.
+     */
+    private fun размахShared(): Int {
+        val src = File(clientRoot, "shared/src")
+        if (!src.isDirectory) return -1
+        return src.listFiles().orEmpty()
+            .filter { it.isDirectory && (it.name.endsWith("Main") || it.name == "jvmCommon") }
+            .flatMap { набор ->
+                набор.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+            }
+            .flatMap { файл -> файл.readLines() }
+            .map { it.trim() }
+            .filter { it.startsWith("import io.tima.") }
+            .mapNotNull { строка ->
+                // io.tima.core.network.KeysApi → io.tima.core.network
+                строка.removePrefix("import ").split('.').take(4).joinToString(".")
+            }
+            .filter { !it.startsWith("io.tima.shared") }
+            .distinct()
+            .size
+    }
 
     private fun корень(): File =
         File(clientRoot, "shared/src/commonMain/kotlin/io/tima/shared/Корень.kt")
