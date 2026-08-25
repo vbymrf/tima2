@@ -127,22 +127,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/devices/{deviceID}", s.requireActiveDevice(s.revokeDevice))
 	mux.HandleFunc("GET /api/v1/escrow/pubkey", s.requireActiveDevice(s.escrowPubkey))
 	mux.HandleFunc("GET /api/v1/escrow/key", s.requireActiveDevice(s.escrowKeyForChat))
-	mux.HandleFunc("POST /api/v1/groups", s.requireActiveDevice(s.createGroup))
-	mux.HandleFunc("GET /api/v1/groups", s.requireActiveDevice(s.listMyGroups))
-	mux.HandleFunc("GET /api/v1/groups/{groupID}", s.requireActiveDevice(s.getGroup))
-	mux.HandleFunc("PATCH /api/v1/groups/{groupID}", s.requireActiveDevice(s.patchGroup))
-	mux.HandleFunc("DELETE /api/v1/groups/{groupID}", s.requireActiveDevice(s.deleteGroup))
-	mux.HandleFunc("GET /api/v1/groups/{groupID}/members", s.requireActiveDevice(s.listGroupMembers))
-	mux.HandleFunc("POST /api/v1/groups/{groupID}/members", s.requireActiveDevice(s.addGroupMember))
-	mux.HandleFunc("DELETE /api/v1/groups/{groupID}/members/{userID}", s.requireActiveDevice(s.removeGroupMember))
-	mux.HandleFunc("PUT /api/v1/groups/{groupID}/members/{userID}/role", s.requireActiveDevice(s.setGroupRole))
-	mux.HandleFunc("POST /api/v1/groups/{groupID}/members/{userID}/ban", s.requireActiveDevice(s.banGroupMember))
-	mux.HandleFunc("POST /api/v1/groups/{groupID}/messages", s.requireActiveDevice(s.postGroupMessage))
-	mux.HandleFunc("GET /api/v1/groups/{groupID}/messages", s.requireActiveDevice(s.listGroupMessages))
-	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys", s.requireActiveDevice(s.groupRotate))
-	mux.HandleFunc("GET /api/v1/groups/{groupID}/keys", s.requireActiveDevice(s.groupKeys))
-	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys/recover", s.requireActiveDevice(s.groupKeyRecover))
-	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys/recover/provide", s.requireActiveDevice(s.groupKeyProvide))
+	// Группы: состав, сообщения и ключи (шаг 4). Три файла держатся вместе
+	// инвариантом ротации: смена состава обязана менять ключ.
+	RegisterGroups(mux, s.Store, func() *ratelimit.Limiter { return s.Limit }, s.notifier(), s.requireActiveDevice)
 	// Медиа (шаг 4): вместе с маршрутами уехало поле Blob.
 	RegisterMedia(mux, s.Store, func() *blob.Client { return s.Blob }, s.requireActiveDevice)
 	// Каналы — первая группа, вынесенная в registrar (шаг 4 программы). Дальше
@@ -163,13 +150,15 @@ func (s *Server) настройкиLiveKit() LiveKitНастройки {
 // notifier — уведомитель для registrar-ов: тот же порядок доставки, что у notify,
 // но без доступа к остальным полям Server.
 func (s *Server) notifier() *Notifier {
-	n := &Notifier{store: s.Store}
-	// Events — конкретный тип с указателем: nil-указатель в интерфейсе перестал бы
-	// быть nil при сравнении, и «шины нет» превратилось бы в панику на Publish.
-	if s.Events != nil {
-		n.events = s.Events
-	}
-	return n
+	return &Notifier{store: s.Store, шина: func() Publisher {
+		// Проверка на nil здесь, а не в Notifier: s.Events — указатель, и
+		// nil-указатель, положенный в интерфейс, перестаёт быть nil при
+		// сравнении. Publish на таком дал бы панику вместо «шины нет».
+		if s.Events == nil {
+			return nil
+		}
+		return s.Events
+	}}
 }
 
 // notify — доставка события устройству (sync-offline.md §2): сначала в

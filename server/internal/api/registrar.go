@@ -52,8 +52,15 @@ type Publisher interface {
 // и не увидит ни одно офлайновое. Handler-у этот порядок знать не нужно — и не
 // нужно про него помнить: после выделения он не видит ни Events, ни очерёдности.
 type Notifier struct {
-	store  NotifyStore
-	events Publisher
+	store NotifyStore
+	// Шина берётся ФУНКЦИЕЙ и читается на каждое событие.
+	//
+	// Server.Events заполняется ПОСЛЕ Register — так делает и cmd/tima, и
+	// setupWithEvents. Снимок при регистрации давал самую подлую поломку из
+	// возможных: запись в device_events проходила, REST-проверки были зелёными,
+	// а live-доставки не было вовсе — «сообщение отправлено, но не пришло».
+	// Стоило это двух упавших WS-тестов, и хорошо, что они есть.
+	шина func() Publisher
 }
 
 // Device — событие одному устройству.
@@ -68,10 +75,11 @@ func (n *Notifier) Device(ctx context.Context, deviceID, event string, payload m
 		log.Printf("notify %s %s: append: %v", deviceID, event, err)
 		return
 	}
-	if n.events == nil {
+	шина := n.шина()
+	if шина == nil {
 		return
 	}
-	if err := n.events.Publish(ctx, deviceID, event, eventID, payload); err != nil {
+	if err := шина.Publish(ctx, deviceID, event, eventID, payload); err != nil {
 		// Живая доставка не фатальна: событие уже в логе.
 		log.Printf("notify %s %s: publish: %v", deviceID, event, err)
 	}
