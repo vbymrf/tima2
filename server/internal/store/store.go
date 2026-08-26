@@ -100,21 +100,70 @@ func (s *Store) Migrate(ctx context.Context, fsys fs.FS) error {
 	return nil
 }
 
+// keepForTests — что ResetForTests обязан оставить.
+//
+// schema_migrations — журнал применённых миграций: стерев его, следующий Migrate
+// применил бы всё заново поверх существующих таблиц.
+//
+// retention_policy — сроки хранения, засеянные самими миграциями. Это не данные
+// прогона, а часть схемы; пустая таблица означала бы «сроков нет», и worker_test
+// проверял бы выдуманное поведение.
+var keepForTests = []string{"schema_migrations", "retention_policy"}
+
 // ResetForTests очищает таблицы (только интеграционные тесты; в бою не вызывается).
 //
 // Отказывается работать с базой, имя которой не заканчивается на _test. Ниже
 // TRUNCATE по всем таблицам сразу, и до этой проверки единственным, что отделяло
 // его от боевых данных, была переменная окружения: забытый или опечатанный
 // TIMA_TEST_DATABASE_URL стоил бы мессенджеру всей истории.
+//
+// **Список таблиц спрашивается у базы, а не пишется здесь руками.** Так было до
+// 2026-08-26, и перечисление ломалось в обе стороны:
+//
+//   - таблица, которой в перечне нет, между прогонами НЕ чистится. chat_states
+//     появилась миграцией 0024 и в перечень не попала: строки копились молча, и
+//     заметить это можно было только по тесту, который проходит в одиночку и
+//     падает вторым;
+//   - **лишняя таблица в томе роняет весь пакет**. TRUNCATE отказывается работать,
+//     если на очищаемую таблицу ссылается внешним ключом таблица, которой в списке
+//     нет. Старый том Postgres с таблицами от прежней схемы (communities, stories)
+//     давал отказ в setup, а значит t.Fatal в каждом тесте: 71 падение, из которых
+//     ни одно не дошло до своего сценария. Выглядит как «изменение сломало всё»,
+//     хотя не выполнилось вообще ничего.
+//
+// Перечисление снимает оба случая разом: чистится ровно то, что в базе есть.
 func (s *Store) ResetForTests(ctx context.Context) error {
 	if db := s.pool.Config().ConnConfig.Database; !strings.HasSuffix(db, "_test") {
 		return fmt.Errorf("store: ResetForTests отказано — база %q не заканчивается на _test", db)
 	}
-	// persons и escrow_keys — тоже тестовые данные. Без них persons копил бы
-	// аккаунты между прогонами (и держал номера занятыми), а escrow_keys ловил бы
-	// конфликт идентификаторов с анклавом, который в каждом тесте поднимается
-	// заново и начинает нумерацию с единицы.
-	// retention_policy НЕ трогаем: там строки, засеянные миграцией.
-	_, err := s.pool.Exec(ctx, `TRUNCATE personal_messages, personal_message_keys, personal_message_backup, device_link_sessions, devices, users, persons, escrow_keys, sms_codes, media_objects, group_key_history, group_wrapped_keys, groups, memberships, group_messages, device_events, sync_cursors, gc_state, channels, channel_subscriptions, channel_posts, calls, call_participants, voice_rooms, voice_speakers`)
-	return err
+	rows, err := s.pool.Query(ctx, `
+		SELECT quote_ident(tablename) FROM pg_tables
+		WHERE schemaname = current_schema() AND NOT tablename = ANY($1)
+		ORDER BY tablename`, keepForTests)
+	if err != nil {
+		return fmt.Errorf("store: ResetForTests — список таблиц: %w", err)
+	}
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			rows.Close()
+			return fmt.Errorf("store: ResetForTests — список таблиц: %w", err)
+		}
+		tables = append(tables, name)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("store: ResetForTests — список таблиц: %w", err)
+	}
+	if len(tables) == 0 {
+		// Пустая база — миграции ещё не применялись. Чистить нечего, и это не ошибка.
+		return nil
+	}
+	// Одним оператором: TRUNCATE нескольких таблиц сразу разрешает взаимные
+	// внешние ключи между ними, а по одной — нет.
+	if _, err := s.pool.Exec(ctx, "TRUNCATE "+strings.Join(tables, ", ")); err != nil {
+		return fmt.Errorf("store: ResetForTests — TRUNCATE %d таблиц: %w", len(tables), err)
+	}
+	return nil
 }

@@ -374,6 +374,30 @@ if ($skip -gt 0) {
 }
 if ($fail -gt 0) {
     Bad ("Упало тестов: " + $fail + ". Имена — в журнале по строкам «--- FAIL».")
+
+    # Одна причина на все падения — это отказ ПОДГОТОВКИ, а не поведения.
+    #
+    # t.Fatal в общем setup валит каждый тест пакета одним и тем же сообщением.
+    # Семьдесят одно падение читается как «изменение сломало всё», хотя ни один
+    # сценарий не начался. Это зеркало ловушки с SKIP: там пустота выглядит
+    # успехом, здесь — катастрофой, и оба раза счёт врёт о том, что произошло.
+    $reasons = @(Select-String -Path $logFile -Pattern '^\s+[\w-]+\.go:\d+: (.+)$' |
+        ForEach-Object { $_.Matches[0].Groups[1].Value.Trim() } |
+        Group-Object | Sort-Object Count -Descending)
+    $порог = [Math]::Max(3, [int][Math]::Ceiling($fail / 2))
+    if ($reasons.Count -gt 0 -and $reasons[0].Count -ge $порог) {
+        Say ''
+        Say ('Все падения об одном — ' + $reasons[0].Count + ' раз:')
+        Say ('    ' + $reasons[0].Name)
+        Say ''
+        Say 'Это отказ подготовки: сценарии тестов не выполнялись вовсе.'
+        if ($reasons[0].Name -match 'ResetForTests') {
+            Say 'Чаще всего это СТАРЫЙ ТОМ Postgres — в базе лежат таблицы от прежней схемы.'
+            Say 'Лечится пересозданием тестового тома:'
+            Say '    docker compose -p tima-test -f server/deploy/docker-compose.test.yml down -v'
+            Say 'Тестовый том данных не хранит: он для того и отдельный.'
+        }
+    }
 }
 if ($testExit -ne 0 -and $fail -eq 0 -and $skip -eq 0) {
     Bad 'go test вернул ненулевой код, но упавших тестов не видно — смотрите журнал целиком.'
