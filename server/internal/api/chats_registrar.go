@@ -31,21 +31,21 @@ type ChatStore interface {
 
 var _ ChatStore = (*store.Store)(nil)
 
-type чатыDeps struct {
-	хранилище   ChatStore
-	уведомитель *Notifier
+type chatsDeps struct {
+	store    ChatStore
+	notifier *Notifier
 }
 
 // RegisterChats — семь маршрутов архива и восстановления.
 func RegisterChats(mux *http.ServeMux, st ChatStore, n *Notifier, requireDevice Middleware) {
-	д := чатыDeps{хранилище: st, уведомитель: n}
+	deps := chatsDeps{store: st, notifier: n}
 
-	mux.HandleFunc("GET /api/v1/chats/archived", requireDevice(listArchivedChats(д)))
-	mux.HandleFunc("PUT /api/v1/chats/{chatID}/archive", requireDevice(archiveChat(д)))
-	mux.HandleFunc("DELETE /api/v1/chats/{chatID}/archive", requireDevice(unarchiveChat(д)))
+	mux.HandleFunc("GET /api/v1/chats/archived", requireDevice(listArchivedChats(deps)))
+	mux.HandleFunc("PUT /api/v1/chats/{chatID}/archive", requireDevice(archiveChat(deps)))
+	mux.HandleFunc("DELETE /api/v1/chats/{chatID}/archive", requireDevice(unarchiveChat(deps)))
 
-	mux.HandleFunc("POST /api/v1/chats/{chatID}/backup", requireDevice(chatBackupSave(д)))
-	mux.HandleFunc("GET /api/v1/chats/{chatID}/backup", requireDevice(chatBackupList(д)))
-	mux.HandleFunc("POST /api/v1/chats/{chatID}/recover", requireDevice(chatRecover(д)))
-	mux.HandleFunc("POST /api/v1/chats/{chatID}/recover/provide", requireDevice(chatRecoverProvide(д)))
+	mux.HandleFunc("POST /api/v1/chats/{chatID}/backup", requireDevice(chatBackupSave(deps)))
+	mux.HandleFunc("GET /api/v1/chats/{chatID}/backup", requireDevice(chatBackupList(deps)))
+	mux.HandleFunc("POST /api/v1/chats/{chatID}/recover", requireDevice(chatRecover(deps)))
+	mux.HandleFunc("POST /api/v1/chats/{chatID}/recover/provide", requireDevice(chatRecoverProvide(deps)))
 }

@@ -30,9 +30,9 @@ const (
 
 // groupAndRole достаёт группу и роль запрашивающего ("" — не участник).
 // При false ответ (404/500) уже записан.
-func группаИРоль(д группыDeps, w http.ResponseWriter, r *http.Request) (store.Group, string, bool) {
+func groupAndRole(deps groupsDeps, w http.ResponseWriter, r *http.Request) (store.Group, string, bool) {
 	groupID := r.PathValue("groupID")
-	g, err := д.хранилище.GetGroup(r.Context(), groupID)
+	g, err := deps.store.GetGroup(r.Context(), groupID)
 	if errors.Is(err, store.ErrGroupNotFound) {
 		writeErr(w, http.StatusNotFound, "group_not_found", "группа не найдена")
 		return g, "", false
@@ -42,7 +42,7 @@ func группаИРоль(д группыDeps, w http.ResponseWriter, r *http.
 		return g, "", false
 	}
 	id, _ := auth.FromContext(r.Context())
-	role, err := д.хранилище.GroupRole(r.Context(), groupID, id.UserID)
+	role, err := deps.store.GroupRole(r.Context(), groupID, id.UserID)
 	if err != nil && !errors.Is(err, store.ErrNotMember) {
 		log.Printf("group role %s: %v", groupID, err)
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -52,7 +52,7 @@ func группаИРоль(д группыDeps, w http.ResponseWriter, r *http.
 }
 
 // createGroup — POST /groups.
-func createGroup(д группыDeps) http.HandlerFunc {
+func createGroup(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Kind          string `json:"kind"`
@@ -78,7 +78,7 @@ func createGroup(д группыDeps) http.HandlerFunc {
 			return
 		}
 		id, _ := auth.FromContext(r.Context())
-		groupID, err := д.хранилище.CreateGroup(r.Context(), store.Group{
+		groupID, err := deps.store.CreateGroup(r.Context(), store.Group{
 			Kind: req.Kind, Title: req.Title, Description: req.Description, OwnerID: id.UserID,
 			SlowModeSec: req.SlowModeSec, Premoderation: req.Premoderation, ThreadsOnly: req.ThreadsOnly,
 		})
@@ -94,10 +94,10 @@ func createGroup(д группыDeps) http.HandlerFunc {
 }
 
 // listMyGroups — GET /groups: активные членства пользователя (клиентский список групп).
-func listMyGroups(д группыDeps) http.HandlerFunc {
+func listMyGroups(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
-		groups, err := д.хранилище.ListGroupsForUser(r.Context(), id.UserID)
+		groups, err := deps.store.ListGroupsForUser(r.Context(), id.UserID)
 		if err != nil {
 			log.Printf("listMyGroups: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -122,9 +122,9 @@ func groupJSON(g store.Group, myRole string) map[string]any {
 
 // getGroup — GET /groups/{groupID}. Private-группа для не-участника
 // неотличима от несуществующей; public видна любому аутентифицированному.
-func getGroup(д группыDeps) http.HandlerFunc {
+func getGroup(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		g, role, ok := группаИРоль(д, w, r)
+		g, role, ok := groupAndRole(deps, w, r)
 		if !ok {
 			return
 		}
@@ -138,9 +138,9 @@ func getGroup(д группыDeps) http.HandlerFunc {
 }
 
 // patchGroup — PATCH /groups/{groupID}: настройки, owner|admin.
-func patchGroup(д группыDeps) http.HandlerFunc {
+func patchGroup(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		g, role, ok := группаИРоль(д, w, r)
+		g, role, ok := groupAndRole(deps, w, r)
 		if !ok {
 			return
 		}
@@ -178,7 +178,7 @@ func patchGroup(д группыDeps) http.HandlerFunc {
 		if req.ThreadsOnly != nil {
 			g.ThreadsOnly = *req.ThreadsOnly
 		}
-		if err := д.хранилище.UpdateGroup(r.Context(), g); err != nil {
+		if err := deps.store.UpdateGroup(r.Context(), g); err != nil {
 			log.Printf("patchGroup: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -189,9 +189,9 @@ func patchGroup(д группыDeps) http.HandlerFunc {
 }
 
 // deleteGroup — DELETE /groups/{groupID}: soft delete, только owner.
-func deleteGroup(д группыDeps) http.HandlerFunc {
+func deleteGroup(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, role, ok := группаИРоль(д, w, r)
+		_, role, ok := groupAndRole(deps, w, r)
 		if !ok {
 			return
 		}
@@ -199,7 +199,7 @@ func deleteGroup(д группыDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "forbidden", "группу удаляет только owner")
 			return
 		}
-		if err := д.хранилище.SoftDeleteGroup(r.Context(), r.PathValue("groupID")); err != nil {
+		if err := deps.store.SoftDeleteGroup(r.Context(), r.PathValue("groupID")); err != nil {
 			log.Printf("deleteGroup: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -209,9 +209,9 @@ func deleteGroup(д группыDeps) http.HandlerFunc {
 }
 
 // listGroupMembers — GET /groups/{groupID}/members: только активным участникам.
-func listGroupMembers(д группыDeps) http.HandlerFunc {
+func listGroupMembers(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, role, ok := группаИРоль(д, w, r)
+		_, role, ok := groupAndRole(deps, w, r)
 		if !ok {
 			return
 		}
@@ -219,7 +219,7 @@ func listGroupMembers(д группыDeps) http.HandlerFunc {
 			writeErr(w, http.StatusNotFound, "group_not_found", "группа не найдена")
 			return
 		}
-		members, err := д.хранилище.ListGroupMembers(r.Context(), r.PathValue("groupID"))
+		members, err := deps.store.ListGroupMembers(r.Context(), r.PathValue("groupID"))
 		if err != nil {
 			log.Printf("listGroupMembers: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -248,9 +248,9 @@ func listGroupMembers(д группыDeps) http.HandlerFunc {
 // addGroupMember — POST /groups/{groupID}/members {user_id, role?}.
 // Добавляют owner|admin; назначаемая роль строго ниже роли действующего.
 // После добавления клиент-админ обязан ротировать GK (crypto-protocol §4.2).
-func addGroupMember(д группыDeps) http.HandlerFunc {
+func addGroupMember(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, role, ok := группаИРоль(д, w, r)
+		_, role, ok := groupAndRole(deps, w, r)
 		if !ok {
 			return
 		}
@@ -274,7 +274,7 @@ func addGroupMember(д группыDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "forbidden", "добавляют owner|admin, роль — строго ниже своей")
 			return
 		}
-		err := д.хранилище.AddGroupMember(r.Context(), r.PathValue("groupID"), req.UserID, req.Role)
+		err := deps.store.AddGroupMember(r.Context(), r.PathValue("groupID"), req.UserID, req.Role)
 		if errors.Is(err, store.ErrUserUnknown) {
 			writeErr(w, http.StatusNotFound, "user_not_found", "пользователь не существует")
 			return
@@ -293,14 +293,14 @@ func addGroupMember(д группыDeps) http.HandlerFunc {
 // или owner|admin над участником строго ниже рангом. Owner не выходит —
 // передача владения появится с модулем communities.
 // После исключения клиент-админ обязан ротировать GK (crypto-protocol §4.2).
-func removeGroupMember(д группыDeps) http.HandlerFunc {
+func removeGroupMember(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, role, ok := группаИРоль(д, w, r)
+		_, role, ok := groupAndRole(deps, w, r)
 		if !ok {
 			return
 		}
 		targetID := r.PathValue("userID")
-		targetRole, err := д.хранилище.GroupRole(r.Context(), r.PathValue("groupID"), targetID)
+		targetRole, err := deps.store.GroupRole(r.Context(), r.PathValue("groupID"), targetID)
 		if errors.Is(err, store.ErrNotMember) {
 			writeErr(w, http.StatusNotFound, "member_not_found", "участник не найден")
 			return
@@ -319,7 +319,7 @@ func removeGroupMember(д группыDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "forbidden", "исключают owner|admin участника ниже рангом")
 			return
 		}
-		if err := д.хранилище.RemoveGroupMember(r.Context(), r.PathValue("groupID"), targetID); err != nil {
+		if err := deps.store.RemoveGroupMember(r.Context(), r.PathValue("groupID"), targetID); err != nil {
 			log.Printf("removeGroupMember: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -330,9 +330,9 @@ func removeGroupMember(д группыDeps) http.HandlerFunc {
 
 // setGroupRole — PUT /groups/{groupID}/members/{userID}/role {role}.
 // Меняют owner|admin; и текущая, и новая роль цели — строго ниже своей.
-func setGroupRole(д группыDeps) http.HandlerFunc {
+func setGroupRole(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, role, ok := группаИРоль(д, w, r)
+		_, role, ok := groupAndRole(deps, w, r)
 		if !ok {
 			return
 		}
@@ -349,7 +349,7 @@ func setGroupRole(д группыDeps) http.HandlerFunc {
 			return
 		}
 		targetID := r.PathValue("userID")
-		targetRole, err := д.хранилище.GroupRole(r.Context(), r.PathValue("groupID"), targetID)
+		targetRole, err := deps.store.GroupRole(r.Context(), r.PathValue("groupID"), targetID)
 		if errors.Is(err, store.ErrNotMember) {
 			writeErr(w, http.StatusNotFound, "member_not_found", "участник не найден")
 			return
@@ -362,7 +362,7 @@ func setGroupRole(д группыDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "forbidden", "роль меняют owner|admin, обе роли — строго ниже своей")
 			return
 		}
-		if err := д.хранилище.SetGroupRole(r.Context(), r.PathValue("groupID"), targetID, req.Role); err != nil {
+		if err := deps.store.SetGroupRole(r.Context(), r.PathValue("groupID"), targetID, req.Role); err != nil {
 			log.Printf("setGroupRole: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -374,9 +374,9 @@ func setGroupRole(д группыDeps) http.HandlerFunc {
 
 // banGroupMember — POST /groups/{groupID}/members/{userID}/ban {seconds}.
 // Банят moderator и выше, цель — строго ниже рангом; членство сохраняется.
-func banGroupMember(д группыDeps) http.HandlerFunc {
+func banGroupMember(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, role, ok := группаИРоль(д, w, r)
+		_, role, ok := groupAndRole(deps, w, r)
 		if !ok {
 			return
 		}
@@ -388,7 +388,7 @@ func banGroupMember(д группыDeps) http.HandlerFunc {
 			return
 		}
 		targetID := r.PathValue("userID")
-		targetRole, err := д.хранилище.GroupRole(r.Context(), r.PathValue("groupID"), targetID)
+		targetRole, err := deps.store.GroupRole(r.Context(), r.PathValue("groupID"), targetID)
 		if errors.Is(err, store.ErrNotMember) {
 			writeErr(w, http.StatusNotFound, "member_not_found", "участник не найден")
 			return
@@ -401,7 +401,7 @@ func banGroupMember(д группыDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "forbidden", "банят moderator и выше участника ниже рангом")
 			return
 		}
-		if err := д.хранилище.BanGroupMember(r.Context(), r.PathValue("groupID"), targetID, req.Seconds); err != nil {
+		if err := deps.store.BanGroupMember(r.Context(), r.PathValue("groupID"), targetID, req.Seconds); err != nil {
 			log.Printf("banGroupMember: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return

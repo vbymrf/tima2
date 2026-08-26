@@ -40,18 +40,18 @@ type DeviceStore interface {
 
 var _ DeviceStore = (*store.Store)(nil)
 
-// ВыдачаТокенов — единственное, что нужно привязке от подсистемы входа: выдать
+// TokenIssuer — единственное, что нужно привязке от подсистемы входа: выдать
 // access-токен устройству, которое только что подтвердили.
-type ВыдачаТокенов interface {
+type TokenIssuer interface {
 	IssueAccess(userID, deviceID string) (string, error)
 }
 
-// устройстваDeps — зависимости группы.
-type устройстваDeps struct {
-	хранилище     DeviceStore
-	лимит         func() *ratelimit.Limiter
-	выдачаТокенов func() ВыдачаТокенов
-	уведомитель   *Notifier
+// devicesDeps — зависимости группы.
+type devicesDeps struct {
+	store    DeviceStore
+	limiter  func() *ratelimit.Limiter
+	tokens   func() TokenIssuer
+	notifier *Notifier
 }
 
 // RegisterDevices — шесть маршрутов: три про свои устройства, три про привязку.
@@ -63,17 +63,17 @@ func RegisterDevices(
 	mux *http.ServeMux,
 	st DeviceStore,
 	limit func() *ratelimit.Limiter,
-	tokens func() ВыдачаТокенов,
+	tokens func() TokenIssuer,
 	n *Notifier,
 	requireDevice Middleware,
 ) {
-	д := устройстваDeps{хранилище: st, лимит: limit, выдачаТокенов: tokens, уведомитель: n}
+	deps := devicesDeps{store: st, limiter: limit, tokens: tokens, notifier: n}
 
-	mux.HandleFunc("GET /api/v1/devices", requireDevice(listMyDevices(д)))
-	mux.HandleFunc("PUT /api/v1/devices/me/platform", requireDevice(setMyPlatform(д)))
-	mux.HandleFunc("DELETE /api/v1/devices/{deviceID}", requireDevice(revokeDevice(д)))
+	mux.HandleFunc("GET /api/v1/devices", requireDevice(listMyDevices(deps)))
+	mux.HandleFunc("PUT /api/v1/devices/me/platform", requireDevice(setMyPlatform(deps)))
+	mux.HandleFunc("DELETE /api/v1/devices/{deviceID}", requireDevice(revokeDevice(deps)))
 
-	mux.HandleFunc("POST /api/v1/link/start", linkStart(д))
-	mux.HandleFunc("POST /api/v1/link/confirm", requireDevice(linkConfirm(д)))
-	mux.HandleFunc("POST /api/v1/link/claim", linkClaim(д))
+	mux.HandleFunc("POST /api/v1/link/start", linkStart(deps))
+	mux.HandleFunc("POST /api/v1/link/confirm", requireDevice(linkConfirm(deps)))
+	mux.HandleFunc("POST /api/v1/link/claim", linkClaim(deps))
 }

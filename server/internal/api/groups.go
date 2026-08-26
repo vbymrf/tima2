@@ -26,7 +26,7 @@ import (
 )
 
 // groupRotate — POST /groups/{groupID}/keys: новая версия GK (строго current+1).
-func groupRotate(д группыDeps) http.HandlerFunc {
+func groupRotate(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			GKVersion          int32  `json:"gk_version"`
@@ -77,7 +77,7 @@ func groupRotate(д группыDeps) http.HandlerFunc {
 		}
 
 		// Права: группа существует, private, ротирующий — owner|admin
-		g, role, ok := группаИРоль(д, w, r)
+		g, role, ok := groupAndRole(deps, w, r)
 		if !ok {
 			return
 		}
@@ -92,7 +92,7 @@ func groupRotate(д группыDeps) http.HandlerFunc {
 		// Заблокированный не ротирует: бан снимает право писать, а ротация — это запись,
 		// которую увидят все устройства группы.
 		id, _ := auth.FromContext(r.Context())
-		if _, bannedUntil, err := д.хранилище.GroupMemberInfo(r.Context(), r.PathValue("groupID"), id.UserID); err != nil {
+		if _, bannedUntil, err := deps.store.GroupMemberInfo(r.Context(), r.PathValue("groupID"), id.UserID); err != nil {
 			log.Printf("groupRotate: member info: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -106,11 +106,11 @@ func groupRotate(д группыDeps) http.HandlerFunc {
 		// Проверка причины важнее порога: после успешной эпохальной ротации условие
 		// перестаёт выполняться само, и одновременные попытки остальных участников
 		// отвергаются как ненужные. При праве ротации у каждого это главная защита.
-		if !допустимаяПричина(reason) {
+		if !reasonAllowed(reason) {
 			writeErr(w, http.StatusBadRequest, "bad_reason", "неизвестная причина ротации: "+reason)
 			return
 		}
-		последняя, err := д.хранилище.LatestGroupRotation(r.Context(), r.PathValue("groupID"))
+		latest, err := deps.store.LatestGroupRotation(r.Context(), r.PathValue("groupID"))
 		if err != nil {
 			log.Printf("groupRotate: последняя ротация: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -122,28 +122,28 @@ func groupRotate(д группыDeps) http.HandlerFunc {
 		// на устаревшую версию, клиент ждал бы пятнадцать минут ради ротации, которая уже
 		// произошла. Окончательная проверка всё равно идёт под блокировкой в хранилище —
 		// здесь ранний выход, а не замена ей.
-		if req.GKVersion != последняя.GKVersion+1 {
+		if req.GKVersion != latest.GKVersion+1 {
 			writeErr(w, http.StatusConflict, "version_conflict",
-				"текущая "+strconv.Itoa(int(последняя.GKVersion))+", предложена "+strconv.Itoa(int(req.GKVersion)))
+				"текущая "+strconv.Itoa(int(latest.GKVersion))+", предложена "+strconv.Itoa(int(req.GKVersion)))
 			return
 		}
-		текущаяЭпоха := escrow.EpochOf(time.Now())
-		if reason == причинаЭпоха && последняя.EscrowEpoch == текущаяЭпоха {
+		currentEpoch := escrow.EpochOf(time.Now())
+		if reason == reasonEpoch && latest.EscrowEpoch == currentEpoch {
 			// Не отказ по существу: ключ уже привязан к текущей эпохе, цель достигнута.
 			// Клиент обязан считать это успехом (ADR-0017 §7).
-			writeErr(w, http.StatusConflict, "rotation_not_needed", "ключ уже привязан к эпохе "+текущаяЭпоха)
+			writeErr(w, http.StatusConflict, "rotation_not_needed", "ключ уже привязан к эпохе "+currentEpoch)
 			return
 		}
 		// Проверка названной причины по состоянию сервера (ADR-0017 §7). До первой ротации
 		// подтверждать нечего: первая версия ключа группе нужна в любом случае.
-		if последняя.GKVersion > 0 && !последняя.RotatedAt.IsZero() {
-			доводы, err := д.хранилище.RotationEvidenceSince(r.Context(), r.PathValue("groupID"), последняя.RotatedAt)
+		if latest.GKVersion > 0 && !latest.RotatedAt.IsZero() {
+			evidence, err := deps.store.RotationEvidenceSince(r.Context(), r.PathValue("groupID"), latest.RotatedAt)
 			if err != nil {
 				log.Printf("groupRotate: доводы: %v", err)
 				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 				return
 			}
-			if !причинаПодтверждена(reason, доводы) {
+			if !reasonConfirmed(reason, evidence) {
 				writeErr(w, http.StatusConflict, "rotation_not_needed",
 					"причина «"+reason+"» не подтверждается состоянием группы")
 				return
@@ -153,11 +153,11 @@ func groupRotate(д группыDeps) http.HandlerFunc {
 		// Порог — подстраховка на случай ошибки в проверке причины, поэтому он только для
 		// несрочных. Задержка ротации по составу означала бы, что исключённый читает
 		// переписку ещё пятнадцать минут.
-		if несрочная(reason) && !последняя.RotatedAt.IsZero() &&
-			time.Since(последняя.RotatedAt) < порогРотации {
-			w.Header().Set("Retry-After", strconv.Itoa(int(порогРотации.Seconds())))
+		if notUrgent(reason) && !latest.RotatedAt.IsZero() &&
+			time.Since(latest.RotatedAt) < rotationThreshold {
+			w.Header().Set("Retry-After", strconv.Itoa(int(rotationThreshold.Seconds())))
 			writeErr(w, http.StatusTooManyRequests, "rotation_too_soon",
-				"предыдущая ротация моложе "+порогРотации.String())
+				"предыдущая ротация моложе "+rotationThreshold.String())
 			return
 		}
 		// Получатели wrapped_GK — действующие устройства активных участников
@@ -165,7 +165,7 @@ func groupRotate(д группыDeps) http.HandlerFunc {
 		for rcpt := range wrapped {
 			recipients = append(recipients, rcpt)
 		}
-		outsiders, err := д.хранилище.NonMemberDevices(r.Context(), r.PathValue("groupID"), recipients)
+		outsiders, err := deps.store.NonMemberDevices(r.Context(), r.PathValue("groupID"), recipients)
 		if err != nil {
 			log.Printf("groupRotate: non-member devices: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -180,20 +180,20 @@ func groupRotate(д группыDeps) http.HandlerFunc {
 		// Полнота получателей (ADR-0017 §6). Пока считаем и пишем в журнал, не отвергая:
 		// сегодняшний клиент такую ротацию присылать может, а сервер обязан работать со
 		// старым клиентом. Отказ missing_recipients включается после выката клиента.
-		if все, err := д.хранилище.ActiveMemberDevices(r.Context(), r.PathValue("groupID"), ""); err != nil {
+		if all, err := deps.store.ActiveMemberDevices(r.Context(), r.PathValue("groupID"), ""); err != nil {
 			log.Printf("groupRotate: устройства участников: %v", err)
 		} else {
-			непокрытые := make([]string, 0)
-			for _, устройство := range все {
-				if _, есть := wrapped[устройство]; !есть {
-					непокрытые = append(непокрытые, устройство)
+			uncovered := make([]string, 0)
+			for _, dev := range all {
+				if _, ok := wrapped[dev]; !ok {
+					uncovered = append(uncovered, dev)
 				}
 			}
-			if len(непокрытые) > 0 {
+			if len(uncovered) > 0 {
 				// Это не мелочь: устройство без обёртки перестаёт читать группу молча —
 				// для человека это выглядит как «в группе тихо», а не как отказ.
 				log.Printf("groupRotate: группа %s версия %d — без обёрток остались устройства: %s",
-					r.PathValue("groupID"), req.GKVersion, strings.Join(непокрытые, ", "))
+					r.PathValue("groupID"), req.GKVersion, strings.Join(uncovered, ", "))
 			}
 		}
 
@@ -201,13 +201,13 @@ func groupRotate(д группыDeps) http.HandlerFunc {
 		// клиент мог зашифровать на устаревший ключ, и «сейчас» стало бы неправдой в
 		// истории. Неизвестная эпоха записывается пустой — тогда группа честно ротируется
 		// при первой же активности, потому что пусто никогда не равно текущей эпохе.
-		эпохаКлюча, err := д.хранилище.EscrowKeyEpoch(r.Context(), uint32(req.Escrow.EscrowKeyVersion))
+		keyEpoch, err := deps.store.EscrowKeyEpoch(r.Context(), uint32(req.Escrow.EscrowKeyVersion))
 		if err != nil {
 			log.Printf("groupRotate: эпоха ключа %d неизвестна: %v", req.Escrow.EscrowKeyVersion, err)
-			эпохаКлюча = ""
+			keyEpoch = ""
 		}
 
-		err = д.хранилище.SaveGroupRotation(r.Context(), store.GroupRotation{
+		err = deps.store.SaveGroupRotation(r.Context(), store.GroupRotation{
 			GroupID:            r.PathValue("groupID"),
 			GKVersion:          req.GKVersion,
 			RotatedBy:          id.UserID,
@@ -215,7 +215,7 @@ func groupRotate(д группыDeps) http.HandlerFunc {
 			EscrowMlkemCt:      mlkemCt,
 			EscrowWrappedKey:   escrowWrapped,
 			EscrowKeyVersion:   req.Escrow.EscrowKeyVersion,
-			EscrowEpoch:        эпохаКлюча,
+			EscrowEpoch:        keyEpoch,
 			Reason:             reason,
 			WrappedKeys:        wrapped,
 		})
@@ -229,7 +229,7 @@ func groupRotate(д группыDeps) http.HandlerFunc {
 		}
 		// key.rotated участникам: event log + live онлайн-устройствам (websocket-events.md)
 		for recipient, w := range wrapped {
-			д.уведомитель.Device(r.Context(), recipient, "key.rotated", map[string]any{
+			deps.notifier.Device(r.Context(), recipient, "key.rotated", map[string]any{
 				"group_id":             r.PathValue("groupID"),
 				"gk_version":           req.GKVersion,
 				"sender_ephemeral_pub": req.SenderEphemeralPub,
@@ -255,12 +255,12 @@ func recoverCanonical(groupID, requesterDevice string) []byte {
 // Аутентификация запроса — device JWT + членство (крипто-подпись запроса ключом
 // личности — этап 3). Согласие в группе автоматическое: помощник и так делится с
 // участником, имеющим право на историю.
-func groupKeyRecover(д группыDeps) http.HandlerFunc {
+func groupKeyRecover(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		groupID := r.PathValue("groupID")
 		id, _ := auth.FromContext(r.Context())
 
-		role, err := д.хранилище.GroupRole(r.Context(), groupID, id.UserID)
+		role, err := deps.store.GroupRole(r.Context(), groupID, id.UserID)
 		if err != nil || role == "" {
 			writeErr(w, http.StatusForbidden, "not_member", "восстановление доступно только участникам группы")
 			return
@@ -274,7 +274,7 @@ func groupKeyRecover(д группыDeps) http.HandlerFunc {
 			Signature string `json:"signature"` // base64url, Ed25519 над recoverCanonical
 		}
 		_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req)
-		identityPub, err := д.хранилище.IdentityPub(r.Context(), id.UserID)
+		identityPub, err := deps.store.IdentityPub(r.Context(), id.UserID)
 		if err != nil {
 			log.Printf("groupKeyRecover: identity: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -287,7 +287,7 @@ func groupKeyRecover(д группыDeps) http.HandlerFunc {
 				return
 			}
 		}
-		missing, err := д.хранилище.MissingGKVersions(r.Context(), groupID, id.DeviceID)
+		missing, err := deps.store.MissingGKVersions(r.Context(), groupID, id.DeviceID)
 		if err != nil {
 			log.Printf("groupKeyRecover: missing: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -298,13 +298,13 @@ func groupKeyRecover(д группыDeps) http.HandlerFunc {
 			_ = json.NewEncoder(w).Encode(map[string]any{"requested": 0, "helpers": 0})
 			return
 		}
-		helpers, err := д.хранилище.HelperDevices(r.Context(), groupID, id.DeviceID, missing)
+		helpers, err := deps.store.HelperDevices(r.Context(), groupID, id.DeviceID, missing)
 		if err != nil {
 			log.Printf("groupKeyRecover: helpers: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		encPub, err := д.хранилище.DeviceEncryptionPub(r.Context(), id.DeviceID)
+		encPub, err := deps.store.DeviceEncryptionPub(r.Context(), id.DeviceID)
 		if err != nil {
 			log.Printf("groupKeyRecover: enc pub: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -314,7 +314,7 @@ func groupKeyRecover(д группыDeps) http.HandlerFunc {
 		versions := make([]int32, len(missing))
 		copy(versions, missing)
 		for _, helper := range helpers {
-			д.уведомитель.Device(r.Context(), helper, "recovery.gk_request", map[string]any{
+			deps.notifier.Device(r.Context(), helper, "recovery.gk_request", map[string]any{
 				"group_id":          groupID,
 				"requester_device":  id.DeviceID,
 				"requester_enc_pub": b64.EncodeToString(encPub),
@@ -330,12 +330,12 @@ func groupKeyRecover(д группыDeps) http.HandlerFunc {
 // обёртки GK под устройство-запросившее. Сервер кладёт их в group_wrapped_keys и
 // уведомляет получателя recovery.gk_ready. Проверки: помощник — участник; получатель —
 // устройство активного участника (ключи не уходят чужому).
-func groupKeyProvide(д группыDeps) http.HandlerFunc {
+func groupKeyProvide(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		groupID := r.PathValue("groupID")
 		id, _ := auth.FromContext(r.Context())
 
-		role, err := д.хранилище.GroupRole(r.Context(), groupID, id.UserID)
+		role, err := deps.store.GroupRole(r.Context(), groupID, id.UserID)
 		if err != nil || role == "" {
 			writeErr(w, http.StatusForbidden, "not_member", "делиться ключами может только участник")
 			return
@@ -352,7 +352,7 @@ func groupKeyProvide(д группыDeps) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_json", "нужны requester_device и keys")
 			return
 		}
-		member, err := д.хранилище.IsGroupMemberDevice(r.Context(), groupID, req.RequesterDevice)
+		member, err := deps.store.IsGroupMemberDevice(r.Context(), groupID, req.RequesterDevice)
 		if err != nil {
 			log.Printf("groupKeyProvide: member check: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -373,12 +373,12 @@ func groupKeyProvide(д группыDeps) http.HandlerFunc {
 			}
 			keys = append(keys, store.RecoveryKey{GKVersion: k.GKVersion, SenderEphemeralPub: eph, Wrapped: wrapped})
 		}
-		if err := д.хранилище.SaveRecoveryKeys(r.Context(), groupID, req.RequesterDevice, keys); err != nil {
+		if err := deps.store.SaveRecoveryKeys(r.Context(), groupID, req.RequesterDevice, keys); err != nil {
 			log.Printf("groupKeyProvide: save: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		д.уведомитель.Device(r.Context(), req.RequesterDevice, "recovery.gk_ready", map[string]any{
+		deps.notifier.Device(r.Context(), req.RequesterDevice, "recovery.gk_ready", map[string]any{
 			"group_id": groupID, "count": len(keys),
 		})
 		w.Header().Set("Content-Type", "application/json")
@@ -392,7 +392,7 @@ func groupKeyProvide(д группыDeps) http.HandlerFunc {
 // Членство не проверяется намеренно: выдаются только обёртки, адресованные
 // этому устройству, — исключённый читает старые версии для истории
 // (crypto-protocol §4.2: окно апелляции), новых версий у него нет.
-func groupKeys(д группыDeps) http.HandlerFunc {
+func groupKeys(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var since int64
 		if v := r.URL.Query().Get("since_version"); v != "" {
@@ -400,7 +400,7 @@ func groupKeys(д группыDeps) http.HandlerFunc {
 		}
 		groupID := r.PathValue("groupID")
 		id, _ := auth.FromContext(r.Context())
-		keys, err := д.хранилище.ListGroupKeysForDevice(r.Context(), groupID, id.DeviceID, int32(since))
+		keys, err := deps.store.ListGroupKeysForDevice(r.Context(), groupID, id.DeviceID, int32(since))
 		if err != nil {
 			log.Printf("groupKeys: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -408,7 +408,7 @@ func groupKeys(д группыDeps) http.HandlerFunc {
 		}
 		// current_version — максимум по группе (может быть больше версий, выданных
 		// этому устройству): новому устройству админа она нужна для ротации current+1.
-		current, err := д.хранилище.CurrentGKVersion(r.Context(), groupID)
+		current, err := deps.store.CurrentGKVersion(r.Context(), groupID)
 		if err != nil {
 			log.Printf("groupKeys: current version: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -428,7 +428,7 @@ func groupKeys(д группыDeps) http.HandlerFunc {
 		// Без неё клиент не может заметить устаревание сам и зависел бы только от события,
 		// которое можно пропустить, будучи офлайн. Поле аддитивное: старый клиент его не
 		// читает. Пусто — ротаций не было либо они были до введения правила.
-		последняя, err := д.хранилище.LatestGroupRotation(r.Context(), groupID)
+		latest, err := deps.store.LatestGroupRotation(r.Context(), groupID)
 		if err != nil {
 			log.Printf("groupKeys: последняя ротация: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -438,7 +438,7 @@ func groupKeys(д группыDeps) http.HandlerFunc {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"keys":            out,
 			"current_version": current,
-			"escrow_epoch":    последняя.EscrowEpoch,
+			"escrow_epoch":    latest.EscrowEpoch,
 		})
 	}
 }
@@ -446,33 +446,33 @@ func groupKeys(д группыDeps) http.HandlerFunc {
 // ── Ротация: причины и порог (ADR-0017 §7) ──────────────────────────────────
 
 const (
-	причинаЭпоха       = "epoch"
-	причинаСчётчик     = "periodic"
-	причинаВход        = "member_join"
-	причинаВыход       = "member_leave"
-	причинаКомпромисса = "compromise"
+	reasonEpoch      = "epoch"
+	reasonPeriodic   = "periodic"
+	reasonJoin       = "member_join"
+	reasonLeave      = "member_leave"
+	reasonCompromise = "compromise"
 
 	// Подстраховка на случай ошибки в проверке причины. Упереться в неё законной
 	// ротацией по счётчику означало бы 11 сообщений в секунду непрерывно.
-	порогРотации = 15 * time.Minute
+	rotationThreshold = 15 * time.Minute
 )
 
-func допустимаяПричина(r string) bool {
+func reasonAllowed(r string) bool {
 	switch r {
-	case причинаЭпоха, причинаСчётчик, причинаВход, причинаВыход, причинаКомпромисса:
+	case reasonEpoch, reasonPeriodic, reasonJoin, reasonLeave, reasonCompromise:
 		return true
 	}
 	return false
 }
 
-// несрочная — та, задержка которой ничего не открывает постороннему. Ротации по
+// notUrgent — та, задержка которой ничего не открывает постороннему. Ротации по
 // составу и по компрометации срочные: там пятнадцать минут означают пятнадцать минут
 // чтения переписки тем, кого уже исключили.
-func несрочная(r string) bool {
-	return r == причинаЭпоха || r == причинаСчётчик
+func notUrgent(r string) bool {
+	return r == reasonEpoch || r == reasonPeriodic
 }
 
-// причинаПодтверждена — сверка названной причины с тем, что видит сервер.
+// reasonConfirmed — сверка названной причины с тем, что видит сервер.
 //
 // Смысл не в недоверии к клиенту, а в том, что ротировать теперь может каждый участник:
 // причина — это то, по чему сервер решает, действует ли порог частоты и нужна ли ротация
@@ -483,18 +483,18 @@ func несрочная(r string) bool {
 // ровно порог значило бы отвергать законную ротацию из-за расхождения в единицу.
 // Достаточно, что группа вообще жила: ротация в мёртвой группе по причине «много
 // сообщений» — заведомая неправда.
-func причинаПодтверждена(reason string, доводы store.RotationEvidence) bool {
+func reasonConfirmed(reason string, evidence store.RotationEvidence) bool {
 	switch reason {
-	case причинаЭпоха:
+	case reasonEpoch:
 		return true // эпоха проверена выше, отдельно и точнее
-	case причинаСчётчик:
-		return доводы.MessagesSince > 0
-	case причинаВход:
-		return доводы.Joined
-	case причинаВыход:
-		return доводы.Left
-	case причинаКомпромисса:
-		return доводы.DeviceRevoked
+	case reasonPeriodic:
+		return evidence.MessagesSince > 0
+	case reasonJoin:
+		return evidence.Joined
+	case reasonLeave:
+		return evidence.Left
+	case reasonCompromise:
+		return evidence.DeviceRevoked
 	}
 	return false
 }

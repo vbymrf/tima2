@@ -19,10 +19,10 @@ import (
 
 // listMyDevices — GET /api/v1/devices: свои активные устройства.
 // Только свои: чужой список устройств — это карта того, чем человек пользуется.
-func listMyDevices(д устройстваDeps) http.HandlerFunc {
+func listMyDevices(deps devicesDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
-		devices, err := д.хранилище.ListUserDevices(r.Context(), id.UserID)
+		devices, err := deps.store.ListUserDevices(r.Context(), id.UserID)
 		if err != nil {
 			log.Printf("listMyDevices: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -67,7 +67,7 @@ func normalizePlatform(v string) string {
 // setMyPlatform — PUT /api/v1/devices/me/platform: устройство объявляет свою
 // платформу. Клиент вызывает это при запуске, чтобы установки, созданные до
 // миграции 0029, получили платформу и не потеряли возможность подтверждать QR.
-func setMyPlatform(д устройстваDeps) http.HandlerFunc {
+func setMyPlatform(deps devicesDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
 		var req struct {
@@ -82,7 +82,7 @@ func setMyPlatform(д устройстваDeps) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_platform", "platform: android, ios или desktop")
 			return
 		}
-		if err := д.хранилище.SetDevicePlatform(r.Context(), id.DeviceID, platform); err != nil {
+		if err := deps.store.SetDevicePlatform(r.Context(), id.DeviceID, platform); err != nil {
 			log.Printf("setMyPlatform: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -97,7 +97,7 @@ func setMyPlatform(д устройстваDeps) http.HandlerFunc {
 // Отозвать последнее активное устройство нельзя: аккаунт остался бы без единой
 // точки входа — ни писать, ни восстановить историю, ни отозвать что-либо ещё.
 // Для «уйти совсем» есть удаление аккаунта, и оно говорит о последствиях прямо.
-func revokeDevice(д устройстваDeps) http.HandlerFunc {
+func revokeDevice(deps devicesDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
 		deviceID := r.PathValue("deviceID")
@@ -106,7 +106,7 @@ func revokeDevice(д устройстваDeps) http.HandlerFunc {
 			return
 		}
 		ctx := r.Context()
-		owned, err := д.хранилище.IsActiveDevice(ctx, id.UserID, deviceID)
+		owned, err := deps.store.IsActiveDevice(ctx, id.UserID, deviceID)
 		if err != nil {
 			log.Printf("revokeDevice: ownership: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -116,7 +116,7 @@ func revokeDevice(д устройстваDeps) http.HandlerFunc {
 			writeErr(w, http.StatusNotFound, "device_not_found", "устройство не найдено или уже отозвано")
 			return
 		}
-		active, err := д.хранилище.CountActiveDevices(ctx, id.UserID)
+		active, err := deps.store.CountActiveDevices(ctx, id.UserID)
 		if err != nil {
 			log.Printf("revokeDevice: count: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -127,7 +127,7 @@ func revokeDevice(д устройстваDeps) http.HandlerFunc {
 				"Это единственное устройство аккаунта — отозвать его нельзя. Чтобы уйти совсем, удалите аккаунт.")
 			return
 		}
-		if err := д.хранилище.RevokeDevice(ctx, id.UserID, deviceID); errors.Is(err, store.ErrDeviceNotFound) {
+		if err := deps.store.RevokeDevice(ctx, id.UserID, deviceID); errors.Is(err, store.ErrDeviceNotFound) {
 			writeErr(w, http.StatusNotFound, "device_not_found", "устройство не найдено или уже отозвано")
 			return
 		} else if err != nil {
@@ -136,7 +136,7 @@ func revokeDevice(д устройстваDeps) http.HandlerFunc {
 			return
 		}
 		log.Printf("revokeDevice: %s отозвал %s", id.DeviceID, deviceID)
-		попроситьРотациюПослеОтзыва(д, ctx, id.UserID, deviceID)
+		requestRotationAfterRevoke(deps, ctx, id.UserID, deviceID)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"revoked": true, "device_id": deviceID})
 	}
@@ -158,14 +158,14 @@ func revokeDevice(д устройстваDeps) http.HandlerFunc {
 //
 // Ошибки только логируем: отзыв уже состоялся и должен остаться успешным —
 // несостоявшееся уведомление означает отложенную ротацию, а не отменённый отзыв.
-func попроситьРотациюПослеОтзыва(д устройстваDeps, ctx context.Context, userID, revokedDeviceID string) {
-	groups, err := д.хранилище.ListGroupsForUser(ctx, userID)
+func requestRotationAfterRevoke(deps devicesDeps, ctx context.Context, userID, revokedDeviceID string) {
+	groups, err := deps.store.ListGroupsForUser(ctx, userID)
 	if err != nil {
 		log.Printf("requestGroupRotationAfterRevoke: groups: %v", err)
 		return
 	}
 	for _, g := range groups {
-		members, err := д.хранилище.ListGroupMembers(ctx, g.GroupID)
+		members, err := deps.store.ListGroupMembers(ctx, g.GroupID)
 		if err != nil {
 			log.Printf("requestGroupRotationAfterRevoke: members %s: %v", g.GroupID, err)
 			continue
@@ -174,7 +174,7 @@ func попроситьРотациюПослеОтзыва(д устройст�
 			if m.Role != "owner" && m.Role != "admin" {
 				continue // ротацию принимает только админ (groupRotate проверяет роль)
 			}
-			devices, err := д.хранилище.ListDevices(ctx, m.UserID)
+			devices, err := deps.store.ListDevices(ctx, m.UserID)
 			if err != nil {
 				continue
 			}
@@ -182,7 +182,7 @@ func попроситьРотациюПослеОтзыва(д устройст�
 				if d.DeviceID == revokedDeviceID {
 					continue
 				}
-				д.уведомитель.Device(ctx, d.DeviceID, "group.rotation_needed", map[string]any{
+				deps.notifier.Device(ctx, d.DeviceID, "group.rotation_needed", map[string]any{
 					"group_id": g.GroupID,
 					"reason":   "device_revoked",
 				})

@@ -24,15 +24,15 @@ type MessageStore interface {
 
 var _ MessageStore = (*store.Store)(nil)
 
-// сообщенияDeps — зависимости группы.
+// messagesDeps — зависимости группы.
 //
 // Шина нужна здесь напрямую, в обход Notifier, и это не обход правила: «печатает…»
 // живёт только пока смотрят на экран. Записывать его в device_events значило бы
 // догонять человека сообщением о том, что кто-то печатал полчаса назад.
-type сообщенияDeps struct {
-	хранилище   MessageStore
-	шина        func() Publisher
-	уведомитель *Notifier
+type messagesDeps struct {
+	store    MessageStore
+	bus      func() Publisher
+	notifier *Notifier
 }
 
 // RegisterMessages — четыре маршрута: отправка, чтение, прочитано, печатает.
@@ -43,10 +43,10 @@ func RegisterMessages(
 	n *Notifier,
 	requireDevice Middleware,
 ) {
-	д := сообщенияDeps{хранилище: st, шина: bus, уведомитель: n}
+	deps := messagesDeps{store: st, bus: bus, notifier: n}
 
-	mux.HandleFunc("POST /api/v1/messages", requireDevice(postMessage(д)))
-	mux.HandleFunc("GET /api/v1/chats/{chatID}/messages", requireDevice(listMessages(д)))
-	mux.HandleFunc("POST /api/v1/chats/{chatID}/read", requireDevice(chatRead(д)))
-	mux.HandleFunc("POST /api/v1/chats/{chatID}/typing", requireDevice(chatTyping(д)))
+	mux.HandleFunc("POST /api/v1/messages", requireDevice(postMessage(deps)))
+	mux.HandleFunc("GET /api/v1/chats/{chatID}/messages", requireDevice(listMessages(deps)))
+	mux.HandleFunc("POST /api/v1/chats/{chatID}/read", requireDevice(chatRead(deps)))
+	mux.HandleFunc("POST /api/v1/chats/{chatID}/typing", requireDevice(chatTyping(deps)))
 }

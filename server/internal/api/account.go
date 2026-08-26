@@ -19,23 +19,23 @@ import (
 // Удаление в два шага (ADR-0015): пометка, потом физическое стирание по сроку.
 // Помеченный аккаунт уже недоступен, но данные могут понадобиться по юридически
 // обязывающему запросу в пределах срока хранения.
-func deleteAccount(д людиDeps) http.HandlerFunc {
+func deleteAccount(deps usersDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
-		personID, err := д.хранилище.PersonOfUser(r.Context(), id.UserID)
+		personID, err := deps.store.PersonOfUser(r.Context(), id.UserID)
 		if err != nil {
 			writeErr(w, http.StatusNotFound, "no_account", "аккаунт не найден")
 			return
 		}
 		// Срок берётся из настроек, а не из константы: требование поменяется — поменяем
 		// строку в таблице, а не соберём приложение заново.
-		days, err := д.хранилище.RetentionDays(r.Context(), "account_purge_days")
+		days, err := deps.store.RetentionDays(r.Context(), "account_purge_days")
 		if err != nil {
 			log.Printf("deleteAccount: срок: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		if err := д.хранилище.MarkAccountDeleted(r.Context(), personID, days); err != nil {
+		if err := deps.store.MarkAccountDeleted(r.Context(), personID, days); err != nil {
 			log.Printf("deleteAccount: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -54,16 +54,16 @@ func deleteAccount(д людиDeps) http.HandlerFunc {
 // archiveChat и unarchiveChat — два входа в одно действие. Раньше это был один
 // handler, различавший PUT и DELETE по r.Method; при регистрации по глаголам
 // такая проверка внутри — лишний шаг, о котором надо помнить.
-func archiveChat(д чатыDeps) http.HandlerFunc { return установитьАрхив(д, true) }
-func unarchiveChat(д чатыDeps) http.HandlerFunc {
-	return установитьАрхив(д, false)
+func archiveChat(deps chatsDeps) http.HandlerFunc { return setArchived(deps, true) }
+func unarchiveChat(deps chatsDeps) http.HandlerFunc {
+	return setArchived(deps, false)
 }
 
-func установитьАрхив(д чатыDeps, archived bool) http.HandlerFunc {
+func setArchived(deps chatsDeps, archived bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		chatID := r.PathValue("chatID")
 		id, _ := auth.FromContext(r.Context())
-		if err := д.хранилище.SetChatArchived(r.Context(), chatID, id.UserID, archived); err != nil {
+		if err := deps.store.SetChatArchived(r.Context(), chatID, id.UserID, archived); err != nil {
 			log.Printf("setChatArchived: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -74,10 +74,10 @@ func установитьАрхив(д чатыDeps, archived bool) http.Handler
 }
 
 // listArchivedChats — GET /chats/archived: что человек убрал у себя.
-func listArchivedChats(д чатыDeps) http.HandlerFunc {
+func listArchivedChats(deps chatsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
-		ids, err := д.хранилище.ArchivedChatsFor(r.Context(), id.UserID)
+		ids, err := deps.store.ArchivedChatsFor(r.Context(), id.UserID)
 		if err != nil {
 			log.Printf("listArchivedChats: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")

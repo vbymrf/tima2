@@ -60,7 +60,7 @@ type Notifier struct {
 	// возможных: запись в device_events проходила, REST-проверки были зелёными,
 	// а live-доставки не было вовсе — «сообщение отправлено, но не пришло».
 	// Стоило это двух упавших WS-тестов, и хорошо, что они есть.
-	шина func() Publisher
+	bus func() Publisher
 }
 
 // Device — событие одному устройству.
@@ -75,11 +75,11 @@ func (n *Notifier) Device(ctx context.Context, deviceID, event string, payload m
 		log.Printf("notify %s %s: append: %v", deviceID, event, err)
 		return
 	}
-	шина := n.шина()
-	if шина == nil {
+	bus := n.bus()
+	if bus == nil {
 		return
 	}
-	if err := шина.Publish(ctx, deviceID, event, eventID, payload); err != nil {
+	if err := bus.Publish(ctx, deviceID, event, eventID, payload); err != nil {
 		// Живая доставка не фатальна: событие уже в логе.
 		log.Printf("notify %s %s: publish: %v", deviceID, event, err)
 	}

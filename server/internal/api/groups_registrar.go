@@ -61,14 +61,14 @@ type GroupStore interface {
 
 var _ GroupStore = (*store.Store)(nil)
 
-// группыDeps — зависимости группы.
+// groupsDeps — зависимости группы.
 //
 // Ограничитель частоты берётся функцией: он, как Blob и настройки LiveKit,
 // заполняется на Server уже после Register.
-type группыDeps struct {
-	хранилище   GroupStore
-	лимит       func() *ratelimit.Limiter
-	уведомитель *Notifier
+type groupsDeps struct {
+	store    GroupStore
+	limiter  func() *ratelimit.Limiter
+	notifier *Notifier
 }
 
 // RegisterGroups — шестнадцать маршрутов групп.
@@ -79,24 +79,24 @@ func RegisterGroups(
 	n *Notifier,
 	requireDevice Middleware,
 ) {
-	д := группыDeps{хранилище: st, лимит: limit, уведомитель: n}
+	deps := groupsDeps{store: st, limiter: limit, notifier: n}
 
-	mux.HandleFunc("POST /api/v1/groups", requireDevice(createGroup(д)))
-	mux.HandleFunc("GET /api/v1/groups", requireDevice(listMyGroups(д)))
-	mux.HandleFunc("GET /api/v1/groups/{groupID}", requireDevice(getGroup(д)))
-	mux.HandleFunc("PATCH /api/v1/groups/{groupID}", requireDevice(patchGroup(д)))
-	mux.HandleFunc("DELETE /api/v1/groups/{groupID}", requireDevice(deleteGroup(д)))
-	mux.HandleFunc("GET /api/v1/groups/{groupID}/members", requireDevice(listGroupMembers(д)))
-	mux.HandleFunc("POST /api/v1/groups/{groupID}/members", requireDevice(addGroupMember(д)))
-	mux.HandleFunc("DELETE /api/v1/groups/{groupID}/members/{userID}", requireDevice(removeGroupMember(д)))
-	mux.HandleFunc("PUT /api/v1/groups/{groupID}/members/{userID}/role", requireDevice(setGroupRole(д)))
-	mux.HandleFunc("POST /api/v1/groups/{groupID}/members/{userID}/ban", requireDevice(banGroupMember(д)))
+	mux.HandleFunc("POST /api/v1/groups", requireDevice(createGroup(deps)))
+	mux.HandleFunc("GET /api/v1/groups", requireDevice(listMyGroups(deps)))
+	mux.HandleFunc("GET /api/v1/groups/{groupID}", requireDevice(getGroup(deps)))
+	mux.HandleFunc("PATCH /api/v1/groups/{groupID}", requireDevice(patchGroup(deps)))
+	mux.HandleFunc("DELETE /api/v1/groups/{groupID}", requireDevice(deleteGroup(deps)))
+	mux.HandleFunc("GET /api/v1/groups/{groupID}/members", requireDevice(listGroupMembers(deps)))
+	mux.HandleFunc("POST /api/v1/groups/{groupID}/members", requireDevice(addGroupMember(deps)))
+	mux.HandleFunc("DELETE /api/v1/groups/{groupID}/members/{userID}", requireDevice(removeGroupMember(deps)))
+	mux.HandleFunc("PUT /api/v1/groups/{groupID}/members/{userID}/role", requireDevice(setGroupRole(deps)))
+	mux.HandleFunc("POST /api/v1/groups/{groupID}/members/{userID}/ban", requireDevice(banGroupMember(deps)))
 
-	mux.HandleFunc("POST /api/v1/groups/{groupID}/messages", requireDevice(postGroupMessage(д)))
-	mux.HandleFunc("GET /api/v1/groups/{groupID}/messages", requireDevice(listGroupMessages(д)))
+	mux.HandleFunc("POST /api/v1/groups/{groupID}/messages", requireDevice(postGroupMessage(deps)))
+	mux.HandleFunc("GET /api/v1/groups/{groupID}/messages", requireDevice(listGroupMessages(deps)))
 
-	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys", requireDevice(groupRotate(д)))
-	mux.HandleFunc("GET /api/v1/groups/{groupID}/keys", requireDevice(groupKeys(д)))
-	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys/recover", requireDevice(groupKeyRecover(д)))
-	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys/recover/provide", requireDevice(groupKeyProvide(д)))
+	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys", requireDevice(groupRotate(deps)))
+	mux.HandleFunc("GET /api/v1/groups/{groupID}/keys", requireDevice(groupKeys(deps)))
+	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys/recover", requireDevice(groupKeyRecover(deps)))
+	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys/recover/provide", requireDevice(groupKeyProvide(deps)))
 }

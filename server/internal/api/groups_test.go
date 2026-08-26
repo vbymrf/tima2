@@ -206,10 +206,10 @@ func TestGroupKeyRotationRightsAndReasons(t *testing.T) {
 	addMemberAPI(t, ts, owner.token, groupID, member.userID, "member")
 	addMemberAPI(t, ts, owner.token, groupID, banned.userID, "member")
 
-	все := []*device{owner, member, banned}
+	all := []*device{owner, member, banned}
 
 	// Участник ротирует — это и есть изменение ADR-0017 §5.
-	if _, code := doRotate(t, ts, member.token, groupID, 1, "member_join", все); code != http.StatusCreated {
+	if _, code := doRotate(t, ts, member.token, groupID, 1, "member_join", all); code != http.StatusCreated {
 		t.Fatalf("ротация участником: ожидался 201, получен %d", code)
 	}
 
@@ -219,20 +219,20 @@ func TestGroupKeyRotationRightsAndReasons(t *testing.T) {
 		owner.token, map[string]any{"seconds": 3600}, nil); code != http.StatusOK && code != http.StatusNoContent {
 		t.Fatalf("бан участника: %d", code)
 	}
-	if _, code := doRotate(t, ts, banned.token, groupID, 2, "member_join", все); code != http.StatusForbidden {
+	if _, code := doRotate(t, ts, banned.token, groupID, 2, "member_join", all); code != http.StatusForbidden {
 		t.Fatalf("ротация заблокированным: ожидался 403, получен %d", code)
 	}
 
 	// Неизвестная причина отвергается: причина — не пояснение, по ней сервер решает,
 	// действует ли порог и нужна ли ротация вообще.
-	if _, code := doRotate(t, ts, member.token, groupID, 2, "потому что", все); code != http.StatusBadRequest {
+	if _, code := doRotate(t, ts, member.token, groupID, 2, "потому что", all); code != http.StatusBadRequest {
 		t.Fatalf("неизвестная причина: ожидался 400, получен %d", code)
 	}
 
 	// Причина проверяется по состоянию группы: «много сообщений» в группе, где после
 	// прошлой ротации не было ни одного, — заведомая неправда, и это отвергается раньше
 	// порога. Иначе злоупотребление стоило бы всего лишь ожидания.
-	if _, code := doRotate(t, ts, member.token, groupID, 2, "periodic", все); code != http.StatusConflict {
+	if _, code := doRotate(t, ts, member.token, groupID, 2, "periodic", all); code != http.StatusConflict {
 		t.Fatalf("periodic без сообщений: ожидался 409 rotation_not_needed, получен %d", code)
 	}
 
@@ -247,7 +247,7 @@ func TestGroupKeyRotationRightsAndReasons(t *testing.T) {
 	}, false); code != http.StatusCreated {
 		t.Fatalf("отправка в группу для подтверждения причины: %d", code)
 	}
-	if _, code := doRotate(t, ts, member.token, groupID, 2, "periodic", все); code != http.StatusTooManyRequests {
+	if _, code := doRotate(t, ts, member.token, groupID, 2, "periodic", all); code != http.StatusTooManyRequests {
 		t.Fatalf("periodic при живой переписке: ожидался 429, получен %d", code)
 	}
 
@@ -260,8 +260,8 @@ func TestGroupKeyRotationRightsAndReasons(t *testing.T) {
 	}
 	// Получатели — без исключённого: обёртка его устройству была бы выдачей доступа
 	// тому, кого только что убрали, и сервер такую ротацию отвергает.
-	оставшиеся := []*device{owner, member}
-	if _, code := doRotate(t, ts, member.token, groupID, 2, "member_leave", оставшиеся); code != http.StatusCreated {
+	remaining := []*device{owner, member}
+	if _, code := doRotate(t, ts, member.token, groupID, 2, "member_leave", remaining); code != http.StatusCreated {
 		t.Fatalf("member_leave под порогом: ожидался 201, получен %d", code)
 	}
 
@@ -277,13 +277,13 @@ func TestGroupKeyRotationRightsAndReasons(t *testing.T) {
 	}
 	// Причина должна быть правдой и здесь: зовём нового участника, и только тогда
 	// member_join подтверждается состоянием группы.
-	новичок := registerDevice(t, ts, "+79993330004")
-	addMemberAPI(t, ts, owner.token, groupID, новичок.userID, "member")
-	сНовичком := []*device{owner, member, новичок}
-	if _, code := doRotate(t, ts, member.token, groupID, 3, "member_join", сНовичком); code != http.StatusCreated {
+	newcomer := registerDevice(t, ts, "+79993330004")
+	addMemberAPI(t, ts, owner.token, groupID, newcomer.userID, "member")
+	withNewcomer := []*device{owner, member, newcomer}
+	if _, code := doRotate(t, ts, member.token, groupID, 3, "member_join", withNewcomer); code != http.StatusCreated {
 		t.Fatalf("ротация с известной эпохой: %d", code)
 	}
-	if _, code := doRotate(t, ts, member.token, groupID, 4, "epoch", сНовичком); code != http.StatusConflict {
+	if _, code := doRotate(t, ts, member.token, groupID, 4, "epoch", withNewcomer); code != http.StatusConflict {
 		t.Fatalf("epoch при совпадающей эпохе: ожидался 409 rotation_not_needed, получен %d", code)
 	}
 }

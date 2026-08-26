@@ -27,10 +27,10 @@ import (
 )
 
 // reidentifyChallenge — POST /api/v1/users/me/reidentify/challenge.
-func reidentifyChallenge(д людиDeps) http.HandlerFunc {
+func reidentifyChallenge(deps usersDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
-		token, err := д.токены().IssueReidentifyChallenge(id.UserID)
+		token, err := deps.tokens().IssueReidentifyChallenge(id.UserID)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
 			return
@@ -44,7 +44,7 @@ func reidentifyChallenge(д людиDeps) http.HandlerFunc {
 // ключа личности → воссоединение. StartNewIdentity получает подпись как proof,
 // поэтому связка проверяемая (LinkProven), а не административная — собеседники не
 // увидят предупреждение о смене личности.
-func reidentify(д людиDeps) http.HandlerFunc {
+func reidentify(deps usersDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
 		var req struct {
@@ -56,7 +56,7 @@ func reidentify(д людиDeps) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
 			return
 		}
-		claims, err := д.токены().Parse(req.ChallengeToken, auth.ScopeReidentify)
+		claims, err := deps.tokens().Parse(req.ChallengeToken, auth.ScopeReidentify)
 		if err != nil || claims.Subject != id.UserID {
 			writeErr(w, http.StatusForbidden, "bad_challenge",
 				"challenge_token просрочен, подделан или выдан не этой сессии — запросите новый")
@@ -73,13 +73,13 @@ func reidentify(д людиDeps) http.HandlerFunc {
 			return
 		}
 		ctx := r.Context()
-		personID, err := д.хранилище.PersonOfUser(ctx, id.UserID)
+		personID, err := deps.store.PersonOfUser(ctx, id.UserID)
 		if err != nil {
 			log.Printf("reidentify: person: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		priorUserID, err := д.хранилище.FindPriorIdentity(ctx, personID, identityPub)
+		priorUserID, err := deps.store.FindPriorIdentity(ctx, personID, identityPub)
 		if errors.Is(err, store.ErrIdentityNotFound) {
 			writeErr(w, http.StatusNotFound, "not_found",
 				"Эта фраза не подходит ни одной прежней личности этого аккаунта.")
@@ -93,7 +93,7 @@ func reidentify(д людиDeps) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "already_current", "Вы уже под этой личностью — присоединять нечего.")
 			return
 		}
-		newUserID, err := д.хранилище.StartNewIdentity(ctx, personID, priorUserID, sig)
+		newUserID, err := deps.store.StartNewIdentity(ctx, personID, priorUserID, sig)
 		if err != nil {
 			log.Printf("reidentify: start new identity: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -101,17 +101,17 @@ func reidentify(д людиDeps) http.HandlerFunc {
 		}
 		// Тот же ключ доказан — новая голова цепочки продолжает им пользоваться, иначе
 		// следующий вход снова упёрся бы в identity_mismatch на пустом месте.
-		if err := д.хранилище.SetOrCheckIdentity(ctx, newUserID, identityPub); err != nil {
+		if err := deps.store.SetOrCheckIdentity(ctx, newUserID, identityPub); err != nil {
 			log.Printf("reidentify: set identity: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		if err := д.хранилище.MoveDeviceToUser(ctx, id.DeviceID, newUserID); err != nil {
+		if err := deps.store.MoveDeviceToUser(ctx, id.DeviceID, newUserID); err != nil {
 			log.Printf("reidentify: move device: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		access, err := д.токены().IssueAccess(newUserID, id.DeviceID)
+		access, err := deps.tokens().IssueAccess(newUserID, id.DeviceID)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
 			return

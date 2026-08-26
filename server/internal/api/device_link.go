@@ -54,9 +54,9 @@ const (
 // linkStart — POST /api/v1/link/start, без авторизации: у нового устройства
 // аккаунта ещё нет. Тело — те же ключи, что при обычной регистрации, но без
 // SMS/фразы: доверие принесёт confirm с другого устройства.
-func linkStart(д устройстваDeps) http.HandlerFunc {
+func linkStart(deps devicesDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !ограничитьЧастоту(д.лимит(), w, r, "link:start:"+clientIP(r), rlLinkStartPerIP) {
+		if !rateLimit(deps.limiter(), w, r, "link:start:"+clientIP(r), rlLinkStartPerIP) {
 			return
 		}
 		var req struct {
@@ -87,7 +87,7 @@ func linkStart(д устройстваDeps) http.HandlerFunc {
 			return
 		}
 		expires := time.Now().UTC().Add(linkSessionTTL)
-		sessionID, err := д.хранилище.CreateLinkSession(r.Context(), enc, sig, req.DeviceName,
+		sessionID, err := deps.store.CreateLinkSession(r.Context(), enc, sig, req.DeviceName,
 			hashLinkToken(secret), hashLinkToken(claimToken), expires)
 		if err != nil {
 			log.Printf("linkStart: %v", err)
@@ -111,7 +111,7 @@ func linkStart(д устройстваDeps) http.HandlerFunc {
 
 // linkConfirm — POST /api/v1/link/confirm, авторизовано: вызывает уже доверенное
 // устройство, отсканировавшее QR.
-func linkConfirm(д устройстваDeps) http.HandlerFunc {
+func linkConfirm(deps devicesDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
 		var req struct {
@@ -130,7 +130,7 @@ func linkConfirm(д устройстваDeps) http.HandlerFunc {
 			return
 		}
 		ctx := r.Context()
-		ls, err := д.хранилище.GetLinkSessionForConfirm(ctx, req.SessionID)
+		ls, err := deps.store.GetLinkSessionForConfirm(ctx, req.SessionID)
 		if errors.Is(err, store.ErrLinkSessionInvalid) {
 			writeErr(w, http.StatusForbidden, "bad_session", "сессия привязки не найдена, просрочена или уже подтверждена")
 			return
@@ -144,7 +144,7 @@ func linkConfirm(д устройстваDeps) http.HandlerFunc {
 		// Платформа самообъявленная и до аттестации непроверяема (миграция 0029) —
 		// правило порядка, а не граница безопасности. Пустая платформа (регистрация
 		// до 0029) тоже отказ: клиент объявляет её при запуске и чинится сам.
-		platform, err := д.хранилище.DevicePlatform(ctx, id.DeviceID)
+		platform, err := deps.store.DevicePlatform(ctx, id.DeviceID)
 		if err != nil {
 			log.Printf("linkConfirm: platform: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -155,7 +155,7 @@ func linkConfirm(д устройстваDeps) http.HandlerFunc {
 				"Подтвердить подключение может только телефон — на нём откройте «Устройства» и отсканируйте код.")
 			return
 		}
-		signingPub, err := д.хранилище.SigningKey(ctx, id.DeviceID, id.UserID)
+		signingPub, err := deps.store.SigningKey(ctx, id.DeviceID, id.UserID)
 		if err != nil {
 			log.Printf("linkConfirm: signing key: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -165,7 +165,7 @@ func linkConfirm(д устройстваDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "bad_signature", "подпись не сходится")
 			return
 		}
-		newDeviceID, err := д.хранилище.ConfirmLinkSession(ctx, req.SessionID, hashLinkToken(req.Secret), id.UserID)
+		newDeviceID, err := deps.store.ConfirmLinkSession(ctx, req.SessionID, hashLinkToken(req.Secret), id.UserID)
 		if errors.Is(err, store.ErrLinkSessionInvalid) {
 			writeErr(w, http.StatusForbidden, "bad_session", "сессия привязки не найдена, просрочена или уже подтверждена")
 			return
@@ -191,9 +191,9 @@ func linkConfirm(д устройстваDeps) http.HandlerFunc {
 // linkClaim — POST /api/v1/link/claim, без авторизации: у нового устройства
 // аккаунта ещё нет, claim_token и есть его пропуск (как registration_token при
 // обычной регистрации).
-func linkClaim(д устройстваDeps) http.HandlerFunc {
+func linkClaim(deps devicesDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !ограничитьЧастоту(д.лимит(), w, r, "link:claim:"+clientIP(r), rlLinkClaimPerIP) {
+		if !rateLimit(deps.limiter(), w, r, "link:claim:"+clientIP(r), rlLinkClaimPerIP) {
 			return
 		}
 		var req struct {
@@ -205,7 +205,7 @@ func linkClaim(д устройстваDeps) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_request", "нужны session_id и claim_token")
 			return
 		}
-		userID, deviceID, err := д.хранилище.ClaimLinkSession(r.Context(), req.SessionID, hashLinkToken(req.ClaimToken))
+		userID, deviceID, err := deps.store.ClaimLinkSession(r.Context(), req.SessionID, hashLinkToken(req.ClaimToken))
 		if errors.Is(err, store.ErrLinkSessionInvalid) {
 			writeErr(w, http.StatusForbidden, "not_ready", "устройство ещё не подтверждено — попробуйте ещё раз через пару секунд")
 			return
@@ -214,7 +214,7 @@ func linkClaim(д устройстваDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		access, err := д.выдачаТокенов().IssueAccess(userID, deviceID)
+		access, err := deps.tokens().IssueAccess(userID, deviceID)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
 			return

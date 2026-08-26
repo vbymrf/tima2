@@ -19,11 +19,11 @@ import (
 
 // chatBackupSave — POST /chats/{chatID}/backup: владелец кладёт резервные обёртки
 // ключей сообщений под свой backup_key (ADR-0010 §этап 4, «сообщения себе»).
-func chatBackupSave(д чатыDeps) http.HandlerFunc {
+func chatBackupSave(deps chatsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		chatID := r.PathValue("chatID")
 		id, _ := auth.FromContext(r.Context())
-		participant, err := д.хранилище.IsChatParticipant(r.Context(), chatID, id.UserID)
+		participant, err := deps.store.IsChatParticipant(r.Context(), chatID, id.UserID)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -52,7 +52,7 @@ func chatBackupSave(д чатыDeps) http.HandlerFunc {
 			}
 			items = append(items, store.MessageBackup{MessageID: it.MessageID, Wrapped: wrapped})
 		}
-		if err := д.хранилище.SaveMessageBackups(r.Context(), chatID, id.UserID, items); err != nil {
+		if err := deps.store.SaveMessageBackups(r.Context(), chatID, id.UserID, items); err != nil {
 			log.Printf("chatBackupSave: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -65,11 +65,11 @@ func chatBackupSave(д чатыDeps) http.HandlerFunc {
 
 // chatBackupList — GET /chats/{chatID}/backup: резервные обёртки владельца
 // (новое устройство разворачивает их backup_key из фразы и переносит историю).
-func chatBackupList(д чатыDeps) http.HandlerFunc {
+func chatBackupList(deps chatsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		chatID := r.PathValue("chatID")
 		id, _ := auth.FromContext(r.Context())
-		participant, err := д.хранилище.IsChatParticipant(r.Context(), chatID, id.UserID)
+		participant, err := deps.store.IsChatParticipant(r.Context(), chatID, id.UserID)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -78,7 +78,7 @@ func chatBackupList(д чатыDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "not_participant", "бэкап доступен только участнику чата")
 			return
 		}
-		items, err := д.хранилище.ListMessageBackups(r.Context(), chatID, id.UserID)
+		items, err := deps.store.ListMessageBackups(r.Context(), chatID, id.UserID)
 		if err != nil {
 			log.Printf("chatBackupList: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -99,12 +99,12 @@ func chatBackupList(д чатыDeps) http.HandlerFunc {
 }
 
 // chatRecover — POST /chats/{chatID}/recover: запрос восстановления истории личного чата.
-func chatRecover(д чатыDeps) http.HandlerFunc {
+func chatRecover(deps chatsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		chatID := r.PathValue("chatID")
 		id, _ := auth.FromContext(r.Context())
 
-		participant, err := д.хранилище.IsChatParticipant(r.Context(), chatID, id.UserID)
+		participant, err := deps.store.IsChatParticipant(r.Context(), chatID, id.UserID)
 		if err != nil {
 			log.Printf("chatRecover: participant: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -120,7 +120,7 @@ func chatRecover(д чатыDeps) http.HandlerFunc {
 			Signature string `json:"signature"`
 		}
 		_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req)
-		identityPub, err := д.хранилище.IdentityPub(r.Context(), id.UserID)
+		identityPub, err := deps.store.IdentityPub(r.Context(), id.UserID)
 		if err != nil {
 			log.Printf("chatRecover: identity: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -134,13 +134,13 @@ func chatRecover(д чатыDeps) http.HandlerFunc {
 			}
 		}
 
-		helpers, err := д.хранилище.ChatHelperDevices(r.Context(), chatID, id.DeviceID, id.UserID)
+		helpers, err := deps.store.ChatHelperDevices(r.Context(), chatID, id.DeviceID, id.UserID)
 		if err != nil {
 			log.Printf("chatRecover: helpers: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		encPub, err := д.хранилище.DeviceEncryptionPub(r.Context(), id.DeviceID)
+		encPub, err := deps.store.DeviceEncryptionPub(r.Context(), id.DeviceID)
 		if err != nil {
 			log.Printf("chatRecover: enc pub: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -152,7 +152,7 @@ func chatRecover(д чатыDeps) http.HandlerFunc {
 			if h.Own {
 				own++
 			}
-			д.уведомитель.Device(r.Context(), h.DeviceID, "recovery.msg_request", map[string]any{
+			deps.notifier.Device(r.Context(), h.DeviceID, "recovery.msg_request", map[string]any{
 				"chat_id":           chatID,
 				"requester_device":  id.DeviceID,
 				"requester_enc_pub": b64.EncodeToString(encPub),
@@ -166,12 +166,12 @@ func chatRecover(д чатыDeps) http.HandlerFunc {
 
 // chatRecoverProvide — POST /chats/{chatID}/recover/provide: помощник отдаёт обёртки
 // message_key под устройство-запросившее.
-func chatRecoverProvide(д чатыDeps) http.HandlerFunc {
+func chatRecoverProvide(deps chatsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		chatID := r.PathValue("chatID")
 		id, _ := auth.FromContext(r.Context())
 
-		participant, err := д.хранилище.IsChatParticipant(r.Context(), chatID, id.UserID)
+		participant, err := deps.store.IsChatParticipant(r.Context(), chatID, id.UserID)
 		if err != nil {
 			log.Printf("chatRecoverProvide: participant: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -193,7 +193,7 @@ func chatRecoverProvide(д чатыDeps) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_json", "нужны requester_device и keys")
 			return
 		}
-		ok, err := д.хранилище.IsChatParticipantDevice(r.Context(), chatID, req.RequesterDevice)
+		ok, err := deps.store.IsChatParticipantDevice(r.Context(), chatID, req.RequesterDevice)
 		if err != nil {
 			log.Printf("chatRecoverProvide: requester check: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -214,12 +214,12 @@ func chatRecoverProvide(д чатыDeps) http.HandlerFunc {
 			}
 			keys = append(keys, store.RecoveryMessageKey{MessageID: k.MessageID, SenderEphemeralPub: eph, Wrapped: wrapped})
 		}
-		if err := д.хранилище.SaveRecoveryMessageKeys(r.Context(), chatID, req.RequesterDevice, keys); err != nil {
+		if err := deps.store.SaveRecoveryMessageKeys(r.Context(), chatID, req.RequesterDevice, keys); err != nil {
 			log.Printf("chatRecoverProvide: save: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		д.уведомитель.Device(r.Context(), req.RequesterDevice, "recovery.msg_ready", map[string]any{
+		deps.notifier.Device(r.Context(), req.RequesterDevice, "recovery.msg_ready", map[string]any{
 			"chat_id": chatID, "count": len(keys),
 		})
 		w.Header().Set("Content-Type", "application/json")

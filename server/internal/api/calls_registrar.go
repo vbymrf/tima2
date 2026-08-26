@@ -37,31 +37,31 @@ type CallStore interface {
 
 var _ CallStore = (*store.Store)(nil)
 
-// LiveKitНастройки — выдача токенов, управление комнатами и адрес SFU.
+// LiveKitSettings — выдача токенов, управление комнатами и адрес SFU.
 //
 // **Читаются на каждый запрос, а не при регистрации.** Поля Server заполняются
 // ПОСЛЕ Register — так делает и cmd/tima, и setupWithCalls в тестах. Снимок,
 // снятый в момент регистрации, оставил бы звонки навсегда в 503, и выглядело бы
 // это как «LiveKit не настроен», хотя настроен он строкой ниже.
-type LiveKitНастройки struct {
-	Выдача  *calls.Issuer     // nil → звонки отвечают 503
-	Комнаты *calls.RoomClient // закрыть комнату, выкинуть участника
-	Адрес   string
+type LiveKitSettings struct {
+	Issuer *calls.Issuer     // nil → звонки отвечают 503
+	Rooms  *calls.RoomClient // закрыть комнату, выкинуть участника
+	URL    string
 }
 
-// звонкиDeps — всё, чем пользуются handler-ы этой группы.
+// callsDeps — всё, чем пользуются handler-ы этой группы.
 //
 // Строчными буквами и внутри пакета: набор зависимостей — не часть публичного
 // API, и снаружи его собирать незачем. Публичен только RegisterCalls.
-type звонкиDeps struct {
-	хранилище   CallStore
-	livekit     func() LiveKitНастройки
-	уведомитель *Notifier
+type callsDeps struct {
+	store    CallStore
+	livekit  func() LiveKitSettings
+	notifier *Notifier
 }
 
-func (д звонкиDeps) выдача() *calls.Issuer      { return д.livekit().Выдача }
-func (д звонкиDeps) комнаты() *calls.RoomClient { return д.livekit().Комнаты }
-func (д звонкиDeps) адресLiveKit() string       { return д.livekit().Адрес }
+func (deps callsDeps) issuer() *calls.Issuer    { return deps.livekit().Issuer }
+func (deps callsDeps) rooms() *calls.RoomClient { return deps.livekit().Rooms }
+func (deps callsDeps) livekitURL() string       { return deps.livekit().URL }
 
 // RegisterCalls — маршруты звонков 1:1, групповых звонков и аудио-комнат.
 //
@@ -71,23 +71,23 @@ func (д звонкиDeps) адресLiveKit() string       { return д.livekit(
 func RegisterCalls(
 	mux *http.ServeMux,
 	st CallStore,
-	livekit func() LiveKitНастройки,
+	livekit func() LiveKitSettings,
 	n *Notifier,
 	requireDevice Middleware,
 ) {
-	д := звонкиDeps{хранилище: st, livekit: livekit, уведомитель: n}
+	deps := callsDeps{store: st, livekit: livekit, notifier: n}
 
-	mux.HandleFunc("POST /api/v1/calls", requireDevice(startCall(д)))
-	mux.HandleFunc("POST /api/v1/calls/{callID}/answer", requireDevice(answerCall(д)))
-	mux.HandleFunc("POST /api/v1/calls/{callID}/end", requireDevice(endCall(д)))
-	mux.HandleFunc("POST /api/v1/calls/group", requireDevice(startGroupCall(д)))
-	mux.HandleFunc("POST /api/v1/calls/{callID}/join", requireDevice(joinCall(д)))
-	mux.HandleFunc("POST /livekit/webhook", livekitWebhook(д))
+	mux.HandleFunc("POST /api/v1/calls", requireDevice(startCall(deps)))
+	mux.HandleFunc("POST /api/v1/calls/{callID}/answer", requireDevice(answerCall(deps)))
+	mux.HandleFunc("POST /api/v1/calls/{callID}/end", requireDevice(endCall(deps)))
+	mux.HandleFunc("POST /api/v1/calls/group", requireDevice(startGroupCall(deps)))
+	mux.HandleFunc("POST /api/v1/calls/{callID}/join", requireDevice(joinCall(deps)))
+	mux.HandleFunc("POST /livekit/webhook", livekitWebhook(deps))
 
-	mux.HandleFunc("POST /api/v1/voice-rooms", requireDevice(createVoiceRoom(д)))
-	mux.HandleFunc("GET /api/v1/voice-rooms", requireDevice(listVoiceRooms(д)))
-	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/join", requireDevice(joinVoiceRoom(д)))
-	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/hand", requireDevice(raiseHand(д)))
-	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/grant", requireDevice(grantSpeaker(д)))
-	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/revoke", requireDevice(revokeSpeaker(д)))
+	mux.HandleFunc("POST /api/v1/voice-rooms", requireDevice(createVoiceRoom(deps)))
+	mux.HandleFunc("GET /api/v1/voice-rooms", requireDevice(listVoiceRooms(deps)))
+	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/join", requireDevice(joinVoiceRoom(deps)))
+	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/hand", requireDevice(raiseHand(deps)))
+	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/grant", requireDevice(grantSpeaker(deps)))
+	mux.HandleFunc("POST /api/v1/voice-rooms/{roomID}/revoke", requireDevice(revokeSpeaker(deps)))
 }

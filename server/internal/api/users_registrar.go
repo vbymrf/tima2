@@ -38,31 +38,31 @@ type UserStore interface {
 
 var _ UserStore = (*store.Store)(nil)
 
-// ТокеныЛичности — что смене личности нужно от подсистемы входа.
+// IdentityTokens — что смене личности нужно от подсистемы входа.
 //
-// Шире, чем ВыдачаТокенов у привязки, и намеренно: здесь ещё выпускается и
+// Шире, чем TokenIssuer у привязки, и намеренно: здесь ещё выпускается и
 // разбирается челлендж, доказывающий владение прежней фразой.
-type ТокеныЛичности interface {
+type IdentityTokens interface {
 	IssueAccess(userID, deviceID string) (string, error)
 	IssueReidentifyChallenge(userID string) (string, error)
 	Parse(token, wantScope string) (*auth.Claims, error)
 }
 
-type людиDeps struct {
-	хранилище UserStore
-	токены    func() ТокеныЛичности
+type usersDeps struct {
+	store  UserStore
+	tokens func() IdentityTokens
 }
 
 // RegisterUsers — восемь маршрутов: справочник, имена, личности, удаление аккаунта.
-func RegisterUsers(mux *http.ServeMux, st UserStore, tokens func() ТокеныЛичности, requireDevice Middleware) {
-	д := людиDeps{хранилище: st, токены: tokens}
+func RegisterUsers(mux *http.ServeMux, st UserStore, tokens func() IdentityTokens, requireDevice Middleware) {
+	deps := usersDeps{store: st, tokens: tokens}
 
-	mux.HandleFunc("GET /api/v1/users/lookup", requireDevice(lookupUser(д)))
-	mux.HandleFunc("POST /api/v1/users/discover", requireDevice(discoverContacts(д)))
-	mux.HandleFunc("PATCH /api/v1/users/me/name", requireDevice(setDisplayName(д)))
-	mux.HandleFunc("DELETE /api/v1/users/me", requireDevice(deleteAccount(д)))
-	mux.HandleFunc("POST /api/v1/users/names", requireDevice(resolveNames(д)))
-	mux.HandleFunc("POST /api/v1/users/identities", requireDevice(resolveIdentities(д)))
-	mux.HandleFunc("POST /api/v1/users/me/reidentify/challenge", requireDevice(reidentifyChallenge(д)))
-	mux.HandleFunc("POST /api/v1/users/me/reidentify", requireDevice(reidentify(д)))
+	mux.HandleFunc("GET /api/v1/users/lookup", requireDevice(lookupUser(deps)))
+	mux.HandleFunc("POST /api/v1/users/discover", requireDevice(discoverContacts(deps)))
+	mux.HandleFunc("PATCH /api/v1/users/me/name", requireDevice(setDisplayName(deps)))
+	mux.HandleFunc("DELETE /api/v1/users/me", requireDevice(deleteAccount(deps)))
+	mux.HandleFunc("POST /api/v1/users/names", requireDevice(resolveNames(deps)))
+	mux.HandleFunc("POST /api/v1/users/identities", requireDevice(resolveIdentities(deps)))
+	mux.HandleFunc("POST /api/v1/users/me/reidentify/challenge", requireDevice(reidentifyChallenge(deps)))
+	mux.HandleFunc("POST /api/v1/users/me/reidentify", requireDevice(reidentify(deps)))
 }

@@ -14,7 +14,7 @@ import (
 )
 
 // chatRead — POST /chats/{chatID}/read {message_id}: собеседник узнаёт, что прочитано до message_id.
-func chatRead(д сообщенияDeps) http.HandlerFunc {
+func chatRead(deps messagesDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
 		chatID := r.PathValue("chatID")
@@ -25,7 +25,7 @@ func chatRead(д сообщенияDeps) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_request", "нужен message_id")
 			return
 		}
-		peers, err := д.хранилище.ChatHelperDevices(r.Context(), chatID, id.DeviceID, id.UserID)
+		peers, err := deps.store.ChatHelperDevices(r.Context(), chatID, id.DeviceID, id.UserID)
 		if err != nil {
 			log.Printf("chatRead: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -35,7 +35,7 @@ func chatRead(д сообщенияDeps) http.HandlerFunc {
 			if p.Own {
 				continue // уведомляем устройства собеседника, не свои
 			}
-			д.уведомитель.Device(r.Context(), p.DeviceID, "receipt.read", map[string]any{
+			deps.notifier.Device(r.Context(), p.DeviceID, "receipt.read", map[string]any{
 				"chat_id": chatID, "message_id": req.MessageID, "reader_id": id.UserID,
 			})
 		}
@@ -44,15 +44,15 @@ func chatRead(д сообщенияDeps) http.HandlerFunc {
 }
 
 // chatTyping — POST /chats/{chatID}/typing: эфемерный сигнал «печатает» собеседнику.
-func chatTyping(д сообщенияDeps) http.HandlerFunc {
+func chatTyping(deps messagesDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if д.шина() == nil {
+		if deps.bus() == nil {
 			w.WriteHeader(http.StatusNoContent) // без шины typing просто не доставляется
 			return
 		}
 		id, _ := auth.FromContext(r.Context())
 		chatID := r.PathValue("chatID")
-		peers, err := д.хранилище.ChatHelperDevices(r.Context(), chatID, id.DeviceID, id.UserID)
+		peers, err := deps.store.ChatHelperDevices(r.Context(), chatID, id.DeviceID, id.UserID)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -62,7 +62,7 @@ func chatTyping(д сообщенияDeps) http.HandlerFunc {
 				continue
 			}
 			// event_id=0 → живой кадр без персистенции и без ack (websocket-events.md)
-			_ = д.шина().Publish(r.Context(), p.DeviceID, "typing", 0, map[string]any{
+			_ = deps.bus().Publish(r.Context(), p.DeviceID, "typing", 0, map[string]any{
 				"chat_id": chatID, "user_id": id.UserID,
 			})
 		}

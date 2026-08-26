@@ -54,12 +54,12 @@ func orDefault(v, def int) int64 {
 // недоступность шины не должна класть вход целиком.
 // rateLimit — обёртка для handler-ов, оставшихся на Server (вход и SMS).
 func (s *Server) rateLimit(w http.ResponseWriter, r *http.Request, key string, limit int64) bool {
-	return ограничитьЧастоту(s.Limit, w, r, key, limit)
+	return rateLimit(s.Limit, w, r, key, limit)
 }
 
-// ограничитьЧастоту — свободная функция: ею пользуются и Server, и registrar-ы.
+// rateLimit — свободная функция: ею пользуются и Server, и registrar-ы.
 // Ограничителя нет (dev без Redis) — пропускаем: это осознанный режим, а не отказ.
-func ограничитьЧастоту(lim *ratelimit.Limiter, w http.ResponseWriter, r *http.Request, key string, limit int64) bool {
+func rateLimit(lim *ratelimit.Limiter, w http.ResponseWriter, r *http.Request, key string, limit int64) bool {
 	if lim == nil {
 		return true
 	}
@@ -290,14 +290,14 @@ func (s *Server) forceNewIdentityIfConflict(ctx context.Context, userID string, 
 // lookupUser — GET /users/lookup?phone=: user_id по телефону (contact discovery MVP).
 // Только под Bearer; отвечает 404 без деталей. Приватность справочника (rate limit
 // на перебор, скрытие по настройке) — итерация Privacy вместе с контактами.
-func lookupUser(д людиDeps) http.HandlerFunc {
+func lookupUser(deps usersDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		phone := r.URL.Query().Get("phone")
 		if !phoneRe.MatchString(phone) {
 			writeErr(w, http.StatusBadRequest, "bad_phone", "нужен телефон в формате E.164")
 			return
 		}
-		userID, err := д.хранилище.FindUserByPhone(r.Context(), phone)
+		userID, err := deps.store.FindUserByPhone(r.Context(), phone)
 		if errors.Is(err, store.ErrUserUnknown) {
 			writeErr(w, http.StatusNotFound, "user_not_found", "пользователь не найден")
 			return
@@ -313,7 +313,7 @@ func lookupUser(д людиDeps) http.HandlerFunc {
 
 // discoverContacts — POST /users/discover {phones:[...]}: какие из телефонов в TIMA.
 // Возвращает {matches:{phone:user_id}}. Приватность справочника — итерация Privacy.
-func discoverContacts(д людиDeps) http.HandlerFunc {
+func discoverContacts(deps usersDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Phones []string `json:"phones"`
@@ -333,7 +333,7 @@ func discoverContacts(д людиDeps) http.HandlerFunc {
 				}
 			}
 		}
-		matches, err := д.хранилище.FindUsersByPhones(r.Context(), valid)
+		matches, err := deps.store.FindUsersByPhones(r.Context(), valid)
 		if err != nil {
 			log.Printf("discoverContacts: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -345,7 +345,7 @@ func discoverContacts(д людиDeps) http.HandlerFunc {
 }
 
 // setDisplayName — PATCH /users/me/name {display_name}: своё публичное имя.
-func setDisplayName(д людиDeps) http.HandlerFunc {
+func setDisplayName(deps usersDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			DisplayName string `json:"display_name"`
@@ -360,7 +360,7 @@ func setDisplayName(д людиDeps) http.HandlerFunc {
 			return
 		}
 		id, _ := auth.FromContext(r.Context())
-		if err := д.хранилище.SetDisplayName(r.Context(), id.UserID, name); err != nil {
+		if err := deps.store.SetDisplayName(r.Context(), id.UserID, name); err != nil {
 			log.Printf("setDisplayName: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -373,7 +373,7 @@ func setDisplayName(д людиDeps) http.HandlerFunc {
 // resolveNames — POST /users/names {ids}: публичные имена по user_id (batch для UI).
 // Плюс phones — но только собеседников по личным чатам: UI показывает «Имя +7999…»
 // для того, кто написал первым, а чужой номер по чужому id остаётся недоступен.
-func resolveNames(д людиDeps) http.HandlerFunc {
+func resolveNames(deps usersDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			IDs []string `json:"ids"`
@@ -385,14 +385,14 @@ func resolveNames(д людиDeps) http.HandlerFunc {
 		if len(req.IDs) > 500 {
 			req.IDs = req.IDs[:500]
 		}
-		names, err := д.хранилище.DisplayNames(r.Context(), req.IDs)
+		names, err := deps.store.DisplayNames(r.Context(), req.IDs)
 		if err != nil {
 			log.Printf("resolveNames: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
 		id, _ := auth.FromContext(r.Context())
-		phones, err := д.хранилище.PhonesOfChatPeers(r.Context(), id.UserID, req.IDs)
+		phones, err := deps.store.PhonesOfChatPeers(r.Context(), id.UserID, req.IDs)
 		if err != nil {
 			log.Printf("resolveNames phones: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -411,7 +411,7 @@ func resolveNames(д людиDeps) http.HandlerFunc {
 // группирует их в один контакт — но только если связка доказана подписью прежнего
 // ключа. Для административной связки он ОБЯЗАН показать смену личности: иначе
 // владение номером начинает подменять владение ключами.
-func resolveIdentities(д людиDeps) http.HandlerFunc {
+func resolveIdentities(deps usersDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			IDs []string `json:"ids"`
@@ -423,7 +423,7 @@ func resolveIdentities(д людиDeps) http.HandlerFunc {
 		if len(req.IDs) > 500 {
 			req.IDs = req.IDs[:500]
 		}
-		ids, err := д.хранилище.IdentitiesOf(r.Context(), req.IDs)
+		ids, err := deps.store.IdentitiesOf(r.Context(), req.IDs)
 		if err != nil {
 			log.Printf("resolveIdentities: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")

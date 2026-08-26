@@ -110,11 +110,11 @@ func (s *Server) Register(mux *http.ServeMux) {
 	RegisterChats(mux, s.Store, s.notifier(), s.requireActiveDevice)
 	mux.HandleFunc("GET /api/v1/keys/devices", s.requireActiveDevice(s.listDeviceKeys))
 	// Люди и аккаунт (шаг 4): справочник, имена, личности, удаление.
-	RegisterUsers(mux, s.Store, func() ТокеныЛичности { return s.Auth }, s.requireActiveDevice)
+	RegisterUsers(mux, s.Store, func() IdentityTokens { return s.Auth }, s.requireActiveDevice)
 	// Устройства и привязка по QR (шаг 4). link/start и link/claim идут без
 	// requireDevice: их зовёт устройство, у которого токена ещё нет.
 	RegisterDevices(mux, s.Store, func() *ratelimit.Limiter { return s.Limit },
-		func() ВыдачаТокенов { return s.Auth }, s.notifier(), s.requireActiveDevice)
+		func() TokenIssuer { return s.Auth }, s.notifier(), s.requireActiveDevice)
 	mux.HandleFunc("GET /api/v1/escrow/pubkey", s.requireActiveDevice(s.escrowPubkey))
 	mux.HandleFunc("GET /api/v1/escrow/key", s.requireActiveDevice(s.escrowKeyForChat))
 	// Группы: состав, сообщения и ключи (шаг 4). Три файла держатся вместе
@@ -127,20 +127,20 @@ func (s *Server) Register(mux *http.ServeMux) {
 	RegisterChannels(mux, s.Store, s.notifier(), s.requireActiveDevice)
 	// Звонки, групповые звонки и аудио-комнаты (шаг 4): сюда же уехали поля
 	// Calls, Rooms и LiveKitURL — их видят только эти двенадцать маршрутов.
-	RegisterCalls(mux, s.Store, s.настройкиLiveKit, s.notifier(), s.requireActiveDevice)
+	RegisterCalls(mux, s.Store, s.livekitSettings, s.notifier(), s.requireActiveDevice)
 	mux.HandleFunc("GET /ws", s.handleWS) // auth — первым кадром, не Bearer (websocket-events.md)
 }
 
-// настройкиLiveKit — снимок полей звонков НА МОМЕНТ ВЫЗОВА. Передаётся функцией, а
+// livekitSettings — снимок полей звонков НА МОМЕНТ ВЫЗОВА. Передаётся функцией, а
 // не значением: cmd/tima и тесты заполняют эти поля уже после Register.
-func (s *Server) настройкиLiveKit() LiveKitНастройки {
-	return LiveKitНастройки{Выдача: s.Calls, Комнаты: s.Rooms, Адрес: s.LiveKitURL}
+func (s *Server) livekitSettings() LiveKitSettings {
+	return LiveKitSettings{Issuer: s.Calls, Rooms: s.Rooms, URL: s.LiveKitURL}
 }
 
 // notifier — уведомитель для registrar-ов: тот же порядок доставки, что у notify,
 // но без доступа к остальным полям Server.
 func (s *Server) notifier() *Notifier {
-	return &Notifier{store: s.Store, шина: func() Publisher {
+	return &Notifier{store: s.Store, bus: func() Publisher {
 		// Проверка на nil здесь, а не в Notifier: s.Events — указатель, и
 		// nil-указатель, положенный в интерфейс, перестаёт быть nil при
 		// сравнении. Publish на таком дал бы панику вместо «шины нет».
@@ -180,7 +180,7 @@ func writeErr(w http.ResponseWriter, status int, code, msg string) {
 }
 
 // postMessage — приём конверта: protobuf → валидация размеров → подпись → хранение.
-func postMessage(д сообщенияDeps) http.HandlerFunc {
+func postMessage(deps messagesDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(io.LimitReader(r.Body, maxEnvelopeBytes+1))
 		if err != nil || len(body) > maxEnvelopeBytes {
@@ -206,7 +206,7 @@ func postMessage(д сообщенияDeps) http.HandlerFunc {
 		}
 
 		// Подпись: ключ устройства отправителя обязан существовать и принадлежать sender_id
-		signingPub, err := д.хранилище.SigningKey(r.Context(), meta.GetSenderDevice(), meta.GetSenderId())
+		signingPub, err := deps.store.SigningKey(r.Context(), meta.GetSenderDevice(), meta.GetSenderId())
 		if errors.Is(err, store.ErrDeviceUnknown) {
 			writeErr(w, http.StatusForbidden, "unknown_device", "устройство отправителя не зарегистрировано")
 			return
@@ -244,7 +244,7 @@ func postMessage(д сообщенияDeps) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "no_client_msg_id", "нужен заголовок X-Client-Msg-Id (UUID)")
 			return
 		}
-		err = д.хранилище.SaveMessage(r.Context(), store.Message{
+		err = deps.store.SaveMessage(r.Context(), store.Message{
 			ChatID:             meta.GetChatId(),
 			MessageID:          meta.GetMessageId(),
 			ClientMsgID:        clientMsgID,
@@ -282,7 +282,7 @@ func postMessage(д сообщенияDeps) http.HandlerFunc {
 			if err != nil {
 				continue
 			}
-			д.уведомитель.Device(r.Context(), wk.GetRecipient(), "message.new", map[string]any{
+			deps.notifier.Device(r.Context(), wk.GetRecipient(), "message.new", map[string]any{
 				"chat_id":    meta.GetChatId(),
 				"message_id": meta.GetMessageId(),
 				"envelope":   base64.RawURLEncoding.EncodeToString(raw),
@@ -338,7 +338,7 @@ func validateEnvelope(env *pb.Envelope) string {
 }
 
 // listMessages — история чата: конверт (protobuf, base64url) + wrapped_key устройства.
-func listMessages(д сообщенияDeps) http.HandlerFunc {
+func listMessages(deps messagesDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
 		deviceID := id.DeviceID
@@ -348,7 +348,7 @@ func listMessages(д сообщенияDeps) http.HandlerFunc {
 		}
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 
-		msgs, err := д.хранилище.ListMessages(r.Context(), r.PathValue("chatID"), deviceID, before, limit)
+		msgs, err := deps.store.ListMessages(r.Context(), r.PathValue("chatID"), deviceID, before, limit)
 		if err != nil {
 			log.Printf("listMessages: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")

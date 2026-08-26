@@ -26,9 +26,9 @@ import (
 )
 
 // postGroupMessage — POST /groups/{groupID}/messages.
-func postGroupMessage(д группыDeps) http.HandlerFunc {
+func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		g, role, ok := группаИРоль(д, w, r)
+		g, role, ok := groupAndRole(deps, w, r)
 		if !ok {
 			return
 		}
@@ -40,7 +40,7 @@ func postGroupMessage(д группыDeps) http.HandlerFunc {
 		id, _ := auth.FromContext(r.Context())
 
 		// Бан и slow mode (модераторам и выше slow mode не действует)
-		_, bannedUntil, err := д.хранилище.GroupMemberInfo(r.Context(), groupID, id.UserID)
+		_, bannedUntil, err := deps.store.GroupMemberInfo(r.Context(), groupID, id.UserID)
 		if err != nil {
 			log.Printf("postGroupMessage: member info: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -51,7 +51,7 @@ func postGroupMessage(д группыDeps) http.HandlerFunc {
 			return
 		}
 		if g.SlowModeSec > 0 && roleRank[role] < rankModerator {
-			recent, err := д.хранилище.SenderPostedWithin(r.Context(), groupID, id.UserID, g.SlowModeSec)
+			recent, err := deps.store.SenderPostedWithin(r.Context(), groupID, id.UserID, g.SlowModeSec)
 			if err != nil {
 				log.Printf("postGroupMessage: slow mode: %v", err)
 				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -108,7 +108,7 @@ func postGroupMessage(д группыDeps) http.HandlerFunc {
 				writeErr(w, http.StatusBadRequest, "bad_payload", "payload короче минимума SecretBox")
 				return
 			}
-			known, err := д.хранилище.GroupKeyVersionExists(r.Context(), groupID, req.GKVersion)
+			known, err := deps.store.GroupKeyVersionExists(r.Context(), groupID, req.GKVersion)
 			if err != nil {
 				log.Printf("postGroupMessage: gk version: %v", err)
 				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -128,7 +128,7 @@ func postGroupMessage(д группыDeps) http.HandlerFunc {
 			if ref == 0 {
 				continue
 			}
-			exists, err := д.хранилище.GroupMessageExists(r.Context(), groupID, ref)
+			exists, err := deps.store.GroupMessageExists(r.Context(), groupID, ref)
 			if err != nil {
 				log.Printf("postGroupMessage: ref %s: %v", name, err)
 				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -141,7 +141,7 @@ func postGroupMessage(д группыDeps) http.HandlerFunc {
 		}
 
 		// Подпись: устройство из токена, preimage — group_message_canonical_bytes
-		signingPub, err := д.хранилище.SigningKey(r.Context(), id.DeviceID, id.UserID)
+		signingPub, err := deps.store.SigningKey(r.Context(), id.DeviceID, id.UserID)
 		if errors.Is(err, store.ErrDeviceUnknown) {
 			writeErr(w, http.StatusForbidden, "unknown_device", "устройство отправителя не зарегистрировано")
 			return
@@ -178,7 +178,7 @@ func postGroupMessage(д группыDeps) http.HandlerFunc {
 			CreatedAtUnixMs: req.CreatedAtUnixMs,
 			Signature:       signature,
 		}
-		messageID, duplicate, err := д.хранилище.SaveGroupMessage(r.Context(), msg)
+		messageID, duplicate, err := deps.store.SaveGroupMessage(r.Context(), msg)
 		if err != nil {
 			log.Printf("postGroupMessage: save: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -193,20 +193,20 @@ func postGroupMessage(д группыDeps) http.HandlerFunc {
 
 		// Доставка активным участникам (кроме устройства отправителя):
 		// event log + live онлайн-устройствам
-		devices, err := д.хранилище.ActiveMemberDevices(r.Context(), groupID, id.DeviceID)
+		devices, err := deps.store.ActiveMemberDevices(r.Context(), groupID, id.DeviceID)
 		if err != nil {
 			log.Printf("postGroupMessage: member devices: %v", err)
 		}
 		eventPayload := groupMessageJSON(msg)
 		for _, dev := range devices {
-			д.уведомитель.Device(r.Context(), dev, "message.group", eventPayload)
+			deps.notifier.Device(r.Context(), dev, "message.group", eventPayload)
 		}
 
 		// Инвариант ADR-0017 §2: в группе, где в эту эпоху была отправка, последняя версия
 		// GK обязана быть завёрнута на текущую эпоху. Отправка только что произошла — самое
 		// время проверить. Сервер ротировать не может (ключа он не видит), поэтому просит
 		// участников: кто первым откроет приложение, тот и сменит.
-		напомнитьОРотации(д, r.Context(), groupID, append(devices, id.DeviceID))
+		remindAboutRotation(deps, r.Context(), groupID, append(devices, id.DeviceID))
 
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{"message_id": messageID})
@@ -233,9 +233,9 @@ func groupMessageJSON(m store.GroupMessage) map[string]any {
 }
 
 // listGroupMessages — GET /groups/{groupID}/messages?before=&limit=&thread=.
-func listGroupMessages(д группыDeps) http.HandlerFunc {
+func listGroupMessages(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, role, ok := группаИРоль(д, w, r)
+		_, role, ok := groupAndRole(deps, w, r)
 		if !ok {
 			return
 		}
@@ -252,7 +252,7 @@ func listGroupMessages(д группыDeps) http.HandlerFunc {
 		}
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 
-		msgs, err := д.хранилище.ListGroupMessages(r.Context(), r.PathValue("groupID"), thread, before, limit)
+		msgs, err := deps.store.ListGroupMessages(r.Context(), r.PathValue("groupID"), thread, before, limit)
 		if err != nil {
 			log.Printf("listGroupMessages: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -267,7 +267,7 @@ func listGroupMessages(д группыDeps) http.HandlerFunc {
 	}
 }
 
-// напомнитьОРотации рассылает group.rotation_needed, если ключ группы завёрнут на
+// remindAboutRotation рассылает group.rotation_needed, если ключ группы завёрнут на
 // прошлую эпоху (ADR-0017 §3).
 //
 // **Не чаще раза в час на группу и эпоху.** Иначе каждое сообщение в группе с устаревшим
@@ -277,32 +277,32 @@ func listGroupMessages(д группыDeps) http.HandlerFunc {
 //
 // Без Redis (dev) напоминание уходит на каждое сообщение: это шумно, но честнее, чем
 // молчать о невыполнимом ордере.
-func напомнитьОРотации(д группыDeps, ctx context.Context, groupID string, devices []string) {
-	последняя, err := д.хранилище.LatestGroupRotation(ctx, groupID)
+func remindAboutRotation(deps groupsDeps, ctx context.Context, groupID string, devices []string) {
+	latest, err := deps.store.LatestGroupRotation(ctx, groupID)
 	if err != nil {
 		log.Printf("напомнитьОРотации: последняя ротация: %v", err)
 		return
 	}
 	// Группа без ротаций ключа не имеет вовсе — напоминать не о чем: первую версию
 	// выпустят при первой отправке в private-группу.
-	if последняя.GKVersion == 0 {
+	if latest.GKVersion == 0 {
 		return
 	}
-	эпоха := escrow.EpochOf(time.Now())
-	if последняя.EscrowEpoch == эпоха {
+	epoch := escrow.EpochOf(time.Now())
+	if latest.EscrowEpoch == epoch {
 		return
 	}
-	if д.лимит() != nil {
-		ok, _, err := д.лимит().Allow(ctx, "gk_epoch_notify:"+groupID+":"+эпоха, 1, time.Hour)
+	if deps.limiter() != nil {
+		ok, _, err := deps.limiter().Allow(ctx, "gk_epoch_notify:"+groupID+":"+epoch, 1, time.Hour)
 		if err != nil || !ok {
 			return
 		}
 	}
 	for _, dev := range devices {
-		д.уведомитель.Device(ctx, dev, "group.rotation_needed", map[string]any{
+		deps.notifier.Device(ctx, dev, "group.rotation_needed", map[string]any{
 			"group_id": groupID,
 			"reason":   "epoch",
-			"epoch":    эпоха,
+			"epoch":    epoch,
 		})
 	}
 }

@@ -25,9 +25,9 @@ import (
 //
 // Приглашаются все участники группы. Инициатор — такой же участник: в группе он не
 // медиа-хаб, и его обрыв не роняет звонок для остальных.
-func startGroupCall(д звонкиDeps) http.HandlerFunc {
+func startGroupCall(deps callsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if д.выдача() == nil {
+		if deps.issuer() == nil {
 			writeErr(w, http.StatusServiceUnavailable, "no_livekit", "звонки не сконфигурированы (LIVEKIT_API_KEY/SECRET)")
 			return
 		}
@@ -44,7 +44,7 @@ func startGroupCall(д звонкиDeps) http.HandlerFunc {
 		}
 		id, _ := auth.FromContext(r.Context())
 
-		members, err := д.хранилище.ListGroupMembers(r.Context(), req.GroupID)
+		members, err := deps.store.ListGroupMembers(r.Context(), req.GroupID)
 		if err != nil {
 			log.Printf("startGroupCall members: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -64,13 +64,13 @@ func startGroupCall(д звонкиDeps) http.HandlerFunc {
 		}
 
 		room := "call-" + newUUID()
-		callID, err := д.хранилище.CreateGroupCall(r.Context(), room, req.Kind, req.GroupID, id.UserID, userIDs)
+		callID, err := deps.store.CreateGroupCall(r.Context(), room, req.Kind, req.GroupID, id.UserID, userIDs)
 		if err != nil {
 			log.Printf("startGroupCall: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		token, err := д.выдача().Token(room, личностьЗвонка(id), true, callTokenTTL, time.Now())
+		token, err := deps.issuer().Token(room, callIdentity(id), true, callTokenTTL, time.Now())
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
 			return
@@ -79,9 +79,9 @@ func startGroupCall(д звонкиDeps) http.HandlerFunc {
 			if uid == id.UserID {
 				continue
 			}
-			if devices, err := д.хранилище.ListDevices(r.Context(), uid); err == nil {
+			if devices, err := deps.store.ListDevices(r.Context(), uid); err == nil {
 				for _, d := range devices {
-					д.уведомитель.Device(r.Context(), d.DeviceID, "call.incoming", map[string]any{
+					deps.notifier.Device(r.Context(), d.DeviceID, "call.incoming", map[string]any{
 						"call_id": callID, "room": room, "kind": req.Kind,
 						"from": id.UserID, "group_id": req.GroupID, "type": "group",
 					})
@@ -94,7 +94,7 @@ func startGroupCall(д звонкиDeps) http.HandlerFunc {
 			// url — то же имя, что и у звонка один на один. Разнобой в именах уже стоил
 			// бы клиенту пустого адреса и молчаливого «не подключается».
 			"call_id": callID, "room": room, "token": token,
-			"url": д.адресLiveKit(), "livekit_url": д.адресLiveKit(), "type": "group",
+			"url": deps.livekitURL(), "livekit_url": deps.livekitURL(), "type": "group",
 		})
 	}
 }
@@ -107,9 +107,9 @@ func startGroupCall(д звонкиDeps) http.HandlerFunc {
 //
 // Для звонка один на один повторного входа НЕТ: обрыв завершает его для обоих, и
 // вернуться можно только новым звонком.
-func joinCall(д звонкиDeps) http.HandlerFunc {
+func joinCall(deps callsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if д.выдача() == nil {
+		if deps.issuer() == nil {
 			writeErr(w, http.StatusServiceUnavailable, "no_livekit", "звонки не сконфигурированы")
 			return
 		}
@@ -119,7 +119,7 @@ func joinCall(д звонкиDeps) http.HandlerFunc {
 			return
 		}
 		id, _ := auth.FromContext(r.Context())
-		c, err := д.хранилище.CallForJoinByID(r.Context(), callID, id.UserID)
+		c, err := deps.store.CallForJoinByID(r.Context(), callID, id.UserID)
 		if errors.Is(err, store.ErrNotInvited) {
 			writeErr(w, http.StatusForbidden, "not_invited", "вас не приглашали в этот звонок")
 			return
@@ -137,7 +137,7 @@ func joinCall(д звонкиDeps) http.HandlerFunc {
 			writeErr(w, http.StatusGone, "call_ended", "звонок уже завершён")
 			return
 		}
-		token, err := д.выдача().Token(c.Room, личностьЗвонка(id), true, callTokenTTL, time.Now())
+		token, err := deps.issuer().Token(c.Room, callIdentity(id), true, callTokenTTL, time.Now())
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
 			return
@@ -145,7 +145,7 @@ func joinCall(д звонкиDeps) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"call_id": callID, "room": c.Room, "token": token,
-			"url": д.адресLiveKit(), "livekit_url": д.адресLiveKit(), "kind": c.Kind,
+			"url": deps.livekitURL(), "livekit_url": deps.livekitURL(), "kind": c.Kind,
 		})
 	}
 }
@@ -155,14 +155,14 @@ func joinCall(д звонкиDeps) http.HandlerFunc {
 // Источник правды о том, кто в комнате, — SFU. Своего учёта «жив или нет» бэкенд не
 // ведёт и таймеры LiveKit не дублирует: он сам решает, когда участник ушёл, с учётом
 // реконнектов, а параллельный учёт неизбежно разошёлся бы с ним.
-func livekitWebhook(д звонкиDeps) http.HandlerFunc {
+func livekitWebhook(deps callsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_body", "не прочитано тело")
 			return
 		}
-		if !подписьВебхукаВерна(д, r.Header.Get("Authorization"), body) {
+		if !webhookSignatureValid(deps, r.Header.Get("Authorization"), body) {
 			// Не «неверная подпись», а глухой отказ: эндпоинт открыт наружу, и
 			// подробности помогали бы подбирать.
 			writeErr(w, http.StatusUnauthorized, "unauthorized", "подпись вебхука не прошла проверку")
@@ -182,7 +182,7 @@ func livekitWebhook(д звонкиDeps) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_json", "не разобрано событие")
 			return
 		}
-		callID, callType, err := д.хранилище.CallIDByRoom(r.Context(), ev.Room.Name)
+		callID, callType, err := deps.store.CallIDByRoom(r.Context(), ev.Room.Name)
 		if err != nil {
 			// Комната не наша или звонок уже почищен — не ошибка: отвечаем 200,
 			// иначе LiveKit будет ретраить событие, которое некуда применить.
@@ -199,24 +199,24 @@ func livekitWebhook(д звонкиDeps) http.HandlerFunc {
 		switch ev.Event {
 		case "participant_joined":
 			if userID != "" {
-				_ = д.хранилище.SetParticipantState(r.Context(), callID, userID, store.PartJoined, at)
-				_ = д.хранилище.SetCallState(r.Context(), callID, "answered")
+				_ = deps.store.SetParticipantState(r.Context(), callID, userID, store.PartJoined, at)
+				_ = deps.store.SetCallState(r.Context(), callID, "answered")
 			}
 		case "participant_left":
 			if userID != "" {
-				_ = д.хранилище.SetParticipantState(r.Context(), callID, userID, store.PartLeft, at)
+				_ = deps.store.SetParticipantState(r.Context(), callID, userID, store.PartLeft, at)
 			}
 			// Один на один: уход любой стороны завершает звонок для обоих — держать
 			// второго в пустой комнате незачем. В группе остальные продолжают.
 			if callType == "direct" {
-				_ = д.хранилище.SetCallState(r.Context(), callID, "ended")
+				_ = deps.store.SetCallState(r.Context(), callID, "ended")
 			}
-			уведомитьУчастников(д, r, callID, "call.participant_left", map[string]any{
+			notifyParticipants(deps, r, callID, "call.participant_left", map[string]any{
 				"call_id": callID, "user_id": userID,
 			})
 		case "room_finished":
-			_ = д.хранилище.SetCallState(r.Context(), callID, "ended")
-			уведомитьУчастников(д, r, callID, "call.state", map[string]any{
+			_ = deps.store.SetCallState(r.Context(), callID, "ended")
+			notifyParticipants(deps, r, callID, "call.state", map[string]any{
 				"call_id": callID, "state": "ended",
 			})
 		}
@@ -225,18 +225,18 @@ func livekitWebhook(д звонкиDeps) http.HandlerFunc {
 }
 
 // notifyCallParticipants рассылает событие устройствам всех приглашённых.
-func уведомитьУчастников(д звонкиDeps, r *http.Request, callID, event string, payload map[string]any) {
-	parts, err := д.хранилище.CallParticipants(r.Context(), callID)
+func notifyParticipants(deps callsDeps, r *http.Request, callID, event string, payload map[string]any) {
+	parts, err := deps.store.CallParticipants(r.Context(), callID)
 	if err != nil {
 		return
 	}
 	for uid := range parts {
-		devices, err := д.хранилище.ListDevices(r.Context(), uid)
+		devices, err := deps.store.ListDevices(r.Context(), uid)
 		if err != nil {
 			continue
 		}
 		for _, d := range devices {
-			д.уведомитель.Device(r.Context(), d.DeviceID, event, payload)
+			deps.notifier.Device(r.Context(), d.DeviceID, event, payload)
 		}
 	}
 }
@@ -246,8 +246,8 @@ func уведомитьУчастников(д звонкиDeps, r *http.Request
 // LiveKit подписывает тело так: JWT на API-секрете, в claim `sha256` — хэш тела в
 // base64. Проверяем и подпись токена, и что хэш совпал с реально пришедшим телом:
 // без второй проверки перехваченный токен годился бы для любого содержимого.
-func подписьВебхукаВерна(д звонкиDeps, authHeader string, body []byte) bool {
-	if д.выдача() == nil || authHeader == "" {
+func webhookSignatureValid(deps callsDeps, authHeader string, body []byte) bool {
+	if deps.issuer() == nil || authHeader == "" {
 		return false
 	}
 	raw := strings.TrimPrefix(authHeader, "Bearer ")
@@ -259,9 +259,9 @@ func подписьВебхукаВерна(д звонкиDeps, authHeader stri
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("неожиданный алгоритм подписи")
 		}
-		return []byte(д.выдача().APISecret), nil
+		return []byte(deps.issuer().APISecret), nil
 	})
-	if err != nil || !tok.Valid || c.Issuer != д.выдача().APIKey {
+	if err != nil || !tok.Valid || c.Issuer != deps.issuer().APIKey {
 		return false
 	}
 	want, err := base64.StdEncoding.DecodeString(c.Sha256)

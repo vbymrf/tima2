@@ -18,13 +18,13 @@ import (
 
 const callTokenTTL = 2 * time.Minute // §3: короткий TTL на подключение
 
-// личностьЗвонка — как участник называется в LiveKit: пара «человек:устройство».
-func личностьЗвонка(id auth.Identity) string { return id.UserID + ":" + id.DeviceID }
+// callIdentity — как участник называется в LiveKit: пара «человек:устройство».
+func callIdentity(id auth.Identity) string { return id.UserID + ":" + id.DeviceID }
 
 // startCall — POST /calls {peer_id, kind}: комната + токен инициатора, звонок собеседнику.
-func startCall(д звонкиDeps) http.HandlerFunc {
+func startCall(deps callsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if д.выдача() == nil {
+		if deps.issuer() == nil {
 			writeErr(w, http.StatusServiceUnavailable, "no_livekit", "звонки не сконфигурированы (LIVEKIT_API_KEY/SECRET)")
 			return
 		}
@@ -42,7 +42,7 @@ func startCall(д звонкиDeps) http.HandlerFunc {
 		id, _ := auth.FromContext(r.Context())
 		// room уникальна на звонок; генерируем как UUID (переиспользуем newUUID)
 		room := "call-" + newUUID()
-		callID, err := д.хранилище.CreateCall(r.Context(), store.Call{
+		callID, err := deps.store.CreateCall(r.Context(), store.Call{
 			Room: room, Kind: req.Kind, InitiatorID: id.UserID, PeerID: req.PeerID,
 		})
 		if err != nil {
@@ -50,15 +50,15 @@ func startCall(д звонкиDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		token, err := д.выдача().Token(room, личностьЗвонка(id), true, callTokenTTL, time.Now())
+		token, err := deps.issuer().Token(room, callIdentity(id), true, callTokenTTL, time.Now())
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
 			return
 		}
 		// call.incoming устройствам собеседника (VoIP push — с провайдером позже)
-		if devices, err := д.хранилище.ListDevices(r.Context(), req.PeerID); err == nil {
+		if devices, err := deps.store.ListDevices(r.Context(), req.PeerID); err == nil {
 			for _, d := range devices {
-				д.уведомитель.Device(r.Context(), d.DeviceID, "call.incoming", map[string]any{
+				deps.notifier.Device(r.Context(), d.DeviceID, "call.incoming", map[string]any{
 					"call_id": callID, "room": room, "kind": req.Kind, "from": id.UserID,
 				})
 			}
@@ -66,20 +66,20 @@ func startCall(д звонкиDeps) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"call_id": callID, "room": room, "url": д.адресLiveKit(), "token": token,
+			"call_id": callID, "room": room, "url": deps.livekitURL(), "token": token,
 		})
 	}
 }
 
 // answerCall — POST /calls/{callID}/answer: токен для собеседника, состояние answered.
-func answerCall(д звонкиDeps) http.HandlerFunc {
+func answerCall(deps callsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if д.выдача() == nil {
+		if deps.issuer() == nil {
 			writeErr(w, http.StatusServiceUnavailable, "no_livekit", "звонки не сконфигурированы")
 			return
 		}
 		callID := r.PathValue("callID")
-		call, err := д.хранилище.GetCall(r.Context(), callID)
+		call, err := deps.store.GetCall(r.Context(), callID)
 		if errors.Is(err, store.ErrCallNotFound) {
 			writeErr(w, http.StatusNotFound, "not_found", "звонок не найден")
 			return
@@ -92,25 +92,25 @@ func answerCall(д звонкиDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "not_callee", "ответить может только вызываемый")
 			return
 		}
-		token, err := д.выдача().Token(call.Room, личностьЗвонка(id), true, callTokenTTL, time.Now())
+		token, err := deps.issuer().Token(call.Room, callIdentity(id), true, callTokenTTL, time.Now())
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
 			return
 		}
-		_ = д.хранилище.SetCallState(r.Context(), callID, "answered")
-		if devices, err := д.хранилище.ListDevices(r.Context(), call.InitiatorID); err == nil {
+		_ = deps.store.SetCallState(r.Context(), callID, "answered")
+		if devices, err := deps.store.ListDevices(r.Context(), call.InitiatorID); err == nil {
 			for _, d := range devices {
-				д.уведомитель.Device(r.Context(), d.DeviceID, "call.state", map[string]any{"call_id": callID, "state": "answered"})
+				deps.notifier.Device(r.Context(), d.DeviceID, "call.state", map[string]any{"call_id": callID, "state": "answered"})
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"room": call.Room, "url": д.адресLiveKit(), "token": token})
+		_ = json.NewEncoder(w).Encode(map[string]any{"room": call.Room, "url": deps.livekitURL(), "token": token})
 	}
 }
 
 // ── Аудио-чаты (постоянные голосовые комнаты) ──
 
-func createVoiceRoom(д звонкиDeps) http.HandlerFunc {
+func createVoiceRoom(deps callsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Title string `json:"title"`
@@ -120,7 +120,7 @@ func createVoiceRoom(д звонкиDeps) http.HandlerFunc {
 			return
 		}
 		id, _ := auth.FromContext(r.Context())
-		roomID, err := д.хранилище.CreateVoiceRoom(r.Context(), req.Title, id.UserID)
+		roomID, err := deps.store.CreateVoiceRoom(r.Context(), req.Title, id.UserID)
 		if err != nil {
 			log.Printf("createVoiceRoom: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -132,9 +132,9 @@ func createVoiceRoom(д звонкиDeps) http.HandlerFunc {
 	}
 }
 
-func listVoiceRooms(д звонкиDeps) http.HandlerFunc {
+func listVoiceRooms(deps callsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rooms, err := д.хранилище.ListVoiceRooms(r.Context(), 50)
+		rooms, err := deps.store.ListVoiceRooms(r.Context(), 50)
 		if err != nil {
 			log.Printf("listVoiceRooms: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -151,14 +151,14 @@ func listVoiceRooms(д звонкиDeps) http.HandlerFunc {
 
 // joinVoiceRoom — POST /voice-rooms/{id}/join: LiveKit-токен комнаты. MVP: все спикеры
 // (canPublish=true); роли спикер/слушатель — следующая итерация.
-func joinVoiceRoom(д звонкиDeps) http.HandlerFunc {
+func joinVoiceRoom(deps callsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if д.выдача() == nil {
+		if deps.issuer() == nil {
 			writeErr(w, http.StatusServiceUnavailable, "no_livekit", "звонки не сконфигурированы")
 			return
 		}
 		roomID := r.PathValue("roomID")
-		vr, err := д.хранилище.GetVoiceRoom(r.Context(), roomID)
+		vr, err := deps.store.GetVoiceRoom(r.Context(), roomID)
 		if errors.Is(err, store.ErrVoiceRoomNotFound) {
 			writeErr(w, http.StatusNotFound, "not_found", "аудио-чат не найден")
 			return
@@ -169,12 +169,12 @@ func joinVoiceRoom(д звонкиDeps) http.HandlerFunc {
 		id, _ := auth.FromContext(r.Context())
 		room := "voice-" + vr.RoomID
 		// Роль решает canPublish: спикер говорит, слушатель только слушает
-		speaker, err := д.хранилище.IsSpeaker(r.Context(), vr.RoomID, vr.OwnerID, id.UserID)
+		speaker, err := deps.store.IsSpeaker(r.Context(), vr.RoomID, vr.OwnerID, id.UserID)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		token, err := д.выдача().Token(room, личностьЗвонка(id), speaker, 10*time.Minute, time.Now())
+		token, err := deps.issuer().Token(room, callIdentity(id), speaker, 10*time.Minute, time.Now())
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
 			return
@@ -185,17 +185,17 @@ func joinVoiceRoom(д звонкиDeps) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"room": room, "url": д.адресLiveKit(), "token": token, "title": vr.Title,
+			"room": room, "url": deps.livekitURL(), "token": token, "title": vr.Title,
 			"role": role, "is_owner": vr.OwnerID == id.UserID,
 		})
 	}
 }
 
 // raiseHand — POST /voice-rooms/{id}/hand: слушатель просит слово → владельцу voice.hand.
-func raiseHand(д звонкиDeps) http.HandlerFunc {
+func raiseHand(deps callsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		roomID := r.PathValue("roomID")
-		vr, err := д.хранилище.GetVoiceRoom(r.Context(), roomID)
+		vr, err := deps.store.GetVoiceRoom(r.Context(), roomID)
 		if errors.Is(err, store.ErrVoiceRoomNotFound) {
 			writeErr(w, http.StatusNotFound, "not_found", "аудио-чат не найден")
 			return
@@ -204,9 +204,9 @@ func raiseHand(д звонкиDeps) http.HandlerFunc {
 			return
 		}
 		id, _ := auth.FromContext(r.Context())
-		if devices, err := д.хранилище.ListDevices(r.Context(), vr.OwnerID); err == nil {
+		if devices, err := deps.store.ListDevices(r.Context(), vr.OwnerID); err == nil {
 			for _, d := range devices {
-				д.уведомитель.Device(r.Context(), d.DeviceID, "voice.hand", map[string]any{"room_id": roomID, "user_id": id.UserID})
+				deps.notifier.Device(r.Context(), d.DeviceID, "voice.hand", map[string]any{"room_id": roomID, "user_id": id.UserID})
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -215,9 +215,9 @@ func raiseHand(д звонкиDeps) http.HandlerFunc {
 }
 
 // setSpeaker — POST /voice-rooms/{id}/grant|revoke {user_id}: владелец даёт/забирает слово.
-func датьСлово(д звонкиDeps, w http.ResponseWriter, r *http.Request, grant bool) {
+func setSpeaker(deps callsDeps, w http.ResponseWriter, r *http.Request, grant bool) {
 	roomID := r.PathValue("roomID")
-	vr, err := д.хранилище.GetVoiceRoom(r.Context(), roomID)
+	vr, err := deps.store.GetVoiceRoom(r.Context(), roomID)
 	if errors.Is(err, store.ErrVoiceRoomNotFound) {
 		writeErr(w, http.StatusNotFound, "not_found", "аудио-чат не найден")
 		return
@@ -238,9 +238,9 @@ func датьСлово(д звонкиDeps, w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if grant {
-		err = д.хранилище.AddSpeaker(r.Context(), roomID, req.UserID)
+		err = deps.store.AddSpeaker(r.Context(), roomID, req.UserID)
 	} else {
-		err = д.хранилище.RemoveSpeaker(r.Context(), roomID, req.UserID)
+		err = deps.store.RemoveSpeaker(r.Context(), roomID, req.UserID)
 	}
 	if err != nil {
 		log.Printf("setSpeaker: %v", err)
@@ -252,28 +252,28 @@ func датьСлово(д звонкиDeps, w http.ResponseWriter, r *http.Requ
 	if !grant {
 		event = "voice.revoked"
 	}
-	if devices, err := д.хранилище.ListDevices(r.Context(), req.UserID); err == nil {
+	if devices, err := deps.store.ListDevices(r.Context(), req.UserID); err == nil {
 		for _, d := range devices {
-			д.уведомитель.Device(r.Context(), d.DeviceID, event, map[string]any{"room_id": roomID})
+			deps.notifier.Device(r.Context(), d.DeviceID, event, map[string]any{"room_id": roomID})
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 }
 
-func grantSpeaker(д звонкиDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { датьСлово(д, w, r, true) }
+func grantSpeaker(deps callsDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) { setSpeaker(deps, w, r, true) }
 }
 
-func revokeSpeaker(д звонкиDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { датьСлово(д, w, r, false) }
+func revokeSpeaker(deps callsDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) { setSpeaker(deps, w, r, false) }
 }
 
 // endCall — POST /calls/{callID}/end: завершение любым участником.
-func endCall(д звонкиDeps) http.HandlerFunc {
+func endCall(deps callsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		callID := r.PathValue("callID")
-		call, err := д.хранилище.GetCall(r.Context(), callID)
+		call, err := deps.store.GetCall(r.Context(), callID)
 		if errors.Is(err, store.ErrCallNotFound) {
 			writeErr(w, http.StatusNotFound, "not_found", "звонок не найден")
 			return
@@ -293,17 +293,17 @@ func endCall(д звонкиDeps) http.HandlerFunc {
 		// Закрываем комнату НА САМОМ ДЕЛЕ. Без этого «завершить» меняло состояние у нас
 		// и рассылало уведомление, а комната жила до empty_timeout: клиент, который
 		// уведомление не получил или проигнорировал, продолжал публиковать звук.
-		if err := д.комнаты().DeleteRoom(r.Context(), call.Room); err != nil {
+		if err := deps.rooms().DeleteRoom(r.Context(), call.Room); err != nil {
 			log.Printf("endCall: комната %s не закрылась: %v", call.Room, err)
 		}
-		_ = д.хранилище.SetCallState(r.Context(), callID, state)
+		_ = deps.store.SetCallState(r.Context(), callID, state)
 		other := call.PeerID
 		if id.UserID == call.PeerID {
 			other = call.InitiatorID
 		}
-		if devices, err := д.хранилище.ListDevices(r.Context(), other); err == nil {
+		if devices, err := deps.store.ListDevices(r.Context(), other); err == nil {
 			for _, d := range devices {
-				д.уведомитель.Device(r.Context(), d.DeviceID, "call.state", map[string]any{"call_id": callID, "state": state})
+				deps.notifier.Device(r.Context(), d.DeviceID, "call.state", map[string]any{"call_id": callID, "state": state})
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
