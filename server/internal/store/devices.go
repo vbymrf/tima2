@@ -189,3 +189,34 @@ func (s *Store) DeviceEncryptionPub(ctx context.Context, deviceID string) ([]byt
 	}
 	return key, err
 }
+
+// UsersOfDevices — чьи это устройства.
+//
+// Нужно проверке chat_id при отправке: сервер обязан убедиться, что идентификатор
+// переписки выведен из пары «отправитель и получатель», а получателей конверт называет
+// устройствами, а не людьми.
+//
+// **Отозванные тоже возвращаются.** Отправитель мог взять список устройств за секунду
+// до отзыва; молча выкинув такого получателя, сервер решил бы, что собеседника в
+// переписке нет, и отверг бы честное сообщение. Доставку это не расширяет — обёртка
+// ложится в personal_message_keys, а читать её уже некому.
+func (s *Store) UsersOfDevices(ctx context.Context, deviceIDs []string) (map[string]string, error) {
+	out := make(map[string]string, len(deviceIDs))
+	if len(deviceIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT device_id, user_id FROM devices WHERE device_id = ANY($1)`, deviceIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var device, user string
+		if err := rows.Scan(&device, &user); err != nil {
+			return nil, err
+		}
+		out[device] = user
+	}
+	return out, rows.Err()
+}

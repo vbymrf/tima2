@@ -20,6 +20,7 @@ type MessageStore interface {
 	ListMessages(ctx context.Context, chatID, deviceID string, before uint64, limit int) ([]store.StoredMessage, error)
 	SigningKey(ctx context.Context, deviceID, userID string) ([]byte, error)
 	ChatHelperDevices(ctx context.Context, chatID, requesterDevice, requesterUser string) ([]store.ChatHelper, error)
+	UsersOfDevices(ctx context.Context, deviceIDs []string) (map[string]string, error)
 }
 
 var _ MessageStore = (*store.Store)(nil)

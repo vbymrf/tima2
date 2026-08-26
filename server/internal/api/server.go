@@ -236,8 +236,58 @@ func postMessage(deps messagesDeps) http.HandlerFunc {
 		}
 
 		wrapped := make(map[string][]byte, len(env.GetWrappedKeys()))
+		recipients := make([]string, 0, len(env.GetWrappedKeys()))
 		for _, wk := range env.GetWrappedKeys() {
 			wrapped[wk.GetRecipient()] = wk.GetWrapped()
+			recipients = append(recipients, wk.GetRecipient())
+		}
+
+		// chat_id обязан быть выведен из пары «отправитель и собеседник».
+		//
+		// **Зачем.** Идентификатор личной переписки сервер не назначает — его считает
+		// клиент из двух user_id (personalChatID, раскладка общая с Kotlin). Без этой
+		// проверки посторонний, знающий оба user_id (их отдаёт справочник) и публичные
+		// ключи чужих устройств (их отдаёт /keys/devices), клал бы своё сообщение
+		// ВНУТРЬ чужой переписки. Прочитать её он и так не может, подделать отправителя
+		// не даёт подпись, — но появиться в чужой ветке со своим именем мог.
+		//
+		// **Собеседник берётся из получателей**, а не из chat_id: chat_id и есть то,
+		// что проверяется, и доверять ему при проверке самого себя нельзя.
+		if len(recipients) > 0 {
+			owners, err := deps.store.UsersOfDevices(r.Context(), recipients)
+			if err != nil {
+				log.Printf("postMessage: владельцы устройств: %v", err)
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+				return
+			}
+			peers := make(map[string]struct{}, 2)
+			for _, user := range owners {
+				if user != id.UserID {
+					peers[user] = struct{}{}
+				}
+			}
+			switch len(peers) {
+			case 0:
+				// Получатели — только свои устройства. Либо это чат с самим собой, либо
+				// у собеседника нет ни одного живого устройства. Проверять нечего и,
+				// главное, некого защищать: в чужую переписку так не попасть.
+			case 1:
+				var peer string
+				for user := range peers {
+					peer = user
+				}
+				if meta.GetChatId() != personalChatID(id.UserID, peer) {
+					writeErr(w, http.StatusForbidden, "chat_id_mismatch",
+						"chat_id не выведен из пары отправителя и получателя")
+					return
+				}
+			default:
+				// Личная переписка — это двое. Конверт, завёрнутый на устройства
+				// нескольких разных людей, — это уже группа, и путь у неё свой.
+				writeErr(w, http.StatusBadRequest, "too_many_peers",
+					"в личной переписке один собеседник; для нескольких есть группы")
+				return
+			}
 		}
 		clientMsgID := r.Header.Get("X-Client-Msg-Id") // дедупликация повторной отправки (api-overview: client_msg_id)
 		if clientMsgID == "" {

@@ -148,7 +148,35 @@ func registerDevice(t *testing.T, ts *httptest.Server, phone string) *device {
 }
 
 // sealEnvelope повторяет клиентский конвейер (crypto-protocol.md §3.2) на Go.
+//
+// chat_id выводится из пары, как это делает клиент: сервер сверяет его с получателями
+// и отвергает конверт, положенный в чужую переписку. Постоянная chatID осталась для
+// тестов архива и состояний — те через postMessage не ходят.
 func sealEnvelope(t *testing.T, sender *device, recipients []*device, messageID uint64, plaintext []byte) *pb.Envelope {
+	t.Helper()
+	return sealEnvelopeTo(t, sender, recipients, chatIDFor(sender, recipients), messageID, plaintext)
+}
+
+// chatIDFor — идентификатор переписки отправителя с первым чужим получателем.
+func chatIDFor(sender *device, recipients []*device) string {
+	for _, r := range recipients {
+		if r.userID != sender.userID {
+			return personalChatID(sender.userID, r.userID)
+		}
+	}
+	return personalChatID(sender.userID, sender.userID)
+}
+
+// sealEnvelopeTo — то же, но с явным chat_id: нужен проверке, которая кладёт конверт
+// в ЧУЖУЮ переписку и обязана получить отказ.
+func sealEnvelopeTo(
+	t *testing.T,
+	sender *device,
+	recipients []*device,
+	chatID string,
+	messageID uint64,
+	plaintext []byte,
+) *pb.Envelope {
 	t.Helper()
 	var messageKey [32]byte
 	if _, err := rand.Read(messageKey[:]); err != nil {
