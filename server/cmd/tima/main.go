@@ -230,8 +230,15 @@ func serve() {
 				VersionName: os.Getenv("APP_LATEST_VERSION_NAME"),
 				APKUrl:      os.Getenv("APP_APK_URL"),
 				Notes:       os.Getenv("APP_UPDATE_NOTES"),
+				Stream:      os.Getenv("APP_STREAM"),
 			}
-			log.Printf("Авто-обновление: последняя версия %d (%s)", code, srv.AppVer.APKUrl)
+			// Поток печатаем отдельно: без него клиент v2 предложение проигнорирует,
+			// и молчащая вкладка «Обновление» выглядит как поломка, а не как настройка.
+			if srv.AppVer.Stream == "" {
+				log.Print("APP_STREAM не задан — клиенты, различающие потоки, это предложение пропустят")
+			}
+			log.Printf("Авто-обновление: последняя версия %d поток %q (%s)",
+				code, srv.AppVer.Stream, srv.AppVer.APKUrl)
 		} else {
 			log.Print("APP_LATEST_VERSION_CODE не задан — /app/version отдаёт 204 (обновления выключены)")
 		}

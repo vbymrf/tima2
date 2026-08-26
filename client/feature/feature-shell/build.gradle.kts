@@ -30,9 +30,13 @@ kotlin {
             implementation(projects.core.coreUi)
             implementation(compose.runtime)
             implementation(compose.foundation)
+            // Корутины — ради UpdateStore: проверка обновлений ходит в сеть, а сеть
+            // за оболочкой (порт AppVersionPort), и держать её приходится ей.
+            implementation(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
         jvmTest.dependencies {
             implementation(projects.test.testUi)

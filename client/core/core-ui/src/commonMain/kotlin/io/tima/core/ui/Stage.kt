@@ -163,6 +163,18 @@ fun WithCluster(
     modifier: Modifier = Modifier,
     /** Подпись рядом с кнопками. Появляется только внизу колонки: на телефоне места нет. */
     caption: String? = null,
+    /**
+     * Второй вход, стоящий отдельно от главного.
+     *
+     * **Отдельный слот, а не ещё одна кнопка внутри [cluster].** Найдено глазами на ПК
+     * 2026-08-26: «Группа», положенная в ту же гроздь, встала вплотную к кругу «Написать»
+     * и читалась как часть его — то есть подпись объясняла не ту кнопку. В макете
+     * (`Layout-UI-light/пк/телефон.html`, `низ-колонки`) там ровно один круг с подписью.
+     *
+     * На телефоне гроздь ещё и складывалась: `Box` кладёт детей друг на друга, и два
+     * входа оказывались один поверх другого в том же углу.
+     */
+    secondary: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val layout = LayoutLocal.current
@@ -170,11 +182,16 @@ fun WithCluster(
     if (layout.phone) {
         Box(modifier.fillMaxSize()) {
             content()
-            Box(
-                Modifier
+            Column(
+                modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(TimaSpacing.about4),
-            ) { cluster() }
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            ) {
+                secondary?.invoke()
+                cluster()
+            }
         }
         return
     }
@@ -192,6 +209,12 @@ fun WithCluster(
         ) {
             cluster()
             caption?.let { Caption(it, fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colors.text2) }
+            // Второй вход уходит к дальнему краю: между ним и подписанным кругом остаётся
+            // пустота, и она и есть то, что разделяет два разных действия.
+            if (secondary != null) {
+                Box(Modifier.weight(1f))
+                secondary()
+            }
         }
     }
 }

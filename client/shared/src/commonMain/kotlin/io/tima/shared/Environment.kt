@@ -19,6 +19,7 @@ import io.tima.core.network.AccountApiOverHttp
 import io.tima.core.network.AuthApi
 import io.tima.core.network.DeviceLinkConfirmOverHttp
 import io.tima.core.network.DeviceLinkStartOverHttp
+import io.tima.core.network.AppVersionApi
 import io.tima.core.network.DeviceBookOverHttp
 import io.tima.core.network.DevicesApi
 import io.tima.core.network.EscrowApi
@@ -208,6 +209,9 @@ class Network(
      * отключать человек должен уметь сам.
      */
     override val myFleet: MyDevices = MyDevices(DeviceBookOverHttp(devices))
+
+    /** Версия на сервере. Без токена: её спрашивают и до входа. */
+    override val appVersion: AppVersionApi = AppVersionApi(link.route, link.client)
 
     /**
      * Подтверждение привязки нового устройства.

@@ -75,12 +75,14 @@ fun ChatsScreen(
         // места нет, а сам вход всё равно придуман и уйдёт в каталог окна 2.
         WithCluster(
             cluster = {
-                Chip("Группа", kind = ChipKind.Selected, onClick = onNewGroup)
                 ButtonCircle(onClick = onNew, live = true) {
                     Arrow(Side.Right, color = colors.onAccent)
                 }
             },
             caption = "Написать",
+            // Отдельным входом, а не рядом с кругом: подпись «Написать» относится к
+            // кругу, и «Группа», стоявшая с ним вплотную, читалась как её часть.
+            secondary = { Chip("Группа", kind = ChipKind.Selected, onClick = onNewGroup) },
             modifier = Modifier.weight(1f),
         ) {
             when {

@@ -36,7 +36,9 @@ import io.tima.feature.auth.AuthState
 import io.tima.feature.auth.AuthStore
 import io.tima.feature.auth.LinkStore
 import io.tima.feature.auth.LinkScreen
+import io.tima.feature.auth.DevicesState
 import io.tima.feature.auth.DevicesStore
+import io.tima.core.network.AppVersionResult
 import io.tima.feature.auth.DeviceScreen
 import io.tima.feature.auth.EntryScreen
 import io.tima.feature.chat.ChatStore
@@ -55,6 +57,11 @@ import io.tima.feature.shell.WindowFrame
 import io.tima.feature.shell.Rail
 import io.tima.feature.shell.TabStub
 import io.tima.feature.shell.WindowSwitchingScreen
+import io.tima.feature.shell.SettingsItem
+import io.tima.feature.shell.SettingsScreen
+import io.tima.feature.shell.UpdateOffer
+import io.tima.feature.shell.UpdateSection
+import io.tima.feature.shell.UpdateStore
 import io.tima.feature.chat.NewChatStore
 import io.tima.feature.chat.NewChatScreen
 import io.tima.feature.chat.ChatScreen
@@ -167,14 +174,16 @@ private sealed interface Where {
     data class Link(val code: String) : Where
 
     /**
-     * Свои устройства.
+     * Настройки: подокно с вкладками.
      *
-     * Открывается кнопкой настроек в шапке, и это **не подмена**: настроек как экрана
-     * (`doc_UI/25`) пока нет, а из всех их разделов существует ровно один — устройства.
-     * Экран назван своим именем, поэтому человек видит, куда попал; когда разделов станет
-     * больше, между ними встанет список разделов.
+     * Раньше «⚙» вело прямо в список устройств — тогда это было честно, потому что из
+     * всех разделов существовал ровно один. Разделов стало три, и дверь снова одна.
+     *
+     * Вкладка хранится в состоянии, а не внутри подокна: человек, ушедший из настроек в
+     * привязку устройства и вернувшийся назад, обязан вернуться на ту же вкладку, а не в
+     * начало.
      */
-    data object Devices : Where
+    data class Settings(val item: SettingsItem? = null) : Where
 }
 
 /**
@@ -270,7 +279,7 @@ private fun App(
                 windowSwitcher = false
             },
             onSettings = {
-                where = Where.Devices
+                where = Where.Settings()
                 windowSwitcher = false
             },
             onClose = { windowSwitcher = false },
@@ -292,7 +301,7 @@ private fun App(
                     where = Where.Nothing
                 },
                 counters = windowCounters(listState),
-                onSettings = { where = Where.Devices },
+                onSettings = { where = Where.Settings() },
             )
         },
         column = {
@@ -307,7 +316,7 @@ private fun App(
                     onOpenPerson = { where = Where.Chat(it.chatId, it.name) },
                     onNew = { where = Where.New },
                     onNewGroup = { where = Where.NewGroup },
-                    onSettings = { where = Where.Devices },
+                    onSettings = { where = Where.Settings() },
                     onSwitchWindows = { windowSwitcher = true },
                     onNeighbourWindow = switchWindow,
                 )
@@ -315,28 +324,28 @@ private fun App(
                 Window.Social -> SocialWindow(
                     onSwitchWindows = { windowSwitcher = true },
                     onSearch = {},
-                    onSettings = { where = Where.Devices },
+                    onSettings = { where = Where.Settings() },
                     onNeighbourWindow = switchWindow,
                 )
 
                 Window.Media -> MediaWindow(
                     onSwitchWindows = { windowSwitcher = true },
                     onSearch = {},
-                    onSettings = { where = Where.Devices },
+                    onSettings = { where = Where.Settings() },
                     onNeighbourWindow = switchWindow,
                 )
 
                 Window.Activity -> ActivityWindow(
                     onSwitchWindows = { windowSwitcher = true },
                     onSearch = {},
-                    onSettings = { where = Where.Devices },
+                    onSettings = { where = Where.Settings() },
                     onNeighbourWindow = switchWindow,
                 )
 
                 Window.Page -> PageWindow(
                     onSwitchWindows = { windowSwitcher = true },
                     onSearch = {},
-                    onSettings = { where = Where.Devices },
+                    onSettings = { where = Where.Settings() },
                     onNeighbourWindow = switchWindow,
                 )
             }
@@ -358,11 +367,14 @@ private fun App(
                 }
             }
 
-            Where.Devices -> {
+            is Where.Settings -> {
                 {
-                    Devices(
+                    Settings(
+                        opened = current.item,
+                        onOpen = { where = Where.Settings(it) },
                         network = network,
                         scope = scope,
+                        platform = platform,
                         buildVersion = buildVersion,
                         onBack = { where = Where.Nothing },
                     )
@@ -505,25 +517,130 @@ private fun LinkConfirmation(
     LinkScreen(state = state, onTrust = store::trust, onCancel = onClose)
 }
 
-/** Свои устройства: список, отключение и вопрос перед ним. */
+/**
+ * Настройки: подокно с тремя вкладками.
+ *
+ * Собирается здесь, а не в оболочке: вкладки живут в разных модулях — устройства в
+ * `feature-auth`, обновление в `feature-shell`, — и свести их вправе только приложение.
+ * Оболочка получает готовое содержимое слотом и по-прежнему не знает ни про один feature.
+ */
 @Composable
-private fun Devices(
+private fun Settings(
+    opened: SettingsItem?,
+    onOpen: (SettingsItem?) -> Unit,
     network: DevicePorts,
     scope: kotlinx.coroutines.CoroutineScope,
+    platform: Platform,
     buildVersion: String,
     onBack: () -> Unit,
 ) {
-    val store = remember { DevicesStore(network.myFleet, scope) }
-    val state by store.state.collectAsState()
+    val fleet = remember { DevicesStore(network.myFleet, scope) }
+    val devices by fleet.state.collectAsState()
+
+    SettingsScreen(
+        opened = opened,
+        onOpen = { onOpen(it) },
+        // Из пункта — к списку, из списка — из настроек. Одно «назад» на оба шага
+        // выкидывало бы наружу из глубины, то есть теряло бы место, куда человек шёл.
+        onBack = { if (opened == null) onBack() else onOpen(null) },
+        value = { item ->
+            when (item) {
+                // Значение справа — то, что и так посчитано для самого пункта. Отдельный
+                // запрос ради строки в списке будил бы сеть на каждый заход в настройки.
+                SettingsItem.DEVICES -> devices.devices.size.takeIf { it > 0 }?.toString().orEmpty()
+                SettingsItem.ABOUT -> buildVersion
+                else -> ""
+            }
+        },
+    ) { item ->
+        when (item) {
+            SettingsItem.DEVICES -> Devices(fleet, devices, buildVersion)
+
+            SettingsItem.UPDATE -> Update(network, scope, platform, buildVersion)
+
+            else -> TabStub(
+                willWhat = item.title,
+                thanHolds = "Раздел из макета настроек. Экрана пока нет — " +
+                    "doc/Layout-UI-light/пк/настройки.html",
+            )
+        }
+    }
+}
+
+/** Свои устройства: список, отключение и вопрос перед ним. */
+@Composable
+private fun Devices(
+    store: DevicesStore,
+    state: DevicesState,
+    buildVersion: String,
+) {
     DeviceScreen(
         state = state,
-        onBack = onBack,
         onAsk = store::ask,
         onConfirm = store::revoke,
         onChangedMind = store::changedMind,
         buildVersion = buildVersion,
     )
 }
+
+/**
+ * Обновление: своя версия против того, что предлагает сервер.
+ *
+ * Порт [AppVersionPort] объявлен оболочкой, а сеть подставляется здесь — оболочка про
+ * Ktor не знает и знать не должна.
+ */
+@Composable
+private fun Update(
+    network: DevicePorts,
+    scope: kotlinx.coroutines.CoroutineScope,
+    platform: Platform,
+    buildVersion: String,
+) {
+    val store = remember {
+        UpdateStore(
+            versions = {
+                when (val answer = network.appVersion.latest()) {
+                    is AppVersionResult.Version -> UpdateOffer(
+                        versionCode = answer.versionCode,
+                        versionName = answer.versionName,
+                        url = answer.url,
+                        notes = answer.notes,
+                        stream = answer.stream,
+                    )
+                    AppVersionResult.NotConfigured -> null
+                    is AppVersionResult.NoConnection -> error("нет связи")
+                    is AppVersionResult.Refused -> error("отказ ${answer.status}")
+                }
+            },
+            scope = scope,
+            installed = buildVersion,
+            installedCode = BUILD_CODE,
+            stream = STREAM,
+        )
+    }
+    val state by store.state.collectAsState()
+    UpdateSection(
+        state = state,
+        onCheck = store::check,
+        // Скачивание — платформенное действие: на ПК это браузер, на телефоне установщик.
+        // Пока не заведено, ссылка просто не нажимается, и это честнее кнопки, которая
+        // делает вид. Платформа рядом, чтобы вопрос не потерялся при разводке.
+        onInstall = { _ -> },
+    )
+    // Платформа участвует в сборке состояния и будет нужна установщику; ссылка на неё
+    // держится явно, чтобы её не выкинули как неиспользуемую.
+    check(platform.server.isNotBlank())
+}
+
+/**
+ * Поток сборок и его номер.
+ *
+ * **v2 начала нумерацию заново, с двойки, а на сервере лежит v1 с номером 24.** Сравнив
+ * числа без потока, приложение предложило бы поставить поверх себя прошлогоднюю сборку.
+ * Поэтому поток объявлен явно и сравнение идёт только внутри него.
+ */
+private const val STREAM = "v2"
+private const val BUILD_CODE = 2
 
 /**
  * Новая группа: подокно создания.

@@ -91,7 +91,6 @@ class DeviceScreenTest {
         @androidx.compose.runtime.Composable
         fun screen(state: DevicesState) = DeviceScreen(
             state = state,
-            onBack = {},
             onAsk = {},
             onConfirm = {},
             onChangedMind = {},

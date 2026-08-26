@@ -9,6 +9,7 @@ import io.tima.core.network.GroupsApi
 import io.tima.core.network.KeysApi
 import io.tima.core.network.UsersApi
 import io.tima.domain.account.ConfirmDeviceLink
+import io.tima.core.network.AppVersionApi
 import io.tima.domain.account.MyDevices
 
 /**
@@ -68,6 +69,15 @@ interface GroupPorts {
 /** Устройства: список, отключение, платформа, подтверждение привязки. */
 interface DevicePorts {
     val myFleet: MyDevices
+
+    /**
+     * Какая версия лежит на сервере — для вкладки «Обновление».
+     *
+     * Ручка публичная, токена не требует: спросить должно и устройство, на котором ещё
+     * не вошли. Живёт среди портов устройств, потому что спрашивают о версии там же, где
+     * смотрят, чем читают, — в настройках.
+     */
+    val appVersion: AppVersionApi
 
     /** Объявление платформы серверу: телефон это или ПК (key-lifecycle.md §2). */
     val devices: DevicesApi
