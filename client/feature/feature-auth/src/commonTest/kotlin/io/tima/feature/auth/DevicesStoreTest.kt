@@ -19,49 +19,49 @@ import kotlin.test.assertTrue
  * строки в списке похожи друг на друга: «Телефон» и «Телефон». Нажатие без вопроса означает,
  * что человек однажды выкинет то устройство, с которого читает.
  */
-class УстройстваStoreTest {
+class DevicesStoreTest {
 
-    private val книга = ПоддельнаяКнига()
+    private val book = FakeBook()
 
-    private fun store(scope: kotlinx.coroutines.CoroutineScope) = УстройстваStore(MyDevices(книга), scope)
+    private fun store(scope: kotlinx.coroutines.CoroutineScope) = DevicesStore(MyDevices(book), scope)
 
     @Test
     fun список_приходит_при_открытии() = runTest {
         val store = store(backgroundScope)
 
-        val состояние = store.state.first { !it.ждём }
+        val state = store.state.first { !it.expect }
 
-        assertEquals(2, состояние.устройства.size)
-        assertEquals("Телефон", состояние.устройства.first().name)
-        assertTrue(состояние.устройства.first().current, "своё устройство обязано быть помечено")
+        assertEquals(2, state.devices.size)
+        assertEquals("Телефон", state.devices.first().name)
+        assertTrue(state.devices.first().current, "своё устройство обязано быть помечено")
     }
 
     /** Нажатие «Отключить» задаёт вопрос, а в сеть не идёт. */
     @Test
     fun отключение_сначала_спрашивает() = runTest {
         val store = store(backgroundScope)
-        store.state.first { !it.ждём }
+        store.state.first { !it.expect }
 
-        store.спросить("d-2")
+        store.ask("d-2")
 
-        assertEquals("d-2", store.state.value.спрашиваем)
-        assertEquals(0, книга.отзывов, "до подтверждения в сеть не уходит ничего")
+        assertEquals("d-2", store.state.value.ask)
+        assertEquals(0, book.revocations, "до подтверждения в сеть не уходит ничего")
     }
 
     @Test
     fun подтверждение_отключает_и_перечитывает_список() = runTest {
         val store = store(backgroundScope)
-        store.state.first { !it.ждём }
-        store.спросить("d-2")
+        store.state.first { !it.expect }
+        store.ask("d-2")
 
-        store.отключить()
+        store.revoke()
 
-        val состояние = store.state.first { !it.ждём && it.спрашиваем == null }
-        assertEquals(1, книга.отзывов)
-        assertEquals("d-2", книга.отозванное)
+        val state = store.state.first { !it.expect && it.ask == null }
+        assertEquals(1, book.revocations)
+        assertEquals("d-2", book.revoked)
         assertEquals(
             1,
-            состояние.устройства.size,
+            state.devices.size,
             "список обязан быть перечитан у сервера, а не поправлен по памяти",
         )
     }
@@ -70,13 +70,13 @@ class УстройстваStoreTest {
     @Test
     fun передумал_ничего_не_делает() = runTest {
         val store = store(backgroundScope)
-        store.state.first { !it.ждём }
-        store.спросить("d-2")
+        store.state.first { !it.expect }
+        store.ask("d-2")
 
-        store.передумал()
+        store.changedMind()
 
-        assertNull(store.state.value.спрашиваем)
-        assertEquals(0, книга.отзывов)
+        assertNull(store.state.value.ask)
+        assertEquals(0, book.revocations)
     }
 
     /**
@@ -87,68 +87,68 @@ class УстройстваStoreTest {
      */
     @Test
     fun последнее_устройство_объясняется_словами() = runTest {
-        книга.наОтзыв = { RevokeStep.LastDevice }
+        book.onRevocation = { RevokeStep.LastDevice }
         val store = store(backgroundScope)
-        store.state.first { !it.ждём }
-        store.спросить("d-2")
+        store.state.first { !it.expect }
+        store.ask("d-2")
 
-        store.отключить()
+        store.revoke()
 
-        val состояние = store.state.first { !it.ждём }
-        assertTrue(состояние.беда.orEmpty().contains("единственное"), "беда: ${состояние.беда}")
+        val state = store.state.first { !it.expect }
+        assertTrue(state.trouble.orEmpty().contains("единственное"), "беда: ${state.trouble}")
     }
 
     /** Уже отозванное — не беда: список просто устарел, и его надо перечитать. */
     @Test
     fun уже_отозванное_только_обновляет_список() = runTest {
-        книга.наОтзыв = { RevokeStep.Gone }
+        book.onRevocation = { RevokeStep.Gone }
         val store = store(backgroundScope)
-        store.state.first { !it.ждём }
-        store.спросить("d-2")
+        store.state.first { !it.expect }
+        store.ask("d-2")
 
-        store.отключить()
+        store.revoke()
 
-        val состояние = store.state.first { !it.ждём && it.спрашиваем == null }
-        assertNull(состояние.беда, "беды здесь нет: устройства и так больше нет")
-        assertEquals(2, книга.запросов, "список обязан быть перечитан")
+        val state = store.state.first { !it.expect && it.ask == null }
+        assertNull(state.trouble, "беды здесь нет: устройства и так больше нет")
+        assertEquals(2, book.requests, "список обязан быть перечитан")
     }
 
     /** Отказ связи не выкидывает вопрос: человек ещё не отменил своё решение. */
     @Test
     fun отказ_связи_оставляет_вопрос() = runTest {
-        книга.наОтзыв = { RevokeStep.Offline(retryAfterMs = 5_000) }
+        book.onRevocation = { RevokeStep.Offline(retryAfterMs = 5_000) }
         val store = store(backgroundScope)
-        store.state.first { !it.ждём }
-        store.спросить("d-2")
+        store.state.first { !it.expect }
+        store.ask("d-2")
 
-        store.отключить()
+        store.revoke()
 
-        val состояние = store.state.first { !it.ждём }
-        assertEquals("d-2", состояние.спрашиваем, "вопрос остался: решение человека в силе")
-        assertTrue(состояние.беда.orEmpty().contains("связи"), "беда: ${состояние.беда}")
+        val state = store.state.first { !it.expect }
+        assertEquals("d-2", state.ask, "вопрос остался: решение человека в силе")
+        assertTrue(state.trouble.orEmpty().contains("связи"), "беда: ${state.trouble}")
     }
 
-    private class ПоддельнаяКнига : DeviceBook {
-        var запросов = 0
-        var отзывов = 0
-        var отозванное: String? = null
-        var наОтзыв: suspend () -> RevokeStep = { RevokeStep.Revoked }
+    private class FakeBook : DeviceBook {
+        var requests = 0
+        var revocations = 0
+        var revoked: String? = null
+        var onRevocation: suspend () -> RevokeStep = { RevokeStep.Revoked }
 
         override suspend fun mine(): DevicesStep {
-            запросов++
+            requests++
             // После отзыва сервер отдаёт список короче — так и проверяется, что список
             // перечитан, а не поправлен по памяти.
-            val все = listOf(
+            val all = listOf(
                 AccountDevice("d-1", "Телефон", "2026-08-20T10:00:00Z", current = true),
                 AccountDevice("d-2", "Компьютер", "2026-08-23T10:00:00Z", current = false),
             )
-            return DevicesStep.Devices(if (отзывов == 0) все else все.take(1))
+            return DevicesStep.Devices(if (revocations == 0) all else all.take(1))
         }
 
         override suspend fun revoke(deviceId: String): RevokeStep {
-            отзывов++
-            отозванное = deviceId
-            return наОтзыв()
+            revocations++
+            revoked = deviceId
+            return onRevocation()
         }
     }
 }

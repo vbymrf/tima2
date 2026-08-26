@@ -25,38 +25,38 @@ import kotlin.test.assertTrue
 class SqlInboxStoreTest {
 
     private val db = testDatabase()
-    private val шифр = тестовыйШифр()
-    private val inboxStore = SqlInboxStore(db, шифр)
-    private val outboxStore = SqlOutboxStore(db, шифр)
+    private val cipher = testCipher()
+    private val inboxStore = SqlInboxStore(db, cipher)
+    private val outboxStore = SqlOutboxStore(db, cipher)
 
-    private var время = 1_000L
-    private val inbox = Inbox(inboxStore, nowMs = { время })
-    private val outbox = Outbox(outboxStore, nowMs = { время })
+    private var time = 1_000L
+    private val inbox = Inbox(inboxStore, nowMs = { time })
+    private val outbox = Outbox(outboxStore, nowMs = { time })
 
-    private val конверт = byteArrayOf(5, 6, 7)
-    private val тело = byteArrayOf(1)
+    private val envelope = byteArrayOf(5, 6, 7)
+    private val body = byteArrayOf(1)
 
     @Test
     fun приём_и_чтение_возвращают_то_же_самое() {
-        assertTrue(inbox.receive("chat-1", 42, конверт))
+        assertTrue(inbox.receive("chat-1", 42, envelope))
         val e = inboxStore.byKey("chat-1", 42)
         assertNotNull(e)
         assertEquals(IncomingState.RECEIVED, e.state)
         assertEquals(42L, e.messageId)
-        assertTrue(конверт.contentEquals(e.envelope), "исходник нужен второй попытке разбора")
+        assertTrue(envelope.contentEquals(e.envelope), "исходник нужен второй попытке разбора")
     }
 
     @Test
     fun повтор_из_догона_истории_не_даёт_второй_строки() {
-        assertTrue(inbox.receive("chat-1", 42, конверт))
-        assertFalse(inbox.receive("chat-1", 42, конверт))
+        assertTrue(inbox.receive("chat-1", 42, envelope))
+        assertFalse(inbox.receive("chat-1", 42, envelope))
         assertEquals(1L, db.messagesQueries.countAll().executeAsOne())
     }
 
     @Test
     fun одинаковый_номер_в_разных_чатах_это_разные_сообщения() {
-        assertTrue(inbox.receive("chat-1", 42, конверт))
-        assertTrue(inbox.receive("chat-2", 42, конверт))
+        assertTrue(inbox.receive("chat-1", 42, envelope))
+        assertTrue(inbox.receive("chat-2", 42, envelope))
         assertEquals(2L, db.messagesQueries.countAll().executeAsOne())
     }
 
@@ -64,7 +64,7 @@ class SqlInboxStoreTest {
     fun причина_нечитаемости_доезжает_до_базы_и_обратно() {
         // Она пишется отдельным столбцом, а не подмешивается в тело: тело шифртекст, и
         // текстовая пометка внутри стала бы байтами, которых никто не расшифрует.
-        inbox.receive("chat-1", 42, конверт)
+        inbox.receive("chat-1", 42, envelope)
         inbox.openNext({ OpenOutcome.NoKey("обёртки для устройства нет") })
 
         val e = inboxStore.byKey("chat-1", 42)!!
@@ -75,24 +75,24 @@ class SqlInboxStoreTest {
 
     @Test
     fun появился_ключ_и_разбор_повторяется() {
-        inbox.receive("chat-1", 42, конверт)
+        inbox.receive("chat-1", 42, envelope)
         inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
 
         assertEquals(1, inbox.retryUndecryptable())
         assertEquals(IncomingState.RECEIVED, inboxStore.byKey("chat-1", 42)?.state)
 
-        inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") })
+        inbox.openNext({ OpenOutcome.Opened(body, "u-автор") })
         assertEquals(IncomingState.STORED, inboxStore.byKey("chat-1", 42)?.state)
         // Тело проверяется В БАЗЕ, а не в тестовой переменной: раньше запись содержимого
         // была лямбдой, и все вызывающие передавали пустую — состояние STORED означало
         // «разобрано и потеряно». Теперь строка обязана содержать тело, и закрытое.
-        val строка = db.messagesQueries.byDedupKey("chat-1/42").executeAsOne()
+        val line = db.messagesQueries.byDedupKey("chat-1/42").executeAsOne()
         assertFalse(
-            тело.contentEquals(строка.body_enc),
+            body.contentEquals(line.body_enc),
             "тело легло в базу открытым — шифрование покоя не сработало",
         )
         assertTrue(
-            тело.contentEquals(шифр.open(строка.body_enc)!!),
+            body.contentEquals(cipher.open(line.body_enc)!!),
             "разобранное тело обязано лечь в строку",
         )
     }
@@ -103,13 +103,13 @@ class SqlInboxStoreTest {
     fun очередь_отправки_не_видит_входящих() {
         // Входящее в состоянии UNDECRYPTABLE имеет state = 1 — то же число, что SEALED
         // у исходящего. Без direction очередь забрала бы его на отправку.
-        inbox.receive("chat-1", 42, конверт)
+        inbox.receive("chat-1", 42, envelope)
         inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
         assertEquals(1L, IncomingState.UNDECRYPTABLE.ordinal.toLong(), "предпосылка теста")
         assertEquals(1L, OutboxState.SEALED.ordinal.toLong(), "предпосылка теста")
 
         assertNull(outboxStore.claimSealed(), "чужое нерасшифрованное — не наш конверт")
-        assertNull(outboxStore.nextQueued(время + 1_000_000))
+        assertNull(outboxStore.nextQueued(time + 1_000_000))
         assertEquals(0, outbox.pending().size)
     }
 
@@ -117,7 +117,7 @@ class SqlInboxStoreTest {
     fun приём_входящих_не_видит_исходящих() {
         // И обратная сторона: исходящее в QUEUED имеет state = 0 — то же число, что
         // RECEIVED у входящего.
-        outbox.enqueue("d-1", "chat-1", тело)
+        outbox.enqueue("d-1", "chat-1", body)
         assertEquals(0L, OutboxState.QUEUED.ordinal.toLong(), "предпосылка теста")
         assertEquals(0L, IncomingState.RECEIVED.ordinal.toLong(), "предпосылка теста")
 
@@ -129,15 +129,15 @@ class SqlInboxStoreTest {
     fun две_машины_работают_в_одной_таблице_одновременно() {
         // Обычная жизнь чата: своё уходит, чужое приходит. Обе очереди обязаны видеть
         // ровно своё.
-        outbox.enqueue("d-1", "chat-1", тело)
-        inbox.receive("chat-1", 42, конверт)
+        outbox.enqueue("d-1", "chat-1", body)
+        inbox.receive("chat-1", 42, envelope)
 
         assertEquals(2L, db.messagesQueries.countAll().executeAsOne())
 
         outbox.sealNext("chat-1", 1L) { byteArrayOf(1) }
         outbox.claimForSend()
         outbox.onOutcome("d-1", SendOutcome.Accepted(serverMessageId = 100))
-        inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") })
+        inbox.openNext({ OpenOutcome.Opened(body, "u-автор") })
 
         assertEquals(OutboxState.SENT, outboxStore.byDedupKey("d-1")?.state)
         assertEquals(IncomingState.STORED, inboxStore.byKey("chat-1", 42)?.state)
@@ -149,11 +149,11 @@ class SqlInboxStoreTest {
     fun переписка_читается_одним_списком_обоих_направлений() {
         // Ради этого они и лежат в одной таблице: чат — один список с одной
         // сортировкой, а не склейка двух наборов при каждом открытии.
-        outbox.enqueue("d-1", "chat-1", тело)
-        inbox.receive("chat-1", 42, конверт)
+        outbox.enqueue("d-1", "chat-1", body)
+        inbox.receive("chat-1", 42, envelope)
 
-        val список = db.messagesQueries.chatPage("chat-1", 10).executeAsList()
-        assertEquals(2, список.size)
-        assertEquals(setOf(0L, 1L), список.map { it.direction }.toSet())
+        val list = db.messagesQueries.chatPage("chat-1", 10).executeAsList()
+        assertEquals(2, list.size)
+        assertEquals(setOf(0L, 1L), list.map { it.direction }.toSet())
     }
 }

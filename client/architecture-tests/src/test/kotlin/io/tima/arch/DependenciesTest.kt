@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
  * тогда, когда долг погашен, а запись о нём осталась. Иначе список сам становится
  * тем, что устаревает молча.
  */
-class ЗависимостиTest {
+class DependenciesTest {
 
     private val clientRoot = File(requireNotNull(System.getProperty("client.root")) {
         "не передан client.root — смотри build.gradle.kts этого модуля"
@@ -36,36 +36,36 @@ class ЗависимостиTest {
      * тест это терпит. Когда зависимость объявлена — строку обязан убрать тот же
      * коммит, иначе тест упадёт на «долг погашен, а запись осталась».
      */
-    private val допущенныеДолги = emptySet<String>()
+    private val allowedDebts = emptySet<String>()
 
     @Test
     fun импорты_совпадают_с_манифестами() {
-        val модули = собратьМодули(clientRoot)
-        assertTrue(модули.size >= 12, "модулей найдено ${модули.size} — карта собралась неверно")
+        val modules = assembleModules(clientRoot)
+        assertTrue(modules.size >= 12, "модулей найдено ${modules.size} — карта собралась неверно")
 
-        val найденные = mutableSetOf<String>()
-        val объяснения = mutableMapOf<String, MutableSet<String>>()
+        val found = mutableSetOf<String>()
+        val explanations = mutableMapOf<String, MutableSet<String>>()
 
-        for (модуль in модули) {
-            val объявлено = модуль.объявленныеЗависимости()
-            for ((импорт, файл) in модуль.первыеСтороннИмпорты()) {
-                val чей = модули.firstOrNull { it != модуль && импорт.startsWith(it.пакет + ".") }
-                val имяЧужого = чей?.имя
-                    ?: if (импорт.startsWith(ПАКЕТ_КРИПТО)) МОДУЛЬ_КРИПТО else null
-                if (имяЧужого == null || имяЧужого in объявлено) continue
-                val ребро = "${модуль.имя} -> $имяЧужого"
-                найденные += ребро
-                объяснения.getOrPut(ребро) { mutableSetOf() } += файл
+        for (module in modules) {
+            val declared = module.dependencyDeclared()
+            for ((import, file) in module.firstForeignImports()) {
+                val whose = modules.firstOrNull { it != module && import.startsWith(it.packageValue + ".") }
+                val foreignName = whose?.name
+                    ?: if (import.startsWith(ПАКЕТ_КРИПТО)) МОДУЛЬ_КРИПТО else null
+                if (foreignName == null || foreignName in declared) continue
+                val edge = "${module.name} -> $foreignName"
+                found += edge
+                explanations.getOrPut(edge) { mutableSetOf() } += file
             }
         }
 
-        val новые = найденные - допущенныеДолги
-        val погашенные = допущенныеДолги - найденные
+        val new = found - allowedDebts
+        val settled = allowedDebts - found
 
         assertTrue(
-            новые.isEmpty(),
+            new.isEmpty(),
             "Модуль пользуется тем, чего не объявил:\n" +
-                новые.sorted().joinToString("\n") { "  $it — например ${объяснения[it]?.first()}" } +
+                new.sorted().joinToString("\n") { "  $it — например ${explanations[it]?.first()}" } +
                 "\n\nОбъявите зависимость в build.gradle.kts. Компилируется оно только " +
                 "потому, что кто-то третий переэкспортировал типы через api: уберут " +
                 "переэкспорт — упадёт модуль, который никто не трогал.",
@@ -73,7 +73,7 @@ class ЗависимостиTest {
 
         assertEquals(
             emptySet(),
-            погашенные,
+            settled,
             "Долг погашен, а запись о нём осталась в допущенныеДолги. Уберите строку " +
                 "тем же коммитом: список, который живёт дольше долга, врёт о состоянии " +
                 "проекта так же, как отсутствующий.",
@@ -82,21 +82,21 @@ class ЗависимостиTest {
 
     // ── разбор проекта ────────────────────────────────────────────────────────
 
-    private data class Модуль(val имя: String, val путь: File, val пакет: String) {
+    private data class Module(val name: String, val path: File, val packageValue: String) {
 
         /** Что объявлено в `build.gradle.kts`: `projects.*` и артефакт крипто. */
-        fun объявленныеЗависимости(): Set<String> {
-            val текст = File(путь, "build.gradle.kts").readText()
-            val итог = mutableSetOf<String>()
-            for (совпадение in ПРОЕКТ.findAll(текст)) {
-                итог += изАксессора(совпадение.groupValues[1])
+        fun dependencyDeclared(): Set<String> {
+            val text = File(path, "build.gradle.kts").readText()
+            val result = mutableSetOf<String>()
+            for (match in PROJECT.findAll(text)) {
+                result += fromAccessor(match.groupValues[1])
             }
             // Оба входа объявляют зависимости старой записью project(":core:core-ui").
-            for (совпадение in СТАРЫЙ_ПРОЕКТ.findAll(текст)) {
-                итог += совпадение.groupValues[1].substringAfterLast(':')
+            for (match in СТАРЫЙ_ПРОЕКТ.findAll(text)) {
+                result += match.groupValues[1].substringAfterLast(':')
             }
-            if (текст.contains(АРТЕФАКТ_КРИПТО)) итог += МОДУЛЬ_КРИПТО
-            return итог
+            if (text.contains(АРТЕФАКТ_КРИПТО)) result += МОДУЛЬ_КРИПТО
+            return result
         }
 
         /**
@@ -105,57 +105,57 @@ class ЗависимостиTest {
          * Тестовые наборы не считаются: тест вправе брать чужое напрямую, и правило
          * «объяви зависимость» относится к тому, что уезжает в сборку.
          */
-        fun первыеСтороннИмпорты(): List<Pair<String, String>> {
-            val итог = mutableListOf<Pair<String, String>>()
-            val видели = mutableSetOf<String>()
-            val src = File(путь, "src")
-            if (!src.isDirectory) return итог
-            for (набор in src.listFiles().orEmpty()) {
+        fun firstForeignImports(): List<Pair<String, String>> {
+            val result = mutableListOf<Pair<String, String>>()
+            val seen = mutableSetOf<String>()
+            val src = File(path, "src")
+            if (!src.isDirectory) return result
+            for (setValue in src.listFiles().orEmpty()) {
                 // Production — только наборы, уезжающие в сборку: commonMain, jvmMain,
                 // androidMain, iosMain, desktopMain и jvmCommon. Всё прочее — тесты и
                 // фикстуры: там чужое берут напрямую, и это законно.
-                if (!набор.isDirectory) continue
-                if (!набор.name.endsWith("Main") && набор.name != "jvmCommon") continue
-                набор.walkTopDown()
+                if (!setValue.isDirectory) continue
+                if (!setValue.name.endsWith("Main") && setValue.name != "jvmCommon") continue
+                setValue.walkTopDown()
                     .filter { it.isFile && it.extension == "kt" }
-                    .forEach { файл ->
-                        for (строка in файл.readLines()) {
-                            val обрез = строка.trim()
-                            if (!обрез.startsWith("import ")) {
-                                if (обрез.startsWith("class ") || обрез.startsWith("object ") ||
-                                    обрез.startsWith("fun ") || обрез.startsWith("interface ")
+                    .forEach { file ->
+                        for (line in file.readLines()) {
+                            val clip = line.trim()
+                            if (!clip.startsWith("import ")) {
+                                if (clip.startsWith("class ") || clip.startsWith("object ") ||
+                                    clip.startsWith("fun ") || clip.startsWith("interface ")
                                 ) break
                                 continue
                             }
-                            val импорт = обрез.removePrefix("import ").trim().removeSuffix(";")
-                            if (!импорт.startsWith("io.tima.")) continue
-                            if (импорт in видели) continue
-                            видели += импорт
-                            итог += импорт to "${набор.name}/${файл.name}"
+                            val import = clip.removePrefix("import ").trim().removeSuffix(";")
+                            if (!import.startsWith("io.tima.")) continue
+                            if (import in seen) continue
+                            seen += import
+                            result += import to "${setValue.name}/${file.name}"
                         }
                     }
             }
-            return итог
+            return result
         }
     }
 
-    private fun собратьМодули(корень: File): List<Модуль> =
-        корень.walkTopDown()
+    private fun assembleModules(root: File): List<Module> =
+        root.walkTopDown()
             .onEnter { it.name !in setOf("build", ".gradle", ".kotlin", ".git", "src") }
-            .filter { it.isFile && it.name == "build.gradle.kts" && it.parentFile != корень }
-            .mapNotNull { файл ->
-                val каталог = файл.parentFile
-                val пакет = первыйПакет(File(каталог, "src")) ?: return@mapNotNull null
-                Модуль(каталог.name, каталог, пакет)
+            .filter { it.isFile && it.name == "build.gradle.kts" && it.parentFile != root }
+            .mapNotNull { file ->
+                val catalog = file.parentFile
+                val packageValue = firstPackage(File(catalog, "src")) ?: return@mapNotNull null
+                Module(catalog.name, catalog, packageValue)
             }
             .toList()
 
-    private fun первыйПакет(src: File): String? {
+    private fun firstPackage(src: File): String? {
         if (!src.isDirectory) return null
         return src.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
-            .mapNotNull { файл ->
-                файл.readLines().firstOrNull { it.startsWith("package ") }
+            .mapNotNull { file ->
+                file.readLines().firstOrNull { it.startsWith("package ") }
                     ?.removePrefix("package ")?.trim()
             }
             // Самый короткий пакет модуля и есть его корень: подпакеты начинаются с него.
@@ -164,16 +164,16 @@ class ЗависимостиTest {
 
     private companion object {
         /** `projects.core.coreOutbox` → `core-outbox`. */
-        val ПРОЕКТ = Regex("""projects\.((?:\w+\.)*\w+)""")
+        val PROJECT = Regex("""projects\.((?:\w+\.)*\w+)""")
         val СТАРЫЙ_ПРОЕКТ = Regex("""project\("(:[\w:-]+)"\)""")
         const val ПАКЕТ_КРИПТО = "io.tima.crypto"
         const val МОДУЛЬ_КРИПТО = "messenger-crypto"
         const val АРТЕФАКТ_КРИПТО = "io.tima:messenger-crypto"
 
-        fun изАксессора(аксессор: String): String {
-            val последний = аксессор.substringAfterLast('.')
+        fun fromAccessor(accessor: String): String {
+            val last = accessor.substringAfterLast('.')
             // coreOutbox → core-outbox: имя каталога модуля пишется через дефис.
-            return последний.replace(Regex("([a-z0-9])([A-Z])"), "$1-$2").lowercase()
+            return last.replace(Regex("([a-z0-9])([A-Z])"), "$1-$2").lowercase()
         }
     }
 }

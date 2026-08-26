@@ -19,20 +19,20 @@ import kotlinx.coroutines.launch
  * показывает такие номера отдельным списком с предложением позвать человека — не красным
  * текстом про сбой.
  */
-class НоваяГруппаStore(
-    private val создание: CreateGroupChat,
+class NewGroupStore(
+    private val creation: CreateGroupChat,
     private val scope: CoroutineScope,
 ) {
 
-    private val _state = MutableStateFlow(НоваяГруппаState())
-    val state: StateFlow<НоваяГруппаState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(NewGroupState())
+    val state: StateFlow<NewGroupState> = _state.asStateFlow()
 
-    fun названиеИзменено(текст: String) {
-        _state.value = _state.value.copy(название = текст, беда = null)
+    fun changedTitle(text: String) {
+        _state.value = _state.value.copy(title = text, trouble = null)
     }
 
-    fun номерИзменён(текст: String) {
-        _state.value = _state.value.copy(номер = текст, беда = null)
+    fun changedNumber(text: String) {
+        _state.value = _state.value.copy(number = text, trouble = null)
     }
 
     /**
@@ -41,63 +41,63 @@ class НоваяГруппаStore(
      * Номера накапливаются до создания, а не после: группу создают один раз, и звать в неё
      * по одному, каждый раз через сеть, — это ротация ключа на каждого приглашённого.
      */
-    fun добавитьНомер() {
-        val текущее = _state.value
-        val номер = текущее.номер.trim()
-        if (номер.isEmpty()) return
-        if (номер in текущее.номера) {
+    fun addNumber() {
+        val current = _state.value
+        val number = current.number.trim()
+        if (number.isEmpty()) return
+        if (number in current.numbers) {
             // Молча проглотить повтор нельзя: человек будет жать снова, думая, что не
             // сработало. Сказать словами — дешевле.
-            _state.value = текущее.copy(номер = "", беда = "Этот номер уже в списке")
+            _state.value = current.copy(number = "", trouble = "Этот номер уже в списке")
             return
         }
-        _state.value = текущее.copy(номера = текущее.номера + номер, номер = "", беда = null)
+        _state.value = current.copy(numbers = current.numbers + number, number = "", trouble = null)
     }
 
-    fun убратьНомер(номер: String) {
-        _state.value = _state.value.copy(номера = _state.value.номера - номер)
+    fun removeNumber(number: String) {
+        _state.value = _state.value.copy(numbers = _state.value.numbers - number)
     }
 
     /** Человек нажал «Создать». */
-    fun создать() {
-        val текущее = _state.value
-        if (текущее.ждём) return
-        _state.value = текущее.copy(ждём = true, беда = null)
+    fun create() {
+        val current = _state.value
+        if (current.expect) return
+        _state.value = current.copy(expect = true, trouble = null)
 
         scope.launch {
-            _state.value = when (val исход = создание.создать(текущее.название, текущее.номера)) {
-                is CreateGroupStep.Created -> текущее.copy(
-                    ждём = false,
-                    создана = исход.groupId,
-                    непозванные = исход.непозванные,
+            _state.value = when (val outcome = creation.create(current.title, current.numbers)) {
+                is CreateGroupStep.Created -> current.copy(
+                    expect = false,
+                    created = outcome.groupId,
+                    notInvited = outcome.notInvited,
                 )
-                is CreateGroupStep.BadTitle -> текущее.копияСБедой(исход.reason)
-                is CreateGroupStep.Offline -> текущее.копияСБедой(
-                    "Нет связи с сервером — повторим через ${(исход.retryAfterMs / 1000).coerceAtLeast(1)} с",
+                is CreateGroupStep.BadTitle -> current.copyWithTrouble(outcome.reason)
+                is CreateGroupStep.Offline -> current.copyWithTrouble(
+                    "Нет связи с сервером — повторим через ${(outcome.retryAfterMs / 1000).coerceAtLeast(1)} с",
                 )
-                is CreateGroupStep.Refused -> текущее.копияСБедой(исход.reason)
+                is CreateGroupStep.Refused -> current.copyWithTrouble(outcome.reason)
             }
         }
     }
 
     /** Экран закрыт: следующее открытие начинается с пустого. */
-    fun сброс() {
-        _state.value = НоваяГруппаState()
+    fun reset() {
+        _state.value = NewGroupState()
     }
 }
 
 /** Что видно на экране новой группы. */
-data class НоваяГруппаState(
-    val название: String = "",
-    val номер: String = "",
+data class NewGroupState(
+    val title: String = "",
+    val number: String = "",
     /** Кого зовут: накопленные номера. */
-    val номера: List<String> = emptyList(),
-    val беда: String? = null,
-    val ждём: Boolean = false,
+    val numbers: List<String> = emptyList(),
+    val trouble: String? = null,
+    val expect: Boolean = false,
     /** Группа создана: её идентификатор. Приложение открывает её и закрывает этот экран. */
-    val создана: String? = null,
+    val created: String? = null,
     /** Номера, которых нет в TIMA. Группа при этом создана. */
-    val непозванные: List<String> = emptyList(),
+    val notInvited: List<String> = emptyList(),
 ) {
-    fun копияСБедой(текст: String) = copy(беда = текст, ждём = false)
+    fun copyWithTrouble(text: String) = copy(trouble = text, expect = false)
 }

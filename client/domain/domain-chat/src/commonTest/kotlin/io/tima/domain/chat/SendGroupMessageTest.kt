@@ -16,120 +16,120 @@ import kotlin.test.assertTrue
  */
 class SendGroupMessageTest {
 
-    private val группа = "gggggggg-0000-0000-0000-000000000001"
+    private val group = "gggggggg-0000-0000-0000-000000000001"
 
     @Test
     fun шифруем_последней_известной_нам_версией() = runTest {
         // Не серверной: серверная могла уйти вперёд, а ключа от неё у нас ещё нет.
-        val книга = ПамятныеКлючи().apply {
-            put(группа, 4, ByteArray(32) { 4 })
-            put(группа, 7, ByteArray(32) { 7 })
+        val book = KeyMemorable().apply {
+            put(group, 4, ByteArray(32) { 4 })
+            put(group, 7, ByteArray(32) { 7 })
         }
-        val сеть = ПоддельныйТранспорт()
+        val network = FakeTransport()
 
-        случай(книга, сеть).отправить(группа, "привет")
+        case(book, network).send(group, "привет")
 
-        assertEquals(7, сеть.версия)
+        assertEquals(7, network.version)
     }
 
     @Test
     fun без_ключа_до_сети_не_доходим() = runTest {
         // Только что созданная группа до первой ротации: это не сеть и не лечится повтором.
-        val сеть = ПоддельныйТранспорт()
-        val шаг = случай(ПамятныеКлючи(), сеть).отправить(группа, "привет")
+        val network = FakeTransport()
+        val step = case(KeyMemorable(), network).send(group, "привет")
 
-        assertIs<SendGroupStep.NoKey>(шаг)
-        assertEquals(0, сеть.попыток)
+        assertIs<SendGroupStep.NoKey>(step)
+        assertEquals(0, network.attempts)
     }
 
     @Test
     fun счётчик_растёт_только_после_успеха() = runTest {
         // Считать попытки значило бы ротировать ключ из-за обрывов связи, то есть
         // наказывать за плохую сеть выдачей обёрток всем устройствам.
-        val книга = ключи()
-        val сеть = ПоддельныйТранспорт(ответ = GroupSendStep.Offline(1_000))
+        val book = keys()
+        val network = FakeTransport(answer = GroupSendStep.Offline(1_000))
 
-        случай(книга, сеть).отправить(группа, "привет")
+        case(book, network).send(group, "привет")
 
-        assertEquals(0, книга.счёт(группа, 1))
+        assertEquals(0, book.count(group, 1))
     }
 
     @Test
     fun повтор_не_увеличивает_счётчик() = runTest {
         // Под этой версией отправлено одно сообщение, а не два: сервер опознал дубль.
-        val книга = ключи()
-        val сеть = ПоддельныйТранспорт(ответ = GroupSendStep.Duplicate(messageId = 42))
+        val book = keys()
+        val network = FakeTransport(answer = GroupSendStep.Duplicate(messageId = 42))
 
-        val шаг = случай(книга, сеть).отправить(группа, "привет")
+        val step = case(book, network).send(group, "привет")
 
-        assertIs<SendGroupStep.Sent>(шаг)
-        assertFalse(шаг.ротацияЗапущена)
-        assertEquals(0, книга.счёт(группа, 1))
+        assertIs<SendGroupStep.Sent>(step)
+        assertFalse(step.launchedRotation)
+        assertEquals(0, book.count(group, 1))
     }
 
     @Test
     fun порог_запускает_ротацию_и_только_на_нём() = runTest {
-        val книга = ключи().apply { счётчик[группа to 1] = SendGroupMessage.ПОРОГ_РОТАЦИИ - 2 }
-        val ротатор = ПоддельнаяРотация()
-        val случай = случай(книга, ПоддельныйТранспорт(), ротатор)
+        val book = keys().apply { counter[group to 1] = SendGroupMessage.ROTATION_THRESHOLD - 2 }
+        val rotator = FakeRotation()
+        val case = case(book, FakeTransport(), rotator)
 
-        val доПорога = случай.отправить(группа, "раз")
-        assertFalse((доПорога as SendGroupStep.Sent).ротацияЗапущена, "ротация раньше порога")
-        assertTrue(ротатор.вызовы.isEmpty())
+        val untilThreshold = case.send(group, "раз")
+        assertFalse((untilThreshold as SendGroupStep.Sent).launchedRotation, "ротация раньше порога")
+        assertTrue(rotator.calls.isEmpty())
 
-        val наПороге = случай.отправить(группа, "два")
-        assertTrue((наПороге as SendGroupStep.Sent).ротацияЗапущена)
-        assertEquals(listOf(группа), ротатор.вызовы)
+        val onThreshold = case.send(group, "два")
+        assertTrue((onThreshold as SendGroupStep.Sent).launchedRotation)
+        assertEquals(listOf(group), rotator.calls)
     }
 
     @Test
     fun неизвестная_серверу_версия_это_повод_за_ключами() = runTest {
         // Не повод повторять отправку: пока ключи не сойдутся, повтор даст то же самое.
-        val шаг = случай(ключи(), ПоддельныйТранспорт(ответ = GroupSendStep.UnknownKeyVersion))
-            .отправить(группа, "привет")
-        assertIs<SendGroupStep.NeedKeys>(шаг)
+        val step = case(keys(), FakeTransport(answer = GroupSendStep.UnknownKeyVersion))
+            .send(group, "привет")
+        assertIs<SendGroupStep.NeedKeys>(step)
     }
 
     @Test
     fun пустое_сообщение_до_сети_не_доходит() = runTest {
-        val сеть = ПоддельныйТранспорт()
-        assertIs<SendGroupStep.Empty>(случай(ключи(), сеть).отправить(группа, "   "))
-        assertEquals(0, сеть.попыток)
+        val network = FakeTransport()
+        assertIs<SendGroupStep.Empty>(case(keys(), network).send(group, "   "))
+        assertEquals(0, network.attempts)
     }
 
     // ── подделки ────────────────────────────────────────────────────────────
 
-    private fun ключи() = ПамятныеКлючи().apply { put(группа, 1, ByteArray(32) { 1 }) }
+    private fun keys() = KeyMemorable().apply { put(group, 1, ByteArray(32) { 1 }) }
 
-    private fun случай(
-        книга: ПамятныеКлючи,
-        сеть: ПоддельныйТранспорт,
-        ротатор: GroupKeyRotator = ПоддельнаяРотация(),
+    private fun case(
+        book: KeyMemorable,
+        network: FakeTransport,
+        rotator: GroupKeyRotator = FakeRotation(),
     ) = SendGroupMessage(
-        keys = книга,
-        sealer = { _, _, _, текст, _ ->
-            SealedGroupBytes(payload = текст.encodeToByteArray(), signature = ByteArray(64))
+        keys = book,
+        sealer = { _, _, _, text, _ ->
+            SealedGroupBytes(payload = text.encodeToByteArray(), signature = ByteArray(64))
         },
-        transport = сеть,
+        transport = network,
         dedup = DedupKeys { "d-1" },
-        rotator = ротатор,
+        rotator = rotator,
         nowMs = { 1_750_000_000_000 },
     )
 
-    private class ПоддельнаяРотация : GroupKeyRotator {
-        val вызовы = mutableListOf<String>()
-        override suspend fun ротировать(groupId: String): RotateStep {
-            вызовы += groupId
+    private class FakeRotation : GroupKeyRotator {
+        val calls = mutableListOf<String>()
+        override suspend fun rotate(groupId: String): RotateStep {
+            calls += groupId
             return RotateStep.Rotated
         }
     }
 
-    private class ПоддельныйТранспорт(
-        private val ответ: GroupSendStep = GroupSendStep.Sent(messageId = 1),
+    private class FakeTransport(
+        private val answer: GroupSendStep = GroupSendStep.Sent(messageId = 1),
     ) : GroupTransport {
-        var версия: Int = -1
+        var version: Int = -1
             private set
-        var попыток: Int = 0
+        var attempts: Int = 0
             private set
 
         override suspend fun send(
@@ -141,33 +141,33 @@ class SendGroupMessageTest {
             signature: ByteArray,
             createdAtUnixMs: Long,
         ): GroupSendStep {
-            версия = gkVersion
-            попыток++
-            return ответ
+            version = gkVersion
+            attempts++
+            return answer
         }
     }
 
-    private class ПамятныеКлючи : GroupKeyBook {
-        private val хранилище = mutableMapOf<Pair<String, Int>, ByteArray>()
-        val счётчик = mutableMapOf<Pair<String, Int>, Int>()
+    private class KeyMemorable : GroupKeyBook {
+        private val store = mutableMapOf<Pair<String, Int>, ByteArray>()
+        val counter = mutableMapOf<Pair<String, Int>, Int>()
 
-        fun счёт(groupId: String, version: Int) = счётчик[groupId to version] ?: 0
+        fun count(groupId: String, version: Int) = counter[groupId to version] ?: 0
 
         override fun put(groupId: String, version: Int, key: ByteArray) {
-            хранилище[groupId to version] = key
+            store[groupId to version] = key
         }
-        override fun key(groupId: String, version: Int): ByteArray? = хранилище[groupId to version]
+        override fun key(groupId: String, version: Int): ByteArray? = store[groupId to version]
         override fun latestVersion(groupId: String): Int? =
-            хранилище.keys.filter { it.first == groupId }.maxOfOrNull { it.second }
+            store.keys.filter { it.first == groupId }.maxOfOrNull { it.second }
         override fun versions(groupId: String): List<Int> =
-            хранилище.keys.filter { it.first == groupId }.map { it.second }.sorted()
-        override fun отметитьОтправку(groupId: String, version: Int): Int {
-            val n = счёт(groupId, version) + 1
-            счётчик[groupId to version] = n
+            store.keys.filter { it.first == groupId }.map { it.second }.sorted()
+        override fun markSend(groupId: String, version: Int): Int {
+            val n = count(groupId, version) + 1
+            counter[groupId to version] = n
             return n
         }
         override fun forget(groupId: String) {
-            хранилище.keys.filter { it.first == groupId }.forEach { хранилище.remove(it) }
+            store.keys.filter { it.first == groupId }.forEach { store.remove(it) }
         }
     }
 }

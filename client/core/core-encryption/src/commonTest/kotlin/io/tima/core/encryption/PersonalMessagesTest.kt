@@ -107,10 +107,10 @@ class PersonalMessagesTest {
     @Test
     fun чужая_подпись_отвергается_и_именно_как_подмена() {
         val envelope = sealTo("dev-получатель" to recipient)
-        val чужой = DeviceIdentity.generate()
+        val foreign = DeviceIdentity.generate()
 
         val result = PersonalMessages.open(
-            envelope, "dev-получатель", recipient, чужой.signingPublic,
+            envelope, "dev-получатель", recipient, foreign.signingPublic,
         )
 
         assertTrue(result.isFailure, "конверт с чужой подписью не должен открываться")

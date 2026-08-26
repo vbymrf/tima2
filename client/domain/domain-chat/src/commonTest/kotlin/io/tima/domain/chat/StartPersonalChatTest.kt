@@ -12,13 +12,13 @@ import kotlin.test.assertTrue
  */
 class StartPersonalChatTest {
 
-    private var найденное: UserLookup = UserLookup.Found("u-аня", "Аня Борисова")
-    private val записано = mutableListOf<Запись>()
+    private var found: UserLookup = UserLookup.Found("u-аня", "Аня Борисова")
+    private val written = mutableListOf<Entry>()
 
-    private val случай = StartPersonalChat(
-        directory = UserDirectory { найденное },
+    private val case = StartPersonalChat(
+        directory = UserDirectory { found },
         chats = ChatBook { chatId, kind, title, peerId ->
-            записано += Запись(chatId, kind, title, peerId)
+            written += Entry(chatId, kind, title, peerId)
         },
         // Порядок пары не важен — свойство самого вычисления; здесь достаточно
         // предсказуемости.
@@ -27,15 +27,15 @@ class StartPersonalChatTest {
 
     @Test
     fun найденный_человек_превращается_в_переписку() = runTest {
-        val исход = случай.byPhone("u-я", "+79990000001")
+        val outcome = case.byPhone("u-я", "+79990000001")
 
-        assertIs<StartChatResult.Started>(исход)
-        assertEquals("чат:u-аня+u-я", исход.chatId, "идентификатор считается из пары, а не даётся сервером")
-        val запись = записано.single()
-        assertEquals("чат:u-аня+u-я", запись.chatId)
-        assertEquals(ChatKind.Personal, запись.kind)
-        assertEquals("Аня Борисова", запись.title)
-        assertEquals("u-аня", запись.peerId, "собеседник нужен, чтобы взять его ключи")
+        assertIs<StartChatResult.Started>(outcome)
+        assertEquals("чат:u-аня+u-я", outcome.chatId, "идентификатор считается из пары, а не даётся сервером")
+        val entry = written.single()
+        assertEquals("чат:u-аня+u-я", entry.chatId)
+        assertEquals(ChatKind.Personal, entry.kind)
+        assertEquals("Аня Борисова", entry.title)
+        assertEquals("u-аня", entry.peerId, "собеседник нужен, чтобы взять его ключи")
     }
 
     /**
@@ -46,20 +46,20 @@ class StartPersonalChatTest {
      */
     @Test
     fun без_имени_переписка_называется_номером() = runTest {
-        найденное = UserLookup.Found("u-аня", name = null)
+        found = UserLookup.Found("u-аня", name = null)
 
-        случай.byPhone("u-я", "+79990000001")
+        case.byPhone("u-я", "+79990000001")
 
-        assertEquals("+79990000001", записано.single().title)
+        assertEquals("+79990000001", written.single().title)
     }
 
     @Test
     fun пустое_имя_считается_отсутствующим() = runTest {
-        найденное = UserLookup.Found("u-аня", name = "   ")
+        found = UserLookup.Found("u-аня", name = "   ")
 
-        случай.byPhone("u-я", "+79990000001")
+        case.byPhone("u-я", "+79990000001")
 
-        assertEquals("+79990000001", записано.single().title)
+        assertEquals("+79990000001", written.single().title)
     }
 
     /**
@@ -71,68 +71,68 @@ class StartPersonalChatTest {
      */
     @Test
     fun свой_номер_не_становится_личной_перепиской() = runTest {
-        найденное = UserLookup.Found("u-я", "Я сам")
+        found = UserLookup.Found("u-я", "Я сам")
 
-        val исход = случай.byPhone("u-я", "+79990000001")
+        val outcome = case.byPhone("u-я", "+79990000001")
 
-        assertEquals(StartChatResult.Myself, исход)
-        assertTrue(записано.isEmpty(), "записывать такую переписку нельзя")
+        assertEquals(StartChatResult.Myself, outcome)
+        assertTrue(written.isEmpty(), "записывать такую переписку нельзя")
     }
 
     /** Нет в TIMA — это не отказ: такого человека звать надо, а не сообщать об ошибке. */
     @Test
     fun ненайденный_номер_даёт_отдельный_исход() = runTest {
-        найденное = UserLookup.NotFound
+        found = UserLookup.NotFound
 
-        val исход = случай.byPhone("u-я", "+79990000009")
+        val outcome = case.byPhone("u-я", "+79990000009")
 
-        assertEquals(StartChatResult.NotFound, исход)
-        assertTrue(записано.isEmpty())
+        assertEquals(StartChatResult.NotFound, outcome)
+        assertTrue(written.isEmpty())
     }
 
     @Test
     fun при_отказе_сети_ничего_не_записывается() = runTest {
-        найденное = UserLookup.Offline(retryAfterMs = 5_000)
+        found = UserLookup.Offline(retryAfterMs = 5_000)
 
-        val исход = случай.byPhone("u-я", "+79990000001")
+        val outcome = case.byPhone("u-я", "+79990000001")
 
-        assertIs<StartChatResult.Offline>(исход)
-        assertEquals(5_000, исход.retryAfterMs, "срок повтора доносится до экрана: без него он бесполезен")
-        assertTrue(записано.isEmpty(), "переписка с непроверенным собеседником не заводится")
+        assertIs<StartChatResult.Offline>(outcome)
+        assertEquals(5_000, outcome.retryAfterMs, "срок повтора доносится до экрана: без него он бесполезен")
+        assertTrue(written.isEmpty(), "переписка с непроверенным собеседником не заводится")
     }
 
     @Test
     fun плохой_номер_доносит_причину() = runTest {
-        найденное = UserLookup.BadPhone("нужен E.164")
+        found = UserLookup.BadPhone("нужен E.164")
 
-        val исход = случай.byPhone("u-я", "89990000001")
+        val outcome = case.byPhone("u-я", "89990000001")
 
-        assertIs<StartChatResult.BadPhone>(исход)
-        assertEquals("нужен E.164", исход.reason)
+        assertIs<StartChatResult.BadPhone>(outcome)
+        assertEquals("нужен E.164", outcome.reason)
     }
 
     /** Пустой номер отсекается до сети: спрашивать сервер о пустоте незачем. */
     @Test
     fun пустой_номер_до_сети_не_доходит() = runTest {
-        var спрошено = 0
-        val свой = StartPersonalChat(
-            directory = UserDirectory { спрошено++; найденное },
+        var asked = 0
+        val own = StartPersonalChat(
+            directory = UserDirectory { asked++; found },
             chats = ChatBook { _, _, _, _ -> },
             ids = PersonalChatIds { a, b -> "$a+$b" },
         )
 
-        assertIs<StartChatResult.BadPhone>(свой.byPhone("u-я", "   "))
-        assertEquals(0, спрошено)
+        assertIs<StartChatResult.BadPhone>(own.byPhone("u-я", "   "))
+        assertEquals(0, asked)
     }
 
     @Test
     fun пустой_я_отвергается_как_ошибка_кода() = runTest {
         // Не исход, а исключение: «кто я» приходит из сессии, и пустое значение означает
         // ошибку сборки приложения, а не действие человека.
-        assertNull(runCatching { случай.byPhone("", "+79990000001") }.getOrNull())
+        assertNull(runCatching { case.byPhone("", "+79990000001") }.getOrNull())
     }
 
-    private class Запись(
+    private class Entry(
         val chatId: String,
         val kind: ChatKind,
         val title: String?,

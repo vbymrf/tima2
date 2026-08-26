@@ -42,7 +42,7 @@ class AuthStore(
      */
     private val link: LinkNewDevice? = null,
     /** Как это устройство назовётся человеку на телефоне. Он увидит имя перед «Доверить». */
-    private val имяУстройства: String = "Устройство",
+    private val deviceName: String = "Устройство",
 ) {
 
     /**
@@ -51,58 +51,58 @@ class AuthStore(
      * Живёт в памяти до показа человеку и дальше не хранится нигде: слова — секрет, и
      * восстановить их можно только из его собственной записи. Это и есть смысл фразы.
      */
-    private var свежая: NewAccountIdentity? = null
+    private var fresh: NewAccountIdentity? = null
 
-    private val _state = MutableStateFlow<AuthState>(AuthState.Телефон())
+    private val _state = MutableStateFlow<AuthState>(AuthState.Phone())
     val state: StateFlow<AuthState> = _state.asStateFlow()
 
-    fun номерИзменён(текст: String) {
-        val текущее = _state.value as? AuthState.Телефон ?: return
-        _state.value = текущее.copy(номер = текст, беда = null)
+    fun changedNumber(text: String) {
+        val current = _state.value as? AuthState.Phone ?: return
+        _state.value = current.copy(number = text, trouble = null)
     }
 
     /**
      * Код страны. Плюс не принимается и не хранится: он нарисован на экране и в значение
      * не входит — иначе «+7» и «7» стали бы разными кодами одной страны.
      */
-    fun кодСтраныИзменён(текст: String) {
-        val текущее = _state.value as? AuthState.Телефон ?: return
-        _state.value = текущее.copy(кодСтраны = текст.filter { it.isDigit() }.take(4), беда = null)
+    fun changedCountryCode(text: String) {
+        val current = _state.value as? AuthState.Phone ?: return
+        _state.value = current.copy(countryCode = text.filter { it.isDigit() }.take(4), trouble = null)
     }
 
-    fun кодИзменён(текст: String) {
-        val текущее = _state.value as? AuthState.Код ?: return
-        _state.value = текущее.copy(код = текст, беда = null)
+    fun changedCode(text: String) {
+        val current = _state.value as? AuthState.Code ?: return
+        _state.value = current.copy(code = text, trouble = null)
     }
 
     /** Человек нажал «Получить код». */
-    fun запроситьКод() {
-        val текущее = _state.value as? AuthState.Телефон ?: return
+    fun requestCode() {
+        val current = _state.value as? AuthState.Phone ?: return
         // Занято — значит вызов уже идёт. Второе нажатие это вторая SMS.
-        if (текущее.ждём) return
-        _state.value = текущее.copy(ждём = true, беда = null)
+        if (current.expect) return
+        _state.value = current.copy(expect = true, trouble = null)
 
         scope.launch {
-            _state.value = when (val шаг = register.requestCode(текущее.полныйНомер)) {
-                is CodeRequestStep.CodeRequested -> AuthState.Код(
-                    requestId = шаг.requestId,
-                    телефон = текущее.полныйНомер,
+            _state.value = when (val step = register.requestCode(current.fullNumber)) {
+                is CodeRequestStep.CodeRequested -> AuthState.Code(
+                    requestId = step.requestId,
+                    phone = current.fullNumber,
                     // Код в ответе приходит только со стенда, где включён TIMA_DEV_SMS.
                     // Решает это сервер, не мы: на боевом сервере поля нет вовсе.
-                    подсказкаСтенда = шаг.devCode,
+                    standHint = step.devCode,
                 )
 
-                is CodeRequestStep.BadPhone -> текущее.копияСБедой("Номер не тот: ${шаг.reason}")
-                is CodeRequestStep.Offline -> текущее.копияСБедой(нетСвязи(шаг.retryAfterMs))
-                is CodeRequestStep.Refused -> текущее.копияСБедой(шаг.reason)
+                is CodeRequestStep.BadPhone -> current.copyWithTrouble("Номер не тот: ${step.reason}")
+                is CodeRequestStep.Offline -> current.copyWithTrouble(noLinks(step.retryAfterMs))
+                is CodeRequestStep.Refused -> current.copyWithTrouble(step.reason)
             }
         }
     }
 
     /** Человек набирает фразу возврата. */
-    fun фразаИзменена(текст: String) {
-        val текущее = _state.value as? AuthState.ВводФразы ?: return
-        _state.value = текущее.copy(фраза = текст, беда = null)
+    fun changedPhrase(text: String) {
+        val current = _state.value as? AuthState.PhraseInput ?: return
+        _state.value = current.copy(phrase = text, trouble = null)
     }
 
     /**
@@ -113,51 +113,51 @@ class AuthStore(
      * подтверждает только номер, а номера перевыпускают. Ответ «у этого номера другая
      * личность» означает, что аккаунт существует, и человеку надо ввести свою фразу.
      */
-    fun подтвердить() {
-        val текущее = _state.value as? AuthState.Код ?: return
-        if (текущее.ждём) return
-        _state.value = текущее.copy(ждём = true, беда = null)
+    fun confirm() {
+        val current = _state.value as? AuthState.Code ?: return
+        if (current.expect) return
+        _state.value = current.copy(expect = true, trouble = null)
 
         scope.launch {
-            val личность = identities.fresh().also { свежая = it }
+            val identity = identities.fresh().also { fresh = it }
             _state.value = when (
-                val шаг = register.confirm(текущее.requestId, текущее.код, личность.identityPub)
+                val step = register.confirm(current.requestId, current.code, identity.identityPub)
             ) {
                 // Личность приняли — значит у аккаунта теперь наша, и фразу надо показать.
                 // Один раз: второго раза у неё не бывает.
-                is RegistrationStep.Registered -> AuthState.Фраза(
-                    слова = личность.words,
-                    userId = шаг.userId,
-                    deviceId = шаг.deviceId,
+                is RegistrationStep.Registered -> AuthState.Phrase(
+                    words = identity.words,
+                    userId = step.userId,
+                    deviceId = step.deviceId,
                 )
 
                 // Устройство уже заведено: секрет в хранилище платформы, сессия тоже.
                 // Это не отказ — это «мы уже вошли», и приложение идёт дальше.
-                RegistrationStep.AlreadyRegistered -> AuthState.УжеЗаведено
+                RegistrationStep.AlreadyRegistered -> AuthState.CreatedAlready
 
                 // Код остаётся в поле. Отобрать набранное нельзя даже когда оно неверно:
                 // человек чаще опечатался в одной цифре, чем набрал наугад.
-                RegistrationStep.WrongCode -> текущее.копияСБедой("Код неверен или просрочен")
+                RegistrationStep.WrongCode -> current.copyWithTrouble("Код неверен или просрочен")
 
                 // Токен регистрации живёт минуты. Начинать надо с запроса кода, и сказать
                 // это надо явно — иначе человек будет повторять код, который уже не примут.
-                RegistrationStep.CodeExpired -> AuthState.Телефон(
-                    номер = текущее.телефон,
-                    беда = "Код просрочен — запросите новый",
+                RegistrationStep.CodeExpired -> AuthState.Phone(
+                    number = current.phone,
+                    trouble = "Код просрочен — запросите новый",
                 )
 
                 // Не отказ, а другой путь: аккаунт существует, и владение им доказывает
                 // фраза. Номер этого не доказывает — его перевыпускают.
-                is RegistrationStep.IdentityMismatch -> AuthState.ВводФразы(
-                    requestId = текущее.requestId,
-                    телефон = текущее.телефон,
+                is RegistrationStep.IdentityMismatch -> AuthState.PhraseInput(
+                    requestId = current.requestId,
+                    phone = current.phone,
                     // Дальше идём с токеном: код погашен проверкой и второй раз не
                     // сработает. Именно это и ломало вход по фразе.
-                    registrationToken = шаг.registrationToken,
+                    registrationToken = step.registrationToken,
                 )
 
-                is RegistrationStep.Offline -> текущее.копияСБедой(нетСвязи(шаг.retryAfterMs))
-                is RegistrationStep.Refused -> текущее.копияСБедой(шаг.reason)
+                is RegistrationStep.Offline -> current.copyWithTrouble(noLinks(step.retryAfterMs))
+                is RegistrationStep.Refused -> current.copyWithTrouble(step.reason)
             }
         }
     }
@@ -169,33 +169,33 @@ class AuthStore(
      * из списка или контрольная сумма. Человеку во всех трёх случаях надо перепроверить
      * запись, а подробность подсказывала бы подбирающему.
      */
-    fun войтиПоФразе() {
-        val текущее = _state.value as? AuthState.ВводФразы ?: return
-        if (текущее.ждём) return
+    fun enterByPhrase() {
+        val current = _state.value as? AuthState.PhraseInput ?: return
+        if (current.expect) return
 
-        val слова = текущее.фраза.split(РАЗДЕЛИТЕЛЬ).filter { it.isNotBlank() }
-        val ключ = identities.fromWords(слова)
-        if (ключ == null) {
-            _state.value = текущее.копияСБедой("Фраза не та — проверьте запись")
+        val words = current.phrase.split(SEPARATOR).filter { it.isNotBlank() }
+        val key = identities.fromWords(words)
+        if (key == null) {
+            _state.value = current.copyWithTrouble("Фраза не та — проверьте запись")
             return
         }
-        _state.value = текущее.copy(ждём = true, беда = null)
+        _state.value = current.copy(expect = true, trouble = null)
 
         scope.launch {
-            _state.value = when (val шаг = register.continueWithToken(текущее.registrationToken, ключ)) {
+            _state.value = when (val step = register.continueWithToken(current.registrationToken, key)) {
                 // Фразу показывать не надо: она у человека есть, он её только что ввёл.
-                is RegistrationStep.Registered -> AuthState.Готово(шаг.userId, шаг.deviceId)
-                RegistrationStep.AlreadyRegistered -> AuthState.УжеЗаведено
-                is RegistrationStep.IdentityMismatch -> текущее.копияСБедой("Фраза не та — проверьте запись")
-                RegistrationStep.WrongCode -> текущее.копияСБедой("Код неверен или просрочен")
+                is RegistrationStep.Registered -> AuthState.Done(step.userId, step.deviceId)
+                RegistrationStep.AlreadyRegistered -> AuthState.CreatedAlready
+                is RegistrationStep.IdentityMismatch -> current.copyWithTrouble("Фраза не та — проверьте запись")
+                RegistrationStep.WrongCode -> current.copyWithTrouble("Код неверен или просрочен")
                 // Токен живёт десять минут. Истёк — начинать с запроса кода, и сказать об
                 // этом надо именно так: «введите фразу заново» здесь бесполезно.
-                RegistrationStep.CodeExpired -> AuthState.Телефон(
-                    номер = текущее.телефон,
-                    беда = "Время истекло — запросите код заново",
+                RegistrationStep.CodeExpired -> AuthState.Phone(
+                    number = current.phone,
+                    trouble = "Время истекло — запросите код заново",
                 )
-                is RegistrationStep.Offline -> текущее.копияСБедой(нетСвязи(шаг.retryAfterMs))
-                is RegistrationStep.Refused -> текущее.копияСБедой(шаг.reason)
+                is RegistrationStep.Offline -> current.copyWithTrouble(noLinks(step.retryAfterMs))
+                is RegistrationStep.Refused -> current.copyWithTrouble(step.reason)
             }
         }
     }
@@ -208,47 +208,47 @@ class AuthStore(
      * смене личности (ADR-0014 §3). Поставить этот флаг «чтобы прошло» значит молча забрать
      * у человека историю и напугать его собеседников.
      */
-    fun начатьЗаново() {
-        val текущее = _state.value as? AuthState.ВводФразы ?: return
-        if (текущее.ждём) return
-        _state.value = текущее.copy(ждём = true, беда = null)
+    fun startAnew() {
+        val current = _state.value as? AuthState.PhraseInput ?: return
+        if (current.expect) return
+        _state.value = current.copy(expect = true, trouble = null)
 
         scope.launch {
-            val личность = identities.fresh().also { свежая = it }
+            val identity = identities.fresh().also { fresh = it }
             _state.value = when (
                 // Тем же токеном, что и вход по фразе: код погашен проверкой, и «начать
                 // заново» с ним упиралось бы в ту же ошибку.
-                val шаг = register.continueWithToken(
-                    registrationToken = текущее.registrationToken,
-                    identityPub = личность.identityPub,
+                val step = register.continueWithToken(
+                    registrationToken = current.registrationToken,
+                    identityPub = identity.identityPub,
                     forceNewIdentity = true,
                 )
             ) {
                 // Личность теперь новая — и фраза к ней новая. Показать обязательно: иначе
                 // человек второй раз останется без способа вернуться.
-                is RegistrationStep.Registered -> AuthState.Фраза(
-                    слова = личность.words,
-                    userId = шаг.userId,
-                    deviceId = шаг.deviceId,
+                is RegistrationStep.Registered -> AuthState.Phrase(
+                    words = identity.words,
+                    userId = step.userId,
+                    deviceId = step.deviceId,
                 )
-                RegistrationStep.AlreadyRegistered -> AuthState.УжеЗаведено
-                RegistrationStep.WrongCode -> текущее.копияСБедой("Код неверен или просрочен")
-                RegistrationStep.CodeExpired -> AuthState.Телефон(
-                    номер = текущее.телефон,
-                    беда = "Время истекло — запросите код заново",
+                RegistrationStep.AlreadyRegistered -> AuthState.CreatedAlready
+                RegistrationStep.WrongCode -> current.copyWithTrouble("Код неверен или просрочен")
+                RegistrationStep.CodeExpired -> AuthState.Phone(
+                    number = current.phone,
+                    trouble = "Время истекло — запросите код заново",
                 )
-                is RegistrationStep.IdentityMismatch -> текущее.копияСБедой("Сервер отказал в смене личности")
-                is RegistrationStep.Offline -> текущее.копияСБедой(нетСвязи(шаг.retryAfterMs))
-                is RegistrationStep.Refused -> текущее.копияСБедой(шаг.reason)
+                is RegistrationStep.IdentityMismatch -> current.copyWithTrouble("Сервер отказал в смене личности")
+                is RegistrationStep.Offline -> current.copyWithTrouble(noLinks(step.retryAfterMs))
+                is RegistrationStep.Refused -> current.copyWithTrouble(step.reason)
             }
         }
     }
 
     /** Человек подтвердил, что фразу сохранил. Дальше — приложение. */
-    fun фразаСохранена() {
-        val текущее = _state.value as? AuthState.Фраза ?: return
-        свежая = null
-        _state.value = AuthState.Готово(текущее.userId, текущее.deviceId)
+    fun savedPhrase() {
+        val current = _state.value as? AuthState.Phrase ?: return
+        fresh = null
+        _state.value = AuthState.Done(current.userId, current.deviceId)
     }
 
     /**
@@ -257,25 +257,25 @@ class AuthStore(
      * Доверие приносит телефон, который отсканирует код. Здесь только показ кода и
      * ожидание; всё остальное решается на том конце, и решается человеком.
      */
-    fun подключиться() {
-        val привязка = link ?: return
+    fun connect() {
+        val link = link ?: return
         // Повторно — только если прежний код уже мёртв: живой код рядом с кнопкой
         // «новый» означал бы, что человек может обнулить работающий код одним промахом.
-        val текущее = _state.value
-        if (текущее is AuthState.ПоказКода && !(текущее.код == null && текущее.беда != null)) return
-        _state.value = AuthState.ПоказКода(код = null)
+        val current = _state.value
+        if (current is AuthState.DisplayCode && !(current.code == null && current.trouble != null)) return
+        _state.value = AuthState.DisplayCode(code = null)
 
         scope.launch {
-            when (val шаг = привязка.begin(имяУстройства)) {
+            when (val step = link.begin(deviceName)) {
                 is LinkBeginStep.ShowCode -> {
-                    _state.value = AuthState.ПоказКода(код = шаг.code)
-                    ждать(привязка, шаг.sessionId, шаг.claimToken)
+                    _state.value = AuthState.DisplayCode(code = step.code)
+                    wait(link, step.sessionId, step.claimToken)
                 }
-                LinkBeginStep.AlreadyRegistered -> _state.value = AuthState.УжеЗаведено
+                LinkBeginStep.AlreadyRegistered -> _state.value = AuthState.CreatedAlready
                 is LinkBeginStep.Offline -> _state.value =
-                    AuthState.ПоказКода(код = null, беда = нетСвязи(шаг.retryAfterMs))
+                    AuthState.DisplayCode(code = null, trouble = noLinks(step.retryAfterMs))
                 is LinkBeginStep.Refused -> _state.value =
-                    AuthState.ПоказКода(код = null, беда = шаг.reason)
+                    AuthState.DisplayCode(code = null, trouble = step.reason)
             }
         }
     }
@@ -286,39 +286,39 @@ class AuthStore(
      * Срок вышел — не беда, а «покажите новый код»: сессия живёт пять минут, и человек мог
      * просто не успеть дойти до телефона.
      */
-    private suspend fun ждать(привязка: LinkNewDevice, sessionId: String, claimToken: String) {
-        _state.value = when (val шаг = привязка.await(sessionId, claimToken)) {
-            is LinkAwaitStep.Linked -> AuthState.Готово(шаг.userId, шаг.deviceId)
-            LinkAwaitStep.Expired -> AuthState.ПоказКода(
-                код = null,
-                беда = "Срок кода вышел — попросите новый",
+    private suspend fun wait(link: LinkNewDevice, sessionId: String, claimToken: String) {
+        _state.value = when (val step = link.await(sessionId, claimToken)) {
+            is LinkAwaitStep.Linked -> AuthState.Done(step.userId, step.deviceId)
+            LinkAwaitStep.Expired -> AuthState.DisplayCode(
+                code = null,
+                trouble = "Срок кода вышел — попросите новый",
             )
-            is LinkAwaitStep.Refused -> AuthState.ПоказКода(код = null, беда = шаг.reason)
+            is LinkAwaitStep.Refused -> AuthState.DisplayCode(code = null, trouble = step.reason)
         }
     }
 
     /** «Назад» с экрана кода: номер сохраняется — его уже набрали. */
-    fun назад() {
-        if (_state.value is AuthState.ПоказКода) {
-            _state.value = AuthState.Телефон()
+    fun back() {
+        if (_state.value is AuthState.DisplayCode) {
+            _state.value = AuthState.Phone()
             return
         }
         // Из ввода фразы возврат тоже обязан работать, и это была настоящая ловушка:
         // человек, набравший чужой или свой старый номер, оказывался заперт между
         // «введите фразу» и «начать заново». Второе стирает прежнюю личность — то есть
         // опечатка в номере стоила бы аккаунта.
-        (_state.value as? AuthState.ВводФразы)?.let {
-            _state.value = AuthState.Телефон(номер = it.телефон)
+        (_state.value as? AuthState.PhraseInput)?.let {
+            _state.value = AuthState.Phone(number = it.phone)
             return
         }
-        val текущее = _state.value as? AuthState.Код ?: return
-        _state.value = AuthState.Телефон(номер = текущее.телефон)
+        val current = _state.value as? AuthState.Code ?: return
+        _state.value = AuthState.Phone(number = current.phone)
     }
 
     private companion object {
 
         /** Пробелы, переводы строк, табуляции: фразу вставляют как получится. */
-        val РАЗДЕЛИТЕЛЬ = Regex("\\s+")
+        val SEPARATOR = Regex("\\s+")
 
         /**
          * «Нет связи» с числом секунд.
@@ -326,9 +326,9 @@ class AuthStore(
          * Число обязательно: «попробуйте позже» человек читает как «сломалось». Названный
          * срок — это обещание, которое можно проверить.
          */
-        fun нетСвязи(retryAfterMs: Long): String {
-            val секунды = (retryAfterMs / 1000).coerceAtLeast(1)
-            return "Нет связи с сервером — повторим через $секунды с"
+        fun noLinks(retryAfterMs: Long): String {
+            val seconds = (retryAfterMs / 1000).coerceAtLeast(1)
+            return "Нет связи с сервером — повторим через $seconds с"
         }
     }
 }
@@ -337,9 +337,9 @@ class AuthStore(
 sealed interface AuthState {
 
     /** Отказ, который надо показать. `null` — показывать нечего. */
-    val беда: String?
+    val trouble: String?
 
-    data class Телефон(
+    data class Phone(
         /**
          * Код страны без плюса: человек набирает «7», а не «+7».
          *
@@ -349,11 +349,11 @@ sealed interface AuthState {
          * и, что хуже, «+7» в подсказке выглядел как уже введённый, хотя поле было
          * пустым, и человек набирал номер без кода страны.
          */
-        val кодСтраны: String = "7",
-        val номер: String = "",
-        override val беда: String? = null,
+        val countryCode: String = "7",
+        val number: String = "",
+        override val trouble: String? = null,
         /** Вызов идёт: кнопка занята, второе нажатие не посылает вторую SMS. */
-        val ждём: Boolean = false,
+        val expect: Boolean = false,
     ) : AuthState {
         /**
          * То, что уходит серверу: E.164 без пробелов и скобок.
@@ -363,31 +363,31 @@ sealed interface AuthState {
          * получить «+77999…» — номер, которого нет. Поймано тестом, который вставлял
          * именно так.
          */
-        val полныйНомер: String get() {
-            val введённое = номер.trim()
-            if (введённое.startsWith("+")) {
-                return "+" + введённое.drop(1).filter { it.isDigit() }
+        val fullNumber: String get() {
+            val entered = number.trim()
+            if (entered.startsWith("+")) {
+                return "+" + entered.drop(1).filter { it.isDigit() }
             }
-            return "+" + кодСтраны.filter { it.isDigit() } + введённое.filter { it.isDigit() }
+            return "+" + countryCode.filter { it.isDigit() } + entered.filter { it.isDigit() }
         }
 
-        fun копияСБедой(текст: String) = copy(беда = текст, ждём = false)
+        fun copyWithTrouble(text: String) = copy(trouble = text, expect = false)
     }
 
-    data class Код(
+    data class Code(
         val requestId: String,
         /** Номер помнится: с экрана кода можно вернуться, не набирая заново. */
-        val телефон: String,
-        val код: String = "",
-        override val беда: String? = null,
-        val ждём: Boolean = false,
+        val phone: String,
+        val code: String = "",
+        override val trouble: String? = null,
+        val expect: Boolean = false,
         /**
          * Код, присланный сервером в ответе. Появляется **только на стенде**, где включён
          * `TIMA_DEV_SMS`; на боевом сервере поля нет вовсе, и решает это сервер, а не мы.
          */
-        val подсказкаСтенда: String? = null,
+        val standHint: String? = null,
     ) : AuthState {
-        fun копияСБедой(текст: String) = copy(беда = текст, ждём = false)
+        fun copyWithTrouble(text: String) = copy(trouble = text, expect = false)
     }
 
     /**
@@ -396,12 +396,12 @@ sealed interface AuthState {
      * Отдельное состояние, а не всплывающее сообщение: это единственный момент, когда
      * человек может её записать. Проскочить его нельзя — дальше только по кнопке.
      */
-    data class Фраза(
-        val слова: List<String>,
+    data class Phrase(
+        val words: List<String>,
         val userId: String,
         val deviceId: String,
     ) : AuthState {
-        override val беда: String? get() = null
+        override val trouble: String? get() = null
     }
 
     /**
@@ -410,9 +410,9 @@ sealed interface AuthState {
      * Код и `requestId` помнятся: человек уже подтвердил номер, и просить SMS второй раз
      * значило бы наказать его за то, что у него есть аккаунт.
      */
-    data class ВводФразы(
+    data class PhraseInput(
         val requestId: String,
-        val телефон: String,
+        val phone: String,
         /**
          * `registration_token`, полученный при проверке кода.
          *
@@ -421,11 +421,11 @@ sealed interface AuthState {
          * живым прогоном.
          */
         val registrationToken: String,
-        val фраза: String = "",
-        override val беда: String? = null,
-        val ждём: Boolean = false,
+        val phrase: String = "",
+        override val trouble: String? = null,
+        val expect: Boolean = false,
     ) : AuthState {
-        fun копияСБедой(текст: String) = copy(беда = текст, ждём = false)
+        fun copyWithTrouble(text: String) = copy(trouble = text, expect = false)
     }
 
     /**
@@ -435,18 +435,18 @@ sealed interface AuthState {
      *   (тогда сказано в [беда]). Пустой строки здесь не бывает намеренно: пустой QR
      *   человек попробует отсканировать.
      */
-    data class ПоказКода(
-        val код: String?,
-        override val беда: String? = null,
+    data class DisplayCode(
+        val code: String?,
+        override val trouble: String? = null,
     ) : AuthState
 
     /** Устройство заведено. Дальше — окно переписок. */
-    data class Готово(val userId: String, val deviceId: String) : AuthState {
-        override val беда: String? get() = null
+    data class Done(val userId: String, val deviceId: String) : AuthState {
+        override val trouble: String? get() = null
     }
 
     /** Устройство было заведено раньше: секрет и сессия уже в хранилище платформы. */
-    data object УжеЗаведено : AuthState {
-        override val беда: String? get() = null
+    data object CreatedAlready : AuthState {
+        override val trouble: String? get() = null
     }
 }

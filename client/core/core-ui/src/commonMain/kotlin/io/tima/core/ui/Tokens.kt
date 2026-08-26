@@ -29,32 +29,32 @@ import androidx.compose.ui.unit.sp
  */
 data class TimaColors(
     /** Навигация и действие: логотип, текущее окно, «назад», «отправить», «написать». */
-    val навигация: Color,
+    val navigation: Color,
     /** Активность: новые сообщения, комментарии, непрочитанное. */
-    val активность: Color,
+    val activity: Color,
     /** Подтверждено: доставлено, прочитано, E2E. */
-    val подтверждено: Color,
+    val confirmed: Color,
     /** Фон **моих** сообщений. */
-    val мои: Color,
+    val my: Color,
     /** Фон сообщений **автора**. */
-    val автор: Color,
-    val текст: Color,
+    val author: Color,
+    val text: Color,
     /** Общий фон содержимого: лента и переписка. */
-    val поверхность: Color,
+    val surface: Color,
     /**
      * Фон функциональных областей: шапка с логотипом, вкладки, строка ввода.
      *
      * Третий признак поверх формы и цвета: **где приложение показывает — фона нет; где
      * им управляют — есть.** Работает даже там, где цвета не видно.
      */
-    val функц: Color,
+    val functional: Color,
     /**
      * Текст на зелёной **заливке**: кнопки, плашка шапки, чипы.
      *
      * По темам различается, и это решение, а не недосмотр: в тёмной весь текст белый,
      * в светлой на салатовом лучше читается чёрный.
      */
-    val наАкценте: Color,
+    val onAccent: Color,
 
     /**
      * Текст на **янтарной** заливке: счётчики непрочитанного.
@@ -65,7 +65,7 @@ data class TimaColors(
      * янтарю, около 1,7 : 1. Взята версия README: правило про янтарь сформулировано
      * явно, а `var(--текст)` там скорее недосмотр наследования.
      */
-    val наЯнтаре: Color,
+    val onAmber: Color,
 
     /**
      * Заливка элементов **внутри салатовой плашки** шапки: логотип, круглые кнопки.
@@ -74,23 +74,23 @@ data class TimaColors(
      * одна и та же салатовая, значит и то, что лежит на ней, одинаково. Внутри плашки
      * даже «живая» кнопка становится белой: салатовое на салатовом не видно.
      */
-    val вПлашке: Color,
+    val inPlate: Color,
 
     /** Рамка сообщения переписки. */
-    val рамка: Color,
+    val border: Color,
     /** Линия между записями списка и ленты. */
-    val линия: Color,
+    val line: Color,
     /** Приглушённый текст: подписи, время. */
-    val текст2: Color,
+    val text2: Color,
     /** Ещё тише: третий уровень. */
-    val текст3: Color,
+    val text3: Color,
     /** Мягкая подложка акцента: выделение без заливки. */
-    val акцентМягкий: Color,
+    val softAccent: Color,
     /**
      * Эмоции — **нецветные**. Цвет занят кодом, и раскрасить эмоции значило бы отдать
      * им смысл, которого у них нет: девять цветов рядом с тремя значащими.
      */
-    val эмоция: Color,
+    val emotion: Color,
 
     /**
      * QR-код: чернила и бумага. **Одинаковы в обеих темах, и это не упущение.**
@@ -100,35 +100,35 @@ data class TimaColors(
      * выбранную нами тему. Поэтому код всегда тёмным по светлому — и на тёмной теме
      * выглядит светлым пятном намеренно.
      */
-    val кодЧернила: Color,
-    val кодБумага: Color,
+    val inkCode: Color,
+    val paperCode: Color,
 ) {
     companion object {
 
         /** Светлая тема: `doc/Layout-UI-light/стиль.css`. */
-        val светлая = TimaColors(
-            навигация = Color(0xFF8AC44A),
-            активность = Color(0xFFFEBB02),
-            подтверждено = Color(0xFF3BB300),
-            мои = Color(0xFFBFBFBF),
-            автор = Color(0xFFFFFFFF),
-            текст = Color(0xFF000000),
-            поверхность = Color(0xFFFFFFFF),
-            функц = Color(0xFFF7F7F7),
+        val light = TimaColors(
+            navigation = Color(0xFF8AC44A),
+            activity = Color(0xFFFEBB02),
+            confirmed = Color(0xFF3BB300),
+            my = Color(0xFFBFBFBF),
+            author = Color(0xFFFFFFFF),
+            text = Color(0xFF000000),
+            surface = Color(0xFFFFFFFF),
+            functional = Color(0xFFF7F7F7),
             // Чёрный: решение заказчика 2026-08-23. На светлой теме белый по салатовому
             // давал 2,08 : 1 при пороге 4,5, чёрный даёт 10,08 — и на мелких подписях
             // («E2E», галочки, чипы) это разница между «читается» и «угадывается».
-            наАкценте = Color(0xFF000000),
-            наЯнтаре = Color(0xFF000000),
-            вПлашке = Color(0xFFFFFFFF),
-            рамка = Color(0x47000000),
-            линия = Color(0x24000000),
-            текст2 = Color(0xB3000000),
-            текст3 = Color(0x9E000000),
-            акцентМягкий = Color(0x338AC44A),
-            эмоция = Color(0xFF111111),
-            кодЧернила = Color(0xFF000000),
-            кодБумага = Color(0xFFFFFFFF),
+            onAccent = Color(0xFF000000),
+            onAmber = Color(0xFF000000),
+            inPlate = Color(0xFFFFFFFF),
+            border = Color(0x47000000),
+            line = Color(0x24000000),
+            text2 = Color(0xB3000000),
+            text3 = Color(0x9E000000),
+            softAccent = Color(0x338AC44A),
+            emotion = Color(0xFF111111),
+            inkCode = Color(0xFF000000),
+            paperCode = Color(0xFFFFFFFF),
         )
 
         /**
@@ -138,31 +138,31 @@ data class TimaColors(
          * серой лестнице (`#ffffff → #3d3d3d`, `#bfbfbf → #1a1a1a`). Цвета кода —
          * салатовый, янтарь, зелёный — те же: перекрашивать их не пришлось.
          */
-        val тёмная = TimaColors(
-            навигация = Color(0xFF8AC44A),
-            активность = Color(0xFFFEBB02),
-            подтверждено = Color(0xFF3BB300),
-            мои = Color(0xFF1A1A1A),
-            автор = Color(0xFF3D3D3D),
-            текст = Color(0xFFFFFFFF),
-            поверхность = Color(0xFF000000),
-            функц = Color(0x12FFFFFF),
+        val dark = TimaColors(
+            navigation = Color(0xFF8AC44A),
+            activity = Color(0xFFFEBB02),
+            confirmed = Color(0xFF3BB300),
+            my = Color(0xFF1A1A1A),
+            author = Color(0xFF3D3D3D),
+            text = Color(0xFFFFFFFF),
+            surface = Color(0xFF000000),
+            functional = Color(0x12FFFFFF),
             // Белый: решение заказчика 2026-08-23. В тёмной теме весь текст белый, и
             // делать зелёную заливку единственным исключением значило бы вводить
             // правило ради одного места. Цена известна и принята: 2,08 : 1.
-            наАкценте = Color(0xFFFFFFFF),
+            onAccent = Color(0xFFFFFFFF),
             // Чёрный и здесь: янтарь в обеих темах один, значит и текст на нём один.
-            наЯнтаре = Color(0xFF000000),
-            вПлашке = Color(0xFFFFFFFF),
-            рамка = Color(0x59FFFFFF),
-            линия = Color(0x24FFFFFF),
-            текст2 = Color(0xBFFFFFFF),
-            текст3 = Color(0x8CFFFFFF),
-            акцентМягкий = Color(0x388AC44A),
-            эмоция = Color(0xFFFFFFFF),
+            onAmber = Color(0xFF000000),
+            inPlate = Color(0xFFFFFFFF),
+            border = Color(0x59FFFFFF),
+            line = Color(0x24FFFFFF),
+            text2 = Color(0xBFFFFFFF),
+            text3 = Color(0x8CFFFFFF),
+            softAccent = Color(0x388AC44A),
+            emotion = Color(0xFFFFFFFF),
             // Те же, что в светлой: см. объяснение у поля.
-            кодЧернила = Color(0xFF000000),
-            кодБумага = Color(0xFFFFFFFF),
+            inkCode = Color(0xFF000000),
+            paperCode = Color(0xFFFFFFFF),
         )
     }
 }
@@ -175,42 +175,42 @@ data class TimaColors(
  */
 object TimaShapes {
     /** Кнопки, поле ввода, чипы, счётчики. */
-    val круг: Dp = 999.dp
+    val circle: Dp = 999.dp
 
     /** Пузырь сообщения. */
-    val радиус: Dp = 16.dp
-    val радиусМал: Dp = 12.dp
+    val radius: Dp = 16.dp
+    val smallRadius: Dp = 12.dp
 
     /** Аватары и логотипы: квадрат со скруглёнными краями. */
-    val квадрат: Dp = 10.dp
-    val квадратМал: Dp = 8.dp
-    val квадратБол: Dp = 16.dp
+    val square: Dp = 10.dp
+    val smallSquare: Dp = 8.dp
+    val bigSquare: Dp = 16.dp
 }
 
 /** Отступы: `--о1`…`--о6`. */
 object TimaSpacing {
-    val о1: Dp = 4.dp
-    val о2: Dp = 8.dp
-    val о3: Dp = 12.dp
-    val о4: Dp = 16.dp
-    val о5: Dp = 22.dp
-    val о6: Dp = 28.dp
+    val about1: Dp = 4.dp
+    val about2: Dp = 8.dp
+    val about3: Dp = 12.dp
+    val about4: Dp = 16.dp
+    val about5: Dp = 22.dp
+    val about6: Dp = 28.dp
 }
 
 /** Кегли: `--щ1`…`--щ6`. */
 object TimaType {
-    val щ1: TextUnit = 30.sp
-    val щ2: TextUnit = 22.sp
-    val щ3: TextUnit = 17.sp
-    val щ4: TextUnit = 15.sp
-    val щ5: TextUnit = 13.sp
-    val щ6: TextUnit = 11.sp
+    val sz1: TextUnit = 30.sp
+    val sz2: TextUnit = 22.sp
+    val sz3: TextUnit = 17.sp
+    val sz4: TextUnit = 15.sp
+    val sz5: TextUnit = 13.sp
+    val sz6: TextUnit = 11.sp
 
     /**
      * Семейство. В макете первым стоит Inter, дальше системные подстановки; шрифт в
      * сборку пока не кладётся — это отдельное решение с лицензией и весом.
      */
-    val семейство: List<String> = listOf(
+    val family: List<String> = listOf(
         "Inter", "Helvetica Neue", "Arial", "Segoe UI", "system-ui", "sans-serif",
     )
 }
@@ -222,13 +222,13 @@ object TimaType {
  * у них своей высоты нет: они занимают остаток.
  */
 object TimaZones {
-    val зона1: Dp = 56.dp
-    val зона4: Dp = 62.dp
-    val аватар: Dp = 42.dp
+    val zone1: Dp = 56.dp
+    val zone4: Dp = 62.dp
+    val avatar: Dp = 42.dp
 
     /**
      * Порог широкого формата (У.4). До него — телефонная раскладка, после — полосы.
      * Одно число на все форматы: контейнерные запросы, а не три разметки.
      */
-    val порогШирокого: Dp = 840.dp
+    val wideThreshold: Dp = 840.dp
 }

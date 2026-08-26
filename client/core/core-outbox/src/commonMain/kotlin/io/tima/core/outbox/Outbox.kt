@@ -302,8 +302,8 @@ class Outbox(
      * @return `null`, если сейчас нечего: очередь этой переписки пуста либо срок не пришёл.
      */
     fun sealNext(chatId: String, epochKeyId: Long, seal: (OutboxEntry) -> ByteArray): OutboxEntry? {
-        val прошлая = cachedEpochs[chatId]
-        if (прошлая != null && прошлая != epochKeyId) discardSealed(chatId)
+        val previous = cachedEpochs[chatId]
+        if (previous != null && previous != epochKeyId) discardSealed(chatId)
         cachedEpochs[chatId] = epochKeyId
 
         val entry = store.nextQueued(chatId, nowMs()) ?: return null
@@ -312,8 +312,8 @@ class Outbox(
         // к этой строке уже равен epochKeyId, а под какую эпоху собран конверт — свойство
         // записи. Те же байты на повторе — это и есть повтор: сервер опознаёт его по
         // dedup_key, поэтому пересобирать конверт незачем.
-        val готовый = if (entry.sealedForEpoch == epochKeyId) sealedEnvelopes[entry.dedupKey] else null
-        val envelope = готовый ?: seal(entry).also {
+        val ready = if (entry.sealedForEpoch == epochKeyId) sealedEnvelopes[entry.dedupKey] else null
+        val envelope = ready ?: seal(entry).also {
             require(it.isNotEmpty()) { "запечатывание вернуло пустой конверт" }
             sealedEnvelopes[entry.dedupKey] = it
         }

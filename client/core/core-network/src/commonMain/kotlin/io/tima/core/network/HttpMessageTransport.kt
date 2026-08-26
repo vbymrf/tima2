@@ -66,10 +66,10 @@ class HttpMessageTransport(
             // Сеть, TLS, разорванное соединение. Пауза берётся из состояния связи,
             // распознанного по признакам из живых испытаний v1 — а не из общего
             // «подождём пять секунд».
-            val состояние = classifyFailure(e)
+            val state = classifyFailure(e)
             return SendOutcome.Retry(
-                afterMs = состояние.retryDelayMs,
-                reason = "сеть: $состояние, ${e::class.simpleName}: ${e.message}",
+                afterMs = state.retryDelayMs,
+                reason = "сеть: $state, ${e::class.simpleName}: ${e.message}",
             )
         }
         return outcomeOf(response)
@@ -102,7 +102,7 @@ class HttpMessageTransport(
             HttpStatusCode.BadRequest,
             HttpStatusCode.Forbidden,
             HttpStatusCode.PayloadTooLarge,
-            -> SendOutcome.Permanent("${response.status.value} ${code ?: "без кода"}")
+            -> SendOutcome.Permanent("${response.status.value} ${code ?: "without code"}")
 
             HttpStatusCode.Unauthorized -> when (code) {
                 // Устройство отозвано — это не «попробуем позже», это конец пути для
@@ -113,13 +113,13 @@ class HttpMessageTransport(
                 // просто подождёт. Отдельного исхода «нужен новый токен» у неё нет.
                 else -> SendOutcome.Retry(
                     afterMs = LinkState.ONLINE.retryDelayMs,
-                    reason = "401 ${code ?: "без кода"}: нужен новый токен",
+                    reason = "401 ${code ?: "without code"}: нужен новый токен",
                 )
             }
 
             HttpStatusCode.TooManyRequests -> SendOutcome.Retry(
                 afterMs = retryAfterMs(response) ?: LinkState.BLOCKED.retryDelayMs,
-                reason = "429 ${code ?: "без кода"}: ограничитель частоты",
+                reason = "429 ${code ?: "without code"}: ограничитель частоты",
             )
 
             else -> when {
@@ -127,11 +127,11 @@ class HttpMessageTransport(
                 // посредника (прокси, портал в кафе) не повод выбрасывать сообщение.
                 response.status.value >= 500 -> SendOutcome.Retry(
                     afterMs = retryAfterMs(response) ?: LinkState.ONLINE.retryDelayMs,
-                    reason = "${response.status.value} ${code ?: "без кода"}: сервер",
+                    reason = "${response.status.value} ${code ?: "without code"}: сервер",
                 )
                 else -> SendOutcome.Retry(
                     afterMs = LinkState.ONLINE.retryDelayMs,
-                    reason = "${response.status.value} ${code ?: "без кода"}: неизвестный ответ",
+                    reason = "${response.status.value} ${code ?: "without code"}: неизвестный ответ",
                 )
             }
         }

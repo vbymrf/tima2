@@ -61,7 +61,7 @@ class ChatStore(
     // Признак берётся из наличия случая, а не задаётся отдельно: два источника одной
     // правды разошлись бы, и кнопка появилась бы там, где нажимать её нечем.
     private val _state = MutableStateFlow(
-        ChatState(можноПроситьКлюч = requestKeys != null, группа = names != null),
+        ChatState(keyAskMay = requestKeys != null, group = names != null),
     )
     val state: StateFlow<ChatState> = _state.asStateFlow()
 
@@ -69,19 +69,19 @@ class ChatStore(
         // Список приходит потоком: обновление от самой базы, а не по нажатию. Значит
         // пришедшее сообщение и смена состояния отправки появляются на экране сами.
         observe.page(chatId, pageSize)
-            .onEach { строки ->
-                _state.value = _state.value.copy(lines = строки)
+            .onEach { lines ->
+                _state.value = _state.value.copy(lines = lines)
                 // Имена спрашиваются по одному разу на автора и только в группе: список
                 // обновляется на каждое сообщение, и поход за именем на каждой строке
                 // означал бы запрос к серверу на каждую реплику.
-                names?.let { справочник ->
-                    val новые = строки.mapNotNull { it.senderId }
+                names?.let { directory ->
+                    val new = lines.mapNotNull { it.senderId }
                         .distinct()
-                        .filter { it !in _state.value.имена }
-                    if (новые.isNotEmpty()) {
-                        val дополненные = _state.value.имена.toMutableMap()
-                        for (кто in новые) дополненные[кто] = справочник.имя(кто)
-                        _state.value = _state.value.copy(имена = дополненные)
+                        .filter { it !in _state.value.names }
+                    if (new.isNotEmpty()) {
+                        val padded = _state.value.names.toMutableMap()
+                        for (who in new) padded[who] = directory.name(who)
+                        _state.value = _state.value.copy(names = padded)
                     }
                 }
                 // Переписка на экране — значит прочитана. Порядок именно такой: сначала
@@ -103,10 +103,10 @@ class ChatStore(
      * действие — например чтобы убрать клавиатуру. Состояние при этом уже обновлено.
      */
     fun sendPressed(): SendMessageResult {
-        val текст = _state.value.draft
-        val исход = send.send(chatId, текст)
+        val text = _state.value.draft
+        val outcome = send.send(chatId, text)
 
-        _state.value = when (исход) {
+        _state.value = when (outcome) {
             // Принято: поле чистим — сообщение уже в списке.
             is SendMessageResult.Queued,
             is SendMessageResult.AlreadyQueued,
@@ -117,10 +117,10 @@ class ChatStore(
 
             // Текст ОСТАЁТСЯ. Сообщить надо, а отобрать написанное — нельзя.
             is SendMessageResult.TooLarge -> _state.value.copy(
-                notice = ChatNotice.TooLarge(исход.bytes, исход.limit),
+                notice = ChatNotice.TooLarge(outcome.bytes, outcome.limit),
             )
         }
-        return исход
+        return outcome
     }
 
     /** Человек закрыл сообщение о беде. */
@@ -135,38 +135,38 @@ class ChatStore(
      * возможности нет, и кнопки на экране тоже не будет.
      */
     /** Человек набирает секретную фразу — её просят только после отказа по подписи. */
-    fun фразаИзменена(текст: String) {
-        _state.value = _state.value.copy(фраза = текст)
+    fun changedPhrase(text: String) {
+        _state.value = _state.value.copy(phrase = text)
     }
 
-    fun запроситьКлюч() {
-        val случай = requestKeys ?: return
-        if (_state.value.ждёмКлюч) return
+    fun requestKey() {
+        val case = requestKeys ?: return
+        if (_state.value.expectKey) return
         // Слова берутся из поля и дальше нигде не сохраняются: держать их значило бы
         // отдать вместе с устройством и тот заслон, ради которого фразу спрашивают.
-        val слова = _state.value.фраза.trim()
+        val words = _state.value.phrase.trim()
             .split(Regex("""\s+"""))
             .filter { it.isNotBlank() }
             .takeIf { it.isNotEmpty() }
-        _state.value = _state.value.copy(ждёмКлюч = true, notice = null)
+        _state.value = _state.value.copy(expectKey = true, notice = null)
 
         scope.launch {
-            val исход = случай.запросить(chatId, слова)
+            val outcome = case.request(chatId, words)
             _state.value = _state.value.copy(
-                ждёмКлюч = false,
+                expectKey = false,
                 // Набранная фраза живёт до успеха и стирается сразу после него: держать
                 // её на экране дольше нужного незачем.
-                фраза = if (исход is RequestKeysStep.Asked) "" else _state.value.фраза,
-                notice = when (исход) {
-                    is RequestKeysStep.Asked -> ChatNotice.KeysAsked(исход.устройствам)
+                phrase = if (outcome is RequestKeysStep.Asked) "" else _state.value.phrase,
+                notice = when (outcome) {
+                    is RequestKeysStep.Asked -> ChatNotice.KeysAsked(outcome.devices)
                     RequestKeysStep.NoHelpers -> ChatNotice.KeysNoHelpers
                     RequestKeysStep.NothingMissing -> ChatNotice.KeysNothingMissing
                     RequestKeysStep.NeedsSecretPhrase -> ChatNotice.KeysNeedPhrase
                     RequestKeysStep.NotMember -> ChatNotice.KeysRefused("Вы больше не участник этой группы")
                     is RequestKeysStep.Offline -> ChatNotice.KeysRefused(
-                        "Нет связи с сервером — повторите через ${(исход.retryAfterMs / 1000).coerceAtLeast(1)} с",
+                        "Нет связи с сервером — повторите через ${(outcome.retryAfterMs / 1000).coerceAtLeast(1)} с",
                     )
-                    is RequestKeysStep.Refused -> ChatNotice.KeysRefused(исход.reason)
+                    is RequestKeysStep.Refused -> ChatNotice.KeysRefused(outcome.reason)
                 },
             )
         }
@@ -185,18 +185,18 @@ data class ChatState(
     val draft: String = "",
     val notice: ChatNotice? = null,
     /** Запрос ключа в пути: второе нажатие не шлёт вторую просьбу чужим устройствам. */
-    val ждёмКлюч: Boolean = false,
+    val expectKey: Boolean = false,
     /** Можно ли просить ключ: у личной переписки такой возможности нет. */
-    val можноПроситьКлюч: Boolean = false,
+    val keyAskMay: Boolean = false,
     /** Набранная секретная фраза. Пусто — запрос уйдёт без подписи. */
-    val фраза: String = "",
+    val phrase: String = "",
     /**
      * Групповая ли переписка. От этого зависит показ автора у каждой реплики: в личной
      * он лишний, в групповой без него сообщение теряет половину смысла.
      */
-    val группа: Boolean = false,
+    val group: Boolean = false,
     /** Имена авторов по идентификатору. Пусто для личной переписки. */
-    val имена: Map<String, String> = emptyMap(),
+    val names: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -209,7 +209,7 @@ sealed interface ChatNotice {
     data class TooLarge(val bytes: Int, val limit: Int) : ChatNotice
 
     /** Просьба ушла: ключи приедут, когда ответит кто-то из этих устройств. */
-    data class KeysAsked(val устройствам: Int) : ChatNotice
+    data class KeysAsked(val devices: Int) : ChatNotice
 
     /** Просить некого: нужных версий нет ни у кого из участников. Ждать бесполезно. */
     data object KeysNoHelpers : ChatNotice
@@ -220,5 +220,5 @@ sealed interface ChatNotice {
     /** Нужна секретная фраза: аккаунт защищён ею от угона номера. */
     data object KeysNeedPhrase : ChatNotice
 
-    data class KeysRefused(val текст: String) : ChatNotice
+    data class KeysRefused(val text: String) : ChatNotice
 }

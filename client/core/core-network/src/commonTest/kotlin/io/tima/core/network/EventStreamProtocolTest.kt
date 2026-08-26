@@ -13,19 +13,19 @@ import kotlin.test.assertTrue
 class EventStreamProtocolTest {
 
     private val protocol = EventStreamProtocol()
-    private val конверт = byteArrayOf(1, 2, 3, 4)
+    private val envelope = byteArrayOf(1, 2, 3, 4)
 
-    private fun кадрСообщения(
+    private fun messageFrame(
         eventId: Long = 5,
         chatId: String = "chat-1",
         messageId: Long = 77,
     ) = """{"event":"message.new","event_id":$eventId,"chat_id":"$chatId",""" +
-        """"message_id":$messageId,"envelope":"${encodeBase64Url(конверт)}"}"""
+        """"message_id":$messageId,"envelope":"${encodeBase64Url(envelope)}"}"""
 
     // ── кадры, которые мы отправляем ─────────────────────────────────────────
 
     @Test
-    fun первый_кадр_это_токен() {
+    fun first_frame_this_token() {
         // Сервер рвёт соединение с StatusPolicyViolation, если первым пришло что-то
         // другое. Значит порядок — часть протокола, а не вежливость.
         assertEquals("""{"token":"жетон"}""", protocol.authFrame("жетон"))
@@ -63,50 +63,50 @@ class EventStreamProtocolTest {
 
     @Test
     fun подтверждение_токена_даёт_готовность() {
-        val решение = protocol.decide("""{"event":"ok","device_id":"d-1"}""")
-        assertEquals(EventStreamProtocol.Decision.Ready("d-1"), решение)
+        val decision = protocol.decide("""{"event":"ok","device_id":"d-1"}""")
+        assertEquals(EventStreamProtocol.Decision.Ready("d-1"), decision)
     }
 
     @Test
     fun сообщение_разбирается_целиком() {
-        val решение = protocol.decide(кадрСообщения())
+        val decision = protocol.decide(messageFrame())
 
-        assertIs<EventStreamProtocol.Decision.Deliver>(решение)
-        assertEquals(5, решение.event.eventId)
-        assertEquals("chat-1", решение.event.chatId)
-        assertEquals(77, решение.event.messageId)
-        assertContentEquals(конверт, решение.event.envelope)
+        assertIs<EventStreamProtocol.Decision.Deliver>(decision)
+        assertEquals(5, decision.event.eventId)
+        assertEquals("chat-1", decision.event.chatId)
+        assertEquals(77, decision.event.messageId)
+        assertContentEquals(envelope, decision.event.envelope)
     }
 
     @Test
     fun неполное_сообщение_пропускается_но_курсор_двигает() {
         // Записывать нечего, а курсор двигать надо: иначе он застрянет на испорченном
         // событии навсегда, и канал встанет целиком.
-        val решение = protocol.decide("""{"event":"message.new","event_id":9,"chat_id":"c"}""")
+        val decision = protocol.decide("""{"event":"message.new","event_id":9,"chat_id":"c"}""")
 
-        assertIs<EventStreamProtocol.Decision.Skip>(решение)
-        assertEquals(9, решение.eventId, "курсор обязан двинуться дальше испорченного")
+        assertIs<EventStreamProtocol.Decision.Skip>(decision)
+        assertEquals(9, decision.eventId, "курсор обязан двинуться дальше испорченного")
     }
 
     @Test
     fun конверт_не_base64url_это_пропуск_а_не_падение() {
-        val решение = protocol.decide(
+        val decision = protocol.decide(
             """{"event":"message.new","event_id":9,"chat_id":"c","message_id":1,"envelope":"!!!"}""",
         )
-        assertIs<EventStreamProtocol.Decision.Skip>(решение)
+        assertIs<EventStreamProtocol.Decision.Skip>(decision)
     }
 
     @Test
     fun догон_сообщает_остаток() {
         // more = true означает «есть ещё», и следующую страницу обязан попросить клиент.
         // Не попросит — остаток истории не приедет, а канал будет выглядеть исправным.
-        val решение = protocol.decide(
+        val decision = protocol.decide(
             """{"event":"sync.done","count":100,"next_cursor":250,"more":true}""",
         )
-        assertEquals(EventStreamProtocol.Decision.SyncDone(100, 250, true), решение)
+        assertEquals(EventStreamProtocol.Decision.SyncDone(100, 250, true), decision)
 
-        val последняя = protocol.decide("""{"event":"sync.done","count":7,"next_cursor":257,"more":false}""")
-        assertEquals(EventStreamProtocol.Decision.SyncDone(7, 257, false), последняя)
+        val last = protocol.decide("""{"event":"sync.done","count":7,"next_cursor":257,"more":false}""")
+        assertEquals(EventStreamProtocol.Decision.SyncDone(7, 257, false), last)
     }
 
     @Test
@@ -114,18 +114,18 @@ class EventStreamProtocolTest {
         // Главное правило приёма. sync.gap означает, что события до next_cursor сервер
         // удалил по сроку хранения: живой канал их не принесёт никогда. Молча продолжить
         // с этого места — значит навсегда потерять переписку за промежуток.
-        val решение = protocol.decide("""{"event":"sync.gap","next_cursor":900}""")
+        val decision = protocol.decide("""{"event":"sync.gap","next_cursor":900}""")
 
-        assertIs<EventStreamProtocol.Decision.NeedHistory>(решение)
-        assertEquals(900, решение.fromCursor)
+        assertIs<EventStreamProtocol.Decision.NeedHistory>(decision)
+        assertEquals(900, decision.fromCursor)
     }
 
     @Test
     fun беда_сервера_отличается_от_испорченного_кадра() {
         // Первое — повторить позже, второе — пропустить. Одно решение на два случая
         // означало бы либо вечный повтор мусора, либо потерю живого канала.
-        val беда = protocol.decide("""{"event":"error","code":"internal"}""")
-        assertEquals(EventStreamProtocol.Decision.ServerTrouble("internal"), беда)
+        val trouble = protocol.decide("""{"event":"error","code":"internal"}""")
+        assertEquals(EventStreamProtocol.Decision.ServerTrouble("internal"), trouble)
 
         assertIs<EventStreamProtocol.Decision.Skip>(protocol.decide("не json"))
     }
@@ -135,18 +135,18 @@ class EventStreamProtocolTest {
         // typing, receipt, presence — сервер обещает их следующими итерациями. Не
         // подтверждать непонятное «чтобы не потерять» значило бы остановить канал
         // целиком из-за кадра, который мы всё равно не умеем прочитать.
-        val решение = protocol.decide("""{"event":"typing","event_id":31,"chat_id":"c"}""")
+        val decision = protocol.decide("""{"event":"typing","event_id":31,"chat_id":"c"}""")
 
-        assertIs<EventStreamProtocol.Decision.Skip>(решение)
-        assertEquals(31, решение.eventId)
-        assertTrue(решение.reason.contains("typing"), "причина обязана называть кадр: ${решение.reason}")
+        assertIs<EventStreamProtocol.Decision.Skip>(decision)
+        assertEquals(31, decision.eventId)
+        assertTrue(decision.reason.contains("typing"), "причина обязана называть кадр: ${decision.reason}")
     }
 
     @Test
     fun мусор_не_роняет_канал() {
-        for (мусор in listOf("", "{}", "[]", "не json", """{"event":123}""")) {
-            val решение = protocol.decide(мусор)
-            assertIs<EventStreamProtocol.Decision.Skip>(решение, "вход «$мусор» обязан быть пропуском")
+        for (garbage in listOf("", "{}", "[]", "не json", """{"event":123}""")) {
+            val decision = protocol.decide(garbage)
+            assertIs<EventStreamProtocol.Decision.Skip>(decision, "вход «$garbage» обязан быть пропуском")
         }
     }
 }

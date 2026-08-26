@@ -30,19 +30,19 @@ import kotlin.test.assertTrue
  */
 class AuthStoreTest {
 
-    private val api = ПоддельныйApi()
-    private val хранилище = ПамятныеСекреты()
+    private val api = FakeApi()
+    private val store = SecretMemorable()
 
-    private val личности = ПоддельныеЛичности()
+    private val identity = FakeIdentity()
 
-    private val привязка = ПоддельныйСтарт()
+    private val link = FakeStart()
 
     private fun store(scope: kotlinx.coroutines.CoroutineScope) = AuthStore(
-        register = RegisterDevice(api, ключи, хранилище, platform = "проба"),
-        identities = личности,
+        register = RegisterDevice(api, keys, store, platform = "проба"),
+        identities = identity,
         scope = scope,
-        link = LinkNewDevice(привязка, ключи, хранилище),
-        имяУстройства = "Компьютер",
+        link = LinkNewDevice(link, keys, store),
+        deviceName = "Компьютер",
     )
 
     // ── набранное не теряется ────────────────────────────────────────────────
@@ -55,16 +55,16 @@ class AuthStoreTest {
      */
     @Test
     fun номер_остаётся_в_поле_при_отказе() = runTest {
-        api.наЗапросКода = { CodeRequestStep.Offline(retryAfterMs = 5_000) }
+        api.onRequestCode = { CodeRequestStep.Offline(retryAfterMs = 5_000) }
         val store = store(backgroundScope)
-        store.номерИзменён("+79990000001")
+        store.changedNumber("+79990000001")
 
-        store.запроситьКод()
+        store.requestCode()
 
-        val состояние = store.state.first { it is AuthState.Телефон && !it.ждём }
-        assertIs<AuthState.Телефон>(состояние)
-        assertEquals("+79990000001", состояние.номер, "номер отобрали при отказе сети")
-        assertTrue(состояние.беда.orEmpty().contains("5 с"), "срок повтора обязан быть назван: ${состояние.беда}")
+        val state = store.state.first { it is AuthState.Phone && !it.expect }
+        assertIs<AuthState.Phone>(state)
+        assertEquals("+79990000001", state.number, "номер отобрали при отказе сети")
+        assertTrue(state.trouble.orEmpty().contains("5 с"), "срок повтора обязан быть назван: ${state.trouble}")
     }
 
     /**
@@ -75,28 +75,28 @@ class AuthStoreTest {
      */
     @Test
     fun неверный_код_остаётся_в_поле() = runTest {
-        api.наПроверкуКода = { CodeSubmitStep.WrongCode }
-        val store = дошлиДоКода(backgroundScope)
-        store.кодИзменён("123456")
+        api.onCheckCode = { CodeSubmitStep.WrongCode }
+        val store = deliveredUntilCode(backgroundScope)
+        store.changedCode("123456")
 
-        store.подтвердить()
+        store.confirm()
 
-        val состояние = store.state.first { it is AuthState.Код && !it.ждём }
-        assertIs<AuthState.Код>(состояние)
-        assertEquals("123456", состояние.код)
-        assertEquals("Код неверен или просрочен", состояние.беда)
+        val state = store.state.first { it is AuthState.Code && !it.expect }
+        assertIs<AuthState.Code>(state)
+        assertEquals("123456", state.code)
+        assertEquals("Код неверен или просрочен", state.trouble)
     }
 
     /** «Изменить номер» возвращает к телефону с уже набранным номером. */
     @Test
     fun назад_помнит_номер() = runTest {
-        val store = дошлиДоКода(backgroundScope)
+        val store = deliveredUntilCode(backgroundScope)
 
-        store.назад()
+        store.back()
 
-        val состояние = store.state.value
-        assertIs<AuthState.Телефон>(состояние)
-        assertEquals(ТЕЛЕФОН, состояние.номер)
+        val state = store.state.value
+        assertIs<AuthState.Phone>(state)
+        assertEquals(PHONE, state.number)
     }
 
     // ── второе нажатие ──────────────────────────────────────────────────────
@@ -109,20 +109,20 @@ class AuthStoreTest {
      */
     @Test
     fun второе_нажатие_не_посылает_вторую_смс() = runTest {
-        val держим = CompletableDeferred<CodeRequestStep>()
-        api.наЗапросКода = { держим.await() }
+        val hold = CompletableDeferred<CodeRequestStep>()
+        api.onRequestCode = { hold.await() }
         val store = store(backgroundScope)
-        store.номерИзменён(ТЕЛЕФОН)
+        store.changedNumber(PHONE)
 
-        store.запроситьКод()
-        store.state.first { it is AuthState.Телефон && it.ждём }
-        store.запроситьКод()
-        store.запроситьКод()
+        store.requestCode()
+        store.state.first { it is AuthState.Phone && it.expect }
+        store.requestCode()
+        store.requestCode()
 
-        держим.complete(CodeRequestStep.CodeRequested(requestId = "r-1"))
-        store.state.first { it is AuthState.Код }
+        hold.complete(CodeRequestStep.CodeRequested(requestId = "r-1"))
+        store.state.first { it is AuthState.Code }
 
-        assertEquals(1, api.запросовКода, "вызовов запроса кода обязано быть ровно одно")
+        assertEquals(1, api.codeRequests, "вызовов запроса кода обязано быть ровно одно")
     }
 
     // ── исходы ──────────────────────────────────────────────────────────────
@@ -135,21 +135,21 @@ class AuthStoreTest {
      */
     @Test
     fun успех_показывает_фразу_и_только_потом_готово() = runTest {
-        val store = дошлиДоКода(backgroundScope)
-        store.кодИзменён("111111")
+        val store = deliveredUntilCode(backgroundScope)
+        store.changedCode("111111")
 
-        store.подтвердить()
+        store.confirm()
 
-        val фраза = store.state.first { it is AuthState.Фраза }
-        assertIs<AuthState.Фраза>(фраза)
-        assertEquals(СЛОВА, фраза.слова, "показать надо ровно ту фразу, что ушла на сервер")
+        val phrase = store.state.first { it is AuthState.Phrase }
+        assertIs<AuthState.Phrase>(phrase)
+        assertEquals(WORDS, phrase.words, "показать надо ровно ту фразу, что ушла на сервер")
 
-        store.фразаСохранена()
+        store.savedPhrase()
 
-        val готово = store.state.value
-        assertIs<AuthState.Готово>(готово)
-        assertEquals("u-1", готово.userId)
-        assertEquals("d-1", готово.deviceId)
+        val done = store.state.value
+        assertIs<AuthState.Done>(done)
+        assertEquals("u-1", done.userId)
+        assertEquals("d-1", done.deviceId)
     }
 
     /**
@@ -160,14 +160,14 @@ class AuthStoreTest {
      */
     @Test
     fun при_регистрации_серверу_уходит_личность_аккаунта() = runTest {
-        val store = дошлиДоКода(backgroundScope)
-        store.кодИзменён("111111")
+        val store = deliveredUntilCode(backgroundScope)
+        store.changedCode("111111")
 
-        store.подтвердить()
-        store.state.first { it is AuthState.Фраза }
+        store.confirm()
+        store.state.first { it is AuthState.Phrase }
 
-        assertContentEquals(ПУБЛИЧНЫЙ, api.посланныйIdentity, "identity_pub обязан быть послан")
-        assertEquals(false, api.посланныйФорк, "форк цепочки без просьбы человека недопустим")
+        assertContentEquals(PUBLIC, api.sentIdentity, "identity_pub обязан быть послан")
+        assertEquals(false, api.sentFork, "форк цепочки без просьбы человека недопустим")
     }
 
     // ── возврат по фразе ────────────────────────────────────────────────────
@@ -180,20 +180,20 @@ class AuthStoreTest {
      */
     @Test
     fun занятый_номер_ведёт_к_вводу_фразы() = runTest {
-        api.наПроверкуКода = { CodeSubmitStep.Accepted("t-1") }
-        api.наЗаведение = { DeviceCreateStep.IdentityMismatch }
-        val store = дошлиДоКода(backgroundScope)
-        store.кодИзменён("111111")
+        api.onCheckCode = { CodeSubmitStep.Accepted("t-1") }
+        api.onCreation = { DeviceCreateStep.IdentityMismatch }
+        val store = deliveredUntilCode(backgroundScope)
+        store.changedCode("111111")
 
-        store.подтвердить()
+        store.confirm()
 
-        val состояние = store.state.first { it is AuthState.ВводФразы }
-        assertIs<AuthState.ВводФразы>(состояние)
-        assertEquals(ТЕЛЕФОН, состояние.телефон)
+        val state = store.state.first { it is AuthState.PhraseInput }
+        assertIs<AuthState.PhraseInput>(state)
+        assertEquals(PHONE, state.phone)
         // Дальше идём с токеном, а не с кодом: код одноразовый и погашен проверкой.
         // Второй confirm с ним отвечал «неверен или просрочен», и вход по фразе не мог
         // сработать никогда — найдено живым прогоном 2026-08-25.
-        assertTrue(состояние.registrationToken.isNotBlank(), "токен обязан сохраниться")
+        assertTrue(state.registrationToken.isNotBlank(), "токен обязан сохраниться")
     }
 
     /**
@@ -209,16 +209,16 @@ class AuthStoreTest {
      */
     @Test
     fun вход_по_фразе_идёт_с_токеном_а_не_с_кодом() = runTest {
-        val store = дошлиДоВводаФразы(backgroundScope)
-        val былоПроверок = api.проверокКода
+        val store = deliveredUntilInputPhrase(backgroundScope)
+        val checkWas = api.codeChecks
 
-        store.фразаИзменена(СЛОВА.joinToString(" "))
-        store.войтиПоФразе()
-        store.state.first { it !is AuthState.ВводФразы || it.ждём.not() }
+        store.changedPhrase(WORDS.joinToString(" "))
+        store.enterByPhrase()
+        store.state.first { it !is AuthState.PhraseInput || it.expect.not() }
 
         assertEquals(
-            былоПроверок,
-            api.проверокКода,
+            checkWas,
+            api.codeChecks,
             "код проверен второй раз — сервер погасил его при первой проверке",
         )
     }
@@ -232,48 +232,48 @@ class AuthStoreTest {
      */
     @Test
     fun из_ввода_фразы_можно_вернуться_к_номеру() = runTest {
-        val store = дошлиДоВводаФразы(backgroundScope)
+        val store = deliveredUntilInputPhrase(backgroundScope)
 
-        store.назад()
+        store.back()
 
-        val состояние = store.state.first { it is AuthState.Телефон }
-        assertIs<AuthState.Телефон>(состояние)
-        assertEquals(ТЕЛЕФОН, состояние.номер, "набранный номер обязан сохраниться")
+        val state = store.state.first { it is AuthState.Phone }
+        assertIs<AuthState.Phone>(state)
+        assertEquals(PHONE, state.number, "набранный номер обязан сохраниться")
         // Возвращённый номер уже с плюсом, и склейка обязана взять его как есть: иначе
         // к нему приписался бы код страны и получился бы номер, которого нет.
-        assertEquals(ТЕЛЕФОН, состояние.полныйНомер)
+        assertEquals(PHONE, state.fullNumber)
     }
 
     /** Неверная фраза до сети не доходит: проверить её можно на месте. */
     @Test
     fun неверная_фраза_до_сети_не_доходит() = runTest {
-        val store = дошлиДоВводаФразы(backgroundScope)
-        личности.признаёт = false
-        val былоЗаведений = api.заведений
+        val store = deliveredUntilInputPhrase(backgroundScope)
+        identity.accepts = false
+        val creationWas = api.creations
 
-        store.фразаИзменена("не та фраза совсем")
-        store.войтиПоФразе()
+        store.changedPhrase("не та фраза совсем")
+        store.enterByPhrase()
 
-        val состояние = store.state.value
-        assertIs<AuthState.ВводФразы>(состояние)
-        assertEquals("Фраза не та — проверьте запись", состояние.беда)
-        assertEquals("не та фраза совсем", состояние.фраза, "набранное не отбираем")
-        assertEquals(былоЗаведений, api.заведений, "сеть на неверной фразе не тревожим")
+        val state = store.state.value
+        assertIs<AuthState.PhraseInput>(state)
+        assertEquals("Фраза не та — проверьте запись", state.trouble)
+        assertEquals("не та фраза совсем", state.phrase, "набранное не отбираем")
+        assertEquals(creationWas, api.creations, "сеть на неверной фразе не тревожим")
     }
 
     /** Верная фраза заводит устройство — и фразу больше не показывает: она у человека есть. */
     @Test
     fun верная_фраза_заводит_устройство_без_показа_фразы() = runTest {
-        val store = дошлиДоВводаФразы(backgroundScope)
-        api.наЗаведение = { DeviceCreateStep.Created("u-1", "d-2", "a-2") }
+        val store = deliveredUntilInputPhrase(backgroundScope)
+        api.onCreation = { DeviceCreateStep.Created("u-1", "d-2", "a-2") }
 
-        store.фразаИзменена(СЛОВА.joinToString(" "))
-        store.войтиПоФразе()
+        store.changedPhrase(WORDS.joinToString(" "))
+        store.enterByPhrase()
 
-        val состояние = store.state.first { it is AuthState.Готово }
-        assertIs<AuthState.Готово>(состояние)
-        assertEquals("d-2", состояние.deviceId)
-        assertContentEquals(ПУБЛИЧНЫЙ, api.посланныйIdentity)
+        val state = store.state.first { it is AuthState.Done }
+        assertIs<AuthState.Done>(state)
+        assertEquals("d-2", state.deviceId)
+        assertContentEquals(PUBLIC, api.sentIdentity)
     }
 
     /**
@@ -285,15 +285,15 @@ class AuthStoreTest {
      */
     @Test
     fun начать_заново_форкает_личность_и_показывает_новую_фразу() = runTest {
-        val store = дошлиДоВводаФразы(backgroundScope)
-        api.наЗаведение = { DeviceCreateStep.Created("u-2", "d-3", "a-3") }
+        val store = deliveredUntilInputPhrase(backgroundScope)
+        api.onCreation = { DeviceCreateStep.Created("u-2", "d-3", "a-3") }
 
-        store.начатьЗаново()
+        store.startAnew()
 
-        val фраза = store.state.first { it is AuthState.Фраза }
-        assertIs<AuthState.Фраза>(фраза)
-        assertEquals(СЛОВА, фраза.слова, "новая личность — новая фраза, и показать её обязательно")
-        assertEquals(true, api.посланныйФорк)
+        val phrase = store.state.first { it is AuthState.Phrase }
+        assertIs<AuthState.Phrase>(phrase)
+        assertEquals(WORDS, phrase.words, "новая личность — новая фраза, и показать её обязательно")
+        assertEquals(true, api.sentFork)
     }
 
     /**
@@ -304,20 +304,20 @@ class AuthStoreTest {
      */
     @Test
     fun код_стенда_доезжает_до_экрана() = runTest {
-        api.наЗапросКода = { CodeRequestStep.CodeRequested(requestId = "r-1", devCode = "424242") }
+        api.onRequestCode = { CodeRequestStep.CodeRequested(requestId = "r-1", devCode = "424242") }
         val store = store(backgroundScope)
-        store.номерИзменён(ТЕЛЕФОН)
+        store.changedNumber(PHONE)
 
-        store.запроситьКод()
+        store.requestCode()
 
-        val состояние = store.state.first { it is AuthState.Код }
-        assertEquals("424242", (состояние as AuthState.Код).подсказкаСтенда)
+        val state = store.state.first { it is AuthState.Code }
+        assertEquals("424242", (state as AuthState.Code).standHint)
     }
 
     @Test
     fun без_кода_стенда_подсказки_нет() = runTest {
-        val store = дошлиДоКода(backgroundScope)
-        assertNull((store.state.value as AuthState.Код).подсказкаСтенда)
+        val store = deliveredUntilCode(backgroundScope)
+        assertNull((store.state.value as AuthState.Code).standHint)
     }
 
     /**
@@ -327,17 +327,17 @@ class AuthStoreTest {
      */
     @Test
     fun просроченный_токен_возвращает_к_номеру() = runTest {
-        api.наПроверкуКода = { CodeSubmitStep.Accepted("t-1") }
-        api.наЗаведение = { DeviceCreateStep.TokenExpired }
-        val store = дошлиДоКода(backgroundScope)
-        store.кодИзменён("111111")
+        api.onCheckCode = { CodeSubmitStep.Accepted("t-1") }
+        api.onCreation = { DeviceCreateStep.TokenExpired }
+        val store = deliveredUntilCode(backgroundScope)
+        store.changedCode("111111")
 
-        store.подтвердить()
+        store.confirm()
 
-        val состояние = store.state.first { it is AuthState.Телефон }
-        assertIs<AuthState.Телефон>(состояние)
-        assertEquals(ТЕЛЕФОН, состояние.номер, "номер сохраняется: его уже набрали")
-        assertEquals("Код просрочен — запросите новый", состояние.беда)
+        val state = store.state.first { it is AuthState.Phone }
+        assertIs<AuthState.Phone>(state)
+        assertEquals(PHONE, state.number, "номер сохраняется: его уже набрали")
+        assertEquals("Код просрочен — запросите новый", state.trouble)
     }
 
     /**
@@ -348,14 +348,14 @@ class AuthStoreTest {
      * попытки, которую следующая перезапишет.
      */
     @Test
-    fun уже_заведённое_устройство_это_не_отказ() = runTest {
-        хранилище.сессия = Session(userId = "u-1", deviceId = "d-1", accessToken = "a-1")
-        val store = дошлиДоКода(backgroundScope)
-        store.кодИзменён("111111")
+    fun already_created_device_this_not_refusal() = runTest {
+        store.savedSession = Session(userId = "u-1", deviceId = "d-1", accessToken = "a-1")
+        val store = deliveredUntilCode(backgroundScope)
+        store.changedCode("111111")
 
-        store.подтвердить()
+        store.confirm()
 
-        assertEquals(AuthState.УжеЗаведено, store.state.first { it is AuthState.УжеЗаведено })
+        assertEquals(AuthState.CreatedAlready, store.state.first { it is AuthState.CreatedAlready })
     }
 
     // ── привязка к существующему аккаунту ───────────────────────────────────
@@ -370,26 +370,26 @@ class AuthStoreTest {
     fun подключение_показывает_код() = runTest {
         val store = store(backgroundScope)
 
-        store.подключиться()
+        store.connect()
 
-        val состояние = store.state.first { it is AuthState.ПоказКода && it.код != null }
-        assertIs<AuthState.ПоказКода>(состояние)
-        assertEquals("tima://link/v1?session_id=s-1", состояние.код)
-        assertEquals("Компьютер", привязка.посланноеИмя)
+        val state = store.state.first { it is AuthState.DisplayCode && it.code != null }
+        assertIs<AuthState.DisplayCode>(state)
+        assertEquals("tima://link/v1?session_id=s-1", state.code)
+        assertEquals("Компьютер", link.sentName)
     }
 
     /** Подтвердили на телефоне — устройство заведено, и без всякой SMS. */
     @Test
     fun подтверждение_на_телефоне_доводит_до_готово() = runTest {
-        привязка.наОпрос = { LinkClaimStep.Claimed("u-1", "d-9", "a-9") }
+        link.onPoll = { LinkClaimStep.Claimed("u-1", "d-9", "a-9") }
         val store = store(backgroundScope)
 
-        store.подключиться()
+        store.connect()
 
-        val состояние = store.state.first { it is AuthState.Готово }
-        assertIs<AuthState.Готово>(состояние)
-        assertEquals("d-9", состояние.deviceId)
-        assertEquals(0, api.запросовКода, "привязка идёт без SMS — в этом весь её смысл")
+        val state = store.state.first { it is AuthState.Done }
+        assertIs<AuthState.Done>(state)
+        assertEquals("d-9", state.deviceId)
+        assertEquals(0, api.codeRequests, "привязка идёт без SMS — в этом весь её смысл")
     }
 
     /**
@@ -399,25 +399,25 @@ class AuthStoreTest {
      */
     @Test
     fun вышедший_срок_просит_новый_код() = runTest {
-        привязка.наОпрос = { LinkClaimStep.NotReady }
+        link.onPoll = { LinkClaimStep.NotReady }
         val store = store(backgroundScope)
 
-        store.подключиться()
+        store.connect()
 
-        val состояние = store.state.first { it is AuthState.ПоказКода && it.беда != null }
-        assertTrue(состояние.беда.orEmpty().contains("новый"), "беда: ${состояние.беда}")
+        val state = store.state.first { it is AuthState.DisplayCode && it.trouble != null }
+        assertTrue(state.trouble.orEmpty().contains("новый"), "беда: ${state.trouble}")
     }
 
     /** «Назад» с показа кода возвращает к номеру: путь по SMS никуда не делся. */
     @Test
     fun назад_с_кода_возвращает_к_номеру() = runTest {
         val store = store(backgroundScope)
-        store.подключиться()
-        store.state.first { it is AuthState.ПоказКода }
+        store.connect()
+        store.state.first { it is AuthState.DisplayCode }
 
-        store.назад()
+        store.back()
 
-        assertIs<AuthState.Телефон>(store.state.value)
+        assertIs<AuthState.Phone>(store.state.value)
     }
 
     /**
@@ -428,51 +428,51 @@ class AuthStoreTest {
      */
     @Test
     fun новый_код_просится_только_вместо_мёртвого() = runTest {
-        привязка.наОпрос = { LinkClaimStep.NotReady }
+        link.onPoll = { LinkClaimStep.NotReady }
         val store = store(backgroundScope)
 
-        store.подключиться()
-        store.state.first { it is AuthState.ПоказКода && it.код != null }
-        val сессийПоказано = привязка.стартов
-        store.подключиться()
-        assertEquals(сессийПоказано, привязка.стартов, "живой код не сбрасывается вторым нажатием")
+        store.connect()
+        store.state.first { it is AuthState.DisplayCode && it.code != null }
+        val displayedSessions = link.starts
+        store.connect()
+        assertEquals(displayedSessions, link.starts, "живой код не сбрасывается вторым нажатием")
 
-        store.state.first { it is AuthState.ПоказКода && it.беда != null }
-        store.подключиться()
+        store.state.first { it is AuthState.DisplayCode && it.trouble != null }
+        store.connect()
 
-        store.state.first { it is AuthState.ПоказКода && it.код != null }
-        assertEquals(сессийПоказано + 1, привязка.стартов, "после просрочки новый код обязан прийти")
+        store.state.first { it is AuthState.DisplayCode && it.code != null }
+        assertEquals(displayedSessions + 1, link.starts, "после просрочки новый код обязан прийти")
     }
 
     @Test
     fun плохой_номер_отсекается_до_сети() = runTest {
-        api.наЗапросКода = { CodeRequestStep.BadPhone("не E.164") }
+        api.onRequestCode = { CodeRequestStep.BadPhone("не E.164") }
         val store = store(backgroundScope)
-        store.номерИзменён("восемь-девять-ноль")
+        store.changedNumber("восемь-девять-ноль")
 
-        store.запроситьКод()
+        store.requestCode()
 
-        val состояние = store.state.first { it is AuthState.Телефон && !it.ждём }
-        assertTrue(состояние.беда.orEmpty().contains("не E.164"))
+        val state = store.state.first { it is AuthState.Phone && !it.expect }
+        assertTrue(state.trouble.orEmpty().contains("не E.164"))
     }
 
     // ── помощники ───────────────────────────────────────────────────────────
 
-    private suspend fun дошлиДоВводаФразы(scope: kotlinx.coroutines.CoroutineScope): AuthStore {
-        api.наПроверкуКода = { CodeSubmitStep.Accepted("t-1") }
-        api.наЗаведение = { DeviceCreateStep.IdentityMismatch }
-        val store = дошлиДоКода(scope)
-        store.кодИзменён("111111")
-        store.подтвердить()
-        store.state.first { it is AuthState.ВводФразы }
+    private suspend fun deliveredUntilInputPhrase(scope: kotlinx.coroutines.CoroutineScope): AuthStore {
+        api.onCheckCode = { CodeSubmitStep.Accepted("t-1") }
+        api.onCreation = { DeviceCreateStep.IdentityMismatch }
+        val store = deliveredUntilCode(scope)
+        store.changedCode("111111")
+        store.confirm()
+        store.state.first { it is AuthState.PhraseInput }
         return store
     }
 
-    private suspend fun дошлиДоКода(scope: kotlinx.coroutines.CoroutineScope): AuthStore {
+    private suspend fun deliveredUntilCode(scope: kotlinx.coroutines.CoroutineScope): AuthStore {
         val store = store(scope)
-        store.номерИзменён(ТЕЛЕФОН)
-        store.запроситьКод()
-        store.state.first { it is AuthState.Код }
+        store.changedNumber(PHONE)
+        store.requestCode()
+        store.state.first { it is AuthState.Code }
         return store
     }
 
@@ -483,54 +483,54 @@ class AuthStoreTest {
      * Здесь проверяется не он, а поведение экрана: что фраза показывается, что неверная не
      * доходит до сети, что форк требует нажатия.
      */
-    private class ПоддельныеЛичности : AccountIdentities {
-        var признаёт = true
-        override fun fresh() = NewAccountIdentity(words = СЛОВА, identityPub = ПУБЛИЧНЫЙ)
-        override fun fromWords(words: List<String>): ByteArray? = if (признаёт) ПУБЛИЧНЫЙ else null
+    private class FakeIdentity : AccountIdentities {
+        var accepts = true
+        override fun fresh() = NewAccountIdentity(words = WORDS, identityPub = PUBLIC)
+        override fun fromWords(words: List<String>): ByteArray? = if (accepts) PUBLIC else null
     }
 
-    private class ПоддельныйСтарт : DeviceLinkStart {
-        var стартов = 0
-        var посланноеИмя: String? = null
-        var наСтарт: suspend () -> LinkStartStep = {
+    private class FakeStart : DeviceLinkStart {
+        var starts = 0
+        var sentName: String? = null
+        var onStart: suspend () -> LinkStartStep = {
             LinkStartStep.Started("s-1", "tima://link/v1?session_id=s-1", "c-1")
         }
-        var наОпрос: suspend () -> LinkClaimStep = { LinkClaimStep.NotReady }
+        var onPoll: suspend () -> LinkClaimStep = { LinkClaimStep.NotReady }
 
         override suspend fun start(
             encryptionPub: ByteArray,
             signingPub: ByteArray,
             deviceName: String,
         ): LinkStartStep {
-            стартов++
-            посланноеИмя = deviceName
-            return наСтарт()
+            starts++
+            sentName = deviceName
+            return onStart()
         }
 
-        override suspend fun claim(sessionId: String, claimToken: String): LinkClaimStep = наОпрос()
+        override suspend fun claim(sessionId: String, claimToken: String): LinkClaimStep = onPoll()
     }
 
-    private class ПоддельныйApi : AccountApi {
-        var запросовКода = 0
-        var заведений = 0
-        var наЗапросКода: suspend () -> CodeRequestStep = { CodeRequestStep.CodeRequested("r-1") }
-        var наПроверкуКода: suspend () -> CodeSubmitStep = { CodeSubmitStep.Accepted("t-1") }
-        var посланныйIdentity: ByteArray? = null
-        var посланныйФорк: Boolean = false
-        var наЗаведение: suspend () -> DeviceCreateStep = {
+    private class FakeApi : AccountApi {
+        var codeRequests = 0
+        var creations = 0
+        var onRequestCode: suspend () -> CodeRequestStep = { CodeRequestStep.CodeRequested("r-1") }
+        var onCheckCode: suspend () -> CodeSubmitStep = { CodeSubmitStep.Accepted("t-1") }
+        var sentIdentity: ByteArray? = null
+        var sentFork: Boolean = false
+        var onCreation: suspend () -> DeviceCreateStep = {
             DeviceCreateStep.Created(userId = "u-1", deviceId = "d-1", accessToken = "a-1")
         }
 
         override suspend fun requestCode(phone: String): CodeRequestStep {
-            запросовКода++
-            return наЗапросКода()
+            codeRequests++
+            return onRequestCode()
         }
 
-        var проверокКода = 0
+        var codeChecks = 0
 
         override suspend fun submitCode(requestId: String, code: String): CodeSubmitStep {
-            проверокКода++
-            return наПроверкуКода()
+            codeChecks++
+            return onCheckCode()
         }
 
         override suspend fun createDevice(
@@ -541,36 +541,39 @@ class AuthStoreTest {
             platform: String,
             forceNewIdentity: Boolean,
         ): DeviceCreateStep {
-            заведений++
-            посланныйIdentity = identityPub
-            посланныйФорк = forceNewIdentity
-            return наЗаведение()
+            creations++
+            sentIdentity = identityPub
+            sentFork = forceNewIdentity
+            return onCreation()
         }
     }
 
-    private class ПамятныеСекреты : DeviceSecretStore {
-        var секрет: ByteArray? = null
-        var сессия: Session? = null
+    private class SecretMemorable : DeviceSecretStore {
+        // savedX, а не X: имена параметров уже заняли secret и session, и поле,
+        // названное так же, закрывало бы их собой — присваивание уходило бы в
+        // параметр, а проверка читала бы null.
+        var savedSecret: ByteArray? = null
+        var savedSession: Session? = null
         // Секрет без сессии — прерванная попытка, а не заведённое устройство. Настоящее
         // хранилище отвечает именно так; подделка, отвечавшая «секрет есть — значит
         // заведено», обрывала вход по фразе на «Устройство уже заведено».
-        override fun hasDevice(): Boolean = сессия != null
-        override fun saveDeviceSecret(secret: ByteArray) { секрет = secret }
-        override fun saveSession(session: Session) { сессия = session }
-        override fun session(): Session? = сессия
+        override fun hasDevice(): Boolean = savedSession != null
+        override fun saveDeviceSecret(secret: ByteArray) { savedSecret = secret }
+        override fun saveSession(session: Session) { savedSession = session }
+        override fun session(): Session? = savedSession
     }
 
     private companion object {
-        const val ТЕЛЕФОН = "+79990000001"
+        const val PHONE = "+79990000001"
 
         /** Двенадцать слов: их показывают человеку и по ним он возвращается. */
-        val СЛОВА = listOf(
+        val WORDS = listOf(
             "абажур", "берег", "ветер", "город", "дерево", "ель",
             "жизнь", "заря", "игла", "камень", "лето", "море",
         )
-        val ПУБЛИЧНЫЙ = ByteArray(32) { 7 }
+        val PUBLIC = ByteArray(32) { 7 }
 
-        val ключи = DeviceKeyFactory {
+        val keys = DeviceKeyFactory {
             DeviceKeyMaterial(
                 encryptionPub = ByteArray(32) { 1 },
                 signingPub = ByteArray(32) { 2 },

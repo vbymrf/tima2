@@ -38,38 +38,38 @@ import androidx.compose.ui.unit.dp
  * всегда, и свайп только ускоряет. Поэтому его отсутствие в верхней и нижней полосе
  * ничего не ломает: там просто работает то, что нарисовано.
  */
-fun Modifier.свайпОкон(
-    onВлево: () -> Unit,
-    onВправо: () -> Unit,
-    включён: Boolean = true,
+fun Modifier.windowSwipe(
+    onLeft: () -> Unit,
+    onRight: () -> Unit,
+    enabled: Boolean = true,
 ): Modifier = composed {
-    if (!включён) return@composed this
+    if (!enabled) return@composed this
 
-    val плотность = LocalDensity.current
-    val верх = with(плотность) { ЗОНА_ИСТОРИЙ.toPx() }
-    val низ = with(плотность) { ЗОНА_ПЕРЕМОТКИ.toPx() }
-    val порог = with(плотность) { ПОРОГ.toPx() }
+    val density = LocalDensity.current
+    val top = with(density) { ЗОНА_ИСТОРИЙ.toPx() }
+    val bottom = with(density) { ЗОНА_ПЕРЕМОТКИ.toPx() }
+    val threshold = with(density) { THRESHOLD.toPx() }
 
-    pointerInput(onВлево, onВправо) {
-        var вСреднейЗоне = false
-        var накоплено = 0f
+    pointerInput(onLeft, onRight) {
+        var inMiddleZone = false
+        var accumulated = 0f
         detectHorizontalDragGestures(
-            onDragStart = { старт ->
+            onDragStart = { start ->
                 // Решает ТОЧКА НАЧАЛА, а не текущая: жест, начатый в средней полосе,
                 // остаётся сменой окна, даже если палец уехал к краю экрана. Иначе
                 // длинный свайп по диагонали терял бы смысл на середине пути.
-                вСреднейЗоне = старт.y > верх && старт.y < size.height - низ
-                накоплено = 0f
+                inMiddleZone = start.y > top && start.y < size.height - bottom
+                accumulated = 0f
             },
             onDragEnd = {
-                if (вСреднейЗоне && накоплено <= -порог) onВлево()
-                if (вСреднейЗоне && накоплено >= порог) onВправо()
-                накоплено = 0f
+                if (inMiddleZone && accumulated <= -threshold) onLeft()
+                if (inMiddleZone && accumulated >= threshold) onRight()
+                accumulated = 0f
             },
-            onDragCancel = { накоплено = 0f },
-        ) { change, сдвиг ->
-            if (вСреднейЗоне) {
-                накоплено += сдвиг
+            onDragCancel = { accumulated = 0f },
+        ) { change, shift ->
+            if (inMiddleZone) {
+                accumulated += shift
                 // Событие потребляется, только когда жест наш: иначе средняя полоса
                 // съедала бы прокрутку у всего, что окажется внутри неё.
                 change.consume()
@@ -102,4 +102,4 @@ private val ЗОНА_ПЕРЕМОТКИ: Dp = 46.dp
  * Меньше — окна начнут меняться от случайного движения при прокрутке списка;
  * больше — жест перестанет срабатывать с одного движения пальца.
  */
-private val ПОРОГ: Dp = 72.dp
+private val THRESHOLD: Dp = 72.dp

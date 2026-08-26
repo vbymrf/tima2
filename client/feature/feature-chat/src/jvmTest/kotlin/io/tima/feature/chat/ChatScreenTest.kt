@@ -4,11 +4,11 @@ import androidx.compose.runtime.Composable
 import io.tima.core.ui.TimaColors
 import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.MessageDisplay
-import io.tima.testui.Снимок
-import io.tima.testui.ЧУЖОЙ_ФОН
-import io.tima.testui.обеТемы
-import io.tima.testui.снять
-import io.tima.testui.тема
+import io.tima.testui.Snapshot
+import io.tima.testui.FOREIGN_BACKGROUND
+import io.tima.testui.bothThemes
+import io.tima.testui.capture
+import io.tima.testui.theme
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
  * справа, чужое слева, шапка сверху, ввод снизу, нечитаемое остаётся строкой. Такой тест
  * говорит, что именно сломалось, и не краснеет от смены шрифта.
  */
-class ЭкранЧатаTest {
+class ChatScreenTest {
 
     /**
      * **Экран заливает свой фон** (находка 29).
@@ -34,19 +34,19 @@ class ЭкранЧатаTest {
      */
     @Test
     fun экран_заливает_свой_фон() {
-        val снимки = обеТемы("чат-фон", ШИРИНА, ВЫСОТА, подложка = ЧУЖОЙ_ФОН) { экран(переписка()) }
-        for ((имя, снимок) in снимки) {
-            assertTrue(!снимок.есть(ЧУЖОЙ_ФОН), "$имя: сквозь экран видна подложка")
+        val snapshots = bothThemes("чат-фон", WIDTH, HEIGHT, backdrop = FOREIGN_BACKGROUND) { screen(chat()) }
+        for ((name, snapshot) in snapshots) {
+            assertTrue(!snapshot.has(FOREIGN_BACKGROUND), "$name: сквозь экран видна подложка")
         }
     }
 
     @Test
     fun экран_рисуется_в_обеих_темах() {
-        val снимки = обеТемы("чат", ШИРИНА, ВЫСОТА) { экран(переписка()) }
-        val расхождение = снимки.getValue("светлая").расхождение(снимки.getValue("тёмная"))
+        val snapshots = bothThemes("чат", WIDTH, HEIGHT) { screen(chat()) }
+        val difference = snapshots.getValue("светлая").difference(snapshots.getValue("тёмная"))
         assertTrue(
-            расхождение > 0.10,
-            "темы расходятся лишь на ${(расхождение * 100).toInt()}% — цвет взят мимо темы",
+            difference > 0.10,
+            "темы расходятся лишь на ${(difference * 100).toInt()}% — цвет взят мимо темы",
         )
     }
 
@@ -57,16 +57,16 @@ class ЭкранЧатаTest {
      * ввода. Если пропала одна из них, из окна либо не выйти, либо не отправить.
      */
     @Test
-    fun шапка_сверху_и_зона_ввода_снизу() {
-        for ((имя, снимок) in обеТемы("чат-полосы", ШИРИНА, ВЫСОТА) { экран(переписка()) }) {
-            val навигация = тема(имя).навигация
+    fun header_top_and_zone_input_bottom() {
+        for ((name, snapshot) in bothThemes("чат-полосы", WIDTH, HEIGHT) { screen(chat()) }) {
+            val navigation = theme(name).navigation
             assertTrue(
-                есть(снимок, навигация, y = 0 until ЗОНА1),
-                "$имя: в шапке нет кнопки «назад» — из окна не выйти",
+                has(snapshot, navigation, y = 0 until ZONE_1),
+                "$name: в шапке нет кнопки «назад» — из окна не выйти",
             )
             assertTrue(
-                есть(снимок, навигация, y = (ВЫСОТА - ЗОНА4) until ВЫСОТА),
-                "$имя: в зоне ввода нет кнопки отправки",
+                has(snapshot, navigation, y = (HEIGHT - ZONE_4) until HEIGHT),
+                "$name: в зоне ввода нет кнопки отправки",
             )
         }
     }
@@ -78,21 +78,21 @@ class ЭкранЧатаTest {
      * Пузырь во всю ширину лишает переписку этого признака вовсе.
      */
     @Test
-    fun своё_справа_чужое_слева() {
-        for ((имя, снимок) in обеТемы("чат-стороны", ШИРИНА, ВЫСОТА) { экран(переписка()) }) {
-            val цвета = тема(имя)
-            val лента = ЗОНА1 until (ВЫСОТА - ЗОНА4)
+    fun own_right_foreign_left() {
+        for ((name, snapshot) in bothThemes("чат-стороны", WIDTH, HEIGHT) { screen(chat()) }) {
+            val colors = theme(name)
+            val feed = ZONE_1 until (HEIGHT - ZONE_4)
             assertTrue(
-                есть(снимок, цвета.навигация, y = лента, x = 0 until 30),
-                "$имя: у чужого сообщения нет полосы автора у левого края",
+                has(snapshot, colors.navigation, y = feed, x = 0 until 30),
+                "$name: у чужого сообщения нет полосы автора у левого края",
             )
             assertTrue(
-                есть(снимок, цвета.мои, y = лента, x = (ШИРИНА - 30) until ШИРИНА),
-                "$имя: своё сообщение не доходит до правого края",
+                has(snapshot, colors.my, y = feed, x = (WIDTH - 30) until WIDTH),
+                "$name: своё сообщение не доходит до правого края",
             )
             assertTrue(
-                !есть(снимок, цвета.мои, y = лента, x = 0 until 20),
-                "$имя: своё сообщение достаёт до левого края — сторона перестала различать",
+                !has(snapshot, colors.my, y = feed, x = 0 until 20),
+                "$name: своё сообщение достаёт до левого края — сторона перестала различать",
             )
         }
     }
@@ -107,11 +107,11 @@ class ЭкранЧатаTest {
      */
     @Test
     fun короткая_переписка_прижата_к_вводу() {
-        for ((имя, снимок) in обеТемы("чат-низ", ШИРИНА, ВЫСОТА) { экран(переписка()) }) {
-            val уВвода = (ВЫСОТА - ЗОНА4 - 40) until (ВЫСОТА - ЗОНА4)
+        for ((name, snapshot) in bothThemes("чат-низ", WIDTH, HEIGHT) { screen(chat()) }) {
+            val atInput = (HEIGHT - ZONE_4 - 40) until (HEIGHT - ZONE_4)
             assertTrue(
-                есть(снимок, тема(имя).мои, y = уВвода),
-                "$имя: последней реплики нет у поля ввода — список прижался к шапке",
+                has(snapshot, theme(name).my, y = atInput),
+                "$name: последней реплики нет у поля ввода — список прижался к шапке",
             )
         }
     }
@@ -123,20 +123,20 @@ class ЭкранЧатаTest {
      * ответа на то, чего собеседник, по его сведениям, не присылал.
      */
     @Test
-    fun нечитаемое_остаётся_строкой() {
+    fun unreadable_stays_line() {
         val только_нечитаемое = ChatState(
-            lines = listOf(строка("d-1", MessageDisplay.UNREADABLE, outgoing = false, text = null)),
+            lines = listOf(line("d-1", MessageDisplay.UNREADABLE, outgoing = false, text = null)),
         )
-        val пусто = снять("чат-пусто", ШИРИНА, ВЫСОТА, тёмная = false) { экран(ChatState()) }
-        val снимок = снять("чат-нечитаемое", ШИРИНА, ВЫСОТА, тёмная = false) { экран(только_нечитаемое) }
+        val empty = capture("чат-пусто", WIDTH, HEIGHT, dark = false) { screen(ChatState()) }
+        val snapshot = capture("чат-нечитаемое", WIDTH, HEIGHT, dark = false) { screen(только_нечитаемое) }
 
-        val лента = ЗОНА1 until (ВЫСОТА - ЗОНА4)
+        val feed = ZONE_1 until (HEIGHT - ZONE_4)
         assertTrue(
-            снимок.расхождение(пусто) > 0.0,
+            snapshot.difference(empty) > 0.0,
             "нечитаемое сообщение не нарисовалось вовсе",
         )
         assertTrue(
-            есть(снимок, TimaColors.светлая.навигация, y = лента, x = 0 until 30),
+            has(snapshot, TimaColors.light.navigation, y = feed, x = 0 until 30),
             "у нечитаемого нет даже полосы автора — сообщение исчезло из переписки",
         )
     }
@@ -154,18 +154,18 @@ class ЭкранЧатаTest {
      */
     @Test
     fun неразобранное_и_нечитаемое_выглядят_по_разному() {
-        val нечитаемое = ChatState(
-            lines = listOf(строка("d-1", MessageDisplay.UNREADABLE, outgoing = false, text = null)),
+        val unreadable = ChatState(
+            lines = listOf(line("d-1", MessageDisplay.UNREADABLE, outgoing = false, text = null)),
         )
-        val ещёНеРазобрано = ChatState(
-            lines = listOf(строка("d-1", MessageDisplay.RECEIVED, outgoing = false, text = null)),
+        val notParsedYet = ChatState(
+            lines = listOf(line("d-1", MessageDisplay.RECEIVED, outgoing = false, text = null)),
         )
 
-        val первое = снять("чат-нечитаемое-надпись", ШИРИНА, ВЫСОТА, тёмная = false) { экран(нечитаемое) }
-        val второе = снять("чат-разбирается", ШИРИНА, ВЫСОТА, тёмная = false) { экран(ещёНеРазобрано) }
+        val first = capture("чат-нечитаемое-надпись", WIDTH, HEIGHT, dark = false) { screen(unreadable) }
+        val second = capture("чат-разбирается", WIDTH, HEIGHT, dark = false) { screen(notParsedYet) }
 
         assertTrue(
-            первое.расхождение(второе) > 0.0,
+            first.difference(second) > 0.0,
             "оба состояния нарисованы одинаково — человеку сказали «не читается» о том, " +
                 "что сейчас появится",
         )
@@ -179,31 +179,31 @@ class ЭкранЧатаTest {
      */
     @Test
     fun беда_видна_и_набранное_остаётся() {
-        val сБедой = ChatState(
-            lines = переписка().lines,
+        val withTrouble = ChatState(
+            lines = chat().lines,
             draft = "очень длинное сообщение",
             notice = ChatNotice.TooLarge(bytes = 5000, limit = 4096),
         )
-        val безБеды = ChatState(lines = переписка().lines, draft = "очень длинное сообщение")
+        val troubleWithout = ChatState(lines = chat().lines, draft = "очень длинное сообщение")
 
-        val сжалобой = снять("чат-беда", ШИРИНА, ВЫСОТА, тёмная = false) { экран(сБедой) }
-        val без = снять("чат-без-беды", ШИРИНА, ВЫСОТА, тёмная = false) { экран(безБеды) }
-        val пустоеПоле = снять("чат-пустое-поле", ШИРИНА, ВЫСОТА, тёмная = false) { экран(переписка()) }
+        val withComplaint = capture("чат-беда", WIDTH, HEIGHT, dark = false) { screen(withTrouble) }
+        val without = capture("чат-без-беды", WIDTH, HEIGHT, dark = false) { screen(troubleWithout) }
+        val emptyField = capture("чат-пустое-поле", WIDTH, HEIGHT, dark = false) { screen(chat()) }
 
-        assertTrue(сжалобой.расхождение(без) > 0.0, "сообщение о беде не нарисовалось")
+        assertTrue(withComplaint.difference(without) > 0.0, "сообщение о беде не нарисовалось")
         assertTrue(
-            без.расхождение(пустоеПоле) > 0.0,
+            without.difference(emptyField) > 0.0,
             "набранного не видно в поле — а именно оно и не должно теряться",
         )
     }
 
     private companion object {
-        const val ШИРИНА = 380
-        const val ВЫСОТА = 800
+        const val WIDTH = 380
+        const val HEIGHT = 800
 
         /** Зоны из макета: шапка и строка ввода. */
-        const val ЗОНА1 = 56
-        const val ЗОНА4 = 62
+        const val ZONE_1 = 56
+        const val ZONE_4 = 62
 
         /**
          * Пятно цвета в области — а не одиночный пиксель.
@@ -212,14 +212,14 @@ class ЭкранЧатаTest {
          * дала ровно тот серый, каким залито своё сообщение, и проверка «своё не касается
          * левого края» покраснела на четырёх пикселях сглаживания.
          */
-        fun есть(
-            снимок: Снимок,
-            цвет: androidx.compose.ui.graphics.Color,
+        fun has(
+            snapshot: Snapshot,
+            color: androidx.compose.ui.graphics.Color,
             y: IntRange,
-            x: IntRange = 0 until снимок.ширина,
-        ): Boolean = снимок.естьПятно(цвет, x = x, y = y)
+            x: IntRange = 0 until snapshot.width,
+        ): Boolean = snapshot.patchHas(color, x = x, y = y)
 
-        fun строка(
+        fun line(
             dedupKey: String,
             display: MessageDisplay,
             outgoing: Boolean,
@@ -236,24 +236,24 @@ class ЭкранЧатаTest {
         )
 
         /** Смешанная переписка: чужое, своё во всех трёх состояниях, нечитаемое. */
-        fun переписка() = ChatState(
+        fun chat() = ChatState(
             lines = listOf(
-                строка("d-5", MessageDisplay.PENDING, outgoing = true, text = "ещё не ушло"),
-                строка("d-4", MessageDisplay.FAILED, outgoing = true, text = "не дошло совсем"),
-                строка("d-3", MessageDisplay.SENT, outgoing = true, text = "моё сообщение"),
-                строка("d-2", MessageDisplay.UNREADABLE, outgoing = false, text = null),
-                строка("d-1", MessageDisplay.RECEIVED, outgoing = false, text = "чужое сообщение"),
+                line("d-5", MessageDisplay.PENDING, outgoing = true, text = "ещё не ушло"),
+                line("d-4", MessageDisplay.FAILED, outgoing = true, text = "не дошло совсем"),
+                line("d-3", MessageDisplay.SENT, outgoing = true, text = "моё сообщение"),
+                line("d-2", MessageDisplay.UNREADABLE, outgoing = false, text = null),
+                line("d-1", MessageDisplay.RECEIVED, outgoing = false, text = "чужое сообщение"),
             ),
         )
 
         @Composable
-        fun экран(состояние: ChatState) = ЭкранЧата(
-            состояние = состояние,
-            собеседник = "Аня",
-            подпись = "в сети",
-            onНабор = {},
-            onОтправить = {},
-            onНазад = {},
+        fun screen(state: ChatState) = ChatScreen(
+            state = state,
+            peer = "Аня",
+            caption = "в сети",
+            onSet = {},
+            onSend = {},
+            onBack = {},
         )
     }
 }

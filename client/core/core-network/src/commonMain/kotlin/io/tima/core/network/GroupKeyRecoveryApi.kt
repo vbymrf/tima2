@@ -38,12 +38,12 @@ class GroupKeyRecoveryApi(
      *   base64url. `null` — у аккаунта нет фразы либо она сейчас недоступна.
      */
     suspend fun request(groupId: String, signature: String? = null): RecoverResult {
-        val тело = if (signature == null) "{}" else "{\"signature\":\"" + signature + "\"}"
+        val requestBody = if (signature == null) "{}" else "{\"signature\":\"" + signature + "\"}"
         val response = try {
             client.post(route.api("/api/v1/groups/$groupId/keys/recover")) {
                 header("Authorization", "Bearer ${token()}")
                 contentType(ContentType.Application.Json)
-                setBody(тело)
+                setBody(requestBody)
             }
         } catch (e: Throwable) {
             return RecoverResult.NoConnection(classifyFailure(e))
@@ -77,17 +77,17 @@ class GroupKeyRecoveryApi(
         keys: List<ProvidedKey>,
     ): ProvideResult {
         require(keys.isNotEmpty()) { "отдавать нечего — вызывать не следовало" }
-        val элементы = keys.joinToString(",") { ключ ->
-            "{\"gk_version\":" + ключ.gkVersion +
-                ",\"sender_ephemeral_pub\":\"" + encodeBase64Url(ключ.senderEphemeralPub) +
-                "\",\"wrapped\":\"" + encodeBase64Url(ключ.wrapped) + "\"}"
+        val elements = keys.joinToString(",") { key ->
+            "{\"gk_version\":" + key.gkVersion +
+                ",\"sender_ephemeral_pub\":\"" + encodeBase64Url(key.senderEphemeralPub) +
+                "\",\"wrapped\":\"" + encodeBase64Url(key.wrapped) + "\"}"
         }
-        val тело = "{\"requester_device\":\"" + requesterDevice + "\",\"keys\":[" + элементы + "]}"
+        val requestBody = "{\"requester_device\":\"" + requesterDevice + "\",\"keys\":[" + elements + "]}"
         val response = try {
             client.post(route.api("/api/v1/groups/$groupId/keys/recover/provide")) {
                 header("Authorization", "Bearer ${token()}")
                 contentType(ContentType.Application.Json)
-                setBody(тело)
+                setBody(requestBody)
             }
         } catch (e: Throwable) {
             return ProvideResult.NoConnection(classifyFailure(e))

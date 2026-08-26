@@ -35,28 +35,28 @@ import kotlinx.coroutines.delay
  * **Переподключение решает вызывающий, а не канал.** [EventStream] возвращает исход и
  * заканчивается; политика повторов — здесь, потому что здесь известно, сколько ждать.
  */
-class Приёмник(
-    private val окружение: Окружение,
-    private val сеть: Сеть,
-    private val сессия: Session,
-    private val личность: DeviceIdentity,
-    private val оркестрКлючей: ОркестрГрупповыхКлючей,
+class Receiver(
+    private val environment: Environment,
+    private val network: Network,
+    private val session: Session,
+    private val identity: DeviceIdentity,
+    private val keyOrchestrator: GroupKeyOrchestrator,
 ) {
 
     /** Что случилось с каналом в последний раз. Для диагностики, не для решений. */
-    var последнийИсход: String? = null
+    var lastOutcome: String? = null
         private set
 
     /** Ключи подписи по устройству отправителя: спрашиваются один раз на устройство. */
-    private val ключиОтправителей = HashMap<String, ByteArray>()
+    private val senderKeys = HashMap<String, ByteArray>()
 
-    private val книга = SqlChatBook(окружение.db, окружение.шифр)
+    private val book = SqlChatBook(environment.db, environment.cipher)
 
     // ── Групповые ключи ──────────────────────────────────────────────────────
     //
     // Собираются НЕ здесь: канал только приносит кадры, а выполняет их работа, которой
     // нужны escrow, крипта, сеть и хранилище разом. Приёмник получает готовый оркестр.
-    private val ключиГруппы get() = оркестрКлючей.ключи
+    private val groupKeys get() = keyOrchestrator.keys
 
     /**
      * Держать канал, пока приложение живо.
@@ -64,16 +64,16 @@ class Приёмник(
      * Бесконечный цикл здесь на месте: канал — это и есть «пока живо». Пауза между
      * попытками берётся из состояния связи, а не из общего «подождём пять секунд».
      */
-    suspend fun держать() {
+    suspend fun hold() {
         while (true) {
-            val исход = runCatching {
-                сеть.каналСобытий()
+            val outcome = runCatching {
+                network.eventChannel()
                     .run(
                         cursor = null,
-                        onGroupKeys = { решение -> проКлючи(решение) },
-                    ) { событие -> принять(событие.chatId, событие.messageId, событие.envelope) }
+                        onGroupKeys = { decision -> aboutKeys(decision) },
+                    ) { event -> accept(event.chatId, event.messageId, event.envelope) }
             }
-            последнийИсход = исход.fold(
+            lastOutcome = outcome.fold(
                 onSuccess = { it.toString() },
                 onFailure = { "канал упал: ${it::class.simpleName}: ${it.message}" },
             )
@@ -89,54 +89,54 @@ class Приёмник(
      * экране «сообщение недоступно» с предложением запросить ключ. Именно поэтому здесь
      * `NoKey`, а не `Rejected`: первое означает «попробуем ещё», второе — «никогда».
      */
-    private suspend fun принятьГрупповое(groupId: String, messageId: Long, кадр: ByteArray) {
-        val разобранный = GroupFrame.parse(кадр)
-        окружение.входящие.receive(groupId, messageId, кадр)
+    private suspend fun acceptGroup(groupId: String, messageId: Long, frame: ByteArray) {
+        val parsed = GroupFrame.parse(frame)
+        environment.incoming.receive(groupId, messageId, frame)
 
         // Ключ подписи спрашивается до разбора: сам разбор синхронный, и ходить за ним
         // изнутри нельзя. Промах кэша означает лишь, что сообщение откроется следующей
         // попыткой — оно уже записано и не потеряется.
-        if (разобранный != null) ключПодписи(разобранный.senderId, разобранный.senderDevice)
+        if (parsed != null) captionKey(parsed.senderId, parsed.senderDevice)
 
-        окружение.входящие.openNext { запись ->
-            if (!GroupFrame.isGroupFrame(запись.envelope)) {
+        environment.incoming.openNext { entry ->
+            if (!GroupFrame.isGroupFrame(entry.envelope)) {
                 // Очередь отдала не групповую запись: её откроет свой путь. Причина
                 // называется словами, чтобы это не выглядело потерей ключа.
                 OpenOutcome.NoKey("запись не групповая — ждёт своего разбора")
             } else {
-                открытьГрупповое(запись)
+                openGroup(entry)
             }
         }
 
         // Группа в списке переписок: без строки человек не увидит, куда пришло сообщение.
-        if (!окружение.фактыПереписок.knows(groupId)) {
-            книга.remember(chatId = groupId, kind = ChatKind.Group, title = "Группа", peerId = null)
+        if (!environment.chatFacts.knows(groupId)) {
+            book.remember(chatId = groupId, kind = ChatKind.Group, title = "Группа", peerId = null)
         }
     }
 
-    private fun открытьГрупповое(запись: IncomingEntry): OpenOutcome {
-        val кадр = GroupFrame.parse(запись.envelope)
+    private fun openGroup(entry: IncomingEntry): OpenOutcome {
+        val frame = GroupFrame.parse(entry.envelope)
             ?: return OpenOutcome.Rejected("кадр группы не разбирается")
-        val ключГруппы = ключиГруппы.key(кадр.groupId, кадр.gkVersion)
-            ?: return OpenOutcome.NoKey("нет ключа версии ${кадр.gkVersion}")
-        val ключПодписи = ключиОтправителей[кадр.senderDevice]
+        val groupKey = groupKeys.key(frame.groupId, frame.gkVersion)
+            ?: return OpenOutcome.NoKey("нет ключа версии ${frame.gkVersion}")
+        val captionKey = senderKeys[frame.senderDevice]
             ?: return OpenOutcome.NoKey("ключ подписи отправителя не получен")
 
         // Метаданные собирает фасад: их раскладка входит в подписываемые байты, и
         // собирать её здесь значило бы держать копию правила вдали от него самого.
         return GroupMessages.open(
-            groupId = кадр.groupId,
-            senderId = кадр.senderId,
-            senderDevice = кадр.senderDevice,
-            kind = кадр.kind,
-            createdAtUnixMs = кадр.createdAtUnixMs,
-            threadRoot = кадр.threadRoot,
-            replyTo = кадр.replyTo,
-            gkVersion = кадр.gkVersion,
-            payload = кадр.payload,
-            signature = кадр.signature,
-            senderSigningPublic = ключПодписи,
-            groupKey = ключГруппы,
+            groupId = frame.groupId,
+            senderId = frame.senderId,
+            senderDevice = frame.senderDevice,
+            kind = frame.kind,
+            createdAtUnixMs = frame.createdAtUnixMs,
+            threadRoot = frame.threadRoot,
+            replyTo = frame.replyTo,
+            gkVersion = frame.gkVersion,
+            payload = frame.payload,
+            signature = frame.signature,
+            senderSigningPublic = captionKey,
+            groupKey = groupKey,
         ).fold(
             onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId) },
             onFailure = { OpenOutcome.Rejected("сообщение группы не открылось: ${it.message}") },
@@ -144,8 +144,8 @@ class Приёмник(
     }
 
     /** Кадр про групповые ключи: исход остаётся в диагностике, канал не роняется. */
-    private suspend fun проКлючи(решение: EventStreamProtocol.Decision) {
-        оркестрКлючей.обработать(решение)?.let { последнийИсход = it }
+    private suspend fun aboutKeys(decision: EventStreamProtocol.Decision) {
+        keyOrchestrator.handle(decision)?.let { lastOutcome = it }
     }
 
     /**
@@ -154,15 +154,15 @@ class Приёмник(
      * Возвращается **только после записи**: подтверждение уходит сразу после нас, а
      * подтверждённое сервер больше не пришлёт.
      */
-    private suspend fun принять(chatId: String, messageId: Long, envelope: ByteArray) {
+    private suspend fun accept(chatId: String, messageId: Long, envelope: ByteArray) {
         // Групповое сообщение приходит тем же путём, но открывается иначе: у него нет
         // конверта, а подпись считается по метаданным вместе с payload.
         if (GroupFrame.isGroupFrame(envelope)) {
-            принятьГрупповое(chatId, messageId, envelope)
+            acceptGroup(chatId, messageId, envelope)
             return
         }
 
-        val отправитель = отправительКонверта(envelope)
+        val sender = envelopeSender(envelope)
 
         // Своя копия с ЭТОГО ЖЕ устройства — не входящее сообщение, а эхо: сервер
         // рассылает конверт по всем обёрткам ключа, включая нашу собственную. Записать её
@@ -171,42 +171,42 @@ class Приёмник(
         //
         // Подтверждение серверу при этом уходит: событие обработано, повторять его не
         // надо. Молча пропустить и не подтвердить значило бы получать его вечно.
-        if (свояКопия(отправитель?.deviceId)) {
-            последнийИсход = "эхо своего сообщения пропущено"
+        if (ownCopy(sender?.deviceId)) {
+            lastOutcome = "эхо своего сообщения пропущено"
             return
         }
 
-        окружение.входящие.receive(chatId, messageId, envelope)
+        environment.incoming.receive(chatId, messageId, envelope)
 
         // Разбор — уже после записи. Упадёт — сообщение останется на повтор.
-        val ключ = отправитель?.let { ключПодписи(it.userId, it.deviceId) }
+        val key = sender?.let { captionKey(it.userId, it.deviceId) }
 
-        окружение.входящие.openNext { запись ->
+        environment.incoming.openNext { entry ->
             when {
-                отправитель == null -> OpenOutcome.Rejected("конверт не разбирается")
-                ключ == null -> OpenOutcome.NoKey("ключ подписи отправителя не получен")
-                else -> открыть(запись, ключ)
+                sender == null -> OpenOutcome.Rejected("конверт не разбирается")
+                key == null -> OpenOutcome.NoKey("ключ подписи отправителя не получен")
+                else -> open(entry, key)
             }
         }
 
         // Переписка от незнакомого — со своим именем: иначе в списке появится строка без
         // имени, и человек не узнает, кто написал.
-        if (отправитель != null && !окружение.фактыПереписок.knows(chatId)) {
-            книга.remember(
+        if (sender != null && !environment.chatFacts.knows(chatId)) {
+            book.remember(
                 chatId = chatId,
                 kind = ChatKind.Personal,
-                title = сеть.справочник.имяИлиНомер(отправитель.userId),
-                peerId = отправитель.userId,
+                title = network.directory.nameOrNumber(sender.userId),
+                peerId = sender.userId,
             )
         }
     }
 
-    private fun открыть(запись: IncomingEntry, ключПодписи: ByteArray): OpenOutcome =
+    private fun open(entry: IncomingEntry, captionKey: ByteArray): OpenOutcome =
         PersonalMessages.open(
-            envelopeBytes = запись.envelope,
-            myDeviceId = сессия.deviceId,
-            me = личность,
-            senderSigningPublic = ключПодписи,
+            envelopeBytes = entry.envelope,
+            myDeviceId = session.deviceId,
+            me = identity,
+            senderSigningPublic = captionKey,
         ).fold(
             // Записываются БАЙТЫ ТЕЛА, как пришли, а не текст: столбец читается кодеком,
             // и запись текстом означала бы «расшифровано и не читается» — состояние, в
@@ -225,25 +225,25 @@ class Приёмник(
      * человек написал сам с телефона и хочет видеть на ПК; показывать его надо своим, а не
      * чужим, и это отдельная работа (привязка второго устройства, К5.1).
      */
-    internal fun свояКопия(senderDeviceId: String?): Boolean = senderDeviceId == сессия.deviceId
+    internal fun ownCopy(senderDeviceId: String?): Boolean = senderDeviceId == session.deviceId
 
     /** Кто прислал — по открытой части конверта. Доверенным станет после проверки подписи. */
-    private fun отправительКонверта(envelope: ByteArray): Отправившее? =
+    private fun envelopeSender(envelope: ByteArray): SentBy? =
         PersonalMessages.peekSender(envelope)?.let {
-            Отправившее(userId = it.userId, deviceId = it.deviceId)
+            SentBy(userId = it.userId, deviceId = it.deviceId)
         }
 
-    private suspend fun ключПодписи(userId: String, deviceId: String): ByteArray? {
-        ключиОтправителей[deviceId]?.let { return it }
-        val исход = сеть.ключи.devicesOf(userId)
-        if (исход !is DeviceKeysResult.Devices) return null
-        for (устройство in исход.devices) {
-            ключиОтправителей[устройство.deviceId] = устройство.signingPub
+    private suspend fun captionKey(userId: String, deviceId: String): ByteArray? {
+        senderKeys[deviceId]?.let { return it }
+        val outcome = network.keys.devicesOf(userId)
+        if (outcome !is DeviceKeysResult.Devices) return null
+        for (device in outcome.devices) {
+            senderKeys[device.deviceId] = device.signingPub
         }
-        return ключиОтправителей[deviceId]
+        return senderKeys[deviceId]
     }
 
-    private class Отправившее(val userId: String, val deviceId: String)
+    private class SentBy(val userId: String, val deviceId: String)
 
     private companion object {
         /**

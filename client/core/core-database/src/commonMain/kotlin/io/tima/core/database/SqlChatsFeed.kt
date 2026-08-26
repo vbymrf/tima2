@@ -46,7 +46,7 @@ class SqlChatsFeed(
 ) : ChatsFeed {
 
     override fun list(limit: Int): Flow<List<ChatSummary>> {
-        val сСообщениями = db.chatsQueries.chatList(
+        val withMessages = db.chatsQueries.chatList(
             readState = IncomingState.READ.ordinal.toLong(),
             limit = limit.toLong(),
         )
@@ -55,10 +55,10 @@ class SqlChatsFeed(
             .asFlow()
             .mapToList(Dispatchers.Default)
 
-        val пустые = db.chatsQueries.emptyChats().asFlow().mapToList(Dispatchers.Default)
+        val empty = db.chatsQueries.emptyChats().asFlow().mapToList(Dispatchers.Default)
 
-        return сСообщениями.combine(пустые) { строки, пустышки ->
-            пустышки.map { it.toSummary() } + строки.map { it.toSummary() }
+        return withMessages.combine(empty) { lines, stubs ->
+            stubs.map { it.toSummary() } + lines.map { it.toSummary() }
         }
     }
 
@@ -69,11 +69,11 @@ class SqlChatsFeed(
         title = title_enc?.let { cipher.open(it) }?.decodeToString(),
         // Нет строки имени — считаем переписку личной: группа без имени не заводится, а
         // личная появляется от одного сообщения.
-        kind = if (kind == ГРУППА) ChatKind.Group else ChatKind.Personal,
+        kind = if (kind == GROUP) ChatKind.Group else ChatKind.Personal,
         peerId = peer_id,
-        preview = превью(last_direction, last_state, last_body),
+        preview = preview(last_direction, last_state, last_body),
         // То же правило, что в переписке: входящее от себя же — своё.
-        lastOutgoing = last_direction == ИСХОДЯЩЕЕ ||
+        lastOutgoing = last_direction == OUTGOING ||
             (last_sender.isNotEmpty() && last_sender == myUserId),
         lastDisplay = displayOf(last_direction, last_state),
         atMs = last_at ?: 0,
@@ -90,7 +90,7 @@ class SqlChatsFeed(
     private fun Chats.toSummary() = ChatSummary(
         chatId = chat_id,
         title = title_enc?.let { cipher.open(it) }?.decodeToString(),
-        kind = if (kind == ГРУППА) ChatKind.Group else ChatKind.Personal,
+        kind = if (kind == GROUP) ChatKind.Group else ChatKind.Personal,
         peerId = peer_id,
         preview = null,
         lastOutgoing = false,
@@ -106,15 +106,15 @@ class SqlChatsFeed(
      * потом разобрать тело кодеком. У входящего до разбора в столбце лежит конверт, а не
      * тело, и превью у такой строки нет — показывать байты конверта было бы хуже пустоты.
      */
-    private fun превью(direction: Long, state: Long, поле: ByteArray): String? {
-        if (direction != ИСХОДЯЩЕЕ && !входящееРазобрано(state)) return null
-        val открытое = cipher.open(поле) ?: return null
-        return codec.decodeText(открытое)
+    private fun preview(direction: Long, state: Long, field: ByteArray): String? {
+        if (direction != OUTGOING && !incomingParsed(state)) return null
+        val open = cipher.open(field) ?: return null
+        return codec.decodeText(open)
     }
 
     private companion object {
         /** `kind` из схемы: 0 — личная, 1 — группа. */
-        const val ГРУППА = 1L
+        const val GROUP = 1L
     }
 }
 
@@ -159,13 +159,13 @@ class SqlReadMarks(private val inbox: Inbox) : ReadMarks {
  */
 class SqlChatFacts(private val db: TimaDatabase) : ChatFacts {
 
-    override fun kindOf(chatId: String): ChatKind? = строка(chatId)?.let {
+    override fun kindOf(chatId: String): ChatKind? = line(chatId)?.let {
         if (it.kind.toInt() == ChatKind.Group.ordinal) ChatKind.Group else ChatKind.Personal
     }
 
-    override fun peerOf(chatId: String): String? = строка(chatId)?.peer_id
+    override fun peerOf(chatId: String): String? = line(chatId)?.peer_id
 
-    override fun knows(chatId: String): Boolean = строка(chatId) != null
+    override fun knows(chatId: String): Boolean = line(chatId) != null
 
-    private fun строка(chatId: String) = db.chatsQueries.chatById(chatId).executeAsOneOrNull()
+    private fun line(chatId: String) = db.chatsQueries.chatById(chatId).executeAsOneOrNull()
 }

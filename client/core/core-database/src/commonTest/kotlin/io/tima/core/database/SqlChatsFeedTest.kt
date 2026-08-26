@@ -26,50 +26,50 @@ import kotlin.test.assertTrue
 class SqlChatsFeedTest {
 
     private val db = testDatabase()
-    private val шифр = тестовыйШифр()
-    private val outbox = SqlOutboxStore(db, шифр)
-    private val inbox = SqlInboxStore(db, шифр)
-    private val chats = ObserveChats(SqlChatsFeed(db, Кодек, шифр, Я))
+    private val cipher = testCipher()
+    private val outbox = SqlOutboxStore(db, cipher)
+    private val inbox = SqlInboxStore(db, cipher)
+    private val chats = ObserveChats(SqlChatsFeed(db, Codec, cipher, Me))
 
-    private fun исходящее(chatId: String, текст: String, ts: Long, state: OutboxState = OutboxState.SENT) {
+    private fun outgoing(chatId: String, text: String, ts: Long, state: OutboxState = OutboxState.SENT) {
         outbox.putIfAbsent(
             OutboxEntry(
                 dedupKey = "d-$chatId-$ts",
                 chatId = chatId,
-                body = Кодек.encodeText(текст),
+                body = Codec.encodeText(text),
                 createdAtMs = ts,
             ),
         )
-        val запись = outbox.byDedupKey("d-$chatId-$ts")!!
-        outbox.update(запись.copy(state = state))
+        val entry = outbox.byDedupKey("d-$chatId-$ts")!!
+        outbox.update(entry.copy(state = state))
     }
 
-    private fun входящее(
+    private fun incoming(
         chatId: String,
         messageId: Long,
-        текст: String?,
+        text: String?,
         ts: Long,
         state: IncomingState = IncomingState.STORED,
-        автор: String = СОБЕСЕДНИК,
+        author: String = PEER,
     ) {
         inbox.putIfAbsent(
             IncomingEntry(
                 chatId = chatId,
                 messageId = messageId,
-                envelope = Кодек.НЕЧИТАЕМОЕ,
+                envelope = Codec.UNREADABLE,
                 receivedAtMs = ts,
             ),
         )
-        if (текст != null) inbox.storeParsed(chatId, messageId, Кодек.encodeText(текст), автор)
-        val запись = inbox.byKey(chatId, messageId)!!
-        inbox.update(запись.copy(state = state))
+        if (text != null) inbox.storeParsed(chatId, messageId, Codec.encodeText(text), author)
+        val entry = inbox.byKey(chatId, messageId)!!
+        inbox.update(entry.copy(state = state))
     }
 
-    private fun имя(chatId: String, имя: String, kind: Long = 0, peer: String? = "u-1") {
+    private fun name(chatId: String, name: String, kind: Long = 0, peer: String? = "u-1") {
         db.chatsQueries.upsertChat(
             chat_id = chatId,
             kind = kind,
-            title_enc = шифр.seal(имя.encodeToByteArray()),
+            title_enc = cipher.seal(name.encodeToByteArray()),
             peer_id = peer,
         )
     }
@@ -88,17 +88,17 @@ class SqlChatsFeedTest {
      */
     @Test
     fun пустая_переписка_видна_в_списке() = runTest {
-        имя("g-1", "Поход", kind = 1, peer = null)
+        name("g-1", "Поход", kind = 1, peer = null)
 
-        val строка = chats.list().first().single()
+        val line = chats.list().first().single()
 
-        assertEquals("g-1", строка.chatId)
-        assertEquals("Поход", строка.title)
-        assertEquals(ChatKind.Group, строка.kind)
-        assertNull(строка.preview, "сообщений нет — превью взять негде")
-        assertNull(строка.atMs, "времени нет: последнего сообщения не существует")
-        assertNull(строка.lastDisplay, "отметки у пустоты не бывает")
-        assertEquals(0, строка.unread)
+        assertEquals("g-1", line.chatId)
+        assertEquals("Поход", line.title)
+        assertEquals(ChatKind.Group, line.kind)
+        assertNull(line.preview, "сообщений нет — превью взять негде")
+        assertNull(line.atMs, "времени нет: последнего сообщения не существует")
+        assertNull(line.lastDisplay, "отметки у пустоты не бывает")
+        assertEquals(0, line.unread)
     }
 
     /**
@@ -110,25 +110,25 @@ class SqlChatsFeedTest {
      */
     @Test
     fun пустые_переписки_идут_первыми() = runTest {
-        исходящее("chat-1", "привет", ts = 5_000)
-        имя("g-1", "Поход", kind = 1, peer = null)
+        outgoing("chat-1", "привет", ts = 5_000)
+        name("g-1", "Поход", kind = 1, peer = null)
 
-        val порядок = chats.list().first().map { it.chatId }
+        val order = chats.list().first().map { it.chatId }
 
-        assertEquals(listOf("g-1", "chat-1"), порядок)
+        assertEquals(listOf("g-1", "chat-1"), order)
     }
 
     /** Пришло первое сообщение — и переписка перестаёт быть пустой, а не удваивается. */
     @Test
     fun с_первым_сообщением_пустая_становится_обычной() = runTest {
-        имя("g-1", "Поход", kind = 1, peer = null)
-        исходящее("g-1", "всем привет", ts = 1_000)
+        name("g-1", "Поход", kind = 1, peer = null)
+        outgoing("g-1", "всем привет", ts = 1_000)
 
-        val список = chats.list().first()
+        val list = chats.list().first()
 
-        assertEquals(1, список.size, "строка обязана быть одна, а не две")
-        assertEquals("всем привет", список.single().preview)
-        assertEquals(1_000, список.single().atMs)
+        assertEquals(1, list.size, "строка обязана быть одна, а не две")
+        assertEquals("всем привет", list.single().preview)
+        assertEquals(1_000, list.single().atMs)
     }
 
     // ── список выводится из сообщений ────────────────────────────────────────
@@ -142,72 +142,72 @@ class SqlChatsFeedTest {
      */
     @Test
     fun переписка_видна_даже_без_имени() = runTest {
-        исходящее("chat-1", "привет", ts = 1_000)
+        outgoing("chat-1", "привет", ts = 1_000)
 
-        val список = chats.list().first()
+        val list = chats.list().first()
 
-        assertEquals(1, список.size)
-        assertEquals("chat-1", список.single().chatId)
-        assertNull(список.single().title, "имени нет — и выдумывать его нечем")
-        assertEquals("привет", список.single().preview)
+        assertEquals(1, list.size)
+        assertEquals("chat-1", list.single().chatId)
+        assertNull(list.single().title, "имени нет — и выдумывать его нечем")
+        assertEquals("привет", list.single().preview)
     }
 
     @Test
     fun имя_расшифровывается_и_вид_переписки_читается() = runTest {
-        исходящее("chat-1", "привет", ts = 1_000)
-        имя("chat-1", "Аня Борисова", kind = 0, peer = "u-аня")
-        исходящее("chat-2", "всем привет", ts = 2_000)
-        имя("chat-2", "Поход", kind = 1, peer = null)
+        outgoing("chat-1", "привет", ts = 1_000)
+        name("chat-1", "Аня Борисова", kind = 0, peer = "u-аня")
+        outgoing("chat-2", "всем привет", ts = 2_000)
+        name("chat-2", "Поход", kind = 1, peer = null)
 
-        val список = chats.list().first().associateBy { it.chatId }
+        val list = chats.list().first().associateBy { it.chatId }
 
-        assertEquals("Аня Борисова", список["chat-1"]?.title)
-        assertEquals(ChatKind.Personal, список["chat-1"]?.kind)
-        assertEquals("u-аня", список["chat-1"]?.peerId)
-        assertEquals("Поход", список["chat-2"]?.title)
-        assertEquals(ChatKind.Group, список["chat-2"]?.kind)
-        assertNull(список["chat-2"]?.peerId, "у группы собеседника нет")
+        assertEquals("Аня Борисова", list["chat-1"]?.title)
+        assertEquals(ChatKind.Personal, list["chat-1"]?.kind)
+        assertEquals("u-аня", list["chat-1"]?.peerId)
+        assertEquals("Поход", list["chat-2"]?.title)
+        assertEquals(ChatKind.Group, list["chat-2"]?.kind)
+        assertNull(list["chat-2"]?.peerId, "у группы собеседника нет")
     }
 
     /** Имя лежит в базе закрытым: это содержимое переписки, а не метаданные. */
     @Test
     fun имя_в_базе_закрыто() = runTest {
-        исходящее("chat-1", "привет", ts = 1_000)
-        имя("chat-1", "Аня Борисова")
+        outgoing("chat-1", "привет", ts = 1_000)
+        name("chat-1", "Аня Борисова")
 
-        val строка = db.chatsQueries.chatById("chat-1").executeAsOne()
+        val line = db.chatsQueries.chatById("chat-1").executeAsOne()
 
         assertTrue(
-            !строка.title_enc.contentEquals("Аня Борисова".encodeToByteArray()),
+            !line.title_enc.contentEquals("Аня Борисова".encodeToByteArray()),
             "имя собеседника лежит открытым",
         )
-        assertEquals("Аня Борисова", шифр.open(строка.title_enc!!)?.decodeToString())
+        assertEquals("Аня Борисова", cipher.open(line.title_enc!!)?.decodeToString())
     }
 
     // ── порядок и превью ────────────────────────────────────────────────────
 
     @Test
     fun сверху_та_переписка_где_сказали_последним() = runTest {
-        исходящее("старая", "давно", ts = 1_000)
-        исходящее("новая", "только что", ts = 5_000)
-        исходящее("средняя", "вчера", ts = 3_000)
+        outgoing("старая", "давно", ts = 1_000)
+        outgoing("новая", "только что", ts = 5_000)
+        outgoing("средняя", "вчера", ts = 3_000)
 
-        val порядок = chats.list().first().map { it.chatId }
+        val order = chats.list().first().map { it.chatId }
 
-        assertEquals(listOf("новая", "средняя", "старая"), порядок)
+        assertEquals(listOf("новая", "средняя", "старая"), order)
     }
 
     @Test
     fun превью_и_состояние_берутся_у_последнего_сообщения() = runTest {
-        исходящее("chat-1", "первое", ts = 1_000)
-        исходящее("chat-1", "последнее", ts = 2_000, state = OutboxState.DEAD)
+        outgoing("chat-1", "первое", ts = 1_000)
+        outgoing("chat-1", "последнее", ts = 2_000, state = OutboxState.DEAD)
 
-        val строка = chats.list().first().single()
+        val line = chats.list().first().single()
 
-        assertEquals("последнее", строка.preview)
-        assertEquals(MessageDisplay.FAILED, строка.lastDisplay, "человек видит, что оно не дошло")
-        assertTrue(строка.lastOutgoing)
-        assertEquals(2_000, строка.atMs)
+        assertEquals("последнее", line.preview)
+        assertEquals(MessageDisplay.FAILED, line.lastDisplay, "человек видит, что оно не дошло")
+        assertTrue(line.lastOutgoing)
+        assertEquals(2_000, line.atMs)
     }
 
     /**
@@ -218,14 +218,14 @@ class SqlChatsFeedTest {
      */
     @Test
     fun неразобранное_входящее_даёт_переписку_без_превью() = runTest {
-        входящее("chat-1", 1, текст = null, ts = 1_000, state = IncomingState.RECEIVED)
+        incoming("chat-1", 1, text = null, ts = 1_000, state = IncomingState.RECEIVED)
 
-        val строка = chats.list().first().single()
+        val line = chats.list().first().single()
 
-        assertEquals("chat-1", строка.chatId)
-        assertNull(строка.preview)
-        assertEquals(MessageDisplay.RECEIVED, строка.lastDisplay)
-        assertTrue(!строка.lastOutgoing)
+        assertEquals("chat-1", line.chatId)
+        assertNull(line.preview)
+        assertEquals(MessageDisplay.RECEIVED, line.lastDisplay)
+        assertTrue(!line.lastOutgoing)
     }
 
     /**
@@ -236,21 +236,21 @@ class SqlChatsFeedTest {
      */
     @Test
     fun последнее_от_себя_же_считается_своим() = runTest {
-        входящее("chat-1", 1, "со телефона", ts = 1_000, автор = Я)
+        incoming("chat-1", 1, "со телефона", ts = 1_000, author = Me)
 
-        val строка = chats.list().first().single()
+        val line = chats.list().first().single()
 
-        assertTrue(строка.lastOutgoing, "написанное мною с другого устройства — моё")
-        assertEquals("со телефона", строка.preview)
+        assertTrue(line.lastOutgoing, "написанное мною с другого устройства — моё")
+        assertEquals("со телефона", line.preview)
     }
 
     // ── непрочитанное ───────────────────────────────────────────────────────
 
     @Test
     fun непрочитанное_считается_только_по_входящим() = runTest {
-        входящее("chat-1", 1, "раз", ts = 1_000)
-        входящее("chat-1", 2, "два", ts = 2_000)
-        исходящее("chat-1", "своё", ts = 3_000)
+        incoming("chat-1", 1, "раз", ts = 1_000)
+        incoming("chat-1", 2, "два", ts = 2_000)
+        outgoing("chat-1", "своё", ts = 3_000)
 
         assertEquals(
             2,
@@ -261,8 +261,8 @@ class SqlChatsFeedTest {
 
     @Test
     fun прочитанное_из_счётчика_уходит() = runTest {
-        входящее("chat-1", 1, "раз", ts = 1_000, state = IncomingState.READ)
-        входящее("chat-1", 2, "два", ts = 2_000)
+        incoming("chat-1", 1, "раз", ts = 1_000, state = IncomingState.READ)
+        incoming("chat-1", 2, "два", ts = 2_000)
 
         assertEquals(1, chats.list().first().single().unread)
     }
@@ -270,20 +270,20 @@ class SqlChatsFeedTest {
     /** Нечитаемое входящее — тоже непрочитанное: человек про него ещё не знает. */
     @Test
     fun нечитаемое_считается_непрочитанным() = runTest {
-        входящее("chat-1", 1, текст = null, ts = 1_000, state = IncomingState.UNDECRYPTABLE)
+        incoming("chat-1", 1, text = null, ts = 1_000, state = IncomingState.UNDECRYPTABLE)
 
         assertEquals(1, chats.list().first().single().unread)
     }
 
     @Test
     fun чужая_переписка_в_счётчик_не_попадает() = runTest {
-        входящее("chat-1", 1, "раз", ts = 1_000)
-        входящее("chat-2", 2, "два", ts = 2_000)
+        incoming("chat-1", 1, "раз", ts = 1_000)
+        incoming("chat-2", 2, "два", ts = 2_000)
 
-        val список = chats.list().first().associateBy { it.chatId }
+        val list = chats.list().first().associateBy { it.chatId }
 
-        assertEquals(1, список["chat-1"]?.unread)
-        assertEquals(1, список["chat-2"]?.unread)
+        assertEquals(1, list["chat-1"]?.unread)
+        assertEquals(1, list["chat-2"]?.unread)
     }
 
     /**
@@ -294,14 +294,14 @@ class SqlChatsFeedTest {
      */
     @Test
     fun прочтение_переписки_гасит_счётчик() = runTest {
-        входящее("chat-1", 1, "раз", ts = 1_000)
-        входящее("chat-1", 2, "два", ts = 2_000)
+        incoming("chat-1", 1, "раз", ts = 1_000)
+        incoming("chat-1", 2, "два", ts = 2_000)
         assertEquals(2, chats.list().first().single().unread)
 
-        val прочитано = MarkRead(SqlReadMarks(io.tima.core.outbox.Inbox(inbox, nowMs = { 3_000 })))
+        val read = MarkRead(SqlReadMarks(io.tima.core.outbox.Inbox(inbox, nowMs = { 3_000 })))
             .chat("chat-1")
 
-        assertEquals(2, прочитано)
+        assertEquals(2, read)
         assertEquals(0, chats.list().first().single().unread)
     }
 
@@ -313,35 +313,35 @@ class SqlChatsFeedTest {
      */
     @Test
     fun неразобранное_и_нечитаемое_остаются_непрочитанными() = runTest {
-        входящее("chat-1", 1, "разобранное", ts = 1_000)
-        входящее("chat-1", 2, текст = null, ts = 2_000, state = IncomingState.RECEIVED)
-        входящее("chat-1", 3, текст = null, ts = 3_000, state = IncomingState.UNDECRYPTABLE)
+        incoming("chat-1", 1, "разобранное", ts = 1_000)
+        incoming("chat-1", 2, text = null, ts = 2_000, state = IncomingState.RECEIVED)
+        incoming("chat-1", 3, text = null, ts = 3_000, state = IncomingState.UNDECRYPTABLE)
 
-        val прочитано = MarkRead(SqlReadMarks(io.tima.core.outbox.Inbox(inbox, nowMs = { 4_000 })))
+        val read = MarkRead(SqlReadMarks(io.tima.core.outbox.Inbox(inbox, nowMs = { 4_000 })))
             .chat("chat-1")
 
-        assertEquals(1, прочитано, "погасить можно только то, что человек мог прочитать")
+        assertEquals(1, read, "погасить можно только то, что человек мог прочитать")
         assertEquals(2, chats.list().first().single().unread)
     }
 
     /** Чужая переписка от прочтения этой не гаснет. */
     @Test
     fun прочтение_не_трогает_другую_переписку() = runTest {
-        входящее("chat-1", 1, "раз", ts = 1_000)
-        входящее("chat-2", 2, "два", ts = 2_000)
+        incoming("chat-1", 1, "раз", ts = 1_000)
+        incoming("chat-2", 2, "два", ts = 2_000)
 
         MarkRead(SqlReadMarks(io.tima.core.outbox.Inbox(inbox, nowMs = { 3_000 }))).chat("chat-1")
 
-        val список = chats.list().first().associateBy { it.chatId }
-        assertEquals(0, список["chat-1"]?.unread)
-        assertEquals(1, список["chat-2"]?.unread)
+        val list = chats.list().first().associateBy { it.chatId }
+        assertEquals(0, list["chat-1"]?.unread)
+        assertEquals(1, list["chat-2"]?.unread)
     }
 
     // ── границы и стирание ──────────────────────────────────────────────────
 
     @Test
     fun страница_ограничена() = runTest {
-        repeat(5) { исходящее("chat-$it", "текст", ts = 1_000L + it) }
+        repeat(5) { outgoing("chat-$it", "текст", ts = 1_000L + it) }
 
         assertEquals(2, chats.list(limit = 2).first().size)
         assertFailsWith<IllegalArgumentException> { chats.list(limit = 0) }
@@ -356,8 +356,8 @@ class SqlChatsFeedTest {
      */
     @Test
     fun стёртая_переписка_уходит_вместе_с_именем() = runTest {
-        исходящее("chat-1", "привет", ts = 1_000)
-        имя("chat-1", "Аня")
+        outgoing("chat-1", "привет", ts = 1_000)
+        name("chat-1", "Аня")
 
         db.messagesQueries.deleteChat("chat-1")
         db.chatsQueries.deleteChatRow("chat-1")
@@ -367,7 +367,7 @@ class SqlChatsFeedTest {
     }
 
     private companion object {
-        const val Я = "u-я"
-        const val СОБЕСЕДНИК = "u-аня"
+        const val Me = "u-я"
+        const val PEER = "u-аня"
     }
 }

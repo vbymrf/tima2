@@ -10,26 +10,26 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import io.tima.core.ui.ВидОтметки
-import io.tima.core.ui.LocalРаскладка
-import io.tima.core.ui.Чип
-import io.tima.core.ui.ВидЧипа
-import io.tima.core.ui.КругКнопка
-import io.tima.core.ui.Аватар
-import io.tima.core.ui.Второстепенное
-import io.tima.core.ui.Имя
-import io.tima.core.ui.Отметка
-import io.tima.core.ui.ПустаяОбласть
-import io.tima.core.ui.РядУправления
-import io.tima.core.ui.СГроздью
-import io.tima.core.ui.Сторона
-import io.tima.core.ui.Стрелка
-import io.tima.core.ui.СтрокаСписка
-import io.tima.core.ui.Счётчик
+import io.tima.core.ui.MarkKind
+import io.tima.core.ui.LayoutLocal
+import io.tima.core.ui.Chip
+import io.tima.core.ui.ChipKind
+import io.tima.core.ui.ButtonCircle
+import io.tima.core.ui.Avatar
+import io.tima.core.ui.Secondary
+import io.tima.core.ui.Name
+import io.tima.core.ui.Mark
+import io.tima.core.ui.EmptyArea
+import io.tima.core.ui.ControlRow
+import io.tima.core.ui.WithCluster
+import io.tima.core.ui.Side
+import io.tima.core.ui.Arrow
+import io.tima.core.ui.ListLine
+import io.tima.core.ui.Counter
 import io.tima.core.ui.TimaSpacing
-import io.tima.core.ui.Третьестепенное
-import io.tima.core.ui.Тима
-import io.tima.core.ui.ШапкаОкна
+import io.tima.core.ui.Tertiary
+import io.tima.core.ui.Tima
+import io.tima.core.ui.WindowHeader
 import io.tima.domain.chat.ChatSummary
 import io.tima.domain.chat.MessageDisplay
 
@@ -51,20 +51,20 @@ import io.tima.domain.chat.MessageDisplay
  *    может не быть; спрятать строку значило бы спрятать сообщение.
  */
 @Composable
-fun ЭкранПереписок(
-    состояние: ChatsState,
-    onОткрыть: (ChatSummary) -> Unit,
+fun ChatsScreen(
+    state: ChatsState,
+    onOpen: (ChatSummary) -> Unit,
     modifier: Modifier = Modifier,
-    onНастройки: () -> Unit = {},
-    onНовая: () -> Unit = {},
+    onSettings: () -> Unit = {},
+    onNew: () -> Unit = {},
     /**
      * Создать группу. Отдельным входом, а не пунктом внутри «новой переписки»: это разные
      * действия с разным исходом — переписка с одним человеком против переписки с многими.
      */
-    onНоваяГруппа: () -> Unit = {},
+    onNewGroup: () -> Unit = {},
 ) {
-    val цвета = Тима.цвета
-    Column(modifier.fillMaxSize().background(цвета.поверхность)) {
+    val colors = Tima.colors
+    Column(modifier.fillMaxSize().background(colors.surface)) {
         // ── ШАПКИ ЗДЕСЬ БОЛЬШЕ НЕТ ───────────────────────────────────────────
         //
         // Экран стал содержимым вкладки «Чаты», а шапку окна рисует общий каркас:
@@ -73,56 +73,56 @@ fun ЭкранПереписок(
         //
         // Вход в группы остаётся гроздью, а не чипом в шапке: чипу в чужой шапке
         // места нет, а сам вход всё равно придуман и уйдёт в каталог окна 2.
-        СГроздью(
-            гроздь = {
-                Чип("Группа", вид = ВидЧипа.Выбран, onClick = onНоваяГруппа)
-                КругКнопка(onClick = onНовая, живая = true) {
-                    Стрелка(Сторона.Вправо, цвет = цвета.наАкценте)
+        WithCluster(
+            cluster = {
+                Chip("Группа", kind = ChipKind.Selected, onClick = onNewGroup)
+                ButtonCircle(onClick = onNew, live = true) {
+                    Arrow(Side.Right, color = colors.onAccent)
                 }
             },
-            подпись = "Написать",
+            caption = "Написать",
             modifier = Modifier.weight(1f),
         ) {
             when {
                 // Пустой список до первого ответа базы — это не «переписок нет».
                 // Показывать «переписок нет» в первую секунду после запуска значит врать.
-                !состояние.прочитано -> Box(Modifier.fillMaxSize())
+                !state.read -> Box(Modifier.fillMaxSize())
 
-                состояние.chats.isEmpty() -> ПустаяОбласть(
-                    заголовок = "Переписок пока нет",
-                    пояснение = "Напишите первому собеседнику",
+                state.chats.isEmpty() -> EmptyArea(
+                    title = "Переписок пока нет",
+                    explanation = "Напишите первому собеседнику",
                 )
 
-                else -> Список(состояние.chats, onОткрыть)
+                else -> List(state.chats, onOpen)
             }
         }
     }
 }
 
 @Composable
-private fun Список(переписки: List<ChatSummary>, onОткрыть: (ChatSummary) -> Unit) = LazyColumn(
+private fun List(chats: List<ChatSummary>, onOpen: (ChatSummary) -> Unit) = LazyColumn(
     modifier = Modifier.fillMaxSize(),
 ) {
-    items(переписки, key = { it.chatId }) { переписка ->
-        СтрокаПереписки(переписка) { onОткрыть(переписка) }
+    items(chats, key = { it.chatId }) { chat ->
+        ChatLine(chat) { onOpen(chat) }
     }
 }
 
 @Composable
-private fun СтрокаПереписки(переписка: ChatSummary, onClick: () -> Unit) = СтрокаСписка(
+private fun ChatLine(chat: ChatSummary, onClick: () -> Unit) = ListLine(
     onClick = onClick,
-    слева = { Аватар(буквы(переписка)) },
-    справа = {
+    left = { Avatar(letters(chat)) },
+    right = {
         Column(
             horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(TimaSpacing.о1),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
         ) {
             // Времени может не быть вовсе: у пустой переписки нет последнего сообщения.
             // Ставить сюда 1970 год или «—» незачем — пустое место говорит то же самое и
             // не спорит с именем за внимание.
-            переписка.atMs?.let {
+            chat.atMs?.let {
                 // Время в строке списка не переносится: строка списка держит высоту.
-                Третьестепенное(время(it), однойСтрокой = true)
+                Tertiary(time(it), lineOne = true)
             }
             // Без fillMaxWidth: в ряду строки этот столбец не взвешен, и растянутый на
             // всю ширину он съедал середину — имя и превью получали нулевую ширину и
@@ -131,20 +131,20 @@ private fun СтрокаПереписки(переписка: ChatSummary, onCl
                 // Счётчик и отметка не спорят за место: счётчик — про чужие сообщения,
                 // отметка — про своё последнее. Одновременно они бывают редко, и тогда
                 // важнее непрочитанное.
-                if (переписка.unread > 0) {
-                    Счётчик(переписка.unread)
-                } else if (переписка.lastOutgoing) {
-                    переписка.lastDisplay?.let { отметка(it) }?.let { Отметка(it) }
+                if (chat.unread > 0) {
+                    Counter(chat.unread)
+                } else if (chat.lastOutgoing) {
+                    chat.lastDisplay?.let { mark(it) }?.let { Mark(it) }
                 }
             }
         }
     },
-    середина = {
+    middle = {
         // Имени может не быть: профиль не приезжал. Строку это не отменяет — сообщение
         // есть, и человек должен его видеть.
-        Имя(переписка.title ?: "Без имени")
+        Name(chat.title ?: "Без имени")
         // Превью обрезается: иначе строка списка растёт от чужого длинного сообщения.
-        Второстепенное(превью(переписка), однойСтрокой = true)
+        Secondary(preview(chat), lineOne = true)
     },
 )
 
@@ -154,8 +154,8 @@ private fun СтрокаПереписки(переписка: ChatSummary, onCl
  * У неразобранного или нечитаемого входящего текста нет, и вместо него — слова, а не
  * пустота: пустая строка выглядит как поломка списка, а не как состояние сообщения.
  */
-private fun превью(переписка: ChatSummary): String = переписка.preview
-    ?: when (переписка.lastDisplay) {
+private fun preview(chat: ChatSummary): String = chat.preview
+    ?: when (chat.lastDisplay) {
         MessageDisplay.UNREADABLE -> "сообщение не читается"
         else -> "новое сообщение"
     }
@@ -166,8 +166,8 @@ private fun превью(переписка: ChatSummary): String = перепи
  * Из имени, если оно есть. Без имени — вопросительный знак: он честнее первых букв
  * идентификатора, которые выглядят как имя и им не являются.
  */
-private fun буквы(переписка: ChatSummary): String =
-    переписка.title?.trim()?.takeIf { it.isNotEmpty() }
+private fun letters(chat: ChatSummary): String =
+    chat.title?.trim()?.takeIf { it.isNotEmpty() }
         ?.split(" ")
         ?.take(2)
         ?.mapNotNull { it.firstOrNull()?.uppercase() }
@@ -175,9 +175,9 @@ private fun буквы(переписка: ChatSummary): String =
         ?: "?"
 
 /** Отметка о судьбе последнего своего сообщения. У чужого отметки не бывает. */
-private fun отметка(вид: MessageDisplay): ВидОтметки? = when (вид) {
-    MessageDisplay.PENDING -> ВидОтметки.Ждёт
-    MessageDisplay.SENT -> ВидОтметки.Ушло
-    MessageDisplay.FAILED -> ВидОтметки.НеУшло
+private fun mark(kind: MessageDisplay): MarkKind? = when (kind) {
+    MessageDisplay.PENDING -> MarkKind.Waits
+    MessageDisplay.SENT -> MarkKind.Left
+    MessageDisplay.FAILED -> MarkKind.NotLeft
     MessageDisplay.RECEIVED, MessageDisplay.UNREADABLE -> null
 }

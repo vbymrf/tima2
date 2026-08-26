@@ -1,9 +1,9 @@
 package io.tima.feature.auth
 
 import io.tima.domain.account.AccountDevice
-import io.tima.testui.ЧУЖОЙ_ФОН
-import io.tima.testui.обеТемы
-import io.tima.testui.снять
+import io.tima.testui.FOREIGN_BACKGROUND
+import io.tima.testui.bothThemes
+import io.tima.testui.capture
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -14,13 +14,13 @@ import kotlin.test.assertTrue
  * похожи — «Телефон» и «Телефон», — и если пометка не нарисовалась, человек отключит то
  * устройство, с которого смотрит.
  */
-class ЭкранУстройствTest {
+class DeviceScreenTest {
 
     @Test
     fun список_рисуется_в_обеих_темах() {
-        val снимки = обеТемы("устройства", ШИРИНА, ВЫСОТА) { экран(СОСТОЯНИЕ) }
-        val расхождение = снимки.getValue("светлая").расхождение(снимки.getValue("тёмная"))
-        assertTrue(расхождение > 0.10, "темы расходятся лишь на ${(расхождение * 100).toInt()}%")
+        val snapshots = bothThemes("устройства", WIDTH, HEIGHT) { screen(STATE) }
+        val difference = snapshots.getValue("светлая").difference(snapshots.getValue("тёмная"))
+        assertTrue(difference > 0.10, "темы расходятся лишь на ${(difference * 100).toInt()}%")
     }
 
     /**
@@ -31,18 +31,18 @@ class ЭкранУстройствTest {
      */
     @Test
     fun своё_устройство_отличимо() {
-        val сПометкой = снять("устройства-своё", ШИРИНА, ВЫСОТА, тёмная = false) { экран(СОСТОЯНИЕ) }
-        val безПометки = снять("устройства-чужие", ШИРИНА, ВЫСОТА, тёмная = false) {
-            экран(
-                СОСТОЯНИЕ.copy(
-                    устройства = СОСТОЯНИЕ.устройства.map {
+        val withMark = capture("устройства-своё", WIDTH, HEIGHT, dark = false) { screen(STATE) }
+        val markWithout = capture("устройства-чужие", WIDTH, HEIGHT, dark = false) {
+            screen(
+                STATE.copy(
+                    devices = STATE.devices.map {
                         AccountDevice(it.deviceId, it.name, it.createdAt, current = false)
                     },
                 ),
             )
         }
 
-        assertTrue(сПометкой.расхождение(безПометки) > 0.0, "пометка своего устройства не нарисовалась")
+        assertTrue(withMark.difference(markWithout) > 0.0, "пометка своего устройства не нарисовалась")
     }
 
     /**
@@ -55,13 +55,13 @@ class ЭкранУстройствTest {
      */
     @Test
     fun экран_заливает_свой_фон() {
-        val снимки = обеТемы("устройства-фон", ШИРИНА, ВЫСОТА, подложка = ЧУЖОЙ_ФОН) {
-            экран(СОСТОЯНИЕ)
+        val snapshots = bothThemes("устройства-фон", WIDTH, HEIGHT, backdrop = FOREIGN_BACKGROUND) {
+            screen(STATE)
         }
-        for ((имя, снимок) in снимки) {
+        for ((name, snapshot) in snapshots) {
             assertTrue(
-                !снимок.есть(ЧУЖОЙ_ФОН),
-                "$имя: сквозь экран видна подложка — он не залил свой фон",
+                !snapshot.has(FOREIGN_BACKGROUND),
+                "$name: сквозь экран видна подложка — он не залил свой фон",
             )
         }
     }
@@ -69,32 +69,32 @@ class ЭкранУстройствTest {
     /** Вопрос перед отключением занимает экран: решение должно выглядеть решением. */
     @Test
     fun вопрос_заменяет_список() {
-        val список = снять("устройства-список", ШИРИНА, ВЫСОТА, тёмная = false) { экран(СОСТОЯНИЕ) }
-        val вопрос = снять("устройства-вопрос", ШИРИНА, ВЫСОТА, тёмная = false) {
-            экран(СОСТОЯНИЕ.copy(спрашиваем = "d-2"))
+        val list = capture("устройства-список", WIDTH, HEIGHT, dark = false) { screen(STATE) }
+        val question = capture("устройства-вопрос", WIDTH, HEIGHT, dark = false) {
+            screen(STATE.copy(ask = "d-2"))
         }
 
-        assertTrue(вопрос.расхождение(список) > 0.05, "вопрос не заменил список")
+        assertTrue(question.difference(list) > 0.05, "вопрос не заменил список")
     }
 
     private companion object {
-        const val ШИРИНА = 380
-        const val ВЫСОТА = 700
+        const val WIDTH = 380
+        const val HEIGHT = 700
 
-        val СОСТОЯНИЕ = УстройстваState(
-            устройства = listOf(
+        val STATE = DevicesState(
+            devices = listOf(
                 AccountDevice("d-1", "Телефон", "2026-08-20T10:00:00Z", current = true),
                 AccountDevice("d-2", "Компьютер", "2026-08-23T10:00:00Z", current = false),
             ),
         )
 
         @androidx.compose.runtime.Composable
-        fun экран(состояние: УстройстваState) = ЭкранУстройств(
-            состояние = состояние,
-            onНазад = {},
-            onСпросить = {},
-            onПодтвердить = {},
-            onПередумал = {},
+        fun screen(state: DevicesState) = DeviceScreen(
+            state = state,
+            onBack = {},
+            onAsk = {},
+            onConfirm = {},
+            onChangedMind = {},
         )
     }
 }

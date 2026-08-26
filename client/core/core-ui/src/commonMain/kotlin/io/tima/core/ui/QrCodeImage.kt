@@ -27,52 +27,52 @@ import kotlin.math.floor
  *   место честнее кода, который не отсканируется.
  */
 @Composable
-fun КодQR(данные: String, modifier: Modifier = Modifier) {
-    val матрица = remember(данные) { QrКод.матрица(данные) }
-    if (матрица == null) {
-        ПустаяОбласть(заголовок = "Код не показать", пояснение = "Он слишком длинный для QR", modifier = modifier)
+fun QrCodeImage(data: String, modifier: Modifier = Modifier) {
+    val matrix = remember(data) { QrCode.matrix(data) }
+    if (matrix == null) {
+        EmptyArea(title = "Код не показать", explanation = "Он слишком длинный для QR", modifier = modifier)
         return
     }
 
-    val чернила = Тима.цвета.кодЧернила
-    val бумага = Тима.цвета.кодБумага
+    val ink = Tima.colors.inkCode
+    val paper = Tima.colors.paperCode
 
     Box(modifier = modifier.fillMaxWidth().aspectRatio(1f)) {
         Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
-            нарисовать(матрица, чернила, бумага)
+            draw(matrix, ink, paper)
         }
     }
 }
 
-private fun DrawScope.нарисовать(
-    матрица: QrМатрица,
-    чернила: androidx.compose.ui.graphics.Color,
-    бумага: androidx.compose.ui.graphics.Color,
+private fun DrawScope.draw(
+    matrix: QrMatrix,
+    ink: androidx.compose.ui.graphics.Color,
+    paper: androidx.compose.ui.graphics.Color,
 ) {
-    val всего = матрица.размер + 2 * ТИХАЯ_ЗОНА
-    val клетка = floor(minOf(size.width, size.height) / всего)
-    if (клетка < 1f) return
+    val total = matrix.size + 2 * QUIET_ZONE
+    val cell = floor(minOf(size.width, size.height) / total)
+    if (cell < 1f) return
 
-    val сторона = клетка * всего
-    val сдвигX = (size.width - сторона) / 2
-    val сдвигY = (size.height - сторона) / 2
+    val side = cell * total
+    val shiftX = (size.width - side) / 2
+    val shiftY = (size.height - side) / 2
 
-    drawRect(color = бумага, topLeft = Offset(сдвигX, сдвигY), size = Size(сторона, сторона))
+    drawRect(color = paper, topLeft = Offset(shiftX, shiftY), size = Size(side, side))
 
-    for (y in 0 until матрица.размер) {
-        for (x in 0 until матрица.размер) {
-            if (!матрица.тёмная(x, y)) continue
+    for (y in 0 until matrix.size) {
+        for (x in 0 until matrix.size) {
+            if (!matrix.dark(x, y)) continue
             drawRect(
-                color = чернила,
+                color = ink,
                 topLeft = Offset(
-                    сдвигX + (x + ТИХАЯ_ЗОНА) * клетка,
-                    сдвигY + (y + ТИХАЯ_ЗОНА) * клетка,
+                    shiftX + (x + QUIET_ZONE) * cell,
+                    shiftY + (y + QUIET_ZONE) * cell,
                 ),
-                size = Size(клетка, клетка),
+                size = Size(cell, cell),
             )
         }
     }
 }
 
 /** Четыре модуля — минимум по ISO/IEC 18004. Меньше делать нельзя, больше незачем. */
-private const val ТИХАЯ_ЗОНА = 4
+private const val QUIET_ZONE = 4

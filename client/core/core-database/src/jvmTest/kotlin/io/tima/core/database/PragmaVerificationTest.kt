@@ -24,11 +24,11 @@ class PragmaVerificationTest {
     fun ненастроенный_драйвер_валит_открытие_базы() {
         // Строка подключения без параметров — то есть платформа настройки не задала.
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
-        val ошибка = runCatching { TimaDatabaseFactory.verifyPragmas(driver) }.exceptionOrNull()
+        val error = runCatching { TimaDatabaseFactory.verifyPragmas(driver) }.exceptionOrNull()
 
-        assertTrue(ошибка is IllegalStateException, "ожидалась ошибка открытия, получено: $ошибка")
+        assertTrue(error is IllegalStateException, "ожидалась ошибка открытия, получено: $error")
         assertTrue(
-            ошибка.message.orEmpty().contains("secure_delete"),
+            error.message.orEmpty().contains("secure_delete"),
             "в сообщении обязано быть имя настройки, иначе искать нечего",
         )
     }

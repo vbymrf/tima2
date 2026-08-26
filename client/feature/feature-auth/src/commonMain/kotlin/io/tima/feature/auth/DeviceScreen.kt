@@ -13,17 +13,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import io.tima.core.ui.Беда
-import io.tima.core.ui.ВидКнопки
-import io.tima.core.ui.Второстепенное
-import io.tima.core.ui.Кнопка
-import io.tima.core.ui.Подпись
-import io.tima.core.ui.ПустаяОбласть
+import io.tima.core.ui.Trouble
+import io.tima.core.ui.ButtonKind
+import io.tima.core.ui.Secondary
+import io.tima.core.ui.Button
+import io.tima.core.ui.Caption
+import io.tima.core.ui.EmptyArea
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
-import io.tima.core.ui.Тима
-import io.tima.core.ui.Третьестепенное
-import io.tima.core.ui.ШапкаПодокна
+import io.tima.core.ui.Tima
+import io.tima.core.ui.Tertiary
+import io.tima.core.ui.SubwindowHeader
 import io.tima.domain.account.AccountDevice
 
 /**
@@ -35,98 +35,98 @@ import io.tima.domain.account.AccountDevice
  * заново.
  */
 @Composable
-fun ЭкранУстройств(
-    состояние: УстройстваState,
-    onНазад: () -> Unit,
-    onСпросить: (String) -> Unit,
-    onПодтвердить: () -> Unit,
-    onПередумал: () -> Unit,
+fun DeviceScreen(
+    state: DevicesState,
+    onBack: () -> Unit,
+    onAsk: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onChangedMind: () -> Unit,
     modifier: Modifier = Modifier,
     /**
      * Номер сборки. Здесь он нужен уже после входа: экран входа человек видит один раз,
      * а «какая версия стоит» спрашивают, когда что-то пошло не так, — то есть изнутри
      * приложения. Пусто — версия не передана (проверки, снимки), строки нет.
      */
-    версияСборки: String = "",
-) = Column(modifier.fillMaxSize().background(Тима.цвета.поверхность)) {
+    buildVersion: String = "",
+) = Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
     // Фон заливается явно. Экран без своего фона показывает то, что под ним, — на телефоне
     // это выглядело как тёмный экран внутри светлой темы, и найдено это было только глазами
     // на устройстве: снимки видят компонент, а не окно.
-    ШапкаПодокна(название = "Устройства", onНазад = onНазад)
+    SubwindowHeader(title = "Устройства", onBack = onBack)
 
     // Сразу под шапкой, а не в конце списка: у экрана есть ранние выходы — вопрос об
     // отключении и пустой список, — и строка, поставленная после них, в этих состояниях
     // не показалась бы вовсе. А спрашивают версию как раз тогда, когда что-то не так.
-    if (версияСборки.isNotBlank()) {
-        Третьестепенное(
-            "сборка $версияСборки",
-            Modifier.padding(horizontal = TimaSpacing.о4, vertical = TimaSpacing.о2),
+    if (buildVersion.isNotBlank()) {
+        Tertiary(
+            "сборка $buildVersion",
+            Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
         )
     }
 
-    состояние.беда?.let {
-        Column(Modifier.padding(TimaSpacing.о4)) { Беда(it) }
+    state.trouble?.let {
+        Column(Modifier.padding(TimaSpacing.about4)) { Trouble(it) }
     }
 
-    val спрашиваем = состояние.спрашиваем
-    if (спрашиваем != null) {
-        Вопрос(
-            имя = состояние.устройства.firstOrNull { it.deviceId == спрашиваем }?.name.orEmpty(),
-            onПодтвердить = onПодтвердить,
-            onПередумал = onПередумал,
+    val ask = state.ask
+    if (ask != null) {
+        Question(
+            name = state.devices.firstOrNull { it.deviceId == ask }?.name.orEmpty(),
+            onConfirm = onConfirm,
+            onChangedMind = onChangedMind,
         )
         return@Column
     }
 
-    if (состояние.устройства.isEmpty()) {
-        ПустаяОбласть(
-            заголовок = if (состояние.ждём) "Смотрим…" else "Устройств нет",
-            пояснение = if (состояние.ждём) null else "Список пуст — такого не бывает, если вы вошли",
+    if (state.devices.isEmpty()) {
+        EmptyArea(
+            title = if (state.expect) "Смотрим…" else "Устройств нет",
+            explanation = if (state.expect) null else "Список пуст — такого не бывает, если вы вошли",
         )
         return@Column
     }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(TimaSpacing.о4),
-        verticalArrangement = Arrangement.spacedBy(TimaSpacing.о3),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(TimaSpacing.about4),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
     ) {
-        items(состояние.устройства, key = { it.deviceId }) { устройство ->
-            Строка(устройство, onСпросить)
+        items(state.devices, key = { it.deviceId }) { device ->
+            Line(device, onAsk)
         }
     }
 }
 
 @Composable
-private fun Строка(устройство: AccountDevice, onСпросить: (String) -> Unit) {
+private fun Line(device: AccountDevice, onAsk: (String) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о3),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Подпись(
-                текст = устройство.name.ifEmpty { "Без имени" },
-                вес = FontWeight.Bold,
-                однойСтрокой = true,
+            Caption(
+                text = device.name.ifEmpty { "Без имени" },
+                weight = FontWeight.Bold,
+                lineOne = true,
             )
             // Пометка своего устройства и дата — в одной строке: это про одно и то же,
             // «что это за железка».
-            Третьестепенное(
-                текст = listOfNotNull(
-                    if (устройство.current) "это устройство" else null,
-                    устройство.createdAt,
+            Tertiary(
+                text = listOfNotNull(
+                    if (device.current) "это устройство" else null,
+                    device.createdAt,
                 ).joinToString(" · ").ifEmpty { "—" },
-                однойСтрокой = true,
+                lineOne = true,
             )
         }
         // Своё устройство отключается не отсюда: «выйти» — это другое действие с другими
         // последствиями, и оно живёт в настройках аккаунта.
-        if (!устройство.current) {
-            Кнопка(
-                надпись = "Отключить",
-                onClick = { onСпросить(устройство.deviceId) },
-                вид = ВидКнопки.Тихая,
+        if (!device.current) {
+            Button(
+                label = "Отключить",
+                onClick = { onAsk(device.deviceId) },
+                kind = ButtonKind.Quiet,
             )
         }
     }
@@ -139,26 +139,26 @@ private fun Строка(устройство: AccountDevice, onСпросить
  * вернуть, и решение должно выглядеть решением.
  */
 @Composable
-private fun Вопрос(имя: String, onПодтвердить: () -> Unit, onПередумал: () -> Unit) = Column(
-    modifier = Modifier.fillMaxSize().padding(TimaSpacing.о4),
-    verticalArrangement = Arrangement.spacedBy(TimaSpacing.о3),
+private fun Question(name: String, onConfirm: () -> Unit, onChangedMind: () -> Unit) = Column(
+    modifier = Modifier.fillMaxSize().padding(TimaSpacing.about4),
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
 ) {
-    Подпись("Отключить устройство?", кегль = TimaType.щ3, вес = FontWeight.ExtraBold)
-    Второстепенное(имя.ifEmpty { "Без имени" })
-    Второстепенное(
+    Caption("Отключить устройство?", fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
+    Secondary(name.ifEmpty { "Без имени" })
+    Secondary(
         "Оно перестанет получать сообщения и потеряет доступ к аккаунту. Вернуть его " +
             "нельзя — на нём придётся подключаться заново.",
     )
 
-    Кнопка(
-        надпись = "Отключить",
-        onClick = onПодтвердить,
-        вид = ВидКнопки.Опасная,
+    Button(
+        label = "Отключить",
+        onClick = onConfirm,
+        kind = ButtonKind.Dangerous,
         modifier = Modifier.fillMaxWidth(),
     )
-    Кнопка(
-        надпись = "Оставить",
-        onClick = onПередумал,
+    Button(
+        label = "Оставить",
+        onClick = onChangedMind,
         modifier = Modifier.fillMaxWidth(),
     )
 }

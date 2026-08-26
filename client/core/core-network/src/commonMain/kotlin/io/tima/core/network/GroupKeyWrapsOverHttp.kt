@@ -14,14 +14,14 @@ import io.tima.domain.chat.WrappedGroupKeyInfo
 class GroupKeyWrapsOverHttp(private val api: GroupKeysApi) : GroupKeyWraps {
 
     override suspend fun mine(groupId: String, sinceVersion: Int): GroupKeyWrapsStep =
-        when (val ответ = api.mine(groupId, sinceVersion)) {
+        when (val answer = api.mine(groupId, sinceVersion)) {
             is GroupKeysResult.Keys -> GroupKeyWrapsStep.Wraps(
-                wraps = ответ.keys.map {
+                wraps = answer.keys.map {
                     WrappedGroupKeyInfo(it.gkVersion, it.senderEphemeralPub, it.wrapped)
                 },
-                currentVersion = ответ.currentVersion,
+                currentVersion = answer.currentVersion,
             )
-            is GroupKeysResult.NoConnection -> GroupKeyWrapsStep.Offline(ответ.link.retryDelayMs)
-            is GroupKeysResult.Refused -> GroupKeyWrapsStep.Refused(ответ.code)
+            is GroupKeysResult.NoConnection -> GroupKeyWrapsStep.Offline(answer.link.retryDelayMs)
+            is GroupKeysResult.Refused -> GroupKeyWrapsStep.Refused(answer.code)
         }
 }

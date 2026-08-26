@@ -119,7 +119,7 @@ class AuthApi(
             "identity_pub обязан быть $KEY_BYTES байт"
         }
 
-        val поля = buildList {
+        val fields = buildList {
             add(""""registration_token":"$registrationToken"""")
             add(""""encryption_pub":"${encodeBase64Url(encryptionPub)}"""")
             add(""""signing_pub":"${encodeBase64Url(signingPub)}"""")
@@ -130,7 +130,7 @@ class AuthApi(
         val response = try {
             client.post(route.api("/api/v1/auth/register")) {
                 contentType(ContentType.Application.Json)
-                setBody(поля.joinToString(",", "{", "}"))
+                setBody(fields.joinToString(",", "{", "}"))
             }
         } catch (e: Throwable) {
             return RegisterResult.NoConnection(classifyFailure(e))

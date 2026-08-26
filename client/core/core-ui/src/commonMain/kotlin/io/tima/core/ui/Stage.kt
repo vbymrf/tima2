@@ -40,65 +40,65 @@ import androidx.compose.ui.text.font.FontWeight
  * а не таблица устройств.
  */
 @Composable
-fun Стан(
+fun Stage(
     /** Список: корневое окно целиком — шапка, вкладки, содержимое. На телефоне это экран. */
-    колонка: @Composable () -> Unit,
+    column: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     /** Рейка окон. На телефоне переключение окон — подокно, и рейки нет. */
-    рейка: (@Composable (Раскладка) -> Unit)? = null,
+    rail: (@Composable (Layout) -> Unit)? = null,
     /** Подокно: чат, пост, слайд. `null` — ничего не выбрано. */
-    главная: (@Composable () -> Unit)? = null,
+    main: (@Composable () -> Unit)? = null,
     /** Страница объекта. Показывается только на ПК. */
-    панель: (@Composable () -> Unit)? = null,
+    panel: (@Composable () -> Unit)? = null,
     /** Что показать в главной области, пока ничего не выбрано. */
-    пусто: @Composable () -> Unit = { ПустаяОбласть() },
+    empty: @Composable () -> Unit = { EmptyArea() },
 ) {
     BoxWithConstraints(modifier) {
-        val доступно = maxWidth
-        val раскладка = раскладкаДля(доступно)
-        val цвета = Тима.цвета
-        CompositionLocalProvider(LocalРаскладка provides раскладка) {
-            if (раскладка.телефон) {
+        val available = maxWidth
+        val layout = layoutFor(available)
+        val colors = Tima.colors
+        CompositionLocalProvider(LayoutLocal provides layout) {
+            if (layout.phone) {
                 // Перерисовка, а не полосы: выбранное подокно занимает окно целиком, и
                 // пустого состояния на телефоне не бывает вовсе — там список и есть экран.
-                Box(Modifier.fillMaxSize()) { (главная ?: колонка)() }
+                Box(Modifier.fillMaxSize()) { (main ?: column)() }
                 return@CompositionLocalProvider
             }
 
             Row(Modifier.fillMaxSize()) {
-                раскладка.рейка?.let { ширина ->
+                layout.rail?.let { width ->
                     Box(
                         Modifier
-                            .width(ширина)
+                            .width(width)
                             .fillMaxHeight()
-                            .background(цвета.функц)
-                            .линияСправа(цвета.линия),
-                    ) { рейка?.invoke(раскладка) }
+                            .background(colors.functional)
+                            .rightLine(colors.line),
+                    ) { rail?.invoke(layout) }
                 }
 
                 Box(
                     Modifier
-                        .width(раскладка.колонка ?: доступно)
+                        .width(layout.column ?: available)
                         .fillMaxHeight()
-                        .линияСправа(цвета.линия),
-                ) { колонка() }
+                        .rightLine(colors.line),
+                ) { column() }
 
                 Box(
                     Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .background(цвета.поверхность),
-                ) { главная?.invoke() ?: пусто() }
+                        .background(colors.surface),
+                ) { main?.invoke() ?: empty() }
 
-                if (панель != null) {
-                    раскладка.панель?.let { ширина ->
+                if (panel != null) {
+                    layout.panel?.let { width ->
                         Box(
                             Modifier
-                                .width(ширина)
+                                .width(width)
                                 .fillMaxHeight()
-                                .background(цвета.поверхность)
-                                .линияСлева(цвета.линия),
-                        ) { панель() }
+                                .background(colors.surface)
+                                .leftLine(colors.line),
+                        ) { panel() }
                     }
                 }
             }
@@ -113,11 +113,11 @@ fun Стан(
  * что в макете, — [TimaФорматы.ПРЕДЕЛ_СОДЕРЖИМОГО].
  */
 @Composable
-fun ВЦентре(modifier: Modifier = Modifier, содержимое: @Composable () -> Unit) = Box(
+fun InCenter(modifier: Modifier = Modifier, content: @Composable () -> Unit) = Box(
     modifier = modifier.fillMaxWidth(),
     contentAlignment = Alignment.TopCenter,
 ) {
-    Box(Modifier.widthIn(max = TimaФорматы.ПРЕДЕЛ_СОДЕРЖИМОГО)) { содержимое() }
+    Box(Modifier.widthIn(max = FormatTima.ПРЕДЕЛ_СОДЕРЖИМОГО)) { content() }
 }
 
 /**
@@ -131,19 +131,19 @@ fun ВЦентре(modifier: Modifier = Modifier, содержимое: @Composa
  * пустое место, чем квадратик: пустое место человек не примет за поломку.
  */
 @Composable
-fun ПустаяОбласть(
-    знак: String? = null,
-    заголовок: String = "Ничего не выбрано",
-    пояснение: String? = null,
+fun EmptyArea(
+    glyph: String? = null,
+    title: String = "Ничего не выбрано",
+    explanation: String? = null,
     modifier: Modifier = Modifier,
 ) = Column(
-    modifier = modifier.fillMaxSize().padding(TimaSpacing.о6),
+    modifier = modifier.fillMaxSize().padding(TimaSpacing.about6),
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(TimaSpacing.о2, Alignment.CenterVertically),
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2, Alignment.CenterVertically),
 ) {
-    знак?.let { Подпись(it, кегль = TimaType.щ1, цвет = Тима.цвета.текст3) }
-    Подпись(заголовок, кегль = TimaType.щ3, вес = FontWeight.ExtraBold)
-    пояснение?.let { Второстепенное(it) }
+    glyph?.let { Caption(it, fontSize = TimaType.sz1, color = Tima.colors.text3) }
+    Caption(title, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
+    explanation?.let { Secondary(it) }
 }
 
 /**
@@ -158,40 +158,40 @@ fun ПустаяОбласть(
  * Кнопки при этом те же самые. Вызывающий передаёт их один раз и не спрашивает про формат.
  */
 @Composable
-fun СГроздью(
-    гроздь: @Composable () -> Unit,
+fun WithCluster(
+    cluster: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     /** Подпись рядом с кнопками. Появляется только внизу колонки: на телефоне места нет. */
-    подпись: String? = null,
-    содержимое: @Composable () -> Unit,
+    caption: String? = null,
+    content: @Composable () -> Unit,
 ) {
-    val раскладка = LocalРаскладка.current
-    val цвета = Тима.цвета
-    if (раскладка.телефон) {
+    val layout = LayoutLocal.current
+    val colors = Tima.colors
+    if (layout.phone) {
         Box(modifier.fillMaxSize()) {
-            содержимое()
+            content()
             Box(
                 Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(TimaSpacing.о4),
-            ) { гроздь() }
+                    .padding(TimaSpacing.about4),
+            ) { cluster() }
         }
         return
     }
 
     Column(modifier.fillMaxSize()) {
-        Box(Modifier.weight(1f)) { содержимое() }
+        Box(Modifier.weight(1f)) { content() }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(цвета.функц)
-                .линияСверху(цвета.линия)
-                .padding(horizontal = TimaSpacing.о4, vertical = TimaSpacing.о3),
-            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о3),
+                .background(colors.functional)
+                .topLine(colors.line)
+                .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about3),
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            гроздь()
-            подпись?.let { Подпись(it, кегль = TimaType.щ5, вес = FontWeight.Bold, цвет = цвета.текст2) }
+            cluster()
+            caption?.let { Caption(it, fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colors.text2) }
         }
     }
 }

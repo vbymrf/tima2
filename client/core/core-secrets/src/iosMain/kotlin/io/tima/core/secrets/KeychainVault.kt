@@ -69,12 +69,12 @@ internal class KeychainVault(private val service: String) : SecretVault {
         remove(alias)
 
         val data = secret.toCFData() ?: throw SecretVaultFailure("не удалось собрать CFData")
-        val query = запрос(alias, 4)
+        val query = request(alias, 4)
         try {
             CFDictionarySetValue(query, kSecValueData, data)
             CFDictionarySetValue(query, kSecAttrAccessible, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly)
             val status = SecItemAdd(query, null)
-            if (status != errSecSuccess) отказ("записи", alias, status)
+            if (status != errSecSuccess) refusal("записи", alias, status)
         } finally {
             CFRelease(data)
             CFRelease(query)
@@ -82,7 +82,7 @@ internal class KeychainVault(private val service: String) : SecretVault {
     }
 
     override fun get(alias: SecretAlias): ByteArray? {
-        val query = запрос(alias, 5)
+        val query = request(alias, 5)
         try {
             CFDictionarySetValue(query, kSecReturnData, kCFBooleanTrue)
             CFDictionarySetValue(query, kSecMatchLimit, kSecMatchLimitOne)
@@ -93,7 +93,7 @@ internal class KeychainVault(private val service: String) : SecretVault {
                 // Не `null`: «нет секрета» означает первый запуск и рождение нового
                 // ключа. Принять за первый запуск отказ Keychain значило бы молча
                 // выбросить локальную переписку.
-                if (status != errSecSuccess) отказ("чтении", alias, status)
+                if (status != errSecSuccess) refusal("чтении", alias, status)
                 val data: CFDataRef = holder.value?.reinterpret()
                     ?: throw SecretVaultFailure("Keychain вернул успех без данных")
                 try {
@@ -108,12 +108,12 @@ internal class KeychainVault(private val service: String) : SecretVault {
     }
 
     override fun remove(alias: SecretAlias): Boolean {
-        val query = запрос(alias, 3)
+        val query = request(alias, 3)
         try {
             val status = SecItemDelete(query)
             if (status == errSecSuccess) return true
             if (status == errSecItemNotFound) return false
-            отказ("удалении", alias, status)
+            refusal("удалении", alias, status)
         } finally {
             CFRelease(query)
         }
@@ -134,7 +134,7 @@ internal class KeychainVault(private val service: String) : SecretVault {
      * остальное — «эта запись не читается», и лечится переустановкой у человека. Одно
      * сообщение на два случая отправило бы искать причину не там.
      */
-    private fun отказ(действие: String, alias: SecretAlias, status: Int): Nothing =
+    private fun refusal(action: String, alias: SecretAlias, status: Int): Nothing =
         if (status == NOT_AVAILABLE || status == MISSING_ENTITLEMENT) {
             throw KeychainUnavailable(
                 "Keychain недоступен этому процессу (OSStatus $status): " +
@@ -143,11 +143,11 @@ internal class KeychainVault(private val service: String) : SecretVault {
                     "в симуляторе вне приложения",
             )
         } else {
-            throw SecretVaultFailure("Keychain отказал при $действие ${alias.value}: OSStatus $status")
+            throw SecretVaultFailure("Keychain отказал при $action ${alias.value}: OSStatus $status")
         }
 
     /** Общая часть запроса: класс, служба, имя. Освобождать обязан вызывающий. */
-    private fun запрос(alias: SecretAlias, capacity: Int): CFMutableDictionaryRef {
+    private fun request(alias: SecretAlias, capacity: Int): CFMutableDictionaryRef {
         val query = CFDictionaryCreateMutable(
             kCFAllocatorDefault,
             capacity.convert(),

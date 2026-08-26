@@ -13,21 +13,21 @@ import kotlin.test.assertTrue
  * порогов **следуют из ширин полос**. Расхождение таблицы с вёрсткой и есть та поломка,
  * которую иначе находят на чужом устройстве.
  */
-class ФорматTest {
+class FormatTest {
 
     @Test
     fun три_формата_на_ширинах_макета() {
         // Ровно те размеры, что стоят в индексах макета.
-        assertEquals(Формат.Телефон, раскладкаДля(380.dp).формат)
-        assertEquals(Формат.Планшет, раскладкаДля(1024.dp).формат)
-        assertEquals(Формат.ПК, раскладкаДля(1440.dp).формат)
+        assertEquals(Format.Phone, layoutFor(380.dp).format)
+        assertEquals(Format.Tablet, layoutFor(1024.dp).format)
+        assertEquals(Format.DESKTOP, layoutFor(1440.dp).format)
     }
 
     @Test
     fun порог_полос_ровно_на_840() {
         // Число из Plan.md §К5. Внешнее, но не произвольное: см. следующий тест.
-        assertEquals(Формат.Телефон, раскладкаДля(839.dp).формат)
-        assertEquals(Формат.Планшет, раскладкаДля(840.dp).формат)
+        assertEquals(Format.Phone, layoutFor(839.dp).format)
+        assertEquals(Format.Tablet, layoutFor(840.dp).format)
     }
 
     /**
@@ -38,12 +38,12 @@ class ФорматTest {
      */
     @Test
     fun на_пороге_полос_главной_области_хватает_места() {
-        val раскладка = раскладкаДля(TimaФорматы.ПОРОГ_ПОЛОС)
-        val занято = раскладка.рейка!! + раскладка.колонка!!
-        val главной = TimaФорматы.ПОРОГ_ПОЛОС - занято
+        val layout = layoutFor(FormatTima.ПОРОГ_ПОЛОС)
+        val taken = layout.rail!! + layout.column!!
+        val main = FormatTima.ПОРОГ_ПОЛОС - taken
         assertTrue(
-            главной >= TimaФорматы.МИНИМУМ_ГЛАВНОЙ,
-            "на пороге 840 главной области остаётся $главной при минимуме ${TimaФорматы.МИНИМУМ_ГЛАВНОЙ}",
+            main >= FormatTima.МИНИМУМ_ГЛАВНОЙ,
+            "на пороге 840 главной области остаётся $main при минимуме ${FormatTima.МИНИМУМ_ГЛАВНОЙ}",
         )
     }
 
@@ -57,35 +57,35 @@ class ФорматTest {
      */
     @Test
     fun порог_пк_есть_сумма_полос() {
-        assertEquals(1236.dp, TimaФорматы.ПОРОГ_ПК)
-        assertEquals(Формат.Планшет, раскладкаДля(TimaФорматы.ПОРОГ_ПК - 1.dp).формат)
-        assertEquals(Формат.ПК, раскладкаДля(TimaФорматы.ПОРОГ_ПК).формат)
+        assertEquals(1236.dp, FormatTima.DESKTOP_THRESHOLD)
+        assertEquals(Format.Tablet, layoutFor(FormatTima.DESKTOP_THRESHOLD - 1.dp).format)
+        assertEquals(Format.DESKTOP, layoutFor(FormatTima.DESKTOP_THRESHOLD).format)
     }
 
     /** На телефоне полос нет вовсе: список и есть экран, подокно открывается перерисовкой. */
     @Test
     fun на_телефоне_полос_нет() {
-        val раскладка = раскладкаДля(380.dp)
-        assertNull(раскладка.рейка, "на телефоне переключение окон — подокно, а не рейка")
-        assertNull(раскладка.колонка, "колонка на телефоне занимает окно целиком")
-        assertNull(раскладка.панель)
-        assertTrue(раскладка.телефон)
+        val layout = layoutFor(380.dp)
+        assertNull(layout.rail, "на телефоне переключение окон — подокно, а не рейка")
+        assertNull(layout.column, "колонка на телефоне занимает окно целиком")
+        assertNull(layout.panel)
+        assertTrue(layout.phone)
     }
 
     /** На планшете панели нет: страница объекта открывается перерисовкой, как на телефоне. */
     @Test
     fun панель_только_на_пк() {
-        assertNull(раскладкаДля(1024.dp).панель)
-        assertEquals(TimaФорматы.ПАНЕЛЬ, раскладкаДля(1440.dp).панель)
+        assertNull(layoutFor(1024.dp).panel)
+        assertEquals(FormatTima.PANEL, layoutFor(1440.dp).panel)
     }
 
     /** Рейка значками на планшете, с подписями на ПК — та же рейка, другая ширина. */
     @Test
     fun подписи_в_рейке_появляются_только_на_пк() {
-        assertEquals(false, раскладкаДля(1024.dp).подписиРейки)
-        assertEquals(TimaФорматы.РЕЙКА_ЗНАЧКИ, раскладкаДля(1024.dp).рейка)
-        assertEquals(true, раскладкаДля(1440.dp).подписиРейки)
-        assertEquals(TimaФорматы.РЕЙКА_ПОДПИСИ, раскладкаДля(1440.dp).рейка)
+        assertEquals(false, layoutFor(1024.dp).railCaption)
+        assertEquals(FormatTima.РЕЙКА_ЗНАЧКИ, layoutFor(1024.dp).rail)
+        assertEquals(true, layoutFor(1440.dp).railCaption)
+        assertEquals(FormatTima.CAPTION_RAIL, layoutFor(1440.dp).rail)
     }
 
     /**
@@ -97,16 +97,16 @@ class ФорматTest {
      */
     @Test
     fun главной_области_всегда_остаётся_минимум() {
-        var ширина = TimaФорматы.ПОРОГ_ПОЛОС
-        while (ширина <= 3000.dp) {
-            val раскладка = раскладкаДля(ширина)
-            val занято = (раскладка.рейка ?: 0.dp) + (раскладка.колонка ?: 0.dp) + (раскладка.панель ?: 0.dp)
-            val главной = ширина - занято
+        var width = FormatTima.ПОРОГ_ПОЛОС
+        while (width <= 3000.dp) {
+            val layout = layoutFor(width)
+            val taken = (layout.rail ?: 0.dp) + (layout.column ?: 0.dp) + (layout.panel ?: 0.dp)
+            val main = width - taken
             assertTrue(
-                главной >= TimaФорматы.МИНИМУМ_ГЛАВНОЙ,
-                "на ширине $ширина главной области досталось $главной",
+                main >= FormatTima.МИНИМУМ_ГЛАВНОЙ,
+                "на ширине $width главной области досталось $main",
             )
-            ширина += 1.dp
+            width += 1.dp
         }
     }
 
@@ -117,8 +117,8 @@ class ФорматTest {
      */
     @Test
     fun колонок_медиа_по_формату() {
-        assertEquals(2, раскладкаДля(380.dp).колонокМедиа)
-        assertEquals(3, раскладкаДля(1024.dp).колонокМедиа)
-        assertEquals(4, раскладкаДля(1440.dp).колонокМедиа)
+        assertEquals(2, layoutFor(380.dp).mediaColumns)
+        assertEquals(3, layoutFor(1024.dp).mediaColumns)
+        assertEquals(4, layoutFor(1440.dp).mediaColumns)
     }
 }

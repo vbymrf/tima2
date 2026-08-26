@@ -1,9 +1,9 @@
 package io.tima.feature.group
 
-import io.tima.testui.ЧУЖОЙ_ФОН
-import io.tima.testui.обеТемы
-import io.tima.testui.снять
-import io.tima.testui.тема
+import io.tima.testui.FOREIGN_BACKGROUND
+import io.tima.testui.bothThemes
+import io.tima.testui.capture
+import io.tima.testui.theme
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -14,79 +14,79 @@ import kotlin.test.assertTrue
  * экран и устроен так: **непозванные номера рисуются не как беда**. Группа создана, и
  * красный текст про сбой заставил бы человека повторять сделанное.
  */
-class ЭкранНовойГруппыTest {
+class NewGroupScreenTest {
 
     /** Экран заливает свой фон (находка 29): снимается на краске, которой в палитре нет. */
     @Test
     fun экран_заливает_свой_фон() {
-        for ((имя, снимок) in обеТемы("группа-новая-фон", ШИРИНА, ВЫСОТА, подложка = ЧУЖОЙ_ФОН) {
-            экран(НоваяГруппаState())
+        for ((name, snapshot) in bothThemes("группа-новая-фон", WIDTH, HEIGHT, backdrop = FOREIGN_BACKGROUND) {
+            screen(NewGroupState())
         }) {
-            assertTrue(!снимок.есть(ЧУЖОЙ_ФОН), "$имя: сквозь экран видна подложка")
+            assertTrue(!snapshot.has(FOREIGN_BACKGROUND), "$name: сквозь экран видна подложка")
         }
     }
 
     @Test
     fun экран_рисуется_в_обеих_темах() {
-        val снимки = обеТемы("группа-новая", ШИРИНА, ВЫСОТА) { экран(НоваяГруппаState()) }
-        val расхождение = снимки.getValue("светлая").расхождение(снимки.getValue("тёмная"))
-        assertTrue(расхождение > 0.10, "темы расходятся лишь на ${(расхождение * 100).toInt()}%")
+        val snapshots = bothThemes("группа-новая", WIDTH, HEIGHT) { screen(NewGroupState()) }
+        val difference = snapshots.getValue("светлая").difference(snapshots.getValue("тёмная"))
+        assertTrue(difference > 0.10, "темы расходятся лишь на ${(difference * 100).toInt()}%")
     }
 
     /** Подокно: есть «назад», нет плашки окна. Человек вернётся туда, откуда пришёл. */
     @Test
     fun у_подокна_шапка_без_плашки() {
-        for ((имя, снимок) in обеТемы("группа-новая-шапка", ШИРИНА, ВЫСОТА) { экран(НоваяГруппаState()) }) {
+        for ((name, snapshot) in bothThemes("группа-новая-шапка", WIDTH, HEIGHT) { screen(NewGroupState()) }) {
             assertTrue(
-                !снимок.естьПятно(тема(имя).навигация, y = 0 until 40, сторона = 20),
-                "$имя: у подокна появилась плашка окна",
+                !snapshot.patchHas(theme(name).navigation, y = 0 until 40, side = 20),
+                "$name: у подокна появилась плашка окна",
             )
         }
     }
 
     @Test
     fun набранные_номера_видны_списком() {
-        val пусто = снять("группа-новая-пусто", ШИРИНА, ВЫСОТА, тёмная = false) {
-            экран(НоваяГруппаState(название = "Поход"))
+        val empty = capture("группа-новая-пусто", WIDTH, HEIGHT, dark = false) {
+            screen(NewGroupState(title = "Поход"))
         }
-        val сНомерами = снять("группа-новая-номера", ШИРИНА, ВЫСОТА, тёмная = false) {
-            экран(НоваяГруппаState(название = "Поход", номера = listOf("+79990000002")))
+        val withNumbers = capture("группа-новая-номера", WIDTH, HEIGHT, dark = false) {
+            screen(NewGroupState(title = "Поход", numbers = listOf("+79990000002")))
         }
-        assertTrue(сНомерами.расхождение(пусто) > 0.0, "добавленный номер не нарисовался")
+        assertTrue(withNumbers.difference(empty) > 0.0, "добавленный номер не нарисовался")
     }
 
     @Test
     fun непозванные_нарисованы_и_отдельно_от_беды() {
-        val чисто = снять("группа-новая-чисто", ШИРИНА, ВЫСОТА, тёмная = false) {
-            экран(НоваяГруппаState(название = "Поход"))
+        val clean = capture("группа-новая-чисто", WIDTH, HEIGHT, dark = false) {
+            screen(NewGroupState(title = "Поход"))
         }
-        val непозванные = снять("группа-новая-непозванные", ШИРИНА, ВЫСОТА, тёмная = false) {
-            экран(НоваяГруппаState(название = "Поход", непозванные = listOf("+70000000000")))
+        val notInvited = capture("группа-новая-непозванные", WIDTH, HEIGHT, dark = false) {
+            screen(NewGroupState(title = "Поход", notInvited = listOf("+70000000000")))
         }
-        val беда = снять("группа-новая-беда", ШИРИНА, ВЫСОТА, тёмная = false) {
-            экран(НоваяГруппаState(название = "Поход", беда = "Нет связи — повторим через 5 с"))
+        val trouble = capture("группа-новая-беда", WIDTH, HEIGHT, dark = false) {
+            screen(NewGroupState(title = "Поход", trouble = "Нет связи — повторим через 5 с"))
         }
 
-        assertTrue(непозванные.расхождение(чисто) > 0.0, "непозванные не нарисовались")
+        assertTrue(notInvited.difference(clean) > 0.0, "непозванные не нарисовались")
         assertTrue(
-            непозванные.расхождение(беда) > 0.0,
+            notInvited.difference(trouble) > 0.0,
             "непозванные выглядят так же, как беда: человек станет повторять сделанное",
         )
     }
 
     private companion object {
-        const val ШИРИНА = 380
-        const val ВЫСОТА = 700
+        const val WIDTH = 380
+        const val HEIGHT = 700
 
         @androidx.compose.runtime.Composable
-        fun экран(состояние: НоваяГруппаState) = ЭкранНовойГруппы(
-            состояние = состояние,
-            onНазвание = {},
-            onНомер = {},
-            onДобавитьНомер = {},
-            onУбратьНомер = {},
-            onСоздать = {},
-            onНазад = {},
+        fun screen(state: NewGroupState) = NewGroupScreen(
+            state = state,
+            onTitle = {},
+            onNumber = {},
+            onAddNumber = {},
+            onRemoveNumber = {},
+            onCreate = {},
+            onBack = {},
         )
     }
 }

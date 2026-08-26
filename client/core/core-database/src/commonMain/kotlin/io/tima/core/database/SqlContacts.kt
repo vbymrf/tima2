@@ -31,12 +31,12 @@ class SqlContacts(
             // Поток от самой базы:новая переписка появляется в контактах сама, без опроса.
             .asFlow()
             .mapToList(Dispatchers.Default)
-            .map { строки ->
-                строки.map { строка ->
+            .map { lines ->
+                lines.map { line ->
                     Contact(
-                        userId = строка.peer_id.orEmpty(),
-                        chatId = строка.chat_id,
-                        name = строка.title_enc?.let { cipher.open(it) }?.decodeToString(),
+                        userId = line.peer_id.orEmpty(),
+                        chatId = line.chat_id,
+                        name = line.title_enc?.let { cipher.open(it) }?.decodeToString(),
                     )
                 }.sortedWith(
                     // Безымянные — в конец: у них нечего читать глазами, и держать их

@@ -30,23 +30,23 @@ class VaultSecretStore(private val vault: SecretVault) : DeviceSecretStore {
     fun deviceSecret(): ByteArray? = vault.get(Secrets.DEVICE_SECRET)
 
     override fun saveSession(session: Session) {
-        val части = listOf(session.userId, session.deviceId, session.accessToken)
-        require(части.none { it.isEmpty() }) { "пустое поле сессии: $части" }
-        require(части.none { it.contains(SEPARATOR) }) {
+        val parts = listOf(session.userId, session.deviceId, session.accessToken)
+        require(parts.none { it.isEmpty() }) { "пустое поле сессии: $parts" }
+        require(parts.none { it.contains(SEPARATOR) }) {
             "перевод строки внутри значения сессии — такого не бывает у UUID и base64url"
         }
-        vault.put(SESSION, части.joinToString(SEPARATOR).encodeToByteArray())
+        vault.put(SESSION, parts.joinToString(SEPARATOR).encodeToByteArray())
     }
 
     override fun session(): Session? {
-        val части = vault.get(SESSION)?.decodeToString()?.split(SEPARATOR) ?: return null
+        val parts = vault.get(SESSION)?.decodeToString()?.split(SEPARATOR) ?: return null
         // Не «пустая сессия»: испорченная запись означает, что хранилище отдало не то, и
         // молча начать с чистого листа — значит завести второе устройство при живом
         // первом.
-        if (части.size != 3 || части.any { it.isEmpty() }) {
-            throw SecretVaultFailure("запись сессии испорчена: ${части.size} частей")
+        if (parts.size != 3 || parts.any { it.isEmpty() }) {
+            throw SecretVaultFailure("запись сессии испорчена: ${parts.size} частей")
         }
-        return Session(userId = части[0], deviceId = части[1], accessToken = части[2])
+        return Session(userId = parts[0], deviceId = parts[1], accessToken = parts[2])
     }
 
     /** Выход из аккаунта: и сессия, и секрет устройства. */

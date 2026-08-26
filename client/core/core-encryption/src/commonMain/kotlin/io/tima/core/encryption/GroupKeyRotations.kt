@@ -37,18 +37,18 @@ class GroupKeyRotations(escrowKey: EscrowEpochKey) {
     fun rotate(currentVersion: Int, recipients: List<RecipientDevice>): Result<MintedGroupKey> =
         runCatching {
             require(recipients.isNotEmpty()) { "ротация без получателей оставит группу без ключа" }
-            val ротация = manager.rotate(
+            val rotation = manager.rotate(
                 currentVersion = currentVersion,
                 devices = recipients.map { DeviceAddress(it.deviceId, it.encryptionPublic) },
             ).getOrThrow()
             MintedGroupKey(
-                gkVersion = ротация.gkVersion,
-                groupKey = ротация.groupKey,
-                senderEphemeralPub = ротация.senderEphemeralPub,
-                wrappedKeys = ротация.wrappedKeys,
-                escrowMlkemCt = ротация.escrow.mlkemCt,
-                escrowWrappedKey = ротация.escrow.wrappedMessageKey,
-                escrowKeyVersion = ротация.escrow.escrowKeyVersion,
+                gkVersion = rotation.gkVersion,
+                groupKey = rotation.groupKey,
+                senderEphemeralPub = rotation.senderEphemeralPub,
+                wrappedKeys = rotation.wrappedKeys,
+                escrowMlkemCt = rotation.escrow.mlkemCt,
+                escrowWrappedKey = rotation.escrow.wrappedMessageKey,
+                escrowKeyVersion = rotation.escrow.escrowKeyVersion,
             )
         }
 }

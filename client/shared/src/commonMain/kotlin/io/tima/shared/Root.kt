@@ -24,41 +24,41 @@ import io.tima.domain.chat.ChatNames
 import io.tima.domain.chat.CreateGroupChat
 import io.tima.domain.chat.ManageGroupMembers
 import io.tima.domain.chat.RequestGroupKeys
-import io.tima.feature.group.НоваяГруппаStore
-import io.tima.feature.group.СоставStore
-import io.tima.feature.group.ЭкранНовойГруппы
-import io.tima.feature.group.ЭкранСостава
+import io.tima.feature.group.NewGroupStore
+import io.tima.feature.group.MembersStore
+import io.tima.feature.group.NewGroupScreen
+import io.tima.feature.group.MemberScreen
 import io.tima.core.database.TimaDatabase
-import io.tima.core.ui.Стан
+import io.tima.core.ui.Stage
 import io.tima.domain.account.Session
 import io.tima.domain.chat.StartPersonalChat
 import io.tima.feature.auth.AuthState
 import io.tima.feature.auth.AuthStore
-import io.tima.feature.auth.ПривязкаStore
-import io.tima.feature.auth.ЭкранПривязки
-import io.tima.feature.auth.УстройстваStore
-import io.tima.feature.auth.ЭкранУстройств
-import io.tima.feature.auth.ЭкранВхода
+import io.tima.feature.auth.LinkStore
+import io.tima.feature.auth.LinkScreen
+import io.tima.feature.auth.DevicesStore
+import io.tima.feature.auth.DeviceScreen
+import io.tima.feature.auth.EntryScreen
 import io.tima.feature.chat.ChatStore
 import io.tima.feature.chat.ChatsState
 import io.tima.feature.chat.ChatsStore
-import io.tima.feature.chat.КнигаState
-import io.tima.feature.chat.КнигаStore
-import io.tima.feature.chat.ЭкранКниги
-import io.tima.feature.shell.Окно
-import io.tima.feature.shell.ОкноМедиа
-import io.tima.feature.shell.ОкноОбщение
-import io.tima.feature.shell.ОкноСоциум
-import io.tima.feature.shell.ОкноСтраница
-import io.tima.feature.shell.ВСторону
-import io.tima.feature.shell.КаркасОкна
-import io.tima.feature.shell.Рейка
-import io.tima.feature.shell.ЗаглушкаВкладки
-import io.tima.feature.shell.ЭкранПереключенияОкон
-import io.tima.feature.chat.НоваяПерепискаStore
-import io.tima.feature.chat.ЭкранНовойПереписки
-import io.tima.feature.chat.ЭкранПереписок
-import io.tima.feature.chat.ЭкранЧата
+import io.tima.feature.chat.BookState
+import io.tima.feature.chat.BookStore
+import io.tima.feature.chat.BookScreen
+import io.tima.feature.shell.Window
+import io.tima.feature.shell.MediaWindow
+import io.tima.feature.shell.ActivityWindow
+import io.tima.feature.shell.SocialWindow
+import io.tima.feature.shell.PageWindow
+import io.tima.feature.shell.InSide
+import io.tima.feature.shell.WindowFrame
+import io.tima.feature.shell.Rail
+import io.tima.feature.shell.TabStub
+import io.tima.feature.shell.WindowSwitchingScreen
+import io.tima.feature.chat.NewChatStore
+import io.tima.feature.chat.NewChatScreen
+import io.tima.feature.chat.ChatScreen
+import io.tima.feature.chat.ChatsScreen
 
 /**
  * Корень приложения — общий для всех платформ.
@@ -75,76 +75,76 @@ import io.tima.feature.chat.ЭкранЧата
  * секрет пишется до вызова сервера, и секрет без сессии это незаконченный вход.
  */
 @Composable
-fun Корень(
-    вход: Вход,
-    базаУстройства: () -> TimaDatabase,
-    кодПривязки: String? = null,
+fun Root(
+    entry: Entry,
+    deviceDatabase: () -> TimaDatabase,
+    linkCode: String? = null,
     /** Номер сборки от платформы: общий код его знать не может и не должен. */
-    версияСборки: String = "",
+    buildVersion: String = "",
 ) {
-    var устройство by remember { mutableStateOf(вход.заведённое()) }
+    var device by remember { mutableStateOf(entry.created()) }
 
-    val текущее = устройство
-    if (текущее == null) {
+    val current = device
+    if (current == null) {
         // Код, пришедший на устройство без аккаунта, ничего не значит: подтверждать
         // привязку нечем — своего ключа у него нет. Показываем обычный вход, а не
         // сообщение о беде: человек, скорее всего, просто отсканировал код не тем
         // приложением.
-        Вхождение(вход, версияСборки) { устройство = вход.заведённое() }
+        Occurrence(entry, buildVersion) { device = entry.created() }
         return
     }
 
     // Сборка живёт в Assembly.kt: здесь навигация, а не «кто из чего состоит».
-    val собранное = собрать(вход, текущее, базаУстройства)
+    val assembled = assemble(entry, current, deviceDatabase)
 
-    Приложение(собранное, вход.платформа, текущее.секрет, кодПривязки, версияСборки)
+    App(assembled, entry.platform, current.secret, linkCode, buildVersion)
 }
 
 @Composable
-private fun Вхождение(вход: Вход, версияСборки: String, onВошли: () -> Unit) {
+private fun Occurrence(entry: Entry, buildVersion: String, onEntered: () -> Unit) {
     val scope = rememberCoroutineScope()
     val store = remember {
         AuthStore(
-            register = вход.регистрация,
+            register = entry.registration,
             identities = AccountIdentitiesOverKodium,
             scope = scope,
-            link = вход.привязка,
-            имяУстройства = вход.платформа.имяУстройства,
+            link = entry.link,
+            deviceName = entry.platform.deviceName,
         )
     }
-    val состояние by store.state.collectAsState()
+    val state by store.state.collectAsState()
 
     // Оба конечных состояния означают одно: устройство есть. «Готово» и «уже заведено»
     // различаются только тем, кто его завёл, а приложению дальше всё равно.
-    if (состояние is AuthState.Готово || состояние is AuthState.УжеЗаведено) onВошли()
+    if (state is AuthState.Done || state is AuthState.CreatedAlready) onEntered()
 
-    ЭкранВхода(
-        состояние = состояние,
-        onНомер = store::номерИзменён,
-        onКодСтраны = store::кодСтраныИзменён,
-        onКод = store::кодИзменён,
-        onЗапросить = store::запроситьКод,
-        onПодтвердить = store::подтвердить,
-        onНазад = store::назад,
-        onФраза = store::фразаИзменена,
-        onВойтиПоФразе = store::войтиПоФразе,
-        onНачатьЗаново = store::начатьЗаново,
-        onФразаСохранена = store::фразаСохранена,
-        onПодключиться = store::подключиться,
-        версияСборки = версияСборки,
+    EntryScreen(
+        state = state,
+        onNumber = store::changedNumber,
+        onCodeCountry = store::changedCountryCode,
+        onCode = store::changedCode,
+        onRequest = store::requestCode,
+        onConfirm = store::confirm,
+        onBack = store::back,
+        onPhrase = store::changedPhrase,
+        onEnterByPhrase = store::enterByPhrase,
+        onStartAnew = store::startAnew,
+        onPhraseSaved = store::savedPhrase,
+        onConnect = store::connect,
+        buildVersion = buildVersion,
     )
 }
 
 /** Что открыто в главной области. Вся навигация верхнего уровня — эти три случая. */
-private sealed interface Куда {
+private sealed interface Where {
     /** Ничего: на телефоне это список, на широком формате — пустая главная область. */
-    data object Ничего : Куда
+    data object Nothing : Where
 
     /** Подокно «новая переписка». */
-    data object Новая : Куда
+    data object New : Where
 
     /** Подокно «новая группа». */
-    data object НоваяГруппа : Куда
+    data object NewGroup : Where
 
     /**
      * Подокно «участники группы».
@@ -152,10 +152,10 @@ private sealed interface Куда {
      * Открывается из окна переписки, а не из списка: состав — свойство открытой группы, и
      * попасть в него, не открыв её, значит спрашивать «чей состав».
      */
-    data class Состав(val groupId: String, val имя: String?) : Куда
+    data class Members(val groupId: String, val name: String?) : Where
 
     /** Переписка. Имя хранится здесь, потому что строка в списке появится позже — потоком. */
-    data class Переписка(val chatId: String, val имя: String?) : Куда
+    data class Chat(val chatId: String, val name: String?) : Where
 
     /**
      * Подтверждение привязки нового устройства.
@@ -164,7 +164,7 @@ private sealed interface Куда {
      * и открыла нас. Своего сканера у нас поэтому нет вовсе — и не нужно: чужой уже стоит
      * на каждом телефоне, а свой потребовал бы доступа к камере и объяснений, зачем он.
      */
-    data class Привязка(val код: String) : Куда
+    data class Link(val code: String) : Where
 
     /**
      * Свои устройства.
@@ -174,7 +174,7 @@ private sealed interface Куда {
      * Экран назван своим именем, поэтому человек видит, куда попал; когда разделов станет
      * больше, между ними встанет список разделов.
      */
-    data object Устройства : Куда
+    data object Devices : Where
 }
 
 /**
@@ -186,239 +186,239 @@ private sealed interface Куда {
  * навигации. Семь окон и рейка — К5.4.
  */
 @Composable
-private fun Приложение(
-    собранное: Собранное,
-    платформа: Платформа,
-    секретУстройства: ByteArray,
-    кодПривязки: String?,
+private fun App(
+    assembled: Assembled,
+    platform: Platform,
+    deviceSecret: ByteArray,
+    linkCode: String?,
     /** Номер сборки — показывается в «Устройствах», см. пояснение там. */
-    версияСборки: String,
+    buildVersion: String,
 ) {
-    val окружение = собранное.окружение
-    val сеть = собранное.сеть
-    val сессия = собранное.сессия
+    val environment = assembled.environment
+    val network = assembled.network
+    val session = assembled.session
     val scope = rememberCoroutineScope()
-    val список = remember { ChatsStore(окружение.переписки, scope) }
-    var куда by remember { mutableStateOf<Куда>(Куда.Ничего) }
+    val list = remember { ChatsStore(environment.chats, scope) }
+    var where by remember { mutableStateOf<Where>(Where.Nothing) }
 
     // Какое окно открыто. Приложение начинается с окна 1: личная связь — то, ради
     // чего его открывают чаще всего, а остальные окна пока пусты по существу.
-    var окно by remember { mutableStateOf(Окно.Телефон) }
-    var переключательОкон by remember { mutableStateOf(false) }
+    var window by remember { mutableStateOf(Window.Phone) }
+    var windowSwitcher by remember { mutableStateOf(false) }
 
     // Книга: люди, с которыми уже есть переписка. Поток из базы — новая переписка
     // появляется в книге сама.
-    val книга = remember { КнигаStore(окружение.контакты, scope) }
-    var вкладкаТелефона by remember { mutableStateOf("Чаты") }
+    val book = remember { BookStore(environment.contacts, scope) }
+    var phoneTab by remember { mutableStateOf("Чаты") }
 
-    val новая = remember {
-        НоваяПерепискаStore(
+    val new = remember {
+        NewChatStore(
             start = StartPersonalChat(
-                directory = сеть.справочник,
-                chats = SqlChatBook(окружение.db, окружение.шифр),
+                directory = network.directory,
+                chats = SqlChatBook(environment.db, environment.cipher),
                 ids = PersonalChatIdsOverKodium,
             ),
-            myUserId = сессия.userId,
+            myUserId = session.userId,
             scope = scope,
         )
     }
 
     // Код снаружи открывает подтверждение поверх всего: человек только что навёл камеру и
     // ждёт ответа именно на это.
-    LaunchedEffect(кодПривязки) {
-        кодПривязки?.let { куда = Куда.Привязка(it) }
+    LaunchedEffect(linkCode) {
+        linkCode?.let { where = Where.Link(it) }
     }
 
-    val состояниеСписка by список.state.collectAsState()
-    val состояниеКниги by книга.state.collectAsState()
-    val состояниеНовой by новая.state.collectAsState()
+    val listState by list.state.collectAsState()
+    val bookState by book.state.collectAsState()
+    val newState by new.state.collectAsState()
 
     // Переписка начата — открываем её. Один и тот же признак ведёт и к открытию, и к
     // закрытию подокна: иначе они однажды разойдутся.
-    LaunchedEffect(состояниеНовой.начата) {
-        val chatId = состояниеНовой.начата ?: return@LaunchedEffect
-        куда = Куда.Переписка(chatId, состояниеНовой.номер)
-        новая.сброс()
+    LaunchedEffect(newState.started) {
+        val chatId = newState.started ?: return@LaunchedEffect
+        where = Where.Chat(chatId, newState.number)
+        new.reset()
     }
 
     // Фоновые циклы — в своём файле: это политика времени, а не навигация.
-    ФоновыеЦиклы(собранное, платформа, признакИзменений = состояниеСписка)
+    BackgroundLoops(assembled, platform, changeSign = listState)
 
     // Свайп по средней зоне ведёт к соседнему окну в порядке переключателя. Края
     // не заворачиваются: с первого окна влево уйти некуда, и это честнее кольца —
     // человек, дойдя до края, видит, что край есть.
-    val сменитьОкно: (ВСторону) -> Unit = { куда_ ->
-        val порядок = Окно.entries
-        val следующий = порядок.indexOf(окно) + if (куда_ == ВСторону.Следующее) 1 else -1
-        порядок.getOrNull(следующий)?.let {
-            окно = it
-            куда = Куда.Ничего
+    val switchWindow: (InSide) -> Unit = { where_ ->
+        val order = Window.entries
+        val next = order.indexOf(window) + if (where_ == InSide.Next) 1 else -1
+        order.getOrNull(next)?.let {
+            window = it
+            where = Where.Nothing
         }
     }
 
     // Переключатель окон лежит ПОВЕРХ стана, а не внутри колонки: он перекрывает
     // всё окно, включая главную область, и затемняет то, из чего его открыли.
-    if (переключательОкон) {
-        ЭкранПереключенияОкон(
-            текущее = окно,
-            имя = сессия.userId,
-            псевдоним = "@" + сессия.userId.take(8),
-            счётчики = счётчикиОкон(состояниеСписка),
-            onВыбрать = { выбрано ->
-                окно = выбрано
-                куда = Куда.Ничего
-                переключательОкон = false
+    if (windowSwitcher) {
+        WindowSwitchingScreen(
+            current = window,
+            name = session.userId,
+            alias = "@" + session.userId.take(8),
+            counters = windowCounters(listState),
+            onSelect = { selected ->
+                window = selected
+                where = Where.Nothing
+                windowSwitcher = false
             },
-            onНастройки = {
-                куда = Куда.Устройства
-                переключательОкон = false
+            onSettings = {
+                where = Where.Devices
+                windowSwitcher = false
             },
-            onЗакрыть = { переключательОкон = false },
+            onClose = { windowSwitcher = false },
         )
         return
     }
 
-    Стан(
+    Stage(
         modifier = Modifier.fillMaxSize(),
         // Рейка есть только на широких форматах: на телефоне окна меняют подокном.
         // Решает это Стан — он и не позовёт рейку там, где её нет в раскладке.
-        рейка = { раскладка ->
-            Рейка(
-                раскладка = раскладка,
-                текущее = окно,
-                onВыбрать = { выбрано ->
-                    окно = выбрано
+        rail = { layout ->
+            Rail(
+                layout = layout,
+                current = window,
+                onSelect = { selected ->
+                    window = selected
                     // Смена окна закрывает подокно: оно принадлежало прежнему окну.
-                    куда = Куда.Ничего
+                    where = Where.Nothing
                 },
-                счётчики = счётчикиОкон(состояниеСписка),
-                onНастройки = { куда = Куда.Устройства },
+                counters = windowCounters(listState),
+                onSettings = { where = Where.Devices },
             )
         },
-        колонка = {
-            when (окно) {
-                Окно.Телефон -> ОкноТелефон(
-                    вкладка = вкладкаТелефона,
-                    onВкладка = { вкладкаТелефона = it },
-                    список = состояниеСписка,
-                    книга = состояниеКниги,
-                    onПоискВКниге = книга::поискИзменён,
-                    onОткрыть = { куда = Куда.Переписка(it.chatId, it.title) },
-                    onОткрытьЧеловека = { куда = Куда.Переписка(it.chatId, it.name) },
-                    onНовая = { куда = Куда.Новая },
-                    onНоваяГруппа = { куда = Куда.НоваяГруппа },
-                    onНастройки = { куда = Куда.Устройства },
-                    onПереключитьОкна = { переключательОкон = true },
-                    onСоседнееОкно = сменитьОкно,
+        column = {
+            when (window) {
+                Window.Phone -> PhoneWindow(
+                    tab = phoneTab,
+                    onTab = { phoneTab = it },
+                    list = listState,
+                    book = bookState,
+                    onSearchInBook = book::changedSearch,
+                    onOpen = { where = Where.Chat(it.chatId, it.title) },
+                    onOpenPerson = { where = Where.Chat(it.chatId, it.name) },
+                    onNew = { where = Where.New },
+                    onNewGroup = { where = Where.NewGroup },
+                    onSettings = { where = Where.Devices },
+                    onSwitchWindows = { windowSwitcher = true },
+                    onNeighbourWindow = switchWindow,
                 )
 
-                Окно.Социум -> ОкноСоциум(
-                    onПереключитьОкна = { переключательОкон = true },
-                    onПоиск = {},
-                    onНастройки = { куда = Куда.Устройства },
-                    onСоседнееОкно = сменитьОкно,
+                Window.Social -> SocialWindow(
+                    onSwitchWindows = { windowSwitcher = true },
+                    onSearch = {},
+                    onSettings = { where = Where.Devices },
+                    onNeighbourWindow = switchWindow,
                 )
 
-                Окно.Медиа -> ОкноМедиа(
-                    onПереключитьОкна = { переключательОкон = true },
-                    onПоиск = {},
-                    onНастройки = { куда = Куда.Устройства },
-                    onСоседнееОкно = сменитьОкно,
+                Window.Media -> MediaWindow(
+                    onSwitchWindows = { windowSwitcher = true },
+                    onSearch = {},
+                    onSettings = { where = Where.Devices },
+                    onNeighbourWindow = switchWindow,
                 )
 
-                Окно.Общение -> ОкноОбщение(
-                    onПереключитьОкна = { переключательОкон = true },
-                    onПоиск = {},
-                    onНастройки = { куда = Куда.Устройства },
-                    onСоседнееОкно = сменитьОкно,
+                Window.Activity -> ActivityWindow(
+                    onSwitchWindows = { windowSwitcher = true },
+                    onSearch = {},
+                    onSettings = { where = Where.Devices },
+                    onNeighbourWindow = switchWindow,
                 )
 
-                Окно.Страница -> ОкноСтраница(
-                    onПереключитьОкна = { переключательОкон = true },
-                    onПоиск = {},
-                    onНастройки = { куда = Куда.Устройства },
-                    onСоседнееОкно = сменитьОкно,
+                Window.Page -> PageWindow(
+                    onSwitchWindows = { windowSwitcher = true },
+                    onSearch = {},
+                    onSettings = { where = Where.Devices },
+                    onNeighbourWindow = switchWindow,
                 )
             }
         },
-        главная = when (val текущее = куда) {
-            Куда.Ничего -> null
+        main = when (val current = where) {
+            Where.Nothing -> null
 
-            Куда.Новая -> {
+            Where.New -> {
                 {
-                    ЭкранНовойПереписки(
-                        состояние = состояниеНовой,
-                        onНомер = новая::номерИзменён,
-                        onНайти = новая::найти,
-                        onНазад = {
-                            куда = Куда.Ничего
-                            новая.сброс()
+                    NewChatScreen(
+                        state = newState,
+                        onNumber = new::changedNumber,
+                        onFind = new::find,
+                        onBack = {
+                            where = Where.Nothing
+                            new.reset()
                         },
                     )
                 }
             }
 
-            Куда.Устройства -> {
+            Where.Devices -> {
                 {
-                    Устройства(
-                        сеть = сеть,
+                    Devices(
+                        network = network,
                         scope = scope,
-                        версияСборки = версияСборки,
-                        onНазад = { куда = Куда.Ничего },
+                        buildVersion = buildVersion,
+                        onBack = { where = Where.Nothing },
                     )
                 }
             }
 
-            is Куда.Привязка -> {
+            is Where.Link -> {
                 {
-                    ПодтверждениеПривязки(
-                        сеть = сеть,
-                        секретУстройства = секретУстройства,
-                        код = текущее.код,
+                    LinkConfirmation(
+                        network = network,
+                        deviceSecret = deviceSecret,
+                        code = current.code,
                         scope = scope,
-                        onЗакрыть = { куда = Куда.Ничего },
+                        onClose = { where = Where.Nothing },
                     )
                 }
             }
 
-            is Куда.Переписка -> {
+            is Where.Chat -> {
                 {
-                    Переписка(
-                        окружение = окружение,
-                        сеть = сеть,
-                        chatId = текущее.chatId,
+                    Chat(
+                        environment = environment,
+                        network = network,
+                        chatId = current.chatId,
                         // Имя из списка, если строка уже пришла потоком; иначе то, с чем
                         // переписку открыли. Пустое место читалось бы как поломка.
-                        имя = состояниеСписка.chats.firstOrNull { it.chatId == текущее.chatId }?.title
-                            ?: текущее.имя,
+                        name = listState.chats.firstOrNull { it.chatId == current.chatId }?.title
+                            ?: current.name,
                         scope = scope,
-                        onНазад = { куда = Куда.Ничего },
-                        onСостав = { куда = Куда.Состав(текущее.chatId, текущее.имя) },
+                        onBack = { where = Where.Nothing },
+                        onMembers = { where = Where.Members(current.chatId, current.name) },
                     )
                 }
             }
 
-            Куда.НоваяГруппа -> {
+            Where.NewGroup -> {
                 {
-                    НоваяГруппа(
-                        окружение = окружение,
-                        сеть = сеть,
+                    NewGroup(
+                        environment = environment,
+                        network = network,
                         scope = scope,
-                        onНазад = { куда = Куда.Ничего },
-                        onСоздана = { groupId, название -> куда = Куда.Переписка(groupId, название) },
+                        onBack = { where = Where.Nothing },
+                        onCreated = { groupId, title -> where = Where.Chat(groupId, title) },
                     )
                 }
             }
 
-            is Куда.Состав -> {
+            is Where.Members -> {
                 {
-                    Состав(
-                        окружение = окружение,
-                        сеть = сеть,
-                        сессия = сессия,
-                        groupId = текущее.groupId,
+                    Members(
+                        environment = environment,
+                        network = network,
+                        session = session,
+                        groupId = current.groupId,
                         scope = scope,
-                        onНазад = { куда = Куда.Переписка(текущее.groupId, текущее.имя) },
+                        onBack = { where = Where.Chat(current.groupId, current.name) },
                     )
                 }
             }
@@ -427,55 +427,55 @@ private fun Приложение(
 }
 
 @Composable
-private fun Переписка(
-    окружение: Окружение,
-    сеть: ПортыПереписок,
+private fun Chat(
+    environment: Environment,
+    network: ChatPorts,
     chatId: String,
-    имя: String?,
+    name: String?,
     scope: kotlinx.coroutines.CoroutineScope,
-    onНазад: () -> Unit,
-    onСостав: () -> Unit,
+    onBack: () -> Unit,
+    onMembers: () -> Unit,
 ) {
     // Групповая ли переписка — решает столбец `kind`, а не догадка по идентификатору.
     // От этого зависит трое: показывать ли автора у реплик, спрашивать ли имена и есть ли
     // вход в состав.
-    val группа = remember(chatId) {
-        окружение.фактыПереписок.kindOf(chatId) == ChatKind.Group
+    val group = remember(chatId) {
+        environment.chatFacts.kindOf(chatId) == ChatKind.Group
     }
     // Store живёт столько, сколько открыта переписка: ключ по chatId, чтобы при переходе в
     // другую он пересоздался, а не показал реплики предыдущей.
     val store = remember(chatId) {
         ChatStore(
             chatId = chatId,
-            observe = окружение.переписка,
-            send = окружение.отправка,
+            observe = environment.chat,
+            send = environment.send,
             scope = scope,
-            markRead = окружение.прочтение,
+            markRead = environment.reading,
             // Запрос недостающего ключа и имена авторов — только у группы: у личной
             // переписки просить не у кого, а собеседник назван в шапке.
-            requestKeys = if (группа) {
-                RequestGroupKeys(GroupKeyRecoveryOverHttp(сеть.восстановлениеКлючей))
+            requestKeys = if (group) {
+                RequestGroupKeys(GroupKeyRecoveryOverHttp(network.keyRecovery))
             } else {
                 null
             },
-            names = if (группа) {
-                ChatNames { userId -> сеть.справочник.имяИлиНомер(userId) ?: userId }
+            names = if (group) {
+                ChatNames { userId -> network.directory.nameOrNumber(userId) ?: userId }
             } else {
                 null
             },
         )
     }
-    val состояние by store.state.collectAsState()
-    ЭкранЧата(
-        состояние = состояние,
-        собеседник = имя ?: "Без имени",
-        onНабор = store::draftChanged,
-        onОтправить = { store.sendPressed() },
-        onНазад = onНазад,
-        onЗакрытьСообщение = store::noticeDismissed,
-        onЗапроситьКлюч = store::запроситьКлюч,
-        onФраза = store::фразаИзменена,
-        onСостав = if (группа) onСостав else null,
+    val state by store.state.collectAsState()
+    ChatScreen(
+        state = state,
+        peer = name ?: "Без имени",
+        onSet = store::draftChanged,
+        onSend = { store.sendPressed() },
+        onBack = onBack,
+        onCloseMessage = store::noticeDismissed,
+        onRequestKey = store::requestKey,
+        onPhrase = store::changedPhrase,
+        onMembers = if (group) onMembers else null,
     )
 }
 
@@ -487,41 +487,41 @@ private fun Переписка(
  * другое устройство, и остатки прежнего состояния тут были бы опасны.
  */
 @Composable
-private fun ПодтверждениеПривязки(
-    сеть: ПортыУстройств,
-    секретУстройства: ByteArray,
-    код: String,
+private fun LinkConfirmation(
+    network: DevicePorts,
+    deviceSecret: ByteArray,
+    code: String,
     scope: kotlinx.coroutines.CoroutineScope,
-    onЗакрыть: () -> Unit,
+    onClose: () -> Unit,
 ) {
-    val store = remember(код) {
-        ПривязкаStore(
-            confirm = сеть.подтверждениеПривязки(deviceIdentityFrom(секретУстройства)),
+    val store = remember(code) {
+        LinkStore(
+            confirm = network.linkConfirmation(deviceIdentityFrom(deviceSecret)),
             scope = scope,
-            код = код,
+            code = code,
         )
     }
-    val состояние by store.state.collectAsState()
-    ЭкранПривязки(состояние = состояние, onДоверить = store::доверить, onОтмена = onЗакрыть)
+    val state by store.state.collectAsState()
+    LinkScreen(state = state, onTrust = store::trust, onCancel = onClose)
 }
 
 /** Свои устройства: список, отключение и вопрос перед ним. */
 @Composable
-private fun Устройства(
-    сеть: ПортыУстройств,
+private fun Devices(
+    network: DevicePorts,
     scope: kotlinx.coroutines.CoroutineScope,
-    версияСборки: String,
-    onНазад: () -> Unit,
+    buildVersion: String,
+    onBack: () -> Unit,
 ) {
-    val store = remember { УстройстваStore(сеть.мойПарк, scope) }
-    val состояние by store.state.collectAsState()
-    ЭкранУстройств(
-        состояние = состояние,
-        onНазад = onНазад,
-        onСпросить = store::спросить,
-        onПодтвердить = store::отключить,
-        onПередумал = store::передумал,
-        версияСборки = версияСборки,
+    val store = remember { DevicesStore(network.myFleet, scope) }
+    val state by store.state.collectAsState()
+    DeviceScreen(
+        state = state,
+        onBack = onBack,
+        onAsk = store::ask,
+        onConfirm = store::revoke,
+        onChangedMind = store::changedMind,
+        buildVersion = buildVersion,
     )
 }
 
@@ -532,48 +532,48 @@ private fun Устройства(
  * сервере, справочника и книги переписок. Домен их объявляет, а сводит приложение.
  */
 @Composable
-private fun НоваяГруппа(
-    окружение: Окружение,
-    сеть: ПортыГрупп,
+private fun NewGroup(
+    environment: Environment,
+    network: GroupPorts,
     scope: kotlinx.coroutines.CoroutineScope,
-    onНазад: () -> Unit,
-    onСоздана: (String, String) -> Unit,
+    onBack: () -> Unit,
+    onCreated: (String, String) -> Unit,
 ) {
     val store = remember {
-        НоваяГруппаStore(
-            создание = CreateGroupChat(
-                groups = GroupsOverHttp(сеть.группы),
-                directory = сеть.справочник,
-                chats = SqlChatBook(окружение.db, окружение.шифр),
+        NewGroupStore(
+            creation = CreateGroupChat(
+                groups = GroupsOverHttp(network.groups),
+                directory = network.directory,
+                chats = SqlChatBook(environment.db, environment.cipher),
             ),
             scope = scope,
         )
     }
-    val состояние by store.state.collectAsState()
+    val state by store.state.collectAsState()
 
     // Группа создана — открываем её. Оставаться на экране создания нечем: он своё сделал,
     // а человек ждёт переписку, а не подтверждение.
-    LaunchedEffect(состояние.создана) {
-        состояние.создана?.let { groupId ->
+    LaunchedEffect(state.created) {
+        state.created?.let { groupId ->
             // Непозванные показываются на самом экране; если они есть, переход не спешим
             // делать — иначе список номеров мелькнёт и исчезнет.
-            if (состояние.непозванные.isEmpty()) {
-                onСоздана(groupId, состояние.название)
-                store.сброс()
+            if (state.notInvited.isEmpty()) {
+                onCreated(groupId, state.title)
+                store.reset()
             }
         }
     }
 
-    ЭкранНовойГруппы(
-        состояние = состояние,
-        onНазвание = store::названиеИзменено,
-        onНомер = store::номерИзменён,
-        onДобавитьНомер = store::добавитьНомер,
-        onУбратьНомер = store::убратьНомер,
-        onСоздать = store::создать,
-        onНазад = {
-            onНазад()
-            store.сброс()
+    NewGroupScreen(
+        state = state,
+        onTitle = store::changedTitle,
+        onNumber = store::changedNumber,
+        onAddNumber = store::addNumber,
+        onRemoveNumber = store::removeNumber,
+        onCreate = store::create,
+        onBack = {
+            onBack()
+            store.reset()
         },
     )
 }
@@ -585,45 +585,45 @@ private fun НоваяГруппа(
  * хранилище разом, то есть ровно то, чего домен не видит.
  */
 @Composable
-private fun Состав(
-    окружение: Окружение,
-    сеть: ПортыГрупп,
-    сессия: Session,
+private fun Members(
+    environment: Environment,
+    network: GroupPorts,
+    session: Session,
     groupId: String,
     scope: kotlinx.coroutines.CoroutineScope,
-    onНазад: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val store = remember(groupId) {
-        СоставStore(
-            участники = ManageGroupMembers(
-                groups = GroupsOverHttp(сеть.группы),
-                directory = сеть.справочник,
-                rotator = РотацияГрупповогоКлюча(
-                    группы = сеть.группы,
-                    ключиУстройств = сеть.ключи,
-                    escrow = сеть.escrow,
-                    ключиГрупп = сеть.ключиГрупп,
-                    книга = SqlGroupKeys(окружение.db, окружение.шифр),
-                    сейчасМс = ::сейчасМс,
+        MembersStore(
+            members = ManageGroupMembers(
+                groups = GroupsOverHttp(network.groups),
+                directory = network.directory,
+                rotator = GroupKeyRotation(
+                    groups = network.groups,
+                    deviceKeys = network.keys,
+                    escrow = network.escrow,
+                    groupKeys = network.groupKeys,
+                    book = SqlGroupKeys(environment.db, environment.cipher),
+                    msNow = ::msNow,
                 ),
             ),
             groupId = groupId,
-            myUserId = сессия.userId,
+            myUserId = session.userId,
             scope = scope,
         )
     }
-    val состояние by store.state.collectAsState()
+    val state by store.state.collectAsState()
 
     // Состав спрашивается при открытии: он меняется чужими руками, и показывать
     // вчерашний список значит показывать неправду.
-    LaunchedEffect(groupId) { store.обновить() }
+    LaunchedEffect(groupId) { store.refresh() }
 
-    ЭкранСостава(
-        состояние = состояние,
-        onНомер = store::номерИзменён,
-        onПозвать = store::позвать,
-        onИсключить = store::исключить,
-        onНазад = onНазад,
+    MemberScreen(
+        state = state,
+        onNumber = store::changedNumber,
+        onInvite = store::invite,
+        onRemove = store::remove,
+        onBack = onBack,
     )
 }
 
@@ -634,9 +634,9 @@ private fun Состав(
  * его нет, и подставлять туда ноль было бы не честнее: ноль означает «прочитано всё»,
  * а правда в том, что считать нечего — социального слоя на сервере нет.
  */
-private fun счётчикиОкон(список: ChatsState): Map<Окно, Int> {
-    val непрочитано = список.chats.sumOf { it.unread }
-    return if (непрочитано > 0) mapOf(Окно.Телефон to непрочитано) else emptyMap()
+private fun windowCounters(list: ChatsState): Map<Window, Int> {
+    val unread = list.chats.sumOf { it.unread }
+    return if (unread > 0) mapOf(Window.Phone to unread) else emptyMap()
 }
 
 /**
@@ -649,47 +649,47 @@ private fun счётчикиОкон(список: ChatsState): Map<Окно, In
  * чтобы окно возвращалось туда, где его оставили, — в том числе после захода в подокно.
  */
 @Composable
-private fun ОкноТелефон(
-    вкладка: String,
-    onВкладка: (String) -> Unit,
-    список: ChatsState,
-    книга: КнигаState,
-    onПоискВКниге: (String) -> Unit,
-    onОткрыть: (ChatSummary) -> Unit,
-    onОткрытьЧеловека: (Contact) -> Unit,
-    onНовая: () -> Unit,
-    onНоваяГруппа: () -> Unit,
-    onНастройки: () -> Unit,
-    onПереключитьОкна: () -> Unit,
-    onСоседнееОкно: (ВСторону) -> Unit,
-) = КаркасОкна(
-    окно = Окно.Телефон,
-    вкладки = listOf("Чаты", "Книга", "Звонки"),
-    выбрана = вкладка,
-    onВкладка = onВкладка,
-    onПереключитьОкна = onПереключитьОкна,
-    onПоиск = {},
-    onНастройки = onНастройки,
-    onСоседнееОкно = onСоседнееОкно,
+private fun PhoneWindow(
+    tab: String,
+    onTab: (String) -> Unit,
+    list: ChatsState,
+    book: BookState,
+    onSearchInBook: (String) -> Unit,
+    onOpen: (ChatSummary) -> Unit,
+    onOpenPerson: (Contact) -> Unit,
+    onNew: () -> Unit,
+    onNewGroup: () -> Unit,
+    onSettings: () -> Unit,
+    onSwitchWindows: () -> Unit,
+    onNeighbourWindow: (InSide) -> Unit,
+) = WindowFrame(
+    window = Window.Phone,
+    tabs = listOf("Чаты", "Книга", "Звонки"),
+    selected = tab,
+    onTab = onTab,
+    onSwitchWindows = onSwitchWindows,
+    onSearch = {},
+    onSettings = onSettings,
+    onNeighbourWindow = onNeighbourWindow,
 ) {
-    when (вкладка) {
-        "Чаты" -> ЭкранПереписок(
-            состояние = список,
-            onОткрыть = onОткрыть,
-            onНовая = onНовая,
-            onНоваяГруппа = onНоваяГруппа,
-            onНастройки = onНастройки,
+    when (tab) {
+        "Чаты" -> ChatsScreen(
+            state = list,
+            onOpen = onOpen,
+            onNew = onNew,
+            onNewGroup = onNewGroup,
+            onSettings = onSettings,
         )
 
-        "Книга" -> ЭкранКниги(
-            состояние = книга,
-            onПоиск = onПоискВКниге,
-            onОткрыть = onОткрытьЧеловека,
+        "Книга" -> BookScreen(
+            state = book,
+            onSearch = onSearchInBook,
+            onOpen = onOpenPerson,
         )
 
-        else -> ЗаглушкаВкладки(
-            чтоБудет = "Здесь будет журнал звонков",
-            чемДержится = "Входящие, исходящие и пропущенные, с фильтрами. " +
+        else -> TabStub(
+            willWhat = "Здесь будет журнал звонков",
+            thanHolds = "Входящие, исходящие и пропущенные, с фильтрами. " +
                 "Звонков нет: клиент LiveKit — задача К7.",
         )
     }

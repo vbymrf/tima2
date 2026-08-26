@@ -15,10 +15,10 @@ package io.tima.shared
  * Поэтому список закрытый, а не строка: строку можно опечатать, и отказ придёт через
  * неделю на живом устройстве.
  */
-enum class Платформа(val серверу: String) {
-    ПК("desktop"),
-    Андроид("android"),
-    Айфон("ios"),
+enum class Platform(val server: String) {
+    DESKTOP("desktop"),
+    Android("android"),
+    Iphone("ios"),
     ;
 
     /**
@@ -28,10 +28,10 @@ enum class Платформа(val серверу: String) {
      * телефоне он увидит «Компьютер» — и этого хватает, чтобы отличить свой ПК от чужого
      * кода, подсунутого в переписке.
      */
-    val имяУстройства: String
+    val deviceName: String
         get() = when (this) {
-            ПК -> "Компьютер"
-            Андроид -> "Телефон"
-            Айфон -> "iPhone"
+            DESKTOP -> "Компьютер"
+            Android -> "Телефон"
+            Iphone -> "iPhone"
         }
 }

@@ -26,54 +26,54 @@ class SendGroupMessage(
     private val nowMs: () -> Long,
 ) {
 
-    suspend fun отправить(groupId: String, текст: String): SendGroupStep {
-        if (текст.isBlank()) return SendGroupStep.Empty
+    suspend fun send(groupId: String, text: String): SendGroupStep {
+        if (text.isBlank()) return SendGroupStep.Empty
 
-        val версия = keys.latestVersion(groupId) ?: return SendGroupStep.NoKey
-        val ключ = keys.key(groupId, версия) ?: return SendGroupStep.NoKey
+        val version = keys.latestVersion(groupId) ?: return SendGroupStep.NoKey
+        val key = keys.key(groupId, version) ?: return SendGroupStep.NoKey
 
-        val ключИдемпотентности = dedup.newKey()
-        val момент = nowMs()
-        val собранное = sealer.seal(
+        val idempotencyKey = dedup.newKey()
+        val moment = nowMs()
+        val assembled = sealer.seal(
             groupId = groupId,
-            gkVersion = версия,
-            key = ключ,
-            text = текст,
-            createdAtUnixMs = момент,
+            gkVersion = version,
+            key = key,
+            text = text,
+            createdAtUnixMs = moment,
         ) ?: return SendGroupStep.CannotSeal
 
-        val исход = transport.send(
+        val outcome = transport.send(
             groupId = groupId,
-            clientMsgId = ключИдемпотентности,
+            clientMsgId = idempotencyKey,
             kind = KIND_TEXT,
-            gkVersion = версия,
-            payload = собранное.payload,
-            signature = собранное.signature,
-            createdAtUnixMs = момент,
+            gkVersion = version,
+            payload = assembled.payload,
+            signature = assembled.signature,
+            createdAtUnixMs = moment,
         )
 
-        return when (исход) {
+        return when (outcome) {
             // Повтор той же отправки — тоже успех: сообщение у сервера есть. Но счётчик
             // на нём не растёт: под этой версией было отправлено одно сообщение, а не два.
-            is GroupSendStep.Duplicate -> SendGroupStep.Sent(исход.messageId, ротацияЗапущена = false)
+            is GroupSendStep.Duplicate -> SendGroupStep.Sent(outcome.messageId, launchedRotation = false)
 
             is GroupSendStep.Sent -> {
-                val сколько = keys.отметитьОтправку(groupId, версия)
-                val пора = сколько >= ПОРОГ_РОТАЦИИ
-                if (пора) {
+                val howMany = keys.markSend(groupId, version)
+                val due = howMany >= ROTATION_THRESHOLD
+                if (due) {
                     // Провал ротации не отменяет отправку: сообщение доставлено, а ключ
                     // сменится при следующей попытке. Сказать об этом наружу стоит, но
                     // ронять из-за этого отправку — нет.
-                    rotator.ротировать(groupId)
+                    rotator.rotate(groupId)
                 }
-                SendGroupStep.Sent(исход.messageId, ротацияЗапущена = пора)
+                SendGroupStep.Sent(outcome.messageId, launchedRotation = due)
             }
 
             GroupSendStep.UnknownKeyVersion -> SendGroupStep.NeedKeys
             GroupSendStep.Banned -> SendGroupStep.Banned
-            is GroupSendStep.SlowMode -> SendGroupStep.SlowMode(исход.retryAfterSec)
-            is GroupSendStep.Offline -> SendGroupStep.Offline(исход.retryAfterMs)
-            is GroupSendStep.Refused -> SendGroupStep.Refused(исход.reason)
+            is GroupSendStep.SlowMode -> SendGroupStep.SlowMode(outcome.retryAfterSec)
+            is GroupSendStep.Offline -> SendGroupStep.Offline(outcome.retryAfterMs)
+            is GroupSendStep.Refused -> SendGroupStep.Refused(outcome.reason)
         }
     }
 
@@ -89,7 +89,7 @@ class SendGroupMessage(
          * устройства всех участников. Смысл счётчика не в свежести ключа, а в
          * ограничении объёма, который раскроется при его утечке.
          */
-        const val ПОРОГ_РОТАЦИИ: Int = 10_000
+        const val ROTATION_THRESHOLD: Int = 10_000
     }
 }
 
@@ -140,7 +140,7 @@ sealed interface GroupSendStep {
 
 sealed interface SendGroupStep {
     /** @param ротацияЗапущена счётчик дошёл до порога, и ключ меняется. */
-    data class Sent(val messageId: Long, val ротацияЗапущена: Boolean) : SendGroupStep
+    data class Sent(val messageId: Long, val launchedRotation: Boolean) : SendGroupStep
 
     /** Пустое сообщение до сети не доходит. */
     data object Empty : SendGroupStep

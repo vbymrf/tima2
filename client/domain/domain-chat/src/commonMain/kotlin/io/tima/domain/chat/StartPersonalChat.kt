@@ -28,32 +28,32 @@ class StartPersonalChat(
      */
     suspend fun byPhone(myUserId: String, phone: String): StartChatResult {
         require(myUserId.isNotBlank()) { "myUserId пустой" }
-        val номер = phone.trim()
-        if (номер.isEmpty()) return StartChatResult.BadPhone("номер пустой")
+        val number = phone.trim()
+        if (number.isEmpty()) return StartChatResult.BadPhone("номер пустой")
 
-        return when (val найден = directory.byPhone(номер)) {
-            is UserLookup.Found -> запомнить(myUserId, найден, номер)
+        return when (val found = directory.byPhone(number)) {
+            is UserLookup.Found -> remember(myUserId, found, number)
             UserLookup.NotFound -> StartChatResult.NotFound
-            is UserLookup.BadPhone -> StartChatResult.BadPhone(найден.reason)
-            is UserLookup.Offline -> StartChatResult.Offline(найден.retryAfterMs)
-            is UserLookup.Refused -> StartChatResult.Refused(найден.reason)
+            is UserLookup.BadPhone -> StartChatResult.BadPhone(found.reason)
+            is UserLookup.Offline -> StartChatResult.Offline(found.retryAfterMs)
+            is UserLookup.Refused -> StartChatResult.Refused(found.reason)
         }
     }
 
-    private fun запомнить(myUserId: String, найден: UserLookup.Found, номер: String): StartChatResult {
-        if (найден.userId == myUserId) {
+    private fun remember(myUserId: String, found: UserLookup.Found, number: String): StartChatResult {
+        if (found.userId == myUserId) {
             // Переписка с собой — другой случай с другими правилами, и делать вид, что это
             // обычная личная, значит однажды применить к ней чужие правила.
             return StartChatResult.Myself
         }
-        val chatId = ids.personalChatId(myUserId, найден.userId)
+        val chatId = ids.personalChatId(myUserId, found.userId)
         chats.remember(
             chatId = chatId,
             kind = ChatKind.Personal,
             // Имя — то, что знает сервер, иначе номер: он человеку известен, он его и
             // вводил. Пустая строка в списке выглядела бы поломкой.
-            title = найден.name?.takeIf { it.isNotBlank() } ?: номер,
-            peerId = найден.userId,
+            title = found.name?.takeIf { it.isNotBlank() } ?: number,
+            peerId = found.userId,
         )
         return StartChatResult.Started(chatId)
     }

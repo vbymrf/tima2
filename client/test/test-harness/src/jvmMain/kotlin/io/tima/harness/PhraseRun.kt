@@ -55,7 +55,7 @@ import kotlinx.coroutines.runBlocking
  */
 object PhraseRun {
 
-    private val журнал = StringBuilder()
+    private val log = StringBuilder()
 
     /**
      * Пишем и в консоль, и в файл.
@@ -64,117 +64,117 @@ object PhraseRun {
      * диагностический вывод — это всё, ради чего программа написана. Файл в UTF-8 читается
      * всегда.
      */
-    private fun строка(текст: String = "") {
-        println(текст)
-        журнал.appendLine(текст)
+    private fun line(text: String = "") {
+        println(text)
+        log.appendLine(text)
     }
 
-    private var провалов = 0
+    private var failures = 0
 
-    private fun проверка(имя: String, условие: Boolean, подробность: String) {
-        строка(if (условие) "  ok    $имя — $подробность" else "  ПЛОХО  $имя — $подробность")
-        if (!условие) провалов++
+    private fun check(name: String, condition: Boolean, detail: String) {
+        line(if (condition) "  ok    $name — $detail" else "  ПЛОХО  $name — $detail")
+        if (!condition) failures++
     }
 
     fun main() = runBlocking {
         val host = System.getenv("TIMA_STAND_HOST")?.takeIf { it.isNotBlank() }
             ?: "xn--80aa4ar0b.xn--p1ai"
-        val метка = System.currentTimeMillis() % 100_000_000
-        val номер1 = System.getenv("TIMA_PHONE_A")?.takeIf { it.isNotBlank() }
-            ?: "+797${метка.toString().padStart(8, '0')}"
-        val номер2 = System.getenv("TIMA_PHONE_B")?.takeIf { it.isNotBlank() }
-            ?: "+796${метка.toString().padStart(8, '0')}"
+        val label = System.currentTimeMillis() % 100_000_000
+        val number1 = System.getenv("TIMA_PHONE_A")?.takeIf { it.isNotBlank() }
+            ?: "+797${label.toString().padStart(8, '0')}"
+        val number2 = System.getenv("TIMA_PHONE_B")?.takeIf { it.isNotBlank() }
+            ?: "+796${label.toString().padStart(8, '0')}"
 
         val route = ServerRoute.from(RouteConfig(host = host))
-        строка("маршрут:  ${route.apiBase}")
-        строка("номер 1:  $номер1 (возврат по фразе)")
-        строка("номер 2:  $номер2 (форк личности)")
-        строка()
+        line("маршрут:  ${route.apiBase}")
+        line("номер 1:  $number1 (возврат по фразе)")
+        line("номер 2:  $number2 (форк личности)")
+        line()
 
         val client = HttpClient(httpEngine()) { timaDefaults() }
         try {
-            возврат(client, route, номер1)
-            строка()
-            форк(client, route, номер2)
+            returnValue(client, route, number1)
+            line()
+            fork(client, route, number2)
         } finally {
             client.close()
-            строка()
-            строка(if (провалов == 0) "ВСЁ СОШЛОСЬ" else "НЕ СОШЛОСЬ: $провалов")
-            val файл = File("build/phrase-run.txt")
-            файл.parentFile?.mkdirs()
-            файл.writeText(журнал.toString(), Charsets.UTF_8)
-            println("журнал: ${файл.absolutePath}")
+            line()
+            line(if (failures == 0) "ВСЁ СОШЛОСЬ" else "НЕ СОШЛОСЬ: $failures")
+            val file = File("build/phrase-run.txt")
+            file.parentFile?.mkdirs()
+            file.writeText(log.toString(), Charsets.UTF_8)
+            println("журнал: ${file.absolutePath}")
         }
     }
 
     /** Номер 1: фраза заводит аккаунт, чужая не входит, своя возвращает. */
-    private suspend fun возврат(client: HttpClient, route: ServerRoute, номер: String) {
-        val моя = AccountIdentitiesOverKodium.fresh()
+    private suspend fun returnValue(client: HttpClient, route: ServerRoute, number: String) {
+        val my = AccountIdentitiesOverKodium.fresh()
         // Слова не печатаются даже здесь: это секрет, а журнал остаётся на диске.
-        строка("шаг 1: заведение с новой личностью (${моя.words.size} слов)")
-        val первое = завести(client, route, номер, моя.identityPub)
-        проверка("заведено", первое is RegisterResult.Registered, первое.краткоеИмя())
-        if (первое !is RegisterResult.Registered) return
-        строка("        user=${первое.userId} device=${первое.deviceId}")
+        line("шаг 1: заведение с новой личностью (${my.words.size} слов)")
+        val first = create(client, route, number, my.identityPub)
+        check("заведено", first is RegisterResult.Registered, first.shortName())
+        if (first !is RegisterResult.Registered) return
+        line("        user=${first.userId} device=${first.deviceId}")
 
-        val чужая = AccountIdentitiesOverKodium.fresh()
-        строка("шаг 2: тот же номер, ЧУЖАЯ личность")
-        val второе = завести(client, route, номер, чужая.identityPub)
-        проверка(
+        val foreign = AccountIdentitiesOverKodium.fresh()
+        line("шаг 2: тот же номер, ЧУЖАЯ личность")
+        val second = create(client, route, number, foreign.identityPub)
+        check(
             "отказ по личности",
-            второе is RegisterResult.IdentityMismatch,
-            "${второе.краткоеИмя()} — второй аккаунт на том же номере был бы угоном",
+            second is RegisterResult.IdentityMismatch,
+            "${second.shortName()} — второй аккаунт на том же номере был бы угоном",
         )
 
-        строка("шаг 3: тот же номер, ключ выведен ЗАНОВО из тех же слов")
-        val изСлов = AccountIdentitiesOverKodium.fromWords(моя.words)
-        проверка(
+        line("шаг 3: тот же номер, ключ выведен ЗАНОВО из тех же слов")
+        val fromWords = AccountIdentitiesOverKodium.fromWords(my.words)
+        check(
             "ключ из слов тот же",
-            изСлов != null && изСлов.contentEquals(моя.identityPub),
+            fromWords != null && fromWords.contentEquals(my.identityPub),
             "иначе фраза не вернула бы в аккаунт ни на каком устройстве",
         )
-        if (изСлов == null) return
-        val третье = завести(client, route, номер, изСлов)
-        проверка("вход по фразе", третье is RegisterResult.Registered, третье.краткоеИмя())
-        if (третье !is RegisterResult.Registered) return
-        проверка(
+        if (fromWords == null) return
+        val third = create(client, route, number, fromWords)
+        check("вход по фразе", third is RegisterResult.Registered, third.shortName())
+        if (third !is RegisterResult.Registered) return
+        check(
             "аккаунт тот же",
-            третье.userId == первое.userId,
-            "user=${третье.userId}, ожидали ${первое.userId}",
+            third.userId == first.userId,
+            "user=${third.userId}, ожидали ${first.userId}",
         )
-        проверка(
+        check(
             "устройство новое",
-            третье.deviceId != первое.deviceId,
-            "device=${третье.deviceId} — прежнее осталось на месте",
+            third.deviceId != first.deviceId,
+            "device=${third.deviceId} — прежнее осталось на месте",
         )
     }
 
     /** Номер 2: «начать заново» форкает цепочку, и прежняя фраза через register не входит. */
-    private suspend fun форк(client: HttpClient, route: ServerRoute, номер: String) {
-        val прежняя = AccountIdentitiesOverKodium.fresh()
-        строка("шаг 4: заведение, затем «начать заново» с новой личностью")
-        val первое = завести(client, route, номер, прежняя.identityPub)
-        проверка("заведено", первое is RegisterResult.Registered, первое.краткоеИмя())
-        if (первое !is RegisterResult.Registered) return
-        строка("        user=${первое.userId}")
+    private suspend fun fork(client: HttpClient, route: ServerRoute, number: String) {
+        val previous = AccountIdentitiesOverKodium.fresh()
+        line("шаг 4: заведение, затем «начать заново» с новой личностью")
+        val first = create(client, route, number, previous.identityPub)
+        check("заведено", first is RegisterResult.Registered, first.shortName())
+        if (first !is RegisterResult.Registered) return
+        line("        user=${first.userId}")
 
-        val новая = AccountIdentitiesOverKodium.fresh()
-        val форкнутое = завести(client, route, номер, новая.identityPub, форк = true)
-        проверка("форк принят", форкнутое is RegisterResult.Registered, форкнутое.краткоеИмя())
-        if (форкнутое is RegisterResult.Registered) {
-            проверка(
+        val new = AccountIdentitiesOverKodium.fresh()
+        val forked = create(client, route, number, new.identityPub, fork = true)
+        check("форк принят", forked is RegisterResult.Registered, forked.shortName())
+        if (forked is RegisterResult.Registered) {
+            check(
                 "цепочка форкнута",
-                форкнутое.userId != первое.userId,
-                "user=${форкнутое.userId} — прежний ${первое.userId} закрыт",
+                forked.userId != first.userId,
+                "user=${forked.userId} — прежний ${first.userId} закрыт",
             )
         }
 
-        строка("шаг 5: прежняя фраза ПОСЛЕ форка")
-        val пятое = завести(client, route, номер, прежняя.identityPub)
-        проверка(
+        line("шаг 5: прежняя фраза ПОСЛЕ форка")
+        val fifth = create(client, route, number, previous.identityPub)
+        check(
             "register знает только текущую личность",
-            пятое is RegisterResult.IdentityMismatch,
-            "${пятое.краткоеИмя()} — для прежней есть /identity/reunion с подписью",
+            fifth is RegisterResult.IdentityMismatch,
+            "${fifth.shortName()} — для прежней есть /identity/reunion с подписью",
         )
     }
 
@@ -184,34 +184,34 @@ object PhraseRun {
      * Ключи устройства каждый раз новые — так и бывает на чистом устройстве, ради которого
      * фраза и нужна. Личность аккаунта задаётся снаружи: её узнавание и проверяется.
      */
-    private suspend fun завести(
+    private suspend fun create(
         client: HttpClient,
         route: ServerRoute,
         phone: String,
         identityPub: ByteArray,
-        форк: Boolean = false,
+        fork: Boolean = false,
     ): RegisterResult {
         val auth = AuthApi(route, client)
-        val запрос = auth.requestSms(phone)
-        if (запрос !is SmsRequestResult.Sent) return RegisterResult.Refused(0, "запрос кода: $запрос")
-        val код = запрос.devCode
+        val request = auth.requestSms(phone)
+        if (request !is SmsRequestResult.Sent) return RegisterResult.Refused(0, "запрос кода: $request")
+        val code = request.devCode
             ?: return RegisterResult.Refused(0, "TIMA_DEV_SMS выключен — кода в ответе нет")
-        val проверка = auth.verifySms(запрос.requestId, код)
-        if (проверка !is SmsVerifyResult.Verified) {
-            return RegisterResult.Refused(0, "проверка кода: $проверка")
+        val check = auth.verifySms(request.requestId, code)
+        if (check !is SmsVerifyResult.Verified) {
+            return RegisterResult.Refused(0, "проверка кода: $check")
         }
-        val материал = DeviceKeyFactoryOverKodium.newDeviceKeys()
+        val material = DeviceKeyFactoryOverKodium.newDeviceKeys()
         return auth.register(
-            registrationToken = проверка.registrationToken,
-            encryptionPub = материал.encryptionPub,
-            signingPub = материал.signingPub,
+            registrationToken = check.registrationToken,
+            encryptionPub = material.encryptionPub,
+            signingPub = material.signingPub,
             identityPub = identityPub,
             platform = "харнесс",
-            forceNewIdentity = форк,
+            forceNewIdentity = fork,
         )
     }
 
-    private fun RegisterResult.краткоеИмя(): String = when (this) {
+    private fun RegisterResult.shortName(): String = when (this) {
         is RegisterResult.Registered -> "201 Registered"
         RegisterResult.IdentityMismatch -> "403 identity_mismatch"
         RegisterResult.TokenExpired -> "403 bad_token"

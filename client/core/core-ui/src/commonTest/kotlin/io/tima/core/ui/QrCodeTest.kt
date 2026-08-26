@@ -33,13 +33,13 @@ import kotlin.test.assertNull
  * с этой одной строкой, приведённой к стандарту. Всё остальное в эталоне своё: коррекция,
  * чередование, раскладка, маски, BCH.
  */
-class QrКодTest {
+class QrCodeTest {
 
     /**
      * Настоящий код привязки: та самая строка, какую строит сервер (`device_link.go`) —
      * 258 знаков, версия 12.
      */
-    private val кодПривязки = "tima://link/v1?session_id=aaaaaaaa-0000-0000-0000-00000000c4a7" +
+    private val linkCode = "tima://link/v1?session_id=aaaaaaaa-0000-0000-0000-00000000c4a7" +
         "&secret=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8" +
         "&encryption_key=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8" +
         "&signing_key=AAMGCQwPEhUYGx4hJCcqLTAzNjk8P0JFSEtOUVRXWl0" +
@@ -47,18 +47,18 @@ class QrКодTest {
 
     @Test
     fun матрица_версии_1_совпадает_с_эталоном() {
-        val матрица = assertNotNull(QrКод.матрица("HELLO WORLD"))
+        val matrix = assertNotNull(QrCode.matrix("HELLO WORLD"))
 
-        assertEquals(21, матрица.размер, "11 знаков влезают в первую версию")
-        assertEquals(ЭТАЛОН_HELLO, матрица.строки())
+        assertEquals(21, matrix.size, "11 знаков влезают в первую версию")
+        assertEquals(ЭТАЛОН_HELLO, matrix.lines())
     }
 
     @Test
     fun матрица_с_чередованием_блоков_совпадает_с_эталоном() {
-        val матрица = assertNotNull(QrКод.матрица("x".repeat(100)))
+        val matrix = assertNotNull(QrCode.matrix("x".repeat(100)))
 
-        assertEquals(41, матрица.размер, "100 байт — шестая версия при уровне M")
-        assertEquals(6879806635924208815L, свёртка(матрица))
+        assertEquals(41, matrix.size, "100 байт — шестая версия при уровне M")
+        assertEquals(6879806635924208815L, digest(matrix))
     }
 
     /**
@@ -67,10 +67,10 @@ class QrКодTest {
      */
     @Test
     fun код_привязки_совпадает_с_эталоном() {
-        val матрица = assertNotNull(QrКод.матрица(кодПривязки))
+        val matrix = assertNotNull(QrCode.matrix(linkCode))
 
-        assertEquals(65, матрица.размер, "258 знаков — двенадцатая версия")
-        assertEquals(7384925942544133665L, свёртка(матрица))
+        assertEquals(65, matrix.size, "258 знаков — двенадцатая версия")
+        assertEquals(7384925942544133665L, digest(matrix))
     }
 
     /**
@@ -84,13 +84,13 @@ class QrКодTest {
     @Test
     fun маска_выбирается_та_же_что_у_эталона() {
         assertEquals(
-            QrКод.матрица("HELLO WORLD", маскаНасильно = 4)?.строки(),
-            QrКод.матрица("HELLO WORLD")?.строки(),
+            QrCode.matrix("HELLO WORLD", forcedMask = 4)?.lines(),
+            QrCode.matrix("HELLO WORLD")?.lines(),
             "для этого входа наименьший штраф у маски 4",
         )
         assertEquals(
-            QrКод.матрица(кодПривязки, маскаНасильно = 2)?.строки(),
-            QrКод.матрица(кодПривязки)?.строки(),
+            QrCode.matrix(linkCode, forcedMask = 2)?.lines(),
+            QrCode.matrix(linkCode)?.lines(),
             "для кода привязки — у маски 2",
         )
     }
@@ -104,13 +104,13 @@ class QrКодTest {
      */
     @Test
     fun слишком_длинное_не_кодируется() {
-        assertNull(QrКод.матрица("я".repeat(500)))
+        assertNull(QrCode.matrix("я".repeat(500)))
     }
 
     /** Пустая строка — тоже код: он валидный, просто ни о чём. Падать здесь нечему. */
     @Test
     fun пустая_строка_кодируется() {
-        assertEquals(21, assertNotNull(QrКод.матрица("")).размер)
+        assertEquals(21, assertNotNull(QrCode.matrix("")).size)
     }
 
     /**
@@ -121,10 +121,10 @@ class QrКодTest {
      * незачем. Матрица версии 1 записана целиком именно поэтому: свёртка не показывает,
      * что разошлось, а двадцать одна строка показывает.
      */
-    private fun свёртка(матрица: QrМатрица): Long {
+    private fun digest(matrix: QrMatrix): Long {
         var h = -3750763034362895579L // 0xcbf29ce484222325
-        for (знак in матрица.строки().joinToString("")) {
-            h = (h xor знак.code.toLong()) * 1099511628211L
+        for (glyph in matrix.lines().joinToString("")) {
+            h = (h xor glyph.code.toLong()) * 1099511628211L
         }
         return h
     }

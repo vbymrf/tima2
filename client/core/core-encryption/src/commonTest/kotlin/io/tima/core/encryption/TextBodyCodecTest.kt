@@ -13,12 +13,12 @@ class TextBodyCodecTest {
 
     @Test
     fun текст_проходит_круг_без_потерь() {
-        val текст = "Привет! Как дела? 🙂 Ⅵ ﷽"
+        val text = "Привет! Как дела? 🙂 Ⅵ ﷽"
 
-        val тело = TextBodyCodec.encodeText(текст)
-        val содержимое = TextBodyCodec.decode(тело).getOrThrow()
+        val body = TextBodyCodec.encodeText(text)
+        val content = TextBodyCodec.decode(body).getOrThrow()
 
-        assertEquals(текст, содержимое.plainText())
+        assertEquals(text, content.plainText())
     }
 
     @Test
@@ -32,9 +32,9 @@ class TextBodyCodecTest {
     fun одинаковый_текст_даёт_одинаковые_байты() {
         // Не нормативное требование (нормативна только распаковка), но свойство, на
         // котором держится dedup_key: два вызова подряд не должны давать разные тела.
-        val первое = TextBodyCodec.encodeText("привет")
-        val второе = TextBodyCodec.encodeText("привет")
-        assertTrue(первое.contentEquals(второе))
+        val first = TextBodyCodec.encodeText("привет")
+        val second = TextBodyCodec.encodeText("привет")
+        assertTrue(first.contentEquals(second))
     }
 
     @Test
@@ -49,12 +49,12 @@ class TextBodyCodecTest {
     fun длинный_текст_сжимается_а_не_растёт() {
         // zstd на повторяющемся тексте обязан выигрывать: если бы тело росло, сжатие
         // стоило бы трафика вместо того, чтобы его экономить.
-        val длинный = "одна и та же строка ".repeat(500)
-        val тело = TextBodyCodec.encodeText(длинный)
+        val long = "одна и та же строка ".repeat(500)
+        val body = TextBodyCodec.encodeText(long)
         assertTrue(
-            тело.size < длинный.encodeToByteArray().size / 2,
-            "ожидалось сжатие, а получилось ${тело.size} из ${длинный.encodeToByteArray().size}",
+            body.size < long.encodeToByteArray().size / 2,
+            "ожидалось сжатие, а получилось ${body.size} из ${long.encodeToByteArray().size}",
         )
-        assertEquals(длинный, TextBodyCodec.decode(тело).getOrThrow().plainText())
+        assertEquals(long, TextBodyCodec.decode(body).getOrThrow().plainText())
     }
 }

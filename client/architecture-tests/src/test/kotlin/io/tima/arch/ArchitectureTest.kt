@@ -56,7 +56,7 @@ class ArchitectureTest {
      */
     @Test
     fun правила_шага_1_ловят_нарушения() {
-        val ожидания = mapOf(
+        val waiting = mapOf(
             "shared не обходит крипто-фасад" to "io.tima.crypto",
             "SQLDelight не выходит за core-database" to "app.cash.sqldelight",
             "Ktor не поднимается выше core-network" to "io.ktor",
@@ -66,12 +66,12 @@ class ArchitectureTest {
             "feature не знает адаптеров сети и базы" to "io.tima.core.network",
         )
 
-        for ((имя, признак) in ожидания) {
-            val rule = ArchitectureRules.rules.single { it.name == имя }
+        for ((name, sign) in waiting) {
+            val rule = ArchitectureRules.rules.single { it.name == name }
             val found = ArchitectureRules.violationsIn(fixtures, rule)
             assertTrue(
-                found.any { it.detail.contains(признак) },
-                "правило «$имя» не поймало $признак в образце: $found",
+                found.any { it.detail.contains(sign) },
+                "правило «$name» не поймало $sign в образце: $found",
             )
         }
     }
@@ -93,7 +93,7 @@ class ArchitectureTest {
      */
     @Test
     fun у_модуля_с_compose_есть_android_таргет() {
-        val файлы = clientRoot.walkTopDown()
+        val files = clientRoot.walkTopDown()
             .onEnter { it.name !in setOf("build", ".gradle", ".kotlin", ".git") }
             .filter { it.isFile && it.name == "build.gradle.kts" }
             // Корневой файл сборки не модуль: он объявляет плагины с `apply false`, то
@@ -101,19 +101,19 @@ class ArchitectureTest {
             .filter { it.parentFile != clientRoot }
             .toList()
 
-        val нарушители = файлы.filter { файл ->
-            val текст = файл.readText()
-            val compose = текст.contains("composeMultiplatform")
-            val мультиплатформа = текст.contains("kotlinMultiplatform")
+        val violators = files.filter { file ->
+            val text = file.readText()
+            val compose = text.contains("composeMultiplatform")
+            val multiplatform = text.contains("kotlinMultiplatform")
             // Вход для ПК — платформенный по определению: у него `compose.desktop`.
-            val входДляПК = текст.contains("compose.desktop")
-            compose && мультиплатформа && !входДляПК && !текст.contains("androidTarget()")
+            val entryForDesktop = text.contains("compose.desktop")
+            compose && multiplatform && !entryForDesktop && !text.contains("androidTarget()")
         }
 
         assertTrue(
-            нарушители.isEmpty(),
+            violators.isEmpty(),
             "модули с Compose без androidTarget(): " +
-                нарушители.joinToString { it.parentFile.name } +
+                violators.joinToString { it.parentFile.name } +
                 ". Android-приложение заберёт их jvm-вариантом и упадёт на первом " +
                 "платформенном вызове Compose — проверено живым телефоном",
         )
@@ -123,7 +123,7 @@ class ArchitectureTest {
     fun у_каждого_правила_есть_причина() {
         // Правило без объяснения снимают при первом же неудобстве, потому что никто
         // не помнит, что оно защищало.
-        val безПричины = ArchitectureRules.rules.filter { it.why.length < 40 }
-        assertTrue(безПричины.isEmpty(), "правила без внятной причины: ${безПричины.map { it.name }}")
+        val reasonWithout = ArchitectureRules.rules.filter { it.why.length < 40 }
+        assertTrue(reasonWithout.isEmpty(), "правила без внятной причины: ${reasonWithout.map { it.name }}")
     }
 }

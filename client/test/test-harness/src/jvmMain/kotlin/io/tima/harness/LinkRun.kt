@@ -41,70 +41,70 @@ object LinkRun {
     fun main() = runBlocking {
         val host = System.getenv("TIMA_STAND_HOST")?.takeIf { it.isNotBlank() }
             ?: "xn--80aa4ar0b.xn--p1ai"
-        val имя = System.getenv("TIMA_DEVICE_NAME")?.takeIf { it.isNotBlank() } ?: "Компьютер"
+        val name = System.getenv("TIMA_DEVICE_NAME")?.takeIf { it.isNotBlank() } ?: "Компьютер"
 
         val route = ServerRoute.from(RouteConfig(host = host))
         val client = HttpClient(httpEngine()) { timaDefaults() }
-        val журнал = File("build/link-run.txt")
-        журнал.parentFile?.mkdirs()
+        val log = File("build/link-run.txt")
+        log.parentFile?.mkdirs()
 
-        fun строка(текст: String) {
-            println(текст)
-            журнал.appendText(текст + "\n", Charsets.UTF_8)
+        fun line(text: String) {
+            println(text)
+            log.appendText(text + "\n", Charsets.UTF_8)
         }
 
-        журнал.writeText("", Charsets.UTF_8)
-        строка("маршрут: ${route.apiBase}")
-        строка("имя устройства: $имя")
+        log.writeText("", Charsets.UTF_8)
+        line("маршрут: ${route.apiBase}")
+        line("имя устройства: $name")
 
         try {
             val api = LinkStartApi(route, client)
-            val материал = DeviceKeyFactoryOverKodium.newDeviceKeys()
+            val material = DeviceKeyFactoryOverKodium.newDeviceKeys()
 
-            val начало = api.start(материал.encryptionPub, материал.signingPub, имя)
-            if (начало !is LinkStartResult.Started) {
-                строка("ПЛОХО start: $начало")
+            val start = api.start(material.encryptionPub, material.signingPub, name)
+            if (start !is LinkStartResult.Started) {
+                line("ПЛОХО start: $start")
                 return@runBlocking
             }
-            строка("сессия: ${начало.sessionId}")
-            строка("срок: ${начало.expiresAt}")
-            строка("")
-            строка("КОД:")
-            строка(начало.qrPayload)
-            строка("")
-            строка("Теперь на телефоне: переход по этому коду и «Доверить».")
+            line("сессия: ${start.sessionId}")
+            line("срок: ${start.expiresAt}")
+            line("")
+            line("КОД:")
+            line(start.qrPayload)
+            line("")
+            line("Теперь на телефоне: переход по этому коду и «Доверить».")
 
-            var прошло = 0L
-            while (прошло < СРОК_МС) {
-                when (val ответ = api.claim(начало.sessionId, начало.claimToken)) {
+            var elapsed = 0L
+            while (elapsed < СРОК_МС) {
+                when (val answer = api.claim(start.sessionId, start.claimToken)) {
                     is LinkClaimResult.Claimed -> {
-                        строка("")
-                        строка("ok ПОДТВЕРЖДЕНО")
-                        строка("  user=${ответ.userId}")
-                        строка("  device=${ответ.deviceId}")
-                        строка("  токен получен: ${ответ.accessToken.isNotEmpty()}")
+                        line("")
+                        line("ok ПОДТВЕРЖДЕНО")
+                        line("  user=${answer.userId}")
+                        line("  device=${answer.deviceId}")
+                        line("  токен получен: ${answer.accessToken.isNotEmpty()}")
                         return@runBlocking
                     }
                     LinkClaimResult.NotReady -> Unit
-                    is LinkClaimResult.NoConnection -> строка("нет связи: ${ответ.link}")
+                    is LinkClaimResult.NoConnection -> line("нет связи: ${answer.link}")
                     is LinkClaimResult.Refused -> {
-                        строка("ПЛОХО claim: ${ответ.status} ${ответ.code}")
+                        line("ПЛОХО claim: ${answer.status} ${answer.code}")
                         return@runBlocking
                     }
                 }
-                delay(ОПРОС_МС)
-                прошло += ОПРОС_МС
+                delay(MS_POLL)
+                elapsed += MS_POLL
             }
-            строка("ПЛОХО: срок вышел, подтверждения не было")
+            line("ПЛОХО: срок вышел, подтверждения не было")
         } finally {
             client.close()
-            println("журнал: ${журнал.absolutePath}")
+            println("журнал: ${log.absolutePath}")
         }
     }
 
     /** Сервер держит сессию пять минут; опрашиваем раз в две секунды, как приложение. */
     private const val СРОК_МС = 5 * 60 * 1000L
-    private const val ОПРОС_МС = 2_000L
+    private const val MS_POLL = 2_000L
 }
 
 fun main() = LinkRun.main()

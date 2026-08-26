@@ -59,9 +59,9 @@ object TimaDatabaseFactory {
 
     /** Читает настройки обратно и падает, если хоть одна не действует. */
     fun verifyPragmas(driver: SqlDriver) {
-        val выключенные = REQUIRED.filterNot { readFlag(driver, it) }
-        check(выключенные.isEmpty()) {
-            "не действуют настройки базы: ${выключенные.joinToString()}. " +
+        val disabled = REQUIRED.filterNot { readFlag(driver, it) }
+        check(disabled.isEmpty()) {
+            "не действуют настройки базы: ${disabled.joinToString()}. " +
                 "Их задаёт платформа при создании драйвера — строкой подключения или " +
                 "конфигурацией. Отдельным PRAGMA после открытия не выйдет: на JVM он " +
                 "ложится на другое соединение, а на Apple execute для него запрещён"

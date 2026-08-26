@@ -9,7 +9,7 @@ package io.tima.domain.account
  */
 class MyDevices(private val book: DeviceBook) {
 
-    suspend fun список(): DevicesStep = book.mine()
+    suspend fun list(): DevicesStep = book.mine()
 
     /**
      * Отключить устройство.
@@ -18,7 +18,7 @@ class MyDevices(private val book: DeviceBook) {
      * в него можно было бы только по секретной фразе. Запрещает это сервер, а отдельный
      * исход нужен, чтобы сказать человеку именно это.
      */
-    suspend fun отключить(deviceId: String): RevokeStep = book.revoke(deviceId)
+    suspend fun revoke(deviceId: String): RevokeStep = book.revoke(deviceId)
 }
 
 /** Порт к серверу. Реализует `core-network`. */

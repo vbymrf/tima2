@@ -12,18 +12,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import io.tima.core.ui.Аватар
-import io.tima.core.ui.Беда
-import io.tima.core.ui.Второстепенное
-import io.tima.core.ui.Имя
-import io.tima.core.ui.Кнопка
-import io.tima.core.ui.Поле
-import io.tima.core.ui.ПустаяОбласть
-import io.tima.core.ui.СтрокаСписка
+import io.tima.core.ui.Avatar
+import io.tima.core.ui.Trouble
+import io.tima.core.ui.Secondary
+import io.tima.core.ui.Name
+import io.tima.core.ui.Button
+import io.tima.core.ui.Field
+import io.tima.core.ui.EmptyArea
+import io.tima.core.ui.ListLine
 import io.tima.core.ui.TimaSpacing
-import io.tima.core.ui.Тима
-import io.tima.core.ui.Третьестепенное
-import io.tima.core.ui.ШапкаПодокна
+import io.tima.core.ui.Tima
+import io.tima.core.ui.Tertiary
+import io.tima.core.ui.SubwindowHeader
 import io.tima.domain.chat.GroupMember
 import io.tima.domain.chat.GroupRole
 
@@ -40,55 +40,55 @@ import io.tima.domain.chat.GroupRole
  * Чистый рендер [СоставState]. Решения — в [СоставStore].
  */
 @Composable
-fun ЭкранСостава(
-    состояние: СоставState,
-    onНомер: (String) -> Unit,
-    onПозвать: () -> Unit,
-    onИсключить: (String) -> Unit,
-    onНазад: () -> Unit,
+fun MemberScreen(
+    state: MembersState,
+    onNumber: (String) -> Unit,
+    onInvite: () -> Unit,
+    onRemove: (String) -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val цвета = Тима.цвета
-    Column(modifier.fillMaxSize().background(цвета.поверхность)) {
-        ШапкаПодокна(название = "Участники", onНазад = onНазад)
+    val colors = Tima.colors
+    Column(modifier.fillMaxSize().background(colors.surface)) {
+        SubwindowHeader(title = "Участники", onBack = onBack)
 
         Column(
-            modifier = Modifier.fillMaxSize().padding(TimaSpacing.о4),
-            verticalArrangement = Arrangement.spacedBy(TimaSpacing.о3),
+            modifier = Modifier.fillMaxSize().padding(TimaSpacing.about4),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
         ) {
-            состояние.беда?.let { Беда(it) }
-            состояние.предупреждение?.let { Беда(it) }
+            state.trouble?.let { Trouble(it) }
+            state.warning?.let { Trouble(it) }
 
-            if (состояние.правлюСоставом) {
+            if (state.memberEdit) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
+                    horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.weight(1f)) {
-                        Поле(
-                            значение = состояние.номер,
-                            onИзменение = onНомер,
-                            подсказка = "+7…",
-                            числовое = true,
+                        Field(
+                            value = state.number,
+                            onChange = onNumber,
+                            hint = "+7…",
+                            numeric = true,
                         )
                     }
-                    Кнопка(надпись = if (состояние.ждём) "…" else "Позвать", onClick = onПозвать)
+                    Button(label = if (state.expect) "…" else "Позвать", onClick = onInvite)
                 }
             }
 
-            if (состояние.участники.isEmpty()) {
-                ПустаяОбласть(
-                    знак = "👥",
-                    заголовок = if (состояние.ждём) "Читаем состав" else "Здесь пока никого",
-                    пояснение = if (состояние.ждём) null else "Позовите людей по номеру телефона",
+            if (state.members.isEmpty()) {
+                EmptyArea(
+                    glyph = "👥",
+                    title = if (state.expect) "Читаем состав" else "Здесь пока никого",
+                    explanation = if (state.expect) null else "Позовите людей по номеру телефона",
                 )
             } else {
-                for (участник in состояние.участники) {
-                    СтрокаУчастника(
-                        участник = участник,
-                        можноИсключать = состояние.правлюСоставом && !участник.role.правитПоставом,
-                        onИсключить = { onИсключить(участник.userId) },
+                for (member in state.members) {
+                    MemberLine(
+                        member = member,
+                        removeMay = state.memberEdit && !member.role.deliveryEdits,
+                        onRemove = { onRemove(member.userId) },
                     )
                 }
             }
@@ -103,35 +103,35 @@ fun ЭкранСостава(
  * здесь, чтобы отказ не пришлось объяснять после нажатия.
  */
 @Composable
-private fun СтрокаУчастника(
-    участник: GroupMember,
-    можноИсключать: Boolean,
-    onИсключить: () -> Unit,
+private fun MemberLine(
+    member: GroupMember,
+    removeMay: Boolean,
+    onRemove: () -> Unit,
 ) {
-    СтрокаСписка(
-        слева = { Аватар(буквы = участник.userId.take(2).uppercase()) },
-        справа = {
-            if (можноИсключать) {
-                Кнопка(надпись = "Исключить", onClick = onИсключить)
+    ListLine(
+        left = { Avatar(letters = member.userId.take(2).uppercase()) },
+        right = {
+            if (removeMay) {
+                Button(label = "Исключить", onClick = onRemove)
             } else {
-                Третьестепенное(подписьРоли(участник.role))
+                Tertiary(roleCaption(member.role))
             }
         },
-        середина = {
+        middle = {
             Column {
-                Имя(участник.userId)
-                участник.bannedUntil?.let { Второстепенное("заблокирован до $it") }
+                Name(member.userId)
+                member.bannedUntil?.let { Secondary("заблокирован до $it") }
             }
         },
     )
 }
 
-private fun подписьРоли(роль: GroupRole): String = when (роль) {
-    GroupRole.Владелец -> "владелец"
-    GroupRole.Админ -> "админ"
-    GroupRole.Модератор -> "модератор"
-    GroupRole.Участник -> "участник"
+private fun roleCaption(role: GroupRole): String = when (role) {
+    GroupRole.Owner -> "владелец"
+    GroupRole.Admin -> "админ"
+    GroupRole.Moderator -> "модератор"
+    GroupRole.Member -> "участник"
     // Роль, которой этот клиент не знает: сервер новее нас. Показать «участник» значило бы
     // соврать про права, которых мы не понимаем.
-    GroupRole.Неизвестная -> "роль неизвестна"
+    GroupRole.Unknown -> "роль неизвестна"
 }

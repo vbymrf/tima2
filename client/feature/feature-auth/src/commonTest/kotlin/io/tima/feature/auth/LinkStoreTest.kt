@@ -18,12 +18,12 @@ import kotlin.test.assertTrue
  * Проверяется главное правило этого экрана: **скан — не решение**. Между чтением кода и
  * доверием стоит вопрос человеку, и до ответа в сеть не уходит ничего.
  */
-class ПривязкаStoreTest {
+class LinkStoreTest {
 
-    private val сеть = ПоддельноеПодтверждение()
+    private val network = FakeConfirmation()
 
-    private fun store(scope: kotlinx.coroutines.CoroutineScope, код: String = "tima://link/v1?…") =
-        ПривязкаStore(ConfirmDeviceLink(сеть, ПодписантВсегда), scope, код)
+    private fun store(scope: kotlinx.coroutines.CoroutineScope, code: String = "tima://link/v1?…") =
+        LinkStore(ConfirmDeviceLink(network, AlwaysSigner), scope, code)
 
     /**
      * Скан сам ничего не подтверждает.
@@ -35,35 +35,35 @@ class ПривязкаStoreTest {
     fun скан_ничего_не_подтверждает() = runTest {
         val store = store(backgroundScope)
 
-        val состояние = store.state.value
-        assertIs<ПривязкаState.Спрашиваем>(состояние)
-        assertEquals("Компьютер", состояние.имя, "человеку показывают имя устройства")
-        assertEquals(0, сеть.подтверждений, "до нажатия в сеть не уходит ничего")
+        val state = store.state.value
+        assertIs<LinkState.Ask>(state)
+        assertEquals("Компьютер", state.name, "человеку показывают имя устройства")
+        assertEquals(0, network.confirmations, "до нажатия в сеть не уходит ничего")
     }
 
     @Test
     fun доверить_подтверждает_и_говорит_об_успехе() = runTest {
         val store = store(backgroundScope)
 
-        store.доверить()
+        store.trust()
 
-        val состояние = store.state.first { it is ПривязкаState.Готово }
-        assertIs<ПривязкаState.Готово>(состояние)
-        assertEquals("d-2", состояние.deviceId)
-        assertEquals(1, сеть.подтверждений)
+        val state = store.state.first { it is LinkState.Done }
+        assertIs<LinkState.Done>(state)
+        assertEquals("d-2", state.deviceId)
+        assertEquals(1, network.confirmations)
     }
 
     /** Второе нажатие не посылает второе подтверждение. */
     @Test
     fun второе_нажатие_не_повторяет_вызов() = runTest {
-        сеть.наПодтверждение = { LinkConfirmStep.Offline(retryAfterMs = 1_000) }
+        network.onConfirmation = { LinkConfirmStep.Offline(retryAfterMs = 1_000) }
         val store = store(backgroundScope)
 
-        store.доверить()
-        store.доверить()
+        store.trust()
+        store.trust()
 
-        store.state.first { it is ПривязкаState.Спрашиваем && !it.ждём }
-        assertEquals(1, сеть.подтверждений)
+        store.state.first { it is LinkState.Ask && !it.expect }
+        assertEquals(1, network.confirmations)
     }
 
     /**
@@ -74,71 +74,71 @@ class ПривязкаStoreTest {
      */
     @Test
     fun отказ_не_телефону_называется_словами() = runTest {
-        сеть.наПодтверждение = { LinkConfirmStep.NotAPhone }
+        network.onConfirmation = { LinkConfirmStep.NotAPhone }
         val store = store(backgroundScope)
 
-        store.доверить()
+        store.trust()
 
-        val состояние = store.state.first { it is ПривязкаState.Спрашиваем && !it.ждём }
-        assertIs<ПривязкаState.Спрашиваем>(состояние)
-        assertTrue(состояние.беда.orEmpty().contains("только телефон"), "беда: ${состояние.беда}")
+        val state = store.state.first { it is LinkState.Ask && !it.expect }
+        assertIs<LinkState.Ask>(state)
+        assertTrue(state.trouble.orEmpty().contains("только телефон"), "беда: ${state.trouble}")
     }
 
     /** Просроченный код — своё сообщение: показать новый надо на том устройстве. */
     @Test
     fun просроченный_код_отправляет_за_новым() = runTest {
-        сеть.наПодтверждение = { LinkConfirmStep.SessionGone }
+        network.onConfirmation = { LinkConfirmStep.SessionGone }
         val store = store(backgroundScope)
 
-        store.доверить()
+        store.trust()
 
-        val состояние = store.state.first { it is ПривязкаState.Спрашиваем && !it.ждём }
-        assertIs<ПривязкаState.Спрашиваем>(состояние)
-        assertTrue(состояние.беда.orEmpty().contains("новый"), "беда: ${состояние.беда}")
+        val state = store.state.first { it is LinkState.Ask && !it.expect }
+        assertIs<LinkState.Ask>(state)
+        assertTrue(state.trouble.orEmpty().contains("новый"), "беда: ${state.trouble}")
     }
 
     /** Чужой код виден сразу, до всякой сети. */
     @Test
     fun чужой_код_виден_сразу() = runTest {
-        сеть.наРазбор = { null }
+        network.onParsing = { null }
 
-        val store = store(backgroundScope, код = "https://example.com")
+        val store = store(backgroundScope, code = "https://example.com")
 
-        assertEquals(ПривязкаState.НеНашКод, store.state.value)
-        assertEquals(0, сеть.подтверждений)
+        assertEquals(LinkState.NotOurCode, store.state.value)
+        assertEquals(0, network.confirmations)
     }
 
     /** Имени в коде не было — так и говорим. Подставленное имя человек примет за настоящее. */
     @Test
     fun безымянное_устройство_не_получает_придуманного_имени() = runTest {
-        сеть.наРазбор = { LinkCode("s-1", "sec", ByteArray(32), ByteArray(32), deviceName = null) }
+        network.onParsing = { LinkCode("s-1", "sec", ByteArray(32), ByteArray(32), deviceName = null) }
 
-        val состояние = store(backgroundScope).state.value
+        val state = store(backgroundScope).state.value
 
-        assertIs<ПривязкаState.Спрашиваем>(состояние)
-        assertEquals(null, состояние.имя)
+        assertIs<LinkState.Ask>(state)
+        assertEquals(null, state.name)
     }
 
-    private class ПоддельноеПодтверждение : DeviceLinkConfirm {
-        var подтверждений = 0
-        var наРазбор: (String) -> LinkCode? = {
+    private class FakeConfirmation : DeviceLinkConfirm {
+        var confirmations = 0
+        var onParsing: (String) -> LinkCode? = {
             LinkCode("s-1", "sec", ByteArray(32), ByteArray(32), deviceName = "Компьютер")
         }
-        var наПодтверждение: suspend () -> LinkConfirmStep = { LinkConfirmStep.Confirmed("d-2") }
+        var onConfirmation: suspend () -> LinkConfirmStep = { LinkConfirmStep.Confirmed("d-2") }
 
-        override fun parse(code: String): LinkCode? = наРазбор(code)
+        override fun parse(code: String): LinkCode? = onParsing(code)
 
         override suspend fun confirm(
             sessionId: String,
             secret: String,
             signature: ByteArray,
         ): LinkConfirmStep {
-            подтверждений++
-            return наПодтверждение()
+            confirmations++
+            return onConfirmation()
         }
     }
 
-    private object ПодписантВсегда : LinkSigner {
+    private object AlwaysSigner : LinkSigner {
         override fun sign(
             sessionId: String,
             secret: String,

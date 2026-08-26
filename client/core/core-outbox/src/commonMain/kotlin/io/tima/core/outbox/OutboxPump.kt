@@ -56,34 +56,34 @@ class OutboxPump(
      * @return сколько сообщений получили исход за этот проход.
      */
     suspend fun runOnce(
-        эпохи: Map<String, Long>,
+        epoch: Map<String, Long>,
         seal: (OutboxEntry) -> ByteArray,
         send: suspend (ReadyToSend) -> SendOutcome,
     ): Int {
         // Сначала запечатываем всё готовое, потом отправляем. Порядок именно такой:
         // запечатывание синхронное и быстрое, а отправка ждёт сеть. Смешав их, мы бы
         // держали открытым окно, в которое может попасть смена эпохи.
-        val готовые = mutableListOf<ReadyToSend>()
-        for ((chatId, epochKeyId) in эпохи) {
-            while (готовые.size < BATCH_LIMIT) {
+        val ready = mutableListOf<ReadyToSend>()
+        for ((chatId, epochKeyId) in epoch) {
+            while (ready.size < BATCH_LIMIT) {
                 outbox.sealNext(chatId, epochKeyId, seal) ?: break
-                готовые += outbox.claimForSend() ?: break
+                ready += outbox.claimForSend() ?: break
             }
         }
-        if (готовые.isEmpty()) return 0
+        if (ready.isEmpty()) return 0
 
         val permits = Semaphore(maxConcurrent)
         coroutineScope {
-            for (готовое in готовые) {
+            for (ready in ready) {
                 launch {
                     permits.withPermit {
-                        val исход = send(готовое)
-                        outbox.onOutcome(готовое.entry.dedupKey, исход)
+                        val outcome = send(ready)
+                        outbox.onOutcome(ready.entry.dedupKey, outcome)
                     }
                 }
             }
         }
-        return готовые.size
+        return ready.size
     }
 
     companion object {

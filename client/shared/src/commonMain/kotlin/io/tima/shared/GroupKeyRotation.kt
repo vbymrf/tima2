@@ -38,95 +38,95 @@ import io.tima.domain.chat.RotateStep
  * 4. **Свой экземпляр ключа кладётся в базу только после успеха сервера.** Записав раньше,
  *    мы получили бы версию, которой нет ни у кого: писать ею — значит писать в пустоту.
  */
-class РотацияГрупповогоКлюча(
-    private val группы: GroupsApi,
-    private val ключиУстройств: KeysApi,
+class GroupKeyRotation(
+    private val groups: GroupsApi,
+    private val deviceKeys: KeysApi,
     private val escrow: EscrowApi,
-    private val ключиГрупп: GroupKeysApi,
-    private val книга: GroupKeyBook,
-    private val сейчасМс: () -> Long,
+    private val groupKeys: GroupKeysApi,
+    private val book: GroupKeyBook,
+    private val msNow: () -> Long,
 ) : GroupKeyRotator {
 
-    override suspend fun ротировать(groupId: String): RotateStep {
-        val анклав = EscrowTrust.enclaveSigningPub
+    override suspend fun rotate(groupId: String): RotateStep {
+        val enclave = EscrowTrust.enclaveSigningPub
             ?: return RotateStep.Refused("нет ключа подписи анклава: ротация отказана")
 
-        val участники = when (val ответ = группы.members(groupId)) {
-            is MembersResult.Members -> ответ.members.map { it.userId }
-            is MembersResult.NoConnection -> return RotateStep.Offline(ответ.link.retryDelayMs)
-            is MembersResult.Refused -> return RotateStep.Refused(ответ.code)
+        val members = when (val answer = groups.members(groupId)) {
+            is MembersResult.Members -> answer.members.map { it.userId }
+            is MembersResult.NoConnection -> return RotateStep.Offline(answer.link.retryDelayMs)
+            is MembersResult.Refused -> return RotateStep.Refused(answer.code)
         }
-        if (участники.isEmpty()) {
+        if (members.isEmpty()) {
             // Группа без участников ключа не требует, и ротация без получателей оставила бы
             // версию, которой ни у кого нет.
             return RotateStep.Refused("в группе нет участников: ротировать не для кого")
         }
 
-        val получатели = mutableListOf<RecipientDevice>()
-        for (кто in участники) {
-            when (val ответ = ключиУстройств.devicesOf(кто)) {
+        val recipients = mutableListOf<RecipientDevice>()
+        for (who in members) {
+            when (val answer = deviceKeys.devicesOf(who)) {
                 is DeviceKeysResult.Devices ->
-                    получатели += ответ.devices.map { RecipientDevice(it.deviceId, it.encryptionPub) }
+                    recipients += answer.devices.map { RecipientDevice(it.deviceId, it.encryptionPub) }
 
-                is DeviceKeysResult.Offline -> return RotateStep.Offline(ответ.link.retryDelayMs)
+                is DeviceKeysResult.Offline -> return RotateStep.Offline(answer.link.retryDelayMs)
 
                 // Пропустить участника нельзя: он остался бы без ключа и перестал читать
                 // группу — молча, потому что для него это выглядело бы как «нет сообщений».
                 is DeviceKeysResult.Refused ->
-                    return RotateStep.Refused("не удалось узнать устройства участника: ${ответ.code}")
+                    return RotateStep.Refused("не удалось узнать устройства участника: ${answer.code}")
             }
         }
-        val все = получатели.distinctBy { it.deviceId }
-        if (все.isEmpty()) return RotateStep.Refused("ни у одного участника нет устройств")
+        val all = recipients.distinctBy { it.deviceId }
+        if (all.isEmpty()) return RotateStep.Refused("ни у одного участника нет устройств")
 
-        val текущая = when (val ответ = ключиГрупп.mine(groupId, книга.latestVersion(groupId) ?: 0)) {
-            is GroupKeysResult.Keys -> ответ.currentVersion
-            is GroupKeysResult.NoConnection -> return RotateStep.Offline(ответ.link.retryDelayMs)
-            is GroupKeysResult.Refused -> return RotateStep.Refused(ответ.code)
+        val current = when (val answer = groupKeys.mine(groupId, book.latestVersion(groupId) ?: 0)) {
+            is GroupKeysResult.Keys -> answer.currentVersion
+            is GroupKeysResult.NoConnection -> return RotateStep.Offline(answer.link.retryDelayMs)
+            is GroupKeysResult.Refused -> return RotateStep.Refused(answer.code)
         }
 
-        val ключЭпохи = when (val исход = escrow.keyForChat(groupId)) {
-            is EscrowKeyResult.Keys -> исход.current
+        val epochKey = when (val outcome = escrow.keyForChat(groupId)) {
+            is EscrowKeyResult.Keys -> outcome.current
             EscrowKeyResult.NoEnclave -> return RotateStep.Refused("сервер без анклава escrow")
-            is EscrowKeyResult.Offline -> return RotateStep.Offline(исход.link.retryDelayMs)
-            is EscrowKeyResult.Refused -> return RotateStep.Refused("ключ эпохи: ${исход.code}")
+            is EscrowKeyResult.Offline -> return RotateStep.Offline(outcome.link.retryDelayMs)
+            is EscrowKeyResult.Refused -> return RotateStep.Refused("ключ эпохи: ${outcome.code}")
         }
-        val проверенный = EscrowKeyVerifier.verify(
-            enclaveSigningPub = анклав,
-            id = ключЭпохи.id,
-            region = ключЭпохи.region,
-            chatId = ключЭпохи.chatId,
-            epoch = ключЭпохи.epoch,
-            publicKey = ключЭпохи.publicKey,
-            signature = ключЭпохи.signature,
-            validFromMs = ключЭпохи.validFromMs,
-            validToMs = ключЭпохи.validToMs,
-            destroyAtMs = ключЭпохи.destroyAtMs,
-            nowMs = сейчасМс(),
+        val verified = EscrowKeyVerifier.verify(
+            enclaveSigningPub = enclave,
+            id = epochKey.id,
+            region = epochKey.region,
+            chatId = epochKey.chatId,
+            epoch = epochKey.epoch,
+            publicKey = epochKey.publicKey,
+            signature = epochKey.signature,
+            validFromMs = epochKey.validFromMs,
+            validToMs = epochKey.validToMs,
+            destroyAtMs = epochKey.destroyAtMs,
+            nowMs = msNow(),
         ).getOrElse {
             // Не «повторим позже»: подпись не сошлась — это подмена или наша ошибка.
             return RotateStep.Refused("подпись анклава не сошлась: ${it.message}")
         }
 
-        val выпуск = GroupKeyRotations(проверенный).rotate(текущая, все).getOrElse {
+        val issue = GroupKeyRotations(verified).rotate(current, all).getOrElse {
             return RotateStep.Refused("не удалось выпустить ключ: ${it.message}")
         }
 
-        val отправка = ключиГрупп.rotate(
+        val send = groupKeys.rotate(
             groupId = groupId,
-            gkVersion = выпуск.gkVersion,
-            senderEphemeralPub = выпуск.senderEphemeralPub,
-            escrowMlkemCt = выпуск.escrowMlkemCt,
-            escrowWrappedKey = выпуск.escrowWrappedKey,
-            escrowKeyVersion = выпуск.escrowKeyVersion,
-            wrappedKeys = выпуск.wrappedKeys,
+            gkVersion = issue.gkVersion,
+            senderEphemeralPub = issue.senderEphemeralPub,
+            escrowMlkemCt = issue.escrowMlkemCt,
+            escrowWrappedKey = issue.escrowWrappedKey,
+            escrowKeyVersion = issue.escrowKeyVersion,
+            wrappedKeys = issue.wrappedKeys,
             reason = "member_change",
         )
 
-        return when (отправка) {
+        return when (send) {
             RotateResult.Rotated -> {
                 // Только теперь — и своим ключом мы будем шифровать исходящее.
-                книга.put(groupId, выпуск.gkVersion, выпуск.groupKey)
+                book.put(groupId, issue.gkVersion, issue.groupKey)
                 RotateStep.Rotated
             }
             RotateResult.VersionConflict -> RotateStep.VersionConflict
@@ -135,8 +135,8 @@ class РотацияГрупповогоКлюча(
             // Состав у нас устарел: в получателях оказалось устройство не-участника.
             // Это не отказ в правах, а повод перечитать состав и повторить.
             RotateResult.StaleMembers -> RotateStep.Refused("состав изменился — перечитайте и повторите")
-            is RotateResult.Refused -> RotateStep.Refused(отправка.code)
-            is RotateResult.NoConnection -> RotateStep.Offline(отправка.link.retryDelayMs)
+            is RotateResult.Refused -> RotateStep.Refused(send.code)
+            is RotateResult.NoConnection -> RotateStep.Offline(send.link.retryDelayMs)
         }
     }
 }

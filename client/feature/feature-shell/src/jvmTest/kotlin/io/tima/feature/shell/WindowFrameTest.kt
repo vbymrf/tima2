@@ -4,11 +4,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import io.tima.core.ui.Стан
+import io.tima.core.ui.Stage
 import io.tima.core.ui.TimaColors
-import io.tima.testui.обеТемы
-import io.tima.testui.снять
-import io.tima.testui.тема
+import io.tima.testui.bothThemes
+import io.tima.testui.capture
+import io.tima.testui.theme
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
  * пять окон, и правила проверяются один раз — иначе их пришлось бы повторять пять раз
  * и они бы разошлись.
  */
-class КаркасОкнаTest {
+class WindowFrameTest {
 
     /**
      * Шапка-плашка есть: это основное окно.
@@ -30,10 +30,10 @@ class КаркасОкнаTest {
      */
     @Test
     fun у_основного_окна_есть_салатовая_плашка() {
-        for ((имя, снимок) in обеТемы("каркас-шапка", ШИРИНА, ВЫСОТА) { окно() }) {
+        for ((name, snapshot) in bothThemes("каркас-шапка", WIDTH, HEIGHT) { window() }) {
             assertTrue(
-                снимок.естьПятно(тема(имя).навигация, y = 0 until ЗОНА1, сторона = 8),
-                "$имя: плашки окна нет — человек не видит, в каком он окне",
+                snapshot.patchHas(theme(name).navigation, y = 0 until ZONE_1, side = 8),
+                "$name: плашки окна нет — человек не видит, в каком он окне",
             )
         }
     }
@@ -46,15 +46,15 @@ class КаркасОкнаTest {
      */
     @Test
     fun логотип_в_шапке_только_на_телефоне() {
-        val телефон = снять("каркас-лого-телефон", ШИРИНА, ВЫСОТА, тёмная = false) { окно() }
-        val широкий = снять("каркас-лого-широкий", 1000, ВЫСОТА, тёмная = false) { окно() }
+        val phone = capture("каркас-лого-телефон", WIDTH, HEIGHT, dark = false) { window() }
+        val wide = capture("каркас-лого-широкий", 1000, HEIGHT, dark = false) { window() }
 
         assertTrue(
-            телефон.естьПятно(TimaColors.светлая.вПлашке, y = 0 until ЗОНА1, x = 0 until 60),
+            phone.patchHas(TimaColors.light.inPlate, y = 0 until ZONE_1, x = 0 until 60),
             "на телефоне белого квадрата логотипа нет",
         )
         assertTrue(
-            !широкий.естьПятно(TimaColors.светлая.вПлашке, y = 0 until ЗОНА1, x = 76 until 140),
+            !wide.patchHas(TimaColors.light.inPlate, y = 0 until ZONE_1, x = 76 until 140),
             "на широком формате логотип повторён в шапке колонки, хотя он уже в рейке",
         )
     }
@@ -67,33 +67,33 @@ class КаркасОкнаTest {
      */
     @Test
     fun выбранная_вкладка_видна() {
-        val первая = снять("каркас-вкладка-1", ШИРИНА, ВЫСОТА, тёмная = false) { окно("Общая") }
-        val вторая = снять("каркас-вкладка-2", ШИРИНА, ВЫСОТА, тёмная = false) { окно("Каталог") }
+        val first = capture("каркас-вкладка-1", WIDTH, HEIGHT, dark = false) { window("Общая") }
+        val second = capture("каркас-вкладка-2", WIDTH, HEIGHT, dark = false) { window("Каталог") }
 
         assertTrue(
-            первая.расхождение(вторая) > 0.0,
+            first.difference(second) > 0.0,
             "смена вкладки ничего не изменила на экране",
         )
     }
 
     @Composable
-    private fun окно(выбрана: String = "Общая") = Стан(
-        колонка = {
-            КаркасОкна(
-                окно = Окно.Социум,
-                вкладки = listOf("Общая", "Друзья", "Каталог"),
-                выбрана = выбрана,
-                onВкладка = {},
-                onПереключитьОкна = {},
-                onПоиск = {},
-                onНастройки = {},
+    private fun window(selected: String = "Общая") = Stage(
+        column = {
+            WindowFrame(
+                window = Window.Social,
+                tabs = listOf("Общая", "Друзья", "Каталог"),
+                selected = selected,
+                onTab = {},
+                onSwitchWindows = {},
+                onSearch = {},
+                onSettings = {},
             ) { Box(Modifier.fillMaxSize()) }
         },
     )
 
     private companion object {
-        const val ШИРИНА = 380
-        const val ВЫСОТА = 800
-        const val ЗОНА1 = 56
+        const val WIDTH = 380
+        const val HEIGHT = 800
+        const val ZONE_1 = 56
     }
 }

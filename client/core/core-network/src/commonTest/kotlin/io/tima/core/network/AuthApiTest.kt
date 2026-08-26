@@ -26,16 +26,16 @@ import kotlin.test.assertTrue
 class AuthApiTest {
 
     private val route = ServerRoute.from(RouteConfig(host = "example.com"))
-    private val ключ = ByteArray(32) { it.toByte() }
+    private val key = ByteArray(32) { it.toByte() }
     private lateinit var engine: MockEngine
 
-    private fun api(отвечает: MockRequestHandler): AuthApi {
-        engine = MockEngine(отвечает)
+    private fun api(responds: MockRequestHandler): AuthApi {
+        engine = MockEngine(responds)
         return AuthApi(route, HttpClient(engine) { timaDefaults() })
     }
 
-    private fun json(тело: String, статус: HttpStatusCode = HttpStatusCode.OK): MockRequestHandler =
-        { respond(тело, статус, headersOf("Content-Type", "application/json")) }
+    private fun json(body: String, status: HttpStatusCode = HttpStatusCode.OK): MockRequestHandler =
+        { respond(body, status, headersOf("Content-Type", "application/json")) }
 
     /** Тело запроса как текст: всё, что здесь отправляется, — JSON. */
     private fun HttpRequestData.text(): String = (body as TextContent).text
@@ -48,11 +48,11 @@ class AuthApiTest {
         // иначе сквозной путь требовал бы настоящей SMS на настоящий телефон.
         val api = api(json("""{"request_id":"r-1","dev_code":"123456"}"""))
 
-        val исход = api.requestSms("+79001234567")
+        val outcome = api.requestSms("+79001234567")
 
-        assertIs<SmsRequestResult.Sent>(исход)
-        assertEquals("r-1", исход.requestId)
-        assertEquals("123456", исход.devCode)
+        assertIs<SmsRequestResult.Sent>(outcome)
+        assertEquals("r-1", outcome.requestId)
+        assertEquals("123456", outcome.devCode)
         assertEquals(
             "https://api.example.com/api/v1/auth/sms/request",
             engine.requestHistory.single().url.toString(),
@@ -61,9 +61,9 @@ class AuthApiTest {
 
     @Test
     fun боевой_ответ_без_dev_кода_тоже_принимается() = runTest {
-        val исход = api(json("""{"request_id":"r-1"}""")).requestSms("+79001234567")
-        assertIs<SmsRequestResult.Sent>(исход)
-        assertNull(исход.devCode, "на боевом сервере кода в ответе нет — и это норма")
+        val outcome = api(json("""{"request_id":"r-1"}""")).requestSms("+79001234567")
+        assertIs<SmsRequestResult.Sent>(outcome)
+        assertNull(outcome.devCode, "на боевом сервере кода в ответе нет — и это норма")
     }
 
     @Test
@@ -72,10 +72,10 @@ class AuthApiTest {
         // 400 — трата времени человека, стоящего перед полем ввода.
         val api = api(json("""{"request_id":"r-1"}"""))
 
-        for (плохой in listOf("", "79001234567", "+0900123456", "+7900", "+7900123456789012", "+7 900 123")) {
+        for (bad in listOf("", "79001234567", "+0900123456", "+7900", "+7900123456789012", "+7 900 123")) {
             assertIs<SmsRequestResult.BadPhone>(
-                api.requestSms(плохой),
-                "телефон «$плохой» обязан быть отвергнут",
+                api.requestSms(bad),
+                "телефон «$bad» обязан быть отвергнут",
             )
         }
         assertEquals(0, engine.requestHistory.size, "ни один запрос не должен был уйти")
@@ -85,11 +85,11 @@ class AuthApiTest {
     fun отказ_сервера_на_запросе_кода_несёт_код_причины() = runTest {
         // Ограничитель частоты отвечает 429: это не «плохой телефон», и человеку надо
         // сказать другое.
-        val исход = api(json("""{"code":"rate_limited"}""", HttpStatusCode.TooManyRequests))
+        val outcome = api(json("""{"code":"rate_limited"}""", HttpStatusCode.TooManyRequests))
             .requestSms("+79001234567")
-        assertIs<SmsRequestResult.Refused>(исход)
-        assertEquals(429, исход.status)
-        assertEquals("rate_limited", исход.code)
+        assertIs<SmsRequestResult.Refused>(outcome)
+        assertEquals(429, outcome.status)
+        assertEquals("rate_limited", outcome.code)
     }
 
     // ── проверка кода ────────────────────────────────────────────────────────
@@ -128,16 +128,16 @@ class AuthApiTest {
             HttpStatusCode.Created,
         ))
         // Байты подобраны так, что обычный base64 дал бы и «+», и «/»: 0xFB 0xEF 0xBE.
-        val сПлюсом = ByteArray(32).also { it[0] = -5; it[1] = -17; it[2] = -66 }
+        val withWithPlus = ByteArray(32).also { it[0] = -5; it[1] = -17; it[2] = -66 }
 
-        api.register("rt-1", encryptionPub = сПлюсом, signingPub = ключ)
+        api.register("rt-1", encryptionPub = withWithPlus, signingPub = key)
 
-        val тело = engine.requestHistory.single().text()
-        assertFalse(тело.contains("="), "выравнивание сервер не примет: $тело")
-        assertFalse(тело.contains("+"), "обычный алфавит base64 сервер не примет: $тело")
-        assertFalse(тело.contains("/"), "обычный алфавит base64 сервер не примет: $тело")
+        val body = engine.requestHistory.single().text()
+        assertFalse(body.contains("="), "выравнивание сервер не примет: $body")
+        assertFalse(body.contains("+"), "обычный алфавит base64 сервер не примет: $body")
+        assertFalse(body.contains("/"), "обычный алфавит base64 сервер не примет: $body")
         // И проверяем, что байты вообще доехали: «+» и «/» заменяются на «-» и «_».
-        assertTrue(тело.contains("\"encryption_pub\":\"--"), "ожидались знаки base64url: $тело")
+        assertTrue(body.contains("\"encryption_pub\":\"--"), "ожидались знаки base64url: $body")
     }
 
     @Test
@@ -147,9 +147,9 @@ class AuthApiTest {
             HttpStatusCode.Created,
         ))
 
-        val исход = api.register("rt-1", ключ, ключ, platform = "desktop")
+        val outcome = api.register("rt-1", key, key, platform = "desktop")
 
-        assertEquals(RegisterResult.Registered("u-1", "d-1", "jwt-устройства"), исход)
+        assertEquals(RegisterResult.Registered("u-1", "d-1", "jwt-устройства"), outcome)
     }
 
     @Test
@@ -157,7 +157,7 @@ class AuthApiTest {
         // 201 без access_token означает либо не наш сервер, либо сломанный ответ. Молча
         // считать это успехом — значит остаться без токена и не понять почему.
         val api = api(json("""{"user_id":"u-1","device_id":"d-1"}""", HttpStatusCode.Created))
-        assertIs<RegisterResult.Refused>(api.register("rt-1", ключ, ключ))
+        assertIs<RegisterResult.Refused>(api.register("rt-1", key, key))
     }
 
     @Test
@@ -165,26 +165,26 @@ class AuthApiTest {
         // identity_mismatch — встреча с собственным прошлым аккаунтом, и решать её
         // человеку. bad_token — начинать с запроса кода. Свалить оба в «отказ» значило бы
         // показать одно сообщение на две разные ситуации.
-        val сЧужой = api(json(
+        val withForeign = api(json(
             """{"code":"identity_mismatch","message":"телефон связан с другой личностью"}""",
             HttpStatusCode.Forbidden,
         ))
-        assertEquals(RegisterResult.IdentityMismatch, сЧужой.register("rt-1", ключ, ключ))
+        assertEquals(RegisterResult.IdentityMismatch, withForeign.register("rt-1", key, key))
 
-        val сПросроченным = api(json(
+        val withExpired = api(json(
             """{"code":"bad_token","message":"registration_token просрочен"}""",
             HttpStatusCode.Forbidden,
         ))
-        assertEquals(RegisterResult.TokenExpired, сПросроченным.register("rt-1", ключ, ключ))
+        assertEquals(RegisterResult.TokenExpired, withExpired.register("rt-1", key, key))
     }
 
     @Test
     fun ключ_не_того_размера_не_уходит_в_сеть() = runTest {
         val api = api(json("""{}""", HttpStatusCode.Created))
-        assertFailsWith<IllegalArgumentException> { api.register("rt-1", ByteArray(31), ключ) }
-        assertFailsWith<IllegalArgumentException> { api.register("rt-1", ключ, ByteArray(33)) }
+        assertFailsWith<IllegalArgumentException> { api.register("rt-1", ByteArray(31), key) }
+        assertFailsWith<IllegalArgumentException> { api.register("rt-1", key, ByteArray(33)) }
         assertFailsWith<IllegalArgumentException> {
-            api.register("rt-1", ключ, ключ, identityPub = ByteArray(16))
+            api.register("rt-1", key, key, identityPub = ByteArray(16))
         }
         assertEquals(0, engine.requestHistory.size)
     }
@@ -197,10 +197,10 @@ class AuthApiTest {
             """{"user_id":"u","device_id":"d","access_token":"t"}""", HttpStatusCode.Created,
         ))
 
-        api.register("rt-1", ключ, ключ)
+        api.register("rt-1", key, key)
         assertFalse(engine.requestHistory[0].text().contains("identity_pub"), "поля быть не должно вовсе")
 
-        api.register("rt-1", ключ, ключ, identityPub = ключ)
+        api.register("rt-1", key, key, identityPub = key)
         assertTrue(engine.requestHistory[1].text().contains("identity_pub"))
     }
 
@@ -212,11 +212,11 @@ class AuthApiTest {
         // авторизации не должен придумывать свой таймаут.
         val api = api { throw IOException("Unable to resolve host") }
 
-        val первый = api.requestSms("+79001234567")
-        assertIs<SmsRequestResult.NoConnection>(первый)
-        assertEquals(LinkState.NO_NETWORK, первый.link)
+        val first = api.requestSms("+79001234567")
+        assertIs<SmsRequestResult.NoConnection>(first)
+        assertEquals(LinkState.NO_NETWORK, first.link)
 
         assertIs<SmsVerifyResult.NoConnection>(api.verifySms("r", "1"))
-        assertIs<RegisterResult.NoConnection>(api.register("rt", ключ, ключ))
+        assertIs<RegisterResult.NoConnection>(api.register("rt", key, key))
     }
 }

@@ -25,22 +25,22 @@ import androidx.compose.ui.unit.dp
  * двадцати чатов был двадцатью карточками, каждая из которых просила внимания.
  */
 @Composable
-fun СтрокаСписка(
+fun ListLine(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     /**
      * Слева: обычно [Аватар]. Именно квадрат — «кто-то или что-то».
      */
-    слева: (@Composable () -> Unit)? = null,
+    left: (@Composable () -> Unit)? = null,
     /**
      * Справа: время, [Счётчик], замок. В макете это `.мета` — столбик, прижатый к
      * правому краю, и он не сжимается: время не должно уезжать от чужого длинного имени.
      */
-    справа: (@Composable () -> Unit)? = null,
+    right: (@Composable () -> Unit)? = null,
     /** Середина: имя и превью. Занимает остаток и обрезается первой. */
-    середина: @Composable () -> Unit,
+    middle: @Composable () -> Unit,
 ) {
-    val цвета = Тима.цвета
+    val colors = Tima.colors
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -49,24 +49,24 @@ fun СтрокаСписка(
             // между строками: разделитель-элемент в списке приходится вставлять
             // вызывающему, и он однажды забудет — либо поставит лишний в конце.
             .drawBehind {
-                val толщина = 1.dp.toPx()
+                val thickness = 1.dp.toPx()
                 drawLine(
-                    color = цвета.линия,
-                    start = Offset(0f, size.height - толщина / 2),
-                    end = Offset(size.width, size.height - толщина / 2),
-                    strokeWidth = толщина,
+                    color = colors.line,
+                    start = Offset(0f, size.height - thickness / 2),
+                    end = Offset(size.width, size.height - thickness / 2),
+                    strokeWidth = thickness,
                 )
             }
-            .padding(horizontal = TimaSpacing.о4, vertical = TimaSpacing.о3),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о3),
+            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about3),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        слева?.invoke()
+        left?.invoke()
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) { середина() }
-        справа?.let {
+        ) { middle() }
+        right?.let {
             Column(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -82,15 +82,15 @@ fun СтрокаСписка(
  * внимание.
  */
 @Composable
-fun ЗаголовокРаздела(текст: String, modifier: Modifier = Modifier) = Подпись(
-    текст = текст.uppercase(),
+fun SectionTitle(text: String, modifier: Modifier = Modifier) = Caption(
+    text = text.uppercase(),
     modifier = modifier.padding(
-        start = TimaSpacing.о4,
-        end = TimaSpacing.о4,
-        top = TimaSpacing.о4,
-        bottom = TimaSpacing.о2,
+        start = TimaSpacing.about4,
+        end = TimaSpacing.about4,
+        top = TimaSpacing.about4,
+        bottom = TimaSpacing.about2,
     ),
-    кегль = TimaType.щ6,
-    вес = androidx.compose.ui.text.font.FontWeight.ExtraBold,
-    цвет = Тима.цвета.текст3,
+    fontSize = TimaType.sz6,
+    weight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
+    color = Tima.colors.text3,
 )

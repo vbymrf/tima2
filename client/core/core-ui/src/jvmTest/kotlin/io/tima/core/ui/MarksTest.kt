@@ -5,9 +5,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import io.tima.testui.Снимок
-import io.tima.testui.снять
-import io.tima.testui.тема
+import io.tima.testui.Snapshot
+import io.tima.testui.capture
+import io.tima.testui.theme
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
  * проверен, пока его не увидели нарисованным**, и проверка обязана уметь отличить
  * «нарисовалось» от «ничего не нарисовалось».
  */
-class ЗнакиTest {
+class MarksTest {
 
     /**
      * Каждый знак действительно рисует.
@@ -29,15 +29,15 @@ class ЗнакиTest {
      */
     @Test
     fun каждый_знак_рисует_хоть_что_то() {
-        for ((имя, содержимое) in ВСЕ_ЗНАКИ) {
-            for (тёмная in listOf(false, true)) {
-                val снимок = снять("знак-$имя", 32, 32, тёмная, содержимое = содержимое)
-                val фон = тема(if (тёмная) "тёмная" else "светлая").поверхность
-                val своих = снимок.пиксели().count { !Снимок.близки(it, фон) }
+        for ((name, content) in ALL_GLYPHS) {
+            for (dark in listOf(false, true)) {
+                val snapshot = capture("знак-$name", 32, 32, dark, content = content)
+                val background = theme(if (dark) "тёмная" else "светлая").surface
+                val own = snapshot.pixels().count { !Snapshot.close(it, background) }
                 assertTrue(
-                    своих > 8,
-                    "$имя (${if (тёмная) "тёмная" else "светлая"}): знак не нарисовался — " +
-                        "своих пикселей всего $своих",
+                    own > 8,
+                    "$name (${if (dark) "dark" else "light"}): знак не нарисовался — " +
+                        "своих пикселей всего $own",
                 )
             }
         }
@@ -52,28 +52,28 @@ class ЗнакиTest {
      */
     @Test
     fun знаки_не_повторяют_друг_друга() {
-        val снимки = ВСЕ_ЗНАКИ.map { (имя, содержимое) ->
-            имя to снять("различие-$имя", 32, 32, тёмная = false, содержимое = содержимое)
+        val snapshots = ALL_GLYPHS.map { (name, content) ->
+            name to capture("различие-$name", 32, 32, dark = false, content = content)
         }
-        for (i in снимки.indices) {
-            for (j in i + 1 until снимки.size) {
-                val расхождение = снимки[i].second.расхождение(снимки[j].second)
+        for (i in snapshots.indices) {
+            for (j in i + 1 until snapshots.size) {
+                val difference = snapshots[i].second.difference(snapshots[j].second)
                 assertTrue(
-                    расхождение > 0.01,
-                    "${снимки[i].first} и ${снимки[j].first} нарисованы одинаково",
+                    difference > 0.01,
+                    "${snapshots[i].first} и ${snapshots[j].first} нарисованы одинаково",
                 )
             }
         }
     }
 
     private companion object {
-        val ВСЕ_ЗНАКИ: List<Pair<String, @Composable () -> Unit>> = listOf(
-            "ждёт" to { Box(Modifier.padding(10.dp)) { Отметка(ВидОтметки.Ждёт) } },
-            "ушло" to { Box(Modifier.padding(10.dp)) { Отметка(ВидОтметки.Ушло) } },
-            "не-ушло" to { Box(Modifier.padding(10.dp)) { Отметка(ВидОтметки.НеУшло) } },
-            "влево" to { Box(Modifier.padding(8.dp)) { Стрелка(Сторона.Влево) } },
-            "вправо" to { Box(Modifier.padding(8.dp)) { Стрелка(Сторона.Вправо) } },
-            "вверх" to { Box(Modifier.padding(8.dp)) { Стрелка(Сторона.Вверх) } },
+        val ALL_GLYPHS: List<Pair<String, @Composable () -> Unit>> = listOf(
+            "ждёт" to { Box(Modifier.padding(10.dp)) { Mark(MarkKind.Waits) } },
+            "ушло" to { Box(Modifier.padding(10.dp)) { Mark(MarkKind.Left) } },
+            "не-ушло" to { Box(Modifier.padding(10.dp)) { Mark(MarkKind.NotLeft) } },
+            "влево" to { Box(Modifier.padding(8.dp)) { Arrow(Side.Left) } },
+            "вправо" to { Box(Modifier.padding(8.dp)) { Arrow(Side.Right) } },
+            "вверх" to { Box(Modifier.padding(8.dp)) { Arrow(Side.Up) } },
         )
     }
 }

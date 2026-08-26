@@ -18,23 +18,23 @@ import kotlinx.coroutines.launch
  * с которыми есть переписка, столько, сколько переписок, — это десятки, а не тысячи,
  * и второй запрос на каждую букву был бы работой ради работы.
  */
-class КнигаStore(
+class BookStore(
     contacts: ObserveContacts,
     private val scope: CoroutineScope,
 ) {
-    private val _state = MutableStateFlow(КнигаState())
-    val state: StateFlow<КнигаState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(BookState())
+    val state: StateFlow<BookState> = _state.asStateFlow()
 
     init {
         scope.launch {
-            contacts.list().collect { люди ->
-                _state.value = _state.value.copy(все = люди)
+            contacts.list().collect { people ->
+                _state.value = _state.value.copy(all = people)
             }
         }
     }
 
-    fun поискИзменён(строка: String) {
-        _state.value = _state.value.copy(поиск = строка)
+    fun changedSearch(line: String) {
+        _state.value = _state.value.copy(search = line)
     }
 }
 
@@ -42,9 +42,9 @@ class КнигаStore(
  * @param все всё, что пришло из базы.
  * @param поиск строка фильтра. Пустая — показываются все.
  */
-data class КнигаState(
-    val все: List<Contact> = emptyList(),
-    val поиск: String = "",
+data class BookState(
+    val all: List<Contact> = emptyList(),
+    val search: String = "",
 ) {
     /**
      * Что показать.
@@ -53,16 +53,16 @@ data class КнигаState(
      * искать больше нечего, а исключать его из поиска значило бы прятать того, кто
      * в списке есть.
      */
-    val видимые: List<Contact>
+    val visible: List<Contact>
         get() {
-            val запрос = поиск.trim()
-            if (запрос.isEmpty()) return все
-            return все.filter { человек ->
-                человек.name?.contains(запрос, ignoreCase = true) == true ||
-                    человек.userId.contains(запрос, ignoreCase = true)
+            val request = search.trim()
+            if (request.isEmpty()) return all
+            return all.filter { person ->
+                person.name?.contains(request, ignoreCase = true) == true ||
+                    person.userId.contains(request, ignoreCase = true)
             }
         }
 
     /** Список пуст потому, что ничего не нашлось, а не потому, что переписок нет. */
-    val ничегоНеНашлось: Boolean get() = все.isNotEmpty() && видимые.isEmpty()
+    val notFoundNothing: Boolean get() = all.isNotEmpty() && visible.isEmpty()
 }

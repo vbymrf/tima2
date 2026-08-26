@@ -18,74 +18,74 @@ import kotlinx.coroutines.launch
  * «Телефон». Нажатие без вопроса означает, что человек однажды выкинет то устройство, с
  * которого читает.
  */
-class УстройстваStore(
+class DevicesStore(
     private val devices: MyDevices,
     private val scope: CoroutineScope,
 ) {
 
-    private val _state = MutableStateFlow(УстройстваState(ждём = true))
-    val state: StateFlow<УстройстваState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(DevicesState(expect = true))
+    val state: StateFlow<DevicesState> = _state.asStateFlow()
 
     init {
-        обновить()
+        refresh()
     }
 
-    fun обновить() {
-        _state.value = _state.value.copy(ждём = true, беда = null)
+    fun refresh() {
+        _state.value = _state.value.copy(expect = true, trouble = null)
         scope.launch {
-            _state.value = when (val шаг = devices.список()) {
+            _state.value = when (val step = devices.list()) {
                 is DevicesStep.Devices -> _state.value.copy(
-                    устройства = шаг.devices,
-                    ждём = false,
-                    беда = null,
+                    devices = step.devices,
+                    expect = false,
+                    trouble = null,
                 )
                 is DevicesStep.Offline -> _state.value.copy(
-                    ждём = false,
-                    беда = "Нет связи — список показать не из чего",
+                    expect = false,
+                    trouble = "Нет связи — список показать не из чего",
                 )
-                is DevicesStep.Refused -> _state.value.copy(ждём = false, беда = шаг.reason)
+                is DevicesStep.Refused -> _state.value.copy(expect = false, trouble = step.reason)
             }
         }
     }
 
     /** Человек нажал «Отключить» у строки: спрашиваем. */
-    fun спросить(deviceId: String) {
-        _state.value = _state.value.copy(спрашиваем = deviceId, беда = null)
+    fun ask(deviceId: String) {
+        _state.value = _state.value.copy(ask = deviceId, trouble = null)
     }
 
     /** Передумал. */
-    fun передумал() {
-        _state.value = _state.value.copy(спрашиваем = null)
+    fun changedMind() {
+        _state.value = _state.value.copy(ask = null)
     }
 
     /** Подтвердил отключение. */
-    fun отключить() {
-        val id = _state.value.спрашиваем ?: return
-        if (_state.value.ждём) return
-        _state.value = _state.value.copy(ждём = true, беда = null)
+    fun revoke() {
+        val id = _state.value.ask ?: return
+        if (_state.value.expect) return
+        _state.value = _state.value.copy(expect = true, trouble = null)
 
         scope.launch {
-            when (val шаг = devices.отключить(id)) {
+            when (val step = devices.revoke(id)) {
                 // Список перечитываем, а не правим на месте: сервер мог отозвать не только
                 // это устройство (например, чужая привязка отвалилась), и правка по памяти
                 // разошлась бы с действительностью.
                 RevokeStep.Revoked, RevokeStep.Gone -> {
-                    _state.value = _state.value.copy(спрашиваем = null, ждём = false)
-                    обновить()
+                    _state.value = _state.value.copy(ask = null, expect = false)
+                    refresh()
                 }
                 RevokeStep.LastDevice -> _state.value = _state.value.copy(
-                    спрашиваем = null,
-                    ждём = false,
-                    беда = "Это единственное устройство аккаунта — отключить его нельзя",
+                    ask = null,
+                    expect = false,
+                    trouble = "Это единственное устройство аккаунта — отключить его нельзя",
                 )
                 is RevokeStep.Offline -> _state.value = _state.value.copy(
-                    ждём = false,
-                    беда = "Нет связи — устройство не отключено",
+                    expect = false,
+                    trouble = "Нет связи — устройство не отключено",
                 )
                 is RevokeStep.Refused -> _state.value = _state.value.copy(
-                    спрашиваем = null,
-                    ждём = false,
-                    беда = шаг.reason,
+                    ask = null,
+                    expect = false,
+                    trouble = step.reason,
                 )
             }
         }
@@ -99,9 +99,9 @@ class УстройстваStore(
  *   нет. Хранится здесь, а не в экране: вопрос — это состояние, и после поворота телефона
  *   он должен остаться тем же.
  */
-data class УстройстваState(
-    val устройства: List<AccountDevice> = emptyList(),
-    val ждём: Boolean = false,
-    val спрашиваем: String? = null,
-    val беда: String? = null,
+data class DevicesState(
+    val devices: List<AccountDevice> = emptyList(),
+    val expect: Boolean = false,
+    val ask: String? = null,
+    val trouble: String? = null,
 )

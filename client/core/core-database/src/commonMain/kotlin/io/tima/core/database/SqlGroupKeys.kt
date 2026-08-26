@@ -39,7 +39,7 @@ class SqlGroupKeys(
     override fun versions(groupId: String): List<Int> =
         q.groupKeyVersions(groupId).executeAsList().map { it.toInt() }
 
-    override fun отметитьОтправку(groupId: String, version: Int): Int =
+    override fun markSend(groupId: String, version: Int): Int =
         db.transactionWithResult {
             q.bumpSentCount(group_id = groupId, version = version.toLong())
             // Читаем в той же транзакции: иначе между инкрементом и чтением встрянет

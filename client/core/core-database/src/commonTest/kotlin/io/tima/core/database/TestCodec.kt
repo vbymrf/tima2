@@ -9,12 +9,12 @@ import io.tima.domain.chat.MessageBodyCodec
  * не знает — сюда приезжает доменный порт. Проверяется здесь не упаковка, а то, что
  * переходник тело читает и что нечитаемое не роняет страницу.
  */
-internal object Кодек : MessageBodyCodec {
+internal object Codec : MessageBodyCodec {
     /** Тело, которое кодек читать отказывается: у входящего это «ключа нет». */
-    val НЕЧИТАЕМОЕ: ByteArray = byteArrayOf(-1)
+    val UNREADABLE: ByteArray = byteArrayOf(-1)
 
     override fun encodeText(text: String): ByteArray = text.encodeToByteArray()
 
     override fun decodeText(body: ByteArray): String? =
-        if (body.contentEquals(НЕЧИТАЕМОЕ)) null else body.decodeToString()
+        if (body.contentEquals(UNREADABLE)) null else body.decodeToString()
 }

@@ -1,9 +1,9 @@
 package io.tima.feature.chat
 
-import io.tima.testui.ЧУЖОЙ_ФОН
-import io.tima.testui.обеТемы
-import io.tima.testui.снять
-import io.tima.testui.тема
+import io.tima.testui.FOREIGN_BACKGROUND
+import io.tima.testui.bothThemes
+import io.tima.testui.capture
+import io.tima.testui.theme
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -15,24 +15,24 @@ import kotlin.test.assertTrue
  * от беды**. Последнее — не мелочь: человек, которого нет в мессенджере, это не ошибка
  * ввода, и если сказать это тем же тоном, он будет искать опечатку в своём номере.
  */
-class ЭкранНовойПерепискиTest {
+class NewChatScreenTest {
 
     /** Экран заливает свой фон (находка 29): снимается на краске, которой в палитре нет. */
     @Test
     fun экран_заливает_свой_фон() {
-        val снимки = обеТемы("новая-фон", ШИРИНА, ВЫСОТА, подложка = ЧУЖОЙ_ФОН) {
-            экран(НоваяПерепискаState())
+        val snapshots = bothThemes("новая-фон", WIDTH, HEIGHT, backdrop = FOREIGN_BACKGROUND) {
+            screen(NewChatState())
         }
-        for ((имя, снимок) in снимки) {
-            assertTrue(!снимок.есть(ЧУЖОЙ_ФОН), "$имя: сквозь экран видна подложка")
+        for ((name, snapshot) in snapshots) {
+            assertTrue(!snapshot.has(FOREIGN_BACKGROUND), "$name: сквозь экран видна подложка")
         }
     }
 
     @Test
     fun экран_рисуется_в_обеих_темах() {
-        val снимки = обеТемы("новая", ШИРИНА, ВЫСОТА) { экран(НоваяПерепискаState()) }
-        val расхождение = снимки.getValue("светлая").расхождение(снимки.getValue("тёмная"))
-        assertTrue(расхождение > 0.10, "темы расходятся лишь на ${(расхождение * 100).toInt()}%")
+        val snapshots = bothThemes("новая", WIDTH, HEIGHT) { screen(NewChatState()) }
+        val difference = snapshots.getValue("светлая").difference(snapshots.getValue("тёмная"))
+        assertTrue(difference > 0.10, "темы расходятся лишь на ${(difference * 100).toInt()}%")
     }
 
     /**
@@ -43,10 +43,10 @@ class ЭкранНовойПерепискиTest {
      */
     @Test
     fun у_подокна_шапка_без_плашки() {
-        for ((имя, снимок) in обеТемы("новая-шапка", ШИРИНА, ВЫСОТА) { экран(НоваяПерепискаState()) }) {
+        for ((name, snapshot) in bothThemes("новая-шапка", WIDTH, HEIGHT) { screen(NewChatState()) }) {
             assertTrue(
-                !снимок.естьПятно(тема(имя).навигация, y = 0 until 40, сторона = 20),
-                "$имя: у подокна появилась плашка окна",
+                !snapshot.patchHas(theme(name).navigation, y = 0 until 40, side = 20),
+                "$name: у подокна появилась плашка окна",
             )
         }
     }
@@ -54,14 +54,14 @@ class ЭкранНовойПерепискиTest {
     /** Набранный номер не теряется при отказе — то же правило, что на входе. */
     @Test
     fun отказ_нарисован_и_номер_остался() {
-        val чисто = снять("новая-чисто", ШИРИНА, ВЫСОТА, тёмная = false) {
-            экран(НоваяПерепискаState(номер = "+79990000001"))
+        val clean = capture("новая-чисто", WIDTH, HEIGHT, dark = false) {
+            screen(NewChatState(number = "+79990000001"))
         }
-        val сБедой = снять("новая-беда", ШИРИНА, ВЫСОТА, тёмная = false) {
-            экран(НоваяПерепискаState(номер = "+79990000001", беда = "Нет связи — повторим через 5 с"))
+        val withTrouble = capture("новая-беда", WIDTH, HEIGHT, dark = false) {
+            screen(NewChatState(number = "+79990000001", trouble = "Нет связи — повторим через 5 с"))
         }
 
-        assertTrue(сБедой.расхождение(чисто) > 0.0, "отказ не нарисовался вовсе")
+        assertTrue(withTrouble.difference(clean) > 0.0, "отказ не нарисовался вовсе")
     }
 
     /**
@@ -72,26 +72,26 @@ class ЭкранНовойПерепискиTest {
      */
     @Test
     fun приглашение_нарисовано() {
-        val чисто = снять("новая-чисто", ШИРИНА, ВЫСОТА, тёмная = false) {
-            экран(НоваяПерепискаState(номер = "+79990000001"))
+        val clean = capture("новая-чисто", WIDTH, HEIGHT, dark = false) {
+            screen(NewChatState(number = "+79990000001"))
         }
-        val позвать = снять("новая-позвать", ШИРИНА, ВЫСОТА, тёмная = false) {
-            экран(НоваяПерепискаState(номер = "+79990000001", позвать = true))
+        val invite = capture("новая-позвать", WIDTH, HEIGHT, dark = false) {
+            screen(NewChatState(number = "+79990000001", invite = true))
         }
 
-        assertTrue(позвать.расхождение(чисто) > 0.0, "приглашение не нарисовалось")
+        assertTrue(invite.difference(clean) > 0.0, "приглашение не нарисовалось")
     }
 
     private companion object {
-        const val ШИРИНА = 380
-        const val ВЫСОТА = 600
+        const val WIDTH = 380
+        const val HEIGHT = 600
 
         @androidx.compose.runtime.Composable
-        fun экран(состояние: НоваяПерепискаState) = ЭкранНовойПереписки(
-            состояние = состояние,
-            onНомер = {},
-            onНайти = {},
-            onНазад = {},
+        fun screen(state: NewChatState) = NewChatScreen(
+            state = state,
+            onNumber = {},
+            onFind = {},
+            onBack = {},
         )
     }
 }

@@ -32,19 +32,19 @@ import io.tima.domain.account.Session
  * 3. **Переписка без известного собеседника не отправляется.** `peer_id` берётся из
  *    таблицы `chats`; нет его — нечего спрашивать у сервера, и сообщение честно ждёт.
  */
-class Отправитель(
-    private val окружение: Окружение,
-    private val сеть: Сеть,
-    private val сессия: Session,
-    личность: DeviceIdentity,
+class Sender(
+    private val environment: Environment,
+    private val network: Network,
+    private val session: Session,
+    identity: DeviceIdentity,
 ) {
 
-    private val насос = OutboxPump(окружение.очередь)
+    private val pump = OutboxPump(environment.queue)
 
-    private val сборщик = OutgoingSealer(сессия.userId, сессия.deviceId, личность)
+    private val builder = OutgoingSealer(session.userId, session.deviceId, identity)
 
     /** Что помешало проходу. Показывается человеку одной строкой, а не глотается. */
-    var последняяБеда: String? = null
+    var lastTrouble: String? = null
         private set
 
     /**
@@ -53,32 +53,32 @@ class Отправитель(
      * @return сколько сообщений получили исход. Ноль означает «нечего отправлять» либо
      *   «не удалось подготовиться» — второе видно по [последняяБеда].
      */
-    suspend fun проход(): Int {
-        val ждущие = окружение.очередь.pending()
+    suspend fun pass(): Int {
+        val waiting = environment.queue.pending()
             .filter { it.state == OutboxState.QUEUED }
             .map { it.chatId }
             .distinct()
-        if (ждущие.isEmpty()) return 0
+        if (waiting.isEmpty()) return 0
 
-        val эпохи = HashMap<String, Long>()
-        val сборщики = HashMap<String, (OutboxEntry) -> ByteArray>()
-        for (chatId in ждущие) {
-            val готовое = подготовить(chatId) ?: continue
-            эпохи[chatId] = готовое.first
-            сборщики[chatId] = готовое.second
+        val epoch = HashMap<String, Long>()
+        val builders = HashMap<String, (OutboxEntry) -> ByteArray>()
+        for (chatId in waiting) {
+            val ready = prepare(chatId) ?: continue
+            epoch[chatId] = ready.first
+            builders[chatId] = ready.second
         }
-        if (эпохи.isEmpty()) return 0
+        if (epoch.isEmpty()) return 0
 
-        return насос.runOnce(
-            эпохи = эпохи,
-            seal = { запись ->
+        return pump.runOnce(
+            epoch = epoch,
+            seal = { entry ->
                 // Сборщик выбирается по переписке записи: ключ эпохи и адресаты у каждой
                 // свои, и подставить чужой сборщик значило бы зашифровать не тем ключом.
-                val свой = сборщики[запись.chatId]
-                    ?: error("нет сборщика для переписки ${запись.chatId}: насос взял чужое")
-                свой(запись)
+                val own = builders[entry.chatId]
+                    ?: error("нет сборщика для переписки ${entry.chatId}: насос взял чужое")
+                own(entry)
             },
-            send = { готовое -> сеть.транспорт.send(готовое.entry.dedupKey, готовое.envelope) },
+            send = { ready -> network.transport.send(ready.entry.dedupKey, ready.envelope) },
         )
     }
 
@@ -89,78 +89,78 @@ class Отправитель(
      *   отправка, которая молча не происходит, — худшее из состояний, потому что человек
      *   видит «ждёт» и не знает, чего ждать.
      */
-    private suspend fun подготовить(chatId: String): Pair<Long, (OutboxEntry) -> ByteArray>? {
-        val анклав = EscrowTrust.enclaveSigningPub ?: run {
-            последняяБеда = "нет ключа подписи анклава: отправка отказана целиком"
+    private suspend fun prepare(chatId: String): Pair<Long, (OutboxEntry) -> ByteArray>? {
+        val enclave = EscrowTrust.enclaveSigningPub ?: run {
+            lastTrouble = "нет ключа подписи анклава: отправка отказана целиком"
             return null
         }
 
-        val собеседник = окружение.фактыПереписок.peerOf(chatId)
-        if (собеседник == null) {
-            последняяБеда = "у переписки $chatId неизвестен собеседник — некому адресовать"
+        val peer = environment.chatFacts.peerOf(chatId)
+        if (peer == null) {
+            lastTrouble = "у переписки $chatId неизвестен собеседник — некому адресовать"
             return null
         }
 
-        val адресаты = устройства(собеседник) ?: return null
-        val свои = устройства(сессия.userId) ?: return null
-        val все = (адресаты + свои).distinctBy { it.deviceId }
-        if (все.isEmpty()) {
-            последняяБеда = "у собеседника нет ни одного устройства"
+        val recipients = devices(peer) ?: return null
+        val own = devices(session.userId) ?: return null
+        val all = (recipients + own).distinctBy { it.deviceId }
+        if (all.isEmpty()) {
+            lastTrouble = "у собеседника нет ни одного устройства"
             return null
         }
 
-        val ключ = when (val исход = сеть.escrow.keyForChat(chatId)) {
-            is EscrowKeyResult.Keys -> исход.current
+        val key = when (val outcome = network.escrow.keyForChat(chatId)) {
+            is EscrowKeyResult.Keys -> outcome.current
             EscrowKeyResult.NoEnclave -> {
                 // Не «нет сети»: без анклава отправка невозможна в принципе, и человеку
                 // надо сказать именно это.
-                последняяБеда = "сервер без анклава escrow: отправлять нельзя"
+                lastTrouble = "сервер без анклава escrow: отправлять нельзя"
                 return null
             }
             is EscrowKeyResult.Offline -> {
-                последняяБеда = "нет связи с сервером"
+                lastTrouble = "нет связи с сервером"
                 return null
             }
             is EscrowKeyResult.Refused -> {
-                последняяБеда = "сервер отказал в ключе эпохи: ${исход.code}"
+                lastTrouble = "сервер отказал в ключе эпохи: ${outcome.code}"
                 return null
             }
         }
 
-        val проверенный = EscrowKeyVerifier.verify(
-            enclaveSigningPub = анклав,
-            id = ключ.id,
-            region = ключ.region,
-            chatId = ключ.chatId,
-            epoch = ключ.epoch,
-            publicKey = ключ.publicKey,
-            signature = ключ.signature,
-            validFromMs = ключ.validFromMs,
-            validToMs = ключ.validToMs,
-            destroyAtMs = ключ.destroyAtMs,
-            nowMs = сейчасМс(),
+        val verified = EscrowKeyVerifier.verify(
+            enclaveSigningPub = enclave,
+            id = key.id,
+            region = key.region,
+            chatId = key.chatId,
+            epoch = key.epoch,
+            publicKey = key.publicKey,
+            signature = key.signature,
+            validFromMs = key.validFromMs,
+            validToMs = key.validToMs,
+            destroyAtMs = key.destroyAtMs,
+            nowMs = msNow(),
         ).getOrElse {
             // Подпись не сошлась — это не «повторим позже», а подмена или наша ошибка.
-            последняяБеда = "подпись анклава не сошлась: ${it.message}"
+            lastTrouble = "подпись анклава не сошлась: ${it.message}"
             return null
         }
 
-        последняяБеда = null
-        return ключ.id to сборщик.sealerFor(проверенный, все)
+        lastTrouble = null
+        return key.id to builder.sealerFor(verified, all)
     }
 
-    private suspend fun устройства(userId: String): List<RecipientDevice>? =
-        when (val исход = сеть.ключи.devicesOf(userId)) {
+    private suspend fun devices(userId: String): List<RecipientDevice>? =
+        when (val outcome = network.keys.devicesOf(userId)) {
             is DeviceKeysResult.Devices ->
-                исход.devices.map { RecipientDevice(it.deviceId, it.encryptionPub) }
+                outcome.devices.map { RecipientDevice(it.deviceId, it.encryptionPub) }
 
             is DeviceKeysResult.Offline -> {
-                последняяБеда = "нет связи с сервером"
+                lastTrouble = "нет связи с сервером"
                 null
             }
 
             is DeviceKeysResult.Refused -> {
-                последняяБеда = "сервер отказал в ключах устройств: ${исход.code}"
+                lastTrouble = "сервер отказал в ключах устройств: ${outcome.code}"
                 null
             }
         }

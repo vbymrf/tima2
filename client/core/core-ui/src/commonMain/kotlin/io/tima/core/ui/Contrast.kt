@@ -19,7 +19,7 @@ import kotlin.math.pow
 object TimaContrast {
 
     /** Порог WCAG AA для обычного текста. */
-    const val ПОРОГ_ТЕКСТА: Double = 4.5
+    const val TEXT_THRESHOLD: Double = 4.5
 
     /** Порог для крупного (18 pt, либо 14 pt полужирного) текста. */
     const val ПОРОГ_КРУПНОГО: Double = 3.0
@@ -31,12 +31,12 @@ object TimaContrast {
      * от того, что под ним, и «контраст рамки» без указания подложки — число ни о чём.
      * Кому нужно — пусть сперва наложит цвет на фон ([наложить]).
      */
-    fun отношение(первый: Color, второй: Color): Double {
-        require(первый.alpha == 1f && второй.alpha == 1f) {
+    fun ratio(first: Color, second: Color): Double {
+        require(first.alpha == 1f && second.alpha == 1f) {
             "контраст считается для непрозрачных цветов; наложите на фон через наложить()"
         }
-        val a = яркость(первый)
-        val b = яркость(второй)
+        val a = brightness(first)
+        val b = brightness(second)
         return (max(a, b) + 0.05) / (min(a, b) + 0.05)
     }
 
@@ -46,23 +46,23 @@ object TimaContrast {
      * Нужно как раз для линий, рамок и приглушённого текста: в макете они заданы
      * прозрачностью, а видит человек результат наложения.
      */
-    fun наложить(поверх: Color, фон: Color): Color {
-        require(фон.alpha == 1f) { "фон обязан быть непрозрачным" }
-        val a = поверх.alpha
+    fun overlay(over: Color, background: Color): Color {
+        require(background.alpha == 1f) { "фон обязан быть непрозрачным" }
+        val a = over.alpha
         return Color(
-            red = поверх.red * a + фон.red * (1 - a),
-            green = поверх.green * a + фон.green * (1 - a),
-            blue = поверх.blue * a + фон.blue * (1 - a),
+            red = over.red * a + background.red * (1 - a),
+            green = over.green * a + background.green * (1 - a),
+            blue = over.blue * a + background.blue * (1 - a),
             alpha = 1f,
         )
     }
 
     /** Относительная яркость по WCAG: линеаризация каналов, потом взвешенная сумма. */
-    private fun яркость(цвет: Color): Double {
-        fun канал(v: Float): Double {
+    private fun brightness(color: Color): Double {
+        fun channel(v: Float): Double {
             val x = v.toDouble()
             return if (x <= 0.03928) x / 12.92 else ((x + 0.055) / 1.055).pow(2.4)
         }
-        return 0.2126 * канал(цвет.red) + 0.7152 * канал(цвет.green) + 0.0722 * канал(цвет.blue)
+        return 0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue)
     }
 }

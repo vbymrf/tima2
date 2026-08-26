@@ -35,15 +35,15 @@ class DevicesApiTest {
     private val route = ServerRoute.from(RouteConfig(host = "example.com"))
     private lateinit var engine: MockEngine
 
-    private fun api(отвечает: MockRequestHandler): DevicesApi {
-        engine = MockEngine(отвечает)
+    private fun api(responds: MockRequestHandler): DevicesApi {
+        engine = MockEngine(responds)
         return DevicesApi(route, HttpClient(engine) { timaDefaults() }, token = { "t-1" })
     }
 
-    private fun json(тело: String, статус: HttpStatusCode = HttpStatusCode.OK): MockRequestHandler =
-        { respond(тело, статус, headersOf("Content-Type", "application/json")) }
+    private fun json(body: String, status: HttpStatusCode = HttpStatusCode.OK): MockRequestHandler =
+        { respond(body, status, headersOf("Content-Type", "application/json")) }
 
-    private fun тело(запрос: HttpRequestData): String = (запрос.body as TextContent).text
+    private fun body(request: HttpRequestData): String = (request.body as TextContent).text
 
     @Test
     fun объявление_уходит_путом_с_токеном_и_платформой() = runTest {
@@ -51,14 +51,14 @@ class DevicesApiTest {
 
         api.declarePlatform("android")
 
-        val запрос = engine.requestHistory.single()
-        assertEquals("PUT", запрос.method.value, "объявление идёт PUT: оно идемпотентно")
+        val request = engine.requestHistory.single()
+        assertEquals("PUT", request.method.value, "объявление идёт PUT: оно идемпотентно")
         assertTrue(
-            запрос.url.encodedPath.endsWith("/api/v1/devices/me/platform"),
-            "не тот путь: ${запрос.url}",
+            request.url.encodedPath.endsWith("/api/v1/devices/me/platform"),
+            "не тот путь: ${request.url}",
         )
-        assertEquals("Bearer t-1", запрос.headers["Authorization"], "ручка авторизованная")
-        assertTrue(тело(запрос).contains(""""platform":"android""""), "не то тело: ${тело(запрос)}")
+        assertEquals("Bearer t-1", request.headers["Authorization"], "ручка авторизованная")
+        assertTrue(body(request).contains(""""platform":"android""""), "not that body: ${body(request)}")
     }
 
     /**
@@ -71,10 +71,10 @@ class DevicesApiTest {
     fun ответ_сервера_а_не_своё_же_значение() = runTest {
         val api = api(json("""{"platform":"desktop"}"""))
 
-        val исход = api.declarePlatform("Desktop")
+        val outcome = api.declarePlatform("Desktop")
 
-        assertIs<PlatformResult.Declared>(исход)
-        assertEquals("desktop", исход.platform)
+        assertIs<PlatformResult.Declared>(outcome)
+        assertEquals("desktop", outcome.platform)
     }
 
     /** Неизвестная платформа — отказ сервера, а не тихое «ну ладно». */
@@ -87,11 +87,11 @@ class DevicesApiTest {
             ),
         )
 
-        val исход = api.declarePlatform("windows-phone")
+        val outcome = api.declarePlatform("windows-phone")
 
-        assertIs<PlatformResult.Refused>(исход)
-        assertEquals(400, исход.status)
-        assertEquals("bad_platform", исход.code)
+        assertIs<PlatformResult.Refused>(outcome)
+        assertEquals(400, outcome.status)
+        assertEquals("bad_platform", outcome.code)
     }
 
     // ── список и отзыв ──────────────────────────────────────────────────────
@@ -108,14 +108,14 @@ class DevicesApiTest {
             ),
         )
 
-        val исход = api.mine()
+        val outcome = api.mine()
 
-        assertIs<MyDevicesResult.Devices>(исход)
-        assertEquals(2, исход.devices.size)
-        assertEquals("Телефон", исход.devices[0].name)
-        assertTrue(исход.devices[0].current, "своё устройство обязано быть помечено")
-        assertEquals(false, исход.devices[1].current)
-        assertEquals("2026-08-23T10:00:00Z", исход.devices[1].createdAt)
+        assertIs<MyDevicesResult.Devices>(outcome)
+        assertEquals(2, outcome.devices.size)
+        assertEquals("Телефон", outcome.devices[0].name)
+        assertTrue(outcome.devices[0].current, "своё устройство обязано быть помечено")
+        assertEquals(false, outcome.devices[1].current)
+        assertEquals("2026-08-23T10:00:00Z", outcome.devices[1].createdAt)
     }
 
     /** Строка без device_id пропускается, а не роняет разбор всего списка. */
@@ -123,10 +123,10 @@ class DevicesApiTest {
     fun строка_без_идентификатора_не_роняет_список() = runTest {
         val api = api(json("""{"devices":[{"name":"Без id"},{"device_id":"d-1","name":"Телефон"}]}"""))
 
-        val исход = api.mine()
+        val outcome = api.mine()
 
-        assertIs<MyDevicesResult.Devices>(исход)
-        assertEquals(1, исход.devices.size)
+        assertIs<MyDevicesResult.Devices>(outcome)
+        assertEquals(1, outcome.devices.size)
     }
 
     @Test
@@ -135,10 +135,10 @@ class DevicesApiTest {
 
         assertEquals(RevokeResult.Revoked, api.revoke("d-2"))
 
-        val запрос = engine.requestHistory.single()
-        assertEquals("DELETE", запрос.method.value)
-        assertTrue(запрос.url.encodedPath.endsWith("/api/v1/devices/d-2"), "не тот путь: ${запрос.url}")
-        assertEquals("Bearer t-1", запрос.headers["Authorization"])
+        val request = engine.requestHistory.single()
+        assertEquals("DELETE", request.method.value)
+        assertTrue(request.url.encodedPath.endsWith("/api/v1/devices/d-2"), "не тот путь: ${request.url}")
+        assertEquals("Bearer t-1", request.headers["Authorization"])
     }
 
     /**
@@ -164,8 +164,8 @@ class DevicesApiTest {
     fun отказ_связи_отличается_от_отказа_сервера() = runTest {
         val api = api { throw IOException("сеть отвалилась") }
 
-        val исход = api.declarePlatform("android")
+        val outcome = api.declarePlatform("android")
 
-        assertIs<PlatformResult.NoConnection>(исход)
+        assertIs<PlatformResult.NoConnection>(outcome)
     }
 }

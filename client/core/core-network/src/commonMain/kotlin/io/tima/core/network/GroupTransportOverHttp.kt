@@ -20,7 +20,7 @@ class GroupTransportOverHttp(private val api: GroupMessagesApi) : GroupTransport
         signature: ByteArray,
         createdAtUnixMs: Long,
     ): GroupSendStep {
-        val ответ = api.send(
+        val answer = api.send(
             groupId = groupId,
             clientMsgId = clientMsgId,
             kind = kind,
@@ -29,14 +29,14 @@ class GroupTransportOverHttp(private val api: GroupMessagesApi) : GroupTransport
             signature = signature,
             createdAtUnixMs = createdAtUnixMs,
         )
-        return when (ответ) {
-            is SendGroupResult.Sent -> GroupSendStep.Sent(ответ.messageId)
-            is SendGroupResult.Duplicate -> GroupSendStep.Duplicate(ответ.messageId)
+        return when (answer) {
+            is SendGroupResult.Sent -> GroupSendStep.Sent(answer.messageId)
+            is SendGroupResult.Duplicate -> GroupSendStep.Duplicate(answer.messageId)
             SendGroupResult.UnknownKeyVersion -> GroupSendStep.UnknownKeyVersion
             SendGroupResult.Banned -> GroupSendStep.Banned
-            is SendGroupResult.SlowMode -> GroupSendStep.SlowMode(ответ.retryAfterSec)
-            is SendGroupResult.NoConnection -> GroupSendStep.Offline(ответ.link.retryDelayMs)
-            is SendGroupResult.Refused -> GroupSendStep.Refused(ответ.code)
+            is SendGroupResult.SlowMode -> GroupSendStep.SlowMode(answer.retryAfterSec)
+            is SendGroupResult.NoConnection -> GroupSendStep.Offline(answer.link.retryDelayMs)
+            is SendGroupResult.Refused -> GroupSendStep.Refused(answer.code)
         }
     }
 }

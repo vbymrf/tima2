@@ -1,10 +1,10 @@
 package io.tima.feature.auth
 
 import androidx.compose.runtime.Composable
-import io.tima.testui.ЧУЖОЙ_ФОН
-import io.tima.testui.обеТемы
-import io.tima.testui.снять
-import io.tima.testui.тема
+import io.tima.testui.FOREIGN_BACKGROUND
+import io.tima.testui.bothThemes
+import io.tima.testui.capture
+import io.tima.testui.theme
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
  * темах, отказ видно, подсказка стенда видна, а плашки окна на входе нет — уходить с этого
  * экрана некуда, и вопрос «в каком я окне» здесь не стоит.
  */
-class ЭкранВходаTest {
+class EntryScreenTest {
 
     /**
      * **Экран заливает свой фон** (находка 29).
@@ -26,17 +26,17 @@ class ЭкранВходаTest {
      */
     @Test
     fun экран_заливает_свой_фон() {
-        val снимки = обеТемы("вход-фон", ШИРИНА, ВЫСОТА, подложка = ЧУЖОЙ_ФОН) { экран(AuthState.Телефон()) }
-        for ((имя, снимок) in снимки) {
-            assertTrue(!снимок.есть(ЧУЖОЙ_ФОН), "$имя: сквозь экран видна подложка")
+        val snapshots = bothThemes("вход-фон", WIDTH, HEIGHT, backdrop = FOREIGN_BACKGROUND) { screen(AuthState.Phone()) }
+        for ((name, snapshot) in snapshots) {
+            assertTrue(!snapshot.has(FOREIGN_BACKGROUND), "$name: сквозь экран видна подложка")
         }
     }
 
     @Test
     fun экран_рисуется_в_обеих_темах() {
-        val снимки = обеТемы("вход-телефон", ШИРИНА, ВЫСОТА) { экран(AuthState.Телефон()) }
-        val расхождение = снимки.getValue("светлая").расхождение(снимки.getValue("тёмная"))
-        assertTrue(расхождение > 0.10, "темы расходятся лишь на ${(расхождение * 100).toInt()}%")
+        val snapshots = bothThemes("вход-телефон", WIDTH, HEIGHT) { screen(AuthState.Phone()) }
+        val difference = snapshots.getValue("светлая").difference(snapshots.getValue("тёмная"))
+        assertTrue(difference > 0.10, "темы расходятся лишь на ${(difference * 100).toInt()}%")
     }
 
     /**
@@ -48,23 +48,23 @@ class ЭкранВходаTest {
      */
     @Test
     fun отказ_нарисован() {
-        val без = снять("вход-без-беды", ШИРИНА, ВЫСОТА, тёмная = false) { экран(AuthState.Телефон(номер = "+79990000001")) }
-        val с = снять("вход-беда", ШИРИНА, ВЫСОТА, тёмная = false) {
-            экран(AuthState.Телефон(номер = "+79990000001", беда = "Нет связи с сервером — повторим через 5 с"))
+        val without = capture("вход-без-беды", WIDTH, HEIGHT, dark = false) { screen(AuthState.Phone(number = "+79990000001")) }
+        val with = capture("вход-беда", WIDTH, HEIGHT, dark = false) {
+            screen(AuthState.Phone(number = "+79990000001", trouble = "Нет связи с сервером — повторим через 5 с"))
         }
 
-        assertTrue(с.расхождение(без) > 0.0, "отказ не нарисовался вовсе")
+        assertTrue(with.difference(without) > 0.0, "отказ не нарисовался вовсе")
     }
 
     /** Подсказка стенда видна: без неё сквозной прогон требовал бы настоящей SMS. */
     @Test
     fun подсказка_стенда_нарисована() {
-        val без = снять("вход-код", ШИРИНА, ВЫСОТА, тёмная = false) { экран(код()) }
-        val с = снять("вход-код-стенд", ШИРИНА, ВЫСОТА, тёмная = false) {
-            экран(код().copy(подсказкаСтенда = "424242"))
+        val without = capture("вход-код", WIDTH, HEIGHT, dark = false) { screen(code()) }
+        val with = capture("вход-код-стенд", WIDTH, HEIGHT, dark = false) {
+            screen(code().copy(standHint = "424242"))
         }
 
-        assertTrue(с.расхождение(без) > 0.0)
+        assertTrue(with.difference(without) > 0.0)
     }
 
     /**
@@ -75,29 +75,29 @@ class ЭкранВходаTest {
      */
     @Test
     fun плашки_окна_на_входе_нет() {
-        for ((имя, снимок) in обеТемы("вход-шапка", ШИРИНА, ВЫСОТА) { экран(AuthState.Телефон()) }) {
+        for ((name, snapshot) in bothThemes("вход-шапка", WIDTH, HEIGHT) { screen(AuthState.Phone()) }) {
             assertTrue(
-                !снимок.естьПятно(тема(имя).навигация, y = 0 until 60, сторона = 8),
-                "$имя: на входе появилась плашка окна",
+                !snapshot.patchHas(theme(name).navigation, y = 0 until 60, side = 8),
+                "$name: на входе появилась плашка окна",
             )
         }
     }
 
     private companion object {
-        const val ШИРИНА = 380
-        const val ВЫСОТА = 800
+        const val WIDTH = 380
+        const val HEIGHT = 800
 
-        fun код() = AuthState.Код(requestId = "r-1", телефон = "+79990000001", код = "1234")
+        fun code() = AuthState.Code(requestId = "r-1", phone = "+79990000001", code = "1234")
 
         @Composable
-        fun экран(состояние: AuthState) = ЭкранВхода(
-            состояние = состояние,
-            onНомер = {},
-            onКодСтраны = {},
-            onКод = {},
-            onЗапросить = {},
-            onПодтвердить = {},
-            onНазад = {},
+        fun screen(state: AuthState) = EntryScreen(
+            state = state,
+            onNumber = {},
+            onCodeCountry = {},
+            onCode = {},
+            onRequest = {},
+            onConfirm = {},
+            onBack = {},
         )
     }
 }

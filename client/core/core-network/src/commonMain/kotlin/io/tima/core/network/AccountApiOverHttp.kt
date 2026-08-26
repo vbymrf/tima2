@@ -19,19 +19,19 @@ import io.tima.domain.account.DeviceCreateStep
 class AccountApiOverHttp(private val auth: AuthApi) : AccountApi {
 
     override suspend fun requestCode(phone: String): CodeRequestStep =
-        when (val исход = auth.requestSms(phone)) {
-            is SmsRequestResult.Sent -> CodeRequestStep.CodeRequested(исход.requestId, исход.devCode)
-            is SmsRequestResult.BadPhone -> CodeRequestStep.BadPhone(исход.reason)
-            is SmsRequestResult.NoConnection -> CodeRequestStep.Offline(исход.link.retryDelayMs)
-            is SmsRequestResult.Refused -> CodeRequestStep.Refused(исход.code)
+        when (val outcome = auth.requestSms(phone)) {
+            is SmsRequestResult.Sent -> CodeRequestStep.CodeRequested(outcome.requestId, outcome.devCode)
+            is SmsRequestResult.BadPhone -> CodeRequestStep.BadPhone(outcome.reason)
+            is SmsRequestResult.NoConnection -> CodeRequestStep.Offline(outcome.link.retryDelayMs)
+            is SmsRequestResult.Refused -> CodeRequestStep.Refused(outcome.code)
         }
 
     override suspend fun submitCode(requestId: String, code: String): CodeSubmitStep =
-        when (val исход = auth.verifySms(requestId, code)) {
-            is SmsVerifyResult.Verified -> CodeSubmitStep.Accepted(исход.registrationToken)
+        when (val outcome = auth.verifySms(requestId, code)) {
+            is SmsVerifyResult.Verified -> CodeSubmitStep.Accepted(outcome.registrationToken)
             SmsVerifyResult.BadCode -> CodeSubmitStep.WrongCode
-            is SmsVerifyResult.NoConnection -> CodeSubmitStep.Offline(исход.link.retryDelayMs)
-            is SmsVerifyResult.Refused -> CodeSubmitStep.Refused(исход.code)
+            is SmsVerifyResult.NoConnection -> CodeSubmitStep.Offline(outcome.link.retryDelayMs)
+            is SmsVerifyResult.Refused -> CodeSubmitStep.Refused(outcome.code)
         }
 
     override suspend fun createDevice(
@@ -42,7 +42,7 @@ class AccountApiOverHttp(private val auth: AuthApi) : AccountApi {
         platform: String,
         forceNewIdentity: Boolean,
     ): DeviceCreateStep = when (
-        val исход = auth.register(
+        val outcome = auth.register(
             registrationToken = registrationToken,
             encryptionPub = encryptionPub,
             signingPub = signingPub,
@@ -52,10 +52,10 @@ class AccountApiOverHttp(private val auth: AuthApi) : AccountApi {
         )
     ) {
         is RegisterResult.Registered ->
-            DeviceCreateStep.Created(исход.userId, исход.deviceId, исход.accessToken)
+            DeviceCreateStep.Created(outcome.userId, outcome.deviceId, outcome.accessToken)
         RegisterResult.IdentityMismatch -> DeviceCreateStep.IdentityMismatch
         RegisterResult.TokenExpired -> DeviceCreateStep.TokenExpired
-        is RegisterResult.NoConnection -> DeviceCreateStep.Offline(исход.link.retryDelayMs)
-        is RegisterResult.Refused -> DeviceCreateStep.Refused(исход.code)
+        is RegisterResult.NoConnection -> DeviceCreateStep.Offline(outcome.link.retryDelayMs)
+        is RegisterResult.Refused -> DeviceCreateStep.Refused(outcome.code)
     }
 }

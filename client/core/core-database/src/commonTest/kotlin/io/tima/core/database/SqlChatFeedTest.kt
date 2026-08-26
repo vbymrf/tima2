@@ -23,34 +23,34 @@ import kotlin.test.assertTrue
 class SqlChatFeedTest {
 
     private val db = testDatabase()
-    private val шифр = тестовыйШифр()
+    private val cipher = testCipher()
 
     /** Байты, которые кодек телом не признает: так выглядит конверт до разбора. */
-    private val конвертБезТела = Кодек.НЕЧИТАЕМОЕ
-    private val outbox = SqlOutboxStore(db, шифр)
-    private val inbox = SqlInboxStore(db, шифр)
-    private val feed = SqlChatFeed(db, Кодек, шифр, Я)
+    private val bodyWithoutEnvelope = Codec.UNREADABLE
+    private val outbox = SqlOutboxStore(db, cipher)
+    private val inbox = SqlInboxStore(db, cipher)
+    private val feed = SqlChatFeed(db, Codec, cipher, Me)
     private val chat = ObserveChat(feed)
 
-    private fun исходящее(
+    private fun outgoing(
         dedupKey: String,
         state: OutboxState,
         clientTs: Long = 1_000,
         serverTs: Long? = null,
-        тело: ByteArray = Кодек.encodeText("привет"),
+        body: ByteArray = Codec.encodeText("привет"),
     ) {
         outbox.putIfAbsent(
             OutboxEntry(
                 dedupKey = dedupKey,
                 chatId = "chat-1",
-                body = тело,
+                body = body,
                 state = OutboxState.QUEUED,
                 createdAtMs = clientTs,
             ),
         )
-        val запись = outbox.byDedupKey(dedupKey)!!
+        val entry = outbox.byDedupKey(dedupKey)!!
         outbox.update(
-            запись.copy(
+            entry.copy(
                 state = state,
                 serverMessageId = if (serverTs != null) 42 else null,
             ),
@@ -60,23 +60,23 @@ class SqlChatFeedTest {
         }
     }
 
-    private fun входящее(
+    private fun incoming(
         messageId: Long,
         state: IncomingState,
         ts: Long = 2_000,
-        тело: ByteArray = Кодек.encodeText("ответ"),
+        body: ByteArray = Codec.encodeText("ответ"),
     ) {
         inbox.putIfAbsent(
             IncomingEntry(
                 chatId = "chat-1",
                 messageId = messageId,
-                envelope = тело,
+                envelope = body,
                 state = IncomingState.RECEIVED,
                 receivedAtMs = ts,
             ),
         )
-        val запись = inbox.byKey("chat-1", messageId)!!
-        inbox.update(запись.copy(state = state))
+        val entry = inbox.byKey("chat-1", messageId)!!
+        inbox.update(entry.copy(state = state))
     }
 
     // ── перевод состояний ────────────────────────────────────────────────────
@@ -85,19 +85,19 @@ class SqlChatFeedTest {
     fun ожидание_отправка_и_неудача_различаются_а_очередь_и_конверт_нет() = runTest {
         // Человеку нечего делать с различием «в очереди» и «конверт собран»: это одно
         // ожидание. А «не ушло» требует его решения.
-        исходящее("d-1", OutboxState.QUEUED)
-        исходящее("d-2", OutboxState.SEALED)
-        исходящее("d-3", OutboxState.SENDING)
-        исходящее("d-4", OutboxState.DEAD)
-        исходящее("d-5", OutboxState.SENT, serverTs = 5_000)
+        outgoing("d-1", OutboxState.QUEUED)
+        outgoing("d-2", OutboxState.SEALED)
+        outgoing("d-3", OutboxState.SENDING)
+        outgoing("d-4", OutboxState.DEAD)
+        outgoing("d-5", OutboxState.SENT, serverTs = 5_000)
 
-        val строки = chat.page("chat-1").first().associateBy { it.dedupKey }
+        val lines = chat.page("chat-1").first().associateBy { it.dedupKey }
 
-        assertEquals(MessageDisplay.PENDING, строки["d-1"]?.display)
-        assertEquals(MessageDisplay.PENDING, строки["d-2"]?.display)
-        assertEquals(MessageDisplay.PENDING, строки["d-3"]?.display)
-        assertEquals(MessageDisplay.FAILED, строки["d-4"]?.display)
-        assertEquals(MessageDisplay.SENT, строки["d-5"]?.display)
+        assertEquals(MessageDisplay.PENDING, lines["d-1"]?.display)
+        assertEquals(MessageDisplay.PENDING, lines["d-2"]?.display)
+        assertEquals(MessageDisplay.PENDING, lines["d-3"]?.display)
+        assertEquals(MessageDisplay.FAILED, lines["d-4"]?.display)
+        assertEquals(MessageDisplay.SENT, lines["d-5"]?.display)
     }
 
     @Test
@@ -105,34 +105,34 @@ class SqlChatFeedTest {
         // Самое опасное место схемы: состояние 1 означает SEALED у исходящего и
         // UNDECRYPTABLE у входящего. Спутать — значит показать «отправляется» на
         // нечитаемом чужом сообщении.
-        исходящее("d-1", OutboxState.SEALED) // state = 1
-        входящее(7, IncomingState.UNDECRYPTABLE) // тоже state = 1
+        outgoing("d-1", OutboxState.SEALED) // state = 1
+        incoming(7, IncomingState.UNDECRYPTABLE) // тоже state = 1
 
-        val строки = chat.page("chat-1").first()
+        val lines = chat.page("chat-1").first()
 
-        val исход = строки.single { it.outgoing }
-        val вход = строки.single { !it.outgoing }
-        assertEquals(MessageDisplay.PENDING, исход.display, "исходящее в состоянии 1 — ожидание")
-        assertEquals(MessageDisplay.UNREADABLE, вход.display, "входящее в состоянии 1 — нечитаемое")
+        val outcome = lines.single { it.outgoing }
+        val entry = lines.single { !it.outgoing }
+        assertEquals(MessageDisplay.PENDING, outcome.display, "исходящее в состоянии 1 — ожидание")
+        assertEquals(MessageDisplay.UNREADABLE, entry.display, "входящее в состоянии 1 — нечитаемое")
     }
 
     @Test
     fun входящее_прочитанное_и_сохранённое_показываются_одинаково() = runTest {
         // Различие «разобрано» и «прочитано» — дело отметок о прочтении, а не списка.
-        входящее(1, IncomingState.RECEIVED)
-        входящее(2, IncomingState.STORED)
-        входящее(3, IncomingState.READ)
+        incoming(1, IncomingState.RECEIVED)
+        incoming(2, IncomingState.STORED)
+        incoming(3, IncomingState.READ)
 
-        val виды = chat.page("chat-1").first().map { it.display }.toSet()
+        val kinds = chat.page("chat-1").first().map { it.display }.toSet()
 
-        assertEquals(setOf(MessageDisplay.RECEIVED), виды)
+        assertEquals(setOf(MessageDisplay.RECEIVED), kinds)
     }
 
     @Test
     fun неотправленное_остаётся_видимым() = runTest {
         // Из очереди DEAD уходит, из переписки — нет. Иначе человек не узнает, что
         // сообщение не дошло, и будет ждать ответа на то, чего собеседник не получал.
-        исходящее("d-1", OutboxState.DEAD)
+        outgoing("d-1", OutboxState.DEAD)
 
         assertEquals(0, outbox.pending().size, "в очереди его уже нет: DEAD терминален")
         assertEquals(1, chat.page("chat-1").first().size, "а в переписке есть")
@@ -144,28 +144,28 @@ class SqlChatFeedTest {
     fun текст_доезжает_до_строки() = runTest {
         // Экран переписки без текста не бывает, а тело лежит в базе упакованным. Читает
         // его переходник — тем же кодеком, которым тело уходит на провод.
-        исходящее("d-1", OutboxState.SENT, serverTs = 5_000, тело = Кодек.encodeText("привет"))
-        входящее(7, IncomingState.STORED, тело = Кодек.encodeText("и тебе"))
+        outgoing("d-1", OutboxState.SENT, serverTs = 5_000, body = Codec.encodeText("привет"))
+        incoming(7, IncomingState.STORED, body = Codec.encodeText("и тебе"))
 
-        val строки = chat.page("chat-1").first()
+        val lines = chat.page("chat-1").first()
 
-        assertEquals("привет", строки.single { it.outgoing }.text)
-        assertEquals("и тебе", строки.single { !it.outgoing }.text)
+        assertEquals("привет", lines.single { it.outgoing }.text)
+        assertEquals("и тебе", lines.single { !it.outgoing }.text)
     }
 
     @Test
     fun нечитаемое_тело_не_роняет_страницу() = runTest {
         // Одна испорченная запись не должна лишать человека всей переписки: страница
         // приходит целиком, а у нечитаемой строки текста просто нет.
-        входящее(1, IncomingState.UNDECRYPTABLE, тело = Кодек.НЕЧИТАЕМОЕ)
-        исходящее("d-1", OutboxState.SENT, serverTs = 5_000)
+        incoming(1, IncomingState.UNDECRYPTABLE, body = Codec.UNREADABLE)
+        outgoing("d-1", OutboxState.SENT, serverTs = 5_000)
 
-        val строки = chat.page("chat-1").first()
+        val lines = chat.page("chat-1").first()
 
-        assertEquals(2, строки.size, "нечитаемое остаётся строкой: человек видит, что сообщение было")
-        assertEquals(null, строки.single { !it.outgoing }.text)
-        assertEquals(MessageDisplay.UNREADABLE, строки.single { !it.outgoing }.display)
-        assertEquals("привет", строки.single { it.outgoing }.text, "соседнее читается как обычно")
+        assertEquals(2, lines.size, "нечитаемое остаётся строкой: человек видит, что сообщение было")
+        assertEquals(null, lines.single { !it.outgoing }.text)
+        assertEquals(MessageDisplay.UNREADABLE, lines.single { !it.outgoing }.display)
+        assertEquals("привет", lines.single { it.outgoing }.text, "соседнее читается как обычно")
     }
 
     /**
@@ -178,16 +178,16 @@ class SqlChatFeedTest {
      */
     @Test
     fun текст_входящего_появляется_только_после_разбора() = runTest {
-        val машина = io.tima.core.outbox.Inbox(inbox, nowMs = { 2_000 })
-        машина.receive("chat-1", 42, конвертБезТела)
+        val machine = io.tima.core.outbox.Inbox(inbox, nowMs = { 2_000 })
+        machine.receive("chat-1", 42, bodyWithoutEnvelope)
 
         assertEquals(null, chat.page("chat-1").first().single().text, "конверт — это ещё не текст")
 
-        машина.openNext { io.tima.core.outbox.OpenOutcome.Opened(Кодек.encodeText("и тебе"), СОБЕСЕДНИК) }
+        machine.openNext { io.tima.core.outbox.OpenOutcome.Opened(Codec.encodeText("и тебе"), PEER) }
 
-        val строка = chat.page("chat-1").first().single()
-        assertEquals("и тебе", строка.text, "после разбора тело обязано быть в строке")
-        assertEquals(MessageDisplay.RECEIVED, строка.display)
+        val line = chat.page("chat-1").first().single()
+        assertEquals("и тебе", line.text, "после разбора тело обязано быть в строке")
+        assertEquals(MessageDisplay.RECEIVED, line.display)
     }
 
     /**
@@ -199,21 +199,21 @@ class SqlChatFeedTest {
      */
     @Test
     fun входящее_от_себя_же_считается_своим() = runTest {
-        val машина = io.tima.core.outbox.Inbox(inbox, nowMs = { 2_000 })
-        машина.receive("chat-1", 42, конвертБезТела)
-        машина.openNext { io.tima.core.outbox.OpenOutcome.Opened(Кодек.encodeText("со телефона"), Я) }
+        val machine = io.tima.core.outbox.Inbox(inbox, nowMs = { 2_000 })
+        machine.receive("chat-1", 42, bodyWithoutEnvelope)
+        machine.openNext { io.tima.core.outbox.OpenOutcome.Opened(Codec.encodeText("со телефона"), Me) }
 
-        val строка = chat.page("chat-1").first().single()
+        val line = chat.page("chat-1").first().single()
 
-        assertTrue(строка.outgoing, "написанное мною с другого устройства — моё")
-        assertEquals("со телефона", строка.text)
+        assertTrue(line.outgoing, "написанное мною с другого устройства — моё")
+        assertEquals("со телефона", line.text)
     }
 
     @Test
     fun входящее_от_собеседника_остаётся_чужим() = runTest {
-        val машина = io.tima.core.outbox.Inbox(inbox, nowMs = { 2_000 })
-        машина.receive("chat-1", 42, конвертБезТела)
-        машина.openNext { io.tima.core.outbox.OpenOutcome.Opened(Кодек.encodeText("привет"), СОБЕСЕДНИК) }
+        val machine = io.tima.core.outbox.Inbox(inbox, nowMs = { 2_000 })
+        machine.receive("chat-1", 42, bodyWithoutEnvelope)
+        machine.openNext { io.tima.core.outbox.OpenOutcome.Opened(Codec.encodeText("привет"), PEER) }
 
         assertTrue(!chat.page("chat-1").first().single().outgoing)
     }
@@ -226,7 +226,7 @@ class SqlChatFeedTest {
      */
     @Test
     fun неразобранное_входящее_не_своё() = runTest {
-        io.tima.core.outbox.Inbox(inbox, nowMs = { 2_000 }).receive("chat-1", 42, конвертБезТела)
+        io.tima.core.outbox.Inbox(inbox, nowMs = { 2_000 }).receive("chat-1", 42, bodyWithoutEnvelope)
 
         assertTrue(!chat.page("chat-1").first().single().outgoing)
     }
@@ -237,52 +237,52 @@ class SqlChatFeedTest {
     fun порядок_смешанного_списка_устойчив() = runTest {
         // Часть сообщений отправлена и получила серверное время, часть лежит в очереди с
         // одним местным. Список не должен переставляться на глазах.
-        исходящее("d-старое", OutboxState.SENT, clientTs = 1_000, serverTs = 1_100)
-        исходящее("d-в-очереди", OutboxState.QUEUED, clientTs = 3_000)
-        исходящее("d-новое", OutboxState.SENT, clientTs = 2_000, serverTs = 5_000)
+        outgoing("d-старое", OutboxState.SENT, clientTs = 1_000, serverTs = 1_100)
+        outgoing("d-в-очереди", OutboxState.QUEUED, clientTs = 3_000)
+        outgoing("d-новое", OutboxState.SENT, clientTs = 2_000, serverTs = 5_000)
 
-        val порядок = chat.page("chat-1").first().map { it.dedupKey }
+        val order = chat.page("chat-1").first().map { it.dedupKey }
 
-        assertEquals(listOf("d-новое", "d-в-очереди", "d-старое"), порядок, "новое сверху")
+        assertEquals(listOf("d-новое", "d-в-очереди", "d-старое"), order, "новое сверху")
     }
 
     @Test
     fun при_равном_времени_решает_порядок_появления() = runTest {
         // Иначе два сообщения, отправленных в одну миллисекунду, меняются местами при
         // каждом чтении — и список дёргается без причины.
-        исходящее("d-1", OutboxState.QUEUED, clientTs = 1_000)
-        исходящее("d-2", OutboxState.QUEUED, clientTs = 1_000)
+        outgoing("d-1", OutboxState.QUEUED, clientTs = 1_000)
+        outgoing("d-2", OutboxState.QUEUED, clientTs = 1_000)
 
-        val дважды = listOf(
+        val twice = listOf(
             chat.page("chat-1").first().map { it.dedupKey },
             chat.page("chat-1").first().map { it.dedupKey },
         )
 
-        assertEquals(listOf("d-2", "d-1"), дважды[0], "позже добавленное — выше")
-        assertEquals(дважды[0], дважды[1], "порядок обязан быть тем же при повторном чтении")
+        assertEquals(listOf("d-2", "d-1"), twice[0], "позже добавленное — выше")
+        assertEquals(twice[0], twice[1], "порядок обязан быть тем же при повторном чтении")
     }
 
     @Test
     fun время_берётся_серверное_если_оно_есть() = runTest {
-        исходящее("d-1", OutboxState.SENT, clientTs = 1_000, serverTs = 7_777)
-        исходящее("d-2", OutboxState.QUEUED, clientTs = 2_222)
+        outgoing("d-1", OutboxState.SENT, clientTs = 1_000, serverTs = 7_777)
+        outgoing("d-2", OutboxState.QUEUED, clientTs = 2_222)
 
-        val строки = chat.page("chat-1").first().associateBy { it.dedupKey }
+        val lines = chat.page("chat-1").first().associateBy { it.dedupKey }
 
-        assertEquals(7_777, строки["d-1"]?.atMs, "часы устройства врут — серверные точнее")
-        assertEquals(2_222, строки["d-2"]?.atMs, "но пока сообщение не ушло, других нет")
+        assertEquals(7_777, lines["d-1"]?.atMs, "часы устройства врут — серверные точнее")
+        assertEquals(2_222, lines["d-2"]?.atMs, "но пока сообщение не ушло, других нет")
     }
 
     // ── границы страницы ─────────────────────────────────────────────────────
 
     @Test
     fun страница_ограничена_и_берёт_последние() = runTest {
-        repeat(10) { исходящее("d-$it", OutboxState.QUEUED, clientTs = 1_000L + it) }
+        repeat(10) { outgoing("d-$it", OutboxState.QUEUED, clientTs = 1_000L + it) }
 
-        val страница = chat.page("chat-1", limit = 3).first()
+        val page = chat.page("chat-1", limit = 3).first()
 
-        assertEquals(3, страница.size)
-        assertEquals(listOf("d-9", "d-8", "d-7"), страница.map { it.dedupKey })
+        assertEquals(3, page.size)
+        assertEquals(listOf("d-9", "d-8", "d-7"), page.map { it.dedupKey })
     }
 
     @Test
@@ -296,20 +296,20 @@ class SqlChatFeedTest {
 
     @Test
     fun чужая_переписка_в_страницу_не_попадает() = runTest {
-        исходящее("d-1", OutboxState.QUEUED)
+        outgoing("d-1", OutboxState.QUEUED)
         outbox.putIfAbsent(
             OutboxEntry(dedupKey = "d-чужое", chatId = "chat-2", body = byteArrayOf(1)),
         )
 
-        val строки = chat.page("chat-1").first()
+        val lines = chat.page("chat-1").first()
 
-        assertEquals(1, строки.size)
-        assertTrue(строки.all { it.chatId == "chat-1" })
+        assertEquals(1, lines.size)
+        assertTrue(lines.all { it.chatId == "chat-1" })
     }
 
     private companion object {
         /** Кто я и кто собеседник: своё сообщение отличается от чужого отправителем. */
-        const val Я = "u-я"
-        const val СОБЕСЕДНИК = "u-аня"
+        const val Me = "u-я"
+        const val PEER = "u-аня"
     }
 }

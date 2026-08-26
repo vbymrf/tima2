@@ -18,39 +18,39 @@ import io.tima.domain.chat.MembersStep
  */
 class GroupsOverHttp(private val api: GroupsApi) : GroupRegistry {
 
-    override suspend fun create(title: String): GroupCreateStep = when (val ответ = api.create(title)) {
-        is GroupCreateResult.Created -> GroupCreateStep.Created(ответ.groupId)
-        is GroupCreateResult.NoConnection -> GroupCreateStep.Offline(ответ.link.retryDelayMs)
-        is GroupCreateResult.Refused -> GroupCreateStep.Refused(ответ.code)
+    override suspend fun create(title: String): GroupCreateStep = when (val answer = api.create(title)) {
+        is GroupCreateResult.Created -> GroupCreateStep.Created(answer.groupId)
+        is GroupCreateResult.NoConnection -> GroupCreateStep.Offline(answer.link.retryDelayMs)
+        is GroupCreateResult.Refused -> GroupCreateStep.Refused(answer.code)
     }
 
-    override suspend fun mine(): GroupsStep = when (val ответ = api.mine()) {
+    override suspend fun mine(): GroupsStep = when (val answer = api.mine()) {
         is GroupsResult.Groups -> GroupsStep.Groups(
-            ответ.groups.map { GroupInfo(it.groupId, it.title, GroupRole.из(it.myRole)) },
+            answer.groups.map { GroupInfo(it.groupId, it.title, GroupRole.from(it.myRole)) },
         )
-        is GroupsResult.NoConnection -> GroupsStep.Offline(ответ.link.retryDelayMs)
-        is GroupsResult.Refused -> GroupsStep.Refused(ответ.code)
+        is GroupsResult.NoConnection -> GroupsStep.Offline(answer.link.retryDelayMs)
+        is GroupsResult.Refused -> GroupsStep.Refused(answer.code)
     }
 
-    override suspend fun members(groupId: String): MembersStep = when (val ответ = api.members(groupId)) {
+    override suspend fun members(groupId: String): MembersStep = when (val answer = api.members(groupId)) {
         is MembersResult.Members -> MembersStep.Members(
-            ответ.members.map { GroupMember(it.userId, GroupRole.из(it.role), it.bannedUntil) },
+            answer.members.map { GroupMember(it.userId, GroupRole.from(it.role), it.bannedUntil) },
         )
-        is MembersResult.NoConnection -> MembersStep.Offline(ответ.link.retryDelayMs)
-        is MembersResult.Refused -> MembersStep.Refused(ответ.code)
+        is MembersResult.NoConnection -> MembersStep.Offline(answer.link.retryDelayMs)
+        is MembersResult.Refused -> MembersStep.Refused(answer.code)
     }
 
     override suspend fun addMember(groupId: String, userId: String): MemberStep =
-        шаг(api.addMember(groupId, userId))
+        step(api.addMember(groupId, userId))
 
     override suspend fun removeMember(groupId: String, userId: String): MemberStep =
-        шаг(api.removeMember(groupId, userId))
+        step(api.removeMember(groupId, userId))
 
-    private fun шаг(ответ: MemberResult): MemberStep = when (ответ) {
+    private fun step(answer: MemberResult): MemberStep = when (answer) {
         MemberResult.Done -> MemberStep.Done
         MemberResult.NoSuchUser -> MemberStep.NoSuchUser
         MemberResult.Forbidden -> MemberStep.Forbidden
-        is MemberResult.NoConnection -> MemberStep.Offline(ответ.link.retryDelayMs)
-        is MemberResult.Refused -> MemberStep.Refused(ответ.code)
+        is MemberResult.NoConnection -> MemberStep.Offline(answer.link.retryDelayMs)
+        is MemberResult.Refused -> MemberStep.Refused(answer.code)
     }
 }

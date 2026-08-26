@@ -25,95 +25,95 @@ import kotlin.test.assertTrue
  * Проверяется ввод — то, что человек делает руками: набранное не теряется, повтор номера
  * называется словами, а непозванные номера не выдаются за провал.
  */
-class НоваяГруппаStoreTest {
+class NewGroupStoreTest {
 
     @Test
     fun номера_накапливаются_до_создания() = runTest {
         // Звать по одному после создания — это ротация ключа на каждого приглашённого.
         val store = store(this)
-        store.номерИзменён("+79990000002")
-        store.добавитьНомер()
-        store.номерИзменён("+79990000003")
-        store.добавитьНомер()
+        store.changedNumber("+79990000002")
+        store.addNumber()
+        store.changedNumber("+79990000003")
+        store.addNumber()
 
-        assertEquals(listOf("+79990000002", "+79990000003"), store.state.value.номера)
-        assertEquals("", store.state.value.номер)
+        assertEquals(listOf("+79990000002", "+79990000003"), store.state.value.numbers)
+        assertEquals("", store.state.value.number)
     }
 
     @Test
     fun повтор_номера_называется_словами() = runTest {
         // Молча проглоченный повтор заставляет жать снова, думая, что не сработало.
         val store = store(this)
-        store.номерИзменён("+79990000002")
-        store.добавитьНомер()
-        store.номерИзменён("+79990000002")
-        store.добавитьНомер()
+        store.changedNumber("+79990000002")
+        store.addNumber()
+        store.changedNumber("+79990000002")
+        store.addNumber()
 
-        assertEquals(1, store.state.value.номера.size)
-        assertTrue("уже в списке" in (store.state.value.беда ?: ""))
+        assertEquals(1, store.state.value.numbers.size)
+        assertTrue("уже в списке" in (store.state.value.trouble ?: ""))
     }
 
     @Test
     fun пустое_название_не_доходит_до_сети() = runTest {
-        val сеть = ПоддельныеГруппы()
-        val store = store(this, сеть)
-        store.создать()
+        val network = FakeGroups()
+        val store = store(this, network)
+        store.create()
         runCurrent()
 
-        assertNotNull(store.state.value.беда)
-        assertNull(store.state.value.создана)
-        assertEquals(0, сеть.созданий, "запрос ушёл впустую")
+        assertNotNull(store.state.value.trouble)
+        assertNull(store.state.value.created)
+        assertEquals(0, network.creations, "запрос ушёл впустую")
     }
 
     @Test
     fun непозванные_показываются_отдельно_от_беды() = runTest {
         // Группа создана. Красный текст про сбой здесь означал бы, что дело не сделано.
         val store = store(this)
-        store.названиеИзменено("Поход")
-        store.номерИзменён("+70000000000")
-        store.добавитьНомер()
-        store.создать()
+        store.changedTitle("Поход")
+        store.changedNumber("+70000000000")
+        store.addNumber()
+        store.create()
         runCurrent()
 
-        val состояние = store.state.value
-        assertNotNull(состояние.создана)
-        assertEquals(listOf("+70000000000"), состояние.непозванные)
-        assertNull(состояние.беда)
+        val state = store.state.value
+        assertNotNull(state.created)
+        assertEquals(listOf("+70000000000"), state.notInvited)
+        assertNull(state.trouble)
     }
 
     @Test
     fun второе_нажатие_не_создаёт_вторую_группу() = runTest {
-        val сеть = ПоддельныеГруппы()
-        val store = store(this, сеть)
-        store.названиеИзменено("Поход")
-        store.создать()
-        store.создать()
+        val network = FakeGroups()
+        val store = store(this, network)
+        store.changedTitle("Поход")
+        store.create()
+        store.create()
         runCurrent()
 
-        assertEquals(1, сеть.созданий)
+        assertEquals(1, network.creations)
     }
 
     @Test
     fun сброс_очищает_экран() = runTest {
         val store = store(this)
-        store.названиеИзменено("Поход")
-        store.номерИзменён("+79990000002")
-        store.добавитьНомер()
-        store.сброс()
+        store.changedTitle("Поход")
+        store.changedNumber("+79990000002")
+        store.addNumber()
+        store.reset()
 
-        assertEquals(НоваяГруппаState(), store.state.value)
+        assertEquals(NewGroupState(), store.state.value)
     }
 
     // ── подделки ────────────────────────────────────────────────────────────
 
-    private fun store(scope: TestScope, сеть: ПоддельныеГруппы = ПоддельныеГруппы()) =
-        НоваяГруппаStore(CreateGroupChat(сеть, Справочник, ПамятныеЗаписи()), scope)
+    private fun store(scope: TestScope, network: FakeGroups = FakeGroups()) =
+        NewGroupStore(CreateGroupChat(network, Directory, EntryMemorable()), scope)
 
-    private class ПоддельныеГруппы : GroupRegistry {
-        var созданий = 0
+    private class FakeGroups : GroupRegistry {
+        var creations = 0
 
         override suspend fun create(title: String): GroupCreateStep {
-            созданий++
+            creations++
             return GroupCreateStep.Created("gggggggg-0000-0000-0000-000000000001")
         }
 
@@ -123,12 +123,12 @@ class НоваяГруппаStoreTest {
         override suspend fun removeMember(groupId: String, userId: String) = MemberStep.Done
     }
 
-    private object Справочник : UserDirectory {
+    private object Directory : UserDirectory {
         override suspend fun byPhone(phone: String): UserLookup =
             if (phone == "+79990000002") UserLookup.Found("u-2") else UserLookup.NotFound
     }
 
-    private class ПамятныеЗаписи : ChatBook {
+    private class EntryMemorable : ChatBook {
         override fun remember(chatId: String, kind: ChatKind, title: String?, peerId: String?) = Unit
     }
 }

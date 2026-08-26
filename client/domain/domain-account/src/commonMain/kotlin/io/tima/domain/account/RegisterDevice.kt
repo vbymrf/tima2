@@ -57,12 +57,12 @@ class RegisterDevice(
             return RegistrationStep.AlreadyRegistered
         }
 
-        when (val проверка = api.submitCode(requestId, code)) {
+        when (val check = api.submitCode(requestId, code)) {
             is CodeSubmitStep.Accepted ->
-                return завести(проверка.registrationToken, identityPub, forceNewIdentity)
+                return create(check.registrationToken, identityPub, forceNewIdentity)
             CodeSubmitStep.WrongCode -> return RegistrationStep.WrongCode
-            is CodeSubmitStep.Offline -> return RegistrationStep.Offline(проверка.retryAfterMs)
-            is CodeSubmitStep.Refused -> return RegistrationStep.Refused(проверка.reason)
+            is CodeSubmitStep.Offline -> return RegistrationStep.Offline(check.retryAfterMs)
+            is CodeSubmitStep.Refused -> return RegistrationStep.Refused(check.reason)
         }
     }
 
@@ -81,14 +81,14 @@ class RegisterDevice(
         registrationToken: String,
         identityPub: ByteArray? = null,
         forceNewIdentity: Boolean = false,
-    ): RegistrationStep = завести(registrationToken, identityPub, forceNewIdentity)
+    ): RegistrationStep = create(registrationToken, identityPub, forceNewIdentity)
 
-    private suspend fun завести(
+    private suspend fun create(
         registrationToken: String,
         identityPub: ByteArray?,
         forceNewIdentity: Boolean,
     ): RegistrationStep {
-        val материал = keys.newDeviceKeys()
+        val material = keys.newDeviceKeys()
 
         // Секрет пишется ДО вызова, и это главное решение здесь.
         //
@@ -97,12 +97,12 @@ class RegisterDevice(
         // адресованное ему нельзя, снять его человек может только вручную, а выглядит
         // это как «сообщения не приходят». Обратный порядок стоит ровно ничего: секрет
         // от неудавшейся регистрации перезапишется следующей попыткой.
-        secrets.saveDeviceSecret(материал.secret)
+        secrets.saveDeviceSecret(material.secret)
 
-        return when (val ответ = api.createDevice(
+        return when (val answer = api.createDevice(
             registrationToken = registrationToken,
-            encryptionPub = материал.encryptionPub,
-            signingPub = материал.signingPub,
+            encryptionPub = material.encryptionPub,
+            signingPub = material.signingPub,
             identityPub = identityPub,
             platform = platform,
             forceNewIdentity = forceNewIdentity,
@@ -111,9 +111,9 @@ class RegisterDevice(
                 // Токен — после успеха: до него он не существует, а его наличие и есть
                 // признак «устройство заведено».
                 secrets.saveSession(
-                    Session(userId = ответ.userId, deviceId = ответ.deviceId, accessToken = ответ.accessToken),
+                    Session(userId = answer.userId, deviceId = answer.deviceId, accessToken = answer.accessToken),
                 )
-                RegistrationStep.Registered(ответ.userId, ответ.deviceId)
+                RegistrationStep.Registered(answer.userId, answer.deviceId)
             }
             // Телефон связан с другой личностью. Секрет оставляем: ключи ещё понадобятся
             // тому пути, который человек выберет дальше (возврат по фразе).
@@ -121,8 +121,8 @@ class RegisterDevice(
             // ним, потому что кода больше нет — он погашен при проверке.
             DeviceCreateStep.IdentityMismatch -> RegistrationStep.IdentityMismatch(registrationToken)
             DeviceCreateStep.TokenExpired -> RegistrationStep.CodeExpired
-            is DeviceCreateStep.Offline -> RegistrationStep.Offline(ответ.retryAfterMs)
-            is DeviceCreateStep.Refused -> RegistrationStep.Refused(ответ.reason)
+            is DeviceCreateStep.Offline -> RegistrationStep.Offline(answer.retryAfterMs)
+            is DeviceCreateStep.Refused -> RegistrationStep.Refused(answer.reason)
         }
     }
 }

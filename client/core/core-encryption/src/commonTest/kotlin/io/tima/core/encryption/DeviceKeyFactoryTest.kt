@@ -18,45 +18,45 @@ class DeviceKeyFactoryTest {
 
     @Test
     fun секрет_восстанавливает_оба_ключа_целиком() {
-        val материал = DeviceKeyFactoryOverKodium.newDeviceKeys()
+        val material = DeviceKeyFactoryOverKodium.newDeviceKeys()
 
-        val восстановленный = deviceIdentityFrom(материал.secret)
+        val recovered = deviceIdentityFrom(material.secret)
 
-        assertContentEquals(материал.encryptionPub, восстановленный.encryptionPublic)
-        assertContentEquals(материал.signingPub, восстановленный.signingPublic)
+        assertContentEquals(material.encryptionPub, recovered.encryptionPublic)
+        assertContentEquals(material.signingPub, recovered.signingPublic)
     }
 
     @Test
     fun размеры_те_что_ждёт_сервер() {
         // Сервер принимает по 32 байта и отвечает 400 bad_keys на всё остальное.
-        val материал = DeviceKeyFactoryOverKodium.newDeviceKeys()
-        assertEquals(32, материал.encryptionPub.size)
-        assertEquals(32, материал.signingPub.size)
-        assertEquals(DEVICE_SECRET_BYTES, материал.secret.size)
+        val material = DeviceKeyFactoryOverKodium.newDeviceKeys()
+        assertEquals(32, material.encryptionPub.size)
+        assertEquals(32, material.signingPub.size)
+        assertEquals(DEVICE_SECRET_BYTES, material.secret.size)
     }
 
     @Test
     fun ключи_шифрования_и_подписи_разные() {
         // Один секрет, два ключа — но именно два. Совпади они, подпись и шифрование
         // делили бы материал, чего ни один из двух алгоритмов не предполагает.
-        val материал = DeviceKeyFactoryOverKodium.newDeviceKeys()
-        assertFalse(материал.encryptionPub.contentEquals(материал.signingPub))
+        val material = DeviceKeyFactoryOverKodium.newDeviceKeys()
+        assertFalse(material.encryptionPub.contentEquals(material.signingPub))
     }
 
     @Test
     fun каждое_порождение_даёт_новое_устройство() {
-        val первое = DeviceKeyFactoryOverKodium.newDeviceKeys()
-        val второе = DeviceKeyFactoryOverKodium.newDeviceKeys()
+        val first = DeviceKeyFactoryOverKodium.newDeviceKeys()
+        val second = DeviceKeyFactoryOverKodium.newDeviceKeys()
 
-        assertFalse(первое.secret.contentEquals(второе.secret), "секреты обязаны различаться")
-        assertFalse(первое.encryptionPub.contentEquals(второе.encryptionPub))
+        assertFalse(first.secret.contentEquals(second.secret), "секреты обязаны различаться")
+        assertFalse(first.encryptionPub.contentEquals(second.encryptionPub))
     }
 
     @Test
     fun секрет_не_того_размера_отвергается_внятно() {
         // Обрезанный секрет из испорченного хранилища не должен превращаться в «другое
         // устройство» — он должен быть отказом.
-        val беда = assertFailsWith<IllegalArgumentException> { deviceIdentityFrom(ByteArray(16)) }
-        assertTrue(беда.message.orEmpty().contains("32"), "сообщение обязано называть размер")
+        val trouble = assertFailsWith<IllegalArgumentException> { deviceIdentityFrom(ByteArray(16)) }
+        assertTrue(trouble.message.orEmpty().contains("32"), "сообщение обязано называть размер")
     }
 }

@@ -204,13 +204,13 @@ object ArchitectureRules {
      * `io.tima.feature.` без этого запретил бы модулю его собственные импорты, то есть
      * оказался бы невыполним и был бы снят первым же человеком, который его встретил.
      */
-    private fun свойПакет(path: String): String? {
+    private fun ownPackage(path: String): String? {
         // Слой и имя модуля совпадают по построению: /feature/feature-chat/.
         val m = Regex("""/(feature|core|domain)/\1-([a-z0-9-]+)/""").find(path)
             ?: return null
-        val слой = m.groupValues[1]
-        val имя = m.groupValues[2].replace("-", "")
-        return "io.tima.$слой.$имя."
+        val layer = m.groupValues[1]
+        val name = m.groupValues[2].replace("-", "")
+        return "io.tima.$layer.$name."
     }
 
     private fun check(file: File, relative: String, rule: Rule): List<Violation> {
@@ -226,10 +226,10 @@ object ArchitectureRules {
         }
 
         if (rule.forbiddenContent.isNotEmpty()) {
-            val текст = file.readText()
-            for (кусок in rule.forbiddenContent) {
-                if (текст.contains(кусок)) {
-                    out += Violation(relative, rule.name, "найдено «$кусок»", rule.why)
+            val text = file.readText()
+            for (chunk in rule.forbiddenContent) {
+                if (text.contains(chunk)) {
+                    out += Violation(relative, rule.name, "найдено «$chunk»", rule.why)
                 }
             }
         }
@@ -257,8 +257,8 @@ object ArchitectureRules {
                 if (imported.startsWith("androidx.compose.")) continue
                 // Свой пакет — не чужая зависимость. Частный случай core-model был
                 // записан отдельной строкой; теперь это общее правило для всех слоёв.
-                val свой = свойПакет(file.absolutePath.replace('\\', '/'))
-                if (свой != null && imported.startsWith(свой)) continue
+                val own = ownPackage(file.absolutePath.replace('\\', '/'))
+                if (own != null && imported.startsWith(own)) continue
                 val hit = rule.forbiddenImportPrefixes.firstOrNull { imported.startsWith(it) }
                 if (hit != null) {
                     out += Violation(relative, rule.name, "импорт $imported", rule.why)

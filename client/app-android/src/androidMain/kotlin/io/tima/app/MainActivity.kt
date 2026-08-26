@@ -9,9 +9,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import io.tima.core.database.androidDatabase
 import io.tima.core.ui.TimaTheme
-import io.tima.shared.Вход
-import io.tima.shared.Платформа
-import io.tima.shared.Корень
+import io.tima.shared.Entry
+import io.tima.shared.Platform
+import io.tima.shared.Root
 
 /**
  * Вход для Android.
@@ -41,24 +41,24 @@ class MainActivity : ComponentActivity() {
      * Состояние, а не разовое чтение: приложение может быть уже запущено, и тогда код
      * приезжает в [onNewIntent], а не в [onCreate].
      */
-    private val код = mutableStateOf<String?>(null)
+    private val code = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        код.value = кодИз(intent)
+        code.value = codeFrom(intent)
         setContent {
-            val вход = remember { Вход.создать(Платформа.Андроид) }
+            val entry = remember { Entry.create(Platform.Android) }
             TimaTheme(dark = isSystemInDarkTheme()) {
                 // База телефона: имя файла в песочнице приложения, а не путь. Каталог
                 // выбирает Android, и это правильно — он же его и стирает при удалении.
-                Корень(
-                    вход = вход,
-                    базаУстройства = { androidDatabase(applicationContext, ИМЯ_БАЗЫ) },
-                    кодПривязки = код.value,
+                Root(
+                    entry = entry,
+                    deviceDatabase = { androidDatabase(applicationContext, DATABASE_NAME) },
+                    linkCode = code.value,
                     // Имя и номер разом: имя говорит, что за версия, номер — что
                     // установка действительно сменилась. По одному имени обновление
                     // «2.0.0-dev → 2.0.0-dev» неотличимо от его отсутствия.
-                    версияСборки = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                    buildVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
                 )
             }
         }
@@ -66,14 +66,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        кодИз(intent)?.let { код.value = it }
+        codeFrom(intent)?.let { code.value = it }
     }
 
     /** Наш ли это переход. Чужие ссылки нас не касаются, даже если система их принесла. */
-    private fun кодИз(intent: Intent?): String? =
+    private fun codeFrom(intent: Intent?): String? =
         intent?.data?.toString()?.takeIf { it.startsWith("tima://link/") }
 
     private companion object {
-        const val ИМЯ_БАЗЫ = "tima.db"
+        const val DATABASE_NAME = "tima.db"
     }
 }

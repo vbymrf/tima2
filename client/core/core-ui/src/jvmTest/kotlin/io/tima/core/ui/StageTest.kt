@@ -8,10 +8,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import io.tima.testui.Снимок
-import io.tima.testui.обеТемы
-import io.tima.testui.снять
-import io.tima.testui.тема
+import io.tima.testui.Snapshot
+import io.tima.testui.bothThemes
+import io.tima.testui.capture
+import io.tima.testui.theme
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -28,44 +28,44 @@ import kotlin.test.assertTrue
  * **Одна разметка на все форматы** проверяется буквально: во всех трёх случаях вызов
  * [Стан] один и тот же, меняется только размер сцены.
  */
-class СтанTest {
+class StageTest {
 
     @Test
     fun на_телефоне_одна_полоса_и_это_подокно() {
-        val снимок = снять("стан-телефон", 380, 800, тёмная = false) { стан() }
+        val snapshot = capture("стан-телефон", 380, 800, dark = false) { stage() }
         // Подокно не стоит рядом с колонкой, а заменяет её: перерисовка, как в макете.
-        assertEquals(0, начало(снимок, ГЛАВНАЯ), "главная область обязана занять окно целиком")
-        assertNull(начало(снимок, РЕЙКА), "на телефоне рейки нет")
-        assertNull(начало(снимок, КОЛОНКА), "на телефоне колонка не стоит рядом с подокном")
-        assertNull(начало(снимок, ПАНЕЛЬ))
+        assertEquals(0, start(snapshot, MAIN), "главная область обязана занять окно целиком")
+        assertNull(start(snapshot, RAIL), "на телефоне рейки нет")
+        assertNull(start(snapshot, COLUMN), "на телефоне колонка не стоит рядом с подокном")
+        assertNull(start(snapshot, PANEL))
     }
 
     /** Ничего не выбрано — на телефоне видно список. Пустого состояния там не бывает. */
     @Test
     fun на_телефоне_без_выбора_видно_список() {
-        val снимок = снять("стан-телефон-список", 380, 800, тёмная = false) { стан(главнаяЕсть = false) }
-        assertEquals(0, начало(снимок, КОЛОНКА))
-        assertNull(начало(снимок, ГЛАВНАЯ))
+        val snapshot = capture("стан-телефон-список", 380, 800, dark = false) { stage(mainHas = false) }
+        assertEquals(0, start(snapshot, COLUMN))
+        assertNull(start(snapshot, MAIN))
     }
 
     @Test
     fun на_планшете_три_полосы() {
-        val снимок = снять("стан-планшет", 1024, 768, тёмная = false) { стан() }
-        assertEquals(0, начало(снимок, РЕЙКА))
-        assertEquals(76, начало(снимок, КОЛОНКА), "рейка значками — 76 точек")
-        assertEquals(76 + 296, начало(снимок, ГЛАВНАЯ), "колонка планшета — 296 точек")
-        assertNull(начало(снимок, ПАНЕЛЬ), "на планшете страница объекта открывается перерисовкой")
+        val snapshot = capture("стан-планшет", 1024, 768, dark = false) { stage() }
+        assertEquals(0, start(snapshot, RAIL))
+        assertEquals(76, start(snapshot, COLUMN), "рейка значками — 76 точек")
+        assertEquals(76 + 296, start(snapshot, MAIN), "колонка планшета — 296 точек")
+        assertNull(start(snapshot, PANEL), "на планшете страница объекта открывается перерисовкой")
     }
 
     @Test
     fun на_пк_четыре_полосы() {
-        val снимок = снять("стан-пк", 1440, 900, тёмная = false) { стан() }
-        assertEquals(0, начало(снимок, РЕЙКА))
-        assertEquals(196, начало(снимок, КОЛОНКА), "рейка с подписями — 196 точек")
-        assertEquals(196 + 340, начало(снимок, ГЛАВНАЯ), "колонка ПК — 340 точек")
+        val snapshot = capture("стан-пк", 1440, 900, dark = false) { stage() }
+        assertEquals(0, start(snapshot, RAIL))
+        assertEquals(196, start(snapshot, COLUMN), "рейка с подписями — 196 точек")
+        assertEquals(196 + 340, start(snapshot, MAIN), "колонка ПК — 340 точек")
         // 1141, а не 1140: у панели линия СЛЕВА, и первый её пиксель занят границей —
         // ровно как `border-left: 1px` в макете.
-        assertEquals(1440 - 300 + 1, начало(снимок, ПАНЕЛЬ), "панель прижата к правому краю")
+        assertEquals(1440 - 300 + 1, start(snapshot, PANEL), "панель прижата к правому краю")
     }
 
     /**
@@ -76,11 +76,11 @@ class СтанTest {
      */
     @Test
     fun не_отданная_панель_не_оставляет_пустой_полосы() {
-        val снимок = снять("стан-пк-без-панели", 1440, 900, тёмная = false) { стан(панельЕсть = false) }
-        assertEquals(196 + 340, начало(снимок, ГЛАВНАЯ))
-        assertNull(начало(снимок, ПАНЕЛЬ))
+        val snapshot = capture("стан-пк-без-панели", 1440, 900, dark = false) { stage(hasPanel = false) }
+        assertEquals(196 + 340, start(snapshot, MAIN))
+        assertNull(start(snapshot, PANEL))
         assertTrue(
-            Снимок.близки(снимок.цвет(снимок.ширина - 1, снимок.высота / 2), ГЛАВНАЯ),
+            Snapshot.close(snapshot.color(snapshot.width - 1, snapshot.height / 2), MAIN),
             "главная область обязана дойти до правого края",
         )
     }
@@ -88,14 +88,14 @@ class СтанTest {
     /** Полосы разделены линией темы — той же, что под шапкой, и в один пиксель. */
     @Test
     fun полосы_разделены_линией() {
-        val снимок = снять("стан-линии", 1440, 900, тёмная = false) { стан() }
-        val y = снимок.высота / 2
-        for ((имя, x) in listOf("рейка/колонка" to 195, "колонка/главная" to 535)) {
-            val линия = снимок.цвет(x, y)
+        val snapshot = capture("стан-линии", 1440, 900, dark = false) { stage() }
+        val y = snapshot.height / 2
+        for ((name, x) in listOf("рейка/колонка" to 195, "колонка/главная" to 535)) {
+            val line = snapshot.color(x, y)
             assertTrue(
-                !Снимок.близки(линия, РЕЙКА) && !Снимок.близки(линия, КОЛОНКА) &&
-                    !Снимок.близки(линия, ГЛАВНАЯ),
-                "$имя: на границе полос нет линии, там $линия",
+                !Snapshot.close(line, RAIL) && !Snapshot.close(line, COLUMN) &&
+                    !Snapshot.close(line, MAIN),
+                "$name: на границе полос нет линии, там $line",
             )
         }
     }
@@ -112,40 +112,40 @@ class СтанTest {
      */
     @Test
     fun гроздь_создания_на_телефоне_висит_а_на_широком_опускается() {
-        val телефон = снять("гроздь-телефон", 380, 800, тёмная = false) { станСГроздью() }
+        val phone = capture("гроздь-телефон", 380, 800, dark = false) { stageWithCluster() }
         assertTrue(
-            Снимок.близки(телефон.цвет(6, 793), КОЛОНКА),
+            Snapshot.close(phone.color(6, 793), COLUMN),
             "на телефоне список обязан доходить до нижнего края: под грудью видно содержимое",
         )
-        assertTrue(телефон.есть(ГРОЗДЬ), "гроздь на телефоне не нарисовалась вовсе")
+        assertTrue(phone.has(CLUSTER), "гроздь на телефоне не нарисовалась вовсе")
 
-        val пк = снять("гроздь-пк", 1440, 900, тёмная = false) { станСГроздью() }
+        val desktop = capture("гроздь-пк", 1440, 900, dark = false) { stageWithCluster() }
         // Колонка ПК занимает x от 196 до 536; смотрим её нижний край.
         assertTrue(
-            !Снимок.близки(пк.цвет(210, 893), КОЛОНКА),
+            !Snapshot.close(desktop.color(210, 893), COLUMN),
             "на широком формате гроздь обязана опуститься в отдельную область: " +
                 "список не должен доходить до нижнего края колонки",
         )
-        assertTrue(пк.есть(ГРОЗДЬ), "гроздь на широком формате потерялась")
+        assertTrue(desktop.has(CLUSTER), "гроздь на широком формате потерялась")
     }
 
     private companion object {
         // Слоты закрашены цветами темы — так снимок остаётся в палитре, а границы полос
         // читаются как смена цвета. Что именно нарисовано внутри полосы, здесь не важно.
-        val РЕЙКА: Color = TimaColors.светлая.активность
-        val КОЛОНКА: Color = TimaColors.светлая.подтверждено
-        val ГЛАВНАЯ: Color = TimaColors.светлая.мои
-        val ПАНЕЛЬ: Color = TimaColors.светлая.навигация
-        val ГРОЗДЬ: Color = TimaColors.светлая.эмоция
+        val RAIL: Color = TimaColors.light.activity
+        val COLUMN: Color = TimaColors.light.confirmed
+        val MAIN: Color = TimaColors.light.my
+        val PANEL: Color = TimaColors.light.navigation
+        val CLUSTER: Color = TimaColors.light.emotion
 
         /** Первый столбец, где встречается цвет. `null` — полосы этого цвета нет вовсе. */
-        fun начало(снимок: Снимок, цвет: Color): Int? {
-            val y = снимок.высота / 2
-            return (0 until снимок.ширина).firstOrNull { Снимок.близки(снимок.цвет(it, y), цвет) }
+        fun start(snapshot: Snapshot, color: Color): Int? {
+            val y = snapshot.height / 2
+            return (0 until snapshot.width).firstOrNull { Snapshot.close(snapshot.color(it, y), color) }
         }
 
         @Composable
-        fun заливка(цвет: Color) = Box(Modifier.fillMaxSize().background(цвет))
+        fun fill(color: Color) = Box(Modifier.fillMaxSize().background(color))
 
         /**
          * Один и тот же вызов на все три формата — в этом и признак готовности У.4.
@@ -154,24 +154,24 @@ class СтанTest {
          * них видно, решает ширина контейнера.
          */
         @Composable
-        fun стан(главнаяЕсть: Boolean = true, панельЕсть: Boolean = true) = Стан(
-            колонка = { заливка(КОЛОНКА) },
-            рейка = { заливка(РЕЙКА) },
-            главная = if (главнаяЕсть) ({ заливка(ГЛАВНАЯ) }) else null,
-            панель = if (панельЕсть) ({ заливка(ПАНЕЛЬ) }) else null,
+        fun stage(mainHas: Boolean = true, hasPanel: Boolean = true) = Stage(
+            column = { fill(COLUMN) },
+            rail = { fill(RAIL) },
+            main = if (mainHas) ({ fill(MAIN) }) else null,
+            panel = if (hasPanel) ({ fill(PANEL) }) else null,
         )
 
         /** Тот же вызов [СГроздью] на телефоне и на ПК: место кнопок решает формат. */
         @Composable
-        fun станСГроздью() = Стан(
-            колонка = {
-                СГроздью(
-                    гроздь = { Box(Modifier.size(36.dp).background(ГРОЗДЬ, CircleShape)) },
-                    подпись = "Написать",
-                ) { заливка(КОЛОНКА) }
+        fun stageWithCluster() = Stage(
+            column = {
+                WithCluster(
+                    cluster = { Box(Modifier.size(36.dp).background(CLUSTER, CircleShape)) },
+                    caption = "Написать",
+                ) { fill(COLUMN) }
             },
-            рейка = { заливка(РЕЙКА) },
-            главная = null,
+            rail = { fill(RAIL) },
+            main = null,
         )
     }
 }

@@ -104,46 +104,46 @@ class RouteConfigTrust(
      */
     fun accept(envelopeJson: String, currentVersion: Int = 0): Result<RouteConfigDocument> {
         val key = trustedKey
-            ?: return отказ(RouteConfigRejection.NO_TRUSTED_KEY, "ключ выпуска не зашит")
+            ?: return refusal(RouteConfigRejection.NO_TRUSTED_KEY, "ключ выпуска не зашит")
 
         val envelope = runCatching { json.decodeFromString<SignedRouteEnvelope>(envelopeJson) }
-            .getOrElse { return отказ(RouteConfigRejection.MALFORMED, "конверт не разобран: ${it.message}") }
+            .getOrElse { return refusal(RouteConfigRejection.MALFORMED, "конверт не разобран: ${it.message}") }
 
         val payload = decodeBase64(envelope.payload)
-            ?: return отказ(RouteConfigRejection.MALFORMED, "payload не base64")
+            ?: return refusal(RouteConfigRejection.MALFORMED, "payload не base64")
         val signature = decodeBase64(envelope.signature)
-            ?: return отказ(RouteConfigRejection.MALFORMED, "signature не base64")
+            ?: return refusal(RouteConfigRejection.MALFORMED, "signature не base64")
 
         // Подпись проверяется до разбора: разбирать чужой JSON, ещё не зная, наш ли он,
         // значит давать неизвестному входу работу до проверки.
         if (!check.verify(key, payload, signature)) {
-            return отказ(RouteConfigRejection.BAD_SIGNATURE, "подпись не сошлась")
+            return refusal(RouteConfigRejection.BAD_SIGNATURE, "подпись не сошлась")
         }
 
         val document = runCatching {
             json.decodeFromString<RouteConfigDocument>(payload.decodeToString())
-        }.getOrElse { return отказ(RouteConfigRejection.MALFORMED, "документ не разобран: ${it.message}") }
+        }.getOrElse { return refusal(RouteConfigRejection.MALFORMED, "документ не разобран: ${it.message}") }
 
         if (document.version <= currentVersion) {
-            return отказ(
+            return refusal(
                 RouteConfigRejection.NOT_NEWER,
                 "версия ${document.version} не новее текущей $currentVersion",
             )
         }
         if (document.candidates.isEmpty()) {
-            return отказ(RouteConfigRejection.NO_CANDIDATES, "список кандидатов пуст")
+            return refusal(RouteConfigRejection.NO_CANDIDATES, "список кандидатов пуст")
         }
         // Кандидат обязан быть собираемым в маршрут: подписанный, новый и негодный
         // документ хуже отсутствующего — он вытеснил бы рабочий список.
         document.candidates.forEachIndexed { i, candidate ->
             runCatching { ServerRoute.from(candidate) }.onFailure {
-                return отказ(RouteConfigRejection.MALFORMED, "кандидат $i негоден: ${it.message}")
+                return refusal(RouteConfigRejection.MALFORMED, "кандидат $i негоден: ${it.message}")
             }
         }
         return Result.success(document)
     }
 
-    private fun отказ(reason: RouteConfigRejection, message: String): Result<RouteConfigDocument> =
+    private fun refusal(reason: RouteConfigRejection, message: String): Result<RouteConfigDocument> =
         Result.failure(RouteConfigRejected(reason, message))
 
     private companion object {

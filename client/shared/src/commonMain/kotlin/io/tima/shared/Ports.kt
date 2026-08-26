@@ -29,9 +29,9 @@ import io.tima.domain.account.MyDevices
  */
 
 /** Личные переписки: найти собеседника, назвать автора, попросить ключ группы. */
-interface ПортыПереписок {
+interface ChatPorts {
     /** Кто скрывается за номером телефона. */
-    val справочник: UsersApi
+    val directory: UsersApi
 
     /**
      * Недостающие версии группового ключа: попросить и отдать.
@@ -39,22 +39,22 @@ interface ПортыПереписок {
      * Нужен окну переписки, потому что «сообщение не читается» чинится именно
      * отсюда — просьбой к тому, у кого ключ есть.
      */
-    val восстановлениеКлючей: GroupKeyRecoveryApi
+    val keyRecovery: GroupKeyRecoveryApi
 }
 
 /** Группы: создание, состав, ротация ключа при смене состава. */
-interface ПортыГрупп {
-    val группы: GroupsApi
-    val справочник: UsersApi
+interface GroupPorts {
+    val groups: GroupsApi
+    val directory: UsersApi
 
     /** Ключи устройств участников: на них заворачивается новый групповой ключ. */
-    val ключи: KeysApi
+    val keys: KeysApi
 
     /** Ключ эпохи: escrow-блоб выпускается вместе с версией ключа (ADR-0004). */
     val escrow: EscrowApi
 
     /** Выпуск версии ключа и выдача обёрток. */
-    val ключиГрупп: GroupKeysApi
+    val groupKeys: GroupKeysApi
 
     /**
      * Передача уже существующей версии тому, кому её не выдавали.
@@ -62,19 +62,19 @@ interface ПортыГрупп {
      * Отдельно от [ключиГрупп], потому что это другая работа: там выпуск новой
      * версии, здесь — раздача старой по просьбе.
      */
-    val восстановлениеКлючейГрупп: GroupKeyRecoveryApi
+    val groupKeyRecovery: GroupKeyRecoveryApi
 }
 
 /** Устройства: список, отключение, платформа, подтверждение привязки. */
-interface ПортыУстройств {
-    val мойПарк: MyDevices
+interface DevicePorts {
+    val myFleet: MyDevices
 
     /** Объявление платформы серверу: телефон это или ПК (key-lifecycle.md §2). */
-    val устройства: DevicesApi
+    val devices: DevicesApi
 
     /**
      * Подтверждение привязки требует ключа ЭТОГО устройства: подпись над данными из
      * кода делается им, а живёт он в хранилище платформы, а не в сети.
      */
-    fun подтверждениеПривязки(личность: DeviceIdentity): ConfirmDeviceLink
+    fun linkConfirmation(identity: DeviceIdentity): ConfirmDeviceLink
 }

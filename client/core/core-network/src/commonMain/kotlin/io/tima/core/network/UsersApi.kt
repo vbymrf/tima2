@@ -48,12 +48,12 @@ class UsersApi(
         }
 
         val body = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull()
-        val код = body?.get("code")?.jsonPrimitive?.content
+        val code = body?.get("code")?.jsonPrimitive?.content
         when (response.status) {
             HttpStatusCode.OK -> Unit
             HttpStatusCode.NotFound -> return UserLookup.NotFound
-            HttpStatusCode.BadRequest -> return UserLookup.BadPhone(код ?: "номер не в формате E.164")
-            else -> return UserLookup.Refused(код ?: "сервер отказал: ${response.status.value}")
+            HttpStatusCode.BadRequest -> return UserLookup.BadPhone(code ?: "номер не в формате E.164")
+            else -> return UserLookup.Refused(code ?: "сервер отказал: ${response.status.value}")
         }
 
         val userId = body?.get("user_id")?.jsonPrimitive?.content
@@ -62,7 +62,7 @@ class UsersApi(
         // Имя — вторым запросом и **без права уронить первый**: не пришло, значит его нет,
         // и переписка заведётся с номером вместо имени. Отказаться начинать переписку
         // из-за неизвестного имени было бы хуже.
-        return UserLookup.Found(userId = userId, name = имя(userId))
+        return UserLookup.Found(userId = userId, name = name(userId))
     }
 
     /**
@@ -72,10 +72,10 @@ class UsersApi(
      * и это его решение, а не наше упущение: справочник целиком он не раскрывает. Поэтому
      * ответ бывает пустым, и это не отказ — переписка называется тем, что известно.
      */
-    suspend fun имяИлиНомер(userId: String): String? = имя(userId) ?: номер(userId)
+    suspend fun nameOrNumber(userId: String): String? = name(userId) ?: number(userId)
 
     /** Отображаемое имя, если сервер его знает и вправе отдать. */
-    private suspend fun имя(userId: String): String? {
+    private suspend fun name(userId: String): String? {
         val response = try {
             client.post(route.api("/api/v1/users/names")) {
                 header("Authorization", "Bearer ${token()}")
@@ -97,7 +97,7 @@ class UsersApi(
     }
 
     /** Номер — вторым выбором: он известен только по собеседникам своих переписок. */
-    private suspend fun номер(userId: String): String? {
+    private suspend fun number(userId: String): String? {
         val response = try {
             client.post(route.api("/api/v1/users/names")) {
                 header("Authorization", "Bearer ${token()}")

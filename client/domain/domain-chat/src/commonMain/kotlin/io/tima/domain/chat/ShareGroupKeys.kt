@@ -22,20 +22,20 @@ class ShareGroupKeys(
     private val upload: GroupKeyShareUpload,
 ) {
 
-    suspend fun поделиться(
+    suspend fun share(
         groupId: String,
         requesterDevice: String,
         requesterEncryptionPub: ByteArray,
         versions: List<Int>,
     ): ShareStep {
-        val обёртки = mutableListOf<SharedVersion>()
-        for (версия in versions.distinct().sorted()) {
-            val ключ = keys.key(groupId, версия) ?: continue
-            val обёртка = wrap.wrap(requesterEncryptionPub, ключ) ?: continue
-            обёртки += SharedVersion(версия, обёртка.senderEphemeralPub, обёртка.wrapped)
+        val wraps = mutableListOf<SharedVersion>()
+        for (version in versions.distinct().sorted()) {
+            val key = keys.key(groupId, version) ?: continue
+            val wrap = wrap.wrap(requesterEncryptionPub, key) ?: continue
+            wraps += SharedVersion(version, wrap.senderEphemeralPub, wrap.wrapped)
         }
-        if (обёртки.isEmpty()) return ShareStep.NothingToShare
-        return upload.provide(groupId, requesterDevice, обёртки)
+        if (wraps.isEmpty()) return ShareStep.NothingToShare
+        return upload.provide(groupId, requesterDevice, wraps)
     }
 }
 

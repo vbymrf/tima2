@@ -15,7 +15,7 @@ import io.tima.domain.account.LinkSigner
  * @param личность ключ этого устройства. `null` — подписывать нечем: устройство не
  *   заведено, и подтверждать привязку ему нельзя.
  */
-class LinkSignerOverKodium(private val личность: DeviceIdentity?) : LinkSigner {
+class LinkSignerOverKodium(private val identity: DeviceIdentity?) : LinkSigner {
 
     override fun sign(
         sessionId: String,
@@ -23,8 +23,8 @@ class LinkSignerOverKodium(private val личность: DeviceIdentity?) : Link
         encryptionPub: ByteArray,
         signingPub: ByteArray,
     ): ByteArray? {
-        val ключ = личность?.key ?: return null
-        val байты = DeviceLinkSignature.signingBytes(sessionId, secret, encryptionPub, signingPub)
-        return MessageSigner.sign(ключ, байты).getOrNull()
+        val key = identity?.key ?: return null
+        val bytes = DeviceLinkSignature.signingBytes(sessionId, secret, encryptionPub, signingPub)
+        return MessageSigner.sign(key, bytes).getOrNull()
     }
 }

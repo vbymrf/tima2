@@ -21,9 +21,9 @@ import kotlin.test.assertTrue
  * Секрет передаётся прямо: настоящий порождает регистрация, а DPAPI проверен по файлу
  * там, где ему место. Здесь проверяется то, что стоит между ними, — база на диске.
  */
-class ОкружениеTest {
+class EnvironmentTest {
 
-    private val каталог: File = File.createTempFile("tima-app", "").let {
+    private val catalog: File = File.createTempFile("tima-app", "").let {
         it.delete()
         it.mkdirs()
         it
@@ -35,11 +35,11 @@ class ОкружениеTest {
      * Открывается заново на каждый вызов: именно так и бывает при перезапуске, и именно на
      * втором открытии ломался безусловный «создать схему».
      */
-    private fun база() = desktopDatabase(File(каталог, "tima.db"))
+    private fun database() = desktopDatabase(File(catalog, "tima.db"))
 
     @AfterTest
-    fun убрать() {
-        каталог.deleteRecursively()
+    fun remove() {
+        catalog.deleteRecursively()
     }
 
     /**
@@ -51,14 +51,14 @@ class ОкружениеTest {
      */
     @Test
     fun второй_запуск_видит_написанное_в_первый() = runTest {
-        val первое = Окружение.открыть(база(), СЕКРЕТ, "u-я")
-        assertTrue(первое.отправка.send("chat-1", "привет") is SendMessageResult.Queued)
+        val first = Environment.open(database(), SECRET, "u-я")
+        assertTrue(first.send.send("chat-1", "привет") is SendMessageResult.Queued)
 
-        val второе = Окружение.открыть(база(), СЕКРЕТ, "u-я")
-        val список = второе.переписки.list().first()
+        val second = Environment.open(database(), SECRET, "u-я")
+        val list = second.chats.list().first()
 
-        assertEquals(1, список.size)
-        assertEquals("привет", список.single().preview, "написанное обязано читаться после перезапуска")
+        assertEquals(1, list.size)
+        assertEquals("привет", list.single().preview, "написанное обязано читаться после перезапуска")
     }
 
     /**
@@ -69,14 +69,14 @@ class ОкружениеTest {
      */
     @Test
     fun без_сети_сообщение_ждёт_в_очереди_а_не_исчезает() = runTest {
-        val окружение = Окружение.открыть(база(), СЕКРЕТ, "u-я")
-        окружение.отправка.send("chat-1", "привет")
+        val environment = Environment.open(database(), SECRET, "u-я")
+        environment.send.send("chat-1", "привет")
 
-        val строка = окружение.переписка.page("chat-1").first().single()
+        val line = environment.chat.page("chat-1").first().single()
 
-        assertEquals(io.tima.domain.chat.MessageDisplay.PENDING, строка.display)
-        assertEquals("привет", строка.text)
-        assertEquals(1, окружение.очередь.pending().size)
+        assertEquals(io.tima.domain.chat.MessageDisplay.PENDING, line.display)
+        assertEquals("привет", line.text)
+        assertEquals(1, environment.queue.pending().size)
     }
 
     /**
@@ -89,13 +89,13 @@ class ОкружениеTest {
      */
     @Test
     fun с_чужим_секретом_переписка_не_читается() = runTest {
-        Окружение.открыть(база(), СЕКРЕТ, "u-я").отправка.send("chat-1", "привет")
+        Environment.open(database(), SECRET, "u-я").send.send("chat-1", "привет")
 
-        val чужое = Окружение.открыть(база(), ЧУЖОЙ_СЕКРЕТ, "u-я")
-        val список = чужое.переписки.list().first()
+        val foreign = Environment.open(database(), FOREIGN_SECRET, "u-я")
+        val list = foreign.chats.list().first()
 
-        assertEquals(1, список.size, "строка остаётся: метаданные вариант A не закрывает")
-        assertNull(список.single().preview, "а содержимое чужим ключом не открывается")
+        assertEquals(1, list.size, "строка остаётся: метаданные вариант A не закрывает")
+        assertNull(list.single().preview, "а содержимое чужим ключом не открывается")
     }
 
     private companion object {
@@ -106,7 +106,7 @@ class ОкружениеTest {
          * вообще происходит. Проверке нужен не DPAPI (он проверен по файлу там, где ему
          * место), а ровно 32 байта, из которых выводится ключ покоя.
          */
-        val СЕКРЕТ: ByteArray = ByteArray(32) { (it + 3).toByte() }
-        val ЧУЖОЙ_СЕКРЕТ: ByteArray = ByteArray(32) { (it + 77).toByte() }
+        val SECRET: ByteArray = ByteArray(32) { (it + 3).toByte() }
+        val FOREIGN_SECRET: ByteArray = ByteArray(32) { (it + 77).toByte() }
     }
 }

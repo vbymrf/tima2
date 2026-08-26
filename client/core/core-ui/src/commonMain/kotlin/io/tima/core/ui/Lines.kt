@@ -18,46 +18,46 @@ import androidx.compose.ui.unit.dp
  * область, и граница уезжает под него. Так и было в первой редакции, и поймал это
  * пиксельный тест, а не глаз.
  */
-internal fun Modifier.линияСнизу(цвет: Color): Modifier = drawWithContent {
+internal fun Modifier.bottomLine(color: Color): Modifier = drawWithContent {
     drawContent()
-    val толщина = 1.dp.toPx()
+    val thickness = 1.dp.toPx()
     drawLine(
-        color = цвет,
-        start = Offset(0f, size.height - толщина / 2),
-        end = Offset(size.width, size.height - толщина / 2),
-        strokeWidth = толщина,
+        color = color,
+        start = Offset(0f, size.height - thickness / 2),
+        end = Offset(size.width, size.height - thickness / 2),
+        strokeWidth = thickness,
     )
 }
 
-internal fun Modifier.линияСверху(цвет: Color): Modifier = drawWithContent {
+internal fun Modifier.topLine(color: Color): Modifier = drawWithContent {
     drawContent()
-    val толщина = 1.dp.toPx()
+    val thickness = 1.dp.toPx()
     drawLine(
-        color = цвет,
-        start = Offset(0f, толщина / 2),
-        end = Offset(size.width, толщина / 2),
-        strokeWidth = толщина,
+        color = color,
+        start = Offset(0f, thickness / 2),
+        end = Offset(size.width, thickness / 2),
+        strokeWidth = thickness,
     )
 }
 
-internal fun Modifier.линияСправа(цвет: Color): Modifier = drawWithContent {
+internal fun Modifier.rightLine(color: Color): Modifier = drawWithContent {
     drawContent()
-    val толщина = 1.dp.toPx()
+    val thickness = 1.dp.toPx()
     drawLine(
-        color = цвет,
-        start = Offset(size.width - толщина / 2, 0f),
-        end = Offset(size.width - толщина / 2, size.height),
-        strokeWidth = толщина,
+        color = color,
+        start = Offset(size.width - thickness / 2, 0f),
+        end = Offset(size.width - thickness / 2, size.height),
+        strokeWidth = thickness,
     )
 }
 
-internal fun Modifier.линияСлева(цвет: Color): Modifier = drawWithContent {
+internal fun Modifier.leftLine(color: Color): Modifier = drawWithContent {
     drawContent()
-    val толщина = 1.dp.toPx()
+    val thickness = 1.dp.toPx()
     drawLine(
-        color = цвет,
-        start = Offset(толщина / 2, 0f),
-        end = Offset(толщина / 2, size.height),
-        strokeWidth = толщина,
+        color = color,
+        start = Offset(thickness / 2, 0f),
+        end = Offset(thickness / 2, size.height),
+        strokeWidth = thickness,
     )
 }

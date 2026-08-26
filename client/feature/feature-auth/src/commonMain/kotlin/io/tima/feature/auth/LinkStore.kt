@@ -20,57 +20,57 @@ import kotlinx.coroutines.launch
  * **Показывается имя, а не ключ.** Сверять тридцать два байта на глаз человек не станет, а
  * имя он сам видел минуту назад на своём же компьютере.
  */
-class ПривязкаStore(
+class LinkStore(
     private val confirm: ConfirmDeviceLink,
     private val scope: CoroutineScope,
-    код: String,
+    code: String,
 ) {
 
-    private val _state = MutableStateFlow<ПривязкаState>(разобрать(код))
-    val state: StateFlow<ПривязкаState> = _state.asStateFlow()
+    private val _state = MutableStateFlow<LinkState>(parse(code))
+    val state: StateFlow<LinkState> = _state.asStateFlow()
 
-    private val код: String = код
+    private val code: String = code
 
     /** Человек нажал «Доверить». */
-    fun доверить() {
-        val текущее = _state.value as? ПривязкаState.Спрашиваем ?: return
-        if (текущее.ждём) return
-        _state.value = текущее.copy(ждём = true, беда = null)
+    fun trust() {
+        val current = _state.value as? LinkState.Ask ?: return
+        if (current.expect) return
+        _state.value = current.copy(expect = true, trouble = null)
 
         scope.launch {
-            _state.value = when (val шаг = confirm.confirm(код)) {
-                is LinkConfirmStep.Confirmed -> ПривязкаState.Готово(шаг.deviceId)
+            _state.value = when (val step = confirm.confirm(code)) {
+                is LinkConfirmStep.Confirmed -> LinkState.Done(step.deviceId)
 
                 // Каждый отказ — своё действие человека, поэтому и текст свой.
-                LinkConfirmStep.NotAPhone -> текущее.копияСБедой(
+                LinkConfirmStep.NotAPhone -> current.copyWithTrouble(
                     "Подтвердить подключение может только телефон — на компьютере это не работает",
                 )
-                LinkConfirmStep.SessionGone -> текущее.копияСБедой(
+                LinkConfirmStep.SessionGone -> current.copyWithTrouble(
                     "Код больше не действует — попросите на том устройстве новый",
                 )
-                LinkConfirmStep.BadSignature -> текущее.копияСБедой(
+                LinkConfirmStep.BadSignature -> current.copyWithTrouble(
                     "Код прочитан неверно — отсканируйте заново",
                 )
-                LinkConfirmStep.NotOurCode -> ПривязкаState.НеНашКод
-                LinkConfirmStep.CannotSign -> текущее.копияСБедой(
+                LinkConfirmStep.NotOurCode -> LinkState.NotOurCode
+                LinkConfirmStep.CannotSign -> current.copyWithTrouble(
                     "Это устройство не может подтверждать: у него нет своего ключа",
                 )
-                is LinkConfirmStep.Offline -> текущее.копияСБедой(
+                is LinkConfirmStep.Offline -> current.copyWithTrouble(
                     "Нет связи — попробуйте ещё раз",
                 )
-                is LinkConfirmStep.Refused -> текущее.копияСБедой(шаг.reason)
+                is LinkConfirmStep.Refused -> current.copyWithTrouble(step.reason)
             }
         }
     }
 
-    private fun разобрать(код: String): ПривязкаState {
-        val прочитанное = confirm.прочитать(код) ?: return ПривязкаState.НеНашКод
-        return ПривязкаState.Спрашиваем(имя = прочитанное.deviceName)
+    private fun parse(code: String): LinkState {
+        val read = confirm.read(code) ?: return LinkState.NotOurCode
+        return LinkState.Ask(name = read.deviceName)
     }
 }
 
 /** Что видит человек на телефоне. */
-sealed interface ПривязкаState {
+sealed interface LinkState {
 
     /**
      * Спрашиваем разрешение.
@@ -79,17 +79,17 @@ sealed interface ПривязкаState {
      *   говорим, а не подставляем «Устройство»: подставленное имя человек примет за
      *   настоящее.
      */
-    data class Спрашиваем(
-        val имя: String?,
-        val ждём: Boolean = false,
-        val беда: String? = null,
-    ) : ПривязкаState {
-        fun копияСБедой(текст: String) = copy(беда = текст, ждём = false)
+    data class Ask(
+        val name: String?,
+        val expect: Boolean = false,
+        val trouble: String? = null,
+    ) : LinkState {
+        fun copyWithTrouble(text: String) = copy(trouble = text, expect = false)
     }
 
     /** Подключено. */
-    data class Готово(val deviceId: String) : ПривязкаState
+    data class Done(val deviceId: String) : LinkState
 
     /** Отсканировано что-то другое: не наш код или испорченный. */
-    data object НеНашКод : ПривязкаState
+    data object NotOurCode : LinkState
 }

@@ -32,38 +32,38 @@ import androidx.compose.ui.unit.dp
  * оно расходилось бы с текстом.
  */
 @Composable
-fun Поле(
-    значение: String,
-    onИзменение: (String) -> Unit,
+fun Field(
+    value: String,
+    onChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    подсказка: String = "",
+    hint: String = "",
     /** Числовое: телефон, код. Меняет клавиатуру на телефоне, на ПК — ничего. */
-    числовое: Boolean = false,
-    поЦентру: Boolean = false,
-    кегль: TextUnit = TimaType.щ3,
+    numeric: Boolean = false,
+    byCenter: Boolean = false,
+    fontSize: TextUnit = TimaType.sz3,
 ) {
-    val цвета = Тима.цвета
+    val colors = Tima.colors
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(цвета.акцентМягкий, CircleShape)
-            .padding(horizontal = TimaSpacing.о5, vertical = 14.dp),
-        contentAlignment = if (поЦентру) Alignment.Center else Alignment.CenterStart,
+            .background(colors.softAccent, CircleShape)
+            .padding(horizontal = TimaSpacing.about5, vertical = 14.dp),
+        contentAlignment = if (byCenter) Alignment.Center else Alignment.CenterStart,
     ) {
-        if (значение.isEmpty() && подсказка.isNotEmpty()) {
-            Подпись(подсказка, кегль = кегль, цвет = цвета.текст3)
+        if (value.isEmpty() && hint.isNotEmpty()) {
+            Caption(hint, fontSize = fontSize, color = colors.text3)
         }
         BasicTextField(
-            value = значение,
-            onValueChange = onИзменение,
+            value = value,
+            onValueChange = onChange,
             textStyle = TextStyle(
-                fontSize = кегль,
-                color = цвета.текст,
-                textAlign = if (поЦентру) TextAlign.Center else TextAlign.Start,
+                fontSize = fontSize,
+                color = colors.text,
+                textAlign = if (byCenter) TextAlign.Center else TextAlign.Start,
             ),
-            cursorBrush = SolidColor(цвета.навигация),
+            cursorBrush = SolidColor(colors.navigation),
             keyboardOptions = KeyboardOptions(
-                keyboardType = if (числовое) KeyboardType.Number else KeyboardType.Text,
+                keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text,
             ),
             modifier = Modifier.fillMaxWidth(),
         )
@@ -77,11 +77,11 @@ fun Поле(
  * единственное изменение на экране, она заметна и без цвета.
  */
 @Composable
-fun Беда(текст: String, modifier: Modifier = Modifier) = Box(
+fun Trouble(text: String, modifier: Modifier = Modifier) = Box(
     modifier = modifier
         .fillMaxWidth()
-        .background(Тима.цвета.акцентМягкий, CircleShape)
-        .padding(horizontal = TimaSpacing.о4, vertical = TimaSpacing.о2),
+        .background(Tima.colors.softAccent, CircleShape)
+        .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
 ) {
-    Подпись(текст, кегль = TimaType.щ5, вес = androidx.compose.ui.text.font.FontWeight.Bold)
+    Caption(text, fontSize = TimaType.sz5, weight = androidx.compose.ui.text.font.FontWeight.Bold)
 }

@@ -19,20 +19,20 @@ import kotlin.test.assertTrue
 class DpapiVaultTest {
 
     private val windows = System.getProperty("os.name").orEmpty().startsWith("Windows")
-    private val секрет = ByteArray(32) { (it * 7 + 3).toByte() }
-    private val имя = SecretAlias("device-secret.v1")
+    private val secret = ByteArray(32) { (it * 7 + 3).toByte() }
+    private val name = SecretAlias("device-secret.v1")
 
-    private fun хранилище(): DpapiVault =
+    private fun store(): DpapiVault =
         DpapiVault(Files.createTempDirectory("tima-vault-test"))
 
     @Test
     fun секрет_кладётся_и_читается_обратно() {
-        if (!windows) return проверитьГромкийОтказ()
-        val vault = хранилище()
+        if (!windows) return checkLoudRefusal()
+        val vault = store()
 
-        vault.put(имя, секрет)
+        vault.put(name, secret)
 
-        assertContentEquals(секрет, vault.get(имя), "прочитано не то, что положили")
+        assertContentEquals(secret, vault.get(name), "прочитано не то, что положили")
     }
 
     @Test
@@ -40,16 +40,16 @@ class DpapiVaultTest {
         // Тот же вопрос, который поймал ложное обещание secure_delete: проверять надо
         // файл, а не свою уверенность. Здесь он главный — ровно этим дефектом v1
         // шифрование покоя и было декоративным.
-        if (!windows) return проверитьГромкийОтказ()
-        val каталог = Files.createTempDirectory("tima-vault-test")
-        DpapiVault(каталог).put(имя, секрет)
+        if (!windows) return checkLoudRefusal()
+        val catalog = Files.createTempDirectory("tima-vault-test")
+        DpapiVault(catalog).put(name, secret)
 
-        val файлы = каталог.toFile().listFiles().orEmpty()
-        assertEquals(1, файлы.size, "ожидался один файл секрета: ${файлы.map { it.name }}")
-        val байты = файлы[0].readBytes()
+        val files = catalog.toFile().listFiles().orEmpty()
+        assertEquals(1, files.size, "ожидался один файл секрета: ${files.map { it.name }}")
+        val bytes = files[0].readBytes()
 
-        assertFalse(байты.содержит(секрет), "секрет лежит на диске открытым — это дефект v1")
-        assertTrue(байты.size > секрет.size, "блоб DPAPI обязан быть длиннее секрета")
+        assertFalse(bytes.contains(secret), "секрет лежит на диске открытым — это дефект v1")
+        assertTrue(bytes.size > secret.size, "блоб DPAPI обязан быть длиннее секрета")
     }
 
     @Test
@@ -57,19 +57,19 @@ class DpapiVaultTest {
         // Энтропия не защищает от кода, запущенного под тем же пользователем — этого на
         // ПК не закрывает ничто. Она делает другое: не даёт прочитать блоб обычным
         // инструментом мимо приложения. Это и проверяется.
-        if (!windows) return проверитьГромкийОтказ()
-        val каталог = Files.createTempDirectory("tima-vault-test")
-        DpapiVault(каталог).put(имя, секрет)
-        val блоб = каталог.toFile().listFiles()!![0].readBytes()
+        if (!windows) return checkLoudRefusal()
+        val catalog = Files.createTempDirectory("tima-vault-test")
+        DpapiVault(catalog).put(name, secret)
+        val blob = catalog.toFile().listFiles()!![0].readBytes()
 
         assertFailsWith<Throwable> {
-            Crypt32Util.cryptUnprotectData(блоб, "чужая энтропия".toByteArray(), 0, null)
+            Crypt32Util.cryptUnprotectData(blob, "чужая энтропия".toByteArray(), 0, null)
         }
         // А с нашей — читается: значит отказ выше именно из-за энтропии, а не потому,
         // что блоб вообще не читается.
         assertContentEquals(
-            секрет,
-            Crypt32Util.cryptUnprotectData(блоб, "tima/secret-vault/v1".toByteArray(), 0, null),
+            secret,
+            Crypt32Util.cryptUnprotectData(blob, "tima/secret-vault/v1".toByteArray(), 0, null),
         )
     }
 
@@ -78,38 +78,38 @@ class DpapiVaultTest {
         // Разница дорогая: «нет секрета» означает первый запуск и рождение нового ключа.
         // Принять за первый запуск испорченный секрет значило бы молча выбросить всю
         // локальную переписку.
-        if (!windows) return проверитьГромкийОтказ()
-        val каталог = Files.createTempDirectory("tima-vault-test")
-        val vault = DpapiVault(каталог)
+        if (!windows) return checkLoudRefusal()
+        val catalog = Files.createTempDirectory("tima-vault-test")
+        val vault = DpapiVault(catalog)
 
-        assertNull(vault.get(имя), "на первом запуске секрета нет — и это не ошибка")
+        assertNull(vault.get(name), "на первом запуске секрета нет — и это не ошибка")
 
-        vault.put(имя, секрет)
-        val файл = каталог.toFile().listFiles()!![0]
-        файл.writeBytes(файл.readBytes().also { it[it.size / 2] = (it[it.size / 2] + 1).toByte() })
+        vault.put(name, secret)
+        val file = catalog.toFile().listFiles()!![0]
+        file.writeBytes(file.readBytes().also { it[it.size / 2] = (it[it.size / 2] + 1).toByte() })
 
-        assertFailsWith<SecretVaultFailure> { vault.get(имя) }
+        assertFailsWith<SecretVaultFailure> { vault.get(name) }
     }
 
     @Test
     fun повторная_запись_заменяет_а_удаление_убирает() {
-        if (!windows) return проверитьГромкийОтказ()
-        val vault = хранилище()
-        vault.put(имя, секрет)
-        val другой = ByteArray(32) { 0x5A }
+        if (!windows) return checkLoudRefusal()
+        val vault = store()
+        vault.put(name, secret)
+        val other = ByteArray(32) { 0x5A }
 
-        vault.put(имя, другой)
-        assertContentEquals(другой, vault.get(имя), "перезапись — обычный путь, а не отказ")
+        vault.put(name, other)
+        assertContentEquals(other, vault.get(name), "перезапись — обычный путь, а не отказ")
 
-        assertTrue(vault.remove(имя))
-        assertNull(vault.get(имя))
-        assertFalse(vault.remove(имя), "повторное удаление — не ошибка, но и не «удалил»")
+        assertTrue(vault.remove(name))
+        assertNull(vault.get(name))
+        assertFalse(vault.remove(name), "повторное удаление — не ошибка, но и не «удалил»")
     }
 
     @Test
     fun пустой_секрет_не_принимается() {
-        if (!windows) return проверитьГромкийОтказ()
-        assertFailsWith<IllegalArgumentException> { хранилище().put(имя, ByteArray(0)) }
+        if (!windows) return checkLoudRefusal()
+        assertFailsWith<IllegalArgumentException> { store().put(name, ByteArray(0)) }
     }
 
     /**
@@ -117,20 +117,20 @@ class DpapiVaultTest {
      * откат «положим открытым файлом» вернул бы дефект v1 на macOS и Linux, причём
      * молча.
      */
-    private fun проверитьГромкийОтказ() {
+    private fun checkLoudRefusal() {
         val vault = platformVault("test")
-        val беда = assertFailsWith<SecretVaultFailure> { vault.get(имя) }
+        val trouble = assertFailsWith<SecretVaultFailure> { vault.get(name) }
         assertTrue(
-            беда.message.orEmpty().contains("ещё не сделано"),
-            "ожидался внятный отказ, получено: ${беда.message}",
+            trouble.message.orEmpty().contains("ещё не сделано"),
+            "ожидался внятный отказ, получено: ${trouble.message}",
         )
-        assertFailsWith<SecretVaultFailure> { vault.put(имя, секрет) }
+        assertFailsWith<SecretVaultFailure> { vault.put(name, secret) }
     }
 
-    private fun ByteArray.содержит(образец: ByteArray): Boolean {
-        if (образец.isEmpty() || образец.size > size) return false
-        outer@ for (i in 0..size - образец.size) {
-            for (j in образец.indices) if (this[i + j] != образец[j]) continue@outer
+    private fun ByteArray.contains(sample: ByteArray): Boolean {
+        if (sample.isEmpty() || sample.size > size) return false
+        outer@ for (i in 0..size - sample.size) {
+            for (j in sample.indices) if (this[i + j] != sample[j]) continue@outer
             return true
         }
         return false

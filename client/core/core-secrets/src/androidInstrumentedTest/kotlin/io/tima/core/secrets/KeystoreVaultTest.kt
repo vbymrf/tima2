@@ -22,35 +22,35 @@ import kotlin.test.assertTrue
 class KeystoreVaultTest {
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
-    private val область = "проверка"
-    private val vault = KeystoreVault(context, область)
+    private val area = "проверка"
+    private val vault = KeystoreVault(context, area)
 
-    private val имя = SecretAlias("device-secret.v1")
-    private val секрет = ByteArray(32) { (it * 7 + 3).toByte() }
+    private val name = SecretAlias("device-secret.v1")
+    private val secret = ByteArray(32) { (it * 7 + 3).toByte() }
 
-    private val каталог = java.io.File(java.io.File(context.filesDir, "tima-secrets"), область)
+    private val catalog = java.io.File(java.io.File(context.filesDir, "tima-secrets"), area)
 
     @AfterTest
-    fun убрать() {
-        каталог.deleteRecursively()
+    fun remove() {
+        catalog.deleteRecursively()
     }
 
     @Test
     fun секрет_кладётся_и_читается_обратно() {
-        vault.put(имя, секрет)
-        assertContentEquals(секрет, vault.get(имя), "прочитано не то, что положили")
+        vault.put(name, secret)
+        assertContentEquals(secret, vault.get(name), "прочитано не то, что положили")
     }
 
     @Test
     fun на_диске_нет_открытых_байт_секрета() {
-        vault.put(имя, секрет)
+        vault.put(name, secret)
 
-        val файлы = каталог.listFiles().orEmpty()
-        assertEquals(1, файлы.size, "ожидался один файл: ${файлы.map { it.name }}")
-        val байты = файлы[0].readBytes()
+        val files = catalog.listFiles().orEmpty()
+        assertEquals(1, files.size, "ожидался один файл: ${files.map { it.name }}")
+        val bytes = files[0].readBytes()
 
-        assertFalse(содержит(байты, секрет), "секрет лежит на диске открытым — это дефект v1")
-        assertTrue(байты.size > секрет.size, "шифртекст с вектором и тегом обязан быть длиннее")
+        assertFalse(contains(bytes, secret), "секрет лежит на диске открытым — это дефект v1")
+        assertTrue(bytes.size > secret.size, "шифртекст с вектором и тегом обязан быть длиннее")
     }
 
     @Test
@@ -58,16 +58,16 @@ class KeystoreVaultTest {
         // GCM с повторённым вектором на том же ключе раскрывает открытый текст. Ключ
         // создаётся с setRandomizedEncryptionRequired(true) — проверяем, что это так и
         // работает, а не только объявлено.
-        vault.put(имя, секрет)
-        val первый = каталог.listFiles()!![0].readBytes()
-        vault.put(имя, секрет)
-        val второй = каталог.listFiles()!![0].readBytes()
+        vault.put(name, secret)
+        val first = catalog.listFiles()!![0].readBytes()
+        vault.put(name, secret)
+        val second = catalog.listFiles()!![0].readBytes()
 
         assertFalse(
-            первый.contentEquals(второй),
+            first.contentEquals(second),
             "один и тот же секрет дал те же байты: вектор повторился",
         )
-        assertContentEquals(секрет, vault.get(имя))
+        assertContentEquals(secret, vault.get(name))
     }
 
     @Test
@@ -75,36 +75,36 @@ class KeystoreVaultTest {
         // Разница дорогая: «нет секрета» означает первый запуск и рождение нового ключа.
         // Принять за первый запуск испорченный секрет значило бы молча выбросить всю
         // локальную переписку.
-        assertNull(vault.get(имя), "на первом запуске секрета нет — и это не ошибка")
+        assertNull(vault.get(name), "на первом запуске секрета нет — и это не ошибка")
 
-        vault.put(имя, секрет)
-        val файл = каталог.listFiles()!![0]
-        val байты = файл.readBytes()
-        байты[байты.size - 1] = (байты[байты.size - 1] + 1).toByte()
-        файл.writeBytes(байты)
+        vault.put(name, secret)
+        val file = catalog.listFiles()!![0]
+        val bytes = file.readBytes()
+        bytes[bytes.size - 1] = (bytes[bytes.size - 1] + 1).toByte()
+        file.writeBytes(bytes)
 
-        assertFailsWith<SecretVaultFailure> { vault.get(имя) }
+        assertFailsWith<SecretVaultFailure> { vault.get(name) }
     }
 
     @Test
     fun повторная_запись_заменяет_а_удаление_убирает() {
-        vault.put(имя, секрет)
-        val другой = ByteArray(32) { 0x5A }
+        vault.put(name, secret)
+        val other = ByteArray(32) { 0x5A }
 
-        vault.put(имя, другой)
-        assertContentEquals(другой, vault.get(имя), "перезапись — обычный путь, а не отказ")
+        vault.put(name, other)
+        assertContentEquals(other, vault.get(name), "перезапись — обычный путь, а не отказ")
 
-        assertTrue(vault.remove(имя))
-        assertNull(vault.get(имя))
-        assertFalse(vault.remove(имя), "повторное удаление — не ошибка, но и не «удалил»")
+        assertTrue(vault.remove(name))
+        assertNull(vault.get(name))
+        assertFalse(vault.remove(name), "повторное удаление — не ошибка, но и не «удалил»")
     }
 
     @Test
     fun чужая_область_своих_секретов_не_видит() {
-        vault.put(имя, секрет)
-        val чужая = KeystoreVault(context, "чужая-область")
+        vault.put(name, secret)
+        val foreign = KeystoreVault(context, "чужая-область")
         try {
-            assertNull(чужая.get(имя))
+            assertNull(foreign.get(name))
         } finally {
             java.io.File(java.io.File(context.filesDir, "tima-secrets"), "чужая-область")
                 .deleteRecursively()
@@ -113,7 +113,7 @@ class KeystoreVaultTest {
 
     @Test
     fun пустой_секрет_не_принимается() {
-        assertFailsWith<IllegalArgumentException> { vault.put(имя, ByteArray(0)) }
+        assertFailsWith<IllegalArgumentException> { vault.put(name, ByteArray(0)) }
     }
 
     @Test
@@ -121,28 +121,28 @@ class KeystoreVaultTest {
         // Тот же договор, что проверен в общем коде на хранилище в памяти, — но на
         // настоящем Keystore.
         val store = VaultSecretStore(vault)
-        val сессия = Session(
+        val session = Session(
             userId = "0f8fad5b-d9cb-469f-a165-70867728950e",
             deviceId = "7c9e6679-7425-40de-944b-e07fc1f90ae7",
             accessToken = "eyJhbGciOiJFZERTQSJ9.полезная-нагрузка.подпись",
         )
 
-        store.saveDeviceSecret(секрет)
+        store.saveDeviceSecret(secret)
         assertFalse(store.hasDevice(), "секрет без сессии — прерванная регистрация")
 
-        store.saveSession(сессия)
+        store.saveSession(session)
         assertTrue(store.hasDevice())
-        assertEquals(сессия, store.session())
+        assertEquals(session, store.session())
 
         store.clear()
         assertNull(store.session())
         assertNull(store.deviceSecret())
     }
 
-    private fun содержит(где: ByteArray, что: ByteArray): Boolean {
-        if (что.isEmpty() || что.size > где.size) return false
-        outer@ for (i in 0..где.size - что.size) {
-            for (j in что.indices) if (где[i + j] != что[j]) continue@outer
+    private fun contains(where: ByteArray, what: ByteArray): Boolean {
+        if (what.isEmpty() || what.size > where.size) return false
+        outer@ for (i in 0..where.size - what.size) {
+            for (j in what.indices) if (where[i + j] != what[j]) continue@outer
             return true
         }
         return false

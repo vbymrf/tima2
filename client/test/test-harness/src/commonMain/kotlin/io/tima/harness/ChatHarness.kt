@@ -58,10 +58,10 @@ class ChatHarness(
 
     private val db = TimaDatabase(driver)
 
-    private val шифр = харнессШифр()
+    private val cipher = cipherHarness()
 
-    val outbox = Outbox(SqlOutboxStore(db, шифр), nowMs = { time })
-    val inbox = Inbox(SqlInboxStore(db, шифр), nowMs = { time })
+    val outbox = Outbox(SqlOutboxStore(db, cipher), nowMs = { time })
+    val inbox = Inbox(SqlInboxStore(db, cipher), nowMs = { time })
 
     /**
      * Транспорт. Один на харнесс и **не переживает перезапуск** — как настоящее
@@ -85,11 +85,11 @@ class ChatHarness(
      * просит её **на каждую переписку**: ключ escrow спрашивается у сервера по `chat_id`.
      * Поэтому одно значение раздаётся всем перепискам, у которых есть что отправлять.
      */
-    private fun эпохи(): Map<String, Long> =
+    private fun epoch(): Map<String, Long> =
         outbox.pending().map { it.chatId }.distinct().associateWith { epochKeyId }
 
     /** Один проход насоса: запечатать готовое и отдать фейковому транспорту. */
-    suspend fun pumpOnce(): Int = pump.runOnce(эпохи(), ::seal, transport::send)
+    suspend fun pumpOnce(): Int = pump.runOnce(epoch(), ::seal, transport::send)
 
     /**
      * Проход через **чужой** транспорт — например настоящий HTTP против стенда.
@@ -99,7 +99,7 @@ class ChatHarness(
      * сети» ходил в сеть.
      */
     suspend fun pumpVia(send: suspend (ReadyToSend) -> SendOutcome): Int =
-        pump.runOnce(эпохи(), ::seal, send)
+        pump.runOnce(epoch(), ::seal, send)
 
     /** Прошло время: сроки повторов наступили. */
     fun passTime(ms: Long) {
@@ -114,9 +114,9 @@ class ChatHarness(
      * «Сервер» переносится, потому что он-то не перезапускался.
      */
     fun restart(): ChatHarness {
-        val прежнийСервер = transport
+        val previouServer = transport
         return ChatHarness(driver, startTime = time, startEpoch = epochKeyId, sealWith = sealWith).also {
-            it.transport = прежнийСервер
+            it.transport = previouServer
             it.outbox.recoverOnStart()
         }
     }

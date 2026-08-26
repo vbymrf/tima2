@@ -46,13 +46,13 @@ object EscrowKeyVerifier {
         nowMs: Long,
     ): Result<EscrowEpochKey> {
         if (enclaveSigningPub.size != SIGNING_KEY_BYTES) {
-            return отказ("ключ подписи анклава не $SIGNING_KEY_BYTES байт: ${enclaveSigningPub.size}")
+            return refusal("ключ подписи анклава не $SIGNING_KEY_BYTES байт: ${enclaveSigningPub.size}")
         }
         if (publicKey.size != PUBLIC_KEY_BYTES) {
-            return отказ("ключ эпохи не $PUBLIC_KEY_BYTES байт: ${publicKey.size}")
+            return refusal("ключ эпохи не $PUBLIC_KEY_BYTES байт: ${publicKey.size}")
         }
         if (signature.size != SIGNATURE_BYTES) {
-            return отказ("подпись не $SIGNATURE_BYTES байт: ${signature.size}")
+            return refusal("подпись не $SIGNATURE_BYTES байт: ${signature.size}")
         }
 
         val meta = EscrowKeyMeta(
@@ -71,24 +71,24 @@ object EscrowKeyVerifier {
                 signature,
             )
         ) {
-            return отказ("подпись анклава не сошлась: ключ подменён или это не наш анклав")
+            return refusal("подпись анклава не сошлась: ключ подменён или это не наш анклав")
         }
 
         // Окно проверяется ПОСЛЕ подписи: сроки тоже подписаны, и судить о них до
         // проверки подписи значит судить по неподтверждённым числам.
         if (nowMs < validFromMs) {
-            return отказ("ключ эпохи $epoch ещё не начал действовать")
+            return refusal("ключ эпохи $epoch ещё не начал действовать")
         }
         if (nowMs >= validToMs) {
             // Запечатывать на истёкшую эпоху — значит отдать сообщение ключу, который
             // анклав уничтожит раньше срока хранения переписки.
-            return отказ("ключ эпохи $epoch истёк")
+            return refusal("ключ эпохи $epoch истёк")
         }
 
         return Result.success(EscrowEpochKey(publicKey = publicKey, version = id.toInt()))
     }
 
-    private fun отказ(message: String): Result<EscrowEpochKey> =
+    private fun refusal(message: String): Result<EscrowEpochKey> =
         Result.failure(EscrowKeyRejected(message))
 
     private const val SIGNING_KEY_BYTES = 32

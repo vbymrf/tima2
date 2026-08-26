@@ -11,16 +11,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import io.tima.core.ui.Аватар
-import io.tima.core.ui.ВЦентре
-import io.tima.core.ui.Второстепенное
-import io.tima.core.ui.Имя
-import io.tima.core.ui.КнопкаИконка
-import io.tima.core.ui.Поле
-import io.tima.core.ui.РядУправления
-import io.tima.core.ui.СтрокаСписка
+import io.tima.core.ui.Avatar
+import io.tima.core.ui.InCenter
+import io.tima.core.ui.Secondary
+import io.tima.core.ui.Name
+import io.tima.core.ui.IconButton
+import io.tima.core.ui.Field
+import io.tima.core.ui.ControlRow
+import io.tima.core.ui.ListLine
 import io.tima.core.ui.TimaSpacing
-import io.tima.core.ui.Третьестепенное
+import io.tima.core.ui.Tertiary
 import io.tima.domain.chat.Contact
 
 /**
@@ -43,51 +43,51 @@ import io.tima.domain.chat.Contact
  * книге…» стоит внутри содержимого и не прячется (`§1`).
  */
 @Composable
-fun ЭкранКниги(
-    состояние: КнигаState,
-    onПоиск: (String) -> Unit,
-    onОткрыть: (Contact) -> Unit,
+fun BookScreen(
+    state: BookState,
+    onSearch: (String) -> Unit,
+    onOpen: (Contact) -> Unit,
     modifier: Modifier = Modifier,
     /** «＋» у строки поиска: завести контакт. Экрана нет — кнопки тоже. */
-    onДобавить: (() -> Unit)? = null,
+    onAdd: (() -> Unit)? = null,
 ) {
     Column(modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = TimaSpacing.о4, vertical = TimaSpacing.о2),
-            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
+                .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Поле(
-                значение = состояние.поиск,
-                onИзменение = onПоиск,
-                подсказка = "Поиск по книге…",
+            Field(
+                value = state.search,
+                onChange = onSearch,
+                hint = "Поиск по книге…",
                 modifier = Modifier.weight(1f),
             )
-            if (onДобавить != null) {
-                РядУправления { КнопкаИконка(знак = "＋", onClick = onДобавить, живая = true) }
+            if (onAdd != null) {
+                ControlRow { IconButton(glyph = "＋", onClick = onAdd, live = true) }
             }
         }
 
         when {
-            состояние.ничегоНеНашлось -> ВЦентре(Modifier.fillMaxSize()) {
+            state.notFoundNothing -> InCenter(Modifier.fillMaxSize()) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Имя("Никого не нашлось")
-                    Второстепенное("По «${состояние.поиск}» в книге совпадений нет")
+                    Name("Никого не нашлось")
+                    Secondary("По «${state.search}» в книге совпадений нет")
                 }
             }
 
-            состояние.все.isEmpty() -> ВЦентре(Modifier.fillMaxSize()) {
+            state.all.isEmpty() -> InCenter(Modifier.fillMaxSize()) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
-                    modifier = Modifier.padding(TimaSpacing.о5),
+                    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                    modifier = Modifier.padding(TimaSpacing.about5),
                 ) {
-                    Имя("В книге пока никого")
+                    Name("В книге пока никого")
                     // Не «нет контактов», а откуда они берутся: иначе человек будет
                     // искать, где их добавить, а добавлять их пока неоткуда.
-                    Второстепенное(
+                    Secondary(
                         "Здесь появляются люди, с которыми уже начата переписка. " +
                             "Адресную книгу телефона приложение не читает.",
                     )
@@ -95,16 +95,16 @@ fun ЭкранКниги(
             }
 
             else -> LazyColumn(Modifier.fillMaxSize()) {
-                items(состояние.видимые, key = { it.chatId }) { человек ->
-                    СтрокаСписка(
-                        onClick = { onОткрыть(человек) },
-                        слева = { Аватар(буквы = буквы(человек)) },
-                        середина = {
+                items(state.visible, key = { it.chatId }) { person ->
+                    ListLine(
+                        onClick = { onOpen(person) },
+                        left = { Avatar(letters = letters(person)) },
+                        middle = {
                             Column {
-                                Имя(человек.name ?: "Без имени")
+                                Name(person.name ?: "Без имени")
                                 // Идентификатор второй строкой: у человека без имени
                                 // это единственное, чем строка отличается от соседней.
-                                Третьестепенное(человек.userId, однойСтрокой = true)
+                                Tertiary(person.userId, lineOne = true)
                             }
                         },
                     )
@@ -115,5 +115,5 @@ fun ЭкранКниги(
 }
 
 /** Буквы аватара: первая имени, иначе первая идентификатора. */
-private fun буквы(человек: Contact): String =
-    (человек.name ?: человек.userId).take(1).uppercase()
+private fun letters(person: Contact): String =
+    (person.name ?: person.userId).take(1).uppercase()

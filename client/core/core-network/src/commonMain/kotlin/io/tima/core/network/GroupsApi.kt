@@ -40,7 +40,7 @@ class GroupsApi(
             client.post(route.api("/api/v1/groups")) {
                 header("Authorization", "Bearer ${token()}")
                 contentType(ContentType.Application.Json)
-                setBody("""{"kind":"$kind","title":${цитата(title)}}""")
+                setBody("""{"kind":"$kind","title":${quote(title)}}""")
             }
         } catch (e: Throwable) {
             return GroupCreateResult.NoConnection(classifyFailure(e))
@@ -66,18 +66,18 @@ class GroupsApi(
         if (response.status != HttpStatusCode.OK) {
             return GroupsResult.Refused(response.status.value, body.codeOf())
         }
-        val группы = body?.get("groups")?.jsonArrayOrNull()?.mapNotNull { элемент ->
-            val объект = элемент.jsonObjectOrNull() ?: return@mapNotNull null
-            val id = объект.str("group_id") ?: return@mapNotNull null
+        val groups = body?.get("groups")?.jsonArrayOrNull()?.mapNotNull { element ->
+            val objectValue = element.jsonObjectOrNull() ?: return@mapNotNull null
+            val id = objectValue.str("group_id") ?: return@mapNotNull null
             RemoteGroup(
                 groupId = id,
-                title = объект.str("title").orEmpty(),
-                kind = объект.str("kind").orEmpty(),
-                ownerId = объект.str("owner_id").orEmpty(),
-                myRole = объект.str("my_role").orEmpty(),
+                title = objectValue.str("title").orEmpty(),
+                kind = objectValue.str("kind").orEmpty(),
+                ownerId = objectValue.str("owner_id").orEmpty(),
+                myRole = objectValue.str("my_role").orEmpty(),
             )
         }
-        return группы?.let { GroupsResult.Groups(it) }
+        return groups?.let { GroupsResult.Groups(it) }
             ?: GroupsResult.Refused(response.status.value, "ответ без groups")
     }
 
@@ -94,17 +94,17 @@ class GroupsApi(
         if (response.status != HttpStatusCode.OK) {
             return MembersResult.Refused(response.status.value, body.codeOf())
         }
-        val участники = body?.get("members")?.jsonArrayOrNull()?.mapNotNull { элемент ->
-            val объект = элемент.jsonObjectOrNull() ?: return@mapNotNull null
-            val id = объект.str("user_id") ?: return@mapNotNull null
+        val members = body?.get("members")?.jsonArrayOrNull()?.mapNotNull { element ->
+            val objectValue = element.jsonObjectOrNull() ?: return@mapNotNull null
+            val id = objectValue.str("user_id") ?: return@mapNotNull null
             RemoteMember(
                 userId = id,
-                role = объект.str("role").orEmpty(),
-                joinedAt = объект.str("joined_at"),
-                bannedUntil = объект.str("banned_until"),
+                role = objectValue.str("role").orEmpty(),
+                joinedAt = objectValue.str("joined_at"),
+                bannedUntil = objectValue.str("banned_until"),
             )
         }
-        return участники?.let { MembersResult.Members(it) }
+        return members?.let { MembersResult.Members(it) }
             ?: MembersResult.Refused(response.status.value, "ответ без members")
     }
 
@@ -124,7 +124,7 @@ class GroupsApi(
         } catch (e: Throwable) {
             return MemberResult.NoConnection(classifyFailure(e))
         }
-        return исход(response)
+        return outcome(response)
     }
 
     /** `DELETE /api/v1/groups/{id}/members/{userId}` — убрать участника или выйти самому. */
@@ -136,10 +136,10 @@ class GroupsApi(
         } catch (e: Throwable) {
             return MemberResult.NoConnection(classifyFailure(e))
         }
-        return исход(response)
+        return outcome(response)
     }
 
-    private suspend fun исход(response: io.ktor.client.statement.HttpResponse): MemberResult {
+    private suspend fun outcome(response: io.ktor.client.statement.HttpResponse): MemberResult {
         val body = response.jsonBody()
         val code = body.codeOf()
         return when {
@@ -157,17 +157,17 @@ class GroupsApi(
      * место, куда попадает текст **от человека**. Без экранирования кавычка в названии
      * ломала бы JSON, и выглядело бы это как отказ сервера на пустом месте.
      */
-    private fun цитата(текст: String): String {
+    private fun quote(text: String): String {
         val sb = StringBuilder("\"")
-        for (знак in текст) {
-            when (знак) {
+        for (glyph in text) {
+            when (glyph) {
                 '"' -> sb.append("\\\"")
                 '\\' -> sb.append("\\\\")
                 '\n' -> sb.append("\\n")
                 '\r' -> sb.append("\\r")
                 '\t' -> sb.append("\\t")
-                else -> if (знак < ' ') sb.append("\\u").append(знак.code.toString(16).padStart(4, '0'))
-                else sb.append(знак)
+                else -> if (glyph < ' ') sb.append("\\u").append(glyph.code.toString(16).padStart(4, '0'))
+                else sb.append(glyph)
             }
         }
         return sb.append('"').toString()

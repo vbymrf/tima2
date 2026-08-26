@@ -2,7 +2,7 @@ package io.tima.testui
 
 import io.tima.core.ui.TimaColors
 import io.tima.core.ui.TimaTheme
-import io.tima.core.ui.Тима
+import io.tima.core.ui.Tima
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -37,19 +37,19 @@ import kotlin.math.abs
  * Картинки при этом всё равно сохраняются в `build/снимки/` — посмотреть глазами
  * полезно, просто это не то, на чём стоит проверка.
  */
-class Снимок(private val карта: Bitmap, val имя: String) {
-    val ширина: Int get() = карта.width
-    val высота: Int get() = карта.height
+class Snapshot(private val map: Bitmap, val name: String) {
+    val width: Int get() = map.width
+    val height: Int get() = map.height
 
     /** Цвет пикселя. Всегда непрозрачный: сцена рисуется на непрозрачной поверхности. */
-    fun цвет(x: Int, y: Int): Color = Color(карта.getColor(x, y))
+    fun color(x: Int, y: Int): Color = Color(map.getColor(x, y))
 
-    fun пиксели(): Sequence<Color> = sequence {
-        for (y in 0 until высота) for (x in 0 until ширина) yield(цвет(x, y))
+    fun pixels(): Sequence<Color> = sequence {
+        for (y in 0 until height) for (x in 0 until width) yield(color(x, y))
     }
 
     /** Есть ли такой цвет хоть где-нибудь. Для «полосы тут быть не должно». */
-    fun есть(цвет: Color, допуск: Double = ДОПУСК): Boolean = пиксели().any { близки(it, цвет, допуск) }
+    fun has(color: Color, tolerance: Double = TOLERANCE): Boolean = pixels().any { close(it, color, tolerance) }
 
     /**
      * Есть ли в области **пятно** этого цвета — сплошной квадрат [сторона]×[сторона].
@@ -63,19 +63,19 @@ class Снимок(private val карта: Bitmap, val имя: String) {
      * Квадрат, а не ряд: полоса автора шириной в четыре точки не содержит ряда в восемь,
      * зато содержит квадрат три на три.
      */
-    fun естьПятно(
-        цвет: Color,
-        x: IntRange = 0 until ширина,
-        y: IntRange = 0 until высота,
-        сторона: Int = 3,
-        допуск: Double = ДОПУСК,
+    fun patchHas(
+        color: Color,
+        x: IntRange = 0 until width,
+        y: IntRange = 0 until height,
+        side: Int = 3,
+        tolerance: Double = TOLERANCE,
     ): Boolean {
-        for (yy in y.first..(y.last - сторона + 1)) {
-            столбцы@ for (xx in x.first..(x.last - сторона + 1)) {
-                for (dy in 0 until сторона) {
-                    for (dx in 0 until сторона) {
-                        val точка = цвет(xx + dx, yy + dy)
-                        if (!близки(точка, цвет, допуск)) continue@столбцы
+        for (yy in y.first..(y.last - side + 1)) {
+            columns@ for (xx in x.first..(x.last - side + 1)) {
+                for (dy in 0 until side) {
+                    for (dx in 0 until side) {
+                        val dot = color(xx + dx, yy + dy)
+                        if (!close(dot, color, tolerance)) continue@columns
                     }
                 }
                 return true
@@ -85,38 +85,38 @@ class Снимок(private val карта: Bitmap, val имя: String) {
     }
 
     /** Самый тёмный пиксель области — сердцевина глифа, если в области есть текст. */
-    fun самыйТёмный(x: IntRange, y: IntRange): Color = крайний(x, y) { -яркость(it) }
+    fun darkMost(x: IntRange, y: IntRange): Color = edge(x, y) { -brightness(it) }
 
-    fun самыйСветлый(x: IntRange, y: IntRange): Color = крайний(x, y) { яркость(it) }
+    fun lightMost(x: IntRange, y: IntRange): Color = edge(x, y) { brightness(it) }
 
-    private fun крайний(x: IntRange, y: IntRange, вес: (Color) -> Double): Color {
-        var лучший = цвет(x.first, y.first)
+    private fun edge(x: IntRange, y: IntRange, weight: (Color) -> Double): Color {
+        var best = color(x.first, y.first)
         for (yy in y) for (xx in x) {
-            val c = цвет(xx, yy)
-            if (вес(c) > вес(лучший)) лучший = c
+            val c = color(xx, yy)
+            if (weight(c) > weight(best)) best = c
         }
-        return лучший
+        return best
     }
 
     /** Доля пикселей, которыми два снимка расходятся. */
-    fun расхождение(другой: Снимок): Double {
-        require(ширина == другой.ширина && высота == другой.высота)
-        var разных = 0
-        for (y in 0 until высота) for (x in 0 until ширина) {
-            if (!близки(цвет(x, y), другой.цвет(x, y), ДОПУСК)) разных++
+    fun difference(other: Snapshot): Double {
+        require(width == other.width && height == other.height)
+        var different = 0
+        for (y in 0 until height) for (x in 0 until width) {
+            if (!close(color(x, y), other.color(x, y), TOLERANCE)) different++
         }
-        return разных.toDouble() / (ширина * высота)
+        return different.toDouble() / (width * height)
     }
 
     companion object {
-        const val ДОПУСК: Double = 2.0 / 255
+        const val TOLERANCE: Double = 2.0 / 255
 
-        fun близки(a: Color, b: Color, допуск: Double = ДОПУСК): Boolean =
-            abs(a.red - b.red) <= допуск &&
-                abs(a.green - b.green) <= допуск &&
-                abs(a.blue - b.blue) <= допуск
+        fun close(a: Color, b: Color, tolerance: Double = TOLERANCE): Boolean =
+            abs(a.red - b.red) <= tolerance &&
+                abs(a.green - b.green) <= tolerance &&
+                abs(a.blue - b.blue) <= tolerance
 
-        private fun яркость(c: Color): Double = 0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue
+        private fun brightness(c: Color): Double = 0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue
     }
 }
 
@@ -127,11 +127,11 @@ class Снимок(private val карта: Bitmap, val имя: String) {
  * полупрозрачен, и без непрозрачной подложки снимок получился бы на пустоте, чего на
  * устройстве не бывает.
  */
-fun снять(
-    имя: String,
-    ширина: Int,
-    высота: Int,
-    тёмная: Boolean,
+fun capture(
+    name: String,
+    width: Int,
+    height: Int,
+    dark: Boolean,
     /**
      * Чем закрашено под содержимым.
      *
@@ -141,39 +141,39 @@ fun снять(
      * подложкой темы такого не покажет никогда — он покрасит ровно то же, что покрасил бы
      * экран.
      */
-    подложка: Color? = null,
-    содержимое: @Composable () -> Unit,
-): Снимок {
-    val сцена = ImageComposeScene(width = ширина, height = высота, density = Density(1f)) {
-        TimaTheme(dark = тёмная) {
-            Box(Modifier.fillMaxSize().background(подложка ?: Тима.цвета.поверхность)) { содержимое() }
+    backdrop: Color? = null,
+    content: @Composable () -> Unit,
+): Snapshot {
+    val scene = ImageComposeScene(width = width, height = height, density = Density(1f)) {
+        TimaTheme(dark = dark) {
+            Box(Modifier.fillMaxSize().background(backdrop ?: Tima.colors.surface)) { content() }
         }
     }
     try {
-        val картинка = сцена.render()
-        val полноеИмя = "$имя-${if (тёмная) "тёмная" else "светлая"}"
-        сохранить(картинка, полноеИмя)
-        return Снимок(Bitmap.makeFromImage(картинка), полноеИмя)
+        val image = scene.render()
+        val fullName = "$name-${if (dark) "dark" else "light"}"
+        save(image, fullName)
+        return Snapshot(Bitmap.makeFromImage(image), fullName)
     } finally {
-        сцена.close()
+        scene.close()
     }
 }
 
-private fun сохранить(картинка: org.jetbrains.skia.Image, имя: String) {
-    val каталог = File("build/снимки").apply { mkdirs() }
-    картинка.encodeToData()?.bytes?.let { File(каталог, "$имя.png").writeBytes(it) }
+private fun save(image: org.jetbrains.skia.Image, name: String) {
+    val catalog = File("build/снимки").apply { mkdirs() }
+    image.encodeToData()?.bytes?.let { File(catalog, "$name.png").writeBytes(it) }
 }
 
 /** Обе темы одним вызовом: почти каждое утверждение макета проверяется в двух. */
-fun обеТемы(
-    имя: String,
-    ширина: Int,
-    высота: Int,
-    подложка: Color? = null,
-    содержимое: @Composable () -> Unit,
-): Map<String, Снимок> = mapOf(
-    "светлая" to снять(имя, ширина, высота, тёмная = false, подложка = подложка, содержимое = содержимое),
-    "тёмная" to снять(имя, ширина, высота, тёмная = true, подложка = подложка, содержимое = содержимое),
+fun bothThemes(
+    name: String,
+    width: Int,
+    height: Int,
+    backdrop: Color? = null,
+    content: @Composable () -> Unit,
+): Map<String, Snapshot> = mapOf(
+    "светлая" to capture(name, width, height, dark = false, backdrop = backdrop, content = content),
+    "тёмная" to capture(name, width, height, dark = true, backdrop = backdrop, content = content),
 )
 
 /**
@@ -183,8 +183,8 @@ fun обеТемы(
  * показывает то, что под ним, — на телефоне это увидели глазами, а снимок с обычной
  * подложкой этого не покажет: он красит ровно тем же цветом, каким покрасил бы экран.
  */
-val ЧУЖОЙ_ФОН: Color = Color(0xFFFF00FF)
+val FOREIGN_BACKGROUND: Color = Color(0xFFFF00FF)
 
 /** Тема по имени — чтобы в сообщении об ошибке стояло «светлая», а не `false`. */
-fun тема(имя: String): TimaColors =
-    if (имя == "тёмная") TimaColors.тёмная else TimaColors.светлая
+fun theme(name: String): TimaColors =
+    if (name == "тёмная") TimaColors.dark else TimaColors.light

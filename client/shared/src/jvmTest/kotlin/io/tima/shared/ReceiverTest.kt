@@ -20,34 +20,34 @@ import kotlin.test.assertTrue
  * чужим, — и на телефоне, и на ПК одновременно. Заодно эхо ломало серию: следующее чужое
  * сообщение считалось продолжением и теряло имя автора.
  */
-class ПриёмникTest {
+class ReceiverTest {
 
-    private val каталог: File = File.createTempFile("tima-приёмник", "").let {
+    private val catalog: File = File.createTempFile("tima-приёмник", "").let {
         it.delete(); it.mkdirs(); it
     }
 
     @AfterTest
-    fun убрать() {
-        каталог.deleteRecursively()
+    fun remove() {
+        catalog.deleteRecursively()
     }
 
-    private fun приёмник(myDeviceId: String): Приёмник {
-        val сессия = Session(userId = "u-я", deviceId = myDeviceId, accessToken = "t")
-        val окружение = Окружение.открыть(desktopDatabase(File(каталог, "tima.db")), СЕКРЕТ, сессия.userId)
-        val сеть = Сеть.создать(сессия)
-        val личность = deviceIdentityFrom(СЕКРЕТ)
-        return Приёмник(
-            окружение = окружение,
-            сеть = сеть,
-            сессия = сессия,
-            личность = личность,
-            оркестрКлючей = ОркестрГрупповыхКлючей(окружение, сеть, личность, сейчасМс = { 0L }),
+    private fun receiver(myDeviceId: String): Receiver {
+        val session = Session(userId = "u-я", deviceId = myDeviceId, accessToken = "t")
+        val environment = Environment.open(desktopDatabase(File(catalog, "tima.db")), SECRET, session.userId)
+        val network = Network.create(session)
+        val identity = deviceIdentityFrom(SECRET)
+        return Receiver(
+            environment = environment,
+            network = network,
+            session = session,
+            identity = identity,
+            keyOrchestrator = GroupKeyOrchestrator(environment, network, identity, msNow = { 0L }),
         )
     }
 
     @Test
     fun конверт_с_этого_же_устройства_считается_эхом() {
-        assertTrue(приёмник("d-моё").свояКопия("d-моё"))
+        assertTrue(receiver("d-моё").ownCopy("d-моё"))
     }
 
     /**
@@ -59,16 +59,16 @@ class ПриёмникTest {
      */
     @Test
     fun конверт_с_другого_устройства_не_эхо() {
-        assertFalse(приёмник("d-моё").свояКопия("d-телефон"))
+        assertFalse(receiver("d-моё").ownCopy("d-телефон"))
     }
 
     /** Неразобранный конверт отправителя не назвал — и эхом считаться не может. */
     @Test
     fun конверт_без_отправителя_не_эхо() {
-        assertFalse(приёмник("d-моё").свояКопия(null))
+        assertFalse(receiver("d-моё").ownCopy(null))
     }
 
     private companion object {
-        val СЕКРЕТ: ByteArray = ByteArray(32) { (it + 5).toByte() }
+        val SECRET: ByteArray = ByteArray(32) { (it + 5).toByte() }
     }
 }

@@ -30,33 +30,33 @@ class SyncGroupKeys(
      * нечитаемой целиком вместо одного сообщения. Поэтому число неоткрытых возвращается
      * наружу: это то, о чём стоит знать, но не то, из-за чего стоит останавливаться.
      */
-    suspend fun обновить(groupId: String): SyncKeysStep {
-        val наша = keys.latestVersion(groupId) ?: 0
-        return when (val ответ = wraps.mine(groupId, sinceVersion = наша)) {
+    suspend fun refresh(groupId: String): SyncKeysStep {
+        val our = keys.latestVersion(groupId) ?: 0
+        return when (val answer = wraps.mine(groupId, sinceVersion = our)) {
             is GroupKeyWrapsStep.Wraps -> {
-                var добавлено = 0
-                var неоткрытых = 0
-                for (обёртка in ответ.wraps) {
-                    val ключ = unwrap.unwrap(обёртка.senderEphemeralPub, обёртка.wrapped)
-                    if (ключ == null) {
-                        неоткрытых++
+                var added = 0
+                var unopened = 0
+                for (wrap in answer.wraps) {
+                    val key = unwrap.unwrap(wrap.senderEphemeralPub, wrap.wrapped)
+                    if (key == null) {
+                        unopened++
                         continue
                     }
-                    keys.put(groupId, обёртка.gkVersion, ключ)
-                    добавлено++
+                    keys.put(groupId, wrap.gkVersion, key)
+                    added++
                 }
                 SyncKeysStep.Synced(
-                    добавлено = добавлено,
-                    неоткрытых = неоткрытых,
+                    added = added,
+                    unopened = unopened,
                     // Версия группы может быть больше всего, что выдано нам: нас могли
                     // добавить после ротации. Отправляющему нужна она, а не наша:
                     // зашифровать своей старой значит написать в группу так, что новые
                     // участники не прочтут.
-                    текущаяВерсия = ответ.currentVersion,
+                    currentVersion = answer.currentVersion,
                 )
             }
-            is GroupKeyWrapsStep.Offline -> SyncKeysStep.Offline(ответ.retryAfterMs)
-            is GroupKeyWrapsStep.Refused -> SyncKeysStep.Refused(ответ.reason)
+            is GroupKeyWrapsStep.Offline -> SyncKeysStep.Offline(answer.retryAfterMs)
+            is GroupKeyWrapsStep.Refused -> SyncKeysStep.Refused(answer.reason)
         }
     }
 }
@@ -105,7 +105,7 @@ interface GroupKeyBook {
      * при утечке ЭТОЙ версии. Ротация заводит новую строку — счёт начинается заново сам,
      * без отдельного обнуления.
      */
-    fun отметитьОтправку(groupId: String, version: Int): Int
+    fun markSend(groupId: String, version: Int): Int
 
     /** Забыть группу: ключи уходят вместе с её сообщениями. */
     fun forget(groupId: String)
@@ -132,7 +132,7 @@ sealed interface SyncKeysStep {
      * @param неоткрытых обёрток, которые не развернулись. Не ошибка сама по себе, но
      *   растущее число здесь означает, что с ключом устройства что-то не так.
      */
-    data class Synced(val добавлено: Int, val неоткрытых: Int, val текущаяВерсия: Int) : SyncKeysStep
+    data class Synced(val added: Int, val unopened: Int, val currentVersion: Int) : SyncKeysStep
 
     data class Offline(val retryAfterMs: Long) : SyncKeysStep
     data class Refused(val reason: String) : SyncKeysStep

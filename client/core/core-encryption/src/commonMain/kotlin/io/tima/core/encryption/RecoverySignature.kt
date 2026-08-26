@@ -26,34 +26,34 @@ object RecoverySignature {
      *   опечатка в фразе выглядит именно так, и это не поломка.
      */
     fun sign(words: List<String>, groupId: String, deviceId: String): String? {
-        val ключ = runCatching { AccountMnemonic.identityFromMnemonic(words) }.getOrNull() ?: return null
-        val подпись = MessageSigner.sign(ключ, canonicalBytes(groupId, deviceId)).getOrNull() ?: return null
-        return encodeBase64UrlBytes(подпись)
+        val key = runCatching { AccountMnemonic.identityFromMnemonic(words) }.getOrNull() ?: return null
+        val caption = MessageSigner.sign(key, canonicalBytes(groupId, deviceId)).getOrNull() ?: return null
+        return encodeBase64UrlBytes(caption)
     }
 }
 
 /** Base64url без выравнивания — как ждёт сервер. */
 private fun encodeBase64UrlBytes(bytes: ByteArray): String {
-    val алфавит = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
     val sb = StringBuilder((bytes.size * 4 + 2) / 3)
     var i = 0
     while (i + 2 < bytes.size) {
         val n = (bytes[i].toInt() and 0xFF shl 16) or
             (bytes[i + 1].toInt() and 0xFF shl 8) or
             (bytes[i + 2].toInt() and 0xFF)
-        sb.append(алфавит[n ushr 18 and 63]).append(алфавит[n ushr 12 and 63])
-            .append(алфавит[n ushr 6 and 63]).append(алфавит[n and 63])
+        sb.append(alphabet[n ushr 18 and 63]).append(alphabet[n ushr 12 and 63])
+            .append(alphabet[n ushr 6 and 63]).append(alphabet[n and 63])
         i += 3
     }
     when (bytes.size - i) {
         1 -> {
             val n = bytes[i].toInt() and 0xFF shl 16
-            sb.append(алфавит[n ushr 18 and 63]).append(алфавит[n ushr 12 and 63])
+            sb.append(alphabet[n ushr 18 and 63]).append(alphabet[n ushr 12 and 63])
         }
         2 -> {
             val n = (bytes[i].toInt() and 0xFF shl 16) or (bytes[i + 1].toInt() and 0xFF shl 8)
-            sb.append(алфавит[n ushr 18 and 63]).append(алфавит[n ushr 12 and 63])
-                .append(алфавит[n ushr 6 and 63])
+            sb.append(alphabet[n ushr 18 and 63]).append(alphabet[n ushr 12 and 63])
+                .append(alphabet[n ushr 6 and 63])
         }
     }
     return sb.toString()

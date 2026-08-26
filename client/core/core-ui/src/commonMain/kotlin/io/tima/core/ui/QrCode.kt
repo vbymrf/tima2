@@ -7,7 +7,7 @@ package io.tima.core.ui
  * готовые — платформенные (`zxing` на Android, `CoreImage` на Apple): это значит четыре
  * реализации вместо одной и четыре разных повода не сойтись. Сам алгоритм при этом
  * закрытый и проверяемый: одна строка на входе, одна матрица на выходе, сверяется
- * векторами (`QrКодTest`), посчитанными сторонним кодировщиком.
+ * векторами (`QrCodeTest`), посчитанными сторонним кодировщиком.
  *
  * **Что поддерживается и почему именно это.** Байтовый режим, уровень коррекции M,
  * версии 1–15. Наш единственный настоящий вход — код привязки устройства (~260 знаков,
@@ -21,7 +21,7 @@ package io.tima.core.ui
  * BCH-код информации о версии и формате, выбор маски по штрафам. Всё это **не наши
  * решения**, и менять их нельзя — сканер чужой.
  */
-object QrКод {
+object QrCode {
 
     /**
      * @param маскаНасильно номер маски вместо выбора по штрафам. Нужен проверке: сверять
@@ -30,16 +30,16 @@ object QrКод {
      * @return матрица без «тихой зоны» (её добавляет рисующий: это отступ, а не данные),
      *   либо `null` — данные не влезли даже в 15-ю версию.
      */
-    fun матрица(данные: String, маскаНасильно: Int? = null): QrМатрица? {
-        val байты = данные.encodeToByteArray()
-        val версия = подобратьВерсию(байты.size) ?: return null
-        val слова = кодовыеСлова(байты, версия)
-        val размер = 17 + 4 * версия
+    fun matrix(data: String, forcedMask: Int? = null): QrMatrix? {
+        val bytes = data.encodeToByteArray()
+        val version = pickVersion(bytes.size) ?: return null
+        val words = wordCode(bytes, version)
+        val size = 17 + 4 * version
 
-        val поле = Поле(размер)
-        поле.узоры(версия)
-        val карта = поле.занятое.copyOf()
-        поле.данные(слова)
+        val field = Field(size)
+        field.patterns(version)
+        val map = field.taken.copyOf()
+        field.data(words)
 
         // Восемь масок и штрафы за каждую — не оптимизация, а требование стандарта:
         // сканер калибруется по узорам, и полосы, случайно похожие на узор поиска,
@@ -49,36 +49,36 @@ object QrКод {
         // выбирается по тому, что маскируется, а служебные поля от неё не зависят.
         // Обе договорённости дают читаемый код (номер маски записан в самом формате),
         // но вектор проверяет только ту, по которой посчитан.
-        var лучшая = маскаНасильно ?: 0
-        var лучший = Int.MAX_VALUE
-        for (маска in if (маскаНасильно != null) маскаНасильно..маскаНасильно else 0..7) {
-            поле.маска(маска, карта)
-            val штраф = поле.штраф()
-            if (штраф < лучший) {
-                лучший = штраф
-                лучшая = маска
+        var bestMask = forcedMask ?: 0
+        var bestPenalty = Int.MAX_VALUE
+        for (mask in if (forcedMask != null) forcedMask..forcedMask else 0..7) {
+            field.mask(mask, map)
+            val penalty = field.penalty()
+            if (penalty < bestPenalty) {
+                bestPenalty = penalty
+                bestMask = mask
             }
-            поле.маска(маска, карта) // XOR обратим: снимаем ту же маску
+            field.mask(mask, map) // XOR обратим: снимаем ту же маску
         }
-        поле.маска(лучшая, карта)
-        поле.служебное(версия, лучшая)
+        field.mask(bestMask, map)
+        field.service(version, bestMask)
 
-        return QrМатрица(размер, поле.клетки)
+        return QrMatrix(size, field.cells)
     }
 
     // ── подбор версии ───────────────────────────────────────────────────────
 
-    private fun подобратьВерсию(байт: Int): Int? {
-        for (версия in 1..ЁМКОСТЬ.size) {
-            val строение = ЁМКОСТЬ[версия - 1]
-            val битов = 4 + счётчикБит(версия) + 8 * байт
-            if (битов <= строение.данныхСлов * 8) return версия
+    private fun pickVersion(bytes: Int): Int? {
+        for (version in 1..CAPACITY.size) {
+            val structure = CAPACITY[version - 1]
+            val bits = 4 + bitCounter(version) + 8 * bytes
+            if (bits <= structure.wordData * 8) return version
         }
         return null
     }
 
     /** Длина счётчика знаков: до 9-й версии 8 бит, дальше 16. Так в стандарте. */
-    private fun счётчикБит(версия: Int): Int = if (версия <= 9) 8 else 16
+    private fun bitCounter(version: Int): Int = if (version <= 9) 8 else 16
 
     // ── кодовые слова ───────────────────────────────────────────────────────
 
@@ -89,79 +89,79 @@ object QrКод {
      * каждого блока, а не съест один блок целиком. Блок восстанавливается, если пострадало
      * не больше половины его слов коррекции.
      */
-    private fun кодовыеСлова(байты: ByteArray, версия: Int): IntArray {
-        val строение = ЁМКОСТЬ[версия - 1]
+    private fun wordCode(bytes: ByteArray, version: Int): IntArray {
+        val structure = CAPACITY[version - 1]
 
-        val биты = БитоваяСтрока()
-        биты.добавить(0b0100, 4) // байтовый режим
-        биты.добавить(байты.size, счётчикБит(версия))
-        for (б in байты) биты.добавить(б.toInt() and 0xFF, 8)
+        val bits = LineBit()
+        bits.add(0b0100, 4) // байтовый режим
+        bits.add(bytes.size, bitCounter(version))
+        for (b in bytes) bits.add(b.toInt() and 0xFF, 8)
 
         // Завершитель — до четырёх нулей, и не больше, чем осталось места.
-        val всегоБит = строение.данныхСлов * 8
-        биты.добавить(0, minOf(4, всегоБит - биты.длина))
-        while (биты.длина % 8 != 0) биты.добавить(0, 1)
+        val totalBit = structure.wordData * 8
+        bits.add(0, minOf(4, totalBit - bits.length))
+        while (bits.length % 8 != 0) bits.add(0, 1)
         // Добивка чередующимися 0xEC/0x11 — значения из стандарта, а не произвольные.
-        var добивка = 0
-        while (биты.длина < всегоБит) {
-            биты.добавить(if (добивка++ % 2 == 0) 0xEC else 0x11, 8)
+        var padding = 0
+        while (bits.length < totalBit) {
+            bits.add(if (padding++ % 2 == 0) 0xEC else 0x11, 8)
         }
 
-        val слова = биты.байты()
-        val блокиДанных = mutableListOf<IntArray>()
-        val блокиКоррекции = mutableListOf<IntArray>()
-        var смещение = 0
-        for (группа in строение.группы) {
-            repeat(группа.блоков) {
-                val блок = IntArray(группа.слов) { слова[смещение + it] }
-                смещение += группа.слов
-                блокиДанных += блок
-                блокиКоррекции += коррекция(блок, строение.коррекцииНаБлок)
+        val words = bits.bytes()
+        val dataBlocks = mutableListOf<IntArray>()
+        val correctionBlocks = mutableListOf<IntArray>()
+        var offset = 0
+        for (group in structure.groups) {
+            repeat(group.blocks) {
+                val block = IntArray(group.words) { words[offset + it] }
+                offset += group.words
+                dataBlocks += block
+                correctionBlocks += correction(block, structure.correctionOnBlock)
             }
         }
 
-        val итог = ArrayList<Int>(строение.всегоСлов)
-        val самыйДлинный = блокиДанных.maxOf { it.size }
-        for (i in 0 until самыйДлинный) {
-            for (блок in блокиДанных) if (i < блок.size) итог += блок[i]
+        val result = ArrayList<Int>(structure.totalWords)
+        val longMost = dataBlocks.maxOf { it.size }
+        for (i in 0 until longMost) {
+            for (block in dataBlocks) if (i < block.size) result += block[i]
         }
-        for (i in 0 until строение.коррекцииНаБлок) {
-            for (блок in блокиКоррекции) итог += блок[i]
+        for (i in 0 until structure.correctionOnBlock) {
+            for (block in correctionBlocks) result += block[i]
         }
-        return итог.toIntArray()
+        return result.toIntArray()
     }
 
     /** Рид–Соломон над GF(256): остаток от деления на порождающий многочлен. */
-    private fun коррекция(данные: IntArray, слов: Int): IntArray {
-        val порождающий = порождающийМногочлен(слов)
-        val остаток = IntArray(данные.size + слов)
-        данные.copyInto(остаток)
-        for (i in данные.indices) {
-            val коэф = остаток[i]
-            if (коэф == 0) continue
-            val лог = ЛОГ[коэф]
-            for (j in 0..слов) {
-                остаток[i + j] = остаток[i + j] xor ЭКСП[(ЛОГ[порождающий[j]] + лог) % 255]
+    private fun correction(data: IntArray, words: Int): IntArray {
+        val generating = polynomialGenerating(words)
+        val remainder = IntArray(data.size + words)
+        data.copyInto(remainder)
+        for (i in data.indices) {
+            val coef = remainder[i]
+            if (coef == 0) continue
+            val log = LOG[coef]
+            for (j in 0..words) {
+                remainder[i + j] = remainder[i + j] xor EXP[(LOG[generating[j]] + log) % 255]
             }
         }
-        return IntArray(слов) { остаток[данные.size + it] }
+        return IntArray(words) { remainder[data.size + it] }
     }
 
-    private fun порождающийМногочлен(слов: Int): IntArray {
-        var многочлен = intArrayOf(1)
-        for (i in 0 until слов) {
-            val новый = IntArray(многочлен.size + 1)
-            for (j in многочлен.indices) {
-                новый[j] = новый[j] xor многочлен[j]
-                новый[j + 1] = новый[j + 1] xor умножить(многочлен[j], ЭКСП[i])
+    private fun polynomialGenerating(words: Int): IntArray {
+        var polynomial = intArrayOf(1)
+        for (i in 0 until words) {
+            val new = IntArray(polynomial.size + 1)
+            for (j in polynomial.indices) {
+                new[j] = new[j] xor polynomial[j]
+                new[j + 1] = new[j + 1] xor multiply(polynomial[j], EXP[i])
             }
-            многочлен = новый
+            polynomial = new
         }
-        return многочлен
+        return polynomial
     }
 
-    private fun умножить(a: Int, b: Int): Int =
-        if (a == 0 || b == 0) 0 else ЭКСП[(ЛОГ[a] + ЛОГ[b]) % 255]
+    private fun multiply(a: Int, b: Int): Int =
+        if (a == 0 || b == 0) 0 else EXP[(LOG[a] + LOG[b]) % 255]
 
     // ── поле ────────────────────────────────────────────────────────────────
 
@@ -171,113 +171,113 @@ object QrКод {
      * Карта нужна потому, что маска накладывается **только на данные**: замаскируй узор
      * поиска — и сканеру не за что зацепиться.
      */
-    private class Поле(val размер: Int) {
-        val клетки = BooleanArray(размер * размер)
-        val занятое = BooleanArray(размер * размер)
+    private class Field(val size: Int) {
+        val cells = BooleanArray(size * size)
+        val taken = BooleanArray(size * size)
 
-        fun поставить(x: Int, y: Int, тёмная: Boolean) {
-            клетки[y * размер + x] = тёмная
-            занятое[y * размер + x] = true
+        fun put(x: Int, y: Int, dark: Boolean) {
+            cells[y * size + x] = dark
+            taken[y * size + x] = true
         }
 
-        fun взять(x: Int, y: Int): Boolean = клетки[y * размер + x]
-        fun занято(x: Int, y: Int): Boolean = занятое[y * размер + x]
+        fun take(x: Int, y: Int): Boolean = cells[y * size + x]
+        fun taken(x: Int, y: Int): Boolean = taken[y * size + x]
 
-        fun узоры(версия: Int) {
-            for ((цx, цy) in listOf(0 to 0, размер - 7 to 0, 0 to размер - 7)) {
+        fun patterns(version: Int) {
+            for ((cX, cY) in listOf(0 to 0, size - 7 to 0, 0 to size - 7)) {
                 for (dy in -1..7) for (dx in -1..7) {
-                    val x = цx + dx
-                    val y = цy + dy
-                    if (x !in 0 until размер || y !in 0 until размер) continue
-                    val внутри = dx in 0..6 && dy in 0..6
-                    val тёмная = внутри && (
+                    val x = cX + dx
+                    val y = cY + dy
+                    if (x !in 0 until size || y !in 0 until size) continue
+                    val inside = dx in 0..6 && dy in 0..6
+                    val dark = inside && (
                         dx == 0 || dx == 6 || dy == 0 || dy == 6 || (dx in 2..4 && dy in 2..4)
                         )
-                    поставить(x, y, тёмная)
+                    put(x, y, dark)
                 }
             }
 
-            for (i in 8 until размер - 8) {
-                поставить(i, 6, i % 2 == 0)
-                поставить(6, i, i % 2 == 0)
+            for (i in 8 until size - 8) {
+                put(i, 6, i % 2 == 0)
+                put(6, i, i % 2 == 0)
             }
 
-            if (версия >= 2) {
-                val места = ВЫРАВНИВАНИЕ[версия - 2]
-                for (цy in места) for (цx in места) {
+            if (version >= 2) {
+                val places = ALIGNMENT[version - 2]
+                for (cY in places) for (cX in places) {
                     // Углы, где уже стоят узоры поиска, пропускаются.
-                    if ((цx <= 8 && цy <= 8) || (цx <= 8 && цy >= размер - 9) ||
-                        (цx >= размер - 9 && цy <= 8)
+                    if ((cX <= 8 && cY <= 8) || (cX <= 8 && cY >= size - 9) ||
+                        (cX >= size - 9 && cY <= 8)
                     ) {
                         continue
                     }
                     for (dy in -2..2) for (dx in -2..2) {
-                        val крайний = dx == -2 || dx == 2 || dy == -2 || dy == 2
-                        поставить(цx + dx, цy + dy, крайний || (dx == 0 && dy == 0))
+                        val edge = dx == -2 || dx == 2 || dy == -2 || dy == 2
+                        put(cX + dx, cY + dy, edge || (dx == 0 && dy == 0))
                     }
                 }
             }
 
             // Тёмный модуль: одна клетка, всегда тёмная. Так в стандарте.
-            поставить(8, размер - 8, true)
+            put(8, size - 8, true)
 
             // Место информации о формате занимается заранее, чтобы данные его обошли.
             for (i in 0..8) {
-                if (!занято(i, 8)) поставить(i, 8, false)
-                if (!занято(8, i)) поставить(8, i, false)
+                if (!taken(i, 8)) put(i, 8, false)
+                if (!taken(8, i)) put(8, i, false)
             }
             for (i in 0..7) {
-                поставить(размер - 1 - i, 8, false)
-                поставить(8, размер - 1 - i, false)
+                put(size - 1 - i, 8, false)
+                put(8, size - 1 - i, false)
             }
 
             // Место номера версии тоже резервируется светлым: он пишется после выбора
             // маски, а до тех пор не должен влиять на штрафы.
-            if (версия >= 7) {
+            if (version >= 7) {
                 for (i in 0..17) {
-                    поставить(i / 3, размер - 11 + i % 3, false)
-                    поставить(размер - 11 + i % 3, i / 3, false)
+                    put(i / 3, size - 11 + i % 3, false)
+                    put(size - 11 + i % 3, i / 3, false)
                 }
             }
         }
 
         /** Данные идут снизу вверх парами столбцов, обходя занятое и шестой столбец. */
-        fun данные(слова: IntArray) {
-            var бит = 0
-            var x = размер - 1
-            var вверх = true
+        fun data(words: IntArray) {
+            var bit = 0
+            var x = size - 1
+            var up = true
             while (x > 0) {
                 if (x == 6) x-- // столбец синхронизации данными не заполняется
-                for (i in 0 until размер) {
-                    val y = if (вверх) размер - 1 - i else i
+                for (i in 0 until size) {
+                    val y = if (up) size - 1 - i else i
                     for (dx in 0..1) {
                         val cx = x - dx
-                        if (занято(cx, y)) continue
-                        val значение = if (бит < слова.size * 8) {
-                            (слова[бит / 8] shr (7 - бит % 8)) and 1 == 1
+                        if (taken(cx, y)) continue
+                        val value = if (bit < words.size * 8) {
+                            (words[bit / 8] shr (7 - bit % 8)) and 1 == 1
                         } else {
                             false
                         }
-                        поставить(cx, y, значение)
-                        бит++
+                        put(cx, y, value)
+                        bit++
                     }
                 }
-                вверх = !вверх
+                up = !up
                 x -= 2
             }
         }
 
         /** Маска накладывается XOR — и снимается тем же вызовом. */
-        fun маска(номер: Int, картаУзоров: BooleanArray) {
-            for (y in 0 until размер) for (x in 0 until размер) {
-                if (картаУзоров[y * размер + x]) continue
-                if (условие(номер, x, y)) {
-                    клетки[y * размер + x] = !клетки[y * размер + x]
+        fun mask(number: Int, patternMap: BooleanArray) {
+            for (y in 0 until size) for (x in 0 until size) {
+                if (patternMap[y * size + x]) continue
+                if (condition(number, x, y)) {
+                    cells[y * size + x] = !cells[y * size + x]
                 }
             }
         }
 
-        private fun условие(номер: Int, x: Int, y: Int): Boolean = when (номер) {
+        private fun condition(number: Int, x: Int, y: Int): Boolean = when (number) {
             0 -> (x + y) % 2 == 0
             1 -> y % 2 == 0
             2 -> x % 3 == 0
@@ -289,33 +289,33 @@ object QrКод {
         }
 
         /** Информация о формате, тёмный модуль и номер версии — всё после выбора маски. */
-        fun служебное(версия: Int, маска: Int) {
-            val сведения = форматBCH(маска)
+        fun service(version: Int, mask: Int) {
+            val info = formatBCH(mask)
             // Первая копия — вокруг узора поиска в левом верхнем углу. Порядок именно
             // такой: биты 0–5 идут по СТОЛБЦУ, 9–14 по СТРОКЕ, и между ними три клетки
             // в изломе. Перепутай столбец со строкой — и различия будут ровно в двух
             // линиях, восьмой строке и восьмом столбце; сканер такой код не прочтёт.
-            for (i in 0..5) поставить(8, i, бит(сведения, i))
-            поставить(8, 7, бит(сведения, 6))
-            поставить(8, 8, бит(сведения, 7))
-            поставить(7, 8, бит(сведения, 8))
-            for (i in 9..14) поставить(14 - i, 8, бит(сведения, i))
+            for (i in 0..5) put(8, i, bit(info, i))
+            put(8, 7, bit(info, 6))
+            put(8, 8, bit(info, 7))
+            put(7, 8, bit(info, 8))
+            for (i in 9..14) put(14 - i, 8, bit(info, i))
 
-            for (i in 0..7) поставить(размер - 1 - i, 8, бит(сведения, i))
-            for (i in 8..14) поставить(8, размер - 15 + i, бит(сведения, i))
-            поставить(8, размер - 8, true) // тёмный модуль возвращаем на место
+            for (i in 0..7) put(size - 1 - i, 8, bit(info, i))
+            for (i in 8..14) put(8, size - 15 + i, bit(info, i))
+            put(8, size - 8, true) // тёмный модуль возвращаем на место
 
-            if (версия >= 7) {
-                val номер = версияBCH(версия)
+            if (version >= 7) {
+                val number = versionBCH(version)
                 for (i in 0..17) {
-                    val бит = (номер shr i) and 1 == 1
-                    поставить(i / 3, размер - 11 + i % 3, бит)
-                    поставить(размер - 11 + i % 3, i / 3, бит)
+                    val bit = (number shr i) and 1 == 1
+                    put(i / 3, size - 11 + i % 3, bit)
+                    put(size - 11 + i % 3, i / 3, bit)
                 }
             }
         }
 
-        private fun бит(значение: Int, i: Int): Boolean = (значение shr i) and 1 == 1
+        private fun bit(value: Int, i: Int): Boolean = (value shr i) and 1 == 1
 
         /**
          * Штраф маски — четыре правила стандарта.
@@ -324,56 +324,56 @@ object QrКод {
          * большие однотонные пятна и перекос чёрного к белому ухудшают распознавание на
          * плохой картинке.
          */
-        fun штраф(): Int {
-            var итог = 0
+        fun penalty(): Int {
+            var result = 0
 
             // 1. Полосы одного цвета длиной пять и больше.
-            for (y in 0 until размер) {
-                итог += полосы { x -> взять(x, y) }
+            for (y in 0 until size) {
+                result += strips { x -> take(x, y) }
             }
-            for (x in 0 until размер) {
-                итог += полосы { y -> взять(x, y) }
+            for (x in 0 until size) {
+                result += strips { y -> take(x, y) }
             }
 
             // 2. Квадраты 2×2 одного цвета.
-            for (y in 0 until размер - 1) for (x in 0 until размер - 1) {
-                val c = взять(x, y)
-                if (c == взять(x + 1, y) && c == взять(x, y + 1) && c == взять(x + 1, y + 1)) {
-                    итог += 3
+            for (y in 0 until size - 1) for (x in 0 until size - 1) {
+                val c = take(x, y)
+                if (c == take(x + 1, y) && c == take(x, y + 1) && c == take(x + 1, y + 1)) {
+                    result += 3
                 }
             }
 
             // 3. Последовательность 1:1:3:1:1 (тёмный-светлый-тёмный-тёмный-тёмный-
             //    светлый-тёмный), с четырьмя светлыми до или после. Это и есть ложный
             //    узор поиска: сканер калибруется именно по такому соотношению.
-            for (i in 0 until размер) {
-                итог += ложныеУзоры(BooleanArray(размер) { взять(it, i) })
-                итог += ложныеУзоры(BooleanArray(размер) { взять(i, it) })
+            for (i in 0 until size) {
+                result += patternFalse(BooleanArray(size) { take(it, i) })
+                result += patternFalse(BooleanArray(size) { take(i, it) })
             }
 
             // 4. Перекос доли тёмного от половины. Считается в сотых долях процента:
             //    округли раньше — и на границе получится другой штраф, то есть другая
             //    маска и другая матрица.
-            val тёмных = клетки.count { it }
-            val сотые = тёмных * 10_000 / (размер * размер)
-            итог += 10 * (kotlin.math.abs(сотые - 5_000) / 500)
+            val dark = cells.count { it }
+            val hundredths = dark * 10_000 / (size * size)
+            result += 10 * (kotlin.math.abs(hundredths - 5_000) / 500)
 
-            return итог
+            return result
         }
 
-        private inline fun полосы(цвет: (Int) -> Boolean): Int {
-            var итог = 0
-            var длина = 1
-            for (i in 1 until размер) {
-                if (цвет(i) == цвет(i - 1)) {
-                    длина++
+        private inline fun strips(color: (Int) -> Boolean): Int {
+            var result = 0
+            var length = 1
+            for (i in 1 until size) {
+                if (color(i) == color(i - 1)) {
+                    length++
                 } else {
-                    if (длина >= 5) итог += 3 + (длина - 5)
-                    длина = 1
+                    if (length >= 5) result += 3 + (length - 5)
+                    length = 1
                 }
             }
-            if (длина >= 5) итог += 3 + (длина - 5)
-            return итог
+            if (length >= 5) result += 3 + (length - 5)
+            return result
         }
 
         /**
@@ -384,32 +384,32 @@ object QrКод {
          * следующей клетки за образцом; не нашли светлых — продолжаем с середины
          * образца, потому что она может начать следующее совпадение.
          */
-        private fun ложныеУзоры(полоса: BooleanArray): Int {
-            val образец = booleanArrayOf(true, false, true, true, true, false, true)
-            var итог = 0
-            var с = 0
-            while (с + 7 <= полоса.size) {
-                if (!совпало(полоса, с, образец)) {
-                    с++
+        private fun patternFalse(strip: BooleanArray): Int {
+            val sample = booleanArrayOf(true, false, true, true, true, false, true)
+            var result = 0
+            var with = 0
+            while (with + 7 <= strip.size) {
+                if (!matched(strip, with, sample)) {
+                    with++
                     continue
                 }
-                val после = с + 7
-                val светлоДо = (maxOf(с - 4, 0) until с).none { полоса[it] }
-                val светлоПосле = (после until minOf(после + 4, полоса.size)).none { полоса[it] }
-                if (светлоДо || светлоПосле) {
-                    итог += 40
-                    с = после
+                val after = with + 7
+                val lightUntil = (maxOf(with - 4, 0) until with).none { strip[it] }
+                val lightAfter = (after until minOf(after + 4, strip.size)).none { strip[it] }
+                if (lightUntil || lightAfter) {
+                    result += 40
+                    with = after
                 } else {
                     // Середина образца может начать следующее совпадение:
                     // …тёмный светлый ТЁМНЫЙ тёмный тёмный светлый тёмный…
-                    с += 4
+                    with += 4
                 }
             }
-            return итог
+            return result
         }
 
-        private fun совпало(полоса: BooleanArray, с: Int, образец: BooleanArray): Boolean {
-            for (i in образец.indices) if (полоса[с + i] != образец[i]) return false
+        private fun matched(strip: BooleanArray, with: Int, sample: BooleanArray): Boolean {
+            for (i in sample.indices) if (strip[with + i] != sample[i]) return false
             return true
         }
     }
@@ -422,27 +422,27 @@ object QrКод {
      * Маска 0x5412 — из стандарта. Без неё код со всеми нулями в формате выглядел бы
      * пустым полем, и сканер не отличил бы его от мусора.
      */
-    private fun форматBCH(маска: Int): Int {
-        val данные = (УРОВЕНЬ_M shl 3) or маска
-        var значение = данные shl 10
-        while (разрядность(значение) >= 11) {
-            значение = значение xor (0x537 shl (разрядность(значение) - 11))
+    private fun formatBCH(mask: Int): Int {
+        val data = (УРОВЕНЬ_M shl 3) or mask
+        var value = data shl 10
+        while (bitness(value) >= 11) {
+            value = value xor (0x537 shl (bitness(value) - 11))
         }
-        return ((данные shl 10) or значение) xor 0x5412
+        return ((data shl 10) or value) xor 0x5412
     }
 
     /** Номер версии, защищённый BCH(18,6). Нужен с 7-й версии — до неё его негде взять. */
-    private fun версияBCH(версия: Int): Int {
-        var значение = версия shl 12
-        while (разрядность(значение) >= 13) {
-            значение = значение xor (0x1F25 shl (разрядность(значение) - 13))
+    private fun versionBCH(version: Int): Int {
+        var value = version shl 12
+        while (bitness(value) >= 13) {
+            value = value xor (0x1F25 shl (bitness(value) - 13))
         }
-        return (версия shl 12) or значение
+        return (version shl 12) or value
     }
 
-    private fun разрядность(значение: Int): Int {
+    private fun bitness(value: Int): Int {
         var n = 0
-        var v = значение
+        var v = value
         while (v != 0) {
             n++
             v = v shr 1
@@ -454,34 +454,34 @@ object QrКод {
 
     private const val УРОВЕНЬ_M = 0b00
 
-    private class Группа(val блоков: Int, val слов: Int)
+    private class Group(val blocks: Int, val words: Int)
 
-    private class Строение(val коррекцииНаБлок: Int, val группы: List<Группа>) {
-        val данныхСлов: Int = группы.sumOf { it.блоков * it.слов }
-        val всегоСлов: Int = данныхСлов + группы.sumOf { it.блоков } * коррекцииНаБлок
+    private class Structure(val correctionOnBlock: Int, val groups: List<Group>) {
+        val wordData: Int = groups.sumOf { it.blocks * it.words }
+        val totalWords: Int = wordData + groups.sumOf { it.blocks } * correctionOnBlock
     }
 
     /** Версии 1–15, уровень M. Числа из ISO/IEC 18004, таблица 13. */
-    private val ЁМКОСТЬ = listOf(
-        Строение(10, listOf(Группа(1, 16))),
-        Строение(16, listOf(Группа(1, 28))),
-        Строение(26, listOf(Группа(1, 44))),
-        Строение(18, listOf(Группа(2, 32))),
-        Строение(24, listOf(Группа(2, 43))),
-        Строение(16, listOf(Группа(4, 27))),
-        Строение(18, listOf(Группа(4, 31))),
-        Строение(22, listOf(Группа(2, 38), Группа(2, 39))),
-        Строение(22, listOf(Группа(3, 36), Группа(2, 37))),
-        Строение(26, listOf(Группа(4, 43), Группа(1, 44))),
-        Строение(30, listOf(Группа(1, 50), Группа(4, 51))),
-        Строение(22, listOf(Группа(6, 36), Группа(2, 37))),
-        Строение(22, listOf(Группа(8, 37), Группа(1, 38))),
-        Строение(24, listOf(Группа(4, 40), Группа(5, 41))),
-        Строение(24, listOf(Группа(5, 41), Группа(5, 42))),
+    private val CAPACITY = listOf(
+        Structure(10, listOf(Group(1, 16))),
+        Structure(16, listOf(Group(1, 28))),
+        Structure(26, listOf(Group(1, 44))),
+        Structure(18, listOf(Group(2, 32))),
+        Structure(24, listOf(Group(2, 43))),
+        Structure(16, listOf(Group(4, 27))),
+        Structure(18, listOf(Group(4, 31))),
+        Structure(22, listOf(Group(2, 38), Group(2, 39))),
+        Structure(22, listOf(Group(3, 36), Group(2, 37))),
+        Structure(26, listOf(Group(4, 43), Group(1, 44))),
+        Structure(30, listOf(Group(1, 50), Group(4, 51))),
+        Structure(22, listOf(Group(6, 36), Group(2, 37))),
+        Structure(22, listOf(Group(8, 37), Group(1, 38))),
+        Structure(24, listOf(Group(4, 40), Group(5, 41))),
+        Structure(24, listOf(Group(5, 41), Group(5, 42))),
     )
 
     /** Середины выравнивающих узоров, версии 2–15. */
-    private val ВЫРАВНИВАНИЕ = listOf(
+    private val ALIGNMENT = listOf(
         intArrayOf(6, 18),
         intArrayOf(6, 22),
         intArrayOf(6, 26),
@@ -499,44 +499,44 @@ object QrКод {
     )
 
     /** Таблицы GF(256) по многочлену 0x11D — тому же, что в стандарте. */
-    private val ЭКСП = IntArray(256)
-    private val ЛОГ = IntArray(256)
+    private val EXP = IntArray(256)
+    private val LOG = IntArray(256)
 
     init {
-        var значение = 1
+        var value = 1
         for (i in 0 until 255) {
-            ЭКСП[i] = значение
-            ЛОГ[значение] = i
-            значение = значение shl 1
-            if (значение and 0x100 != 0) значение = значение xor 0x11D
+            EXP[i] = value
+            LOG[value] = i
+            value = value shl 1
+            if (value and 0x100 != 0) value = value xor 0x11D
         }
-        ЭКСП[255] = ЭКСП[0]
+        EXP[255] = EXP[0]
     }
 }
 
 /** Готовая матрица: [размер] клеток в стороне, тёмные — те, что рисуются. */
-class QrМатрица internal constructor(val размер: Int, private val клетки: BooleanArray) {
+class QrMatrix internal constructor(val size: Int, private val cells: BooleanArray) {
 
-    fun тёмная(x: Int, y: Int): Boolean = клетки[y * размер + x]
+    fun dark(x: Int, y: Int): Boolean = cells[y * size + x]
 
     /** Строки нулей и единиц — так матрицу сверяют с вектором. */
-    fun строки(): List<String> = (0 until размер).map { y ->
-        (0 until размер).joinToString("") { x -> if (тёмная(x, y)) "1" else "0" }
+    fun lines(): List<String> = (0 until size).map { y ->
+        (0 until size).joinToString("") { x -> if (dark(x, y)) "1" else "0" }
     }
 }
 
 /** Битовая строка: складывает биты слева направо и отдаёт байты. */
-private class БитоваяСтрока {
-    private val биты = ArrayList<Boolean>()
-    val длина: Int get() = биты.size
+private class LineBit {
+    private val bits = ArrayList<Boolean>()
+    val length: Int get() = bits.size
 
-    fun добавить(значение: Int, сколько: Int) {
-        for (i in сколько - 1 downTo 0) биты += (значение shr i) and 1 == 1
+    fun add(value: Int, howMany: Int) {
+        for (i in howMany - 1 downTo 0) bits += (value shr i) and 1 == 1
     }
 
-    fun байты(): IntArray = IntArray(биты.size / 8) { i ->
-        var б = 0
-        for (j in 0 until 8) б = (б shl 1) or if (биты[i * 8 + j]) 1 else 0
-        б
+    fun bytes(): IntArray = IntArray(bits.size / 8) { i ->
+        var b = 0
+        for (j in 0 until 8) b = (b shl 1) or if (bits[i * 8 + j]) 1 else 0
+        b
     }
 }

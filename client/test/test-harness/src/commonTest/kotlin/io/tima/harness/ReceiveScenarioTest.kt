@@ -20,17 +20,17 @@ import kotlin.test.assertTrue
 class ReceiveScenarioTest {
 
     private val db = TimaDatabase(harnessDriver())
-    private val store = SqlInboxStore(db, харнессШифр())
+    private val store = SqlInboxStore(db, cipherHarness())
     private val inbox = Inbox(store, nowMs = { 1_000 })
     private val h = ReceiveHarness(inbox)
 
-    private val тело = byteArrayOf(7, 7, 7)
+    private val body = byteArrayOf(7, 7, 7)
 
     /** Кадр `message.new`, как его составляет сервер. */
-    private fun кадр(eventId: Long, messageId: Long, chatId: String = "chat-1"): String {
-        val конверт = base64url(byteArrayOf(1, 2, 3) + messageId.toByte())
+    private fun frame(eventId: Long, messageId: Long, chatId: String = "chat-1"): String {
+        val envelope = base64url(byteArrayOf(1, 2, 3) + messageId.toByte())
         return """{"event":"message.new","event_id":$eventId,"chat_id":"$chatId",""" +
-            """"message_id":$messageId,"envelope":"$конверт"}"""
+            """"message_id":$messageId,"envelope":"$envelope"}"""
     }
 
     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
@@ -43,8 +43,8 @@ class ReceiveScenarioTest {
     fun догон_и_живой_канал_дают_одно_сообщение() {
         // Одно сообщение, два кадра: у догона свой event_id, у живого свой. Опознавать
         // повтор надо по message_id — его назначил отправитель, и он входит в подпись.
-        h.onFrame(кадр(eventId = 10, messageId = 555))
-        h.onFrame(кадр(eventId = 11, messageId = 555))
+        h.onFrame(frame(eventId = 10, messageId = 555))
+        h.onFrame(frame(eventId = 11, messageId = 555))
 
         assertEquals(1, h.count(), "два кадра одного сообщения — одна запись")
         assertEquals(
@@ -56,8 +56,8 @@ class ReceiveScenarioTest {
 
     @Test
     fun разные_сообщения_не_склеиваются() {
-        h.onFrame(кадр(eventId = 10, messageId = 1))
-        h.onFrame(кадр(eventId = 11, messageId = 2))
+        h.onFrame(frame(eventId = 10, messageId = 1))
+        h.onFrame(frame(eventId = 11, messageId = 2))
 
         assertEquals(2, h.count())
     }
@@ -66,8 +66,8 @@ class ReceiveScenarioTest {
     fun одинаковый_номер_в_разных_переписках_это_разные_сообщения() {
         // Ключ уникальности — пара (chat_id, message_id). Номер назначает отправитель, и
         // в другой переписке он вполне может совпасть.
-        h.onFrame(кадр(eventId = 10, messageId = 5, chatId = "chat-1"))
-        h.onFrame(кадр(eventId = 11, messageId = 5, chatId = "chat-2"))
+        h.onFrame(frame(eventId = 10, messageId = 5, chatId = "chat-1"))
+        h.onFrame(frame(eventId = 11, messageId = 5, chatId = "chat-2"))
 
         assertEquals(2, h.count())
     }
@@ -79,7 +79,7 @@ class ReceiveScenarioTest {
         // сдвинуть серверный курсор до того, как сообщение оказалось у нас.
         assertTrue(h.sent.isEmpty())
 
-        h.onFrame(кадр(eventId = 10, messageId = 555))
+        h.onFrame(frame(eventId = 10, messageId = 555))
 
         assertEquals(1, h.count(), "запись есть")
         assertEquals(1, h.sent.size, "и подтверждение отправлено ровно одно")
@@ -114,15 +114,15 @@ class ReceiveScenarioTest {
 
     @Test
     fun принятое_разбирается_и_нечитаемое_не_теряется() {
-        h.onFrame(кадр(eventId = 10, messageId = 1))
-        h.onFrame(кадр(eventId = 11, messageId = 2))
+        h.onFrame(frame(eventId = 10, messageId = 1))
+        h.onFrame(frame(eventId = 11, messageId = 2))
 
         // Одно расшифровалось, второму нет ключа.
-        val разобрано = h.openAll { запись ->
-            if (запись.messageId == 1L) OpenOutcome.Opened(тело, "u-автор") else OpenOutcome.NoKey("нет ключа эпохи")
+        val parsed = h.openAll { entry ->
+            if (entry.messageId == 1L) OpenOutcome.Opened(body, "u-автор") else OpenOutcome.NoKey("нет ключа эпохи")
         }
 
-        assertEquals(2, разобрано, "оба получили исход")
+        assertEquals(2, parsed, "оба получили исход")
 
         // Состояния смотрим в хранилище, а не в pending: у входящей машины pending
         // означает «требует работы» — это RECEIVED и UNDECRYPTABLE. Разобранное в него

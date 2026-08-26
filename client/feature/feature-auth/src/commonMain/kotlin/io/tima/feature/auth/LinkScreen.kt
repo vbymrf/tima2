@@ -9,14 +9,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import io.tima.core.ui.Беда
-import io.tima.core.ui.Второстепенное
-import io.tima.core.ui.ВидКнопки
-import io.tima.core.ui.Кнопка
-import io.tima.core.ui.Подпись
+import io.tima.core.ui.Trouble
+import io.tima.core.ui.Secondary
+import io.tima.core.ui.ButtonKind
+import io.tima.core.ui.Button
+import io.tima.core.ui.Caption
 import io.tima.core.ui.TimaSpacing
-import io.tima.core.ui.Тима
-import io.tima.core.ui.Третьестепенное
+import io.tima.core.ui.Tima
+import io.tima.core.ui.Tertiary
 
 /**
  * «Подтвердить подключение?» — экран на телефоне после скана.
@@ -29,69 +29,69 @@ import io.tima.core.ui.Третьестепенное
  * Без этой строки «Доверить» читается как «ок».
  */
 @Composable
-fun ЭкранПривязки(
-    состояние: ПривязкаState,
-    onДоверить: () -> Unit,
-    onОтмена: () -> Unit,
+fun LinkScreen(
+    state: LinkState,
+    onTrust: () -> Unit,
+    onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) = Column(
     modifier = modifier
         .fillMaxSize()
-        .background(Тима.цвета.поверхность)
-        .padding(TimaSpacing.о4),
-    verticalArrangement = Arrangement.spacedBy(TimaSpacing.о3),
+        .background(Tima.colors.surface)
+        .padding(TimaSpacing.about4),
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
 ) {
-    when (состояние) {
-        is ПривязкаState.Спрашиваем -> Спрашиваем(состояние, onДоверить, onОтмена)
+    when (state) {
+        is LinkState.Ask -> Ask(state, onTrust, onCancel)
 
-        is ПривязкаState.Готово -> {
-            Подпись("Устройство подключено", вес = FontWeight.ExtraBold)
-            Второстепенное(
+        is LinkState.Done -> {
+            Caption("Устройство подключено", weight = FontWeight.ExtraBold)
+            Secondary(
                 "Новые сообщения будут приходить и на него. Прежняя переписка туда не " +
                     "переедет: ключи старых сообщений оборачивались на другие устройства.",
             )
-            Кнопка("Готово", onClick = onОтмена, modifier = Modifier.fillMaxWidth())
+            Button("Готово", onClick = onCancel, modifier = Modifier.fillMaxWidth())
         }
 
-        ПривязкаState.НеНашКод -> {
-            Подпись("Это не код подключения", вес = FontWeight.ExtraBold)
-            Второстепенное(
+        LinkState.NotOurCode -> {
+            Caption("Это не код подключения", weight = FontWeight.ExtraBold)
+            Secondary(
                 "Отсканирован другой код. Откройте на компьютере «Подключить к аккаунту» " +
                     "и наведите камеру на код оттуда.",
             )
-            Кнопка("Закрыть", onClick = onОтмена, вид = ВидКнопки.Тихая, modifier = Modifier.fillMaxWidth())
+            Button("Закрыть", onClick = onCancel, kind = ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
         }
     }
 }
 
 @Composable
-private fun Спрашиваем(
-    состояние: ПривязкаState.Спрашиваем,
-    onДоверить: () -> Unit,
-    onОтмена: () -> Unit,
+private fun Ask(
+    state: LinkState.Ask,
+    onTrust: () -> Unit,
+    onCancel: () -> Unit,
 ) {
-    Подпись("Подтвердить подключение?", вес = FontWeight.ExtraBold)
+    Caption("Подтвердить подключение?", weight = FontWeight.ExtraBold)
 
     // Имя устройства — то, что человек видел минуту назад на своём компьютере. Если его
     // в коде не было, так и говорим: подставленное имя он примет за настоящее.
-    Второстепенное(состояние.имя?.let { "Устройство: $it" } ?: "Устройство себя не назвало")
+    Secondary(state.name?.let { "Устройство: $it" } ?: "Устройство себя не назвало")
 
-    Третьестепенное(
+    Tertiary(
         "Подключённое устройство сможет читать новые сообщения этого аккаунта и писать " +
             "от вашего имени. Отключить его можно в списке устройств.",
     )
 
-    состояние.беда?.let { Беда(it) }
+    state.trouble?.let { Trouble(it) }
 
-    Кнопка(
-        надпись = if (состояние.ждём) "Подключаем…" else "Доверить",
-        onClick = onДоверить,
+    Button(
+        label = if (state.expect) "Подключаем…" else "Доверить",
+        onClick = onTrust,
         modifier = Modifier.fillMaxWidth(),
     )
-    Кнопка(
-        надпись = "Отклонить",
-        onClick = onОтмена,
-        вид = ВидКнопки.Опасная,
+    Button(
+        label = "Отклонить",
+        onClick = onCancel,
+        kind = ButtonKind.Dangerous,
         modifier = Modifier.fillMaxWidth(),
     )
 }

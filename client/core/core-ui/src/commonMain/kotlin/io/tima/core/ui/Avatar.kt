@@ -23,29 +23,29 @@ import androidx.compose.ui.unit.TextUnit
  * различие ничего не сообщало.
  */
 @Composable
-fun Аватар(
+fun Avatar(
     /** Одна-две буквы. Картинка приезжает позже, вместе с медиа. */
-    буквы: String,
+    letters: String,
     modifier: Modifier = Modifier,
-    размер: РазмерАватара = РазмерАватара.Обычный,
+    size: AvatarSize = AvatarSize.Normal,
     /** Заливка. `null` — тихая подложка темы: аватар не спорит с содержимым. */
-    фон: Color? = null,
+    background: Color? = null,
 ) {
-    val цвета = Тима.цвета
+    val colors = Tima.colors
     Box(
         modifier = modifier
-            .size(размер.сторона)
+            .size(size.side)
             .background(
-                color = фон ?: цвета.акцентМягкий,
-                shape = RoundedCornerShape(размер.скругление),
+                color = background ?: colors.softAccent,
+                shape = RoundedCornerShape(size.rounding),
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Подпись(
-            текст = буквы,
-            кегль = размер.кегль,
-            вес = FontWeight.ExtraBold,
-            цвет = цвета.текст,
+        Caption(
+            text = letters,
+            fontSize = size.fontSize,
+            weight = FontWeight.ExtraBold,
+            color = colors.text,
         )
     }
 }
@@ -57,8 +57,8 @@ fun Аватар(
  * квадрата большое скругление съедает саму квадратность, а у крупного маленькое
  * возвращает жёсткость, которую скругление и снимало.
  */
-enum class РазмерАватара(val сторона: Dp, val скругление: Dp, val кегль: TextUnit) {
-    Малый(сторона = TimaZones.аватар * 0.76f, скругление = TimaShapes.квадратМал, кегль = TimaType.щ6),
-    Обычный(сторона = TimaZones.аватар, скругление = TimaShapes.квадрат, кегль = TimaType.щ5),
-    Большой(сторона = TimaZones.аватар * 1.9f, скругление = TimaShapes.квадратБол, кегль = TimaType.щ2),
+enum class AvatarSize(val side: Dp, val rounding: Dp, val fontSize: TextUnit) {
+    Small(side = TimaZones.avatar * 0.76f, rounding = TimaShapes.smallSquare, fontSize = TimaType.sz6),
+    Normal(side = TimaZones.avatar, rounding = TimaShapes.square, fontSize = TimaType.sz5),
+    Big(side = TimaZones.avatar * 1.9f, rounding = TimaShapes.bigSquare, fontSize = TimaType.sz2),
 }

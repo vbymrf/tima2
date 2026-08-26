@@ -16,17 +16,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import io.tima.core.ui.Беда
-import io.tima.core.ui.ВидКнопки
-import io.tima.core.ui.Второстепенное
-import io.tima.core.ui.КодQR
-import io.tima.core.ui.Кнопка
-import io.tima.core.ui.Поле
-import io.tima.core.ui.Подпись
+import io.tima.core.ui.Trouble
+import io.tima.core.ui.ButtonKind
+import io.tima.core.ui.Secondary
+import io.tima.core.ui.QrCodeImage
+import io.tima.core.ui.Button
+import io.tima.core.ui.Field
+import io.tima.core.ui.Caption
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
-import io.tima.core.ui.Третьестепенное
-import io.tima.core.ui.Тима
+import io.tima.core.ui.Tertiary
+import io.tima.core.ui.Tima
 
 /**
  * Экран входа — К5.1.
@@ -43,21 +43,21 @@ import io.tima.core.ui.Тима
  * окне», а на входе этот вопрос не стоит: окно одно, и уйти из него некуда.
  */
 @Composable
-fun ЭкранВхода(
-    состояние: AuthState,
-    onНомер: (String) -> Unit,
+fun EntryScreen(
+    state: AuthState,
+    onNumber: (String) -> Unit,
     /** Код страны отдельным полем: см. пояснение у [Телефон]. */
-    onКодСтраны: (String) -> Unit,
-    onКод: (String) -> Unit,
-    onЗапросить: () -> Unit,
-    onПодтвердить: () -> Unit,
-    onНазад: () -> Unit,
+    onCodeCountry: (String) -> Unit,
+    onCode: (String) -> Unit,
+    onRequest: () -> Unit,
+    onConfirm: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    onФраза: (String) -> Unit = {},
-    onВойтиПоФразе: () -> Unit = {},
-    onНачатьЗаново: () -> Unit = {},
-    onФразаСохранена: () -> Unit = {},
-    onПодключиться: (() -> Unit)? = null,
+    onPhrase: (String) -> Unit = {},
+    onEnterByPhrase: () -> Unit = {},
+    onStartAnew: () -> Unit = {},
+    onPhraseSaved: () -> Unit = {},
+    onConnect: (() -> Unit)? = null,
     /**
      * Номер сборки — единственное место, где он виден человеку.
      *
@@ -65,52 +65,52 @@ fun ЭкранВхода(
      * ли приложение, надо ДО того, как заходить в аккаунт. Пусто — версия не передана
      * (проверки, снимки), и строки просто нет.
      */
-    версияСборки: String = "",
+    buildVersion: String = "",
 ) {
-    val цвета = Тима.цвета
+    val colors = Tima.colors
     Box(
-        modifier = modifier.fillMaxSize().background(цвета.поверхность).padding(TimaSpacing.о5),
+        modifier = modifier.fillMaxSize().background(colors.surface).padding(TimaSpacing.about5),
         contentAlignment = Alignment.Center,
     ) {
         Column(
             // Ширина ограничена: поле ввода на всю ширину ПК выглядит как поле поиска, а
             // не как «введите номер». Тот же предел, что у содержимого переписки.
             modifier = Modifier.widthIn(max = 420.dp),
-            verticalArrangement = Arrangement.spacedBy(TimaSpacing.о4),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about4),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            when (состояние) {
-                is AuthState.Телефон -> Телефон(состояние, onНомер, onКодСтраны, onЗапросить, onПодключиться)
-                is AuthState.Код -> Код(состояние, onКод, onПодтвердить, onНазад)
-                is AuthState.Фраза -> Фраза(состояние, onФразаСохранена)
-                is AuthState.ВводФразы -> ВводФразы(состояние, onФраза, onВойтиПоФразе, onНачатьЗаново, onНазад)
-                is AuthState.ПоказКода -> ПоказКода(состояние, onНазад, onПодключиться)
+            when (state) {
+                is AuthState.Phone -> Phone(state, onNumber, onCodeCountry, onRequest, onConnect)
+                is AuthState.Code -> Code(state, onCode, onConfirm, onBack)
+                is AuthState.Phrase -> Phrase(state, onPhraseSaved)
+                is AuthState.PhraseInput -> PhraseInput(state, onPhrase, onEnterByPhrase, onStartAnew, onBack)
+                is AuthState.DisplayCode -> DisplayCode(state, onBack, onConnect)
                 // Оба конечных состояния экран не рисует: приложение уже ушло дальше.
                 // Показывать «готово» было бы лишним шагом на пути, который человек и так
                 // прошёл.
-                is AuthState.Готово, AuthState.УжеЗаведено -> Unit
+                is AuthState.Done, AuthState.CreatedAlready -> Unit
             }
 
             // Номер сборки — мелко и последним. Он нужен не человеку в обычный день, а
             // тому, кто проверяет, доехало ли обновление: без него «поставил новую
             // версию» проверяется только на слово.
-            if (версияСборки.isNotBlank()) {
-                Третьестепенное("сборка $версияСборки")
+            if (buildVersion.isNotBlank()) {
+                Tertiary("сборка $buildVersion")
             }
         }
     }
 }
 
 @Composable
-private fun Телефон(
-    состояние: AuthState.Телефон,
-    onНомер: (String) -> Unit,
-    onКодСтраны: (String) -> Unit,
-    onЗапросить: () -> Unit,
-    onПодключиться: (() -> Unit)?,
+private fun Phone(
+    state: AuthState.Phone,
+    onNumber: (String) -> Unit,
+    onCodeCountry: (String) -> Unit,
+    onRequest: () -> Unit,
+    onConnect: (() -> Unit)?,
 ) {
-    Подпись("Добро пожаловать", кегль = TimaType.щ2, вес = FontWeight.ExtraBold)
-    Второстепенное("Введите номер телефона — пришлём код")
+    Caption("Добро пожаловать", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    Secondary("Введите номер телефона — пришлём код")
 
     // ── ДВА ПОЛЯ, А НЕ ОДНО ──────────────────────────────────────────────────
     //
@@ -122,47 +122,47 @@ private fun Телефон(
     // номер набирают каждый раз. Слитое поле заставляло стирать «+7» вместе с номером.
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Плюс нарисован, а не введён: в значении его нет, иначе «+7» и «7» стали бы
         // разными кодами одной страны.
-        Подпись("+", кегль = TimaType.щ3, вес = FontWeight.ExtraBold)
+        Caption("+", fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
         Box(Modifier.width(72.dp)) {
-            Поле(
-                значение = состояние.кодСтраны,
-                onИзменение = onКодСтраны,
-                подсказка = "7",
-                числовое = true,
+            Field(
+                value = state.countryCode,
+                onChange = onCodeCountry,
+                hint = "7",
+                numeric = true,
             )
         }
         Box(Modifier.weight(1f)) {
-            Поле(
-                значение = состояние.номер,
-                onИзменение = onНомер,
-                подсказка = "999 000 00 00",
-                числовое = true,
+            Field(
+                value = state.number,
+                onChange = onNumber,
+                hint = "999 000 00 00",
+                numeric = true,
             )
         }
     }
 
-    состояние.беда?.let { Беда(it) }
+    state.trouble?.let { Trouble(it) }
 
-    Кнопка(
-        надпись = if (состояние.ждём) "Отправляем…" else "Получить код",
-        onClick = onЗапросить,
+    Button(
+        label = if (state.expect) "Отправляем…" else "Получить код",
+        onClick = onRequest,
         modifier = Modifier.fillMaxWidth(),
     )
 
     // Второй путь, и он второй намеренно: у кого аккаунта ещё нет, тот идёт по номеру, и
     // таких большинство. Кнопки нет вовсе, если путь недоступен: обещать человеку то,
     // чего нет, дороже, чем не обещать.
-    onПодключиться?.let {
-        Третьестепенное("Аккаунт уже есть на телефоне? Это устройство можно подключить к нему — код подтвердите телефоном.")
-        Кнопка(
-            надпись = "Подключить к аккаунту",
+    onConnect?.let {
+        Tertiary("Аккаунт уже есть на телефоне? Это устройство можно подключить к нему — код подтвердите телефоном.")
+        Button(
+            label = "Подключить к аккаунту",
             onClick = it,
-            вид = ВидКнопки.Тихая,
+            kind = ButtonKind.Quiet,
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -179,30 +179,30 @@ private fun Телефон(
  * а потому что его можно скопировать и переслать себе, если камера не берёт экран.
  */
 @Composable
-private fun ПоказКода(
-    состояние: AuthState.ПоказКода,
-    onНазад: () -> Unit,
-    onНовыйКод: (() -> Unit)?,
+private fun DisplayCode(
+    state: AuthState.DisplayCode,
+    onBack: () -> Unit,
+    onNewCode: (() -> Unit)?,
 ) {
-    Подпись("Подключение устройства", кегль = TimaType.щ2, вес = FontWeight.ExtraBold)
-    Второстепенное(
+    Caption("Подключение устройства", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    Secondary(
         "Откройте камеру на телефоне, где вы уже вошли, и наведите её на этот код. " +
             "Телефон спросит подтверждение — код действует пять минут.",
     )
 
-    состояние.беда?.let { Беда(it) }
+    state.trouble?.let { Trouble(it) }
 
-    val код = состояние.код
-    if (код == null) {
-        if (состояние.беда == null) Второстепенное("Просим код у сервера…")
+    val code = state.code
+    if (code == null) {
+        if (state.trouble == null) Secondary("Просим код у сервера…")
     } else {
-        КодQR(код, modifier = Modifier.fillMaxWidth())
+        QrCodeImage(code, modifier = Modifier.fillMaxWidth())
     }
 
     // На привязанном устройстве переписки не будет: ключи прошлых сообщений оборачивались
     // на устройства, которые существовали тогда. Сказать это надо ЗАРАНЕЕ — иначе пустой
     // список человек прочтёт как потерю переписки.
-    Третьестепенное(
+    Tertiary(
         "Прежняя переписка на это устройство не переедет: ключи старых сообщений " +
             "оборачивались на другие устройства. Новые письма будут приходить на оба.",
     )
@@ -210,55 +210,55 @@ private fun ПоказКода(
     // Код умер — нужен новый, и просить его должно быть чем. Кнопка появляется только
     // тогда, когда просить есть за чем: висеть рядом с живым кодом ей незачем, а нажми
     // человек её случайно — прежний код перестанет работать, и телефон покажет отказ.
-    if (состояние.код == null && состояние.беда != null && onНовыйКод != null) {
-        Кнопка(
-            надпись = "Новый код",
-            onClick = onНовыйКод,
+    if (state.code == null && state.trouble != null && onNewCode != null) {
+        Button(
+            label = "Новый код",
+            onClick = onNewCode,
             modifier = Modifier.fillMaxWidth(),
         )
     }
 
-    Кнопка(
-        надпись = "Назад",
-        onClick = onНазад,
-        вид = ВидКнопки.Тихая,
+    Button(
+        label = "Назад",
+        onClick = onBack,
+        kind = ButtonKind.Quiet,
         modifier = Modifier.fillMaxWidth(),
     )
 }
 
 @Composable
-private fun Код(
-    состояние: AuthState.Код,
-    onКод: (String) -> Unit,
-    onПодтвердить: () -> Unit,
-    onНазад: () -> Unit,
+private fun Code(
+    state: AuthState.Code,
+    onCode: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onBack: () -> Unit,
 ) {
-    Подпись("Подтверждение", кегль = TimaType.щ2, вес = FontWeight.ExtraBold)
-    Второстепенное("Код отправлен на ${состояние.телефон}")
+    Caption("Подтверждение", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    Secondary("Код отправлен на ${state.phone}")
 
-    Поле(
-        значение = состояние.код,
-        onИзменение = onКод,
-        подсказка = "······",
-        числовое = true,
-        поЦентру = true,
+    Field(
+        value = state.code,
+        onChange = onCode,
+        hint = "······",
+        numeric = true,
+        byCenter = true,
     )
 
     // Подсказка стенда: код приходит в ответе только там, где сервер сам его прислал.
     // Написано вслух, чтобы её не приняли за «код виден всем».
-    состояние.подсказкаСтенда?.let { Третьестепенное("Стенд прислал код в ответе: $it") }
+    state.standHint?.let { Tertiary("Стенд прислал код в ответе: $it") }
 
-    состояние.беда?.let { Беда(it) }
+    state.trouble?.let { Trouble(it) }
 
-    Кнопка(
-        надпись = if (состояние.ждём) "Проверяем…" else "Подтвердить",
-        onClick = onПодтвердить,
+    Button(
+        label = if (state.expect) "Проверяем…" else "Подтвердить",
+        onClick = onConfirm,
         modifier = Modifier.fillMaxWidth(),
     )
-    Кнопка(
-        надпись = "Изменить номер",
-        onClick = onНазад,
-        вид = ВидКнопки.Тихая,
+    Button(
+        label = "Изменить номер",
+        onClick = onBack,
+        kind = ButtonKind.Quiet,
         modifier = Modifier.fillMaxWidth(),
     )
 }
@@ -274,36 +274,36 @@ private fun Код(
  * важен, и номер у каждого слова стоит именно поэтому.
  */
 @Composable
-private fun Фраза(состояние: AuthState.Фраза, onСохранена: () -> Unit) {
-    Подпись("Секретная фраза", кегль = TimaType.щ2, вес = FontWeight.ExtraBold)
-    Второстепенное(
+private fun Phrase(state: AuthState.Phrase, onSaved: () -> Unit) {
+    Caption("Секретная фраза", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    Secondary(
         "Двенадцать слов — единственный способ вернуться в аккаунт, если телефон потерян. " +
             "Запишите их по порядку и держите отдельно от телефона.",
     )
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
     ) {
-        состояние.слова.chunked(3).forEachIndexed { ряд, слова ->
+        state.words.chunked(3).forEachIndexed { row, words ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
             ) {
-                слова.forEachIndexed { место, слово ->
+                words.forEachIndexed { place, word ->
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .background(Тима.цвета.акцентМягкий, CircleShape)
-                            .padding(vertical = TimaSpacing.о2),
+                            .background(Tima.colors.softAccent, CircleShape)
+                            .padding(vertical = TimaSpacing.about2),
                         contentAlignment = Alignment.Center,
                     ) {
                         // Номер слова: фраза восстанавливается по порядку, и человек
                         // переписывает её строками. Без номеров он собьётся на девятом.
-                        Подпись(
-                            текст = "${ряд * 3 + место + 1}. $слово",
-                            кегль = TimaType.щ5,
-                            вес = FontWeight.Bold,
+                        Caption(
+                            text = "${row * 3 + place + 1}. $word",
+                            fontSize = TimaType.sz5,
+                            weight = FontWeight.Bold,
                         )
                     }
                 }
@@ -311,7 +311,7 @@ private fun Фраза(состояние: AuthState.Фраза, onСохран�
         }
     }
 
-    Кнопка(надпись = "Записал", onClick = onСохранена, modifier = Modifier.fillMaxWidth())
+    Button(label = "Записал", onClick = onSaved, modifier = Modifier.fillMaxWidth())
 }
 
 /**
@@ -325,47 +325,47 @@ private fun Фраза(состояние: AuthState.Фраза, onСохран�
  * предупреждение о смене личности, а прежняя переписка не вернётся.
  */
 @Composable
-private fun ВводФразы(
-    состояние: AuthState.ВводФразы,
-    onФраза: (String) -> Unit,
-    onВойти: () -> Unit,
-    onЗаново: () -> Unit,
-    onДругойНомер: () -> Unit,
+private fun PhraseInput(
+    state: AuthState.PhraseInput,
+    onPhrase: (String) -> Unit,
+    onEnter: () -> Unit,
+    onAnew: () -> Unit,
+    onOtherNumber: () -> Unit,
 ) {
-    Подпись("Вход по фразе", кегль = TimaType.щ2, вес = FontWeight.ExtraBold)
-    Второстепенное("У номера ${состояние.телефон} уже есть аккаунт. Введите его секретную фразу — двенадцать слов через пробел.")
+    Caption("Вход по фразе", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    Secondary("У номера ${state.phone} уже есть аккаунт. Введите его секретную фразу — двенадцать слов через пробел.")
 
-    Поле(
-        значение = состояние.фраза,
-        onИзменение = onФраза,
-        подсказка = "слово слово слово…",
+    Field(
+        value = state.phrase,
+        onChange = onPhrase,
+        hint = "слово слово слово…",
     )
 
-    состояние.беда?.let { Беда(it) }
+    state.trouble?.let { Trouble(it) }
 
-    Кнопка(
-        надпись = if (состояние.ждём) "Проверяем…" else "Войти",
-        onClick = onВойти,
+    Button(
+        label = if (state.expect) "Проверяем…" else "Войти",
+        onClick = onEnter,
         modifier = Modifier.fillMaxWidth(),
     )
 
     // Выход из тупика. Сюда попадают и по опечатке в номере, и войдя с чужого телефона;
     // без этой кнопки оставались только «вспомнить фразу» и «начать заново», а второе
     // стирает прежнюю личность — то есть опечатка стоила бы аккаунта.
-    Кнопка(
-        надпись = "Другой номер",
-        onClick = onДругойНомер,
+    Button(
+        label = "Другой номер",
+        onClick = onOtherNumber,
         modifier = Modifier.fillMaxWidth(),
     )
 
-    Третьестепенное(
+    Tertiary(
         "Фразы нет? Можно начать заново: прежняя переписка не вернётся, а собеседники " +
             "увидят предупреждение о смене личности.",
     )
-    Кнопка(
-        надпись = "Начать заново",
-        onClick = onЗаново,
-        вид = ВидКнопки.Опасная,
+    Button(
+        label = "Начать заново",
+        onClick = onAnew,
+        kind = ButtonKind.Dangerous,
         modifier = Modifier.fillMaxWidth(),
     )
 }

@@ -73,24 +73,24 @@ class FakeTransport(
 
     /** Одна попытка отправки — то, что подставляется в насос очереди. */
     suspend fun send(ready: ReadyToSend): SendOutcome {
-        val ключ = ready.entry.dedupKey
-        attempts += Attempt(ключ, ready.envelope)
+        val key = ready.entry.dedupKey
+        attempts += Attempt(key, ready.envelope)
 
-        return when (val поведение = script.removeFirstOrNull() ?: Behaviour.Accept) {
-            is Behaviour.Offline -> SendOutcome.Retry(поведение.retryAfterMs)
+        return when (val behaviour = script.removeFirstOrNull() ?: Behaviour.Accept) {
+            is Behaviour.Offline -> SendOutcome.Retry(behaviour.retryAfterMs)
             Behaviour.ServerError -> SendOutcome.Retry()
-            is Behaviour.RateLimited -> SendOutcome.Retry(поведение.retryAfterMs)
-            is Behaviour.Rejected -> SendOutcome.Permanent(поведение.reason)
+            is Behaviour.RateLimited -> SendOutcome.Retry(behaviour.retryAfterMs)
+            is Behaviour.Rejected -> SendOutcome.Permanent(behaviour.reason)
 
-            Behaviour.Accept -> accepted[ключ]
+            Behaviour.Accept -> accepted[key]
                 // Повтор уже дошедшего: именно так отвечает сервер, дедуплицируя по
                 // client_msg_id. Считать это ошибкой значило бы повторять вечно.
                 ?.let { SendOutcome.Duplicate(it) }
-                ?: SendOutcome.Accepted(nextId++.also { accepted[ключ] = it })
+                ?: SendOutcome.Accepted(nextId++.also { accepted[key] = it })
 
             Behaviour.AcceptButLoseAnswer -> {
                 // Сервер принял — запись об этом остаётся, — а клиент ответа не увидел.
-                if (ключ !in accepted) accepted[ключ] = nextId++
+                if (key !in accepted) accepted[key] = nextId++
                 SendOutcome.Retry(0)
             }
         }

@@ -13,9 +13,9 @@ class SecretAliasTest {
     @Test
     fun выход_за_свой_каталог_невозможен() {
         // Главная причина, по которой проверка вообще есть.
-        for (плохое in listOf("../../ключ", "..", "a/b", "a\\b", "a:b", "с/../д")) {
-            assertFailsWith<IllegalArgumentException>("имя «$плохое» обязано быть отвергнуто") {
-                SecretAlias(плохое)
+        for (bad in listOf("../../ключ", "..", "a/b", "a\\b", "a:b", "с/../д")) {
+            assertFailsWith<IllegalArgumentException>("имя «$bad» обязано быть отвергнуто") {
+                SecretAlias(bad)
             }
         }
     }

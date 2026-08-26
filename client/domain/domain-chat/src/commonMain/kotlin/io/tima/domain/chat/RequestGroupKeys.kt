@@ -26,24 +26,24 @@ class RequestGroupKeys(private val recovery: GroupKeyRecovery) {
      *   поля ввода и дальше не сохраняются нигде: держать их значило бы отдать вместе с
      *   устройством и заслон против угона номера.
      */
-    suspend fun запросить(groupId: String, фраза: List<String>? = null): RequestKeysStep =
-        when (val ответ = recovery.request(groupId, фраза)) {
+    suspend fun request(groupId: String, phrase: List<String>? = null): RequestKeysStep =
+        when (val answer = recovery.request(groupId, phrase)) {
             is RecoveryStep.Requested -> when {
-                ответ.versions == 0 -> RequestKeysStep.NothingMissing
-                ответ.helpers == 0 -> RequestKeysStep.NoHelpers
-                else -> RequestKeysStep.Asked(ответ.helpers)
+                answer.versions == 0 -> RequestKeysStep.NothingMissing
+                answer.helpers == 0 -> RequestKeysStep.NoHelpers
+                else -> RequestKeysStep.Asked(answer.helpers)
             }
             RecoveryStep.NeedsSecretPhrase -> RequestKeysStep.NeedsSecretPhrase
             RecoveryStep.NotMember -> RequestKeysStep.NotMember
-            is RecoveryStep.Offline -> RequestKeysStep.Offline(ответ.retryAfterMs)
-            is RecoveryStep.Refused -> RequestKeysStep.Refused(ответ.reason)
+            is RecoveryStep.Offline -> RequestKeysStep.Offline(answer.retryAfterMs)
+            is RecoveryStep.Refused -> RequestKeysStep.Refused(answer.reason)
         }
 }
 
 /** Порт запроса ключей. Реализуется `core-network`. */
 fun interface GroupKeyRecovery {
     /** @param фраза слова аккаунта для подписи запроса; `null` — без подписи. */
-    suspend fun request(groupId: String, фраза: List<String>?): RecoveryStep
+    suspend fun request(groupId: String, phrase: List<String>?): RecoveryStep
 }
 
 sealed interface RecoveryStep {
@@ -59,7 +59,7 @@ sealed interface RecoveryStep {
 /** Что показать человеку после нажатия «запросить ключ». */
 sealed interface RequestKeysStep {
     /** Просьба ушла [устройствам] участникам. Ключи приедут, когда кто-то из них ответит. */
-    data class Asked(val устройствам: Int) : RequestKeysStep
+    data class Asked(val devices: Int) : RequestKeysStep
 
     /** Недостающих версий нет — значит, дело не в ключе. */
     data object NothingMissing : RequestKeysStep

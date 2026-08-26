@@ -25,32 +25,32 @@ import kotlin.test.assertTrue
  */
 class ChatStoreTest {
 
-    private val поток = MutableStateFlow<List<ChatLine>>(emptyList())
-    private val feed = ChatFeed { _, _ -> поток }
+    private val stream = MutableStateFlow<List<ChatLine>>(emptyList())
+    private val feed = ChatFeed { _, _ -> stream }
 
-    private val очередь = mutableListOf<String>()
-    private var занятые = emptySet<String>()
-    private var размерТела = 10
+    private val queue = mutableListOf<String>()
+    private var taken = emptySet<String>()
+    private var bodySize = 10
 
     private fun store(scope: kotlinx.coroutines.CoroutineScope) = ChatStore(
         chatId = "chat-1",
         observe = ObserveChat(feed),
         send = SendMessage(
-            queue = OutgoingQueue { ключ, _, _ ->
-                очередь += ключ
-                ключ !in занятые
+            queue = OutgoingQueue { key, _, _ ->
+                queue += key
+                key !in taken
             },
             codec = object : MessageBodyCodec {
-                override fun encodeText(text: String) = ByteArray(размерТела)
+                override fun encodeText(text: String) = ByteArray(bodySize)
                 override fun decodeText(body: ByteArray): String? = null
             },
-            keys = DedupKeys { "d-${очередь.size + 1}" },
+            keys = DedupKeys { "d-${queue.size + 1}" },
             maxBodyBytes = 100,
         ),
         scope = scope,
     )
 
-    private fun строка(dedupKey: String, display: MessageDisplay) = ChatLine(
+    private fun line(dedupKey: String, display: MessageDisplay) = ChatLine(
         dedupKey = dedupKey,
         chatId = "chat-1",
         display = display,
@@ -68,7 +68,7 @@ class ChatStoreTest {
      */
     @Test
     fun открытая_переписка_отмечается_прочитанной() = runTest {
-        val отмечено = mutableListOf<String>()
+        val marked = mutableListOf<String>()
         val store = ChatStore(
             chatId = "chat-1",
             observe = ObserveChat(feed),
@@ -81,17 +81,17 @@ class ChatStoreTest {
                 keys = DedupKeys { "d-1" },
             ),
             scope = backgroundScope,
-            markRead = MarkRead(ReadMarks { chatId -> отмечено += chatId; 1 }),
+            markRead = MarkRead(ReadMarks { chatId -> marked += chatId; 1 }),
         )
 
-        поток.value = listOf(строка("d-1", MessageDisplay.RECEIVED))
+        stream.value = listOf(line("d-1", MessageDisplay.RECEIVED))
         store.state.first { it.lines.isNotEmpty() }
 
-        поток.value = listOf(строка("d-1", MessageDisplay.RECEIVED), строка("d-2", MessageDisplay.RECEIVED))
+        stream.value = listOf(line("d-1", MessageDisplay.RECEIVED), line("d-2", MessageDisplay.RECEIVED))
         store.state.first { it.lines.size == 2 }
 
-        assertTrue(отмечено.size >= 2, "отмечать надо и при открытии, и на каждом обновлении: $отмечено")
-        assertTrue(отмечено.all { it == "chat-1" }, "чужую переписку отмечать нечем: $отмечено")
+        assertTrue(marked.size >= 2, "отмечать надо и при открытии, и на каждом обновлении: $marked")
+        assertTrue(marked.all { it == "chat-1" }, "чужую переписку отмечать нечем: $marked")
     }
 
     @Test
@@ -100,9 +100,9 @@ class ChatStoreTest {
         val s = store(backgroundScope)
         s.draftChanged("привет")
 
-        val исход = s.sendPressed()
+        val outcome = s.sendPressed()
 
-        assertIs<SendMessageResult.Queued>(исход)
+        assertIs<SendMessageResult.Queued>(outcome)
         assertEquals("", s.state.value.draft)
         assertNull(s.state.value.notice)
     }
@@ -112,35 +112,35 @@ class ChatStoreTest {
         // Главное правило. Текст написан человеком, а не нами, и восстановить его нам
         // нечем. В v1 поле очищалось до подтверждения, и отвергнутое сообщение исчезало
         // вместе с набранным.
-        размерТела = 101
+        bodySize = 101
         val s = store(backgroundScope)
         s.draftChanged("очень длинное сообщение")
 
-        val исход = s.sendPressed()
+        val outcome = s.sendPressed()
 
-        assertIs<SendMessageResult.TooLarge>(исход)
+        assertIs<SendMessageResult.TooLarge>(outcome)
         assertEquals("очень длинное сообщение", s.state.value.draft, "набранное обязано остаться")
-        val жалоба = s.state.value.notice
-        assertIs<ChatNotice.TooLarge>(жалоба)
-        assertEquals(101, жалоба.bytes)
-        assertEquals(100, жалоба.limit, "предел в сообщении нужен: «слишком большое» без числа бесполезно")
+        val complaint = s.state.value.notice
+        assertIs<ChatNotice.TooLarge>(complaint)
+        assertEquals(101, complaint.bytes)
+        assertEquals(100, complaint.limit, "предел в сообщении нужен: «слишком большое» без числа бесполезно")
     }
 
     @Test
     fun нажатие_по_пустому_полю_ничего_не_делает() = runTest {
         val s = store(backgroundScope)
 
-        val исход = s.sendPressed()
+        val outcome = s.sendPressed()
 
-        assertEquals(SendMessageResult.Empty, исход)
-        assertTrue(очередь.isEmpty(), "в очередь ничего не легло")
+        assertEquals(SendMessageResult.Empty, outcome)
+        assertTrue(queue.isEmpty(), "в очередь ничего не легло")
         assertNull(s.state.value.notice, "и жаловаться незачем: человек сам видит пустое поле")
     }
 
     @Test
     fun уже_стоящее_в_очереди_тоже_чистит_поле() = runTest {
         // Повторное нажатие: сообщение в очереди, значит поле держать не надо.
-        занятые = setOf("d-1")
+        taken = setOf("d-1")
         val s = store(backgroundScope)
         s.draftChanged("привет")
 
@@ -155,7 +155,7 @@ class ChatStoreTest {
         val s = store(backgroundScope)
         assertTrue(s.state.value.lines.isEmpty())
 
-        поток.value = listOf(строка("d-1", MessageDisplay.PENDING))
+        stream.value = listOf(line("d-1", MessageDisplay.PENDING))
         // Ждём состояние, а не тикаем планировщиком: сборщик живёт в фоновой области, а
         // её планировщик работой не считает — advanceUntilIdle объявит простой, ни разу
         // не дав сборщику начаться. Тот же капкан, что с проверкой пика в насосе.
@@ -165,7 +165,7 @@ class ChatStoreTest {
         )
 
         // Очередь отправила — состояние строки меняется тем же потоком.
-        поток.value = listOf(строка("d-1", MessageDisplay.SENT))
+        stream.value = listOf(line("d-1", MessageDisplay.SENT))
         assertEquals(
             MessageDisplay.SENT,
             s.state.first { it.lines.singleOrNull()?.display == MessageDisplay.SENT }
@@ -176,7 +176,7 @@ class ChatStoreTest {
     @Test
     fun правка_текста_убирает_прежнюю_жалобу() = runTest {
         // Иначе сообщение о слишком большом висит над уже исправленным текстом.
-        размерТела = 101
+        bodySize = 101
         val s = store(backgroundScope)
         s.draftChanged("длинное")
         s.sendPressed()
@@ -189,7 +189,7 @@ class ChatStoreTest {
 
     @Test
     fun жалобу_можно_закрыть() = runTest {
-        размерТела = 101
+        bodySize = 101
         val s = store(backgroundScope)
         s.draftChanged("длинное")
         s.sendPressed()

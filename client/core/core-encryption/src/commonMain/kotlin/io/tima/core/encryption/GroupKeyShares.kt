@@ -21,10 +21,10 @@ object GroupKeyShares {
     fun wrap(recipientEncryptionPub: ByteArray, groupKey: ByteArray): Result<SharedGroupKey> =
         runCatching {
             require(recipientEncryptionPub.size == 32) { "открытый ключ устройства — 32 байта" }
-            val эфемерная = Kodium.generateKeyPair()
+            val ephemeral = Kodium.generateKeyPair()
             SharedGroupKey(
-                senderEphemeralPub = эфемерная.getPublicKey().encryptionKey,
-                wrapped = WrappedKeyService.wrap(эфемерная, recipientEncryptionPub, groupKey).getOrThrow(),
+                senderEphemeralPub = ephemeral.getPublicKey().encryptionKey,
+                wrapped = WrappedKeyService.wrap(ephemeral, recipientEncryptionPub, groupKey).getOrThrow(),
             )
         }
 }

@@ -32,7 +32,7 @@ class ReceiveHarness(private val inbox: Inbox) {
     val skipped = mutableListOf<String>()
 
     /** Кадры про групповые ключи: что пришло. Выполнение — не дело стенда. */
-    val проКлючи = mutableListOf<String>()
+    val aboutKeys = mutableListOf<String>()
 
     /**
      * Обрабатывает кадр сервера так, как это делает живой канал.
@@ -42,41 +42,41 @@ class ReceiveHarness(private val inbox: Inbox) {
      * оказалось у нас; умри процесс в этот момент, и сообщение не придёт никогда.
      */
     fun onFrame(frame: String) {
-        when (val решение = protocol.decide(frame)) {
+        when (val decision = protocol.decide(frame)) {
             is EventStreamProtocol.Decision.Deliver -> {
                 inbox.receive(
-                    chatId = решение.event.chatId,
-                    messageId = решение.event.messageId,
-                    envelope = решение.event.envelope,
+                    chatId = decision.event.chatId,
+                    messageId = decision.event.messageId,
+                    envelope = decision.event.envelope,
                 )
-                sent += protocol.ackFrame(решение.event.eventId)
+                sent += protocol.ackFrame(decision.event.eventId)
             }
 
             is EventStreamProtocol.Decision.Skip -> {
-                skipped += решение.reason
-                решение.eventId?.let { sent += protocol.ackFrame(it) }
+                skipped += decision.reason
+                decision.eventId?.let { sent += protocol.ackFrame(it) }
             }
 
             is EventStreamProtocol.Decision.SyncDone ->
-                if (решение.more) sent += protocol.pullFrame(решение.nextCursor)
+                if (decision.more) sent += protocol.pullFrame(decision.nextCursor)
 
             // Кадры про групповые ключи стенд подтверждает и запоминает, но не
             // выполняет: ротация требует escrow, крипты и сети, а предмет этой проверки —
             // порядок «запись, потом подтверждение». Подтвердить всё же обязаны: иначе
             // курсор застрянет, и следующие сообщения не приедут.
             is EventStreamProtocol.Decision.KeysArrived -> {
-                проКлючи += "keys:${решение.groupId}"
-                решение.eventId?.let { sent += protocol.ackFrame(it) }
+                aboutKeys += "keys:${decision.groupId}"
+                decision.eventId?.let { sent += protocol.ackFrame(it) }
             }
 
             is EventStreamProtocol.Decision.ShareKeys -> {
-                проКлючи += "share:${решение.groupId}:${решение.versions.joinToString(",")}"
-                решение.eventId?.let { sent += protocol.ackFrame(it) }
+                aboutKeys += "share:${decision.groupId}:${decision.versions.joinToString(",")}"
+                decision.eventId?.let { sent += protocol.ackFrame(it) }
             }
 
             is EventStreamProtocol.Decision.RotationNeeded -> {
-                проКлючи += "rotate:${решение.groupId}:${решение.reason}"
-                решение.eventId?.let { sent += protocol.ackFrame(it) }
+                aboutKeys += "rotate:${decision.groupId}:${decision.reason}"
+                decision.eventId?.let { sent += protocol.ackFrame(it) }
             }
 
             is EventStreamProtocol.Decision.NeedHistory,

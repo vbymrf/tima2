@@ -10,8 +10,10 @@ package io.tima.core.outbox
 class InMemoryInboxStore : InboxStore {
 
     private val rows = LinkedHashMap<String, IncomingEntry>()
-    private val тела = LinkedHashMap<String, ByteArray>()
-    private val авторы = LinkedHashMap<String, String>()
+    // bodies, а не body: имя параметра storeParsed заняло бы то же слово и
+    // закрыло бы карту собой.
+    private val bodies = LinkedHashMap<String, ByteArray>()
+    private val authors = LinkedHashMap<String, String>()
 
     /**
      * Отказ записи содержимого — для проверки «убили посреди записи».
@@ -19,7 +21,7 @@ class InMemoryInboxStore : InboxStore {
      * Раньше падение изображали лямбдой, переданной в `openNext`. Лямбды больше нет:
      * обязанность записать тело принадлежит хранилищу, значит и отказ изображает оно.
      */
-    var падатьНаЗаписиТела: Boolean = false
+    var failOnEntryBody: Boolean = false
 
     private fun key(chatId: String, messageId: Long) = "$chatId/$messageId"
 
@@ -42,23 +44,23 @@ class InMemoryInboxStore : InboxStore {
     }
 
     override fun storeParsed(chatId: String, messageId: Long, body: ByteArray, senderId: String) {
-        if (падатьНаЗаписиТела) error("диск отказал")
-        тела[key(chatId, messageId)] = body
-        авторы[key(chatId, messageId)] = senderId
+        if (failOnEntryBody) error("диск отказал")
+        bodies[key(chatId, messageId)] = body
+        authors[key(chatId, messageId)] = senderId
     }
 
     /** Записанный автор — проверка обязана видеть, что он вообще записан. */
-    fun author(chatId: String, messageId: Long): String? = авторы[key(chatId, messageId)]
+    fun author(chatId: String, messageId: Long): String? = authors[key(chatId, messageId)]
 
     /** Записанное тело — чтобы проверка могла убедиться, что оно действительно легло. */
-    fun body(chatId: String, messageId: Long): ByteArray? = тела[key(chatId, messageId)]
+    fun body(chatId: String, messageId: Long): ByteArray? = bodies[key(chatId, messageId)]
 
     override fun markChatRead(chatId: String): Int {
-        val разобранные = rows.values.filter {
+        val parsed = rows.values.filter {
             it.chatId == chatId && it.state == IncomingState.STORED
         }
-        for (запись in разобранные) rows[запись.key] = запись.copy(state = IncomingState.READ)
-        return разобранные.size
+        for (entry in parsed) rows[entry.key] = entry.copy(state = IncomingState.READ)
+        return parsed.size
     }
 
     override fun pending(): List<IncomingEntry> = rows.values.filter {

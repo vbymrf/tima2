@@ -11,9 +11,9 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import io.tima.core.database.desktopDatabase
 import io.tima.core.ui.TimaTheme
-import io.tima.shared.Вход
-import io.tima.shared.Платформа
-import io.tima.shared.Корень
+import io.tima.shared.Entry
+import io.tima.shared.Platform
+import io.tima.shared.Root
 import java.io.File
 
 /**
@@ -29,13 +29,13 @@ import java.io.File
 fun main() = application {
     // Переменная окружения читается ЗДЕСЬ: на ПК она есть, в общем коде её нет вовсе —
     // `System.getenv` отсутствует на iOS. Адрес по умолчанию — стенд.
-    val вход = remember {
-        Вход.создать(
-            платформа = Платформа.ПК,
-            host = System.getenv("TIMA_STAND_HOST")?.takeIf { it.isNotBlank() } ?: Вход.СТЕНД,
+    val entry = remember {
+        Entry.create(
+            platform = Platform.DESKTOP,
+            host = System.getenv("TIMA_STAND_HOST")?.takeIf { it.isNotBlank() } ?: Entry.STAND,
         )
     }
-    val состояниеОкна = rememberWindowState(
+    val windowState = rememberWindowState(
         // Планшетный формат по умолчанию: три полосы влезают, и сразу видно, что раскладку
         // решает ширина окна, а не устройство. Окно можно сузить — станет телефонным.
         size = DpSize(1100.dp, 820.dp),
@@ -44,21 +44,21 @@ fun main() = application {
 
     Window(
         onCloseRequest = ::exitApplication,
-        state = состояниеОкна,
+        state = windowState,
         title = "TIMA",
     ) {
         TimaTheme(dark = isSystemInDarkTheme()) {
-            Корень(вход = вход, базаУстройства = { desktopDatabase(File(каталогДанных(), ИМЯ_БАЗЫ)) })
+            Root(entry = entry, deviceDatabase = { desktopDatabase(File(dataCatalog(), DATABASE_NAME)) })
         }
     }
 }
 
 /** `%LOCALAPPDATA%\TIMA` — рядом с секретами, но не вместе с ними. */
-private fun каталогДанных(): File {
+private fun dataCatalog(): File {
     val base = System.getenv("LOCALAPPDATA")
         ?: System.getProperty("user.home")
         ?: error("непонятно, где держать данные: ни LOCALAPPDATA, ни user.home")
     return File(base, "TIMA")
 }
 
-private const val ИМЯ_БАЗЫ = "tima.db"
+private const val DATABASE_NAME = "tima.db"

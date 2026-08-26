@@ -6,10 +6,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import io.tima.testui.Снимок
-import io.tima.testui.обеТемы
-import io.tima.testui.снять
-import io.tima.testui.тема
+import io.tima.testui.Snapshot
+import io.tima.testui.bothThemes
+import io.tima.testui.capture
+import io.tima.testui.theme
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.max
@@ -24,7 +24,7 @@ import kotlin.test.fail
  * и на чужом устройстве. Поэтому каждый тест назван утверждением и падает с текстом,
  * говорящим, что именно перестало быть правдой.
  */
-class СнимкиTest {
+class SnapshotsTest {
 
     // ── Пояснение переносится, а не обрезается ──────────────────────────────────
 
@@ -43,27 +43,27 @@ class СнимкиTest {
      */
     @Test
     fun пояснение_переносится_а_не_обрезается() {
-        val долгое = "Подключённое устройство сможет читать новые сообщения этого аккаунта " +
+        val long = "Подключённое устройство сможет читать новые сообщения этого аккаунта " +
             "и писать от вашего имени. Отключить его можно в списке устройств."
 
-        val перенос = снять("пояснение-перенос", 300, 200, тёмная = false) {
-            Второстепенное(долгое)
+        val wrap = capture("пояснение-перенос", 300, 200, dark = false) {
+            Secondary(long)
         }
-        val обрез = снять("пояснение-обрез", 300, 200, тёмная = false) {
-            Второстепенное(долгое, однойСтрокой = true)
+        val clip = capture("пояснение-обрез", 300, 200, dark = false) {
+            Secondary(long, lineOne = true)
         }
 
-        val фон = TimaColors.светлая.поверхность
-        val подПервойСтрокой = 30 until 120
-        val подПереносом = перенос.самыйТёмный(x = 0 until 300, y = подПервойСтрокой)
-        val подОбрезом = обрез.самыйТёмный(x = 0 until 300, y = подПервойСтрокой)
+        val background = TimaColors.light.surface
+        val underFirstLine = 30 until 120
+        val underWrap = wrap.darkMost(x = 0 until 300, y = underFirstLine)
+        val underClip = clip.darkMost(x = 0 until 300, y = underFirstLine)
 
         assertTrue(
-            !Снимок.близки(подПереносом, фон),
+            !Snapshot.close(underWrap, background),
             "ниже первой строки пусто: пояснение обрезано, а не перенесено",
         )
         assertTrue(
-            Снимок.близки(подОбрезом, фон),
+            Snapshot.close(underClip, background),
             "одностроч­ный вариант тоже что-то нарисовал ниже — проверка смотрит не туда",
         )
     }
@@ -78,18 +78,18 @@ class СнимкиTest {
      */
     @Test
     fun счётчик_янтарный_и_текст_на_нём_чёрный_в_обеих_темах() {
-        for ((имя, снимок) in обеТемы("счётчик", 40, 40) { Box(Modifier.padding(9.dp)) { Счётчик(7) } }) {
-            val цвета = тема(имя)
-            val подложка = снимок.цвет(12, 20)
+        for ((name, snapshot) in bothThemes("счётчик", 40, 40) { Box(Modifier.padding(9.dp)) { Counter(7) } }) {
+            val colors = theme(name)
+            val backdrop = snapshot.color(12, 20)
             assertTrue(
-                Снимок.близки(подложка, цвета.активность),
-                "$имя: подложка счётчика обязана быть янтарной, а не $подложка",
+                Snapshot.close(backdrop, colors.activity),
+                "$name: подложка счётчика обязана быть янтарной, а не $backdrop",
             )
-            val глиф = снимок.самыйТёмный(x = 14..26, y = 12..28)
-            val отношение = TimaContrast.отношение(глиф, цвета.активность)
+            val glyph = snapshot.darkMost(x = 14..26, y = 12..28)
+            val ratio = TimaContrast.ratio(glyph, colors.activity)
             assertTrue(
-                отношение >= TimaContrast.ПОРОГ_ТЕКСТА,
-                "$имя: текст счётчика даёт $отношение на янтаре — README требует 12,32 : 1",
+                ratio >= TimaContrast.TEXT_THRESHOLD,
+                "$name: текст счётчика даёт $ratio на янтаре — README требует 12,32 : 1",
             )
         }
     }
@@ -103,19 +103,19 @@ class СнимкиTest {
      */
     @Test
     fun полоса_автора_огибает_скругление() {
-        for ((имя, снимок) in обеТемы("пузырь-полоса", 320, 120) { пузырьБезАватара() }) {
-            val цвета = тема(имя)
-            val посередине = снимок.цвет(ЛЕВЫЙ_КРАЙ + 2, ВЕРХ + 20)
+        for ((name, snapshot) in bothThemes("пузырь-полоса", 320, 120) { avatarWithoutBubble() }) {
+            val colors = theme(name)
+            val middle = snapshot.color(ЛЕВЫЙ_КРАЙ + 2, TOP + 20)
             assertTrue(
-                Снимок.близки(посередине, цвета.навигация),
-                "$имя: полосы автора нет там, где она обязана быть: $посередине",
+                Snapshot.close(middle, colors.navigation),
+                "$name: полосы автора нет там, где она обязана быть: $middle",
             )
             // Радиус 16: в самой верхней строке пузыря левее x = 16 нет ничего.
             for (x in ЛЕВЫЙ_КРАЙ..(ЛЕВЫЙ_КРАЙ + 4)) {
-                val угол = снимок.цвет(x, ВЕРХ)
+                val corner = snapshot.color(x, TOP)
                 assertTrue(
-                    !Снимок.близки(угол, цвета.навигация),
-                    "$имя: полоса выпирает в угол на x=$x — значит нарисована подложкой, а не границей",
+                    !Snapshot.close(corner, colors.navigation),
+                    "$name: полоса выпирает в угол на x=$x — значит нарисована подложкой, а не границей",
                 )
             }
         }
@@ -128,21 +128,21 @@ class СнимкиTest {
      */
     @Test
     fun аватар_перекрывает_полосу_автора() {
-        val сАватаром = обеТемы("пузырь-аватар", 320, 140) { пузырьСАватаром() }
-        val безАватара = обеТемы("пузырь-полоса", 320, 140) { пузырьБезАватара() }
-        for (имя in listOf("светлая", "тёмная")) {
-            val цвета = тема(имя)
+        val withAvatar = bothThemes("пузырь-аватар", 320, 140) { bubbleWithAvatar() }
+        val avatarWithout = bothThemes("пузырь-полоса", 320, 140) { avatarWithoutBubble() }
+        for (name in listOf("светлая", "тёмная")) {
+            val colors = theme(name)
             // Сравниваются две сцены, а не координата с числом: у пузыря без аватара полоса
             // начинается сразу за скруглением, у пузыря с аватаром — только под аватаром.
             // Разница и есть «перекрыл», и её не надо угадывать по вёрстке.
-            val сверху = первыйЗелёный(безАватара.getValue(имя), цвета.навигация)
-            val подАватаром = первыйЗелёный(сАватаром.getValue(имя), цвета.навигация)
+            val top = firstGreen(avatarWithout.getValue(name), colors.navigation)
+            val underAvatar = firstGreen(withAvatar.getValue(name), colors.navigation)
             assertTrue(
                 // Аватар опускает начало полосы на 17 px: без него она видна с y=34 (там
                 // скругление уже кончилось), с ним — только с y=51, из-под аватара. Порог 10
                 // отделяет «перекрыл» от «не перекрыл» с запасом и не привязан к вёрстке.
-                подАватаром - сверху >= 10,
-                "$имя: полоса начинается на y=$подАватаром против y=$сверху без аватара — " +
+                underAvatar - top >= 10,
+                "$name: полоса начинается на y=$underAvatar против y=$top без аватара — " +
                     "аватар её не перекрыл: он либо полупрозрачен, либо стоит рядом с пузырём",
             )
         }
@@ -150,11 +150,11 @@ class СнимкиTest {
 
     /** У своего сообщения ни полосы, ни аватара, ни имени: кто говорит — и так понятно. */
     @Test
-    fun моё_сообщение_без_полосы_автора() {
-        for ((имя, снимок) in обеТемы("пузырь-мой", 320, 120) { пузырьМой() }) {
+    fun my_message_without_strips_author() {
+        for ((name, snapshot) in bothThemes("пузырь-мой", 320, 120) { myBubble() }) {
             assertTrue(
-                !снимок.есть(тема(имя).навигация),
-                "$имя: в своём сообщении нашлась салатовая полоса",
+                !snapshot.has(theme(name).navigation),
+                "$name: в своём сообщении нашлась салатовая полоса",
             )
         }
     }
@@ -168,12 +168,12 @@ class СнимкиTest {
      */
     @Test
     fun тема_меняет_пиксели_каждого_компонента() {
-        for ((имя, размер, содержимое) in ВСЕ_КОМПОНЕНТЫ) {
-            val снимки = обеТемы("тема-$имя", размер.first, размер.second, содержимое = содержимое)
-            val расхождение = снимки.getValue("светлая").расхождение(снимки.getValue("тёмная"))
+        for ((name, size, content) in ВСЕ_КОМПОНЕНТЫ) {
+            val snapshots = bothThemes("тема-$name", size.first, size.second, content = content)
+            val difference = snapshots.getValue("светлая").difference(snapshots.getValue("тёмная"))
             assertTrue(
-                расхождение > 0.10,
-                "$имя: темы расходятся лишь на ${(расхождение * 100).toInt()}% пикселей — " +
+                difference > 0.10,
+                "$name: темы расходятся лишь на ${(difference * 100).toInt()}% пикселей — " +
                     "похоже, цвет взят мимо темы",
             )
         }
@@ -191,21 +191,21 @@ class СнимкиTest {
      */
     @Test
     fun текст_на_салатовой_кнопке_чёрный_в_светлой_и_белый_в_тёмной() {
-        val снимки = обеТемы("кнопка", 160, 60) {
-            Box(Modifier.padding(9.dp)) { Кнопка("Отправить", onClick = {}) }
+        val snapshots = bothThemes("кнопка", 160, 60) {
+            Box(Modifier.padding(9.dp)) { Button("Отправить", onClick = {}) }
         }
-        val глифСветлый = снимки.getValue("светлая").самыйТёмный(x = 30..130, y = 20..40)
-        val светлое = TimaContrast.отношение(глифСветлый, TimaColors.светлая.навигация)
+        val lightGlyph = snapshots.getValue("светлая").darkMost(x = 30..130, y = 20..40)
+        val light = TimaContrast.ratio(lightGlyph, TimaColors.light.navigation)
         assertTrue(
-            светлое >= TimaContrast.ПОРОГ_ТЕКСТА,
-            "светлая: текст на салатовой кнопке даёт $светлое — решение заказчика было «чёрный»",
+            light >= TimaContrast.TEXT_THRESHOLD,
+            "светлая: текст на салатовой кнопке даёт $light — решение заказчика было «чёрный»",
         )
 
-        val глифТёмный = снимки.getValue("тёмная").самыйСветлый(x = 30..130, y = 20..40)
-        val тёмное = TimaContrast.отношение(глифТёмный, TimaColors.тёмная.навигация)
+        val darkGlyph = snapshots.getValue("тёмная").lightMost(x = 30..130, y = 20..40)
+        val dark = TimaContrast.ratio(darkGlyph, TimaColors.dark.navigation)
         assertTrue(
-            тёмное < TimaContrast.ПОРОГ_ТЕКСТА,
-            "тёмная: текст на салатовом стал читаемым ($тёмное) — решение было «белый, 2,08», " +
+            dark < TimaContrast.TEXT_THRESHOLD,
+            "тёмная: текст на салатовом стал читаемым ($dark) — решение было «белый, 2,08», " +
                 "и менять его молча нельзя",
         )
     }
@@ -222,15 +222,15 @@ class СнимкиTest {
      */
     @Test
     fun в_снимках_нет_цветов_вне_палитры() {
-        for ((имя, размер, содержимое) in ВСЕ_КОМПОНЕНТЫ) {
-            for ((темаИмя, снимок) in обеТемы("палитра-$имя", размер.first, размер.second, содержимое = содержимое)) {
-                val палитра = палитраТемы(тема(темаИмя))
-                val память = HashMap<ULong, Boolean>()
-                val чужой = снимок.пиксели().firstOrNull { пиксель ->
-                    !память.getOrPut(пиксель.value) { смесь(пиксель, палитра) }
+        for ((name, size, content) in ВСЕ_КОМПОНЕНТЫ) {
+            for ((nameTheme, snapshot) in bothThemes("палитра-$name", size.first, size.second, content = content)) {
+                val palette = themePalette(theme(nameTheme))
+                val memory = HashMap<ULong, Boolean>()
+                val foreign = snapshot.pixels().firstOrNull { pixel ->
+                    !memory.getOrPut(pixel.value) { blend(pixel, palette) }
                 }
-                if (чужой != null) {
-                    fail("$имя/$темаИмя: пиксель $чужой не является смесью цветов темы")
+                if (foreign != null) {
+                    fail("$name/$nameTheme: пиксель $foreign не является смесью цветов темы")
                 }
             }
         }
@@ -250,12 +250,12 @@ class СнимкиTest {
      */
     @Test
     fun чужой_цвет_палитрой_не_принимается() {
-        for (имя in listOf("светлая", "тёмная")) {
-            val палитра = палитраТемы(тема(имя))
-            for (чужой in listOf(Color(0xFFFF0000), Color(0xFF7F00FF), Color(0xFF00A0A0))) {
+        for (name in listOf("светлая", "тёмная")) {
+            val palette = themePalette(theme(name))
+            for (foreign in listOf(Color(0xFFFF0000), Color(0xFF7F00FF), Color(0xFF00A0A0))) {
                 assertTrue(
-                    !смесь(чужой, палитра),
-                    "$имя: $чужой сошёл за смесь цветов темы — проверка палитры потеряла смысл",
+                    !blend(foreign, palette),
+                    "$name: $foreign сошёл за смесь цветов темы — проверка палитры потеряла смысл",
                 )
             }
         }
@@ -264,62 +264,62 @@ class СнимкиTest {
     // ── Сцены ──────────────────────────────────────────────────────────────────
 
     @Composable
-    private fun пузырьБезАватара() = Box(Modifier.padding(start = ЛЕВЫЙ_КРАЙ.dp, top = ВЕРХ.dp)) {
+    private fun avatarWithoutBubble() = Box(Modifier.padding(start = ЛЕВЫЙ_КРАЙ.dp, top = TOP.dp)) {
         // продолжение = true: имени и аватара нет, остаётся ровно полоса и рамка.
-        Пузырь(моё = false, автор = "Аня", аватар = "А", продолжение = true) {
-            Подпись("Полоса обязана огибать скругление")
+        Bubble(my = false, author = "Аня", avatar = "А", continuation = true) {
+            Caption("Полоса обязана огибать скругление")
         }
     }
 
     @Composable
-    private fun пузырьСАватаром() = Box(Modifier.padding(start = ЛЕВЫЙ_КРАЙ.dp, top = ВЕРХ.dp)) {
-        Пузырь(моё = false, автор = "Аня", аватар = "А") { Подпись("Аватар внутри пузыря") }
+    private fun bubbleWithAvatar() = Box(Modifier.padding(start = ЛЕВЫЙ_КРАЙ.dp, top = TOP.dp)) {
+        Bubble(my = false, author = "Аня", avatar = "А") { Caption("Аватар внутри пузыря") }
     }
 
     @Composable
-    private fun пузырьМой() = Box(Modifier.padding(start = ЛЕВЫЙ_КРАЙ.dp, top = ВЕРХ.dp)) {
-        Пузырь(моё = true) { Подпись("Своё сообщение") }
+    private fun myBubble() = Box(Modifier.padding(start = ЛЕВЫЙ_КРАЙ.dp, top = TOP.dp)) {
+        Bubble(my = true) { Caption("Своё сообщение") }
     }
 
     private companion object {
         /** Отступы сцены: аватар выступает вверх, и без верхнего поля он обрезался бы. */
         const val ЛЕВЫЙ_КРАЙ = 8
-        const val ВЕРХ = 24
+        const val TOP = 24
 
         /** Смесь считается по каналам; допуск шире пиксельного — это сглаживание. */
         const val ДОПУСК_СМЕСИ = 8.0 / 255
 
         val ВСЕ_КОМПОНЕНТЫ: List<Triple<String, Pair<Int, Int>, @Composable () -> Unit>> = listOf(
-            Triple("счётчик", 40 to 40) { Box(Modifier.padding(9.dp)) { Счётчик(7) } },
-            Triple("аватар", 60 to 60) { Box(Modifier.padding(9.dp)) { Аватар("АБ") } },
-            Triple("чип", 90 to 40) { Box(Modifier.padding(9.dp)) { Чип("E2E", вид = ВидЧипа.Подтверждено) } },
-            Triple("кнопка", 160 to 60) { Box(Modifier.padding(9.dp)) { Кнопка("Отправить", onClick = {}) } },
+            Triple("счётчик", 40 to 40) { Box(Modifier.padding(9.dp)) { Counter(7) } },
+            Triple("аватар", 60 to 60) { Box(Modifier.padding(9.dp)) { Avatar("АБ") } },
+            Triple("чип", 90 to 40) { Box(Modifier.padding(9.dp)) { Chip("E2E", kind = ChipKind.Confirmed) } },
+            Triple("кнопка", 160 to 60) { Box(Modifier.padding(9.dp)) { Button("Отправить", onClick = {}) } },
             Triple("кнопка-опасная", 160 to 60) {
-                Box(Modifier.padding(9.dp)) { Кнопка("Удалить", onClick = {}, вид = ВидКнопки.Опасная) }
+                Box(Modifier.padding(9.dp)) { Button("Удалить", onClick = {}, kind = ButtonKind.Dangerous) }
             },
             Triple("строка-списка", 300 to 76) {
                 Box(Modifier.padding(top = 6.dp)) {
-                    СтрокаСписка(
-                        слева = { Аватар("АБ") },
-                        справа = { Счётчик(3) },
-                        середина = {
-                            Имя("Аня Борисова")
-                            Второстепенное("Полоса обязана огибать скругление")
+                    ListLine(
+                        left = { Avatar("АБ") },
+                        right = { Counter(3) },
+                        middle = {
+                            Name("Аня Борисова")
+                            Secondary("Полоса обязана огибать скругление")
                         },
                     )
                 }
             },
             Triple("шапка-окна", 320 to 76) {
-                ШапкаОкна(
-                    название = "Переписки",
-                    логотип = "Т",
-                    onПереключитьОкна = {},
-                    справа = { КнопкаИконка(знак = "+", onClick = {}, живая = false) },
+                WindowHeader(
+                    title = "Переписки",
+                    logo = "Т",
+                    onSwitchWindows = {},
+                    right = { IconButton(glyph = "+", onClick = {}, live = false) },
                 )
             },
             Triple("пузырь", 320 to 140) {
                 Box(Modifier.padding(start = 8.dp, top = 24.dp).width(300.dp)) {
-                    Пузырь(моё = false, автор = "Аня", аватар = "А") { Подпись("Аватар внутри пузыря") }
+                    Bubble(my = false, author = "Аня", avatar = "А") { Caption("Аватар внутри пузыря") }
                 }
             },
         )
@@ -334,45 +334,45 @@ class СнимкиTest {
          * Цвета приводятся к непрозрачным: полупрозрачный токен на подложке и есть смесь
          * своего цвета с ней, а смесь проверяется отрезком.
          */
-        fun палитраТемы(цвета: TimaColors): List<Color> {
-            val все = TimaColors::class.java.methods
+        fun themePalette(colors: TimaColors): List<Color> {
+            val all = TimaColors::class.java.methods
                 .filter { it.name.startsWith("get") && it.returnType == Long::class.javaPrimitiveType }
-                .map { Color((it.invoke(цвета) as Long).toULong()) }
-            val непрозрачные = все.filter { it.alpha == 1f }
+                .map { Color((it.invoke(colors) as Long).toULong()) }
+            val opaque = all.filter { it.alpha == 1f }
             // Полупрозрачный токен на непрозрачной подложке — это тоже цвет темы, просто
             // составной: рамка на белом, «мягкий акцент» на поверхности. Без них смесью
             // двух пришлось бы объявлять любой пиксель текста, лежащего на таком фоне.
-            val наложенные = все.flatMap { токен -> непрозрачные.map { TimaContrast.наложить(токен, it) } }
-            return (непрозрачные + наложенные)
+            val overlaid = all.flatMap { token -> opaque.map { TimaContrast.overlay(token, it) } }
+            return (opaque + overlaid)
                 .map { Color(it.red, it.green, it.blue, 1f) }
                 .distinctBy { it.value }
         }
 
         /** Первая строка, где в столбце полосы виден салатовый. Полосы нет — тест валится. */
-        fun первыйЗелёный(снимок: Снимок, навигация: Color): Int =
-            (0 until снимок.высота).firstOrNull {
-                Снимок.близки(снимок.цвет(ЛЕВЫЙ_КРАЙ + 2, it), навигация)
+        fun firstGreen(snapshot: Snapshot, navigation: Color): Int =
+            (0 until snapshot.height).firstOrNull {
+                Snapshot.close(snapshot.color(ЛЕВЫЙ_КРАЙ + 2, it), navigation)
             } ?: fail("полосы автора нет вовсе")
 
         /** Лежит ли цвет на отрезке между какими-нибудь двумя цветами палитры. */
-        fun смесь(цвет: Color, палитра: List<Color>): Boolean {
-            for (i in палитра.indices) {
-                for (j in i until палитра.size) {
-                    if (расстояниеДоОтрезка(цвет, палитра[i], палитра[j]) <= ДОПУСК_СМЕСИ) return true
+        fun blend(color: Color, palette: List<Color>): Boolean {
+            for (i in palette.indices) {
+                for (j in i until palette.size) {
+                    if (distanceUntilSegment(color, palette[i], palette[j]) <= ДОПУСК_СМЕСИ) return true
                 }
             }
             return false
         }
 
         /** Насколько цвет далёк от отрезка между двумя цветами палитры — по худшему каналу. */
-        fun расстояниеДоОтрезка(цвет: Color, a: Color, b: Color): Double {
+        fun distanceUntilSegment(color: Color, a: Color, b: Color): Double {
             val ab = floatArrayOf(b.red - a.red, b.green - a.green, b.blue - a.blue)
-            val ap = floatArrayOf(цвет.red - a.red, цвет.green - a.green, цвет.blue - a.blue)
-            val длина = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2]
-            val t = if (длина == 0f) 0f else ((ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / длина).coerceIn(0f, 1f)
-            var худший = 0.0
-            for (k in 0..2) худший = max(худший, abs(ap[k] - t * ab[k]).toDouble())
-            return худший
+            val ap = floatArrayOf(color.red - a.red, color.green - a.green, color.blue - a.blue)
+            val length = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2]
+            val t = if (length == 0f) 0f else ((ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / length).coerceIn(0f, 1f)
+            var worst = 0.0
+            for (k in 0..2) worst = max(worst, abs(ap[k] - t * ab[k]).toDouble())
+            return worst
         }
     }
 }

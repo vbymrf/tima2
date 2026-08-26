@@ -18,7 +18,7 @@ import kotlin.test.Test
  *
  * Отчёт пишется в `client/architecture-tests/build/reports/trend.md`.
  */
-class ТрендTest {
+class TrendTest {
 
     private val clientRoot = File(requireNotNull(System.getProperty("client.root")) {
         "не передан client.root — смотри build.gradle.kts этого модуля"
@@ -26,43 +26,43 @@ class ТрендTest {
 
     @Test
     fun отчёт_о_хабах() {
-        val сервер = File(clientRoot.parentFile, "server")
+        val server = File(clientRoot.parentFile, "server")
 
-        val строки = listOf(
-            Счётчик(
+        val lines = listOf(
+            Counter(
                 "Маршруты сервера",
                 "`mux.HandleFunc` в server/internal/api/server.go",
-                считатьВФайле(File(сервер, "internal/api/server.go"), Regex("""mux\.HandleFunc""")),
+                countInFile(File(server, "internal/api/server.go"), Regex("""mux\.HandleFunc""")),
             ),
-            Счётчик(
+            Counter(
                 "Методы `Server`",
                 "`func (s *Server)` в server/internal/api/*.go",
-                считатьВКаталоге(File(сервер, "internal/api"), "go", Regex("""^func \(s \*Server\)""")),
+                countInCatalog(File(server, "internal/api"), "go", Regex("""^func \(s \*Server\)""")),
             ),
-            Счётчик(
+            Counter(
                 "Методы `Store`",
                 "`func (s *Store)` в server/internal/store/*.go",
-                считатьВКаталоге(File(сервер, "internal/store"), "go", Regex("""^func \(s \*Store\)""")),
+                countInCatalog(File(server, "internal/store"), "go", Regex("""^func \(s \*Store\)""")),
             ),
-            Счётчик(
+            Counter(
                 "Публичные `val` `Сеть`",
                 "свойства класса Сеть в shared/Environment.kt",
-                публичныеСвойстваСети(),
+                publicPropertyNetwork(),
             ),
-            Счётчик(
+            Counter(
                 "Импорты `Root.kt`",
                 "строки import",
-                считатьВФайле(корень(), Regex("""^import """)),
+                countInFile(root(), Regex("""^import """)),
             ),
-            Счётчик(
+            Counter(
                 "Чужих модулей видит `shared`",
                 "различные io.tima.* модули в импортах production-файлов shared",
-                размахShared(),
+                spreadShared(),
             ),
-            Счётчик(
+            Counter(
                 "Классов `*Api` в core-network",
                 "объявления class …Api",
-                считатьВКаталоге(
+                countInCatalog(
                     File(clientRoot, "core/core-network/src/commonMain"), "kt",
                     // Скобка обязательна: без неё в счёт попадал LinkApiTest —
                     // тестовый класс, к размеру поверхности отношения не имеющий.
@@ -71,7 +71,7 @@ class ТрендTest {
             ),
         )
 
-        val отчёт = buildString {
+        val report = buildString {
             appendLine("# Хабы: сколько мест правит новая функция")
             appendLine()
             appendLine("Отчёт, а не проверка: тест не падает ни при каком значении.")
@@ -79,16 +79,16 @@ class ТрендTest {
             appendLine()
             appendLine("| Счётчик | Как считается | Сейчас |")
             appendLine("|---|---|---:|")
-            строки.forEach { appendLine("| ${it.имя} | ${it.как} | ${it.сколько} |") }
+            lines.forEach { appendLine("| ${it.name} | ${it.asValue} | ${it.howMany} |") }
         }
 
-        val файл = File(clientRoot, "architecture-tests/build/reports/trend.md")
-        файл.parentFile.mkdirs()
-        файл.writeText(отчёт)
-        println(отчёт)
+        val file = File(clientRoot, "architecture-tests/build/reports/trend.md")
+        file.parentFile.mkdirs()
+        file.writeText(report)
+        println(report)
     }
 
-    private data class Счётчик(val имя: String, val как: String, val сколько: Int)
+    private data class Counter(val name: String, val asValue: String, val howMany: Int)
 
     /**
      * Сколько чужих модулей видит композиция.
@@ -97,37 +97,37 @@ class ТрендTest {
      * модуля: каждый новый импорт из чужого пакета — это ещё одна связь, которую
      * потом придётся распутывать при разделении работы.
      */
-    private fun размахShared(): Int {
+    private fun spreadShared(): Int {
         val src = File(clientRoot, "shared/src")
         if (!src.isDirectory) return -1
         return src.listFiles().orEmpty()
             .filter { it.isDirectory && (it.name.endsWith("Main") || it.name == "jvmCommon") }
-            .flatMap { набор ->
-                набор.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+            .flatMap { setValue ->
+                setValue.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
             }
-            .flatMap { файл -> файл.readLines() }
+            .flatMap { file -> file.readLines() }
             .map { it.trim() }
             .filter { it.startsWith("import io.tima.") }
-            .mapNotNull { строка ->
+            .mapNotNull { line ->
                 // io.tima.core.network.KeysApi → io.tima.core.network
-                строка.removePrefix("import ").split('.').take(4).joinToString(".")
+                line.removePrefix("import ").split('.').take(4).joinToString(".")
             }
             .filter { !it.startsWith("io.tima.shared") }
             .distinct()
             .size
     }
 
-    private fun корень(): File =
+    private fun root(): File =
         File(clientRoot, "shared/src/commonMain/kotlin/io/tima/shared/Root.kt")
 
-    private fun считатьВФайле(файл: File, что: Regex): Int =
-        if (!файл.isFile) -1 else файл.readLines().count { что.containsMatchIn(it.trim()) }
+    private fun countInFile(file: File, what: Regex): Int =
+        if (!file.isFile) -1 else file.readLines().count { what.containsMatchIn(it.trim()) }
 
-    private fun считатьВКаталоге(каталог: File, расширение: String, что: Regex): Int {
-        if (!каталог.isDirectory) return -1
-        return каталог.walkTopDown()
-            .filter { it.isFile && it.extension == расширение && !it.name.endsWith("_test.go") }
-            .sumOf { файл -> файл.readLines().count { что.containsMatchIn(it) } }
+    private fun countInCatalog(catalog: File, extension: String, what: Regex): Int {
+        if (!catalog.isDirectory) return -1
+        return catalog.walkTopDown()
+            .filter { it.isFile && it.extension == extension && !it.name.endsWith("_test.go") }
+            .sumOf { file -> file.readLines().count { what.containsMatchIn(it) } }
     }
 
     /**
@@ -136,25 +136,25 @@ class ТрендTest {
      * Считается по тексту: `val` без `private`, между `class Сеть` и концом файла.
      * Это оценка, а не разбор синтаксиса, — для отчёта о росте её достаточно.
      */
-    private fun публичныеСвойстваСети(): Int {
-        val файл = File(clientRoot, "shared/src/commonMain/kotlin/io/tima/shared/Environment.kt")
-        if (!файл.isFile) return -1
-        val текст = файл.readText()
-        val начало = текст.indexOf("class Сеть")
-        if (начало < 0) return -1
-        var счёт = 0
-        for (строка in текст.substring(начало).lineSequence().drop(1)) {
+    private fun publicPropertyNetwork(): Int {
+        val file = File(clientRoot, "shared/src/commonMain/kotlin/io/tima/shared/Environment.kt")
+        if (!file.isFile) return -1
+        val text = file.readText()
+        val start = text.indexOf("class Сеть")
+        if (start < 0) return -1
+        var count = 0
+        for (line in text.substring(start).lineSequence().drop(1)) {
             // Класс кончается закрывающей скобкой в первой колонке: дальше идут
             // соседние объявления файла, и их свойства к Сеть отношения не имеют.
-            if (строка == "}") break
+            if (line == "}") break
             // Только собственные свойства класса: отступ ровно четыре пробела.
             // `val` внутри метода стоит глубже и хабом не является.
             // override val считается наравне с val: свойство остаётся публичным.
             // Разница в другом — теперь его объявляет ПОРТ, а не сам класс.
-            if (!строка.startsWith("    val ") && !строка.startsWith("    override val ")) continue
-            if (строка.startsWith("    private") || строка.startsWith("    internal")) continue
-            счёт++
+            if (!line.startsWith("    val ") && !line.startsWith("    override val ")) continue
+            if (line.startsWith("    private") || line.startsWith("    internal")) continue
+            count++
         }
-        return счёт
+        return count
     }
 }

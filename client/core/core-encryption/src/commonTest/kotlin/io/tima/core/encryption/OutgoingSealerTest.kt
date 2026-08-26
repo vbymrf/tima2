@@ -18,24 +18,24 @@ import kotlin.test.assertTrue
  */
 class OutgoingSealerTest {
 
-    private val отправитель = DeviceIdentity.generate()
-    private val получатель = DeviceIdentity.generate()
-    private val второеСвоё = DeviceIdentity.generate()
+    private val sender = DeviceIdentity.generate()
+    private val recipient = DeviceIdentity.generate()
+    private val secondOwn = DeviceIdentity.generate()
 
     private val escrowKey = EscrowEpochKey(publicKey = Mlkem768.keyPair().first, version = 7)
 
-    private val адресаты = listOf(
-        RecipientDevice("устройство-получателя", получатель.encryptionPublic),
-        RecipientDevice("моё-второе", второеСвоё.encryptionPublic),
+    private val recipients = listOf(
+        RecipientDevice("устройство-получателя", recipient.encryptionPublic),
+        RecipientDevice("моё-второе", secondOwn.encryptionPublic),
     )
 
     private val sealer = OutgoingSealer(
         senderId = "0f8fad5b-d9cb-469f-a165-70867728950e",
         senderDeviceId = "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-        identity = отправитель,
+        identity = sender,
     )
 
-    private fun запись(
+    private fun entry(
         dedupKey: String = "0f8fad5b-d9cb-469f-a165-70867728950e",
         text: String = "привет",
     ) = OutboxEntry(
@@ -47,45 +47,45 @@ class OutgoingSealerTest {
 
     @Test
     fun запечатанное_открывается_получателем() = run {
-        val конверт = sealer.sealerFor(escrowKey, адресаты)(запись())
+        val envelope = sealer.sealerFor(escrowKey, recipients)(entry())
 
-        val открыто = PersonalMessages.open(
-            envelopeBytes = конверт,
+        val open = PersonalMessages.open(
+            envelopeBytes = envelope,
             myDeviceId = "устройство-получателя",
-            me = получатель,
-            senderSigningPublic = отправитель.signingPublic,
+            me = recipient,
+            senderSigningPublic = sender.signingPublic,
         ).getOrThrow()
 
-        assertEquals("привет", открыто.content.plainText())
+        assertEquals("привет", open.content.plainText())
     }
 
     @Test
     fun своё_второе_устройство_тоже_прочитает() {
         // Без обёртки на свои устройства отправленное с ПК не читается на телефоне —
         // и выглядит это как пропавшая половина переписки.
-        val конверт = sealer.sealerFor(escrowKey, адресаты)(запись())
+        val envelope = sealer.sealerFor(escrowKey, recipients)(entry())
 
-        val открыто = PersonalMessages.open(
-            конверт, myDeviceId = "моё-второе", me = второеСвоё,
-            senderSigningPublic = отправитель.signingPublic,
+        val open = PersonalMessages.open(
+            envelope, myDeviceId = "моё-второе", me = secondOwn,
+            senderSigningPublic = sender.signingPublic,
         ).getOrThrow()
 
-        assertEquals("привет", открыто.content.plainText())
+        assertEquals("привет", open.content.plainText())
     }
 
     @Test
     fun чужое_устройство_обёртки_не_находит() {
         // Устройство, которого не было в списке адресатов, обёртки для себя не найдёт —
         // и это не «подмена», а несобранная своя картина.
-        val посторонний = DeviceIdentity.generate()
-        val конверт = sealer.sealerFor(escrowKey, адресаты)(запись())
+        val outsider = DeviceIdentity.generate()
+        val envelope = sealer.sealerFor(escrowKey, recipients)(entry())
 
-        val исход = PersonalMessages.open(
-            конверт, myDeviceId = "посторонний", me = посторонний,
-            senderSigningPublic = отправитель.signingPublic,
+        val outcome = PersonalMessages.open(
+            envelope, myDeviceId = "посторонний", me = outsider,
+            senderSigningPublic = sender.signingPublic,
         )
 
-        assertTrue(исход.isFailure)
+        assertTrue(outcome.isFailure)
     }
 
     /**
@@ -101,13 +101,13 @@ class OutgoingSealerTest {
      */
     @Test
     fun отправитель_читается_из_конверта_до_расшифровки() {
-        val конверт = sealer.sealerFor(escrowKey, адресаты)(запись())
+        val envelope = sealer.sealerFor(escrowKey, recipients)(entry())
 
-        val разобранный = MessageSerializer.decodeEnvelope(конверт).getOrThrow()
+        val parsed = MessageSerializer.decodeEnvelope(envelope).getOrThrow()
 
-        assertEquals("0f8fad5b-d9cb-469f-a165-70867728950e", разобранный.meta.senderId)
-        assertEquals("7c9e6679-7425-40de-944b-e07fc1f90ae7", разобранный.meta.senderDevice)
-        assertEquals("bbbbbbbb-0000-0000-0000-0000000000e1", разобранный.meta.chatId)
+        assertEquals("0f8fad5b-d9cb-469f-a165-70867728950e", parsed.meta.senderId)
+        assertEquals("7c9e6679-7425-40de-944b-e07fc1f90ae7", parsed.meta.senderDevice)
+        assertEquals("bbbbbbbb-0000-0000-0000-0000000000e1", parsed.meta.chatId)
     }
 
     /**
@@ -117,31 +117,31 @@ class OutgoingSealerTest {
      */
     @Test
     fun чужим_ключом_подписи_конверт_не_открывается() {
-        val конверт = sealer.sealerFor(escrowKey, адресаты)(запись())
-        val посторонний = DeviceIdentity.generate()
+        val envelope = sealer.sealerFor(escrowKey, recipients)(entry())
+        val outsider = DeviceIdentity.generate()
 
-        val исход = PersonalMessages.open(
-            envelopeBytes = конверт,
+        val outcome = PersonalMessages.open(
+            envelopeBytes = envelope,
             myDeviceId = "устройство-получателя",
-            me = получатель,
-            senderSigningPublic = посторонний.signingPublic,
+            me = recipient,
+            senderSigningPublic = outsider.signingPublic,
         )
 
-        assertTrue(исход.isFailure, "подпись обязана не сойтись")
+        assertTrue(outcome.isFailure, "подпись обязана не сойтись")
     }
 
     @Test
     fun идентификатор_сообщения_устойчив_к_повтору() {
         // Он лежит ВНУТРИ подписи. Смени его на повторе — и одно сообщение придёт с
         // двумя разными идентификаторами, а записанное себе разойдётся с серверным.
-        val ключ = "0f8fad5b-d9cb-469f-a165-70867728950e"
+        val key = "0f8fad5b-d9cb-469f-a165-70867728950e"
         assertEquals(
-            OutgoingSealer.messageIdOf(ключ),
-            OutgoingSealer.messageIdOf(ключ),
+            OutgoingSealer.messageIdOf(key),
+            OutgoingSealer.messageIdOf(key),
             "один ключ идемпотентности — одно число, всегда",
         )
         assertNotEquals(
-            OutgoingSealer.messageIdOf(ключ),
+            OutgoingSealer.messageIdOf(key),
             OutgoingSealer.messageIdOf("7c9e6679-7425-40de-944b-e07fc1f90ae7"),
         )
     }
@@ -165,9 +165,9 @@ class OutgoingSealerTest {
             // именно из него. Перебор всех 256 значений включает те, где он установлен —
             // на них всё и падало. `String.format` в общем коде нет, и это правильно: он
             // есть только на JVM.
-            val высокий = ((i * 7) and 0xFF).toString(16).padStart(2, '0')
-            val ключ = ("0f8fad5bd9cb46" + высокий).padEnd(32, '0')
-            val id = OutgoingSealer.messageIdOf(ключ)
+            val high = ((i * 7) and 0xFF).toString(16).padStart(2, '0')
+            val key = ("0f8fad5bd9cb46" + high).padEnd(32, '0')
+            val id = OutgoingSealer.messageIdOf(key)
             assertTrue(
                 id <= Long.MAX_VALUE.toULong(),
                 "идентификатор $id не влезает в bigint сервера",
@@ -180,12 +180,12 @@ class OutgoingSealerTest {
     @Test
     fun сбрасывается_ровно_старший_бит() {
         // Первые 8 байт: ff ff ff ff ff ff ff ff → все единицы, LE или BE — неважно.
-        val всеЕдиницы = OutgoingSealer.messageIdOf("ffffffff-ffff-ffff-0000-000000000000")
-        assertEquals(Long.MAX_VALUE.toULong(), всеЕдиницы, "остаться должны все биты, кроме старшего")
+        val allUnits = OutgoingSealer.messageIdOf("ffffffff-ffff-ffff-0000-000000000000")
+        assertEquals(Long.MAX_VALUE.toULong(), allUnits, "остаться должны все биты, кроме старшего")
 
         // 0x7f… старшего бита не имеет и обязан пройти без изменений.
-        val безСтаршего = OutgoingSealer.messageIdOf("01000000-0000-007f-0000-000000000000")
-        assertEquals(0x7F00_0000_0000_0001uL, безСтаршего)
+        val seniorWithout = OutgoingSealer.messageIdOf("01000000-0000-007f-0000-000000000000")
+        assertEquals(0x7F00_0000_0000_0001uL, seniorWithout)
     }
 
     @Test
@@ -211,13 +211,13 @@ class OutgoingSealerTest {
         // Тело в записи очереди уже zstd(protobuf). Упакуй его ещё раз — и байты
         // разойдутся с теми, что легли в базу, то есть подпись перестанет относиться к
         // тому, что человек видит у себя.
-        val запись = запись(text = "проверка двойной упаковки")
-        val конверт = sealer.sealerFor(escrowKey, адресаты)(запись)
+        val entry = entry(text = "проверка двойной упаковки")
+        val envelope = sealer.sealerFor(escrowKey, recipients)(entry)
 
-        val открыто = PersonalMessages.open(
-            конверт, "устройство-получателя", получатель, отправитель.signingPublic,
+        val open = PersonalMessages.open(
+            envelope, "устройство-получателя", recipient, sender.signingPublic,
         ).getOrThrow()
 
-        assertEquals("проверка двойной упаковки", открыто.content.plainText())
+        assertEquals("проверка двойной упаковки", open.content.plainText())
     }
 }

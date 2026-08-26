@@ -23,92 +23,92 @@ import kotlinx.coroutines.launch
  * показываются тому, кому нельзя: узнавать о запрете нажатием — значит предлагать человеку
  * то, чего он не может, и объяснять отказ там, где вопроса быть не должно.
  */
-class СоставStore(
-    private val участники: ManageGroupMembers,
+class MembersStore(
+    private val members: ManageGroupMembers,
     private val groupId: String,
     private val myUserId: String,
     private val scope: CoroutineScope,
 ) {
 
-    private val _state = MutableStateFlow(СоставState())
-    val state: StateFlow<СоставState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(MembersState())
+    val state: StateFlow<MembersState> = _state.asStateFlow()
 
     /** Открыли экран. */
-    fun обновить() {
-        _state.value = _state.value.copy(ждём = true, беда = null)
+    fun refresh() {
+        _state.value = _state.value.copy(expect = true, trouble = null)
         scope.launch {
-            _state.value = when (val исход = участники.состав(groupId)) {
+            _state.value = when (val outcome = members.members(groupId)) {
                 is MembersStep.Members -> _state.value.copy(
-                    ждём = false,
-                    участники = исход.members,
-                    мояРоль = исход.members.firstOrNull { it.userId == myUserId }?.role
-                        ?: GroupRole.Неизвестная,
+                    expect = false,
+                    members = outcome.members,
+                    myRole = outcome.members.firstOrNull { it.userId == myUserId }?.role
+                        ?: GroupRole.Unknown,
                 )
-                is MembersStep.Offline -> _state.value.копияСБедой(
+                is MembersStep.Offline -> _state.value.copyWithTrouble(
                     "Нет связи с сервером — список может быть устаревшим",
                 )
-                is MembersStep.Refused -> _state.value.копияСБедой(исход.reason)
+                is MembersStep.Refused -> _state.value.copyWithTrouble(outcome.reason)
             }
         }
     }
 
-    fun номерИзменён(текст: String) {
-        _state.value = _state.value.copy(номер = текст, беда = null, предупреждение = null)
+    fun changedNumber(text: String) {
+        _state.value = _state.value.copy(number = text, trouble = null, warning = null)
     }
 
-    fun позвать() {
-        val текущее = _state.value
-        if (текущее.ждём || текущее.номер.isBlank()) return
-        _state.value = текущее.copy(ждём = true, беда = null, предупреждение = null)
+    fun invite() {
+        val current = _state.value
+        if (current.expect || current.number.isBlank()) return
+        _state.value = current.copy(expect = true, trouble = null, warning = null)
 
         scope.launch {
-            применить(участники.позвать(groupId, текущее.номер), очиститьНомер = true)
+            apply(members.invite(groupId, current.number), clearNumber = true)
         }
     }
 
-    fun исключить(userId: String) {
-        if (_state.value.ждём) return
-        _state.value = _state.value.copy(ждём = true, беда = null, предупреждение = null)
-        scope.launch { применить(участники.исключить(groupId, userId), очиститьНомер = false) }
+    fun remove(userId: String) {
+        if (_state.value.expect) return
+        _state.value = _state.value.copy(expect = true, trouble = null, warning = null)
+        scope.launch { apply(members.remove(groupId, userId), clearNumber = false) }
     }
 
-    private fun применить(шаг: MembershipStep, очиститьНомер: Boolean) {
-        val база = _state.value.copy(ждём = false, номер = if (очиститьНомер) "" else _state.value.номер)
-        _state.value = when (шаг) {
-            is MembershipStep.Done -> база
+    private fun apply(step: MembershipStep, clearNumber: Boolean) {
+        val database = _state.value.copy(expect = false, number = if (clearNumber) "" else _state.value.number)
+        _state.value = when (step) {
+            is MembershipStep.Done -> database
 
             // Отдельная ветвь, а не текст беды: состав правлен, и показывать это красным
             // словом «ошибка» значило бы заставить человека повторять сделанное.
-            is MembershipStep.DoneWithoutRotation -> база.copy(предупреждение = шаг.предупреждение)
+            is MembershipStep.DoneWithoutRotation -> database.copy(warning = step.warning)
 
-            MembershipStep.NoSuchUser -> база.copy(
-                беда = "Этого номера в TIMA нет — позовите человека в мессенджер",
-                номер = _state.value.номер,
+            MembershipStep.NoSuchUser -> database.copy(
+                trouble = "Этого номера в TIMA нет — позовите человека в мессенджер",
+                number = _state.value.number,
             )
-            MembershipStep.Forbidden -> база.copy(беда = "Менять состав может владелец или админ")
-            is MembershipStep.Offline -> база.copy(
-                беда = "Нет связи с сервером — повторим через ${(шаг.retryAfterMs / 1000).coerceAtLeast(1)} с",
+            MembershipStep.Forbidden -> database.copy(trouble = "Менять состав может владелец или админ")
+            is MembershipStep.Offline -> database.copy(
+                trouble = "Нет связи с сервером — повторим через ${(step.retryAfterMs / 1000).coerceAtLeast(1)} с",
             )
-            is MembershipStep.Refused -> база.copy(беда = шаг.reason)
+            is MembershipStep.Refused -> database.copy(trouble = step.reason)
         }
         // Состав мог измениться — перечитываем его у сервера, а не правим у себя: свой
         // список, собранный из догадок, разойдётся с настоящим на первой же гонке.
-        if (шаг is MembershipStep.Done || шаг is MembershipStep.DoneWithoutRotation) обновить()
+        if (step is MembershipStep.Done || step is MembershipStep.DoneWithoutRotation) refresh()
     }
 }
 
 /** Что видно на экране состава. */
-data class СоставState(
-    val участники: List<GroupMember> = emptyList(),
-    val мояРоль: GroupRole = GroupRole.Неизвестная,
-    val номер: String = "",
-    val ждём: Boolean = false,
-    val беда: String? = null,
+data class MembersState(
+    val members: List<GroupMember> = emptyList(),
+    val myRole: GroupRole = GroupRole.Unknown,
+    val number: String = "",
+    val expect: Boolean = false,
+    val trouble: String? = null,
     /** Состав изменён, а ключ — нет. Не ошибка, но человек обязан знать. */
-    val предупреждение: String? = null,
+    val warning: String? = null,
 ) {
     /** Звать и исключать могут владелец и админ — правило сервера, повторённое здесь. */
-    val правлюСоставом: Boolean get() = мояРоль.правитПоставом
+    val memberEdit: Boolean get() = myRole.deliveryEdits
 
-    fun копияСБедой(текст: String) = copy(беда = текст, ждём = false)
+    fun copyWithTrouble(text: String) = copy(trouble = text, expect = false)
 }

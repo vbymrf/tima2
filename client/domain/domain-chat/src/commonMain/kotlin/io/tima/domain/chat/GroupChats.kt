@@ -29,36 +29,36 @@ class CreateGroupChat(
      * @param название до 200 байт: предел сервера. Проверяется здесь, чтобы отказ пришёл до
      *   сети и словами, а не как `bad_title`.
      */
-    suspend fun создать(название: String, номера: List<String> = emptyList()): CreateGroupStep {
-        val имя = название.trim()
-        if (имя.isEmpty()) return CreateGroupStep.BadTitle("Без названия группу не найти в списке")
-        if (имя.encodeToByteArray().size > ПРЕДЕЛ_НАЗВАНИЯ) {
+    suspend fun create(title: String, number: List<String> = emptyList()): CreateGroupStep {
+        val name = title.trim()
+        if (name.isEmpty()) return CreateGroupStep.BadTitle("Без названия группу не найти в списке")
+        if (name.encodeToByteArray().size > ПРЕДЕЛ_НАЗВАНИЯ) {
             return CreateGroupStep.BadTitle("Название длиннее $ПРЕДЕЛ_НАЗВАНИЯ байт сервер не примет")
         }
 
-        val создание = groups.create(имя)
-        val groupId = when (создание) {
-            is GroupCreateStep.Created -> создание.groupId
-            is GroupCreateStep.Offline -> return CreateGroupStep.Offline(создание.retryAfterMs)
-            is GroupCreateStep.Refused -> return CreateGroupStep.Refused(создание.reason)
+        val creation = groups.create(name)
+        val groupId = when (creation) {
+            is GroupCreateStep.Created -> creation.groupId
+            is GroupCreateStep.Offline -> return CreateGroupStep.Offline(creation.retryAfterMs)
+            is GroupCreateStep.Refused -> return CreateGroupStep.Refused(creation.reason)
         }
 
         // Запоминаем сразу после создания, до приглашений: группа уже есть, и потеряй мы её
         // здесь — человек остался бы с группой, о которой знает только сервер.
-        chats.remember(chatId = groupId, kind = ChatKind.Group, title = имя, peerId = null)
+        chats.remember(chatId = groupId, kind = ChatKind.Group, title = name, peerId = null)
 
-        val непозванные = mutableListOf<String>()
-        for (номер in номера.map { it.trim() }.filter { it.isNotEmpty() }.distinct()) {
-            when (val найден = directory.byPhone(номер)) {
+        val notInvited = mutableListOf<String>()
+        for (number in number.map { it.trim() }.filter { it.isNotEmpty() }.distinct()) {
+            when (val found = directory.byPhone(number)) {
                 is UserLookup.Found ->
-                    if (groups.addMember(groupId, найден.userId) !is MemberStep.Done) {
-                        непозванные += номер
+                    if (groups.addMember(groupId, found.userId) !is MemberStep.Done) {
+                        notInvited += number
                     }
-                else -> непозванные += номер
+                else -> notInvited += number
             }
         }
 
-        return CreateGroupStep.Created(groupId = groupId, непозванные = непозванные)
+        return CreateGroupStep.Created(groupId = groupId, notInvited = notInvited)
     }
 
     private companion object {
@@ -80,22 +80,22 @@ class SyncGroupChats(
 ) {
 
     /** @return сколько групп известно серверу, либо отказ. */
-    suspend fun обновить(): SyncGroupsStep = when (val ответ = groups.mine()) {
+    suspend fun refresh(): SyncGroupsStep = when (val answer = groups.mine()) {
         is GroupsStep.Groups -> {
-            for (группа in ответ.groups) {
+            for (group in answer.groups) {
                 // Название берём серверное: у группы оно общее, в отличие от имени личной
                 // переписки, которое каждый видит своё.
                 chats.remember(
-                    chatId = группа.groupId,
+                    chatId = group.groupId,
                     kind = ChatKind.Group,
-                    title = группа.title.ifBlank { "Группа" },
+                    title = group.title.ifBlank { "Группа" },
                     peerId = null,
                 )
             }
-            SyncGroupsStep.Synced(ответ.groups.size)
+            SyncGroupsStep.Synced(answer.groups.size)
         }
-        is GroupsStep.Offline -> SyncGroupsStep.Offline(ответ.retryAfterMs)
-        is GroupsStep.Refused -> SyncGroupsStep.Refused(ответ.reason)
+        is GroupsStep.Offline -> SyncGroupsStep.Offline(answer.retryAfterMs)
+        is GroupsStep.Refused -> SyncGroupsStep.Refused(answer.reason)
     }
 }
 
@@ -129,23 +129,23 @@ class GroupMember(val userId: String, val role: GroupRole, val bannedUntil: Stri
  * сервер новее нас, и делать вид, что это `member`, значит выдать права по ошибке.
  */
 enum class GroupRole {
-    Владелец,
-    Админ,
-    Модератор,
-    Участник,
-    Неизвестная,
+    Owner,
+    Admin,
+    Moderator,
+    Member,
+    Unknown,
     ;
 
     /** Может звать и исключать. Правило сервера: owner и admin. */
-    val правитПоставом: Boolean get() = this == Владелец || this == Админ
+    val deliveryEdits: Boolean get() = this == Owner || this == Admin
 
     companion object {
-        fun из(строка: String): GroupRole = when (строка) {
-            "owner" -> Владелец
-            "admin" -> Админ
-            "moderator" -> Модератор
-            "member" -> Участник
-            else -> Неизвестная
+        fun from(line: String): GroupRole = when (line) {
+            "owner" -> Owner
+            "admin" -> Admin
+            "moderator" -> Moderator
+            "member" -> Member
+            else -> Unknown
         }
     }
 }
@@ -158,7 +158,7 @@ sealed interface CreateGroupStep {
      * @param непозванные номера, которых нет в TIMA или которых не удалось добавить. Группа
      *   при этом создана: терять её из-за одного номера человек не согласится.
      */
-    data class Created(val groupId: String, val непозванные: List<String>) : CreateGroupStep
+    data class Created(val groupId: String, val notInvited: List<String>) : CreateGroupStep
 
     data class BadTitle(val reason: String) : CreateGroupStep
     data class Offline(val retryAfterMs: Long) : CreateGroupStep

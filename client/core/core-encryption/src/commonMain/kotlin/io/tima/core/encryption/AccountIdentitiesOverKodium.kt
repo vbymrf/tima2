@@ -18,8 +18,8 @@ import io.tima.domain.account.NewAccountIdentity
 object AccountIdentitiesOverKodium : AccountIdentities {
 
     override fun fresh(): NewAccountIdentity {
-        val слова = AccountMnemonic.generate()
-        return NewAccountIdentity(words = слова, identityPub = публичный(слова))
+        val words = AccountMnemonic.generate()
+        return NewAccountIdentity(words = words, identityPub = public(words))
     }
 
     /**
@@ -30,9 +30,9 @@ object AccountIdentitiesOverKodium : AccountIdentities {
      * сошлась» человеку незачем: во всех трёх случаях надо перепроверить фразу.
      */
     override fun fromWords(words: List<String>): ByteArray? =
-        runCatching { публичный(words.map { it.trim().lowercase() }.filter { it.isNotEmpty() }) }
+        runCatching { public(words.map { it.trim().lowercase() }.filter { it.isNotEmpty() }) }
             .getOrNull()
 
-    private fun публичный(words: List<String>): ByteArray =
+    private fun public(words: List<String>): ByteArray =
         AccountMnemonic.identityFromMnemonic(words).getPublicKey().signingKey
 }

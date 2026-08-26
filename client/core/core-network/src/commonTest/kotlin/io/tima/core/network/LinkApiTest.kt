@@ -29,56 +29,56 @@ class LinkApiTest {
     private val route = ServerRoute.from(RouteConfig(host = "example.com"))
     private lateinit var engine: MockEngine
 
-    private fun старт(отвечает: MockRequestHandler): LinkStartApi {
-        engine = MockEngine(отвечает)
+    private fun start(responds: MockRequestHandler): LinkStartApi {
+        engine = MockEngine(responds)
         return LinkStartApi(route, HttpClient(engine) { timaDefaults() })
     }
 
-    private fun подтверждение(отвечает: MockRequestHandler): LinkConfirmApi {
-        engine = MockEngine(отвечает)
+    private fun confirmation(responds: MockRequestHandler): LinkConfirmApi {
+        engine = MockEngine(responds)
         return LinkConfirmApi(route, HttpClient(engine) { timaDefaults() }, token = { "t-1" })
     }
 
-    private fun json(тело: String, статус: HttpStatusCode = HttpStatusCode.OK): MockRequestHandler =
-        { respond(тело, статус, headersOf("Content-Type", "application/json")) }
+    private fun json(body: String, status: HttpStatusCode = HttpStatusCode.OK): MockRequestHandler =
+        { respond(body, status, headersOf("Content-Type", "application/json")) }
 
-    private fun тело(запрос: HttpRequestData): String = (запрос.body as TextContent).text
+    private fun body(request: HttpRequestData): String = (request.body as TextContent).text
 
-    private val ключ = ByteArray(32) { it.toByte() }
+    private val key = ByteArray(32) { it.toByte() }
 
     // ── start ───────────────────────────────────────────────────────────────
 
     @Test
     fun старт_идёт_без_авторизации_и_приносит_код() = runTest {
-        val api = старт(
+        val api = start(
             json(
                 """{"session_id":"s-1","qr_payload":"tima://link/v1?session_id=s-1",""" +
                     """"claim_token":"c-1","expires_at":"2026-08-23T10:00:00Z"}""",
             ),
         )
 
-        val исход = api.start(ключ, ключ, "Компьютер")
+        val outcome = api.start(key, key, "Компьютер")
 
-        val запрос = engine.requestHistory.single()
-        assertTrue(запрос.url.encodedPath.endsWith("/api/v1/link/start"), "не тот путь: ${запрос.url}")
+        val request = engine.requestHistory.single()
+        assertTrue(request.url.encodedPath.endsWith("/api/v1/link/start"), "не тот путь: ${request.url}")
         assertNull(
-            запрос.headers["Authorization"],
+            request.headers["Authorization"],
             "у нового устройства токена нет: посылать его значило бы врать серверу",
         )
-        assertTrue(тело(запрос).contains(""""device_name":"Компьютер""""), "не то тело: ${тело(запрос)}")
+        assertTrue(body(request).contains(""""device_name":"Компьютер""""), "not that body: ${body(request)}")
 
-        assertIs<LinkStartResult.Started>(исход)
-        assertEquals("s-1", исход.sessionId)
-        assertEquals("c-1", исход.claimToken)
-        assertEquals("tima://link/v1?session_id=s-1", исход.qrPayload)
+        assertIs<LinkStartResult.Started>(outcome)
+        assertEquals("s-1", outcome.sessionId)
+        assertEquals("c-1", outcome.claimToken)
+        assertEquals("tima://link/v1?session_id=s-1", outcome.qrPayload)
     }
 
     /** Ответ без обязательного поля — отказ, а не молчаливая пустая строка в QR. */
     @Test
-    fun ответ_без_кода_это_отказ() = runTest {
-        val api = старт(json("""{"session_id":"s-1"}"""))
+    fun answer_without_code_this_refusal() = runTest {
+        val api = start(json("""{"session_id":"s-1"}"""))
 
-        assertIs<LinkStartResult.Refused>(api.start(ключ, ключ, "Компьютер"))
+        assertIs<LinkStartResult.Refused>(api.start(key, key, "Компьютер"))
     }
 
     // ── claim ───────────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ class LinkApiTest {
      */
     @Test
     fun ещё_не_подтвердили_это_ожидание_а_не_беда() = runTest {
-        val api = старт(
+        val api = start(
             json(
                 """{"code":"not_ready","message":"устройство ещё не подтверждено"}""",
                 HttpStatusCode.Forbidden,
@@ -103,34 +103,34 @@ class LinkApiTest {
 
     @Test
     fun подтверждение_приносит_сессию() = runTest {
-        val api = старт(json("""{"user_id":"u-1","device_id":"d-2","access_token":"a-2"}"""))
+        val api = start(json("""{"user_id":"u-1","device_id":"d-2","access_token":"a-2"}"""))
 
-        val исход = api.claim("s-1", "c-1")
+        val outcome = api.claim("s-1", "c-1")
 
-        assertIs<LinkClaimResult.Claimed>(исход)
-        assertEquals("u-1", исход.userId)
-        assertEquals("d-2", исход.deviceId)
-        assertEquals("a-2", исход.accessToken)
+        assertIs<LinkClaimResult.Claimed>(outcome)
+        assertEquals("u-1", outcome.userId)
+        assertEquals("d-2", outcome.deviceId)
+        assertEquals("a-2", outcome.accessToken)
     }
 
     // ── confirm ─────────────────────────────────────────────────────────────
 
     @Test
     fun подтверждение_идёт_с_токеном_и_подписью() = runTest {
-        val api = подтверждение(json("""{"status":"confirmed","device_id":"d-2"}"""))
+        val api = confirmation(json("""{"status":"confirmed","device_id":"d-2"}"""))
 
-        val исход = api.confirm("s-1", "секрет", ByteArray(64) { 7 })
+        val outcome = api.confirm("s-1", "секрет", ByteArray(64) { 7 })
 
-        val запрос = engine.requestHistory.single()
-        assertTrue(запрос.url.encodedPath.endsWith("/api/v1/link/confirm"))
-        assertEquals("Bearer t-1", запрос.headers["Authorization"], "ручка авторизованная")
-        assertTrue(тело(запрос).contains(""""secret":"секрет""""), "не то тело: ${тело(запрос)}")
+        val request = engine.requestHistory.single()
+        assertTrue(request.url.encodedPath.endsWith("/api/v1/link/confirm"))
+        assertEquals("Bearer t-1", request.headers["Authorization"], "ручка авторизованная")
+        assertTrue(body(request).contains(""""secret":"секрет""""), "not that body: ${body(request)}")
 
-        assertIs<LinkConfirmResult.Confirmed>(исход)
+        assertIs<LinkConfirmResult.Confirmed>(outcome)
         assertEquals(
             "d-2",
-            исход.deviceId,
-            "адрес нового устройства нужен, чтобы перезавернуть на него ключи истории",
+            outcome.deviceId,
+            "address new devices needed, so rewrap on itValue keys stories",
         )
     }
 
@@ -139,24 +139,24 @@ class LinkApiTest {
     fun отказы_подтверждения_не_слипаются() = runTest {
         assertEquals(
             LinkConfirmResult.NotAPhone,
-            подтверждение(json("""{"code":"not_a_phone"}""", HttpStatusCode.Forbidden))
+            confirmation(json("""{"code":"not_a_phone"}""", HttpStatusCode.Forbidden))
                 .confirm("s-1", "s", ByteArray(64)),
         )
         assertEquals(
             LinkConfirmResult.SessionGone,
-            подтверждение(json("""{"code":"bad_session"}""", HttpStatusCode.Forbidden))
+            confirmation(json("""{"code":"bad_session"}""", HttpStatusCode.Forbidden))
                 .confirm("s-1", "s", ByteArray(64)),
         )
         assertEquals(
             LinkConfirmResult.BadSignature,
-            подтверждение(json("""{"code":"bad_signature"}""", HttpStatusCode.Forbidden))
+            confirmation(json("""{"code":"bad_signature"}""", HttpStatusCode.Forbidden))
                 .confirm("s-1", "s", ByteArray(64)),
         )
     }
 
     @Test
     fun отказ_связи_отличается_от_отказа_сервера() = runTest {
-        val api = подтверждение { throw IOException("сеть отвалилась") }
+        val api = confirmation { throw IOException("сеть отвалилась") }
 
         assertIs<LinkConfirmResult.NoConnection>(api.confirm("s-1", "s", ByteArray(64)))
     }

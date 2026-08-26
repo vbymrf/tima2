@@ -54,25 +54,25 @@ class ServerRouteTest {
         // Выход этапа К3: «смена прокси — конфигом». Значит имя сервера обязано
         // остаться прежним: оно едет в TLS SNI и в заголовке Host, и подмена его на
         // имя прокси даст 404 от Caddy — то есть «сервер потерял API».
-        val прямо = ServerRoute.from(RouteConfig(host = "пацак.рф"))
-        val через = ServerRoute.from(
+        val directly = ServerRoute.from(RouteConfig(host = "пацак.рф"))
+        val via = ServerRoute.from(
             RouteConfig(host = "пацак.рф", proxy = ProxyConfig("proxy.local", 8443)),
         )
 
-        assertEquals(прямо.serverHost, через.serverHost)
-        assertEquals("proxy.local", через.connectHost)
-        assertEquals(8443, через.connectPort)
-        assertTrue(через.throughProxy)
-        assertFalse(прямо.throughProxy)
+        assertEquals(directly.serverHost, via.serverHost)
+        assertEquals("proxy.local", via.connectHost)
+        assertEquals(8443, via.connectPort)
+        assertTrue(via.throughProxy)
+        assertFalse(directly.throughProxy)
     }
 
     @Test
     fun порт_по_умолчанию_в_адрес_не_попадает() {
-        val обычный = ServerRoute.from(RouteConfig(host = "example.com"))
-        assertEquals("https://api.example.com", обычный.apiBase)
+        val normal = ServerRoute.from(RouteConfig(host = "example.com"))
+        assertEquals("https://api.example.com", normal.apiBase)
 
-        val нестандартный = ServerRoute.from(RouteConfig(host = "example.com", port = 8443))
-        assertEquals("https://api.example.com:8443", нестандартный.apiBase)
+        val nonStandard = ServerRoute.from(RouteConfig(host = "example.com", port = 8443))
+        assertEquals("https://api.example.com:8443", nonStandard.apiBase)
     }
 
     @Test

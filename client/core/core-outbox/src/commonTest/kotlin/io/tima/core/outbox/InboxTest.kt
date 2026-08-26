@@ -18,16 +18,16 @@ import kotlin.test.assertTrue
  */
 class InboxTest {
 
-    private var время = 1_000L
+    private var time = 1_000L
     private val store = InMemoryInboxStore()
-    private val inbox = Inbox(store, nowMs = { время })
+    private val inbox = Inbox(store, nowMs = { time })
 
-    private val конверт = byteArrayOf(9, 9, 9)
-    private val тело = byteArrayOf(1, 2)
+    private val envelope = byteArrayOf(9, 9, 9)
+    private val body = byteArrayOf(1, 2)
 
     /** Куда ложится разобранное; заодно счётчик — по нему видно лишние записи. */
 
-    private fun принять(id: Long = 5) = inbox.receive("chat-1", id, конверт)
+    private fun accept(id: Long = 5) = inbox.receive("chat-1", id, envelope)
 
     // ── приём идемпотентен ───────────────────────────────────────────────────
 
@@ -36,8 +36,8 @@ class InboxTest {
         // Инвентарь, пункт 8: догон истории пересекается с тем, что уже пришло по WS.
         // Идентификатор назначает отправитель, и он входит в подпись — подделать
         // нельзя, значит по нему и опознаём повтор.
-        assertTrue(принять(5))
-        assertFalse(принять(5), "повтор — не новая запись")
+        assertTrue(accept(5))
+        assertFalse(accept(5), "повтор — не новая запись")
         assertEquals(1, store.all().size)
     }
 
@@ -45,18 +45,18 @@ class InboxTest {
     fun разные_чаты_с_одинаковым_номером_не_путаются() {
         // Идентификатор сообщения уникален в пределах чата, а не глобально: ключ
         // составной, и без chatId второе сообщение затёрло бы первое.
-        assertTrue(inbox.receive("chat-1", 5, конверт))
-        assertTrue(inbox.receive("chat-2", 5, конверт))
+        assertTrue(inbox.receive("chat-1", 5, envelope))
+        assertTrue(inbox.receive("chat-2", 5, envelope))
         assertEquals(2, store.all().size)
     }
 
     @Test
     fun конверт_лежит_записанным_до_разбора() {
-        принять()
+        accept()
         val e = store.byKey("chat-1", 5)
         assertNotNull(e)
         assertEquals(IncomingState.RECEIVED, e.state)
-        assertTrue(конверт.contentEquals(e.envelope), "исходник нужен второй попытке")
+        assertTrue(envelope.contentEquals(e.envelope), "исходник нужен второй попытке")
         assertEquals(null, store.body("chat-1", 5), "разбирать до записи нельзя")
     }
 
@@ -64,12 +64,12 @@ class InboxTest {
 
     @Test
     fun разобранное_становится_сохранённым() {
-        принять()
-        val после = inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") })
+        accept()
+        val after = inbox.openNext({ OpenOutcome.Opened(body, "u-автор") })
 
-        assertEquals(IncomingState.STORED, после?.state)
-        assertTrue(тело.contentEquals(store.body("chat-1", 5) ?: ByteArray(0)))
-        assertNull(inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") }), "разбирать больше нечего")
+        assertEquals(IncomingState.STORED, after?.state)
+        assertTrue(body.contentEquals(store.body("chat-1", 5) ?: ByteArray(0)))
+        assertNull(inbox.openNext({ OpenOutcome.Opened(body, "u-автор") }), "разбирать больше нечего")
     }
 
     @Test
@@ -77,38 +77,38 @@ class InboxTest {
         // ADR: UNDECRYPTABLE — состояние, а не потеря. Ключ может приехать позже:
         // обёртка для этого устройства ещё не пришла, групповой ключ ротировался,
         // история опередила ключи.
-        принять()
-        val после = inbox.openNext({ OpenOutcome.NoKey("обёртки для устройства нет") })
+        accept()
+        val after = inbox.openNext({ OpenOutcome.NoKey("обёртки для устройства нет") })
 
-        assertEquals(IncomingState.UNDECRYPTABLE, после?.state)
-        assertEquals(1, после?.attempts)
-        assertEquals("обёртки для устройства нет", после?.undecryptableReason)
+        assertEquals(IncomingState.UNDECRYPTABLE, after?.state)
+        assertEquals(1, after?.attempts)
+        assertEquals("обёртки для устройства нет", after?.undecryptableReason)
         assertEquals(1, inbox.pending().size, "нечитаемое остаётся видимым")
-        assertTrue(конверт.contentEquals(store.byKey("chat-1", 5)!!.envelope))
+        assertTrue(envelope.contentEquals(store.byKey("chat-1", 5)!!.envelope))
     }
 
     @Test
     fun появился_ключ_и_нечитаемое_разбирается_снова() {
-        принять()
+        accept()
         inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
 
         assertEquals(1, inbox.retryUndecryptable(), "вернуться должно одно")
         assertEquals(IncomingState.RECEIVED, store.byKey("chat-1", 5)?.state)
 
-        val после = inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") })
-        assertEquals(IncomingState.STORED, после?.state)
-        assertTrue(тело.contentEquals(store.body("chat-1", 5)!!))
+        val after = inbox.openNext({ OpenOutcome.Opened(body, "u-автор") })
+        assertEquals(IncomingState.STORED, after?.state)
+        assertTrue(body.contentEquals(store.body("chat-1", 5)!!))
     }
 
     @Test
     fun отвергнутый_конверт_остаётся_видимым_а_не_исчезает() {
         // Молчаливое исчезновение — худший вариант: подмена становится незаметной.
         // Человек должен видеть, что сообщение было и что оно не прошло проверку.
-        принять()
-        val после = inbox.openNext({ OpenOutcome.Rejected("подпись не сошлась") })
+        accept()
+        val after = inbox.openNext({ OpenOutcome.Rejected("подпись не сошлась") })
 
-        assertEquals(IncomingState.UNDECRYPTABLE, после?.state)
-        assertEquals("подпись не сошлась", после?.undecryptableReason)
+        assertEquals(IncomingState.UNDECRYPTABLE, after?.state)
+        assertEquals("подпись не сошлась", after?.undecryptableReason)
         assertEquals(1, store.all().size)
         assertEquals(null, store.body("chat-1", 5), "содержимое отвергнутого не записывается")
     }
@@ -117,24 +117,24 @@ class InboxTest {
     fun падение_записи_содержимого_оставляет_сообщение_на_разбор() {
         // Порядок «записать содержимое, потом сменить состояние» проверяется именно
         // так: если запись упала, состояние обязано остаться RECEIVED.
-        принять()
+        accept()
         assertFailsWith<IllegalStateException> {
-            store.падатьНаЗаписиТела = true
+            store.failOnEntryBody = true
             try {
-                inbox.openNext { OpenOutcome.Opened(тело, "u-автор") }
+                inbox.openNext { OpenOutcome.Opened(body, "u-автор") }
             } finally {
-                store.падатьНаЗаписиТела = false
+                store.failOnEntryBody = false
             }
         }
         assertEquals(IncomingState.RECEIVED, store.byKey("chat-1", 5)?.state)
-        assertNotNull(inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") }), "разбирается снова")
+        assertNotNull(inbox.openNext({ OpenOutcome.Opened(body, "u-автор") }), "разбирается снова")
     }
 
     @Test
     fun повторные_неудачи_копят_счётчик_а_не_обнуляют_его() {
         // По счётчику видно, что сообщение висит давно, — это и показывается человеку
         // как «не удаётся прочитать», а не молчание.
-        принять()
+        accept()
         repeat(3) {
             inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
             inbox.retryUndecryptable()
@@ -147,11 +147,11 @@ class InboxTest {
 
     @Test
     fun прочитанным_становится_только_разобранное() {
-        принять()
+        accept()
         // Пока не разобрано — читать нечего, и это ошибка вызывающего.
         assertFailsWith<IllegalArgumentException> { inbox.markRead("chat-1", 5) }
 
-        inbox.openNext({ OpenOutcome.Opened(тело, "u-автор") })
+        inbox.openNext({ OpenOutcome.Opened(body, "u-автор") })
         inbox.markRead("chat-1", 5)
 
         assertEquals(IncomingState.READ, store.byKey("chat-1", 5)?.state)
@@ -167,11 +167,11 @@ class InboxTest {
 
     @Test
     fun пустые_и_неположительные_значения_не_принимаются() {
-        assertFailsWith<IllegalArgumentException> { inbox.receive("", 5, конверт) }
+        assertFailsWith<IllegalArgumentException> { inbox.receive("", 5, envelope) }
         // Ноль в v1 ездил в том же поле, что настоящий идентификатор, и означал «ещё
         // не отправлено». Здесь такого не будет: отсутствие значения не притворяется
         // значением.
-        assertFailsWith<IllegalArgumentException> { inbox.receive("chat-1", 0, конверт) }
+        assertFailsWith<IllegalArgumentException> { inbox.receive("chat-1", 0, envelope) }
         assertFailsWith<IllegalArgumentException> { inbox.receive("chat-1", 5, ByteArray(0)) }
     }
 }

@@ -66,20 +66,20 @@ import io.tima.domain.chat.SendMessage
  * база открывается только когда он есть. Пока устройства нет, открывать нечего: своей
  * переписки у неоформленного устройства не бывает.
  */
-class Вход private constructor(
-    val регистрация: RegisterDevice,
+class Entry private constructor(
+    val registration: RegisterDevice,
     /**
      * Привязка к аккаунту, который уже есть на другом устройстве.
      *
      * Живёт здесь, а не в [Сеть], потому что нужна **до** входа: у нового устройства ещё
      * нет ни аккаунта, ни токена, и весь смысл привязки — получить их без SMS.
      */
-    val привязка: LinkNewDevice,
+    val link: LinkNewDevice,
     /** Адрес сервера: он же понадобится сети после входа. */
     val host: String,
     /** На чём мы работаем. Приложение объявляет это серверу при каждом запуске. */
-    val платформа: Платформа,
-    private val секреты: VaultSecretStore,
+    val platform: Platform,
+    private val secrets: VaultSecretStore,
 ) {
 
     /**
@@ -92,14 +92,14 @@ class Вход private constructor(
      *
      * @return `null` — надо входить.
      */
-    fun заведённое(): Устройство? {
-        val сессия = секреты.session() ?: return null
-        val секрет = секреты.deviceSecret() ?: return null
-        return Устройство(секрет, сессия)
+    fun created(): Device? {
+        val session = secrets.session() ?: return null
+        val secret = secrets.deviceSecret() ?: return null
+        return Device(secret, session)
     }
 
     /** Всё, что нужно приложению после входа: ключ покоя базы и кто мы для сервера. */
-    class Устройство(val секрет: ByteArray, val сессия: Session)
+    class Device(val secret: ByteArray, val session: Session)
 
     companion object {
 
@@ -123,36 +123,36 @@ class Вход private constructor(
          * секреты каждой уже существующей установки в разделе, куда никто больше не
          * заглянет — то есть потребовать перерегистрации без всякой пользы.
          */
-        fun создать(
-            платформа: Платформа,
-            host: String = СТЕНД,
-            хранилищеСекретов: SecretVault = platformVault(scope = "desktop"),
-        ): Вход {
-            val связь = ServerLink.открыть(host)
-            val route = связь.route
-            val client = связь.client
-            val секреты = VaultSecretStore(хранилищеСекретов)
-            val секретыУстройства = секреты
-            return Вход(
+        fun create(
+            platform: Platform,
+            host: String = STAND,
+            secretStore: SecretVault = platformVault(scope = "desktop"),
+        ): Entry {
+            val link = ServerLink.open(host)
+            val route = link.route
+            val client = link.client
+            val secrets = VaultSecretStore(secretStore)
+            val deviceSecrets = secrets
+            return Entry(
                 host = host,
-                платформа = платформа,
-                привязка = LinkNewDevice(
+                platform = platform,
+                link = LinkNewDevice(
                     api = DeviceLinkStartOverHttp(LinkStartApi(route, client)),
                     keys = DeviceKeyFactoryOverKodium,
-                    secrets = секретыУстройства,
+                    secrets = deviceSecrets,
                 ),
-                регистрация = RegisterDevice(
+                registration = RegisterDevice(
                     api = AccountApiOverHttp(AuthApi(route, client)),
                     keys = DeviceKeyFactoryOverKodium,
-                    secrets = секреты,
-                    platform = платформа.серверу,
+                    secrets = secrets,
+                    platform = platform.server,
                 ),
-                секреты = секреты,
+                secrets = secrets,
             )
         }
 
         /** Стенд: единственный существующий сервер. Punycode — тот же, что в харнессе. */
-        const val СТЕНД: String = "xn--80aa4ar0b.xn--p1ai"
+        const val STAND: String = "xn--80aa4ar0b.xn--p1ai"
     }
 }
 
@@ -163,25 +163,25 @@ class Вход private constructor(
  * Отдельно от [Вход], потому что здесь нужна сессия, а у входа её ещё нет. Токен берётся
  * **на каждый вызов**, а не один раз: он живёт меньше приложения.
  */
-class Сеть(
-    private val связь: ServerLink,
-    private val сессия: Session,
-) : ПортыПереписок, ПортыГрупп, ПортыУстройств {
-    override val ключи: KeysApi = KeysApi(связь.route, связь.client, token = { сессия.accessToken })
-    override val escrow: EscrowApi = EscrowApi(связь.route, связь.client, token = { сессия.accessToken })
-    val транспорт: HttpMessageTransport = HttpMessageTransport(связь.route, связь.client, token = { сессия.accessToken })
+class Network(
+    private val link: ServerLink,
+    private val session: Session,
+) : ChatPorts, GroupPorts, DevicePorts {
+    override val keys: KeysApi = KeysApi(link.route, link.client, token = { session.accessToken })
+    override val escrow: EscrowApi = EscrowApi(link.route, link.client, token = { session.accessToken })
+    val transport: HttpMessageTransport = HttpMessageTransport(link.route, link.client, token = { session.accessToken })
 
     /** Справочник: кто скрывается за номером телефона. Нужен, чтобы начать переписку. */
-    override val справочник: UsersApi = UsersApi(связь.route, связь.client, token = { сессия.accessToken })
+    override val directory: UsersApi = UsersApi(link.route, link.client, token = { session.accessToken })
 
     /** Устройства аккаунта: объявить платформу, показать список, отключить. */
-    override val устройства: DevicesApi = DevicesApi(связь.route, связь.client, token = { сессия.accessToken })
+    override val devices: DevicesApi = DevicesApi(link.route, link.client, token = { session.accessToken })
 
     /** Группы: создание, состав, роли. */
-    override val группы: GroupsApi = GroupsApi(связь.route, связь.client, token = { сессия.accessToken })
+    override val groups: GroupsApi = GroupsApi(link.route, link.client, token = { session.accessToken })
 
     /** Групповые ключи: ротация и выдача обёрток этому устройству. */
-    override val ключиГрупп: GroupKeysApi = GroupKeysApi(связь.route, связь.client, token = { сессия.accessToken })
+    override val groupKeys: GroupKeysApi = GroupKeysApi(link.route, link.client, token = { session.accessToken })
 
     /**
      * Недостающие версии ключа: попросить и отдать.
@@ -189,8 +189,8 @@ class Сеть(
      * Отдельно от [ключиГрупп], потому что это другая работа: там выпуск новой версии,
      * здесь передача уже существующей тому, кому её не выдавали.
      */
-    override val восстановлениеКлючей: GroupKeyRecoveryApi =
-        GroupKeyRecoveryApi(связь.route, связь.client, token = { сессия.accessToken })
+    override val keyRecovery: GroupKeyRecoveryApi =
+        GroupKeyRecoveryApi(link.route, link.client, token = { session.accessToken })
 
     /**
      * То же самое под именем порта групп.
@@ -199,7 +199,7 @@ class Сеть(
      * чинится нечитаемое сообщение», порт групп — «чем раздаются старые версии».
      * Это разные вопросы к одному и тому же маршруту.
      */
-    override val восстановлениеКлючейГрупп: GroupKeyRecoveryApi get() = восстановлениеКлючей
+    override val groupKeyRecovery: GroupKeyRecoveryApi get() = keyRecovery
 
     /**
      * Свои устройства как случай использования.
@@ -207,7 +207,7 @@ class Сеть(
      * Появилось вместе с привязкой: подключить устройство стало делом одного скана, значит
      * отключать человек должен уметь сам.
      */
-    override val мойПарк: MyDevices = MyDevices(DeviceBookOverHttp(устройства))
+    override val myFleet: MyDevices = MyDevices(DeviceBookOverHttp(devices))
 
     /**
      * Подтверждение привязки нового устройства.
@@ -215,9 +215,9 @@ class Сеть(
      * Требует ключа этого устройства: подпись над данными из кода делается им. Ключ даёт
      * приложение, потому что он живёт в хранилище платформы, а не в сети.
      */
-    override fun подтверждениеПривязки(личность: DeviceIdentity): ConfirmDeviceLink = ConfirmDeviceLink(
-        api = DeviceLinkConfirmOverHttp(LinkConfirmApi(связь.route, связь.client, token = { сессия.accessToken })),
-        signer = LinkSignerOverKodium(личность),
+    override fun linkConfirmation(identity: DeviceIdentity): ConfirmDeviceLink = ConfirmDeviceLink(
+        api = DeviceLinkConfirmOverHttp(LinkConfirmApi(link.route, link.client, token = { session.accessToken })),
+        signer = LinkSignerOverKodium(identity),
     )
 
     /**
@@ -227,19 +227,19 @@ class Сеть(
      * было целью — Ktor не поднимается выше core-network. Приёмник получает готовый
      * поток и про транспорт не знает.
      */
-    fun каналСобытий(): EventStream = EventStream(связь.route, связь.client, token = { сессия.accessToken })
+    fun eventChannel(): EventStream = EventStream(link.route, link.client, token = { session.accessToken })
 
     companion object {
         /** Тот же адрес и тот же клиент, что у входа: сервер один. */
-        fun создать(
-            сессия: Session,
-            host: String = Вход.СТЕНД,
-        ): Сеть = Сеть(
+        fun create(
+            session: Session,
+            host: String = Entry.STAND,
+        ): Network = Network(
             // Соединение собирает core-network: Ktor выше него не поднимается. Живой
             // канал ставится на тот же клиент — второй означал бы второй набор
             // настроек, и они разошлись бы.
-            связь = ServerLink.открыть(host, живойКанал = true),
-            сессия = сессия,
+            link = ServerLink.open(host, liveChannel = true),
+            session = session,
         )
     }
 }
@@ -255,15 +255,15 @@ class Сеть(
  * следующим срезом. Сообщение ложится в очередь и честно висит с отметкой «ждёт» — это
  * правда о его состоянии, а не недоделка.
  */
-class Окружение private constructor(
+class Environment private constructor(
     val db: TimaDatabase,
-    val шифр: FieldCipher,
+    val cipher: FieldCipher,
     /** Кто я: по этому отличается своё сообщение со второго устройства от чужого. */
     private val myUserId: String,
 ) {
 
     /** Очередь исходящих: одна на приложение, потому что одна на базу. */
-    val очередь: Outbox = Outbox(SqlOutboxStore(db, шифр), nowMs = { сейчасМс() })
+    val queue: Outbox = Outbox(SqlOutboxStore(db, cipher), nowMs = { msNow() })
 
     /**
      * Машина входящих. Одна на приложение по той же причине: одна база.
@@ -271,7 +271,7 @@ class Окружение private constructor(
      * Конверт записывается ДО попытки разбора — иначе падение расшифровки теряет
      * сообщение навсегда, живой канал его больше не пришлёт.
      */
-    val входящие: Inbox = Inbox(SqlInboxStore(db, шифр), nowMs = { сейчасМс() })
+    val incoming: Inbox = Inbox(SqlInboxStore(db, cipher), nowMs = { msNow() })
 
     /**
      * Факты о переписке: вид, собеседник, знаем ли о ней вообще.
@@ -279,20 +279,20 @@ class Окружение private constructor(
      * Порт вместо прямого запроса: схема базы перестала быть публичным API — до этого
      * миграция столбца была правкой экранов и приёмника.
      */
-    val фактыПереписок: ChatFacts = SqlChatFacts(db)
+    val chatFacts: ChatFacts = SqlChatFacts(db)
 
-    val переписки: ObserveChats = ObserveChats(SqlChatsFeed(db, TextBodyCodec, шифр, myUserId))
+    val chats: ObserveChats = ObserveChats(SqlChatsFeed(db, TextBodyCodec, cipher, myUserId))
 
     /** Книга: люди, с которыми уже есть переписка. Другого источника у неё нет. */
-    val контакты: ObserveContacts = ObserveContacts(SqlContacts(db, шифр))
+    val contacts: ObserveContacts = ObserveContacts(SqlContacts(db, cipher))
 
-    val переписка: ObserveChat = ObserveChat(SqlChatFeed(db, TextBodyCodec, шифр, myUserId))
+    val chat: ObserveChat = ObserveChat(SqlChatFeed(db, TextBodyCodec, cipher, myUserId))
 
     /** Открытая переписка прочитана: счётчик непрочитанного обязан гаснуть. */
-    val прочтение: MarkRead = MarkRead(SqlReadMarks(входящие))
+    val reading: MarkRead = MarkRead(SqlReadMarks(incoming))
 
-    val отправка: SendMessage = SendMessage(
-        queue = очередь,
+    val send: SendMessage = SendMessage(
+        queue = queue,
         codec = TextBodyCodec,
         keys = UuidDedupKeys,
     )
@@ -313,7 +313,7 @@ class Окружение private constructor(
          * @param myUserId кто я. Нужен переписке: входящее от себя же — своё сообщение,
          *   написанное с другого своего устройства.
          */
-        fun открыть(db: TimaDatabase, секретУстройства: ByteArray, myUserId: String): Окружение =
-            Окружение(db, LocalStoreFieldCipher(секретУстройства), myUserId)
+        fun open(db: TimaDatabase, deviceSecret: ByteArray, myUserId: String): Environment =
+            Environment(db, LocalStoreFieldCipher(deviceSecret), myUserId)
     }
 }

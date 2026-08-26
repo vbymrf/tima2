@@ -71,7 +71,7 @@ fun timaHttpClient(tuning: TransportTuning = TransportTuning()): HttpClient =
  * Живёт здесь, а не в композиции приложения: `HttpClient` не должен подниматься выше
  * этого модуля, иначе смена движка или политики токенов задевает всех потребителей.
  */
-fun timaHttpClientСКаналом(tuning: TransportTuning = TransportTuning()): HttpClient =
+fun timaHttpClientWithChannel(tuning: TransportTuning = TransportTuning()): HttpClient =
     HttpClient(httpEngine()) {
         timaDefaults(tuning)
         install(WebSockets)
@@ -99,9 +99,9 @@ class ServerLink(val route: ServerRoute, val client: HttpClient) {
          * @param живойКанал ставить ли WebSockets. Клиент при этом остаётся ОДИН:
          *   второй означал бы второй набор настроек, и они разошлись бы.
          */
-        fun открыть(host: String, живойКанал: Boolean = false): ServerLink = ServerLink(
+        fun open(host: String, liveChannel: Boolean = false): ServerLink = ServerLink(
             route = ServerRoute.from(RouteConfig(host = host)),
-            client = if (живойКанал) timaHttpClientСКаналом() else timaHttpClient(),
+            client = if (liveChannel) timaHttpClientWithChannel() else timaHttpClient(),
         )
     }
 }

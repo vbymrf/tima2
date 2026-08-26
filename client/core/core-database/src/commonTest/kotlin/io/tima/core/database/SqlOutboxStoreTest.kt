@@ -22,17 +22,17 @@ import kotlin.test.assertTrue
 class SqlOutboxStoreTest {
 
     private val db = testDatabase()
-    private val store = SqlOutboxStore(db, тестовыйШифр())
+    private val store = SqlOutboxStore(db, testCipher())
 
-    private var время = 1_000L
-    private val outbox = Outbox(store, nowMs = { время })
-    private val тело = byteArrayOf(7, 8, 9)
+    private var time = 1_000L
+    private val outbox = Outbox(store, nowMs = { time })
+    private val body = byteArrayOf(7, 8, 9)
 
-    private fun поставить(id: String = "d-1") = outbox.enqueue(id, "chat-1", тело)
+    private fun put(id: String = "d-1") = outbox.enqueue(id, "chat-1", body)
 
     @Test
     fun постановка_и_чтение_возвращают_то_же_самое() {
-        assertTrue(поставить())
+        assertTrue(put())
         val e = store.byDedupKey("d-1")
         assertNotNull(e)
         assertEquals("chat-1", e.chatId)
@@ -40,35 +40,35 @@ class SqlOutboxStoreTest {
         assertEquals(0, e.attempts)
         // Байты тела обязаны дойти без изменений: это уже сжатый protobuf, и любая
         // «нормализация» BLOB сделала бы сообщение нечитаемым.
-        assertTrue(тело.contentEquals(e.body))
+        assertTrue(body.contentEquals(e.body))
     }
 
     @Test
     fun уникальность_dedup_key_держит_сама_база() {
         // INSERT OR IGNORE плюс changes(): вторая постановка не должна ни падать
         // исключением, ни давать вторую строку.
-        assertTrue(поставить("d-1"))
-        assertFalse(поставить("d-1"))
+        assertTrue(put("d-1"))
+        assertFalse(put("d-1"))
         assertEquals(1L, db.messagesQueries.countAll().executeAsOne())
     }
 
     @Test
     fun повторная_постановка_не_трогает_счётчик_попыток() {
-        поставить()
+        put()
         outbox.sealNext(1) { byteArrayOf(1) }
         outbox.claimForSend()
         outbox.onOutcome("d-1", SendOutcome.Retry())
-        val было = store.byDedupKey("d-1")!!
+        val was = store.byDedupKey("d-1")!!
 
-        поставить()
+        put()
 
-        assertEquals(было.attempts, store.byDedupKey("d-1")!!.attempts)
-        assertEquals(было.nextAttemptAtMs, store.byDedupKey("d-1")!!.nextAttemptAtMs)
+        assertEquals(was.attempts, store.byDedupKey("d-1")!!.attempts)
+        assertEquals(was.nextAttemptAtMs, store.byDedupKey("d-1")!!.nextAttemptAtMs)
     }
 
     @Test
     fun выбор_и_перевод_в_отправку_атомарны() {
-        поставить()
+        put()
         outbox.sealNext(1) { byteArrayOf(1) }
         assertNotNull(store.claimSealed())
         assertNull(store.claimSealed(), "вторая попытка взять то же — ничего")
@@ -77,8 +77,8 @@ class SqlOutboxStoreTest {
 
     @Test
     fun возврат_зависшего_считает_строки() {
-        поставить("d-1")
-        поставить("d-2")
+        put("d-1")
+        put("d-2")
         outbox.sealNext(1) { byteArrayOf(1) } // d-1 → SEALED
         store.claimSealed() // d-1 → SENDING
         outbox.sealNext(1) { byteArrayOf(1) } // d-2 → SEALED
@@ -91,34 +91,34 @@ class SqlOutboxStoreTest {
 
     @Test
     fun срок_следующей_попытки_учитывается_в_запросе() {
-        поставить()
+        put()
         outbox.sealNext(1) { byteArrayOf(1) }
         outbox.claimForSend()
         outbox.onOutcome("d-1", SendOutcome.Retry(afterMs = 5_000))
 
-        assertNull(store.nextQueued(время), "срок ещё не пришёл")
-        assertNotNull(store.nextQueued(время + 5_000))
+        assertNull(store.nextQueued(time), "срок ещё не пришёл")
+        assertNotNull(store.nextQueued(time + 5_000))
     }
 
     @Test
     fun незавершённые_не_включают_терминальные() {
-        поставить("d-1")
-        поставить("d-2")
+        put("d-1")
+        put("d-2")
         outbox.sealNext(1) { byteArrayOf(1) }
         outbox.claimForSend()
         outbox.onOutcome("d-1", SendOutcome.Accepted(serverMessageId = 5))
 
-        val незавершённые = store.pending().map { it.dedupKey }
-        assertEquals(listOf("d-2"), незавершённые, "SENT в очереди быть не должно")
+        val unfinished = store.pending().map { it.dedupKey }
+        assertEquals(listOf("d-2"), unfinished, "SENT в очереди быть не должно")
     }
 
     @Test
     fun сохранённое_состояние_и_эпоха_читаются_обратно() {
         // Круг «записали — прочитали» для всех полей, которые ведёт очередь: если
         // какое-то не доезжает до базы, машина работает, а перезапуск всё теряет.
-        поставить()
-        val запечатано = outbox.sealNext(эпоха = 42) { byteArrayOf(1) }
-        assertEquals(42, запечатано?.sealedForEpoch)
+        put()
+        val sealed = outbox.sealNext(epoch = 42) { byteArrayOf(1) }
+        assertEquals(42, sealed?.sealedForEpoch)
         assertEquals(42, store.byDedupKey("d-1")?.sealedForEpoch)
 
         outbox.claimForSend()
@@ -133,14 +133,14 @@ class SqlOutboxStoreTest {
     fun неизвестное_состояние_из_базы_не_превращается_в_очередь() {
         // Строка, записанная более новой версией приложения, не должна тихо попасть в
         // очередь и уйти повторно. Лучше падение, чем повторная отправка.
-        поставить()
+        put()
         db.messagesQueries.updateState(
             state = 99, attempts = 0, next_attempt_at = 0,
             sealed_epoch = null, server_id = null, dedup_key = "d-1",
         )
-        val ошибка = runCatching { store.byDedupKey("d-1") }.exceptionOrNull()
-        assertNotNull(ошибка, "неизвестное состояние обязано быть ошибкой")
-        assertTrue(ошибка.message.orEmpty().contains("99"), "в сообщении должно быть значение")
+        val error = runCatching { store.byDedupKey("d-1") }.exceptionOrNull()
+        assertNotNull(error, "неизвестное состояние обязано быть ошибкой")
+        assertTrue(error.message.orEmpty().contains("99"), "в сообщении должно быть значение")
     }
 
     /**
@@ -148,6 +148,6 @@ class SqlOutboxStoreTest {
      *
      * Настоящая подпись просит переписку: ключ эпохи escrow у каждой свой.
      */
-    private fun Outbox.sealNext(эпоха: Int, seal: (OutboxEntry) -> ByteArray): OutboxEntry? =
-        this.sealNext("chat-1", эпоха.toLong(), seal)
+    private fun Outbox.sealNext(epoch: Int, seal: (OutboxEntry) -> ByteArray): OutboxEntry? =
+        this.sealNext("chat-1", epoch.toLong(), seal)
 }

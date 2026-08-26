@@ -24,19 +24,19 @@ import kotlin.test.assertTrue
 class SecureDeleteTest {
 
     /** Узнаваемая последовательность: её и ищем в файле. */
-    private val маркер = "СЕКРЕТНОЕ-СОДЕРЖИМОЕ-ПЕРЕПИСКИ".encodeToByteArray()
+    private val marker = "СЕКРЕТНОЕ-СОДЕРЖИМОЕ-ПЕРЕПИСКИ".encodeToByteArray()
 
     @Test
     fun стёртая_переписка_не_находится_в_файле_базы() {
-        val файл = File.createTempFile("tima-secure-delete", ".db").also { it.delete() }
+        val file = File.createTempFile("tima-secure-delete", ".db").also { it.delete() }
         try {
-            записать(файл, secureDelete = true)
+            write(file, secureDelete = true)
             assertFalse(
-                файл.readBytes().содержит(маркер),
+                file.readBytes().contains(marker),
                 "после DELETE с secure_delete байты обязаны быть затёрты, а они на месте",
             )
         } finally {
-            файл.delete()
+            file.delete()
         }
     }
 
@@ -44,25 +44,25 @@ class SecureDeleteTest {
     fun без_настройки_байты_остаются_и_это_доказывает_что_проверка_работает() {
         // Контрольный опыт. Без него первый тест зелёный по любой причине — например
         // потому, что маркер вообще не попал в файл, — и ничего не доказывает.
-        val файл = File.createTempFile("tima-plain-delete", ".db").also { it.delete() }
+        val file = File.createTempFile("tima-plain-delete", ".db").also { it.delete() }
         try {
-            записать(файл, secureDelete = false)
+            write(file, secureDelete = false)
             assertTrue(
-                файл.readBytes().содержит(маркер),
+                file.readBytes().contains(marker),
                 "без secure_delete байты остаются — иначе проверка выше ничего не значит",
             )
         } finally {
-            файл.delete()
+            file.delete()
         }
     }
 
     /** Создаёт базу, кладёт сообщение с маркером, удаляет чат и закрывает соединение. */
-    private fun записать(файл: File, secureDelete: Boolean) {
+    private fun write(file: File, secureDelete: Boolean) {
         // Настройка едет в СТРОКЕ ПОДКЛЮЧЕНИЯ, а не отдельным PRAGMA. Причина
         // найдена этим же тестом: PRAGMA через driver.execute не удержался — sqlite-jdbc
         // берёт соединение под операцию, и настройка легла не туда, где потом шёл DELETE.
         val driver = JdbcSqliteDriver(
-            "jdbc:sqlite:${файл.absolutePath}?secure_delete=${if (secureDelete) "true" else "false"}",
+            "jdbc:sqlite:${file.absolutePath}?secure_delete=${if (secureDelete) "true" else "false"}",
         )
         // journal_mode = DELETE, а не WAL: с WAL удалённые страницы остаются в
         // отдельном файле, и проверка смотрела бы не туда. В бою режим свой, здесь
@@ -74,7 +74,7 @@ class SecureDeleteTest {
         db.messagesQueries.insertQueued(
             dedup_key = "d-1", chat_id = "chat-1", sender_id = "me",
             client_ts = 1, state = 0, attempts = 0,
-            next_attempt_at = null, reply_to = null, body_enc = маркер,
+            next_attempt_at = null, reply_to = null, body_enc = marker,
         )
         // Убедиться, что маркер вообще дошёл до файла: иначе оба теста бессмысленны.
         driver.execute(null, "VACUUM;", 0)
@@ -83,10 +83,10 @@ class SecureDeleteTest {
         driver.close()
     }
 
-    private fun ByteArray.содержит(что: ByteArray): Boolean {
-        if (что.isEmpty() || что.size > size) return false
-        outer@ for (i in 0..size - что.size) {
-            for (j in что.indices) if (this[i + j] != что[j]) continue@outer
+    private fun ByteArray.contains(what: ByteArray): Boolean {
+        if (what.isEmpty() || what.size > size) return false
+        outer@ for (i in 0..size - what.size) {
+            for (j in what.indices) if (this[i + j] != what[j]) continue@outer
             return true
         }
         return false

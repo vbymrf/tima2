@@ -17,9 +17,9 @@ import kotlinx.datetime.toLocalDateTime
  * Общая функция для чата и для списка: одно и то же время в двух местах обязано
  * выглядеть одинаково.
  */
-internal fun время(atMs: Long): String {
-    val местное = Instant.fromEpochMilliseconds(atMs).toLocalDateTime(TimeZone.currentSystemDefault())
-    val час = местное.hour.toString().padStart(2, '0')
-    val минута = местное.minute.toString().padStart(2, '0')
-    return "$час:$минута"
+internal fun time(atMs: Long): String {
+    val local = Instant.fromEpochMilliseconds(atMs).toLocalDateTime(TimeZone.currentSystemDefault())
+    val hour = local.hour.toString().padStart(2, '0')
+    val minute = local.minute.toString().padStart(2, '0')
+    return "$hour:$minute"
 }

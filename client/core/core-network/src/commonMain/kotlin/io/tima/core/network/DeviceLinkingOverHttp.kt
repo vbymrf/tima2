@@ -20,18 +20,18 @@ class DeviceLinkStartOverHttp(private val api: LinkStartApi) : DeviceLinkStart {
         encryptionPub: ByteArray,
         signingPub: ByteArray,
         deviceName: String,
-    ): LinkStartStep = when (val ответ = api.start(encryptionPub, signingPub, deviceName)) {
-        is LinkStartResult.Started -> LinkStartStep.Started(ответ.sessionId, ответ.qrPayload, ответ.claimToken)
-        is LinkStartResult.NoConnection -> LinkStartStep.Offline(ответ.link.retryDelayMs)
-        is LinkStartResult.Refused -> LinkStartStep.Refused(ответ.code)
+    ): LinkStartStep = when (val answer = api.start(encryptionPub, signingPub, deviceName)) {
+        is LinkStartResult.Started -> LinkStartStep.Started(answer.sessionId, answer.qrPayload, answer.claimToken)
+        is LinkStartResult.NoConnection -> LinkStartStep.Offline(answer.link.retryDelayMs)
+        is LinkStartResult.Refused -> LinkStartStep.Refused(answer.code)
     }
 
     override suspend fun claim(sessionId: String, claimToken: String): LinkClaimStep =
-        when (val ответ = api.claim(sessionId, claimToken)) {
-            is LinkClaimResult.Claimed -> LinkClaimStep.Claimed(ответ.userId, ответ.deviceId, ответ.accessToken)
+        when (val answer = api.claim(sessionId, claimToken)) {
+            is LinkClaimResult.Claimed -> LinkClaimStep.Claimed(answer.userId, answer.deviceId, answer.accessToken)
             LinkClaimResult.NotReady -> LinkClaimStep.NotReady
-            is LinkClaimResult.NoConnection -> LinkClaimStep.Offline(ответ.link.retryDelayMs)
-            is LinkClaimResult.Refused -> LinkClaimStep.Refused(ответ.code)
+            is LinkClaimResult.NoConnection -> LinkClaimStep.Offline(answer.link.retryDelayMs)
+            is LinkClaimResult.Refused -> LinkClaimStep.Refused(answer.code)
         }
 }
 
@@ -43,12 +43,12 @@ class DeviceLinkConfirmOverHttp(private val api: LinkConfirmApi) : DeviceLinkCon
     }
 
     override suspend fun confirm(sessionId: String, secret: String, signature: ByteArray): LinkConfirmStep =
-        when (val ответ = api.confirm(sessionId, secret, signature)) {
-            is LinkConfirmResult.Confirmed -> LinkConfirmStep.Confirmed(ответ.deviceId)
+        when (val answer = api.confirm(sessionId, secret, signature)) {
+            is LinkConfirmResult.Confirmed -> LinkConfirmStep.Confirmed(answer.deviceId)
             LinkConfirmResult.NotAPhone -> LinkConfirmStep.NotAPhone
             LinkConfirmResult.SessionGone -> LinkConfirmStep.SessionGone
             LinkConfirmResult.BadSignature -> LinkConfirmStep.BadSignature
-            is LinkConfirmResult.NoConnection -> LinkConfirmStep.Offline(ответ.link.retryDelayMs)
-            is LinkConfirmResult.Refused -> LinkConfirmStep.Refused(ответ.code)
+            is LinkConfirmResult.NoConnection -> LinkConfirmStep.Offline(answer.link.retryDelayMs)
+            is LinkConfirmResult.Refused -> LinkConfirmStep.Refused(answer.code)
         }
 }

@@ -28,16 +28,16 @@ import androidx.compose.ui.Modifier
 
 /** Окно 2 «Социум» — `§4`. */
 @Composable
-fun ОкноСоциум(
-    onПереключитьОкна: () -> Unit,
-    onПоиск: () -> Unit,
-    onНастройки: () -> Unit,
-    onСоседнееОкно: (ВСторону) -> Unit,
+fun SocialWindow(
+    onSwitchWindows: () -> Unit,
+    onSearch: () -> Unit,
+    onSettings: () -> Unit,
+    onNeighbourWindow: (InSide) -> Unit,
     modifier: Modifier = Modifier,
-) = ОкноСВкладками(
-    окно = Окно.Социум,
-    вкладки = listOf("Общая", "Друзья", "Каталог"),
-    заглушки = mapOf(
+) = WindowWithTabs(
+    window = Window.Social,
+    tabs = listOf("Общая", "Друзья", "Каталог"),
+    stubs = mapOf(
         "Общая" to ("Здесь будет общая лента" to
             "Рекомендации и подписки. Сервер социального слоя не готов: постов, " +
             "оценок и подписок на нём нет вовсе."),
@@ -48,25 +48,25 @@ fun ОкноСоциум(
             "Группы, каналы, сообщества и голосовые чаты по разделам. " +
             "Личные группы уже работают, но живут пока во временном входе окна 1."),
     ),
-    onПереключитьОкна = onПереключитьОкна,
-    onПоиск = onПоиск,
-    onНастройки = onНастройки,
-    onСоседнееОкно = onСоседнееОкно,
+    onSwitchWindows = onSwitchWindows,
+    onSearch = onSearch,
+    onSettings = onSettings,
+    onNeighbourWindow = onNeighbourWindow,
     modifier = modifier,
 )
 
 /** Окно 3 «Медиа» — `§5`. */
 @Composable
-fun ОкноМедиа(
-    onПереключитьОкна: () -> Unit,
-    onПоиск: () -> Unit,
-    onНастройки: () -> Unit,
-    onСоседнееОкно: (ВСторону) -> Unit,
+fun MediaWindow(
+    onSwitchWindows: () -> Unit,
+    onSearch: () -> Unit,
+    onSettings: () -> Unit,
+    onNeighbourWindow: (InSide) -> Unit,
     modifier: Modifier = Modifier,
-) = ОкноСВкладками(
-    окно = Окно.Медиа,
-    вкладки = listOf("Общая", "Друзья", "Каталог"),
-    заглушки = mapOf(
+) = WindowWithTabs(
+    window = Window.Media,
+    tabs = listOf("Общая", "Друзья", "Каталог"),
+    stubs = mapOf(
         "Общая" to ("Здесь будет медиа-лента" to
             "Фото и видео карточками, с переключателем «лента / слайды» в шапке. " +
             "Ни медиа-постов, ни ленты сервер не отдаёт."),
@@ -76,25 +76,25 @@ fun ОкноМедиа(
             "Коллекции по разделам, с метками «E2E · личная» и «публичная». " +
             "Коллекций нет ни в базе, ни на сервере."),
     ),
-    onПереключитьОкна = onПереключитьОкна,
-    onПоиск = onПоиск,
-    onНастройки = onНастройки,
-    onСоседнееОкно = onСоседнееОкно,
+    onSwitchWindows = onSwitchWindows,
+    onSearch = onSearch,
+    onSettings = onSettings,
+    onNeighbourWindow = onNeighbourWindow,
     modifier = modifier,
 )
 
 /** Окно 4 «Общение» — `§6`. */
 @Composable
-fun ОкноОбщение(
-    onПереключитьОкна: () -> Unit,
-    onПоиск: () -> Unit,
-    onНастройки: () -> Unit,
-    onСоседнееОкно: (ВСторону) -> Unit,
+fun ActivityWindow(
+    onSwitchWindows: () -> Unit,
+    onSearch: () -> Unit,
+    onSettings: () -> Unit,
+    onNeighbourWindow: (InSide) -> Unit,
     modifier: Modifier = Modifier,
-) = ОкноСВкладками(
-    окно = Окно.Общение,
-    вкладки = listOf("Ответы", "Реакции", "Коллекции"),
-    заглушки = mapOf(
+) = WindowWithTabs(
+    window = Window.Activity,
+    tabs = listOf("Ответы", "Реакции", "Коллекции"),
+    stubs = mapOf(
         "Ответы" to ("Здесь будет то, где вам ответили" to
             "Ветки обсуждений и отслеживаемое. Комментариев и веток на сервере нет."),
         "Реакции" to ("Здесь будет, как оценили ваше" to
@@ -102,26 +102,26 @@ fun ОкноОбщение(
         "Коллекции" to ("Здесь будет то, что вы собрали" to
             "Плитки коллекций. Коллекций нет ни в базе, ни на сервере."),
     ),
-    onПереключитьОкна = onПереключитьОкна,
-    onПоиск = onПоиск,
-    onНастройки = onНастройки,
-    onСоседнееОкно = onСоседнееОкно,
+    onSwitchWindows = onSwitchWindows,
+    onSearch = onSearch,
+    onSettings = onSettings,
+    onNeighbourWindow = onNeighbourWindow,
     modifier = modifier,
 )
 
 /** Окно 5 «Страница» — `§7`, перерисовано 2026-08-25 под ADR-0018. */
 @Composable
-fun ОкноСтраница(
-    onПереключитьОкна: () -> Unit,
-    onПоиск: () -> Unit,
-    onНастройки: () -> Unit,
-    onСоседнееОкно: (ВСторону) -> Unit,
+fun PageWindow(
+    onSwitchWindows: () -> Unit,
+    onSearch: () -> Unit,
+    onSettings: () -> Unit,
+    onNeighbourWindow: (InSide) -> Unit,
     modifier: Modifier = Modifier,
-) = ОкноСВкладками(
-    окно = Окно.Страница,
+) = WindowWithTabs(
+    window = Window.Page,
     // Порядок из макета: страница открывается на «Подписан», и это её первая вкладка.
-    вкладки = listOf("Подписан", "Лента", "Коллекции", "Группы"),
-    заглушки = mapOf(
+    tabs = listOf("Подписан", "Лента", "Коллекции", "Группы"),
+    stubs = mapOf(
         "Подписан" to ("Здесь будут каналы и сообщества" to
             "На них подписываются. Подписок на сервере нет."),
         "Лента" to ("Здесь будет то, что вы показываете" to
@@ -132,10 +132,10 @@ fun ОкноСтраница(
             "Личные группы уже работают, но пока открываются из окна 1: " +
             "каталог окна 2 и эта вкладка ещё не связаны с данными."),
     ),
-    onПереключитьОкна = onПереключитьОкна,
-    onПоиск = onПоиск,
-    onНастройки = onНастройки,
-    onСоседнееОкно = onСоседнееОкно,
+    onSwitchWindows = onSwitchWindows,
+    onSearch = onSearch,
+    onSettings = onSettings,
+    onNeighbourWindow = onNeighbourWindow,
     modifier = modifier,
 )
 
@@ -146,29 +146,29 @@ fun ОкноСтраница(
  * окно возвращалось туда, где его оставили.
  */
 @Composable
-private fun ОкноСВкладками(
-    окно: Окно,
-    вкладки: List<String>,
-    заглушки: Map<String, Pair<String, String>>,
-    onПереключитьОкна: () -> Unit,
-    onПоиск: () -> Unit,
-    onНастройки: () -> Unit,
-    onСоседнееОкно: (ВСторону) -> Unit,
+private fun WindowWithTabs(
+    window: Window,
+    tabs: List<String>,
+    stubs: Map<String, Pair<String, String>>,
+    onSwitchWindows: () -> Unit,
+    onSearch: () -> Unit,
+    onSettings: () -> Unit,
+    onNeighbourWindow: (InSide) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var выбрана by remember(окно) { mutableStateOf(вкладки.first()) }
-    КаркасОкна(
-        окно = окно,
-        вкладки = вкладки,
-        выбрана = выбрана,
-        onВкладка = { выбрана = it },
-        onПереключитьОкна = onПереключитьОкна,
-        onПоиск = onПоиск,
-        onНастройки = onНастройки,
-        onСоседнееОкно = onСоседнееОкно,
+    var selected by remember(window) { mutableStateOf(tabs.first()) }
+    WindowFrame(
+        window = window,
+        tabs = tabs,
+        selected = selected,
+        onTab = { selected = it },
+        onSwitchWindows = onSwitchWindows,
+        onSearch = onSearch,
+        onSettings = onSettings,
+        onNeighbourWindow = onNeighbourWindow,
         modifier = modifier,
     ) {
-        val (чтоБудет, чемДержится) = заглушки.getValue(выбрана)
-        ЗаглушкаВкладки(чтоБудет, чемДержится)
+        val (willWhat, thanHolds) = stubs.getValue(selected)
+        TabStub(willWhat, thanHolds)
     }
 }

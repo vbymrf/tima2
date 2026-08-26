@@ -18,55 +18,55 @@ import kotlin.test.assertTrue
 class SqlContactsTest {
 
     private val db = testDatabase()
-    private val шифр = тестовыйШифр()
-    private val книга = SqlChatBook(db, шифр)
-    private val контакты = SqlContacts(db, шифр)
+    private val cipher = testCipher()
+    private val book = SqlChatBook(db, cipher)
+    private val contacts = SqlContacts(db, cipher)
 
     @Test
     fun группы_в_контакты_не_попадают() = runTest {
         // У группы нет собеседника: в контактах ей делать нечего, а peer_id у неё NULL.
-        книга.remember("g-1", ChatKind.Group, title = "Поход", peerId = null)
-        книга.remember("c-1", ChatKind.Personal, title = "Аня", peerId = "u-2")
+        book.remember("g-1", ChatKind.Group, title = "Поход", peerId = null)
+        book.remember("c-1", ChatKind.Personal, title = "Аня", peerId = "u-2")
 
-        val список = контакты.list().first()
+        val list = contacts.list().first()
 
-        assertEquals(1, список.size)
-        assertEquals("u-2", список.single().userId)
+        assertEquals(1, list.size)
+        assertEquals("u-2", list.single().userId)
     }
 
     @Test
     fun имя_расшифровывается() = runTest {
-        книга.remember("c-1", ChatKind.Personal, title = "Аня", peerId = "u-2")
-        assertEquals("Аня", контакты.list().first().single().name)
+        book.remember("c-1", ChatKind.Personal, title = "Аня", peerId = "u-2")
+        assertEquals("Аня", contacts.list().first().single().name)
     }
 
     @Test
     fun человек_с_нечитаемым_именем_остаётся_в_списке() = runTest {
         // Не открылось — строка остаётся без имени, но остаётся: переписка существует, и
         // потерять собеседника из-за одной испорченной записи нельзя.
-        книга.remember("c-1", ChatKind.Personal, title = null, peerId = "u-2")
+        book.remember("c-1", ChatKind.Personal, title = null, peerId = "u-2")
 
-        val контакт = контакты.list().first().single()
+        val contact = contacts.list().first().single()
 
-        assertEquals("u-2", контакт.userId)
-        assertNull(контакт.name)
+        assertEquals("u-2", contact.userId)
+        assertNull(contact.name)
     }
 
     @Test
     fun порядок_по_имени_а_безымянные_в_конце() = runTest {
         // Сортировать в SQL нечем: имя зашифровано, и ORDER BY по шифртексту дал бы
         // случайный порядок, меняющийся при каждой перезаписи.
-        книга.remember("c-1", ChatKind.Personal, title = "Яна", peerId = "u-9")
-        книга.remember("c-2", ChatKind.Personal, title = null, peerId = "u-0")
-        книга.remember("c-3", ChatKind.Personal, title = "Аня", peerId = "u-2")
+        book.remember("c-1", ChatKind.Personal, title = "Яна", peerId = "u-9")
+        book.remember("c-2", ChatKind.Personal, title = null, peerId = "u-0")
+        book.remember("c-3", ChatKind.Personal, title = "Аня", peerId = "u-2")
 
-        val имена = контакты.list().first().map { it.name }
+        val names = contacts.list().first().map { it.name }
 
-        assertEquals(listOf("Аня", "Яна", null), имена)
+        assertEquals(listOf("Аня", "Яна", null), names)
     }
 
     @Test
     fun пустая_база_даёт_пустой_список() = runTest {
-        assertTrue(контакты.list().first().isEmpty())
+        assertTrue(contacts.list().first().isEmpty())
     }
 }

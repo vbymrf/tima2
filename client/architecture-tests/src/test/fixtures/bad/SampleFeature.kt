@@ -6,9 +6,9 @@
 //
 // Лежит в src/test/fixtures/, вне наборов исходников: не компилируется и в общую
 // проверку не попадает.
-package плохой
+package bad
 
 import io.tima.core.network.GroupsOverHttp
 import io.tima.feature.chat.ChatStore
 
-class ОбразецFeature(val чужойЭкран: ChatStore, val транспорт: GroupsOverHttp)
+class SampleFeature(val foreignScreen: ChatStore, val transport: GroupsOverHttp)

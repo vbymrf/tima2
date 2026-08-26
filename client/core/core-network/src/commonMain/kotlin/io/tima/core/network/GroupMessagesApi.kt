@@ -43,7 +43,7 @@ class GroupMessagesApi(
         threadRoot: Long = 0,
         replyTo: Long = 0,
     ): SendGroupResult {
-        val тело = "{\"client_msg_id\":\"" + clientMsgId + "\"" +
+        val requestBody = "{\"client_msg_id\":\"" + clientMsgId + "\"" +
             ",\"kind\":" + kind +
             ",\"gk_version\":" + gkVersion +
             ",\"payload\":\"" + encodeBase64Url(payload) + "\"" +
@@ -56,7 +56,7 @@ class GroupMessagesApi(
             client.post(route.api("/api/v1/groups/$groupId/messages")) {
                 header("Authorization", "Bearer ${token()}")
                 contentType(ContentType.Application.Json)
-                setBody(тело)
+                setBody(requestBody)
             }
         } catch (e: Throwable) {
             return SendGroupResult.NoConnection(classifyFailure(e))

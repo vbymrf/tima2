@@ -28,7 +28,7 @@ class ChatsStore(
 
     init {
         observe.list(pageSize)
-            .onEach { список -> _state.value = ChatsState(chats = список, прочитано = true) }
+            .onEach { list -> _state.value = ChatsState(chats = list, read = true) }
             .launchIn(scope)
     }
 }
@@ -43,5 +43,5 @@ data class ChatsState(
      * `false` — окно только открылось и о переписках пока ничего не известно. Пустой
      * список в этом состоянии не означает «переписок нет».
      */
-    val прочитано: Boolean = false,
+    val read: Boolean = false,
 )

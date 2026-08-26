@@ -21,33 +21,33 @@ import androidx.compose.ui.unit.TextUnit
  * отдельным решением — у него лицензия и вес, и «пусть будет» здесь неуместно.
  */
 @Composable
-fun Подпись(
-    текст: String,
+fun Caption(
+    text: String,
     modifier: Modifier = Modifier,
-    кегль: TextUnit = TimaType.щ4,
-    вес: FontWeight = FontWeight.Normal,
-    цвет: Color = Тима.цвета.текст,
+    fontSize: TextUnit = TimaType.sz4,
+    weight: FontWeight = FontWeight.Normal,
+    color: Color = Tima.colors.text,
     /**
      * Обрезать одной строкой с многоточием.
      *
      * Это про списки: `.обрез` в макете. Имя и превью там не переносятся — иначе строка
      * списка растёт от чужого длинного имени, и список перестаёт быть списком.
      */
-    однойСтрокой: Boolean = false,
+    lineOne: Boolean = false,
 ) {
     BasicText(
-        text = текст,
+        text = text,
         modifier = modifier,
-        style = TextStyle(color = цвет, fontSize = кегль, fontWeight = вес),
-        maxLines = if (однойСтрокой) 1 else Int.MAX_VALUE,
-        overflow = if (однойСтрокой) TextOverflow.Ellipsis else TextOverflow.Clip,
+        style = TextStyle(color = color, fontSize = fontSize, fontWeight = weight),
+        maxLines = if (lineOne) 1 else Int.MAX_VALUE,
+        overflow = if (lineOne) TextOverflow.Ellipsis else TextOverflow.Clip,
     )
 }
 
 /** Имя в строке списка: `.имя`. */
 @Composable
-fun Имя(текст: String, modifier: Modifier = Modifier) =
-    Подпись(текст, modifier, TimaType.щ4, FontWeight.Bold, однойСтрокой = true)
+fun Name(text: String, modifier: Modifier = Modifier) =
+    Caption(text, modifier, TimaType.sz4, FontWeight.Bold, lineOne = true)
 
 /**
  * Второй уровень: пояснение под заголовком, превью сообщения. `.втор`.
@@ -64,10 +64,10 @@ fun Имя(текст: String, modifier: Modifier = Modifier) =
  * перенос не виден вовсе: текст выглядит законченным.
  */
 @Composable
-fun Второстепенное(текст: String, modifier: Modifier = Modifier, однойСтрокой: Boolean = false) =
-    Подпись(текст, modifier, TimaType.щ5, FontWeight.Normal, Тима.цвета.текст2, однойСтрокой)
+fun Secondary(text: String, modifier: Modifier = Modifier, lineOne: Boolean = false) =
+    Caption(text, modifier, TimaType.sz5, FontWeight.Normal, Tima.colors.text2, lineOne)
 
 /** Третий уровень: мелкая пометка, время. `.трет`. Про перенос — см. [Второстепенное]. */
 @Composable
-fun Третьестепенное(текст: String, modifier: Modifier = Modifier, однойСтрокой: Boolean = false) =
-    Подпись(текст, modifier, TimaType.щ6, FontWeight.SemiBold, Тима.цвета.текст3, однойСтрокой)
+fun Tertiary(text: String, modifier: Modifier = Modifier, lineOne: Boolean = false) =
+    Caption(text, modifier, TimaType.sz6, FontWeight.SemiBold, Tima.colors.text3, lineOne)

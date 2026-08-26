@@ -46,30 +46,30 @@ import androidx.compose.ui.unit.dp
  * шум, а кто говорит, и так понятно.
  */
 @Composable
-fun Пузырь(
+fun Bubble(
     /** `true` — моё сообщение: другой фон, ни полосы, ни аватара, ни имени. */
-    моё: Boolean,
+    my: Boolean,
     modifier: Modifier = Modifier,
     /** Имя автора. У своих не показывается; у продолжения серии — тоже. */
-    автор: String? = null,
+    author: String? = null,
     /** Буквы аватара автора. */
-    аватар: String? = null,
+    avatar: String? = null,
     /**
      * Продолжение серии: перед этим сообщением есть предыдущее от того же автора.
      * Тогда аватара и имени нет — вопроса «кто это» сообщение не задаёт.
      */
-    продолжение: Boolean = false,
+    continuation: Boolean = false,
     /** Цвет полосы автора. По умолчанию — салатовый. */
-    полоса: Color? = null,
+    strip: Color? = null,
     /** Нижняя строка: эмоции, время, галочки. Одним рядом справа. */
-    низ: (@Composable () -> Unit)? = null,
-    содержимое: @Composable () -> Unit,
+    bottom: (@Composable () -> Unit)? = null,
+    content: @Composable () -> Unit,
 ) {
-    val цвета = Тима.цвета
-    val показыватьАвтора = !моё && !продолжение
+    val colors = Tima.colors
+    val showAuthor = !my && !continuation
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = if (моё) Arrangement.End else Arrangement.Start,
+        horizontalArrangement = if (my) Arrangement.End else Arrangement.Start,
     ) {
         Box {
             Column(
@@ -78,39 +78,39 @@ fun Пузырь(
                     // должно остаться место кнопке.
                     .widthIn(max = ПРЕДЕЛ_ШИРИНЫ)
                     .background(
-                        color = if (моё) цвета.мои else цвета.автор,
-                        shape = RoundedCornerShape(TimaShapes.радиус),
+                        color = if (my) colors.my else colors.author,
+                        shape = RoundedCornerShape(TimaShapes.radius),
                     )
-                    .border(1.dp, цвета.рамка, RoundedCornerShape(TimaShapes.радиус))
+                    .border(1.dp, colors.border, RoundedCornerShape(TimaShapes.radius))
                     .then(
-                        if (!моё) {
+                        if (!my) {
                             // Полоса автора: левая граница самого пузыря.
-                            Modifier.полосаАвтора(полоса ?: цвета.навигация)
+                            Modifier.authorStrip(strip ?: colors.navigation)
                         } else {
                             Modifier
                         },
                     )
                     .padding(
-                        start = if (моё) 14.dp else 12.dp + ПОЛОСА,
+                        start = if (my) 14.dp else 12.dp + STRIP,
                         end = 14.dp,
                         top = 11.dp,
                         bottom = 11.dp,
                     ),
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                if (показыватьИмя(показыватьАвтора, автор)) {
-                    Подпись(
-                        текст = автор!!,
+                if (showName(showAuthor, author)) {
+                    Caption(
+                        text = author!!,
                         // Имя отходит на ширину аватара: обтекания нет, текст идёт во
                         // всю ширину пузыря.
                         modifier = Modifier.padding(start = ОТСТУП_ПОД_АВАТАР),
-                        кегль = TimaType.щ6,
-                        вес = FontWeight.ExtraBold,
-                        цвет = цвета.текст2,
+                        fontSize = TimaType.sz6,
+                        weight = FontWeight.ExtraBold,
+                        color = colors.text2,
                     )
                 }
-                содержимое()
-                низ?.let {
+                content()
+                bottom?.let {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
@@ -119,23 +119,23 @@ fun Пузырь(
                 }
             }
 
-            if (показыватьАвтора && аватар != null) {
+            if (showAuthor && avatar != null) {
                 // Выступает вверх, в зазор между репликами, и перекрывает полосу.
                 Box(
                     modifier = Modifier
                         .offset(x = (-1).dp, y = (-12).dp)
                         .background(
-                            color = if (моё) цвета.мои else цвета.автор,
-                            shape = RoundedCornerShape(TimaShapes.квадрат),
+                            color = if (my) colors.my else colors.author,
+                            shape = RoundedCornerShape(TimaShapes.square),
                         )
-                        .border(1.dp, цвета.рамка, RoundedCornerShape(TimaShapes.квадрат))
-                        .padding(АВАТАР_ПОЛЕ),
+                        .border(1.dp, colors.border, RoundedCornerShape(TimaShapes.square))
+                        .padding(FIELD_AVATAR),
                 ) {
-                    Подпись(
-                        текст = аватар,
-                        кегль = TimaType.щ6,
-                        вес = FontWeight.ExtraBold,
-                        цвет = цвета.текст,
+                    Caption(
+                        text = avatar,
+                        fontSize = TimaType.sz6,
+                        weight = FontWeight.ExtraBold,
+                        color = colors.text,
                     )
                 }
             }
@@ -143,8 +143,8 @@ fun Пузырь(
     }
 }
 
-private fun показыватьИмя(показывать: Boolean, автор: String?): Boolean =
-    показывать && !автор.isNullOrBlank()
+private fun showName(show: Boolean, author: String?): Boolean =
+    show && !author.isNullOrBlank()
 
 /**
  * Полоса автора — **левая граница пузыря**, а не подложка под ним.
@@ -153,31 +153,31 @@ private fun показыватьИмя(показывать: Boolean, автор
  * второго прямоугольника не требуется. Подложка под пузырём давала бы на скруглениях
  * зазор, который читается как брак.
  */
-private fun Modifier.полосаАвтора(цвет: Color): Modifier = drawBehind {
-    val радиус = TimaShapes.радиус.toPx()
-    val форма = Path().apply {
+private fun Modifier.authorStrip(color: Color): Modifier = drawBehind {
+    val radius = TimaShapes.radius.toPx()
+    val shape = Path().apply {
         addRoundRect(
             RoundRect(
                 left = 0f,
                 top = 0f,
                 right = size.width,
                 bottom = size.height,
-                cornerRadius = CornerRadius(радиус, радиус),
+                cornerRadius = CornerRadius(radius, radius),
             ),
         )
     }
-    clipPath(форма) {
-        drawRect(color = цвет, size = Size(ПОЛОСА.toPx(), size.height))
+    clipPath(shape) {
+        drawRect(color = color, size = Size(STRIP.toPx(), size.height))
     }
 }
 /** Ширина полосы автора: `border-left: 4px`. */
-private val ПОЛОСА = 4.dp
+private val STRIP = 4.dp
 
 /** Насколько имя отходит вправо, освобождая место аватару: `padding-left: 33px`. */
 private val ОТСТУП_ПОД_АВАТАР = 33.dp
 
 /** Поле внутри аватара пузыря: он 40×40 при кегле 10. */
-private val АВАТАР_ПОЛЕ = 13.dp
+private val FIELD_AVATAR = 13.dp
 
 /** `max-width: 290px` из макета. */
 private val ПРЕДЕЛ_ШИРИНЫ = 290.dp

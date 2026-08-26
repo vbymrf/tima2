@@ -17,17 +17,17 @@ import kotlin.test.assertTrue
  */
 class VaultSecretStoreTest {
 
-    private class ХранилищеВПамяти : SecretVault {
-        val значения = mutableMapOf<String, ByteArray>()
-        override fun put(alias: SecretAlias, secret: ByteArray) { значения[alias.value] = secret }
-        override fun get(alias: SecretAlias): ByteArray? = значения[alias.value]
-        override fun remove(alias: SecretAlias): Boolean = значения.remove(alias.value) != null
+    private class StoreInMemory : SecretVault {
+        val values = mutableMapOf<String, ByteArray>()
+        override fun put(alias: SecretAlias, secret: ByteArray) { values[alias.value] = secret }
+        override fun get(alias: SecretAlias): ByteArray? = values[alias.value]
+        override fun remove(alias: SecretAlias): Boolean = values.remove(alias.value) != null
     }
 
-    private val vault = ХранилищеВПамяти()
+    private val vault = StoreInMemory()
     private val store = VaultSecretStore(vault)
-    private val секрет = ByteArray(32) { it.toByte() }
-    private val сессия = Session(
+    private val secret = ByteArray(32) { it.toByte() }
+    private val session = Session(
         userId = "0f8fad5b-d9cb-469f-a165-70867728950e",
         deviceId = "7c9e6679-7425-40de-944b-e07fc1f90ae7",
         accessToken = "eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJ1LTEifQ.cGjK-подпись_дальше",
@@ -35,11 +35,11 @@ class VaultSecretStoreTest {
 
     @Test
     fun сессия_и_секрет_кладутся_и_читаются() {
-        store.saveDeviceSecret(секрет)
-        store.saveSession(сессия)
+        store.saveDeviceSecret(secret)
+        store.saveSession(session)
 
-        assertEquals(сессия, store.session())
-        assertContentEquals(секрет, store.deviceSecret())
+        assertEquals(session, store.session())
+        assertContentEquals(secret, store.deviceSecret())
         assertTrue(store.hasDevice())
     }
 
@@ -55,7 +55,7 @@ class VaultSecretStoreTest {
         // Порядок записи в RegisterDevice именно такой: секрет раньше вызова, сессия
         // после успеха. Значит «есть секрет, нет сессии» — это прерванная регистрация, и
         // устройством она не считается.
-        store.saveDeviceSecret(секрет)
+        store.saveDeviceSecret(secret)
         assertFalse(store.hasDevice(), "секрет без сессии — прерванная регистрация")
     }
 
@@ -63,10 +63,10 @@ class VaultSecretStoreTest {
     fun испорченная_запись_сессии_это_беда_а_не_чистый_лист() {
         // Молча начать с нуля значило бы завести второе устройство при живом первом, а
         // первое осталось бы на сервере без ключа.
-        vault.значения["session.v1"] = "только-одно-поле".encodeToByteArray()
+        vault.values["session.v1"] = "только-одно-поле".encodeToByteArray()
         assertFailsWith<SecretVaultFailure> { store.session() }
 
-        vault.значения["session.v1"] = "u\n\nтокен".encodeToByteArray()
+        vault.values["session.v1"] = "u\n\nтокен".encodeToByteArray()
         assertFailsWith<SecretVaultFailure> { store.session() }
     }
 
@@ -81,19 +81,19 @@ class VaultSecretStoreTest {
         // Разбор держится на том, что перевода строки в значениях не бывает: UUID и
         // base64url его содержать не могут. Проверка на записи, а не надежда.
         assertFailsWith<IllegalArgumentException> {
-            store.saveSession(сессия.copy(accessToken = "часть\nвторая"))
+            store.saveSession(session.copy(accessToken = "часть\nвторая"))
         }
     }
 
     @Test
     fun выход_из_аккаунта_убирает_и_сессию_и_секрет() {
-        store.saveDeviceSecret(секрет)
-        store.saveSession(сессия)
+        store.saveDeviceSecret(secret)
+        store.saveSession(session)
 
         store.clear()
 
         assertNull(store.session())
         assertNull(store.deviceSecret())
-        assertTrue(vault.значения.isEmpty(), "в хранилище не должно остаться ничего нашего")
+        assertTrue(vault.values.isEmpty(), "в хранилище не должно остаться ничего нашего")
     }
 }

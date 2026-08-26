@@ -42,13 +42,13 @@ class GroupFrame(
 
     companion object {
         /** Признак группового кадра. В protobuf невозможен: поля с номером ноль нет. */
-        const val МЕТКА: Byte = 0
+        const val LABEL: Byte = 0
 
         /** Кадр как он хранится: метка и исходный JSON сервера. */
-        fun toStored(frameJson: String): ByteArray = byteArrayOf(МЕТКА) + frameJson.encodeToByteArray()
+        fun toStored(frameJson: String): ByteArray = byteArrayOf(LABEL) + frameJson.encodeToByteArray()
 
         /** Групповой ли это кадр. Дешёвая проверка перед разбором. */
-        fun isGroupFrame(stored: ByteArray): Boolean = stored.isNotEmpty() && stored[0] == МЕТКА
+        fun isGroupFrame(stored: ByteArray): Boolean = stored.isNotEmpty() && stored[0] == LABEL
 
         /**
          * Разбирает сохранённый кадр.

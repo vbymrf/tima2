@@ -68,7 +68,7 @@ class EndpointStrategy(
         require(failuresBeforeRotation >= 1) { "отказов до смены адреса не может быть меньше одного" }
     }
 
-    private var index: Int = запомненный()
+    private var index: Int = remembered()
     private var consecutiveFailures: Int = 0
 
     /** Текущий кандидат. Меняется только по правилам выше. */
@@ -124,7 +124,7 @@ class EndpointStrategy(
     /** Сколько временных отказов подряд у текущего адреса — для диагностики. */
     fun failures(): Int = consecutiveFailures
 
-    private fun запомненный(): Int {
+    private fun remembered(): Int {
         val key = memory.lastGood() ?: return 0
         val found = candidates.indexOfFirst { keyOf(it) == key }
         if (found >= 0) return found

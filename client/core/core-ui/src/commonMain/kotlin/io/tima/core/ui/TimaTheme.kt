@@ -23,8 +23,8 @@ fun TimaTheme(
     dark: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val цвета = if (dark) TimaColors.тёмная else TimaColors.светлая
-    CompositionLocalProvider(LocalTimaColors provides цвета, content = content)
+    val colors = if (dark) TimaColors.dark else TimaColors.light
+    CompositionLocalProvider(LocalTimaColors provides colors, content = content)
 }
 
 /**
@@ -37,11 +37,11 @@ val LocalTimaColors = staticCompositionLocalOf {
     // Светлая по умолчанию — но не «на всякий случай»: без темы компонент рисоваться
     // не должен, и падение здесь было бы честнее. Ошибка вида «забыл обернуть в тему»
     // ловится скриншот-тестом (У.3), а не исключением в проде у человека.
-    TimaColors.светлая
+    TimaColors.light
 }
 
 /** Короткий доступ: `Тима.цвета.навигация`. */
-object Тима {
-    val цвета: TimaColors
+object Tima {
+    val colors: TimaColors
         @Composable @ReadOnlyComposable get() = LocalTimaColors.current
 }

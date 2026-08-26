@@ -26,48 +26,48 @@ import androidx.compose.ui.unit.dp
  */
 
 /** Толщина обводки у «контурных» кнопок: `.кн.контур` — 2 px. */
-private val ОБВОДКА = 2.dp
+private val OUTLINE = 2.dp
 
 /**
  * Кнопка. Салатовая заливка — **навигация и действие**: «отправить», «написать»,
  * «назад», «подписаться».
  */
 @Composable
-fun Кнопка(
-    надпись: String,
+fun Button(
+    label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    вид: ВидКнопки = ВидКнопки.Действие,
+    kind: ButtonKind = ButtonKind.Action,
 ) {
-    val цвета = Тима.цвета
-    val фон = when (вид) {
-        ВидКнопки.Действие -> цвета.навигация
-        ВидКнопки.Тихая -> цвета.акцентМягкий
+    val colors = Tima.colors
+    val background = when (kind) {
+        ButtonKind.Action -> colors.navigation
+        ButtonKind.Quiet -> colors.softAccent
         // Опасное — БЕЗ ЦВЕТА: красного в палитре нет вовсе. Остаются слово,
         // незаполненная кнопка и последнее место в списке.
-        ВидКнопки.Опасная -> Color.Transparent
+        ButtonKind.Dangerous -> Color.Transparent
     }
-    val надписьЦвет = when (вид) {
-        ВидКнопки.Действие -> цвета.наАкценте
-        else -> цвета.текст
+    val colorLabel = when (kind) {
+        ButtonKind.Action -> colors.onAccent
+        else -> colors.text
     }
 
     Box(
         modifier = modifier
             .defaultMinSize(minHeight = 42.dp)
-            .background(фон, CircleShape)
+            .background(background, CircleShape)
             .then(
-                if (вид == ВидКнопки.Опасная) {
-                    Modifier.border(ОБВОДКА, цвета.текст, CircleShape)
+                if (kind == ButtonKind.Dangerous) {
+                    Modifier.border(OUTLINE, colors.text, CircleShape)
                 } else {
                     Modifier
                 },
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = TimaSpacing.о2),
+            .padding(horizontal = 20.dp, vertical = TimaSpacing.about2),
         contentAlignment = Alignment.Center,
     ) {
-        Подпись(надпись, кегль = TimaType.щ5, вес = FontWeight.Bold, цвет = надписьЦвет)
+        Caption(label, fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colorLabel)
     }
 }
 
@@ -77,7 +77,7 @@ fun Кнопка(
  * Опасного действия **красным цветом не бывает**: красного в палитре нет. Отличается
  * оно словом, незаполненной кнопкой и местом — последним в списке.
  */
-enum class ВидКнопки { Действие, Тихая, Опасная }
+enum class ButtonKind { Action, Quiet, Dangerous }
 
 /**
  * Кнопка-иконка: круг 36 px. `.икона`.
@@ -87,27 +87,27 @@ enum class ВидКнопки { Действие, Тихая, Опасная }
  *   [ШапкаОкна], а не здесь.
  */
 @Composable
-fun КнопкаИконка(
-    знак: String,
+fun IconButton(
+    glyph: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    живая: Boolean = false,
-    фон: Color? = null,
-    знакЦвет: Color? = null,
+    live: Boolean = false,
+    background: Color? = null,
+    colorGlyph: Color? = null,
 ) {
-    val цвета = Тима.цвета
+    val colors = Tima.colors
     Box(
         modifier = modifier
             .size(36.dp)
-            .background(фон ?: if (живая) цвета.навигация else цвета.акцентМягкий, CircleShape)
+            .background(background ?: if (live) colors.navigation else colors.softAccent, CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Подпись(
-            текст = знак,
-            кегль = TimaType.щ4,
-            вес = FontWeight.Bold,
-            цвет = знакЦвет ?: if (живая) цвета.наАкценте else цвета.текст,
+        Caption(
+            text = glyph,
+            fontSize = TimaType.sz4,
+            weight = FontWeight.Bold,
+            color = colorGlyph ?: if (live) colors.onAccent else colors.text,
         )
     }
 }
@@ -120,21 +120,21 @@ fun КнопкаИконка(
  * строку.
  */
 @Composable
-fun КругКнопка(
+fun ButtonCircle(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    живая: Boolean = false,
-    фон: Color? = null,
-    рисунок: @Composable () -> Unit,
+    live: Boolean = false,
+    background: Color? = null,
+    drawing: @Composable () -> Unit,
 ) {
-    val цвета = Тима.цвета
+    val colors = Tima.colors
     Box(
         modifier = modifier
             .size(36.dp)
-            .background(фон ?: if (живая) цвета.навигация else цвета.акцентМягкий, CircleShape)
+            .background(background ?: if (live) colors.navigation else colors.softAccent, CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { рисунок() }
+    ) { drawing() }
 }
 
 /**
@@ -144,35 +144,35 @@ fun КругКнопка(
  * (E2E), тихая — обычная пометка.
  */
 @Composable
-fun Чип(
-    надпись: String,
+fun Chip(
+    label: String,
     modifier: Modifier = Modifier,
-    вид: ВидЧипа = ВидЧипа.Тихий,
+    kind: ChipKind = ChipKind.Quiet,
     onClick: (() -> Unit)? = null,
 ) {
-    val цвета = Тима.цвета
-    val фон = when (вид) {
-        ВидЧипа.Тихий -> цвета.акцентМягкий
-        ВидЧипа.Выбран -> цвета.навигация
-        ВидЧипа.Подтверждено -> цвета.подтверждено
+    val colors = Tima.colors
+    val background = when (kind) {
+        ChipKind.Quiet -> colors.softAccent
+        ChipKind.Selected -> colors.navigation
+        ChipKind.Confirmed -> colors.confirmed
     }
-    val цветНадписи = when (вид) {
-        ВидЧипа.Тихий -> цвета.текст2
-        else -> цвета.наАкценте
+    val labelColor = when (kind) {
+        ChipKind.Quiet -> colors.text2
+        else -> colors.onAccent
     }
 
     Box(
         modifier = modifier
-            .background(фон, CircleShape)
+            .background(background, CircleShape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 10.dp, vertical = 3.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Подпись(надпись, кегль = TimaType.щ6, вес = FontWeight.Bold, цвет = цветНадписи)
+        Caption(label, fontSize = TimaType.sz6, weight = FontWeight.Bold, color = labelColor)
     }
 }
 
-enum class ВидЧипа { Тихий, Выбран, Подтверждено }
+enum class ChipKind { Quiet, Selected, Confirmed }
 
 /**
  * Счётчик непрочитанного — **янтарь**. `.счёт`.
@@ -182,35 +182,35 @@ enum class ВидЧипа { Тихий, Выбран, Подтверждено }
  * зелёный, и правило про текст на заливке к нему не относится.
  */
 @Composable
-fun Счётчик(сколько: Int, modifier: Modifier = Modifier) {
-    if (сколько <= 0) return
-    val цвета = Тима.цвета
+fun Counter(howMany: Int, modifier: Modifier = Modifier) {
+    if (howMany <= 0) return
+    val colors = Tima.colors
     Box(
         modifier = modifier
             .defaultMinSize(minWidth = 22.dp, minHeight = 22.dp)
-            .background(цвета.активность, CircleShape)
+            .background(colors.activity, CircleShape)
             .padding(horizontal = 7.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Подпись(
+        Caption(
             // Больше 99 показывать незачем: точное число не меняет решения человека,
             // а ширину пилюли меняет.
-            текст = if (сколько > 99) "99+" else сколько.toString(),
-            кегль = TimaType.щ6,
-            вес = FontWeight.ExtraBold,
-            цвет = цвета.наЯнтаре,
+            text = if (howMany > 99) "99+" else howMany.toString(),
+            fontSize = TimaType.sz6,
+            weight = FontWeight.ExtraBold,
+            color = colors.onAmber,
         )
     }
 }
 
 /** Ряд управляющих элементов с одинаковым зазором: чипы, кнопки шапки. */
 @Composable
-fun РядУправления(
+fun ControlRow(
     modifier: Modifier = Modifier,
-    зазор: androidx.compose.ui.unit.Dp = TimaSpacing.о2,
+    gap: androidx.compose.ui.unit.Dp = TimaSpacing.about2,
     content: @Composable () -> Unit,
 ) = Row(
     modifier = modifier,
-    horizontalArrangement = Arrangement.spacedBy(зазор),
+    horizontalArrangement = Arrangement.spacedBy(gap),
     verticalAlignment = Alignment.CenterVertically,
 ) { content() }

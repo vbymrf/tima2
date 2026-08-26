@@ -14,9 +14,9 @@ import kotlin.test.assertTrue
  */
 class LinkStateTest {
 
-    private class Ошибка(override val message: String?) : Throwable(message)
+    private class Error(override val message: String?) : Throwable(message)
 
-    private fun поводы(): List<Pair<String, LinkState>> = listOf(
+    private fun occasions(): List<Pair<String, LinkState>> = listOf(
         // Имя не разбирается — сети нет вовсе
         "UnknownHostException: api.example.org" to LinkState.NO_NETWORK,
         "Unable to resolve host \"api\"" to LinkState.NO_NETWORK,
@@ -39,11 +39,11 @@ class LinkStateTest {
 
     @Test
     fun каждый_признак_из_журналов_опознаётся() {
-        for ((текст, ожидалось) in поводы()) {
+        for ((text, expected) in occasions()) {
             assertEquals(
-                ожидалось,
-                classifyFailure(Ошибка(текст)),
-                "признак «$текст» опознан неверно",
+                expected,
+                classifyFailure(Error(text)),
+                "признак «$text» опознан неверно",
             )
         }
     }
@@ -51,8 +51,8 @@ class LinkStateTest {
     @Test
     fun признак_ищется_и_в_причине_а_не_только_в_верхнем_исключении() {
         // Ktor и OkHttp оборачивают исходную ошибку, поэтому важен весь путь причин.
-        val обёрнуто = Throwable("не удалось выполнить запрос", Ошибка("Read timed out"))
-        assertEquals(LinkState.BLOCKED, classifyFailure(обёрнуто))
+        val wrapped = Throwable("не удалось выполнить запрос", Error("Read timed out"))
+        assertEquals(LinkState.BLOCKED, classifyFailure(wrapped))
     }
 
     @Test
@@ -60,7 +60,7 @@ class LinkStateTest {
         // Осторожность в правильную сторону: незнакомое — это «нет сети» с быстрым
         // повтором, а не «стена» с паузой на две минуты. Ошибиться в сторону
         // двухминутного молчания дороже.
-        assertEquals(LinkState.NO_NETWORK, classifyFailure(Ошибка("что-то новое")))
+        assertEquals(LinkState.NO_NETWORK, classifyFailure(Error("что-то новое")))
         assertEquals(LinkState.NO_NETWORK, classifyFailure(null))
     }
 

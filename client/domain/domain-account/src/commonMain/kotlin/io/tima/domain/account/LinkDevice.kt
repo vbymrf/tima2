@@ -40,17 +40,17 @@ class LinkNewDevice(
     suspend fun begin(deviceName: String): LinkBeginStep {
         if (secrets.hasDevice()) return LinkBeginStep.AlreadyRegistered
 
-        val материал = keys.newDeviceKeys()
-        secrets.saveDeviceSecret(материал.secret)
+        val material = keys.newDeviceKeys()
+        secrets.saveDeviceSecret(material.secret)
 
-        return when (val ответ = api.start(материал.encryptionPub, материал.signingPub, deviceName)) {
+        return when (val answer = api.start(material.encryptionPub, material.signingPub, deviceName)) {
             is LinkStartStep.Started -> LinkBeginStep.ShowCode(
-                sessionId = ответ.sessionId,
-                code = ответ.qrPayload,
-                claimToken = ответ.claimToken,
+                sessionId = answer.sessionId,
+                code = answer.qrPayload,
+                claimToken = answer.claimToken,
             )
-            is LinkStartStep.Offline -> LinkBeginStep.Offline(ответ.retryAfterMs)
-            is LinkStartStep.Refused -> LinkBeginStep.Refused(ответ.reason)
+            is LinkStartStep.Offline -> LinkBeginStep.Offline(answer.retryAfterMs)
+            is LinkStartStep.Refused -> LinkBeginStep.Refused(answer.reason)
         }
     }
 
@@ -66,23 +66,23 @@ class LinkNewDevice(
      * упавшая на секунду сеть — не причина заставлять его начинать заново.
      */
     suspend fun await(sessionId: String, claimToken: String): LinkAwaitStep {
-        var прошло = 0L
-        while (прошло < СРОК_СЕССИИ_МС) {
-            when (val ответ = api.claim(sessionId, claimToken)) {
+        var elapsed = 0L
+        while (elapsed < СРОК_СЕССИИ_МС) {
+            when (val answer = api.claim(sessionId, claimToken)) {
                 is LinkClaimStep.Claimed -> {
                     // Токен — после успеха, как при регистрации: его наличие и есть
                     // признак «устройство заведено».
                     secrets.saveSession(
-                        Session(userId = ответ.userId, deviceId = ответ.deviceId, accessToken = ответ.accessToken),
+                        Session(userId = answer.userId, deviceId = answer.deviceId, accessToken = answer.accessToken),
                     )
-                    return LinkAwaitStep.Linked(ответ.userId, ответ.deviceId)
+                    return LinkAwaitStep.Linked(answer.userId, answer.deviceId)
                 }
                 LinkClaimStep.NotReady -> Unit
                 is LinkClaimStep.Offline -> Unit
-                is LinkClaimStep.Refused -> return LinkAwaitStep.Refused(ответ.reason)
+                is LinkClaimStep.Refused -> return LinkAwaitStep.Refused(answer.reason)
             }
             delay(МЕЖДУ_ОПРОСАМИ_МС)
-            прошло += МЕЖДУ_ОПРОСАМИ_МС
+            elapsed += МЕЖДУ_ОПРОСАМИ_МС
         }
         return LinkAwaitStep.Expired
     }
@@ -113,22 +113,22 @@ class ConfirmDeviceLink(
      * человеку показывают, какое устройство он подключает. Скан сам по себе не решение —
      * код можно прислать в переписке или наклеить на стену.
      */
-    fun прочитать(code: String): LinkCode? = api.parse(code)
+    fun read(code: String): LinkCode? = api.parse(code)
 
     /**
      * @param code строка из QR. Разбирать её умеет [DeviceLinkConfirm.parse] — реализация
      *   знает формат, потому что формат сетевой.
      */
     suspend fun confirm(code: String): LinkConfirmStep {
-        val данные = api.parse(code) ?: return LinkConfirmStep.NotOurCode
-        val подпись = signer.sign(
-            sessionId = данные.sessionId,
-            secret = данные.secret,
-            encryptionPub = данные.encryptionPub,
-            signingPub = данные.signingPub,
+        val data = api.parse(code) ?: return LinkConfirmStep.NotOurCode
+        val caption = signer.sign(
+            sessionId = data.sessionId,
+            secret = data.secret,
+            encryptionPub = data.encryptionPub,
+            signingPub = data.signingPub,
         ) ?: return LinkConfirmStep.CannotSign
 
-        return api.confirm(данные.sessionId, данные.secret, подпись)
+        return api.confirm(data.sessionId, data.secret, caption)
     }
 }
 

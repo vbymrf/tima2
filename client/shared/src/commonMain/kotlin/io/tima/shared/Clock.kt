@@ -9,4 +9,4 @@ import kotlinx.datetime.Clock
  * общем коде вообще. Именно такие вызовы и держали сборку приложения платформенной — по
  * одному на каждую очередь и каждый повтор.
  */
-internal fun сейчасМс(): Long = Clock.System.now().toEpochMilliseconds()
+internal fun msNow(): Long = Clock.System.now().toEpochMilliseconds()

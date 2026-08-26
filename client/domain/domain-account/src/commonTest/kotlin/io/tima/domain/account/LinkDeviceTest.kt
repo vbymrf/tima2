@@ -17,10 +17,10 @@ import kotlin.test.assertTrue
  */
 class LinkDeviceTest {
 
-    private val сеть = ПоддельнаяПривязка()
-    private val секреты = ПамятныеСекреты()
+    private val network = FakeLink()
+    private val secrets = SecretMemorable()
 
-    private fun новое() = LinkNewDevice(сеть, ключи, секреты)
+    private fun new() = LinkNewDevice(network, keys, secrets)
 
     // ── новое устройство ────────────────────────────────────────────────────
 
@@ -34,25 +34,25 @@ class LinkDeviceTest {
      */
     @Test
     fun секрет_пишется_до_вызова_сервера() = runTest {
-        сеть.наСтарт = {
-            assertNotNull(секреты.секрет, "секрет обязан быть записан ДО вызова сервера")
+        network.onStart = {
+            assertNotNull(secrets.savedSecret, "секрет обязан быть записан ДО вызова сервера")
             LinkStartStep.Started("s-1", "tima://link/v1?…", "c-1")
         }
 
-        val шаг = новое().begin("Компьютер")
+        val step = new().begin("Компьютер")
 
-        assertIs<LinkBeginStep.ShowCode>(шаг)
-        assertEquals("s-1", шаг.sessionId)
-        assertContentEquals(МАТЕРИАЛ.secret, секреты.секрет)
+        assertIs<LinkBeginStep.ShowCode>(step)
+        assertEquals("s-1", step.sessionId)
+        assertContentEquals(MATERIAL.secret, secrets.savedSecret)
     }
 
     @Test
     fun имя_устройства_уходит_серверу() = runTest {
-        новое().begin("Компьютер Евгения")
+        new().begin("Компьютер Евгения")
 
         assertEquals(
             "Компьютер Евгения",
-            сеть.посланноеИмя,
+            network.sentName,
             "человек на том конце увидит это имя и по нему решит, подтверждать ли",
         )
     }
@@ -60,10 +60,10 @@ class LinkDeviceTest {
     /** Уже заведённое устройство привязывать нечего: у него есть свой аккаунт. */
     @Test
     fun заведённое_устройство_не_привязывается() = runTest {
-        секреты.сессия = Session("u-1", "d-1", "a-1")
+        secrets.savedSession = Session("u-1", "d-1", "a-1")
 
-        assertEquals(LinkBeginStep.AlreadyRegistered, новое().begin("Компьютер"))
-        assertEquals(0, сеть.стартов, "сеть не тревожим: ответ известен на месте")
+        assertEquals(LinkBeginStep.AlreadyRegistered, new().begin("Компьютер"))
+        assertEquals(0, network.starts, "сеть не тревожим: ответ известен на месте")
     }
 
     /**
@@ -75,30 +75,30 @@ class LinkDeviceTest {
      */
     @Test
     fun ожидание_переживает_и_ожидание_и_отказ_связи() = runTest {
-        val ответы = mutableListOf(
+        val answers = mutableListOf(
             LinkClaimStep.NotReady,
             LinkClaimStep.Offline(retryAfterMs = 5_000),
             LinkClaimStep.NotReady,
             LinkClaimStep.Claimed("u-1", "d-2", "a-2"),
         )
-        сеть.наОпрос = { ответы.removeFirst() }
+        network.onPoll = { answers.removeFirst() }
 
-        val шаг = новое().await("s-1", "c-1")
+        val step = new().await("s-1", "c-1")
 
-        assertIs<LinkAwaitStep.Linked>(шаг)
-        assertEquals("d-2", шаг.deviceId)
-        assertTrue(ответы.isEmpty(), "опрос обязан дойти до подтверждения")
+        assertIs<LinkAwaitStep.Linked>(step)
+        assertEquals("d-2", step.deviceId)
+        assertTrue(answers.isEmpty(), "опрос обязан дойти до подтверждения")
     }
 
     /** Сессия записывается только после успеха: её наличие и есть «устройство заведено». */
     @Test
     fun сессия_пишется_только_после_подтверждения() = runTest {
-        сеть.наОпрос = { LinkClaimStep.Claimed("u-1", "d-2", "a-2") }
+        network.onPoll = { LinkClaimStep.Claimed("u-1", "d-2", "a-2") }
 
-        новое().await("s-1", "c-1")
+        new().await("s-1", "c-1")
 
-        assertEquals("d-2", секреты.сессия?.deviceId)
-        assertEquals("a-2", секреты.сессия?.accessToken)
+        assertEquals("d-2", secrets.savedSession?.deviceId)
+        assertEquals("a-2", secrets.savedSession?.accessToken)
     }
 
     /**
@@ -109,10 +109,10 @@ class LinkDeviceTest {
      */
     @Test
     fun вышедший_срок_называется_сроком() = runTest {
-        сеть.наОпрос = { LinkClaimStep.NotReady }
+        network.onPoll = { LinkClaimStep.NotReady }
 
-        assertEquals(LinkAwaitStep.Expired, новое().await("s-1", "c-1"))
-        assertNull(секреты.сессия, "без подтверждения сессии нет")
+        assertEquals(LinkAwaitStep.Expired, new().await("s-1", "c-1"))
+        assertNull(secrets.savedSession, "без подтверждения сессии нет")
     }
 
     // ── доверенное устройство ───────────────────────────────────────────────
@@ -120,110 +120,111 @@ class LinkDeviceTest {
     /** Подписывается то, что прочитано из кода, а не то, что мы думаем о сессии. */
     @Test
     fun подписывается_прочитанное_из_кода() = runTest {
-        val подписант = ПоддельныйПодписант()
-        сеть.наРазбор = { LinkCode("s-9", "секрет-из-кода", ByteArray(32) { 1 }, ByteArray(32) { 2 }, "Телефон") }
+        val signer = FakeSigner()
+        network.onParsing = { LinkCode("s-9", "секрет-из-кода", ByteArray(32) { 1 }, ByteArray(32) { 2 }, "Телефон") }
 
-        val шаг = ConfirmDeviceLink(сеть, подписант).confirm("tima://link/v1?…")
+        val step = ConfirmDeviceLink(network, signer).confirm("tima://link/v1?…")
 
-        assertIs<LinkConfirmStep.Confirmed>(шаг)
-        assertEquals("s-9", подписант.последний?.first)
-        assertEquals("секрет-из-кода", подписант.последний?.second)
-        assertEquals("s-9", сеть.подтверждённая)
+        assertIs<LinkConfirmStep.Confirmed>(step)
+        assertEquals("s-9", signer.last?.first)
+        assertEquals("секрет-из-кода", signer.last?.second)
+        assertEquals("s-9", network.confirmed)
     }
 
     /** Не наш код — до сети не доходит: разобрать его можно на месте. */
     @Test
     fun чужой_код_до_сети_не_доходит() = runTest {
-        сеть.наРазбор = { null }
+        network.onParsing = { null }
 
         assertEquals(
             LinkConfirmStep.NotOurCode,
-            ConfirmDeviceLink(сеть, ПоддельныйПодписант()).confirm("что-то не то"),
+            ConfirmDeviceLink(network, FakeSigner()).confirm("что-то не то"),
         )
-        assertEquals(0, сеть.подтверждений)
+        assertEquals(0, network.confirmations)
     }
 
     /** Подписать нечем — тоже до сети: без ключа устройства подтверждать нельзя. */
     @Test
     fun без_ключа_устройства_подтверждать_нечем() = runTest {
-        сеть.наРазбор = { LinkCode("s-9", "s", ByteArray(32), ByteArray(32), null) }
+        network.onParsing = { LinkCode("s-9", "s", ByteArray(32), ByteArray(32), null) }
 
         assertEquals(
             LinkConfirmStep.CannotSign,
-            ConfirmDeviceLink(сеть, ПоддельныйПодписант(умеет = false)).confirm("tima://link/v1?…"),
+            ConfirmDeviceLink(network, FakeSigner(can = false)).confirm("tima://link/v1?…"),
         )
-        assertEquals(0, сеть.подтверждений)
+        assertEquals(0, network.confirmations)
     }
 
     // ── подделки ────────────────────────────────────────────────────────────
 
-    private class ПоддельнаяПривязка : DeviceLinkStart, DeviceLinkConfirm {
-        var стартов = 0
-        var подтверждений = 0
-        var посланноеИмя: String? = null
-        var подтверждённая: String? = null
+    private class FakeLink : DeviceLinkStart, DeviceLinkConfirm {
+        var starts = 0
+        var confirmations = 0
+        var sentName: String? = null
+        var confirmed: String? = null
 
-        var наСтарт: suspend () -> LinkStartStep = { LinkStartStep.Started("s-1", "код", "c-1") }
-        var наОпрос: suspend () -> LinkClaimStep = { LinkClaimStep.NotReady }
-        var наРазбор: (String) -> LinkCode? = { null }
-        var наПодтверждение: suspend () -> LinkConfirmStep = { LinkConfirmStep.Confirmed("d-2") }
+        var onStart: suspend () -> LinkStartStep = { LinkStartStep.Started("s-1", "код", "c-1") }
+        var onPoll: suspend () -> LinkClaimStep = { LinkClaimStep.NotReady }
+        var onParsing: (String) -> LinkCode? = { null }
+        var onConfirmation: suspend () -> LinkConfirmStep = { LinkConfirmStep.Confirmed("d-2") }
 
         override suspend fun start(
             encryptionPub: ByteArray,
             signingPub: ByteArray,
             deviceName: String,
         ): LinkStartStep {
-            стартов++
-            посланноеИмя = deviceName
-            return наСтарт()
+            starts++
+            sentName = deviceName
+            return onStart()
         }
 
-        override suspend fun claim(sessionId: String, claimToken: String): LinkClaimStep = наОпрос()
+        override suspend fun claim(sessionId: String, claimToken: String): LinkClaimStep = onPoll()
 
-        override fun parse(code: String): LinkCode? = наРазбор(code)
+        override fun parse(code: String): LinkCode? = onParsing(code)
 
         override suspend fun confirm(
             sessionId: String,
             secret: String,
             signature: ByteArray,
         ): LinkConfirmStep {
-            подтверждений++
-            подтверждённая = sessionId
-            return наПодтверждение()
+            confirmations++
+            confirmed = sessionId
+            return onConfirmation()
         }
     }
 
-    private class ПоддельныйПодписант(private val умеет: Boolean = true) : LinkSigner {
-        var последний: Pair<String, String>? = null
+    private class FakeSigner(private val can: Boolean = true) : LinkSigner {
+        var last: Pair<String, String>? = null
         override fun sign(
             sessionId: String,
             secret: String,
             encryptionPub: ByteArray,
             signingPub: ByteArray,
         ): ByteArray? {
-            последний = sessionId to secret
-            return if (умеет) ByteArray(64) { 9 } else null
+            last = sessionId to secret
+            return if (can) ByteArray(64) { 9 } else null
         }
     }
 
-    private class ПамятныеСекреты : DeviceSecretStore {
-        var секрет: ByteArray? = null
-        var сессия: Session? = null
+    private class SecretMemorable : DeviceSecretStore {
+        // savedX: имена параметров ниже уже занимают secret и session.
+        var savedSecret: ByteArray? = null
+        var savedSession: Session? = null
 
         // Как в настоящем хранилище: заведено — значит есть сессия. Секрет без сессии это
         // прерванная попытка, которую следующая перезапишет.
-        override fun hasDevice(): Boolean = сессия != null
-        override fun saveDeviceSecret(secret: ByteArray) { секрет = secret }
-        override fun saveSession(session: Session) { сессия = session }
-        override fun session(): Session? = сессия
+        override fun hasDevice(): Boolean = savedSession != null
+        override fun saveDeviceSecret(secret: ByteArray) { savedSecret = secret }
+        override fun saveSession(session: Session) { savedSession = session }
+        override fun session(): Session? = savedSession
     }
 
     private companion object {
-        val МАТЕРИАЛ = DeviceKeyMaterial(
+        val MATERIAL = DeviceKeyMaterial(
             encryptionPub = ByteArray(32) { 1 },
             signingPub = ByteArray(32) { 2 },
             secret = ByteArray(32) { 3 },
         )
-        val ключи = DeviceKeyFactory { МАТЕРИАЛ }
+        val keys = DeviceKeyFactory { MATERIAL }
     }
 }

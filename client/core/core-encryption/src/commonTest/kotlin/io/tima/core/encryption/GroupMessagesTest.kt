@@ -21,10 +21,10 @@ import kotlin.test.assertTrue
  */
 class GroupMessagesTest {
 
-    private val автор = DeviceIdentity.generate()
-    private val чужой = DeviceIdentity.generate()
-    private val ключ = ByteArray(32) { (it * 7 + 1).toByte() }
-    private val другойКлюч = ByteArray(32) { (it * 3 + 9).toByte() }
+    private val author = DeviceIdentity.generate()
+    private val foreign = DeviceIdentity.generate()
+    private val key = ByteArray(32) { (it * 7 + 1).toByte() }
+    private val otherKey = ByteArray(32) { (it * 3 + 9).toByte() }
 
     private val meta = GroupMessageMeta(
         groupId = "gggggggg-0000-0000-0000-000000000001",
@@ -35,12 +35,12 @@ class GroupMessagesTest {
         gkVersion = 7,
     )
 
-    private fun запечатать(текст: String = "Собираемся в 19:00 🥁", meta: GroupMessageMeta = this.meta) =
-        GroupMessages.seal(MessageContent.text(текст), meta, автор, ключ).getOrThrow()
+    private fun seal(text: String = "Собираемся в 19:00 🥁", meta: GroupMessageMeta = this.meta) =
+        GroupMessages.seal(MessageContent.text(text), meta, author, key).getOrThrow()
 
     @Test
     fun сообщение_собирается_и_читается_участником() {
-        val got = GroupMessages.open(запечатать(), автор.signingPublic, ключ).getOrThrow()
+        val got = GroupMessages.open(seal(), author.signingPublic, key).getOrThrow()
 
         assertEquals("Собираемся в 19:00 🥁", got.content.plainText())
         assertEquals(meta.groupId, got.meta.groupId)
@@ -51,16 +51,16 @@ class GroupMessagesTest {
     fun payload_не_содержит_открытого_текста() {
         // Смысл всего слоя. Проверка дешёвая и ловит худшее из возможного — отправку
         // открытым текстом, которая доставляется и потому выглядит исправной.
-        val запечатанное = запечатать("совершенно секретно")
-        val какТекст = запечатанное.payload.decodeToString()
-        assertTrue("совершенно секретно" !in какТекст, "открытый текст виден в payload")
+        val sealed = seal("совершенно секретно")
+        val asText = sealed.payload.decodeToString()
+        assertTrue("совершенно секретно" !in asText, "открытый текст виден в payload")
     }
 
     @Test
     fun чужая_подпись_не_проходит() {
-        val запечатанное = запечатать()
-        val провал = GroupMessages.open(запечатанное, чужой.signingPublic, ключ).exceptionOrNull()
-        assertIs<VerificationFailure>(провал, "подмена автора обязана быть отличима от битых байт")
+        val sealed = seal()
+        val failure = GroupMessages.open(sealed, foreign.signingPublic, key).exceptionOrNull()
+        assertIs<VerificationFailure>(failure, "подмена автора обязана быть отличима от битых байт")
     }
 
     @Test
@@ -68,14 +68,14 @@ class GroupMessagesTest {
         // Подпись считается по метаданным вместе с содержимым, поэтому сервер не может
         // переписать автора или время, не тронув payload. Если бы проверка шла только по
         // payload, эта подмена прошла бы незамеченной.
-        val запечатанное = запечатать()
-        val подделка = SealedGroupMessage(
-            meta = запечатанное.meta.copy(senderId = "eeeeeeee-0000-0000-0000-000000000009"),
-            payload = запечатанное.payload,
-            signature = запечатанное.signature,
+        val sealed = seal()
+        val fake = SealedGroupMessage(
+            meta = sealed.meta.copy(senderId = "eeeeeeee-0000-0000-0000-000000000009"),
+            payload = sealed.payload,
+            signature = sealed.signature,
         )
         assertIs<VerificationFailure>(
-            GroupMessages.open(подделка, автор.signingPublic, ключ).exceptionOrNull(),
+            GroupMessages.open(fake, author.signingPublic, key).exceptionOrNull(),
         )
     }
 
@@ -83,8 +83,8 @@ class GroupMessagesTest {
     fun другая_версия_ключа_не_открывает() {
         // Так выглядит сообщение, пришедшее под версией, которой у нас нет: это не подмена,
         // а своя несобранная картина, и различать их обязан вызывающий.
-        val провал = GroupMessages.open(запечатать(), автор.signingPublic, другойКлюч).exceptionOrNull()
-        assertTrue(провал != null && провал !is VerificationFailure, "не тот ключ — не подмена")
+        val failure = GroupMessages.open(seal(), author.signingPublic, otherKey).exceptionOrNull()
+        assertTrue(failure != null && failure !is VerificationFailure, "не тот ключ — не подмена")
     }
 
     @Test
@@ -95,8 +95,8 @@ class GroupMessagesTest {
             GroupMessages.seal(
                 MessageContent.text("привет"),
                 meta.copy(gkVersion = 0),
-                автор,
-                ключ,
+                author,
+                key,
             ).getOrThrow()
         }
     }
@@ -105,10 +105,10 @@ class GroupMessagesTest {
     fun тело_отдаётся_упакованным_как_пришло() {
         // Хранилище пишет именно эти байты: кодек один на провод и на диск. Записать
         // текстом значит записать в другом формате, чем читает экран.
-        val запечатанное = запечатать("проверка тела")
-        val got = GroupMessages.open(запечатанное, автор.signingPublic, ключ).getOrThrow()
-        val ожидаемое = GroupMessages.open(запечатанное, автор.signingPublic, ключ).getOrThrow().body
-        assertContentEquals(ожидаемое, got.body)
+        val sealed = seal("проверка тела")
+        val got = GroupMessages.open(sealed, author.signingPublic, key).getOrThrow()
+        val expected = GroupMessages.open(sealed, author.signingPublic, key).getOrThrow().body
+        assertContentEquals(expected, got.body)
         assertTrue(got.body.isNotEmpty())
     }
 }

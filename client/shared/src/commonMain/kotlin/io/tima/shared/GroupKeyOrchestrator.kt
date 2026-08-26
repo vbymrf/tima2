@@ -26,62 +26,62 @@ import io.tima.domain.chat.SyncGroupKeys
  * вместо неё: не удалось сходить за обёртками — сообщения всё равно должны идти.
  * Поэтому провал остаётся строкой диагностики, а не летит наверх.
  */
-class ОркестрГрупповыхКлючей(
-    окружение: Окружение,
-    сеть: ПортыГрупп,
-    личность: DeviceIdentity,
-    private val сейчасМс: () -> Long,
+class GroupKeyOrchestrator(
+    environment: Environment,
+    network: GroupPorts,
+    identity: DeviceIdentity,
+    private val msNow: () -> Long,
 ) {
-    private val ключиГруппы = SqlGroupKeys(окружение.db, окружение.шифр)
+    private val groupKeys = SqlGroupKeys(environment.db, environment.cipher)
 
-    private val сверка = SyncGroupKeys(
-        wraps = GroupKeyWrapsOverHttp(сеть.ключиГрупп),
-        unwrap = GroupKeyUnwrapOverKodium(личность),
-        keys = ключиГруппы,
+    private val sync = SyncGroupKeys(
+        wraps = GroupKeyWrapsOverHttp(network.groupKeys),
+        unwrap = GroupKeyUnwrapOverKodium(identity),
+        keys = groupKeys,
     )
 
-    private val раздача = ShareGroupKeys(
-        keys = ключиГруппы,
+    private val sharing = ShareGroupKeys(
+        keys = groupKeys,
         wrap = GroupKeyWrapOverKodium,
-        upload = GroupKeyRecoveryOverHttp(сеть.восстановлениеКлючейГрупп),
+        upload = GroupKeyRecoveryOverHttp(network.groupKeyRecovery),
     )
 
-    private val ротация = РотацияГрупповогоКлюча(
-        группы = сеть.группы,
-        ключиУстройств = сеть.ключи,
-        escrow = сеть.escrow,
-        ключиГрупп = сеть.ключиГрупп,
-        книга = ключиГруппы,
-        сейчасМс = сейчасМс,
+    private val rotation = GroupKeyRotation(
+        groups = network.groups,
+        deviceKeys = network.keys,
+        escrow = network.escrow,
+        groupKeys = network.groupKeys,
+        book = groupKeys,
+        msNow = msNow,
     )
 
     /** Ключи этого устройства: их читает разбор сообщений группы. */
-    val ключи: SqlGroupKeys get() = ключиГруппы
+    val keys: SqlGroupKeys get() = groupKeys
 
     /**
      * Обработать кадр. Возвращает строку для диагностики — ту же, что раньше писал
      * приёмник: по ней на живом прогоне видно, что происходило с ключами.
      */
-    suspend fun обработать(решение: EventStreamProtocol.Decision): String? = runCatching {
-        when (решение) {
+    suspend fun handle(decision: EventStreamProtocol.Decision): String? = runCatching {
+        when (decision) {
             // Ротация и приезд обёрток означают одно: сходить за тем, чего у нас нет.
             is EventStreamProtocol.Decision.KeysArrived ->
-                "ключи группы: ${сверка.обновить(решение.groupId)}"
+                "ключи группы: ${sync.refresh(decision.groupId)}"
 
             // Просят у нас — значит, у нас эти версии есть. Молчание оставит человека
             // ждать вечно: другого способа получить историю до своего прихода у него нет.
             is EventStreamProtocol.Decision.ShareKeys ->
-                "отдали ключи: " + раздача.поделиться(
-                    groupId = решение.groupId,
-                    requesterDevice = решение.requesterDevice,
-                    requesterEncryptionPub = решение.requesterEncryptionPub,
-                    versions = решение.versions,
+                "отдали ключи: " + sharing.share(
+                    groupId = decision.groupId,
+                    requesterDevice = decision.requesterDevice,
+                    requesterEncryptionPub = decision.requesterEncryptionPub,
+                    versions = decision.versions,
                 )
 
             // Сервер сам ротировать не может — ключа он не видит (ADR-0017 §3).
             is EventStreamProtocol.Decision.RotationNeeded ->
-                "ротация по просьбе сервера (${решение.reason}): " +
-                    ротация.ротировать(решение.groupId)
+                "ротация по просьбе сервера (${decision.reason}): " +
+                    rotation.rotate(decision.groupId)
 
             else -> null
         }

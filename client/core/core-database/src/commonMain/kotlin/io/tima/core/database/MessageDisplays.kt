@@ -19,11 +19,11 @@ import io.tima.domain.chat.MessageDisplay
  * Общая функция, а не копия в каждом переходнике: список переписок показывает состояние
  * последнего сообщения теми же словами, что и сам чат, и разойтись им негде.
  */
-internal const val ИСХОДЯЩЕЕ = 0L
+internal const val OUTGOING = 0L
 
 internal fun displayOf(direction: Long, state: Long): MessageDisplay {
     val ordinal = state.toInt()
-    return if (direction == ИСХОДЯЩЕЕ) {
+    return if (direction == OUTGOING) {
         when (OutboxState.entries.getOrNull(ordinal)) {
             OutboxState.QUEUED, OutboxState.SEALED, OutboxState.SENDING -> MessageDisplay.PENDING
             OutboxState.SENT -> MessageDisplay.SENT
@@ -43,7 +43,7 @@ internal fun displayOf(direction: Long, state: Long): MessageDisplay {
 }
 
 /** Разобрано ли входящее: до разбора в столбце лежит конверт, а не тело. */
-internal fun входящееРазобрано(state: Long): Boolean =
+internal fun incomingParsed(state: Long): Boolean =
     when (IncomingState.entries.getOrNull(state.toInt())) {
         IncomingState.STORED, IncomingState.READ -> true
         else -> false

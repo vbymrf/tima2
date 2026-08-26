@@ -78,12 +78,12 @@ object StandRun {
 
     fun main() = runBlocking {
         val host = env("TIMA_STAND_HOST") ?: "xn--80aa4ar0b.xn--p1ai"
-        val метка = System.currentTimeMillis() % 100_000_000
-        val телефонА = env("TIMA_PHONE_A") ?: "+799${метка.toString().padStart(8, '0')}"
-        val телефонБ = env("TIMA_PHONE_B") ?: "+798${метка.toString().padStart(8, '0')}"
+        val label = System.currentTimeMillis() % 100_000_000
+        val aPhone = env("TIMA_PHONE_A") ?: "+799${label.toString().padStart(8, '0')}"
+        val bPhone = env("TIMA_PHONE_B") ?: "+798${label.toString().padStart(8, '0')}"
 
         val route = ServerRoute.from(RouteConfig(host = host))
-        шаг("маршрут", "${route.apiBase}, WS ${route.wsUrl}")
+        step("маршрут", "${route.apiBase}, WS ${route.wsUrl}")
 
         val client = HttpClient(httpEngine()) {
             timaDefaults()
@@ -91,59 +91,59 @@ object StandRun {
         }
 
         try {
-            val А = завести(client, route, телефонА, "устройство А") ?: return@runBlocking
-            val Б = завести(client, route, телефонБ, "устройство Б") ?: return@runBlocking
+            val A = create(client, route, aPhone, "устройство А") ?: return@runBlocking
+            val B = create(client, route, bPhone, "устройство Б") ?: return@runBlocking
 
-            объявитьПлатформу(client, route, А)
+            declarePlatform(client, route, A)
 
             // Так переписку начинает приложение: по НОМЕРУ, а не по внутреннему
             // идентификатору. Проверяем справочник против живого сервера — единственное
             // место, где это вообще можно проверить.
-            val найденБ = UsersApi(route, client, token = { А.accessToken }).byPhone(телефонБ)
-            if (найденБ !is UserLookup.Found) {
-                провал("поиск Б по номеру", найденБ.toString())
+            val bFound = UsersApi(route, client, token = { A.accessToken }).byPhone(bPhone)
+            if (bFound !is UserLookup.Found) {
+                failure("поиск Б по номеру", bFound.toString())
                 return@runBlocking
             }
-            if (найденБ.userId != Б.userId) {
-                провал("поиск Б по номеру", "нашёлся другой: ${найденБ.userId} вместо ${Б.userId}")
+            if (bFound.userId != B.userId) {
+                failure("поиск Б по номеру", "нашёлся другой: ${bFound.userId} вместо ${B.userId}")
                 return@runBlocking
             }
-            шаг("поиск по номеру", "нашёлся тот же user_id, имя от сервера: ${найденБ.name ?: "нет"}")
+            step("поиск по номеру", "нашёлся тот же user_id, имя от сервера: ${bFound.name ?: "no"}")
 
-            val chatId = PersonalChatIdsOverKodium.personalChatId(А.userId, Б.userId)
-            шаг("chat_id", "$chatId (выведен из пары user_id, сервер его не назначает)")
+            val chatId = PersonalChatIdsOverKodium.personalChatId(A.userId, B.userId)
+            step("chat_id", "$chatId (выведен из пары user_id, сервер его не назначает)")
 
-            val ключиБ = KeysApi(route, client, token = { А.accessToken }).devicesOf(Б.userId)
-            if (ключиБ !is DeviceKeysResult.Devices) {
-                провал("ключи устройств Б", ключиБ.toString())
+            val bKeys = KeysApi(route, client, token = { A.accessToken }).devicesOf(B.userId)
+            if (bKeys !is DeviceKeysResult.Devices) {
+                failure("ключи устройств Б", bKeys.toString())
                 return@runBlocking
             }
-            шаг("ключи устройств Б", "${ключиБ.devices.size} шт.: ${ключиБ.devices.map { it.deviceId }}")
+            step("ключи устройств Б", "${bKeys.devices.size} шт.: ${bKeys.devices.map { it.deviceId }}")
 
-            val доверие = env("TIMA_ESCROW_SIGNING_PUB")
-            if (доверие == null) {
-                строка("")
-                строка("Шаги 1–4 прошли. Дальше нужен ключ подписи анклава:")
-                строка("  docker compose -f deploy/docker-compose.prod.yml logs escrow-stub \\")
-                строка("    | grep 'ключ подписи конфига'")
-                строка("и повторный запуск с TIMA_ESCROW_SIGNING_PUB=<эта строка>.")
-                строка("")
-                строка("Без него отправка невозможна намеренно: непроверенный ключ эпохи")
-                строка("означал бы шифрование в обход анклава.")
+            val trust = env("TIMA_ESCROW_SIGNING_PUB")
+            if (trust == null) {
+                line("")
+                line("Шаги 1–4 прошли. Дальше нужен ключ подписи анклава:")
+                line("  docker compose -f deploy/docker-compose.prod.yml logs escrow-stub \\")
+                line("    | grep 'ключ подписи конфига'")
+                line("и повторный запуск с TIMA_ESCROW_SIGNING_PUB=<эта строка>.")
+                line("")
+                line("Без него отправка невозможна намеренно: непроверенный ключ эпохи")
+                line("означал бы шифрование в обход анклава.")
                 return@runBlocking
             }
 
-            отправитьИПринять(client, route, А, Б, chatId, ключиБ, доверие)
+            sendAndAccept(client, route, A, B, chatId, bKeys, trust)
         } finally {
             client.close()
-            сохранитьЖурнал()
+            saveLog()
         }
     }
 
     // ── регистрация ──────────────────────────────────────────────────────────
 
     /** Что мы знаем про заведённое устройство. */
-    private class Заведённое(
+    private class Created(
         val userId: String,
         val deviceId: String,
         val accessToken: String,
@@ -152,54 +152,54 @@ object StandRun {
         val secret: ByteArray,
     )
 
-    private suspend fun завести(
+    private suspend fun create(
         client: HttpClient,
         route: ServerRoute,
         phone: String,
-        имя: String,
-    ): Заведённое? {
+        name: String,
+    ): Created? {
         val auth = AuthApi(route, client)
 
-        val запрос = auth.requestSms(phone)
-        if (запрос !is SmsRequestResult.Sent) {
-            провал("$имя: запрос кода", запрос.toString())
+        val request = auth.requestSms(phone)
+        if (request !is SmsRequestResult.Sent) {
+            failure("$name: запрос кода", request.toString())
             return null
         }
-        val код = запрос.devCode
-        if (код == null) {
-            провал("$имя: код в ответе", "TIMA_DEV_SMS выключен — настоящую SMS харнесс не получит")
+        val code = request.devCode
+        if (code == null) {
+            failure("$name: код в ответе", "TIMA_DEV_SMS выключен — настоящую SMS харнесс не получит")
             return null
         }
-        шаг("$имя: код", "получен для $phone")
+        step("$name: код", "получен для $phone")
 
-        val проверка = auth.verifySms(запрос.requestId, код)
-        if (проверка !is SmsVerifyResult.Verified) {
-            провал("$имя: проверка кода", проверка.toString())
+        val check = auth.verifySms(request.requestId, code)
+        if (check !is SmsVerifyResult.Verified) {
+            failure("$name: проверка кода", check.toString())
             return null
         }
 
         // Ключи порождаются здесь и живут в памяти: это программа на один запуск, и
         // хранилище платформы ей ни к чему. В приложении их пишет core-secrets, причём
         // ДО вызова сервера.
-        val материал = DeviceKeyFactoryOverKodium.newDeviceKeys()
-        val ответ = auth.register(
-            registrationToken = проверка.registrationToken,
-            encryptionPub = материал.encryptionPub,
-            signingPub = материал.signingPub,
+        val material = DeviceKeyFactoryOverKodium.newDeviceKeys()
+        val answer = auth.register(
+            registrationToken = check.registrationToken,
+            encryptionPub = material.encryptionPub,
+            signingPub = material.signingPub,
             platform = "харнесс",
         )
-        if (ответ !is RegisterResult.Registered) {
-            провал("$имя: заведение", ответ.toString())
+        if (answer !is RegisterResult.Registered) {
+            failure("$name: заведение", answer.toString())
             return null
         }
-        шаг("$имя: заведено", "user=${ответ.userId} device=${ответ.deviceId}")
+        step("$name: заведено", "user=${answer.userId} device=${answer.deviceId}")
 
-        return Заведённое(
-            userId = ответ.userId,
-            deviceId = ответ.deviceId,
-            accessToken = ответ.accessToken,
-            identity = deviceIdentityFrom(материал.secret),
-            secret = материал.secret,
+        return Created(
+            userId = answer.userId,
+            deviceId = answer.deviceId,
+            accessToken = answer.accessToken,
+            identity = deviceIdentityFrom(material.secret),
+            secret = material.secret,
         )
     }
 
@@ -212,87 +212,87 @@ object StandRun {
      * словом, каким его понял сервер, а незнакомое отвергнуто — молчаливое «ну ладно»
      * здесь означало бы, что опечатка в платформе выяснится через неделю на привязке.
      */
-    private suspend fun объявитьПлатформу(client: HttpClient, route: ServerRoute, устройство: Заведённое) {
-        val ручка = DevicesApi(route, client, token = { устройство.accessToken })
+    private suspend fun declarePlatform(client: HttpClient, route: ServerRoute, device: Created) {
+        val handle = DevicesApi(route, client, token = { device.accessToken })
 
-        val доброе = ручка.declarePlatform("desktop")
-        if (доброе is PlatformResult.Declared && доброе.platform == "desktop") {
-            шаг("платформа объявлена", "сервер понял её как «${доброе.platform}»")
+        val good = handle.declarePlatform("desktop")
+        if (good is PlatformResult.Declared && good.platform == "desktop") {
+            step("платформа объявлена", "сервер понял её как «${good.platform}»")
         } else {
-            провал("платформа объявлена", доброе.toString())
+            failure("платформа объявлена", good.toString())
         }
 
-        val незнакомое = ручка.declarePlatform("харнесс")
-        if (незнакомое is PlatformResult.Refused && незнакомое.code == "bad_platform") {
-            шаг("незнакомая платформа", "отказ ${незнакомое.status} ${незнакомое.code}")
+        val unknown = handle.declarePlatform("харнесс")
+        if (unknown is PlatformResult.Refused && unknown.code == "bad_platform") {
+            step("незнакомая платформа", "отказ ${unknown.status} ${unknown.code}")
         } else {
-            провал("незнакомая платформа", "ожидали 400 bad_platform, пришло: $незнакомое")
+            failure("незнакомая платформа", "ожидали 400 bad_platform, пришло: $unknown")
         }
     }
 
     // ── отправка и приём ─────────────────────────────────────────────────────
 
-    private suspend fun отправитьИПринять(
+    private suspend fun sendAndAccept(
         client: HttpClient,
         route: ServerRoute,
-        А: Заведённое,
-        Б: Заведённое,
+        A: Created,
+        B: Created,
         chatId: String,
-        ключиБ: DeviceKeysResult.Devices,
-        довериеBase64: String,
+        bKeys: DeviceKeysResult.Devices,
+        trustBase64: String,
     ) {
-        val анклавПуб = декодировать(довериеBase64)
-        if (анклавПуб == null) {
-            провал("ключ анклава", "не base64url: $довериеBase64")
+        val pubEnclave = decode(trustBase64)
+        if (pubEnclave == null) {
+            failure("ключ анклава", "не base64url: $trustBase64")
             return
         }
 
-        val эпоха = EscrowApi(route, client, token = { А.accessToken }).keyForChat(chatId)
-        if (эпоха !is EscrowKeyResult.Keys) {
-            провал("ключ эпохи escrow", эпоха.toString())
+        val epoch = EscrowApi(route, client, token = { A.accessToken }).keyForChat(chatId)
+        if (epoch !is EscrowKeyResult.Keys) {
+            failure("ключ эпохи escrow", epoch.toString())
             return
         }
-        val подписанный = эпоха.current
-        шаг("ключ эпохи", "id=${подписанный.id} эпоха=${подписанный.epoch} регион=${подписанный.region}")
+        val signed = epoch.current
+        step("ключ эпохи", "id=${signed.id} эпоха=${signed.epoch} регион=${signed.region}")
 
-        val проверенный = EscrowKeyVerifier.verify(
-            enclaveSigningPub = анклавПуб,
-            id = подписанный.id,
-            region = подписанный.region,
-            chatId = подписанный.chatId,
-            epoch = подписанный.epoch,
-            publicKey = подписанный.publicKey,
-            signature = подписанный.signature,
-            validFromMs = подписанный.validFromMs,
-            validToMs = подписанный.validToMs,
-            destroyAtMs = подписанный.destroyAtMs,
+        val verified = EscrowKeyVerifier.verify(
+            enclaveSigningPub = pubEnclave,
+            id = signed.id,
+            region = signed.region,
+            chatId = signed.chatId,
+            epoch = signed.epoch,
+            publicKey = signed.publicKey,
+            signature = signed.signature,
+            validFromMs = signed.validFromMs,
+            validToMs = signed.validToMs,
+            destroyAtMs = signed.destroyAtMs,
             nowMs = System.currentTimeMillis(),
         ).getOrElse {
-            провал("подпись анклава", it.message ?: "не сошлась")
+            failure("подпись анклава", it.message ?: "не сошлась")
             return
         }
-        шаг("подпись анклава", "сошлась")
+        step("подпись анклава", "сошлась")
 
-        val текст = "Первое сквозное сообщение v2, ${System.currentTimeMillis()}"
-        val sealer = OutgoingSealer(А.userId, А.deviceId, А.identity).sealerFor(
-            escrowKey = проверенный,
-            recipients = ключиБ.devices.map { RecipientDevice(it.deviceId, it.encryptionPub) },
+        val text = "Первое сквозное сообщение v2, ${System.currentTimeMillis()}"
+        val sealer = OutgoingSealer(A.userId, A.deviceId, A.identity).sealerFor(
+            escrowKey = verified,
+            recipients = bKeys.devices.map { RecipientDevice(it.deviceId, it.encryptionPub) },
         )
 
         // База в памяти: программа на один запуск, следов на диске оставлять незачем.
         val harness = ChatHarness(harnessDriver(), sealWith = sealer)
-        harness.send(chatId, текст)
+        harness.send(chatId, text)
 
-        val transport = HttpMessageTransport(route, client, token = { А.accessToken })
-        val отправлено = harness.pumpVia { готовое ->
-            val исход = transport.send(готовое.entry.dedupKey, готовое.envelope)
+        val transport = HttpMessageTransport(route, client, token = { A.accessToken })
+        val sent = harness.pumpVia { ready ->
+            val outcome = transport.send(ready.entry.dedupKey, ready.envelope)
             // Исход печатается всегда: «сообщение не ушло» без причины — отчёт ни о чём.
-            шаг("исход отправки", исход.toString() + ", конверт " + готовое.envelope.size + " байт")
-            исход
+            step("исход отправки", outcome.toString() + ", конверт " + ready.envelope.size + " байт")
+            outcome
         }
-        шаг("отправка", "исходов: $отправлено, в очереди осталось ${harness.pending().size}")
+        step("отправка", "исходов: $sent, в очереди осталось ${harness.pending().size}")
         if (harness.pending().isNotEmpty()) {
-            провал("отправка", "сообщение не ушло: ${harness.pending()}")
+            failure("отправка", "сообщение не ушло: ${harness.pending()}")
             return
         }
 
@@ -300,62 +300,62 @@ object StandRun {
         // Шифр покоя выводится из НАСТОЯЩЕГО секрета устройства, а не из постоянного
         // харнессного: прогон по стенду проверяет то, что поедет на устройство, включая
         // ключ локальной базы.
-        val шифрБ = LocalStoreFieldCipher(Б.secret)
-        val базаБ = TimaDatabase(harnessDriver())
+        val bCipher = LocalStoreFieldCipher(B.secret)
+        val bDatabase = TimaDatabase(harnessDriver())
         val inbox = Inbox(
-            SqlInboxStore(базаБ, шифрБ),
+            SqlInboxStore(bDatabase, bCipher),
             nowMs = { System.currentTimeMillis() },
         )
         // Ждём до первого дошедшего, а не до конца тайм-аута: канал сам не закрывается.
-        val дошло = CompletableDeferred<String>()
+        val delivered = CompletableDeferred<String>()
 
-        val канал = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
-            EventStream(route, client, token = { Б.accessToken }).run(cursor = null) { событие ->
-                inbox.receive(событие.chatId, событие.messageId, событие.envelope)
+        val channel = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+            EventStream(route, client, token = { B.accessToken }).run(cursor = null) { event ->
+                inbox.receive(event.chatId, event.messageId, event.envelope)
                 inbox.openNext(
-                    open = { запись ->
+                    open = { entry ->
                         PersonalMessages.open(
-                            envelopeBytes = запись.envelope,
-                            myDeviceId = Б.deviceId,
-                            me = Б.identity,
-                            senderSigningPublic = А.identity.signingPublic,
+                            envelopeBytes = entry.envelope,
+                            myDeviceId = B.deviceId,
+                            me = B.identity,
+                            senderSigningPublic = A.identity.signingPublic,
                         ).fold(
                             // Байты тела, как пришли: столбец читается кодеком, и текстом писать нельзя.
                             onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId) },
                             onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },
                         )
                     },
-                )?.let { запись ->
+                )?.let { entry ->
                     // Текст берётся ИЗ БАЗЫ, а не из лямбды: прогон обязан доказать, что
                     // сообщение доехало туда, откуда его читает экран. Раньше здесь была
                     // лямбда persist, и она же скрывала, что в базу тело не ложилось.
-                    if (запись.state == io.tima.core.outbox.IncomingState.STORED) {
-                        val строка = базаБ.messagesQueries
-                            .byDedupKey("${запись.chatId}/${запись.messageId}")
+                    if (entry.state == io.tima.core.outbox.IncomingState.STORED) {
+                        val line = bDatabase.messagesQueries
+                            .byDedupKey("${entry.chatId}/${entry.messageId}")
                             .executeAsOneOrNull()
-                        val тело = строка?.body_enc?.let { шифрБ.open(it) }
+                        val body = line?.body_enc?.let { bCipher.open(it) }
                         // Тело читается КОДЕКОМ, как его читает экран: столбец хранит
                         // упакованное тело, а не текст. Прежняя проверка сравнивала байты
                         // напрямую и потому не заметила, что приёмник писал текстом.
-                        val текстСтроки = тело?.let { TextBodyCodec.decode(it).getOrNull()?.plainText() }
-                        if (текстСтроки != null) дошло.complete(текстСтроки)
+                        val lineText = body?.let { TextBodyCodec.decode(it).getOrNull()?.plainText() }
+                        if (lineText != null) delivered.complete(lineText)
                     }
                 }
             }
         }
-        val прочитано = withTimeoutOrNull(30_000) { дошло.await() }
-        канал.cancel()
+        val read = withTimeoutOrNull(30_000) { delivered.await() }
+        channel.cancel()
 
-        if (прочитано == текст) {
-            шаг("ПРИНЯТО", "текст сошёлся целиком")
-            строка("")
-            строка("Сквозной путь пройден: отправлено устройством А, прочитано устройством Б.")
+        if (read == text) {
+            step("ПРИНЯТО", "текст сошёлся целиком")
+            line("")
+            line("Сквозной путь пройден: отправлено устройством А, прочитано устройством Б.")
         } else {
-            провал("приём", "ожидался «$текст», получено «$прочитано»")
+            failure("приём", "ожидался «$text», получено «$read»")
         }
     }
 
-    private fun декодировать(text: String): ByteArray? = runCatching {
+    private fun decode(text: String): ByteArray? = runCatching {
         @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
         kotlin.io.encoding.Base64.UrlSafe
             .withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT)
@@ -369,23 +369,23 @@ object StandRun {
      * диагностический вывод — то, ради чего программа и написана, — становится
      * нечитаемым ровно там, где он нужен. Журнал ещё и прикладывается к отчёту.
      */
-    private val журнал = StringBuilder()
+    private val log = StringBuilder()
 
-    private fun строка(текст: String) {
-        println(текст)
-        журнал.appendLine(текст)
+    private fun line(text: String) {
+        println(text)
+        log.appendLine(text)
     }
 
-    private fun шаг(что: String, подробность: String) = строка("  + " + что + ": " + подробность)
+    private fun step(what: String, detail: String) = line("  + " + what + ": " + detail)
 
-    private fun провал(что: String, подробность: String) = строка("  ! " + что + ": " + подробность)
+    private fun failure(what: String, detail: String) = line("  ! " + what + ": " + detail)
 
     /** Куда лёг журнал. Вызывается в конце, что бы ни случилось. */
-    private fun сохранитьЖурнал() {
-        val файл = java.io.File("build/stand-run.log")
-        файл.parentFile?.mkdirs()
-        файл.writeText(журнал.toString(), Charsets.UTF_8)
-        println("журнал: " + файл.absolutePath)
+    private fun saveLog() {
+        val file = java.io.File("build/stand-run.log")
+        file.parentFile?.mkdirs()
+        file.writeText(log.toString(), Charsets.UTF_8)
+        println("журнал: " + file.absolutePath)
     }
 }
 

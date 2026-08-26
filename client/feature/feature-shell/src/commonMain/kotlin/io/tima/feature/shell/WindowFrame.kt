@@ -12,17 +12,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import io.tima.core.ui.ВидЧипа
-import io.tima.core.ui.ВЦентре
-import io.tima.core.ui.Второстепенное
-import io.tima.core.ui.Имя
-import io.tima.core.ui.КнопкаИконка
-import io.tima.core.ui.LocalРаскладка
-import io.tima.core.ui.РядУправления
+import io.tima.core.ui.ChipKind
+import io.tima.core.ui.InCenter
+import io.tima.core.ui.Secondary
+import io.tima.core.ui.Name
+import io.tima.core.ui.IconButton
+import io.tima.core.ui.LayoutLocal
+import io.tima.core.ui.ControlRow
 import io.tima.core.ui.TimaSpacing
-import io.tima.core.ui.Тима
-import io.tima.core.ui.Чип
-import io.tima.core.ui.ШапкаОкна
+import io.tima.core.ui.Tima
+import io.tima.core.ui.Chip
+import io.tima.core.ui.WindowHeader
 
 /**
  * Каркас основного окна: шапка, ряд вкладок, содержимое.
@@ -44,55 +44,55 @@ import io.tima.core.ui.ШапкаОкна
  *   «Подписан» на узком телефоне уже нет.
  */
 @Composable
-fun КаркасОкна(
-    окно: Окно,
-    вкладки: List<String>,
-    выбрана: String,
-    onВкладка: (String) -> Unit,
-    onПереключитьОкна: () -> Unit,
-    onПоиск: () -> Unit,
-    onНастройки: () -> Unit,
+fun WindowFrame(
+    window: Window,
+    tabs: List<String>,
+    selected: String,
+    onTab: (String) -> Unit,
+    onSwitchWindows: () -> Unit,
+    onSearch: () -> Unit,
+    onSettings: () -> Unit,
     modifier: Modifier = Modifier,
     /** Второй ряд: подвкладки, фильтры, режимы. Есть не у всех окон. */
-    второйРяд: (@Composable () -> Unit)? = null,
+    secondRow: (@Composable () -> Unit)? = null,
     /**
      * Соседние окна: свайп по средней зоне содержимого.
      *
      * `null` — свайпа нет. Так на широких форматах: там окна меняют рейкой, и
      * горизонталь содержимого принадлежит содержимому целиком.
      */
-    onСоседнееОкно: ((ВСторону) -> Unit)? = null,
-    содержимое: @Composable () -> Unit,
+    onNeighbourWindow: ((InSide) -> Unit)? = null,
+    content: @Composable () -> Unit,
 ) {
-    val цвета = Тима.цвета
-    Column(modifier.fillMaxSize().background(цвета.поверхность)) {
-        ШапкаОкна(
-            название = окно.краткое,
-            логотип = if (LocalРаскладка.current.телефон) "Т" else null,
-            onПереключитьОкна = onПереключитьОкна,
-            справа = {
-                РядУправления {
-                    КнопкаИконка(знак = "🔍", onClick = onПоиск)
-                    КнопкаИконка(знак = "⚙", onClick = onНастройки)
+    val colors = Tima.colors
+    Column(modifier.fillMaxSize().background(colors.surface)) {
+        WindowHeader(
+            title = window.short,
+            logo = if (LayoutLocal.current.phone) "Т" else null,
+            onSwitchWindows = onSwitchWindows,
+            right = {
+                ControlRow {
+                    IconButton(glyph = "🔍", onClick = onSearch)
+                    IconButton(glyph = "⚙", onClick = onSettings)
                 }
             },
         )
 
-        РядВкладок(вкладки, выбрана, onВкладка)
-        второйРяд?.invoke()
+        TabRow(tabs, selected, onTab)
+        secondRow?.invoke()
 
         Box(
             modifier = Modifier
                 .weight(1f)
-                .свайпОкон(
-                    onВлево = { onСоседнееОкно?.invoke(ВСторону.Следующее) },
-                    onВправо = { onСоседнееОкно?.invoke(ВСторону.Предыдущее) },
+                .windowSwipe(
+                    onLeft = { onNeighbourWindow?.invoke(InSide.Next) },
+                    onRight = { onNeighbourWindow?.invoke(InSide.Previous) },
                     // На широком формате окна меняют рейкой, и горизонталь содержимого
                     // принадлежит содержимому целиком. Правило живёт здесь, а не у
                     // каждого вызывающего: пять копий одного условия разошлись бы.
-                    включён = onСоседнееОкно != null && LocalРаскладка.current.телефон,
+                    enabled = onNeighbourWindow != null && LayoutLocal.current.phone,
                 ),
-        ) { содержимое() }
+        ) { content() }
     }
 }
 
@@ -103,7 +103,7 @@ fun КаркасОкна(
  * приходит следующее — и путать эти два направления в вызывающем коде дороже, чем
  * завести перечень из двух слов.
  */
-enum class ВСторону { Предыдущее, Следующее }
+enum class InSide { Previous, Next }
 
 /**
  * Ряд вкладок.
@@ -113,28 +113,28 @@ enum class ВСторону { Предыдущее, Следующее }
  * смысла. Размен осознанный: вкладок три и они под рукой, а окон пять.
  */
 @Composable
-fun РядВкладок(
-    вкладки: List<String>,
-    выбрана: String,
-    onВкладка: (String) -> Unit,
+fun TabRow(
+    tabs: List<String>,
+    selected: String,
+    onTab: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val цвета = Тима.цвета
+    val colors = Tima.colors
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(цвета.функц)
+            .background(colors.functional)
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = TimaSpacing.о4, vertical = TimaSpacing.о2),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
+            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
     ) {
-        for (имя in вкладки) {
-            Чип(
-                надпись = имя,
+        for (name in tabs) {
+            Chip(
+                label = name,
                 // Выбранная вкладка — залитый чип: тот же язык, что у фильтров и
                 // эмоций (`§1 «Язык состояний»`), и человеку не приходится учить второй.
-                вид = if (имя == выбрана) ВидЧипа.Выбран else ВидЧипа.Тихий,
-                onClick = { onВкладка(имя) },
+                kind = if (name == selected) ChipKind.Selected else ChipKind.Quiet,
+                onClick = { onTab(name) },
             )
         }
     }
@@ -151,17 +151,17 @@ fun РядВкладок(
  * однажды уезжают в сборку и принимаются за работающее.
  */
 @Composable
-fun ЗаглушкаВкладки(
-    чтоБудет: String,
-    чемДержится: String,
+fun TabStub(
+    willWhat: String,
+    thanHolds: String,
     modifier: Modifier = Modifier,
-) = ВЦентре(modifier.fillMaxSize()) {
+) = InCenter(modifier.fillMaxSize()) {
     Column(
         horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
-        modifier = Modifier.padding(TimaSpacing.о5),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        modifier = Modifier.padding(TimaSpacing.about5),
     ) {
-        Имя(чтоБудет)
-        Второстепенное(чемДержится)
+        Name(willWhat)
+        Secondary(thanHolds)
     }
 }

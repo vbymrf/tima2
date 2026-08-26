@@ -15,7 +15,7 @@ import io.tima.core.outbox.FieldCipher
  * Подделки здесь нет намеренно, по той же причине, что и в общих тестах: сквозной
  * «шифр», отдающий байты как есть, — способ получить зелёные проверки при открытой базе.
  */
-internal fun тестовыйШифр(): FieldCipher = LocalStoreFieldCipher(ТЕСТОВЫЙ_СЕКРЕТ_ANDROID)
+internal fun testCipher(): FieldCipher = LocalStoreFieldCipher(TEST_SECRET_ANDROID)
 
 /** Тот же постоянный секрет, что и в общих проверках: сверки должны совпадать. */
-internal val ТЕСТОВЫЙ_СЕКРЕТ_ANDROID: ByteArray = ByteArray(32) { (it + 7).toByte() }
+internal val TEST_SECRET_ANDROID: ByteArray = ByteArray(32) { (it + 7).toByte() }

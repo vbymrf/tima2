@@ -23,46 +23,46 @@ import kotlin.test.assertTrue
  *
  * Порядок и партии переименования — `doc_mig/plan-latin-names.md`.
  */
-class ЛатиницаTest {
+class LatinTest {
 
-    private val клиент = File(requireNotNull(System.getProperty("client.root")) {
+    private val client = File(requireNotNull(System.getProperty("client.root")) {
         "не передан client.root — смотри build.gradle.kts этого модуля"
     })
 
     /** Корень репозитория: клиент лежит в нём соседом server, doc и doc_mig. */
-    private val корень = клиент.parentFile
+    private val root = client.parentFile
 
     @Test
     fun имён_с_кириллицей_не_прибавляется() {
-        val найдены = скириллицей(корень)
+        val found = withCyrillic(root)
 
         assertTrue(
-            найдены.size <= БЮДЖЕТ,
-            "Файлов и папок с кириллицей в имени стало ${найдены.size} при бюджете $БЮДЖЕТ.\n" +
-                "Новые:\n" + найдены.takeLast(НАЗВАТЬ).joinToString("\n") { "  $it" } +
+            found.size <= BUDGET,
+            "Файлов и папок с кириллицей в имени стало ${found.size} при бюджете $BUDGET.\n" +
+                "Новые:\n" + found.takeLast(NAME).joinToString("\n") { "  $it" } +
                 "\n\nИмена — латиницей и по смыслу (CLAUDE.md, «Соглашения репозитория»). " +
                 "Русский остаётся в комментариях, тексте и надписях на экране.",
         )
 
         assertTrue(
-            найдены.size >= БЮДЖЕТ,
-            "Стало ${найдены.size} при бюджете $БЮДЖЕТ — понизьте бюджет тем же коммитом, " +
+            found.size >= BUDGET,
+            "Стало ${found.size} при бюджете $BUDGET — понизьте бюджет тем же коммитом, " +
                 "которым прошла партия переименования. Бюджет, который живёт дольше долга, " +
                 "врёт о состоянии проекта так же, как отсутствующий.",
         )
     }
 
-    private fun скириллицей(корень: File): List<String> = корень.walkTopDown()
-        .onEnter { it.name !in ПРОПУСТИТЬ }
-        .filter { it.isFile && КИРИЛЛИЦА.containsMatchIn(it.name) }
-        .map { it.relativeTo(корень).path.replace('\\', '/') }
-        .filter { это -> ДОКУМЕНТАЦИЯ.none { это.startsWith(it) } }
-        .filter { it.substringAfterLast('.') !in ДОКУМЕНТЫ }
+    private fun withCyrillic(root: File): List<String> = root.walkTopDown()
+        .onEnter { it.name !in SKIP }
+        .filter { it.isFile && CYRILLIC.containsMatchIn(it.name) }
+        .map { it.relativeTo(root).path.replace('\\', '/') }
+        .filter { thisValue -> DOCUMENTATION.none { thisValue.startsWith(it) } }
+        .filter { it.substringAfterLast('.') !in DOCUMENTS }
         .sorted()
         .toList()
 
     private companion object {
-        val КИРИЛЛИЦА = Regex("[А-Яа-яЁё]")
+        val CYRILLIC = Regex("[А-Яа-яЁё]")
 
         /**
          * Бюджет на 2026-08-25 — 1: запускалка `.bat` в корне. Партия 3 (84 файла
@@ -71,10 +71,10 @@ class ЛатиницаTest {
          * Считается по рабочему дереву, а не по индексу: файл, лежащий рядом и не
          * добавленный в git, ломает те же инструменты.
          */
-        const val БЮДЖЕТ = 1
+        const val BUDGET = 1
 
         /** Сколько имён назвать в тексте падения: весь список читать никто не станет. */
-        const val НАЗВАТЬ = 15
+        const val NAME = 15
 
         /**
          * Чего не смотрим: не наше, сборочное или заведомо временное.
@@ -82,13 +82,13 @@ class ЛатиницаTest {
          * `doc_add` в `.gitignore` — там черновики, и на вторую машину они не поедут;
          * требовать от них латиницы значит требовать от заметок.
          */
-        val ПРОПУСТИТЬ = setOf(
+        val SKIP = setOf(
             ".git", ".gradle", ".kotlin", ".idea", "build", "node_modules",
             "doc_add", "doc_arh", "third-party",
         )
 
         /** Расширения документов: их имена — дело человека, а не инструментов. */
-        val ДОКУМЕНТЫ = setOf("md", "docx")
+        val DOCUMENTS = setOf("md", "docx")
 
         /**
          * Каталоги документации целиком, включая макет.
@@ -96,6 +96,6 @@ class ЛатиницаTest {
          * Макет — это `.html` и `.css`, то есть формально не документ; но читает его
          * человек, и страницы он открывает по именам окон. Под тем же решением.
          */
-        val ДОКУМЕНТАЦИЯ = listOf("doc/", "doc_mig/", "ДОКУМЕНТАЦИЯ/")
+        val DOCUMENTATION = listOf("doc/", "doc_mig/", "ДОКУМЕНТАЦИЯ/")
     }
 }

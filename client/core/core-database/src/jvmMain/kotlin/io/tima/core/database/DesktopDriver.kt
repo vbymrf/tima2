@@ -27,17 +27,17 @@ import java.io.File
  * а база **от более новой версии приложения** отвергается: открывать её значит писать в
  * неизвестную схему, а это потеря переписки, а не неудобство.
  */
-fun desktopDatabaseDriver(файл: File): SqlDriver {
-    файл.parentFile?.mkdirs()
+fun desktopDatabaseDriver(file: File): SqlDriver {
+    file.parentFile?.mkdirs()
     return JdbcSqliteDriver(
-        "jdbc:sqlite:${файл.absolutePath}?secure_delete=true&foreign_keys=true",
+        "jdbc:sqlite:${file.absolutePath}?secure_delete=true&foreign_keys=true",
     )
 }
 
 /** Открыть или создать базу на диске: схема приводится к нужной версии. */
-fun desktopDatabase(файл: File): TimaDatabase {
-    val driver = desktopDatabaseDriver(файл)
-    привестиСхему(driver)
+fun desktopDatabase(file: File): TimaDatabase {
+    val driver = desktopDatabaseDriver(file)
+    bringSchema(driver)
     return TimaDatabaseFactory.open(driver, createSchema = false)
 }
 
@@ -49,35 +49,35 @@ fun desktopDatabase(файл: File): TimaDatabase {
  * код такого не выдержит. Читается версия одинаково везде, пишется по-своему; ровно то же
  * разделение, что у остальных настроек базы.
  */
-internal fun привестиСхему(driver: SqlDriver) {
-    val нужная = TimaDatabase.Schema.version
-    val текущая = версияБазы(driver)
+internal fun bringSchema(driver: SqlDriver) {
+    val needed = TimaDatabase.Schema.version
+    val current = databaseVersion(driver)
     when {
-        текущая == 0L -> {
+        current == 0L -> {
             // Ноль означает «версию никто не ставил». У пустого файла так и есть; у файла
             // с таблицами это чужая база или база, созданную мимо этого пути, — и
             // создавать схему поверх неё нельзя.
-            check(таблицПусто(driver)) {
+            check(emptyTables(driver)) {
                 "в базе уже есть таблицы, но версия схемы не записана: " +
                     "открыть такую нельзя, не зная, что в ней лежит"
             }
             TimaDatabase.Schema.create(driver)
-            записатьВерсию(driver, нужная)
+            writeVersion(driver, needed)
         }
 
-        текущая < нужная -> {
-            TimaDatabase.Schema.migrate(driver, текущая, нужная)
-            записатьВерсию(driver, нужная)
+        current < needed -> {
+            TimaDatabase.Schema.migrate(driver, current, needed)
+            writeVersion(driver, needed)
         }
 
-        текущая > нужная -> error(
-            "база записана версией приложения новее этой: схема $текущая, а мы умеем $нужная. " +
+        current > needed -> error(
+            "база записана версией приложения новее этой: схема $current, а мы умеем $needed. " +
                 "Открывать её нельзя: запись в неизвестную схему теряет переписку",
         )
     }
 }
 
-private fun версияБазы(driver: SqlDriver): Long = driver.executeQuery(
+private fun databaseVersion(driver: SqlDriver): Long = driver.executeQuery(
     identifier = null,
     sql = "PRAGMA user_version;",
     mapper = { cursor ->
@@ -86,13 +86,13 @@ private fun версияБазы(driver: SqlDriver): Long = driver.executeQuery(
     parameters = 0,
 ).value
 
-private fun записатьВерсию(driver: SqlDriver, версия: Long) {
+private fun writeVersion(driver: SqlDriver, version: Long) {
     // Присваивающий PRAGMA строк не возвращает — на JVM это execute. На Apple тот же
     // вызов запрещён, и потому эта функция здесь, а не в общем коде.
-    driver.execute(null, "PRAGMA user_version = $версия;", 0)
+    driver.execute(null, "PRAGMA user_version = $version;", 0)
 }
 
-private fun таблицПусто(driver: SqlDriver): Boolean = driver.executeQuery(
+private fun emptyTables(driver: SqlDriver): Boolean = driver.executeQuery(
     identifier = null,
     sql = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%';",
     mapper = { cursor ->

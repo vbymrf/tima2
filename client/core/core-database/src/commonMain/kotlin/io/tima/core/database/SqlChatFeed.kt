@@ -51,7 +51,7 @@ class SqlChatFeed(
             // таблица. Опрос по таймеру давал бы в v1 и задержку, и лишние пробуждения.
             .asFlow()
             .mapToList(Dispatchers.Default)
-            .map { строки -> строки.map { it.toLine() } }
+            .map { lines -> lines.map { it.toLine() } }
 
     private fun Messages.toLine() = ChatLine(
         dedupKey = dedup_key,
@@ -61,8 +61,8 @@ class SqlChatFeed(
         // разобрать тело кодеком. Любой из шагов может не удаться, и тогда текста нет —
         // строка остаётся в переписке нечитаемой. Одна испорченная запись не должна
         // лишать человека всей истории.
-        text = текстСтроки(direction, state, body_enc),
-        outgoing = своё(direction, sender_id),
+        text = lineText(direction, state, body_enc),
+        outgoing = own(direction, sender_id),
         // Серверное время, если сообщение дошло; иначе часы устройства. Они врут, но
         // других на момент составления нет.
         atMs = server_ts ?: client_ts,
@@ -80,8 +80,8 @@ class SqlChatFeed(
      * с самим собой в чужих пузырях. Пустой `sender_id` — ещё не разобранное входящее;
      * автора у него пока нет, и своим оно не считается.
      */
-    private fun своё(direction: Long, senderId: String): Boolean =
-        direction == ИСХОДЯЩЕЕ || (senderId.isNotEmpty() && senderId == myUserId)
+    private fun own(direction: Long, senderId: String): Boolean =
+        direction == OUTGOING || (senderId.isNotEmpty() && senderId == myUserId)
 
     /**
      * Текст строки — или его отсутствие.
@@ -90,9 +90,9 @@ class SqlChatFeed(
      * только после успешной расшифровки. Поэтому у непринятого и нечитаемого текста нет
      * по определению, и пытаться разобрать конверт кодеком незачем — это не тело.
      */
-    private fun текстСтроки(direction: Long, state: Long, поле: ByteArray): String? {
-        if (direction != ИСХОДЯЩЕЕ && !входящееРазобрано(state)) return null
-        val открытое = cipher.open(поле) ?: return null
-        return codec.decodeText(открытое)
+    private fun lineText(direction: Long, state: Long, field: ByteArray): String? {
+        if (direction != OUTGOING && !incomingParsed(state)) return null
+        val open = cipher.open(field) ?: return null
+        return codec.decodeText(open)
     }
 }

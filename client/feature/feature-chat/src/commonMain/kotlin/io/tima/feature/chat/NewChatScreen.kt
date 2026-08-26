@@ -13,15 +13,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import io.tima.core.ui.Беда
-import io.tima.core.ui.Второстепенное
-import io.tima.core.ui.Кнопка
-import io.tima.core.ui.Поле
-import io.tima.core.ui.Подпись
+import io.tima.core.ui.Trouble
+import io.tima.core.ui.Secondary
+import io.tima.core.ui.Button
+import io.tima.core.ui.Field
+import io.tima.core.ui.Caption
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
-import io.tima.core.ui.Тима
-import io.tima.core.ui.ШапкаПодокна
+import io.tima.core.ui.Tima
+import io.tima.core.ui.SubwindowHeader
 
 /**
  * Новая переписка — подокно.
@@ -33,47 +33,47 @@ import io.tima.core.ui.ШапкаПодокна
  * Чистый рендер [НоваяПерепискаState]. Решения — в [НоваяПерепискаStore].
  */
 @Composable
-fun ЭкранНовойПереписки(
-    состояние: НоваяПерепискаState,
-    onНомер: (String) -> Unit,
-    onНайти: () -> Unit,
-    onНазад: () -> Unit,
+fun NewChatScreen(
+    state: NewChatState,
+    onNumber: (String) -> Unit,
+    onFind: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val цвета = Тима.цвета
-    Column(modifier.fillMaxSize().background(цвета.поверхность)) {
-        ШапкаПодокна(название = "Новая переписка", onНазад = onНазад)
+    val colors = Tima.colors
+    Column(modifier.fillMaxSize().background(colors.surface)) {
+        SubwindowHeader(title = "Новая переписка", onBack = onBack)
 
         Box(
-            modifier = Modifier.fillMaxSize().padding(TimaSpacing.о5),
+            modifier = Modifier.fillMaxSize().padding(TimaSpacing.about5),
             contentAlignment = Alignment.TopCenter,
         ) {
             Column(
                 // Тот же предел, что у входа: поле во всю ширину ПК читается как поиск.
                 modifier = Modifier.widthIn(max = 420.dp),
-                verticalArrangement = Arrangement.spacedBy(TimaSpacing.о4),
+                verticalArrangement = Arrangement.spacedBy(TimaSpacing.about4),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Подпись("Кому написать", кегль = TimaType.щ2, вес = FontWeight.ExtraBold)
-                Второстепенное("Номер телефона в TIMA")
+                Caption("Кому написать", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+                Secondary("Номер телефона в TIMA")
 
-                Поле(
-                    значение = состояние.номер,
-                    onИзменение = onНомер,
-                    подсказка = "+7…",
-                    числовое = true,
+                Field(
+                    value = state.number,
+                    onChange = onNumber,
+                    hint = "+7…",
+                    numeric = true,
                 )
 
-                состояние.беда?.let { Беда(it) }
+                state.trouble?.let { Trouble(it) }
 
                 // Не беда, а предложение: человека, которого нет в TIMA, надо позвать.
-                if (состояние.позвать) {
-                    Беда("Этого номера в TIMA нет — позовите человека")
+                if (state.invite) {
+                    Trouble("Этого номера в TIMA нет — позовите человека")
                 }
 
-                Кнопка(
-                    надпись = if (состояние.ждём) "Ищем…" else "Найти",
-                    onClick = onНайти,
+                Button(
+                    label = if (state.expect) "Ищем…" else "Найти",
+                    onClick = onFind,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

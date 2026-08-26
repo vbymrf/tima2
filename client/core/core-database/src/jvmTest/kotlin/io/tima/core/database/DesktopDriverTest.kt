@@ -19,40 +19,40 @@ import kotlin.test.assertTrue
  */
 class DesktopDriverTest {
 
-    private val файлы = mutableListOf<File>()
+    private val files = mutableListOf<File>()
 
-    private fun новыйФайл(имя: String): File =
-        File.createTempFile(имя, ".db").also { it.delete(); файлы += it }
+    private fun newFile(name: String): File =
+        File.createTempFile(name, ".db").also { it.delete(); files += it }
 
     @AfterTest
-    fun убрать() {
-        файлы.forEach { it.delete() }
+    fun remove() {
+        files.forEach { it.delete() }
     }
 
     @Test
     fun новая_база_создаётся_и_настройки_действуют() {
-        val файл = новыйФайл("tima-desktop-new")
+        val file = newFile("tima-desktop-new")
 
-        val db = desktopDatabase(файл)
+        val db = desktopDatabase(file)
 
         // Открытие само проверяет настройки: не действуют — не откроется.
         assertEquals(0, db.messagesQueries.countAll().executeAsOne())
-        assertTrue(файл.exists() && файл.length() > 0)
+        assertTrue(file.exists() && file.length() > 0)
     }
 
     @Test
     fun второй_запуск_открывает_ту_же_базу_и_переписка_на_месте() {
-        val файл = новыйФайл("tima-desktop-reopen")
-        val шифр = LocalStoreFieldCipher(ТЕСТОВЫЙ_СЕКРЕТ)
+        val file = newFile("tima-desktop-reopen")
+        val cipher = LocalStoreFieldCipher(TEST_SECRET)
 
-        SqlOutboxStore(desktopDatabase(файл), шифр).putIfAbsent(
+        SqlOutboxStore(desktopDatabase(file), cipher).putIfAbsent(
             OutboxEntry(dedupKey = "d-1", chatId = "chat-1", body = "привет".encodeToByteArray()),
         )
 
         // Второй запуск: тот же файл, новое соединение.
-        val снова = SqlOutboxStore(desktopDatabase(файл), шифр)
+        val again = SqlOutboxStore(desktopDatabase(file), cipher)
 
-        assertEquals("привет", снова.byDedupKey("d-1")?.body?.decodeToString())
+        assertEquals("привет", again.byDedupKey("d-1")?.body?.decodeToString())
     }
 
     /**
@@ -64,15 +64,15 @@ class DesktopDriverTest {
      */
     @Test
     fun база_от_более_новой_версии_отвергается() {
-        val файл = новыйФайл("tima-desktop-future")
-        desktopDatabase(файл)
-        поставитьВерсию(файл, TimaDatabase.Schema.version + 5)
+        val file = newFile("tima-desktop-future")
+        desktopDatabase(file)
+        versionPut(file, TimaDatabase.Schema.version + 5)
 
-        val отказ = assertFailsWith<IllegalStateException> { desktopDatabase(файл) }
+        val refusal = assertFailsWith<IllegalStateException> { desktopDatabase(file) }
 
         assertTrue(
-            отказ.message.orEmpty().contains("новее"),
-            "отказ обязан объяснять причину, а не падать где-нибудь ниже: ${отказ.message}",
+            refusal.message.orEmpty().contains("новее"),
+            "отказ обязан объяснять причину, а не падать где-нибудь ниже: ${refusal.message}",
         )
     }
 
@@ -84,18 +84,18 @@ class DesktopDriverTest {
      */
     @Test
     fun база_с_таблицами_но_без_версии_отвергается() {
-        val файл = новыйФайл("tima-desktop-noversion")
-        desktopDatabase(файл)
-        поставитьВерсию(файл, 0)
+        val file = newFile("tima-desktop-noversion")
+        desktopDatabase(file)
+        versionPut(file, 0)
 
-        val отказ = assertFailsWith<IllegalStateException> { desktopDatabase(файл) }
+        val refusal = assertFailsWith<IllegalStateException> { desktopDatabase(file) }
 
-        assertTrue(отказ.message.orEmpty().contains("версия схемы не записана"), отказ.message.orEmpty())
+        assertTrue(refusal.message.orEmpty().contains("версия схемы не записана"), refusal.message.orEmpty())
     }
 
-    private fun поставитьВерсию(файл: File, версия: Long) {
-        val driver = desktopDatabaseDriver(файл)
-        driver.execute(null, "PRAGMA user_version = $версия;", 0)
+    private fun versionPut(file: File, version: Long) {
+        val driver = desktopDatabaseDriver(file)
+        driver.execute(null, "PRAGMA user_version = $version;", 0)
         driver.close()
     }
 }

@@ -15,38 +15,38 @@ package io.tima.core.network
  */
 object LinkQr {
 
-    private const val ПРЕФИКС = "tima://link/v1?"
+    private const val PREFIX = "tima://link/v1?"
 
     /**
      * @return `null` — код не наш или в нём нет обязательного. Различать «не тот QR» и
      *   «испорченный QR» человеку незачем: в обоих случаях надо показать код заново.
      */
     fun parse(payload: String): LinkQrData? {
-        val строка = payload.trim()
-        if (!строка.startsWith(ПРЕФИКС)) return null
-        val хвост = строка.removePrefix(ПРЕФИКС)
+        val line = payload.trim()
+        if (!line.startsWith(PREFIX)) return null
+        val tail = line.removePrefix(PREFIX)
 
-        val поля = mutableMapOf<String, String>()
-        for (кусок in хвост.split('&')) {
-            val знак = кусок.indexOf('=')
-            if (знак <= 0) continue
-            поля[кусок.substring(0, знак)] = кусок.substring(знак + 1)
+        val fields = mutableMapOf<String, String>()
+        for (chunk in tail.split('&')) {
+            val glyph = chunk.indexOf('=')
+            if (glyph <= 0) continue
+            fields[chunk.substring(0, glyph)] = chunk.substring(glyph + 1)
         }
 
-        val sessionId = поля["session_id"]?.takeIf { it.isNotEmpty() } ?: return null
-        val secret = поля["secret"]?.takeIf { it.isNotEmpty() } ?: return null
-        val encryptionPub = поля["encryption_key"]?.let { decodeBase64Url(it) } ?: return null
-        val signingPub = поля["signing_key"]?.let { decodeBase64Url(it) } ?: return null
-        if (encryptionPub.size != КЛЮЧ || signingPub.size != КЛЮЧ) return null
+        val sessionId = fields["session_id"]?.takeIf { it.isNotEmpty() } ?: return null
+        val secret = fields["secret"]?.takeIf { it.isNotEmpty() } ?: return null
+        val encryptionPub = fields["encryption_key"]?.let { decodeBase64Url(it) } ?: return null
+        val signingPub = fields["signing_key"]?.let { decodeBase64Url(it) } ?: return null
+        if (encryptionPub.size != KEY || signingPub.size != KEY) return null
 
         // Имя — единственное поле, которое можно не понять и продолжить: оно показывается
         // человеку («подключить Компьютер?»), а не участвует в подписи.
-        val имя = поля["name"]?.let { decodeBase64Url(it) }?.decodeToString()
+        val name = fields["name"]?.let { decodeBase64Url(it) }?.decodeToString()
 
-        return LinkQrData(sessionId, secret, encryptionPub, signingPub, имя)
+        return LinkQrData(sessionId, secret, encryptionPub, signingPub, name)
     }
 
-    private const val КЛЮЧ = 32
+    private const val KEY = 32
 }
 
 /**

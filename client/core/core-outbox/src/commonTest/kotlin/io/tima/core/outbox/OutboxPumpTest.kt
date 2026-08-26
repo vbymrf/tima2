@@ -18,55 +18,55 @@ import kotlin.test.assertTrue
  */
 class OutboxPumpTest {
 
-    private var время = 1_000L
+    private var time = 1_000L
     private val store = InMemoryOutboxStore()
-    private val outbox = Outbox(store, nowMs = { время })
-    private val тело = byteArrayOf(1)
+    private val outbox = Outbox(store, nowMs = { time })
+    private val body = byteArrayOf(1)
 
-    private val запечатать: (OutboxEntry) -> ByteArray = { byteArrayOf(0x7F) + it.body }
+    private val seal: (OutboxEntry) -> ByteArray = { byteArrayOf(0x7F) + it.body }
 
-    private fun поставить(n: Int) = repeat(n) { outbox.enqueue("d-$it", ЧАТ, тело) }
+    private fun put(n: Int) = repeat(n) { outbox.enqueue("d-$it", CHAT, body) }
 
     /** Проход по единственной переписке: настоящая подпись просит эпоху на каждую. */
     private suspend fun OutboxPump.runOnce(
-        эпоха: Int,
+        epoch: Int,
         seal: (OutboxEntry) -> ByteArray,
         send: suspend (ReadyToSend) -> SendOutcome,
-    ) = runOnce(mapOf(ЧАТ to эпоха.toLong()), seal, send)
+    ) = runOnce(mapOf(CHAT to epoch.toLong()), seal, send)
 
     @Test
     fun одновременных_отправок_не_больше_предела() = runTest {
-        поставить(10)
+        put(10)
 
-        var сейчас = 0
-        var пик = 0
-        val держим = CompletableDeferred<Unit>()
+        var now = 0
+        var peak = 0
+        val hold = CompletableDeferred<Unit>()
 
-        val насос = OutboxPump(outbox, maxConcurrent = 3)
+        val pump = OutboxPump(outbox, maxConcurrent = 3)
         // async от области самого теста, а не backgroundScope: фоновые корутины
         // планировщик не считает работой, и advanceUntilIdle объявил бы простой, ни разу
         // не дав проходу начаться (пик остался бы нулём — так и было).
-        val проход = async {
-            насос.runOnce(эпоха = 1, seal = запечатать) {
-                сейчас++
-                пик = maxOf(пик, сейчас)
+        val pass = async {
+            pump.runOnce(epoch = 1, seal = seal) {
+                now++
+                peak = maxOf(peak, now)
                 // Все отправки висят, пока не отпустим: так пик виден целиком, а не
                 // зависит от того, кто успел завершиться.
-                держим.await()
-                сейчас--
+                hold.await()
+                now--
                 SendOutcome.Accepted(1)
             }
         }
 
         // Даём корутинам дойти до ожидания.
         testScheduler.advanceUntilIdle()
-        assertEquals(3, пик, "одновременно должно висеть ровно три отправки")
+        assertEquals(3, peak, "одновременно должно висеть ровно три отправки")
 
-        держим.complete(Unit)
-        val обработано = проход.await()
+        hold.complete(Unit)
+        val handled = pass.await()
 
-        assertEquals(10, обработано)
-        assertEquals(3, пик, "предел не должен превышаться и после разблокировки")
+        assertEquals(10, handled)
+        assertEquals(3, peak, "предел не должен превышаться и после разблокировки")
         assertEquals(10, store.countBy(OutboxState.SENT))
     }
 
@@ -75,26 +75,26 @@ class OutboxPumpTest {
         // Одно неотправляемое сообщение не должно задерживать переписку — это то же
         // требование, что и «отложенная запись не загораживает готовую», но на уровне
         // прохода.
-        поставить(5)
+        put(5)
 
-        val обработано = OutboxPump(outbox, maxConcurrent = 2).runOnce(1, запечатать) { готовое ->
-            if (готовое.entry.dedupKey == "d-2") {
+        val handled = OutboxPump(outbox, maxConcurrent = 2).runOnce(1, seal) { ready ->
+            if (ready.entry.dedupKey == "d-2") {
                 SendOutcome.Permanent("подпись не сошлась")
             } else {
                 SendOutcome.Accepted(1)
             }
         }
 
-        assertEquals(5, обработано)
+        assertEquals(5, handled)
         assertEquals(4, store.countBy(OutboxState.SENT))
         assertEquals(1, store.countBy(OutboxState.DEAD))
     }
 
     @Test
     fun временные_отказы_возвращаются_в_очередь_целиком() = runTest {
-        поставить(4)
+        put(4)
 
-        OutboxPump(outbox, maxConcurrent = 4).runOnce(1, запечатать) { SendOutcome.Retry() }
+        OutboxPump(outbox, maxConcurrent = 4).runOnce(1, seal) { SendOutcome.Retry() }
 
         assertEquals(4, store.countBy(OutboxState.QUEUED), "всё вернулось, ничего не потеряно")
         // Конверты остаются в памяти: эпоха не сменилась, значит повтор уйдёт теми же
@@ -104,13 +104,13 @@ class OutboxPumpTest {
 
     @Test
     fun пустая_очередь_даёт_ноль_и_не_зовёт_транспорт() = runTest {
-        var вызовов = 0
-        val обработано = OutboxPump(outbox).runOnce(1, запечатать) {
-            вызовов++
+        var calls = 0
+        val handled = OutboxPump(outbox).runOnce(1, seal) {
+            calls++
             SendOutcome.Accepted(1)
         }
-        assertEquals(0, обработано)
-        assertEquals(0, вызовов, "по пустой очереди в сеть ходить незачем")
+        assertEquals(0, handled)
+        assertEquals(0, calls, "по пустой очереди в сеть ходить незачем")
     }
 
     @Test
@@ -118,13 +118,13 @@ class OutboxPumpTest {
         // Проход держит запечатанные конверты в памяти, поэтому берёт ограниченную
         // партию. Очередь после долгого офлайна уйдёт за несколько проходов — это
         // правильнее, чем один проход на всю память устройства.
-        поставить(OutboxPump.BATCH_LIMIT + 10)
+        put(OutboxPump.BATCH_LIMIT + 10)
 
-        val первый = OutboxPump(outbox, maxConcurrent = 5).runOnce(1, запечатать) {
+        val first = OutboxPump(outbox, maxConcurrent = 5).runOnce(1, seal) {
             SendOutcome.Accepted(1)
         }
 
-        assertEquals(OutboxPump.BATCH_LIMIT, первый)
+        assertEquals(OutboxPump.BATCH_LIMIT, first)
         assertEquals(10, store.countBy(OutboxState.QUEUED), "остаток ждёт следующего прохода")
     }
 
@@ -132,20 +132,20 @@ class OutboxPumpTest {
     fun смена_эпохи_между_проходами_перезапечатывает() = runTest {
         // Ради этого запечатывание и позднее: за время ожидания в очереди ключ эпохи
         // escrow успевает смениться.
-        поставить(2)
-        var запечатано = 0
-        val считающий: (OutboxEntry) -> ByteArray = { запечатано++; byteArrayOf(1) }
+        put(2)
+        var sealed = 0
+        val counting: (OutboxEntry) -> ByteArray = { sealed++; byteArrayOf(1) }
 
-        OutboxPump(outbox, maxConcurrent = 2).runOnce(1, считающий) { SendOutcome.Retry() }
-        assertEquals(2, запечатано)
+        OutboxPump(outbox, maxConcurrent = 2).runOnce(1, counting) { SendOutcome.Retry() }
+        assertEquals(2, sealed)
 
-        время += 1_000
-        outbox.onEpochChanged(ЧАТ, 2L)
-        OutboxPump(outbox, maxConcurrent = 2).runOnce(эпоха = 2, seal = считающий) {
+        time += 1_000
+        outbox.onEpochChanged(CHAT, 2L)
+        OutboxPump(outbox, maxConcurrent = 2).runOnce(epoch = 2, seal = counting) {
             SendOutcome.Accepted(1)
         }
 
-        assertEquals(4, запечатано, "под новую эпоху конверты собираются заново")
+        assertEquals(4, sealed, "под новую эпоху конверты собираются заново")
         assertEquals(2, store.countBy(OutboxState.SENT))
     }
 
@@ -160,9 +160,9 @@ class OutboxPumpTest {
     fun исключение_из_транспорта_не_проглатывается_молча() = runTest {
         // Транспорт обязан отдавать беду исходом. Если он всё же бросил, проход должен
         // упасть, а не сделать вид, что сообщение отправлено.
-        поставить(1)
+        put(1)
         assertFailsWith<IllegalStateException> {
-            OutboxPump(outbox).runOnce(1, запечатать) { error("транспорт бросил") }
+            OutboxPump(outbox).runOnce(1, seal) { error("транспорт бросил") }
         }
         // И запись осталась в SENDING — её вернёт recoverOnStart, а не молчание.
         assertEquals(1, store.countBy(OutboxState.SENDING))
@@ -170,6 +170,6 @@ class OutboxPumpTest {
     }
 
     private companion object {
-        const val ЧАТ = "chat-1"
+        const val CHAT = "chat-1"
     }
 }

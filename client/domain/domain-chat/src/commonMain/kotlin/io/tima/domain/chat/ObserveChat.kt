@@ -138,5 +138,5 @@ fun interface ChatFeed {
  */
 fun interface ChatNames {
     /** Имя или номер. Пустого ответа не бывает: строка без автора хуже, чем номер. */
-    suspend fun имя(userId: String): String
+    suspend fun name(userId: String): String
 }

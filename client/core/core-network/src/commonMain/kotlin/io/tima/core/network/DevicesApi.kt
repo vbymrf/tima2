@@ -45,17 +45,17 @@ class DevicesApi(
         if (response.status != HttpStatusCode.OK) {
             return MyDevicesResult.Refused(response.status.value, body.codeOf())
         }
-        val список = body?.get("devices")?.jsonArrayOrNull()?.mapNotNull { элемент ->
-            val объект = элемент.jsonObjectOrNull() ?: return@mapNotNull null
-            val id = объект.str("device_id") ?: return@mapNotNull null
+        val list = body?.get("devices")?.jsonArrayOrNull()?.mapNotNull { element ->
+            val objectValue = element.jsonObjectOrNull() ?: return@mapNotNull null
+            val id = objectValue.str("device_id") ?: return@mapNotNull null
             MyDevice(
                 deviceId = id,
-                name = объект.str("name").orEmpty(),
-                createdAt = объект.str("created_at"),
-                current = объект.bool("current") == true,
+                name = objectValue.str("name").orEmpty(),
+                createdAt = objectValue.str("created_at"),
+                current = objectValue.bool("current") == true,
             )
         }
-        return список?.let { MyDevicesResult.Devices(it) }
+        return list?.let { MyDevicesResult.Devices(it) }
             ?: MyDevicesResult.Refused(response.status.value, "ответ без devices")
     }
 

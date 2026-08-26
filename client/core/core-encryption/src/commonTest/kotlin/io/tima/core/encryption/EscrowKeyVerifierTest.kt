@@ -16,33 +16,33 @@ import kotlin.test.assertTrue
  */
 class EscrowKeyVerifierTest {
 
-    private val анклав = Kodium.generateKeyPair()
-    private val ключАнклава = анклав.getPublicKey().signingKey
+    private val enclave = Kodium.generateKeyPair()
+    private val enclaveKey = enclave.getPublicKey().signingKey
 
-    private val сейчас = 1_771_200_000_000L
-    private val ключЭпохи = ByteArray(EscrowKeyVerifier.PUBLIC_KEY_BYTES) { (it % 251).toByte() }
+    private val now = 1_771_200_000_000L
+    private val epochKey = ByteArray(EscrowKeyVerifier.PUBLIC_KEY_BYTES) { (it % 251).toByte() }
 
-    private fun мета(
+    private fun meta(
         id: Long = 7,
         region: String = "ru",
         chatId: String = "bbbbbbbb-0000-0000-0000-0000000000e1",
         epoch: String = "2026-08",
-        publicKey: ByteArray = ключЭпохи,
-        validFrom: Long = сейчас - 1_000,
-        validTo: Long = сейчас + 1_000,
-        destroyAt: Long = сейчас + 100_000,
+        publicKey: ByteArray = epochKey,
+        validFrom: Long = now - 1_000,
+        validTo: Long = now + 1_000,
+        destroyAt: Long = now + 100_000,
     ) = EscrowKeyMeta(id, region, epoch, chatId, publicKey, validFrom, validTo, destroyAt)
 
-    private fun подпись(meta: EscrowKeyMeta, ключ: io.kodium.KodiumPrivateKey = анклав): ByteArray =
-        Kodium.signDetached(ключ, EscrowConfigSignature.keyMetaSigningBytes(meta)).getOrThrow()
+    private fun caption(meta: EscrowKeyMeta, key: io.kodium.KodiumPrivateKey = enclave): ByteArray =
+        Kodium.signDetached(key, EscrowConfigSignature.keyMetaSigningBytes(meta)).getOrThrow()
 
-    private fun проверить(
-        meta: EscrowKeyMeta = мета(),
-        signature: ByteArray = подпись(meta),
-        ключАнклава: ByteArray = this.ключАнклава,
-        nowMs: Long = сейчас,
+    private fun check(
+        meta: EscrowKeyMeta = meta(),
+        signature: ByteArray = caption(meta),
+        enclaveKey: ByteArray = this.enclaveKey,
+        nowMs: Long = now,
     ) = EscrowKeyVerifier.verify(
-        enclaveSigningPub = ключАнклава,
+        enclaveSigningPub = enclaveKey,
         id = meta.id,
         region = meta.region,
         chatId = meta.chatId,
@@ -57,31 +57,31 @@ class EscrowKeyVerifierTest {
 
     @Test
     fun подписанный_анклавом_ключ_принимается() {
-        val принят = проверить().getOrThrow()
+        val accepted = check().getOrThrow()
 
-        assertEquals(7, принят.version, "версия ключа едет в конверт как escrow_key_version")
-        assertContentEquals(ключЭпохи, принят.publicKey)
+        assertEquals(7, accepted.version, "версия ключа едет в конверт как escrow_key_version")
+        assertContentEquals(epochKey, accepted.publicKey)
     }
 
     @Test
     fun подменённый_ключ_эпохи_отвергается() {
         // Главная проверка: именно так выглядит компрометация бэкенда — подписан один
         // ключ, отдан другой. Пройди это, и сообщение зашифровалось бы в обход анклава.
-        val честная = мета()
-        val подпись = подпись(честная)
-        val чужой = ByteArray(EscrowKeyVerifier.PUBLIC_KEY_BYTES) { 0x42 }
+        val honest = meta()
+        val caption = caption(honest)
+        val foreign = ByteArray(EscrowKeyVerifier.PUBLIC_KEY_BYTES) { 0x42 }
 
-        val исход = проверить(meta = честная.copy(publicKey = чужой), signature = подпись)
+        val outcome = check(meta = honest.copy(publicKey = foreign), signature = caption)
 
-        assertIs<EscrowKeyRejected>(исход.exceptionOrNull())
-        assertTrue(исход.exceptionOrNull()!!.message!!.contains("подпись"))
+        assertIs<EscrowKeyRejected>(outcome.exceptionOrNull())
+        assertTrue(outcome.exceptionOrNull()!!.message!!.contains("подпись"))
     }
 
     @Test
     fun подпись_чужого_анклава_отвергается() {
-        val чужойАнклав = Kodium.generateKeyPair()
-        val meta = мета()
-        assertTrue(проверить(meta, подпись(meta, чужойАнклав)).isFailure)
+        val foreignEnclave = Kodium.generateKeyPair()
+        val meta = meta()
+        assertTrue(check(meta, caption(meta, foreignEnclave)).isFailure)
     }
 
     @Test
@@ -89,22 +89,22 @@ class EscrowKeyVerifierTest {
         // Подпись покрывает восемь полей, и все восемь важны: подменённый chat_id даёт
         // ключ другой переписки, подменённый destroy_at — обещание хранения, которого
         // анклав не давал.
-        val честная = мета()
-        val подпись = подпись(честная)
+        val honest = meta()
+        val caption = caption(honest)
 
-        val подмены = listOf(
-            "id" to честная.copy(id = 8),
-            "region" to честная.copy(region = "eu"),
-            "chatId" to честная.copy(chatId = "cccccccc-0000-0000-0000-0000000000e1"),
-            "epoch" to честная.copy(epoch = "2026-09"),
-            "validFrom" to честная.copy(validFromUnixMs = честная.validFromUnixMs - 1),
-            "validTo" to честная.copy(validToUnixMs = честная.validToUnixMs + 1),
-            "destroyAt" to честная.copy(destroyAtUnixMs = честная.destroyAtUnixMs + 1),
+        val substitution = listOf(
+            "id" to honest.copy(id = 8),
+            "region" to honest.copy(region = "eu"),
+            "chatId" to honest.copy(chatId = "cccccccc-0000-0000-0000-0000000000e1"),
+            "epoch" to honest.copy(epoch = "2026-09"),
+            "validFrom" to honest.copy(validFromUnixMs = honest.validFromUnixMs - 1),
+            "validTo" to honest.copy(validToUnixMs = honest.validToUnixMs + 1),
+            "destroyAt" to honest.copy(destroyAtUnixMs = honest.destroyAtUnixMs + 1),
         )
-        for ((поле, подменённая) in подмены) {
+        for ((field, substituted) in substitution) {
             assertTrue(
-                проверить(подменённая, подпись).isFailure,
-                "подмена поля $поле обязана быть замечена",
+                check(substituted, caption).isFailure,
+                "подмена поля $field обязана быть замечена",
             )
         }
     }
@@ -113,34 +113,34 @@ class EscrowKeyVerifierTest {
     fun истёкший_и_ещё_не_начавшийся_ключ_не_годятся() {
         // Запечатывать на истёкшую эпоху — значит отдать сообщение ключу, который анклав
         // уничтожит раньше, чем истечёт срок хранения переписки.
-        val meta = мета()
-        val истёк = проверить(meta, nowMs = meta.validToUnixMs)
-        assertTrue(истёк.isFailure)
-        assertTrue(истёк.exceptionOrNull()!!.message!!.contains("истёк"))
+        val meta = meta()
+        val expired = check(meta, nowMs = meta.validToUnixMs)
+        assertTrue(expired.isFailure)
+        assertTrue(expired.exceptionOrNull()!!.message!!.contains("истёк"))
 
-        val рано = проверить(meta, nowMs = meta.validFromUnixMs - 1)
-        assertTrue(рано.isFailure)
-        assertTrue(рано.exceptionOrNull()!!.message!!.contains("не начал"))
+        val early = check(meta, nowMs = meta.validFromUnixMs - 1)
+        assertTrue(early.isFailure)
+        assertTrue(early.exceptionOrNull()!!.message!!.contains("не начал"))
     }
 
     @Test
     fun граница_окна_включает_начало_и_исключает_конец() {
-        val meta = мета()
-        assertTrue(проверить(meta, nowMs = meta.validFromUnixMs).isSuccess, "начало включительно")
-        assertTrue(проверить(meta, nowMs = meta.validToUnixMs - 1).isSuccess)
-        assertTrue(проверить(meta, nowMs = meta.validToUnixMs).isFailure, "конец исключительно")
+        val meta = meta()
+        assertTrue(check(meta, nowMs = meta.validFromUnixMs).isSuccess, "начало включительно")
+        assertTrue(check(meta, nowMs = meta.validToUnixMs - 1).isSuccess)
+        assertTrue(check(meta, nowMs = meta.validToUnixMs).isFailure, "конец исключительно")
     }
 
     @Test
     fun размеры_проверяются_до_криптографии() {
         // Ключ не того размера — испорченный ответ, а не подмена. Сообщение об этом
         // должно называть размер, иначе искать причину придётся в криптографии.
-        val meta = мета(publicKey = ByteArray(100))
-        val исход = проверить(meta)
-        assertTrue(исход.exceptionOrNull()!!.message!!.contains("1184"))
+        val meta = meta(publicKey = ByteArray(100))
+        val outcome = check(meta)
+        assertTrue(outcome.exceptionOrNull()!!.message!!.contains("1184"))
 
-        assertTrue(проверить(signature = ByteArray(10)).isFailure)
-        assertTrue(проверить(ключАнклава = ByteArray(10)).isFailure)
+        assertTrue(check(signature = ByteArray(10)).isFailure)
+        assertTrue(check(enclaveKey = ByteArray(10)).isFailure)
     }
 
     @Test
@@ -152,9 +152,9 @@ class EscrowKeyVerifierTest {
         // константу с собой бессмысленно. А вот 31 байт вместо 32 (обрезанная строка,
         // испорченный base64url) даст отказ на каждом сообщении, и причина будет
         // выглядеть как «анклав подписывает неправильно».
-        val ключ = EscrowTrust.enclaveSigningPub
-        assertNotNull(ключ, "ключ анклава обязан быть зашит: без него отправка невозможна")
-        assertEquals(32, ключ.size)
+        val key = EscrowTrust.enclaveSigningPub
+        assertNotNull(key, "ключ анклава обязан быть зашит: без него отправка невозможна")
+        assertEquals(32, key.size)
     }
 
     @Test

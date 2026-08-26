@@ -139,8 +139,8 @@ class EventStreamProtocol {
      */
     fun pullFrame(cursor: Long?, limit: Int = DEFAULT_LIMIT): String {
         require(limit in 1..MAX_LIMIT) { "предел страницы вне 1..$MAX_LIMIT: $limit" }
-        val курсор = cursor?.toString() ?: "null"
-        return """{"event":"sync.pull","cursor":$курсор,"limit":$limit}"""
+        val cursor = cursor?.toString() ?: "null"
+        return """{"event":"sync.pull","cursor":$cursor,"limit":$limit}"""
     }
 
     /** Подтверждение. Вызывать **после** записи. */

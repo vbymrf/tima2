@@ -68,16 +68,16 @@ import kotlin.test.assertTrue
  */
 class AndroidStandTest {
 
-    private val метка = "СТЕНД"
-    private val контекст = InstrumentationRegistry.getInstrumentation().targetContext
+    private val label = "СТЕНД"
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     private lateinit var client: HttpClient
-    private val шаги = StringBuilder()
+    private val steps = StringBuilder()
 
     @BeforeTest
-    fun подготовить() {
-        AndroidHarness.install(контекст)
-        AndroidSecrets.install(контекст)
+    fun prepare() {
+        AndroidHarness.install(context)
+        AndroidSecrets.install(context)
         client = HttpClient(httpEngine()) {
             timaDefaults()
             install(WebSockets)
@@ -85,144 +85,144 @@ class AndroidStandTest {
     }
 
     @AfterTest
-    fun убрать() {
+    fun remove() {
         client.close()
         // Секрет устройства за собой чистим: телефон не наш, и оставлять на нём ключи от
         // тестовых аккаунтов незачем.
         runCatching { platformVault("android-stand-test").remove(Secrets.DEVICE_SECRET) }
-        Log.i(метка, шаги.toString())
+        Log.i(label, steps.toString())
     }
 
-    private fun шаг(текст: String) {
-        шаги.appendLine(текст)
-        Log.i(метка, текст)
+    private fun step(text: String) {
+        steps.appendLine(text)
+        Log.i(label, text)
     }
 
     @Test
     fun сообщение_уходит_и_приходит_на_телефоне() = runBlocking {
         val host = "xn--80aa4ar0b.xn--p1ai"
         val route = ServerRoute.from(RouteConfig(host = host))
-        шаг("маршрут: ${route.apiBase}, WS ${route.wsUrl}")
+        step("маршрут: ${route.apiBase}, WS ${route.wsUrl}")
 
-        val анклав = EscrowTrust.enclaveSigningPub
-        assertTrue(анклав != null, "ключ подписи анклава обязан быть зашит в сборку")
-        assertEquals(32, анклав.size)
+        val enclave = EscrowTrust.enclaveSigningPub
+        assertTrue(enclave != null, "ключ подписи анклава обязан быть зашит в сборку")
+        assertEquals(32, enclave.size)
 
         // ── два устройства ───────────────────────────────────────────────────
-        val метка = System.currentTimeMillis() % 100_000_000
-        val А = завести(route, "+797${метка.toString().padStart(8, '0')}", "А")
-        val Б = завести(route, "+796${метка.toString().padStart(8, '0')}", "Б")
+        val label = System.currentTimeMillis() % 100_000_000
+        val A = create(route, "+797${label.toString().padStart(8, '0')}", "А")
+        val B = create(route, "+796${label.toString().padStart(8, '0')}", "Б")
 
         // Секрет устройства А проходит через настоящее хранилище платформы: на этом
         // телефоне это AndroidKeyStore, и путь обязан работать целиком.
-        val хранилище = platformVault("android-stand-test")
-        хранилище.put(Secrets.DEVICE_SECRET, А.secret)
+        val store = platformVault("android-stand-test")
+        store.put(Secrets.DEVICE_SECRET, A.secret)
         assertContentEquals(
-            А.secret,
-            хранилище.get(Secrets.DEVICE_SECRET),
+            A.secret,
+            store.get(Secrets.DEVICE_SECRET),
             "секрет устройства обязан читаться из хранилища платформы обратно",
         )
-        шаг("секрет устройства прошёл через AndroidKeyStore")
+        step("секрет устройства прошёл через AndroidKeyStore")
 
-        val chatId = PersonalChatId.of(А.userId, Б.userId)
-        шаг("chat_id: $chatId")
+        val chatId = PersonalChatId.of(A.userId, B.userId)
+        step("chat_id: $chatId")
 
         // ── ключи собеседника и ключ эпохи ───────────────────────────────────
-        val ключиБ = KeysApi(route, client, token = { А.accessToken }).devicesOf(Б.userId)
-        assertIs<DeviceKeysResult.Devices>(ключиБ)
-        assertTrue(ключиБ.devices.isNotEmpty(), "у собеседника обязано быть устройство")
-        шаг("ключи устройств Б: ${ключиБ.devices.size}")
+        val bKeys = KeysApi(route, client, token = { A.accessToken }).devicesOf(B.userId)
+        assertIs<DeviceKeysResult.Devices>(bKeys)
+        assertTrue(bKeys.devices.isNotEmpty(), "у собеседника обязано быть устройство")
+        step("ключи устройств Б: ${bKeys.devices.size}")
 
-        val эпоха = EscrowApi(route, client, token = { А.accessToken }).keyForChat(chatId)
-        assertIs<EscrowKeyResult.Keys>(эпоха)
-        val подписанный = эпоха.current
-        val проверенный = EscrowKeyVerifier.verify(
-            enclaveSigningPub = анклав,
-            id = подписанный.id,
-            region = подписанный.region,
-            chatId = подписанный.chatId,
-            epoch = подписанный.epoch,
-            publicKey = подписанный.publicKey,
-            signature = подписанный.signature,
-            validFromMs = подписанный.validFromMs,
-            validToMs = подписанный.validToMs,
-            destroyAtMs = подписанный.destroyAtMs,
+        val epoch = EscrowApi(route, client, token = { A.accessToken }).keyForChat(chatId)
+        assertIs<EscrowKeyResult.Keys>(epoch)
+        val signed = epoch.current
+        val verified = EscrowKeyVerifier.verify(
+            enclaveSigningPub = enclave,
+            id = signed.id,
+            region = signed.region,
+            chatId = signed.chatId,
+            epoch = signed.epoch,
+            publicKey = signed.publicKey,
+            signature = signed.signature,
+            validFromMs = signed.validFromMs,
+            validToMs = signed.validToMs,
+            destroyAtMs = signed.destroyAtMs,
             nowMs = System.currentTimeMillis(),
         ).getOrThrow()
-        шаг("подпись анклава сошлась, эпоха ${подписанный.epoch}")
+        step("подпись анклава сошлась, эпоха ${signed.epoch}")
 
         // ── отправка через настоящую очередь на базе Android ──────────────────
-        val sealer = OutgoingSealer(А.userId, А.deviceId, А.identity).sealerFor(
-            escrowKey = проверенный,
-            recipients = ключиБ.devices.map { RecipientDevice(it.deviceId, it.encryptionPub) },
+        val sealer = OutgoingSealer(A.userId, A.deviceId, A.identity).sealerFor(
+            escrowKey = verified,
+            recipients = bKeys.devices.map { RecipientDevice(it.deviceId, it.encryptionPub) },
         )
         val harness = ChatHarness(harnessDriver(), sealWith = sealer)
-        val текст = "Сообщение с телефона, ${System.currentTimeMillis()}"
-        harness.send(chatId, текст)
+        val text = "Сообщение с телефона, ${System.currentTimeMillis()}"
+        harness.send(chatId, text)
 
-        val transport = HttpMessageTransport(route, client, token = { А.accessToken })
-        val исходов = harness.pumpVia { готовое ->
-            val исход = transport.send(готовое.entry.dedupKey, готовое.envelope)
-            шаг("исход отправки: $исход, конверт ${готовое.envelope.size} байт")
-            исход
+        val transport = HttpMessageTransport(route, client, token = { A.accessToken })
+        val outcomes = harness.pumpVia { ready ->
+            val outcome = transport.send(ready.entry.dedupKey, ready.envelope)
+            step("исход отправки: $outcome, конверт ${ready.envelope.size} байт")
+            outcome
         }
-        assertEquals(1, исходов)
+        assertEquals(1, outcomes)
         assertTrue(harness.pending().isEmpty(), "сообщение не ушло: ${harness.pending()}")
 
         // ── приём вторым устройством по живому каналу ─────────────────────────
-        val шифрБ = харнессШифр()
-        val базаБ = TimaDatabase(harnessDriver())
+        val bCipher = cipherHarness()
+        val bDatabase = TimaDatabase(harnessDriver())
         val inbox = Inbox(
-            SqlInboxStore(базаБ, шифрБ),
+            SqlInboxStore(bDatabase, bCipher),
             nowMs = { System.currentTimeMillis() },
         )
         // Ждём ДО первого дошедшего сообщения, а не до конца тайм-аута: живой канал
         // сам не закрывается, и «подожди минуту на всякий случай» превращает проверку
         // в ту, которую однажды выключат за медлительность.
-        val дошло = CompletableDeferred<String>()
-        val канал = launch {
-            EventStream(route, client, token = { Б.accessToken }).run(cursor = null) { событие ->
-                inbox.receive(событие.chatId, событие.messageId, событие.envelope)
+        val delivered = CompletableDeferred<String>()
+        val channel = launch {
+            EventStream(route, client, token = { B.accessToken }).run(cursor = null) { event ->
+                inbox.receive(event.chatId, event.messageId, event.envelope)
                 inbox.openNext(
-                    open = { запись ->
+                    open = { entry ->
                         PersonalMessages.open(
-                            envelopeBytes = запись.envelope,
-                            myDeviceId = Б.deviceId,
-                            me = Б.identity,
-                            senderSigningPublic = А.identity.signingPublic,
+                            envelopeBytes = entry.envelope,
+                            myDeviceId = B.deviceId,
+                            me = B.identity,
+                            senderSigningPublic = A.identity.signingPublic,
                         ).fold(
                             // Байты тела, как пришли: столбец читается кодеком, и текстом писать нельзя.
                             onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId) },
                             onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },
                         )
                     },
-                )?.let { запись ->
+                )?.let { entry ->
                     // Текст берётся ИЗ БАЗЫ УСТРОЙСТВА: прогон на телефоне обязан
                     // доказать, что сообщение доехало туда, откуда его читает экран.
-                    if (запись.state == IncomingState.STORED) {
-                        val строка = базаБ.messagesQueries
-                            .byDedupKey("${запись.chatId}/${запись.messageId}")
+                    if (entry.state == IncomingState.STORED) {
+                        val line = bDatabase.messagesQueries
+                            .byDedupKey("${entry.chatId}/${entry.messageId}")
                             .executeAsOneOrNull()
-                        val тело = строка?.body_enc?.let { шифрБ.open(it) }
+                        val body = line?.body_enc?.let { bCipher.open(it) }
                         // Тело читается КОДЕКОМ, как его читает экран: столбец хранит
                         // упакованное тело, а не текст. Прежняя проверка сравнивала байты
                         // напрямую и потому не заметила, что приёмник писал текстом.
-                        val текстСтроки = тело?.let { TextBodyCodec.decode(it).getOrNull()?.plainText() }
-                        if (текстСтроки != null) дошло.complete(текстСтроки)
+                        val lineText = body?.let { TextBodyCodec.decode(it).getOrNull()?.plainText() }
+                        if (lineText != null) delivered.complete(lineText)
                     }
                 }
             }
         }
-        val прочитано = withTimeoutOrNull(60_000) { дошло.await() }
-        канал.cancel()
+        val read = withTimeoutOrNull(60_000) { delivered.await() }
+        channel.cancel()
 
-        assertEquals(текст, прочитано, "до второго устройства обязан дойти тот же текст")
-        шаг("ПРИНЯТО на телефоне: текст сошёлся")
+        assertEquals(text, read, "до второго устройства обязан дойти тот же текст")
+        step("ПРИНЯТО на телефоне: текст сошёлся")
     }
 
     // ── регистрация ──────────────────────────────────────────────────────────
 
-    private class Заведённое(
+    private class Created(
         val userId: String,
         val deviceId: String,
         val accessToken: String,
@@ -230,33 +230,33 @@ class AndroidStandTest {
         val secret: ByteArray,
     )
 
-    private suspend fun завести(route: ServerRoute, phone: String, имя: String): Заведённое {
+    private suspend fun create(route: ServerRoute, phone: String, name: String): Created {
         val auth = AuthApi(route, client)
 
-        val запрос = auth.requestSms(phone)
-        assertIs<SmsRequestResult.Sent>(запрос, "$имя: запрос кода не прошёл: $запрос")
-        val код = запрос.devCode
-        assertTrue(код != null, "$имя: сервер не отдал dev_code — TIMA_DEV_SMS выключен?")
+        val request = auth.requestSms(phone)
+        assertIs<SmsRequestResult.Sent>(request, "$name: запрос кода не прошёл: $request")
+        val code = request.devCode
+        assertTrue(code != null, "$name: сервер не отдал dev_code — TIMA_DEV_SMS выключен?")
 
-        val проверка = auth.verifySms(запрос.requestId, код)
-        assertIs<SmsVerifyResult.Verified>(проверка, "$имя: код не принят: $проверка")
+        val check = auth.verifySms(request.requestId, code)
+        assertIs<SmsVerifyResult.Verified>(check, "$name: код не принят: $check")
 
-        val материал = DeviceKeyFactoryOverKodium.newDeviceKeys()
-        val ответ = auth.register(
-            registrationToken = проверка.registrationToken,
-            encryptionPub = материал.encryptionPub,
-            signingPub = материал.signingPub,
+        val material = DeviceKeyFactoryOverKodium.newDeviceKeys()
+        val answer = auth.register(
+            registrationToken = check.registrationToken,
+            encryptionPub = material.encryptionPub,
+            signingPub = material.signingPub,
             platform = "android-харнесс",
         )
-        assertIs<RegisterResult.Registered>(ответ, "$имя: заведение не прошло: $ответ")
-        шаг("$имя заведено: user=${ответ.userId} device=${ответ.deviceId}")
+        assertIs<RegisterResult.Registered>(answer, "$name: заведение не прошло: $answer")
+        step("$name заведено: user=${answer.userId} device=${answer.deviceId}")
 
-        return Заведённое(
-            userId = ответ.userId,
-            deviceId = ответ.deviceId,
-            accessToken = ответ.accessToken,
-            identity = deviceIdentityFrom(материал.secret),
-            secret = материал.secret,
+        return Created(
+            userId = answer.userId,
+            deviceId = answer.deviceId,
+            accessToken = answer.accessToken,
+            identity = deviceIdentityFrom(material.secret),
+            secret = material.secret,
         )
     }
 }

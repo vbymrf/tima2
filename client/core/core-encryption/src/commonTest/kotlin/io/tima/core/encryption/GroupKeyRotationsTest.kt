@@ -19,39 +19,39 @@ import kotlin.test.assertTrue
 class GroupKeyRotationsTest {
 
     private val escrow = Mlkem768.keyPair()
-    private val ротации = GroupKeyRotations(EscrowEpochKey(escrow.first, version = 3))
+    private val rotation = GroupKeyRotations(EscrowEpochKey(escrow.first, version = 3))
 
-    private val остаётся = DeviceIdentity.generate()
-    private val второе = DeviceIdentity.generate()
-    private val исключённый = DeviceIdentity.generate()
+    private val stays = DeviceIdentity.generate()
+    private val second = DeviceIdentity.generate()
+    private val removed = DeviceIdentity.generate()
 
-    private fun адрес(id: String, кто: DeviceIdentity) = RecipientDevice(id, кто.encryptionPublic)
+    private fun address(id: String, who: DeviceIdentity) = RecipientDevice(id, who.encryptionPublic)
 
     @Test
     fun версия_на_единицу_больше_серверной() {
         // Не «наша + 1»: наша могла отстать, и тогда сервер ответит version_conflict.
-        val выпуск = ротации.rotate(7, listOf(адрес("dev-1", остаётся))).getOrThrow()
-        assertEquals(8, выпуск.gkVersion)
+        val issue = rotation.rotate(7, listOf(address("dev-1", stays))).getOrThrow()
+        assertEquals(8, issue.gkVersion)
     }
 
     @Test
     fun каждому_получателю_своя_обёртка_и_все_дают_один_ключ() {
-        val выпуск = ротации.rotate(
+        val issue = rotation.rotate(
             currentVersion = 0,
-            recipients = listOf(адрес("dev-1", остаётся), адрес("dev-2", второе)),
+            recipients = listOf(address("dev-1", stays), address("dev-2", second)),
         ).getOrThrow()
 
-        assertEquals(setOf("dev-1", "dev-2"), выпуск.wrappedKeys.keys)
+        assertEquals(setOf("dev-1", "dev-2"), issue.wrappedKeys.keys)
 
         // Оба устройства обязаны прийти к ОДНОМУ ключу: иначе половина группы читала бы
         // одно, половина другое, и расхождение вылезло бы только на живой переписке.
-        for ((устройство, кто) in listOf("dev-1" to остаётся, "dev-2" to второе)) {
-            val развёрнутый = GroupKeyManager.unwrapGroupKey(
-                deviceKey = кто.key,
-                senderEphemeralPub = выпуск.senderEphemeralPub,
-                wrappedGk = выпуск.wrappedKeys.getValue(устройство),
+        for ((device, who) in listOf("dev-1" to stays, "dev-2" to second)) {
+            val unwrapped = GroupKeyManager.unwrapGroupKey(
+                deviceKey = who.key,
+                senderEphemeralPub = issue.senderEphemeralPub,
+                wrappedGk = issue.wrappedKeys.getValue(device),
             ).getOrThrow()
-            assertContentEquals(выпуск.groupKey, развёрнутый, "устройство $устройство получило другой ключ")
+            assertContentEquals(issue.groupKey, unwrapped, "устройство $device получило другой ключ")
         }
     }
 
@@ -59,25 +59,25 @@ class GroupKeyRotationsTest {
     fun исключённый_новую_версию_не_разворачивает() {
         // Смысл ротации при выходе участника. Ему не запрещают — ему просто не создают
         // обёртку, и старые ключи новых сообщений не открывают.
-        val выпуск = ротации.rotate(1, listOf(адрес("dev-1", остаётся))).getOrThrow()
+        val issue = rotation.rotate(1, listOf(address("dev-1", stays))).getOrThrow()
 
-        assertNull(выпуск.wrappedKeys["dev-исключённый"])
-        val чужая = выпуск.wrappedKeys.getValue("dev-1")
-        val попытка = GroupKeyManager.unwrapGroupKey(исключённый.key, выпуск.senderEphemeralPub, чужая)
-        assertTrue(попытка.isFailure, "исключённый развернул чужую обёртку")
+        assertNull(issue.wrappedKeys["dev-исключённый"])
+        val foreign = issue.wrappedKeys.getValue("dev-1")
+        val attempt = GroupKeyManager.unwrapGroupKey(removed.key, issue.senderEphemeralPub, foreign)
+        assertTrue(attempt.isFailure, "исключённый развернул чужую обёртку")
     }
 
     @Test
     fun ключ_на_сервер_не_уходит_а_escrow_уходит() {
-        val выпуск = ротации.rotate(0, listOf(адрес("dev-1", остаётся))).getOrThrow()
+        val issue = rotation.rotate(0, listOf(address("dev-1", stays))).getOrThrow()
 
-        assertEquals(3, выпуск.escrowKeyVersion, "версия ключа эпохи обязана ехать с блобом")
-        assertTrue(выпуск.escrowMlkemCt.isNotEmpty() && выпуск.escrowWrappedKey.isNotEmpty())
+        assertEquals(3, issue.escrowKeyVersion, "версия ключа эпохи обязана ехать с блобом")
+        assertTrue(issue.escrowMlkemCt.isNotEmpty() && issue.escrowWrappedKey.isNotEmpty())
 
         // Ключ не должен встречаться ни в одной части того, что уедет на сервер.
-        val наружу = выпуск.escrowMlkemCt + выпуск.escrowWrappedKey +
-            выпуск.senderEphemeralPub + выпуск.wrappedKeys.values.fold(ByteArray(0)) { a, b -> a + b }
-        assertTrue(!содержит(наружу, выпуск.groupKey), "групповой ключ уехал бы открытым")
+        val outward = issue.escrowMlkemCt + issue.escrowWrappedKey +
+            issue.senderEphemeralPub + issue.wrappedKeys.values.fold(ByteArray(0)) { a, b -> a + b }
+        assertTrue(!contains(outward, issue.groupKey), "групповой ключ уехал бы открытым")
     }
 
     @Test
@@ -85,14 +85,14 @@ class GroupKeyRotationsTest {
         // Иначе группа осталась бы с версией, которой ни у кого нет ключа, — и замолчала
         // бы навсегда, без единой ошибки где-либо.
         assertFailsWith<IllegalArgumentException> {
-            ротации.rotate(1, emptyList()).getOrThrow()
+            rotation.rotate(1, emptyList()).getOrThrow()
         }
     }
 
-    private fun содержит(где: ByteArray, что: ByteArray): Boolean {
-        if (что.isEmpty() || где.size < что.size) return false
-        outer@ for (i in 0..(где.size - что.size)) {
-            for (j in что.indices) if (где[i + j] != что[j]) continue@outer
+    private fun contains(where: ByteArray, what: ByteArray): Boolean {
+        if (what.isEmpty() || where.size < what.size) return false
+        outer@ for (i in 0..(where.size - what.size)) {
+            for (j in what.indices) if (where[i + j] != what[j]) continue@outer
             return true
         }
         return false

@@ -14,12 +14,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import io.tima.core.ui.Имя
-import io.tima.core.ui.Раскладка
-import io.tima.core.ui.Счётчик
+import io.tima.core.ui.Name
+import io.tima.core.ui.Layout
+import io.tima.core.ui.Counter
 import io.tima.core.ui.TimaShapes
 import io.tima.core.ui.TimaSpacing
-import io.tima.core.ui.Тима
+import io.tima.core.ui.Tima
 
 /**
  * Рейка окон — то, чем на широких форматах заменяется подокно «Переключение окон».
@@ -34,84 +34,84 @@ import io.tima.core.ui.Тима
  * видны разом», просто на широком формате оно всегда открыто.
  */
 @Composable
-fun Рейка(
-    раскладка: Раскладка,
-    текущее: Окно,
-    onВыбрать: (Окно) -> Unit,
+fun Rail(
+    layout: Layout,
+    current: Window,
+    onSelect: (Window) -> Unit,
     modifier: Modifier = Modifier,
-    счётчики: Map<Окно, Int> = emptyMap(),
-    onНастройки: (() -> Unit)? = null,
+    counters: Map<Window, Int> = emptyMap(),
+    onSettings: (() -> Unit)? = null,
 ) {
-    val цвета = Тима.цвета
-    val сПодписями = раскладка.подписиРейки
+    val colors = Tima.colors
+    val withCaptions = layout.railCaption
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .background(цвета.функц)
-            .padding(vertical = TimaSpacing.о3, horizontal = TimaSpacing.о2),
-        verticalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
+            .background(colors.functional)
+            .padding(vertical = TimaSpacing.about3, horizontal = TimaSpacing.about2),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
     ) {
-        for (окно in Окно.entries) {
-            Пункт(
-                окно = окно,
-                выбрано = окно == текущее,
-                сколько = счётчики[окно] ?: 0,
-                сПодписью = сПодписями,
-                onClick = { onВыбрать(окно) },
+        for (window in Window.entries) {
+            Item(
+                window = window,
+                selected = window == current,
+                howMany = counters[window] ?: 0,
+                withCaption = withCaptions,
+                onClick = { onSelect(window) },
             )
         }
 
         // Настройки внизу — так в макете, и это не только вид: то, чем пользуются
         // редко, не должно стоять на пути к тому, чем пользуются постоянно.
         Spacer(Modifier.weight(1f))
-        if (onНастройки != null) {
-            Пункт(
-                знак = "⚙",
-                подпись = "Настройки",
-                выбрано = false,
-                сколько = 0,
-                сПодписью = сПодписями,
-                onClick = onНастройки,
+        if (onSettings != null) {
+            Item(
+                glyph = "⚙",
+                caption = "Настройки",
+                selected = false,
+                howMany = 0,
+                withCaption = withCaptions,
+                onClick = onSettings,
             )
         }
     }
 }
 
 @Composable
-private fun Пункт(
-    окно: Окно,
-    выбрано: Boolean,
-    сколько: Int,
-    сПодписью: Boolean,
+private fun Item(
+    window: Window,
+    selected: Boolean,
+    howMany: Int,
+    withCaption: Boolean,
     onClick: () -> Unit,
-) = Пункт(окно.знак, окно.полное, выбрано, сколько, сПодписью, onClick)
+) = Item(window.glyph, window.full, selected, howMany, withCaption, onClick)
 
 @Composable
-private fun Пункт(
-    знак: String,
-    подпись: String,
-    выбрано: Boolean,
-    сколько: Int,
-    сПодписью: Boolean,
+private fun Item(
+    glyph: String,
+    caption: String,
+    selected: Boolean,
+    howMany: Int,
+    withCaption: Boolean,
     onClick: () -> Unit,
 ) {
-    val цвета = Тима.цвета
+    val colors = Tima.colors
     Row(
         modifier = Modifier
-            .then(if (сПодписью) Modifier.fillMaxWidth() else Modifier)
+            .then(if (withCaption) Modifier.fillMaxWidth() else Modifier)
             .background(
-                if (выбрано) цвета.навигация else цвета.функц,
-                RoundedCornerShape(TimaShapes.квадратМал),
+                if (selected) colors.navigation else colors.functional,
+                RoundedCornerShape(TimaShapes.smallSquare),
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = TimaSpacing.о3, vertical = TimaSpacing.о2),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
+            .padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(contentAlignment = Alignment.Center) { Имя(знак) }
-        if (сПодписью) {
-            Имя(подпись, modifier = Modifier.weight(1f))
+        Box(contentAlignment = Alignment.Center) { Name(glyph) }
+        if (withCaption) {
+            Name(caption, modifier = Modifier.weight(1f))
         }
-        if (сколько > 0) Счётчик(сколько)
+        if (howMany > 0) Counter(howMany)
     }
 }

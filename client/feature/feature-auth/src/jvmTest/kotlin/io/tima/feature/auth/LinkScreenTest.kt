@@ -1,9 +1,9 @@
 package io.tima.feature.auth
 
-import io.tima.testui.ЧУЖОЙ_ФОН
-import io.tima.testui.обеТемы
-import io.tima.testui.снять
-import io.tima.testui.тема
+import io.tima.testui.FOREIGN_BACKGROUND
+import io.tima.testui.bothThemes
+import io.tima.testui.capture
+import io.tima.testui.theme
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
  * с нулевым размером, полотно не той стороной, клетка меньше пикселя. Обнаружилось бы это
  * на живом устройстве, где человек просто не может отсканировать «код».
  */
-class ЭкранПривязкиTest {
+class LinkScreenTest {
 
     /**
      * Код нарисован тёмным по светлому.
@@ -30,14 +30,14 @@ class ЭкранПривязкиTest {
      */
     @Test
     fun код_нарисован_в_обеих_темах() {
-        for ((имя, снимок) in обеТемы("привязка-код", ШИРИНА, ВЫСОТА) { экранКода(КОД) }) {
+        for ((name, snapshot) in bothThemes("привязка-код", WIDTH, HEIGHT) { codeScreen(CODE) }) {
             assertTrue(
-                снимок.естьПятно(тема(имя).кодБумага, сторона = 6),
-                "$имя: светлой бумаги кода нет — QR не нарисовался",
+                snapshot.patchHas(theme(name).paperCode, side = 6),
+                "$name: светлой бумаги кода нет — QR не нарисовался",
             )
             assertTrue(
-                снимок.естьПятно(тема(имя).кодЧернила, сторона = 10),
-                "$имя: тёмных модулей нет — нарисовалось пустое полотно",
+                snapshot.patchHas(theme(name).inkCode, side = 10),
+                "$name: тёмных модулей нет — нарисовалось пустое полотно",
             )
         }
     }
@@ -49,22 +49,22 @@ class ЭкранПривязкиTest {
      */
     @Test
     fun без_кода_полотна_нет() {
-        val сКодом = снять("привязка-с-кодом", ШИРИНА, ВЫСОТА, тёмная = false) { экранКода(КОД) }
-        val без = снять("привязка-ждём", ШИРИНА, ВЫСОТА, тёмная = false) { экранКода(null) }
+        val withCode = capture("привязка-с-кодом", WIDTH, HEIGHT, dark = false) { codeScreen(CODE) }
+        val without = capture("привязка-ждём", WIDTH, HEIGHT, dark = false) { codeScreen(null) }
 
-        assertTrue(сКодом.расхождение(без) > 0.05, "экран без кода не отличается от экрана с кодом")
+        assertTrue(withCode.difference(without) > 0.05, "экран без кода не отличается от экрана с кодом")
     }
 
     /** Экран подтверждения заливает свой фон — см. `ЭкранУстройствTest`. */
     @Test
     fun вопрос_заливает_свой_фон() {
-        val снимки = обеТемы("привязка-фон", ШИРИНА, ВЫСОТА, подложка = ЧУЖОЙ_ФОН) {
-            ЭкранПривязки(ПривязкаState.Спрашиваем(имя = "Компьютер"), {}, {})
+        val snapshots = bothThemes("привязка-фон", WIDTH, HEIGHT, backdrop = FOREIGN_BACKGROUND) {
+            LinkScreen(LinkState.Ask(name = "Компьютер"), {}, {})
         }
-        for ((имя, снимок) in снимки) {
+        for ((name, snapshot) in snapshots) {
             assertTrue(
-                !снимок.есть(ЧУЖОЙ_ФОН),
-                "$имя: сквозь экран видна подложка — он не залил свой фон",
+                !snapshot.has(FOREIGN_BACKGROUND),
+                "$name: сквозь экран видна подложка — он не залил свой фон",
             )
         }
     }
@@ -72,15 +72,15 @@ class ЭкранПривязкиTest {
     /** Вопрос телефона рисуется в обеих темах. */
     @Test
     fun вопрос_подтверждения_рисуется() {
-        val снимки = обеТемы("привязка-вопрос", ШИРИНА, ВЫСОТА) {
-            ЭкранПривязки(
-                состояние = ПривязкаState.Спрашиваем(имя = "Компьютер"),
-                onДоверить = {},
-                onОтмена = {},
+        val snapshots = bothThemes("привязка-вопрос", WIDTH, HEIGHT) {
+            LinkScreen(
+                state = LinkState.Ask(name = "Компьютер"),
+                onTrust = {},
+                onCancel = {},
             )
         }
-        val расхождение = снимки.getValue("светлая").расхождение(снимки.getValue("тёмная"))
-        assertTrue(расхождение > 0.10, "темы расходятся лишь на ${(расхождение * 100).toInt()}%")
+        val difference = snapshots.getValue("светлая").difference(snapshots.getValue("тёмная"))
+        assertTrue(difference > 0.10, "темы расходятся лишь на ${(difference * 100).toInt()}%")
     }
 
     /**
@@ -91,43 +91,43 @@ class ЭкранПривязкиTest {
      */
     @Test
     fun отказ_на_вопросе_нарисован() {
-        val без = снять("привязка-вопрос-чисто", ШИРИНА, ВЫСОТА, тёмная = false) {
-            ЭкранПривязки(ПривязкаState.Спрашиваем(имя = "Компьютер"), {}, {})
+        val without = capture("привязка-вопрос-чисто", WIDTH, HEIGHT, dark = false) {
+            LinkScreen(LinkState.Ask(name = "Компьютер"), {}, {})
         }
-        val с = снять("привязка-вопрос-беда", ШИРИНА, ВЫСОТА, тёмная = false) {
-            ЭкранПривязки(
-                ПривязкаState.Спрашиваем(
-                    имя = "Компьютер",
-                    беда = "Подтвердить подключение может только телефон",
+        val with = capture("привязка-вопрос-беда", WIDTH, HEIGHT, dark = false) {
+            LinkScreen(
+                LinkState.Ask(
+                    name = "Компьютер",
+                    trouble = "Подтвердить подключение может только телефон",
                 ),
                 {},
                 {},
             )
         }
 
-        assertTrue(с.расхождение(без) > 0.0, "отказ не нарисовался вовсе")
+        assertTrue(with.difference(without) > 0.0, "отказ не нарисовался вовсе")
     }
 
     private companion object {
-        const val ШИРИНА = 380
-        const val ВЫСОТА = 800
+        const val WIDTH = 380
+        const val HEIGHT = 800
 
         /** Настоящий код привязки: та строка, какую строит сервер. */
-        const val КОД = "tima://link/v1?session_id=aaaaaaaa-0000-0000-0000-00000000c4a7" +
+        const val CODE = "tima://link/v1?session_id=aaaaaaaa-0000-0000-0000-00000000c4a7" +
             "&secret=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8" +
             "&encryption_key=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8" +
             "&signing_key=AAMGCQwPEhUYGx4hJCcqLTAzNjk8P0JFSEtOUVRXWl0" +
             "&name=0JrQvtC80L_RjNGO0YLQtdGA"
 
         @androidx.compose.runtime.Composable
-        fun экранКода(код: String?) = ЭкранВхода(
-            состояние = AuthState.ПоказКода(код = код),
-            onНомер = {},
-            onКодСтраны = {},
-            onКод = {},
-            onЗапросить = {},
-            onПодтвердить = {},
-            onНазад = {},
+        fun codeScreen(code: String?) = EntryScreen(
+            state = AuthState.DisplayCode(code = code),
+            onNumber = {},
+            onCodeCountry = {},
+            onCode = {},
+            onRequest = {},
+            onConfirm = {},
+            onBack = {},
         )
     }
 }

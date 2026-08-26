@@ -53,32 +53,32 @@ class EventStream(
         onGroupKeys: suspend (EventStreamProtocol.Decision) -> Unit = {},
         persist: suspend (EventStreamProtocol.IncomingEvent) -> Unit,
     ): StreamOutcome {
-        var последний = cursor
+        var last = cursor
         // Локальная переменная, а не поле: `webSocket` возвращает Unit, и вынести исход
         // иначе нельзя. Поле переживало бы вызов и отдало бы прошлый исход следующему.
-        var решённое: StreamOutcome? = null
+        var decided: StreamOutcome? = null
         return try {
             client.webSocket(route.wsUrl) {
                 send(Frame.Text(protocol.authFrame(token())))
-                send(Frame.Text(protocol.pullFrame(последний)))
+                send(Frame.Text(protocol.pullFrame(last)))
 
                 for (frame in incoming) {
-                    val текст = (frame as? Frame.Text)?.readText() ?: continue
-                    when (val решение = protocol.decide(текст)) {
+                    val text = (frame as? Frame.Text)?.readText() ?: continue
+                    when (val decision = protocol.decide(text)) {
                         is EventStreamProtocol.Decision.Deliver -> {
                             // Порядок обязателен: сначала запись, потом подтверждение.
-                            persist(решение.event)
-                            последний = решение.event.eventId
-                            send(Frame.Text(protocol.ackFrame(решение.event.eventId)))
+                            persist(decision.event)
+                            last = decision.event.eventId
+                            send(Frame.Text(protocol.ackFrame(decision.event.eventId)))
                         }
 
-                        is EventStreamProtocol.Decision.Skip -> решение.eventId?.let {
-                            последний = it
+                        is EventStreamProtocol.Decision.Skip -> decision.eventId?.let {
+                            last = it
                             send(Frame.Text(protocol.ackFrame(it)))
                         }
 
-                        is EventStreamProtocol.Decision.SyncDone -> if (решение.more) {
-                            send(Frame.Text(protocol.pullFrame(решение.nextCursor)))
+                        is EventStreamProtocol.Decision.SyncDone -> if (decision.more) {
+                            send(Frame.Text(protocol.pullFrame(decision.nextCursor)))
                         }
 
                         // Подтверждаем и отдаём наружу: событие обработано каналом в
@@ -88,26 +88,26 @@ class EventStream(
                         is EventStreamProtocol.Decision.ShareKeys,
                         is EventStreamProtocol.Decision.RotationNeeded,
                         -> {
-                            onGroupKeys(решение)
-                            val идентификатор = when (решение) {
-                                is EventStreamProtocol.Decision.KeysArrived -> решение.eventId
-                                is EventStreamProtocol.Decision.ShareKeys -> решение.eventId
-                                is EventStreamProtocol.Decision.RotationNeeded -> решение.eventId
+                            onGroupKeys(decision)
+                            val id = when (decision) {
+                                is EventStreamProtocol.Decision.KeysArrived -> decision.eventId
+                                is EventStreamProtocol.Decision.ShareKeys -> decision.eventId
+                                is EventStreamProtocol.Decision.RotationNeeded -> decision.eventId
                                 else -> null
                             }
-                            идентификатор?.let {
-                                последний = it
+                            id?.let {
+                                last = it
                                 send(Frame.Text(protocol.ackFrame(it)))
                             }
                         }
 
                         is EventStreamProtocol.Decision.NeedHistory -> {
-                            решённое = StreamOutcome.NeedHistory(решение.fromCursor)
+                            decided = StreamOutcome.NeedHistory(decision.fromCursor)
                             return@webSocket
                         }
 
                         is EventStreamProtocol.Decision.ServerTrouble -> {
-                            решённое = StreamOutcome.ServerTrouble(решение.code)
+                            decided = StreamOutcome.ServerTrouble(decision.code)
                             return@webSocket
                         }
 
@@ -115,10 +115,10 @@ class EventStream(
                     }
                 }
             }
-            решённое ?: StreamOutcome.Closed(последний)
+            decided ?: StreamOutcome.Closed(last)
         } catch (e: Throwable) {
             // Обрыв, TLS, разорванный сокет, отказ авторизации при рукопожатии.
-            StreamOutcome.Disconnected(classifyFailure(e), последний)
+            StreamOutcome.Disconnected(classifyFailure(e), last)
         }
     }
 }

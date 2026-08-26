@@ -21,23 +21,23 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import io.tima.core.ui.ВидОтметки
-import io.tima.core.ui.ВидЧипа
-import io.tima.core.ui.Кнопка
-import io.tima.core.ui.КругКнопка
-import io.tima.core.ui.Отметка
-import io.tima.core.ui.Поле
-import io.tima.core.ui.Подпись
-import io.tima.core.ui.Пузырь
-import io.tima.core.ui.Сторона
-import io.tima.core.ui.Стрелка
+import io.tima.core.ui.MarkKind
+import io.tima.core.ui.ChipKind
+import io.tima.core.ui.Button
+import io.tima.core.ui.ButtonCircle
+import io.tima.core.ui.Mark
+import io.tima.core.ui.Field
+import io.tima.core.ui.Caption
+import io.tima.core.ui.Bubble
+import io.tima.core.ui.Side
+import io.tima.core.ui.Arrow
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.TimaZones
-import io.tima.core.ui.Тима
-import io.tima.core.ui.Третьестепенное
-import io.tima.core.ui.ШапкаПодокна
-import io.tima.core.ui.Чип
+import io.tima.core.ui.Tima
+import io.tima.core.ui.Tertiary
+import io.tima.core.ui.SubwindowHeader
+import io.tima.core.ui.Chip
 import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.MessageDisplay
 
@@ -58,52 +58,52 @@ import io.tima.domain.chat.MessageDisplay
  * [ChatLine] нет — это придёт с группами (К6), и тогда правило станет другим.
  */
 @Composable
-fun ЭкранЧата(
-    состояние: ChatState,
+fun ChatScreen(
+    state: ChatState,
     /** Имя собеседника в шапке. Над сообщениями его нет: в личной переписке подписей нет. */
-    собеседник: String,
-    onНабор: (String) -> Unit,
-    onОтправить: () -> Unit,
-    onНазад: () -> Unit,
+    peer: String,
+    onSet: (String) -> Unit,
+    onSend: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
     /** Подпись под именем: «в сети», «был вчера». */
-    подпись: String? = null,
-    onЗакрытьСообщение: () -> Unit = {},
+    caption: String? = null,
+    onCloseMessage: () -> Unit = {},
     /**
      * Человек просит недостающий ключ группы. Кнопка появляется только у групповой
      * переписки с нечитаемыми сообщениями: у личной просить нечего и не у кого.
      */
-    onЗапроситьКлюч: () -> Unit = {},
+    onRequestKey: () -> Unit = {},
     /** Человек набирает секретную фразу для подписи запроса. */
-    onФраза: (String) -> Unit = {},
+    onPhrase: (String) -> Unit = {},
     /**
      * Открыть состав группы. `null` — переписка личная: состава у неё нет, и кнопки быть
      * не должно.
      */
-    onСостав: (() -> Unit)? = null,
+    onMembers: (() -> Unit)? = null,
 ) {
-    val цвета = Тима.цвета
-    Column(modifier.fillMaxSize().background(цвета.поверхность)) {
-        ШапкаПодокна(
-            название = собеседник,
-            onНазад = onНазад,
-            подпись = подпись,
-            справа = onСостав?.let { открыть ->
-                { Чип("Участники", вид = ВидЧипа.Выбран, onClick = открыть) }
+    val colors = Tima.colors
+    Column(modifier.fillMaxSize().background(colors.surface)) {
+        SubwindowHeader(
+            title = peer,
+            onBack = onBack,
+            caption = caption,
+            right = onMembers?.let { open ->
+                { Chip("Участники", kind = ChipKind.Selected, onClick = open) }
             },
         )
 
-        Лента(
-            строки = состояние.lines,
+        Feed(
+            lines = state.lines,
             // **В личной переписке подписи нет вовсе.** Так в макете: у чужой реплики
             // остаётся полоса автора, но ни аватара, ни имени внутри пузыря нет
             // (`Layout-UI-light/телефон/подокна/чат.html`, первый кадр). Собеседник один
             // и назван в шапке — подпись у каждого пузыря повторяла бы её.
             // В группе имя берётся по отправителю; неизвестное не выдумываем:
             // «Участник» честнее чужого имени.
-            имяАвтора = { строка ->
-                if (!состояние.группа) null
-                else состояние.имена[строка.senderId] ?: "Участник"
+            authorName = { line ->
+                if (!state.group) null
+                else state.names[line.senderId] ?: "Участник"
             },
             modifier = Modifier.weight(1f),
         )
@@ -111,26 +111,26 @@ fun ЭкранЧата(
         // Полоса недоступной истории — над вводом и ОДНА на экран, а не у каждой строки.
         // Запрос уходит сразу за все недостающие версии; кнопка у каждого сообщения
         // обещала бы точность, которой в механизме нет.
-        if (состояние.можноПроситьКлюч &&
-            состояние.lines.any { it.display == MessageDisplay.UNREADABLE }
+        if (state.keyAskMay &&
+            state.lines.any { it.display == MessageDisplay.UNREADABLE }
         ) {
-            НедоступнаяИстория(
-                ждём = состояние.ждёмКлюч,
+            StoryUnavailable(
+                expect = state.expectKey,
                 // Поле фразы появляется только после отказа по подписи: спрашивать её
                 // заранее значило бы требовать секрет там, где он может не понадобиться.
-                нуженВводФразы = состояние.notice is ChatNotice.KeysNeedPhrase,
-                фраза = состояние.фраза,
-                onФраза = onФраза,
-                onЗапросить = onЗапроситьКлюч,
+                phraseInputNeeded = state.notice is ChatNotice.KeysNeedPhrase,
+                phrase = state.phrase,
+                onPhrase = onPhrase,
+                onRequest = onRequestKey,
             )
         }
 
-        состояние.notice?.let { Беда(it, onЗакрытьСообщение) }
+        state.notice?.let { Trouble(it, onCloseMessage) }
 
-        ЗонаВвода(
-            набранное = состояние.draft,
-            onНабор = onНабор,
-            onОтправить = onОтправить,
+        InputZone(
+            typed = state.draft,
+            onSet = onSet,
+            onSend = onSend,
         )
     }
 }
@@ -144,32 +144,32 @@ fun ЭкранЧата(
  * бесплатное «прокрутка начинается снизу».
  */
 @Composable
-private fun Лента(
-    строки: List<ChatLine>,
-    имяАвтора: (ChatLine) -> String?,
+private fun Feed(
+    lines: List<ChatLine>,
+    authorName: (ChatLine) -> String?,
     modifier: Modifier = Modifier,
 ) =
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         reverseLayout = true,
         contentPadding = PaddingValues(
-            horizontal = TimaSpacing.о3,
-            vertical = TimaSpacing.о4,
+            horizontal = TimaSpacing.about3,
+            vertical = TimaSpacing.about4,
         ),
-        verticalArrangement = Arrangement.spacedBy(TimaSpacing.о3, Alignment.Bottom),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3, Alignment.Bottom),
     ) {
-        items(строки, key = { it.dedupKey }) { строка ->
-            val индекс = строки.indexOf(строка)
+        items(lines, key = { it.dedupKey }) { line ->
+            val index = lines.indexOf(line)
             // Предыдущее по времени лежит НИЖЕ в списке: список идёт новым сверху.
-            val предыдущее = строки.getOrNull(индекс + 1)
-            Реплика(
-                строка = строка,
-                автор = имяАвтора(строка),
+            val previous = lines.getOrNull(index + 1)
+            Reply(
+                line = line,
+                author = authorName(line),
                 // Смена автора разрывает цепочку, даже когда обе реплики чужие: иначе в
                 // группе два человека подряд слились бы в одного, и имя второго не
                 // показалось бы вовсе.
-                продолжение = предыдущее?.outgoing == строка.outgoing &&
-                    предыдущее?.senderId == строка.senderId,
+                continuation = previous?.outgoing == line.outgoing &&
+                    previous?.senderId == line.senderId,
             )
         }
     }
@@ -182,19 +182,19 @@ private fun Лента(
  * не задаётся.
  */
 @Composable
-private fun Реплика(строка: ChatLine, автор: String?, продолжение: Boolean) = Пузырь(
-    моё = строка.outgoing,
-    автор = автор,
-    аватар = автор?.take(1)?.uppercase(),
-    продолжение = продолжение,
-    низ = {
-        Третьестепенное(время(строка.atMs), однойСтрокой = true)
-        отметка(строка.display)?.let { Отметка(it) }
+private fun Reply(line: ChatLine, author: String?, continuation: Boolean) = Bubble(
+    my = line.outgoing,
+    author = author,
+    avatar = author?.take(1)?.uppercase(),
+    continuation = continuation,
+    bottom = {
+        Tertiary(time(line.atMs), lineOne = true)
+        mark(line.display)?.let { Mark(it) }
     },
 ) {
-    val текст = строка.text
+    val text = line.text
     when {
-        текст != null -> Подпись(текст, кегль = TimaType.щ4)
+        text != null -> Caption(text, fontSize = TimaType.sz4)
 
         // **«Не читается» и «ещё не разобрано» — разные вещи, и путать их нельзя.**
         // Первое окончательно: ключа нет, подпись не сошлась. Второе — секунда между
@@ -204,10 +204,10 @@ private fun Реплика(строка: ChatLine, автор: String?, прод
         // Нашлось на живом прогоне: экран показывал «не читается» на сообщении, которое в
         // базе лежало разобранным. Список переписок при этом различал их правильно — то
         // есть два места в одном приложении говорили человеку разное.
-        строка.display == MessageDisplay.UNREADABLE ->
-            Чип("сообщение недоступно", вид = ВидЧипа.Тихий)
+        line.display == MessageDisplay.UNREADABLE ->
+            Chip("сообщение недоступно", kind = ChipKind.Quiet)
 
-        else -> Чип("расшифровывается…", вид = ВидЧипа.Тихий)
+        else -> Chip("расшифровывается…", kind = ChipKind.Quiet)
     }
 }
 
@@ -217,10 +217,10 @@ private fun Реплика(строка: ChatLine, автор: String?, прод
  * У входящего отметки нет: «получено» для чужого сообщения означает, что оно на экране,
  * а это и так видно. Нечитаемое говорит о себе самим пузырём.
  */
-private fun отметка(вид: MessageDisplay): ВидОтметки? = when (вид) {
-    MessageDisplay.PENDING -> ВидОтметки.Ждёт
-    MessageDisplay.SENT -> ВидОтметки.Ушло
-    MessageDisplay.FAILED -> ВидОтметки.НеУшло
+private fun mark(kind: MessageDisplay): MarkKind? = when (kind) {
+    MessageDisplay.PENDING -> MarkKind.Waits
+    MessageDisplay.SENT -> MarkKind.Left
+    MessageDisplay.FAILED -> MarkKind.NotLeft
     MessageDisplay.RECEIVED, MessageDisplay.UNREADABLE -> null
 }
 
@@ -232,40 +232,40 @@ private fun отметка(вид: MessageDisplay): ВидОтметки? = when
  * про которую надо догадываться.
  */
 @Composable
-private fun ЗонаВвода(
-    набранное: String,
-    onНабор: (String) -> Unit,
-    onОтправить: () -> Unit,
+private fun InputZone(
+    typed: String,
+    onSet: (String) -> Unit,
+    onSend: () -> Unit,
 ) {
-    val цвета = Тима.цвета
+    val colors = Tima.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(цвета.функц)
-            .heightIn(min = TimaZones.зона4)
-            .padding(horizontal = TimaSpacing.о3, vertical = TimaSpacing.о2),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
+            .background(colors.functional)
+            .heightIn(min = TimaZones.zone4)
+            .padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
                 .weight(1f)
-                .background(цвета.поверхность, CircleShape)
-                .padding(horizontal = TimaSpacing.о4, vertical = 10.dp),
+                .background(colors.surface, CircleShape)
+                .padding(horizontal = TimaSpacing.about4, vertical = 10.dp),
         ) {
-            if (набранное.isEmpty()) {
-                Подпись("Сообщение", кегль = TimaType.щ4, цвет = цвета.текст3)
+            if (typed.isEmpty()) {
+                Caption("Сообщение", fontSize = TimaType.sz4, color = colors.text3)
             }
             BasicTextField(
-                value = набранное,
-                onValueChange = onНабор,
-                textStyle = TextStyle(fontSize = TimaType.щ4, color = цвета.текст),
-                cursorBrush = SolidColor(цвета.навигация),
+                value = typed,
+                onValueChange = onSet,
+                textStyle = TextStyle(fontSize = TimaType.sz4, color = colors.text),
+                cursorBrush = SolidColor(colors.navigation),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        КругКнопка(onClick = onОтправить, живая = true) {
-            Стрелка(Сторона.Вверх, цвет = цвета.наАкценте)
+        ButtonCircle(onClick = onSend, live = true) {
+            Arrow(Side.Up, color = colors.onAccent)
         }
     }
 }
@@ -277,26 +277,26 @@ private fun ЗонаВвода(
  * незачем: это видно по отметке у реплики. Остаётся то, что требует его решения.
  */
 @Composable
-private fun Беда(беда: ChatNotice, onЗакрыть: () -> Unit) {
-    val цвета = Тима.цвета
+private fun Trouble(trouble: ChatNotice, onClose: () -> Unit) {
+    val colors = Tima.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(цвета.акцентМягкий)
-            .padding(horizontal = TimaSpacing.о4, vertical = TimaSpacing.о2),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
+            .background(colors.softAccent)
+            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val текст = when (беда) {
+        val text = when (trouble) {
             // Числа обязательны: «слишком большое» без размера человеку бесполезно —
             // он не знает, насколько сокращать.
             is ChatNotice.TooLarge ->
-                "Слишком большое: ${беда.bytes} байт при пределе ${беда.limit}"
+                "Слишком большое: ${trouble.bytes} байт при пределе ${trouble.limit}"
 
             // Просьба ушла живым устройствам, а не «серверу»: человеку важно понимать,
             // что ответ зависит от того, откроет ли кто-то из участников приложение.
             is ChatNotice.KeysAsked ->
-                "Ключ запрошен у ${беда.устройствам} устройств — история появится, когда кто-то ответит"
+                "Ключ запрошен у ${trouble.devices} устройств — история появится, когда кто-то ответит"
 
             // Не «попробуйте позже»: ждать здесь бесполезно, и сказать надо именно это.
             ChatNotice.KeysNoHelpers ->
@@ -310,15 +310,15 @@ private fun Беда(беда: ChatNotice, onЗакрыть: () -> Unit) {
             ChatNotice.KeysNeedPhrase ->
                 "Нужна секретная фраза: ею аккаунт защищён от угона номера"
 
-            is ChatNotice.KeysRefused -> беда.текст
+            is ChatNotice.KeysRefused -> trouble.text
         }
-        Подпись(
-            текст,
-            кегль = TimaType.щ5,
-            вес = FontWeight.Bold,
+        Caption(
+            text,
+            fontSize = TimaType.sz5,
+            weight = FontWeight.Bold,
             modifier = Modifier.weight(1f),
         )
-        КругКнопка(onClick = onЗакрыть) { Стрелка(Сторона.Вправо, цвет = цвета.текст2) }
+        ButtonCircle(onClick = onClose) { Arrow(Side.Right, color = colors.text2) }
     }
 }
 
@@ -331,37 +331,37 @@ private fun Беда(беда: ChatNotice, onЗакрыть: () -> Unit) {
  * как задумано — и одновременно спрятать единственное доступное ему действие.
  */
 @Composable
-private fun НедоступнаяИстория(
-    ждём: Boolean,
-    нуженВводФразы: Boolean,
-    фраза: String,
-    onФраза: (String) -> Unit,
-    onЗапросить: () -> Unit,
+private fun StoryUnavailable(
+    expect: Boolean,
+    phraseInputNeeded: Boolean,
+    phrase: String,
+    onPhrase: (String) -> Unit,
+    onRequest: () -> Unit,
 ) {
-    val цвета = Тима.цвета
-    Column(modifier = Modifier.fillMaxWidth().background(цвета.функц)) {
-        if (нуженВводФразы) {
-            Поле(
-                значение = фраза,
-                onИзменение = onФраза,
-                подсказка = "Двенадцать слов через пробел",
-                modifier = Modifier.padding(horizontal = TimaSpacing.о4, vertical = TimaSpacing.о2),
+    val colors = Tima.colors
+    Column(modifier = Modifier.fillMaxWidth().background(colors.functional)) {
+        if (phraseInputNeeded) {
+            Field(
+                value = phrase,
+                onChange = onPhrase,
+                hint = "Двенадцать слов через пробел",
+                modifier = Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
             )
         }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(цвета.функц)
-            .padding(horizontal = TimaSpacing.о4, vertical = TimaSpacing.о2),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о2),
+            .background(colors.functional)
+            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Подпись(
+        Caption(
             "Часть истории недоступна: она была до вашего прихода",
-            кегль = TimaType.щ5,
+            fontSize = TimaType.sz5,
             modifier = Modifier.weight(1f),
         )
-        Кнопка(надпись = if (ждём) "Просим…" else "Запросить ключ", onClick = onЗапросить)
+        Button(label = if (expect) "Просим…" else "Запросить ключ", onClick = onRequest)
     }
     }
 }

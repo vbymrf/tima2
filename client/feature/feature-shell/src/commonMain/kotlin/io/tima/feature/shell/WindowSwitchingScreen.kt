@@ -15,15 +15,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import io.tima.core.ui.Второстепенное
-import io.tima.core.ui.Имя
-import io.tima.core.ui.КнопкаИконка
-import io.tima.core.ui.СтрокаСписка
-import io.tima.core.ui.Счётчик
+import io.tima.core.ui.Secondary
+import io.tima.core.ui.Name
+import io.tima.core.ui.IconButton
+import io.tima.core.ui.ListLine
+import io.tima.core.ui.Counter
 import io.tima.core.ui.TimaShapes
 import io.tima.core.ui.TimaSpacing
-import io.tima.core.ui.Третьестепенное
-import io.tima.core.ui.Тима
+import io.tima.core.ui.Tertiary
+import io.tima.core.ui.Tima
 
 /**
  * Подокно «Переключение окон» — единственный видимый способ сменить окно на телефоне.
@@ -42,53 +42,53 @@ import io.tima.core.ui.Тима
  * список поверх. Поэтому фон затемняется, а не подменяется.
  */
 @Composable
-fun ЭкранПереключенияОкон(
-    текущее: Окно,
-    имя: String,
-    псевдоним: String,
-    onВыбрать: (Окно) -> Unit,
-    onЗакрыть: () -> Unit,
+fun WindowSwitchingScreen(
+    current: Window,
+    name: String,
+    alias: String,
+    onSelect: (Window) -> Unit,
+    onClose: () -> Unit,
     modifier: Modifier = Modifier,
     /** Непрочитанное по окнам. Нет записи — нет и числа. */
-    счётчики: Map<Окно, Int> = emptyMap(),
-    onНастройки: (() -> Unit)? = null,
+    counters: Map<Window, Int> = emptyMap(),
+    onSettings: (() -> Unit)? = null,
 ) {
-    val цвета = Тима.цвета
+    val colors = Tima.colors
     Box(
         modifier = modifier
             .fillMaxSize()
             // Затемнение поверх окна, из которого пришли: человек не ушёл никуда, а
             // приподнял список над тем, где был.
-            .background(цвета.текст.copy(alpha = ЗАТЕМНЕНИЕ))
+            .background(colors.text.copy(alpha = DIM))
             // Касание вне панели закрывает — то же, что «✕». Оба входа обязаны быть:
             // касание вне угадывают не все, а «✕» ищут глазами.
-            .clickable(onClick = onЗакрыть),
+            .clickable(onClick = onClose),
         contentAlignment = Alignment.BottomCenter,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = TimaShapes.радиус, topEnd = TimaShapes.радиус))
-                .background(цвета.поверхность)
+                .clip(RoundedCornerShape(topStart = TimaShapes.radius, topEnd = TimaShapes.radius))
+                .background(colors.surface)
                 // Нажатие по самой панели не должно закрывать её вместе с фоном.
                 .clickable(enabled = false, onClick = {}),
         ) {
-            Шапка(имя, псевдоним, onЗакрыть)
+            Header(name, alias, onClose)
 
-            for (окно in Окно.entries) {
-                Пункт(
-                    окно = окно,
-                    текущее = окно == текущее,
-                    сколько = счётчики[окно] ?: 0,
-                    onClick = { onВыбрать(окно) },
+            for (window in Window.entries) {
+                Item(
+                    window = window,
+                    current = window == current,
+                    howMany = counters[window] ?: 0,
+                    onClick = { onSelect(window) },
                 )
             }
 
-            if (onНастройки != null) {
-                СтрокаСписка(
-                    onClick = onНастройки,
-                    слева = { Знак("⚙") },
-                    середина = { Имя("Настройки, помощь, баги") },
+            if (onSettings != null) {
+                ListLine(
+                    onClick = onSettings,
+                    left = { Glyph("⚙") },
+                    middle = { Name("Настройки, помощь, баги") },
                 )
             }
 
@@ -99,41 +99,41 @@ fun ЭкранПереключенияОкон(
 }
 
 @Composable
-private fun Шапка(имя: String, псевдоним: String, onЗакрыть: () -> Unit) {
-    val цвета = Тима.цвета
+private fun Header(name: String, alias: String, onClose: () -> Unit) {
+    val colors = Tima.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(цвета.функц)
-            .padding(horizontal = TimaSpacing.о4, vertical = TimaSpacing.о3),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о3),
+            .background(colors.functional)
+            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about3),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Знак("Т")
+        Glyph("Т")
         Column(modifier = Modifier.weight(1f)) {
-            Имя("Окна")
+            Name("Окна")
             // Кто я — здесь, а не в шапке окна: имя нужно тому, кто выбирает, от чьего
             // лица он сейчас в приложении, а не тому, кто читает переписку.
-            Третьестепенное("$имя · $псевдоним", однойСтрокой = true)
+            Tertiary("$name · $alias", lineOne = true)
         }
-        КнопкаИконка(знак = "✕", onClick = onЗакрыть)
+        IconButton(glyph = "✕", onClick = onClose)
     }
 }
 
 @Composable
-private fun Пункт(окно: Окно, текущее: Boolean, сколько: Int, onClick: () -> Unit) {
-    СтрокаСписка(
+private fun Item(window: Window, current: Boolean, howMany: Int, onClick: () -> Unit) {
+    ListLine(
         onClick = onClick,
-        слева = { Знак(окно.знак) },
-        справа = { if (сколько > 0) Счётчик(сколько) },
-        середина = {
+        left = { Glyph(window.glyph) },
+        right = { if (howMany > 0) Counter(howMany) },
+        middle = {
             Column {
-                Имя(окно.полное)
-                Второстепенное(
+                Name(window.full)
+                Secondary(
                     // Текущее окно называет себя текущим словом, а не только цветом:
                     // цвет здесь один на всё приложение и уже занят навигацией.
-                    if (текущее) "${окно.очём} · вы здесь" else окно.очём,
-                    однойСтрокой = true,
+                    if (current) "${window.about} · вы здесь" else window.about,
+                    lineOne = true,
                 )
             }
         },
@@ -141,15 +141,15 @@ private fun Пункт(окно: Окно, текущее: Boolean, скольк
 }
 
 @Composable
-private fun Знак(знак: String) {
-    val цвета = Тима.цвета
+private fun Glyph(glyph: String) {
+    val colors = Tima.colors
     Box(
         modifier = Modifier
-            .background(цвета.акцентМягкий, RoundedCornerShape(TimaShapes.квадратМал))
+            .background(colors.softAccent, RoundedCornerShape(TimaShapes.smallSquare))
             .padding(horizontal = 8.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
-    ) { Имя(знак) }
+    ) { Name(glyph) }
 }
 
 /** Насколько затемняется окно под панелью. Меньше — панель «висит», больше — окно исчезает. */
-private const val ЗАТЕМНЕНИЕ = 0.32f
+private const val DIM = 0.32f

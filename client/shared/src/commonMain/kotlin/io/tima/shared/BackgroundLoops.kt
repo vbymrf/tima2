@@ -18,39 +18,39 @@ import kotlinx.coroutines.delay
  * отправляет и никого не слушает.
  */
 @Composable
-fun ФоновыеЦиклы(
-    собранное: Собранное,
-    платформа: Платформа,
+fun BackgroundLoops(
+    assembled: Assembled,
+    platform: Platform,
     /** Меняется при каждом изменении списка переписок: по нему и идёт отправка. */
-    признакИзменений: Any?,
+    changeSign: Any?,
 ) {
     // Платформа объявляется серверу при каждом запуске — так задуман сервер, и так
     // чинятся установки, заведённые до появления колонки. Не в регистрации:
     // регистрация бывает один раз, а объявление нужно и тем, кто уже завёлся.
-    LaunchedEffect(собранное) {
-        объявитьПлатформу(собранное.сеть, платформа)
+    LaunchedEffect(assembled) {
+        declarePlatform(assembled.network, platform)
     }
 
     // Отправка идёт ОТ ИЗМЕНЕНИЙ, а не по таймеру: список приходит потоком из базы, и
     // новое сообщение в очереди — это его изменение. Опрос по таймеру давал бы в v1 и
     // задержку, и лишние пробуждения.
-    LaunchedEffect(признакИзменений) {
-        собранное.отправитель.проход()
+    LaunchedEffect(changeSign) {
+        assembled.sender.pass()
     }
 
     // Живой канал держится, пока живо окно. Переподключение решает приёмник: у него
     // есть и исход канала, и пауза.
-    LaunchedEffect(собранное) {
-        собранное.приёмник.держать()
+    LaunchedEffect(assembled) {
+        assembled.receiver.hold()
     }
 
     // Медленное биение — только ради ПОВТОРОВ: сроки у них свои (секунда, пять, две
     // минуты), и наступают они без изменений в базе. Это единственная причина, по
     // которой здесь вообще есть таймер.
-    LaunchedEffect(собранное) {
+    LaunchedEffect(assembled) {
         while (true) {
             delay(ПОВТОРЫ_КАЖДЫЕ_МС)
-            собранное.отправитель.проход()
+            assembled.sender.pass()
         }
     }
 }
@@ -76,12 +76,12 @@ internal const val ПОВТОРЫ_КАЖДЫЕ_МС = 5_000L
  * Повторы — только для отказа связи: запуск и есть тот момент, когда сети чаще всего
  * ещё нет. Отказ сервера повторять нечего: он не изменится.
  */
-internal suspend fun объявитьПлатформу(сеть: ПортыУстройств, платформа: Платформа) {
-    repeat(ПОПЫТОК_ОБЪЯВЛЕНИЯ) { попытка ->
-        when (сеть.устройства.declarePlatform(платформа.серверу)) {
+internal suspend fun declarePlatform(network: DevicePorts, platform: Platform) {
+    repeat(ПОПЫТОК_ОБЪЯВЛЕНИЯ) { attempt ->
+        when (network.devices.declarePlatform(platform.server)) {
             is PlatformResult.Declared -> return
             is PlatformResult.Refused -> return
-            is PlatformResult.NoConnection -> delay(МЕЖДУ_ОБЪЯВЛЕНИЯМИ_МС * (попытка + 1))
+            is PlatformResult.NoConnection -> delay(МЕЖДУ_ОБЪЯВЛЕНИЯМИ_МС * (attempt + 1))
         }
     }
 }

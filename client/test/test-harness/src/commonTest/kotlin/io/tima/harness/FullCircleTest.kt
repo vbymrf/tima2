@@ -47,85 +47,85 @@ class FullCircleTest {
 
     // ── тестовый анклав: ключ эпохи и подпись к нему ─────────────────────────
 
-    private val анклав = Kodium.generateKeyPair()
-    private val ключЭпохи = Mlkem768.keyPair().first
-    private val эпоха = 7
+    private val enclave = Kodium.generateKeyPair()
+    private val epochKey = Mlkem768.keyPair().first
+    private val epoch = 7
 
-    private val сейчас = 1_771_200_000_000L
+    private val now = 1_771_200_000_000L
 
-    private val мета = EscrowKeyMeta(
-        id = эпоха.toLong(),
+    private val meta = EscrowKeyMeta(
+        id = epoch.toLong(),
         region = "ru",
         epoch = "2026-08",
         chatId = "chat-1",
-        publicKey = ключЭпохи,
-        validFromUnixMs = сейчас - 1_000,
-        validToUnixMs = сейчас + 1_000_000,
-        destroyAtUnixMs = сейчас + 100_000_000,
+        publicKey = epochKey,
+        validFromUnixMs = now - 1_000,
+        validToUnixMs = now + 1_000_000,
+        destroyAtUnixMs = now + 100_000_000,
     )
 
     /** Проверенный ключ эпохи — только так его и можно получить. */
-    private val проверенный: EscrowEpochKey = EscrowKeyVerifier.verify(
-        enclaveSigningPub = анклав.getPublicKey().signingKey,
-        id = мета.id,
-        region = мета.region,
-        chatId = мета.chatId,
-        epoch = мета.epoch,
-        publicKey = мета.publicKey,
+    private val verified: EscrowEpochKey = EscrowKeyVerifier.verify(
+        enclaveSigningPub = enclave.getPublicKey().signingKey,
+        id = meta.id,
+        region = meta.region,
+        chatId = meta.chatId,
+        epoch = meta.epoch,
+        publicKey = meta.publicKey,
         signature = Kodium.signDetached(
-            анклав,
-            EscrowConfigSignature.keyMetaSigningBytes(мета),
+            enclave,
+            EscrowConfigSignature.keyMetaSigningBytes(meta),
         ).getOrThrow(),
-        validFromMs = мета.validFromUnixMs,
-        validToMs = мета.validToUnixMs,
-        destroyAtMs = мета.destroyAtUnixMs,
-        nowMs = сейчас,
+        validFromMs = meta.validFromUnixMs,
+        validToMs = meta.validToUnixMs,
+        destroyAtMs = meta.destroyAtUnixMs,
+        nowMs = now,
     ).getOrThrow()
 
     // ── два устройства: отправитель и получатель ─────────────────────────────
 
-    private val отправитель = DeviceIdentity.generate()
-    private val получатель = DeviceIdentity.generate()
+    private val sender = DeviceIdentity.generate()
+    private val recipient = DeviceIdentity.generate()
 
     private val sealer = OutgoingSealer(
         senderId = "0f8fad5b-d9cb-469f-a165-70867728950e",
         senderDeviceId = "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-        identity = отправитель,
+        identity = sender,
     ).sealerFor(
-        escrowKey = проверенный,
-        recipients = listOf(RecipientDevice("устройство-получателя", получатель.encryptionPublic)),
+        escrowKey = verified,
+        recipients = listOf(RecipientDevice("устройство-получателя", recipient.encryptionPublic)),
     )
 
     /** Очередь отправителя: с настоящим сборщиком конвертов. */
     private val у_отправителя = ChatHarness(harnessDriver(), sealWith = sealer)
 
     /** Своя база получателя: у него отдельное устройство, значит и хранилище своё. */
-    private val база_получателя = TimaDatabase(harnessDriver())
-    private val у_получателя = Inbox(SqlInboxStore(база_получателя, харнессШифр()), nowMs = { сейчас })
+    private val database_recipient = TimaDatabase(harnessDriver())
+    private val at_recipient = Inbox(SqlInboxStore(database_recipient, cipherHarness()), nowMs = { now })
 
     @Test
     fun текст_доходит_до_собеседника_целиком() = runTest {
-        val текст = "Привет! Это первое сквозное сообщение. 🙂"
+        val text = "Привет! Это первое сквозное сообщение. 🙂"
 
         // 1. Человек нажал «отправить».
-        у_отправителя.send("chat-1", текст)
+        у_отправителя.send("chat-1", text)
 
         // 2. Очередь запечатала и отдала транспорту.
         assertEquals(1, у_отправителя.pumpOnce())
         assertEquals(1, у_отправителя.transport.deliveredCount())
-        val конверт = у_отправителя.transport.attempts.single().envelope
+        val envelope = у_отправителя.transport.attempts.single().envelope
 
         // 3. Тот же конверт пришёл получателю живым каналом.
-        у_получателя.receive("chat-1", messageId = 1, envelope = конверт)
+        at_recipient.receive("chat-1", messageId = 1, envelope = envelope)
 
         // 4. Получатель открыл его своим ключом.
-        у_получателя.openNext(
-            open = { запись ->
+        at_recipient.openNext(
+            open = { entry ->
                 PersonalMessages.open(
-                    envelopeBytes = запись.envelope,
+                    envelopeBytes = entry.envelope,
                     myDeviceId = "устройство-получателя",
-                    me = получатель,
-                    senderSigningPublic = отправитель.signingPublic,
+                    me = recipient,
+                    senderSigningPublic = sender.signingPublic,
                 ).fold(
                     // Байты тела, как пришли: столбец читается кодеком, и текстом писать нельзя.
                             onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId) },
@@ -134,10 +134,10 @@ class FullCircleTest {
             },
         )
 
-        assertEquals(текст, теломПолучателя(1), "до собеседника обязан дойти тот же текст")
+        assertEquals(text, recipientBody(1), "до собеседника обязан дойти тот же текст")
         assertEquals(
             IncomingState.STORED,
-            SqlInboxStore(база_получателя, харнессШифр()).byKey("chat-1", 1)?.state,
+            SqlInboxStore(database_recipient, cipherHarness()).byKey("chat-1", 1)?.state,
         )
     }
 
@@ -148,14 +148,14 @@ class FullCircleTest {
         // украшением.
         у_отправителя.send("chat-1", "секрет")
         у_отправителя.pumpOnce()
-        val конверт = у_отправителя.transport.attempts.single().envelope
+        val envelope = у_отправителя.transport.attempts.single().envelope
 
-        val посторонний = DeviceIdentity.generate()
-        у_получателя.receive("chat-1", 1, конверт)
+        val outsider = DeviceIdentity.generate()
+        at_recipient.receive("chat-1", 1, envelope)
 
-        у_получателя.openNext(
-            open = { запись ->
-                PersonalMessages.open(запись.envelope, "посторонний", посторонний, отправитель.signingPublic)
+        at_recipient.openNext(
+            open = { entry ->
+                PersonalMessages.open(entry.envelope, "посторонний", outsider, sender.signingPublic)
                     .fold(
                         onSuccess = { OpenOutcome.Opened(byteArrayOf(), it.meta.senderId) },
                         onFailure = { OpenOutcome.NoKey("нет обёртки для этого устройства") },
@@ -165,7 +165,7 @@ class FullCircleTest {
 
         assertEquals(
             IncomingState.UNDECRYPTABLE,
-            SqlInboxStore(база_получателя, харнессШифр()).byKey("chat-1", 1)?.state,
+            SqlInboxStore(database_recipient, cipherHarness()).byKey("chat-1", 1)?.state,
             "нечитаемое остаётся видимым, а не исчезает",
         )
     }
@@ -193,10 +193,10 @@ class FullCircleTest {
             "повтор внутри эпохи обязан уйти теми же байтами: конверт берётся из кэша",
         )
 
-        у_получателя.receive("chat-1", 1, у_отправителя.transport.attempts[1].envelope)
-        у_получателя.openNext(
-            open = { запись ->
-                PersonalMessages.open(запись.envelope, "устройство-получателя", получатель, отправитель.signingPublic)
+        at_recipient.receive("chat-1", 1, у_отправителя.transport.attempts[1].envelope)
+        at_recipient.openNext(
+            open = { entry ->
+                PersonalMessages.open(entry.envelope, "устройство-получателя", recipient, sender.signingPublic)
                     .fold(
                         // Байты тела, как пришли: столбец читается кодеком, и текстом писать нельзя.
                             onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId) },
@@ -205,7 +205,7 @@ class FullCircleTest {
             },
         )
 
-        assertEquals("после обрыва", теломПолучателя(1))
+        assertEquals("после обрыва", recipientBody(1))
         assertEquals(0, у_отправителя.pending().size, "у отправителя очередь пуста")
     }
 
@@ -213,25 +213,25 @@ class FullCircleTest {
     fun непроверенный_ключ_эпохи_запечатать_не_даёт() {
         // Замыкание цепочки доверия: сборщик конвертов принимает только то, что вернул
         // проверяющий. Подменённый ключ до запечатывания не доходит вовсе.
-        val подменённый = Mlkem768.keyPair().first
-        val исход = EscrowKeyVerifier.verify(
-            enclaveSigningPub = анклав.getPublicKey().signingKey,
-            id = мета.id,
-            region = мета.region,
-            chatId = мета.chatId,
-            epoch = мета.epoch,
-            publicKey = подменённый,
+        val substituted = Mlkem768.keyPair().first
+        val outcome = EscrowKeyVerifier.verify(
+            enclaveSigningPub = enclave.getPublicKey().signingKey,
+            id = meta.id,
+            region = meta.region,
+            chatId = meta.chatId,
+            epoch = meta.epoch,
+            publicKey = substituted,
             signature = Kodium.signDetached(
-                анклав,
-                EscrowConfigSignature.keyMetaSigningBytes(мета),
+                enclave,
+                EscrowConfigSignature.keyMetaSigningBytes(meta),
             ).getOrThrow(),
-            validFromMs = мета.validFromUnixMs,
-            validToMs = мета.validToUnixMs,
-            destroyAtMs = мета.destroyAtUnixMs,
-            nowMs = сейчас,
+            validFromMs = meta.validFromUnixMs,
+            validToMs = meta.validToUnixMs,
+            destroyAtMs = meta.destroyAtUnixMs,
+            nowMs = now,
         )
 
-        assertTrue(исход.isFailure, "подпись покрывает ключ: подмена обязана быть замечена")
+        assertTrue(outcome.isFailure, "подпись покрывает ключ: подмена обязана быть замечена")
     }
 
     @Test
@@ -241,10 +241,10 @@ class FullCircleTest {
         у_отправителя.send("chat-1", "проверка согласия")
         у_отправителя.pumpOnce()
 
-        val переписка = у_отправителя.chatPage("chat-1")
-        assertEquals(1, переписка.size)
-        assertEquals(OutboxState.SENT, переписка.single().state)
-        assertTrue(переписка.single().outgoing)
+        val chat = у_отправителя.chatPage("chat-1")
+        assertEquals(1, chat.size)
+        assertEquals(OutboxState.SENT, chat.single().state)
+        assertTrue(chat.single().outgoing)
         assertEquals(0, у_отправителя.pending().size)
     }
 
@@ -265,8 +265,8 @@ class FullCircleTest {
      * читается». Сообщение при этом было расшифровано и записано. Нашлось на живом
      * прогоне приложения; проверка, читающая как экран, поймала бы это сразу.
      */
-    private suspend fun теломПолучателя(messageId: Long): String? =
-        ObserveChat(SqlChatFeed(база_получателя, TextBodyCodec, харнессШифр(), "u-получатель"))
+    private suspend fun recipientBody(messageId: Long): String? =
+        ObserveChat(SqlChatFeed(database_recipient, TextBodyCodec, cipherHarness(), "u-получатель"))
             .page("chat-1")
             .first()
             .firstOrNull { it.dedupKey == "chat-1/$messageId" }

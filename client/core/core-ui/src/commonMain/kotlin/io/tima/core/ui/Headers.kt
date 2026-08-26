@@ -30,69 +30,69 @@ import androidx.compose.ui.unit.dp
  * было знать.
  */
 @Composable
-fun ШапкаОкна(
-    название: String,
+fun WindowHeader(
+    title: String,
     modifier: Modifier = Modifier,
     /** Буква логотипа. В подокне логотипа нет. */
-    логотип: String? = null,
+    logo: String? = null,
     /** Нажатие на логотип с названием: переключение окон. */
-    onПереключитьОкна: (() -> Unit)? = null,
+    onSwitchWindows: (() -> Unit)? = null,
     /** Кнопки справа: поиск, настройки. Внутри плашки они белые. */
-    справа: (@Composable () -> Unit)? = null,
+    right: (@Composable () -> Unit)? = null,
 ) {
-    val цвета = Тима.цвета
+    val colors = Tima.colors
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(цвета.функц)
-            .линияСнизу(цвета.линия)
-            .padding(horizontal = 12.dp, vertical = TimaSpacing.о2),
+            .background(colors.functional)
+            .bottomLine(colors.line)
+            .padding(horizontal = 12.dp, vertical = TimaSpacing.about2),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(цвета.навигация, RoundedCornerShape(TimaShapes.квадратМал))
-                .heightIn(min = TimaZones.зона1 - TimaSpacing.о4)
+                .background(colors.navigation, RoundedCornerShape(TimaShapes.smallSquare))
+                .heightIn(min = TimaZones.zone1 - TimaSpacing.about4)
                 .padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о3),
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(
                 modifier = Modifier
                     .weight(1f)
                     .then(
-                        if (onПереключитьОкна != null) {
-                            Modifier.clickable(onClick = onПереключитьОкна)
+                        if (onSwitchWindows != null) {
+                            Modifier.clickable(onClick = onSwitchWindows)
                         } else {
                             Modifier
                         },
                     ),
-                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о3),
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                логотип?.let {
+                logo?.let {
                     // Логотип — белый квадрат внутри салатовой плашки. Квадрат, потому
                     // что это «что-то», а не «нажми»; белый, потому что он на зелёном.
                     Box(
                         modifier = Modifier
                             .size(30.dp)
-                            .background(цвета.вПлашке, RoundedCornerShape(TimaShapes.квадратМал)),
+                            .background(colors.inPlate, RoundedCornerShape(TimaShapes.smallSquare)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Подпись(it, кегль = TimaType.щ4, вес = FontWeight.ExtraBold, цвет = цвета.навигация)
+                        Caption(it, fontSize = TimaType.sz4, weight = FontWeight.ExtraBold, color = colors.navigation)
                     }
                 }
-                Подпись(
-                    текст = название,
+                Caption(
+                    text = title,
                     // Цвет названия — от заливки, а не свой токен: в светлой теме это
                     // чёрный, в тёмной белый. Отдельного «цвета названия» не бывает.
-                    кегль = TimaType.щ3,
-                    вес = FontWeight.ExtraBold,
-                    цвет = цвета.наАкценте,
-                    однойСтрокой = true,
+                    fontSize = TimaType.sz3,
+                    weight = FontWeight.ExtraBold,
+                    color = colors.onAccent,
+                    lineOne = true,
                 )
             }
-            справа?.invoke()
+            right?.invoke()
         }
     }
 }
@@ -104,35 +104,35 @@ fun ШапкаОкна(
  * Название набрано обычным текстом: плашки нет, значит и текста на заливке нет.
  */
 @Composable
-fun ШапкаПодокна(
-    название: String,
-    onНазад: () -> Unit,
+fun SubwindowHeader(
+    title: String,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
     /** Подпись под названием: «в сети», «3 участника». */
-    подпись: String? = null,
-    справа: (@Composable () -> Unit)? = null,
+    caption: String? = null,
+    right: (@Composable () -> Unit)? = null,
 ) {
-    val цвета = Тима.цвета
+    val colors = Tima.colors
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(цвета.функц)
-            .линияСнизу(цвета.линия)
-            .heightIn(min = TimaZones.зона1)
-            .padding(horizontal = TimaSpacing.о4),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.о3),
+            .background(colors.functional)
+            .bottomLine(colors.line)
+            .heightIn(min = TimaZones.zone1)
+            .padding(horizontal = TimaSpacing.about4),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // «Назад» рисуется, а не набирается глифом: «‹» есть не во всяком шрифте, а
         // пропавший знак навигации — это кнопка без надписи. См. Знаки.kt.
-        КругКнопка(onClick = onНазад, живая = true) {
-            Стрелка(Сторона.Влево, цвет = цвета.наАкценте)
+        ButtonCircle(onClick = onBack, live = true) {
+            Arrow(Side.Left, color = colors.onAccent)
         }
         androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
-            Подпись(название, кегль = TimaType.щ3, вес = FontWeight.ExtraBold, однойСтрокой = true)
+            Caption(title, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold, lineOne = true)
             // Подпись шапки — одна строка: шапка не растёт от длинного имени.
-            подпись?.let { Третьестепенное(it, однойСтрокой = true) }
+            caption?.let { Tertiary(it, lineOne = true) }
         }
-        справа?.invoke()
+        right?.invoke()
     }
 }

@@ -32,9 +32,9 @@ class GroupMessageSealerOverKodium(
             createdAtUnixMs = createdAtUnixMs,
             gkVersion = gkVersion,
         )
-        val собранное = GroupMessages.seal(MessageContent.text(text), meta, identity, key).getOrNull()
+        val assembled = GroupMessages.seal(MessageContent.text(text), meta, identity, key).getOrNull()
             ?: return null
-        return SealedGroupBytes(payload = собранное.payload, signature = собранное.signature)
+        return SealedGroupBytes(payload = assembled.payload, signature = assembled.signature)
     }
 
     private companion object {

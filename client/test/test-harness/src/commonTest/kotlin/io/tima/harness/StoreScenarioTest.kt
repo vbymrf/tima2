@@ -28,25 +28,25 @@ import kotlin.test.assertTrue
  */
 class StoreScenarioTest {
 
-    private var время = 1_000L
-    private var эпоха = 1
+    private var time = 1_000L
+    private var epoch = 1
 
     private val db = TimaDatabase(harnessDriver())
-    private val outbox = Outbox(SqlOutboxStore(db, харнессШифр()), nowMs = { время })
+    private val outbox = Outbox(SqlOutboxStore(db, cipherHarness()), nowMs = { time })
     private val transport = FakeTransport()
     private val pump = OutboxPump(outbox, maxConcurrent = 3)
 
     private fun seal(entry: OutboxEntry): ByteArray =
-        "эпоха=$эпоха|".encodeToByteArray() + entry.body
+        "эпоха=$epoch|".encodeToByteArray() + entry.body
 
     // Эпоха раздаётся по перепискам: ключ escrow у каждой свой, и насос просит его на
     // каждую. Здесь переписка одна.
-    private suspend fun прокрутить(): Int =
-        pump.runOnce(mapOf("chat-1" to эпоха.toLong()), ::seal, transport::send)
+    private suspend fun scroll(): Int =
+        pump.runOnce(mapOf("chat-1" to epoch.toLong()), ::seal, transport::send)
 
     private fun store(scope: kotlinx.coroutines.CoroutineScope) = ChatStore(
         chatId = "chat-1",
-        observe = ObserveChat(SqlChatFeed(db, TextBodyCodec, харнессШифр(), "u-я")),
+        observe = ObserveChat(SqlChatFeed(db, TextBodyCodec, cipherHarness(), "u-я")),
         send = SendMessage(queue = outbox, codec = TextBodyCodec, keys = UuidDedupKeys),
         scope = scope,
     )
@@ -61,12 +61,12 @@ class StoreScenarioTest {
         s.sendPressed()
 
         assertEquals("", s.state.value.draft, "поле очистилось: сообщение уже в списке")
-        val ждёт = s.state.first { it.lines.isNotEmpty() }.lines.single()
-        assertEquals(MessageDisplay.PENDING, ждёт.display, "и видно как ожидающее")
+        val waits = s.state.first { it.lines.isNotEmpty() }.lines.single()
+        assertEquals(MessageDisplay.PENDING, waits.display, "и видно как ожидающее")
 
         // 2. Обрыв. Строка на экране не меняется: человеку нечего с этим делать, очередь
         //    решает сама. Именно поэтому у «ждёт отправки» и «отправляется» один вид.
-        assertEquals(1, прокрутить())
+        assertEquals(1, scroll())
         assertEquals(0, transport.deliveredCount())
         assertEquals(
             MessageDisplay.PENDING,
@@ -74,12 +74,12 @@ class StoreScenarioTest {
         )
 
         // 3. Срок пришёл, сеть починилась — и строка сама стала отправленной.
-        время += 1_000
-        assertEquals(1, прокрутить())
+        time += 1_000
+        assertEquals(1, scroll())
 
-        val ушло = s.state.first { it.lines.singleOrNull()?.display == MessageDisplay.SENT }.lines.single()
-        assertEquals(MessageDisplay.SENT, ушло.display)
-        assertEquals(ждёт.dedupKey, ушло.dedupKey, "это то же сообщение, а не второе")
+        val left = s.state.first { it.lines.singleOrNull()?.display == MessageDisplay.SENT }.lines.single()
+        assertEquals(MessageDisplay.SENT, left.display)
+        assertEquals(waits.dedupKey, left.dedupKey, "это то же сообщение, а не второе")
         assertEquals(1, transport.deliveredCount(), "и доставлено оно один раз")
     }
 
@@ -92,10 +92,10 @@ class StoreScenarioTest {
 
         s.draftChanged("не уйдёт")
         s.sendPressed()
-        прокрутить()
+        scroll()
 
-        val строка = s.state.first { it.lines.singleOrNull()?.display == MessageDisplay.FAILED }.lines.single()
-        assertEquals(MessageDisplay.FAILED, строка.display)
+        val line = s.state.first { it.lines.singleOrNull()?.display == MessageDisplay.FAILED }.lines.single()
+        assertEquals(MessageDisplay.FAILED, line.display)
         assertTrue(outbox.pending().isEmpty(), "а в очереди его уже нет")
     }
 
@@ -105,19 +105,19 @@ class StoreScenarioTest {
 
         s.draftChanged("первое")
         s.sendPressed()
-        время += 1
+        time += 1
         s.draftChanged("второе")
         s.sendPressed()
 
-        assertEquals(2, прокрутить())
+        assertEquals(2, scroll())
 
-        val строки = s.state.first { it.lines.size == 2 }.lines
+        val lines = s.state.first { it.lines.size == 2 }.lines
         assertEquals(2, transport.deliveredCount())
         assertEquals(
             2,
             transport.attempts.map { it.dedupKey }.distinct().size,
             "у каждого свой ключ идемпотентности",
         )
-        assertTrue(строки[0].localId > строки[1].localId, "новое сверху")
+        assertTrue(lines[0].localId > lines[1].localId, "новое сверху")
     }
 }

@@ -16,47 +16,50 @@ import kotlin.test.assertTrue
  */
 class RegisterDeviceTest {
 
-    private val материал = DeviceKeyMaterial(
+    private val material = DeviceKeyMaterial(
         encryptionPub = ByteArray(32) { 1 },
         signingPub = ByteArray(32) { 2 },
         secret = ByteArray(32) { 3 },
     )
 
     /** Хранилище, помнящее порядок вызовов: он и есть предмет проверки. */
-    private class Хранилище : DeviceSecretStore {
-        val порядок = mutableListOf<String>()
-        var секрет: ByteArray? = null
-        var сессия: Session? = null
-        override fun hasDevice(): Boolean = сессия != null
+    private class Store : DeviceSecretStore {
+        val order = mutableListOf<String>()
+        // savedX, а не X: имена параметров уже заняли secret и session, и поле,
+        // названное так же, закрывало бы их собой — присваивание уходило бы в
+        // параметр, а проверка читала бы null.
+        var savedSecret: ByteArray? = null
+        var savedSession: Session? = null
+        override fun hasDevice(): Boolean = savedSession != null
         override fun saveDeviceSecret(secret: ByteArray) {
-            порядок += "секрет"
-            секрет = secret
+            order += "секрет"
+            savedSecret = secret
         }
         override fun saveSession(session: Session) {
-            порядок += "сессия"
-            сессия = session
+            order += "сессия"
+            savedSession = session
         }
-        override fun session(): Session? = сессия
+        override fun session(): Session? = savedSession
     }
 
-    private class Сервер(
-        val проверка: CodeSubmitStep = CodeSubmitStep.Accepted("rt-1"),
-        val заведение: DeviceCreateStep = DeviceCreateStep.Created("u-1", "d-1", "jwt"),
-        val запрос: CodeRequestStep = CodeRequestStep.CodeRequested("r-1", devCode = "123456"),
+    private class Server(
+        val check: CodeSubmitStep = CodeSubmitStep.Accepted("rt-1"),
+        val creation: DeviceCreateStep = DeviceCreateStep.Created("u-1", "d-1", "jwt"),
+        val request: CodeRequestStep = CodeRequestStep.CodeRequested("r-1", devCode = "123456"),
     ) : AccountApi {
-        val вызовы = mutableListOf<String>()
-        var посланныеКлючи: Pair<ByteArray, ByteArray>? = null
-        var посланныйIdentity: ByteArray? = null
-        var посланнаяПлатформа: String? = null
-        var посланныйФорк: Boolean = false
+        val calls = mutableListOf<String>()
+        var sentKeys: Pair<ByteArray, ByteArray>? = null
+        var sentIdentity: ByteArray? = null
+        var sentPlatform: String? = null
+        var sentFork: Boolean = false
 
         override suspend fun requestCode(phone: String): CodeRequestStep {
-            вызовы += "запрос"
-            return запрос
+            calls += "запрос"
+            return request
         }
         override suspend fun submitCode(requestId: String, code: String): CodeSubmitStep {
-            вызовы += "проверка"
-            return проверка
+            calls += "проверка"
+            return check
         }
         override suspend fun createDevice(
             registrationToken: String,
@@ -66,22 +69,22 @@ class RegisterDeviceTest {
             platform: String,
             forceNewIdentity: Boolean,
         ): DeviceCreateStep {
-            вызовы += "заведение"
-            посланныеКлючи = encryptionPub to signingPub
-            посланныйIdentity = identityPub
-            посланнаяПлатформа = platform
-            посланныйФорк = forceNewIdentity
-            return заведение
+            calls += "заведение"
+            sentKeys = encryptionPub to signingPub
+            sentIdentity = identityPub
+            sentPlatform = platform
+            sentFork = forceNewIdentity
+            return creation
         }
     }
 
-    private fun случай(
-        сервер: Сервер = Сервер(),
-        хранилище: Хранилище = Хранилище(),
+    private fun case(
+        server: Server = Server(),
+        store: Store = Store(),
     ) = Triple(
-        RegisterDevice(сервер, DeviceKeyFactory { материал }, хранилище, platform = "desktop"),
-        сервер,
-        хранилище,
+        RegisterDevice(server, DeviceKeyFactory { material }, store, platform = "desktop"),
+        server,
+        store,
     )
 
     // ── удачный путь ─────────────────────────────────────────────────────────
@@ -92,40 +95,40 @@ class RegisterDeviceTest {
         // «мы сохранили закрытый ключ» — устройство останется на сервере навсегда без
         // ключа: адресованное ему не расшифровать, а выглядит это как «сообщения не
         // приходят». Обратный порядок стоит ровно ничего.
-        val (регистрация, _, хранилище) = случай()
+        val (registration, _, store) = case()
 
-        val исход = регистрация.confirm("r-1", "123456")
+        val outcome = registration.confirm("r-1", "123456")
 
-        assertEquals(RegistrationStep.Registered("u-1", "d-1"), исход)
-        assertEquals(listOf("секрет", "сессия"), хранилище.порядок)
+        assertEquals(RegistrationStep.Registered("u-1", "d-1"), outcome)
+        assertEquals(listOf("секрет", "сессия"), store.order)
     }
 
     @Test
     fun ключи_и_платформа_доезжают_до_сервера() = runTest {
-        val (регистрация, сервер, _) = случай()
+        val (registration, server, _) = case()
 
-        регистрация.confirm("r-1", "123456", identityPub = ByteArray(32) { 9 })
+        registration.confirm("r-1", "123456", identityPub = ByteArray(32) { 9 })
 
-        assertContentEquals(материал.encryptionPub, сервер.посланныеКлючи?.first)
-        assertContentEquals(материал.signingPub, сервер.посланныеКлючи?.second)
-        assertContentEquals(ByteArray(32) { 9 }, сервер.посланныйIdentity)
-        assertEquals("desktop", сервер.посланнаяПлатформа)
+        assertContentEquals(material.encryptionPub, server.sentKeys?.first)
+        assertContentEquals(material.signingPub, server.sentKeys?.second)
+        assertContentEquals(ByteArray(32) { 9 }, server.sentIdentity)
+        assertEquals("desktop", server.sentPlatform)
     }
 
     @Test
     fun сессия_запоминается_целиком() = runTest {
-        val (регистрация, _, хранилище) = случай()
-        регистрация.confirm("r-1", "123456")
-        assertEquals(Session("u-1", "d-1", "jwt"), хранилище.сессия)
-        assertContentEquals(материал.secret, хранилище.секрет)
+        val (registration, _, store) = case()
+        registration.confirm("r-1", "123456")
+        assertEquals(Session("u-1", "d-1", "jwt"), store.savedSession)
+        assertContentEquals(material.secret, store.savedSecret)
     }
 
     @Test
     fun код_запрашивается_и_dev_код_доезжает() = runTest {
         // На стенде с TIMA_DEV_SMS код приходит в ответе, и харнесс К4 живёт этим.
-        val (регистрация, _, _) = случай()
-        val исход = регистрация.requestCode("+79001234567")
-        assertEquals(CodeRequestStep.CodeRequested("r-1", "123456"), исход)
+        val (registration, _, _) = case()
+        val outcome = registration.requestCode("+79001234567")
+        assertEquals(CodeRequestStep.CodeRequested("r-1", "123456"), outcome)
     }
 
     // ── отказы ───────────────────────────────────────────────────────────────
@@ -134,79 +137,79 @@ class RegisterDeviceTest {
     fun неверный_код_не_порождает_ключей_и_не_пишет_секрет() = runTest {
         // Порождать ключи до проверки кода значило бы тратить работу на каждый промах
         // пальцем — и, хуже, перезаписывать секрет из-за опечатки.
-        val (регистрация, сервер, хранилище) = случай(Сервер(проверка = CodeSubmitStep.WrongCode))
+        val (registration, server, store) = case(Server(check = CodeSubmitStep.WrongCode))
 
-        assertEquals(RegistrationStep.WrongCode, регистрация.confirm("r-1", "000000"))
+        assertEquals(RegistrationStep.WrongCode, registration.confirm("r-1", "000000"))
 
-        assertEquals(listOf("проверка"), сервер.вызовы, "до заведения дело дойти не должно")
-        assertTrue(хранилище.порядок.isEmpty(), "хранилище не тронуто")
-        assertNull(хранилище.секрет)
+        assertEquals(listOf("проверка"), server.calls, "до заведения дело дойти не должно")
+        assertTrue(store.order.isEmpty(), "хранилище не тронуто")
+        assertNull(store.savedSecret)
     }
 
     @Test
     fun уже_заведённое_устройство_не_перезаводится_молча() = runTest {
         // Случайный повторный вызов оставил бы на сервере устройство, к которому у нас
         // больше нет закрытого ключа: тихий зомби в списке устройств человека.
-        val хранилище = Хранилище().apply { сессия = Session("u-0", "d-0", "старый") }
-        val (регистрация, сервер, _) = случай(хранилище = хранилище)
+        val store = Store().apply { savedSession = Session("u-0", "d-0", "старый") }
+        val (registration, server, _) = case(store = store)
 
-        assertEquals(RegistrationStep.AlreadyRegistered, регистрация.confirm("r-1", "123456"))
+        assertEquals(RegistrationStep.AlreadyRegistered, registration.confirm("r-1", "123456"))
 
-        assertTrue(сервер.вызовы.isEmpty(), "в сеть ходить незачем")
-        assertEquals(Session("u-0", "d-0", "старый"), хранилище.сессия, "прежняя сессия цела")
+        assertTrue(server.calls.isEmpty(), "в сеть ходить незачем")
+        assertEquals(Session("u-0", "d-0", "старый"), store.savedSession, "прежняя сессия цела")
     }
 
     @Test
     fun перезавести_можно_только_явно() = runTest {
-        val хранилище = Хранилище().apply { сессия = Session("u-0", "d-0", "старый") }
-        val (регистрация, _, _) = случай(хранилище = хранилище)
+        val store = Store().apply { savedSession = Session("u-0", "d-0", "старый") }
+        val (registration, _, _) = case(store = store)
 
-        val исход = регистрация.confirm("r-1", "123456", replaceExisting = true)
+        val outcome = registration.confirm("r-1", "123456", replaceExisting = true)
 
-        assertEquals(RegistrationStep.Registered("u-1", "d-1"), исход)
-        assertEquals("jwt", хранилище.сессия?.accessToken)
+        assertEquals(RegistrationStep.Registered("u-1", "d-1"), outcome)
+        assertEquals("jwt", store.savedSession?.accessToken)
     }
 
     @Test
     fun чужая_личность_секрет_не_выбрасывает() = runTest {
         // Ключи ещё понадобятся тому пути, который человек выберет дальше — возврату по
         // секретной фразе. Стереть их значило бы заставить пройти регистрацию заново.
-        val (регистрация, _, хранилище) = случай(
-            Сервер(заведение = DeviceCreateStep.IdentityMismatch),
+        val (registration, _, store) = case(
+            Server(creation = DeviceCreateStep.IdentityMismatch),
         )
 
         // Исход несёт registration_token: дальше — вход по фразе или «начать заново», и
         // оба идут с ним, потому что код к этому моменту погашен проверкой.
-        val шаг = assertIs<RegistrationStep.IdentityMismatch>(регистрация.confirm("r-1", "123456"))
-        assertTrue(шаг.registrationToken.isNotBlank(), "без токена продолжить вход нечем")
+        val step = assertIs<RegistrationStep.IdentityMismatch>(registration.confirm("r-1", "123456"))
+        assertTrue(step.registrationToken.isNotBlank(), "без токена продолжить вход нечем")
 
-        assertNotNull(хранилище.секрет, "секрет остаётся: он ещё пригодится")
-        assertNull(хранилище.сессия, "а сессии нет — устройство не заведено")
+        assertNotNull(store.savedSecret, "секрет остаётся: он ещё пригодится")
+        assertNull(store.savedSession, "а сессии нет — устройство не заведено")
     }
 
     @Test
     fun просроченный_токен_отличается_от_неверного_кода() = runTest {
         // Человеку это разные сообщения: «код не тот» и «слишком долго вводил».
-        val (регистрация, _, _) = случай(Сервер(заведение = DeviceCreateStep.TokenExpired))
-        assertEquals(RegistrationStep.CodeExpired, регистрация.confirm("r-1", "123456"))
+        val (registration, _, _) = case(Server(creation = DeviceCreateStep.TokenExpired))
+        assertEquals(RegistrationStep.CodeExpired, registration.confirm("r-1", "123456"))
     }
 
     @Test
     fun обрыв_связи_несёт_паузу_насквозь() = runTest {
         // Пауза приходит из сетевого слоя, где её измерили в живой сети. Domain её не
         // придумывает и не теряет.
-        val наПроверке = случай(Сервер(проверка = CodeSubmitStep.Offline(5_000))).first
-        assertEquals(RegistrationStep.Offline(5_000), наПроверке.confirm("r-1", "1"))
+        val onCheck = case(Server(check = CodeSubmitStep.Offline(5_000))).first
+        assertEquals(RegistrationStep.Offline(5_000), onCheck.confirm("r-1", "1"))
 
-        val (наЗаведении, _, хранилище) = случай(Сервер(заведение = DeviceCreateStep.Offline(120_000)))
-        assertEquals(RegistrationStep.Offline(120_000), наЗаведении.confirm("r-1", "1"))
-        assertNotNull(хранилище.секрет, "секрет уже записан — повтор возьмёт его же")
-        assertNull(хранилище.сессия)
+        val (onCreation, _, store) = case(Server(creation = DeviceCreateStep.Offline(120_000)))
+        assertEquals(RegistrationStep.Offline(120_000), onCreation.confirm("r-1", "1"))
+        assertNotNull(store.savedSecret, "секрет уже записан — повтор возьмёт его же")
+        assertNull(store.savedSession)
     }
 
     @Test
     fun отказ_сервера_доносит_причину() = runTest {
-        val (регистрация, _, _) = случай(Сервер(заведение = DeviceCreateStep.Refused("bad_keys")))
-        assertEquals(RegistrationStep.Refused("bad_keys"), регистрация.confirm("r-1", "1"))
+        val (registration, _, _) = case(Server(creation = DeviceCreateStep.Refused("bad_keys")))
+        assertEquals(RegistrationStep.Refused("bad_keys"), registration.confirm("r-1", "1"))
     }
 }

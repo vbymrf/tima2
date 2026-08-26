@@ -19,14 +19,14 @@ import io.tima.core.encryption.deviceIdentityFrom
  * Здесь — только «кто из чего состоит». Ни навигации, ни `@Composable`-разметки, ни
  * циклов: они в [Корень] и [ФоновыеЦиклы] соответственно.
  */
-class Собранное(
+class Assembled(
     /** Кто мы для сервера: нужен экранам, которым важен свой идентификатор. */
-    val сессия: Session,
-    val окружение: Окружение,
-    val сеть: Сеть,
-    val отправитель: Отправитель,
-    val приёмник: Приёмник,
-    val оркестрКлючей: ОркестрГрупповыхКлючей,
+    val session: Session,
+    val environment: Environment,
+    val network: Network,
+    val sender: Sender,
+    val receiver: Receiver,
+    val keyOrchestrator: GroupKeyOrchestrator,
 )
 
 /**
@@ -36,38 +36,38 @@ class Собранное(
  * другой ключ покоя, и переиспользовать собранное между ними нельзя.
  */
 @Composable
-fun собрать(вход: Вход, устройство: Вход.Устройство, базаУстройства: () -> TimaDatabase): Собранное =
-    remember(устройство) {
-        val окружение = Окружение.открыть(базаУстройства(), устройство.секрет, устройство.сессия.userId)
-        val сеть = Сеть.создать(устройство.сессия, вход.host)
-        val личность = deviceIdentityFrom(устройство.секрет)
+fun assemble(entry: Entry, device: Entry.Device, deviceDatabase: () -> TimaDatabase): Assembled =
+    remember(device) {
+        val environment = Environment.open(deviceDatabase(), device.secret, device.session.userId)
+        val network = Network.create(device.session, entry.host)
+        val identity = deviceIdentityFrom(device.secret)
 
         // Оркестр ключей собирается ЗДЕСЬ, а не внутри приёмника: ему нужны escrow,
         // крипта, сеть и хранилище разом — это работа сборки, а не канала.
-        val оркестрКлючей = ОркестрГрупповыхКлючей(
-            окружение = окружение,
-            сеть = сеть,
-            личность = личность,
-            сейчасМс = ::сейчасМс,
+        val keyOrchestrator = GroupKeyOrchestrator(
+            environment = environment,
+            network = network,
+            identity = identity,
+            msNow = ::msNow,
         )
 
-        Собранное(
-            сессия = устройство.сессия,
-            окружение = окружение,
-            сеть = сеть,
-            отправитель = Отправитель(
-                окружение = окружение,
-                сеть = сеть,
-                сессия = устройство.сессия,
-                личность = личность,
+        Assembled(
+            session = device.session,
+            environment = environment,
+            network = network,
+            sender = Sender(
+                environment = environment,
+                network = network,
+                session = device.session,
+                identity = identity,
             ),
-            приёмник = Приёмник(
-                окружение = окружение,
-                сеть = сеть,
-                сессия = устройство.сессия,
-                личность = личность,
-                оркестрКлючей = оркестрКлючей,
+            receiver = Receiver(
+                environment = environment,
+                network = network,
+                session = device.session,
+                identity = identity,
+                keyOrchestrator = keyOrchestrator,
             ),
-            оркестрКлючей = оркестрКлючей,
+            keyOrchestrator = keyOrchestrator,
         )
     }

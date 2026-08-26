@@ -26,29 +26,29 @@ class GroupsApiTest {
     private val route = ServerRoute.from(RouteConfig(host = "example.com"))
     private lateinit var engine: MockEngine
 
-    private fun api(отвечает: MockRequestHandler): GroupsApi {
-        engine = MockEngine(отвечает)
+    private fun api(responds: MockRequestHandler): GroupsApi {
+        engine = MockEngine(responds)
         return GroupsApi(route, HttpClient(engine) { timaDefaults() }, token = { "t-1" })
     }
 
-    private fun json(тело: String, статус: HttpStatusCode = HttpStatusCode.OK): MockRequestHandler =
-        { respond(тело, статус, headersOf("Content-Type", "application/json")) }
+    private fun json(body: String, status: HttpStatusCode = HttpStatusCode.OK): MockRequestHandler =
+        { respond(body, status, headersOf("Content-Type", "application/json")) }
 
-    private fun тело(запрос: HttpRequestData): String = (запрос.body as TextContent).text
+    private fun body(request: HttpRequestData): String = (request.body as TextContent).text
 
     @Test
     fun создание_уходит_с_видом_и_названием() = runTest {
         val api = api(json("""{"group_id":"g-1"}""", HttpStatusCode.Created))
 
-        val исход = api.create("Поход")
+        val outcome = api.create("Поход")
 
-        val запрос = engine.requestHistory.single()
-        assertTrue(запрос.url.encodedPath.endsWith("/api/v1/groups"), "не тот путь: ${запрос.url}")
-        assertEquals("Bearer t-1", запрос.headers["Authorization"])
-        assertTrue(тело(запрос).contains(""""kind":"private""""), "вид указывается явно: ${тело(запрос)}")
-        assertTrue(тело(запрос).contains(""""title":"Поход""""), "не то тело: ${тело(запрос)}")
-        assertIs<GroupCreateResult.Created>(исход)
-        assertEquals("g-1", исход.groupId)
+        val request = engine.requestHistory.single()
+        assertTrue(request.url.encodedPath.endsWith("/api/v1/groups"), "не тот путь: ${request.url}")
+        assertEquals("Bearer t-1", request.headers["Authorization"])
+        assertTrue(body(request).contains(""""kind":"private""""), "kind stated explicitly: ${body(request)}")
+        assertTrue(body(request).contains(""""title":"Поход""""), "not that body: ${body(request)}")
+        assertIs<GroupCreateResult.Created>(outcome)
+        assertEquals("g-1", outcome.groupId)
     }
 
     /**
@@ -56,16 +56,16 @@ class GroupsApiTest {
      *
      * Тело собирается строкой, а название набирает человек. Без экранирования кавычка
      * превратила бы JSON в мусор, и сервер ответил бы `bad_json` — то есть человек увидел бы
-     * отказ там, где просто назвал группу «Поход "Север"».
+     * отказ там, где просто назвал группу «Поход "North"».
      */
     @Test
     fun кавычка_в_названии_экранируется() = runTest {
         val api = api(json("""{"group_id":"g-1"}""", HttpStatusCode.Created))
 
-        api.create("""Поход "Север"" + перенос""")
+        api.create("""Hike "Север"" + перенос""")
 
-        val текст = тело(engine.requestHistory.single())
-        assertTrue(текст.contains("""\"Север\""""), "кавычки не экранированы: $текст")
+        val text = body(engine.requestHistory.single())
+        assertTrue(text.contains("""\"Север\""""), "quotes not escaped: $text")
     }
 
     @Test
@@ -79,13 +79,13 @@ class GroupsApiTest {
             ),
         )
 
-        val исход = api.mine()
+        val outcome = api.mine()
 
-        assertIs<GroupsResult.Groups>(исход)
-        assertEquals(2, исход.groups.size)
-        assertEquals("Поход", исход.groups[0].title)
-        assertEquals("owner", исход.groups[0].myRole)
-        assertEquals("member", исход.groups[1].myRole)
+        assertIs<GroupsResult.Groups>(outcome)
+        assertEquals(2, outcome.groups.size)
+        assertEquals("Поход", outcome.groups[0].title)
+        assertEquals("owner", outcome.groups[0].myRole)
+        assertEquals("member", outcome.groups[1].myRole)
     }
 
     @Test
@@ -100,12 +100,12 @@ class GroupsApiTest {
             ),
         )
 
-        val исход = api.members("g-1")
+        val outcome = api.members("g-1")
 
-        assertIs<MembersResult.Members>(исход)
-        assertEquals(2, исход.members.size)
-        assertEquals(null, исход.members[0].bannedUntil)
-        assertEquals("2026-08-30T11:00:00Z", исход.members[1].bannedUntil)
+        assertIs<MembersResult.Members>(outcome)
+        assertEquals(2, outcome.members.size)
+        assertEquals(null, outcome.members[0].bannedUntil)
+        assertEquals("2026-08-30T11:00:00Z", outcome.members[1].bannedUntil)
     }
 
     /**
@@ -132,11 +132,11 @@ class GroupsApiTest {
 
         assertEquals(MemberResult.Done, api.removeMember("g-1", "u-2"))
 
-        val запрос = engine.requestHistory.single()
-        assertEquals("DELETE", запрос.method.value)
+        val request = engine.requestHistory.single()
+        assertEquals("DELETE", request.method.value)
         assertTrue(
-            запрос.url.encodedPath.endsWith("/api/v1/groups/g-1/members/u-2"),
-            "не тот путь: ${запрос.url}",
+            request.url.encodedPath.endsWith("/api/v1/groups/g-1/members/u-2"),
+            "не тот путь: ${request.url}",
         )
     }
 }

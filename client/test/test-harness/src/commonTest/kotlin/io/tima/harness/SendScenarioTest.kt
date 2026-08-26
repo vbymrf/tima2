@@ -18,15 +18,15 @@ import kotlin.test.assertTrue
  */
 class SendScenarioTest {
 
-    private fun харнесс() = ChatHarness(harnessDriver())
+    private fun harness() = ChatHarness(harnessDriver())
 
     @Test
     fun отправил_обрыв_повтор_доставлено() = runTest {
-        val h = харнесс()
+        val h = harness()
         h.transport.then(FakeTransport.Behaviour.Offline(retryAfterMs = 1_000))
 
-        val поставлено = h.send("chat-1", "привет")
-        assertIs<SendMessageResult.Queued>(поставлено)
+        val put = h.send("chat-1", "привет")
+        assertIs<SendMessageResult.Queued>(put)
         assertEquals(1, h.pendingIn(OutboxState.QUEUED))
 
         // Обрыв: попытка была, сообщение вернулось в очередь целым.
@@ -53,7 +53,7 @@ class SendScenarioTest {
         // Худший случай и главная причина, по которой dedup_key назначает клиент: сервер
         // принял, ответ не дошёл. Клиент обязан повторить — не создав второго сообщения
         // у собеседника.
-        val h = харнесс()
+        val h = harness()
         h.transport.then(FakeTransport.Behaviour.AcceptButLoseAnswer)
 
         h.send("chat-1", "привет")
@@ -79,26 +79,26 @@ class SendScenarioTest {
         // Убийство изображается перезапуском харнесса над той же базой: память потеряна,
         // база осталась. В v1 убитое посреди отправки оставалось в SENDING навсегда, то
         // есть пропадало без следа для человека (инвентарь, пункт 7).
-        val h = харнесс()
+        val h = harness()
         h.transport.then(FakeTransport.Behaviour.Offline())
         h.send("chat-1", "привет")
         h.pumpOnce()
 
-        val после = h.restart()
+        val after = h.restart()
 
-        assertEquals(1, после.pendingIn(OutboxState.QUEUED), "восстановление вернуло запись в очередь")
-        после.passTime(5_000)
-        assertEquals(1, после.pumpOnce())
+        assertEquals(1, after.pendingIn(OutboxState.QUEUED), "восстановление вернуло запись в очередь")
+        after.passTime(5_000)
+        assertEquals(1, after.pumpOnce())
 
-        assertEquals(1, после.transport.deliveredCount())
-        assertEquals(0, после.pending().size)
+        assertEquals(1, after.transport.deliveredCount())
+        assertEquals(0, after.pending().size)
     }
 
     @Test
     fun десять_сообщений_после_суток_офлайна_уходят_все_и_по_одному_разу() = runTest {
         // После долгого офлайна очередь уходит залпом — это тот случай, ради которого у
         // насоса есть предел одновременных отправок.
-        val h = харнесс()
+        val h = harness()
         repeat(10) { h.send("chat-1", "сообщение $it") }
         repeat(10) { h.transport.then(FakeTransport.Behaviour.Offline()) }
 
@@ -122,7 +122,7 @@ class SendScenarioTest {
     fun окончательный_отказ_не_держит_очередь_вечно() = runTest {
         // Негодный конверт обязан уйти в DEAD, а не загораживать переписку. И остаться
         // видимым: человек должен знать, что сообщение не ушло.
-        val h = харнесс()
+        val h = harness()
         h.transport.then(FakeTransport.Behaviour.Rejected("подпись не сошлась"))
 
         h.send("chat-1", "первое")
@@ -134,10 +134,10 @@ class SendScenarioTest {
 
         // Неотправленное в очереди уже не стоит, а в переписке стоит: иначе человек не
         // узнает, что сообщение не ушло. Это разные вопросы, и проверять их надо порознь.
-        val переписка = h.chatPage("chat-1")
-        assertEquals(2, переписка.size, "оба сообщения видны человеку")
-        assertEquals(1, переписка.count { it.state == OutboxState.DEAD }, "одно помечено неотправленным")
-        assertEquals(1, переписка.count { it.state == OutboxState.SENT })
+        val chat = h.chatPage("chat-1")
+        assertEquals(2, chat.size, "оба сообщения видны человеку")
+        assertEquals(1, chat.count { it.state == OutboxState.DEAD }, "одно помечено неотправленным")
+        assertEquals(1, chat.count { it.state == OutboxState.SENT })
     }
 
     @Test
@@ -145,24 +145,24 @@ class SendScenarioTest {
         // ADR-0016: за сутки в очереди ключ эпохи escrow успевает смениться, и конверт
         // под прошлую эпоху унёс бы устаревший ключ — сообщение стало бы недоступно по
         // ордеру молча.
-        val h = харнесс()
+        val h = harness()
         h.transport.then(FakeTransport.Behaviour.Offline())
 
         h.send("chat-1", "привет")
         h.pumpOnce()
-        val первыйКонверт = h.transport.attempts.single().envelope
+        val firstEnvelope = h.transport.attempts.single().envelope
 
         h.changeEpoch(2)
         h.passTime(5_000)
         h.pumpOnce()
 
-        val второйКонверт = h.transport.attempts[1].envelope
+        val secondEnvelope = h.transport.attempts[1].envelope
         assertTrue(
-            первыйКонверт.decodeToString().startsWith("эпоха=1|"),
+            firstEnvelope.decodeToString().startsWith("эпоха=1|"),
             "первая попытка шла под первой эпохой",
         )
         assertTrue(
-            второйКонверт.decodeToString().startsWith("эпоха=2|"),
+            secondEnvelope.decodeToString().startsWith("эпоха=2|"),
             "повтор обязан собраться под новую эпоху",
         )
         assertEquals(1, h.transport.deliveredCount(), "и это по-прежнему одно сообщение")
@@ -172,7 +172,7 @@ class SendScenarioTest {
     fun ограничитель_частоты_уважается_а_не_обходится() = runTest {
         // Подсказка сервера сильнее нашей лестницы: он знает про свою перегрузку больше
         // нас. Повторить раньше — значит получить ещё один отказ и растянуть доставку.
-        val h = харнесс()
+        val h = harness()
         h.transport.then(FakeTransport.Behaviour.RateLimited(retryAfterMs = 30_000))
 
         h.send("chat-1", "привет")
@@ -188,7 +188,7 @@ class SendScenarioTest {
 
     @Test
     fun пустое_сообщение_не_доходит_до_очереди_и_не_видно_в_переписке() = runTest {
-        val h = харнесс()
+        val h = harness()
         assertEquals(SendMessageResult.Empty, h.send("chat-1", "   "))
         assertEquals(0, h.pending().size)
         assertEquals(0, h.pumpOnce())

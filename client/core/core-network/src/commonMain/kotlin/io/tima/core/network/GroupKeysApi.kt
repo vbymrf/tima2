@@ -47,21 +47,21 @@ class GroupKeysApi(
         reason: String = "periodic",
     ): RotateResult {
         require(wrappedKeys.isNotEmpty()) { "ротация без получателей бессмысленна" }
-        val обёртки = wrappedKeys.entries.joinToString(",") { (устройство, байты) ->
-            """{"recipient":"$устройство","wrapped":"${encodeBase64Url(байты)}"}"""
+        val wraps = wrappedKeys.entries.joinToString(",") { (device, bytes) ->
+            """{"recipient":"$device","wrapped":"${encodeBase64Url(bytes)}"}"""
         }
-        val тело = """{"gk_version":$gkVersion,"reason":"$reason",""" +
+        val requestBody = """{"gk_version":$gkVersion,"reason":"$reason",""" +
             """"sender_ephemeral_pub":"${encodeBase64Url(senderEphemeralPub)}",""" +
             """"escrow":{"mlkem_ct":"${encodeBase64Url(escrowMlkemCt)}",""" +
             """"wrapped_message_key":"${encodeBase64Url(escrowWrappedKey)}",""" +
             """"escrow_key_version":$escrowKeyVersion},""" +
-            """"wrapped_keys":[$обёртки]}"""
+            """"wrapped_keys":[$wraps]}"""
 
         val response = try {
             client.post(route.api("/api/v1/groups/$groupId/keys")) {
                 header("Authorization", "Bearer ${token()}")
                 contentType(ContentType.Application.Json)
-                setBody(тело)
+                setBody(requestBody)
             }
         } catch (e: Throwable) {
             return RotateResult.NoConnection(classifyFailure(e))
@@ -105,16 +105,16 @@ class GroupKeysApi(
         if (response.status != HttpStatusCode.OK) {
             return GroupKeysResult.Refused(response.status.value, body.codeOf())
         }
-        val ключи = body?.get("keys")?.jsonArrayOrNull()?.mapNotNull { элемент ->
-            val объект = элемент.jsonObjectOrNull() ?: return@mapNotNull null
-            val версия = объект.int("gk_version") ?: return@mapNotNull null
-            val эфемерный = объект.str("sender_ephemeral_pub")?.let { decodeBase64Url(it) }
+        val keys = body?.get("keys")?.jsonArrayOrNull()?.mapNotNull { element ->
+            val objectValue = element.jsonObjectOrNull() ?: return@mapNotNull null
+            val version = objectValue.int("gk_version") ?: return@mapNotNull null
+            val ephemeral = objectValue.str("sender_ephemeral_pub")?.let { decodeBase64Url(it) }
                 ?: return@mapNotNull null
-            val обёртка = объект.str("wrapped")?.let { decodeBase64Url(it) } ?: return@mapNotNull null
-            WrappedGroupKey(gkVersion = версия, senderEphemeralPub = эфемерный, wrapped = обёртка)
+            val wrap = objectValue.str("wrapped")?.let { decodeBase64Url(it) } ?: return@mapNotNull null
+            WrappedGroupKey(gkVersion = version, senderEphemeralPub = ephemeral, wrapped = wrap)
         } ?: return GroupKeysResult.Refused(response.status.value, "ответ без keys")
 
-        return GroupKeysResult.Keys(keys = ключи, currentVersion = body.int("current_version") ?: 0)
+        return GroupKeysResult.Keys(keys = keys, currentVersion = body.int("current_version") ?: 0)
     }
 }
 
