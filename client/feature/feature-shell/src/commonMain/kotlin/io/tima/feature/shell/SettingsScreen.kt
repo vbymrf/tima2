@@ -126,6 +126,6 @@ enum class SettingsItem(val group: SettingsGroup, val title: String, val glyph: 
      * действие, и действию нужна кнопка. Расхождение с макетом названо здесь, чтобы его
      * не обнаружили как ошибку: правится оно решением заказчика, а не молча.
      */
-    UPDATE(SettingsGroup.HELP, "Обновление", "⬇"),
+    UPDATE(SettingsGroup.HELP, "Обновление", "📥"),
     ABOUT(SettingsGroup.HELP, "О приложении", "ℹ"),
 }
