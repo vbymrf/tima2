@@ -102,7 +102,7 @@ object ArchitectureRules {
             appliesToPathContaining = listOf("/src/commonMain/"),
             forbiddenContent = listOf("platform = \""),
             // Единственное место, где эти три строки записаны значением, — сам перечень.
-            exceptFiles = listOf("Платформа.kt"),
+            exceptFiles = listOf("Platform.kt"),
             why = "Строка platform = \"desktop\" стояла в commonMain, то есть телефон " +
                 "объявлял себя ПК. Отказ при этом тихий: регистрация проходит, сообщения " +
                 "ходят — а подтвердить привязку нового устройства по QR сервер разрешает " +

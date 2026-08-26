@@ -37,7 +37,7 @@ class ArchitectureTest {
         val domainRule = ArchitectureRules.rules.single { it.name.startsWith("domain") }
         // Образцов в каталоге несколько — берём тот, который заведён под это правило.
         val found = ArchitectureRules.violationsIn(fixtures, domainRule)
-            .filter { it.file == "ОбразецUseCase.kt" }
+            .filter { it.file == "SampleUseCase.kt" }
 
         assertEquals(
             1,

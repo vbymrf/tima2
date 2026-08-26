@@ -8,7 +8,7 @@ import kotlin.test.Test
  *
  * Числа ниже — размер общих мест, в которые упирается каждая новая функция:
  * маршруты сервера, методы общих receiver-ов, публичные свойства `Сеть`, импорты
- * `Корень.kt`. Программа архитектурных изменений ставит целью «функция = файл»:
+ * `Root.kt`. Программа архитектурных изменений ставит целью «функция = файл»:
  * новый раздел добавляет свой файл, а эти счётчики не растут.
  *
  * Порог здесь намеренно не задан. Счётчик, который валит сборку, обходят
@@ -46,11 +46,11 @@ class ТрендTest {
             ),
             Счётчик(
                 "Публичные `val` `Сеть`",
-                "свойства класса Сеть в shared/Окружение.kt",
+                "свойства класса Сеть в shared/Environment.kt",
                 публичныеСвойстваСети(),
             ),
             Счётчик(
-                "Импорты `Корень.kt`",
+                "Импорты `Root.kt`",
                 "строки import",
                 считатьВФайле(корень(), Regex("""^import """)),
             ),
@@ -118,7 +118,7 @@ class ТрендTest {
     }
 
     private fun корень(): File =
-        File(clientRoot, "shared/src/commonMain/kotlin/io/tima/shared/Корень.kt")
+        File(clientRoot, "shared/src/commonMain/kotlin/io/tima/shared/Root.kt")
 
     private fun считатьВФайле(файл: File, что: Regex): Int =
         if (!файл.isFile) -1 else файл.readLines().count { что.containsMatchIn(it.trim()) }
@@ -137,7 +137,7 @@ class ТрендTest {
      * Это оценка, а не разбор синтаксиса, — для отчёта о росте её достаточно.
      */
     private fun публичныеСвойстваСети(): Int {
-        val файл = File(clientRoot, "shared/src/commonMain/kotlin/io/tima/shared/Окружение.kt")
+        val файл = File(clientRoot, "shared/src/commonMain/kotlin/io/tima/shared/Environment.kt")
         if (!файл.isFile) return -1
         val текст = файл.readText()
         val начало = текст.indexOf("class Сеть")
