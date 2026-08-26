@@ -87,7 +87,7 @@ fun Root(
     deviceDatabase: () -> TimaDatabase,
     linkCode: String? = null,
     /** Номер сборки от платформы: общий код его знать не может и не должен. */
-    buildVersion: String = "",
+    build: Build = Build(),
 ) {
     var device by remember { mutableStateOf(entry.created()) }
 
@@ -97,18 +97,18 @@ fun Root(
         // привязку нечем — своего ключа у него нет. Показываем обычный вход, а не
         // сообщение о беде: человек, скорее всего, просто отсканировал код не тем
         // приложением.
-        Occurrence(entry, buildVersion) { device = entry.created() }
+        Occurrence(entry, build) { device = entry.created() }
         return
     }
 
     // Сборка живёт в Assembly.kt: здесь навигация, а не «кто из чего состоит».
     val assembled = assemble(entry, current, deviceDatabase)
 
-    App(assembled, entry.platform, current.secret, linkCode, buildVersion)
+    App(assembled, entry.platform, current.secret, linkCode, build)
 }
 
 @Composable
-private fun Occurrence(entry: Entry, buildVersion: String, onEntered: () -> Unit) {
+private fun Occurrence(entry: Entry, build: Build, onEntered: () -> Unit) {
     val scope = rememberCoroutineScope()
     val store = remember {
         AuthStore(
@@ -138,7 +138,7 @@ private fun Occurrence(entry: Entry, buildVersion: String, onEntered: () -> Unit
         onStartAnew = store::startAnew,
         onPhraseSaved = store::savedPhrase,
         onConnect = store::connect,
-        buildVersion = buildVersion,
+        buildVersion = build.name,
     )
 }
 
@@ -201,7 +201,7 @@ private fun App(
     deviceSecret: ByteArray,
     linkCode: String?,
     /** Номер сборки — показывается в «Устройствах», см. пояснение там. */
-    buildVersion: String,
+    build: Build,
 ) {
     val environment = assembled.environment
     val network = assembled.network
@@ -375,7 +375,7 @@ private fun App(
                         network = network,
                         scope = scope,
                         platform = platform,
-                        buildVersion = buildVersion,
+                        build = build,
                         onBack = { where = Where.Nothing },
                     )
                 }
@@ -531,7 +531,7 @@ private fun Settings(
     network: DevicePorts,
     scope: kotlinx.coroutines.CoroutineScope,
     platform: Platform,
-    buildVersion: String,
+    build: Build,
     onBack: () -> Unit,
 ) {
     val fleet = remember { DevicesStore(network.myFleet, scope) }
@@ -548,15 +548,15 @@ private fun Settings(
                 // Значение справа — то, что и так посчитано для самого пункта. Отдельный
                 // запрос ради строки в списке будил бы сеть на каждый заход в настройки.
                 SettingsItem.DEVICES -> devices.devices.size.takeIf { it > 0 }?.toString().orEmpty()
-                SettingsItem.ABOUT -> buildVersion
+                SettingsItem.ABOUT -> build.name
                 else -> ""
             }
         },
     ) { item ->
         when (item) {
-            SettingsItem.DEVICES -> Devices(fleet, devices, buildVersion)
+            SettingsItem.DEVICES -> Devices(fleet, devices, build.name)
 
-            SettingsItem.UPDATE -> Update(network, scope, platform, buildVersion)
+            SettingsItem.UPDATE -> Update(network, scope, platform, build)
 
             else -> TabStub(
                 willWhat = item.title,
@@ -594,7 +594,7 @@ private fun Update(
     network: DevicePorts,
     scope: kotlinx.coroutines.CoroutineScope,
     platform: Platform,
-    buildVersion: String,
+    build: Build,
 ) {
     val store = remember {
         UpdateStore(
@@ -613,9 +613,9 @@ private fun Update(
                 }
             },
             scope = scope,
-            installed = buildVersion,
-            installedCode = BUILD_CODE,
-            stream = STREAM,
+            installed = build.name,
+            installedCode = build.code,
+            stream = build.stream,
         )
     }
     val state by store.state.collectAsState()
@@ -632,15 +632,7 @@ private fun Update(
     check(platform.server.isNotBlank())
 }
 
-/**
- * Поток сборок и его номер.
- *
- * **v2 начала нумерацию заново, с двойки, а на сервере лежит v1 с номером 24.** Сравнив
- * числа без потока, приложение предложило бы поставить поверх себя прошлогоднюю сборку.
- * Поэтому поток объявлен явно и сравнение идёт только внутри него.
- */
-private const val STREAM = "v2"
-private const val BUILD_CODE = 2
+
 
 /**
  * Новая группа: подокно создания.

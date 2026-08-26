@@ -58,7 +58,13 @@ class MainActivity : ComponentActivity() {
                     // Имя и номер разом: имя говорит, что за версия, номер — что
                     // установка действительно сменилась. По одному имени обновление
                     // «2.0.0-dev → 2.0.0-dev» неотличимо от его отсутствия.
-                    buildVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                    // Поток обязателен: номера версий сравнимы только внутри него, и
+                    // без него v2 приняла бы предложение v1 за более новую версию.
+                    build = io.tima.shared.Build(
+                        name = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                        code = BuildConfig.VERSION_CODE,
+                        stream = BuildConfig.TIMA_STREAM,
+                    ),
                 )
             }
         }

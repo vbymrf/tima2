@@ -11,6 +11,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import io.tima.core.database.desktopDatabase
 import io.tima.core.ui.TimaTheme
+import io.tima.shared.Build
 import io.tima.shared.Entry
 import io.tima.shared.Platform
 import io.tima.shared.Root
@@ -48,7 +49,15 @@ fun main() = application {
         title = "TIMA",
     ) {
         TimaTheme(dark = isSystemInDarkTheme()) {
-            Root(entry = entry, deviceDatabase = { desktopDatabase(File(dataCatalog(), DATABASE_NAME)) })
+            Root(
+                entry = entry,
+                // Версия порождается сборкой из gradle.properties — одна на Android и ПК.
+                // До 2026-08-26 десктоп её не знал и показывал «Установлена —»: вопрос
+                // «какая версия стоит» задают, когда что-то пошло не так, и остаться без
+                // ответа именно в этот момент — худшее время.
+                build = Build(name = BUILD_NAME, code = BUILD_CODE, stream = BUILD_STREAM),
+                deviceDatabase = { desktopDatabase(File(dataCatalog(), DATABASE_NAME)) },
+            )
         }
     }
 }

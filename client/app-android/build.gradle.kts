@@ -48,8 +48,14 @@ android {
         // а не побочный эффект правки сборки.
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "2.0.1-dev"
+        // Версия — из gradle.properties, одна на все сборки. Литерал здесь означал бы
+        // второй источник правды, а расходятся они молча.
+        versionCode = (property("tima.versionCode") as String).toInt()
+        versionName = property("tima.versionName") as String
+        // Поток в BuildConfig, а не литералом в коде: он обязан совпадать с тем, что
+        // сервер называет в /app/version, иначе обновление либо молчит, либо предлагает
+        // чужую сборку.
+        buildConfigField("String", "TIMA_STREAM", "\"${property("tima.stream")}\"")
 
         // ── ABI намеренно НЕ ограничен ──────────────────────────────────────
         // В v1 стоял abiFilters = arm64-v8a, и там же капсом было записано
