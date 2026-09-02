@@ -57,7 +57,11 @@ class FormatTest {
      */
     @Test
     fun порог_пк_есть_сумма_полос() {
-        assertEquals(1236.dp, FormatTima.DESKTOP_THRESHOLD)
+        // 1300 с 2026-09-02: рейка выросла со 196 до 260, чтобы вместить самое длинное
+        // имя окна («Свободное общение», 152 точки) вместо многоточия. Порог сдвинулся
+        // сам — ровно то, ради чего он и считается суммой. Число держат здесь, чтобы
+        // сдвиг был виден: раскладка ПК начинается на 64 точки позже, чем вчера.
+        assertEquals(1300.dp, FormatTima.DESKTOP_THRESHOLD)
         assertEquals(Format.Tablet, layoutFor(FormatTima.DESKTOP_THRESHOLD - 1.dp).format)
         assertEquals(Format.DESKTOP, layoutFor(FormatTima.DESKTOP_THRESHOLD).format)
     }

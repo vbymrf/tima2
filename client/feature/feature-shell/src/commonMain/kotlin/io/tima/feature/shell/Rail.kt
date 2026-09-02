@@ -10,10 +10,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Name
 import io.tima.core.ui.Layout
 import io.tima.core.ui.Counter
@@ -108,10 +111,38 @@ private fun Item(
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(contentAlignment = Alignment.Center) { Name(glyph) }
+        // Значку отведена своя ширина, а не «сколько занял». Во-первых, подписи от
+        // этого встают в колонку; во-вторых, ширина строки становится считаемой —
+        // на ней держится RAIL_AROUND_CAPTION и проверка, что подпись влезает.
+        Box(Modifier.width(RAIL_GLYPH), contentAlignment = Alignment.Center) { Name(glyph) }
         if (withCaption) {
             Name(caption, modifier = Modifier.weight(1f))
         }
         if (howMany > 0) Counter(howMany)
     }
 }
+
+/** Ширина колонки значка в строке рейки. */
+internal val RAIL_GLYPH: Dp = 22.dp
+
+/**
+ * Место под счётчик. `Counter` начинается с 22 точек и растёт до «99+»; резервируем
+ * широкий случай, иначе подпись помещалась бы ровно до первого двузначного числа.
+ */
+internal val RAIL_COUNTER: Dp = 30.dp
+
+/**
+ * Всё, что в строке рейки занимает ширину **помимо самой подписи**.
+ *
+ * Сумма, а не выбранное число: поля рейки, поля строки, колонка значка, счётчик и два
+ * зазора между ними. Написано сложением ровно затем, чтобы правка любого отступа
+ * пересчитала его сама, а проверка «подпись влезает» осталась верной.
+ *
+ * На этом держится `FormatTima.CAPTION_RAIL`: ширина рейки обязана быть не меньше, чем
+ * это плюс самая длинная подпись окна. Проверяет `RailWidthTest`.
+ */
+internal val RAIL_AROUND_CAPTION: Dp =
+    TimaSpacing.about2 * 2 + // поля самой рейки
+        TimaSpacing.about3 * 2 + // поля строки
+        RAIL_GLYPH + TimaSpacing.about2 + // значок и зазор после него
+        RAIL_COUNTER + TimaSpacing.about2 // счётчик и зазор перед ним

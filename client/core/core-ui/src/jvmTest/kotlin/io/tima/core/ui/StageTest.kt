@@ -30,6 +30,10 @@ import kotlin.test.assertTrue
  */
 class StageTest {
 
+    /** Ширины полос ПК — из раскладки, а не переписанные сюда числом. */
+    private val rail = FormatTima.CAPTION_RAIL.value.toInt()
+    private val column = FormatTima.DESKTOP_COLUMN.value.toInt()
+
     @Test
     fun на_телефоне_одна_полоса_и_это_подокно() {
         val snapshot = capture("стан-телефон", 380, 800, dark = false) { stage() }
@@ -61,8 +65,11 @@ class StageTest {
     fun на_пк_четыре_полосы() {
         val snapshot = capture("стан-пк", 1440, 900, dark = false) { stage() }
         assertEquals(0, start(snapshot, RAIL))
-        assertEquals(196, start(snapshot, COLUMN), "рейка с подписями — 196 точек")
-        assertEquals(196 + 340, start(snapshot, MAIN), "колонка ПК — 340 точек")
+        // Числа берутся из тех же констант, что и раскладка: здесь проверяется, что
+        // Стан их слушается, а не то, чему они равны. «Чему равны» — RailWidthTest,
+        // и там это выведено из самого длинного текста, а не выбрано.
+        assertEquals(rail, start(snapshot, COLUMN), "рейка с подписями — $rail точек")
+        assertEquals(rail + column, start(snapshot, MAIN), "колонка ПК — $column точек")
         // 1141, а не 1140: у панели линия СЛЕВА, и первый её пиксель занят границей —
         // ровно как `border-left: 1px` в макете.
         assertEquals(1440 - 300 + 1, start(snapshot, PANEL), "панель прижата к правому краю")
@@ -77,7 +84,7 @@ class StageTest {
     @Test
     fun не_отданная_панель_не_оставляет_пустой_полосы() {
         val snapshot = capture("стан-пк-без-панели", 1440, 900, dark = false) { stage(hasPanel = false) }
-        assertEquals(196 + 340, start(snapshot, MAIN))
+        assertEquals(rail + column, start(snapshot, MAIN))
         assertNull(start(snapshot, PANEL))
         assertTrue(
             Snapshot.close(snapshot.color(snapshot.width - 1, snapshot.height / 2), MAIN),
@@ -90,7 +97,7 @@ class StageTest {
     fun полосы_разделены_линией() {
         val snapshot = capture("стан-линии", 1440, 900, dark = false) { stage() }
         val y = snapshot.height / 2
-        for ((name, x) in listOf("рейка/колонка" to 195, "колонка/главная" to 535)) {
+        for ((name, x) in listOf("рейка/колонка" to rail - 1, "колонка/главная" to rail + column - 1)) {
             val line = snapshot.color(x, y)
             assertTrue(
                 !Snapshot.close(line, RAIL) && !Snapshot.close(line, COLUMN) &&
@@ -120,9 +127,9 @@ class StageTest {
         assertTrue(phone.has(CLUSTER), "гроздь на телефоне не нарисовалась вовсе")
 
         val desktop = capture("гроздь-пк", 1440, 900, dark = false) { stageWithCluster() }
-        // Колонка ПК занимает x от 196 до 536; смотрим её нижний край.
+        // Смотрим нижний край колонки ПК — чуть правее её левой границы.
         assertTrue(
-            !Snapshot.close(desktop.color(210, 893), COLUMN),
+            !Snapshot.close(desktop.color(rail + 14, 893), COLUMN),
             "на широком формате гроздь обязана опуститься в отдельную область: " +
                 "список не должен доходить до нижнего края колонки",
         )

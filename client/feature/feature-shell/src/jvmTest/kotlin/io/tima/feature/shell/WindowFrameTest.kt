@@ -6,6 +6,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import io.tima.core.ui.Stage
 import io.tima.core.ui.TimaColors
+import io.tima.core.ui.TimaContrast
+import io.tima.testui.Snapshot
 import io.tima.testui.bothThemes
 import io.tima.testui.capture
 import io.tima.testui.theme
@@ -66,45 +68,57 @@ class WindowFrameTest {
     }
 
     /**
-     * Имя окна стоит по центру полосы, а не сразу за логотипом.
+     * Имя окна стоит слева, сразу за логотипом.
      *
-     * Проверяется через белое: имя набрано белым по салатовому, и его пятно обязано
-     * попадать в среднюю треть шапки. Слева от неё стоит логотип, справа две кнопки, и
-     * до 2026-09-02 имя жило вплотную к логотипу — то есть в левой трети.
+     * Проверка перевёрнута дважды за один день, и это стоит держать на виду. Сначала
+     * имя стояло слева (как в макете), потом уехало в центр — я прочитал «центрируем
+     * текст» как горизонталь, — потом вернулось: заказчик уточнил, что имелась в виду
+     * **вертикаль**, то есть выравнивание по середине плашки.
      *
-     * Обе трети проверяются вместе намеренно. Одна левая проверка проходила бы и на
-     * пустой шапке, а «в середине что-то белое есть» — на любой раскладке, где имя
-     * просто длинное.
+     * Проверяется через белое: имя набрано белым по салатовому. Оно обязано быть в
+     * левой трети и не должно занимать середину — на телефоне в 380 точек «Социум»
+     * помещается в первую треть целиком.
      */
     @Test
-    fun имя_окна_стоит_по_центру_плашки() {
-        val phone = capture("каркас-имя-центр", WIDTH, HEIGHT, dark = false) { window() }
-        val third = WIDTH / 3
+    fun имя_окна_стоит_слева_за_логотипом() {
+        val phone = capture("каркас-имя-слева", WIDTH, HEIGHT, dark = false) { window() }
+
+        // Первый столбец белого правее логотипа — и есть начало имени. Логотип
+        // заканчивается около 52-й точки, поэтому смотрим с 56-й.
+        var begins = WIDTH
+        for (x in 56 until WIDTH) {
+            val white = (0 until ZONE_1).any { y -> Snapshot.close(phone.color(x, y), TimaColors.light.inPlate) }
+            if (white) { begins = x; break }
+        }
         assertTrue(
-            phone.patchHas(TimaColors.light.inPlate, y = 0 until ZONE_1, x = third until third * 2, side = 2),
-            "имени окна нет в средней трети шапки",
-        )
-        assertTrue(
-            !phone.patchHas(TimaColors.light.inPlate, y = 0 until ZONE_1, x = 60 until third, side = 2),
-            "между логотипом и центром что-то белое — имя не уехало в центр",
+            begins < WIDTH / 3,
+            "имя окна начинается на $begins-й точке из $WIDTH — это не «слева за логотипом»",
         )
     }
 
     /**
-     * Выбранная вкладка отличается от невыбранной.
+     * Шапка, вкладки и второй ряд — один серый блок.
      *
-     * Проверка кажется тавтологией ровно до того дня, когда чип выбранной вкладки
-     * получит тот же вид, что остальные, — и окно молча перестанет показывать, где вы.
+     * Решение заказчика: «сделай фон всех вкладок и подкладок единым — серый». Между
+     * шапкой и вкладками не должно быть ни линии, ни белой щели: белое там означало бы,
+     * что между ними проглянуло содержимое.
      */
     @Test
-    fun выбранная_вкладка_видна() {
-        val first = capture("каркас-вкладка-1", WIDTH, HEIGHT, dark = false) { window("Общая") }
-        val second = capture("каркас-вкладка-2", WIDTH, HEIGHT, dark = false) { window("Каталог") }
-
-        assertTrue(
-            first.difference(second) > 0.0,
-            "смена вкладки ничего не изменила на экране",
-        )
+    fun шапка_и_вкладки_один_серый_блок() {
+        for ((name, snapshot) in bothThemes("каркас-блок", WIDTH, HEIGHT) { window() }) {
+            val colors = theme(name)
+            // Сравнивать надо с наложением, а не с самим токеном: в тёмной теме
+            // `functional` полупрозрачен. Именно это и ловится здесь: пока блок красил
+            // фон и сверху его же красила шапка, получалось 0,135 вместо 0,07 — шапка
+            // выходила светлее вкладок под ней.
+            val gray = TimaContrast.overlay(colors.functional, colors.surface)
+            for (y in ZONE_1 - 6 until ZONE_1 + 6) {
+                assertTrue(
+                    Snapshot.close(snapshot.color(2, y), gray),
+                    "$name: на строке $y между шапкой и вкладками не серый фон, а ${snapshot.color(2, y)}",
+                )
+            }
+        }
     }
 
     @Composable
