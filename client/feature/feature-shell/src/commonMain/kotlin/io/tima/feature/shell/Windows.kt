@@ -42,7 +42,7 @@ fun SocialWindow(
     modifier: Modifier = Modifier,
 ) = WindowWithTabs(
     window = Window.Social,
-    tabs = listOf("Общая", "Друзья", "Каталог"),
+    tabs = COMMON_TABS,
     onSwitchWindows = onSwitchWindows,
     onSearch = onSearch,
     onSettings = onSettings,
@@ -96,7 +96,7 @@ fun MediaWindow(
     var mode by remember { mutableStateOf(MEDIA_MODES.first()) }
     WindowWithTabs(
         window = Window.Media,
-        tabs = listOf("Общая", "Друзья", "Каталог"),
+        tabs = COMMON_TABS,
         onSwitchWindows = onSwitchWindows,
         onSearch = onSearch,
         onSettings = onSettings,
@@ -141,7 +141,7 @@ fun ActivityWindow(
     var reactions by remember { mutableStateOf(REACTION_FILTERS.first()) }
     WindowWithTabs(
         window = Window.Activity,
-        tabs = listOf("Ответы", "Реакции", "Коллекции"),
+        tabs = SOCIAL_TABS,
         onSwitchWindows = onSwitchWindows,
         onSearch = onSearch,
         onSettings = onSettings,
@@ -197,7 +197,7 @@ fun PageWindow(
     WindowWithTabs(
         window = Window.Page,
         // Порядок из макета: страница открывается на «Подписан», и это её первая вкладка.
-        tabs = listOf("Подписан", "Лента", "Коллекции", "Группы"),
+        tabs = PAGE_TABS,
         onSwitchWindows = onSwitchWindows,
         onSearch = onSearch,
         onSettings = onSettings,
@@ -258,21 +258,47 @@ fun PageWindow(
     }
 }
 
+/**
+ * Надписи рядов — все, какие есть в окнах, в одном месте.
+ *
+ * `internal`, а не `private`, по одной причине: **их меряет тест на перенос строки**
+ * ([RowFitTest]). Список, переписанный в тест руками, разошёлся бы с окном молча — а
+ * тест мерил бы старые слова и уверял, что всё помещается.
+ */
+/** Вкладки окон 2 и 3 (`§4`, `§5`). */
+internal val COMMON_TABS = listOf("Общая", "Друзья", "Каталог")
+
+/** Вкладки окна 4 (`§6`). */
+internal val SOCIAL_TABS = listOf("Ответы", "Реакции", "Коллекции")
+
+/** Вкладки окна 5 (`§7`). */
+internal val PAGE_TABS = listOf("Подписан", "Лента", "Коллекции", "Группы")
+
 /** «Лента» и «Слайды» — два способа смотреть одно и то же (`§5`). */
-private val MEDIA_MODES = listOf("Лента", "Слайды")
+internal val MEDIA_MODES = listOf("Лента", "Слайды")
 
 /** Фильтры «Реакций» (`§6`). */
-private val REACTION_FILTERS = listOf("Все", "Комментарии", "Оценки")
+internal val REACTION_FILTERS = listOf("Все", "Комментарии", "Оценки")
 
 /** Подвкладки «Коллекций» (`§7`). */
-private val COLLECTION_TABS = listOf("Медиа", "Сообщения", "Каталог")
+internal val COLLECTION_TABS = listOf("Медиа", "Сообщения", "Каталог")
 
 /**
  * Контур коллекций (`§7`). Открывается окно на «Личном»: это своё хозяйство, и
  * показывать его сначала публичной частью значило бы прятать от человека его же
  * содержимое — так и в макете, где залито «Личное».
  */
-private val COLLECTION_MODES = listOf("Открытое", "Личное")
+internal val COLLECTION_MODES = listOf("Открытое", "Личное")
+
+/**
+ * Фильтры журнала звонков — `интерфейс.md §2`, ряд под вкладками окна 1.
+ *
+ * Единственный список здесь **не** `internal`: окно «Телефон» живёт в `shared`, рядом с
+ * данными переписок, а не здесь с остальными четырьмя. Держать его надписи там значило
+ * бы, что мерить ряд на перенос нечем — [RowFitTest] лежит в этом модуле и до чужого
+ * `private` не дотянется.
+ */
+val CALL_FILTERS = listOf("Все", "Контактов", "Неизвестные", "Пропущенные")
 
 /**
  * Общий вид окна, у которого пока нет содержимого.

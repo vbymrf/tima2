@@ -47,6 +47,7 @@ import io.tima.feature.chat.ChatsStore
 import io.tima.feature.chat.BookState
 import io.tima.feature.chat.BookStore
 import io.tima.feature.chat.BookScreen
+import io.tima.feature.shell.CALL_FILTERS
 import io.tima.feature.shell.Window
 import io.tima.feature.shell.MediaWindow
 import io.tima.feature.shell.ActivityWindow
@@ -902,5 +903,3 @@ private fun PhoneWindow(
     }
 }
 
-/** Фильтры журнала звонков — `интерфейс.md §2`, ряд под вкладками. */
-private val CALL_FILTERS = listOf("Все", "Контактов", "Неизвестные", "Пропущенные")

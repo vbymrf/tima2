@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -102,7 +103,9 @@ fun WindowHeader(
                 color = colors.onAccent,
                 lineOne = true,
             )
-            right?.invoke()
+            // Внутри плашки круглые кнопки белые: салатовое на салатовом не видно.
+            // Признак ставит плашка, а не тот, кто кладёт в неё кнопки, — см. LocalInPlate.
+            right?.let { CompositionLocalProvider(LocalInPlate provides true) { it() } }
         }
     }
 }

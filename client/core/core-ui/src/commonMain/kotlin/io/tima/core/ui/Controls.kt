@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -99,7 +100,7 @@ fun IconButton(
     Box(
         modifier = modifier
             .size(36.dp)
-            .background(background ?: if (live) colors.navigation else colors.softAccent, CircleShape)
+            .background(background ?: circleFill(live), CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -107,8 +108,43 @@ fun IconButton(
             text = glyph,
             fontSize = TimaType.sz4,
             weight = FontWeight.Bold,
-            color = colorGlyph ?: if (live) colors.onAccent else colors.text,
+            // Внутри плашки знак чёрный на белом круге: `.зона-1 .икона { color: var(--текст) }`.
+            color = colorGlyph ?: if (live && !LocalInPlate.current) colors.onAccent else colors.text,
         )
+    }
+}
+
+/**
+ * Стоим ли мы внутри салатовой плашки шапки.
+ *
+ * Правило макета — две строки: `.икона { background: var(--чёрный-6) }` и
+ * `.зона-1 .икона { background: #ffffff }`. Салатовое на салатовом не видно, а серый
+ * `--чёрный-6` на салатовом виден немногим лучше: шесть процентов чёрного поверх
+ * зелёного дают почти тот же зелёный. **Внутри плашки круг белый, иначе круга нет
+ * вовсе** — а без круга кнопка перестаёт выглядеть кнопкой, и заказчик увидел это
+ * глазами 2026-09-02: «кнопки в шапке нужно разместить на своём круглом фоне».
+ *
+ * Признаком, а не параметром: правило принадлежит плашке, а не тому, кто кладёт в неё
+ * кнопки. Параметром его пришлось бы передавать через каждое окно, и первый же
+ * забывший вернул бы кнопку без круга.
+ */
+val LocalInPlate = staticCompositionLocalOf { false }
+
+/**
+ * Заливка круглой кнопки: белая в плашке, салатовая у главного действия, иначе серая.
+ *
+ * Серый здесь `--чёрный-6` — **тот же, что у невыбранной подвкладки**. Это не совпадение
+ * и не экономия токена: в макете `.икона` и `.чип` берут одну и ту же тихую подложку,
+ * и «как фон подвкладки» — ровно то, как заказчик её и назвал.
+ */
+@Composable
+private fun circleFill(live: Boolean): Color {
+    val colors = Tima.colors
+    return when {
+        // Плашка сильнее «живости»: `.зона-1 .икона.жив { background: #ffffff }`.
+        LocalInPlate.current -> colors.inPlate
+        live -> colors.navigation
+        else -> colors.quiet
     }
 }
 
@@ -127,11 +163,10 @@ fun ButtonCircle(
     background: Color? = null,
     drawing: @Composable () -> Unit,
 ) {
-    val colors = Tima.colors
     Box(
         modifier = modifier
             .size(36.dp)
-            .background(background ?: if (live) colors.navigation else colors.softAccent, CircleShape)
+            .background(background ?: circleFill(live), CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { drawing() }
@@ -170,6 +205,49 @@ fun Chip(
         contentAlignment = Alignment.Center,
     ) {
         Caption(label, fontSize = TimaType.sz6, weight = FontWeight.Bold, color = labelColor)
+    }
+}
+
+/**
+ * Вкладка окна. `.таб`.
+ *
+ * **Невыбранная вкладка — слово без заливки.** В этом всё её отличие от чипа, и оно
+ * рабочее: ряд вкладок и ряд подвкладок стоят друг под другом, и если оба набраны
+ * залитыми пилюлями, человек видит один сплошной ряд из шести кнопок. Заказчик прочёл
+ * это ровно так 2026-09-02: «второй ряд полностью повторяет первый».
+ *
+ * До того дня вкладка была [Chip] вида [ChipKind.Quiet] — залитая тихим оттенком
+ * навигации, ростом и отступами с чип. Макет с самого начала говорил другое:
+ *
+ * ```css
+ * .таб     { padding: 6px 14px; font-size: var(--щ5); color: var(--чёрный-50) }
+ * .таб.тек { background: var(--навигация); color: #ffffff }
+ * ```
+ *
+ * Ни фона, ни рамки у невыбранной — и размер крупнее чипового. Расходился код, а не
+ * макет, поэтому чинится код.
+ */
+@Composable
+fun Tab(
+    label: String,
+    current: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = Tima.colors
+    Box(
+        modifier = modifier
+            .background(if (current) colors.navigation else Color.Transparent, CircleShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Caption(
+            text = label,
+            fontSize = TimaType.sz5,
+            weight = FontWeight.Bold,
+            color = if (current) colors.onAccent else colors.text2,
+        )
     }
 }
 

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import io.tima.core.ui.ChipKind
 import io.tima.core.ui.InCenter
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Name
@@ -20,7 +19,7 @@ import io.tima.core.ui.LayoutLocal
 import io.tima.core.ui.ControlRow
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.Tima
-import io.tima.core.ui.Chip
+import io.tima.core.ui.Tab
 import io.tima.core.ui.WindowHeader
 import io.tima.core.ui.bottomLine
 
@@ -159,11 +158,12 @@ fun TabRow(
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
     ) {
         for (name in tabs) {
-            Chip(
+            // Вкладка, а не чип: невыбранная — слово без заливки (`.таб` макета).
+            // Пока она была чипом, ряд вкладок и ряд подвкладок под ним читались как
+            // один ряд из шести одинаковых пилюль — заказчик увидел это 2026-09-02.
+            Tab(
                 label = name,
-                // Выбранная вкладка — залитый чип: тот же язык, что у фильтров и
-                // эмоций (`§1 «Язык состояний»`), и человеку не приходится учить второй.
-                kind = if (name == selected) ChipKind.Selected else ChipKind.Quiet,
+                current = name == selected,
                 onClick = { onTab(name) },
             )
         }
