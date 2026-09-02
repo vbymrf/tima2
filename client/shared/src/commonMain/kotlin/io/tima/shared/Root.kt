@@ -56,6 +56,7 @@ import io.tima.feature.shell.InSide
 import io.tima.feature.shell.WindowFrame
 import io.tima.feature.shell.Rail
 import io.tima.feature.shell.TabStub
+import io.tima.feature.shell.FilterRow
 import io.tima.feature.shell.WindowSwitchingScreen
 import io.tima.feature.shell.SettingsItem
 import io.tima.feature.shell.SettingsScreen
@@ -756,6 +757,7 @@ private fun windowCounters(list: ChatsState): Map<Window, Int> {
  *
  * Вкладка запоминается вызывающим, а не этим экраном: «единая сессия» из `§1` требует,
  * чтобы окно возвращалось туда, где его оставили, — в том числе после захода в подокно.
+ * Фильтр журнала живёт здесь: он принадлежит одной вкладке и вместе с ней и уходит.
  */
 @Composable
 private fun PhoneWindow(
@@ -771,35 +773,54 @@ private fun PhoneWindow(
     onSettings: () -> Unit,
     onSwitchWindows: () -> Unit,
     onNeighbourWindow: (InSide) -> Unit,
-) = WindowFrame(
-    window = Window.Phone,
-    tabs = listOf("Чаты", "Книга", "Звонки"),
-    selected = tab,
-    onTab = onTab,
-    onSwitchWindows = onSwitchWindows,
-    onSearch = {},
-    onSettings = onSettings,
-    onNeighbourWindow = onNeighbourWindow,
 ) {
-    when (tab) {
-        "Чаты" -> ChatsScreen(
-            state = list,
-            onOpen = onOpen,
-            onNew = onNew,
-            onNewGroup = onNewGroup,
-            onSettings = onSettings,
-        )
+    var calls by remember { mutableStateOf(CALL_FILTERS.first()) }
+    WindowFrame(
+        window = Window.Phone,
+        tabs = listOf("Чаты", "Книга", "Звонки"),
+        selected = tab,
+        onTab = onTab,
+        onSwitchWindows = onSwitchWindows,
+        onSearch = {},
+        onSettings = onSettings,
+        onNeighbourWindow = onNeighbourWindow,
+        // Ряд фильтров есть только у журнала: у «Чатов» и «Книги» его в макете нет.
+        secondRow = if (tab != "Звонки") {
+            null
+        } else {
+            { FilterRow(CALL_FILTERS, calls, { calls = it }) }
+        },
+    ) {
+        when (tab) {
+            "Чаты" -> ChatsScreen(
+                state = list,
+                onOpen = onOpen,
+                onNew = onNew,
+                onNewGroup = onNewGroup,
+                onSettings = onSettings,
+            )
 
-        "Книга" -> BookScreen(
-            state = book,
-            onSearch = onSearchInBook,
-            onOpen = onOpenPerson,
-        )
+            "Книга" -> BookScreen(
+                state = book,
+                onSearch = onSearchInBook,
+                onOpen = onOpenPerson,
+            )
 
-        else -> TabStub(
-            willWhat = "Здесь будет журнал звонков",
-            thanHolds = "Входящие, исходящие и пропущенные, с фильтрами. " +
-                "Звонков нет: клиент LiveKit — задача К7.",
-        )
+            // Заглушка называет выбранный фильтр. Фильтр, от которого на экране ничего
+            // не меняется, неотличим от сломанного — в него тыкают повторно.
+            else -> TabStub(
+                willWhat = when (calls) {
+                    "Контактов" -> "Здесь будет журнал звонков от людей из книги"
+                    "Неизвестные" -> "Здесь будет журнал звонков с чужих номеров"
+                    "Пропущенные" -> "Здесь будет журнал пропущенных"
+                    else -> "Здесь будет журнал звонков"
+                },
+                thanHolds = "Входящие, исходящие и пропущенные — направление стрелкой, " +
+                    "длительность словами. Звонков нет: клиент LiveKit — задача К7.",
+            )
+        }
     }
 }
+
+/** Фильтры журнала звонков — `интерфейс.md §2`, ряд под вкладками. */
+private val CALL_FILTERS = listOf("Все", "Контактов", "Неизвестные", "Пропущенные")

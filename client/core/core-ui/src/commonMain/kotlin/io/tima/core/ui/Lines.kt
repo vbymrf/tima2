@@ -17,8 +17,12 @@ import androidx.compose.ui.unit.dp
  * как только полоса закрашена своим фоном: у рейки и колонки содержимое заполняет всю
  * область, и граница уезжает под него. Так и было в первой редакции, и поймал это
  * пиксельный тест, а не глаз.
+ *
+ * Нижняя линия видна наружу дизайн-системы: её просит ряд фильтров окна, который
+ * живёт в `feature-shell`. Верхняя пока нужна только здесь и остаётся `internal` —
+ * открывать её «заодно» значит предлагать применить.
  */
-internal fun Modifier.bottomLine(color: Color): Modifier = drawWithContent {
+fun Modifier.bottomLine(color: Color): Modifier = drawWithContent {
     drawContent()
     val thickness = 1.dp.toPx()
     drawLine(
