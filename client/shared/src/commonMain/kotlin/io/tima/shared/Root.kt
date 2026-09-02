@@ -59,6 +59,10 @@ import io.tima.feature.shell.TabStub
 import io.tima.feature.shell.FilterRow
 import io.tima.feature.shell.WindowSwitchingScreen
 import io.tima.feature.shell.SettingsItem
+import io.tima.core.ui.Appearance
+import io.tima.core.ui.TimaTheme
+import androidx.compose.foundation.isSystemInDarkTheme
+import io.tima.feature.shell.AppearanceScreen
 import io.tima.feature.shell.SettingsScreen
 import io.tima.feature.shell.UpdateOffer
 import io.tima.feature.shell.UpdateSection
@@ -81,14 +85,79 @@ import io.tima.feature.chat.ChatsScreen
  * Развилка ровно одна, и решает её **заведённое устройство**, а не флаг «вошли»: флаг живёт
  * в памяти и врёт после перезапуска. Заведённое означает сессию, а не только секрет —
  * секрет пишется до вызова сервера, и секрет без сессии это незаконченный вход.
+ *
+ * **Тема живёт здесь, а не у платформенного входа.** До 2026-09-02 обе точки входа сами
+ * звали `TimaTheme(dark = isSystemInDarkTheme())`, и тему решала операционная система.
+ * Теперь её решает человек в настройках, а значит выбор — состояние приложения, и держать
+ * его надо там, где живёт остальное состояние. Платформе остаётся то, что и было её
+ * делом: где хранить строку.
  */
 @Composable
 fun Root(
     entry: Entry,
     deviceDatabase: () -> TimaDatabase,
+    /** Где платформа хранит выбранное оформление. */
+    appearanceStore: AppearanceStore,
     linkCode: String? = null,
     /** Номер сборки от платформы: общий код его знать не может и не должен. */
     build: Build = Build(),
+) {
+    // Системная тема спрашивается ровно один раз и только затем, чтобы решить, с чего
+    // начать при первом запуске. Дальше решает человек.
+    val systemDark = isSystemInDarkTheme()
+    var appearance by remember {
+        mutableStateOf(Appearance.read(appearanceStore.load(), systemDark))
+    }
+
+    TimaTheme(colors = appearance.colors) {
+        Inside(
+            entry = entry,
+            deviceDatabase = deviceDatabase,
+            linkCode = linkCode,
+            build = build,
+            appearance = appearance,
+            onAppearance = {
+                appearance = it
+                appearanceStore.save(it.write())
+            },
+        )
+    }
+}
+
+/**
+ * Где платформа хранит оформление.
+ *
+ * Две лямбды, а не интерфейс с реализацией на платформу: хранить надо одну строку, и
+ * заводить ради неё `expect`/`actual` значило бы завести платформенный слой там, где
+ * платформенного ровно столько же, сколько у открытия базы, — то есть нисколько, кроме
+ * места.
+ *
+ * Ошибку чтения хранилище гасит само и отдаёт `null`: не открывшееся оформление означает
+ * тему по умолчанию, а не отказ пустить человека в переписку.
+ */
+class AppearanceStore(
+    val load: () -> String?,
+    val save: (String) -> Unit,
+) {
+    companion object {
+        /**
+         * Хранилище, которое не хранит.
+         *
+         * Для проверок и для платформы, у которой места ещё нет. Названо честно: тема,
+         * выбранная при таком хранилище, живёт до перезапуска.
+         */
+        val Forgetful: AppearanceStore = AppearanceStore(load = { null }, save = {})
+    }
+}
+
+@Composable
+private fun Inside(
+    entry: Entry,
+    deviceDatabase: () -> TimaDatabase,
+    linkCode: String?,
+    build: Build,
+    appearance: Appearance,
+    onAppearance: (Appearance) -> Unit,
 ) {
     var device by remember { mutableStateOf(entry.created()) }
 
@@ -105,7 +174,7 @@ fun Root(
     // Сборка живёт в Assembly.kt: здесь навигация, а не «кто из чего состоит».
     val assembled = assemble(entry, current, deviceDatabase)
 
-    App(assembled, entry.platform, current.secret, linkCode, build)
+    App(assembled, entry.platform, current.secret, linkCode, build, appearance, onAppearance)
 }
 
 @Composable
@@ -203,6 +272,8 @@ private fun App(
     linkCode: String?,
     /** Номер сборки — показывается в «Устройствах», см. пояснение там. */
     build: Build,
+    appearance: Appearance,
+    onAppearance: (Appearance) -> Unit,
 ) {
     val environment = assembled.environment
     val network = assembled.network
@@ -377,6 +448,8 @@ private fun App(
                         scope = scope,
                         platform = platform,
                         build = build,
+                        appearance = appearance,
+                        onAppearance = onAppearance,
                         onBack = { where = Where.Nothing },
                     )
                 }
@@ -533,6 +606,8 @@ private fun Settings(
     scope: kotlinx.coroutines.CoroutineScope,
     platform: Platform,
     build: Build,
+    appearance: Appearance,
+    onAppearance: (Appearance) -> Unit,
     onBack: () -> Unit,
 ) {
     val fleet = remember { DevicesStore(network.myFleet, scope) }
@@ -550,12 +625,17 @@ private fun Settings(
                 // запрос ради строки в списке будил бы сеть на каждый заход в настройки.
                 SettingsItem.DEVICES -> devices.devices.size.takeIf { it > 0 }?.toString().orEmpty()
                 SettingsItem.ABOUT -> build.name
+                // Тема видна, не заходя внутрь: половина заходов в настройки на этом и
+                // заканчивается — человек посмотрел и вышел.
+                SettingsItem.APPEARANCE -> appearance.choice.title.lowercase()
                 else -> ""
             }
         },
     ) { item ->
         when (item) {
             SettingsItem.DEVICES -> Devices(fleet, devices, build.name)
+
+            SettingsItem.APPEARANCE -> AppearanceScreen(appearance, onAppearance)
 
             SettingsItem.UPDATE -> Update(network, scope, platform, build)
 

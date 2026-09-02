@@ -153,11 +153,12 @@ fun Chip(
     val colors = Tima.colors
     val background = when (kind) {
         ChipKind.Quiet -> colors.softAccent
+        ChipKind.Neutral -> colors.quiet
         ChipKind.Selected -> colors.navigation
         ChipKind.Confirmed -> colors.confirmed
     }
     val labelColor = when (kind) {
-        ChipKind.Quiet -> colors.text2
+        ChipKind.Quiet, ChipKind.Neutral -> colors.text2
         else -> colors.onAccent
     }
 
@@ -172,7 +173,15 @@ fun Chip(
     }
 }
 
-enum class ChipKind { Quiet, Selected, Confirmed }
+/**
+ * Виды чипа.
+ *
+ * [Quiet] и [Neutral] различаются только оттенком подложки, и различие это рабочее:
+ * тихая подложка несёт оттенок навигации, нейтральная — нет. Ряд вкладок набран
+ * первой, ряд подвкладок под ним — второй, и человек видит, какой из двух рядов
+ * главнее, не читая надписей. Решение заказчика 2026-09-02.
+ */
+enum class ChipKind { Quiet, Neutral, Selected, Confirmed }
 
 /**
  * Счётчик непрочитанного — **янтарь**. `.счёт`.

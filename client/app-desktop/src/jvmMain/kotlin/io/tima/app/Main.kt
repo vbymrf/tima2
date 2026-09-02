@@ -1,6 +1,5 @@
 package io.tima.app
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.DpSize
@@ -10,10 +9,10 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import io.tima.core.database.desktopDatabase
-import io.tima.core.ui.TimaTheme
 import io.tima.shared.Build
 import io.tima.shared.Entry
 import io.tima.shared.Platform
+import io.tima.shared.AppearanceStore
 import io.tima.shared.Root
 import java.io.File
 
@@ -48,18 +47,44 @@ fun main() = application {
         state = windowState,
         title = "TIMA",
     ) {
-        TimaTheme(dark = isSystemInDarkTheme()) {
-            Root(
-                entry = entry,
-                // Версия порождается сборкой из gradle.properties — одна на Android и ПК.
-                // До 2026-08-26 десктоп её не знал и показывал «Установлена —»: вопрос
-                // «какая версия стоит» задают, когда что-то пошло не так, и остаться без
-                // ответа именно в этот момент — худшее время.
-                build = Build(name = BUILD_NAME, code = BUILD_CODE, stream = BUILD_STREAM),
-                deviceDatabase = { desktopDatabase(File(dataCatalog(), DATABASE_NAME)) },
-            )
-        }
+        // Тема здесь больше не решается: её выбирает человек в настройках, и держит
+        // выбор `Root`. Платформе осталось только место для хранения строки.
+        Root(
+            entry = entry,
+            deviceDatabase = { desktopDatabase(File(dataCatalog(), DATABASE_NAME)) },
+            appearanceStore = appearanceStore(),
+            // Версия порождается сборкой из gradle.properties — одна на Android и ПК.
+            // До 2026-08-26 десктоп её не знал и показывал «Установлена —»: вопрос
+            // «какая версия стоит» задают, когда что-то пошло не так, и остаться без
+            // ответа именно в этот момент — худшее время.
+            build = Build(name = BUILD_NAME, code = BUILD_CODE, stream = BUILD_STREAM),
+        )
     }
+}
+
+/**
+ * Где ПК хранит оформление: файл рядом с базой.
+ *
+ * Не база: выбранная тема нужна раньше, чем база открывается, — в неё уже завёрнут
+ * экран входа. Не `java.util.prefs`: тот кладёт значения в реестр Windows, то есть в
+ * место, которое не уносится вместе с каталогом данных и переживает переустановку —
+ * а «переустановил, а тема прежняя» человек читает как поломку.
+ *
+ * Ошибки чтения и записи гасятся: оформление — не то, ради чего стоит не пускать
+ * человека в переписку. Не прочиталось — тема по умолчанию; не записалось — выбор
+ * доживёт до перезапуска.
+ */
+private fun appearanceStore(): AppearanceStore {
+    val file = File(dataCatalog(), APPEARANCE_NAME)
+    return AppearanceStore(
+        load = { runCatching { file.readText() }.getOrNull() },
+        save = { text ->
+            runCatching {
+                file.parentFile?.mkdirs()
+                file.writeText(text)
+            }
+        },
+    )
 }
 
 /** `%LOCALAPPDATA%\TIMA` — рядом с секретами, но не вместе с ними. */
@@ -71,3 +96,4 @@ private fun dataCatalog(): File {
 }
 
 private const val DATABASE_NAME = "tima.db"
+private const val APPEARANCE_NAME = "оформление.txt"

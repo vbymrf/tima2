@@ -19,11 +19,23 @@ import androidx.compose.runtime.staticCompositionLocalOf
  */
 @Composable
 fun TimaTheme(
-    /** `true` — тёмная. Значение приходит от платформы, экран его не выбирает. */
+    /** `true` — тёмная. Короткий путь для проверок и для двух готовых тем. */
     dark: Boolean = false,
     content: @Composable () -> Unit,
+) = TimaTheme(colors = if (dark) TimaColors.dark else TimaColors.light, content = content)
+
+/**
+ * Та же тема, но набором цветов.
+ *
+ * Появилась 2026-09-02 вместе с пользовательской темой: тем стало три, и «светлая или
+ * тёмная» перестало быть исчерпывающим вопросом. Экраны от этого не изменились — они
+ * по-прежнему не знают, в какой теме рисуются, и это по-прежнему признак готовности У.1.
+ */
+@Composable
+fun TimaTheme(
+    colors: TimaColors,
+    content: @Composable () -> Unit,
 ) {
-    val colors = if (dark) TimaColors.dark else TimaColors.light
     CompositionLocalProvider(LocalTimaColors provides colors, content = content)
 }
 
