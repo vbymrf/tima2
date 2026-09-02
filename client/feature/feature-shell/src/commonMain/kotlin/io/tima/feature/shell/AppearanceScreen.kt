@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -59,11 +61,17 @@ import io.tima.core.ui.with
  * что смотрят на него; кнопка между выбором и результатом превращает подбор цвета в
  * череду сохранений.
  *
- * **«Вернуть как было» есть, и это не украшение.** Семнадцать цветов открыты целиком,
- * белый текст на белом фоне здесь никто не запрещает — значит выход из положения, когда
- * экран перестал читаться, обязан существовать. Кнопка возвращает светлую или тёмную,
- * смотря от какой отталкивались.
+ * **Возврат есть, и это не украшение.** Семнадцать цветов открыты целиком, белый текст
+ * на белом фоне здесь никто не запрещает — значит выход из положения, когда экран
+ * перестал читаться, обязан существовать.
+ *
+ * **Кнопок возврата две — «Вернуть светлую» и «Вернуть тёмную».** Решение заказчика:
+ * «настройки взять с них по умолчанию». Одна кнопка вынуждала угадывать, от какой темы
+ * отталкивались, а угадывать здесь нечем: своя палитра к тому моменту может не походить
+ * ни на одну из двух. Две кнопки называют исход прямо и заодно дают то, чего одна не
+ * давала вовсе, — перейти к своей тёмной, начав со светлой.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AppearanceScreen(
     appearance: Appearance,
@@ -128,24 +136,41 @@ fun AppearanceScreen(
             }
         }
 
-        Box(Modifier.padding(TimaSpacing.about4)) {
-            Button(
-                label = "Вернуть как было",
-                kind = ButtonKind.Dangerous,
-                onClick = {
-                    // Отталкиваемся от того, что ближе: тёмную возвращаем тёмной.
-                    val base = if (appearance.custom.surface == TimaColors.dark.surface) {
-                        TimaColors.dark
-                    } else {
-                        TimaColors.light
-                    }
-                    onAppearance(appearance.copy(custom = base))
-                    editing = null
-                },
-            )
+        // Две кнопки, а не одна: возврат обязан быть выбором, а не догадкой.
+        // Промежуточная редакция того же дня решала за человека — сравнивала фон своей
+        // темы с тёмным и возвращала «то, что ближе». Догадка врёт ровно тогда, когда
+        // дороже всего: человек, начавший со светлой и перекрасивший фон в тёмный,
+        // получал бы тёмную обратно и не понимал, почему.
+        FlowRow(
+            modifier = Modifier.padding(TimaSpacing.about4),
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        ) {
+            for ((label, base) in RESETS) {
+                Button(
+                    label = label,
+                    kind = ButtonKind.Dangerous,
+                    onClick = {
+                        onAppearance(appearance.copy(custom = base))
+                        editing = null
+                    },
+                )
+            }
         }
     }
 }
+
+/**
+ * Кнопки возврата: надпись и палитра, к которой она возвращает.
+ *
+ * Списком, а не двумя вызовами подряд: набор кнопок — это решение, и проверять его надо
+ * как решение. Третьей темы здесь взяться неоткуда — своя как раз и есть то, от чего
+ * возвращаются.
+ */
+internal val RESETS: List<Pair<String, TimaColors>> = listOf(
+    "Вернуть светлую" to TimaColors.light,
+    "Вернуть тёмную" to TimaColors.dark,
+)
 
 /**
  * Ввод одного цвета.

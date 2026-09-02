@@ -13,6 +13,7 @@ import io.tima.testui.FOREIGN_BACKGROUND
 import io.tima.testui.bothThemes
 import io.tima.testui.capture
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -82,6 +83,24 @@ class AppearanceScreenTest {
         assertTrue(
             painted.patchHas(mark, side = 8),
             "выбранный цвет фона не виден на экране, где его выбирают",
+        )
+    }
+
+    /**
+     * Возврат — выбор из двух, а не догадка.
+     *
+     * Промежуточная редакция того же дня возвращала «то, что ближе»: сравнивала фон
+     * своей темы с тёмным. Догадка врёт ровно тогда, когда дороже всего — человек,
+     * начавший со светлой и перекрасивший фон в тёмный, получал бы тёмную обратно.
+     */
+    @Test
+    fun кнопок_возврата_две_и_они_возвращают_готовые_темы() {
+        assertEquals(2, RESETS.size)
+        assertEquals(listOf(TimaColors.light, TimaColors.dark), RESETS.map { it.second })
+        assertEquals(
+            RESETS.size,
+            RESETS.map { it.first }.distinct().size,
+            "две кнопки с одной надписью неразличимы",
         )
     }
 
