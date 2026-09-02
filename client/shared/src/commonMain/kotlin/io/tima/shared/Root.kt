@@ -61,6 +61,7 @@ import io.tima.feature.shell.FilterRow
 import io.tima.feature.shell.WindowSwitchingScreen
 import io.tima.feature.shell.SettingsItem
 import io.tima.core.ui.Appearance
+import io.tima.core.ui.merged
 import io.tima.core.ui.TimaTheme
 import androidx.compose.foundation.isSystemInDarkTheme
 import io.tima.feature.shell.AppearanceScreen
@@ -619,7 +620,22 @@ private fun Settings(
         onOpen = { onOpen(it) },
         // Из пункта — к списку, из списка — из настроек. Одно «назад» на оба шага
         // выкидывало бы наружу из глубины, то есть теряло бы место, куда человек шёл.
-        onBack = { if (opened == null) onBack() else onOpen(null) },
+        //
+        // **Из «Оформления» не выпускаем, пока цвета дороги назад слиты** — защита от
+        // дурака, решение заказчика 2026-09-03. Момент выбран им же и выбран верно: на
+        // вводе запрещать нельзя, потому что пару меняют по одному цвету и через
+        // слившееся состояние приходится проходить. А вот выйти в приложение, где не
+        // видно ни шапки, ни списка настроек, — это и есть «уже не вернуться».
+        //
+        // Молчаливого отказа не выходит: предупреждение висит на самом экране всё то
+        // время, пока пара слита, и кнопка «назад» упирается в уже написанный ответ.
+        onBack = {
+            when {
+                opened == null -> onBack()
+                opened == SettingsItem.APPEARANCE && appearance.colors.merged().isNotEmpty() -> Unit
+                else -> onOpen(null)
+            }
+        },
         value = { item ->
             when (item) {
                 // Значение справа — то, что и так посчитано для самого пункта. Отдельный

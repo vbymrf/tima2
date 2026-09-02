@@ -35,6 +35,9 @@ import io.tima.core.ui.Name
 import io.tima.core.ui.SectionTitle
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Tertiary
+import io.tima.core.ui.VitalPair
+import io.tima.core.ui.contrastOf
+import io.tima.core.ui.merged
 import io.tima.core.ui.ThemeChoice
 import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaFixed
@@ -122,6 +125,25 @@ private fun Inside(
             .background(TimaFixed.paper)
             .verticalScroll(rememberScrollState()),
     ) {
+        // Предупреждение стоит НАВЕРХУ и держится, пока пара не разведена: пока оно
+        // висит, «назад» из оформления не выпускает. Человек, который этого не заметил,
+        // упрётся в неработающую стрелку — и ответ будет уже на экране, а не в голове.
+        for (pair in appearance.colors.merged()) {
+            Merged(
+                pair = pair,
+                ratio = appearance.colors.contrastOf(pair),
+                onFix = {
+                    onAppearance(
+                        appearance.copy(
+                            custom = appearance.custom
+                                .with(pair.front, TimaColors.light.slot(pair.front))
+                                .with(pair.back, TimaColors.light.slot(pair.back)),
+                        ),
+                    )
+                },
+            )
+        }
+
         SectionTitle("Тема")
         for (choice in ThemeChoice.entries) {
             ListLine(
@@ -193,6 +215,48 @@ private fun Inside(
             }
         }
     }
+}
+
+/**
+ * Предупреждение о слившейся паре — и кнопка, которая её разводит.
+ *
+ * ── ПОЧЕМУ ПРЕДУПРЕЖДЕНИЕ, А НЕ ЗАПРЕТ НА ВВОДЕ ─────────────────────────────
+ *
+ * Заказчик назвал момент проверки сам: «при нажатии на кнопку назад — в этот момент
+ * пользователь уже не вернётся». И это правильнее запрета в момент правки, вот почему.
+ *
+ * Пару меняют по одному цвету: чтобы прийти к чёрному тексту на белом из белого по
+ * белому, надо пройти через одно из двух промежуточных состояний, и оба «слившиеся».
+ * Запрет на «Применить» сделал бы такой переход невозможным вовсе — человек не смог бы
+ * добраться до состояния, которое сам же считает правильным.
+ *
+ * Поэтому правка свободна, а заперта **дверь**: пока пара слита, из оформления не
+ * выпускает. Всё, что можно испортить, чинится здесь же — экран читается всегда.
+ *
+ * Кнопка берёт значения **светлой** темы для этих двух цветов, а не «ближайшей»:
+ * угадывать за человека уже пробовали 2026-09-02, и от этого отказались.
+ */
+@Composable
+private fun Merged(pair: VitalPair, ratio: Double, onFix: () -> Unit) = Column(
+    modifier = Modifier
+        .fillMaxWidth()
+        .background(Tima.colors.functional)
+        .padding(TimaSpacing.about4),
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+) {
+    Name("Так отсюда не выйти")
+    Tertiary(
+        "«${pair.front.title}» и «${pair.back.title}» слились: ${ratio.rounded()} : 1. " +
+            "Этим нарисовано ${pair.where} — без них до оформления уже не дойти, " +
+            "поэтому «назад» подождёт.",
+    )
+    Button(label = "Взять из светлой", onClick = onFix)
+}
+
+/** Контраст числом, каким его читает человек: «1,4», а не «1.3999999». */
+private fun Double.rounded(): String {
+    val tenths = (this * 10).toLong()
+    return "${tenths / 10},${tenths % 10}"
 }
 
 /**

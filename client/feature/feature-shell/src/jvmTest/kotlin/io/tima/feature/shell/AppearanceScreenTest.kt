@@ -9,6 +9,7 @@ import io.tima.core.ui.ColorSlot
 import io.tima.core.ui.ThemeChoice
 import io.tima.core.ui.TimaColors
 import io.tima.core.ui.TimaFixed
+import io.tima.core.ui.VitalPair
 import io.tima.core.ui.with
 import io.tima.testui.FOREIGN_BACKGROUND
 import io.tima.testui.bothThemes
@@ -127,6 +128,50 @@ class AppearanceScreenTest {
             RESETS.size,
             RESETS.map { it.first }.distinct().size,
             "две кнопки с одной надписью неразличимы",
+        )
+    }
+
+    /**
+     * Слипшаяся пара видна на экране, и видна она **сверху**.
+     *
+     * Предупреждение — единственное, что объясняет неработающую стрелку «назад».
+     * Спрятанное под семнадцатью строками цветов, оно объясняло бы её тому, кто и так
+     * догадался прокрутить.
+     */
+    @Test
+    fun предупреждение_о_слиянии_стоит_наверху() {
+        val wrecked = TimaColors.light.with(ColorSlot.TEXT, TimaColors.light.surface)
+        val fine = capture("оформление-цело", WIDTH, HEIGHT, dark = false) { screen(ThemeChoice.Custom) }
+        val broken = capture("оформление-слиплось", WIDTH, HEIGHT, dark = false) {
+            Box(Modifier.fillMaxSize()) {
+                AppearanceScreen(appearance = Appearance(ThemeChoice.Custom, wrecked), onAppearance = {})
+            }
+        }
+        assertTrue(fine.difference(broken) > 0.0, "слипшаяся пара ничего не изменила на экране")
+        // Верхняя четверть: там, где у целой темы сразу «ТЕМА», у слипшейся — предупреждение.
+        assertTrue(
+            fine.difference(broken) > 0.0 &&
+                !fine.patchHas(TimaColors.light.functional, y = 0 until HEIGHT / 4, x = 0 until 8, side = 4),
+            "у целой темы наверху уже что-то лежит — проверка ловит не предупреждение",
+        )
+        assertTrue(
+            broken.patchHas(TimaColors.light.functional, y = 0 until HEIGHT / 4, x = 0 until 8, side = 4),
+            "предупреждения в верхней четверти нет",
+        )
+    }
+
+    /**
+     * Защищены ровно две пары, и обе — про дорогу назад.
+     *
+     * Числом, как и кнопки возврата: набор — это решение заказчика («защищаем только»),
+     * и расширять его молча нельзя. Пятнадцать остальных цветов остаются открытыми.
+     */
+    @Test
+    fun защищены_две_пары_и_обе_про_дорогу_назад() {
+        assertEquals(2, VitalPair.entries.size)
+        assertEquals(
+            listOf(ColorSlot.ON_ACCENT to ColorSlot.NAVIGATION, ColorSlot.TEXT to ColorSlot.SURFACE),
+            VitalPair.entries.map { it.front to it.back },
         )
     }
 

@@ -233,6 +233,76 @@ class AppearanceTest {
         }
     }
 
+    // ── защита от дурака ─────────────────────────────────────────────────────
+
+    /**
+     * Готовые темы проходят собственную защиту — и это не мелочь.
+     *
+     * Кнопка «Вернуть светлую» кладёт светлую палитру в свою тему. Если бы светлая не
+     * проходила проверку, кнопка спасения приводила бы в состояние, из которого не
+     * выпускают, — то есть ровно в ловушку, от которой защита и заводилась.
+     *
+     * Запас у светлой тонкий: плашка даёт 2,08 при пороге 1,8. Число здесь названо
+     * нарочно — правка палитры, которая его съест, покраснеет тестом.
+     */
+    @Test
+    fun готовые_темы_проходят_собственную_защиту() {
+        for ((name, theme) in listOf("светлая" to TimaColors.light, "тёмная" to TimaColors.dark)) {
+            assertTrue(
+                theme.merged().isEmpty(),
+                "$name: готовая тема не проходит защиту — кнопка возврата вела бы в ловушку. " +
+                    VitalPair.entries.joinToString { "${it.name} ${theme.contrastOf(it)}" },
+            )
+        }
+        assertTrue(
+            TimaColors.light.contrastOf(VitalPair.PLATE) > MERGE_LIMIT,
+            "запас светлой плашки съеден: ${TimaColors.light.contrastOf(VitalPair.PLATE)} против $MERGE_LIMIT",
+        )
+    }
+
+    /**
+     * Порог слияния — **не** порог читаемости, и подменять его нельзя.
+     *
+     * Читаемость — 4,5. Светлая плашка её не берёт (2,08) и не должна: решение принято
+     * 2026-09-02 с названной ценой. Поднять здесь порог до 4,5 значило бы объявить
+     * незаконной собственную светлую тему.
+     */
+    @Test
+    fun порог_слияния_ниже_порога_читаемости() {
+        assertTrue(MERGE_LIMIT < TimaContrast.TEXT_THRESHOLD)
+        assertTrue(MERGE_LIMIT < TimaContrast.ratio(TimaColors.light.onAccent, TimaColors.light.navigation))
+    }
+
+    /** Слияние ловится на каждой из пар по отдельности. */
+    @Test
+    fun слияние_ловится_на_каждой_паре() {
+        for (pair in VitalPair.entries) {
+            val wrecked = TimaColors.light.with(pair.front, TimaColors.light.slot(pair.back))
+            assertEquals(
+                listOf(pair),
+                wrecked.merged(),
+                "«${pair.where}»: одинаковые цвета не признаны слившимися",
+            )
+        }
+    }
+
+    /**
+     * Прозрачность не ломает проверку.
+     *
+     * Контраст полупрозрачного цвета не считается вовсе — `TimaContrast.ratio` на такой
+     * паре бросает исключение. Половина токенов полупрозрачна, и человеку никто не
+     * мешает сделать полупрозрачным текст: проверка обязана это пережить, а не уронить
+     * экран настроек.
+     */
+    @Test
+    fun прозрачный_цвет_не_роняет_проверку() {
+        val seeThrough = TimaColors.light.with(ColorSlot.TEXT, Color(0x20000000))
+        assertEquals(listOf(VitalPair.CONTENT), seeThrough.merged())
+
+        val stillFine = TimaColors.light.with(ColorSlot.TEXT, Color(0xE0000000))
+        assertTrue(stillFine.merged().isEmpty(), "почти непрозрачный чёрный на белом не слился")
+    }
+
     /** Каждый открытый цвет действительно меняется поодиночке. */
     @Test
     fun каждый_цвет_меняется_сам_по_себе() {
