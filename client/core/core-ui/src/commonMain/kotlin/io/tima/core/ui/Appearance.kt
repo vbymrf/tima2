@@ -217,8 +217,57 @@ fun Color.hex(): String {
 fun colorOf(text: String): Color? {
     val clean = text.trim().removePrefix("#").uppercase()
     if (clean.length != 6 && clean.length != 8) return null
-    if (clean.any { it !in "0123456789ABCDEF" }) return null
+    if (clean.any { it !in HEX }) return null
     val full = if (clean.length == 6) "FF$clean" else clean
     fun part(at: Int): Int = full.substring(at, at + 2).toInt(16)
     return Color(red = part(2), green = part(4), blue = part(6), alpha = part(0))
+}
+
+private const val HEX = "0123456789ABCDEF"
+
+/**
+ * Что именно не так с набранным цветом. `null` — всё так.
+ *
+ * ── ПОЧЕМУ ЭТО ОТДЕЛЬНАЯ ФУНКЦИЯ, А НЕ `colorOf() == null` ───────────────────
+ *
+ * «Не разобрано» — это не сообщение, а отсутствие сообщения. Человек видит, что цвет не
+ * применился, и не знает, дело в лишнем знаке, в нехватке знака или в том, что он набрал
+ * русскую «С» вместо латинской «C» — а последнее на глаз неотличимо вовсе.
+ *
+ * Решение заказчика 2026-09-03: «вместо того, чтобы не дать сохранить неправильный, с
+ * указанием, что не так». Проверки идут от частного к общему: сначала называется чужой
+ * знак — он и есть причина, — и только потом длина.
+ */
+fun colorProblem(text: String): String? {
+    val clean = text.trim().removePrefix("#").uppercase()
+    if (clean.isEmpty()) return "Пусто. Наберите цвет: шесть знаков или восемь"
+
+    val strangers = clean.filter { it !in HEX }.toSet()
+    if (strangers.isNotEmpty()) {
+        val listed = strangers.joinToString("», «", prefix = "«", postfix = "»")
+        return "Не шестнадцатеричные знаки: $listed. Допустимы 0–9 и A–F"
+    }
+    if (clean.length != 6 && clean.length != 8) {
+        return "Знаков ${clean.length}, а нужно 6 (цвет) или 8 (с непрозрачностью)"
+    }
+    return null
+}
+
+/**
+ * Готовые цвета для выбора: сначала подходящие этому месту, потом вся палитра.
+ *
+ * ── ОТКУДА БЕРУТСЯ ЦВЕТА ────────────────────────────────────────────────────
+ *
+ * **Не выписаны руками.** Набор — это все значения обеих готовых тем, и ничего больше:
+ * палитра проекта и есть то, из чего собраны светлая с тёмной. Выписанный от руки
+ * список разошёлся бы с темами при первой же правке — и предлагал бы человеку цвета,
+ * которых в проекте уже нет.
+ *
+ * Первыми идут два значения **этого самого места**: каким оно было бы в светлой теме и
+ * каким в тёмной. Чаще всего человек хочет именно их — «как в тёмной, но фон свой».
+ */
+fun paletteFor(slot: ColorSlot): List<Color> {
+    val own = listOf(TimaColors.light.slot(slot), TimaColors.dark.slot(slot))
+    val all = ColorSlot.entries.flatMap { listOf(TimaColors.light.slot(it), TimaColors.dark.slot(it)) }
+    return (own + all).distinct()
 }

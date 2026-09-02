@@ -2,6 +2,7 @@ package io.tima.feature.shell
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Appearance
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
+import io.tima.core.ui.ColorPicker
 import io.tima.core.ui.ColorSlot
 import io.tima.core.ui.Field
 import io.tima.core.ui.ListLine
@@ -35,10 +37,14 @@ import io.tima.core.ui.Secondary
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.ThemeChoice
 import io.tima.core.ui.Tima
+import io.tima.core.ui.TimaFixed
+import io.tima.core.ui.TimaTheme
 import io.tima.core.ui.TimaColors
 import io.tima.core.ui.TimaShapes
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.colorOf
+import io.tima.core.ui.colorProblem
+import io.tima.core.ui.paletteFor
 import io.tima.core.ui.hex
 import io.tima.core.ui.slot
 import io.tima.core.ui.with
@@ -52,14 +58,28 @@ import io.tima.core.ui.with
  * строк «что → цвет»: образец, название, назначение и значение. Нажатие на строку
  * открывает ввод; ввод принимает `RRGGBB` и `AARRGGBB`, с решёткой и без.
  *
- * **Выбор цвета — поле, а не круг с радугой.** Круг требует своей отрисовки, своего
- * жеста и своей проверки в двух темах; поле требует шести знаков, которые человек и так
- * копирует из макета или из палитры. Когда понадобится круг, он встанет на это же место
- * — но заводить его до того, как в нём появилась нужда, значит платить за него сейчас.
+ * **Выбор цвета — поле и палитра готовых, а не круг с радугой.** Круг требует своей
+ * отрисовки, своего жеста и своей проверки; поле требует шести знаков, а палитра не
+ * требует и их. Когда понадобится круг, он встанет на это же место.
  *
- * **Тема применяется сразу, а не по кнопке «Сохранить».** Оформление тем и проверяют,
- * что смотрят на него; кнопка между выбором и результатом превращает подбор цвета в
- * череду сохранений.
+ * ── ТРИ ПРАВКИ 2026-09-03, И ВСЕ ТРИ ОТМЕНЯЮТ ПРЕЖНИЕ РЕШЕНИЯ ────────────────
+ *
+ * **Цвет применяется по кнопке, а не на каждый набранный знак.** Прежняя редакция
+ * применяла всё, что разобралось, и это ломалось ровно на стирании: `FF8AC44A` без
+ * последнего знака — семь знаков, мусор; ещё без одного — шесть, то есть **другой
+ * законный цвет**, и он тут же применялся. Поле после этого перерисовывалось из
+ * применённого значения, и набранное человеком исчезало у него под пальцами. Заказчик
+ * описал это точно: «цвета не дают установить; удаляя символы, автоматически
+ * подставляется цвет».
+ *
+ * **Непонятный ввод не применяется и объясняет, чем он непонятен** ([colorProblem]).
+ * «Не сохранилось» без причины неотличимо от поломки.
+ *
+ * **Экран рисуется не выбранной темой, а [TimaFixed.appearance] — чёрным по белому.**
+ * Своя тема открыта целиком, и первым, что она делала нечитаемым, был этот самый экран:
+ * человек оставался без строк, без цветов и без кнопки возврата. Цена принята: своей
+ * темы на этом экране не видно. Видно её в образцах строк и во всём остальном
+ * приложении.
  *
  * **Возврат есть, и это не украшение.** Семнадцать цветов открыты целиком, белый текст
  * на белом фоне здесь никто не запрещает — значит выход из положения, когда экран
@@ -78,14 +98,28 @@ fun AppearanceScreen(
     onAppearance: (Appearance) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = Tima.colors
+    // Экран подбора цветов не подчиняется подобранным цветам: иначе он ломается первым.
+    TimaTheme(colors = TimaFixed.appearance) { Inside(appearance, onAppearance, modifier) }
+}
+
+/**
+ * Само содержимое экрана. Отделено от [AppearanceScreen] ровно затем, чтобы обёртка темы
+ * стояла одной строкой и её нельзя было потерять при следующей правке разметки.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Inside(
+    appearance: Appearance,
+    onAppearance: (Appearance) -> Unit,
+    modifier: Modifier,
+) {
     // Какой цвет сейчас правят. `null` — правят не цвет, а тему.
     var editing by remember { mutableStateOf<ColorSlot?>(null) }
 
     Column(
         modifier
             .fillMaxSize()
-            .background(colors.surface)
+            .background(TimaFixed.paper)
             .verticalScroll(rememberScrollState()),
     ) {
         SectionTitle("Тема")
@@ -129,6 +163,7 @@ fun AppearanceScreen(
             )
             if (editing == slot) {
                 Editor(
+                    slot = slot,
                     value = value.hex(),
                     onColor = { onAppearance(appearance.copy(custom = appearance.custom.with(slot, it))) },
                     onDone = { editing = null },
@@ -173,19 +208,34 @@ internal val RESETS: List<Pair<String, TimaColors>> = listOf(
 )
 
 /**
- * Ввод одного цвета.
+ * Ввод одного цвета: поле, палитра готовых и кнопка «Применить».
  *
- * Правка применяется **на каждый разобранный ввод**, а не по кнопке: человек видит цвет
- * на самом экране, который правит. Непонятный набор знаков не применяется и ничего не
- * ломает — прежнее значение остаётся, пока не наберётся понятное.
+ * ── ПРАВКА ПРИМЕНЯЕТСЯ ПО КНОПКЕ, И ЭТО ГЛАВНОЕ ЗДЕСЬ ───────────────────────
+ *
+ * Набранное живёт **только в поле**, пока человек не нажал «Применить». Прежняя редакция
+ * применяла всё, что разобралось, на каждый знак — и это ломалось не на вводе, а на
+ * стирании: у `FF8AC44A` шесть последних знаков — тоже законный цвет, и он применялся
+ * посреди удаления. Дальше поле перерисовывалось из применённого значения, и набранное
+ * исчезало под пальцами.
+ *
+ * Поэтому же `remember` держит слот ключом, а не значение цвета: значение меняется от
+ * применения, и ключ по нему стирал бы набранное ровно в тот момент, когда оно нужно.
+ *
+ * **Непонятное не применяется и объясняет, чем оно непонятно.** Кнопка при этом гаснет:
+ * запрет виден до нажатия, а не после.
  */
 @Composable
 private fun Editor(
+    slot: ColorSlot,
     value: String,
     onColor: (androidx.compose.ui.graphics.Color) -> Unit,
     onDone: () -> Unit,
 ) {
-    var typed by remember(value) { mutableStateOf(value) }
+    var typed by remember(slot) { mutableStateOf(value) }
+    var palette by remember(slot) { mutableStateOf(false) }
+    val problem = colorProblem(typed)
+    val ready = colorOf(typed)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -193,25 +243,85 @@ private fun Editor(
             .padding(TimaSpacing.about4),
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
     ) {
-        Field(
-            value = typed,
-            onChange = { text ->
-                typed = text
-                colorOf(text)?.let(onColor)
-            },
-            hint = "AARRGGBB",
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-            Tertiary(
-                text = if (colorOf(typed) == null) {
-                    "Шесть или восемь шестнадцатеричных знаков. Пока не разобрано — цвет прежний"
-                } else {
-                    "Первые два знака — непрозрачность: FF непрозрачный, 00 невидимый"
-                },
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Field(
+                value = typed,
+                onChange = { typed = it },
+                hint = "AARRGGBB",
                 modifier = Modifier.weight(1f),
             )
-            Button(label = "Готово", onClick = onDone)
+            // «Палитра» стоит правее области номера — так её и заказали 2026-09-03.
+            // Выбор из палитры **набирает число в поле**, а не применяется сам: путь к
+            // применению один, и он проходит через «Применить». Иначе получилось бы,
+            // что набранное требует подтверждения, а выбранное — нет.
+            Button(
+                label = if (palette) "Скрыть" else "Палитра",
+                kind = ButtonKind.Quiet,
+                onClick = { palette = !palette },
+            )
         }
+
+        if (palette) {
+            // Подбор — квадратом и полосой; готовые цвета проекта остались рядом рядком.
+            // Одно другого не заменяет: квадратом подбирают, образцом возвращаются.
+            ColorPicker(
+                color = colorOf(typed) ?: colorOf(value) ?: Tima.colors.surface,
+                onPick = { typed = it.hex() },
+            )
+            Tertiary("Цвета проекта")
+            Ready(slot) { typed = it.hex() }
+        }
+
+        Tertiary(
+            text = problem
+                ?: "Первые два знака — непрозрачность: FF непрозрачный, 00 невидимый",
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+            // Гаснет, а не ругается после нажатия: запрет виден до того, как в него
+            // упёрлись. Ровно поэтому же кнопка не «Готово»: она применяет, и называть
+            // её надо тем, что она делает.
+            Button(
+                label = "Применить",
+                kind = if (ready == null) ButtonKind.Quiet else ButtonKind.Action,
+                onClick = {
+                    val color = colorOf(typed) ?: return@Button
+                    onColor(color)
+                    onDone()
+                },
+            )
+            Button(label = "Отмена", kind = ButtonKind.Dangerous, onClick = onDone)
+        }
+    }
+}
+
+/**
+ * Готовые цвета проекта плиткой: нажатие набирает число в поле.
+ *
+ * Первые два — значения **этого места** в светлой и тёмной теме; дальше вся палитра
+ * проекта. Список считает [paletteFor] из самих тем, руками здесь не выписано ничего.
+ *
+ * Оставлены рядом с квадратом подбора нарочно: квадратом подбирают новое, образцом
+ * возвращаются к известному. Попасть пальцем ровно в `#8AC44A` на квадрате нельзя.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Ready(slot: ColorSlot, onPick: (androidx.compose.ui.graphics.Color) -> Unit) = FlowRow(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+) {
+    for (color in paletteFor(slot)) {
+        Box(
+            modifier = Modifier
+                .size(TimaZonesAvatar)
+                .background(color, RoundedCornerShape(TimaShapes.square))
+                .border(1.dp, Tima.colors.line, RoundedCornerShape(TimaShapes.square))
+                .clickable { onPick(color) },
+        )
     }
 }
 

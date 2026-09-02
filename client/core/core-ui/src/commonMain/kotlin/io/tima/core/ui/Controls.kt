@@ -108,8 +108,7 @@ fun IconButton(
             text = glyph,
             fontSize = TimaType.sz4,
             weight = FontWeight.Bold,
-            // Внутри плашки знак чёрный на белом круге: `.зона-1 .икона { color: var(--текст) }`.
-            color = colorGlyph ?: if (live && !LocalInPlate.current) colors.onAccent else colors.text,
+            color = colorGlyph ?: glyphColor(live),
         )
     }
 }
@@ -137,6 +136,24 @@ val LocalInPlate = staticCompositionLocalOf { false }
  * и не экономия токена: в макете `.икона` и `.чип` берут одну и ту же тихую подложку,
  * и «как фон подвкладки» — ровно то, как заказчик её и назвал.
  */
+/**
+ * Цвет знака на круглой кнопке.
+ *
+ * **Внутри плашки он считается от заливки, а не берётся у темы.** Круг там белый, а
+ * `colors.text` в тёмной теме тоже белый — знак пропадал целиком. Заливка круга при этом
+ * человеку открыта («Внутри плашки» в «Оформлении»), поэтому и цвет знака обязан
+ * считаться, а не быть выбранным заранее: см. [TimaContrast.readable].
+ */
+@Composable
+private fun glyphColor(live: Boolean): Color {
+    val colors = Tima.colors
+    return when {
+        LocalInPlate.current -> TimaContrast.readable(on = colors.inPlate, under = colors.navigation)
+        live -> colors.onAccent
+        else -> colors.text
+    }
+}
+
 @Composable
 private fun circleFill(live: Boolean): Color {
     val colors = Tima.colors

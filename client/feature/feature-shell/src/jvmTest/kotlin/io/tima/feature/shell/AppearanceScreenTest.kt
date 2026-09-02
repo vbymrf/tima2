@@ -8,6 +8,7 @@ import io.tima.core.ui.Appearance
 import io.tima.core.ui.ColorSlot
 import io.tima.core.ui.ThemeChoice
 import io.tima.core.ui.TimaColors
+import io.tima.core.ui.TimaFixed
 import io.tima.core.ui.with
 import io.tima.testui.FOREIGN_BACKGROUND
 import io.tima.testui.bothThemes
@@ -46,44 +47,69 @@ class AppearanceScreenTest {
      *
      * Трёх строк мало, чтобы занять экран, поэтому проверяется верхняя треть: пустая
      * означала бы, что список не нарисовался вовсе.
+     *
+     * Ищется чёрное в обеих темах, а не текст темы: с 2026-09-03 экран рисуется
+     * [TimaFixed] — чёрным по белому — при любой выбранной теме.
      */
     @Test
     fun три_темы_нарисованы() {
         for ((name, snapshot) in bothThemes("оформление-темы", WIDTH, HEIGHT) { screen(ThemeChoice.Light) }) {
             assertTrue(
-                snapshot.patchHas(theme(name).text, y = 0 until HEIGHT / 3, side = 2),
+                snapshot.patchHas(TimaFixed.ink, y = 0 until HEIGHT / 3, side = 2),
                 "$name: верхняя треть пуста — списка тем нет",
             )
         }
     }
 
     /**
-     * Своя тема применяется к самому экрану оформления.
+     * Экран оформления **не подчиняется** подобранной теме.
      *
-     * Это и есть смысл «применяется сразу»: человек подбирает цвет, глядя на него.
-     * Проверяется заведомо чужим цветом — такого в палитре нет вовсе, и появиться на
-     * снимке он может только из своей темы.
+     * Проверка перевёрнута 2026-09-03 вместе с решением. До этого она требовала
+     * обратного: своя тема применяется к самому экрану, «человек подбирает цвет, глядя
+     * на него». Довод проиграл случаю, который тем же способом и достигается: своя тема
+     * открыта целиком, и первым, что она делает нечитаемым, оказывается этот экран.
+     * Человек остаётся без строк, без цветов и без кнопки возврата — то есть без выхода
+     * из положения, в которое сам себя и завёл.
+     *
+     * Проверяется заведомо чужой краской, которой в палитре нет вовсе: если она видна,
+     * значит фон экрана взят у своей темы.
      */
     @Test
-    fun своя_тема_применяется_к_самому_экрану() {
-        // `FOREIGN_BACKGROUND` — та самая «краска, которой в палитре нет вовсе»,
-        // заведённая в снимках ровно для таких утверждений. Свой литерал здесь был бы
-        // вторым таким же, а заодно нарушил бы правило «на экранах нет зашитых цветов».
+    fun экран_оформления_не_подчиняется_своей_теме() {
         val mark = FOREIGN_BACKGROUND
-        val painted = capture("оформление-применилось", WIDTH, HEIGHT, dark = false) {
+        val wrecked = TimaColors.light
+            .with(ColorSlot.SURFACE, mark)
+            .with(ColorSlot.TEXT, mark)
+            .with(ColorSlot.FUNCTIONAL, mark)
+        val painted = capture("оформление-не-подчиняется", WIDTH, HEIGHT, dark = false) {
             Box(Modifier.fillMaxSize()) {
-                io.tima.core.ui.TimaTheme(colors = TimaColors.light.with(ColorSlot.SURFACE, mark)) {
+                io.tima.core.ui.TimaTheme(colors = wrecked) {
                     AppearanceScreen(
-                        appearance = Appearance(ThemeChoice.Custom, TimaColors.light.with(ColorSlot.SURFACE, mark)),
+                        appearance = Appearance(ThemeChoice.Custom, wrecked),
                         onAppearance = {},
                     )
                 }
             }
         }
+        // Смотрим полосу у левого края: там только фон. Образцы цветов начинаются
+        // с шестнадцатой точки — это поле строки, — и они-то как раз обязаны быть
+        // чужой краской, поэтому по всему снимку такую проверку ставить нельзя.
+        val edge = 0 until 8
         assertTrue(
-            painted.patchHas(mark, side = 8),
-            "выбранный цвет фона не виден на экране, где его выбирают",
+            !painted.patchHas(mark, x = edge, side = 4),
+            "своя тема залила фон экрана оформления — на нём нельзя будет починить её же",
         )
+        assertTrue(
+            painted.patchHas(TimaFixed.paper, x = edge, side = 4),
+            "фон экрана оформления обязан оставаться белым",
+        )
+        assertTrue(
+            painted.patchHas(TimaFixed.ink, side = 2),
+            "текст экрана оформления обязан оставаться чёрным",
+        )
+        // Образцы цветов при этом показывают именно свои значения: экран не подчиняется
+        // теме, но и не скрывает её. Чужая краска обязана быть видна квадратиком.
+        assertTrue(painted.has(mark), "образцы цветов не показывают подобранное")
     }
 
     /**

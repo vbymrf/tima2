@@ -46,16 +46,32 @@ class TokensTest {
     }
 
     @Test
-    fun в_тёмной_теме_текст_на_зелёном_белый_и_цена_принята() {
-        // Тоже решение заказчика, и обратное по цвету: в тёмной теме весь текст белый,
-        // и делать зелёную заливку единственным исключением значило бы вводить правило
-        // ради одного места. Цена — 2,08 : 1, и тест держит её на виду, а не спорит.
+    fun в_тёмной_теме_заливка_тёмно_зелёная_и_белый_на_ней_читается() {
+        // Проверка перевёрнута 2026-09-03 вместе с цветом: заказчик назначил тёмной теме
+        // `#024408` вместо салатового. Раньше здесь стояло «цена принята, 2,08 : 1»;
+        // теперь белый по этой заливке даёт 11,46 — то есть заливка в тёмной теме
+        // перестала быть местом, где решение стоит денег.
         val ratio = TimaContrast.ratio(TimaColors.dark.onAccent, TimaColors.dark.navigation)
-        close(2.08, ratio)
+        close(11.46, ratio, tolerance = 0.05)
         assertTrue(
-            ratio < TimaContrast.TEXT_THRESHOLD,
-            "если это однажды возьмёт порог — значит палитру поменяли, и решение надо перечитать",
+            ratio >= TimaContrast.TEXT_THRESHOLD,
+            "белый по тёмно-зелёной заливке обязан проходить порог, а даёт $ratio : 1",
         )
+    }
+
+    /**
+     * **Тонкой чертой тёмно-зелёный не работает, и вот чего это стоит.**
+     *
+     * Заливкой цвет стал лучше прежнего, а чертой — хуже некуда: обводка выбранного
+     * режима и полоса автора рисуются им же по тёмному фону. Числа названы, чтобы
+     * решение не выглядело бесплатным и чтобы его нельзя было потерять: это два места,
+     * которые ждут продолжения решения заказчика, а не недосмотр.
+     */
+    @Test
+    fun в_тёмной_теме_навигация_чертой_не_видна_и_цена_названа() {
+        val capsule = TimaContrast.overlay(TimaColors.dark.quiet, TimaColors.dark.surface)
+        close(1.36, TimaContrast.ratio(TimaColors.dark.navigation, capsule), tolerance = 0.05)
+        close(1.06, TimaContrast.ratio(TimaColors.dark.navigation, TimaColors.dark.author), tolerance = 0.05)
     }
 
     @Test
@@ -82,11 +98,13 @@ class TokensTest {
     }
 
     @Test
-    fun в_тёмной_теме_салатовый_по_подложке_читался_бы_хорошо() {
-        // 8,99 : 1. Асимметрия объясняет, почему правило «зелёным нельзя» относится к
-        // светлой теме, а не к цвету как таковому.
+    fun зелёным_текст_не_набирают_ни_в_одной_теме() {
+        // До 2026-09-03 здесь стояло обратное: салатовый по тёмной подложке давал
+        // 8,99 : 1, и правило «зелёным нельзя» относилось только к светлой теме.
+        // Тёмно-зелёный убрал асимметрию — теперь цвет навигации нечитаем текстом в
+        // обеих темах, и правило стало общим. Это упрощение, а не потеря.
         val background = TimaContrast.overlay(TimaColors.dark.functional, TimaColors.dark.surface)
-        close(8.99, TimaContrast.ratio(TimaColors.dark.navigation, background), tolerance = 0.15)
+        close(1.64, TimaContrast.ratio(TimaColors.dark.navigation, background), tolerance = 0.05)
     }
 
     @Test
@@ -147,12 +165,17 @@ class TokensTest {
     }
 
     @Test
-    fun цвета_кода_в_темах_совпадают() {
-        // Салатовый, янтарь и зелёный работают заливкой в обеих темах, и перекрашивать
-        // их не пришлось. Это тоже решение, и оно держится тестом.
-        assertEquals(TimaColors.light.navigation, TimaColors.dark.navigation)
+    fun янтарь_и_зелёный_в_темах_совпадают_а_навигация_разошлась() {
+        // Янтарь и «подтверждено» работают заливкой в обеих темах, и перекрашивать их не
+        // пришлось. Навигация разошлась 2026-09-03 — решение заказчика: тёмной теме свой
+        // тёмно-зелёный. Проверка требует именно РАЗЛИЧИЯ: свести их обратно молча,
+        // «чтобы было единообразно», теперь нельзя.
         assertEquals(TimaColors.light.activity, TimaColors.dark.activity)
         assertEquals(TimaColors.light.confirmed, TimaColors.dark.confirmed)
+        assertTrue(
+            TimaColors.light.navigation != TimaColors.dark.navigation,
+            "навигация в темах обязана различаться: у тёмной свой тёмно-зелёный",
+        )
     }
 
     @Test
@@ -193,8 +216,56 @@ class TokensTest {
         // одинаково. Это следствие, а не зашитый цвет: если плашка однажды сменит цвет,
         // менять придётся и это — вместе, а не по отдельности.
         assertEquals(TimaColors.light.inPlate, TimaColors.dark.inPlate)
-        val ratio = TimaContrast.ratio(TimaColors.light.inPlate, TimaColors.light.navigation)
-        close(2.08, ratio)
+        close(2.08, TimaContrast.ratio(TimaColors.light.inPlate, TimaColors.light.navigation))
+        // В тёмной теме белое на плашке читается заметно лучше — заливка там тёмная.
+        close(11.46, TimaContrast.ratio(TimaColors.dark.inPlate, TimaColors.dark.navigation), tolerance = 0.05)
+    }
+
+    // ── два цвета вне темы ───────────────────────────────────────────────────
+
+    /**
+     * Экран подбора цветов не может стать нечитаемым.
+     *
+     * Своя тема открыта целиком, включая белое на белом. Пока экран рисовался ею же, он
+     * ломался первым — и человек оставался без строк и без кнопки возврата. Решение
+     * заказчика 2026-09-03: «две отдельные переменные, чёрным по белому, и не менять их
+     * ни при каких режимах».
+     */
+    @Test
+    fun чёрное_по_белому_вне_темы_и_на_нём_рисуется_оформление() {
+        close(21.0, TimaContrast.ratio(TimaFixed.ink, TimaFixed.paper))
+        assertEquals(TimaFixed.paper, TimaFixed.appearance.surface)
+        assertEquals(TimaFixed.ink, TimaFixed.appearance.text)
+        assertTrue(
+            TimaContrast.ratio(TimaFixed.appearance.text, TimaFixed.appearance.surface) >=
+                TimaContrast.TEXT_THRESHOLD,
+            "экран оформления обязан читаться при любой подобранной теме",
+        )
+    }
+
+    /**
+     * Знак на белом круге виден в обеих темах.
+     *
+     * **Поймано глазами, а не тестом, и потому проверка появилась.** Круг под «⚙» в
+     * шапке белый, а цвет знака брался у темы — в тёмной теме текст белый, и знак пропал
+     * целиком. По отдельности оба цвета были правильные: белый круг из макета, белый
+     * текст из тёмной темы. Ломается их сочетание, значит и проверять надо сочетание.
+     *
+     * Заливка круга при этом человеку открыта, поэтому цвет знака считается от неё
+     * ([TimaContrast.readable]), а не выбирается заранее.
+     */
+    @Test
+    fun знак_на_круге_внутри_плашки_читается_в_обеих_темах() {
+        for ((name, theme) in listOf("светлая" to TimaColors.light, "тёмная" to TimaColors.dark)) {
+            val glyph = TimaContrast.readable(on = theme.inPlate, under = theme.navigation)
+            assertTrue(
+                TimaContrast.ratio(glyph, theme.inPlate) >= TimaContrast.TEXT_THRESHOLD,
+                "$name: знак на круге в плашке не читается",
+            )
+        }
+        // И на подобранной человеком заливке тоже — хоть на чёрной, хоть на белой.
+        assertEquals(TimaFixed.paper, TimaContrast.readable(on = TimaFixed.ink, under = TimaFixed.ink))
+        assertEquals(TimaFixed.ink, TimaContrast.readable(on = TimaFixed.paper, under = TimaFixed.paper))
     }
 
     // ── инструмент ───────────────────────────────────────────────────────────
