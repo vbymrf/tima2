@@ -1,0 +1,42 @@
+﻿# Осмотренные замечания сканера doc_vnedren/check-external-access.ps1.
+#
+# Здесь то, что сканер находит, что было осмотрено человеком и по чему записано решение.
+# Запись снимает замечание с уровня «новое» (код выхода 1): «новых: 0» означает «нет ничего,
+# на что ещё никто не смотрел». Запись НЕ снимает нарушение (код выхода 2): нарушение
+# закрывается только правкой кода или списком allowed-hosts.txt.
+#
+# Чего здесь нет намеренно (остаётся «новым», пока заказчик не решит):
+#   secret-shaped-file  doc_add/gh-token.txt.txt   — токен GitHub в открытом файле: отозвать и удалить
+#   foreign-agent-files aiogram-dev-3.x            — чужие CLAUDE.md/AGENTS.md/.claude/.serena в рабочем каталоге
+#   pipe-to-shell       doc/07-deployment/…, doc_mig/arhiv/… — `curl get.docker.com | sh` в инструкции выкатки
+#
+# Формат: `вид | путь | почему принято`. Путь — от корня репозитория, с прямыми косыми.
+# Вид — как печатает сканер: downloader-in-script, env-conditional-build, gradle-exec-task,
+# process-exec, dynamic-code, opaque-blob, floating-image-tag, unpinned-action,
+# foreign-agent-files, wrapper-version-skew, secret-shaped-file.
+#
+# Принято 2026-09-03 по итогам проверки на вершине 9102e96 (ОТЧЁТ-ПРОВЕРКИ-ВНЕДРЕНИЙ.md).
+
+downloader-in-script   | .github/workflows/ci.yml                        | curl к 127.0.0.1:9000 — проверка живости MinIO в CI, адрес локальный
+downloader-in-script   | check-server.ps1                                | Invoke-WebRequest к 127.0.0.1:9000 — проверка живости MinIO на машине
+env-conditional-build  | client/settings.gradle.kts                      | порядок репозиториев по переменной CI. Само зеркало — отдельное НАРУШЕНИЕ (maven.aliyun.com)
+gradle-exec-task       | third-party/KeccakKotlin/build.gradle.kts       | Exec-задача апстрима publish…ToMavenCentral (curl POST central.sonatype.com). Не вызывается ни CI, ни скриптами; решение об удалении — за заказчиком
+gradle-exec-task       | third-party/KyberKotlin/build.gradle.kts        | то же
+wrapper-version-skew   | third-party/KeccakKotlin/gradle/wrapper/gradle-wrapper.jar | jar = официальный Gradle 7.5 (хеш совпадает с services.gradle.org), properties просят 8.4. Так в апстриме ronhombre/KeccakKotlin. Подмены нет
+floating-image-tag     | server/deploy/docker-compose.prod.yml           | caddy:2 postgres:16 redis:7 — мажорные теги; minio и livekit :latest — см. отчёт, решение за заказчиком
+floating-image-tag     | server/deploy/docker-compose.dev.yml            | то же для стека разработки
+floating-image-tag     | server/deploy/docker-compose.test.yml           | то же для тестового стека
+floating-image-tag     | server/deploy/backend.Dockerfile                | golang:1.26-alpine, alpine:3.20 — минорные теги
+floating-image-tag     | server/deploy/escrow-stub.Dockerfile            | то же
+unpinned-action        | .github/workflows/ci.yml                        | actions/* и gradle/actions привязаны к мажорному тегу, не к SHA. Решение за заказчиком
+unpinned-action        | third-party/upstream-pr/verify-apple-targets.yml | workflow-предложение для апстрима, в CI проекта не исполняется
+floating-image-tag     | .github/workflows/ci.yml                        | postgres:16, redis:7 — службы для тестов сервера в CI, те же теги, что в compose
+env-conditional-build  | client/test/test-harness/build.gradle.kts       | environment(System.getenv()) — харнесс получает окружение машины (TIMA_STAND_HOST и т.п.), порядок сборки не меняет
+env-conditional-build  | third-party/KeccakKotlin/build.gradle.kts       | System.getenv("SONATYPE_TOKEN") внутри той же Exec-задачи публикации апстрима
+env-conditional-build  | third-party/KyberKotlin/build.gradle.kts        | то же
+downloader-in-script   | server/deploy/docker-compose.prod.yml           | комментарий с командой wget к 127.0.0.1:6060 внутри контейнера
+downloader-in-script   | doc_mig/arhiv/скрипты-v1/start-tima.ps1         | архив v1: Invoke-WebRequest к $url — локальному адресу сервера v1; скрипт не используется
+opaque-blob            | schema/test-vectors/gen/generate.mjs            | protobuf_hex — эталонный тест-вектор (данные), не код
+process-exec           | update-and-run-desktop.ps1                      | Start-Process gradlew.bat :app-desktop:run — запускалка ПК по правилу runtime-launchers.mdc
+secret-shaped-file     | keystore/keystore.properties                    | ключ подписи APK, вне git по .gitignore — так и должно быть
+secret-shaped-file     | keystore/tima-release.jks                       | то же

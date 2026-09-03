@@ -1,0 +1,61 @@
+﻿# Допустимые хосты проекта TIMA.
+#
+# Единственный список того, куда код, сборка и выкатка проекта имеют право обращаться.
+# Читается сканером doc_vnedren/check-external-access.ps1. Всё, чего здесь нет, сканер
+# считает внедрением: в коде и конфигурации — нарушение, в документации — к сведению.
+#
+# Формат: `host | зачем`. `*.suffix` — все поддомены suffix (сам suffix — отдельной строкой).
+# Имена без точки (backend, minio, redis…) и адреса петли сканер считает локальными сам.
+#
+# Правило добавления: строка появляется здесь ТОЛЬКО с решением заказчика и с причиной.
+# Хост без причины — не запись, а дыра.
+
+## ── Серверы проекта ──────────────────────────────────────────────────────────
+xn--80aa4ar0b.xn--p1ai      | стенд пацак.рф (punycode). Единственный сервер проекта (shared/Environment.kt STAND)
+*.xn--80aa4ar0b.xn--p1ai    | api. s3. lk. turn. — поддомены стенда (Caddyfile, livekit.yaml, ServerRoute)
+185.221.215.192             | IP стенда: ssh root@ (doc_add/server-url.txt, doc_mig/ОКРУЖЕНИЕ.local.md)
+tima.app                    | НЕ сервер и НЕ запрос: пример ссылки в тест-векторах schema/test-vectors (данные)
+
+## ── Исходники и CI ───────────────────────────────────────────────────────────
+github.com                  | origin vbymrf/tima2; GitHub Actions (actions/*, gradle/actions); ссылки в README форков
+
+## ── Сборка: откуда берутся зависимости. Единственные допустимые внешние загрузки ──
+services.gradle.org         | дистрибутив Gradle (gradle/wrapper/gradle-wrapper.properties, все четыре сборки)
+plugins.gradle.org          | gradlePluginPortal() — плагины Kotlin, Compose, SQLDelight
+repo.maven.apache.org       | mavenCentral()
+dl.google.com               | google() — Android Gradle Plugin, androidx
+proxy.golang.org            | GOPROXY по умолчанию — модули сервера (server/go.mod, go.sum)
+sum.golang.org              | GOSUMDB — прозрачный журнал хешей модулей Go
+registry.npmjs.org          | schema/test-vectors/gen: tweetnacl, @noble/hashes, @noble/post-quantum (package-lock)
+docker.io                   | образы caddy, postgres, redis, minio/minio, livekit/livekit-server, golang, alpine (compose, Dockerfile)
+
+## ── Ссылки внутри кода, которые запросов не порождают ─────────────────────────
+www.apache.org              | текст лицензии Apache-2.0 в заголовках файлов и в POM форков
+schemas.android.com         | XML namespace в AndroidManifest.xml
+paulmillr.com               | поле funding в package-lock.json (@noble) — метаданные, npm туда не ходит
+example.com                 | заполнитель в server/deploy/.env.example и тестах
+*.example.com               | то же
+example.test                | зарезервированный тестовый домен (RFC 2606) — заглушки в *_test.go
+*.example.test              | то же (lk.example.test в server/internal/api/group_calls_test.go)
+*.domain                    | заполнитель api.DOMAIN / s3.DOMAIN в Caddyfile и комментариях compose
+
+## ── Только документация: стандарты, спецификации, источники ───────────────────
+csrc.nist.gov               | FIPS 202/203 — Keccak, ML-KEM
+nvlpubs.nist.gov            | публикации NIST
+pq-crystals.org             | спецификация Kyber
+eprint.iacr.org             | статьи по криптографии
+en.wikipedia.org            | справочные ссылки в документации
+www.ams.org                 | справочная ссылка в README форка
+www.jetbrains.com           | ссылки на документацию Kotlin/Compose
+plugins.jetbrains.com       | ссылка на плагин в документации
+search.maven.org            | ссылки на артефакты в README форков
+central.sonatype.com        | ссылки в README форков. ВНИМАНИЕ: в build.gradle.kts форков есть Exec-задача публикации туда — она НЕ допустима и ловится отдельно (см. accepted-findings.txt)
+img.shields.io              | значки в README форков
+kyber.hombre.asia           | сайт апстрима KyberKotlin (README форка)
+keccak.hombre.asia          | сайт апстрима KeccakKotlin (README форка)
+leventozturk.com            | онлайн-калькулятор SHA-3 в README форка
+
+## ── НЕ допущены намеренно (сканер обязан их показывать, пока заказчик не решит) ──
+# maven.aliyun.com   — зеркало Google Maven первым в client/settings.gradle.kts без сверки хешей.
+#                      Разбор: БЕЗОПАСНОСТЬ-ЗЕРКАЛА-ALIYUN.md. Решение за заказчиком.
+# get.docker.com     — `curl … | sh` в документах выкатки (doc/07-deployment/server-setup.md).
