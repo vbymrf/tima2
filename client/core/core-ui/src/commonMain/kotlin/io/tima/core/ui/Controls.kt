@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
@@ -201,6 +202,15 @@ fun Chip(
     modifier: Modifier = Modifier,
     kind: ChipKind = ChipKind.Quiet,
     onClick: (() -> Unit)? = null,
+    /**
+     * Поле по бокам. Десять точек — `.чип` макета и значение для всех мест, кроме одного.
+     *
+     * Ужимает его только ряд подвкладок в «Коллекциях»: там рядом стоит переключатель, и
+     * весь ряд обязан уместиться в одну строку (`.строка-фильтров > .чип { padding: 3px 6px }`).
+     * Параметром, а не новым видом чипа: меняется размер одного ряда, а не значение
+     * пилюли, и остальные чипы в списках трогать незачем.
+     */
+    horizontalPadding: Dp = 10.dp,
 ) {
     val colors = Tima.colors
     val background = when (kind) {
@@ -218,7 +228,7 @@ fun Chip(
         modifier = modifier
             .background(background, CircleShape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 10.dp, vertical = 3.dp),
+            .padding(horizontal = horizontalPadding, vertical = 3.dp),
         contentAlignment = Alignment.Center,
     ) {
         Caption(label, fontSize = TimaType.sz6, weight = FontWeight.Bold, color = labelColor)
@@ -237,12 +247,18 @@ fun Chip(
  * навигации, ростом и отступами с чип. Макет с самого начала говорил другое:
  *
  * ```css
- * .таб     { padding: 6px 14px; font-size: var(--щ5); color: var(--чёрный-50) }
+ * .таб     { padding: 6px 11px; font-size: var(--щ5); color: var(--чёрный-50) }
  * .таб.тек { background: var(--навигация); color: #ffffff }
  * ```
  *
  * Ни фона, ни рамки у невыбранной — и размер крупнее чипового. Расходился код, а не
  * макет, поэтому чинится код.
+ *
+ * **Поле по бокам — одиннадцать точек, а не четырнадцать.** Решение заказчика
+ * 2026-09-03: все пункты меню обязаны стоять в одну строку. Четырьмя вкладками окна 5
+ * («Подписан · Лента · Коллекции · Группы») при четырнадцати ряд просил 358 точек при
+ * 348 доступных на телефоне и переносился; при одиннадцати просит 328. Ряд теперь
+ * стоит строкой — это проверяет [RowFitTest], а не глаз.
  */
 @Composable
 fun Tab(
@@ -256,7 +272,7 @@ fun Tab(
         modifier = modifier
             .background(if (current) colors.navigation else Color.Transparent, CircleShape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 6.dp),
+            .padding(horizontal = TAB_SIDE, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
         Caption(
@@ -267,6 +283,15 @@ fun Tab(
         )
     }
 }
+
+/**
+ * Поле по бокам у вкладки — `.таб { padding: 6px 11px }` макета.
+ *
+ * Числом рядом с самой вкладкой, а не токеном отступа: в лестнице `--о1…--о6`
+ * одиннадцати точек нет, и подгонять `about3` под этот случай значило бы менять её всем
+ * остальным. Число подобрано под ширину ряда, а не под лестницу, — см. KDoc у [Tab].
+ */
+private val TAB_SIDE = 11.dp
 
 /**
  * Виды чипа.

@@ -222,7 +222,16 @@ private sealed interface Where {
     /** Подокно «новая переписка». */
     data object New : Where
 
-    /** Подокно «новая группа». */
+    /**
+     * Подокно «новая группа».
+     *
+     * **Входа в него сейчас нет.** Чип «Группа» внизу списка переписок убран
+     * 2026-09-03: в макете его нет, и появился он тогда, когда графического
+     * интерфейса ещё не было. Подокно при этом собрано и работает; место входа —
+     * каталог окна 2. Числится в `doc_mig/ИНТЕРФЕЙС/02-телефон/ФУНКЦИОНАЛ.md`,
+     * раздел «нет входа», — иначе «сделано» неотличимо от «человек может этим
+     * пользоваться».
+     */
     data object NewGroup : Where
 
     /**
@@ -389,7 +398,6 @@ private fun App(
                     onOpen = { where = Where.Chat(it.chatId, it.title) },
                     onOpenPerson = { where = Where.Chat(it.chatId, it.name) },
                     onNew = { where = Where.New },
-                    onNewGroup = { where = Where.NewGroup },
                     onSettings = { where = Where.Settings() },
                     onSwitchWindows = { windowSwitcher = true },
                     onNeighbourWindow = switchWindow,
@@ -866,7 +874,6 @@ private fun PhoneWindow(
     onOpen: (ChatSummary) -> Unit,
     onOpenPerson: (Contact) -> Unit,
     onNew: () -> Unit,
-    onNewGroup: () -> Unit,
     onSettings: () -> Unit,
     onSwitchWindows: () -> Unit,
     onNeighbourWindow: (InSide) -> Unit,
@@ -893,7 +900,6 @@ private fun PhoneWindow(
                 state = list,
                 onOpen = onOpen,
                 onNew = onNew,
-                onNewGroup = onNewGroup,
                 onSettings = onSettings,
             )
 
