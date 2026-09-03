@@ -80,6 +80,33 @@
     font-size: 10.5px; font-weight: 800; text-decoration: none;
   }
 
+  /* Г — как А, но круг СПРАВА и стрелка вправо, пожирнее */
+  .вар-г {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 3px 2px 9px; border-radius: var(--радиус-круг);
+    border: 2px solid var(--подтверждено); background: none;
+    font-size: 10.5px; font-weight: 800; color: var(--текст); text-decoration: none;
+  }
+  .вар-г > .стрелка {
+    width: 19px; height: 19px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--подтверждено); color: #fff;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 900; line-height: 1;
+  }
+
+  /* Д — как В, но заливка скруглена ПО ПУЗЫРЮ и кончается остриём вправо.
+     `--радиус` = 16, тот же, что у `.пузырь`: метка читается частью сообщения. */
+  .вар-д { display: inline-flex; align-items: stretch; font-size: 10.5px; font-weight: 800; }
+  .вар-д > .лев {
+    padding: 3px 9px; background: var(--чёрный-6); color: var(--чёрный-70);
+    border-radius: var(--радиус) 0 0 var(--радиус);
+  }
+  .вар-д > .прав {
+    padding: 3px 16px 3px 9px; background: var(--подтверждено); color: #fff;
+    text-decoration: none; font-weight: 900;
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
+  }
+
   /* В — сцеплённая пилюля: слева круг, справа стрелка */
   .вар-в { display: inline-flex; border-radius: var(--радиус-круг); overflow: hidden; font-size: 10.5px; font-weight: 800; }
   .вар-в > .лев { padding: 3px 8px; background: var(--чёрный-6); color: var(--чёрный-70); }
@@ -619,11 +646,11 @@
   </div>
 </div>
 
-<h2>5. Три вида кнопки «себе на страницу»</h2>
+<h2>5. Пять видов кнопки «себе на страницу»</h2>
 
 <p class="подзаголовок">
   Замысел заказчика: кнопка живёт <b>на самой метке</b>, а не отдельно. Можно унести —
-  метка зелёная и со стрелкой; нажал на метку — унёс. Ниже три исполнения, каждое
+  метка зелёная и со стрелкой; нажал на метку — унёс. Ниже пять исполнений, каждое
   показано на трёх видах сообщения.
 </p>
 
@@ -750,10 +777,114 @@
     </div>
     <div class="замечание">
       <b>Единственный, где состояние и действие разведены.</b> Это честнее: «Всем» —
-      сведение, «↓» — кнопка. Цена — фигура шире всех трёх, а стоит она в строке с именем,
+      сведение, «↓» — кнопка. Цена — фигура широкая, а стоит она в строке с именем,
       где место дорого.
     </div>
   </div>
+</div>
+
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно"><span class="имя-окна тянуть">Вариант Г · круг справа</span></div>
+        <div class="зона-2">
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение человека</div>
+            <div class="обр">
+              <span class="ава мал">ЛГ</span><span class="имя тянуть" style="font-size:var(--щ5)">Лена Г.</span>
+              <a class="вар-г" href="#">Всем<span class="стрелка">→</span></a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение группы</div>
+            <div class="обр">
+              <span class="ава мал">Я</span><span class="имя тянуть" style="font-size:var(--щ5)">Ядро · Пётр С.</span>
+              <a class="вар-г" href="#">Всем<span class="стрелка">→</span></a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение канала</div>
+            <div class="обр">
+              <span class="ава мал">РН</span><span class="имя тянуть" style="font-size:var(--щ5)">Разбор недели</span>
+              <a class="вар-г" href="#">Всем<span class="стрелка">→</span></a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Нельзя унести</div>
+            <div class="обр">
+              <span class="ава мал">МК</span><span class="имя тянуть" style="font-size:var(--щ5)">Марк К.</span>
+              <span class="метка-круга нельзя">→ Своим</span>
+            </div>
+          </div>
+          <div class="системное">Слово читается первым, действие — вторым. Порядок чтения совпадает с порядком мысли.</div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">вариант Г</div>
+    </div>
+    <div class="замечание">
+      <b>То же, что А, но круг справа и стрелка вправо.</b> Разница не косметическая:
+      палец идёт к правому краю строки, а не к левому — там, где в списках обычно и стоит
+      действие. И читается по-русски: сперва «Всем», потом «→».
+      <br><br>
+      Стрелка вправо честнее вниз: сообщение не скачивается, а <b>уходит дальше</b> — на
+      стену, оттуда к друзьям. Движение вбок, а не вниз.
+    </div>
+  </div>
+
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно"><span class="имя-окна тянуть">Вариант Д · остриё вправо</span></div>
+        <div class="зона-2">
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение человека</div>
+            <div class="обр">
+              <span class="ава мал">ЛГ</span><span class="имя тянуть" style="font-size:var(--щ5)">Лена Г.</span>
+              <span class="вар-д"><span class="лев">Всем</span><a class="прав" href="#">→</a></span>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение группы</div>
+            <div class="обр">
+              <span class="ава мал">Я</span><span class="имя тянуть" style="font-size:var(--щ5)">Ядро · Пётр С.</span>
+              <span class="вар-д"><span class="лев">Всем</span><a class="прав" href="#">→</a></span>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение канала</div>
+            <div class="обр">
+              <span class="ава мал">РН</span><span class="имя тянуть" style="font-size:var(--щ5)">Разбор недели</span>
+              <span class="вар-д"><span class="лев">Всем</span><a class="прав" href="#">→</a></span>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Нельзя унести — остриё пропадает</div>
+            <div class="обр">
+              <span class="ава мал">МК</span><span class="имя тянуть" style="font-size:var(--щ5)">Марк К.</span>
+              <span class="метка-круга нельзя">Своим</span>
+            </div>
+          </div>
+          <div class="системное">Скругление — по пузырю сообщения, 16 точек. Форма говорит «это про сообщение».</div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">вариант Д</div>
+    </div>
+    <div class="замечание">
+      <b>Единственный, у которого форма сама показывает направление.</b> Остриё вправо — и
+      понятно, что запись уходит дальше, даже не читая слов. Скругление взято у пузыря
+      сообщения (<code>--радиус</code>, 16), поэтому метка выглядит частью сообщения, а не
+      посторонней кнопкой.
+      <br><br>
+      Цена: <b>остриё съедает место справа</b> и в узкой строке подпирает край. И «нельзя
+      унести» приходится рисовать <b>другой формой</b> — без острия, — то есть форм у метки
+      становится две вместо одной.
+    </div>
+  </div>
+
 </div>
 
 <h2>6. Где человек видит свой доступ</h2>
