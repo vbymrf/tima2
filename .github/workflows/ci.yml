@@ -18,6 +18,21 @@
 #      съедает баннер загрузки Gradle. Поэтому значимые строки собираются в ОДНО
 #      сообщение через %0A.
 
+# ── ДЕЙСТВИЯ ПРИВЯЗАНЫ К SHA, А НЕ К ТЕГУ ─────────────────────────────────────
+# Решение заказчика 2026-09-03. Мажорный тег (`@v4`) — подвижная метка: авторы
+# двигают её при каждом патче, и содержимое действия меняется без единого
+# изменения в нашем репозитории. Действие при этом исполняется в раннере, где
+# лежит чекаут и доступны секреты задачи, — известные компрометации популярных
+# действий работали ровно так: тег переставляли.
+#
+# SHA — адрес самого коммита, его переписать нельзя. Версия рядом комментарием,
+# чтобы файл оставался читаемым. Обновление становится отдельной правкой в git:
+# видно, кто, когда и на что.
+#
+# Правило: **не возвращать теги**. Обновлять — заменой SHA на SHA нового релиза
+# (`gh api repos/<owner>/<repo>/git/ref/tags/<точный тег релиза>`), а не на
+# мажорный тег «чтобы само обновлялось».
+
 name: CI
 
 on:
@@ -36,7 +51,7 @@ jobs:
     name: 'заслон · биты исполнения'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
       - name: 'gradlew обязан быть исполняемым'
         run: |
           bad=$(git ls-files -s '*gradlew' | awk '$1 != "100755" {print $4}')
@@ -51,12 +66,12 @@ jobs:
     name: client · JVM
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961   # v5.7.0
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1   # v4.4.4
       # ── Форки крипто в mavenLocal ────────────────────────────────────────
       # Появилось в К3, когда клиент получил core-encryption и через него
       # composite-зависимость на messenger-crypto.
@@ -107,12 +122,12 @@ jobs:
     name: 'client · iOS'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961   # v5.7.0
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1   # v4.4.4
       # ── Форки крипто в mavenLocal ────────────────────────────────────────
       # Появилось в К3, когда клиент получил core-encryption и через него
       # composite-зависимость на messenger-crypto.
@@ -169,7 +184,7 @@ jobs:
           fi
       - name: 'ios · отчёты тестов артефактом'
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4.6.2
         with:
           name: ios-test-reports
           path: |
@@ -189,12 +204,12 @@ jobs:
     name: архитектурные правила
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961   # v5.7.0
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1   # v4.4.4
       - name: 'правила · прогон'
         working-directory: client
         run: |
@@ -212,12 +227,12 @@ jobs:
     name: messenger-crypto
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961   # v5.7.0
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1   # v4.4.4
       # Задача называется jvmTest, а не test: с К2 модуль стал multiplatform, и
       # общей задачи 'test' в нём больше нет. Прежняя команда падала бы с
       # «task not found», а не с ошибкой в коде.
@@ -282,8 +297,8 @@ jobs:
     name: 'крипто · iOS-симулятор (гейт К2)'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961   # v5.7.0
         with:
           distribution: temurin
           java-version: '17'
@@ -394,8 +409,8 @@ jobs:
       TIMA_TEST_S3_ENDPOINT: http://127.0.0.1:9000
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff   # v5.6.0
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum

@@ -32,8 +32,21 @@ ufw allow 3478/udp                   # TURN
 ufw allow 5349/tcp                   # TURN TLS
 ufw enable
 
-# Docker
-curl -fsSL https://get.docker.com | sh
+# Docker — из репозитория Docker, с проверкой подписи.
+# Не `curl … | sh`: там скачанное исполняется сразу, без единой проверки и от root.
+# Здесь ключ кладётся на диск заранее, а каждый пакет сверяется с ним подписью.
+apt install -y ca-certificates curl
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+# Отпечаток ключа сверить глазами — он опубликован на docs.docker.com:
+#   9DC8 5822 9FC7 DD38 854A  E2D8 8D81 803C 0EBF CD88
+gpg --show-keys --with-fingerprint /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+  https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  > /etc/apt/sources.list.d/docker.list
+apt update
+apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 usermod -aG docker deploy
 
 # Автообновления безопасности
