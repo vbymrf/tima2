@@ -16,8 +16,13 @@ alwaysApply: true
   - `ПРИЛОЖЕНИЕ-ПК.bat` — already packaged `TIMA.exe`, no build
   - `ЗАПУСК-ANDROID.bat` (`start-android.ps1`) — AVD `tima_test`, adb reverse,
     install, launch
-  - `ОБНОВИТЬ-ТЕЛЕФОН.bat` (`update-and-install-phone.ps1`) — build and install
-    on a USB phone
+  - `update-and-install-phone.bat` (`update-and-install-phone.ps1`) — build the
+    debug APK and install it on every attached phone. Phones need not hang on
+    this machine: pass `-AdbServer host:port` (or set `TIMA_ADB_SERVER`) and the
+    script drives a remote adb server as a client. Latin name, not the Cyrillic
+    one this rule carried until 2026-09-03: launcher filenames are Latin per
+    CLAUDE.md, and `architecture-tests` freezes the count of Cyrillic code
+    filenames at one — the desktop `.bat` with a shortcut on it.
   - `ОТЛАДКА-TIMA.bat` (`debug-tima.ps1`) — diagnostics; `-Clean` and `-FreeRam`
     change state and need approval
 - Check for an existing instance before starting anything: duplicate listeners on
