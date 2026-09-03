@@ -1,5 +1,4 @@
 import org.jetbrains.dokka.gradle.engine.parameters.VisibilityModifier
-import java.io.ByteArrayOutputStream
 
 plugins {
     kotlin("multiplatform")
@@ -16,7 +15,6 @@ val projectName = "keccak"
 
 val mavenDir = projectDir.resolve("maven")
 
-val isAutomated = false
 
 repositories {
     mavenCentral()
@@ -118,7 +116,6 @@ fun parseArtifactArchiveName(artifact: MavenPublication): String {
 for (publication in publishing.publications.asMap) {
     val artifact = publication.value as MavenPublication
     val parsedArtifactId = parseArtifactId(artifact.artifactId)
-    val bundleFileName = parseArtifactArchiveName(artifact)
 
     tasks.register<Zip>("bundle$parsedArtifactId") {
         group = "Bundle"
@@ -127,31 +124,6 @@ for (publication in publishing.publications.asMap) {
         include("$mavenDeepDir/*/*")
         destinationDirectory = mavenDir
         archiveFileName = parseArtifactArchiveName(artifact)
-    }
-
-    tasks.register<Exec>("publish" + parsedArtifactId + "ToMavenCentral") {
-        mustRunAfter("bundle$parsedArtifactId")
-        group = "Publish"
-        /*if(!mavenDir.resolve(bundleFileName).exists())
-            throw RuntimeException("Bundle does not exist! Please run `bundle$parsedArtifactId`")*/
-
-        commandLine(
-            "curl", "-X", "POST",
-            "https://central.sonatype.com/api/v1/publisher/upload?name=${artifact.artifactId}&publishingType=" + if(isAutomated) "AUTOMATED" else "USER_MANAGED",
-            "-H", "accept: text/plain",
-            "-H", "Content-Type: multipart/form-data",
-            "-H", "Authorization: Bearer " + System.getenv("SONATYPE_TOKEN"),
-            "-F", "bundle=@$bundleFileName;type=application/x-zip-compressed"
-        )
-        workingDir(mavenDir.toString())
-        standardOutput = ByteArrayOutputStream()
-        errorOutput = ByteArrayOutputStream()
-
-        // Execute some action with the output
-        doLast {
-            println("$standardOutput")
-            println("$errorOutput")
-        }
     }
 }
 
@@ -166,16 +138,20 @@ tasks.register("bundleAll") {
     }
 }
 
-tasks.register("publishAllToMavenCentral") {
-    group = "Publish"
-    dependsOn("bundleAll")
-
-    for (publication in publishing.publications.asMap) {
-        val artifact = publication.value as MavenPublication
-
-        dependsOn("publish" + parseArtifactId(artifact.artifactId) + "ToMavenCentral")
-    }
-}
+// ── Задача публикации на central.sonatype.com удалена в форке TIMA ────────────
+//
+// В апстриме здесь регистрировалась Exec-задача `publish<Artifact>ToMavenCentral`,
+// запускавшая `curl -X POST https://central.sonatype.com/...` с токеном из
+// переменной окружения SONATYPE_TOKEN, и задача `publishAllToMavenCentral`,
+// которая их все вызывала.
+//
+// Форк никуда не публикуется: он собирается только `publishToMavenLocal` в ~/.m2
+// (см. client/settings.gradle.kts — mavenLocal первым). Правило проекта: в сборке
+// не может быть исходящих обращений к чужим серверам. Разбор —
+// doc_vnedren/ОТЧЁТ-ПРОВЕРКИ-ВНЕДРЕНИЙ.md, решение заказчика 2026-09-03.
+//
+// Локальная упаковка (`bundle<Artifact>`, `bundleAll`) оставлена: она пишет zip в
+// ./maven и наружу не ходит.
 
 dokka {
     pluginsConfiguration.html {

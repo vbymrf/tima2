@@ -28,6 +28,6 @@ Rules naming TIMA-specific paths, packages, ports, services, or variables.
 - tier: crypto-jvm
 - symptom: Gradle cannot find a settings script or resolves no useful task.
 - check: inspect the invocation directory and its settings.gradle.kts.
-- cause: the repository root is not a Gradle build; TIMA builds are messenger-crypto and client, while the vendored Kodium git copy is not a target.
+- cause: the repository root is not a Gradle build; TIMA builds are messenger-crypto and client, while the read-only copies under third-party/reference are not targets.
 - fix: enter client or messenger-crypto for the documented target, then return to the repository root.
 - verify: the intended task resolves and writes its JUnit XML artifact.

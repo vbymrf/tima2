@@ -4,32 +4,34 @@ rootProject.name = "tima-client"
 // находится компилятором, а не прогоном.
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
-// ── Порядок репозиториев зависит от окружения, и это не прихоть ───────────────
+// ── Репозитории: только официальные источники ─────────────────────────────
 //
-// В сети разработки `dl.google.com` блокируется, поэтому там зеркало обязано идти
-// первым — иначе сборка висит на недоступном хосте.
+// Здесь стояло зеркало `maven.aliyun.com` — первым вне CI и последним на CI.
+// Его добавили, когда в сети разработки блокировался `dl.google.com`.
+// Убрано по решению заказчика 2026-09-03. Причин две.
 //
-// На CI наоборот: зеркало — лишнее звено, и оно уже подводило. Прогон 2026-08-20
-// упал с `502 Bad Gateway` от `maven.aliyun.com` при загрузке `apache-18.pom`, и
-// это выглядело как поломка кода, хотя код был цел.
+// Первая — зеркало само подводило. Прогон 2026-08-20 упал с `502 Bad Gateway`
+// от `maven.aliyun.com` при загрузке `apache-18.pom`, и это выглядело поломкой
+// кода, хотя код был цел. На машине разработки 2026-09-03 без `CI=1` клиент не
+// собирался вовсе, а с `CI=1` — за 17 мин 45 с, 834 из 834. То есть обходом
+// было именно отключение зеркала, а не его включение.
 //
-// Поэтому порядок выбирается по переменной `CI`, которую GitHub Actions задаёт сам.
-// Список репозиториев один и тот же — меняется только очередь, то есть кто
-// отвечает первым.
+// Вторая — правило проекта: сборка ходит только к официальным источникам
+// зависимостей, и каждый из них назван в doc_vnedren/allowed-hosts.txt. Зеркало
+// третьей стороны отдаёт те самые байты, из которых собирается приложение.
+// Разбор: doc_vnedren/БЕЗОПАСНОСТЬ-ЗЕРКАЛА-ALIYUN.md.
+//
+// Сверка скачанного — `gradle/verification-metadata.xml`: каждый артефакт сверяется
+// по sha256, несовпадение останавливает сборку.
+//
+// Если `dl.google.com` снова окажется недоступен — это решается на стороне сети,
+// а не подменой источника в сборке.
 
 pluginManagement {
     repositories {
-        if (System.getenv("CI") != null) {
-            google()
-            gradlePluginPortal()
-            mavenCentral()
-            maven("https://maven.aliyun.com/repository/google")
-        } else {
-            maven("https://maven.aliyun.com/repository/google")
-            google()
-            gradlePluginPortal()
-            mavenCentral()
-        }
+        google()
+        gradlePluginPortal()
+        mavenCentral()
     }
 }
 
@@ -51,15 +53,8 @@ dependencyResolutionManagement {
         // Собрать форки: ./gradlew publishToMavenLocal в third-party/KeccakKotlin,
         // затем в third-party/KyberKotlin (kyber зависит от keccak).
         mavenLocal()
-        if (System.getenv("CI") != null) {
-            google()
-            mavenCentral()
-            maven("https://maven.aliyun.com/repository/google")
-        } else {
-            maven("https://maven.aliyun.com/repository/google")
-            google()
-            mavenCentral()
-        }
+        google()
+        mavenCentral()
     }
 }
 
