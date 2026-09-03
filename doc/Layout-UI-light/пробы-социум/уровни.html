@@ -1,0 +1,852 @@
+<meta charset="utf-8">
+<title>Уровень сообщения — экраны</title>
+<link rel="stylesheet" href="../%D1%81%D1%82%D0%B8%D0%BB%D1%8C.css">
+<style>
+  .ряд-окон { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-start; }
+  .тел { width: auto; }
+  .замечание { font-size: 12.5px; color: var(--чёрный-70); width: 360px; margin-top: 6px; line-height: 1.5; }
+
+  /* ── Формы, которых в стиль.css пока нет. Уйдут туда, если будут приняты. ── */
+  .круг-видимости {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 11px; border-radius: var(--радиус-круг);
+    background: var(--чёрный-6); color: var(--чёрный-70);
+    font-size: var(--щ6); font-weight: 700; text-decoration: none;
+  }
+  .круг-видимости.свои { background: var(--подтверждено); color: #fff; }
+  .круг-видимости.всем { background: var(--чёрный-6); color: var(--чёрный-70); }
+
+  .выбор { display: flex; flex-direction: column; }
+  .выбор > .пункт { align-items: flex-start; }
+  .выбор .имя, .выбор .втор { display: block; }
+  .выбор .втор { margin-top: 3px; }
+  .знак-выбора {
+    width: 26px; height: 26px; flex: 0 0 auto; margin-top: 1px;
+    border-radius: 50%; border: 2px solid var(--чёрный-12);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 800; color: var(--чёрный-50); text-decoration: none;
+  }
+  .пункт.тек .знак-выбора { border-color: var(--навигация); border-width: 3px; color: var(--текст); }
+  .низ-мастера { display: flex; gap: var(--о2); padding: var(--о4); }
+  .низ-мастера > .кн { flex: 1 1 auto; }
+
+  /* Сохранённое, которому закрыли доступ. Видно целиком — отбирать нельзя. */
+  .недоступно { box-shadow: inset 3px 0 0 var(--активность); }
+  .метка-недоступно {
+    display: flex; align-items: center; gap: 7px;
+    padding: 7px var(--о4); background: var(--функц);
+    font-size: var(--щ6); font-weight: 700; color: var(--чёрный-70);
+  }
+
+  /* ── Метка доступности у сообщения: стрелка с номером ──────────────────
+     Зелёная — можно добавить себе. Серая — нельзя. Текст сообщения не
+     красится: цвет несёт метка, а не буквы. */
+  .метка-круга {
+    display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto;
+    padding: 2px 7px; border-radius: var(--радиус-круг);
+    font-size: 10.5px; font-weight: 800; letter-spacing: 0.02em;
+    text-decoration: none;
+  }
+  .метка-круга.можно { background: var(--подтверждено); color: #fff; }
+  .метка-круга.нельзя { background: var(--чёрный-6); color: var(--чёрный-50); }
+  .метка-круга.закрыт { background: var(--активность); color: var(--текст); }
+
+  .шапка-реплики { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+  .шапка-реплики > .имя { font-size: var(--щ6); font-weight: 800; }
+
+  /* ── Три вида кнопки «себе на страницу» ────────────────────────────── */
+  .проба-кнопки { display: flex; flex-direction: column; gap: 9px; padding: 12px var(--о4); border-bottom: 1px solid var(--чёрный-12); }
+  .проба-кнопки > .трет { margin-bottom: 2px; }
+  .обр { display: flex; align-items: center; gap: 8px; }
+
+  /* А — стрелка огибает метку */
+  .вар-а {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 7px 2px 3px; border-radius: var(--радиус-круг);
+    border: 2px solid var(--подтверждено); background: none;
+    font-size: 10.5px; font-weight: 800; color: var(--текст); text-decoration: none;
+  }
+  .вар-а > .стрелка {
+    width: 17px; height: 17px; border-radius: 50%;
+    background: var(--подтверждено); color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 11px;
+  }
+
+  /* Б — метка целиком зелёная, стрелка внутри */
+  .вар-б {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: var(--радиус-круг);
+    background: var(--подтверждено); color: #fff;
+    font-size: 10.5px; font-weight: 800; text-decoration: none;
+  }
+
+  /* В — сцеплённая пилюля: слева круг, справа стрелка */
+  .вар-в { display: inline-flex; border-radius: var(--радиус-круг); overflow: hidden; font-size: 10.5px; font-weight: 800; }
+  .вар-в > .лев { padding: 3px 8px; background: var(--чёрный-6); color: var(--чёрный-70); }
+  .вар-в > .прав { padding: 3px 8px; background: var(--подтверждено); color: #fff; text-decoration: none; }
+</style>
+
+<div class="лист-док">
+<div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-социум / уровни.html</div>
+<h1>Уровень сообщения <span class="вид">восемь экранов</span></h1>
+<p class="подзаголовок">
+  Нарисовано 2026-09-03 после того, как заказчик принял <b>монотонную шкалу</b> и
+  <b>асимметрию админа</b>. Модель — <code>doc_add/макеты-группы/ЕДИНЫЙ-ФОРМАТ.md</code> (вне git),
+  части 4 и 5. Здесь то, чего в макете проекта нет вовсе.
+</p>
+
+<div class="оговорка">
+  <b>Слова «уровень» на экранах нет нигде.</b> Уровень — понятие сервера; человек видит
+  круг: «всем», «своим», «по разрешению». Это то же решение, по которому уровень убран из
+  мастера создания.
+</div>
+
+<table>
+  <tr><th>Уровень</th><th>Что человек читает на экране</th></tr>
+  <tr><td>−1</td><td>ничего: замок E2E, как в личной переписке</td></tr>
+  <tr><td>0</td><td>«описание» — оно и так на виду у всех</td></tr>
+  <tr><td>1</td><td><b>Всем</b></td></tr>
+  <tr><td>2</td><td><b>Своим</b> — «Друзьям» в ленте, «Участникам» в группе</td></tr>
+  <tr><td>3</td><td><b>По разрешению</b></td></tr>
+</table>
+
+<h2>1. Автор назначает круг · сценарий «г»</h2>
+
+<div class="ряд-окон">
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно">
+          <a class="икона" href="#">‹</a>
+          <span class="имя-окна тянуть">Новая запись</span>
+        </div>
+        <div class="зона-2">
+          <div style="padding:14px 16px;font-size:var(--щ4);line-height:1.5">
+            Съездили на Ладогу. Вода холодная, а закат такой, что забываешь.
+          </div>
+        </div>
+        <div class="зона-4">
+          <a class="круг-видимости всем" href="#кому">◉ Всем</a>
+          <span class="тянуть"></span>
+          <a class="кн" href="#" style="min-height:36px">Отправить</a>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">запись в свою ленту</div>
+    </div>
+    <div class="замечание">
+      <b>Круг стоит рядом с «Отправить», а не в настройках.</b> Он выбирается для каждой
+      записи отдельно, и последствие у него необратимое — значит место ему там, где решают
+      отправлять.
+    </div>
+  </div>
+
+  <div>
+    <div class="тел" id="кому">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-2" style="display:flex;flex-direction:column;justify-content:flex-end;background:var(--чёрный-12)">
+          <div class="фон-подпись">под ним — запись</div>
+          <div class="модалка снизу">
+            <div class="шапка-модалки">
+              <div class="тянуть"><div class="имя" style="font-size:var(--щ4)">Кому показать</div></div>
+              <a class="икона" href="#">✕</a>
+            </div>
+            <div class="выбор">
+              <div class="пункт тек">
+                <a class="знак-выбора" href="#">?</a>
+                <span class="тянуть">
+                  <span class="имя">Всем</span>
+                  <span class="втор">Попадёт в ленты незнакомых. Её смогут добавить себе</span>
+                </span>
+              </div>
+              <div class="пункт">
+                <a class="знак-выбора" href="#">?</a>
+                <span class="тянуть">
+                  <span class="имя">Друзьям</span>
+                  <span class="втор">Только вашим контактам. Добавить себе нельзя</span>
+                </span>
+              </div>
+            </div>
+            <div class="системное">Круг можно сузить и потом. Расширить — нет.</div>
+            <div class="низ-мастера"><a class="кн" href="#">Выбрать</a></div>
+          </div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">выбор круга</div>
+    </div>
+    <div class="замечание">
+      Второй строкой — <b>последствие</b>: «попадёт в ленты незнакомых», «добавить себе
+      нельзя». Не «уровень 1» и не «публичная видимость».
+      <br><br>
+      И сразу сказано главное правило: <b>сузить можно, расширить нельзя.</b> Человек
+      узнаёт это до отправки, а не когда попробует.
+    </div>
+  </div>
+
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно">
+          <a class="икона" href="#">‹</a>
+          <span class="имя-окна тянуть">Запись</span>
+          <a class="икона" href="#">•••</a>
+        </div>
+        <div class="зона-2" style="display:flex;flex-direction:column;justify-content:flex-end;background:var(--чёрный-12)">
+          <div class="фон-подпись">под ним — запись «Всем»</div>
+          <div class="модалка снизу">
+            <div class="шапка-модалки">
+              <div class="тянуть"><div class="имя" style="font-size:var(--щ4)">Сузить до друзей?</div></div>
+              <a class="икона" href="#">✕</a>
+            </div>
+            <div style="padding:14px 16px;font-size:var(--щ5);line-height:1.55;color:var(--чёрный-70)">
+              <p style="margin:0 0 10px">Запись уйдёт из чужих лент: незнакомые её больше
+                не увидят.</p>
+              <p style="margin:0"><b style="color:var(--текст)">Но у тех, кто уже добавил
+                её себе, она останется.</b> Отобрать сохранённое нельзя — оно уже у них на
+                телефоне.</p>
+            </div>
+            <div class="низ-мастера">
+              <a class="кн вт" href="#">Отмена</a>
+              <a class="кн" href="#">Сузить</a>
+            </div>
+          </div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">предупреждение перед сужением</div>
+    </div>
+    <div class="замечание">
+      <b>Без этого экрана человек поймёт «закрыл» как «отобрал».</b> Тот же принцип, что в
+      ADR-0017 у исключённого участника: сужение работает на будущее, прошлое не
+      отбирается. Сказать это надо <b>до</b> нажатия, а не после.
+    </div>
+  </div>
+</div>
+
+<h2>2. Унести к себе · сценарий «д»</h2>
+
+<div class="ряд-окон">
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1">
+          <a class="переход-окон тянуть" href="#"><span class="лого">Т</span><span class="имя-окна">Социум</span></a>
+          <a class="икона" href="#">🔍</a>
+          <a class="икона" href="#">⚙</a>
+        </div>
+        <div class="табы">
+          <a class="таб тек" href="#">Общая</a>
+          <a class="таб" href="#">Друзья</a>
+          <a class="таб" href="#">Каталог</a>
+        </div>
+        <div class="зона-2">
+          <div style="padding:14px 16px">
+            <div class="строка-автора">
+              <span class="ава мал">ЛГ</span>
+              <span class="имя-автора тянуть">Лена Г.</span>
+              <span class="круг-видимости всем">Всем</span>
+            </div>
+            <div style="margin-top:10px;font-size:var(--щ4);line-height:1.5">
+              Плёнка, снятая в мае, наконец проявлена. Двенадцать кадров, из них четыре
+              живых.
+            </div>
+            <div class="медиа" style="height:110px;margin-top:10px">кадр</div>
+            <div class="строка-тегов" style="margin-top:10px">
+              <span class="эм">👍 24</span>
+              <a class="чип" href="#">💬 5</a>
+              <span class="тянуть"></span>
+              <a class="чип акц" href="#">＋ Себе на страницу</a>
+            </div>
+          </div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">чужая запись «Всем» — унести можно</div>
+    </div>
+    <div class="замечание">
+      Круг подписан прямо у имени автора: <b>читателю видно, что можно с записью
+      сделать</b>, ещё до того, как он потянется к кнопке.
+    </div>
+  </div>
+
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1">
+          <a class="переход-окон тянуть" href="#"><span class="лого">Т</span><span class="имя-окна">Социум</span></a>
+          <a class="икона" href="#">🔍</a>
+          <a class="икона" href="#">⚙</a>
+        </div>
+        <div class="табы">
+          <a class="таб" href="#">Общая</a>
+          <a class="таб тек" href="#">Друзья</a>
+          <a class="таб" href="#">Каталог</a>
+        </div>
+        <div class="зона-2">
+          <div style="padding:14px 16px">
+            <div class="строка-автора">
+              <span class="ава мал">МК</span>
+              <span class="имя-автора тянуть">Марк К.</span>
+              <span class="круг-видимости свои">Друзьям</span>
+            </div>
+            <div style="margin-top:10px;font-size:var(--щ4);line-height:1.5">
+              Переезжаем в конце месяца. Кто свободен в субботу — нужны руки и коробки.
+            </div>
+            <div class="строка-тегов" style="margin-top:10px">
+              <span class="эм">👍 6</span>
+              <a class="чип" href="#">💬 3</a>
+            </div>
+          </div>
+          <div class="системное">Записи «Друзьям» нельзя добавить себе: их видят только контакты автора.</div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">чужая запись «Друзьям» — кнопки нет</div>
+    </div>
+    <div class="замечание">
+      <b>Кнопки нет вовсе, а не «нажал и отказали».</b> Серая кнопка обещает действие,
+      которого не будет. Вместо неё — строка, объясняющая, почему её нет: иначе человек
+      решит, что приложение сломалось.
+    </div>
+  </div>
+
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно">
+          <a class="икона" href="#">‹</a>
+          <a class="ава мал" href="#">ПС</a>
+          <span class="имя-окна тянуть">Пётр С.</span>
+        </div>
+        <div class="табы">
+          <a class="таб" href="#">Подписан</a>
+          <a class="таб тек" href="#">Лента</a>
+          <a class="таб" href="#">Коллекции</a>
+          <a class="таб" href="#">Группы</a>
+        </div>
+        <div class="зона-2">
+          <div class="метка-недоступно">
+            <span class="замок">⊘</span>
+            <span class="тянуть">Автор закрыл доступ. У вас запись осталась — она сохранена</span>
+          </div>
+          <div class="недоступно" style="padding:14px 16px">
+            <div class="строка-автора">
+              <span class="ава мал">ЛГ</span>
+              <span class="имя-автора тянуть">Лена Г.</span>
+              <span class="чип откр">недоступно</span>
+            </div>
+            <div style="margin-top:10px;font-size:var(--щ4);line-height:1.5">
+              Плёнка, снятая в мае, наконец проявлена. Двенадцать кадров, из них четыре
+              живых.
+            </div>
+            <div class="медиа" style="height:110px;margin-top:10px">кадр</div>
+            <div class="строка-тегов" style="margin-top:10px">
+              <span class="трет">Новых откликов не будет</span>
+            </div>
+          </div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">унесённое, которому закрыли доступ</div>
+    </div>
+    <div class="замечание">
+      <b>Видно целиком — и это решение, а не недосмотр.</b> «Кто забрал, то его»: запись
+      уже на телефоне, отбирать нечего и незачем. Пометка объясняет, почему у неё больше не
+      будет ни откликов, ни обновлений.
+    </div>
+  </div>
+</div>
+
+<h2>3. Группа: посторонний и оповещение · сценарии «б» и права админа</h2>
+
+<div class="ряд-окон">
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно">
+          <a class="икона" href="#">‹</a>
+          <a class="ава мал" href="#">Я</a>
+          <span class="имя-окна тянуть">Ядро</span>
+        </div>
+        <div class="зона-2">
+          <div class="системное">Закрытая группа · вы не участник</div>
+          <div style="padding:14px 16px;border-bottom:1px solid var(--чёрный-12)">
+            <div class="трет" style="margin-bottom:6px">Описание</div>
+            <div style="font-size:var(--щ4);line-height:1.5">
+              Разбираем релизы по вторникам. Зовём тех, кто правда читает код, а не только
+              обсуждает.
+            </div>
+          </div>
+          <div style="padding:14px 16px">
+            <div class="строка-автора">
+              <span class="ава мал">ПС</span>
+              <span class="имя-автора тянуть">Пётр С.</span>
+              <span class="круг-видимости всем">Всем</span>
+            </div>
+            <div style="margin-top:10px;font-size:var(--щ4);line-height:1.5">
+              Записи прошлой встречи выложены. Смотреть можно без вступления.
+            </div>
+          </div>
+          <div class="системное">Остальное видно участникам</div>
+          <div class="зона-3">
+            <a class="кн" href="#" style="min-height:38px">Попросить вступить</a>
+          </div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">закрытая группа глазами постороннего</div>
+    </div>
+    <div class="замечание">
+      Сценарий «б» целиком: описание (уровень 0) и выложенное наружу (уровень 1) видны без
+      вступления, дальше — «Остальное видно участникам». <b>Закрытость про вступление, а не
+      про видимость</b>, и по экрану это понятно без объяснений.
+    </div>
+  </div>
+
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно">
+          <a class="икона" href="#">‹</a>
+          <a class="ава мал" href="#">Я</a>
+          <span class="имя-окна тянуть">Ядро</span>
+          <a class="икона" href="#">•••</a>
+        </div>
+        <div class="зона-2">
+          <div class="поток">
+            <div class="реплика моя">
+              <div class="пузырь">
+                Выкладываю черновик доклада, посмотрите до пятницы.
+                <div class="низ-пузыря"><span>14:02</span></div>
+              </div>
+            </div>
+            <div class="системное">Админ скрыл вашу запись от тех, кто не вступил.<br>Теперь её видят только участники.</div>
+            <div class="реплика" style="--полоса:#2f9c8f">
+              <div class="пузырь">
+                Прости, унёс из общей ленты — там были внутренние ссылки.
+                <div class="низ-пузыря"><span>14:05</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">оповещение о сужении админом</div>
+    </div>
+    <div class="замечание">
+      <b>Оповещение приходит в саму группу, а не отдельным уведомлением</b> — там же, где
+      живёт сообщение, и там же, где админ может объяснить причину. Это работает, потому
+      что админ <b>сузил</b>: вред предотвращён, а не нанесён.
+      <br><br>
+      Расширить чужую запись админ не может вовсе, поэтому экрана «админ выложил вашу
+      запись наружу» здесь нет — и не будет.
+    </div>
+  </div>
+</div>
+
+<h2>4. Сообщения группы: метка справа от имени автора</h2>
+
+<p class="подзаголовок">
+  Основа — <code>телефон/подокна/чат.html</code>, групповое состояние. Метка стоит
+  <b>напротив имени автора</b> и несёт стрелку с номером. Цвет у метки, а не у текста:
+  красить буквы значило бы, что читаемость зависит от доступа.
+</p>
+
+<div class="ряд-окон">
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно">
+          <a class="икона" href="#">‹</a>
+          <a class="ава мал" href="#">Я</a>
+          <span class="имя-окна тянуть">Ядро</span>
+          <a class="икона" href="#настройка">•••</a>
+        </div>
+        <div class="зона-2">
+          <div class="поток">
+            <div class="системное">Сегодня</div>
+            <div class="реплика" style="--полоса:#2f9c8f">
+              <div class="пузырь">
+                <div class="шапка-реплики">
+                  <span class="имя тянуть">Пётр С.</span>
+                  <a class="метка-круга можно" href="#">↓ 1</a>
+                </div>
+                Записи прошлой встречи выложены. Смотреть можно без вступления.
+                <div class="низ-пузыря"><span>14:02</span></div>
+              </div>
+            </div>
+            <div class="реплика" style="--полоса:#b4531f">
+              <div class="пузырь">
+                <div class="шапка-реплики">
+                  <span class="имя тянуть">Аня Б.</span>
+                  <span class="метка-круга нельзя">↓ 2</span>
+                </div>
+                Черновик доклада в закреплённых. Обсудим в четверг, до общей ленты пока не выносим.
+                <div class="низ-пузыря"><span>14:11</span></div>
+              </div>
+            </div>
+            <div class="реплика моя">
+              <div class="пузырь">
+                <div class="шапка-реплики">
+                  <span class="тянуть"></span>
+                  <span class="метка-круга закрыт">↓ 3</span>
+                </div>
+                Цифры по нагрузке — только тем, кому открыл доступ.
+                <div class="низ-пузыря"><span>14:20</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">метки включены</div>
+    </div>
+    <div class="замечание">
+      <b>Зелёная — можно унести себе.</b> Серая — нельзя. Янтарная — доступ по разрешению.
+      Номер рядом со стрелкой нужен тем, кто разбирается; остальным хватает цвета, и это
+      правильный порядок: цвет читается за полсекунды, номер — за две.
+    </div>
+  </div>
+
+  <div>
+    <div class="тел" id="настройка">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-2" style="display:flex;flex-direction:column;justify-content:flex-end;background:var(--чёрный-12)">
+          <div class="фон-подпись">под ним — переписка группы</div>
+          <div class="модалка снизу">
+            <div class="шапка-модалки">
+              <div class="тянуть"><div class="имя" style="font-size:var(--щ4)">Ядро</div></div>
+              <a class="икона" href="#">✕</a>
+            </div>
+            <a class="пункт" href="#"><span class="знак">👥</span><span class="тянуть">Участники</span><span class="усл">6</span></a>
+            <a class="пункт" href="#"><span class="знак">🔗</span><span class="тянуть">Пригласить</span></a>
+            <div class="пункт">
+              <span class="знак">↓</span>
+              <span class="тянуть">Показывать доступность сообщений</span>
+              <span style="width:40px;height:24px;flex:0 0 auto;border-radius:999px;background:var(--навигация);position:relative;display:inline-block">
+                <i style="position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:#fff;display:block"></i>
+              </span>
+            </div>
+            <div class="системное">По умолчанию выключено: большинству метки не нужны, они видят только своё.</div>
+          </div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">настройка · «•••» в шапке группы</div>
+    </div>
+    <div class="замечание">
+      <b>По умолчанию выключено.</b> Метка отвечает на вопрос, которого у обычного
+      участника нет: он и так видит ровно то, что ему открыто. Включает её тот, кто
+      распоряжается содержимым, — админ или автор.
+    </div>
+  </div>
+
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1">
+          <a class="переход-окон тянуть" href="#"><span class="лого">Т</span><span class="имя-окна">Социум</span></a>
+          <a class="икона" href="#">🔍</a>
+          <a class="икона" href="#">⚙</a>
+        </div>
+        <div class="табы">
+          <a class="таб тек" href="#">Общая</a>
+          <a class="таб" href="#">Друзья</a>
+          <a class="таб" href="#">Каталог</a>
+        </div>
+        <div class="зона-2">
+          <div style="padding:14px 16px;border-bottom:1px solid var(--чёрный-12)">
+            <div class="строка-автора">
+              <span class="ава мал">ЛГ</span>
+              <span class="имя-автора тянуть">Лена Г.</span>
+              <a class="метка-круга можно" href="#">↓ 1</a>
+            </div>
+            <div style="margin-top:9px;font-size:var(--щ4);line-height:1.5">
+              Плёнка, снятая в мае, проявлена. Двенадцать кадров, из них четыре живых.
+            </div>
+            <div class="строка" style="padding:0;border:none;background:none;margin-top:9px">
+              <div class="эмоции тянуть">
+                <span class="эм" style="color:var(--одобрение)">👍 24</span>
+                <a class="чип" href="#">💬 5</a>
+              </div>
+              <div class="плюс-минус">
+                <a class="пм" href="#">＋</a>
+                <a class="пм" href="#">−</a>
+              </div>
+            </div>
+          </div>
+          <div style="padding:14px 16px">
+            <div class="строка-автора">
+              <span class="ава мал">МК</span>
+              <span class="имя-автора тянуть">Марк К.</span>
+              <span class="метка-круга нельзя">↓ 2</span>
+            </div>
+            <div style="margin-top:9px;font-size:var(--щ4);line-height:1.5">
+              Переезжаем в конце месяца. Кто свободен в субботу — нужны руки.
+            </div>
+            <div class="строка" style="padding:0;border:none;background:none;margin-top:9px">
+              <div class="эмоции тянуть">
+                <span class="эм" style="color:var(--одобрение)">👍 6</span>
+                <a class="чип" href="#">💬 3</a>
+              </div>
+            </div>
+          </div>
+          <div class="системное">У записей «своим» оценки не ставятся: сервер не ранжирует то, чего не показывает всем.</div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">лента · «＋ −» только у 0 и 1</div>
+    </div>
+    <div class="замечание">
+      <b>Кнопки «＋ −» есть только у уровней 0 и 1.</b> Это не новое правило, а уже
+      записанное: матрица, п. 2 — «рекомендации существуют только у публичного контента,
+      сервер не может ранжировать то, чего не читает». Уровень 2 виден узкому кругу,
+      значит и оценивать его в общем рейтинге нечем.
+    </div>
+  </div>
+</div>
+
+<h2>5. Три вида кнопки «себе на страницу»</h2>
+
+<p class="подзаголовок">
+  Замысел заказчика: кнопка живёт <b>на самой метке</b>, а не отдельно. Можно унести —
+  метка зелёная и со стрелкой; нажал на метку — унёс. Ниже три исполнения, каждое
+  показано на трёх видах сообщения.
+</p>
+
+<div class="ряд-окон">
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно"><span class="имя-окна тянуть">Вариант А · стрелка огибает</span></div>
+        <div class="зона-2">
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение человека</div>
+            <div class="обр">
+              <span class="ава мал">ЛГ</span><span class="имя тянуть" style="font-size:var(--щ5)">Лена Г.</span>
+              <a class="вар-а" href="#"><span class="стрелка">↓</span>Всем</a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение группы</div>
+            <div class="обр">
+              <span class="ава мал">Я</span><span class="имя тянуть" style="font-size:var(--щ5)">Ядро · Пётр С.</span>
+              <a class="вар-а" href="#"><span class="стрелка">↓</span>Всем</a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение канала</div>
+            <div class="обр">
+              <span class="ава мал">РН</span><span class="имя тянуть" style="font-size:var(--щ5)">Разбор недели</span>
+              <a class="вар-а" href="#"><span class="стрелка">↓</span>Всем</a>
+            </div>
+          </div>
+          <div class="системное">Обводка говорит «это кнопка», заливка внутри — «нажимать сюда».</div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">вариант А</div>
+    </div>
+    <div class="замечание">
+      Ближе всего к сказанному: стрелка действительно огибает метку. <b>Но фигура выходит
+      составной</b> — обводка, кружок и слово, — и на мелком кегле читается как три
+      предмета, а не один.
+    </div>
+  </div>
+
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно"><span class="имя-окна тянуть">Вариант Б · метка зелёная</span></div>
+        <div class="зона-2">
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение человека</div>
+            <div class="обр">
+              <span class="ава мал">ЛГ</span><span class="имя тянуть" style="font-size:var(--щ5)">Лена Г.</span>
+              <a class="вар-б" href="#">↓ Всем</a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение группы</div>
+            <div class="обр">
+              <span class="ава мал">Я</span><span class="имя тянуть" style="font-size:var(--щ5)">Ядро · Пётр С.</span>
+              <a class="вар-б" href="#">↓ Всем</a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение канала</div>
+            <div class="обр">
+              <span class="ава мал">РН</span><span class="имя тянуть" style="font-size:var(--щ5)">Разбор недели</span>
+              <a class="вар-б" href="#">↓ Всем</a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Нельзя унести — та же форма, серая</div>
+            <div class="обр">
+              <span class="ава мал">МК</span><span class="имя тянуть" style="font-size:var(--щ5)">Марк К.</span>
+              <span class="метка-круга нельзя">↓ Своим</span>
+            </div>
+          </div>
+          <div class="системное">Одна фигура, один цвет, одно действие.</div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">вариант Б</div>
+    </div>
+    <div class="замечание">
+      <b>Самый простой и самый честный.</b> Зелёная — нажимается, серая — нет; форма одна
+      и та же, меняется только цвет. Ничего лишнего не нарисовано, и на мелком кегле не
+      разваливается. <b>Мой выбор.</b>
+    </div>
+  </div>
+
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно"><span class="имя-окна тянуть">Вариант В · две половины</span></div>
+        <div class="зона-2">
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение человека</div>
+            <div class="обр">
+              <span class="ава мал">ЛГ</span><span class="имя тянуть" style="font-size:var(--щ5)">Лена Г.</span>
+              <span class="вар-в"><span class="лев">Всем</span><a class="прав" href="#">↓</a></span>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение группы</div>
+            <div class="обр">
+              <span class="ава мал">Я</span><span class="имя тянуть" style="font-size:var(--щ5)">Ядро · Пётр С.</span>
+              <span class="вар-в"><span class="лев">Всем</span><a class="прав" href="#">↓</a></span>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение канала</div>
+            <div class="обр">
+              <span class="ава мал">РН</span><span class="имя тянуть" style="font-size:var(--щ5)">Разбор недели</span>
+              <span class="вар-в"><span class="лев">Всем</span><a class="прав" href="#">↓</a></span>
+            </div>
+          </div>
+          <div class="системное">Слева состояние, справа действие. Разные вещи — разные половины.</div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">вариант В</div>
+    </div>
+    <div class="замечание">
+      <b>Единственный, где состояние и действие разведены.</b> Это честнее: «Всем» —
+      сведение, «↓» — кнопка. Цена — фигура шире всех трёх, а стоит она в строке с именем,
+      где место дорого.
+    </div>
+  </div>
+</div>
+
+<h2>6. Где человек видит свой доступ</h2>
+
+<p class="подзаголовок">
+  Ответ заказчика: <b>внутри описания</b>. Если в группе есть сообщения третьего уровня,
+  админ пишет там тег, и тег показывает человеку его собственное состояние.
+</p>
+
+<div class="ряд-окон">
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно">
+          <a class="икона" href="#">‹</a>
+          <a class="ава мал" href="#">Я</a>
+          <span class="имя-окна тянуть">Ядро</span>
+          <a class="икона" href="#">•••</a>
+        </div>
+        <div class="зона-2">
+          <div style="padding:14px 16px;border-bottom:1px solid var(--чёрный-12)">
+            <div class="трет" style="margin-bottom:6px">Описание</div>
+            <div style="font-size:var(--щ4);line-height:1.5">
+              Разбираем релизы по вторникам. Цифры по нагрузке лежат отдельно — доступ
+              даёт админ.
+            </div>
+            <div class="строка-тегов" style="margin-top:10px">
+              <span class="метка-круга закрыт">↓ 3 · доступ до 12 октября</span>
+            </div>
+          </div>
+          <div class="системное">После 12 октября сообщения третьего уровня перестанут открываться. Прочитанное останется.</div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">доступ есть, со сроком</div>
+    </div>
+    <div class="замечание">
+      <b>Тег стоит в описании, а не в настройках</b> — там, куда человек и так заглядывает,
+      чтобы понять, что это за группа. Срок назван числом: «до 12 октября», а не
+      «временно».
+    </div>
+  </div>
+
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно">
+          <a class="икона" href="#">‹</a>
+          <a class="ава мал" href="#">Я</a>
+          <span class="имя-окна тянуть">Ядро</span>
+          <a class="икона" href="#">•••</a>
+        </div>
+        <div class="зона-2">
+          <div style="padding:14px 16px;border-bottom:1px solid var(--чёрный-12)">
+            <div class="трет" style="margin-bottom:6px">Описание</div>
+            <div style="font-size:var(--щ4);line-height:1.5">
+              Разбираем релизы по вторникам. Цифры по нагрузке лежат отдельно — доступ
+              даёт админ.
+            </div>
+            <div class="строка-тегов" style="margin-top:10px">
+              <span class="метка-круга нельзя">↓ 3 · доступа нет</span>
+              <a class="чип" href="#">Попросить</a>
+            </div>
+          </div>
+          <div class="системное">Часть сообщений вам не показана. Их существование не скрыто — скрыто содержимое.</div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">доступа нет</div>
+    </div>
+    <div class="замечание">
+      <b>Отсутствие доступа названо, а не спрятано.</b> Иначе человек видит неполную
+      переписку и считает её полной — та же болезнь, что с группой без ключа (срез С0б в
+      плане групп): пустое и закрытое выглядят одинаково, пока не сказано.
+      <br><br>
+      Кнопка «Попросить» рядом: узнал о существовании — сразу может попросить.
+    </div>
+  </div>
+</div>
+
+<h2>Чего в этих экранах ещё нет</h2>
+
+<p class="подзаголовок">Названо, чтобы не считалось нарисованным.</p>
+
+<ul style="color:var(--чёрный-70);line-height:1.6">
+  <li><b>Уровень 3 — «по разрешению».</b> Как админ выдаёт право конкретному человеку и как
+    тот узнаёт, что получил его. Отдельный экран состава.</li>
+  <li><b>Несколько сообщений уровня 0.</b> Листалка в карточке — решено, что она нужна, но
+    не нарисована: неизвестно, сколько их разрешено.</li>
+  <li><b>Личная группа изнутри.</b> Там уровни −1 и 0, и круг у сообщения не выбирается
+    вовсе — выбирать не из чего. Значит и элемента управления быть не должно.</li>
+  <li><b>Условие по дате.</b> Как оно выглядит участнику: «доступ до 12 октября» где-то
+    обязано стоять, иначе истечение выглядит поломкой.</li>
+</ul>
+</div>
