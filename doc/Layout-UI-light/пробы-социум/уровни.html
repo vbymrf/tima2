@@ -107,6 +107,33 @@
     clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
   }
 
+  /* Е — вариант Б, но стрелка не буква, а вырез фоном страницы.
+     Форма взята с doc_add/strelka.png: хвост уходит влево-вниз, остриё вправо. */
+  .вар-е {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px 3px 7px; border-radius: var(--радиус-круг);
+    background: var(--подтверждено); color: #fff;
+    font-size: 10.5px; font-weight: 800; text-decoration: none;
+  }
+  .вар-е > .зн { width: 12px; height: 12px; flex: 0 0 auto; fill: var(--подложка); }
+  .вар-е.нет { background: var(--чёрный-35); }
+
+  /* Ж — знак с картинки целиком: зелёный круг, внутри та же стрелка вырезом */
+  .вар-ж {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 3px 2px 9px; border-radius: var(--радиус-круг);
+    border: 2px solid var(--подтверждено); background: none;
+    font-size: 10.5px; font-weight: 800; color: var(--текст); text-decoration: none;
+  }
+  .вар-ж > .круг {
+    width: 19px; height: 19px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--подтверждено);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .вар-ж .зн { width: 12px; height: 12px; fill: var(--подложка); }
+  .вар-ж.нет { border-color: var(--чёрный-35); color: var(--чёрный-50); }
+  .вар-ж.нет > .круг { background: var(--чёрный-35); }
+
   /* В — сцеплённая пилюля: слева круг, справа стрелка */
   .вар-в { display: inline-flex; border-radius: var(--радиус-круг); overflow: hidden; font-size: 10.5px; font-weight: 800; }
   .вар-в > .лев { padding: 3px 8px; background: var(--чёрный-6); color: var(--чёрный-70); }
@@ -115,7 +142,7 @@
 
 <div class="лист-док">
 <div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-социум / уровни.html</div>
-<h1>Уровень сообщения <span class="вид">25 экранов</span></h1>
+<h1>Уровень сообщения <span class="вид">29 экранов</span></h1>
 <p class="подзаголовок">
   Нарисовано 2026-09-03 после того, как заказчик принял <b>монотонную шкалу</b> и
   <b>асимметрию админа</b>. Модель — <code>doc_add/макеты-группы/ЕДИНЫЙ-ФОРМАТ.md</code> (вне git),
@@ -646,11 +673,17 @@
   </div>
 </div>
 
-<h2>5. Пять видов кнопки «себе на страницу»</h2>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="strelka-unesti" viewBox="0 0 24 24">
+    <path d="M2.6 16.8 C4.4 9.8, 9.8 6.2, 14.6 7.0 L14.6 3.0 L21.8 10.3 L14.6 17.6 L14.6 13.6 C10.2 12.9, 5.9 13.9, 2.6 16.8 Z"/>
+  </symbol>
+</svg>
+
+<h2>5. Семь видов кнопки «себе на страницу»</h2>
 
 <p class="подзаголовок">
   Замысел заказчика: кнопка живёт <b>на самой метке</b>, а не отдельно. Можно унести —
-  метка зелёная и со стрелкой; нажал на метку — унёс. Ниже пять исполнений, каждое
+  метка зелёная и со стрелкой; нажал на метку — унёс. Ниже семь исполнений, каждое
   показано на трёх видах сообщения.
 </p>
 
@@ -882,6 +915,111 @@
       Цена: <b>остриё съедает место справа</b> и в узкой строке подпирает край. И «нельзя
       унести» приходится рисовать <b>другой формой</b> — без острия, — то есть форм у метки
       становится две вместо одной.
+    </div>
+  </div>
+
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно"><span class="имя-окна тянуть">Вариант Е · стрелка вырезом</span></div>
+        <div class="зона-2">
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение человека</div>
+            <div class="обр">
+              <span class="ава мал">ЛГ</span><span class="имя тянуть" style="font-size:var(--щ5)">Лена Г.</span>
+              <a class="вар-е" href="#"><svg class="зн"><use href="#strelka-unesti"/></svg>Всем</a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение группы</div>
+            <div class="обр">
+              <span class="ава мал">Я</span><span class="имя тянуть" style="font-size:var(--щ5)">Ядро · Пётр С.</span>
+              <a class="вар-е" href="#"><svg class="зн"><use href="#strelka-unesti"/></svg>Всем</a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение канала</div>
+            <div class="обр">
+              <span class="ава мал">РН</span><span class="имя тянуть" style="font-size:var(--щ5)">Разбор недели</span>
+              <a class="вар-е" href="#"><svg class="зн"><use href="#strelka-unesti"/></svg>Всем</a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Нельзя унести — та же форма, серая</div>
+            <div class="обр">
+              <span class="ава мал">МК</span><span class="имя тянуть" style="font-size:var(--щ5)">Марк К.</span>
+              <span class="вар-е нет"><svg class="зн"><use href="#strelka-unesti"/></svg>Своим</span>
+            </div>
+          </div>
+          <div class="системное">Та же фигура, что в Б. Изменилась только стрелка: не буква из шрифта, а вырез.</div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">вариант Е</div>
+    </div>
+    <div class="замечание">
+      <b>Вариант Б со стрелкой с картинки</b> (<code>doc_add/strelka.png</code>): она не
+      написана шрифтом, а <b>вырезана фоном страницы</b> в зелёной заливке. Хвост уходит
+      влево-вниз, остриё — вправо: то самое движение «уходит дальше», ради которого в Г и Д
+      разворачивали стрелку.
+      <br><br>
+      Выгода против Б не косметическая. <b>Знак перестаёт зависеть от шрифта</b> — а на
+      <code>↧</code> мы на этом уже обожглись, глиф не нашёлся и вышла палка. Рисунок
+      одинаков на любом устройстве.
+      <br><br>
+      Цена: <b>это картинка, а не текст.</b> Её надо держать в наборе значков и красить
+      кодом; в Compose это <code>Icon</code> с вектором, а не <code>Text</code>.
+    </div>
+  </div>
+
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно"><span class="имя-окна тянуть">Вариант Ж · знак целиком</span></div>
+        <div class="зона-2">
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение человека</div>
+            <div class="обр">
+              <span class="ава мал">ЛГ</span><span class="имя тянуть" style="font-size:var(--щ5)">Лена Г.</span>
+              <a class="вар-ж" href="#">Всем<span class="круг"><svg class="зн"><use href="#strelka-unesti"/></svg></span></a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение группы</div>
+            <div class="обр">
+              <span class="ава мал">Я</span><span class="имя тянуть" style="font-size:var(--щ5)">Ядро · Пётр С.</span>
+              <a class="вар-ж" href="#">Всем<span class="круг"><svg class="зн"><use href="#strelka-unesti"/></svg></span></a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение канала</div>
+            <div class="обр">
+              <span class="ава мал">РН</span><span class="имя тянуть" style="font-size:var(--щ5)">Разбор недели</span>
+              <a class="вар-ж" href="#">Всем<span class="круг"><svg class="зн"><use href="#strelka-unesti"/></svg></span></a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Нельзя унести — тот же знак, серый</div>
+            <div class="обр">
+              <span class="ава мал">МК</span><span class="имя тянуть" style="font-size:var(--щ5)">Марк К.</span>
+              <span class="вар-ж нет">Своим<span class="круг"><svg class="зн"><use href="#strelka-unesti"/></svg></span></span>
+            </div>
+          </div>
+          <div class="системное">Круг со стрелкой — ровно картинка заказчика. Слово слева, знак справа, как в Г.</div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">вариант Ж</div>
+    </div>
+    <div class="замечание">
+      <b>Картинка перенесена как есть:</b> зелёный круг, внутри стрелка вырезом. Это Г, у
+      которого текстовая <code>→</code> заменена на тот же рисунок, что в Е.
+      <br><br>
+      Отсюда видно развилку, а не семь равных вариантов: <b>знак либо стоит в заливке (Е),
+      либо в своём круге (Ж)</b>. Круг заметнее и годится в плотном списке, где меток много;
+      заливка тише и не спорит с именем автора рядом.
     </div>
   </div>
 
