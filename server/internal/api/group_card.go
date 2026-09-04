@@ -112,3 +112,28 @@ func answerWithCard(deps groupsDeps, w http.ResponseWriter, r *http.Request, g g
 	_ = json.NewEncoder(w).Encode(cardJSON(g))
 	return true
 }
+
+// listMyCards — GET /groups/cards: карточки, которые мне открыли.
+//
+// Вкладка «Друзья» окна 2. Своих групп здесь нет: они в «Каталоге», и показывать одну
+// группу в двух списках значило бы заставить человека гадать, чем эти списки различаются.
+func listMyCards(deps groupsDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		cards, err := deps.store.CardsFor(r.Context(), id.UserID)
+		if err != nil {
+			log.Printf("listMyCards: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		out := make([]map[string]any, 0, len(cards))
+		for _, c := range cards {
+			out = append(out, map[string]any{
+				"group_id": c.GroupID, "kind": c.Kind, "title": c.Title, "description": c.Description,
+			})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"cards": out})
+	}
+}
+

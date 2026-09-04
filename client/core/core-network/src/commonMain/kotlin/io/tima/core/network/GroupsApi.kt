@@ -87,6 +87,51 @@ class GroupsApi(
             ?: GroupsResult.Refused(response.status.value, "ответ без groups")
     }
 
+    /** `GET /api/v1/groups/cards` — карточки, которые мне открыли (вкладка «Друзья»). */
+    suspend fun cards(): CardsResult {
+        val response = try {
+            client.get(route.api("/api/v1/groups/cards")) {
+                header("Authorization", "Bearer ${token()}")
+            }
+        } catch (e: Throwable) {
+            return CardsResult.NoConnection(classifyFailure(e))
+        }
+        val body = response.jsonBody()
+        if (response.status != HttpStatusCode.OK) {
+            return CardsResult.Refused(response.status.value, body.codeOf())
+        }
+        val cards = body?.get("cards")?.jsonArrayOrNull()?.mapNotNull { element ->
+            val objectValue = element.jsonObjectOrNull() ?: return@mapNotNull null
+            val id = objectValue.str("group_id") ?: return@mapNotNull null
+            RemoteCard(
+                groupId = id,
+                title = objectValue.str("title").orEmpty(),
+                description = objectValue.str("description").orEmpty(),
+                kind = objectValue.str("kind").orEmpty(),
+            )
+        }
+        return cards?.let { CardsResult.Cards(it) }
+            ?: CardsResult.Refused(response.status.value, "ответ без cards")
+    }
+
+    /** `POST /api/v1/groups/{id}/join-requests` — попроситься в группу. */
+    suspend fun askToJoin(groupId: String): AskResult {
+        val response = try {
+            client.post(route.api("/api/v1/groups/$groupId/join-requests")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody("{}")
+            }
+        } catch (e: Throwable) {
+            return AskResult.NoConnection(classifyFailure(e))
+        }
+        val body = response.jsonBody()
+        if (response.status != HttpStatusCode.Created) {
+            return AskResult.Refused(response.status.value, body.codeOf())
+        }
+        return AskResult.Asked(body?.str("state").orEmpty())
+    }
+
     /** `GET /api/v1/groups/{id}/members` — участники и роли. */
     suspend fun members(groupId: String): MembersResult {
         val response = try {
@@ -209,6 +254,26 @@ sealed interface GroupsResult {
     data class Groups(val groups: List<RemoteGroup>) : GroupsResult
     data class Refused(val status: Int, val code: String) : GroupsResult
     data class NoConnection(val link: LinkState) : GroupsResult
+}
+
+/** Карточка чужой группы, как её отдаёт сервер. */
+class RemoteCard(
+    val groupId: String,
+    val title: String,
+    val description: String,
+    val kind: String,
+)
+
+sealed interface CardsResult {
+    data class Cards(val cards: List<RemoteCard>) : CardsResult
+    data class Refused(val status: Int, val code: String) : CardsResult
+    data class NoConnection(val link: LinkState) : CardsResult
+}
+
+sealed interface AskResult {
+    data class Asked(val state: String) : AskResult
+    data class Refused(val status: Int, val code: String) : AskResult
+    data class NoConnection(val link: LinkState) : AskResult
 }
 
 sealed interface MembersResult {

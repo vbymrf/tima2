@@ -52,3 +52,43 @@ func (s *Store) GroupCardOpenTo(ctx context.Context, groupID, userID string) (bo
 		groupID, userID).Scan(&exists)
 	return exists, err
 }
+
+// CardsFor — карточки, открытые этому человеку и НЕ ставшие его группами.
+//
+// Вкладка «Друзья» окна 2 показывает именно их: то, что положили себе контакты. Свои
+// группы туда не попадают — они в «Каталоге», и человек не должен видеть одну и ту же
+// группу дважды в разных списках.
+func (s *Store) CardsFor(ctx context.Context, userID string) ([]GroupCardRow, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT g.group_id, g.kind, g.title, COALESCE(g.description, '')
+		  FROM group_card_audience a
+		  JOIN groups g ON g.group_id = a.group_id AND g.deleted_at IS NULL
+		 WHERE a.user_id = $1
+		   AND NOT EXISTS (
+		       SELECT 1 FROM memberships m
+		        WHERE m.target_type = 'group' AND m.target_id = g.group_id
+		          AND m.user_id = $1 AND m.left_at IS NULL)
+		 ORDER BY a.updated_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []GroupCardRow
+	for rows.Next() {
+		var c GroupCardRow
+		if err := rows.Scan(&c.GroupID, &c.Kind, &c.Title, &c.Description); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// GroupCardRow — строка вкладки «Друзья».
+type GroupCardRow struct {
+	GroupID     string
+	Kind        string
+	Title       string
+	Description string
+}
+

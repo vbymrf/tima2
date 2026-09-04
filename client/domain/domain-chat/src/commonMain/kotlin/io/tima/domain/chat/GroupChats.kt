@@ -125,6 +125,38 @@ interface GroupRegistry {
     suspend fun members(groupId: String): MembersStep
     suspend fun addMember(groupId: String, userId: String): MemberStep
     suspend fun removeMember(groupId: String, userId: String): MemberStep
+
+    /**
+     * Карточки, которые мне открыли, — вкладка «Друзья» окна 2.
+     *
+     * Своих групп здесь нет: они в «Каталоге». Одна группа в двух списках заставила бы
+     * гадать, чем списки различаются.
+     */
+    suspend fun cards(): CardsStep = CardsStep.Cards(emptyList())
+
+    /** Попроситься в чужую личную группу — единственное действие с ней (ADR-0018 п. 7). */
+    suspend fun askToJoin(groupId: String): AskStep = AskStep.Refused("не реализовано")
+}
+
+/** Карточка чужой группы: чем она себя называет. */
+class GroupCard(
+    val groupId: String,
+    val title: String,
+    val description: String,
+    val kind: GroupKind,
+)
+
+sealed interface CardsStep {
+    data class Cards(val cards: List<GroupCard>) : CardsStep
+    data class Offline(val retryAfterMs: Long) : CardsStep
+    data class Refused(val reason: String) : CardsStep
+}
+
+sealed interface AskStep {
+    /** Просьба ушла. [state] — «pending» либо «accepted», если уже приняли раньше. */
+    data class Asked(val state: String) : AskStep
+    data class Offline(val retryAfterMs: Long) : AskStep
+    data class Refused(val reason: String) : AskStep
 }
 
 /**

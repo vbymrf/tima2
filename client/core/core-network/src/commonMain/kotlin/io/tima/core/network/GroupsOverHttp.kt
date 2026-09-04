@@ -1,5 +1,8 @@
 package io.tima.core.network
 
+import io.tima.domain.chat.AskStep
+import io.tima.domain.chat.CardsStep
+import io.tima.domain.chat.GroupCard
 import io.tima.domain.chat.GroupCreateStep
 import io.tima.domain.chat.GroupInfo
 import io.tima.domain.chat.GroupKind
@@ -35,6 +38,27 @@ class GroupsOverHttp(private val api: GroupsApi) : GroupRegistry {
         )
         is GroupsResult.NoConnection -> GroupsStep.Offline(answer.link.retryDelayMs)
         is GroupsResult.Refused -> GroupsStep.Refused(answer.code)
+    }
+
+    override suspend fun cards(): CardsStep = when (val answer = api.cards()) {
+        is CardsResult.Cards -> CardsStep.Cards(
+            answer.cards.map {
+                GroupCard(
+                    groupId = it.groupId,
+                    title = it.title,
+                    description = it.description,
+                    kind = if (it.kind == "public") GroupKind.Public else GroupKind.Personal,
+                )
+            },
+        )
+        is CardsResult.NoConnection -> CardsStep.Offline(answer.link.retryDelayMs)
+        is CardsResult.Refused -> CardsStep.Refused(answer.code)
+    }
+
+    override suspend fun askToJoin(groupId: String): AskStep = when (val answer = api.askToJoin(groupId)) {
+        is AskResult.Asked -> AskStep.Asked(answer.state)
+        is AskResult.NoConnection -> AskStep.Offline(answer.link.retryDelayMs)
+        is AskResult.Refused -> AskStep.Refused(answer.code)
     }
 
     override suspend fun members(groupId: String): MembersStep = when (val answer = api.members(groupId)) {

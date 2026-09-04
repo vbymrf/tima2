@@ -47,6 +47,7 @@ type GroupStore interface {
 	MyJoinRequestState(ctx context.Context, groupID, userID string) (string, error)
 	ListUserDevices(ctx context.Context, userID string) ([]store.UserDevice, error)
 	SetGroupCardAudience(ctx context.Context, groupID string, userIDs []string) error
+	CardsFor(ctx context.Context, userID string) ([]store.GroupCardRow, error)
 	GroupCardOpenTo(ctx context.Context, groupID, userID string) (bool, error)
 	NarrowGroupMessageLevel(ctx context.Context, groupID string, messageID int64, level int16, requesterID string, allowForeign bool) (string, error)
 	GroupMessageExists(ctx context.Context, groupID string, messageID int64) (bool, error)
@@ -97,6 +98,8 @@ func RegisterGroups(
 
 	mux.HandleFunc("POST /api/v1/groups", requireDevice(createGroup(deps)))
 	mux.HandleFunc("GET /api/v1/groups", requireDevice(listMyGroups(deps)))
+	// Раньше «{groupID}»: иначе «cards» будет принято за идентификатор группы.
+	mux.HandleFunc("GET /api/v1/groups/cards", requireDevice(listMyCards(deps)))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}", requireDevice(getGroup(deps)))
 	mux.HandleFunc("PATCH /api/v1/groups/{groupID}", requireDevice(patchGroup(deps)))
 	mux.HandleFunc("DELETE /api/v1/groups/{groupID}", requireDevice(deleteGroup(deps)))

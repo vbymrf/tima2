@@ -157,3 +157,39 @@ func TestНеизвестныеПолучателиНеЛомаютРаздач�
 		t.Fatalf("знакомый всё равно должен видеть карточку: %d", code)
 	}
 }
+
+// Вкладка «Друзья»: карточки, которые мне открыли. Своих групп там нет.
+func TestСписокКарточекБезСвоихГрупп(t *testing.T) {
+	ts, _ := setup(t)
+	owner := registerDevice(t, ts, "+79996660001")
+	знакомый := registerDevice(t, ts, "+79996660002")
+
+	чужая := createGroupAPI(t, ts, owner.token)
+	своя := createGroupAPI(t, ts, знакомый.token)
+
+	if code := authedJSON(t, ts, "PUT", "/api/v1/groups/"+чужая+"/audience", owner.token,
+		map[string]any{"user_ids": []string{знакомый.userID}}, nil); code != http.StatusOK {
+		t.Fatalf("раздача: %d", code)
+	}
+
+	var list struct {
+		Cards []struct {
+			GroupID string `json:"group_id"`
+		} `json:"cards"`
+	}
+	if code := authedJSON(t, ts, "GET", "/api/v1/groups/cards", знакомый.token, nil, &list); code != http.StatusOK {
+		t.Fatalf("список карточек: %d", code)
+	}
+	if len(list.Cards) != 1 || list.Cards[0].GroupID != чужая {
+		t.Fatalf("в карточках должна быть одна чужая группа, а там %+v (своя: %s)", list.Cards, своя)
+	}
+
+	// вступил — карточка ушла из списка сама
+	addMemberAPI(t, ts, owner.token, чужая, знакомый.userID, "member")
+	if code := authedJSON(t, ts, "GET", "/api/v1/groups/cards", знакомый.token, nil, &list); code != http.StatusOK {
+		t.Fatalf("список после вступления: %d", code)
+	}
+	if len(list.Cards) != 0 {
+		t.Fatalf("после вступления карточка должна уйти из «Друзей», а там %+v", list.Cards)
+	}
+}

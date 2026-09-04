@@ -24,6 +24,9 @@ import io.tima.domain.chat.ChatNames
 import io.tima.domain.chat.CreateGroupChat
 import io.tima.domain.chat.ManageGroupMembers
 import io.tima.domain.chat.RequestGroupKeys
+import io.tima.feature.group.SocialStore
+import io.tima.feature.group.CatalogTab
+import io.tima.feature.group.FriendsTab
 import io.tima.feature.group.NewGroupStore
 import io.tima.feature.group.Step
 import io.tima.feature.group.MembersStore
@@ -302,6 +305,9 @@ private fun App(
     // Книга: люди, с которыми уже есть переписка. Поток из базы — новая переписка
     // появляется в книге сама.
     val book = remember { BookStore(environment.contacts, scope) }
+    // Окно 2 «Социум»: свои группы и карточки, которые открыли контакты. Списки живут
+    // здесь, а не в оболочке: рама знает раму, работа с сервером — дело feature-group.
+    val social = remember { SocialStore(GroupsOverHttp(network.groups), scope) }
     var phoneTab by remember { mutableStateOf("Чаты") }
 
     val new = remember {
@@ -322,6 +328,7 @@ private fun App(
         linkCode?.let { where = Where.Link(it) }
     }
 
+    val socialState by social.state.collectAsState()
     val listState by list.state.collectAsState()
     val bookState by book.state.collectAsState()
     val newState by new.state.collectAsState()
@@ -404,12 +411,25 @@ private fun App(
                     onNeighbourWindow = switchWindow,
                 )
 
-                Window.Social -> SocialWindow(
-                    onSwitchWindows = { windowSwitcher = true },
-                    onSearch = {},
-                    onSettings = { where = Where.Settings() },
-                    onNeighbourWindow = switchWindow,
-                )
+                Window.Social -> {
+                    // Списки обновляются при входе в окно: возвращаясь из группы, человек
+                    // должен видеть её на месте, а не прежний снимок.
+                    LaunchedEffect(Unit) { social.refresh() }
+                    SocialWindow(
+                        onSwitchWindows = { windowSwitcher = true },
+                        onSearch = {},
+                        onSettings = { where = Where.Settings() },
+                        onNeighbourWindow = switchWindow,
+                        catalog = {
+                            CatalogTab(
+                                state = socialState,
+                                onOpen = { where = Where.Chat(it.groupId, it.title) },
+                                onNew = { where = Where.NewGroup },
+                            )
+                        },
+                        friends = { FriendsTab(state = socialState, onAsk = social::ask) },
+                    )
+                }
 
                 Window.Media -> MediaWindow(
                     onSwitchWindows = { windowSwitcher = true },
