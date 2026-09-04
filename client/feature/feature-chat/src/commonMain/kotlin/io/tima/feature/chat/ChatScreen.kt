@@ -38,6 +38,7 @@ import io.tima.core.ui.Tima
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Chip
+import io.tima.domain.chat.CarryToPage
 import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.MessageDisplay
@@ -102,6 +103,14 @@ fun ChatScreen(
     /** Человек подтвердил сужение, о последствиях которого его предупредили. */
     onNarrowConfirm: () -> Unit = {},
     /**
+     * Унести чужую запись к себе на страницу: `(messageId, круг записи)`.
+     *
+     * `null` — уносить некуда или незачем: личная переписка. У **своих** реплик кнопки нет
+     * никогда — своё и так своё, — и у тех, чей круг не выносится: «по разрешению» отдано
+     * поимённо, шифр читают по ключу.
+     */
+    onCarry: ((Long, Int) -> Unit)? = null,
+    /**
      * Показывать ли доступность у реплик. `null` — переписка личная: там показывать нечего.
      *
      * Переключатель в шапке, а не в настройках приложения: он относится к этой группе и к
@@ -153,6 +162,7 @@ fun ChatScreen(
             modifier = Modifier.weight(1f),
             showCircles = state.showCircles,
             onNarrow = onNarrow,
+            onCarry = onCarry,
         )
 
         // Полоса недоступной истории — над вводом и ОДНА на экран, а не у каждой строки.
@@ -208,6 +218,7 @@ private fun Feed(
     /** Показывать ли метку круга у реплик. По умолчанию нет — см. [ChatState.showCircles]. */
     showCircles: Boolean = false,
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
+    onCarry: ((Long, Int) -> Unit)? = null,
 ) =
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
@@ -232,6 +243,7 @@ private fun Feed(
                     previous?.senderId == line.senderId,
                 showCircle = showCircles,
                 onNarrow = onNarrow,
+                onCarry = onCarry,
             )
         }
     }
@@ -274,6 +286,7 @@ private fun Reply(
     continuation: Boolean,
     showCircle: Boolean = false,
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
+    onCarry: ((Long, Int) -> Unit)? = null,
 ) {
     // Служебная строка — не реплика: у неё нет автора, стороны и времени отправки. Пузырь
     // приписал бы ей всё это разом, поэтому она идёт полосой по центру.
@@ -281,7 +294,7 @@ private fun Reply(
         SystemLine(line.text.orEmpty())
         return
     }
-    Bubbled(line, author, continuation, showCircle, onNarrow)
+    Bubbled(line, author, continuation, showCircle, onNarrow, onCarry)
 }
 
 /** Служебная строка: сказанное приложением, а не человеком. */
@@ -300,6 +313,7 @@ private fun Bubbled(
     continuation: Boolean,
     showCircle: Boolean,
     onNarrow: ((Long, Int, Int) -> Unit)?,
+    onCarry: ((Long, Int) -> Unit)?,
 ) = Bubble(
     my = line.outgoing,
     author = author,
@@ -331,12 +345,59 @@ private fun Bubbled(
         else -> Chip("расшифровывается…", kind = ChipKind.Quiet)
     }
 
+    // Кнопка «Добавить себе» — в конце сообщения, у чужих реплик и только у выносимых.
+    // «Нельзя унести» показывается отсутствием кнопки, а не серой кнопкой с объяснением:
+    // место отдаётся тексту, а метка круга и так говорит, почему (макет, раздел 5).
+    if (onCarry != null && !line.outgoing && line.serverId > 0 && CarryToPage.canCarry(line.level)) {
+        CarryButton(roomy = roomAfter(line.text)) { onCarry(line.serverId, line.level) }
+    }
+
     // Сужение предлагается там же, где показана метка: оба про одно — кто это видит.
     // У неотправленного серверного идентификатора нет, и сужать там нечего.
     if (onNarrow != null && showCircle && line.level >= 0 && line.serverId > 0) {
         NarrowChoice(line.level) { to -> onNarrow(line.serverId, line.level, to) }
     }
 }
+
+/**
+ * «Добавить себе» — полная и без слова.
+ *
+ * Кнопка конкурирует за место в конце сообщения: хватает ширины — стоит полная, не
+ * хватает — остаётся круг с тем же знаком. Правый край у обеих общий, поэтому подмена
+ * ничего не сдвигает (макет `уровень-сообщения.html`, раздел 5).
+ *
+ * Порог в знаках, а не в точках: точная ширина текста известна только при разметке, а
+ * решение нужно принять до неё. Ошибка на границе безобидна — обе кнопки делают одно и то
+ * же и стоят на одном месте.
+ */
+@Composable
+private fun CarryButton(roomy: Boolean, onClick: () -> Unit) = Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.End,
+) {
+    if (roomy) {
+        Chip("Добавить себе", kind = ChipKind.Quiet, onClick = onClick)
+    } else {
+        // Тот же знак, что у метки круга: запись не скачивается, а уходит дальше.
+        ButtonCircle(onClick = onClick) { Arrow(Side.Right, color = Tima.colors.text2) }
+    }
+}
+
+/**
+ * Хватает ли места в конце последней строки под слово.
+ *
+ * Считается по знакам: точная ширина текста известна только при разметке, а решение нужно
+ * до неё. Ошибка на границе безобидна — обе кнопки делают одно и то же и стоят на одном
+ * месте, меняется лишь то, переносится ли она на свою строку.
+ */
+private fun roomAfter(text: String?): Boolean {
+    val tail = (text ?: return true).length % PER_LINE
+    return tail <= PER_LINE - WORD_ROOM
+}
+
+/** Знаков в строке пузыря и места под «Добавить себе» — оценка по макету. */
+private const val PER_LINE = 34
+private const val WORD_ROOM = 15
 
 /**
  * Круги, до которых можно сузить эту реплику.

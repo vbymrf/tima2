@@ -2,6 +2,7 @@ package io.tima.shared
 
 import io.tima.core.encryption.DeviceIdentity
 import io.tima.domain.chat.MessageLevels
+import io.tima.domain.chat.UserPages
 import io.tima.core.network.DevicesApi
 import io.tima.core.network.EscrowApi
 import io.tima.core.network.GroupKeyRecoveryApi
@@ -50,6 +51,14 @@ interface ChatPorts {
      * же, где видна её метка. Состав группы к этому отношения не имеет.
      */
     val messageLevels: MessageLevels
+
+    /**
+     * Страница человека: перенос к себе и чтение ленты.
+     *
+     * Здесь же, а не отдельным портом: «добавить себе» нажимают из окна переписки, глядя
+     * на саму реплику, и страница — то место, куда это ведёт.
+     */
+    val pages: UserPages
 }
 
 /** Группы: создание, состав, ротация ключа при смене состава. */

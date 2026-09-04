@@ -30,6 +30,7 @@ import io.tima.core.network.GroupKeyRecoveryApi
 import io.tima.core.network.GroupKeysApi
 import io.tima.core.network.GroupMessagesApi
 import io.tima.core.network.MessageLevelsOverHttp
+import io.tima.core.network.UserPagesOverHttp
 import io.tima.core.network.GroupsApi
 import io.tima.core.network.HttpMessageTransport
 import io.tima.core.network.KeysApi
@@ -204,6 +205,16 @@ class Network(
      * Отдельной ручкой, а не полем отправки: сужают не тем же действием, которым пишут, и
      * права на это разные — своё сообщение сужает автор, чужое админ.
      */
+    /**
+     * Страница человека: своя лента, чужая лента и перенос к себе.
+     *
+     * Кодек здесь тот же, что у сообщений: у принесённой записи сервер отдаёт байты
+     * оригинала, и разбирать их вторым способом значило бы завести второе представление
+     * текста.
+     */
+    override val pages: UserPagesOverHttp =
+        UserPagesOverHttp(link.route, link.client, token = { session.accessToken }, codec = TextBodyCodec)
+
     override val messageLevels: MessageLevelsOverHttp =
         MessageLevelsOverHttp(link.route, link.client, token = { session.accessToken })
 

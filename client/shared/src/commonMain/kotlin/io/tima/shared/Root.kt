@@ -76,7 +76,9 @@ import io.tima.feature.shell.UpdateOffer
 import io.tima.feature.shell.UpdateSection
 import io.tima.feature.shell.UpdateStore
 import io.tima.feature.chat.NewChatStore
+import io.tima.feature.chat.PageStore
 import io.tima.feature.chat.NewChatScreen
+import io.tima.feature.chat.PageScreen
 import io.tima.feature.chat.ChatScreen
 import io.tima.feature.chat.ChatsScreen
 
@@ -310,6 +312,9 @@ private fun App(
     // Окно 2 «Социум»: свои группы и карточки, которые открыли контакты. Списки живут
     // здесь, а не в оболочке: рама знает раму, работа с сервером — дело feature-group.
     val social = remember { SocialStore(GroupsOverHttp(network.groups), scope) }
+    // Окно 5 «Страница»: своя лента — своё и принесённое. Один Store на приложение: одна
+    // страница у человека, и второй показывал бы то же самое со своим отставанием.
+    val page = remember { PageStore(network.pages, scope) }
     var phoneTab by remember { mutableStateOf("Чаты") }
 
     val new = remember {
@@ -452,6 +457,19 @@ private fun App(
                     onSearch = {},
                     onSettings = { where = Where.Settings() },
                     onNeighbourWindow = switchWindow,
+                    // Своя страница: принесённое и своё вперемешку. Обновляется при
+                    // открытии вкладки — список меняется от чужих действий (автор удалил,
+                    // автор сузил), и держать его закэшированным значило бы показывать то,
+                    // чего уже нет.
+                    feed = {
+                        val state by page.state.collectAsState()
+                        LaunchedEffect(Unit) { page.refresh() }
+                        PageScreen(
+                            state = state,
+                            onRemove = page::remove,
+                            onCloseTrouble = page::troubleDismissed,
+                        )
+                    },
                 )
             }
         },
@@ -513,6 +531,7 @@ private fun App(
                         scope = scope,
                         onBack = { where = Where.Nothing },
                         onMembers = { where = Where.Members(current.chatId, current.name) },
+                        onCarry = { messageId, was -> page.carry(current.chatId, messageId, was) },
                     )
                 }
             }
@@ -554,6 +573,8 @@ private fun Chat(
     scope: kotlinx.coroutines.CoroutineScope,
     onBack: () -> Unit,
     onMembers: () -> Unit,
+    /** Унести реплику к себе на страницу: `(messageId, круг записи)`. */
+    onCarry: (Long, Int) -> Unit = { _, _ -> },
 ) {
     // Групповая ли переписка — решает столбец `kind`, а не догадка по идентификатору.
     // От этого зависит трое: показывать ли автора у реплик, спрашивать ли имена и есть ли
@@ -608,6 +629,10 @@ private fun Chat(
         onNarrowConfirm = store::narrowConfirmed,
         // Показ доступности — только в группе: в личной переписке круга нет.
         onCircles = if (group) store::circlesShown else null,
+        // «Добавить себе» ведёт на свою страницу — то есть в другое окно. Оттого перенос
+        // делает PageStore, а не ChatStore: страница одна, и знать о принесённом обязана
+        // она, а не окно переписки.
+        onCarry = if (group) { messageId, was -> onCarry(messageId, was) } else null,
     )
 }
 
