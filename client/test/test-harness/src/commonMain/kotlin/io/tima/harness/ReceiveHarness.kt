@@ -79,6 +79,13 @@ class ReceiveHarness(private val inbox: Inbox) {
                 decision.eventId?.let { sent += protocol.ackFrame(it) }
             }
 
+            // Сужение круга стенд подтверждает так же: работа по нему — правка местной
+            // записи и строка в переписку, а предмет этой проверки другой.
+            is EventStreamProtocol.Decision.LevelNarrowed -> {
+                aboutKeys += "narrow:${decision.groupId}:${decision.messageId}:${decision.level}"
+                decision.eventId?.let { sent += protocol.ackFrame(it) }
+            }
+
             is EventStreamProtocol.Decision.NeedHistory,
             is EventStreamProtocol.Decision.ServerTrouble,
             is EventStreamProtocol.Decision.Ready,

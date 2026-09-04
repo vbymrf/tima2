@@ -60,7 +60,7 @@ class SqlChatsFeedTest {
                 receivedAtMs = ts,
             ),
         )
-        if (text != null) inbox.storeParsed(chatId, messageId, Codec.encodeText(text), author)
+        if (text != null) inbox.storeParsed(chatId, messageId, Codec.encodeText(text), author, level = -1)
         val entry = inbox.byKey(chatId, messageId)!!
         inbox.update(entry.copy(state = state))
     }

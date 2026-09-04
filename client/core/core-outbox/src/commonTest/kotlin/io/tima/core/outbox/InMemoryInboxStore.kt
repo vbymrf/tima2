@@ -43,11 +43,15 @@ class InMemoryInboxStore : InboxStore {
         rows[entry.key] = entry
     }
 
-    override fun storeParsed(chatId: String, messageId: Long, body: ByteArray, senderId: String) {
+    override fun storeParsed(chatId: String, messageId: Long, body: ByteArray, senderId: String, level: Int) {
         if (failOnEntryBody) error("диск отказал")
         bodies[key(chatId, messageId)] = body
         authors[key(chatId, messageId)] = senderId
+        levels[key(chatId, messageId)] = level
     }
+
+    /** Записанный круг сообщения — по нему проверяется, что уровень доехал до хранилища. */
+    val levels = mutableMapOf<String, Int>()
 
     /** Записанный автор — проверка обязана видеть, что он вообще записан. */
     fun author(chatId: String, messageId: Long): String? = authors[key(chatId, messageId)]

@@ -162,6 +162,32 @@ object GroupMessages {
     }
 
     /**
+     * Открывает ОТКРЫТОЕ сообщение группы — уровни 0…3 (ADR-0019).
+     *
+     * Ключа здесь нет по назначению, но **подпись проверяется так же строго**: открытость
+     * содержимого не отменяет вопроса, кто его написал. Без этой проверки сервер мог бы
+     * подставить в ленту любой текст от чужого имени.
+     */
+    fun openPlain(
+        sealed: SealedGroupMessage,
+        senderSigningPublic: ByteArray,
+    ): Result<ReceivedGroupMessage> = runCatching {
+        require(sealed.meta.gkVersion == 0) {
+            "у открытого сообщения версии ключа нет: ненулевая означает шифр"
+        }
+        val canonical = CanonicalBytes.buildGroupMessage(sealed.meta, sealed.payload)
+        if (!MessageSigner.verify(senderSigningPublic, canonical, sealed.signature)) {
+            throw VerificationFailure("Подпись сообщения группы не прошла проверку")
+        }
+        val body = MessageSerializer.decodeBody(sealed.payload).getOrThrow()
+        ReceivedGroupMessage(
+            meta = sealed.meta,
+            content = MessageContentCodec.fromBody(body),
+            body = sealed.payload,
+        )
+    }
+
+    /**
      * То же открытие, но **по полям кадра**, как они пришли с сервера.
      *
      * Появилось 2026-08-25. До этого приёмник собирал [GroupMessageMeta] сам — восемь
@@ -190,8 +216,9 @@ object GroupMessages {
         payload: ByteArray,
         signature: ByteArray,
         senderSigningPublic: ByteArray,
+        /** Пустой при [gkVersion] = 0: открытому сообщению ключ не нужен. */
         groupKey: ByteArray,
-    ): Result<ReceivedGroupMessage> = open(
+    ): Result<ReceivedGroupMessage> = openAny(
         sealed = SealedGroupMessage(
             meta = GroupMessageMeta(
                 groupId = groupId,
@@ -209,6 +236,15 @@ object GroupMessages {
         senderSigningPublic = senderSigningPublic,
         groupKey = groupKey,
     )
+
+    /** Открыть по тому, шифровано ли: нулевая версия ключа — открытое сообщение. */
+    private fun openAny(
+        sealed: SealedGroupMessage,
+        senderSigningPublic: ByteArray,
+        groupKey: ByteArray,
+    ): Result<ReceivedGroupMessage> =
+        if (sealed.meta.gkVersion == 0) openPlain(sealed, senderSigningPublic)
+        else open(sealed, senderSigningPublic, groupKey)
 }
 
 /** Готовое к отправке сообщение группы: то, что уходит в `POST /groups/{id}/messages`. */

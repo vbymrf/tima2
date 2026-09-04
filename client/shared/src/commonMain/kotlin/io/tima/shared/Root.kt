@@ -17,6 +17,8 @@ import io.tima.core.database.SqlChatBook
 import io.tima.core.database.SqlGroupKeys
 import io.tima.core.network.GroupKeyRecoveryOverHttp
 import io.tima.core.network.GroupsOverHttp
+import io.tima.domain.chat.MessageCircle
+import io.tima.domain.chat.NarrowMessageLevel
 import io.tima.domain.chat.ChatKind
 import io.tima.domain.chat.ChatSummary
 import io.tima.domain.chat.Contact
@@ -76,7 +78,6 @@ import io.tima.feature.shell.UpdateStore
 import io.tima.feature.chat.NewChatStore
 import io.tima.feature.chat.NewChatScreen
 import io.tima.feature.chat.ChatScreen
-import io.tima.feature.chat.MessageCircle
 import io.tima.feature.chat.ChatsScreen
 
 /**
@@ -581,6 +582,9 @@ private fun Chat(
             } else {
                 null
             },
+            // Сужение — только в группе: у личного сообщения круга нет, оно зашифровано и
+            // адресовано одному человеку.
+            narrow = if (group) NarrowMessageLevel(network.messageLevels) else null,
         )
     }
     val state by store.state.collectAsState()
@@ -598,6 +602,12 @@ private fun Chat(
         // адресовано одному человеку — выбирать нечего.
         circle = if (group) MessageCircle.of(state.level) else null,
         onCircle = if (group) { chosen -> store.circleChosen(chosen.level) } else null,
+        // Сужение живёт рядом с меткой круга: показ включён — значит человек занят
+        // доступом, а не чтением. Выключен — реплики выглядят как обычно.
+        onNarrow = if (group) { messageId, was, to -> store.narrowAsked(messageId, was, to) } else null,
+        onNarrowConfirm = store::narrowConfirmed,
+        // Показ доступности — только в группе: в личной переписке круга нет.
+        onCircles = if (group) store::circlesShown else null,
     )
 }
 

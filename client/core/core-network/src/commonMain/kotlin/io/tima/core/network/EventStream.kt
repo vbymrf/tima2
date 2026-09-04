@@ -51,6 +51,11 @@ class EventStream(
          * существующий вызов молча сменил бы смысл.
          */
         onGroupKeys: suspend (EventStreamProtocol.Decision) -> Unit = {},
+        /**
+         * Сужение круга у сообщения. По умолчанию ничего: канал обязан работать и там,
+         * где переписки нет вовсе (проверки транспорта).
+         */
+        onLevelNarrowed: suspend (EventStreamProtocol.Decision.LevelNarrowed) -> Unit = {},
         persist: suspend (EventStreamProtocol.IncomingEvent) -> Unit,
     ): StreamOutcome {
         var last = cursor
@@ -96,6 +101,16 @@ class EventStream(
                                 else -> null
                             }
                             id?.let {
+                                last = it
+                                send(Frame.Text(protocol.ackFrame(it)))
+                            }
+                        }
+
+                        // Подтверждаем так же, как кадры про ключи: работа сделана в том
+                        // смысле, что событие доставлено тому, кто им занимается.
+                        is EventStreamProtocol.Decision.LevelNarrowed -> {
+                            onLevelNarrowed(decision)
+                            decision.eventId?.let {
                                 last = it
                                 send(Frame.Text(protocol.ackFrame(it)))
                             }

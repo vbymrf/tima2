@@ -1,6 +1,7 @@
 package io.tima.shared
 
 import io.tima.core.encryption.DeviceIdentity
+import io.tima.domain.chat.MessageLevels
 import io.tima.core.network.DevicesApi
 import io.tima.core.network.EscrowApi
 import io.tima.core.network.GroupKeyRecoveryApi
@@ -41,6 +42,14 @@ interface ChatPorts {
      * отсюда — просьбой к тому, у кого ключ есть.
      */
     val keyRecovery: GroupKeyRecoveryApi
+
+    /**
+     * Сужение круга у уже отправленного сообщения (ADR-0019 §6).
+     *
+     * Здесь, а не в [GroupPorts]: сужают из окна переписки, глядя на саму реплику, — там
+     * же, где видна её метка. Состав группы к этому отношения не имеет.
+     */
+    val messageLevels: MessageLevels
 }
 
 /** Группы: создание, состав, ротация ключа при смене состава. */

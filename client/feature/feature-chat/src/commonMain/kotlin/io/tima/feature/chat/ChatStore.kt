@@ -1,6 +1,9 @@
 package io.tima.feature.chat
 
 import io.tima.domain.chat.ChatLine
+import io.tima.domain.chat.MessageCircle
+import io.tima.domain.chat.NarrowMessageLevel
+import io.tima.domain.chat.NarrowStep
 import io.tima.domain.chat.MarkRead
 import io.tima.domain.chat.ObserveChat
 import io.tima.domain.chat.ChatNames
@@ -54,6 +57,11 @@ class ChatStore(
      * каждую его реплику именем значит шуметь.
      */
     private val names: ChatNames? = null,
+    /**
+     * Сужение круга у уже отправленного сообщения. `null` — переписка личная: там у
+     * сообщений кругов нет, и предлагать сужение нечему.
+     */
+    private val narrow: NarrowMessageLevel? = null,
     /** Сколько строк держать на экране. Столько же просит и запрос к базе. */
     pageSize: Int = ObserveChat.DEFAULT_PAGE,
 ) {
@@ -102,9 +110,64 @@ class ChatStore(
      * Возвращает исход, потому что вызывающему бывает нужно знать, состоялось ли
      * действие — например чтобы убрать клавиатуру. Состояние при этом уже обновлено.
      */
+    /** Человек включил или выключил показ меток круга. */
+    fun circlesShown(show: Boolean) {
+        _state.value = _state.value.copy(showCircles = show)
+    }
+
     /** Человек выбрал круг для следующего сообщения (ADR-0019). */
     fun circleChosen(level: Int) {
         _state.value = _state.value.copy(level = level)
+    }
+
+    /**
+     * Человек выбрал, до какого круга сузить уже отправленное сообщение.
+     *
+     * **Сначала предупреждение, потом действие, и разделено это намеренно.** Сужение
+     * необратимо и неполно: у тех, кто уже унёс сообщение к себе, запись останется —
+     * сервер чужие переносы не отзывает и отозвать не может. Человек обязан узнать об
+     * этом до нажатия, а не после.
+     *
+     * Расширение сюда не доходит: экран его не предлагает, а доменный случай отвергает.
+     */
+    fun narrowAsked(messageId: Long, was: Int, to: Int) {
+        if (narrow == null) return
+        _state.value = _state.value.copy(
+            pendingNarrow = PendingNarrow(messageId, was, to),
+            notice = ChatNotice.NarrowWarning(MessageCircle.of(to).title),
+        )
+    }
+
+    /** Человек прочитал предупреждение и подтвердил сужение. */
+    fun narrowConfirmed() {
+        val case = narrow ?: return
+        val asked = _state.value.pendingNarrow ?: return
+        _state.value = _state.value.copy(pendingNarrow = null, notice = null)
+        scope.launch {
+            val outcome = case.narrow(chatId, asked.messageId, asked.was, asked.to)
+            _state.value = _state.value.copy(
+                notice = when (outcome) {
+                    // Метку у реплики поменяет не экран, а событие сервера: оно приходит
+                    // всем устройствам, включая наше, и второй источник правды здесь
+                    // означал бы расхождение между тем, что видим мы, и что видят другие.
+                    is NarrowStep.Narrowed -> ChatNotice.Narrowed(MessageCircle.of(outcome.level).title)
+                    NarrowStep.Wider -> ChatNotice.NarrowRefused("Круг можно только сузить — расширить нельзя")
+                    NarrowStep.AlreadySecret ->
+                        ChatNotice.NarrowRefused("Зашифрованное сообщение читают только участники — сужать нечего")
+                    NarrowStep.CannotEncryptLater ->
+                        ChatNotice.NarrowRefused("Открытое сообщение уже разошлось — зашифровать его задним числом нельзя")
+                    NarrowStep.NotAllowed -> ChatNotice.NarrowRefused("Чужое сообщение сужает админ группы")
+                    NarrowStep.NotFound -> ChatNotice.NarrowRefused("Сообщения больше нет в группе")
+                    is NarrowStep.Offline -> ChatNotice.NarrowRefused("Нет связи с сервером — повторите позже")
+                    is NarrowStep.Refused -> ChatNotice.NarrowRefused("Сервер отказал: ${outcome.reason}")
+                },
+            )
+        }
+    }
+
+    /** Человек передумал сужать. */
+    fun narrowDropped() {
+        _state.value = _state.value.copy(pendingNarrow = null, notice = null)
     }
 
     fun sendPressed(): SendMessageResult {
@@ -209,9 +272,27 @@ data class ChatState(
      * заменяет его при первом же касании.
      */
     val level: Int = -1,
+    /**
+     * Показывать ли метки круга у реплик.
+     *
+     * **По умолчанию выключено.** Метка отвечает на вопрос, которого у обычного участника
+     * нет: он и так видит ровно то, что ему открыто. Включает её тот, кто распоряжается
+     * содержимым, — админ или автор.
+     */
+    val showCircles: Boolean = false,
     /** Имена авторов по идентификатору. Пусто для личной переписки. */
     val names: Map<String, String> = emptyMap(),
+    /**
+     * Сужение, о котором человека предупредили и которого он ещё не подтвердил.
+     *
+     * Держится в состоянии, а не в замыкании кнопки: предупреждение — это отдельный шаг,
+     * и между показом и подтверждением экран может пережить поворот.
+     */
+    val pendingNarrow: PendingNarrow? = null,
 )
+
+/** Задуманное сужение: до какого круга и от какого. */
+data class PendingNarrow(val messageId: Long, val was: Int, val to: Int)
 
 /**
  * Сообщение человеку. Список короткий намеренно: то, что очередь решает сама
@@ -242,4 +323,17 @@ sealed interface ChatNotice {
     data object KeysNeedPhrase : ChatNotice
 
     data class KeysRefused(val text: String) : ChatNotice
+
+    /**
+     * Предупреждение перед сужением: у тех, кто унёс, запись останется.
+     *
+     * Это главное, чего человек не ожидает. Сужение выглядит как «спрятать», а прячет оно
+     * только вперёд: перенос уже сделан, и отзывать чужие страницы никто не станет.
+     */
+    data class NarrowWarning(val circle: String) : ChatNotice
+
+    /** Сузили. Круг назван словами: номера человек не видит нигде. */
+    data class Narrowed(val circle: String) : ChatNotice
+
+    data class NarrowRefused(val text: String) : ChatNotice
 }

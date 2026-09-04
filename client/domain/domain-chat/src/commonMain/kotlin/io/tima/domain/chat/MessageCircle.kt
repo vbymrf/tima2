@@ -1,6 +1,4 @@
-package io.tima.feature.chat
-
-import io.tima.domain.chat.SendGroupMessage
+package io.tima.domain.chat
 
 /**
  * Круг сообщения — то, что человек выбирает перед отправкой (ADR-0019).
@@ -11,6 +9,10 @@ import io.tima.domain.chat.SendGroupMessage
  *
  * Личной группе доступны только «Всем и всегда» (описание) и «Зашифровано» — градаций
  * внутри шифра нет и не будет.
+ *
+ * **Живёт в домене, а не на экране.** Теми же словами говорит служебная строка о сужении,
+ * которую пишет фоновый обработчик события: будь список слов в `feature-chat`, у одного
+ * понятия оказалось бы два словаря, и они разошлись бы при первой же правке.
  */
 enum class MessageCircle(val level: Int, val title: String, val about: String) {
     /** Уровень 0: описание группы — его видят все, кому открыта карточка. */
@@ -26,7 +28,7 @@ enum class MessageCircle(val level: Int, val title: String, val about: String) {
     ByGrant(3, "По разрешению", "Только тем, кому админ открыл доступ"),
 
     /** Уровень −1: шифр. Умолчание в личной группе. */
-    Secret(SendGroupMessage.LEVEL_SECRET, "Зашифровано", "Прочитают только участники, по ключу группы");
+    Secret(LEVEL_SECRET, "Зашифровано", "Прочитают только участники, по ключу группы");
 
     companion object {
         /**
@@ -37,6 +39,16 @@ enum class MessageCircle(val level: Int, val title: String, val about: String) {
          */
         fun forGroup(personal: Boolean): List<MessageCircle> =
             if (personal) listOf(Secret, Everyone) else listOf(Outside, Members, ByGrant, Everyone)
+
+        /**
+         * Круги уже названного — то, до чего сообщение можно сузить (ADR-0019 §6).
+         *
+         * Шифра здесь нет никогда: сделать открытое сообщение зашифрованным невозможно —
+         * оно уже лежит на сервере открытым, и ключа сервер не видит по построению.
+         */
+        fun narrowerThan(was: Int): List<MessageCircle> =
+            if (was == LEVEL_SECRET) emptyList()
+            else entries.filter { it.level > was }.sortedBy { it.level }
 
         /** Круг по номеру уровня; неизвестный — шифр: молчать безопаснее, чем показать лишнее. */
         fun of(level: Int): MessageCircle = entries.firstOrNull { it.level == level } ?: Secret

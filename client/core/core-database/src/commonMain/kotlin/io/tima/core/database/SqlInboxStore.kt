@@ -76,10 +76,13 @@ class SqlInboxStore(
      * успешного разбора он больше не нужен, а тело — нужно: его показывает экран. Пока
      * этой записи не было, состояние `STORED` означало «разобрано и потеряно».
      */
-    override fun storeParsed(chatId: String, messageId: Long, body: ByteArray, senderId: String) {
+    override fun storeParsed(chatId: String, messageId: Long, body: ByteArray, senderId: String, level: Int) {
         q.updateParsed(
             body_enc = cipher.seal(body),
             sender_id = senderId,
+            // Круг сообщения записывается вместе с телом: метку у реплики рисовать не по
+            // чему, если уровень остался только в пришедшем кадре.
+            level = level.toLong(),
             dedup_key = keyOf(chatId, messageId),
         )
     }

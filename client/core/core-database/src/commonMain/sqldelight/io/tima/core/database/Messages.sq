@@ -64,7 +64,11 @@ CREATE TABLE messages (
     -- Стоит ПОСЛЕДНИМ не для красоты: миграция 3.sqm добавляет его через ALTER TABLE, а
     -- тот всегда дописывает колонку в конец. Поставь его выше — и `verifyMigration`
     -- поймает расхождение порядка между свежей базой и мигрированной.
-    level           INTEGER NOT NULL DEFAULT -1
+    level           INTEGER NOT NULL DEFAULT -1,
+    -- Служебная строка: её написали не человек, а событие сервера (сужение круга).
+    -- Автора у неё нет, подписи тоже — поэтому признак отдельный, а не «пустой
+    -- отправитель». Дописана миграцией 4.sqm, отсюда и место в конце.
+    system          INTEGER NOT NULL DEFAULT 0
 );
 
 -- Порядок в чате. Индекс повторяет правило сортировки, иначе список чата на
@@ -184,7 +188,18 @@ SELECT * FROM messages WHERE direction = 1 AND state IN (?, ?) ORDER BY local_id
 -- sender_id до разбора пуст намеренно: автор известен только после сошедшейся подписи, а
 -- выдуманное значение потом пришлось бы отличать от настоящего.
 updateParsed:
-UPDATE messages SET body_enc = ?, sender_id = ? WHERE dedup_key = ?;
+UPDATE messages SET body_enc = ?, sender_id = ?, level = ? WHERE dedup_key = ?;
+
+-- Круг сообщения изменили после отправки: админ или сам автор сузил его (ADR-0019 §6).
+-- Меняется ТОЛЬКО уровень: тело и автор остаются теми, что были проверены подписью.
+updateLevel:
+UPDATE messages SET level = :level WHERE chat_id = :chatId AND server_id = :serverId;
+
+-- Служебная строка в переписке. Направление входящее — она приходит человеку, а не от
+-- него; отправитель пуст, и признак `system` отличает её от неразобранного сообщения.
+insertSystem:
+INSERT OR IGNORE INTO messages(dedup_key, chat_id, sender_id, client_ts, direction, state, attempts, body_enc, system)
+VALUES (?, ?, '', ?, 1, ?, 0, ?, 1);
 
 -- Прочитано: всё разобранное этой переписки. Предусловие в самом запросе — переход идёт
 -- ТОЛЬКО из STORED, потому что прочитанным становится разобранное. Неразобранное и

@@ -11,6 +11,7 @@ import io.tima.core.network.EventStream
 import io.tima.core.outbox.IncomingEntry
 import io.tima.core.outbox.OpenOutcome
 import io.tima.domain.account.Session
+import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.ChatKind
 import kotlinx.coroutines.delay
 
@@ -71,6 +72,7 @@ class Receiver(
                     .run(
                         cursor = null,
                         onGroupKeys = { decision -> aboutKeys(decision) },
+                        onLevelNarrowed = { decision -> aboutLevel(decision) },
                     ) { event -> accept(event.chatId, event.messageId, event.envelope) }
             }
             lastOutcome = outcome.fold(
@@ -117,8 +119,14 @@ class Receiver(
     private fun openGroup(entry: IncomingEntry): OpenOutcome {
         val frame = GroupFrame.parse(entry.envelope)
             ?: return OpenOutcome.Rejected("кадр группы не разбирается")
-        val groupKey = groupKeys.key(frame.groupId, frame.gkVersion)
-            ?: return OpenOutcome.NoKey("нет ключа версии ${frame.gkVersion}")
+        // Открытому сообщению (уровни 0…3) ключ не нужен: его читает тот, кому ключа не
+        // дадут, — описание личной группы, лента публичной. Подпись при этом проверяется
+        // так же строго.
+        val plain = frame.gkVersion == 0
+        val groupKey = if (plain) ByteArray(0) else {
+            groupKeys.key(frame.groupId, frame.gkVersion)
+                ?: return OpenOutcome.NoKey("нет ключа версии ${frame.gkVersion}")
+        }
         val captionKey = senderKeys[frame.senderDevice]
             ?: return OpenOutcome.NoKey("ключ подписи отправителя не получен")
 
@@ -138,7 +146,7 @@ class Receiver(
             senderSigningPublic = captionKey,
             groupKey = groupKey,
         ).fold(
-            onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId) },
+            onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId, frame.level) },
             onFailure = { OpenOutcome.Rejected("сообщение группы не открылось: ${it.message}") },
         )
     }
@@ -146,6 +154,28 @@ class Receiver(
     /** Кадр про групповые ключи: исход остаётся в диагностике, канал не роняется. */
     private suspend fun aboutKeys(decision: EventStreamProtocol.Decision) {
         keyOrchestrator.handle(decision)?.let { lastOutcome = it }
+    }
+
+    /**
+     * Круг сообщения сузили: метку у реплики поменять, и сказать словами почему.
+     *
+     * **Оба действия обязательны, и второе важнее.** Одна метка объясняет только тому, кто
+     * включил их показ; всем остальным реплика просто пропадает из чужих лент, и это
+     * выглядит как поломка. Поэтому в группу ложится строка — там же, где живёт само
+     * сообщение, и там же, где админ может объяснить причину.
+     *
+     * Ключ строки собран из идентификатора события: тот же кадр приезжает и живым каналом,
+     * и догоном истории, а строк об одном сужении должно остаться ровно одна.
+     */
+    private fun aboutLevel(decision: EventStreamProtocol.Decision.LevelNarrowed) {
+        environment.journal.levelChanged(decision.groupId, decision.messageId, decision.level)
+        val circle = MessageCircle.of(decision.level)
+        environment.journal.note(
+            chatId = decision.groupId,
+            key = "level/${decision.groupId}/${decision.messageId}/${decision.level}",
+            text = "Круг сообщения сузили: теперь «${circle.title}». ${circle.about}",
+            atMs = msNow(),
+        )
     }
 
     /**

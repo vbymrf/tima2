@@ -56,17 +56,22 @@ class SqlChatFeed(
     private fun Messages.toLine() = ChatLine(
         dedupKey = dedup_key,
         chatId = chat_id,
-        display = displayOf(direction, state),
+        display = displayOf(direction, state, system),
         // Два шага, и порядок обязателен: сначала открыть поле ключом покоя, потом
         // разобрать тело кодеком. Любой из шагов может не удаться, и тогда текста нет —
         // строка остаётся в переписке нечитаемой. Одна испорченная запись не должна
         // лишать человека всей истории.
-        text = lineText(direction, state, body_enc),
+        text = lineText(direction, state, body_enc, system),
         outgoing = own(direction, sender_id),
         // Серверное время, если сообщение дошло; иначе часы устройства. Они врут, но
         // других на момент составления нет.
         atMs = server_ts ?: client_ts,
+        level = level.toInt(),
         localId = local_id,
+        // Ноль, а не null: «сервер его ещё не видел» и «идентификатор ноль» — одно и то
+        // же состояние, и разделять их значило бы плодить проверку на пустоту у каждого
+        // действия над сообщением.
+        serverId = server_id ?: 0,
         // Автор берётся из столбца, куда он записан ПОСЛЕ проверки подписи. До разбора
         // там пусто, и это честнее выдуманного имени: пустое место видно, подделка нет.
         senderId = sender_id.ifBlank { null },
@@ -90,8 +95,10 @@ class SqlChatFeed(
      * только после успешной расшифровки. Поэтому у непринятого и нечитаемого текста нет
      * по определению, и пытаться разобрать конверт кодеком незачем — это не тело.
      */
-    private fun lineText(direction: Long, state: Long, field: ByteArray): String? {
-        if (direction != OUTGOING && !incomingParsed(state)) return null
+    private fun lineText(direction: Long, state: Long, field: ByteArray, system: Long): String? {
+        // Служебная строка лежит уже разобранной: конверта у неё не было — её написало
+        // само устройство, получив событие сервера.
+        if (system == 0L && direction != OUTGOING && !incomingParsed(state)) return null
         val open = cipher.open(field) ?: return null
         return codec.decodeText(open)
     }

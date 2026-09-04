@@ -185,5 +185,6 @@ private fun mark(kind: MessageDisplay): MarkKind? = when (kind) {
     MessageDisplay.PENDING -> MarkKind.Waits
     MessageDisplay.SENT -> MarkKind.Left
     MessageDisplay.FAILED -> MarkKind.NotLeft
-    MessageDisplay.RECEIVED, MessageDisplay.UNREADABLE -> null
+    // Служебная строка не отправлялась — отмечать у неё нечего.
+    MessageDisplay.RECEIVED, MessageDisplay.UNREADABLE, MessageDisplay.SYSTEM -> null
 }

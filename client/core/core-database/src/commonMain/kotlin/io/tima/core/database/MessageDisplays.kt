@@ -21,7 +21,10 @@ import io.tima.domain.chat.MessageDisplay
  */
 internal const val OUTGOING = 0L
 
-internal fun displayOf(direction: Long, state: Long): MessageDisplay {
+internal fun displayOf(direction: Long, state: Long, system: Long = 0): MessageDisplay {
+    // Служебная строка решается раньше состояния: состояние у неё формальное, а показать
+    // её обычным входящим значило бы приписать ей автора, которого нет.
+    if (system != 0L) return MessageDisplay.SYSTEM
     val ordinal = state.toInt()
     return if (direction == OUTGOING) {
         when (OutboxState.entries.getOrNull(ordinal)) {

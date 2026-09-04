@@ -38,6 +38,14 @@ class GroupFrame(
     val createdAtUnixMs: Long,
     val threadRoot: Long,
     val replyTo: Long,
+    /**
+     * Круг сообщения (ADR-0019): −1 — шифр, 0…3 — открытое.
+     *
+     * В подпись не входит: подпись неизменна, а уровень по замыслу сужается после
+     * отправки. Здесь он нужен для двух вещей — понять, надо ли искать ключ, и показать
+     * метку у реплики.
+     */
+    val level: Int = -1,
 ) {
 
     companion object {
@@ -79,14 +87,17 @@ class GroupFrame(
                 senderId = senderId,
                 senderDevice = senderDevice,
                 kind = json.int("kind") ?: 0,
-                // Ноль означает публичную группу с открытым текстом. Клиент такие не
-                // умеет, и разбор их отвергнет — но кадр всё равно сохранится.
+                // Ноль означает открытое сообщение (уровни 0…3): ключа у него нет по
+                // назначению — его читает тот, кому ключа не дадут.
                 gkVersion = json.int("gk_version") ?: 0,
                 payload = payload,
                 signature = signature,
                 createdAtUnixMs = json.long("created_at_unix_ms") ?: 0,
                 threadRoot = json.long("thread_root") ?: 0,
                 replyTo = json.long("reply_to") ?: 0,
+                // Молчание сервера про уровень — шифр: так вело себя всё до ADR-0019, и
+                // принять открытым то, о чём не сказано, было бы опаснее.
+                level = json.int("level") ?: -1,
             )
         }
     }

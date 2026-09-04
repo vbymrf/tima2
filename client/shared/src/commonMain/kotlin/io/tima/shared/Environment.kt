@@ -1,5 +1,6 @@
 package io.tima.shared
 
+import io.tima.core.database.SqlChatJournal
 import io.tima.core.database.SqlChatFeed
 import io.tima.core.database.SqlChatFacts
 import io.tima.core.database.SqlContacts
@@ -28,6 +29,7 @@ import io.tima.core.network.EventStream
 import io.tima.core.network.GroupKeyRecoveryApi
 import io.tima.core.network.GroupKeysApi
 import io.tima.core.network.GroupMessagesApi
+import io.tima.core.network.MessageLevelsOverHttp
 import io.tima.core.network.GroupsApi
 import io.tima.core.network.HttpMessageTransport
 import io.tima.core.network.KeysApi
@@ -51,6 +53,7 @@ import io.tima.domain.account.LinkNewDevice
 import io.tima.domain.account.MyDevices
 import io.tima.domain.account.RegisterDevice
 import io.tima.domain.account.Session
+import io.tima.domain.chat.ChatJournal
 import io.tima.domain.chat.MarkRead
 import io.tima.domain.chat.ObserveChat
 import io.tima.domain.chat.ObserveChats
@@ -196,6 +199,15 @@ class Network(
         GroupMessagesApi(link.route, link.client, token = { session.accessToken })
 
     /**
+     * Сужение круга у уже отправленного сообщения (ADR-0019 §6).
+     *
+     * Отдельной ручкой, а не полем отправки: сужают не тем же действием, которым пишут, и
+     * права на это разные — своё сообщение сужает автор, чужое админ.
+     */
+    override val messageLevels: MessageLevelsOverHttp =
+        MessageLevelsOverHttp(link.route, link.client, token = { session.accessToken })
+
+    /**
      * Недостающие версии ключа: попросить и отдать.
      *
      * Отдельно от [ключиГрупп], потому что это другая работа: там выпуск новой версии,
@@ -310,6 +322,14 @@ class Environment private constructor(
     val contacts: ObserveContacts = ObserveContacts(SqlContacts(db, cipher))
 
     val chat: ObserveChat = ObserveChat(SqlChatFeed(db, TextBodyCodec, cipher, myUserId))
+
+    /**
+     * Местные записи в переписке: смена круга у сообщения и служебная строка о ней.
+     *
+     * Пишет их приёмник по событию сервера. Наружу они не уходят: подписи у такой строки
+     * нет, и уйти ей некуда — каждый участник получает своё событие сам.
+     */
+    val journal: ChatJournal = SqlChatJournal(db, TextBodyCodec, cipher)
 
     /** Открытая переписка прочитана: счётчик непрочитанного обязан гаснуть. */
     val reading: MarkRead = MarkRead(SqlReadMarks(incoming))

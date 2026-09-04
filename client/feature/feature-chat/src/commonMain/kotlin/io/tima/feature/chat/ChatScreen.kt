@@ -38,6 +38,7 @@ import io.tima.core.ui.Tima
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Chip
+import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.MessageDisplay
 
@@ -89,6 +90,25 @@ fun ChatScreen(
      */
     circle: MessageCircle? = null,
     onCircle: ((MessageCircle) -> Unit)? = null,
+    /**
+     * Сузить круг у уже отправленной реплики: `(messageId, было, стало)`.
+     *
+     * `null` — сужать нечем: личная переписка либо мы не распоряжаемся содержимым.
+     * **Расширения здесь нет и быть не может** — экран предлагает только круги уже
+     * нынешнего, и это не украшение, а само правило (ADR-0019 §6): предложить расширение
+     * значило бы довести человека до отказа сервера.
+     */
+    onNarrow: ((Long, Int, Int) -> Unit)? = null,
+    /** Человек подтвердил сужение, о последствиях которого его предупредили. */
+    onNarrowConfirm: () -> Unit = {},
+    /**
+     * Показывать ли доступность у реплик. `null` — переписка личная: там показывать нечего.
+     *
+     * Переключатель в шапке, а не в настройках приложения: он относится к этой группе и к
+     * этому занятию — разобраться, кто что видит. Уйдя в настройки, он превратился бы в
+     * забытый флаг, о котором вспоминают, когда метки уже мешают.
+     */
+    onCircles: ((Boolean) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     Column(modifier.fillMaxSize().background(colors.surface)) {
@@ -96,8 +116,25 @@ fun ChatScreen(
             title = peer,
             onBack = onBack,
             caption = caption,
-            right = onMembers?.let { open ->
-                { Chip("Участники", kind = ChipKind.Selected, onClick = open) }
+            right = if (onMembers != null || onCircles != null) {
+                {
+                    Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                        onCircles?.let { switch ->
+                            // Слово «доступность», а не «уровни»: человек видит, кому
+                            // открыта реплика, а не понятие сервера.
+                            Chip(
+                                label = "Доступность",
+                                kind = if (state.showCircles) ChipKind.Selected else ChipKind.Quiet,
+                                onClick = { switch(!state.showCircles) },
+                            )
+                        }
+                        onMembers?.let { open ->
+                            Chip("Участники", kind = ChipKind.Selected, onClick = open)
+                        }
+                    }
+                }
+            } else {
+                null
             },
         )
 
@@ -114,6 +151,8 @@ fun ChatScreen(
                 else state.names[line.senderId] ?: "Участник"
             },
             modifier = Modifier.weight(1f),
+            showCircles = state.showCircles,
+            onNarrow = onNarrow,
         )
 
         // Полоса недоступной истории — над вводом и ОДНА на экран, а не у каждой строки.
@@ -133,7 +172,15 @@ fun ChatScreen(
             )
         }
 
-        state.notice?.let { Trouble(it, onCloseMessage) }
+        state.notice?.let {
+            Trouble(
+                trouble = it,
+                onClose = onCloseMessage,
+                // Подтверждение появляется только у предупреждения: у остальных заметок
+                // подтверждать нечего, и кнопка там означала бы действие без действия.
+                onConfirm = if (it is ChatNotice.NarrowWarning) onNarrowConfirm else null,
+            )
+        }
 
         InputZone(
             typed = state.draft,
@@ -158,6 +205,9 @@ private fun Feed(
     lines: List<ChatLine>,
     authorName: (ChatLine) -> String?,
     modifier: Modifier = Modifier,
+    /** Показывать ли метку круга у реплик. По умолчанию нет — см. [ChatState.showCircles]. */
+    showCircles: Boolean = false,
+    onNarrow: ((Long, Int, Int) -> Unit)? = null,
 ) =
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
@@ -180,9 +230,35 @@ private fun Feed(
                 // показалось бы вовсе.
                 continuation = previous?.outgoing == line.outgoing &&
                     previous?.senderId == line.senderId,
+                showCircle = showCircles,
+                onNarrow = onNarrow,
             )
         }
     }
+
+/**
+ * Метка круга у реплики: стрелка вправо и номер.
+ *
+ * Вправо — потому что запись не скачивается, а **уходит дальше**: на стену, оттуда к
+ * друзьям. Цвет говорит быстрее номера: зелёная — можно унести, тихая — нельзя, янтарная
+ * — по разрешению. Номер нужен тем, кто разбирается; остальным хватает цвета, и это
+ * правильный порядок — цвет читается за полсекунды, номер за две.
+ *
+ * Слова «уровень» здесь нет: человек видит круг, а не понятие сервера.
+ */
+@Composable
+private fun CircleMark(level: Int) {
+    if (level < 0) return // шифр метки не носит: в нём и так всё закрыто
+    Chip(
+        label = "→ $level",
+        kind = when (level) {
+            0, 1 -> ChipKind.Confirmed // можно унести к себе
+            3 -> ChipKind.Neutral      // по разрешению
+            else -> ChipKind.Quiet     // только своим
+        },
+        horizontalPadding = 6.dp,
+    )
+}
 
 /**
  * Одна реплика: пузырь, время и отметка; в группе — ещё имя и аватар автора.
@@ -192,7 +268,39 @@ private fun Feed(
  * не задаётся.
  */
 @Composable
-private fun Reply(line: ChatLine, author: String?, continuation: Boolean) = Bubble(
+private fun Reply(
+    line: ChatLine,
+    author: String?,
+    continuation: Boolean,
+    showCircle: Boolean = false,
+    onNarrow: ((Long, Int, Int) -> Unit)? = null,
+) {
+    // Служебная строка — не реплика: у неё нет автора, стороны и времени отправки. Пузырь
+    // приписал бы ей всё это разом, поэтому она идёт полосой по центру.
+    if (line.display == MessageDisplay.SYSTEM) {
+        SystemLine(line.text.orEmpty())
+        return
+    }
+    Bubbled(line, author, continuation, showCircle, onNarrow)
+}
+
+/** Служебная строка: сказанное приложением, а не человеком. */
+@Composable
+private fun SystemLine(text: String) = Row(
+    modifier = Modifier.fillMaxWidth().padding(vertical = TimaSpacing.about2),
+    horizontalArrangement = Arrangement.Center,
+) {
+    Tertiary(text, lineOne = false)
+}
+
+@Composable
+private fun Bubbled(
+    line: ChatLine,
+    author: String?,
+    continuation: Boolean,
+    showCircle: Boolean,
+    onNarrow: ((Long, Int, Int) -> Unit)?,
+) = Bubble(
     my = line.outgoing,
     author = author,
     avatar = author?.take(1)?.uppercase(),
@@ -200,6 +308,9 @@ private fun Reply(line: ChatLine, author: String?, continuation: Boolean) = Bubb
     bottom = {
         Tertiary(time(line.atMs), lineOne = true)
         mark(line.display)?.let { Mark(it) }
+        // Метка круга — рядом со временем, а не поверх текста: цвет несёт метка, а не
+        // буквы. Красить текст значило бы, что читаемость зависит от доступа.
+        if (showCircle) CircleMark(line.level)
     },
 ) {
     val text = line.text
@@ -219,6 +330,31 @@ private fun Reply(line: ChatLine, author: String?, continuation: Boolean) = Bubb
 
         else -> Chip("расшифровывается…", kind = ChipKind.Quiet)
     }
+
+    // Сужение предлагается там же, где показана метка: оба про одно — кто это видит.
+    // У неотправленного серверного идентификатора нет, и сужать там нечего.
+    if (onNarrow != null && showCircle && line.level >= 0 && line.serverId > 0) {
+        NarrowChoice(line.level) { to -> onNarrow(line.serverId, line.level, to) }
+    }
+}
+
+/**
+ * Круги, до которых можно сузить эту реплику.
+ *
+ * **Список считается от нынешнего круга, а не выбирается из всех.** Расширение отвергнет
+ * сервер, но доводить до отказа нельзя: кнопка, которая заведомо не сработает, — это
+ * обещание, которого приложение не держит.
+ */
+@Composable
+private fun NarrowChoice(was: Int, onPick: (Int) -> Unit) {
+    val narrower = MessageCircle.narrowerThan(was)
+    if (narrower.isEmpty()) return
+    Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+        Tertiary("сузить до", lineOne = true)
+        for (circle in narrower) {
+            Chip(circle.title, kind = ChipKind.Quiet, onClick = { onPick(circle.level) })
+        }
+    }
 }
 
 /**
@@ -231,7 +367,8 @@ private fun mark(kind: MessageDisplay): MarkKind? = when (kind) {
     MessageDisplay.PENDING -> MarkKind.Waits
     MessageDisplay.SENT -> MarkKind.Left
     MessageDisplay.FAILED -> MarkKind.NotLeft
-    MessageDisplay.RECEIVED, MessageDisplay.UNREADABLE -> null
+    // Служебной строке отмечать нечего: её никто не отправлял.
+    MessageDisplay.RECEIVED, MessageDisplay.UNREADABLE, MessageDisplay.SYSTEM -> null
 }
 
 /**
@@ -310,7 +447,7 @@ private fun InputZone(
  * незачем: это видно по отметке у реплики. Остаётся то, что требует его решения.
  */
 @Composable
-private fun Trouble(trouble: ChatNotice, onClose: () -> Unit) {
+private fun Trouble(trouble: ChatNotice, onClose: () -> Unit, onConfirm: (() -> Unit)? = null) {
     val colors = Tima.colors
     Row(
         modifier = Modifier
@@ -348,6 +485,15 @@ private fun Trouble(trouble: ChatNotice, onClose: () -> Unit) {
                     "ключ сменится, и новые сообщения откроются. Прежние — только по фразе"
 
             is ChatNotice.KeysRefused -> trouble.text
+
+            // Главное здесь — второе предложение. Сужение прячет вперёд, а не назад: у
+            // тех, кто уже унёс запись к себе, она останется, и узнать об этом человек
+            // обязан ДО нажатия.
+            is ChatNotice.NarrowWarning ->
+                "Сузить до «${trouble.circle}»? У тех, кто уже унёс сообщение к себе, оно останется"
+
+            is ChatNotice.Narrowed -> "Круг сужен: теперь «${trouble.circle}»"
+            is ChatNotice.NarrowRefused -> trouble.text
         }
         Caption(
             text,
@@ -355,6 +501,7 @@ private fun Trouble(trouble: ChatNotice, onClose: () -> Unit) {
             weight = FontWeight.Bold,
             modifier = Modifier.weight(1f),
         )
+        onConfirm?.let { Chip("Сузить", kind = ChipKind.Selected, onClick = it) }
         ButtonCircle(onClick = onClose) { Arrow(Side.Right, color = colors.text2) }
     }
 }

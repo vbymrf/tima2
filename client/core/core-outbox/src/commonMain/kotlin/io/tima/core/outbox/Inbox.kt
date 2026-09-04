@@ -91,7 +91,14 @@ sealed interface OpenOutcome {
      *   подписью. До этого поля столбец `sender_id` оставался пустым навсегда, и узнать
      *   автора было нельзя ни в группе, ни у сообщения со своего второго устройства.
      */
-    data class Opened(val body: ByteArray, val senderId: String) : OpenOutcome
+    data class Opened(
+        val body: ByteArray,
+        val senderId: String,
+        /**
+         * Круг сообщения (ADR-0019). У личной переписки всегда −1: там открытых не бывает.
+         */
+        val level: Int = -1,
+    ) : OpenOutcome
 
     /**
      * Ключа нет — попробуем позже. Не ошибка данных: обёртка для этого устройства
@@ -139,7 +146,7 @@ interface InboxStore {
      * означало «разобрано и потеряно». Обязанность, которую можно передать пустой
      * лямбдой, однажды передадут пустой лямбдой везде.
      */
-    fun storeParsed(chatId: String, messageId: Long, body: ByteArray, senderId: String)
+    fun storeParsed(chatId: String, messageId: Long, body: ByteArray, senderId: String, level: Int)
 
     /**
      * Перевести всё разобранное этой переписки в «прочитано».
@@ -207,7 +214,7 @@ class Inbox(
         val entry = store.nextReceived() ?: return null
         val updated = when (val outcome = open(entry)) {
             is OpenOutcome.Opened -> {
-                store.storeParsed(entry.chatId, entry.messageId, outcome.body, outcome.senderId)
+                store.storeParsed(entry.chatId, entry.messageId, outcome.body, outcome.senderId, outcome.level)
                 entry.copy(state = IncomingState.STORED, undecryptableReason = null)
             }
             is OpenOutcome.NoKey -> entry.copy(

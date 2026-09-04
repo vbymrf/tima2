@@ -98,6 +98,22 @@ class EventStreamProtocol {
          */
         data class RotationNeeded(val groupId: String, val reason: String, val eventId: Long?) : Decision
 
+        /**
+         * Круг сообщения сузили (ADR-0019 §6): админ спрятал реплику от части группы.
+         *
+         * Кадр не несёт ни тела, ни подписи — менять по нему можно ровно одно поле, и
+         * только в сторону сужения. Слово об этом идёт человеку строкой в саму группу:
+         * пропавшая из чужих лент реплика без объяснения выглядит как поломка.
+         */
+        data class LevelNarrowed(
+            val groupId: String,
+            val messageId: Long,
+            val level: Int,
+            /** Кто сузил. Пусто — сервер не назвал, и врать про «админа» мы не станем. */
+            val by: String,
+            val eventId: Long?,
+        ) : Decision
+
         /** Кадр не наш или испорчен — пропускаем, но курсор двигаем (правило 3). */
         data class Skip(val reason: String, val eventId: Long?) : Decision
     }
@@ -227,6 +243,17 @@ class EventStreamProtocol {
                 json.string("group_id")?.let {
                     Decision.RotationNeeded(it, json.string("reason") ?: "epoch", eventId)
                 } ?: Decision.Skip("group.rotation_needed без group_id", eventId)
+
+            "message.level_narrowed" -> {
+                val groupId = json.string("group_id")
+                val messageId = json["message_id"]?.jsonPrimitive?.longOrNull
+                val level = json["level"]?.jsonPrimitive?.intOrNull
+                if (groupId == null || messageId == null || level == null) {
+                    Decision.Skip("message.level_narrowed без обязательных полей", eventId)
+                } else {
+                    Decision.LevelNarrowed(groupId, messageId, level, json.string("by") ?: "", eventId)
+                }
+            }
 
             "error" -> Decision.ServerTrouble(json.string("code") ?: "без кода")
 
