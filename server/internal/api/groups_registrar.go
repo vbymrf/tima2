@@ -34,7 +34,8 @@ type GroupStore interface {
 
 	// Сообщения группы
 	SaveGroupMessage(ctx context.Context, m store.GroupMessage) (int64, bool, error)
-	ListGroupMessages(ctx context.Context, groupID string, threadRoot, before int64, limit int) ([]store.GroupMessage, error)
+	ListGroupMessages(ctx context.Context, groupID string, threadRoot, before int64, limit int, maxLevel int16) ([]store.GroupMessage, error)
+	NarrowGroupMessageLevel(ctx context.Context, groupID string, messageID int64, level int16, requesterID string, allowForeign bool) (string, error)
 	GroupMessageExists(ctx context.Context, groupID string, messageID int64) (bool, error)
 	SenderPostedWithin(ctx context.Context, groupID, senderID string, seconds int32) (bool, error)
 
@@ -94,6 +95,7 @@ func RegisterGroups(
 
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/messages", requireDevice(postGroupMessage(deps)))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}/messages", requireDevice(listGroupMessages(deps)))
+	mux.HandleFunc("PATCH /api/v1/groups/{groupID}/messages/{messageID}", requireDevice(patchGroupMessageLevel(deps)))
 
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys", requireDevice(groupRotate(deps)))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}/keys", requireDevice(groupKeys(deps)))

@@ -67,6 +67,7 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 		var req struct {
 			ClientMsgID     string `json:"client_msg_id"`
 			Kind            uint32 `json:"kind"`
+			Level           *int16 `json:"level"` // nil = умолчание по виду группы
 			GKVersion       int32  `json:"gk_version"`
 			Payload         string `json:"payload"` // base64url
 			ThreadRoot      int64  `json:"thread_root"`
@@ -98,8 +99,37 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			return
 		}
 
+		// Уровень: кому сервер отдаст сообщение (ADR-0019). В подпись не входит —
+		// он меняется после отправки, а подпись неизменна.
+		level := defaultLevel(g.Kind)
+		if req.Level != nil {
+			level = *req.Level
+		}
+		if level < levelSecret || level > levelByGrant {
+			writeErr(w, http.StatusBadRequest, "bad_level", "уровень вне диапазона -1…3")
+			return
+		}
+		// Личная группа знает только -1 и 0 (ADR-0019 §2): всё, кроме описания,
+		// зашифровано, а градаций внутри шифра нет.
+		if g.Kind == "private" && level > levelPublicShowcase {
+			writeErr(w, http.StatusBadRequest, "level_in_private", "в личной группе бывают только уровни -1 и 0")
+			return
+		}
+		// В публичной группе шифра нет вовсе, значит и -1 неоткуда взяться.
+		if g.Kind == "public" && level == levelSecret {
+			writeErr(w, http.StatusBadRequest, "secret_in_public", "публичная группа не шифруется: уровень -1 недоступен")
+			return
+		}
+		// Открытый текст на сервере ограничен по размеру: без предела он превращается
+		// в бесплатный хостинг. Точный предел — 4096 знаков UTF-16 — проверяет клиент,
+		// потому что знает содержимое; сервер видит байты и держит грубую границу.
+		if level >= levelPublicShowcase && len(payload) > maxPlainPayloadBytes {
+			writeErr(w, http.StatusBadRequest, "payload_too_large", "открытое сообщение больше 16 KiB")
+			return
+		}
+
 		// Крипто-инварианты по типу группы
-		if g.Kind == "private" {
+		if g.Kind == "private" && level == levelSecret {
 			if req.GKVersion == 0 {
 				writeErr(w, http.StatusBadRequest, "no_gk_version", "private-группа: нужен gk_version")
 				return
@@ -119,7 +149,9 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 				return
 			}
 		} else if req.GKVersion != 0 {
-			writeErr(w, http.StatusBadRequest, "gk_in_public", "public-группа: без gk_version")
+			// Незашифрованное сообщение с версией ключа — противоречие: версия говорит,
+			// что payload закрыт, а уровень — что открыт.
+			writeErr(w, http.StatusBadRequest, "gk_without_secret", "gk_version бывает только у уровня -1")
 			return
 		}
 
@@ -177,6 +209,7 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			ReplyTo:         req.ReplyTo,
 			CreatedAtUnixMs: req.CreatedAtUnixMs,
 			Signature:       signature,
+			Level:           level,
 		}
 		messageID, duplicate, err := deps.store.SaveGroupMessage(r.Context(), msg)
 		if err != nil {
@@ -229,6 +262,7 @@ func groupMessageJSON(m store.GroupMessage) map[string]any {
 		"reply_to":           m.ReplyTo,
 		"created_at_unix_ms": m.CreatedAtUnixMs,
 		"signature":          b64.EncodeToString(m.Signature),
+		"level":              m.Level,
 	}
 }
 
@@ -252,7 +286,7 @@ func listGroupMessages(deps groupsDeps) http.HandlerFunc {
 		}
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 
-		msgs, err := deps.store.ListGroupMessages(r.Context(), r.PathValue("groupID"), thread, before, limit)
+		msgs, err := deps.store.ListGroupMessages(r.Context(), r.PathValue("groupID"), thread, before, limit, maxLevelFor(role))
 		if err != nil {
 			log.Printf("listGroupMessages: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
