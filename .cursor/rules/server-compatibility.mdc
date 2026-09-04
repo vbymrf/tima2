@@ -1,5 +1,5 @@
 ---
-description: Compatibility rules for server schema and API changes, so a deployed server keeps working with clients already installed on phones
+description: Compatibility rules for server schema and API changes while v2 is being built: additive migrations, widening API, server before client
 globs: server/migrations/**,server/internal/store/**,server/internal/api/**
 alwaysApply: false
 ---
@@ -9,11 +9,17 @@ alwaysApply: false
 Full text and reasoning: `ПРАВИЛА-РАБОТЫ.md` §2–§4. Here is what must hold while
 this code is being edited.
 
-> **The server must keep working with an old client.**
+> **Additive migrations, a widening API, server deployed before client.**
 
-The asymmetry is not a preference. There is one server and you control it. There
-are many clients, on other people's phones, updating whenever they feel like it
-or never. A broken old client cannot be reached, let alone fixed.
+**The reason is no longer "old clients".** `doc_mig/Plan.md §0.0` decision 3 dropped
+support for previous clients, decision 2 wipes server data, and v2 is not released
+yet — there is no old client anywhere. Do not justify anything by their existence;
+that was the wording in `CLAUDE.md` until 2026-09-04 and it produced wrong decisions.
+
+What holds instead is decision 5: **the envelope format and the API do not change
+until v2 works.** Debugging a client against a moving server means three unknowns
+at once. Once v2 ships to real phones, compatibility between its own versions
+becomes a separate decision, taken then and not assumed now.
 
 ## Migrations are additive
 
@@ -43,9 +49,9 @@ Prefer that shape.
 
 **Server before client. Always, no exceptions decided locally.**
 
-A server that understands both old and new is safe at any moment. A client that
-requires an endpoint the server does not have yet is broken from the first
-second.
+A client that requires an endpoint the server does not have yet is broken from the
+first second. The reverse costs nothing: an endpoint nobody calls yet is dead code,
+not a defect.
 
 ## Irreversible changes ship alone
 
