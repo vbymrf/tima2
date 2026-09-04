@@ -134,6 +134,36 @@
   .вар-ж.нет { border-color: var(--чёрный-35); color: var(--чёрный-50); }
   .вар-ж.нет > .круг { background: var(--чёрный-35); }
 
+  /* З — знак копирования (две карточки с плюсом) слева, плюс цвета шапки.
+     Форма взята с doc_add/13959086.png. */
+  .вар-з {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 9px 2px 6px; border-radius: var(--радиус-круг);
+    border: 2px solid var(--подтверждено); background: none;
+    font-size: 10.5px; font-weight: 800; color: var(--текст); text-decoration: none;
+    --плюс-знака: var(--навигация);
+  }
+  .вар-з > .зн { width: 15px; height: 15px; flex: 0 0 auto; color: var(--чёрный-70); }
+  .вар-з.нет { border-color: var(--чёрный-12); color: var(--чёрный-50); --плюс-знака: var(--чёрный-35); }
+  .вар-з.нет > .зн { color: var(--чёрный-35); }
+
+  /* И — тот же знак, но в круге справа и плюс цвета выделения */
+  .вар-и {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 3px 2px 9px; border-radius: var(--радиус-круг);
+    border: 2px solid var(--подтверждено); background: none;
+    font-size: 10.5px; font-weight: 800; color: var(--текст); text-decoration: none;
+    --плюс-знака: var(--подтверждено);
+  }
+  .вар-и > .круг {
+    width: 22px; height: 22px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--чёрный-6); color: var(--чёрный-70);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .вар-и .зн { width: 15px; height: 15px; }
+  .вар-и.нет { border-color: var(--чёрный-12); color: var(--чёрный-50); --плюс-знака: var(--чёрный-35); }
+  .вар-и.нет > .круг { color: var(--чёрный-35); }
+
   /* В — сцеплённая пилюля: слева круг, справа стрелка */
   .вар-в { display: inline-flex; border-radius: var(--радиус-круг); overflow: hidden; font-size: 10.5px; font-weight: 800; }
   .вар-в > .лев { padding: 3px 8px; background: var(--чёрный-6); color: var(--чёрный-70); }
@@ -142,7 +172,7 @@
 
 <div class="лист-док">
 <div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-социум / уровни.html</div>
-<h1>Уровень сообщения <span class="вид">29 экранов</span></h1>
+<h1>Уровень сообщения <span class="вид">31 экран</span></h1>
 <p class="подзаголовок">
   Нарисовано 2026-09-03 после того, как заказчик принял <b>монотонную шкалу</b> и
   <b>асимметрию админа</b>. Модель — <code>doc_add/макеты-группы/ЕДИНЫЙ-ФОРМАТ.md</code> (вне git),
@@ -677,13 +707,18 @@
   <symbol id="strelka-unesti" viewBox="0 0 24 24">
     <path d="M2.6 16.8 C4.4 9.8, 9.8 6.2, 14.6 7.0 L14.6 3.0 L21.8 10.3 L14.6 17.6 L14.6 13.6 C10.2 12.9, 5.9 13.9, 2.6 16.8 Z"/>
   </symbol>
+  <symbol id="znak-kopii" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="2" width="14" height="14" rx="4" stroke="currentColor"/>
+    <path d="M16 8H18A4 4 0 0 1 22 12V18A4 4 0 0 1 18 22H12A4 4 0 0 1 8 18V16" stroke="currentColor"/>
+    <path d="M9 5V13M5 9H13" stroke-width="2.4" stroke="var(--плюс-знака, currentColor)"/>
+  </symbol>
 </svg>
 
-<h2>5. Семь видов кнопки «себе на страницу»</h2>
+<h2>5. Девять видов кнопки «себе на страницу»</h2>
 
 <p class="подзаголовок">
   Замысел заказчика: кнопка живёт <b>на самой метке</b>, а не отдельно. Можно унести —
-  метка зелёная и со стрелкой; нажал на метку — унёс. Ниже семь исполнений, каждое
+  метка зелёная и со стрелкой; нажал на метку — унёс. Ниже девять исполнений, каждое
   показано на трёх видах сообщения.
 </p>
 
@@ -1020,6 +1055,111 @@
       Отсюда видно развилку, а не семь равных вариантов: <b>знак либо стоит в заливке (Е),
       либо в своём круге (Ж)</b>. Круг заметнее и годится в плотном списке, где меток много;
       заливка тише и не спорит с именем автора рядом.
+    </div>
+  </div>
+
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно"><span class="имя-окна тянуть">Вариант З · знак копирования</span></div>
+        <div class="зона-2">
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение человека</div>
+            <div class="обр">
+              <span class="ава мал">ЛГ</span><span class="имя тянуть" style="font-size:var(--щ5)">Лена Г.</span>
+              <a class="вар-з" href="#"><svg class="зн"><use href="#znak-kopii"/></svg>Всем</a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение группы</div>
+            <div class="обр">
+              <span class="ава мал">Я</span><span class="имя тянуть" style="font-size:var(--щ5)">Ядро · Пётр С.</span>
+              <a class="вар-з" href="#"><svg class="зн"><use href="#znak-kopii"/></svg>Всем</a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение канала</div>
+            <div class="обр">
+              <span class="ава мал">РН</span><span class="имя тянуть" style="font-size:var(--щ5)">Разбор недели</span>
+              <a class="вар-з" href="#"><svg class="зн"><use href="#znak-kopii"/></svg>Всем</a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Нельзя унести — тот же знак, серый</div>
+            <div class="обр">
+              <span class="ава мал">МК</span><span class="имя тянуть" style="font-size:var(--щ5)">Марк К.</span>
+              <span class="вар-з нет"><svg class="зн"><use href="#znak-kopii"/></svg>Своим</span>
+            </div>
+          </div>
+          <div class="системное">Плюс — цвета шапки. Один цветной штрих в знаке, остальное серым.</div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">вариант З</div>
+    </div>
+    <div class="замечание">
+      <b>Знак с картинки</b> (<code>doc_add/13959086.png</code>): две карточки, плюс внутри
+      передней. Плюс покрашен <b>цветом шапки</b> — единственное цветное место в знаке.
+      <br><br>
+      Он говорит не то же, что стрелка. <b>Стрелка — «уходит дальше», знак — «прибавляю к
+      себе»</b>, и второе ближе к тому, что человек делает: добавляет запись на свою
+      страницу. Направление при этом не показано вовсе.
+      <br><br>
+      Оговорка, которую надо держать в уме: <b>две карточки — это общепринятое «копировать»</b>.
+      У нас копии нет, есть ссылка. Знак может пообещать не то, что произойдёт.
+    </div>
+  </div>
+
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно"><span class="имя-окна тянуть">Вариант И · знак в круге</span></div>
+        <div class="зона-2">
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение человека</div>
+            <div class="обр">
+              <span class="ава мал">ЛГ</span><span class="имя тянуть" style="font-size:var(--щ5)">Лена Г.</span>
+              <a class="вар-и" href="#">Всем<span class="круг"><svg class="зн"><use href="#znak-kopii"/></svg></span></a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение группы</div>
+            <div class="обр">
+              <span class="ава мал">Я</span><span class="имя тянуть" style="font-size:var(--щ5)">Ядро · Пётр С.</span>
+              <a class="вар-и" href="#">Всем<span class="круг"><svg class="зн"><use href="#znak-kopii"/></svg></span></a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Сообщение канала</div>
+            <div class="обр">
+              <span class="ава мал">РН</span><span class="имя тянуть" style="font-size:var(--щ5)">Разбор недели</span>
+              <a class="вар-и" href="#">Всем<span class="круг"><svg class="зн"><use href="#znak-kopii"/></svg></span></a>
+            </div>
+          </div>
+          <div class="проба-кнопки">
+            <div class="трет">Нельзя унести — круг гаснет</div>
+            <div class="обр">
+              <span class="ава мал">МК</span><span class="имя тянуть" style="font-size:var(--щ5)">Марк К.</span>
+              <span class="вар-и нет">Своим<span class="круг"><svg class="зн"><use href="#znak-kopii"/></svg></span></span>
+            </div>
+          </div>
+          <div class="системное">Плюс — цвета выделения. Круг отделяет знак от слова: нажимать сюда.</div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">вариант И</div>
+    </div>
+    <div class="замечание">
+      Тот же знак, но <b>в своём круге и справа</b> — как Ж со стрелкой. Плюс здесь взят
+      <b>цветом выделения</b>, а не шапки: сравнить два цвета можно только рядом.
+      <br><br>
+      Круг даёт знаку поле и делает место нажатия очевидным; цена — <b>метка становится
+      выше</b> (22 против 19 у З) и в строке с именем автора весит заметно больше.
+      <br><br>
+      Развилка та же, что у Е и Ж: <b>знак в строке или знак в круге</b>. Выбирать стоит
+      один раз — для всех меток сразу, а не отдельно для стрелки и для карточек.
     </div>
   </div>
 
