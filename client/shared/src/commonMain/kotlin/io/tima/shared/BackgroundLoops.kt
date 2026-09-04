@@ -36,6 +36,10 @@ fun BackgroundLoops(
     // задержку, и лишние пробуждения.
     LaunchedEffect(changeSign) {
         assembled.sender.pass()
+        // Групповой проход идёт следом, а не вместо: в очереди лежат и личные, и
+        // групповые, и каждый берёт своё. Порядок между ними значения не имеет — записи
+        // не пересекаются.
+        assembled.groupSender.pass()
     }
 
     // Живой канал держится, пока живо окно. Переподключение решает приёмник: у него
@@ -51,6 +55,7 @@ fun BackgroundLoops(
         while (true) {
             delay(ПОВТОРЫ_КАЖДЫЕ_МС)
             assembled.sender.pass()
+            assembled.groupSender.pass()
         }
     }
 }

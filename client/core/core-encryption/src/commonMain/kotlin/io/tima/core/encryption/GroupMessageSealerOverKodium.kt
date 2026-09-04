@@ -43,6 +43,38 @@ class GroupMessageSealerOverKodium(
         return SealedGroupBytes(payload = assembled.payload, signature = assembled.signature)
     }
 
+    /**
+     * Собрать сообщение из ГОТОВОГО тела — того, что уже лежит в очереди.
+     *
+     * В очереди хранится `zstd(protobuf(MessageBody))`, собранный при постановке. Достать
+     * из него текст, чтобы упаковать заново, значило бы разобрать и собрать одно и то же
+     * — и однажды собрать иначе, чем в первый раз.
+     *
+     * @param key пустой при [gkVersion] = 0: открытое сообщение шифра не имеет.
+     */
+    fun sealPrepared(
+        groupId: String,
+        gkVersion: Int,
+        key: ByteArray,
+        body: ByteArray,
+        createdAtUnixMs: Long,
+    ): SealedGroupBytes? {
+        val meta = GroupMessageMeta(
+            groupId = groupId,
+            senderId = senderId,
+            senderDevice = senderDeviceId,
+            kind = KIND_TEXT,
+            createdAtUnixMs = createdAtUnixMs,
+            gkVersion = gkVersion,
+        )
+        val assembled = if (gkVersion == 0) {
+            GroupMessages.sealPreparedPlain(body, meta, identity).getOrNull()
+        } else {
+            GroupMessages.sealPrepared(body, meta, identity, key).getOrNull()
+        } ?: return null
+        return SealedGroupBytes(payload = assembled.payload, signature = assembled.signature)
+    }
+
     private companion object {
         /** `CK_TEXT` из `envelope.proto`. */
         const val KIND_TEXT = 1

@@ -90,6 +90,46 @@ object GroupMessages {
     }
 
     /**
+     * То же, что [seal], но тело уже упаковано — оно пришло из очереди исходящих.
+     *
+     * Очередь хранит `zstd(protobuf(MessageBody))`, собранный при постановке сообщения.
+     * Разбирать его обратно ради повторной упаковки значило бы делать одну и ту же работу
+     * дважды — и однажды сделать её иначе.
+     */
+    fun sealPrepared(
+        body: ByteArray,
+        meta: GroupMessageMeta,
+        sender: DeviceIdentity,
+        groupKey: ByteArray,
+    ): Result<SealedGroupMessage> = runCatching {
+        require(meta.gkVersion >= 1) {
+            "версия группового ключа обязана быть не меньше 1: нулевая означает открытый payload"
+        }
+        val payload = EnvelopeCipher.seal(groupKey, body).getOrThrow()
+        SealedGroupMessage(
+            meta = meta,
+            payload = payload,
+            signature = MessageSigner.sign(sender.key, CanonicalBytes.buildGroupMessage(meta, payload)).getOrThrow(),
+        )
+    }
+
+    /** То же для ОТКРЫТОГО сообщения: тело уходит как есть, шифра нет, подпись есть. */
+    fun sealPreparedPlain(
+        body: ByteArray,
+        meta: GroupMessageMeta,
+        sender: DeviceIdentity,
+    ): Result<SealedGroupMessage> = runCatching {
+        require(meta.gkVersion == 0) {
+            "у открытого сообщения версии ключа нет: ненулевая означает шифр"
+        }
+        SealedGroupMessage(
+            meta = meta,
+            payload = body,
+            signature = MessageSigner.sign(sender.key, CanonicalBytes.buildGroupMessage(meta, body)).getOrThrow(),
+        )
+    }
+
+    /**
      * Открывает пришедшее сообщение группы.
      *
      * Подпись проверяется **до** расшифровки и по тем же метаданным, что пришли с сервером:

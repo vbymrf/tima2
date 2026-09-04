@@ -49,6 +49,7 @@ class AtRestEncryptionTest {
                 dedup_key = "d-1", chat_id = "chat-1", sender_id = "",
                 client_ts = 1, state = 0, attempts = 0,
                 next_attempt_at = null, reply_to = null,
+                level = -1,
                 body_enc = marker.encodeToByteArray(),
             )
         }

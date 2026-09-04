@@ -114,7 +114,13 @@ class GroupKeysApi(
             WrappedGroupKey(gkVersion = version, senderEphemeralPub = ephemeral, wrapped = wrap)
         } ?: return GroupKeysResult.Refused(response.status.value, "ответ без keys")
 
-        return GroupKeysResult.Keys(keys = keys, currentVersion = body.int("current_version") ?: 0)
+        // Эпоха последней версии (ADR-0017 §3): по ней клиент сам видит, что ключ
+        // устарел, — событие сервера можно пропустить, будучи офлайн.
+        return GroupKeysResult.Keys(
+            keys = keys,
+            currentVersion = body.int("current_version") ?: 0,
+            escrowEpoch = body.str("escrow_epoch").orEmpty(),
+        )
     }
 }
 
@@ -142,7 +148,12 @@ sealed interface RotateResult {
 }
 
 sealed interface GroupKeysResult {
-    data class Keys(val keys: List<WrappedGroupKey>, val currentVersion: Int) : GroupKeysResult
+    data class Keys(
+        val keys: List<WrappedGroupKey>,
+        val currentVersion: Int,
+        /** Эпоха, на которую завёрнут блоб последней версии. Пусто — сервер её не назвал. */
+        val escrowEpoch: String = "",
+    ) : GroupKeysResult
     data class Refused(val status: Int, val code: String) : GroupKeysResult
     data class NoConnection(val link: LinkState) : GroupKeysResult
 }

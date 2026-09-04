@@ -1,5 +1,6 @@
 package io.tima.core.outbox
 
+import io.tima.domain.chat.LEVEL_SECRET
 import io.tima.domain.chat.OutgoingQueue
 
 /**
@@ -72,6 +73,13 @@ data class OutboxEntry(
     val dedupKey: String,
     val chatId: String,
     val body: ByteArray,
+    /**
+     * Круг сообщения (ADR-0019): −1 — шифр, 0…3 — открытое.
+     *
+     * Отправитель решает по нему **один** вопрос: нужен ли ключ. Всё остальное про
+     * уровень знает сервер — здесь это данные, а не ось.
+     */
+    val level: Int = LEVEL_SECRET,
     val state: OutboxState = OutboxState.QUEUED,
     val attempts: Int = 0,
     val nextAttemptAtMs: Long = 0,
@@ -252,15 +260,22 @@ class Outbox(
      */
     private val cachedEpochs = HashMap<String, Long>()
 
-    override fun enqueue(dedupKey: String, chatId: String, body: ByteArray): Boolean {
+    override fun enqueue(dedupKey: String, chatId: String, body: ByteArray, level: Int): Boolean =
+        enqueue(dedupKey, chatId, body, level, now = nowMs())
+
+    /** Тот же вызов с умолчанием: круг по умолчанию — шифр. */
+    fun enqueue(dedupKey: String, chatId: String, body: ByteArray): Boolean =
+        enqueue(dedupKey, chatId, body, LEVEL_SECRET)
+
+    private fun enqueue(dedupKey: String, chatId: String, body: ByteArray, level: Int, now: Long): Boolean {
         require(dedupKey.isNotBlank()) { "dedupKey пустой: по нему опознаётся повтор" }
         require(body.isNotEmpty()) { "тело пустое" }
-        val now = nowMs()
         return store.putIfAbsent(
             OutboxEntry(
                 dedupKey = dedupKey,
                 chatId = chatId,
                 body = body,
+                level = level,
                 state = OutboxState.QUEUED,
                 nextAttemptAtMs = now,
                 createdAtMs = now,
@@ -346,6 +361,25 @@ class Outbox(
      * останется в `SENDING` до следующего [recoverOnStart]. Это страховка, а не
      * рабочий путь.
      */
+    /**
+     * Взять следующее ожидающее сообщение переписки и отдать его на отправку **без
+     * конверта**.
+     *
+     * Для групповых сообщений: у них нет фазы `SEALED`, потому что нет и конверта —
+     * шифрует групповой ключ (или не шифрует вовсе, если это уровень 0…3). Личный путь
+     * этим методом не пользуется: там между очередью и отправкой обязательно стоит
+     * запечатывание под ключ эпохи escrow.
+     *
+     * Перевод в `SENDING` идёт вместе с выбором, как и в [claimForSend]: между ними
+     * нельзя оказаться, иначе два прохода возьмут одну запись и сообщение уйдёт дважды.
+     */
+    fun claimQueued(chatId: String): OutboxEntry? {
+        val entry = store.nextQueued(chatId, nowMs()) ?: return null
+        val claimed = entry.copy(state = OutboxState.SENDING)
+        store.update(claimed)
+        return claimed
+    }
+
     fun onOutcome(dedupKey: String, outcome: SendOutcome) {
         val entry = store.byDedupKey(dedupKey)
             ?: error("нет записи $dedupKey: результат пришёл не на своё сообщение")

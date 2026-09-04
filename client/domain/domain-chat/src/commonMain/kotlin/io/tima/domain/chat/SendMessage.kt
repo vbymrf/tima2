@@ -31,7 +31,10 @@ class SendMessage(
      * @param chatId переписка, в которую уходит сообщение.
      * @param text то, что набрал человек.
      */
-    fun send(chatId: String, text: String): SendMessageResult {
+    /**
+     * @param level круг сообщения (ADR-0019). По умолчанию шифр — прежнее поведение.
+     */
+    fun send(chatId: String, text: String, level: Int = LEVEL_SECRET): SendMessageResult {
         require(chatId.isNotBlank()) { "chatId пустой" }
 
         // Пустое отсекаем до всего остального: очередь, кодек и ключ на нём тратить
@@ -49,7 +52,7 @@ class SendMessage(
         val dedupKey = keys.newKey()
         require(dedupKey.isNotBlank()) { "ключ идемпотентности пустой" }
 
-        return if (queue.enqueue(dedupKey, chatId, body)) {
+        return if (queue.enqueue(dedupKey, chatId, body, level)) {
             SendMessageResult.Queued(dedupKey)
         } else {
             // Такой ключ уже в очереди. Не ошибка: так выглядит повторное нажатие,
@@ -80,8 +83,16 @@ sealed interface SendMessageResult {
  * @return `false`, если такой `dedupKey` уже есть.
  */
 fun interface OutgoingQueue {
-    fun enqueue(dedupKey: String, chatId: String, body: ByteArray): Boolean
+    /**
+     * @param level круг сообщения (ADR-0019). −1 — шифр, 0…3 — открытое. Хранится в
+     *   очереди, потому что решение «нужен ли ключ» принимается при отправке, а она
+     *   может случиться после перезапуска.
+     */
+    fun enqueue(dedupKey: String, chatId: String, body: ByteArray, level: Int): Boolean
 }
+
+/** Круг по умолчанию: шифр. Всё, что было в очереди до появления кругов, — именно он. */
+const val LEVEL_SECRET: Int = -1
 
 /**
  * Порт к упаковке тела. Реализуется `core-encryption`: `zstd(protobuf(MessageBody))`.

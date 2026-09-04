@@ -42,6 +42,7 @@ class SqlOutboxStore(
             attempts = entry.attempts.toLong(),
             next_attempt_at = entry.nextAttemptAtMs,
             reply_to = null,
+            level = entry.level.toLong(),
             body_enc = cipher.seal(entry.body),
         )
         // INSERT OR IGNORE молчит при конфликте, поэтому «поставили» отличается от
@@ -114,6 +115,7 @@ class SqlOutboxStore(
         createdAtMs = client_ts,
         serverMessageId = server_id,
         sealedForEpoch = sealed_epoch,
+        level = level.toInt(),
     )
 
     private companion object {

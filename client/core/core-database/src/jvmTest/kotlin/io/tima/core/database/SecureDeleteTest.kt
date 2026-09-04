@@ -74,7 +74,7 @@ class SecureDeleteTest {
         db.messagesQueries.insertQueued(
             dedup_key = "d-1", chat_id = "chat-1", sender_id = "me",
             client_ts = 1, state = 0, attempts = 0,
-            next_attempt_at = null, reply_to = null, body_enc = marker,
+            next_attempt_at = null, reply_to = null, level = -1, body_enc = marker,
         )
         // Убедиться, что маркер вообще дошёл до файла: иначе оба теста бессмысленны.
         driver.execute(null, "VACUUM;", 0)

@@ -25,6 +25,14 @@ class Assembled(
     val environment: Environment,
     val network: Network,
     val sender: Sender,
+    /**
+     * Второй проход очереди — групповой.
+     *
+     * Отдельно от [sender], потому что до отправки у них разное всё: личному нужны ключ
+     * эпохи escrow и устройства собеседника, групповому — версия ключа группы либо
+     * ничего, если сообщение открытое.
+     */
+    val groupSender: GroupSender,
     val receiver: Receiver,
     val keyOrchestrator: GroupKeyOrchestrator,
 )
@@ -60,6 +68,14 @@ fun assemble(entry: Entry, device: Entry.Device, deviceDatabase: () -> TimaDatab
                 network = network,
                 session = device.session,
                 identity = identity,
+            ),
+            groupSender = GroupSender(
+                environment = environment,
+                network = network,
+                session = device.session,
+                identity = identity,
+                rotate = keyOrchestrator::rotate,
+                stale = keyOrchestrator::keyStale,
             ),
             receiver = Receiver(
                 environment = environment,

@@ -57,7 +57,14 @@ CREATE TABLE messages (
     -- Почему входящее не расшифровалось: для диагностики и для показа человеку.
     -- NULL у исходящих и у прочитанных.
     undecryptable_reason TEXT,
-    body_enc        BLOB    NOT NULL
+    body_enc        BLOB    NOT NULL,
+    -- Круг сообщения (ADR-0019): -1 шифр, 0…3 открытые. Отправитель решает по нему один
+    -- вопрос — нужен ли ключ.
+    --
+    -- Стоит ПОСЛЕДНИМ не для красоты: миграция 3.sqm добавляет его через ALTER TABLE, а
+    -- тот всегда дописывает колонку в конец. Поставь его выше — и `verifyMigration`
+    -- поймает расхождение порядка между свежей базой и мигрированной.
+    level           INTEGER NOT NULL DEFAULT -1
 );
 
 -- Порядок в чате. Индекс повторяет правило сортировки, иначе список чата на
@@ -71,8 +78,8 @@ CREATE INDEX idx_messages_queue ON messages(direction, state, next_attempt_at);
 -- ── Очередь исходящих ───────────────────────────────────────────────────────
 
 insertQueued:
-INSERT OR IGNORE INTO messages(dedup_key, chat_id, sender_id, client_ts, direction, state, attempts, next_attempt_at, reply_to, body_enc)
-VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?);
+INSERT OR IGNORE INTO messages(dedup_key, chat_id, sender_id, client_ts, direction, state, attempts, next_attempt_at, reply_to, level, body_enc)
+VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?);
 
 -- Сколько строк затронула последняя вставка: 0 означает, что dedup_key уже был.
 -- Отличать «поставили» от «уже было» обязательно — иначе повторная постановка

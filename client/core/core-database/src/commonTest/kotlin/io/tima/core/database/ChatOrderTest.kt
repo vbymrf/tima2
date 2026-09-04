@@ -21,7 +21,7 @@ class ChatOrderTest {
         q.insertQueued(
             dedup_key = id, chat_id = "chat-1", sender_id = "me",
             client_ts = clientTs, state = 0, attempts = 0,
-            next_attempt_at = null, reply_to = null, body_enc = byteArrayOf(1),
+            next_attempt_at = null, reply_to = null, level = -1, body_enc = byteArrayOf(1),
         )
         if (serverTs != null) {
             q.markSent(state = 3, server_id = 1, server_ts = serverTs, dedup_key = id)
@@ -68,7 +68,7 @@ class ChatOrderTest {
         q.insertQueued(
             dedup_key = "чужой", chat_id = "chat-2", sender_id = "me",
             client_ts = 100, state = 0, attempts = 0,
-            next_attempt_at = null, reply_to = null, body_enc = byteArrayOf(1),
+            next_attempt_at = null, reply_to = null, level = -1, body_enc = byteArrayOf(1),
         )
         assertEquals(listOf("свой"), q.chatPage("chat-1", 10).executeAsList().map { it.dedup_key })
     }

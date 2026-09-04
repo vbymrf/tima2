@@ -14,7 +14,7 @@ class SendMessageTest {
 
     private class Queue(val taken: Set<String> = emptySet()) : OutgoingQueue {
         val put = mutableListOf<Triple<String, String, ByteArray>>()
-        override fun enqueue(dedupKey: String, chatId: String, body: ByteArray): Boolean {
+        override fun enqueue(dedupKey: String, chatId: String, body: ByteArray, level: Int): Boolean {
             put += Triple(dedupKey, chatId, body)
             return dedupKey !in taken
         }

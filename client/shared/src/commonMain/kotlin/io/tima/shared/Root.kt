@@ -76,6 +76,7 @@ import io.tima.feature.shell.UpdateStore
 import io.tima.feature.chat.NewChatStore
 import io.tima.feature.chat.NewChatScreen
 import io.tima.feature.chat.ChatScreen
+import io.tima.feature.chat.MessageCircle
 import io.tima.feature.chat.ChatsScreen
 
 /**
@@ -593,6 +594,10 @@ private fun Chat(
         onRequestKey = store::requestKey,
         onPhrase = store::changedPhrase,
         onMembers = if (group) onMembers else null,
+        // Круг предлагается только в группе: в личной переписке всё зашифровано и
+        // адресовано одному человеку — выбирать нечего.
+        circle = if (group) MessageCircle.of(state.level) else null,
+        onCircle = if (group) { chosen -> store.circleChosen(chosen.level) } else null,
     )
 }
 

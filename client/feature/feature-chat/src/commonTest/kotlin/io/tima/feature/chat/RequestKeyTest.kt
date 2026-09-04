@@ -88,7 +88,7 @@ class RequestKeyTest {
         chatId = "gggggggg-0000-0000-0000-000000000001",
         observe = ObserveChat(ChatFeed { _, _ -> stream }),
         send = SendMessage(
-            queue = OutgoingQueue { _, _, _ -> true },
+            queue = OutgoingQueue { _, _, _, _ -> true },
             codec = object : MessageBodyCodec {
                 override fun encodeText(text: String) = ByteArray(10)
                 override fun decodeText(body: ByteArray): String? = null

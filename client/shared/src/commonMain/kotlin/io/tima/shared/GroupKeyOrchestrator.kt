@@ -7,6 +7,11 @@ import io.tima.core.database.SqlGroupKeys
 import io.tima.core.network.EventStreamProtocol
 import io.tima.core.network.GroupKeyRecoveryOverHttp
 import io.tima.core.network.GroupKeyWrapsOverHttp
+import io.tima.core.network.GroupKeysResult
+import io.tima.domain.chat.RotateStep
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import io.tima.domain.chat.ShareGroupKeys
 import io.tima.domain.chat.SyncGroupKeys
 
@@ -28,7 +33,7 @@ import io.tima.domain.chat.SyncGroupKeys
  */
 class GroupKeyOrchestrator(
     environment: Environment,
-    network: GroupPorts,
+    private val network: GroupPorts,
     identity: DeviceIdentity,
     private val msNow: () -> Long,
 ) {
@@ -57,6 +62,37 @@ class GroupKeyOrchestrator(
 
     /** Ключи этого устройства: их читает разбор сообщений группы. */
     val keys: SqlGroupKeys get() = groupKeys
+
+    /**
+     * Ротировать ключ группы. Тот же путь, что по событию сервера.
+     *
+     * Нужен отправке: перед зашифрованной посылкой ключ обязан быть привязан к текущей
+     * эпохе (ADR-0017 §2), иначе сообщение окажется невосстановимым по ордеру в день
+     * отправки.
+     */
+    suspend fun rotate(groupId: String): Boolean =
+        rotation.rotate(groupId) is RotateStep.Rotated
+
+    /**
+     * Устарела ли версия ключа группы: эпоха её выпуска ≠ текущая.
+     *
+     * Спрашивается у сервера: эпохи знает он (`escrow_epoch` в `GET /groups/{id}/keys`), а
+     * клиент — только версии. Молчание сервера про эпоху трактуется как «не устарела»:
+     * лишняя ротация стоит фан-аута обёрток по всем устройствам, а пропущенная —
+     * восстановимости по ордеру, и второе чинится ближайшим событием сервера.
+     */
+    suspend fun keyStale(groupId: String): Boolean {
+        val answer = network.groupKeys.mine(groupId)
+        val epoch = (answer as? GroupKeysResult.Keys)?.escrowEpoch.orEmpty()
+        if (epoch.isEmpty()) return false
+        return epoch != currentEpoch()
+    }
+
+    /** Текущая эпоха escrow — «2026-09». Тот же формат, что у сервера. */
+    private fun currentEpoch(): String {
+        val now = Instant.fromEpochMilliseconds(msNow()).toLocalDateTime(TimeZone.UTC)
+        return now.year.toString() + "-" + now.monthNumber.toString().padStart(2, '0')
+    }
 
     /**
      * Обработать кадр. Возвращает строку для диагностики — ту же, что раньше писал

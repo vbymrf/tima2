@@ -7,6 +7,7 @@ import io.tima.domain.chat.ChatFacts
 import io.tima.domain.chat.ObserveContacts
 import io.tima.core.database.SqlChatsFeed
 import io.tima.core.database.SqlInboxStore
+import io.tima.core.database.SqlGroupKeys
 import io.tima.core.database.SqlOutboxStore
 import io.tima.core.database.SqlReadMarks
 import io.tima.core.database.TimaDatabase
@@ -26,6 +27,7 @@ import io.tima.core.network.EscrowApi
 import io.tima.core.network.EventStream
 import io.tima.core.network.GroupKeyRecoveryApi
 import io.tima.core.network.GroupKeysApi
+import io.tima.core.network.GroupMessagesApi
 import io.tima.core.network.GroupsApi
 import io.tima.core.network.HttpMessageTransport
 import io.tima.core.network.KeysApi
@@ -185,6 +187,15 @@ class Network(
     override val groupKeys: GroupKeysApi = GroupKeysApi(link.route, link.client, token = { session.accessToken })
 
     /**
+     * Отправка сообщений группы.
+     *
+     * Отдельный порт от личного транспорта: у группового сообщения нет ни конверта, ни
+     * обёрток на устройства — есть версия ключа либо открытый текст.
+     */
+    val groupMessages: GroupMessagesApi =
+        GroupMessagesApi(link.route, link.client, token = { session.accessToken })
+
+    /**
      * Недостающие версии ключа: попросить и отдать.
      *
      * Отдельно от [ключиГрупп], потому что это другая работа: там выпуск новой версии,
@@ -283,6 +294,14 @@ class Environment private constructor(
      * Порт вместо прямого запроса: схема базы перестала быть публичным API — до этого
      * миграция столбца была правкой экранов и приёмника.
      */
+    /**
+     * Книга групповых ключей.
+     *
+     * Здесь же, а не только внутри [GroupKeyOrchestrator]: ключи нужны и отправке
+     * ([GroupSender]) — она обязана взять свежую версию перед шифрованием.
+     */
+    val groupKeyBook: SqlGroupKeys = SqlGroupKeys(db, cipher)
+
     val chatFacts: ChatFacts = SqlChatFacts(db)
 
     val chats: ObserveChats = ObserveChats(SqlChatsFeed(db, TextBodyCodec, cipher, myUserId))
