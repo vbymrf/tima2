@@ -1,0 +1,575 @@
+<meta charset="utf-8">
+<title>Кегля и кнопка «копировать» — двадцать проб</title>
+<link rel="stylesheet" href="../%D1%81%D1%82%D0%B8%D0%BB%D1%8C.css">
+<style>
+  /* ── Витрина. Каждая проба показана на живой строке: аватар, имя, кегля. ──
+     Здесь нарочно нет рамки телефона: сравнивать двадцать штук в двадцати
+     окнах невозможно, а решает всё одна строка. Отобранное потом смотрим в
+     окне — последний ряд страницы для этого и стоит. */
+  .решётка { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-top: 18px; }
+  .карта { border: 1px solid var(--чёрный-12); border-radius: var(--радиус-мал); padding: 13px 15px 14px; background: var(--подложка); }
+  .карта > .н { font-size: 10.5px; font-weight: 800; color: var(--чёрный-35); letter-spacing: 0.04em; }
+  .карта > .назв { font-size: 13px; font-weight: 800; margin-top: 1px; }
+  .карта > .пояс { font-size: 12px; color: var(--чёрный-70); line-height: 1.45; margin-top: 5px; }
+  .обр { display: flex; align-items: center; gap: 8px; margin: 12px 0 11px; min-height: 34px; }
+  .обр > .имя { font-size: var(--щ5); }
+
+  /* ── Общее для всех кеглей ────────────────────────────────────────────
+     Кегля — метка круга: слово «Всем», «Друзьям», «Своим». Знак — две
+     карточки с плюсом (doc_add/13959086.png). Цвета знака задаются
+     переменными, поэтому фигура во всех двадцати пробах ровно одна. */
+  .к {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: var(--радиус-круг);
+    background: var(--чёрный-6); color: var(--чёрный-70);
+    font-size: 10.5px; font-weight: 800; text-decoration: none; white-space: nowrap;
+    --квадрат-знака: var(--подтверждено);
+    --плюс-знака: #ffffff;
+  }
+  .зн { width: 14px; height: 14px; flex: 0 0 auto; }
+
+  /* 01 знак слева внутри */
+  .в01 { padding-left: 6px; }
+  /* 02 знак справа внутри */
+  .в02 { padding-right: 6px; }
+  /* 03 кегля зелёная, знак белым контуром */
+  .в03 { padding-right: 6px; background: var(--подтверждено); color: #ffffff; --плюс-знака: #ffffff; }
+  /* 04 обводка вместо заливки, плюс цвета шапки */
+  .в04 { padding: 2px 6px 2px 9px; background: none; border: 2px solid var(--подтверждено); color: var(--текст); --плюс-знака: var(--навигация); }
+  .в04 > .зн { color: var(--чёрный-50); }
+  /* 05 разделитель внутри кегли */
+  .в05 { padding-right: 6px; gap: 0; }
+  .в05 > .черта { width: 1px; height: 13px; background: var(--чёрный-12); margin: 0 6px; }
+  /* 06 сцеплённая пилюля: слово на светлом, знак на зелёном */
+  .в06 { padding: 0; gap: 0; overflow: hidden; background: var(--чёрный-6); }
+  .в06 > .сл { padding: 3px 9px; }
+  .в06 > .уг { padding: 3px 6px; background: var(--подтверждено); display: inline-flex; align-items: center; --квадрат-знака: #ffffff; --плюс-знака: var(--подтверждено); }
+  /* 07 накладной справа: выше кегли, за её край не выходит */
+  .в07 { position: relative; padding-right: 26px; }
+  .в07 > .зн { position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; }
+  /* 08 бейдж в правом верхнем углу */
+  .в08 { position: relative; padding-right: 12px; overflow: visible; }
+  .в08 > .зн { position: absolute; right: -7px; top: -8px; width: 19px; height: 19px; --кайма-знака: var(--подложка); }
+  /* 09 свисает вниз-вправо */
+  .в09 { position: relative; padding-right: 14px; }
+  .в09 > .зн { position: absolute; right: -4px; bottom: -9px; width: 20px; height: 20px; --кайма-знака: var(--подложка); }
+  /* 10 отдельная круглая кнопка рядом */
+  .кноп-круг {
+    width: 24px; height: 24px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--подтверждено); color: #ffffff;
+    display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
+    --квадрат-знака: #ffffff; --плюс-знака: var(--подтверждено);
+  }
+  .кноп-круг > .зн { width: 15px; height: 15px; }
+  /* 11 отдельная квадратная кнопка */
+  .кноп-квадрат {
+    width: 24px; height: 24px; border-radius: var(--радиус-квадрат-мал); flex: 0 0 auto;
+    background: var(--чёрный-6); color: var(--чёрный-70);
+    display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
+    --квадрат-знака: var(--подтверждено); --плюс-знака: #ffffff;
+  }
+  .кноп-квадрат > .зн { width: 15px; height: 15px; }
+  /* 12 голая иконка без плашки */
+  .кноп-гола { color: var(--чёрный-50); text-decoration: none; display: inline-flex; --плюс-знака: var(--навигация); }
+  .кноп-гола > .зн { width: 17px; height: 17px; }
+  /* 13 знак перед кеглей */
+  .пара-обратная { display: inline-flex; align-items: center; gap: 6px; flex-direction: row; }
+  /* 14 общая капсула: кегля и знак под одной обводкой */
+  .капсула {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 2px 3px 2px 3px; border-radius: var(--радиус-круг);
+    border: 1px solid var(--чёрный-12);
+  }
+  .капсула > .к { background: none; padding: 2px 3px 2px 7px; }
+  /* 15 ореол: кегля подсвечена мягким акцентом */
+  .в15 { padding-right: 6px; background: var(--акцент-мягкий); color: var(--текст); }
+  /* 16 точка «живое» у знака */
+  .знак-с-точкой { position: relative; display: inline-flex; }
+  .знак-с-точкой > .точка { position: absolute; right: -1px; top: -1px; width: 6px; height: 6px; border-radius: 50%; background: var(--активность); border: 1.5px solid var(--подложка); }
+  /* 17 подчёркнутая кегля */
+  .в17 { padding-right: 6px; box-shadow: inset 0 -2px 0 var(--подтверждено); border-radius: var(--радиус-мал); }
+  /* 18 билет: насечка между словом и знаком */
+  .в18 { position: relative; padding-right: 6px; gap: 0; }
+  .в18 > .сл { padding-right: 8px; }
+  .в18 > .насечка { width: 0; border-left: 1px dashed var(--чёрный-35); align-self: stretch; margin-right: 7px; position: relative; }
+  .в18 > .насечка::before, .в18 > .насечка::after {
+    content: ""; position: absolute; left: -5px; width: 10px; height: 10px; border-radius: 50%;
+    background: var(--подложка);
+  }
+  .в18 > .насечка::before { top: -5px; }
+  .в18 > .насечка::after { bottom: -5px; }
+  /* 19 приподнятый знак с тенью */
+  .кноп-тень {
+    width: 25px; height: 25px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--подложка); color: var(--чёрный-50);
+    display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.30); --плюс-знака: var(--подтверждено);
+  }
+  .кноп-тень > .зн { width: 15px; height: 15px; }
+  /* 20 вся кегля — кнопка: инверсия, квадрат белый, плюс зелёный */
+  .в20 { padding-right: 6px; background: var(--подтверждено); color: #ffffff; --квадрат-знака: #ffffff; --плюс-знака: var(--подтверждено); }
+
+  /* серые двойники: «нельзя унести» */
+  .нет { background: var(--чёрный-6); color: var(--чёрный-35); }
+
+  /* последний ряд — отобранное в окне */
+  .ряд-окон { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-start; margin-top: 8px; }
+  .замечание { font-size: 12.5px; color: var(--чёрный-70); width: 360px; margin-top: 6px; line-height: 1.5; }
+  .строка-проб { display: flex; align-items: center; gap: 8px; padding: 11px var(--о4); border-bottom: 1px solid var(--чёрный-12); }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <!-- Плотный: задняя карточка контуром, передняя залита, плюс поверх неё. -->
+  <symbol id="zn" viewBox="0 0 24 24">
+    <path d="M17 8H18A4 4 0 0 1 22 12V18A4 4 0 0 1 18 22H12A4 4 0 0 1 8 18V17"
+          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <rect x="1" y="1" width="16" height="16" rx="5"
+          fill="var(--квадрат-знака, #3bb300)"
+          stroke="var(--кайма-знака, transparent)" stroke-width="2"/>
+    <path d="M9 5.2V12.8M5.2 9H12.8" stroke="var(--плюс-знака, #ffffff)"
+          stroke-width="2.4" stroke-linecap="round"/>
+  </symbol>
+  <!-- Контурный: обе карточки линией, цветной только плюс. -->
+  <symbol id="zn-k" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="2" width="14" height="14" rx="4" stroke="currentColor"/>
+    <path d="M16 8H18A4 4 0 0 1 22 12V18A4 4 0 0 1 18 22H12A4 4 0 0 1 8 18V16" stroke="currentColor"/>
+    <path d="M9 5V13M5 9H13" stroke-width="2.4" stroke="var(--плюс-знака, currentColor)"/>
+  </symbol>
+</svg>
+
+<div class="лист-док">
+<div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-социум / кегля-копировать.html</div>
+<h1>Кегля и кнопка «копировать» <span class="вид">20 проб</span></h1>
+<p class="подзаголовок">
+  Одна задача, двадцать исполнений: <b>у метки круга есть действие «унести к себе»</b>.
+  Знак везде один и тот же — две карточки с плюсом,
+  <code>doc_add/13959086.png</code>. Меняется только то, <b>где он стоит и чем выделен</b>.
+  Продолжение раздела 5 в <a href="уровни.html">уровни.html</a>, где вариантов было
+  одиннадцать и все — со словом внутри кегли.
+</p>
+
+<div class="оговорка">
+  <b>Что здесь сравнивается, а что нет.</b> Слово в кегле везде «Всем» — самое короткое.
+  Настоящая проверка длинным словом («Друзьям», «Участникам») стоит отдельным рядом внизу:
+  половина проб на нём и отваливается, и это важнее красоты.
+  <br><br>
+  Знак означает «прибавить к себе». <b>Копии при этом не возникает</b> — переносится
+  ссылка, решение заказчика 2026-09-03. Две карточки — общепринятое «копировать», и это
+  единственное возражение против всей затеи: знак может пообещать не то, что произойдёт.
+</div>
+
+<h2>Внутри кегли</h2>
+
+<div class="решётка">
+
+  <div class="карта">
+    <div class="н">01</div>
+    <div class="назв">Знак слева, кегля светлая</div>
+    <div class="обр">
+      <span class="ава мал">ЛГ</span><span class="имя тянуть">Лена Г.</span>
+      <a class="к в01" href="#"><svg class="зн"><use href="#zn"/></svg>Всем</a>
+    </div>
+    <div class="пояс">Действие читается первым, уровень вторым. Для русского порядка —
+      наоборот тому, как думают: сперва «кому», потом «унести».</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">02</div>
+    <div class="назв">Знак справа, кегля светлая</div>
+    <div class="обр">
+      <span class="ава мал">ПС</span><span class="имя тянуть">Пётр С.</span>
+      <a class="к в02" href="#">Всем<svg class="зн"><use href="#zn"/></svg></a>
+    </div>
+    <div class="пояс">Самое спокойное из всех. Зелёный ровно один и стоит там, куда идёт
+      палец — у правого края строки.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">03</div>
+    <div class="назв">Кегля зелёная, знак белым</div>
+    <div class="обр">
+      <span class="ава мал">РН</span><span class="имя тянуть">Разбор недели</span>
+      <a class="к в03" href="#">Всем<svg class="зн"><use href="#zn-k"/></svg></a>
+    </div>
+    <div class="пояс">Заливка кричит громче знака: сперва видно зелёное пятно, а что
+      внутри — потом. Годится, если унести можно у большинства записей.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">04</div>
+    <div class="назв">Обводка, плюс цвета шапки</div>
+    <div class="обр">
+      <span class="ава мал">Я</span><span class="имя тянуть">Ядро · Пётр С.</span>
+      <a class="к в04" href="#">Всем<svg class="зн"><use href="#zn-k"/></svg></a>
+    </div>
+    <div class="пояс">Ничего не залито — метка легче всех и не спорит с именем автора.
+      Цена: обводка на мелком кегле съедает два пикселя высоты.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">05</div>
+    <div class="назв">Разделитель внутри</div>
+    <div class="обр">
+      <span class="ава мал">МК</span><span class="имя тянуть">Марк К.</span>
+      <a class="к в05" href="#">Всем<span class="черта"></span><svg class="зн"><use href="#zn"/></svg></a>
+    </div>
+    <div class="пояс">Черта говорит «это два разных дела в одной фигуре». Полезна, если
+      нажатие по слову и по знаку ведёт в разные места.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">06</div>
+    <div class="назв">Сцеплённая пилюля</div>
+    <div class="обр">
+      <span class="ава мал">АБ</span><span class="имя тянуть">Аня Б.</span>
+      <span class="к в06"><span class="сл">Всем</span><a class="уг" href="#"><svg class="зн"><use href="#zn"/></svg></a></span>
+    </div>
+    <div class="пояс">Половина слова, половина действия. Единственный вид, где сразу видно:
+      нажимать надо в зелёное, а не куда попало.</div>
+  </div>
+
+</div>
+
+<h2>Накладные: знак поверх кегли</h2>
+
+<div class="решётка">
+
+  <div class="карта">
+    <div class="н">07</div>
+    <div class="назв">Накладной справа</div>
+    <div class="обр">
+      <span class="ава мал">ЛГ</span><span class="имя тянуть">Лена Г.</span>
+      <a class="к в07" href="#">Всем<svg class="зн"><use href="#zn"/></svg></a>
+    </div>
+    <div class="пояс">Знак выше кегли, выступает сверху и снизу, справа встаёт вровень с
+      краем. Слово не сжимается — знак лежит наклейкой.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">08</div>
+    <div class="назв">Бейдж в углу</div>
+    <div class="обр">
+      <span class="ава мал">ПС</span><span class="имя тянуть">Пётр С.</span>
+      <a class="к в08" href="#">Всем<svg class="зн"><use href="#zn"/></svg></a>
+    </div>
+    <div class="пояс">Как счётчик непрочитанного: угол сверху-справа — привычное место
+      пометки. Но пометка и кнопка — разные вещи, а выглядят одинаково.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">09</div>
+    <div class="назв">Свисает вниз</div>
+    <div class="обр">
+      <span class="ава мал">РН</span><span class="имя тянуть">Разбор недели</span>
+      <a class="к в09" href="#">Всем<svg class="зн"><use href="#zn"/></svg></a>
+    </div>
+    <div class="пояс">Знак висит ниже строки и цепляет взгляд сильнее всех. Он же и ломает
+      ритм списка: строки перестают быть одной высоты.</div>
+  </div>
+
+</div>
+
+<h2>Снаружи: знак отдельно от кегли</h2>
+
+<div class="решётка">
+
+  <div class="карта">
+    <div class="н">10</div>
+    <div class="назв">Круглая кнопка рядом</div>
+    <div class="обр">
+      <span class="ава мал">Я</span><span class="имя тянуть">Ядро · Пётр С.</span>
+      <span class="к">Всем</span><a class="кноп-круг" href="#"><svg class="зн"><use href="#zn"/></svg></a>
+    </div>
+    <div class="пояс">Честнее внутренних: метка сообщает, кнопка нажимается, и перепутать
+      нельзя. Дороже всех по месту — две фигуры вместо одной.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">11</div>
+    <div class="назв">Квадратная кнопка рядом</div>
+    <div class="обр">
+      <span class="ава мал">МК</span><span class="имя тянуть">Марк К.</span>
+      <span class="к">Всем</span><a class="кноп-квадрат" href="#"><svg class="зн"><use href="#zn"/></svg></a>
+    </div>
+    <div class="пояс">Квадрат со скруглением рифмуется с самим знаком — тот ведь тоже из
+      квадратов. Круг рядом с квадратами внутри выглядит случайнее.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">12</div>
+    <div class="назв">Голая иконка</div>
+    <div class="обр">
+      <span class="ава мал">АБ</span><span class="имя тянуть">Аня Б.</span>
+      <span class="к">Всем</span><a class="кноп-гола" href="#"><svg class="зн"><use href="#zn-k"/></svg></a>
+    </div>
+    <div class="пояс">Самый тихий вид: ни плашки, ни заливки, цветной только плюс. В
+      плотной ленте пропадает, зато не мешает читать.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">13</div>
+    <div class="назв">Знак перед кеглей</div>
+    <div class="обр">
+      <span class="ава мал">ЛГ</span><span class="имя тянуть">Лена Г.</span>
+      <span class="пара-обратная"><a class="кноп-квадрат" href="#"><svg class="зн"><use href="#zn"/></svg></a><span class="к">Всем</span></span>
+    </div>
+    <div class="пояс">Кнопки в списках стоят справа — здесь она слева, и палец идёт мимо.
+      Проба нужна, чтобы это было видно, а не спорно.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">14</div>
+    <div class="назв">Общая капсула</div>
+    <div class="обр">
+      <span class="ава мал">ПС</span><span class="имя тянуть">Пётр С.</span>
+      <span class="капсула"><span class="к">Всем</span><a class="кноп-круг" href="#"><svg class="зн"><use href="#zn"/></svg></a></span>
+    </div>
+    <div class="пояс">Обводка связывает метку и кнопку в один предмет, не сливая их.
+      Компромисс между 02 и 10 — и по виду, и по месту.</div>
+  </div>
+
+</div>
+
+<h2>С выделением</h2>
+
+<div class="решётка">
+
+  <div class="карта">
+    <div class="н">15</div>
+    <div class="назв">Ореол вокруг кегли</div>
+    <div class="обр">
+      <span class="ава мал">РН</span><span class="имя тянуть">Разбор недели</span>
+      <a class="к в15" href="#">Всем<svg class="зн"><use href="#zn"/></svg></a>
+    </div>
+    <div class="пояс">Мягкий акцент вместо плотной заливки: видно, что метка живая, но она
+      не забивает имя автора рядом.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">16</div>
+    <div class="назв">Точка «новое» на знаке</div>
+    <div class="обр">
+      <span class="ава мал">Я</span><span class="имя тянуть">Ядро · Пётр С.</span>
+      <span class="к">Всем</span>
+      <span class="знак-с-точкой"><a class="кноп-квадрат" href="#"><svg class="зн"><use href="#zn"/></svg></a><span class="точка"></span></span>
+    </div>
+    <div class="пояс">Жёлтая точка — язык «требует внимания» из шапки. Здесь она уместна
+      один раз: подсказать про новое действие, а не висеть всегда.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">17</div>
+    <div class="назв">Подчёркнутая кегля</div>
+    <div class="обр">
+      <span class="ава мал">МК</span><span class="имя тянуть">Марк К.</span>
+      <a class="к в17" href="#">Всем<svg class="зн"><use href="#zn"/></svg></a>
+    </div>
+    <div class="пояс">Зелёная черта снизу вместо заливки — та же подсказка, но вчетверо
+      тише. Скругление пришлось уменьшить: под пилюлей черта не держится.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">18</div>
+    <div class="назв">Билет с насечкой</div>
+    <div class="обр">
+      <span class="ава мал">АБ</span><span class="имя тянуть">Аня Б.</span>
+      <a class="к в18" href="#"><span class="сл">Всем</span><span class="насечка"></span><svg class="зн"><use href="#zn"/></svg></a>
+    </div>
+    <div class="пояс">Отрывной корешок: форма сама говорит «эту часть можно забрать».
+      Красиво и понятно ровно один раз, дальше — просто шум в списке.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">19</div>
+    <div class="назв">Приподнятый знак</div>
+    <div class="обр">
+      <span class="ава мал">ЛГ</span><span class="имя тянуть">Лена Г.</span>
+      <span class="к">Всем</span><a class="кноп-тень" href="#"><svg class="зн"><use href="#zn-k"/></svg></a>
+    </div>
+    <div class="пояс">Тень поднимает кнопку над строкой. В остальном интерфейсе теней нет
+      вовсе, поэтому здесь она будет чужой — и этим заметной.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">20</div>
+    <div class="назв">Вся кегля — кнопка</div>
+    <div class="обр">
+      <span class="ава мал">ПС</span><span class="имя тянуть">Пётр С.</span>
+      <a class="к в20" href="#">Всем<svg class="зн"><use href="#zn"/></svg></a>
+    </div>
+    <div class="пояс">Инверсия: квадрат знака белый, плюс зелёный. Нажимается вся фигура
+      целиком — ровно то, чего хотел заказчик: «нажал на метку — унёс».</div>
+  </div>
+
+</div>
+
+<h2>Проверка длинным словом</h2>
+
+<p class="подзаголовок">
+  Здесь всё и решается. «Всем» — четыре буквы, а круги называются «Друзьям» и
+  «Участникам». Строка та же, только слово длиннее.
+</p>
+
+<div class="решётка">
+
+  <div class="карта">
+    <div class="н">02 · длинное</div>
+    <div class="назв">Знак справа внутри</div>
+    <div class="обр">
+      <span class="ава мал">ПС</span><span class="имя тянуть">Пётр Скворцов</span>
+      <a class="к в02" href="#">Участникам<svg class="зн"><use href="#zn"/></svg></a>
+    </div>
+    <div class="пояс">Держит: кегля растёт вправо вместе со словом, знак едет с ней.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">07 · длинное</div>
+    <div class="назв">Накладной справа</div>
+    <div class="обр">
+      <span class="ава мал">ПС</span><span class="имя тянуть">Пётр Скворцов</span>
+      <a class="к в07" href="#">Участникам<svg class="зн"><use href="#zn"/></svg></a>
+    </div>
+    <div class="пояс">Держит, пока хватает отступа справа. Знак стоит на слове, и запас
+      надо мерить по самому длинному кругу, а не по «Всем».</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">10 · длинное</div>
+    <div class="назв">Круглая кнопка рядом</div>
+    <div class="обр">
+      <span class="ава мал">ПС</span><span class="имя тянуть">Пётр Скворцов</span>
+      <span class="к">Участникам</span><a class="кноп-круг" href="#"><svg class="зн"><use href="#zn"/></svg></a>
+    </div>
+    <div class="пояс">Дороже всех: две фигуры плюс длинное слово. Имя автора сжимается
+      первым — на узком телефоне это заметно.</div>
+  </div>
+
+  <div class="карта">
+    <div class="н">18 · длинное</div>
+    <div class="назв">Билет с насечкой</div>
+    <div class="обр">
+      <span class="ава мал">ПС</span><span class="имя тянуть">Пётр Скворцов</span>
+      <a class="к в18" href="#"><span class="сл">Участникам</span><span class="насечка"></span><svg class="зн"><use href="#zn"/></svg></a>
+    </div>
+    <div class="пояс">Насечка держится, но фигура становится длинной и перестаёт читаться
+      как один предмет.</div>
+  </div>
+
+</div>
+
+<h2>Как это в живой ленте</h2>
+
+<div class="ряд-окон">
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно"><span class="имя-окна тянуть">Шесть отобранных подряд</span></div>
+        <div class="зона-2">
+          <div class="строка-проб">
+            <span class="ава мал">ЛГ</span><span class="имя тянуть">Лена Г.</span>
+            <a class="к в02" href="#">Всем<svg class="зн"><use href="#zn"/></svg></a>
+          </div>
+          <div class="строка-проб">
+            <span class="ава мал">Я</span><span class="имя тянуть">Ядро · Пётр С.</span>
+            <a class="к в07" href="#">Друзьям<svg class="зн"><use href="#zn"/></svg></a>
+          </div>
+          <div class="строка-проб">
+            <span class="ава мал">РН</span><span class="имя тянуть">Разбор недели</span>
+            <span class="к в06"><span class="сл">Всем</span><a class="уг" href="#"><svg class="зн"><use href="#zn"/></svg></a></span>
+          </div>
+          <div class="строка-проб">
+            <span class="ава мал">АБ</span><span class="имя тянуть">Аня Б.</span>
+            <span class="к">Всем</span><a class="кноп-квадрат" href="#"><svg class="зн"><use href="#zn"/></svg></a>
+          </div>
+          <div class="строка-проб">
+            <span class="ава мал">ИП</span><span class="имя тянуть">Игорь П.</span>
+            <a class="к в20" href="#">Всем<svg class="зн"><use href="#zn"/></svg></a>
+          </div>
+          <div class="строка-проб">
+            <span class="ава мал">МК</span><span class="имя тянуть">Марк К.</span>
+            <span class="к нет">Своим</span>
+          </div>
+          <div class="системное">Последняя строка — «нельзя унести»: кегля остаётся, знак пропадает. Серый знак рисовать незачем, нажимать нечего.</div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">шесть видов вперемешку</div>
+    </div>
+    <div class="замечание">
+      <b>Ряд собран нарочно разношёрстным.</b> В живом списке видно то, чего не видно в
+      карточках: пока вид один на всю ленту — годится почти любой; как только рядом
+      оказываются два — строка рассыпается.
+      <br><br>
+      Отсюда единственная просьба к решению: <b>выбрать один вид и держать его везде</b> —
+      в ленте, в переписке, на стене. Разные знаки для одного действия дороже любого из
+      двадцати.
+    </div>
+  </div>
+
+  <div>
+    <div class="тел">
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span></span></div>
+        <div class="зона-1 подокно"><span class="имя-окна тянуть">Один вид на всю ленту · 02</span></div>
+        <div class="зона-2">
+          <div class="строка-проб">
+            <span class="ава мал">ЛГ</span><span class="имя тянуть">Лена Г.</span>
+            <a class="к в02" href="#">Всем<svg class="зн"><use href="#zn"/></svg></a>
+          </div>
+          <div class="строка-проб">
+            <span class="ава мал">Я</span><span class="имя тянуть">Ядро · Пётр С.</span>
+            <a class="к в02" href="#">Друзьям<svg class="зн"><use href="#zn"/></svg></a>
+          </div>
+          <div class="строка-проб">
+            <span class="ава мал">РН</span><span class="имя тянуть">Разбор недели</span>
+            <a class="к в02" href="#">Всем<svg class="зн"><use href="#zn"/></svg></a>
+          </div>
+          <div class="строка-проб">
+            <span class="ава мал">АБ</span><span class="имя тянуть">Аня Борисова</span>
+            <a class="к в02" href="#">Участникам<svg class="зн"><use href="#zn"/></svg></a>
+          </div>
+          <div class="строка-проб">
+            <span class="ава мал">ИП</span><span class="имя тянуть">Игорь П.</span>
+            <span class="к нет">Своим</span>
+          </div>
+          <div class="строка-проб">
+            <span class="ава мал">МК</span><span class="имя тянуть">Марк К.</span>
+            <a class="к в02" href="#">Всем<svg class="зн"><use href="#zn"/></svg></a>
+          </div>
+          <div class="системное">Кегли встают в столбик по правому краю: глаз находит их без поиска.</div>
+        </div>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подпись">02 на всех строках</div>
+    </div>
+    <div class="замечание">
+      <b>То же, но одним видом.</b> Сравнивать надо именно эти два окна, а не карточки:
+      разница между «пёстро» и «спокойно» решает больше, чем разница между 02 и 07.
+      <br><br>
+      Столбик по правому краю получается сам собой, пока фигура одной высоты. Накладной
+      (07) и свисающий (09) этот столбик ломают — им нужен свой запас сверху и снизу.
+    </div>
+  </div>
+</div>
+
+<h2>Что из этого следует</h2>
+
+<div class="оговорка">
+  <b>Двадцать видов — это три решения, а не двадцать.</b>
+  <br><br>
+  <b>Первое: знак внутри метки или отдельной кнопкой.</b> Внутри (01–09, 15–20) дешевле по
+  месту и совпадает с замыслом «нажал на метку — унёс». Отдельно (10–14, 19) честнее:
+  метка сообщает, кнопка нажимается. Ошибиться нельзя ни там, ни там — но во втором случае
+  нельзя ошибиться и случайным касанием.
+  <br><br>
+  <b>Второе: чем выделен.</b> Заливкой (03, 20), мягким акцентом (15), чертой (17) или
+  ничем (12). Чем громче выделение, тем сильнее метка спорит с именем автора — а имя в
+  строке главнее.
+  <br><br>
+  <b>Третье: что делать с «нельзя унести».</b> Везде одинаково и просто — <b>знак
+  пропадает, кегля остаётся серой</b>. Это единственное место, где двадцать проб дали один
+  и тот же ответ.
+</div>
+
+</div>
