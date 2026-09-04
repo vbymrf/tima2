@@ -125,6 +125,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// Каналы — первая группа, вынесенная в registrar (шаг 4 программы). Дальше
 	// сюда добавляются вызовы Register<Группа>, а не строки маршрутов.
 	RegisterChannels(mux, s.Store, s.notifier(), s.requireActiveDevice)
+	// Страница человека: своя лента и перенос к себе. Лента — канал, который ищут по
+	// человеку, поэтому регистратор стоит рядом с каналами, а не с группами.
+	RegisterFeeds(mux, s.Store, s.requireActiveDevice)
 	// Звонки, групповые звонки и аудио-комнаты (шаг 4): сюда же уехали поля
 	// Calls, Rooms и LiveKitURL — их видят только эти двенадцать маршрутов.
 	RegisterCalls(mux, s.Store, s.livekitSettings, s.notifier(), s.requireActiveDevice)
