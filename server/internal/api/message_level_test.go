@@ -4,6 +4,7 @@ package api
 // инварианты вида группы, предел открытого текста.
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
@@ -227,4 +228,42 @@ func itoa64(v int64) string {
 		v /= 10
 	}
 	return string(buf[i:])
+}
+
+// Открытое сообщение не зовёт ротацию ключа.
+//
+// Инвариант ADR-0017 §2 говорит про отправку, которая пользовалась ключом: escrow-блоб у
+// группы один на версию GK, и восстанавливать по ордеру нужно то, что закрыто. Описание
+// личной группы — сообщение уровня 0 — ключа не касается, и гнать из-за него тихую группу
+// на фан-аут обёрток незачем.
+func TestОткрытоеСообщениеНеЗовётРотацию(t *testing.T) {
+	ts, srv := setup(t)
+	admin := registerDevice(t, ts, "+79995551001")
+	groupID := createGroupAPI(t, ts, admin.token) // личная: в ней бывают -1 и 0
+
+	before := countRotationEvents(t, srv, admin.id)
+
+	if code, _ := sendLeveled(t, ts, admin, groupID, "e0000000-0000-0000-0000-000000000001",
+		levelPublicShowcase, []byte("описание группы")); code != http.StatusCreated {
+		t.Fatalf("описание уровня 0: %d", code)
+	}
+
+	if after := countRotationEvents(t, srv, admin.id); after != before {
+		t.Fatalf("открытое сообщение позвало ротацию: событий было %d, стало %d", before, after)
+	}
+}
+
+func countRotationEvents(t *testing.T, srv *Server, deviceID string) int {
+	t.Helper()
+	events, err := srv.Store.ListDeviceEvents(context.Background(), deviceID, 0, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, e := range events {
+		if e.EventType == "group.rotation_needed" {
+			n++
+		}
+	}
+	return n
 }
