@@ -26,11 +26,19 @@ class SendGroupMessage(
     private val nowMs: () -> Long,
 ) {
 
-    suspend fun send(groupId: String, text: String): SendGroupStep {
+    /**
+     * @param level кому сервер отдаст сообщение (ADR-0019). По умолчанию −1 — шифр, то
+     *   есть прежнее поведение. Уровни 0…3 уходят **открытым текстом**: ключа у них нет
+     *   не по недосмотру, а по назначению — их читает тот, кому ключа не дадут.
+     */
+    suspend fun send(groupId: String, text: String, level: Int = LEVEL_SECRET): SendGroupStep {
         if (text.isBlank()) return SendGroupStep.Empty
 
-        val version = keys.latestVersion(groupId) ?: return SendGroupStep.NoKey
-        val key = keys.key(groupId, version) ?: return SendGroupStep.NoKey
+        // Открытое сообщение ключа не требует и версии не несёт: ненулевая версия
+        // означала бы, что payload закрыт, и сервер отверг бы противоречие.
+        val secret = level == LEVEL_SECRET
+        val version = if (secret) keys.latestVersion(groupId) ?: return SendGroupStep.NoKey else 0
+        val key = if (secret) keys.key(groupId, version) ?: return SendGroupStep.NoKey else ByteArray(0)
 
         val idempotencyKey = dedup.newKey()
         val moment = nowMs()
@@ -50,6 +58,7 @@ class SendGroupMessage(
             payload = assembled.payload,
             signature = assembled.signature,
             createdAtUnixMs = moment,
+            level = level,
         )
 
         return when (outcome) {
@@ -58,6 +67,9 @@ class SendGroupMessage(
             is GroupSendStep.Duplicate -> SendGroupStep.Sent(outcome.messageId, launchedRotation = false)
 
             is GroupSendStep.Sent -> {
+                // Открытое сообщение ключом не пользовалось — счётчик отправок под этой
+                // версией трогать не за что, и ротацию оно не приближает.
+                if (!secret) return SendGroupStep.Sent(outcome.messageId, launchedRotation = false)
                 val howMany = keys.markSend(groupId, version)
                 val due = howMany >= ROTATION_THRESHOLD
                 if (due) {
@@ -81,6 +93,12 @@ class SendGroupMessage(
         /** `CK_TEXT` из `envelope.proto`. */
         const val KIND_TEXT: Int = 1
 
+        /** Уровень −1: зашифровано групповым ключом (ADR-0019). */
+        const val LEVEL_SECRET: Int = -1
+
+        /** Уровень 0: всем и всегда — описание группы. */
+        const val LEVEL_SHOWCASE: Int = 0
+
         /**
          * Порог счётчика (ADR-0017 §1).
          *
@@ -102,6 +120,10 @@ class SendGroupMessage(
  * любом случае одно и то же.
  */
 fun interface GroupMessageSealer {
+    /**
+     * @param gkVersion 0 и [key] пустой — собрать ОТКРЫТОЕ сообщение (уровни 0…3):
+     *   шифрования нет, подпись есть. Ненулевая версия — шифр групповым ключом.
+     */
     fun seal(
         groupId: String,
         gkVersion: Int,
@@ -121,6 +143,8 @@ interface GroupTransport {
         payload: ByteArray,
         signature: ByteArray,
         createdAtUnixMs: Long,
+        /** Кому сервер отдаст сообщение (ADR-0019). -1 — шифр. */
+        level: Int = -1,
     ): GroupSendStep
 }
 

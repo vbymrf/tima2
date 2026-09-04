@@ -32,8 +32,14 @@ class GroupMessageSealerOverKodium(
             createdAtUnixMs = createdAtUnixMs,
             gkVersion = gkVersion,
         )
-        val assembled = GroupMessages.seal(MessageContent.text(text), meta, identity, key).getOrNull()
-            ?: return null
+        // Нулевая версия ключа значит «открытое сообщение» (ADR-0019): шифра нет,
+        // подпись есть. Это не обход шифрования, а его отсутствие по назначению —
+        // такое сообщение читает тот, кому ключа не дадут.
+        val assembled = if (gkVersion == 0) {
+            GroupMessages.sealPlain(MessageContent.text(text), meta, identity).getOrNull()
+        } else {
+            GroupMessages.seal(MessageContent.text(text), meta, identity, key).getOrNull()
+        } ?: return null
         return SealedGroupBytes(payload = assembled.payload, signature = assembled.signature)
     }
 

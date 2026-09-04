@@ -62,6 +62,34 @@ object GroupMessages {
     }
 
     /**
+     * Собирает ОТКРЫТОЕ сообщение группы — уровни 0…3 (ADR-0019 §1).
+     *
+     * Шифрования здесь нет по построению: сообщение уровня 0 существует ровно для того,
+     * чтобы его прочёл тот, у кого ключа нет и не будет, — карточка личной группы, лента
+     * публичной. Подпись при этом остаётся: открытость содержимого не отменяет вопроса,
+     * кто его написал.
+     *
+     * `gkVersion` обязан быть нулевым: ненулевой означал бы, что payload закрыт, и сервер
+     * такое сообщение отвергнет (`gk_without_secret`).
+     */
+    fun sealPlain(
+        content: MessageContent,
+        meta: GroupMessageMeta,
+        sender: DeviceIdentity,
+    ): Result<SealedGroupMessage> = runCatching {
+        require(meta.gkVersion == 0) {
+            "у открытого сообщения версии ключа нет: ненулевая означает шифр"
+        }
+        val payload = MessageSerializer.encodeBody(MessageContentCodec.toBody(content))
+        val canonical = CanonicalBytes.buildGroupMessage(meta, payload)
+        SealedGroupMessage(
+            meta = meta,
+            payload = payload,
+            signature = MessageSigner.sign(sender.key, canonical).getOrThrow(),
+        )
+    }
+
+    /**
      * Открывает пришедшее сообщение группы.
      *
      * Подпись проверяется **до** расшифровки и по тем же метаданным, что пришли с сервером:

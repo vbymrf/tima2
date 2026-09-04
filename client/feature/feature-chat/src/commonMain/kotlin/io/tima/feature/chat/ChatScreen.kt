@@ -81,6 +81,14 @@ fun ChatScreen(
      * не должно.
      */
     onMembers: (() -> Unit)? = null,
+    /**
+     * Круг следующего сообщения (ADR-0019) и его смена. `null` — переписка личная: круга
+     * у неё нет, всё зашифровано и адресовано одному человеку.
+     *
+     * Слова «уровень» на экране нет: человек видит круг — «Всем», «Своим», «Зашифровано».
+     */
+    circle: MessageCircle? = null,
+    onCircle: ((MessageCircle) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     Column(modifier.fillMaxSize().background(colors.surface)) {
@@ -131,6 +139,8 @@ fun ChatScreen(
             typed = state.draft,
             onSet = onSet,
             onSend = onSend,
+            circle = circle,
+            onCircle = onCircle,
         )
     }
 }
@@ -236,8 +246,31 @@ private fun InputZone(
     typed: String,
     onSet: (String) -> Unit,
     onSend: () -> Unit,
+    circle: MessageCircle? = null,
+    onCircle: ((MessageCircle) -> Unit)? = null,
 ) {
     val colors = Tima.colors
+    // Круг стоит рядом с «Отправить», а не в настройках: он выбирается для каждого
+    // сообщения, и последствие у него необратимое — сузить можно, расширить нельзя.
+    if (circle != null && onCircle != null) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.functional)
+                .padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about1),
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            for (option in MessageCircle.entries) {
+                Chip(
+                    label = option.title,
+                    kind = if (option == circle) ChipKind.Selected else ChipKind.Quiet,
+                    onClick = { onCircle(option) },
+                )
+            }
+            Caption(circle.about, fontSize = TimaType.sz6, color = colors.text3)
+        }
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()

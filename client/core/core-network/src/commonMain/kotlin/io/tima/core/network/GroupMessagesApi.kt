@@ -42,9 +42,12 @@ class GroupMessagesApi(
         createdAtUnixMs: Long,
         threadRoot: Long = 0,
         replyTo: Long = 0,
+        /** Кому сервер отдаст сообщение (ADR-0019). -1 — шифр. */
+        level: Int = -1,
     ): SendGroupResult {
         val requestBody = "{\"client_msg_id\":\"" + clientMsgId + "\"" +
             ",\"kind\":" + kind +
+            ",\"level\":" + level +
             ",\"gk_version\":" + gkVersion +
             ",\"payload\":\"" + encodeBase64Url(payload) + "\"" +
             ",\"thread_root\":" + threadRoot +

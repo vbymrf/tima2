@@ -124,12 +124,30 @@ class SendGroupMessageTest {
         }
     }
 
+    @Test
+    fun открытое_сообщение_уходит_без_ключа_и_без_версии() = runTest {
+        // Уровень 0 читает тот, кому ключа не дадут (ADR-0019): шифра здесь нет по
+        // назначению, а не по недосмотру. Значит и версии ключа быть не должно —
+        // ненулевая означала бы, что payload закрыт.
+        val transport = FakeTransport()
+        // Ключа у группы нет вовсе: открытое сообщение обязано уйти и без него.
+        val book = KeyMemorable()
+        val outcome = case(book, transport).send(group, "описание группы", level = SendGroupMessage.LEVEL_SHOWCASE)
+
+        assertIs<SendGroupStep.Sent>(outcome, "открытое сообщение не ушло")
+        assertEquals(0, transport.version, "у открытого сообщения не должно быть версии ключа")
+        assertEquals(0, transport.level, "уровень не доехал до транспорта")
+        assertEquals(0, book.count(group, 1), "открытое сообщение не пользовалось ключом — счётчик расти не должен")
+    }
+
     private class FakeTransport(
         private val answer: GroupSendStep = GroupSendStep.Sent(messageId = 1),
     ) : GroupTransport {
         var version: Int = -1
             private set
         var attempts: Int = 0
+            private set
+        var level: Int = -100
             private set
 
         override suspend fun send(
@@ -140,8 +158,10 @@ class SendGroupMessageTest {
             payload: ByteArray,
             signature: ByteArray,
             createdAtUnixMs: Long,
+            level: Int,
         ): GroupSendStep {
             version = gkVersion
+            this.level = level
             attempts++
             return answer
         }
