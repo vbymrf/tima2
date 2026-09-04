@@ -35,6 +35,12 @@ type GroupStore interface {
 	// Сообщения группы
 	SaveGroupMessage(ctx context.Context, m store.GroupMessage) (int64, bool, error)
 	ListGroupMessages(ctx context.Context, groupID string, threadRoot, before int64, limit int, maxLevel int16) ([]store.GroupMessage, error)
+	AskForLevel(ctx context.Context, groupID, userID string, level int16) (string, error)
+	GrantLevel(ctx context.Context, groupID, userID string, level int16, untilEpoch, grantedBy string, grant bool) error
+	ListLevelGrants(ctx context.Context, groupID string) ([]store.LevelGrant, error)
+	GrantedLevelFor(ctx context.Context, groupID, userID string) (int16, error)
+	SetMembershipTerm(ctx context.Context, groupID, userID, untilEpoch string) error
+	ExpireMemberships(ctx context.Context, groupID string) (int64, error)
 	AskToJoin(ctx context.Context, groupID, userID string) (string, error)
 	ListJoinRequests(ctx context.Context, groupID string) ([]store.JoinRequest, error)
 	AnswerJoinRequest(ctx context.Context, groupID, userID, state, answeredBy string) error
@@ -98,6 +104,10 @@ func RegisterGroups(
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/join-requests", requireDevice(postJoinRequest(deps)))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}/join-requests", requireDevice(listJoinRequests(deps)))
 	mux.HandleFunc("PATCH /api/v1/groups/{groupID}/join-requests/{userID}", requireDevice(patchJoinRequest(deps)))
+	mux.HandleFunc("POST /api/v1/groups/{groupID}/level-requests", requireDevice(postLevelRequest(deps)))
+	mux.HandleFunc("GET /api/v1/groups/{groupID}/level-grants", requireDevice(listLevelGrants(deps)))
+	mux.HandleFunc("PUT /api/v1/groups/{groupID}/level-grants/{userID}", requireDevice(putLevelGrant(deps)))
+	mux.HandleFunc("PUT /api/v1/groups/{groupID}/members/{userID}/term", requireDevice(putMembershipTerm(deps)))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}/members", requireDevice(listGroupMembers(deps)))
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/members", requireDevice(addGroupMember(deps)))
 	mux.HandleFunc("DELETE /api/v1/groups/{groupID}/members/{userID}", requireDevice(removeGroupMember(deps)))

@@ -297,7 +297,17 @@ func listGroupMessages(deps groupsDeps) http.HandlerFunc {
 		}
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 
-		msgs, err := deps.store.ListGroupMessages(r.Context(), r.PathValue("groupID"), thread, before, limit, maxLevelFor(role))
+		// Граница выдачи: роль плюс поимённое разрешение, если оно есть и не истекло.
+		max := maxLevelFor(role)
+		if role != "" && max < levelByGrant {
+			id, _ := auth.FromContext(r.Context())
+			if granted, err := deps.store.GrantedLevelFor(r.Context(), r.PathValue("groupID"), id.UserID); err != nil {
+				log.Printf("listGroupMessages: grant: %v", err)
+			} else if granted > max {
+				max = granted
+			}
+		}
+		msgs, err := deps.store.ListGroupMessages(r.Context(), r.PathValue("groupID"), thread, before, limit, max)
 		if err != nil {
 			log.Printf("listGroupMessages: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -336,6 +346,18 @@ func remindAboutRotation(deps groupsDeps, ctx context.Context, groupID string, d
 	epoch := escrow.EpochOf(time.Now())
 	if latest.EscrowEpoch == epoch {
 		return
+	}
+	// Эпоха сменилась — значит ключ всё равно будет ротироваться. Ровно здесь выводим
+	// тех, чей срок участия вышел (ADR-0019 §9): выбытие обязано менять ключ, и делать
+	// его в момент, когда ключ и так меняется, дешевле всего. Отдельной задачи по
+	// расписанию поэтому не заводится — это было условием решения о сроках.
+	//
+	// Читать группу просроченный перестаёт раньше и без этого: `GroupRole` проверяет
+	// срок тем же запросом, которым читает роль. Здесь — только уборка состава.
+	if n, err := deps.store.ExpireMemberships(ctx, groupID); err != nil {
+		log.Printf("expire memberships %s: %v", groupID, err)
+	} else if n > 0 {
+		log.Printf("группа %s: срок вышел у %d участников, ключ сменится ротацией эпохи", groupID, n)
 	}
 	if deps.limiter() != nil {
 		ok, _, err := deps.limiter().Allow(ctx, "gk_epoch_notify:"+groupID+":"+epoch, 1, time.Hour)

@@ -109,9 +109,13 @@ func (s *Store) SoftDeleteGroup(ctx context.Context, groupID string) error {
 // GroupRole — роль активного участника; ErrNotMember, если не состоит или вышел.
 func (s *Store) GroupRole(ctx context.Context, groupID, userID string) (string, error) {
 	var role string
+	// Срок участия проверяется здесь же (ADR-0019 §9): просроченный участник перестаёт
+	// быть участником в тот же миг, даже если строку ещё не убрала смена эпохи. Иначе
+	// между истечением и ближайшей ротацией человек продолжал бы читать группу.
 	err := s.pool.QueryRow(ctx, `
 		SELECT role FROM memberships
-		WHERE target_type = 'group' AND target_id = $1 AND user_id = $2 AND left_at IS NULL`,
+		WHERE target_type = 'group' AND target_id = $1 AND user_id = $2 AND left_at IS NULL
+		  AND (until_epoch IS NULL OR until_epoch >= to_char(now(), 'YYYY-MM'))`,
 		groupID, userID).Scan(&role)
 	if errors.Is(err, pgx.ErrNoRows) || isBadUUID(err) {
 		return "", ErrNotMember
