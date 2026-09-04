@@ -1,6 +1,7 @@
 package io.tima.shared
 
 import io.tima.core.encryption.DeviceIdentity
+import io.tima.domain.chat.AccessPort
 import io.tima.domain.chat.MessageLevels
 import io.tima.domain.chat.UserPages
 import io.tima.core.network.DevicesApi
@@ -82,6 +83,14 @@ interface GroupPorts {
      * версии, здесь — раздача старой по просьбе.
      */
     val groupKeyRecovery: GroupKeyRecoveryApi
+
+    /**
+     * Доступ к закрытым записям: просьбы и выдача (ADR-0019, третий круг).
+     *
+     * В портах группы, а не переписки: доступ открывает админ, глядя на состав, и живёт
+     * это подокно рядом с участниками.
+     */
+    val access: AccessPort
 }
 
 /** Устройства: список, отключение, платформа, подтверждение привязки. */

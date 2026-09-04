@@ -147,6 +147,12 @@ fun ChatScreen(
             },
         )
 
+        // Полоса «ключа нет вовсе» — НАД лентой, а не над вводом: она не про отдельные
+        // сообщения, а про то, что список пуст не потому, что в группе не пишут.
+        if (state.noGroupKey) {
+            NoKeyYet(expect = state.expectKey, onRequest = onRequestKey)
+        }
+
         Feed(
             lines = state.lines,
             // **В личной переписке подписи нет вовсе.** Так в макете: у чужой реплики
@@ -564,6 +570,45 @@ private fun Trouble(trouble: ChatNotice, onClose: () -> Unit, onConfirm: (() -> 
         )
         onConfirm?.let { Chip("Сузить", kind = ChipKind.Selected, onClick = it) }
         ButtonCircle(onClick = onClose) { Arrow(Side.Right, color = colors.text2) }
+    }
+}
+
+/**
+ * Полоса «ключа у этого устройства нет вовсе».
+ *
+ * **Это не пустая группа.** Устройство, подключённое по QR-коду, не имеет ни одной версии
+ * группового ключа: до ближайшей смены группа для него молчит целиком, включая сообщение,
+ * пришедшее минуту назад. Появление устройства смену не запускает — её запускает вход,
+ * выход или новая эпоха, то есть раз в месяц.
+ *
+ * Названы **оба выхода**: попросить ключ у тех, кто в сети, либо написать в группу с
+ * другого своего устройства — тогда ключ сменится, и группа начнёт читаться вперёд.
+ */
+@Composable
+private fun NoKeyYet(expect: Boolean, onRequest: () -> Unit) {
+    val colors = Tima.colors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.functional)
+            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about3),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+    ) {
+        Caption(
+            "Ключа этой группы на устройстве нет — поэтому она пуста",
+            fontSize = TimaType.sz5,
+            weight = FontWeight.Bold,
+        )
+        Caption(
+            "Сообщения есть, но открыть их нечем. Попросите ключ у участников или напишите " +
+                "в группу с другого своего устройства: ключ сменится, и группа откроется вперёд.",
+            fontSize = TimaType.sz5,
+        )
+        if (!expect) {
+            Chip("Запросить ключ", kind = ChipKind.Selected, onClick = onRequest)
+        } else {
+            Chip("Просим…", kind = ChipKind.Quiet)
+        }
     }
 }
 

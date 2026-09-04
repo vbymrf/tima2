@@ -17,6 +17,8 @@ import io.tima.core.ui.Trouble
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Name
 import io.tima.core.ui.Button
+import io.tima.core.ui.Chip
+import io.tima.core.ui.ChipKind
 import io.tima.core.ui.Field
 import io.tima.core.ui.EmptyArea
 import io.tima.core.ui.ListLine
@@ -47,10 +49,19 @@ fun MemberScreen(
     onRemove: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Открыть подокно «Доступ». Кнопка стоит в шапке состава: доступ открывают, глядя на
+     * людей, а не на сообщения, — там же, где решают, кто вообще в группе.
+     */
+    onAccess: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     Column(modifier.fillMaxSize().background(colors.surface)) {
-        SubwindowHeader(title = "Участники", onBack = onBack)
+        SubwindowHeader(
+            title = "Участники",
+            onBack = onBack,
+            right = onAccess?.let { open -> { Chip("Доступ", kind = ChipKind.Selected, onClick = open) } },
+        )
 
         Column(
             modifier = Modifier.fillMaxSize().padding(TimaSpacing.about4),

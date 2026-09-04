@@ -29,6 +29,7 @@ import io.tima.core.network.EventStream
 import io.tima.core.network.GroupKeyRecoveryApi
 import io.tima.core.network.GroupKeysApi
 import io.tima.core.network.GroupMessagesApi
+import io.tima.core.network.LevelAccessOverHttp
 import io.tima.core.network.MessageLevelsOverHttp
 import io.tima.core.network.UserPagesOverHttp
 import io.tima.core.network.GroupsApi
@@ -214,6 +215,9 @@ class Network(
      */
     override val pages: UserPagesOverHttp =
         UserPagesOverHttp(link.route, link.client, token = { session.accessToken }, codec = TextBodyCodec)
+
+    override val access: LevelAccessOverHttp =
+        LevelAccessOverHttp(link.route, link.client, token = { session.accessToken })
 
     override val messageLevels: MessageLevelsOverHttp =
         MessageLevelsOverHttp(link.route, link.client, token = { session.accessToken })

@@ -31,6 +31,8 @@ import io.tima.feature.group.CatalogTab
 import io.tima.feature.group.FriendsTab
 import io.tima.feature.group.NewGroupStore
 import io.tima.feature.group.Step
+import io.tima.feature.group.AccessScreen
+import io.tima.feature.group.AccessStore
 import io.tima.feature.group.MembersStore
 import io.tima.feature.group.NewGroupScreen
 import io.tima.feature.group.MemberScreen
@@ -252,6 +254,9 @@ private sealed interface Where {
 
     /** Переписка. Имя хранится здесь, потому что строка в списке появится позже — потоком. */
     data class Chat(val chatId: String, val name: String?) : Where
+
+    /** Доступ к закрытым записям: просьбы и выдача. Открывается из состава группы. */
+    data class Access(val groupId: String, val name: String?) : Where
 
     /**
      * Подтверждение привязки нового устройства.
@@ -557,6 +562,31 @@ private fun App(
                         groupId = current.groupId,
                         scope = scope,
                         onBack = { where = Where.Chat(current.groupId, current.name) },
+                        onAccess = { where = Where.Access(current.groupId, current.name) },
+                    )
+                }
+            }
+
+            is Where.Access -> {
+                {
+                    // Store живёт столько, сколько открыто подокно, и ключ ему — группа:
+                    // доступ у каждой группы свой, и остатки чужого состояния тут опасны.
+                    val store = remember(current.groupId) {
+                        AccessStore(
+                            port = network.access,
+                            groupId = current.groupId,
+                            scope = scope,
+                            epochAfter = ::epochAfter,
+                        )
+                    }
+                    val state by store.state.collectAsState()
+                    LaunchedEffect(current.groupId) { store.refresh() }
+                    AccessScreen(
+                        state = state,
+                        onAsk = store::ask,
+                        onDecide = store::decide,
+                        onCloseTrouble = store::troubleDismissed,
+                        onBack = { where = Where.Members(current.groupId, current.name) },
                     )
                 }
             }
@@ -606,6 +636,13 @@ private fun Chat(
             // Сужение — только в группе: у личного сообщения круга нет, оно зашифровано и
             // адресовано одному человеку.
             narrow = if (group) NarrowMessageLevel(network.messageLevels) else null,
+            // Ключей нет вовсе — значит группа молчит целиком, и сказать об этом надо
+            // прямо. Спрашивается у книги ключей, а не у сети: ответ нужен и офлайн.
+            anyKey = if (group) {
+                { environment.groupKeyBook.latestVersion(chatId) != null }
+            } else {
+                null
+            },
         )
     }
     val state by store.state.collectAsState()
@@ -880,6 +917,8 @@ private fun Members(
     groupId: String,
     scope: kotlinx.coroutines.CoroutineScope,
     onBack: () -> Unit,
+    /** Открыть подокно «Доступ»: просьбы и выдача третьего круга. */
+    onAccess: () -> Unit = {},
 ) {
     val store = remember(groupId) {
         MembersStore(
@@ -912,6 +951,7 @@ private fun Members(
         onInvite = store::invite,
         onRemove = store::remove,
         onBack = onBack,
+        onAccess = onAccess,
     )
 }
 
