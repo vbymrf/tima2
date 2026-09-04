@@ -1203,3 +1203,135 @@ a.ава { text-decoration: none; }
   font-size: var(--щ5); color: var(--чёрный-70);
 }
 .реакция > .ответы { display: flex; gap: 8px; margin: 9px 0 0 42px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   СОЦИУМ: создание группы, круг сообщения, перенос к себе
+
+   Формы приняты 2026-09-04 и переехали сюда из `пробы-социум/`. До того они
+   жили в <style> самих проб — там и остались, чтобы историю обсуждения было
+   с чем сравнить.
+
+   Тёмной темы здесь нет намеренно: всё держится на переменных, а их
+   переопределяет `тьма.css`. Жёстко заданы два цвета, и оба одинаковы в
+   обеих темах: белый текст на зелёной заливке и тёмный — на янтарной.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Мастер создания: список выбора, поля, шаги ─────────────────────────── */
+
+/* Не `.выбор`: это имя занято навигацией проб, и глобальный флекс её ломал. */
+.список-выбора { display: flex; flex-direction: column; }
+.список-выбора > .пункт { align-items: flex-start; }
+.список-выбора .имя, .список-выбора .втор { display: block; }
+.список-выбора .втор { margin-top: 3px; }
+
+/* Круг слева — он же кнопка «что это такое»: выделение и справка в одном
+   месте. Решение заказчика 2026-09-03: вопрос стоит внутри круга. */
+.знак-выбора {
+  width: 26px; height: 26px; flex: 0 0 auto; margin-top: 1px;
+  border-radius: 50%; border: 2px solid var(--чёрный-12);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 800; color: var(--чёрный-50);
+  text-decoration: none;
+}
+.пункт.тек .знак-выбора { border-color: var(--навигация); border-width: 3px; color: var(--текст); }
+/* «Скоро»: раздел виден, но не выбирается. Пунктир — не заливка серым,
+   иначе он читается как выбранный-но-выключенный. */
+.пункт.нельзя { opacity: 0.45; }
+.пункт.нельзя .знак-выбора { border-style: dashed; }
+
+.поле { padding: 12px var(--о4); border-bottom: 1px solid var(--чёрный-12); }
+.поле > .ярл { font-size: var(--щ6); font-weight: 700; color: var(--чёрный-50); margin-bottom: 5px; }
+.поле > .строка-ввода {
+  min-height: 42px; display: flex; align-items: center; padding: 0 14px;
+  border-radius: var(--радиус-круг); background: var(--чёрный-6);
+  font-size: var(--щ4); color: var(--чёрный-50);
+}
+.поле > .строка-ввода.заполнено { color: var(--текст); font-weight: 600; }
+.поле > .многострочно { min-height: 84px; align-items: flex-start; padding-top: 11px; border-radius: var(--радиус-мал); }
+
+.низ-мастера { display: flex; gap: var(--о2); padding: var(--о4); }
+.низ-мастера > .кн { flex: 1 1 auto; }
+.шаги { display: flex; gap: 5px; padding: 10px var(--о4) 0; }
+.шаги > i { flex: 1 1 auto; height: 3px; border-radius: 3px; background: var(--чёрный-12); }
+.шаги > i.пройден { background: var(--навигация); opacity: 0.45; }
+.шаги > i.тек { background: var(--навигация); }
+
+/* ── Круг сообщения ──────────────────────────────────────────────────────
+   Слова «уровень» на экране нет: человек читает круг — «Всем», «Друзьям»,
+   «По разрешению». Уровень остаётся понятием сервера. */
+.круг-видимости {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 11px; border-radius: var(--радиус-круг);
+  background: var(--чёрный-6); color: var(--чёрный-70);
+  font-size: var(--щ6); font-weight: 700; text-decoration: none;
+}
+.круг-видимости.свои { background: var(--подтверждено); color: #ffffff; }
+.круг-видимости.всем { background: var(--чёрный-6); color: var(--чёрный-70); }
+
+/* Метка доступности у сообщения: стрелка вправо и номер. Вправо — потому что
+   запись уходит дальше, а не скачивается. Цвет несёт метка, а не буквы:
+   красить текст значило бы, что читаемость зависит от доступа. */
+.метка-круга {
+  display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto;
+  padding: 2px 7px; border-radius: var(--радиус-круг);
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.02em;
+  text-decoration: none;
+}
+.метка-круга.можно { background: var(--подтверждено); color: #ffffff; }
+.метка-круга.нельзя { background: var(--чёрный-6); color: var(--чёрный-50); }
+/* Янтарь держит тёмный текст в обеих темах — то же решение, что у эмоций. */
+.метка-круга.закрыт { background: var(--активность); color: #111111; }
+
+.шапка-реплики { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.шапка-реплики > .имя { font-size: var(--щ6); font-weight: 800; }
+
+/* Сохранённое, которому закрыли доступ. Видно целиком: «кто забрал, то его» —
+   запись уже на устройстве, отбирать нечего. Янтарная полоса слева говорит,
+   что новых обновлений у неё не будет. */
+.недоступно { box-shadow: inset 3px 0 0 var(--активность); }
+.метка-недоступно {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px var(--о4); background: var(--функц);
+  font-size: var(--щ6); font-weight: 700; color: var(--чёрный-70);
+}
+
+/* ── Кнопка «Добавить себе» ──────────────────────────────────────────────
+   Отдельная кнопка, а не часть метки: метка сообщает, кнопка нажимается.
+   Стоит в конце сообщения и конкурирует там за место — хватает ширины,
+   стоит полная; не хватает — `.круг`, тот же знак без слова. Правый край у
+   обеих общий, поэтому подмена ничего не сдвигает.
+
+   Знак — две карточки с плюсом; сам рисунок лежит в разметке страницы
+   как <symbol id="znak-kopii-nakl">, потому что CSS вектор не носит. */
+.кн-себе {
+  display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
+  padding: 3px 7px 3px 10px; border-radius: var(--радиус-круг);
+  background: var(--чёрный-6); color: var(--чёрный-70);
+  font-size: 10.5px; font-weight: 800; text-decoration: none; white-space: nowrap;
+  --квадрат-знака: var(--подтверждено);
+  --плюс-знака: #ffffff;
+}
+.кн-себе > .зн { width: 16px; height: 16px; flex: 0 0 auto; }
+.кн-себе.круг {
+  width: 26px; height: 26px; padding: 0; gap: 0;
+  border-radius: 50%; justify-content: center;
+}
+/* В переписке — без подложки и в один вес со смайлом: место и размеры взяты
+   у `.кн-эмоция`, сдвиг вверх — на её высоту. Цветного в групповом чате нет,
+   там его место занято полосой автора. */
+.кн-себе.тихо {
+  position: absolute; bottom: 32px; right: -34px;
+  width: 28px; height: 28px; padding: 0; gap: 0;
+  background: none; border-radius: 0; justify-content: center;
+  color: var(--чёрный-50); --плюс-знака: currentColor;
+}
+.кн-себе.тихо > .зн { width: 20px; height: 20px; }
+/* У своих сообщений её нет: к себе не уносят — по той же причине, по которой
+   там нет и кнопки эмоции. */
+.реплика.моя .кн-себе.тихо { display: none; }
+
+/* Запись ленты: текст и кнопка делят последнюю строку. Сжимается текст —
+   право занять строку до конца есть только у одного из двух. */
+.запись { padding: 12px var(--о4); border-bottom: 1px solid var(--чёрный-12); }
+.конец-записи { display: flex; align-items: flex-end; gap: 8px; margin-top: 7px; }
+.конец-записи > .тело { flex: 1 1 auto; min-width: 0; font-size: var(--щ5); line-height: 1.45; }
