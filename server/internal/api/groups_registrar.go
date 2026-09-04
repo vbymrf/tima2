@@ -35,6 +35,11 @@ type GroupStore interface {
 	// Сообщения группы
 	SaveGroupMessage(ctx context.Context, m store.GroupMessage) (int64, bool, error)
 	ListGroupMessages(ctx context.Context, groupID string, threadRoot, before int64, limit int, maxLevel int16) ([]store.GroupMessage, error)
+	AskToJoin(ctx context.Context, groupID, userID string) (string, error)
+	ListJoinRequests(ctx context.Context, groupID string) ([]store.JoinRequest, error)
+	AnswerJoinRequest(ctx context.Context, groupID, userID, state, answeredBy string) error
+	MyJoinRequestState(ctx context.Context, groupID, userID string) (string, error)
+	ListUserDevices(ctx context.Context, userID string) ([]store.UserDevice, error)
 	SetGroupCardAudience(ctx context.Context, groupID string, userIDs []string) error
 	GroupCardOpenTo(ctx context.Context, groupID, userID string) (bool, error)
 	NarrowGroupMessageLevel(ctx context.Context, groupID string, messageID int64, level int16, requesterID string, allowForeign bool) (string, error)
@@ -90,6 +95,9 @@ func RegisterGroups(
 	mux.HandleFunc("PATCH /api/v1/groups/{groupID}", requireDevice(patchGroup(deps)))
 	mux.HandleFunc("DELETE /api/v1/groups/{groupID}", requireDevice(deleteGroup(deps)))
 	mux.HandleFunc("PUT /api/v1/groups/{groupID}/audience", requireDevice(putGroupAudience(deps)))
+	mux.HandleFunc("POST /api/v1/groups/{groupID}/join-requests", requireDevice(postJoinRequest(deps)))
+	mux.HandleFunc("GET /api/v1/groups/{groupID}/join-requests", requireDevice(listJoinRequests(deps)))
+	mux.HandleFunc("PATCH /api/v1/groups/{groupID}/join-requests/{userID}", requireDevice(patchJoinRequest(deps)))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}/members", requireDevice(listGroupMembers(deps)))
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/members", requireDevice(addGroupMember(deps)))
 	mux.HandleFunc("DELETE /api/v1/groups/{groupID}/members/{userID}", requireDevice(removeGroupMember(deps)))
