@@ -269,13 +269,24 @@ func groupMessageJSON(m store.GroupMessage) map[string]any {
 // listGroupMessages — GET /groups/{groupID}/messages?before=&limit=&thread=.
 func listGroupMessages(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, role, ok := groupAndRole(deps, w, r)
+		g, role, ok := groupAndRole(deps, w, r)
 		if !ok {
 			return
 		}
+		// Не-участник получает историю только до уровня «всем» — и только если карточка
+		// ему открыта. Иначе 404: существование личной группы не должно быть видно.
 		if role == "" {
-			writeErr(w, http.StatusNotFound, "group_not_found", "группа не найдена")
-			return
+			id, _ := auth.FromContext(r.Context())
+			open, err := cardOpenTo(deps, r, g.Kind, g.GroupID, id.UserID)
+			if err != nil {
+				log.Printf("listGroupMessages: card audience: %v", err)
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+				return
+			}
+			if !open {
+				writeErr(w, http.StatusNotFound, "group_not_found", "группа не найдена")
+				return
+			}
 		}
 		var before, thread int64
 		if v := r.URL.Query().Get("before"); v != "" {

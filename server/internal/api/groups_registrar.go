@@ -35,6 +35,8 @@ type GroupStore interface {
 	// Сообщения группы
 	SaveGroupMessage(ctx context.Context, m store.GroupMessage) (int64, bool, error)
 	ListGroupMessages(ctx context.Context, groupID string, threadRoot, before int64, limit int, maxLevel int16) ([]store.GroupMessage, error)
+	SetGroupCardAudience(ctx context.Context, groupID string, userIDs []string) error
+	GroupCardOpenTo(ctx context.Context, groupID, userID string) (bool, error)
 	NarrowGroupMessageLevel(ctx context.Context, groupID string, messageID int64, level int16, requesterID string, allowForeign bool) (string, error)
 	GroupMessageExists(ctx context.Context, groupID string, messageID int64) (bool, error)
 	SenderPostedWithin(ctx context.Context, groupID, senderID string, seconds int32) (bool, error)
@@ -87,6 +89,7 @@ func RegisterGroups(
 	mux.HandleFunc("GET /api/v1/groups/{groupID}", requireDevice(getGroup(deps)))
 	mux.HandleFunc("PATCH /api/v1/groups/{groupID}", requireDevice(patchGroup(deps)))
 	mux.HandleFunc("DELETE /api/v1/groups/{groupID}", requireDevice(deleteGroup(deps)))
+	mux.HandleFunc("PUT /api/v1/groups/{groupID}/audience", requireDevice(putGroupAudience(deps)))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}/members", requireDevice(listGroupMembers(deps)))
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/members", requireDevice(addGroupMember(deps)))
 	mux.HandleFunc("DELETE /api/v1/groups/{groupID}/members/{userID}", requireDevice(removeGroupMember(deps)))

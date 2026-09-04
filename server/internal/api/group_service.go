@@ -120,16 +120,23 @@ func groupJSON(g store.Group, myRole string) map[string]any {
 	}
 }
 
-// getGroup — GET /groups/{groupID}. Private-группа для не-участника
-// неотличима от несуществующей; public видна любому аутентифицированному.
+// getGroup — GET /groups/{groupID}. Ответ участнику прежний, поле в поле.
+//
+// Не-участнику с 2026-09-04 отвечает ДВУМЯ видами (ADR-0018 п. 6, ПЛАН-СОЦИУМА Г2):
+// карточкой, если она ему открыта, и 404 иначе. Личная группа без карточки по-прежнему
+// неотличима от несуществующей; публичная видна любому аутентифицированному.
 func getGroup(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		g, role, ok := groupAndRole(deps, w, r)
 		if !ok {
 			return
 		}
-		if role == "" && g.Kind == "private" {
-			writeErr(w, http.StatusNotFound, "group_not_found", "группа не найдена")
+		// Не-участник видит карточку, если она ему открыта, и 404 иначе (ADR-0018 п. 6).
+		// Публичной группе список получателей не нужен: её и так находят поиском.
+		if role == "" {
+			answerWithCard(deps, w, r, groupCard{
+				GroupID: g.GroupID, Kind: g.Kind, Title: g.Title, Description: g.Description,
+			})
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
