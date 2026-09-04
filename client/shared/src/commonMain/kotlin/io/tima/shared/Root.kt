@@ -25,6 +25,7 @@ import io.tima.domain.chat.CreateGroupChat
 import io.tima.domain.chat.ManageGroupMembers
 import io.tima.domain.chat.RequestGroupKeys
 import io.tima.feature.group.NewGroupStore
+import io.tima.feature.group.Step
 import io.tima.feature.group.MembersStore
 import io.tima.feature.group.NewGroupScreen
 import io.tima.feature.group.MemberScreen
@@ -781,14 +782,26 @@ private fun NewGroup(
 
     NewGroupScreen(
         state = state,
+        onSection = store::choseSection,
+        onKind = store::choseKind,
+        onJoining = store::choseJoining,
+        onForward = store::forward,
+        onExplain = store::explain,
         onTitle = store::changedTitle,
+        onDescription = store::changedDescription,
         onNumber = store::changedNumber,
         onAddNumber = store::addNumber,
         onRemoveNumber = store::removeNumber,
         onCreate = store::create,
+        // «Назад» с первого шага закрывает мастер, с остальных — шаг назад: человек,
+        // ошибшийся на третьем шаге, не должен начинать заново.
         onBack = {
-            onBack()
-            store.reset()
+            if (state.step == Step.Section) {
+                onBack()
+                store.reset()
+            } else {
+                store.back()
+            }
         },
     )
 }

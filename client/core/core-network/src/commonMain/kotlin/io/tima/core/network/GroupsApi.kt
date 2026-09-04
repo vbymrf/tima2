@@ -35,12 +35,18 @@ class GroupsApi(
      *   явно: вид группы решает, кто её видит, и полагаться на чужое умолчание в таком
      *   вопросе нельзя.
      */
-    suspend fun create(title: String, kind: String = "private"): GroupCreateResult {
+    suspend fun create(title: String, kind: String = "private", description: String = ""): GroupCreateResult {
         val response = try {
             client.post(route.api("/api/v1/groups")) {
                 header("Authorization", "Bearer ${token()}")
                 contentType(ContentType.Application.Json)
-                setBody("""{"kind":"$kind","title":${quote(title)}}""")
+                setBody(
+                    if (description.isEmpty()) {
+                        """{"kind":"$kind","title":${quote(title)}}"""
+                    } else {
+                        """{"kind":"$kind","title":${quote(title)},"description":${quote(description)}}"""
+                    },
+                )
             }
         } catch (e: Throwable) {
             return GroupCreateResult.NoConnection(classifyFailure(e))

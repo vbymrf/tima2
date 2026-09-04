@@ -163,7 +163,7 @@ class GroupChatsTest {
         var onCreation: suspend () -> GroupCreateStep = { GroupCreateStep.Created("g-1") }
         var onList: suspend () -> GroupsStep = { GroupsStep.Groups(emptyList()) }
 
-        override suspend fun create(title: String): GroupCreateStep {
+        override suspend fun create(title: String, kind: GroupKind, description: String): GroupCreateStep {
             creations++
             return onCreation()
         }

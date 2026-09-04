@@ -4,6 +4,7 @@ import io.tima.domain.chat.ChatBook
 import io.tima.domain.chat.ChatKind
 import io.tima.domain.chat.CreateGroupChat
 import io.tima.domain.chat.GroupCreateStep
+import io.tima.domain.chat.GroupKind
 import io.tima.domain.chat.GroupRegistry
 import io.tima.domain.chat.GroupsStep
 import io.tima.domain.chat.MemberStep
@@ -26,6 +27,71 @@ import kotlin.test.assertTrue
  * называется словами, а непозванные номера не выдаются за провал.
  */
 class NewGroupStoreTest {
+
+    // ── правила мастера ─────────────────────────────────────────────────────
+
+    @Test
+    fun личная_группа_всегда_закрытая() = runTest {
+        // Не запрет, а следствие: личную группу не находят поиском, значит «вступить
+        // самому» некуда — сначала надо найти.
+        val store = store(this)
+        store.choseKind(GroupKind.Public)
+        store.choseJoining(Joining.Open)
+        assertEquals(Joining.Open, store.state.value.joining)
+
+        store.choseKind(GroupKind.Personal)
+        assertEquals(
+            Joining.Closed,
+            store.state.value.joining,
+            "переключение на личную группу обязано поправить вступление, а не оставить невозможное сочетание",
+        )
+
+        store.choseJoining(Joining.Open)
+        assertEquals(
+            Joining.Closed,
+            store.state.value.joining,
+            "у личной группы открытое вступление выбирается — значит человек уедет с невозможным сочетанием",
+        )
+    }
+
+    @Test
+    fun недоступные_разделы_не_выбираются() = runTest {
+        val store = store(this)
+        store.choseSection(Section.Channel)
+        assertEquals(
+            Section.Group,
+            store.state.value.section,
+            "серый раздел выбрался: замысел показан, но нажать было нельзя",
+        )
+    }
+
+    @Test
+    fun шаги_идут_вперёд_и_назад_не_выпадая_за_края() = runTest {
+        val store = store(this)
+        assertEquals(Step.Section, store.state.value.step)
+        store.back()
+        assertEquals(Step.Section, store.state.value.step, "с первого шага назад некуда")
+
+        repeat(5) { store.forward() }
+        assertEquals(Step.Naming, store.state.value.step, "дальше последнего шага мастер не идёт")
+
+        store.back()
+        assertEquals(Step.Joining, store.state.value.step)
+    }
+
+    @Test
+    fun вид_и_описание_уходят_в_создание() = runTest {
+        val groups = FakeGroups()
+        val store = store(this, groups)
+        store.choseKind(GroupKind.Public)
+        store.changedTitle("Ядро")
+        store.changedDescription("Разбираем релизы по вторникам")
+        store.create()
+        runCurrent()
+
+        assertEquals(GroupKind.Public, groups.lastKind, "вид группы не доехал до сервера")
+        assertEquals("Разбираем релизы по вторникам", groups.lastDescription, "описание не доехало")
+    }
 
     @Test
     fun номера_накапливаются_до_создания() = runTest {
@@ -112,8 +178,13 @@ class NewGroupStoreTest {
     private class FakeGroups : GroupRegistry {
         var creations = 0
 
-        override suspend fun create(title: String): GroupCreateStep {
+        var lastKind: GroupKind? = null
+        var lastDescription: String? = null
+
+        override suspend fun create(title: String, kind: GroupKind, description: String): GroupCreateStep {
             creations++
+            lastKind = kind
+            lastDescription = description
             return GroupCreateStep.Created("gggggggg-0000-0000-0000-000000000001")
         }
 

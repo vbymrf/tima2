@@ -1,6 +1,7 @@
 package io.tima.feature.group
 
 import io.tima.domain.chat.GroupCreateStep
+import io.tima.domain.chat.GroupKind
 import io.tima.domain.chat.GroupKeyRotator
 import io.tima.domain.chat.GroupMember
 import io.tima.domain.chat.GroupRegistry
@@ -135,7 +136,7 @@ class MembersStoreTest {
         var myRole: GroupRole = GroupRole.Owner
         var additions = 0
 
-        override suspend fun create(title: String) = GroupCreateStep.Created(group)
+        override suspend fun create(title: String, kind: GroupKind, description: String) = GroupCreateStep.Created(group)
         override suspend fun mine() = GroupsStep.Groups(emptyList())
 
         override suspend fun members(groupId: String) = MembersStep.Members(

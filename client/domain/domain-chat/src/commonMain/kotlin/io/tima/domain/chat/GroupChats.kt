@@ -29,14 +29,24 @@ class CreateGroupChat(
      * @param название до 200 байт: предел сервера. Проверяется здесь, чтобы отказ пришёл до
      *   сети и словами, а не как `bad_title`.
      */
-    suspend fun create(title: String, number: List<String> = emptyList()): CreateGroupStep {
+    suspend fun create(
+        title: String,
+        number: List<String> = emptyList(),
+        kind: GroupKind = GroupKind.Personal,
+        description: String = "",
+    ): CreateGroupStep {
         val name = title.trim()
         if (name.isEmpty()) return CreateGroupStep.BadTitle("Без названия группу не найти в списке")
         if (name.encodeToByteArray().size > ПРЕДЕЛ_НАЗВАНИЯ) {
             return CreateGroupStep.BadTitle("Название длиннее $ПРЕДЕЛ_НАЗВАНИЯ байт сервер не примет")
         }
+        // Предел описания — общий предел сообщения (ADR-0019 §3): описание и есть
+        // сообщение уровня 0, и особых правил у него нет.
+        if (description.length > ПРЕДЕЛ_ОПИСАНИЯ) {
+            return CreateGroupStep.BadTitle("Описание длиннее $ПРЕДЕЛ_ОПИСАНИЯ знаков")
+        }
 
-        val creation = groups.create(name)
+        val creation = groups.create(name, kind, description.trim())
         val groupId = when (creation) {
             is GroupCreateStep.Created -> creation.groupId
             is GroupCreateStep.Offline -> return CreateGroupStep.Offline(creation.retryAfterMs)
@@ -64,6 +74,9 @@ class CreateGroupChat(
     private companion object {
         /** Предел сервера на название — в БАЙТАХ, а не знаках: кириллица занимает по два. */
         const val ПРЕДЕЛ_НАЗВАНИЯ = 200
+
+        /** Предел описания — в ЗНАКАХ UTF-16, как у любого сообщения (ADR-0019 §3). */
+        const val ПРЕДЕЛ_ОПИСАНИЯ = 4096
     }
 }
 
@@ -103,11 +116,29 @@ class SyncGroupChats(
 
 /** Порт к группам на сервере. Реализуется `core-network`. */
 interface GroupRegistry {
-    suspend fun create(title: String): GroupCreateStep
+    suspend fun create(
+        title: String,
+        kind: GroupKind = GroupKind.Personal,
+        description: String = "",
+    ): GroupCreateStep
     suspend fun mine(): GroupsStep
     suspend fun members(groupId: String): MembersStep
     suspend fun addMember(groupId: String, userId: String): MemberStep
     suspend fun removeMember(groupId: String, userId: String): MemberStep
+}
+
+/**
+ * Вид группы — ось, от которой зависит шифрование (ADR-0019 §1, `doc_UI/33` шаг 2).
+ *
+ * **Не меняется после создания.** Перешифровать «на месте» нельзя: сменить вид значит
+ * создать другую группу, и мастер говорит это словами на самом шаге.
+ */
+enum class GroupKind(val wire: String) {
+    /** Личная: сообщения зашифрованы групповым ключом, поиском не находится. */
+    Personal("private"),
+
+    /** Публичная: сервер видит переписку, находится поиском и каталогом. */
+    Public("public"),
 }
 
 /** Группа, как её знает сервер. */

@@ -2,6 +2,7 @@ package io.tima.core.network
 
 import io.tima.domain.chat.GroupCreateStep
 import io.tima.domain.chat.GroupInfo
+import io.tima.domain.chat.GroupKind
 import io.tima.domain.chat.GroupMember
 import io.tima.domain.chat.GroupRegistry
 import io.tima.domain.chat.GroupRole
@@ -18,7 +19,11 @@ import io.tima.domain.chat.MembersStep
  */
 class GroupsOverHttp(private val api: GroupsApi) : GroupRegistry {
 
-    override suspend fun create(title: String): GroupCreateStep = when (val answer = api.create(title)) {
+    override suspend fun create(
+        title: String,
+        kind: GroupKind,
+        description: String,
+    ): GroupCreateStep = when (val answer = api.create(title, kind.wire, description)) {
         is GroupCreateResult.Created -> GroupCreateStep.Created(answer.groupId)
         is GroupCreateResult.NoConnection -> GroupCreateStep.Offline(answer.link.retryDelayMs)
         is GroupCreateResult.Refused -> GroupCreateStep.Refused(answer.code)

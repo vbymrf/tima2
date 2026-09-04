@@ -109,7 +109,7 @@ class ManageGroupMembersTest {
     ) : GroupRegistry {
         val added = mutableListOf<String>()
 
-        override suspend fun create(title: String) = GroupCreateStep.Created("g-1")
+        override suspend fun create(title: String, kind: GroupKind, description: String) = GroupCreateStep.Created("g-1")
         override suspend fun mine() = GroupsStep.Groups(emptyList())
         override suspend fun members(groupId: String) = MembersStep.Members(emptyList())
 
