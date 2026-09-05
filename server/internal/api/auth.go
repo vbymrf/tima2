@@ -398,8 +398,17 @@ func resolveNames(deps usersDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
+		// Ники отдаются всем и без условий, в отличие от телефонов: телефон виден
+		// только собеседнику по переписке, а ник человек назначил себе сам, и по
+		// нему его и так находят.
+		nicks, err := deps.store.Nicknames(r.Context(), req.IDs)
+		if err != nil {
+			log.Printf("resolveNames nicknames: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"names": names, "phones": phones})
+		_ = json.NewEncoder(w).Encode(map[string]any{"names": names, "phones": phones, "nicknames": nicks})
 	}
 }
 

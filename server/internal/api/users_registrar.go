@@ -21,6 +21,12 @@ type UserStore interface {
 	PhonesOfChatPeers(ctx context.Context, userID string, ids []string) (map[string]string, error)
 	DisplayNames(ctx context.Context, ids []string) (map[string]string, error)
 	SetDisplayName(ctx context.Context, userID, name string) error
+
+	// Ник: занять, проверить занятость, найти по нему (Д1)
+	SetNickname(ctx context.Context, userID, nick string) error
+	NicknameFree(ctx context.Context, nick string) (bool, error)
+	FindUserByNickname(ctx context.Context, nick string) (string, error)
+	Nicknames(ctx context.Context, ids []string) (map[string]string, error)
 	IdentitiesOf(ctx context.Context, ids []string) (map[string]store.Identity, error)
 	ListDevices(ctx context.Context, userID string) ([]store.Device, error)
 
@@ -53,13 +59,19 @@ type usersDeps struct {
 	tokens func() IdentityTokens
 }
 
-// RegisterUsers — восемь маршрутов: справочник, имена, личности, удаление аккаунта.
+// RegisterUsers — одиннадцать маршрутов: справочник, имена, ник, личности, удаление.
 func RegisterUsers(mux *http.ServeMux, st UserStore, tokens func() IdentityTokens, requireDevice Middleware) {
 	deps := usersDeps{store: st, tokens: tokens}
 
 	mux.HandleFunc("GET /api/v1/users/lookup", requireDevice(lookupUser(deps)))
 	mux.HandleFunc("POST /api/v1/users/discover", requireDevice(discoverContacts(deps)))
 	mux.HandleFunc("PATCH /api/v1/users/me/name", requireDevice(setDisplayName(deps)))
+	mux.HandleFunc("PATCH /api/v1/users/me/nickname", requireDevice(setNickname(deps)))
+	// Ники — своя ветка, а не «/users/...»: там уже стоит «/users/{userID}/feed»,
+	// и любой двухсегментный маршрут под /users сталкивается с ним неразрешимо
+	// («/users/nickname/feed» подходит обоим).
+	mux.HandleFunc("GET /api/v1/nicknames/{nick}/free", requireDevice(nicknameFree(deps)))
+	mux.HandleFunc("GET /api/v1/nicknames/{nick}", requireDevice(lookupByNickname(deps)))
 	mux.HandleFunc("DELETE /api/v1/users/me", requireDevice(deleteAccount(deps)))
 	mux.HandleFunc("POST /api/v1/users/names", requireDevice(resolveNames(deps)))
 	mux.HandleFunc("POST /api/v1/users/identities", requireDevice(resolveIdentities(deps)))
