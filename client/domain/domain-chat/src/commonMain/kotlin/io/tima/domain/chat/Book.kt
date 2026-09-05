@@ -195,6 +195,20 @@ class SyncBook(
     }
 }
 
+/**
+ * Настройки экранов — пары «имя → значение».
+ *
+ * Порт здесь, а не в модуле-реализации: выбор вида принадлежит сценарию, а не базе.
+ * Реализуется `core-database`.
+ */
+interface Settings {
+
+    /** Всё разом и потоком: настроек единицы, и читать их по одной незачем. */
+    fun all(): Flow<Map<String, String>>
+
+    suspend fun put(name: String, value: String)
+}
+
 /** Чем кончилась синхронизация. */
 sealed interface SyncStep {
     data class Done(val read: Int, val matched: Int) : SyncStep

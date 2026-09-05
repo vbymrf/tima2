@@ -3,9 +3,15 @@ package io.tima.shared
 import io.tima.core.database.SqlChatJournal
 import io.tima.core.database.SqlChatFeed
 import io.tima.core.database.SqlChatFacts
+import io.tima.core.database.SqlBook
 import io.tima.core.database.SqlContacts
+import io.tima.core.database.SqlSettings
 import io.tima.domain.chat.ChatFacts
+import io.tima.domain.chat.Book
+import io.tima.domain.chat.ContactDiscovery
+import io.tima.domain.chat.ObserveBook
 import io.tima.domain.chat.ObserveContacts
+import io.tima.domain.chat.Settings
 import io.tima.core.database.SqlChatsFeed
 import io.tima.core.database.SqlInboxStore
 import io.tima.core.database.SqlGroupKeys
@@ -35,6 +41,7 @@ import io.tima.core.network.UserPagesOverHttp
 import io.tima.core.network.GroupsApi
 import io.tima.core.network.HttpMessageTransport
 import io.tima.core.network.KeysApi
+import io.tima.core.network.ContactsOverHttp
 import io.tima.core.network.UsersApi
 import io.tima.core.network.LinkConfirmApi
 import io.tima.core.network.LinkStartApi
@@ -181,6 +188,10 @@ class Network(
 
     /** Справочник: кто скрывается за номером телефона. Нужен, чтобы начать переписку. */
     override val directory: UsersApi = UsersApi(link.route, link.client, token = { session.accessToken })
+
+    /** Сверка книги: `POST /users/discover`, куда уходит номер, а хранится слепой индекс. */
+    override val discovery: ContactDiscovery =
+        ContactsOverHttp(link.route, link.client, token = { session.accessToken })
 
     /** Устройства аккаунта: объявить платформу, показать список, отключить. */
     override val devices: DevicesApi = DevicesApi(link.route, link.client, token = { session.accessToken })
@@ -333,8 +344,23 @@ class Environment private constructor(
 
     val chats: ObserveChats = ObserveChats(SqlChatsFeed(db, TextBodyCodec, cipher, myUserId))
 
-    /** Книга: люди, с которыми уже есть переписка. Другого источника у неё нет. */
+    /**
+     * Прежняя книга: люди, с которыми уже есть переписка.
+     *
+     * Оставлена до Д9: на ней держится выбор собеседника в «Новой переписке». Вкладка
+     * «Контакты» с неё уже ушла — там своя книга ([book]), которая читается с телефона
+     * и живёт своей жизнью.
+     */
     val contacts: ObserveContacts = ObserveContacts(SqlContacts(db, cipher))
+
+    /** Своя книга контактов: телефонная книга плюс заведённое руками (Д2). */
+    val bookStorage: Book = SqlBook(db, cipher)
+
+    val book: ObserveBook = ObserveBook(bookStorage)
+
+    /** Настройки экранов: вид списка и что показывать (Д5). */
+    val settings: Settings = SqlSettings(db)
+
 
     val chat: ObserveChat = ObserveChat(SqlChatFeed(db, TextBodyCodec, cipher, myUserId))
 

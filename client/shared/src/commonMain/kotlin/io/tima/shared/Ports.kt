@@ -11,6 +11,7 @@ import io.tima.core.network.GroupKeysApi
 import io.tima.core.network.GroupsApi
 import io.tima.core.network.KeysApi
 import io.tima.core.network.UsersApi
+import io.tima.domain.chat.ContactDiscovery
 import io.tima.domain.account.ConfirmDeviceLink
 import io.tima.core.network.AppVersionApi
 import io.tima.domain.account.MyDevices
@@ -36,6 +37,14 @@ import io.tima.domain.account.MyDevices
 interface ChatPorts {
     /** Кто скрывается за номером телефона. */
     val directory: UsersApi
+
+    /**
+     * Сверка книги: кто из этих номеров в TIMa (Д4).
+     *
+     * Здесь, а не отдельным портом: сверка нужна вкладке «Контакты», и та же вкладка
+     * живёт в окне «Телефон» рядом с перепиской.
+     */
+    val discovery: ContactDiscovery
 
     /**
      * Недостающие версии группового ключа: попросить и отдать.

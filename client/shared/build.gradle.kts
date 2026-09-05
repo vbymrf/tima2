@@ -38,6 +38,7 @@ kotlin {
             implementation(projects.core.coreDatabase)
             implementation(projects.core.coreEncryption)
             implementation(projects.core.coreSecrets)
+            implementation(projects.core.coreContacts)
             implementation(projects.core.coreNetwork)
             implementation(projects.feature.featureChat)
             implementation(projects.feature.featureGroup)

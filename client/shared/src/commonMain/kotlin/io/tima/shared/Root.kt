@@ -53,7 +53,12 @@ import io.tima.feature.chat.ChatStore
 import io.tima.feature.chat.ChatsState
 import io.tima.feature.chat.ChatsStore
 import io.tima.feature.chat.BookState
+import io.tima.core.contacts.platformPhoneBook
+import io.tima.core.ui.Tab
+import io.tima.domain.chat.BookEntry
+import io.tima.domain.chat.SyncBook
 import io.tima.feature.chat.BookStore
+import io.tima.feature.chat.BookViewSheet
 import io.tima.feature.chat.BookScreen
 import io.tima.feature.shell.CALL_FILTERS
 import io.tima.feature.shell.Window
@@ -310,10 +315,20 @@ private fun App(
     // чего его открывают чаще всего, а остальные окна пока пусты по существу.
     var window by remember { mutableStateOf(Window.Phone) }
     var windowSwitcher by remember { mutableStateOf(false) }
+    // Подокно «Вид» вкладки «Контакты»: настроек три группы и они независимы, перебор
+    // по кругу не дал бы угадать следующее состояние.
+    var bookView by remember { mutableStateOf(false) }
 
-    // Книга: люди, с которыми уже есть переписка. Поток из базы — новая переписка
-    // появляется в книге сама.
-    val book = remember { BookStore(environment.contacts, scope) }
+    // Контакты: своя книга — прочитанное с телефона плюс заведённое руками (Д2…Д5).
+    // Поток из базы: прочитанное и итог сверки появляются сами, без опроса.
+    val book = remember {
+        BookStore(
+            book = environment.book,
+            settings = environment.settings,
+            sync = SyncBook(platformPhoneBook(), environment.bookStorage, network.discovery),
+            scope = scope,
+        )
+    }
     // Окно 2 «Социум»: свои группы и карточки, которые открыли контакты. Списки живут
     // здесь, а не в оболочке: рама знает раму, работа с сервером — дело feature-group.
     val social = remember { SocialStore(GroupsOverHttp(network.groups), scope) }
@@ -370,6 +385,15 @@ private fun App(
 
     // Переключатель окон лежит ПОВЕРХ стана, а не внутри колонки: он перекрывает
     // всё окно, включая главную область, и затемняет то, из чего его открыли.
+    if (bookView) {
+        BookViewSheet(
+            view = bookState.view,
+            onChange = book::changedView,
+            onClose = { bookView = false },
+        )
+        return
+    }
+
     if (windowSwitcher) {
         WindowSwitchingScreen(
             current = window,
@@ -416,11 +440,21 @@ private fun App(
                     book = bookState,
                     onSearchInBook = book::changedSearch,
                     onOpen = { where = Where.Chat(it.chatId, it.title) },
-                    onOpenPerson = { where = Where.Chat(it.chatId, it.name) },
+                    // Открыть можно только того, кто в TIMa: у остальных переписки нет
+                    // и завести её не из чего — им «Пригласить».
+                    onOpenPerson = { person ->
+                        val id = person.userId
+                        if (id != null) {
+                            val chatId = PersonalChatIdsOverKodium.personalChatId(session.userId, id)
+                            where = Where.Chat(chatId, person.name)
+                        }
+                    },
                     onNew = { where = Where.New },
                     onSettings = { where = Where.Settings() },
                     onSwitchWindows = { windowSwitcher = true },
                     onNeighbourWindow = switchWindow,
+                    onView = { bookView = true },
+                    onToggleSection = book::openedSection,
                 )
 
                 Window.Social -> {
@@ -985,27 +1019,39 @@ private fun PhoneWindow(
     book: BookState,
     onSearchInBook: (String) -> Unit,
     onOpen: (ChatSummary) -> Unit,
-    onOpenPerson: (Contact) -> Unit,
+    onOpenPerson: (BookEntry) -> Unit,
+    onChooseSection: (String) -> Unit = {},
     onNew: () -> Unit,
     onSettings: () -> Unit,
     onSwitchWindows: () -> Unit,
     onNeighbourWindow: (InSide) -> Unit,
+    /** «Вид» — последняя вкладка-кнопка: открывает подокно настроек списка. */
+    onView: () -> Unit,
+    onToggleSection: (String) -> Unit,
 ) {
     var calls by remember { mutableStateOf(CALL_FILTERS.first()) }
     WindowFrame(
         window = Window.Phone,
-        tabs = listOf("Чаты", "Книга", "Звонки"),
+        tabs = listOf("Чаты", "Контакты", "Звонки"),
         selected = tab,
         onTab = onTab,
         onSwitchWindows = onSwitchWindows,
         onSearch = {},
         onSettings = onSettings,
         onNeighbourWindow = onNeighbourWindow,
-        // Ряд фильтров есть только у журнала: у «Чатов» и «Книги» его в макете нет.
-        secondRow = if (tab != "Звонки") {
-            null
+        // «Вид» стоит последней вкладкой и только у «Контактов»: у чатов и журнала
+        // настраивать нечего, и кнопка там означала бы несуществующее.
+        tabsTrailing = if (tab == "Контакты") {
+            { Tab(label = "Вид", current = false, onClick = onView) }
         } else {
-            { FilterRow(CALL_FILTERS, calls, { calls = it }) }
+            null
+        },
+        // Второй ряд: у журнала фильтры, у «Контактов» в виде «меню» — разделы.
+        secondRow = when {
+            tab == "Звонки" -> { { FilterRow(CALL_FILTERS, calls, { calls = it }) } }
+            tab == "Контакты" && !book.view.folders && book.tabs.size > 1 ->
+                { { FilterRow(book.tabs, book.chosen.ifBlank { "Все" }, onChooseSection) } }
+            else -> null
         },
     ) {
         when (tab) {
@@ -1016,10 +1062,11 @@ private fun PhoneWindow(
                 onSettings = onSettings,
             )
 
-            "Книга" -> BookScreen(
+            "Контакты" -> BookScreen(
                 state = book,
                 onSearch = onSearchInBook,
                 onOpen = onOpenPerson,
+                onToggleSection = onToggleSection,
             )
 
             // Заглушка называет выбранный фильтр. Фильтр, от которого на экране ничего

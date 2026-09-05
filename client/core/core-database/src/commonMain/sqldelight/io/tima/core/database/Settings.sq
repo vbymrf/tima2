@@ -1,0 +1,27 @@
+-- Настройки экранов — ПЛАН-КОНТАКТОВ.md, Д5.
+--
+-- Пары «имя → значение», а не столбцы под каждую настройку: настройки вида появляются и
+-- исчезают вместе с экранами, и столбец под каждую означал бы миграцию на каждую галку.
+--
+-- **Здесь не хранится ничего секретного.** Ключи, токены и фраза живут в хранилище
+-- платформы (`core-secrets`); сюда кладут то, что человек выбрал глазами: вид списка,
+-- показывать ли поиск, чем называть людей. Потеря такой строки означает возврат к
+-- умолчанию, а не потерю доступа.
+CREATE TABLE setting (
+    name  TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+read:
+SELECT value FROM setting WHERE name = ?;
+
+all:
+SELECT name, value FROM setting;
+
+-- Два запроса вместо UPSERT: диалект здесь SQLite 3.18, ON CONFLICT DO UPDATE появился
+-- в 3.24 (то же, что в Book.sq).
+put:
+INSERT OR IGNORE INTO setting (name, value) VALUES (?, ?);
+
+update:
+UPDATE setting SET value = ? WHERE name = ?;
