@@ -14,6 +14,17 @@
     -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!--
+      READ_CONTACTS появляется вместе со вкладкой «Контакты» (Д3). Спрашивается оно не
+      при запуске, а при первом открытии вкладки: приложение, просящее доступ к
+      контактам на первом экране, не может объяснить зачем — человек ещё не видел ни
+      одного контакта.
+
+      Разрешения на ЗАПИСЬ здесь нет и не будет: книгу телефона мы читаем, но не
+      правим. Своё имя контакта живёт в нашей книге и обратно в телефон не уходит.
+    -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
     <application
         android:name=".TimaApplication"
         android:label="TIMA v2"

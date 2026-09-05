@@ -1,6 +1,7 @@
 package io.tima.domain.chat
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 
 /**
  * Книга контактов — ПЛАН-КОНТАКТОВ.md, Д2.
@@ -92,6 +93,115 @@ interface Book {
 
 /** Что прочитано с телефона: только имя и номер, больше ничего нам не нужно. */
 data class PhoneBookEntry(val phone: String, val name: String?)
+
+/**
+ * Телефонная книга устройства. Реализуется `core-contacts` по платформам.
+ *
+ * Порт объявлен здесь, а не в модуле-реализации: сценарий синхронизации живёт в домене,
+ * и он не должен знать, что на Android это `ContactsContract`, а на ПК — ничего.
+ */
+fun interface PhoneBookSource {
+
+    /**
+     * Прочитать книгу целиком.
+     *
+     * Целиком, а не порциями: чтение идёт редко, а частичное потребовало бы курсора,
+     * живущего между вызовами, — и первый же поворот экрана оставил бы книгу
+     * прочитанной наполовину.
+     */
+    suspend fun read(): PhoneBookRead
+}
+
+/** Чем кончилось чтение книги устройства. */
+sealed interface PhoneBookRead {
+
+    /** Прочитано; номера уже приведены к E.164, неразбираемые отброшены. */
+    data class Entries(val entries: List<PhoneBookEntry>) : PhoneBookRead
+
+    /**
+     * Разрешения нет.
+     *
+     * Отдельное состояние, а не пустой список: пустая книга и закрытая выглядят
+     * одинаково, но говорить о них надо разное — во втором случае человеку есть что
+     * нажать.
+     */
+    data object Denied : PhoneBookRead
+
+    /**
+     * Книги у платформы нет вовсе — ПК.
+     *
+     * Тоже не пустой список: предлагать «разрешить доступ» там, где разрешать нечего,
+     * значит обещать несуществующее.
+     */
+    data object NoBook : PhoneBookRead
+}
+
+/**
+ * Сверка номеров с сервером: кто из них в TIMa.
+ *
+ * Реализуется `core-network` поверх `POST /users/discover`. **Уходит не номер, а его
+ * слепой индекс** — это сделано на сервере и потому обещание «сверяем, не читая»
+ * выполнимо.
+ */
+fun interface ContactDiscovery {
+
+    /** @return номер → `user_id`, либо `null` для тех, кого в TIMa нет. */
+    suspend fun discover(phones: List<String>): Map<String, String?>
+}
+
+/**
+ * Синхронизация книги — ПЛАН-КОНТАКТОВ.md, Д3 и Д4.
+ *
+ * Три шага, и каждый может кончиться сам по себе: прочитать телефонную книгу, положить
+ * прочитанное в свою, сверить с сервером. **Сверка не обязана удаться**: без сети список
+ * остаётся тем, что был, а не пустеет и не теряет отметки.
+ */
+class SyncBook(
+    private val phones: PhoneBookSource,
+    private val book: Book,
+    private val discovery: ContactDiscovery,
+) {
+
+    /**
+     * @param batch сколько номеров уходит за раз. Предел сервера — 2000; берём меньше,
+     *   потому что ответ ждёт человек, а не фон.
+     */
+    suspend fun run(batch: Int = 500): SyncStep {
+        val read = phones.read()
+        val entries = when (read) {
+            is PhoneBookRead.Entries -> read.entries
+            PhoneBookRead.Denied -> return SyncStep.NeedPermission
+            PhoneBookRead.NoBook -> return SyncStep.NoBook
+        }
+        book.fromPhoneBook(entries)
+
+        // Сверяются номера всей книги, а не только что прочитанного: заведённые вручную
+        // тоже могли появиться в TIMa, и не спросить о них значит навсегда оставить их
+        // «только в телефоне».
+        val all = book.list().first().map { it.phone }
+        var found = 0
+        for (part in all.chunked(batch)) {
+            val matched = try {
+                discovery.discover(part)
+            } catch (_: Exception) {
+                // Сеть отказала — то, что уже прочитано, остаётся. Молчаливое падение
+                // здесь хуже частичного результата: человек видел бы пустую вкладку.
+                return SyncStep.Offline(read = entries.size, matched = found)
+            }
+            book.matched(matched)
+            found += matched.values.count { !it.isNullOrBlank() }
+        }
+        return SyncStep.Done(read = entries.size, matched = found)
+    }
+}
+
+/** Чем кончилась синхронизация. */
+sealed interface SyncStep {
+    data class Done(val read: Int, val matched: Int) : SyncStep
+    data class Offline(val read: Int, val matched: Int) : SyncStep
+    data object NeedPermission : SyncStep
+    data object NoBook : SyncStep
+}
 
 /**
  * Нормализация номера в E.164 — до всего остального.

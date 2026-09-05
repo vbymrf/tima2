@@ -24,6 +24,7 @@ kotlin {
             implementation(project(":core:core-ui"))
             // Хранилищу секретов нужен контекст: AndroidKeyStore вместо DPAPI.
             implementation(project(":core:core-secrets"))
+            implementation(project(":core:core-contacts"))
             implementation(libs.androidx.activity.compose)
             // foundation нужен самой Activity: тема системы (isSystemInDarkTheme) живёт там.
             implementation(compose.foundation)
