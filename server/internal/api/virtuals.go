@@ -34,14 +34,24 @@ type VirtualStore interface {
 	HasPhone(ctx context.Context, ids []string) (map[string]bool, error)
 	IdentityPub(ctx context.Context, userID string) ([]byte, error)
 	Nicknames(ctx context.Context, ids []string) (map[string]string, error)
+
+	// Устройство виртуального аккаунта: без него в него не войти вовсе.
+	NewDevice(ctx context.Context, userID string, encryptionPub, signingPub []byte, platform string) (string, error)
+}
+
+// VirtualTokens — что виртуальным аккаунтам нужно от подсистемы входа.
+//
+// Только выдача токена: код из SMS сюда прислать неоткуда, номера у аккаунта нет.
+type VirtualTokens interface {
+	IssueAccess(userID, deviceID string) (string, error)
 }
 
 var _ VirtualStore = (*store.Store)(nil)
 
 // RegisterVirtuals — две ручки.
-func RegisterVirtuals(mux *http.ServeMux, st VirtualStore, requireDevice Middleware) {
+func RegisterVirtuals(mux *http.ServeMux, st VirtualStore, tokens func() VirtualTokens, requireDevice Middleware) {
 	mux.HandleFunc("GET /api/v1/users/me/virtuals", requireDevice(listVirtuals(st)))
-	mux.HandleFunc("POST /api/v1/users/me/virtuals", requireDevice(createVirtual(st)))
+	mux.HandleFunc("POST /api/v1/users/me/virtuals", requireDevice(createVirtual(st, tokens)))
 }
 
 // virtualSigned — что именно подписывает владелец.
@@ -57,12 +67,19 @@ func virtualSigned(nickname string, identityPub []byte) []byte {
 }
 
 // createVirtual — POST /users/me/virtuals {nickname, identity_pub, signature}.
-func createVirtual(st VirtualStore) http.HandlerFunc {
+func createVirtual(st VirtualStore, tokens func() VirtualTokens) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Nickname    string `json:"nickname"`
-			IdentityPub string `json:"identity_pub"` // base64url, 32 байта
+			IdentityPub string `json:"identity_pub"` // base64url, 32 байта — ключ из новой фразы
 			Signature   string `json:"signature"`    // base64url, 64 байта, ключом владельца
+			// Ключи УСТРОЙСТВА для нового аккаунта. Свои, а не те же, что у владельца:
+			// одно устройство — один набор ключей на аккаунт, иначе конверт, посланный
+			// виртуальному, открывался бы ключом основного, и «отдельный пользователь»
+			// оставался бы словами.
+			EncryptionPub string `json:"encryption_pub"`
+			SigningPub    string `json:"signing_pub"`
+			Platform      string `json:"platform,omitempty"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 8<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -71,9 +88,16 @@ func createVirtual(st VirtualStore) http.HandlerFunc {
 		b64 := base64.RawURLEncoding
 		identityPub, err1 := b64.DecodeString(req.IdentityPub)
 		signature, err2 := b64.DecodeString(req.Signature)
+		enc, err3 := b64.DecodeString(req.EncryptionPub)
+		sig, err4 := b64.DecodeString(req.SigningPub)
 		if err1 != nil || err2 != nil || len(identityPub) != 32 || len(signature) != 64 {
 			writeErr(w, http.StatusBadRequest, "bad_encoding",
 				"identity_pub и signature — base64url, 32 и 64 байта")
+			return
+		}
+		if err3 != nil || err4 != nil || len(enc) != 32 || len(sig) != 32 {
+			writeErr(w, http.StatusBadRequest, "bad_keys",
+				"encryption_pub и signing_pub — base64url, по 32 байта")
 			return
 		}
 
@@ -115,11 +139,32 @@ func createVirtual(st VirtualStore) http.HandlerFunc {
 			return
 		}
 
+		// Устройство и токен выдаются сразу. Без них аккаунт был бы заведён и
+		// недоступен: войти в него нечем — кода из SMS не будет никогда, номера у него
+		// нет. Заводит его то же устройство, что и просило, — оно им и пользуется.
+		deviceID, err := st.NewDevice(r.Context(), userID, enc, sig, normalizePlatform(req.Platform))
+		if err != nil {
+			log.Printf("createVirtual: устройство: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		access, err := tokens().IssueAccess(userID, deviceID)
+		if err != nil {
+			log.Printf("createVirtual: токен: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
+			return
+		}
+
 		// Фразы восстановления в ответе нет и быть не может: её придумал клиент, из неё
 		// он вывел ключ, и сервер её не видел. Сказать «сохраните фразу» — дело клиента.
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(map[string]any{"user_id": userID, "nickname": req.Nickname})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"user_id":      userID,
+			"nickname":     req.Nickname,
+			"device_id":    deviceID,
+			"access_token": access,
+		})
 	}
 }
 

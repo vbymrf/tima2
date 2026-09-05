@@ -36,6 +36,18 @@ const (
 	rlSmsPerPhone   = 3  // SMS на телефон: защита от спама SMS-провайдером
 	rlSmsPerIP      = 10 // SMS с одного IP: перебор чужих телефонов
 	rlVerifyPerCode = 5  // попыток verify на request_id: перебор 6-значного кода
+
+	// Суточный предел кодов на номер — решение заказчика 2026-09-05.
+	//
+	// Предел ОБЩИЙ: в него входят вход, восстановление и передача аккаунта. Отдельные
+	// счётчики обходятся сменой повода — упёршись в предел передачи, следующий код
+	// просят под видом входа, и предел перестаёт существовать. Счёт за SMS платим мы,
+	// и платим по номеру, а не по поводу.
+	//
+	// Десять — это девять неверных фраз за сутки при трёх заведённых передачах: для
+	// человека, которому фразу продиктовали, с запасом; для перебора — ничто.
+	rlSmsPerDay   = 10
+	rlWindowDay   = 24 * time.Hour
 )
 
 func (s *Server) limSmsPerPhone() int64   { return orDefault(s.SMSPerPhone, rlSmsPerPhone) }
@@ -60,10 +72,18 @@ func (s *Server) rateLimit(w http.ResponseWriter, r *http.Request, key string, l
 // rateLimit — свободная функция: ею пользуются и Server, и registrar-ы.
 // Ограничителя нет (dev без Redis) — пропускаем: это осознанный режим, а не отказ.
 func rateLimit(lim *ratelimit.Limiter, w http.ResponseWriter, r *http.Request, key string, limit int64) bool {
+	return rateLimitFor(lim, w, r, key, limit, rlWindow)
+}
+
+// rateLimitFor — то же, но со своим окном: суточному пределу десятиминутное не годится.
+func rateLimitFor(
+	lim *ratelimit.Limiter, w http.ResponseWriter, r *http.Request,
+	key string, limit int64, window time.Duration,
+) bool {
 	if lim == nil {
 		return true
 	}
-	ok, retryAfter, err := lim.Allow(r.Context(), key, limit, rlWindow)
+	ok, retryAfter, err := lim.Allow(r.Context(), key, limit, window)
 	if err != nil {
 		log.Printf("ratelimit %s: %v", key, err)
 		return true
@@ -119,6 +139,11 @@ func (s *Server) smsRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	if !s.rateLimit(w, r, "sms:phone:"+req.Phone, s.limSmsPerPhone()) ||
 		!s.rateLimit(w, r, "sms:ip:"+clientIP(r), s.limSmsPerIP()) {
+		return
+	}
+	// Второй предел — суточный и на тот же номер. Первый бережёт от очереди из трёх
+	// SMS подряд, этот — от сотни за день по разным поводам.
+	if !rateLimitFor(s.Limit, w, r, "sms:phone:day:"+req.Phone, rlSmsPerDay, rlWindowDay) {
 		return
 	}
 	requestID := newUUID()

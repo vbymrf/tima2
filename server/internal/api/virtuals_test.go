@@ -96,16 +96,44 @@ func завестиВиртуального(t *testing.T, ts *httptest.Server, o
 	b64 := base64.RawURLEncoding
 	подпись := ed25519.Sign(owner.identity, virtualSigned(nick, pub))
 
+	// Ключи устройства для нового аккаунта — свои: одно устройство, но разные ключи
+	// на аккаунт, иначе «отдельный пользователь» оставался бы словами.
+	var encPriv [32]byte
+	if _, err := rand.Read(encPriv[:]); err != nil {
+		t.Fatal(err)
+	}
+	encPub, err := curve25519.X25519(encPriv[:], curve25519.Basepoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signPub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	var resp struct {
-		UserID string `json:"user_id"`
+		UserID      string `json:"user_id"`
+		DeviceID    string `json:"device_id"`
+		AccessToken string `json:"access_token"`
 	}
 	code := authedJSON(t, ts, "POST", "/api/v1/users/me/virtuals", owner.token, map[string]any{
-		"nickname":     nick,
-		"identity_pub": b64.EncodeToString(pub),
-		"signature":    b64.EncodeToString(подпись),
+		"nickname":       nick,
+		"identity_pub":   b64.EncodeToString(pub),
+		"signature":      b64.EncodeToString(подпись),
+		"encryption_pub": b64.EncodeToString(encPub),
+		"signing_pub":    b64.EncodeToString(signPub),
+		"platform":       "android",
 	}, &resp)
+	if code == http.StatusCreated && resp.AccessToken == "" {
+		t.Fatal("аккаунт заведён без токена — войти в него нечем")
+	}
+	последнийТокен = resp.AccessToken
 	return code, resp.UserID
 }
+
+// последнийТокен — токен последнего заведённого виртуального аккаунта. Нужен тесту,
+// который проверяет, что в аккаунт можно войти сразу.
+var последнийТокен string
 
 func моиВиртуальные(t *testing.T, ts *httptest.Server, token string) []string {
 	t.Helper()
@@ -204,10 +232,26 @@ func TestБезПодписиВладельцаНеСоздаётся(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Ключи устройства настоящие: иначе запрос отвергнется как негодный ещё до
+	// проверки подписи, и тест перестанет проверять то, ради чего написан.
+	var encPriv [32]byte
+	if _, err := rand.Read(encPriv[:]); err != nil {
+		t.Fatal(err)
+	}
+	encPub, err := curve25519.X25519(encPriv[:], curve25519.Basepoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signPub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	code := authedJSON(t, ts, "POST", "/api/v1/users/me/virtuals", пётр.token, map[string]any{
-		"nickname":     "chuzhaya_podpis_1",
-		"identity_pub": b64.EncodeToString(pub),
-		"signature":    b64.EncodeToString(ed25519.Sign(чужой, virtualSigned("chuzhaya_podpis_1", pub))),
+		"nickname":       "chuzhaya_podpis_1",
+		"identity_pub":   b64.EncodeToString(pub),
+		"signature":      b64.EncodeToString(ed25519.Sign(чужой, virtualSigned("chuzhaya_podpis_1", pub))),
+		"encryption_pub": b64.EncodeToString(encPub),
+		"signing_pub":    b64.EncodeToString(signPub),
 	}, nil)
 	if code != http.StatusForbidden {
 		t.Fatalf("создание с чужой подписью прошло: %d", code)
@@ -221,6 +265,17 @@ func TestВиртуальныйПолноценен(t *testing.T) {
 	ts, _ := setup(t)
 	пётр := заведиВладельца(t, ts, "+79990000047")
 	_, virtual := завестиВиртуального(t, ts, пётр, "polnocennyy_00")
+	токен := последнийТокен
+
+	// В аккаунт можно войти сразу: устройство и токен выданы при создании. Кода из
+	// SMS не будет никогда — номера у него нет, и без этого аккаунт был бы заведён
+	// и недоступен.
+	var своя struct {
+		ChannelID string `json:"channel_id"`
+	}
+	if code := authedJSON(t, ts, "GET", "/api/v1/users/me/feed", токен, nil, &своя); code != http.StatusOK {
+		t.Fatalf("виртуальный не может открыть свою ленту: %d", code)
+	}
 
 	// Прав у него ровно столько же: ник он себе уже занял при создании, а найти его
 	// можно и он виден в списке имён — тем же кодом, что и обычного.
