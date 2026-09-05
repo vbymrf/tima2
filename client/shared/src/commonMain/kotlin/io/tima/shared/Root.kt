@@ -54,6 +54,7 @@ import io.tima.feature.chat.ChatsState
 import io.tima.feature.chat.ChatsStore
 import io.tima.feature.chat.BookState
 import io.tima.core.contacts.platformInvite
+import io.tima.core.secrets.Account
 import io.tima.core.contacts.platformPhoneBook
 import io.tima.core.ui.Tab
 import io.tima.domain.chat.BookEntry
@@ -120,7 +121,15 @@ import io.tima.feature.chat.ChatsScreen
 @Composable
 fun Root(
     entry: Entry,
-    deviceDatabase: () -> TimaDatabase,
+    /**
+     * Открыть базу по имени файла (Д11).
+     *
+     * Своя база на каждый аккаунт, а не одна на приложение: у аккаунтов разные ключи
+     * покоя, и общая база означала бы, что переписка виртуального открывается ключом
+     * основного — то есть «отдельный пользователь» остаётся словами. Имя считает
+     * `databaseFor`; приложению остаётся каталог.
+     */
+    deviceDatabase: (String) -> TimaDatabase,
     /** Где платформа хранит выбранное оформление. */
     appearanceStore: AppearanceStore,
     linkCode: String? = null,
@@ -178,7 +187,7 @@ class AppearanceStore(
 @Composable
 private fun Inside(
     entry: Entry,
-    deviceDatabase: () -> TimaDatabase,
+    deviceDatabase: (String) -> TimaDatabase,
     linkCode: String?,
     build: Build,
     appearance: Appearance,
@@ -197,9 +206,27 @@ private fun Inside(
     }
 
     // Сборка живёт в Assembly.kt: здесь навигация, а не «кто из чего состоит».
-    val assembled = assemble(entry, current, deviceDatabase)
+    // Первый аккаунт сохраняет прежнее имя базы: у того, кто уже пользуется
+    // приложением, переписка лежит в `tima.db`, и переименование потеряло бы её.
+    val assembled = assemble(entry, current, deviceDatabase, entry.accountList().firstOrNull()?.userId)
 
-    App(assembled, entry.platform, current.secret, linkCode, build, appearance, onAppearance)
+    App(
+        assembled = assembled,
+        platform = entry.platform,
+        deviceSecret = current.secret,
+        linkCode = linkCode,
+        build = build,
+        appearance = appearance,
+        onAppearance = onAppearance,
+        accounts = entry.accountList(),
+        // Переключение меняет указатель и перечитывает устройство. Всё остальное
+        // пересобирается само: `assemble` помнит по устройству, а у другого аккаунта
+        // другая сессия и другой ключ покоя.
+        onSwitchAccount = { userId ->
+            entry.switchAccount(userId)
+            device = entry.created()
+        },
+    )
 }
 
 @Composable
@@ -320,6 +347,9 @@ private fun App(
     build: Build,
     appearance: Appearance,
     onAppearance: (Appearance) -> Unit,
+    /** Аккаунты этого устройства: основной и его виртуальные (Д11). */
+    accounts: List<Account> = emptyList(),
+    onSwitchAccount: (String) -> Unit = {},
 ) {
     val environment = assembled.environment
     val network = assembled.network
@@ -477,6 +507,14 @@ private fun App(
             onProfile = {
                 where = Where.Profile
                 windowSwitcher = false
+            },
+            // Аккаунты — здесь же: это единственное место, где человек видит, от чьего
+            // лица он в приложении, и менять это надо там же, где смотрят.
+            accounts = accounts.map { it.userId to (it.nickname.ifBlank { it.userId.take(8) }) },
+            currentAccount = session.userId,
+            onAccount = { userId ->
+                windowSwitcher = false
+                onSwitchAccount(userId)
             },
             onClose = { windowSwitcher = false },
         )

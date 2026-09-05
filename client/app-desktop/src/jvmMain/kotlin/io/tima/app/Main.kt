@@ -51,7 +51,9 @@ fun main() = application {
         // выбор `Root`. Платформе осталось только место для хранения строки.
         Root(
             entry = entry,
-            deviceDatabase = { desktopDatabase(File(dataCatalog(), DATABASE_NAME)) },
+            // Имя файла приходит готовым: правило именования — общее (Д11), каталог —
+            // платформенный, и это единственное, что здесь платформенного.
+            deviceDatabase = { name -> desktopDatabase(File(dataCatalog(), name)) },
             appearanceStore = appearanceStore(),
             // Версия порождается сборкой из gradle.properties — одна на Android и ПК.
             // До 2026-08-26 десктоп её не знал и показывал «Установлена —»: вопрос

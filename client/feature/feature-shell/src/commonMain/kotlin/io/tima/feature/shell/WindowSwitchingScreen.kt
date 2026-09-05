@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Name
+import io.tima.core.ui.SectionTitle
 import io.tima.core.ui.IconButton
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Counter
@@ -60,6 +61,15 @@ fun WindowSwitchingScreen(
      * любого экрана и потому ближе всего к «шапке приложения».
      */
     onProfile: (() -> Unit)? = null,
+    /**
+     * Аккаунты этого устройства: пара «идентификатор — как называть» (Д11).
+     *
+     * Один аккаунт — списка нет вовсе: строка «переключиться» там, где переключаться
+     * не на что, обещает несуществующее.
+     */
+    accounts: List<Pair<String, String>> = emptyList(),
+    currentAccount: String = "",
+    onAccount: (String) -> Unit = {},
 ) {
     val colors = Tima.colors
     Box(
@@ -82,6 +92,17 @@ fun WindowSwitchingScreen(
                 .clickable(enabled = false, onClick = {}),
         ) {
             Header(name, alias, onClose, onProfile)
+
+            if (accounts.size > 1) {
+                SectionTitle("Аккаунты")
+                accounts.forEach { (userId, label) ->
+                    ListLine(
+                        onClick = { if (userId != currentAccount) onAccount(userId) },
+                        left = { Glyph(if (userId == currentAccount) "●" else "○") },
+                        middle = { Name(label) },
+                    )
+                }
+            }
 
             for (window in Window.entries) {
                 Item(

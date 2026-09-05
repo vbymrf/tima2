@@ -72,7 +72,8 @@ class MainActivity : ComponentActivity() {
             // выбирает Android, и это правильно — он же его и стирает при удалении.
             Root(
                 entry = entry,
-                deviceDatabase = { androidDatabase(applicationContext, DATABASE_NAME) },
+                // Имя файла приходит готовым: правило именования общее (Д11).
+                deviceDatabase = { name -> androidDatabase(applicationContext, name) },
                 appearanceStore = appearanceStore(),
                 linkCode = code.value,
                 // Имя и номер разом: имя говорит, что за версия, номер — что

@@ -59,6 +59,8 @@ import io.tima.core.outbox.Inbox
 import io.tima.core.outbox.Outbox
 import io.tima.core.outbox.UuidDedupKeys
 import io.tima.core.secrets.SecretVault
+import io.tima.core.secrets.Account
+import io.tima.core.secrets.Accounts
 import io.tima.core.secrets.VaultSecretStore
 import io.tima.core.secrets.platformVault
 import io.tima.domain.account.ConfirmDeviceLink
@@ -99,6 +101,7 @@ class Entry private constructor(
     /** На чём мы работаем. Приложение объявляет это серверу при каждом запуске. */
     val platform: Platform,
     private val secrets: VaultSecretStore,
+    private val accounts: Accounts,
 ) {
 
     /**
@@ -112,10 +115,46 @@ class Entry private constructor(
      * @return `null` — надо входить.
      */
     fun created(): Device? {
+        // Есть список аккаунтов — берём текущий из него. Нет — читаем прежнее место:
+        // до Д11 сессия лежала одна и без имени аккаунта, и терять её при обновлении
+        // приложения значило бы потребовать перерегистрации на пустом месте.
+        accounts.current()?.let { userId ->
+            val store = accounts.store(userId)
+            val session = store.session() ?: return@let
+            val secret = store.deviceSecret() ?: return@let
+            return Device(secret, session)
+        }
         val session = secrets.session() ?: return null
         val secret = secrets.deviceSecret() ?: return null
+        // Прежний одиночный вход переезжает в список при первом же запуске: дальше
+        // работает только новый путь, и двух источников правды не остаётся.
+        accounts.remember(Account(userId = session.userId), session, secret)
         return Device(secret, session)
     }
+
+    /**
+     * Аккаунты этого устройства — ПЛАН-КОНТАКТОВ.md, Д11.
+     *
+     * Основной и его виртуальные равны во всём, кроме телефона: у каждого своя сессия,
+     * свой ключ покоя и своя база.
+     */
+    fun accountList(): List<Account> = accounts.all()
+
+    /** Кто сейчас. */
+    fun currentAccount(): String? = accounts.current()
+
+    /**
+     * Переключиться на другой аккаунт.
+     *
+     * Ничего не отправляет и ничего не закрывает: пересборка окружения — дело того, кто
+     * его собирает. Здесь меняется только указатель, и это намеренно: переключение,
+     * которое само лезет в сеть, нечем отменить.
+     */
+    fun switchAccount(userId: String) = accounts.switchTo(userId)
+
+    /** Запомнить заведённый аккаунт (свой или виртуальный) и сделать текущим. */
+    fun rememberAccount(account: Account, session: Session, deviceSecret: ByteArray) =
+        accounts.remember(account, session, deviceSecret)
 
     /** Всё, что нужно приложению после входа: ключ покоя базы и кто мы для сервера. */
     class Device(val secret: ByteArray, val session: Session)
@@ -167,6 +206,7 @@ class Entry private constructor(
                     platform = platform.server,
                 ),
                 secrets = secrets,
+                accounts = Accounts(secretStore),
             )
         }
 

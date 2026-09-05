@@ -44,9 +44,29 @@ class Assembled(
  * другой ключ покоя, и переиспользовать собранное между ними нельзя.
  */
 @Composable
-fun assemble(entry: Entry, device: Entry.Device, deviceDatabase: () -> TimaDatabase): Assembled =
+fun assemble(
+    entry: Entry,
+    device: Entry.Device,
+    /**
+     * Открыть базу по **имени файла**. Имя считает общий код (`databaseFor`), а не
+     * приложение: правило именования одно на все платформы, и два одинаковых правила в
+     * двух приложениях однажды разошлись бы.
+     */
+    deviceDatabase: (String) -> TimaDatabase,
+    /**
+     * Первый заведённый аккаунт: за ним остаётся прежнее имя базы.
+     *
+     * Иначе человек, уже пользующийся приложением, после обновления открыл бы пустую
+     * базу — переписка осталась бы в файле, которого никто больше не ищет.
+     */
+    firstAccount: String? = null,
+): Assembled =
     remember(device) {
-        val environment = Environment.open(deviceDatabase(), device.secret, device.session.userId)
+        val environment = Environment.open(
+            deviceDatabase(databaseFor(device.session.userId, firstAccount)),
+            device.secret,
+            device.session.userId,
+        )
         val network = Network.create(device.session, entry.host)
         val identity = deviceIdentityFrom(device.secret)
 
