@@ -11,9 +11,14 @@
 // ── ПОДПИСКА АВТОМАТИЧЕСКАЯ ─────────────────────────────────────────────────
 //
 // Кнопки «подписаться» на странице нет: подписчиком становится тот, кто её открыл.
-// Друзей на сервере нет и графа знакомств не будет (решение А3), поэтому «свои» пока
-// неотличимы от посторонних, и уровень 2 на чужой странице не видит никто, кроме
-// владельца. Появятся друзья — поменяется граница выдачи, а не устройство ленты.
+//
+// ── КРУГ «СВОИМ» ────────────────────────────────────────────────────────────
+//
+// Здесь было написано, что своих на сервере нет, а появятся друзья — поменяется
+// граница выдачи, а не устройство ленты. Друзья появились (Д1б), и поменялась ровно
+// граница: друг владельца видит уровень 2 «своим», посторонний — только 1 «всем».
+// Направление именно такое: круг задаёт владелец страницы, а не читатель. Иначе
+// «добавь его в друзья» открывало бы чужое узкое.
 package api
 
 import (
@@ -40,6 +45,9 @@ type FeedStore interface {
 	CarryToFeed(ctx context.Context, channelID, carrierID, srcGroupID string, srcMessageID int64, level, visibleTo int16) (uint64, error)
 	ListFeed(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16) ([]store.FeedItem, error)
 	RemoveFeedItem(ctx context.Context, channelID string, postID uint64, ownerID string) error
+
+	// Круг «своим» на чужой странице: друг владельца — свой (Д1б).
+	IsFriend(ctx context.Context, ownerUserID, otherUserID string) (bool, error)
 
 	// Право видеть оригинал проверяется до переноса: унести можно только то, что тебе
 	// показали. Роль и поимённое разрешение отвечают на этот вопрос вместе.
@@ -99,9 +107,15 @@ func userFeed(st FeedStore) http.HandlerFunc {
 		if err := st.SubscribeToFeed(r.Context(), channelID, id.UserID); err != nil {
 			log.Printf("userFeed: subscribe: %v", err)
 		}
-		// Посторонний видит «всем и всегда» и «всем». Уровень 2 — «своим», а своих на
-		// сервере пока нет: см. шапку файла.
-		writeFeed(w, st, r, channelID, levelEveryone)
+		// Свой — тот, кого владелец добавил к себе в друзья. Ошибка чтения списка не
+		// должна закрывать страницу: показываем открытое, как постороннему.
+		граница := levelEveryone
+		if свой, err := st.IsFriend(r.Context(), owner, id.UserID); err != nil {
+			log.Printf("userFeed: друзья %s: %v", owner, err)
+		} else if свой {
+			граница = levelMembers
+		}
+		writeFeed(w, st, r, channelID, граница)
 	}
 }
 
