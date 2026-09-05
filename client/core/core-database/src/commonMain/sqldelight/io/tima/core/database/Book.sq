@@ -1,0 +1,110 @@
+-- Книга контактов — ПЛАН-КОНТАКТОВ.md, Д2.
+--
+-- ── КНИГА СВОЯ, А НЕ ЗЕРКАЛО ТЕЛЕФОННОЙ ─────────────────────────────────────
+--
+-- Приложение читает телефонную книгу устройства, но живёт своим списком. Иначе не
+-- выполняются два обещания: удалённый из книги не должен возвращаться при следующей
+-- синхронизации, а заведённый вручную — исчезать оттого, что в телефоне его нет.
+--
+-- ── КЛЮЧ — НОМЕР ────────────────────────────────────────────────────────────
+--
+-- Имя меняется, `user_id` появляется позже (после сверки), а номер и есть то, чем
+-- человек назван: по нему сверяются с сервером и находят человека. Номер здесь в
+-- открытом виде, как и `chats.peer_id`: по нему ищут и по нему сверяют, а искать по
+-- зашифрованному нечем.
+--
+-- ── ДВА ИМЕНИ, А НЕ ОДНО ────────────────────────────────────────────────────
+--
+-- Решение заказчика 2026-09-05. Одно поле означало бы, что правка ложится поверх
+-- прочитанного из телефона, и следующая синхронизация обязана выбрать: затереть правку
+-- или навсегда перестать замечать, что имя в телефоне изменилось. Оба ответа плохие.
+--
+-- Имена закрыты шифром покоя, как `chats.title_enc`: имя человека — содержимое, а не
+-- метаданные. Порядок и поиск делаются в памяти после расшифровки; `ORDER BY` по
+-- шифртексту дал бы случайный порядок, меняющийся при каждой перезаписи.
+CREATE TABLE book (
+    phone          TEXT    NOT NULL PRIMARY KEY,
+    -- Что прочитано из телефонной книги. Перезаписывается синхронизацией свободно.
+    name_phone_enc BLOB,
+    -- Что человек записал сам. Не затирается никем и никогда.
+    name_own_enc   BLOB,
+    -- Раздел книги. Один на человека (решение 2026-09-05): счётчики разделов должны
+    -- складываться в число контактов, а в виде «папками» никто не должен двоиться.
+    section        TEXT    NOT NULL DEFAULT '',
+    -- Заполняется после сверки. NULL — человека в TIMa нет (или ещё не сверяли).
+    user_id        TEXT,
+    -- 1 — заведён вручную. Такой не исчезает оттого, что в телефонной книге его нет.
+    manual         INTEGER NOT NULL DEFAULT 0,
+    -- 1 — убран человеком. Строка остаётся именно ради этого: без неё синхронизация
+    -- вернула бы убранного обратно, и удаление выглядело бы неработающим.
+    hidden         INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX book_by_section ON book (section);
+CREATE INDEX book_by_user ON book (user_id);
+
+-- Разделы книги. Отдельная таблица, а не набор строк из `book.section`: пустой раздел
+-- существует до того, как в него кого-то положили, и без своей строки исчезал бы.
+CREATE TABLE book_section (
+    name  TEXT    NOT NULL PRIMARY KEY,
+    place INTEGER NOT NULL DEFAULT 0
+);
+
+all:
+SELECT phone, name_phone_enc, name_own_enc, section, user_id, manual
+FROM book
+WHERE hidden = 0;
+
+byPhone:
+SELECT phone, name_phone_enc, name_own_enc, section, user_id, manual
+FROM book
+WHERE phone = ?;
+
+-- Из телефонной книги — двумя запросами, а не UPSERT: диалект здесь SQLite 3.18,
+-- `ON CONFLICT DO UPDATE` появился в 3.24. Порядок «вставить, если нет» → «обновить»
+-- даёт ровно то же: своё имя, раздел и `hidden` остаются нетронутыми, и скрытый не
+-- воскресает — без этого удаление выглядело бы неработающим.
+fromPhoneBookInsert:
+INSERT OR IGNORE INTO book (phone) VALUES (?);
+
+fromPhoneBookName:
+UPDATE book SET name_phone_enc = ? WHERE phone = ?;
+
+-- Заведён человеком. `manual` не даёт синхронизации посчитать его пропавшим, а
+-- `hidden = 0` возвращает того, кого убирали раньше: добавление руками — это и есть
+-- прямое «верни».
+addManuallyInsert:
+INSERT OR IGNORE INTO book (phone) VALUES (?);
+
+addManuallyFields:
+UPDATE book SET name_own_enc = ?, section = ?, manual = 1, hidden = 0 WHERE phone = ?;
+
+setOwnName:
+UPDATE book SET name_own_enc = ? WHERE phone = ?;
+
+setSection:
+UPDATE book SET section = ? WHERE phone = ?;
+
+-- Сверка с сервером: кто из них в TIMa.
+setUserId:
+UPDATE book SET user_id = ? WHERE phone = ?;
+
+clearUserId:
+UPDATE book SET user_id = NULL WHERE phone = ?;
+
+-- Убрать из книги. Не DELETE: строка нужна, чтобы синхронизация не вернула убранного.
+hide:
+UPDATE book SET hidden = 1 WHERE phone = ?;
+
+sections:
+SELECT name, place FROM book_section ORDER BY place, name;
+
+addSection:
+INSERT OR IGNORE INTO book_section (name, place) VALUES (?, ?);
+
+removeSection:
+DELETE FROM book_section WHERE name = ?;
+
+-- Люди убранного раздела возвращаются в общий, а не исчезают вместе с ним.
+emptySection:
+UPDATE book SET section = '' WHERE section = ?;
