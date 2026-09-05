@@ -62,8 +62,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        // Удержанная активность — это утечка целого экрана.
-        AndroidContactsAccess.detach()
+        // Удержанная активность — это утечка целого экрана. Отдаём именно себя:
+        // новое окно Android умеет создать раньше, чем доломает старое, и без этого
+        // уходящее обнуляло бы ссылку на живое.
+        AndroidContactsAccess.detach(this)
         super.onDestroy()
     }
 
