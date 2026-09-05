@@ -1340,3 +1340,134 @@ a.ава { text-decoration: none; }
 .запись { padding: 12px var(--о4); border-bottom: 1px solid var(--чёрный-12); }
 .конец-записи { display: flex; align-items: flex-end; gap: 8px; margin-top: 7px; }
 .конец-записи > .тело { flex: 1 1 auto; min-width: 0; font-size: var(--щ5); line-height: 1.45; }
+
+
+/* ── ПРОФИЛЬ И КОНТАКТЫ ───────────────────────────────────────────────────
+ *
+ * Формы, принятые из проб `пробы-контакты/` (решения заказчика 2026-09-05).
+ * Пробы после переноса удалены; почему форма такая — в doc_mig/ПЛАН-КОНТАКТОВ.md.
+ */
+
+/* Профиль в шапке переключения окон. Имя отдельной строкой во всю ширину:
+   оно главное и ни с чем в ряд не встаёт. */
+.профиль-столбом {
+  position: relative;
+  display: flex; flex-direction: column; gap: var(--о2);
+  padding: var(--о5) var(--о4) var(--о4);
+  border-bottom: 1px solid var(--чёрный-12);
+}
+.профиль-столбом .икона.закрыть { position: absolute; top: var(--о3); right: var(--о3); }
+.профиль-столбом .имя-крупно {
+  font-size: var(--щ2); font-weight: 800; letter-spacing: -0.02em;
+  padding-right: 44px;   /* место под крестик: длинное имя не лезет ему под низ */
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Аватар и всё прочее — один ряд с переносом: поместилось правее аватара —
+   стоит там, не поместилось — уезжает под него целиком. */
+.ряд-авы { display: flex; flex-wrap: wrap; align-items: center; gap: var(--о3); }
+.ряд-авы.к-верху { align-items: flex-start; }
+.ава.огром {
+  width: 160px; height: 160px; flex: 0 0 160px;
+  font-size: 56px; border-radius: var(--радиус-квадрат-бол);
+}
+/* Аватар не загружен — квадрат остаётся маленьким, плюс в нём мелкий: это
+   приглашение, а не содержимое. Пустой квадрат в 160 px занимал бы место
+   картинки, которой нет. */
+.ава.пусто {
+  width: 58px; height: 58px; flex: 0 0 58px;
+  border-radius: var(--радиус-квадрат-бол);
+  font-size: 20px; color: var(--чёрный-50);
+}
+.при-аве {
+  flex: 1 1 146px; min-width: 0;
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--о2);
+}
+.при-аве .пара { display: flex; flex-direction: column; gap: 2px; }
+.при-аве .номер { font-size: var(--щ4); font-weight: 700; }
+.при-аве .ник { font-size: var(--щ5); font-weight: 700; color: var(--чёрный-70); }
+.при-аве .пояснение {
+  font-size: var(--щ6); font-weight: 700; line-height: 1.35;
+  color: var(--чёрный-50); max-width: 100%;
+}
+
+/* Мелкая правка — таблетка в строку текста: рядом с маленьким аватаром
+   кнопка в 42 px была бы почти его высоты и перетягивала взгляд. */
+.правка {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 9px; border-radius: var(--радиус-круг);
+  background: var(--чёрный-6); color: var(--чёрный-70);
+  font-size: 10.5px; font-weight: 800; text-decoration: none;
+}
+
+/* Переключатель вида — последняя вкладка: всегда на одном месте и не спорит
+   за место с названиями разделов. */
+.таб-вид {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 9px; border-radius: var(--радиус-круг);
+  background: var(--чёрный-6); color: var(--чёрный-70);
+  font-size: var(--щ6); font-weight: 800; text-decoration: none;
+}
+.таб-вид .зн { font-size: 13px; line-height: 1; }
+
+/* Второй ряд вкладок — разделы книги в виде «меню». */
+.табы.второй { background: var(--поверхность); border-bottom: 1px solid var(--чёрный-12); }
+.табы.второй .таб { font-size: var(--щ6); padding: 5px 9px; }
+
+/* Строка поиска в контактах ужата: над списком и так два ряда, и каждая
+   лишняя строка отнимает у списка одного человека. */
+.строка-поиска.ужата { padding: 6px var(--о4); }
+.строка-поиска.ужата > .ввод { min-height: 30px; font-size: var(--щ6); }
+.строка-поиска.ужата > .икона { width: 30px; height: 30px; flex-basis: 30px; font-size: 14px; }
+
+/* «Пригласить» вместо звонка — в две строки: одной «Пригласить в TIMa» не
+   влезает, на строку контакта остаётся 96 px. */
+.кн-пригласить {
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; padding: 4px 10px; border-radius: var(--радиус-круг);
+  background: var(--чёрный-6); color: var(--текст); text-decoration: none;
+  font-size: 10.5px; font-weight: 800; line-height: 1.15; text-align: center;
+}
+.кн-пригласить > .втор-строка { color: var(--чёрный-50); font-weight: 700; }
+
+/* Тумблер — «включено / выключено» на месте, без перехода вглубь. */
+.тумбл {
+  width: 34px; height: 20px; flex: 0 0 34px; border-radius: var(--радиус-круг);
+  background: var(--чёрный-12); position: relative;
+}
+.тумбл::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 50%; background: #ffffff;
+}
+.тумбл.вкл { background: var(--навигация); }
+.тумбл.вкл::after { left: 16px; }
+
+/* Галка — квадрат, а не круг: круг означает «одно из», квадрат — «сколько
+   угодно, в том числе ничего». */
+.галка {
+  width: 22px; height: 22px; flex: 0 0 22px; border-radius: 6px;
+  border: 2px solid var(--чёрный-12); background: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 800; color: transparent;
+}
+.галка.вкл { background: var(--навигация); border-color: var(--навигация); color: #ffffff; }
+
+/* Выбор из двух — «Папки | Меню». */
+.выбор-двух { display: flex; gap: var(--о2); padding: 0 var(--о4) var(--о3); }
+.выбор-двух > a {
+  flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 40px; border-radius: var(--радиус-круг);
+  background: var(--чёрный-6); color: var(--чёрный-70);
+  font-size: var(--щ5); font-weight: 800; text-decoration: none;
+}
+.выбор-двух > a.нажата { background: var(--навигация); color: #ffffff; }
+
+/* Показ выбранного прямо в подокне: слово «Меню» ничего не говорит о том,
+   что получится, — строка разделов и есть ответ. */
+.как-будет { padding: 0 var(--о4) var(--о3); }
+.как-будет > .проба-табов {
+  display: flex; gap: 4px; padding: 6px; border-radius: var(--радиус-мал);
+  background: var(--функц); border: 1px solid var(--чёрный-12); overflow: hidden;
+}
+.как-будет .таб { font-size: var(--щ6); padding: 4px 8px; white-space: nowrap; }
+.как-будет > .втор { margin-top: 5px; font-size: 11px; }
