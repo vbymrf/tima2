@@ -128,7 +128,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// Страница человека: своя лента и перенос к себе. Лента — канал, который ищут по
 	// человеку, поэтому регистратор стоит рядом с каналами, а не с группами.
 	RegisterFeeds(mux, s.Store, s.requireActiveDevice)
-	RegisterFriends(mux, s.Store, s.requireActiveDevice)
+	RegisterVirtuals(mux, s.Store, s.requireActiveDevice)
 	// Звонки, групповые звонки и аудио-комнаты (шаг 4): сюда же уехали поля
 	// Calls, Rooms и LiveKitURL — их видят только эти двенадцать маршрутов.
 	RegisterCalls(mux, s.Store, s.livekitSettings, s.notifier(), s.requireActiveDevice)

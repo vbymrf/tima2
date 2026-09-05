@@ -27,13 +27,18 @@ type UserStore interface {
 	NicknameFree(ctx context.Context, nick string) (bool, error)
 	FindUserByNickname(ctx context.Context, nick string) (string, error)
 	Nicknames(ctx context.Context, ids []string) (map[string]string, error)
+
+	// Есть ли у человека телефон. Виртуальный аккаунт — тот, у кого его нет (Д10):
+	// отдельного признака не заводится, но вычислить его может только сервер.
+	HasPhone(ctx context.Context, ids []string) (map[string]bool, error)
 	IdentitiesOf(ctx context.Context, ids []string) (map[string]store.Identity, error)
 	ListDevices(ctx context.Context, userID string) ([]store.Device, error)
 
 	// Удаление аккаунта: пометка, стирание по сроку (ADR-0015)
 	PersonOfUser(ctx context.Context, userID string) (string, error)
 	RetentionDays(ctx context.Context, name string) (int, error)
-	MarkAccountDeleted(ctx context.Context, personID string, purgeAfterDays int) error
+	// Удаление уносит виртуальные аккаунты и всё, чем они владеют (§4 плана).
+	MarkAccountAndBelongings(ctx context.Context, personID string, purgeAfterDays int) error
 
 	// Смена личности после «начать заново» и возврат по прежней фразе
 	SetOrCheckIdentity(ctx context.Context, userID string, identityPub []byte) error

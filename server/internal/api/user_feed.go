@@ -8,17 +8,45 @@
 // подписчики и удаление достались готовыми, а добавились три вещи — связь «человек → его
 // канал», пост-ссылка вместо копии и граница выдачи по кругу.
 //
-// ── ПОДПИСКА АВТОМАТИЧЕСКАЯ ─────────────────────────────────────────────────
+// ── ПОДПИСКУ ДЕЛАЕТ ВЛАДЕЛЕЦ ────────────────────────────────────────────────
 //
-// Кнопки «подписаться» на странице нет: подписчиком становится тот, кто её открыл.
+// **Исправлено 2026-09-05.** Здесь было: «подписчиком становится тот, кто открыл
+// страницу». Это делало своим любого прохожего — открыл чужую страницу и стал
+// подписчиком, то есть тем, кому владелец якобы что-то доверил.
 //
-// ── КРУГ «СВОИМ» ────────────────────────────────────────────────────────────
+// Теперь наоборот: **подписывает владелец**. Его клиент берёт свой список друзей и
+// просит подписать их на свою ленту (`/users/me/feed/subscribers`). Открытие чужой
+// страницы не подписывает ни на что.
 //
-// Здесь было написано, что своих на сервере нет, а появятся друзья — поменяется
-// граница выдачи, а не устройство ленты. Друзья появились (Д1б), и поменялась ровно
-// граница: друг владельца видит уровень 2 «своим», посторонний — только 1 «всем».
-// Направление именно такое: круг задаёт владелец страницы, а не читатель. Иначе
-// «добавь его в друзья» открывало бы чужое узкое.
+// ── ПОДПИСКА И ЕСТЬ ДРУЖБА ──────────────────────────────────────────────────
+//
+// Отдельной таблицы друзей на сервере нет: она прожила один день и снята миграцией
+// 0040. Список подписчиков ленты и есть список друзей владельца — то же отношение,
+// записанное с той стороны, с какой сервер его применяет.
+//
+// **Дружба односторонняя и асимметричная.** Я дружу с тобой — ты видишь мою ленту; ты
+// со мной не дружишь — я твою не вижу. Законны все четыре состояния пары.
+//
+// ── УРОВНИ НЕ МЕНЯЮТСЯ ──────────────────────────────────────────────────────
+//
+// Не друг видит уровень 1 «всем», друг — до 2 «своим», 3 — поимённо по разрешению.
+// Дружба двигает границу, а не открывает ленту целиком. О выданном разрешении никого
+// не уведомляют.
+//
+// ── ЛЕНТА — КАНАЛ, А НЕ ГРУППА ──────────────────────────────────────────────
+//
+// Уточнение заказчика 2026-09-05: писать в чужую ленту нельзя — как в канал. Отвечать
+// можно **комментарием**, и уходит он туда, где лежит контейнер оригинала:
+//
+//   • запись принесена из КАНАЛА  → комментарий уходит в тот канал;
+//   • запись принесена из ГРУППЫ  → комментариев нет вовсе.
+//
+// **Ни того, ни другого сейчас не существует**, и это надо знать, читая правило:
+// комментариев на сервере нет ни в каком виде, а перенос умеет только группу
+// (`ref_group_id`/`ref_message_id`) — из канала принести нечего. Значит правило пока
+// выполняется вырожденно: всё, что попадает на страницу, принесено из группы, и
+// комментариев у него нет. Заведётся перенос из канала — правило начнёт работать
+// по-настоящему, и тогда же понадобится ветка комментариев.
 package api
 
 import (
@@ -26,6 +54,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -46,8 +75,10 @@ type FeedStore interface {
 	ListFeed(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16) ([]store.FeedItem, error)
 	RemoveFeedItem(ctx context.Context, channelID string, postID uint64, ownerID string) error
 
-	// Круг «своим» на чужой странице: друг владельца — свой (Д1б).
-	IsFriend(ctx context.Context, ownerUserID, otherUserID string) (bool, error)
+	// Подписка и есть дружба: подписан на ленту владельца — свой (Д1б, пересмотр).
+	IsSubscribed(ctx context.Context, channelID, userID string) (bool, error)
+	Unsubscribe(ctx context.Context, channelID, userID string) error
+	FeedSubscribers(ctx context.Context, channelID string) ([]string, error)
 
 	// Право видеть оригинал проверяется до переноса: унести можно только то, что тебе
 	// показали. Роль и поимённое разрешение отвечают на этот вопрос вместе.
@@ -62,6 +93,12 @@ func RegisterFeeds(mux *http.ServeMux, st FeedStore, requireDevice Middleware) {
 	mux.HandleFunc("GET /api/v1/users/me/feed", requireDevice(myFeed(st)))
 	mux.HandleFunc("POST /api/v1/users/me/feed/items", requireDevice(carryToFeed(st)))
 	mux.HandleFunc("DELETE /api/v1/users/me/feed/items/{postID}", requireDevice(removeFeedItem(st)))
+
+	// Кому открыта моя лента — то же, что «кто у меня в друзьях». Правит только
+	// владелец: доступ к своему даёт хозяин, а не тот, кто пришёл.
+	mux.HandleFunc("GET /api/v1/users/me/feed/subscribers", requireDevice(feedSubscribers(st)))
+	mux.HandleFunc("POST /api/v1/users/me/feed/subscribers", requireDevice(addFeedSubscriber(st)))
+	mux.HandleFunc("DELETE /api/v1/users/me/feed/subscribers/{userID}", requireDevice(removeFeedSubscriber(st)))
 	// Позже «me», иначе «me» будет принято за идентификатор пользователя.
 	mux.HandleFunc("GET /api/v1/users/{userID}/feed", requireDevice(userFeed(st)))
 }
@@ -102,24 +139,125 @@ func userFeed(st FeedStore) http.HandlerFunc {
 			writeFeed(w, st, r, channelID, levelByGrant)
 			return
 		}
-		// Подписка случается сама, от факта чтения. Молчаливый отказ подписки не должен
-		// ломать показ: страница важнее учёта.
-		if err := st.SubscribeToFeed(r.Context(), channelID, id.UserID); err != nil {
-			log.Printf("userFeed: subscribe: %v", err)
+		// Свой — тот, кого владелец подписал на свою ленту. Ошибка чтения не должна
+		// закрывать страницу: показываем открытое, как постороннему.
+		друг := false
+		if подписан, err := st.IsSubscribed(r.Context(), channelID, id.UserID); err != nil {
+			log.Printf("userFeed: подписка %s: %v", owner, err)
+		} else {
+			друг = подписан
 		}
-		// Свой — тот, кого владелец добавил к себе в друзья. Ошибка чтения списка не
-		// должна закрывать страницу: показываем открытое, как постороннему.
 		граница := levelEveryone
-		if свой, err := st.IsFriend(r.Context(), owner, id.UserID); err != nil {
-			log.Printf("userFeed: друзья %s: %v", owner, err)
-		} else if свой {
+		if друг {
 			граница = levelMembers
 		}
-		writeFeed(w, st, r, channelID, граница)
+		// Признак уходит клиенту: внизу чужой ленты он пишет «имя не дружит с вами».
+		// Молчаливая пустота неотличима от «он ничего не писал», а про уровень 3
+		// поимённо не говорится ничего — о разрешении не уведомляют.
+		writeFeedWithFriend(w, st, r, channelID, граница, друг)
 	}
 }
 
+// feedSubscribers — GET /users/me/feed/subscribers: кому открыта моя лента.
+//
+// Свой список и только свой: чужой не отдаётся никому. По одному знакомому иначе
+// раскручивался бы круг общения человека.
+func feedSubscribers(st FeedStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		channelID, err := st.EnsureFeed(r.Context(), id.UserID, "Лента")
+		if err != nil {
+			log.Printf("feedSubscribers: ensure: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		ids, err := st.FeedSubscribers(r.Context(), channelID)
+		if err != nil {
+			log.Printf("feedSubscribers: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		if ids == nil {
+			ids = []string{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"subscribers": ids})
+	}
+}
+
+// addFeedSubscriber — POST /users/me/feed/subscribers {user_id}: «этот мне друг».
+//
+// Клиент шлёт это сам, сведя книгу со своим списком друзей: сущность «друзья» живёт у
+// него, а сервер знает лишь, кому открыта лента.
+func addFeedSubscriber(st FeedStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			UserID string `json:"user_id"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&req); err != nil || req.UserID == "" {
+			writeErr(w, http.StatusBadRequest, "bad_json", "нужен user_id")
+			return
+		}
+		id, _ := auth.FromContext(r.Context())
+		if req.UserID == id.UserID {
+			// Себе свою ленту открывать не нужно: владелец видит её целиком и так.
+			writeErr(w, http.StatusBadRequest, "self_subscribe", "своя лента открыта вам всегда")
+			return
+		}
+		channelID, err := st.EnsureFeed(r.Context(), id.UserID, "Лента")
+		if err != nil {
+			log.Printf("addFeedSubscriber: ensure: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		if err := st.SubscribeToFeed(r.Context(), channelID, req.UserID); err != nil {
+			log.Printf("addFeedSubscriber: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+	}
+}
+
+// removeFeedSubscriber — DELETE /users/me/feed/subscribers/{userID}: «больше не друг».
+func removeFeedSubscriber(st FeedStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		channelID, err := st.FeedOf(r.Context(), id.UserID)
+		if errors.Is(err, store.ErrNoFeed) {
+			// Ленты нет — и открывать было нечего.
+			w.WriteHeader(http.StatusNoContent)
+			return
+		} else if err != nil {
+			log.Printf("removeFeedSubscriber: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		if err := st.Unsubscribe(r.Context(), channelID, r.PathValue("userID")); err != nil {
+			log.Printf("removeFeedSubscriber: отписка: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// writeFeedWithFriend — лента и признак «владелец дружит со мной».
+func writeFeedWithFriend(
+	w http.ResponseWriter, st FeedStore, r *http.Request,
+	channelID string, maxLevel int16, friend bool,
+) {
+	writeFeedLevels(w, st, r, channelID, maxLevel, &friend)
+}
+
 func writeFeed(w http.ResponseWriter, st FeedStore, r *http.Request, channelID string, maxLevel int16) {
+	writeFeedLevels(w, st, r, channelID, maxLevel, nil)
+}
+
+func writeFeedLevels(
+	w http.ResponseWriter, st FeedStore, r *http.Request,
+	channelID string, maxLevel int16, friend *bool,
+) {
 	var before uint64
 	if v := r.URL.Query().Get("before"); v != "" {
 		before, _ = strconv.ParseUint(v, 10, 64)
@@ -155,8 +293,14 @@ func writeFeed(w http.ResponseWriter, st FeedStore, r *http.Request, channelID s
 			"kind":          it.Kind,
 		})
 	}
+	ответ := map[string]any{"channel_id": channelID, "items": out}
+	// Признак дружбы — только у чужой ленты: на своей он бессмыслен, и молчание тут
+	// честнее, чем «вы дружите с собой».
+	if friend != nil {
+		ответ["friend"] = *friend
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"channel_id": channelID, "items": out})
+	_ = json.NewEncoder(w).Encode(ответ)
 }
 
 // carryToFeed — POST /users/me/feed/items: принести чужую запись к себе.

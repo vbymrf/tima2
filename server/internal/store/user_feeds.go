@@ -105,10 +105,13 @@ func (s *Store) EnsureFeed(ctx context.Context, userID, title string) (string, e
 	return s.FeedOf(ctx, userID)
 }
 
-// SubscribeToFeed — подписка на чужую ленту, которая случается сама.
+// SubscribeToFeed — открыть свою ленту человеку.
 //
-// Кнопки «подписаться» на странице нет: подписчиком становится тот, кто ленту открыл
-// (решение заказчика 2026-09-04). Повтор безвреден — вторая подписка не заводится.
+// **Исправлено 2026-09-05.** Здесь было «подписчиком становится тот, кто ленту открыл»:
+// прохожий, заглянувший на страницу, становился своим. Теперь подписывает ВЛАДЕЛЕЦ —
+// его клиент сводит книгу со своим списком друзей и просит открыть ленту каждому.
+//
+// Повтор безвреден: вторая подписка не заводится.
 func (s *Store) SubscribeToFeed(ctx context.Context, channelID, userID string) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO channel_subscriptions (channel_id, subscriber_id)
@@ -235,4 +238,38 @@ func (s *Store) RemoveFeedItem(ctx context.Context, channelID string, postID uin
 		return ErrGroupMessageNotFound
 	}
 	return nil
+}
+
+// FeedSubscribers — кому открыта эта лента.
+//
+// Список подписчиков ленты **и есть** список друзей владельца: отдельной таблицы друзей
+// нет (миграция 0040), потому что она хранила бы то же отношение вторым способом.
+//
+// Отдаются текущие личности: клиент работает с ними, а не с аккаунтами.
+func (s *Store) FeedSubscribers(ctx context.Context, channelID string) ([]string, error) {
+	// Владелец подписан на свою ленту с её создания — так она попадает в его же
+	// список каналов. В списке друзей ему делать нечего: «дружу сам с собой» не
+	// значит ничего, а в счёт друзей эта строка попадала бы всегда.
+	rows, err := s.pool.Query(ctx, `
+		SELECT s.subscriber_id
+		FROM channel_subscriptions s
+		JOIN channels c ON c.channel_id = s.channel_id
+		WHERE s.channel_id = $1 AND s.subscriber_id <> c.owner_id
+		ORDER BY s.created_at`, channelID)
+	if err != nil {
+		if isBadUUID(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }

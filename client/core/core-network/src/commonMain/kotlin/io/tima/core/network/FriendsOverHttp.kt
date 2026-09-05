@@ -13,11 +13,14 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 
 /**
- * Друзья по HTTP — `/api/v1/users/me/friends` (ПЛАН-КОНТАКТОВ.md, Д1б).
+ * Друзья по HTTP — `/api/v1/users/me/feed/subscribers` (ПЛАН-КОНТАКТОВ.md, Д1б).
  *
- * **Список правит только владелец, и ручка это и означает: `me`.** Чужого списка на
- * сервере не спрашивают вовсе — по одному знакомому иначе раскручивался бы круг общения
- * человека.
+ * **Слова «друзья» сервер не знает.** Он хранит одно: кому открыта моя лента. Сущность
+ * «друзья» живёт у клиента, а сюда уходит её след — подписка. Отдельная таблица друзей
+ * на сервере дублировала бы это отношение вторым способом (снята миграцией 0040).
+ *
+ * **Подписывает владелец, а не читатель.** Открытие чужой страницы не подписывает ни на
+ * что: иначе своим становился бы любой прохожий.
  *
  * **Отказ возвращается, а не бросается.** Добавление друга — часть добавления контакта, и
  * контакт обязан сохраниться даже тогда, когда сервер промолчал: без сети человек всё
@@ -31,18 +34,18 @@ class FriendsOverHttp(
 
     override suspend fun set(userId: String, friend: Boolean): Boolean = try {
         val response = if (friend) {
-            client.post(route.api("/api/v1/users/me/friends")) {
+            client.post(route.api("/api/v1/users/me/feed/subscribers")) {
                 header("Authorization", "Bearer ${token()}")
                 contentType(ContentType.Application.Json)
                 setBody(buildJsonObject { put("user_id", JsonPrimitive(userId)) }.toString())
             }
         } else {
-            client.delete(route.api("/api/v1/users/me/friends/$userId")) {
+            client.delete(route.api("/api/v1/users/me/feed/subscribers/$userId")) {
                 header("Authorization", "Bearer ${token()}")
             }
         }
-        // 201 при добавлении, 204 при удалении. Повторное добавление тоже 201: сервер
-        // не считает его ошибкой, и клиенту незачем считать иначе.
+        // 201 при открытии ленты, 204 при закрытии. Повторное открытие тоже 201:
+        // сервер не считает его ошибкой, и клиенту незачем считать иначе.
         response.status == HttpStatusCode.Created || response.status == HttpStatusCode.NoContent
     } catch (_: Throwable) {
         false

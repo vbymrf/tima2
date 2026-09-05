@@ -407,8 +407,19 @@ func resolveNames(deps usersDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
+		// Есть ли телефон — вычисляет сервер: клиент не отличит «у него нет телефона»
+		// от «я его телефона не знаю». По этому полю показывается предупреждение при
+		// добавлении анонимного участника в личную группу (Д10).
+		hasPhone, err := deps.store.HasPhone(r.Context(), req.IDs)
+		if err != nil {
+			log.Printf("resolveNames has_phone: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"names": names, "phones": phones, "nicknames": nicks})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"names": names, "phones": phones, "nicknames": nicks, "has_phone": hasPhone,
+		})
 	}
 }
 

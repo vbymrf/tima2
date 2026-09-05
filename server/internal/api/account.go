@@ -35,12 +35,12 @@ func deleteAccount(deps usersDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		if err := deps.store.MarkAccountDeleted(r.Context(), personID, days); err != nil {
+		if err := deps.store.MarkAccountAndBelongings(r.Context(), personID, days); err != nil {
 			log.Printf("deleteAccount: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		log.Printf("аккаунт %s помечен удалённым, стирание через %d дней", personID, days)
+		log.Printf("аккаунт %s и его виртуальные помечены удалёнными, стирание через %d дней", personID, days)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"deleted": true, "purge_after_days": days})
 	}
