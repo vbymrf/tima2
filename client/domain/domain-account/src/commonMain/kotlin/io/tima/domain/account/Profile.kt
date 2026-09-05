@@ -1,4 +1,4 @@
-package io.tima.domain.chat
+package io.tima.domain.account
 
 /**
  * Свой профиль: имя и ник — ПЛАН-КОНТАКТОВ.md, Д8.

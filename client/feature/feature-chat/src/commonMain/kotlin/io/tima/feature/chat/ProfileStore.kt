@@ -1,8 +1,8 @@
 package io.tima.feature.chat
 
-import io.tima.domain.chat.NickStep
-import io.tima.domain.chat.Profile
-import io.tima.domain.chat.nicknameFits
+import io.tima.domain.account.NickStep
+import io.tima.domain.account.Profile
+import io.tima.domain.account.nicknameFits
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

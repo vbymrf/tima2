@@ -70,6 +70,14 @@ fun WindowSwitchingScreen(
     accounts: List<Pair<String, String>> = emptyList(),
     currentAccount: String = "",
     onAccount: (String) -> Unit = {},
+    /**
+     * «Завести виртуальный аккаунт» (Д11).
+     *
+     * Стоит здесь, а не в настройках: человек заводит второго себя, и место этому там,
+     * где он этих себя выбирает. Показывается и при единственном аккаунте — иначе завести
+     * второй было бы неоткуда.
+     */
+    onNewAccount: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     Box(
@@ -93,13 +101,24 @@ fun WindowSwitchingScreen(
         ) {
             Header(name, alias, onClose, onProfile)
 
-            if (accounts.size > 1) {
+            if (accounts.size > 1 || onNewAccount != null) {
                 SectionTitle("Аккаунты")
-                accounts.forEach { (userId, label) ->
+                // Один аккаунт — списка нет: строка «переключиться» там, где переключаться
+                // не на что, обещает несуществующее. Строка «завести» при этом остаётся.
+                if (accounts.size > 1) {
+                    accounts.forEach { (userId, label) ->
+                        ListLine(
+                            onClick = { if (userId != currentAccount) onAccount(userId) },
+                            left = { Glyph(if (userId == currentAccount) "●" else "○") },
+                            middle = { Name(label) },
+                        )
+                    }
+                }
+                onNewAccount?.let {
                     ListLine(
-                        onClick = { if (userId != currentAccount) onAccount(userId) },
-                        left = { Glyph(if (userId == currentAccount) "●" else "○") },
-                        middle = { Name(label) },
+                        onClick = it,
+                        left = { Glyph("＋") },
+                        middle = { Name("Виртуальный аккаунт") },
                     )
                 }
             }

@@ -10,7 +10,7 @@ import io.tima.domain.chat.ChatFacts
 import io.tima.domain.chat.Book
 import io.tima.domain.chat.ContactDiscovery
 import io.tima.domain.chat.Friends
-import io.tima.domain.chat.Profile
+import io.tima.domain.account.Profile
 import io.tima.domain.chat.ObserveBook
 import io.tima.domain.chat.ObserveContacts
 import io.tima.domain.chat.Settings
@@ -46,6 +46,7 @@ import io.tima.core.network.KeysApi
 import io.tima.core.network.ContactsOverHttp
 import io.tima.core.network.FriendsOverHttp
 import io.tima.core.network.ProfileOverHttp
+import io.tima.core.network.VirtualsOverHttp
 import io.tima.core.network.UsersApi
 import io.tima.core.network.LinkConfirmApi
 import io.tima.core.network.LinkStartApi
@@ -68,6 +69,7 @@ import io.tima.domain.account.LinkNewDevice
 import io.tima.domain.account.MyDevices
 import io.tima.domain.account.RegisterDevice
 import io.tima.domain.account.Session
+import io.tima.domain.account.VirtualsApi
 import io.tima.domain.chat.ChatJournal
 import io.tima.domain.chat.MarkRead
 import io.tima.domain.chat.ObserveChat
@@ -247,6 +249,10 @@ class Network(
 
     /** Устройства аккаунта: объявить платформу, показать список, отключить. */
     override val devices: DevicesApi = DevicesApi(link.route, link.client, token = { session.accessToken })
+
+    /** Виртуальные аккаунты: завести своей подписью, перечислить свои (Д10). */
+    override val virtuals: VirtualsApi =
+        VirtualsOverHttp(link.route, link.client, token = { session.accessToken })
 
     /** Группы: создание, состав, роли. */
     override val groups: GroupsApi = GroupsApi(link.route, link.client, token = { session.accessToken })

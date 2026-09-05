@@ -9,8 +9,8 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
-import io.tima.domain.chat.NickStep
-import io.tima.domain.chat.Profile
+import io.tima.domain.account.NickStep
+import io.tima.domain.account.Profile
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject

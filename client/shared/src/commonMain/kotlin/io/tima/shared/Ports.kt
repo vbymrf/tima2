@@ -13,10 +13,11 @@ import io.tima.core.network.KeysApi
 import io.tima.core.network.UsersApi
 import io.tima.domain.chat.ContactDiscovery
 import io.tima.domain.chat.Friends
-import io.tima.domain.chat.Profile
+import io.tima.domain.account.Profile
 import io.tima.domain.account.ConfirmDeviceLink
 import io.tima.core.network.AppVersionApi
 import io.tima.domain.account.MyDevices
+import io.tima.domain.account.VirtualsApi
 
 /**
  * Порты композиции: что экраны и подсистемы берут из сети.
@@ -130,6 +131,15 @@ interface DevicePorts {
 
     /** Объявление платформы серверу: телефон это или ПК (key-lifecycle.md §2). */
     val devices: DevicesApi
+
+    /**
+     * Виртуальные аккаунты: завести и перечислить свои (ПЛАН-КОНТАКТОВ.md, Д10, Д11).
+     *
+     * Здесь, а не в [ChatPorts]: виртуальный аккаунт — отдельный пользователь, и заводят
+     * его тем же ключом личности, которым подтверждают устройства. К переписке это
+     * отношения не имеет: у нового аккаунта её ещё нет вовсе.
+     */
+    val virtuals: VirtualsApi
 
     /**
      * Подтверждение привязки требует ключа ЭТОГО устройства: подпись над данными из

@@ -11,6 +11,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import io.tima.core.encryption.AccountIdentitiesOverKodium
+import io.tima.core.encryption.DeviceKeyFactoryOverKodium
+import io.tima.core.encryption.IdentitySignerOverKodium
 import io.tima.core.encryption.PersonalChatIdsOverKodium
 import io.tima.core.encryption.deviceIdentityFrom
 import io.tima.core.database.SqlChatBook
@@ -66,6 +68,11 @@ import io.tima.feature.chat.BookViewSheet
 import io.tima.feature.chat.InviteScreen
 import io.tima.feature.chat.NewContactScreen
 import io.tima.feature.chat.NewContactStore
+import io.tima.domain.account.CreateVirtual
+import io.tima.domain.account.VirtualStep
+import io.tima.feature.auth.NewVirtualScreen
+import io.tima.feature.auth.NewVirtualStep
+import io.tima.feature.auth.NewVirtualStore
 import io.tima.feature.chat.ProfileScreen
 import io.tima.feature.chat.ProfileState
 import io.tima.feature.chat.ProfileStore
@@ -227,6 +234,21 @@ private fun Inside(
             entry.switchAccount(userId)
             device = entry.created()
         },
+        // Заведённый виртуальный аккаунт записывается и становится текущим — то есть
+        // приложение сразу входит в него. Иначе человек, только что придумавший ему ник
+        // и записавший фразу, оставался бы в прежнем аккаунте и гадал, что произошло.
+        onVirtualCreated = { created ->
+            entry.rememberAccount(
+                Account(
+                    userId = created.session.userId,
+                    nickname = created.nickname,
+                    virtual = true,
+                ),
+                created.session,
+                created.deviceSecret,
+            )
+            device = entry.created()
+        },
     )
 }
 
@@ -328,6 +350,15 @@ private sealed interface Where {
      * начало.
      */
     data class Settings(val item: SettingsItem? = null) : Where
+
+    /**
+     * Заведение виртуального аккаунта (ПЛАН-КОНТАКТОВ.md, Д11).
+     *
+     * Открывается из переключения окон — оттуда же, где виден список аккаунтов. Это не
+     * настройка: человек заводит второго себя, и место этому там, где он этих себя
+     * выбирает.
+     */
+    data object NewVirtual : Where
 }
 
 /**
@@ -351,6 +382,14 @@ private fun App(
     /** Аккаунты этого устройства: основной и его виртуальные (Д11). */
     accounts: List<Account> = emptyList(),
     onSwitchAccount: (String) -> Unit = {},
+    /**
+     * Заведён виртуальный аккаунт: записать его в список и войти в него.
+     *
+     * Записывает не экран: список аккаунтов и секреты живут в хранилище платформы, о
+     * котором ни `feature`, ни `domain` не знают, — а войти значит пересобрать
+     * окружение, то есть выйти на уровень выше.
+     */
+    onVirtualCreated: (VirtualStep.Created) -> Unit = {},
 ) {
     val environment = assembled.environment
     val network = assembled.network
@@ -389,6 +428,23 @@ private fun App(
         ProfileStore(profile = network.profile, phone = "", scope = scope)
     }
     val profileState by profile.state.collectAsState()
+
+    // Виртуальный аккаунт: ник проверяется тем же профилем, что и свой, а создание
+    // заверяется фразой владельца — кода из SMS у аккаунта без телефона не будет.
+    val newVirtual = remember {
+        NewVirtualStore(
+            create = CreateVirtual(
+                api = network.virtuals,
+                keys = DeviceKeyFactoryOverKodium,
+                identities = AccountIdentitiesOverKodium,
+                signer = IdentitySignerOverKodium,
+                platform = platform.server,
+            ),
+            profile = network.profile,
+            scope = scope,
+        )
+    }
+    val newVirtualState by newVirtual.state.collectAsState()
 
     // Контакты: своя книга — прочитанное с телефона плюс заведённое руками (Д2…Д5).
     // Поток из базы: прочитанное и итог сверки появляются сами, без опроса.
@@ -517,6 +573,16 @@ private fun App(
                 windowSwitcher = false
                 onSwitchAccount(userId)
             },
+            // Виртуальный не заводит виртуальных — сервер это отвергает (Д10), и
+            // предлагать здесь то, что не сработает, нельзя.
+            onNewAccount = if (accounts.none { it.userId == session.userId && it.virtual }) {
+                {
+                    windowSwitcher = false
+                    where = Where.NewVirtual
+                }
+            } else {
+                null
+            },
             onClose = { windowSwitcher = false },
         )
         return
@@ -628,6 +694,34 @@ private fun App(
         },
         main = when (val current = where) {
             Where.Nothing -> null
+
+            Where.NewVirtual -> {
+                {
+                    NewVirtualScreen(
+                        state = newVirtualState,
+                        onNickname = newVirtual::changedNickname,
+                        onNext = newVirtual::toPhrase,
+                        onPhrase = newVirtual::changedPhrase,
+                        onConfirm = newVirtual::confirm,
+                        onBack = {
+                            // «Назад» с первого шага закрывает экран, со второго —
+                            // возвращает к нику. Решает это магазин: он знает, какой
+                            // шаг открыт, а навигация — нет.
+                            if (newVirtualState.step == NewVirtualStep.Nickname) {
+                                where = Where.Nothing
+                            } else {
+                                newVirtual.back()
+                            }
+                        },
+                        onDone = {
+                            // Слова записаны. Дальше вход в заведённый аккаунт: список и
+                            // секреты — уровнем выше, здесь только сказать, что готово.
+                            where = Where.Nothing
+                            newVirtualState.created?.let(onVirtualCreated)
+                        },
+                    )
+                }
+            }
 
             Where.Profile -> {
                 {
