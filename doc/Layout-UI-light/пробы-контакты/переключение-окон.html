@@ -33,20 +33,23 @@
      вход в правку профиля; телефон и ник — под аватаром. */
   .профиль-столбом {
     position: relative;
-    display: flex; flex-direction: column; align-items: center; gap: var(--о2);
-    padding: var(--о5) var(--о3) var(--о4);
-    border-bottom: 1px solid var(--чёрный-12); text-align: center;
+    display: flex; flex-direction: column; gap: var(--о2);
+    padding: var(--о5) var(--о4) var(--о4);
+    border-bottom: 1px solid var(--чёрный-12);
   }
   .профиль-столбом .икона.закрыть { position: absolute; top: var(--о3); right: var(--о3); }
   .профиль-столбом .имя-крупно {
     font-size: var(--щ2); font-weight: 800; letter-spacing: -0.02em;
-    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding-right: 44px;   /* место под крестик: длинное имя не лезет ему под низ */
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  /* Аватар и «Изменить» — одна область: высоту задаёт аватар, кнопка стоит
+     правее и по его середине. */
+  .ряд-авы { display: flex; align-items: center; gap: var(--о4); }
   .ава.огром {
-    width: 96px; height: 96px; flex: 0 0 96px;
-    font-size: 34px; border-radius: var(--радиус-квадрат-бол);
+    width: 112px; height: 112px; flex: 0 0 112px;
+    font-size: 40px; border-radius: var(--радиус-квадрат-бол);
   }
-  .профиль-столбом .кн { margin-top: 2px; }
   .под-авой { display: flex; flex-direction: column; gap: 2px; }
   .под-авой .номер { font-size: var(--щ4); font-weight: 700; }
   .под-авой .ник { font-size: var(--щ5); font-weight: 700; color: var(--чёрный-70); }
@@ -224,8 +227,10 @@
         <div class="профиль-столбом">
           <a class="икона закрыть" href="#">✕</a>
           <div class="имя-крупно">Пётр Смирнов</div>
-          <div class="ава огром">ПС</div>
-          <a class="кн тихая" href="#">✎ Изменить</a>
+          <div class="ряд-авы">
+            <div class="ава огром">ПС</div>
+            <a class="кн тихая" href="#">✎ Изменить</a>
+          </div>
           <div class="под-авой">
             <div class="номер">+7 916 000-11-22</div>
             <div class="ник">@petr</div>
@@ -256,14 +261,19 @@
     </div>
     <div class="дом-полоса"></div>
   </div>
-  <div class="подпись">имя · логотип · «Изменить» · телефон и ник</div>
+  <div class="подпись">имя · логотип и «Изменить» одной областью · телефон и ник</div>
 </div>
 
 <div class="замечание">
   <b>Чем отличается от Б.</b> Там профиль лежит строкой и читается как заголовок
   списка; здесь он столбом и читается как страница о себе. Цена — высота: столб
-  съедает около 190 px, и до списка окон остаётся меньше места. При пяти окнах это
+  съедает около 220 px, и до списка окон остаётся меньше места. При пяти окнах это
   ещё влезает, при восьми последние уйдут под сгиб.
+  <br><br>
+  <b>Аватар и «Изменить» — одна область.</b> Высоту задаёт аватар (112 px), кнопка
+  стоит правее и по его середине. Так рядом с ней остаётся место: туда лягут ещё
+  действия над учётной записью, когда появятся. Кнопка под аватаром такого места не
+  оставляла и растила столб ещё на 50 px.
   <br><br>
   <b>«Изменить» — кнопка, а не строка.</b> В Б правка спрятана мелкой ссылкой под
   именем: она объясняет, что правится (имя), но выглядит подписью. Здесь это
