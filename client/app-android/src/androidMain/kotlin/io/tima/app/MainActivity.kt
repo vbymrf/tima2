@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import io.tima.core.contacts.AndroidContactsAccess
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.mutableStateOf
@@ -60,8 +61,28 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    override fun onDestroy() {
+        // Удержанная активность — это утечка целого экрана.
+        AndroidContactsAccess.detach()
+        super.onDestroy()
+    }
+
+    @Deprecated("вызывается системой; свой ActivityResultLauncher здесь не нужен")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray,
+    ) {
+        @Suppress("DEPRECATION")
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        AndroidContactsAccess.answered(requestCode, grantResults)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Разрешение на контакты спрашивает ОКНО, а не приложение: контекст от
+        // Application для системного диалога не годится (Д3).
+        AndroidContactsAccess.attach(this)
         code.value = codeFrom(intent)
         setContent {
             val entry = remember { Entry.create(Platform.Android) }

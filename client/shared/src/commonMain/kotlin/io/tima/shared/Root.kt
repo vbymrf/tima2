@@ -53,6 +53,7 @@ import io.tima.feature.chat.ChatStore
 import io.tima.feature.chat.ChatsState
 import io.tima.feature.chat.ChatsStore
 import io.tima.feature.chat.BookState
+import io.tima.core.contacts.askContactsAccess
 import io.tima.core.contacts.platformInvite
 import io.tima.core.secrets.Account
 import io.tima.core.contacts.platformPhoneBook
@@ -564,6 +565,10 @@ private fun App(
                     onToggleSection = book::openedSection,
                     onAddContact = { newContact = true },
                     onInvite = { inviting = it },
+                    onOpenedContacts = book::refresh,
+                    onAllowContacts = {
+                        askContactsAccess { дали -> if (дали) book.refresh() }
+                    },
                 )
 
                 Window.Social -> {
@@ -1178,6 +1183,10 @@ private fun PhoneWindow(
     onToggleSection: (String) -> Unit,
     onAddContact: () -> Unit,
     onInvite: (BookEntry) -> Unit,
+    /** Открыли вкладку: прочитать телефонную книгу и сверить. */
+    onOpenedContacts: () -> Unit,
+    /** «Разрешить»: системный диалог, и после согласия — чтение. */
+    onAllowContacts: () -> Unit,
 ) {
     var calls by remember { mutableStateOf(CALL_FILTERS.first()) }
     WindowFrame(
@@ -1212,14 +1221,21 @@ private fun PhoneWindow(
                 onSettings = onSettings,
             )
 
-            "Контакты" -> BookScreen(
-                state = book,
-                onSearch = onSearchInBook,
-                onOpen = onOpenPerson,
-                onToggleSection = onToggleSection,
-                onAdd = onAddContact,
-                onInvite = onInvite,
-            )
+            "Контакты" -> {
+                // Телефонная книга читается при открытии вкладки, а не при запуске:
+                // разрешение, спрошенное на первом экране, объяснить нечем — человек
+                // ещё не видел ни одного контакта.
+                LaunchedEffect(Unit) { onOpenedContacts() }
+                BookScreen(
+                    state = book,
+                    onSearch = onSearchInBook,
+                    onOpen = onOpenPerson,
+                    onToggleSection = onToggleSection,
+                    onAdd = onAddContact,
+                    onInvite = onInvite,
+                    onAllow = onAllowContacts,
+                )
+            }
 
             // Заглушка называет выбранный фильтр. Фильтр, от которого на экране ничего
             // не меняется, неотличим от сломанного — в него тыкают повторно.
