@@ -52,6 +52,14 @@ fun WindowSwitchingScreen(
     /** Непрочитанное по окнам. Нет записи — нет и числа. */
     counters: Map<Window, Int> = emptyMap(),
     onSettings: (() -> Unit)? = null,
+    /**
+     * «Изменить» в шапке — вход в профиль (ПЛАН-КОНТАКТОВ.md, Д8).
+     *
+     * Здесь, потому что своего экрана учётной записи у нас нет, а окно 5 — про
+     * содержимое, а не про запись о человеке. Это подокно открывается логотипом с
+     * любого экрана и потому ближе всего к «шапке приложения».
+     */
+    onProfile: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     Box(
@@ -73,7 +81,7 @@ fun WindowSwitchingScreen(
                 // Нажатие по самой панели не должно закрывать её вместе с фоном.
                 .clickable(enabled = false, onClick = {}),
         ) {
-            Header(name, alias, onClose)
+            Header(name, alias, onClose, onProfile)
 
             for (window in Window.entries) {
                 Item(
@@ -98,8 +106,20 @@ fun WindowSwitchingScreen(
     }
 }
 
+/**
+ * Шапка: кто я и вход в профиль.
+ *
+ * Заголовка «Окна» здесь больше нет — он повторял то, что видно из списка под ним
+ * (решение 2026-09-05). Вместо него имя и ник: это единственное место, где человек
+ * видит свою учётную запись.
+ */
 @Composable
-private fun Header(name: String, alias: String, onClose: () -> Unit) {
+private fun Header(
+    name: String,
+    alias: String,
+    onClose: () -> Unit,
+    onProfile: (() -> Unit)?,
+) {
     val colors = Tima.colors
     Row(
         modifier = Modifier
@@ -111,11 +131,13 @@ private fun Header(name: String, alias: String, onClose: () -> Unit) {
     ) {
         Glyph("Т")
         Column(modifier = Modifier.weight(1f)) {
-            Name("Окна")
             // Кто я — здесь, а не в шапке окна: имя нужно тому, кто выбирает, от чьего
             // лица он сейчас в приложении, а не тому, кто читает переписку.
-            Tertiary("$name · $alias", lineOne = true)
+            Name(name)
+            Tertiary(alias, lineOne = true)
         }
+        // «Изменить» — первый из двух входов в профиль; второй в настройках.
+        if (onProfile != null) IconButton(glyph = "✎", onClick = onProfile)
         IconButton(glyph = "✕", onClick = onClose)
     }
 }

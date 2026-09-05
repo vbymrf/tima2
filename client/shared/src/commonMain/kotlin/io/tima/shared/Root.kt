@@ -64,6 +64,9 @@ import io.tima.feature.chat.BookViewSheet
 import io.tima.feature.chat.InviteScreen
 import io.tima.feature.chat.NewContactScreen
 import io.tima.feature.chat.NewContactStore
+import io.tima.feature.chat.ProfileScreen
+import io.tima.feature.chat.ProfileState
+import io.tima.feature.chat.ProfileStore
 import io.tima.feature.chat.BookScreen
 import io.tima.feature.shell.CALL_FILTERS
 import io.tima.feature.shell.Window
@@ -243,6 +246,15 @@ private sealed interface Where {
     data object New : Where
 
     /**
+     * Экран профиля: имя и ник (Д8).
+     *
+     * Отдельный экран, а не модалка: ник требует проверки занятости и показа ошибки,
+     * аватар — загрузки картинки, и в модалке для этого тесно. Входа два и оба ведут
+     * сюда: «Изменить» в переключении окон и «Профиль» в настройках.
+     */
+    data object Profile : Where
+
+    /**
      * Подокно «новая группа».
      *
      * **Входа в него сейчас нет.** Чип «Группа» внизу списка переписок убран
@@ -338,6 +350,14 @@ private fun App(
     }
     val contactsState by contacts.state.collectAsState()
     val invite = remember { platformInvite() }
+    val profile = remember {
+        // Номер сюда не приходит: в сессии его нет (userId, deviceId, токен), а
+        // сервер отдаёт телефон только собеседникам по переписке. Строка номера в
+        // профиле поэтому пуста — до тех пор, пока номер не начнёт храниться рядом
+        // с сессией. Числится в ПЛАН-КОНТАКТОВ.md, Д8.
+        ProfileStore(profile = network.profile, phone = "", scope = scope)
+    }
+    val profileState by profile.state.collectAsState()
 
     // Контакты: своя книга — прочитанное с телефона плюс заведённое руками (Д2…Д5).
     // Поток из базы: прочитанное и итог сверки появляются сами, без опроса.
@@ -453,6 +473,11 @@ private fun App(
                 where = Where.Settings()
                 windowSwitcher = false
             },
+            // «Изменить» в шапке: первый из двух входов в профиль.
+            onProfile = {
+                where = Where.Profile
+                windowSwitcher = false
+            },
             onClose = { windowSwitcher = false },
         )
         return
@@ -561,6 +586,18 @@ private fun App(
         main = when (val current = where) {
             Where.Nothing -> null
 
+            Where.Profile -> {
+                {
+                    ProfileScreen(
+                        state = profileState,
+                        onName = profile::changedName,
+                        onNickname = profile::changedNickname,
+                        onSave = profile::save,
+                        onBack = { where = Where.Nothing },
+                    )
+                }
+            }
+
             Where.New -> {
                 {
                     NewChatScreen(
@@ -587,6 +624,8 @@ private fun App(
                         appearance = appearance,
                         onAppearance = onAppearance,
                         onBack = { where = Where.Nothing },
+                        profile = profile,
+                        profileState = profileState,
                     )
                 }
             }
@@ -797,6 +836,9 @@ private fun Settings(
     appearance: Appearance,
     onAppearance: (Appearance) -> Unit,
     onBack: () -> Unit,
+    /** Профиль общий с переключением окон: один Store, два входа. */
+    profile: ProfileStore,
+    profileState: ProfileState,
 ) {
     val fleet = remember { DevicesStore(network.myFleet, scope) }
     val devices by fleet.state.collectAsState()
@@ -836,6 +878,17 @@ private fun Settings(
         },
     ) { item ->
         when (item) {
+            // Второй вход в профиль — тот же экран, что из переключения окон.
+            // Не дубль: настройки — место, где ищут «где это поменять», не помня,
+            // откуда туда попали.
+            SettingsItem.PROFILE -> ProfileScreen(
+                state = profileState,
+                onName = profile::changedName,
+                onNickname = profile::changedNickname,
+                onSave = profile::save,
+                onBack = { onOpen(null) },
+            )
+
             SettingsItem.DEVICES -> Devices(fleet, devices, build.name)
 
             SettingsItem.APPEARANCE -> AppearanceScreen(appearance, onAppearance)

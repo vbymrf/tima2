@@ -13,6 +13,7 @@ import io.tima.core.network.KeysApi
 import io.tima.core.network.UsersApi
 import io.tima.domain.chat.ContactDiscovery
 import io.tima.domain.chat.Friends
+import io.tima.domain.chat.Profile
 import io.tima.domain.account.ConfirmDeviceLink
 import io.tima.core.network.AppVersionApi
 import io.tima.domain.account.MyDevices
@@ -54,6 +55,9 @@ interface ChatPorts {
      * этом же окне.
      */
     val friends: Friends
+
+    /** Свой профиль: имя и ник (Д8). */
+    val profile: Profile
 
     /**
      * Недостающие версии группового ключа: попросить и отдать.

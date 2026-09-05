@@ -10,6 +10,7 @@ import io.tima.domain.chat.ChatFacts
 import io.tima.domain.chat.Book
 import io.tima.domain.chat.ContactDiscovery
 import io.tima.domain.chat.Friends
+import io.tima.domain.chat.Profile
 import io.tima.domain.chat.ObserveBook
 import io.tima.domain.chat.ObserveContacts
 import io.tima.domain.chat.Settings
@@ -44,6 +45,7 @@ import io.tima.core.network.HttpMessageTransport
 import io.tima.core.network.KeysApi
 import io.tima.core.network.ContactsOverHttp
 import io.tima.core.network.FriendsOverHttp
+import io.tima.core.network.ProfileOverHttp
 import io.tima.core.network.UsersApi
 import io.tima.core.network.LinkConfirmApi
 import io.tima.core.network.LinkStartApi
@@ -198,6 +200,10 @@ class Network(
     /** Друзья: свой список, правит только владелец. */
     override val friends: Friends =
         FriendsOverHttp(link.route, link.client, token = { session.accessToken })
+
+    /** Профиль: имя свободно, ник с проверкой занятости. */
+    override val profile: Profile =
+        ProfileOverHttp(link.route, link.client, token = { session.accessToken })
 
     /** Устройства аккаунта: объявить платформу, показать список, отключить. */
     override val devices: DevicesApi = DevicesApi(link.route, link.client, token = { session.accessToken })
