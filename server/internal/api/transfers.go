@@ -44,15 +44,21 @@ type TransferStore interface {
 	FindTransfer(ctx context.Context, codeHash []byte) (store.Transfer, error)
 	FailedAttempt(ctx context.Context, transferID string) error
 	CompleteTransfer(ctx context.Context, transferID, newOwnerUserID string) error
+
+	// Устройство нового владельца в переданном аккаунте: без него передача кончалась бы
+	// аккаунтом, в который никто не может войти. Все прежние устройства завершение
+	// передачи отзывает, а нового ещё нет — и завести его неоткуда: своего номера у
+	// аккаунта нет, кода на него не будет.
+	NewDevice(ctx context.Context, userID string, encryptionPub, signingPub []byte, platform string) (string, error)
 }
 
 var _ TransferStore = (*store.Store)(nil)
 
 // RegisterTransfers — три маршрута.
-func RegisterTransfers(mux *http.ServeMux, st TransferStore, requireDevice Middleware) {
+func RegisterTransfers(mux *http.ServeMux, st TransferStore, tokens func() VirtualTokens, requireDevice Middleware) {
 	mux.HandleFunc("POST /api/v1/users/me/virtuals/{userID}/transfer", requireDevice(startTransfer(st)))
 	mux.HandleFunc("DELETE /api/v1/users/me/virtuals/{userID}/transfer", requireDevice(cancelTransfer(st)))
-	mux.HandleFunc("POST /api/v1/transfers/accept", requireDevice(acceptTransfer(st)))
+	mux.HandleFunc("POST /api/v1/transfers/accept", requireDevice(acceptTransfer(st, tokens)))
 }
 
 // hashTransferCode — что лежит в базе вместо кода.
@@ -121,11 +127,17 @@ func cancelTransfer(st TransferStore) http.HandlerFunc {
 //
 // Времени на этот шаг не отведено: тридцать минут ограничивают предъявление кода, а
 // дальше человек не торопится — спешка на вводе фразы стоит попытки.
-func acceptTransfer(st TransferStore) http.HandlerFunc {
+func acceptTransfer(st TransferStore, tokens func() VirtualTokens) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Code  string `json:"code"`
 			Proof string `json:"proof"` // base64url, 64 байта: подпись кода ключом личности
+			// Ключи УСТРОЙСТВА принимающего — для переданного аккаунта. Свои, а не те же,
+			// что у его основного: одно устройство — один набор ключей на аккаунт, иначе
+			// конверт, посланный переданному, открывался бы ключом основного.
+			EncryptionPub string `json:"encryption_pub"`
+			SigningPub    string `json:"signing_pub"`
+			Platform      string `json:"platform,omitempty"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -134,8 +146,15 @@ func acceptTransfer(st TransferStore) http.HandlerFunc {
 		b64 := base64.RawURLEncoding
 		code, err1 := b64.DecodeString(req.Code)
 		proof, err2 := b64.DecodeString(req.Proof)
+		enc, err3 := b64.DecodeString(req.EncryptionPub)
+		sig, err4 := b64.DecodeString(req.SigningPub)
 		if err1 != nil || err2 != nil || len(code) != 32 || len(proof) != 64 {
 			writeErr(w, http.StatusBadRequest, "bad_encoding", "code и proof — base64url, 32 и 64 байта")
+			return
+		}
+		if err3 != nil || err4 != nil || len(enc) != 32 || len(sig) != 32 {
+			writeErr(w, http.StatusBadRequest, "bad_keys",
+				"encryption_pub и signing_pub — base64url, по 32 байта")
 			return
 		}
 
@@ -175,12 +194,34 @@ func acceptTransfer(st TransferStore) http.HandlerFunc {
 			return
 		}
 
-		// Устройства прежнего владельца отозваны, владелец перевязан. Новому владельцу
-		// остаётся войти в аккаунт своим устройством — и ротировать групповые ключи:
-		// сервер этого сделать не может, ключи выпускают участники (ADR-0017).
+		// Устройства прежнего владельца отозваны, владелец перевязан. Осталось выдать
+		// новому владельцу устройство и токен: иначе передача кончилась бы аккаунтом, в
+		// который никто не может войти — прежние устройства сняты, а завести новое
+		// неоткуда, своего номера у аккаунта нет и кода на него не будет.
+		//
+		// Право на это доказано тем же, чем и передача: подписью кода ключом личности
+		// передаваемого аккаунта, то есть знанием его фразы.
+		deviceID, err := st.NewDevice(r.Context(), transfer.UserID, enc, sig, normalizePlatform(req.Platform))
+		if err != nil {
+			log.Printf("acceptTransfer: устройство: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		access, err := tokens().IssueAccess(transfer.UserID, deviceID)
+		if err != nil {
+			log.Printf("acceptTransfer: токен: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
+			return
+		}
+
+		// `rotate_needed` — не украшение: групповые ключи сервер ротировать не может,
+		// их выпускают участники (ADR-0017). Это работа клиента нового владельца, и до
+		// неё прежний продолжает читать группы, где виртуал состоит.
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"user_id":       transfer.UserID,
+			"device_id":     deviceID,
+			"access_token":  access,
 			"rotate_needed": true,
 		})
 	}

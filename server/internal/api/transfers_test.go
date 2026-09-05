@@ -74,11 +74,41 @@ func началПередачу(t *testing.T, ts *httptest.Server, owner *вла
 
 func принял(t *testing.T, ts *httptest.Server, token string, code []byte, identity ed25519.PrivateKey) int {
 	t.Helper()
+	status, _ := принялСТокеном(t, ts, token, code, identity)
+	return status
+}
+
+// принялСТокеном — то же, но отдаёт токен переданного аккаунта.
+//
+// Он и есть доказательство, что передача кончилась чем-то работающим: прежние устройства
+// завершение отзывает все, а нового аккаунту взять неоткуда — своего номера у него нет.
+func принялСТокеном(
+	t *testing.T, ts *httptest.Server, token string, code []byte, identity ed25519.PrivateKey,
+) (int, string) {
+	t.Helper()
 	b64 := base64.RawURLEncoding
-	return authedJSON(t, ts, "POST", "/api/v1/transfers/accept", token, map[string]any{
-		"code":  b64.EncodeToString(code),
-		"proof": b64.EncodeToString(ed25519.Sign(identity, code)),
-	}, nil)
+	var encPriv [32]byte
+	if _, err := rand.Read(encPriv[:]); err != nil {
+		t.Fatal(err)
+	}
+	encPub, err := curve25519.X25519(encPriv[:], curve25519.Basepoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signPub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var resp struct {
+		AccessToken string `json:"access_token"`
+	}
+	status := authedJSON(t, ts, "POST", "/api/v1/transfers/accept", token, map[string]any{
+		"code":           b64.EncodeToString(code),
+		"proof":          b64.EncodeToString(ed25519.Sign(identity, code)),
+		"encryption_pub": b64.EncodeToString(encPub),
+		"signing_pub":    b64.EncodeToString(signPub),
+	}, &resp)
+	return status, resp.AccessToken
 }
 
 func TestПередачаТребуетИКодаИФразы(t *testing.T) {
@@ -192,5 +222,38 @@ func TestНоваяПередачаГаситПрежнюю(t *testing.T) {
 	}
 	if code := принял(t, ts, анна.token, второй, фраза); code != http.StatusOK {
 		t.Fatalf("новый код не сработал: %d", code)
+	}
+}
+
+func TestПринявшийВходитВПереданныйАккаунт(t *testing.T) {
+	ts, _ := setup(t)
+	пётр := заведиВладельца(t, ts, "+79990000081")
+	анна := заведиВладельца(t, ts, "+79990000082")
+	virtualID, фраза := виртуальныйСФразой(t, ts, пётр, "voshel_posle_1")
+
+	_, код := началПередачу(t, ts, пётр, virtualID)
+	status, токен := принялСТокеном(t, ts, анна.token, код, фраза)
+	if status != http.StatusOK {
+		t.Fatalf("передача не прошла: %d", status)
+	}
+
+	// Без этого передача кончалась бы аккаунтом, в который никто не может войти:
+	// прежние устройства завершение отзывает все, а нового аккаунту взять неоткуда —
+	// своего номера у него нет, и кода на него не будет никогда.
+	if токен == "" {
+		t.Fatal("токен переданного аккаунта не выдан")
+	}
+	var me struct {
+		Virtuals []struct {
+			UserID string `json:"user_id"`
+		} `json:"virtuals"`
+	}
+	if code := authedJSON(t, ts, "GET", "/api/v1/users/me/virtuals", токен, nil, &me); code != http.StatusOK {
+		t.Fatalf("выданный токен не работает: %d", code)
+	}
+	// Сам виртуальный своих виртуальных не заводит — список пуст, и это тоже проверка:
+	// токен принадлежит переданному аккаунту, а не Анне.
+	if len(me.Virtuals) != 0 {
+		t.Fatalf("токен оказался не от переданного аккаунта: %v", me.Virtuals)
 	}
 }
