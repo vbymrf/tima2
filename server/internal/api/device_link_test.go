@@ -284,7 +284,11 @@ func TestDeviceLinkAllowsHistoryHandover(t *testing.T) {
 
 	// Новое устройство — устройство участника чата: проверка, на которой держится
 	// выдача ключей (chatRecoverProvide → IsChatParticipantDevice).
-	ok, err := srv.Store.IsChatParticipantDevice(ctx, chatID, confirm.DeviceID)
+	//
+	// Переписка называется парой собеседников (73d3339): сообщение выше легло именно в
+	// неё, а в постоянной chatID участников нет вовсе — там ответ был бы «не участник»
+	// независимо от привязки.
+	ok, err := srv.Store.IsChatParticipantDevice(ctx, personalChatID(alice.userID, bob.userID), confirm.DeviceID)
 	if err != nil {
 		t.Fatal(err)
 	}

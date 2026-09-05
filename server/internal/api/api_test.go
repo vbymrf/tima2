@@ -304,8 +304,14 @@ func TestAuthAndMessagingEndToEnd(t *testing.T) {
 		t.Fatalf("повторный POST: ожидался duplicate=true, статус %d", resp.StatusCode)
 	}
 
-	// История получателя: устройство определяется токеном
-	histReq, _ := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/chats/%s/messages", ts.URL, chatID), nil)
+	// История получателя: устройство определяется токеном.
+	//
+	// Спрашивается ТА переписка, в которую сообщение легло, — а её имя сервер выводит из
+	// пары собеседников (73d3339). Постоянная chatID здесь не годится: конверт с ней
+	// сервер отверг бы как положенный в чужую переписку.
+	histReq, _ := http.NewRequest("GET",
+		fmt.Sprintf("%s/api/v1/chats/%s/messages", ts.URL,
+			personalChatID(sender.userID, recipient.userID)), nil)
 	histReq.Header.Set("Authorization", "Bearer "+recipient.token)
 	histResp, err := http.DefaultClient.Do(histReq)
 	if err != nil {

@@ -126,6 +126,11 @@ func TestPurgeGatedByEscrowKey(t *testing.T) {
 	sender := registerDevice(t, ts, "+79990050004")
 	recipient := registerDevice(t, ts, "+79990050005")
 
+	// Переписка называется парой собеседников (73d3339): и ключ эпохи, и метаданные
+	// спрашиваются по тому же имени, под которым сообщение легло. Постоянная chatID
+	// дала бы ключ одной переписки и поиск метаданных в другой, пустой.
+	chatID := personalChatID(sender.userID, recipient.userID)
+
 	// Ключ эпохи для чата — как его получил бы клиент перед отправкой.
 	got, code := getEscrowKey(t, ts, sender.token, chatID)
 	if code != 200 {

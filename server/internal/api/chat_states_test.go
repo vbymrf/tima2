@@ -23,6 +23,10 @@ func TestChatArchiveIsPersonal(t *testing.T) {
 		defer resp.Body.Close()
 		t.Fatalf("отправка: %d", resp.StatusCode)
 	}
+	// Имя переписки сервер выводит из пары собеседников (73d3339), и сообщение легло
+	// именно в неё. Постоянная chatID здесь означала бы пустую переписку без участников —
+	// «убрали все» в ней не наступает никогда.
+	chatID := personalChatID(a.userID, b.userID)
 
 	if err := srv.Store.SetChatArchived(ctx, chatID, a.userID, true); err != nil {
 		t.Fatal(err)
@@ -74,6 +78,7 @@ func TestChatUnarchive(t *testing.T) {
 	b := registerDevice(t, ts, "+79990071002")
 	env := sealEnvelope(t, a, []*device{a, b}, 910002, []byte("привет"))
 	post(t, ts, env, a.token, "dddddddd-0000-0000-0000-000000000002").Body.Close()
+	chatID := personalChatID(a.userID, b.userID)
 
 	for _, u := range []string{a.userID, b.userID} {
 		if err := srv.Store.SetChatArchived(ctx, chatID, u, true); err != nil {
