@@ -1,6 +1,7 @@
 <meta charset="utf-8">
 <title>Окно переходов</title>
 <link rel="stylesheet" href="../../стиль.css">
+<link rel="stylesheet" href="../../широкий.css">
 
 <div class="лист-док">
 <div class="путь"><a href="../../индекс.html">Layout-UI-light</a> / подокна / переходы.html</div>
@@ -9,9 +10,16 @@
   Самый частый элемент приложения: открывается по имени или аватару из чата, из
   ленты, из слайдов. Одна раскладка, три набора пунктов — человек, канал, пост.
   Поэтому имя и аватар везде выглядят одинаково: это не украшение, а кнопка.
+  <br><br>
+  <b>Здесь же единственный вход в видеозвонок.</b> Из строк списков и из шапки чата
+  «📹» убрана: два вида звонка в строке спорили за место с именем, а групповому там
+  не находилось места вовсе. Теперь звонок — один блок и всегда на одном месте, сразу
+  под «Перейти на страницу»: на телефоне, планшете и ПК.
 </p>
 
 <div class="экраны">
+
+<h2>Телефон</h2>
 
 <div class="тел">
   <div class="окно">
@@ -28,6 +36,12 @@
           <a class="икона" href="чат.html">✕</a>
         </div>
         <a class="пункт" href="../окна/страница-гостя.html"><span class="знак">📋</span> Перейти на страницу</a>
+        <div class="раздел">Позвонить</div>
+        <div style="display:flex;gap:8px;padding:0 var(--о4) var(--о3)">
+          <a class="кн тихая" href="звонок.html" style="flex:1 1 0;min-height:38px;padding:0 6px;font-size:11px;gap:5px">📞 Обычный</a>
+          <a class="кн тихая" href="звонок.html" style="flex:1 1 0;min-height:38px;padding:0 6px;font-size:11px;gap:5px">📹 Видео</a>
+          <a class="кн тихая" href="звонок.html" style="flex:1 1 0;min-height:38px;padding:0 6px;font-size:11px;gap:5px">👥 Групповой</a>
+        </div>
         <a class="пункт" href="#"><span class="знак">📌</span> Закреплённые <span class="усл">3</span></a>
         <a class="пункт" href="#"><span class="знак">🔍</span> Поиск по чату</a>
         <a class="пункт" href="#"><span class="знак">🖼</span> Общие медиа <span class="усл">48</span></a>
@@ -106,6 +120,237 @@
   <div class="подпись">пост в слайдах — добавлен блок о содержимом</div>
 </div>
 
+
+<h2>Планшет</h2>
+<p>
+  Колонка списка и чат стоят рядом, третьей полосы нет — поэтому подокно ложится
+  поверх главной области, ровно как на телефоне. Блок звонка тот же и на том же месте.
+</p>
+
+<div class="широк">
+  <div class="окно планшет">
+    <div class="статус"><span>9:41</span><span>E2E</span></div>
+    <div class="стан">
+
+      <div class="рейка">
+        <span class="лого">Т</span>
+        <a class="окно-рейки тек" href="../../планшет/телефон.html">📞<span class="подпись-рейки">Телефон</span><span class="счёт">3</span></a>
+        <a class="окно-рейки" href="../../планшет/новости.html">📰<span class="подпись-рейки">Социум</span><span class="счёт">12</span></a>
+        <a class="окно-рейки" href="../../планшет/медиа.html">🖼<span class="подпись-рейки">Медиа</span></a>
+        <a class="окно-рейки" href="../../планшет/общение.html">💬<span class="подпись-рейки">Общение</span><span class="счёт">5</span></a>
+        <a class="окно-рейки" href="../../планшет/страница.html">👤<span class="подпись-рейки">Страница</span></a>
+        <div class="низ-рейки">
+          <a class="окно-рейки" href="../../планшет/настройки.html">⚙<span class="подпись-рейки">Настройки</span></a>
+        </div>
+      </div>
+
+      <div class="колонка-списка">
+        <div class="зона-1">
+          <span class="имя-окна тянуть">Телефон</span>
+          <a class="икона" href="поиск.html">🔍</a>
+          <a class="икона" href="настройки.html">⚙</a>
+        </div>
+        <div class="табы">
+          <a class="таб тек" href="#">Чаты</a>
+          <a class="таб" href="#">Контакты</a>
+          <a class="таб" href="#">Звонки</a>
+        </div>
+        <div class="зона-2">
+          <a class="строка" href="#">
+            <div class="ава">АК</div>
+            <div class="тянуть">
+              <div class="имя обрез">Анна Ковалёва</div>
+              <div class="втор обрез">печатает…</div>
+            </div>
+            <div class="мета"><span class="трет">12:31</span></div>
+          </a>
+          <a class="строка" href="#">
+            <div class="ава">БМ</div>
+            <div class="тянуть">
+              <div class="имя обрез">Борис Мельник</div>
+              <div class="втор обрез">Смету посмотрел, вопрос по срокам</div>
+            </div>
+            <div class="мета"><span class="трет">11:02</span></div>
+          </a>
+          <a class="строка" href="#">
+            <div class="ава">КР</div>
+            <div class="тянуть">
+              <div class="имя обрез">Команда разработки</div>
+              <div class="втор обрез">4 участника</div>
+            </div>
+            <div class="мета"><span class="трет">вчера</span></div>
+          </a>
+        </div>
+      </div>
+
+      <div class="главная">
+        <div class="зона-1 подокно">
+          <a class="ава мал" href="#">АК</a>
+          <a class="тянуть" href="#" style="text-decoration:none;color:inherit">
+            <div class="имя обрез" style="font-size:var(--щ5)">Анна Ковалёва</div>
+            <div class="трет" style="color:var(--живое);font-weight:700">печатает…</div>
+          </a>
+          <a class="икона" href="#" title="позвонить">📞</a>
+          <a class="икона жив" href="#" title="меню перехода">•••</a>
+        </div>
+
+        <div class="поверх">
+          <div class="фон-подпись">под ним — чат, он остался на месте</div>
+          <div class="модалка">
+            <div class="шапка-модалки">
+              <div class="ава бол" style="width:56px;height:56px;flex-basis:56px;border-radius:16px;font-size:var(--щ3)">АК</div>
+              <div class="тянуть">
+                <div class="имя">Анна Ковалёва</div>
+                <div class="трет">@anna · была 5 минут назад</div>
+              </div>
+              <a class="икона" href="#">✕</a>
+            </div>
+            <a class="пункт" href="../окна/страница-гостя.html"><span class="знак">📋</span> Перейти на страницу</a>
+            <div class="раздел">Позвонить</div>
+            <div style="display:flex;gap:8px;padding:0 var(--о4) var(--о3)">
+              <a class="кн тихая" href="звонок.html" style="flex:1 1 0;min-height:38px;padding:0 6px;font-size:11px;gap:5px">📞 Обычный</a>
+              <a class="кн тихая" href="звонок.html" style="flex:1 1 0;min-height:38px;padding:0 6px;font-size:11px;gap:5px">📹 Видео</a>
+              <a class="кн тихая" href="звонок.html" style="flex:1 1 0;min-height:38px;padding:0 6px;font-size:11px;gap:5px">👥 Групповой</a>
+            </div>
+            <a class="пункт" href="#"><span class="знак">📌</span> Закреплённые <span class="усл">3</span></a>
+            <a class="пункт" href="#"><span class="знак">🔍</span> Поиск по чату</a>
+            <a class="пункт" href="#"><span class="знак">🖼</span> Общие медиа <span class="усл">48</span></a>
+            <a class="пункт беда" href="#"><span class="знак">🚫</span> Заблокировать</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">планшет · 1024×768 — подокно поверх главной, «📹» из шапки чата убрана</div>
+</div>
+
+<h2>ПК</h2>
+<p>
+  Полос три: список, разговор и страница собеседника. Подокно всё равно ложится
+  поверх — вместе с затемнением и «✕»: оно про действия, а не про содержимое, и
+  четвёртого места для него нет.
+</p>
+
+<div class="широк">
+  <div class="окно пк">
+    <div class="стан">
+
+      <div class="рейка">
+        <div class="шапка-рейки">
+          <span class="лого">Т</span>
+          <span class="имя-приложения">TIMa</span>
+        </div>
+        <a class="окно-рейки тек" href="../../пк/телефон.html">📞<span class="подпись-рейки">Телефон</span><span class="счёт">3</span></a>
+        <a class="окно-рейки" href="../../пк/новости.html">📰<span class="подпись-рейки">Социум</span><span class="счёт">12</span></a>
+        <a class="окно-рейки" href="../../пк/медиа.html">🖼<span class="подпись-рейки">Медиа-лента</span></a>
+        <a class="окно-рейки" href="../../пк/общение.html">💬<span class="подпись-рейки">Общение</span><span class="счёт">5</span></a>
+        <a class="окно-рейки" href="../../пк/страница.html">👤<span class="подпись-рейки">Личная страница</span></a>
+        <div class="низ-рейки">
+          <a class="окно-рейки" href="../../пк/настройки.html">⚙<span class="подпись-рейки">Настройки</span></a>
+        </div>
+      </div>
+
+      <div class="колонка-списка">
+        <div class="зона-1">
+          <span class="имя-окна тянуть">Телефон</span>
+          <a class="икона" href="поиск.html">🔍</a>
+        </div>
+        <div class="табы">
+          <a class="таб тек" href="#">Чаты</a>
+          <a class="таб" href="#">Контакты</a>
+          <a class="таб" href="#">Звонки</a>
+        </div>
+        <div class="зона-2">
+          <a class="строка" href="#">
+            <div class="ава">АК</div>
+            <div class="тянуть">
+              <div class="имя обрез">Анна Ковалёва</div>
+              <div class="втор обрез">печатает…</div>
+            </div>
+            <div class="мета"><span class="трет">12:31</span></div>
+          </a>
+          <a class="строка" href="#">
+            <div class="ава">БМ</div>
+            <div class="тянуть">
+              <div class="имя обрез">Борис Мельник</div>
+              <div class="втор обрез">Смету посмотрел, вопрос по срокам</div>
+            </div>
+            <div class="мета"><span class="трет">11:02</span></div>
+          </a>
+          <a class="строка" href="#">
+            <div class="ава">КР</div>
+            <div class="тянуть">
+              <div class="имя обрез">Команда разработки</div>
+              <div class="втор обрез">4 участника</div>
+            </div>
+            <div class="мета"><span class="трет">вчера</span></div>
+          </a>
+        </div>
+      </div>
+
+      <div class="главная">
+        <div class="зона-1 подокно">
+          <a class="ава мал" href="#">АК</a>
+          <a class="тянуть" href="#" style="text-decoration:none;color:inherit">
+            <div class="имя обрез" style="font-size:var(--щ5)">Анна Ковалёва</div>
+            <div class="трет" style="color:var(--живое);font-weight:700">печатает…</div>
+          </a>
+          <span class="чип е2е">E2E</span>
+          <a class="икона" href="#" title="позвонить">📞</a>
+          <a class="икона жив" href="#" title="меню перехода">•••</a>
+        </div>
+
+        <div class="поверх">
+          <div class="фон-подпись">под ним — разговор, он остался на месте</div>
+          <div class="модалка">
+            <div class="шапка-модалки">
+              <div class="ава бол" style="width:56px;height:56px;flex-basis:56px;border-radius:16px;font-size:var(--щ3)">АК</div>
+              <div class="тянуть">
+                <div class="имя">Анна Ковалёва</div>
+                <div class="трет">@anna · была 5 минут назад</div>
+              </div>
+              <a class="икона" href="#">✕</a>
+            </div>
+            <a class="пункт" href="../окна/страница-гостя.html"><span class="знак">📋</span> Перейти на страницу</a>
+            <div class="раздел">Позвонить</div>
+            <div style="display:flex;gap:8px;padding:0 var(--о4) var(--о3)">
+              <a class="кн тихая" href="звонок.html" style="flex:1 1 0;min-height:38px;padding:0 6px;font-size:11px;gap:5px">📞 Обычный</a>
+              <a class="кн тихая" href="звонок.html" style="flex:1 1 0;min-height:38px;padding:0 6px;font-size:11px;gap:5px">📹 Видео</a>
+              <a class="кн тихая" href="звонок.html" style="flex:1 1 0;min-height:38px;padding:0 6px;font-size:11px;gap:5px">👥 Групповой</a>
+            </div>
+            <a class="пункт" href="#"><span class="знак">📌</span> Закреплённые <span class="усл">3</span></a>
+            <a class="пункт" href="#"><span class="знак">🔍</span> Поиск по чату</a>
+            <a class="пункт" href="#"><span class="знак">🖼</span> Общие медиа <span class="усл">48</span></a>
+            <a class="пункт беда" href="#"><span class="знак">🚫</span> Заблокировать</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="правая-панель">
+        <div class="шапка-страницы">
+          <div class="ава бол">АК</div>
+          <div class="имя" style="font-size:var(--щ2)">Анна Ковалёва</div>
+          <div class="трет">@anna · была 5 минут назад</div>
+        </div>
+        <div class="тело-панели">
+          <div class="числа-страницы">
+            <div><div class="имя">1 248</div><div class="трет">сообщений</div></div>
+            <div><div class="имя">48</div><div class="трет">фото</div></div>
+            <div><div class="имя">12</div><div class="трет">файлов</div></div>
+          </div>
+          <div class="раздел">Управление</div>
+          <a class="пункт" href="#"><span class="знак">🔔</span> Уведомления <span class="усл">звук</span></a>
+          <a class="пункт" href="#"><span class="знак">✍</span> Может писать мне <span class="усл">да</span></a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="подпись">ПК · 1440×900 — три полосы, подокно всё равно поверх</div>
+</div>
+
 <div class="разбор">
 
 <h2>Что здесь</h2>
@@ -116,6 +361,9 @@
   <li>У канала «Покинуть» заменено на «Отписаться», и добавлена «Статистика», если есть доступ.</li>
   <li>В слайдах добавлен блок о самом посте: описание, теги, эмоции, дата — на серой подложке, чтобы отделить содержимое от действий.</li>
   <li>Затемнение фона одно и то же в светлых окнах и в тёмных: модалка остаётся светлой даже поверх слайдов — она про действия, а не про содержимое.</li>
+  <li><b>Звонок — блок из трёх кнопок, а не три пункта списком.</b> Пунктами это была бы треть меню, отданная одному действию; кнопками — одна строка. Голосовой стоит первым: он самый частый.</li>
+  <li><b>Групповой звонок появился здесь впервые.</b> В строке списка ему места не было вовсе, и позвать сразу нескольких было неоткуда.</li>
+  <li>У канала и у поста блока звонка нет: звонить некому.</li>
 </ul>
 
 <h2>Из чего открывается</h2>
