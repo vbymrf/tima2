@@ -53,12 +53,17 @@ import io.tima.feature.chat.ChatStore
 import io.tima.feature.chat.ChatsState
 import io.tima.feature.chat.ChatsStore
 import io.tima.feature.chat.BookState
+import io.tima.core.contacts.platformInvite
 import io.tima.core.contacts.platformPhoneBook
 import io.tima.core.ui.Tab
 import io.tima.domain.chat.BookEntry
+import io.tima.domain.chat.AddContact
 import io.tima.domain.chat.SyncBook
 import io.tima.feature.chat.BookStore
 import io.tima.feature.chat.BookViewSheet
+import io.tima.feature.chat.InviteScreen
+import io.tima.feature.chat.NewContactScreen
+import io.tima.feature.chat.NewContactStore
 import io.tima.feature.chat.BookScreen
 import io.tima.feature.shell.CALL_FILTERS
 import io.tima.feature.shell.Window
@@ -318,6 +323,21 @@ private fun App(
     // Подокно «Вид» вкладки «Контакты»: настроек три группы и они независимы, перебор
     // по кругу не дал бы угадать следующее состояние.
     var bookView by remember { mutableStateOf(false) }
+    // Кого приглашаем. null — подокно закрыто: отдельного флага не заводим, чтобы
+    // «открыто, но некого» не стало возможным состоянием.
+    var inviting by remember { mutableStateOf<BookEntry?>(null) }
+    var newContact by remember { mutableStateOf(false) }
+
+    val contacts = remember {
+        NewContactStore(
+            add = AddContact(environment.bookStorage, network.friends, network.discovery),
+            book = environment.bookStorage,
+            discovery = network.discovery,
+            scope = scope,
+        )
+    }
+    val contactsState by contacts.state.collectAsState()
+    val invite = remember { platformInvite() }
 
     // Контакты: своя книга — прочитанное с телефона плюс заведённое руками (Д2…Д5).
     // Поток из базы: прочитанное и итог сверки появляются сами, без опроса.
@@ -385,6 +405,30 @@ private fun App(
 
     // Переключатель окон лежит ПОВЕРХ стана, а не внутри колонки: он перекрывает
     // всё окно, включая главную область, и затемняет то, из чего его открыли.
+    inviting?.let { person ->
+        InviteScreen(
+            person = person,
+            // Текст один на все три способа: разница только в том, чем его понесут.
+            onSms = { invite.sms(person.phone, INVITE_TEXT); inviting = null },
+            onCall = { invite.call(person.phone); inviting = null },
+            onShare = { invite.share(INVITE_TEXT); inviting = null },
+            onClose = { inviting = null },
+        )
+        return
+    }
+
+    if (newContact) {
+        NewContactScreen(
+            state = contactsState,
+            onPhone = contacts::changedPhone,
+            onName = contacts::changedName,
+            onSection = contacts::changedSection,
+            onSave = { contacts.save { newContact = false } },
+            onBack = { newContact = false },
+        )
+        return
+    }
+
     if (bookView) {
         BookViewSheet(
             view = bookState.view,
@@ -455,6 +499,8 @@ private fun App(
                     onNeighbourWindow = switchWindow,
                     onView = { bookView = true },
                     onToggleSection = book::openedSection,
+                    onAddContact = { newContact = true },
+                    onInvite = { inviting = it },
                 )
 
                 Window.Social -> {
@@ -1002,9 +1048,20 @@ private fun windowCounters(list: ChatsState): Map<Window, Int> {
 }
 
 /**
+ * Текст приглашения — один на все три способа.
+ *
+ * СМС и «поделиться» несут одну и ту же строку: разница только в том, чем её понесут.
+ * Ссылки-приглашения с меткой пригласившего здесь нет — она отдельная работа, и без неё
+ * нельзя узнать, кто кого привёл (развилка в ПЛАН-КОНТАКТОВ.md).
+ */
+private const val INVITE_TEXT =
+    "Пишу из TIMa — это мессенджер, где переписка видна только собеседникам. " +
+        "Ставится по номеру телефона."
+
+/**
  * Окно «Телефон» — три вкладки макета.
  *
- * «Чаты» и «Книга» построены, «Звонки» ждут К7 и говорят об этом словами: кнопка,
+ * «Чаты» и «Контакты» построены, «Звонки» ждут К7 и говорят об этом словами: кнопка,
  * которая ничего не делает, обещает больше, чем есть.
  *
  * Вкладка запоминается вызывающим, а не этим экраном: «единая сессия» из `§1` требует,
@@ -1028,6 +1085,8 @@ private fun PhoneWindow(
     /** «Вид» — последняя вкладка-кнопка: открывает подокно настроек списка. */
     onView: () -> Unit,
     onToggleSection: (String) -> Unit,
+    onAddContact: () -> Unit,
+    onInvite: (BookEntry) -> Unit,
 ) {
     var calls by remember { mutableStateOf(CALL_FILTERS.first()) }
     WindowFrame(
@@ -1067,6 +1126,8 @@ private fun PhoneWindow(
                 onSearch = onSearchInBook,
                 onOpen = onOpenPerson,
                 onToggleSection = onToggleSection,
+                onAdd = onAddContact,
+                onInvite = onInvite,
             )
 
             // Заглушка называет выбранный фильтр. Фильтр, от которого на экране ничего

@@ -12,6 +12,7 @@ import io.tima.core.network.GroupsApi
 import io.tima.core.network.KeysApi
 import io.tima.core.network.UsersApi
 import io.tima.domain.chat.ContactDiscovery
+import io.tima.domain.chat.Friends
 import io.tima.domain.account.ConfirmDeviceLink
 import io.tima.core.network.AppVersionApi
 import io.tima.domain.account.MyDevices
@@ -45,6 +46,14 @@ interface ChatPorts {
      * живёт в окне «Телефон» рядом с перепиской.
      */
     val discovery: ContactDiscovery
+
+    /**
+     * Друзья: добавить и убрать (Д1б, Д7).
+     *
+     * Здесь же, а не отдельным портом: друзьями становятся из книги, и книга живёт в
+     * этом же окне.
+     */
+    val friends: Friends
 
     /**
      * Недостающие версии группового ключа: попросить и отдать.
