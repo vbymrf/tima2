@@ -71,6 +71,14 @@ fun WindowSwitchingScreen(
     currentAccount: String = "",
     onAccount: (String) -> Unit = {},
     /**
+     * Неотправленное по аккаунтам (Д11, путь Б, смягчение 2).
+     *
+     * Ушедший не наказан: несказанное остаётся у аккаунта числом, и вход в него запускает
+     * досылку. Без этой метки ожидание было бы тихим — человек видел «отправляется» и
+     * ушёл бы уверенным, что отправлено.
+     */
+    unsent: Map<String, Int> = emptyMap(),
+    /**
      * «Завести виртуальный аккаунт» (Д11).
      *
      * Стоит здесь, а не в настройках: человек заводит второго себя, и место этому там,
@@ -107,10 +115,20 @@ fun WindowSwitchingScreen(
                 // не на что, обещает несуществующее. Строка «завести» при этом остаётся.
                 if (accounts.size > 1) {
                     accounts.forEach { (userId, label) ->
+                        val лежит = unsent[userId] ?: 0
                         ListLine(
                             onClick = { if (userId != currentAccount) onAccount(userId) },
                             left = { Glyph(if (userId == currentAccount) "●" else "○") },
-                            middle = { Name(label) },
+                            right = { if (лежит > 0) Counter(лежит) },
+                            middle = {
+                                Column {
+                                    Name(label)
+                                    // Число само по себе непонятно: у окон рядом такой же
+                                    // счётчик означает непрочитанное. Здесь наоборот —
+                                    // несказанное, и это надо назвать словом.
+                                    if (лежит > 0) Secondary("не отправлено", lineOne = true)
+                                }
+                            },
                         )
                     }
                 }
@@ -215,3 +233,69 @@ private fun Glyph(glyph: String) {
 
 /** Насколько затемняется окно под панелью. Меньше — панель «висит», больше — окно исчезает. */
 private const val DIM = 0.32f
+
+/**
+ * Уход из аккаунта с непустой очередью — ПЛАН-КОНТАКТОВ.md, Д11 (путь Б, смягчение 1).
+ *
+ * **Вопрос, а не сообщение.** Оба ответа законны, и умалчивать нельзя ни о том, ни о
+ * другом: молча уйти значит соврать про «отправляется», молча подождать — задержать того,
+ * кто спешит.
+ *
+ * Почему вопрос вообще возникает: конверт собирается перед посылкой, а не при написании
+ * (ADR-0020 §3), — значит для отправки нужны ключи аккаунта, живые и в памяти. Вышел из
+ * аккаунта — ключей нет, и написанное лежит до возвращения. Досылка «на выходе», пока
+ * ключи ещё в памяти, покрывает почти всё, ради чего иначе пришлось бы заводить очередь
+ * как службу — а служба заставила бы устройство работать от имени аккаунта, в который
+ * никто не вошёл.
+ */
+@Composable
+fun AccountLeavingSheet(
+    /** Сколько лежит неотправленного. Ноль сюда не приходит: вопроса тогда нет. */
+    howMany: Int,
+    onWait: () -> Unit,
+    onLeaveNow: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = Tima.colors
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(colors.text.copy(alpha = DIM))
+            .clickable(onClick = onClose),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = TimaShapes.radius, topEnd = TimaShapes.radius))
+                .background(colors.surface)
+                .clickable(enabled = false, onClick = {})
+                .padding(TimaSpacing.about4),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+        ) {
+            SectionTitle("Не отправлено")
+            Name(
+                if (howMany == 1) {
+                    "Одно сообщение ещё не ушло."
+                } else {
+                    "$howMany сообщений ещё не ушли."
+                },
+            )
+            Secondary(
+                "Пока вы в этом аккаунте, они дойдут. Уйдёте — будут ждать вашего " +
+                    "возвращения: отправить их от имени другого аккаунта нельзя.",
+            )
+            ListLine(
+                onClick = onWait,
+                left = { Glyph("↑") },
+                middle = { Name("Подождать отправки") },
+            )
+            ListLine(
+                onClick = onLeaveNow,
+                left = { Glyph("→") },
+                middle = { Name("Уйти сейчас") },
+            )
+        }
+    }
+}

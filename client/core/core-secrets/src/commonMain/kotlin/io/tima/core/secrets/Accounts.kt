@@ -62,6 +62,33 @@ class Accounts(private val vault: SecretVault) {
     fun store(userId: String): VaultSecretStore = VaultSecretStore(Scoped(vault, userId))
 
     /**
+     * Сколько у аккаунта неотправленного — ПЛАН-КОНТАКТОВ.md, Д11 (путь Б, смягчение 2).
+     *
+     * **Число живёт здесь, а не в очереди, потому что чужую очередь читать нечем.** База
+     * у каждого аккаунта своя и зашифрована своим ключом покоя; чтобы узнать длину чужой
+     * очереди, пришлось бы открыть чужую базу — то есть при каждом показе списка держать
+     * рядом ключи всех аккаунтов. Это ровно то, чего избегает путь Б.
+     *
+     * Поэтому аккаунт, пока он открыт, **сам оставляет здесь своё число**, а список его
+     * только читает. Секретом оно не является: список аккаунтов и так лежит рядом.
+     *
+     * Цена честная, и её надо знать: число — снимок на момент последнего прохода очереди,
+     * а не запрос к ней. Устареть оно может ровно в одном случае — приложение убили между
+     * постановкой в очередь и проходом; следующий вход в аккаунт число поправит.
+     */
+    fun pending(userId: String): Int =
+        vault.get(pendingAlias(userId))?.decodeToString()?.toIntOrNull() ?: 0
+
+    /** Записать своё число. Ноль стирает запись: пустая очередь — это отсутствие метки. */
+    fun notePending(userId: String, howMany: Int) {
+        if (howMany <= 0) {
+            vault.remove(pendingAlias(userId))
+        } else {
+            vault.put(pendingAlias(userId), howMany.toString().encodeToByteArray())
+        }
+    }
+
+    /**
      * Забыть аккаунт целиком: и запись в списке, и его секреты.
      *
      * Текущим становится первый из оставшихся — иначе приложение осталось бы с
@@ -69,6 +96,7 @@ class Accounts(private val vault: SecretVault) {
      */
     fun forget(userId: String) {
         store(userId).clear()
+        vault.remove(pendingAlias(userId))
         val осталось = all().filterNot { it.userId == userId }
         write(осталось)
         if (current() == userId) {
@@ -93,6 +121,10 @@ class Accounts(private val vault: SecretVault) {
         val LIST = SecretAlias("accounts.v1")
         val CURRENT = SecretAlias("accounts.current.v1")
         const val FIELD = "\t"
+
+        // Точка, а не «собака»: имя секрета допускает только a-z, цифры, точку,
+        // дефис и подчёркивание — см. пояснение у Scoped.
+        fun pendingAlias(userId: String) = SecretAlias("accounts.pending.v1.$userId")
     }
 }
 

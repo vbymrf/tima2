@@ -77,6 +77,7 @@ import io.tima.feature.chat.ProfileScreen
 import io.tima.feature.chat.ProfileState
 import io.tima.feature.chat.ProfileStore
 import io.tima.feature.chat.BookScreen
+import io.tima.feature.shell.AccountLeavingSheet
 import io.tima.feature.shell.CALL_FILTERS
 import io.tima.feature.shell.Window
 import io.tima.feature.shell.MediaWindow
@@ -213,6 +214,12 @@ private fun Inside(
         return
     }
 
+    // Неотправленное по аккаунтам: читается один раз при входе, дальше правится тем
+    // аккаунтом, который открыт. Чужие числа — снимки, оставленные их же проходами.
+    var unsent by remember(current) {
+        mutableStateOf(entry.accountList().associate { it.userId to entry.pendingOf(it.userId) })
+    }
+
     // Сборка живёт в Assembly.kt: здесь навигация, а не «кто из чего состоит».
     // Первый аккаунт сохраняет прежнее имя базы: у того, кто уже пользуется
     // приложением, переписка лежит в `tima.db`, и переименование потеряло бы её.
@@ -227,6 +234,13 @@ private fun Inside(
         appearance = appearance,
         onAppearance = onAppearance,
         accounts = entry.accountList(),
+        unsent = unsent,
+        // Число оставляет тот аккаунт, что открыт: чужую очередь не прочитать — её база
+        // зашифрована своим ключом покоя (Д11).
+        onPending = { howMany ->
+            entry.notePending(current.session.userId, howMany)
+            unsent = unsent + (current.session.userId to howMany)
+        },
         // Переключение меняет указатель и перечитывает устройство. Всё остальное
         // пересобирается само: `assemble` помнит по устройству, а у другого аккаунта
         // другая сессия и другой ключ покоя.
@@ -390,6 +404,10 @@ private fun App(
      * окружение, то есть выйти на уровень выше.
      */
     onVirtualCreated: (VirtualStep.Created) -> Unit = {},
+    /** Неотправленное по аккаунтам — для метки в переключателе (Д11). */
+    unsent: Map<String, Int> = emptyMap(),
+    /** Сколько осталось в очереди этого аккаунта после прохода. */
+    onPending: (Int) -> Unit = {},
 ) {
     val environment = assembled.environment
     val network = assembled.network
@@ -402,6 +420,9 @@ private fun App(
     // чего его открывают чаще всего, а остальные окна пока пусты по существу.
     var window by remember { mutableStateOf(Window.Phone) }
     var windowSwitcher by remember { mutableStateOf(false) }
+    // Куда уходим, если очередь непуста. null — вопрос не задан: отдельного флага
+    // «спрашиваем» не заводим, чтобы «спрашиваем, но некуда» не стало возможным.
+    var leavingTo by remember { mutableStateOf<String?>(null) }
     // Подокно «Вид» вкладки «Контакты»: настроек три группы и они независимы, перебор
     // по кругу не дал бы угадать следующее состояние.
     var bookView by remember { mutableStateOf(false) }
@@ -496,7 +517,7 @@ private fun App(
     }
 
     // Фоновые циклы — в своём файле: это политика времени, а не навигация.
-    BackgroundLoops(assembled, platform, changeSign = listState)
+    BackgroundLoops(assembled, platform, changeSign = listState, onPending = onPending)
 
     // Свайп по средней зоне ведёт к соседнему окну в порядке переключателя. Края
     // не заворачиваются: с первого окна влево уйти некуда, и это честнее кольца —
@@ -545,6 +566,26 @@ private fun App(
         return
     }
 
+    // Уход из аккаунта с непустой очередью — вопрос, а не сообщение (Д11). Оба ответа
+    // законны: молча уйти значит соврать про «отправляется», молча ждать — задержать
+    // того, кто спешит.
+    val leaving = leavingTo
+    if (leaving != null) {
+        AccountLeavingSheet(
+            howMany = unsent[session.userId] ?: 0,
+            // «Подождать» ничего не запускает: отправка и так идёт, пока мы в аккаунте.
+            // Обещать здесь «сейчас дошлём» значило бы обещать сеть.
+            onWait = { leavingTo = null },
+            onLeaveNow = {
+                leavingTo = null
+                windowSwitcher = false
+                onSwitchAccount(leaving)
+            },
+            onClose = { leavingTo = null },
+        )
+        return
+    }
+
     if (windowSwitcher) {
         WindowSwitchingScreen(
             current = window,
@@ -569,9 +610,14 @@ private fun App(
             // лица он в приложении, и менять это надо там же, где смотрят.
             accounts = accounts.map { it.userId to (it.nickname.ifBlank { it.userId.take(8) }) },
             currentAccount = session.userId,
+            unsent = unsent,
             onAccount = { userId ->
-                windowSwitcher = false
-                onSwitchAccount(userId)
+                if ((unsent[session.userId] ?: 0) > 0) {
+                    leavingTo = userId
+                } else {
+                    windowSwitcher = false
+                    onSwitchAccount(userId)
+                }
             },
             // Виртуальный не заводит виртуальных — сервер это отвергает (Д10), и
             // предлагать здесь то, что не сработает, нельзя.
