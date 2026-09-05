@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import io.tima.core.encryption.AccountIdentitiesOverKodium
 import io.tima.core.encryption.DeviceKeyFactoryOverKodium
 import io.tima.core.encryption.IdentitySignerOverKodium
+import io.tima.core.network.TransferQr
+import io.tima.core.encryption.TransferProverOverKodium
 import io.tima.core.encryption.PersonalChatIdsOverKodium
 import io.tima.core.encryption.deviceIdentityFrom
 import io.tima.core.database.SqlChatBook
@@ -69,8 +71,15 @@ import io.tima.feature.chat.InviteScreen
 import io.tima.feature.chat.NewContactScreen
 import io.tima.feature.chat.NewContactStore
 import io.tima.domain.account.CreateVirtual
+import io.tima.domain.account.TransferVirtual
+import io.tima.domain.account.TransferAcceptStep
 import io.tima.domain.account.VirtualStep
 import io.tima.feature.auth.NewVirtualScreen
+import io.tima.feature.auth.VirtualsState
+import io.tima.feature.auth.VirtualsStore
+import io.tima.feature.auth.VirtualsScreen
+import io.tima.feature.auth.TransferStore
+import io.tima.feature.auth.TransferScreen
 import io.tima.feature.auth.NewVirtualStep
 import io.tima.feature.auth.NewVirtualStore
 import io.tima.feature.chat.ProfileScreen
@@ -263,6 +272,18 @@ private fun Inside(
             )
             device = entry.created()
         },
+        // Принятый по передаче аккаунт записывается и становится текущим — тем же путём,
+        // что и заведённый. Ник его сюда не приходит: сервер отдаёт при передаче только
+        // то, чем входить, а имя аккаунта в списке подтянется после первого захода в
+        // профиль. Виртуальным он помечается сразу: телефона у него нет и не будет.
+        onTransferTaken = { taken ->
+            entry.rememberAccount(
+                Account(userId = taken.session.userId, virtual = true),
+                taken.session,
+                taken.deviceSecret,
+            )
+            device = entry.created()
+        },
     )
 }
 
@@ -373,6 +394,14 @@ private sealed interface Where {
      * выбирает.
      */
     data object NewVirtual : Where
+
+    /**
+     * Передача виртуального аккаунта (ПЛАН-КОНТАКТОВ.md, Д12).
+     *
+     * @param virtualUserId кого передаём. `null` — мы принимающая сторона: принимающий
+     *   не знает идентификатора до предъявления кода, и знать не должен.
+     */
+    data class Transfer(val virtualUserId: String?) : Where
 }
 
 /**
@@ -408,6 +437,8 @@ private fun App(
     unsent: Map<String, Int> = emptyMap(),
     /** Сколько осталось в очереди этого аккаунта после прохода. */
     onPending: (Int) -> Unit = {},
+    /** Принятый по передаче аккаунт: записать в список и войти (Д12). */
+    onTransferTaken: (TransferAcceptStep.Taken) -> Unit = {},
 ) {
     val environment = assembled.environment
     val network = assembled.network
@@ -466,6 +497,25 @@ private fun App(
         )
     }
     val newVirtualState by newVirtual.state.collectAsState()
+
+    // Свои виртуальные аккаунты и передача: оба про распоряжение аккаунтом, оба живут
+    // столько же, сколько окно.
+    val virtuals = remember { VirtualsStore(network.virtuals, scope) }
+    val virtualsState by virtuals.state.collectAsState()
+    val transfer = remember {
+        TransferStore(
+            transfer = TransferVirtual(
+                api = network.transfers,
+                keys = DeviceKeyFactoryOverKodium,
+                prover = TransferProverOverKodium,
+                platform = platform.server,
+            ),
+            payloadOf = TransferQr::payload,
+            parse = TransferQr::parse,
+            scope = scope,
+        )
+    }
+    val transferState by transfer.state.collectAsState()
 
     // Контакты: своя книга — прочитанное с телефона плюс заведённое руками (Д2…Д5).
     // Поток из базы: прочитанное и итог сверки появляются сами, без опроса.
@@ -741,6 +791,31 @@ private fun App(
         main = when (val current = where) {
             Where.Nothing -> null
 
+            is Where.Transfer -> {
+                {
+                    LaunchedEffect(current) {
+                        // Сторона задаётся тем, откуда пришли, а не переключателем на
+                        // экране: «передаю» и «принимаю» — разные намерения, и путать их
+                        // здесь дороже всего.
+                        val кого = current.virtualUserId
+                        if (кого != null) transfer.giveCode(кого) else transfer.takingSide()
+                    }
+                    TransferScreen(
+                        state = transferState,
+                        onGiveCode = { current.virtualUserId?.let(transfer::giveCode) },
+                        onCancel = { transfer.cancel() },
+                        onCode = transfer::changedCode,
+                        onPhrase = transfer::changedPhrase,
+                        onTake = transfer::take,
+                        onBack = { where = Where.Settings(SettingsItem.VIRTUALS) },
+                        onDone = {
+                            where = Where.Nothing
+                            transferState.taken?.let(onTransferTaken)
+                        },
+                    )
+                }
+            }
+
             Where.NewVirtual -> {
                 {
                     NewVirtualScreen(
@@ -809,6 +884,10 @@ private fun App(
                         onBack = { where = Where.Nothing },
                         profile = profile,
                         profileState = profileState,
+                        virtuals = virtuals,
+                        virtualsState = virtualsState,
+                        onNewVirtual = { where = Where.NewVirtual },
+                        onTransfer = { userId -> where = Where.Transfer(userId) },
                     )
                 }
             }
@@ -1022,6 +1101,12 @@ private fun Settings(
     /** Профиль общий с переключением окон: один Store, два входа. */
     profile: ProfileStore,
     profileState: ProfileState,
+    /** Виртуальные аккаунты: список свой, а действия уводят из настроек (Д10…Д12). */
+    virtuals: VirtualsStore,
+    virtualsState: VirtualsState,
+    onNewVirtual: () -> Unit,
+    /** `null` — принимаем чужой; иначе передаём свой. */
+    onTransfer: (String?) -> Unit,
 ) {
     val fleet = remember { DevicesStore(network.myFleet, scope) }
     val devices by fleet.state.collectAsState()
@@ -1071,6 +1156,18 @@ private fun Settings(
                 onSave = profile::save,
                 onBack = { onOpen(null) },
             )
+
+            SettingsItem.VIRTUALS -> {
+                // Список спрашивается у сервера при каждом заходе: он меняется и на
+                // других устройствах, а местный список показал бы вчерашнее.
+                LaunchedEffect(Unit) { virtuals.refresh() }
+                VirtualsScreen(
+                    state = virtualsState,
+                    onCreate = onNewVirtual,
+                    onGive = { onTransfer(it) },
+                    onTake = { onTransfer(null) },
+                )
+            }
 
             SettingsItem.DEVICES -> Devices(fleet, devices, build.name)
 

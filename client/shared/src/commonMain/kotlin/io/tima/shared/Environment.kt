@@ -46,6 +46,7 @@ import io.tima.core.network.KeysApi
 import io.tima.core.network.ContactsOverHttp
 import io.tima.core.network.FriendsOverHttp
 import io.tima.core.network.ProfileOverHttp
+import io.tima.core.network.TransfersOverHttp
 import io.tima.core.network.VirtualsOverHttp
 import io.tima.core.network.UsersApi
 import io.tima.core.network.LinkConfirmApi
@@ -69,6 +70,7 @@ import io.tima.domain.account.LinkNewDevice
 import io.tima.domain.account.MyDevices
 import io.tima.domain.account.RegisterDevice
 import io.tima.domain.account.Session
+import io.tima.domain.account.TransfersApi
 import io.tima.domain.account.VirtualsApi
 import io.tima.domain.chat.ChatJournal
 import io.tima.domain.chat.MarkRead
@@ -265,6 +267,10 @@ class Network(
     /** Виртуальные аккаунты: завести своей подписью, перечислить свои (Д10). */
     override val virtuals: VirtualsApi =
         VirtualsOverHttp(link.route, link.client, token = { session.accessToken })
+
+    /** Передача: выдать код, отменить, предъявить код с фразой (Д12). */
+    override val transfers: TransfersApi =
+        TransfersOverHttp(link.route, link.client, token = { session.accessToken })
 
     /** Группы: создание, состав, роли. */
     override val groups: GroupsApi = GroupsApi(link.route, link.client, token = { session.accessToken })

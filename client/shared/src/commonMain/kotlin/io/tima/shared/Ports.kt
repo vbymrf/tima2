@@ -17,6 +17,7 @@ import io.tima.domain.account.Profile
 import io.tima.domain.account.ConfirmDeviceLink
 import io.tima.core.network.AppVersionApi
 import io.tima.domain.account.MyDevices
+import io.tima.domain.account.TransfersApi
 import io.tima.domain.account.VirtualsApi
 
 /**
@@ -140,6 +141,13 @@ interface DevicePorts {
      * отношения не имеет: у нового аккаунта её ещё нет вовсе.
      */
     val virtuals: VirtualsApi
+
+    /**
+     * Передача виртуального аккаунта другому человеку (Д12).
+     *
+     * Рядом с [virtuals] и по той же причине: это распоряжение аккаунтом, а не переписка.
+     */
+    val transfers: TransfersApi
 
     /**
      * Подтверждение привязки требует ключа ЭТОГО устройства: подпись над данными из

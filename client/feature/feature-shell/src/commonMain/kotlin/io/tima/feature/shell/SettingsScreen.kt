@@ -108,6 +108,15 @@ enum class SettingsItem(val group: SettingsGroup, val title: String, val glyph: 
     DEVICES(SettingsGroup.ACCOUNT, "Секретная фраза и устройства", "🔑"),
     NOTIFICATIONS(SettingsGroup.ACCOUNT, "Уведомления", "🔔"),
 
+    /**
+     * Виртуальные аккаунты — ПЛАН-КОНТАКТОВ.md, Д10…Д12.
+     *
+     * В разделе «Аккаунт», а не в отдельном месте: это распоряжение своими аккаунтами —
+     * завести, передать, принять. Переключаются между ними в другом месте (переключение
+     * окон), и это не противоречие: переключаются часто, распоряжаются редко.
+     */
+    VIRTUALS(SettingsGroup.ACCOUNT, "Виртуальные аккаунты", "🎭"),
+
     APPEARANCE(SettingsGroup.APPLICATION, "Оформление", "🎨"),
     LANGUAGE(SettingsGroup.APPLICATION, "Язык", "🌐"),
     PRIVACY(SettingsGroup.APPLICATION, "Приватность и блокировки", "🔒"),
