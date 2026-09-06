@@ -8,6 +8,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.util.AttributeKey
 import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
 import kotlinx.datetime.Clock
 import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.plugins.HttpTimeout
@@ -79,22 +80,30 @@ fun HttpClientConfig<*>.timaDefaults(
                 val first = proceed(request)
                 if (first.response.status != HttpStatusCode.Unauthorized) return@on first
                 val path = shortPath(request.url.build().encodedPath)
-                // Объясняющая строка (правило журнала): не «401», а что мы из него поняли
-                // и что делаем дальше. Отчёт читают ради причины, а не ради кода.
-                Journal.trouble("вход", "сервер не принял токен на " + path + " — пробую обновить")
+                // Общий код: сервер отказал по авторизации. Причину назовёт частный —
+                // её знает тот, кто владеет токеном, а не транспорт.
+                Journal.trouble(LogCode.NET_401, "сервер не принял токен — пробую обновить", "путь" to path)
                 val fresh = renewal.renew?.invoke()
                 if (fresh == null) {
-                    Journal.trouble("вход", "обновить не вышло: работаем без доступа, ручки под токеном будут отказывать")
+                    Journal.trouble(
+                        LogCode.AUTH_RENEW_FAILED,
+                        "обновить не вышло: ручки под токеном будут отказывать",
+                        "путь" to path,
+                    )
                     return@on first
                 }
-                Journal.note("вход", "токен обновлён, повторяю " + path)
+                Journal.note(LogCode.AUTH_RENEWED, "повторяю запрос", "путь" to path)
                 request.headers.remove(HttpHeaders.Authorization)
                 request.headers.append(HttpHeaders.Authorization, "Bearer " + fresh)
                 val second = proceed(request)
                 if (second.response.status == HttpStatusCode.Unauthorized) {
                     // Второй отказ означает не срок: устройство отозвано либо ключ не тот.
                     // Сказать это здесь дешевле, чем оставить читающему два одинаковых 401.
-                    Journal.trouble("вход", "и с новым токеном " + path + " → 401: дело не в сроке, устройство отозвано или ключ не тот")
+                    Journal.trouble(
+                        LogCode.AUTH_REVOKED,
+                        "и с новым токеном отказ: дело не в сроке — устройство отозвано или ключ не тот",
+                        "путь" to path,
+                    )
                 }
                 second
             }
@@ -116,10 +125,19 @@ fun HttpClientConfig<*>.timaDefaults(
             val started = response.call.request.attributes.getOrNull(startedAt)
             val spent = started?.let { Clock.System.now().toEpochMilliseconds() - it } ?: -1
             val path = shortPath(response.call.request.url.encodedPath)
-            val line = response.call.request.method.value + " " + path +
-                " → " + response.status.value + (if (spent >= 0) " за ${spent} мс" else "")
-            if (response.status.value >= 400) Journal.trouble("сеть", line)
-            else Journal.note("сеть", line)
+            val method = response.call.request.method.value
+            val code = when {
+                response.status == HttpStatusCode.Unauthorized -> LogCode.NET_401
+                response.status.value >= 400 -> LogCode.NET_ERROR
+                else -> LogCode.NET_CALL
+            }
+            val details = arrayOf<Pair<String, Any?>>(
+                "путь" to (method + " " + path),
+                "код" to response.status.value,
+                "мс" to (if (spent >= 0) spent else null),
+            )
+            if (response.status.value >= 400) Journal.trouble(code, details = details)
+            else Journal.note(code, details = details)
         }
     })
 }

@@ -94,12 +94,43 @@ fun interface ProblemLog {
     fun dump(): String
 }
 
+/**
+ * Снимок состояния устройства — то, что считается **в момент составления отчёта**.
+ *
+ * **Зачем отдельно от журнала.** Журнал отвечает «как дошли», снимок — «что сейчас». На
+ * вопрос «в чём проблема у устройства» отвечает именно он, и читается за три секунды, а
+ * не за минуту разбора хронологии.
+ *
+ * **Почему в момент составления, а не по расписанию.** Человек жалуется тогда, когда у
+ * него не работает; это и есть нужный момент. Состояние на границах сеансов при этом
+ * пишется и в журнал (`APP-START`, `AUTH-*`) — чтобы отчёт, отправленный через час после
+ * поломки, не показывал только то, что уже починилось само.
+ */
+data class Snapshot(
+    /** Вход: живой токен, истёкший, отсутствующий. */
+    val auth: String = "",
+    /** Сколько лежит неотправленного. */
+    val queued: Int = 0,
+    /** Разрешения, которые нам нужны: какие есть, каких нет. */
+    val permissions: String = "",
+    /** Сколько живёт этот запуск — сколько журнала мы вообще застали. */
+    val sessionFor: String = "",
+) {
+    fun lines(): List<String> = buildList {
+        if (auth.isNotBlank()) add("вход: $auth")
+        add("очередь: " + if (queued == 0) "пусто" else "$queued не отправлено")
+        if (permissions.isNotBlank()) add("разрешения: $permissions")
+        if (sessionFor.isNotBlank()) add("сеанс: $sessionFor")
+    }
+}
+
 /** Собранный отчёт. Ровно это уходит на сервер и ровно это показывает «Смотреть». */
 data class ProblemReport(
     val kind: ProblemKind,
     val text: String,
     val origin: String,
     val facts: ProblemFacts,
+    val snapshot: Snapshot,
     val log: String,
 )
 
@@ -134,6 +165,8 @@ data class ProblemState(
     val showing: Boolean = false,
     /** Журнал, который уйдёт. Берётся при открытии экрана, а не при отправке. */
     val log: String = "",
+    /** Состояние устройства на момент составления отчёта. */
+    val snapshot: Snapshot = Snapshot(),
     val sending: Boolean = false,
     val outcome: SendOutcome? = null,
 ) {
@@ -153,9 +186,11 @@ class ProblemStore(
     private val scope: CoroutineScope,
     origin: Origin?,
     facts: ProblemFacts,
+    /** Снимок состояния — считается здесь же, при открытии экрана. */
+    snapshot: Snapshot = Snapshot(),
 ) {
     private val _state = MutableStateFlow(
-        ProblemState(origin = origin, facts = facts, log = log.dump()),
+        ProblemState(origin = origin, facts = facts, log = log.dump(), snapshot = snapshot),
     )
     val state: StateFlow<ProblemState> = _state.asStateFlow()
 
@@ -182,6 +217,7 @@ class ProblemStore(
                 text = state.text.trim(),
                 origin = state.origin?.short().orEmpty(),
                 facts = state.facts,
+                snapshot = state.snapshot,
                 log = state.log,
             )
             val outcome = try {
@@ -247,6 +283,10 @@ fun ProblemScreen(
     )
     if (state.showing) {
         state.facts.lines().forEach { Tertiary(it) }
+        // Снимок идёт ПЕРЕД журналом: он отвечает «что сейчас», журнал — «как дошли».
+        Caption("Состояние сейчас", fontSize = TimaType.sz5, weight = FontWeight.Bold)
+        state.snapshot.lines().forEach { Tertiary(it) }
+        Caption("Что происходило", fontSize = TimaType.sz5, weight = FontWeight.Bold)
         Tertiary(if (state.log.isBlank()) "Журнал пуст" else state.log)
     }
 

@@ -3,6 +3,7 @@ package io.tima.shared
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
 import io.tima.core.network.PlatformResult
 import kotlinx.coroutines.delay
 
@@ -54,7 +55,7 @@ fun BackgroundLoops(
         // «Сообщение не ушло» — самая частая жалоба, и ответ на неё живёт здесь: сколько
         // было, сколько осталось. Пустой проход не пишем — журнал должен читаться.
         if (before > 0 || after > 0) {
-            Journal.note("очередь", "проход: было " + before + ", осталось " + after)
+            Journal.note(LogCode.QUEUE_PASS, "проход очереди", "было" to before, "осталось" to after)
         }
         onPending(after)
     }
@@ -78,11 +79,11 @@ fun BackgroundLoops(
             // Застрявшая очередь важнее уходящей: одно и то же число из прохода в проход
             // означает, что повторы не помогают, и это надо видеть в отчёте.
             if (before > 0) {
-                Journal.note(
-                    "очередь",
-                    if (before == after) "повтор не помог: осталось " + after
-                    else "повтор: было " + before + ", осталось " + after,
-                )
+                if (before == after) {
+                    Journal.trouble(LogCode.QUEUE_STUCK, "повтор не помог", "осталось" to after)
+                } else {
+                    Journal.note(LogCode.QUEUE_PASS, "повтор", "было" to before, "осталось" to after)
+                }
             }
             onPending(after)
         }

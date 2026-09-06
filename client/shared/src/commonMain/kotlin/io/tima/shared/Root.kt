@@ -107,12 +107,14 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import io.tima.feature.shell.AppearanceScreen
 import io.tima.feature.shell.SettingsScreen
 import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
 import io.tima.core.network.ProblemPost
 import io.tima.core.network.ProblemSendResult
 import io.tima.feature.shell.Origin
 import io.tima.feature.shell.ProblemFacts
 import io.tima.feature.shell.ProblemScreen
 import io.tima.feature.shell.ProblemStore
+import io.tima.feature.shell.Snapshot
 import io.tima.feature.shell.SendOutcome
 import io.tima.feature.shell.UpdateGate
 import io.tima.feature.shell.UpdateInstaller
@@ -515,13 +517,13 @@ private fun App(
     var where by remember { mutableStateOf<Where>(Where.Nothing) }
     // Куда человек ходил — второй вопрос правила журнала («что он делал»). Пишется смена,
     // а не каждая перерисовка: журнал должен читаться, а не разбухать.
-    LaunchedEffect(where) { Journal.note("экран", whereWords(where)) }
+    LaunchedEffect(where) { Journal.note(LogCode.SCREEN_OPEN, whereWords(where)) }
 
     // Какое окно открыто. Приложение начинается с окна 1: личная связь — то, ради
     // чего его открывают чаще всего, а остальные окна пока пусты по существу.
     var window by remember { mutableStateOf(Window.Phone) }
     // Смена окна — тоже «что человек делал»: половина жалоб про конкретное окно.
-    LaunchedEffect(window) { Journal.note("экран", "окно " + window.short) }
+    LaunchedEffect(window) { Journal.note(LogCode.WINDOW_OPEN, window.short) }
     var windowSwitcher by remember { mutableStateOf(false) }
     // Куда уходим, если очередь непуста. null — вопрос не задан: отдельного флага
     // «спрашиваем» не заводим, чтобы «спрашиваем, но некуда» не стало возможным.
@@ -559,9 +561,12 @@ private fun App(
         // Отметка запуска: без неё непонятно, к какому открытию приложения относятся
         // строки ниже, а отчёт присылают после нескольких запусков подряд.
         Journal.note(
-            "запуск",
-            "версия " + build.name + ", " + platform.packageKind.ifBlank { platform.server } +
-                ", аккаунт " + session.userId,
+            LogCode.APP_START,
+            "приложение запущено",
+            "версия" to build.name,
+            "поток" to build.stream,
+            "платформа" to platform.packageKind.ifBlank { platform.server },
+            "аккаунт" to session.userId,
         )
 
         // Токен обновляется ДО первых вызовов, а не по первому отказу: приложение,
@@ -570,7 +575,7 @@ private fun App(
         network.tokenKeeper?.renewIfStale()
 
         val sent = reporting.deliver()
-        if (sent > 0) Journal.note("отчёты", "досланы отложенные: " + sent)
+        if (sent > 0) Journal.note(LogCode.REPORT_SENT, "досланы отложенные отчёты", "сколько" to sent)
     }
 
     val contacts = remember {
@@ -651,6 +656,12 @@ private fun App(
     // бесполезным. Вкладка есть только у окна «Телефон» — у остальных её пока нет, и
     // выдумывать нечего.
     var cameFrom by remember { mutableStateOf<Origin?>(null) }
+
+    // Когда начался этот запуск. В снимке отчёта из него получается строка «сеанс идёт
+    // 6 мин» — она говорит, сколько журнала мы вообще застали: журнал живёт в памяти
+    // процесса, и после убийства приложения в нём только новое.
+    val startedAt = remember { nowMillis() }
+    val startedWords = { howLongSince(startedAt) }
     val toSettings: () -> Unit = {
         cameFrom = Origin(window, if (window == Window.Phone) phoneTab else "")
         where = Where.Settings()
@@ -1042,6 +1053,17 @@ private fun App(
                         ),
                         origin = cameFrom,
                         reporting = reporting,
+                        // Снимок считается ЗДЕСЬ и в момент открытия экрана: человек
+                        // жалуется тогда, когда у него не работает, — это и есть нужный
+                        // момент. Собрать его может только сборка: у неё есть и токен, и
+                        // очередь, и платформа.
+                        snapshot = {
+                            Snapshot(
+                                auth = network.tokenKeeper?.words() ?: "неизвестно",
+                                queued = unsent[session.userId] ?: 0,
+                                sessionFor = startedWords(),
+                            )
+                        },
                     )
                 }
             }
@@ -1270,6 +1292,8 @@ private fun Settings(
     origin: Origin?,
     /** Сеть плюс очередь: отчёт не теряется, даже если связи нет. */
     reporting: Reporting,
+    /** Снимок состояния — считается в момент открытия экрана отчёта. */
+    snapshot: () -> Snapshot,
 ) {
     val fleet = remember { DevicesStore(network.myFleet, scope) }
     val devices by fleet.state.collectAsState()
@@ -1341,7 +1365,7 @@ private fun Settings(
             // Отчёт о проблеме. Магазин создаётся ЗДЕСЬ, при открытии раздела: журнал
             // снимается в момент, когда человек пришёл жаловаться, а не когда дописал
             // текст — к тому времени начало поломки успело бы вытесниться.
-            SettingsItem.PROBLEM -> Problem(problemFacts, origin, reporting, scope, platform)
+            SettingsItem.PROBLEM -> Problem(problemFacts, origin, reporting, scope, platform, snapshot)
 
             else -> TabStub(
                 willWhat = item.title,
@@ -1399,6 +1423,7 @@ private fun Problem(
     reporting: Reporting,
     scope: kotlinx.coroutines.CoroutineScope,
     platform: Platform,
+    snapshot: () -> Snapshot,
 ) {
     val store = remember {
         ProblemStore(
@@ -1415,7 +1440,11 @@ private fun Problem(
                         build = report.facts.build,
                         stream = report.facts.stream,
                         nickname = report.facts.nickname,
-                        log = report.log,
+                        // Снимок идёт первым блоком журнала, а не отдельным полем: он и
+                        // есть часть того, что читают. Отдельное поле пришлось бы
+                        // добавлять в таблицу, в ручку и в разбор — ради текста, который
+                        // и так читается сверху вниз.
+                        log = reportBody(report.snapshot, report.log),
                     ),
                 )
                 when (result) {
@@ -1431,6 +1460,7 @@ private fun Problem(
             scope = scope,
             origin = origin,
             facts = facts,
+            snapshot = snapshot(),
         )
     }
     val state by store.state.collectAsState()
@@ -1441,6 +1471,37 @@ private fun Problem(
         onShow = store::toggleShowing,
         onSend = store::send,
     )
+}
+
+/**
+ * Тело отчёта: снимок сверху, хронология под ним.
+ *
+ * Снимок отвечает «что сейчас», журнал — «как дошли»; читающий начинает с первого и
+ * спускается ко второму, только если первого не хватило. Отдельным полем снимок не
+ * заводится: это тот же текст, и отдельное поле пришлось бы вести в таблице, в ручке и в
+ * разборе ради того, что и так читается сверху вниз.
+ */
+private fun reportBody(snapshot: Snapshot, log: String): String = buildString {
+    appendLine("СОСТОЯНИЕ")
+    snapshot.lines().forEach { appendLine("  " + it) }
+    appendLine()
+    appendLine("ЧТО ПРОИСХОДИЛО")
+    append(log)
+}
+
+/**
+ * Сколько идёт этот запуск — словами.
+ *
+ * Нужно в снимке отчёта: «сеанс идёт 6 мин» сразу говорит, что глубже журнала нет, и
+ * искать вчерашнее в нём бесполезно.
+ */
+private fun howLongSince(startedAt: Long): String {
+    val minutes = (nowMillis() - startedAt) / 60_000
+    return when {
+        minutes < 1 -> "идёт меньше минуты"
+        minutes < 60 -> "идёт $minutes мин"
+        else -> "идёт " + (minutes / 60) + " ч " + (minutes % 60) + " мин"
+    }
 }
 
 /**

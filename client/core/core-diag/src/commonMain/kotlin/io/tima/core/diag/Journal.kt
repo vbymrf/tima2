@@ -25,7 +25,14 @@ object Journal {
         diary = other
     }
 
-    fun note(area: String, text: String) = diary.note(area, text)
+    /**
+     * @param code код из [LogCode]; по нему строку ищут и считают.
+     * @param text человеческая часть — что это значит.
+     * @param details пары «имя=значение» для того, что сравнивается: путь, код, мс.
+     */
+    fun note(code: String, text: String = "", vararg details: Pair<String, Any?>) =
+        diary.note(code, text, *details)
 
-    fun trouble(area: String, text: String) = diary.trouble(area, text)
+    fun trouble(code: String, text: String = "", vararg details: Pair<String, Any?>) =
+        diary.trouble(code, text, *details)
 }

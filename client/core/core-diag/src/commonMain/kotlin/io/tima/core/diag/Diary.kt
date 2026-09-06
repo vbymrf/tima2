@@ -34,15 +34,27 @@ class Diary(
     /**
      * Записать.
      *
-     * @param area откуда: `сеть`, `экран`, `очередь`, `вход`. Короткое слово, по которому
-     *   отчёт потом читают глазами.
+     * @param code код из [LogCode] — машинная часть строки: по нему ищут, считают и
+     *   выбирают отчёты. Первая часть кода и есть область.
+     * @param text человеческая часть: что это значит. Меняется свободно — на поиск она
+     *   не влияет.
+     * @param details пары «имя=значение» для того, что считается и сравнивается: путь,
+     *   код ответа, миллисекунды, длина очереди.
      */
-    fun note(area: String, text: String, level: Level = Level.Info) {
+    fun note(
+        code: String,
+        text: String = "",
+        vararg details: Pair<String, Any?>,
+        level: Level = Level.Info,
+    ) {
         val note = Note(
             atMillis = now(),
             level = level,
-            area = area,
+            code = code,
             text = scrub(text).take(maxLength),
+            details = details.mapNotNull { (name, value) ->
+                value?.let { name to scrub(it.toString()).take(DETAIL_LENGTH) }
+            },
         )
         synchronizedNotes {
             notes.addLast(note)
@@ -51,7 +63,8 @@ class Diary(
     }
 
     /** То же, но для беды: отдельный уровень, чтобы её было видно в отчёте. */
-    fun trouble(area: String, text: String) = note(area, text, Level.Trouble)
+    fun trouble(code: String, text: String = "", vararg details: Pair<String, Any?>) =
+        note(code, text, *details, level = Level.Trouble)
 
     /** Что уйдёт в отчёт: всё, что уложилось в обе границы, от старого к новому. */
     fun tail(): List<Note> {
@@ -77,8 +90,14 @@ class Diary(
 
     companion object {
         const val DAY: Long = 24L * 60 * 60 * 1000
-        const val MAX_NOTES: Int = 2000
+
+        /** Хранение — трое суток (решение заказчика 2026-09-06); в отчёт уходят сутки. */
+        const val KEEP_DAYS: Long = 3 * DAY
+        const val MAX_NOTES: Int = 4000
         const val MAX_LENGTH: Int = 300
+
+        /** Предел значения в хвосте: там числа и пути, длинному там взяться неоткуда. */
+        const val DETAIL_LENGTH: Int = 120
     }
 }
 
@@ -89,14 +108,24 @@ enum class Level { Info, Trouble }
 data class Note(
     val atMillis: Long,
     val level: Level,
-    val area: String,
+    val code: String,
     val text: String,
+    val details: List<Pair<String, String>> = emptyList(),
 ) {
-    /** Строка отчёта: время, уровень, откуда, что. */
+    /**
+     * Строка отчёта: время, знак беды, код, текст, хвост из пар.
+     *
+     * Порядок не случаен. Время — чтобы сопоставлять с рассказом человека; знак — чтобы
+     * беды находились взглядом; код — чтобы находились поиском; текст — чтобы читались;
+     * хвост — чтобы считались.
+     */
     fun line(): String {
         val stamp = Instant.fromEpochMilliseconds(atMillis).toString()
         val mark = if (level == Level.Trouble) "!" else " "
-        return "$stamp $mark [$area] $text"
+        val tail = if (details.isEmpty()) "" else
+            "  " + details.joinToString(" ") { (name, value) -> "$name=$value" }
+        val words = if (text.isBlank()) "" else " $text"
+        return "$stamp $mark $code$words$tail"
     }
 }
 

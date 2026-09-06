@@ -1,6 +1,7 @@
 package io.tima.shared
 
 import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
 import kotlinx.datetime.Clock
 import io.tima.core.network.DeviceTokenApi
 import io.tima.core.network.DeviceTokenResult
@@ -49,7 +50,10 @@ class DeviceTokens(
         val expires = expiresAt(access)
         // Срок токена — четвёртый вопрос правила журнала: «в каком состоянии был вход».
         // Именно его не хватило 2026-09-06, когда 401 был виден, а причина — нет.
-        Journal.note("вход", state(expires))
+        val (code, words) = state(expires)
+        val left = expires?.let { it - now() }
+        if (code == LogCode.AUTH_OK) Journal.note(code, words, "осталось" to left?.let(::howLong))
+        else Journal.trouble(code, words, "просрочено" to left?.let { howLong(-it) })
         val soon = expires == null || expires - now() < MARGIN
         return if (soon) renew() else false
     }
@@ -60,20 +64,28 @@ class DeviceTokens(
      * «Токен истёк 40 минут назад» вместо «exp=1757169600»: отчёт читают, чтобы понять
      * причину, и перекладывать перевод чисел на читающего — значит терять половину смысла.
      */
-    private fun state(expires: Long?): String = when {
-        access.isBlank() -> "токена нет: устройство не вошло"
-        expires == null -> "токен есть, срок прочитать не удалось — обновляю на всякий случай"
-        expires <= now() -> "токен истёк " + howLong(now() - expires) + " назад — обновляю"
-        expires - now() < MARGIN -> "токен живёт ещё " + howLong(expires - now()) + " — обновляю заранее"
-        else -> "токен жив ещё " + howLong(expires - now())
+    private fun state(expires: Long?): Pair<String, String> = when {
+        access.isBlank() -> LogCode.AUTH_NONE to "токена нет: устройство не вошло"
+        expires == null -> LogCode.AUTH_UNKNOWN to "срок прочитать не удалось — обновляю на всякий случай"
+        expires <= now() -> LogCode.AUTH_EXPIRED to ("токен истёк " + howLong(now() - expires) + " назад — обновляю")
+        expires - now() < MARGIN -> LogCode.AUTH_SOON to ("скоро истечёт — обновляю заранее")
+        else -> LogCode.AUTH_OK to "токен жив"
     }
+
+    /**
+     * Состояние входа словами — для снимка в отчёте.
+     *
+     * Тот же текст, что уходит в журнал: два разных описания одного состояния однажды
+     * разошлись бы, и читающий отчёт получил бы два ответа на один вопрос.
+     */
+    fun words(): String = state(expiresAt(access)).second
 
     /** Обновить сейчас. `false` — не вышло; прежний токен остаётся на месте. */
     suspend fun renew(): Boolean {
         val issuedAt = now() / 1000
         val signature = sign(deviceTokenSigningBytes(session.userId, session.deviceId, issuedAt))
         if (signature == null) {
-            Journal.trouble("вход", "нечем подписать обновление токена: ключа устройства нет")
+            Journal.trouble(LogCode.AUTH_NO_KEY, "нечем подписать обновление: ключа устройства нет")
             return false
         }
         return when (val answer = api.renew(session.userId, session.deviceId, issuedAt, signature)) {
@@ -82,7 +94,7 @@ class DeviceTokens(
                 // Сохраняем сразу: незаписанный токен означает, что после перезапуска мы
                 // снова придём сюда же — и так каждый запуск.
                 remember(Session(session.userId, session.deviceId, answer.accessToken))
-                Journal.note("вход", "токен обновлён")
+                Journal.note(LogCode.AUTH_RENEWED, "токен обновлён")
                 true
             }
 
@@ -90,17 +102,22 @@ class DeviceTokens(
                 // Отзыв — это конец, а не заминка: у этого устройства доступа больше нет,
                 // и повторять запрос бессмысленно. Человеку это скажет экран, когда
                 // дойдёт до действия; здесь важно не крутить обновление впустую.
-                Journal.trouble("вход", "устройство отозвано — обновлять нечего")
+                Journal.trouble(LogCode.AUTH_REVOKED, "устройство отозвано — нужен новый вход")
                 false
             }
 
             is DeviceTokenResult.NoConnection -> {
-                Journal.trouble("вход", "обновление токена не дошло до сервера")
+                Journal.trouble(LogCode.AUTH_RENEW_FAILED, "обновление не дошло до сервера")
                 false
             }
 
             is DeviceTokenResult.Refused -> {
-                Journal.trouble("вход", "сервер не обновил токен: " + answer.status + " " + answer.code)
+                Journal.trouble(
+                    LogCode.AUTH_RENEW_FAILED,
+                    "сервер не обновил токен",
+                    "код" to answer.status,
+                    "причина" to answer.code,
+                )
                 false
             }
         }

@@ -22,9 +22,9 @@ class DiaryTest {
     @Test
     fun пишет_и_отдаёт_по_порядку() {
         val diary = diary()
-        diary.note("сеть", "пошёл запрос")
+        diary.note(LogCode.NET_CALL, "пошёл запрос")
         now += 5
-        diary.trouble("сеть", "отказ 500")
+        diary.trouble(LogCode.NET_ERROR, "отказ", "код" to 500)
 
         val notes = diary.tail()
         assertEquals(2, notes.size)
@@ -35,9 +35,9 @@ class DiaryTest {
     @Test
     fun старое_вытесняется_по_времени() {
         val diary = diary(keepMillis = 100)
-        diary.note("экран", "вчерашнее")
+        diary.note(LogCode.SCREEN_OPEN, "вчерашнее")
         now += 500
-        diary.note("экран", "сегодняшнее")
+        diary.note(LogCode.SCREEN_OPEN, "сегодняшнее")
 
         val notes = diary.tail()
         assertEquals(1, notes.size, "запись старше границы обязана уйти")
@@ -49,7 +49,7 @@ class DiaryTest {
         // Предел по числу записей нужен ровно для этого случая: ошибка в цикле пишет
         // тысячу строк за секунду, и по времени они все свежие.
         val diary = diary(maxNotes = 10)
-        repeat(100) { diary.note("сеть", "попытка $it") }
+        repeat(100) { diary.note(LogCode.NET_CALL, "попытка $it") }
 
         val notes = diary.tail()
         assertEquals(10, notes.size)
@@ -59,7 +59,7 @@ class DiaryTest {
     @Test
     fun длинное_обрезается() {
         val diary = diary()
-        diary.note("экран", "я".repeat(1000))
+        diary.note(LogCode.SCREEN_OPEN, "я".repeat(1000))
 
         assertTrue(diary.tail()[0].text.length <= Diary.MAX_LENGTH)
     }
@@ -70,7 +70,7 @@ class DiaryTest {
         // заголовок с токеном — и уедет молча, если не вырезать.
         val token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9aaaaaaaaaaaaaaaa"
         val diary = diary()
-        diary.trouble("сеть", "отказ, заголовок Authorization: Bearer $token")
+        diary.trouble(LogCode.NET_ERROR, "отказ, заголовок Authorization: Bearer $token")
 
         val line = diary.dump()
         assertFalse(line.contains(token), "токен уехал бы в отчёт целиком")
@@ -82,7 +82,7 @@ class DiaryTest {
     fun короткое_не_режется() {
         // Идентификаторы и имена методов в журнале нужны: без них он бесполезен.
         val diary = diary()
-        diary.note("вход", "user_id=abc12345 шаг=verify")
+        diary.note(LogCode.AUTH_OK, "user_id=abc12345 шаг=verify")
 
         assertContains(diary.dump(), "user_id=abc12345")
         assertContains(diary.dump(), "verify")
@@ -92,7 +92,7 @@ class DiaryTest {
     fun выгрузка_и_показ_совпадают() {
         // Показывать человеку одно, а отправлять другое нельзя — это обман в чистом виде.
         val diary = diary()
-        diary.note("экран", "открыли настройки")
+        diary.note(LogCode.SCREEN_OPEN, "открыли настройки")
 
         assertEquals(diary.dump(), diary.tail().joinToString("\n") { it.line() })
         assertEquals(1, diary.size())

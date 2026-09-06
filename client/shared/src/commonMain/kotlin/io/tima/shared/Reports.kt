@@ -1,5 +1,7 @@
 package io.tima.shared
 
+import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
 import io.tima.core.diag.scrub
 import io.tima.core.network.ProblemPost
 import io.tima.core.network.ProblemSendResult
@@ -104,6 +106,13 @@ fun rememberCrash(
     // Стек проходит ту же чистку, что журнал: в аргументах метода легко оказывается текст
     // сообщения, и обещание «наружу не уходит содержимое» действует и здесь.
     val stack = scrub(error.stackTraceToString()).take(CRASH_LIMIT)
+    // Падение попадает и в журнал: отчёт о падении уйдёт при следующем запуске, а строка
+    // нужна здесь и сейчас — чтобы в журнале было видно, чем кончился прошлый сеанс.
+    Journal.trouble(
+        LogCode.CRASH,
+        "приложение закрылось само",
+        "ошибка" to (error::class.simpleName ?: "неизвестно"),
+    )
     ReportQueue(store).add(
         ProblemPost(
             kind = "crash",
