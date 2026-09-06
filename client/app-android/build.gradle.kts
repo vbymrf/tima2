@@ -25,6 +25,9 @@ kotlin {
             // Хранилищу секретов нужен контекст: AndroidKeyStore вместо DPAPI.
             implementation(project(":core:core-secrets"))
             implementation(project(":core:core-contacts"))
+            // Оболочка объявляет порт установщика обновлений, реализация платформенная и
+            // живёт здесь (О4): DownloadManager, проверка подписи, PackageInstaller.
+            implementation(project(":feature:feature-shell"))
             implementation(libs.androidx.activity.compose)
             // foundation нужен самой Activity: тема системы (isSystemInDarkTheme) живёт там.
             implementation(compose.foundation)

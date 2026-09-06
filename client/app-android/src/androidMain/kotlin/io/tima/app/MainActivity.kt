@@ -110,6 +110,10 @@ class MainActivity : ComponentActivity() {
                 appearanceStore = appearanceStore(),
                 linkCode = code.value,
                 transferCode = transfer.value,
+                // Обновление ставит платформа. Закрывать приложение здесь, в отличие от
+                // ПК, не нужно: Android сам покажет установщик поверх, а замену пакета
+                // проведёт, когда сочтёт нужным.
+                installer = AndroidInstaller(applicationContext),
                 // Имя и номер разом: имя говорит, что за версия, номер — что
                 // установка действительно сменилась. По одному имени обновление
                 // «2.0.0-dev → 2.0.0-dev» неотличимо от его отсутствия.

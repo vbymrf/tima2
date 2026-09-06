@@ -25,6 +25,17 @@
     -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
+    <!--
+      REQUEST_INSTALL_PACKAGES появляется вместе с обновлением из самого приложения
+      (ПЛАН-ОБНОВЛЕНИЯ.md, О4). Приложение раздаётся мимо Google Play, и поставить новую
+      версию, кроме как самим, некому.
+
+      На Android 8 и новее одного объявления мало: система спрашивает разрешение отдельно
+      и для каждого источника. Спрашиваем его не при запуске, а по нажатию «Обновить» —
+      только там его можно объяснить.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:name=".TimaApplication"
         android:label="TIMA v2"
@@ -76,6 +87,17 @@
                 <data android:scheme="tima" android:host="transfer" />
             </intent-filter>
         </activity>
+
+        <!--
+          Ответ системы на нашу установку. `PackageInstaller` не показывает диалог сам:
+          он присылает «нужно спросить человека» вместе с готовым интентом, и запустить
+          его должны мы. Без этого приёмника установка молча стоит на месте.
+
+          exported="false": сюда пишет только система, отвечая на нашу же сессию.
+        -->
+        <receiver
+            android:name=".InstallResultReceiver"
+            android:exported="false" />
 
     </application>
 
