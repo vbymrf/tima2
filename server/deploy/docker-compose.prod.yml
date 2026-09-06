@@ -63,6 +63,7 @@ services:
       APP_LATEST_VERSION_NAME: ${APP_LATEST_VERSION_NAME:-}
       APP_APK_URL: ${APP_APK_URL:-}
       APP_UPDATE_NOTES: ${APP_UPDATE_NOTES:-}
+      APP_IMPORTANT: ${APP_IMPORTANT:-}
       # Хэш и размер APK. Хэш на Android не главная проверка — там сверяется отпечаток
       # подписи скачанного пакета с подписью установленного приложения, — но объявить его
       # дешевле, чем однажды выяснять, дошёл ли файл целиком.
@@ -80,6 +81,7 @@ services:
       APP_WIN_VERSION_NAME: ${APP_WIN_VERSION_NAME:-}
       APP_MSI_URL: ${APP_MSI_URL:-}
       APP_WIN_UPDATE_NOTES: ${APP_WIN_UPDATE_NOTES:-}
+      APP_WIN_IMPORTANT: ${APP_WIN_IMPORTANT:-}
       # Для ПК хэш ОБЯЗАТЕЛЕН по смыслу: подписи кода у пакета нет (решение заказчика
       # 2026-09-06), и проверять скачанное больше нечем. Пусто — клиент не поставит и
       # скажет об этом.

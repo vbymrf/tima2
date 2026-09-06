@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import io.tima.core.ui.Alarm
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Caption
@@ -49,7 +50,59 @@ data class UpdateOffer(
      * «блокировать», откат выключил бы все установленные приложения разом.
      */
     val minClient: Int = 0,
+    /**
+     * Важное ли обновление (уровень 1, решение заказчика 2026-09-06).
+     *
+     * **Не то же самое, что [minClient].** Порог — «работать нельзя», и его окно не
+     * закрывается. Важность — «старая версия может вести себя неправильно»: окно при
+     * каждом запуске, но с кнопкой «Позже». Разница в том, кто решает: порог решает
+     * сервер за человека, важность — человек, которого предупредили.
+     */
+    val important: Boolean = false,
 )
+
+/**
+ * Где платформа помнит, что установка была начата.
+ *
+ * Две лямбды, как у хранилища отчётов, и по той же причине: помнить надо одну строку.
+ * **Не база**: обновляются и до входа, а база открывается после.
+ *
+ * Ради чего это заведено: до 2026-09-06 успех и обрыв установки выглядели для человека
+ * одинаково — молчанием. Приложение закрывалось, он запускал его заново и не знал,
+ * поставилось ли. Запись «пошёл ставить версию N» позволяет при следующем запуске
+ * сравнить задуманное с тем, что стоит, и сказать словами.
+ */
+class UpdateMemory(
+    val load: () -> String?,
+    val save: (String) -> Unit,
+) {
+    companion object {
+        /** Не помнит ничего: для проверок и для платформы, у которой места ещё нет. */
+        val Forgetful: UpdateMemory = UpdateMemory(load = { null }, save = {})
+    }
+}
+
+/**
+ * Что сказать человеку при запуске. `null` — говорить нечего, и окна нет.
+ *
+ * Три повода, одно окно (решение заказчика 2026-09-06). Четвёртого не будет: окно,
+ * которое показывают «ещё и вот об этом», перестают читать.
+ */
+sealed interface UpdateNews {
+    /** Обновление, которое он начал, доехало. Показывается один раз. */
+    data class Installed(val versionName: String, val notes: String) : UpdateNews
+
+    /**
+     * Начал ставить и не довёл: версия осталась прежней.
+     *
+     * Показывается после **каждой** брошенной установки (решение заказчика): незаконченная
+     * установка — это состояние, а не разовое событие.
+     */
+    data class Broken(val wanted: String, val current: String, val notes: String) : UpdateNews
+
+    /** Вышло важное обновление. Показывается при каждом запуске, пока не поставит. */
+    data class Important(val versionName: String, val notes: String) : UpdateNews
+}
 
 /**
  * Откуда берётся предложение. Узкий порт, объявленный **потребителем**.
@@ -127,6 +180,8 @@ data class UpdateState(
     val percent: Int = 0,
     /** Чем кончилось. `null` — ещё не начинали. */
     val outcome: InstallOutcome? = null,
+    /** Что сказать при запуске. `null` — нечего, окна нет. */
+    val news: UpdateNews? = null,
 ) {
     /**
      * Есть ли что ставить.
@@ -146,6 +201,15 @@ data class UpdateState(
             if (offer.stream != stream) return false
             return offer.versionCode > installedCode
         }
+
+    /**
+     * Есть важное обновление, которое ещё не поставлено (уровень 1).
+     *
+     * Ровно [updateAvailable] плюс объявленная важность: важность чужого потока к нам не
+     * относится так же, как и его номер версии, и проверка потока уже внутри.
+     */
+    val important: Boolean
+        get() = updateAvailable && offer?.important == true
 
     /** Сервер что-то предлагает, но не нам. Человеку это надо сказать, а не спрятать. */
     val alienStream: Boolean
@@ -192,6 +256,8 @@ class UpdateStore(
      * заменять файлы работающей программы, а Windows предложит перезагрузку.
      */
     private val onLeaving: () -> Unit = {},
+    /** Где помнится начатая установка. По умолчанию нигде — как было до 2026-09-06. */
+    private val memory: UpdateMemory = UpdateMemory.Forgetful,
 ) {
     private val _state = MutableStateFlow(
         UpdateState(installed = installed, installedCode = installedCode, stream = stream),
@@ -202,7 +268,36 @@ class UpdateStore(
     val canInstall: Boolean get() = installer != null
 
     init {
+        // Память читается ДО первого обращения к сети: исход прошлой установки известен
+        // без сервера, и человек, у которого связи нет, всё равно узнает, поставилось ли.
+        rememberedOutcome()?.let { _state.value = _state.value.copy(news = it) }
         check()
+    }
+
+    /**
+     * Чем кончилась прошлая попытка — по записи на диске и по тому, что стоит сейчас.
+     *
+     * Запись стирается сразу: и успех, и обрыв говорятся один раз за попытку. Следующая
+     * брошенная установка запишет её снова и снова покажет окно — так и задумано.
+     */
+    private fun rememberedOutcome(): UpdateNews? {
+        val raw = memory.load()?.takeIf { it.isNotBlank() } ?: return null
+        runCatching { memory.save("") }
+        val parts = raw.split(SPLIT)
+        val wantedCode = parts.getOrNull(0)?.toIntOrNull() ?: return null
+        val wantedName = parts.getOrNull(1).orEmpty()
+        val notes = parts.getOrNull(2).orEmpty()
+        val installed = _state.value.installedCode
+        return if (installed >= wantedCode) {
+            UpdateNews.Installed(_state.value.installed.ifBlank { wantedName }, notes)
+        } else {
+            UpdateNews.Broken(wantedName, _state.value.installed, notes)
+        }
+    }
+
+    /** Окно закрыли. Важное вернётся при следующем запуске — оно на то и важное. */
+    fun dismissNews() {
+        _state.value = _state.value.copy(news = null)
     }
 
     fun check() {
@@ -215,7 +310,14 @@ class UpdateStore(
         scope.launch {
             _state.value = try {
                 val offer = versions.latest()
-                _state.value.copy(offer = offer, expect = false, notConfigured = offer == null)
+                val next = _state.value.copy(offer = offer, expect = false, notConfigured = offer == null)
+                // Новость об исходе прошлой установки важнее: она про то, что человек
+                // уже сделал. Предложение поставить новое подождёт до следующего запуска.
+                if (next.news == null && next.important && offer != null) {
+                    next.copy(news = UpdateNews.Important(offer.versionName, offer.notes))
+                } else {
+                    next
+                }
             } catch (e: Throwable) {
                 // Сообщение исключения человеку не показываем: там адрес сервера и класс
                 // ошибки Ktor. Ему нужно одно — что делать дальше.
@@ -249,6 +351,19 @@ class UpdateStore(
             } catch (e: Throwable) {
                 InstallOutcome.Refused("установщик не запустился")
             }
+            // Запись — ПЕРЕД закрытием и только на успешном запуске установщика: до
+            // этого момента ставить ещё нечего, а после него нас могут не спросить.
+            if (outcome is InstallOutcome.Started) {
+                runCatching {
+                    memory.save(
+                        listOf(
+                            offer.versionCode.toString(),
+                            offer.versionName.replace(SPLIT, " "),
+                            offer.notes.replace(SPLIT, " "),
+                        ).joinToString(SPLIT),
+                    )
+                }
+            }
             _state.value = _state.value.copy(
                 installing = outcome is InstallOutcome.Started,
                 outcome = outcome,
@@ -257,6 +372,11 @@ class UpdateStore(
             // платформе, которая закрытие игнорирует, экран остался бы в «скачиваем».
             if (outcome is InstallOutcome.Started) onLeaving()
         }
+    }
+
+    private companion object {
+        /** Разделитель полей памяти: в номере версии и примечании его не бывает. */
+        const val SPLIT = "	"
     }
 }
 
@@ -289,8 +409,7 @@ fun UpdateSection(
 
     when {
         state.installing -> {
-            Caption("Скачиваем " + state.percent + "%", fontSize = TimaType.sz3, weight = FontWeight.Bold)
-            Secondary("Не закрывайте приложение — оно закроется само, когда начнётся установка.")
+            Downloading(state.percent)
         }
 
         state.asking -> Asking(state, onConfirm, onDismiss)
@@ -336,6 +455,90 @@ fun UpdateSection(
 }
 
 /**
+ * Подокно при запуске: чем кончилась прошлая установка и не пора ли обновиться.
+ *
+ * **Отдельное окно, а не строка в настройках** (решение заказчика 2026-09-06). Прежде и
+ * успех, и обрыв выглядели одинаково — молчанием: приложение исчезало, человек запускал
+ * его заново и не знал, поставилось ли. Строку в настройках он бы не увидел: туда
+ * заходят, когда о чём-то подумали, а здесь надо сказать первым.
+ *
+ * **Закрывается всегда.** Даже важное: оно вернётся при следующем запуске, и это уже
+ * достаточно настойчиво. Не закрывается только [UpdateGate] — там работать правда
+ * нельзя, и «продолжить» было бы ложью.
+ */
+@Composable
+fun UpdateNewsWindow(
+    state: UpdateState,
+    news: UpdateNews,
+    /** Нажали «Установить»: дальше вопрос, а не загрузка. */
+    onInstall: () -> Unit,
+    /** Подтвердили установку. */
+    onConfirm: () -> Unit = {},
+    /** Отказались от установки — но окно остаётся: человек ещё не ответил на него. */
+    onDismiss: () -> Unit = {},
+    /** Закрыли окно. */
+    onClose: () -> Unit,
+    /** Умеет ли эта сборка ставить обновление сама. */
+    canInstall: Boolean = false,
+    modifier: Modifier = Modifier,
+) = Column(
+    modifier.fillMaxSize().padding(TimaSpacing.about5),
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+) {
+    // Установка идёт прямо здесь, а не «перейдите на вкладку Обновление»: человек уже
+    // нажал, и отправлять его искать другое место значит терять половину нажавших.
+    when {
+        state.installing -> {
+            Downloading(state.percent)
+            return@Column
+        }
+
+        state.asking -> {
+            Asking(state, onConfirm, onDismiss)
+            return@Column
+        }
+
+        state.outcome != null && state.outcome !is InstallOutcome.Started -> {
+            Failed(state.outcome, onInstall)
+            Button(label = "Закрыть", onClick = onClose, kind = ButtonKind.Quiet)
+            return@Column
+        }
+    }
+
+    when (news) {
+        is UpdateNews.Installed -> {
+            Caption("Обновление установлено", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+            Secondary("Работает версия " + news.versionName + ".")
+            if (news.notes.isNotBlank()) Secondary("Что изменилось: " + news.notes)
+            Button(label = "Понятно", onClick = onClose)
+        }
+
+        is UpdateNews.Broken -> {
+            Caption("Обновление не завершилось", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+            // Названы обе версии: «не завершилось» без чисел человек читает как «что-то
+            // сломалось», а с числами — как «осталось прежнее», что и есть правда.
+            Secondary(
+                "Вы начали ставить " + news.wanted + ", но установка не дошла до конца — " +
+                    "работает прежняя " + news.current.ifBlank { "версия" } + ".",
+            )
+            if (news.notes.isNotBlank()) Secondary("Что изменилось: " + news.notes)
+            Secondary("Переписка и аккаунт не пострадали: установщик их не трогает.")
+            if (canInstall) Button(label = "Установить", onClick = onInstall)
+            Button(label = "Позже", onClick = onClose, kind = ButtonKind.Quiet)
+        }
+
+        is UpdateNews.Important -> {
+            Caption("Вышло важное обновление", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+            Secondary("Доступна " + news.versionName + ".")
+            if (news.notes.isNotBlank()) Secondary("Что изменилось: " + news.notes)
+            Secondary("Старая версия может работать неправильно.")
+            if (canInstall) Button(label = "Установить", onClick = onInstall)
+            Button(label = "Позже", onClick = onClose, kind = ButtonKind.Quiet)
+        }
+    }
+}
+
+/**
  * Работать нельзя, пока не обновишься (уровень 2, [UpdateState.mustUpdate]).
  *
  * Отдельный экран поверх всего, а не строка в настройках: сервер объявил, что эта сборка
@@ -366,8 +569,7 @@ fun UpdateGate(
 
     when {
         state.installing -> {
-            Caption("Скачиваем " + state.percent + "%", fontSize = TimaType.sz3, weight = FontWeight.Bold)
-            Secondary("Не закрывайте приложение — оно закроется само, когда начнётся установка.")
+            Downloading(state.percent)
         }
 
         state.asking -> Asking(state, onConfirm, onDismiss)
@@ -385,6 +587,21 @@ fun UpdateGate(
 }
 
 /**
+ * Идёт скачивание.
+ *
+ * **Красным — то, что стоит человеку денег и времени; серым — то, что просто
+ * происходит.** Решение заказчика 2026-09-06. Закрыть приложение сейчас значит начинать
+ * заново: на ПК качает сам процесс приложения, на телефоне загрузку ведёт системная
+ * служба, но наш счётчик умирает вместе с процессом, и докачанный файл мы теряем из
+ * виду. Причины разные, для человека последствие одно.
+ */
+@Composable
+private fun Downloading(percent: Int) {
+    Caption("Скачиваем " + percent + "%", fontSize = TimaType.sz3, weight = FontWeight.Bold)
+    Alarm("Не закрывайте приложение, пока идёт скачивание")
+}
+
+/**
  * Вопрос перед установкой.
  *
  * Решение заказчика 2026-09-06: спросить, показав, что теряется, а что нет. Главное здесь
@@ -394,13 +611,18 @@ fun UpdateGate(
 @Composable
 private fun Asking(state: UpdateState, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val offer = state.offer
-    Caption("Поставить " + (offer?.versionName ?: ""), fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
-    Secondary("Приложение закроется, и запустится установщик. Это займёт минуту.")
+    Caption("Установить " + (offer?.versionName ?: ""), fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
+    // Красным все три строки, и это решение заказчика 2026-09-06. Каждая — про то, что
+    // человек обязан сделать сам: не испугаться исчезнувшего окна, подтвердить системный
+    // вопрос, вернуться в приложение. Серым он их прочтёт как примечание и не сделает.
+    Alarm("Приложение закроется, и запустится установщик. Это займёт минуту.")
+    Alarm("Если система спросит разрешение на установку — подтвердите.")
+    Alarm("Когда установщик запустится, приложение автоматически закроется — войдите заново.")
     Secondary(
         "Переписка, аккаунт и настройки останутся: они лежат отдельно от программы, и " +
             "установщик их не трогает. Неотправленное дойдёт после запуска новой версии.",
     )
-    Button(label = "Поставить", onClick = onConfirm)
+    Button(label = "Установить", onClick = onConfirm)
     Button(label = "Не сейчас", onClick = onDismiss, kind = ButtonKind.Quiet)
 }
 

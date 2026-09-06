@@ -1,7 +1,8 @@
 // Проверка обновлений приложения (self-distributed пакеты, вне Google Play и вне
 // Microsoft Store): клиент опрашивает GET /api/v1/app/version и сравнивает version_code
 // со своим. Конфигурация — из env (main.go): APP_LATEST_VERSION_CODE/NAME, APP_APK_URL,
-// APP_APK_SHA256, APP_UPDATE_NOTES, APP_STREAM и те же поля с префиксом APP_WIN_ для ПК.
+// APP_APK_SHA256, APP_UPDATE_NOTES, APP_STREAM, APP_IMPORTANT и те же поля с префиксом
+// APP_WIN_ для ПК.
 package api
 
 import (
@@ -48,6 +49,14 @@ type AppVersion struct {
 	// (Plan.md §3.5). Правило исполняет клиент; здесь оно записано, чтобы поле не
 	// «починили», сделав обязательным.
 	MinClient int `json:"min_client,omitempty"`
+	// Important — важное обновление (уровень 1, решение заказчика 2026-09-06). Клиент
+	// поднимает при каждом запуске окно с текстом «старая версия может работать
+	// неправильно» — но окно **закрывается**, в отличие от порога MinClient.
+	//
+	// Разница между ними и есть смысл поля: MinClient решает за человека, Important
+	// предупреждает его. Отсутствие поля означает «обычное обновление»: сервер, который
+	// про важность не знает, не должен случайно поднять окно у всех.
+	Important bool `json:"important,omitempty"`
 }
 
 // appVersion — публичный (без токена): клиент опрашивает его на старте.

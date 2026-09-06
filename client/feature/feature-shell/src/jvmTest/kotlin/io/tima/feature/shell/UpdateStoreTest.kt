@@ -44,15 +44,22 @@ class UpdateStoreTest {
         installer: UpdateInstaller? = Fake(),
         onLeaving: () -> Unit = {},
         offered: UpdateOffer? = offer,
+        installedCode: Int = 2,
+        memory: UpdateMemory = UpdateMemory.Forgetful,
     ) = UpdateStore(
         versions = { offered },
         scope = scope,
-        installed = "2.0.2-dev (2)",
-        installedCode = 2,
+        installed = "2.0." + installedCode + "-dev (" + installedCode + ")",
+        installedCode = installedCode,
         stream = "v2",
         installer = installer,
         onLeaving = onLeaving,
+        memory = memory,
     )
+
+    /** Память на одной строке: ровно то, что делает платформа с файлом или настройками. */
+    private fun memory(held: Array<String?>) =
+        UpdateMemory(load = { held[0] }, save = { held[0] = it })
 
     @Test
     fun нажатие_обновить_не_начинает_загрузку() = runTest {
@@ -151,5 +158,109 @@ class UpdateStoreTest {
         // Номера версий сравнимы только внутри потока: 24 больше 2, но это прошлогодняя v1.
         assertFalse(state.updateAvailable)
         assertTrue(state.alienStream, "человеку надо сказать, что предложение чужое")
+    }
+
+    // ── Подокно при запуске (решение заказчика 2026-09-06) ────────────────────
+
+    @Test
+    fun начатая_установка_запоминается() = runTest {
+        val held = arrayOf<String?>(null)
+        val store = store(backgroundScope, memory = memory(held))
+        store.state.first { it.offer != null }
+
+        store.ask()
+        store.install()
+        store.state.first { it.outcome != null }
+
+        // Без этой записи успех и обрыв установки неотличимы: приложение закрылось, и
+        // спросить у него потом, чем всё кончилось, будет некого.
+        assertTrue(held[0].orEmpty().startsWith("7	"), "намерение не записано: ${held[0]}")
+    }
+
+    @Test
+    fun после_успешной_установки_говорим_об_этом() = runTest {
+        // Записано «пошёл ставить 7», стоит 7 — значит доехало.
+        val held = arrayOf<String?>("7	2.0.7-dev	журнал переживает перезапуск")
+        val store = store(backgroundScope, memory = memory(held), installedCode = 7)
+
+        val news = store.state.value.news
+        assertTrue(news is UpdateNews.Installed, "человеку не сказали, что обновление встало")
+        assertEquals("журнал переживает перезапуск", (news as UpdateNews.Installed).notes)
+        assertEquals("", held[0], "запись обязана стереться: успех говорится один раз")
+    }
+
+    @Test
+    fun брошенная_установка_названа_словами() = runTest {
+        // Записано «пошёл ставить 7», стоит по-прежнему 2 — человек начал и не довёл.
+        val held = arrayOf<String?>("7	2.0.7-dev	")
+        val store = store(backgroundScope, memory = memory(held), installedCode = 2)
+
+        val news = store.state.value.news
+        assertTrue(news is UpdateNews.Broken, "обрыв выглядел бы как молчание")
+        assertEquals("2.0.7-dev", (news as UpdateNews.Broken).wanted)
+    }
+
+    @Test
+    fun без_записи_окна_нет() = runTest {
+        // Обычный запуск: говорить не о чем, и окно не поднимается.
+        val store = store(backgroundScope, offered = null)
+        store.state.first { !it.expect }
+
+        assertEquals(null, store.state.value.news)
+    }
+
+    @Test
+    fun важное_обновление_поднимает_окно() = runTest {
+        val store = store(backgroundScope, offered = offer.copy(important = true))
+        val news = store.state.first { it.news != null }.news
+
+        assertTrue(news is UpdateNews.Important)
+        assertTrue(store.state.value.important)
+    }
+
+    @Test
+    fun обычное_обновление_окна_не_поднимает() = runTest {
+        // Уровень 0 молчит: окно при каждом запуске ради необязательного обновления —
+        // самый быстрый способ научить человека закрывать его не читая.
+        val store = store(backgroundScope, offered = offer.copy(important = false))
+        store.state.first { it.offer != null }
+
+        assertEquals(null, store.state.value.news)
+    }
+
+    @Test
+    fun важность_чужого_потока_не_наша() = runTest {
+        val store = store(backgroundScope, offered = offer.copy(stream = "v1", important = true))
+        store.state.first { it.offer != null }
+
+        assertFalse(store.state.value.important, "важность соседнего ряда сборок к нам не относится")
+        assertEquals(null, store.state.value.news)
+    }
+
+    @Test
+    fun исход_установки_важнее_предложения() = runTest {
+        // Человек уже что-то сделал, и сказать надо сначала про это. Предложение
+        // поставить новое подождёт до следующего запуска.
+        val held = arrayOf<String?>("7	2.0.7-dev	")
+        val store = store(
+            backgroundScope,
+            offered = offer.copy(versionCode = 8, important = true),
+            memory = memory(held),
+            installedCode = 7,
+        )
+        store.state.first { it.offer != null }
+
+        assertTrue(store.state.value.news is UpdateNews.Installed)
+    }
+
+    @Test
+    fun окно_закрывается() = runTest {
+        val held = arrayOf<String?>("7	2.0.7-dev	")
+        val store = store(backgroundScope, memory = memory(held), installedCode = 7, offered = null)
+        store.state.first { it.news != null }
+
+        store.dismissNews()
+
+        assertEquals(null, store.state.value.news, "окно обязано закрываться — даже важное")
     }
 }

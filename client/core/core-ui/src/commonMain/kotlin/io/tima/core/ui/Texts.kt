@@ -67,6 +67,17 @@ fun Name(text: String, modifier: Modifier = Modifier) =
 fun Secondary(text: String, modifier: Modifier = Modifier, lineOne: Boolean = false) =
     Caption(text, modifier, TimaType.sz5, FontWeight.Normal, Tima.colors.text2, lineOne)
 
+/**
+ * Тревожная строка: предупреждение, которое человеку стоит денег или времени.
+ *
+ * Размер второстепенного, а цвет и насыщенность — тревоги: она обязана читаться иначе,
+ * чем примечание рядом, но не превращать экран в аварию. Единственный потребитель
+ * [Tima.colors.alarm]; почему он вообще заведён — см. там же.
+ */
+@Composable
+fun Alarm(text: String, modifier: Modifier = Modifier) =
+    Caption(text, modifier, TimaType.sz5, FontWeight.Bold, Tima.colors.alarm)
+
 /** Третий уровень: мелкая пометка, время. `.трет`. Про перенос — см. [Второстепенное]. */
 @Composable
 fun Tertiary(text: String, modifier: Modifier = Modifier, lineOne: Boolean = false) =

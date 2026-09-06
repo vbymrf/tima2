@@ -237,6 +237,7 @@ func serve() {
 				SHA256:      os.Getenv("APP_APK_SHA256"),
 				Size:        int64(atoiOr("APP_APK_SIZE", 0)),
 				MinClient:   atoiOr("APP_MIN_CLIENT", 0),
+				Important:   os.Getenv("APP_IMPORTANT") == "1",
 			}
 			// Поток печатаем отдельно: без него клиент v2 предложение проигнорирует,
 			// и молчащая вкладка «Обновление» выглядит как поломка, а не как настройка.
@@ -261,6 +262,7 @@ func serve() {
 				SHA256:      os.Getenv("APP_MSI_SHA256"),
 				Size:        int64(atoiOr("APP_MSI_SIZE", 0)),
 				MinClient:   atoiOr("APP_WIN_MIN_CLIENT", 0),
+				Important:   os.Getenv("APP_WIN_IMPORTANT") == "1",
 			}
 			// Хэш для ПК — единственная проверка скачанного: подписи кода у пакета нет
 			// (решение заказчика 2026-09-06). Без него клиент честно откажется ставить,

@@ -13,6 +13,7 @@ import io.tima.core.database.androidDatabase
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
 import io.tima.feature.shell.ProblemFacts
+import io.tima.feature.shell.UpdateMemory
 import io.tima.core.ui.TimaTheme
 import io.tima.shared.Entry
 import io.tima.shared.Platform
@@ -83,6 +84,20 @@ class MainActivity : ComponentActivity() {
      * Строка в журнале нужна не меньше сброса: без неё тишина фона неотличима от
      * зависания, а «приложение висело полчаса» — частая формулировка жалобы.
      */
+    /**
+     * Где телефон помнит начатую установку: обычные настройки приложения.
+     *
+     * `SharedPreferences`, а не файл: строка короткая и читается один раз при запуске.
+     * Не база — обновляются и до входа, а база открывается после.
+     */
+    private fun updateMemory(): UpdateMemory {
+        val prefs = getSharedPreferences("обновление", Context.MODE_PRIVATE)
+        return UpdateMemory(
+            load = { prefs.getString(KEY_UPDATE, null) },
+            save = { prefs.edit().putString(KEY_UPDATE, it).apply() },
+        )
+    }
+
     override fun onStop() {
         wasBackground = true
         Journal.note(LogCode.APP_BACKGROUND, "ушли в фон")
@@ -153,6 +168,9 @@ class MainActivity : ComponentActivity() {
                         " (SDK " + android.os.Build.VERSION.SDK_INT + ")",
                 ),
                 reportsStore = androidReportsStore(application),
+                // Начатая установка помнится между запусками: замена пакета убивает
+                // процесс, и спросить у себя, чем всё кончилось, потом будет некого.
+                updateMemory = updateMemory(),
                 // Имя и номер разом: имя говорит, что за версия, номер — что
                 // установка действительно сменилась. По одному имени обновление
                 // «2.0.0-dev → 2.0.0-dev» неотличимо от его отсутствия.
@@ -186,5 +204,8 @@ class MainActivity : ComponentActivity() {
 
         /** Ключ строки оформления в настройках приложения. */
         const val KEY_APPEARANCE = "оформление"
+
+        /** Ключ памяти о начатой установке. */
+        const val KEY_UPDATE = "начатая"
     }
 }

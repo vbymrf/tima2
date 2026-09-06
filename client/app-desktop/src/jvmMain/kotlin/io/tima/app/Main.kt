@@ -13,6 +13,7 @@ import io.tima.core.diag.Diary
 import io.tima.core.diag.DiaryStore
 import io.tima.core.diag.Journal
 import io.tima.feature.shell.ProblemFacts
+import io.tima.feature.shell.UpdateMemory
 import io.tima.shared.Build
 import io.tima.shared.ReportsStore
 import io.tima.shared.rememberCrash
@@ -100,6 +101,9 @@ private fun window(store: ReportsStore) = application {
                 os = System.getProperty("os.name").orEmpty() + " " + System.getProperty("os.version").orEmpty(),
             ),
             reportsStore = store,
+            // Начатая установка помнится файлом рядом с базой: MSI закрывает приложение,
+            // и спросить у самих себя, чем всё кончилось, потом будет некого.
+            updateMemory = updateMemory(),
             // Обновление ставит платформа: скачать, сверить хэш, позвать msiexec.
             // Приложение при этом закрывается — MSI не заменит файлы работающей
             // программы, и Windows вместо установки предложила бы перезагрузку.
@@ -123,6 +127,25 @@ private fun window(store: ReportsStore) = application {
 private fun reportsStore(): ReportsStore {
     val file = File(dataCatalog(), REPORTS_NAME)
     return ReportsStore(
+        load = { runCatching { file.readText() }.getOrNull() },
+        save = { text ->
+            runCatching {
+                file.parentFile?.mkdirs()
+                file.writeText(text)
+            }
+        },
+    )
+}
+
+/**
+ * Где ПК помнит начатую установку: файл рядом с базой.
+ *
+ * Одна строка: номер версии, имя и примечание. Читается один раз при запуске и сразу
+ * стирается — см. `UpdateStore.rememberedOutcome`.
+ */
+private fun updateMemory(): UpdateMemory {
+    val file = File(dataCatalog(), UPDATE_NAME)
+    return UpdateMemory(
         load = { runCatching { file.readText() }.getOrNull() },
         save = { text ->
             runCatching {
@@ -193,3 +216,4 @@ private const val DATABASE_NAME = "tima.db"
 private const val APPEARANCE_NAME = "оформление.txt"
 private const val REPORTS_NAME = "отчёты.json"
 private const val DIARY_NAME = "журнал.txt"
+private const val UPDATE_NAME = "обновление.txt"

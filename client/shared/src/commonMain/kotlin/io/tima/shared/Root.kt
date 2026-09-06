@@ -117,6 +117,8 @@ import io.tima.feature.shell.ProblemStore
 import io.tima.feature.shell.Snapshot
 import io.tima.feature.shell.SendOutcome
 import io.tima.feature.shell.UpdateGate
+import io.tima.feature.shell.UpdateMemory
+import io.tima.feature.shell.UpdateNewsWindow
 import io.tima.feature.shell.UpdateInstaller
 import io.tima.feature.shell.UpdateState
 import io.tima.feature.shell.UpdateOffer
@@ -192,6 +194,8 @@ fun Root(
     facts: ProblemFacts = ProblemFacts(),
     /** Где платформа держит неотправленные отчёты. */
     reportsStore: ReportsStore = ReportsStore.Forgetful,
+    /** Где платформа помнит начатую установку — чтобы сказать при запуске, чем кончилось. */
+    updateMemory: UpdateMemory = UpdateMemory.Forgetful,
     /** Номер сборки от платформы: общий код его знать не может и не должен. */
     build: Build = Build(),
 ) {
@@ -212,6 +216,7 @@ fun Root(
             onLeaving = onLeaving,
             facts = facts,
             reportsStore = reportsStore,
+            updateMemory = updateMemory,
             build = build,
             appearance = appearance,
             onAppearance = {
@@ -258,6 +263,7 @@ private fun Inside(
     onLeaving: () -> Unit,
     facts: ProblemFacts,
     reportsStore: ReportsStore,
+    updateMemory: UpdateMemory,
     build: Build,
     appearance: Appearance,
     onAppearance: (Appearance) -> Unit,
@@ -295,6 +301,7 @@ private fun Inside(
         onLeaving = onLeaving,
         facts = facts,
         reportsStore = reportsStore,
+        updateMemory = updateMemory,
         build = build,
         appearance = appearance,
         onAppearance = onAppearance,
@@ -487,6 +494,8 @@ private fun App(
     facts: ProblemFacts = ProblemFacts(),
     /** Где платформа держит неотправленные отчёты. */
     reportsStore: ReportsStore = ReportsStore.Forgetful,
+    /** Где платформа помнит начатую установку. */
+    updateMemory: UpdateMemory = UpdateMemory.Forgetful,
     /** Номер сборки — показывается в «Устройствах», см. пояснение там. */
     build: Build,
     appearance: Appearance,
@@ -549,6 +558,7 @@ private fun App(
             stream = build.stream,
             installer = installer,
             onLeaving = onLeaving,
+            memory = updateMemory,
         )
     }
     val updateState by update.state.collectAsState()
@@ -784,6 +794,23 @@ private fun App(
             onInstall = update::ask,
             onConfirm = update::install,
             onDismiss = update::dismiss,
+            canInstall = update.canInstall,
+        )
+        return
+    }
+
+    // Подокно при запуске: чем кончилась прошлая установка и не пора ли обновиться
+    // (решение заказчика 2026-09-06). После порога, а не до: там работать нельзя вовсе,
+    // и новость об успешной установке поверх этого была бы издевательством.
+    val news = updateState.news
+    if (news != null) {
+        UpdateNewsWindow(
+            state = updateState,
+            news = news,
+            onInstall = update::ask,
+            onConfirm = update::install,
+            onDismiss = update::dismiss,
+            onClose = update::dismissNews,
             canInstall = update.canInstall,
         )
         return
@@ -1550,6 +1577,7 @@ private suspend fun versionOffer(network: DevicePorts, platform: Platform): Upda
             sha256 = answer.sha256,
             size = answer.size,
             minClient = answer.minClient,
+            important = answer.important,
         )
         AppVersionResult.NotConfigured -> null
         is AppVersionResult.NoConnection -> error("нет связи")
