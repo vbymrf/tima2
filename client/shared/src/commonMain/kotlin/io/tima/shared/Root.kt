@@ -1020,6 +1020,7 @@ private fun App(
                             nickname = profileState.nickname,
                             userId = session.userId,
                             deviceId = session.deviceId,
+                            signedIn = session.accessToken.isNotBlank(),
                         ),
                         origin = cameFrom,
                         reporting = reporting,

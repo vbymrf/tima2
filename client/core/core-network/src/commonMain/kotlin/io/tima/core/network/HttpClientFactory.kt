@@ -72,7 +72,7 @@ fun HttpClientConfig<*>.timaDefaults(tuning: TransportTuning = TransportTuning()
         onResponse { response ->
             val started = response.call.request.attributes.getOrNull(startedAt)
             val spent = started?.let { Clock.System.now().toEpochMilliseconds() - it } ?: -1
-            val path = response.call.request.url.encodedPath
+            val path = shortPath(response.call.request.url.encodedPath)
             val line = response.call.request.method.value + " " + path +
                 " → " + response.status.value + (if (spent >= 0) " за ${spent} мс" else "")
             if (response.status.value >= 400) Journal.trouble("сеть", line)
@@ -83,6 +83,32 @@ fun HttpClientConfig<*>.timaDefaults(tuning: TransportTuning = TransportTuning()
 
 /** Когда ушёл запрос — чтобы в журнале было время ответа, а не только его код. */
 private val startedAt = AttributeKey<Long>("tima-started-at")
+
+/**
+ * Путь для журнала: длинные сегменты заменяются на `{id}`.
+ *
+ * **Поймано первым же настоящим отчётом (ПЛАН-ОТЛАДКИ.md §6, 2026-09-06.)** Журнал
+ * проходил общую чистку `scrub`, и она честно вырезала идентификатор в пути:
+ *
+ *     PUT <вырезано 27> → 401
+ *
+ * Строка бесполезна — непонятно, какая ручка отказала. Идентификатор в пути не секрет:
+ * он и так виден серверу и не открывает ничего сам по себе. А вот **какая ручка вернула
+ * 401** — это и есть половина разбора.
+ */
+internal fun shortPath(path: String): String =
+    path.split('/').joinToString("/") { segment ->
+        if (segment.length > LONG_SEGMENT && segment.any { it.isDigit() }) "{id}" else segment
+    }
+
+/**
+ * Порог «это идентификатор, а не имя ручки».
+ *
+ * Шестнадцать знаков: наши ручки называются словами (`messages`, `problem-reports`), а
+ * идентификаторы — это UUID и base64url, они длиннее и содержат цифры. Проверка на цифру
+ * нужна, чтобы не превратить в `{id}` длинное человеческое имя.
+ */
+private const val LONG_SEGMENT = 16
 
 /** Клиент для боевого хода: движок по платформе, настройки общие. */
 fun timaHttpClient(tuning: TransportTuning = TransportTuning()): HttpClient =

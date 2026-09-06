@@ -61,6 +61,8 @@ data class ProblemFacts(
     val nickname: String = "",
     val userId: String = "",
     val deviceId: String = "",
+    /** Есть ли у приложения токен доступа прямо сейчас. */
+    val signedIn: Boolean = false,
 ) {
     fun lines(): List<String> = buildList {
         if (build.isNotBlank()) add("Версия: $build" + if (stream.isBlank()) "" else " ($stream)")
@@ -70,6 +72,11 @@ data class ProblemFacts(
         if (nickname.isNotBlank()) add("Ник: $nickname")
         if (userId.isNotBlank()) add("Аккаунт: $userId")
         if (deviceId.isNotBlank()) add("Устройство в системе: $deviceId")
+        // Поймано первым живым отчётом (ПЛАН-ОТЛАДКИ.md §6): отчёт лёг на сервер
+        // неопознанным, и по нему нельзя было понять — токена не было вовсе или сервер
+        // его отверг. Разница решающая: в первом случае чинить приложение, во втором —
+        // разбираться с токеном.
+        add(if (signedIn) "Вход: есть токен" else "Вход: токена нет")
     }
 }
 
