@@ -2,6 +2,7 @@ package io.tima.shared
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import io.tima.core.diag.Journal
 import io.tima.core.network.PlatformResult
 import kotlinx.coroutines.delay
 
@@ -43,12 +44,19 @@ fun BackgroundLoops(
     // новое сообщение в очереди — это его изменение. Опрос по таймеру давал бы в v1 и
     // задержку, и лишние пробуждения.
     LaunchedEffect(changeSign) {
+        val before = assembled.environment.queue.pending().size
         assembled.sender.pass()
         // Групповой проход идёт следом, а не вместо: в очереди лежат и личные, и
         // групповые, и каждый берёт своё. Порядок между ними значения не имеет — записи
         // не пересекаются.
         assembled.groupSender.pass()
-        onPending(assembled.environment.queue.pending().size)
+        val after = assembled.environment.queue.pending().size
+        // «Сообщение не ушло» — самая частая жалоба, и ответ на неё живёт здесь: сколько
+        // было, сколько осталось. Пустой проход не пишем — журнал должен читаться.
+        if (before > 0 || after > 0) {
+            Journal.note("очередь", "проход: было " + before + ", осталось " + after)
+        }
+        onPending(after)
     }
 
     // Живой канал держится, пока живо окно. Переподключение решает приёмник: у него
@@ -63,9 +71,20 @@ fun BackgroundLoops(
     LaunchedEffect(assembled) {
         while (true) {
             delay(ПОВТОРЫ_КАЖДЫЕ_МС)
+            val before = assembled.environment.queue.pending().size
             assembled.sender.pass()
             assembled.groupSender.pass()
-            onPending(assembled.environment.queue.pending().size)
+            val after = assembled.environment.queue.pending().size
+            // Застрявшая очередь важнее уходящей: одно и то же число из прохода в проход
+            // означает, что повторы не помогают, и это надо видеть в отчёте.
+            if (before > 0) {
+                Journal.note(
+                    "очередь",
+                    if (before == after) "повтор не помог: осталось " + after
+                    else "повтор: было " + before + ", осталось " + after,
+                )
+            }
+            onPending(after)
         }
     }
 }

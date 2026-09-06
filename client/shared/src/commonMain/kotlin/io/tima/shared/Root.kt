@@ -513,10 +513,15 @@ private fun App(
     val scope = rememberCoroutineScope()
     val list = remember { ChatsStore(environment.chats, scope) }
     var where by remember { mutableStateOf<Where>(Where.Nothing) }
+    // Куда человек ходил — второй вопрос правила журнала («что он делал»). Пишется смена,
+    // а не каждая перерисовка: журнал должен читаться, а не разбухать.
+    LaunchedEffect(where) { Journal.note("экран", whereWords(where)) }
 
     // Какое окно открыто. Приложение начинается с окна 1: личная связь — то, ради
     // чего его открывают чаще всего, а остальные окна пока пусты по существу.
     var window by remember { mutableStateOf(Window.Phone) }
+    // Смена окна — тоже «что человек делал»: половина жалоб про конкретное окно.
+    LaunchedEffect(window) { Journal.note("экран", "окно " + window.short) }
     var windowSwitcher by remember { mutableStateOf(false) }
     // Куда уходим, если очередь непуста. null — вопрос не задан: отдельного флага
     // «спрашиваем» не заводим, чтобы «спрашиваем, но некуда» не стало возможным.
@@ -551,6 +556,14 @@ private fun App(
     // за отчётом не пойдёт (ПЛАН-ОТЛАДКИ.md, Б7).
     val reporting = remember { Reporting(network.problems, ReportQueue(reportsStore)) }
     LaunchedEffect(assembled) {
+        // Отметка запуска: без неё непонятно, к какому открытию приложения относятся
+        // строки ниже, а отчёт присылают после нескольких запусков подряд.
+        Journal.note(
+            "запуск",
+            "версия " + build.name + ", " + platform.packageKind.ifBlank { platform.server } +
+                ", аккаунт " + session.userId,
+        )
+
         // Токен обновляется ДО первых вызовов, а не по первому отказу: приложение,
         // открытое через сутки, иначе начинало бы работу с череды 401 — их бы починил
         // перехват, но человек успел бы увидеть пустые списки (находка 2026-09-06).
@@ -1428,6 +1441,27 @@ private fun Problem(
         onShow = store::toggleShowing,
         onSend = store::send,
     )
+}
+
+/**
+ * Как назвать открытый экран в журнале.
+ *
+ * **Имена, а не идентификаторы.** `Where.Chat(7f3a…)` в отчёте бесполезен: читающему
+ * нужно знать, что человек открыл переписку, а не какую именно — и уж точно не нужен
+ * идентификатор чужого разговора в нашем хранилище отчётов.
+ */
+private fun whereWords(where: Where): String = when (where) {
+    Where.Nothing -> "список"
+    Where.New -> "новая переписка"
+    Where.Profile -> "профиль"
+    Where.NewGroup -> "новая группа"
+    Where.NewVirtual -> "новый виртуальный аккаунт"
+    is Where.Members -> "состав группы"
+    is Where.Chat -> "переписка"
+    is Where.Access -> "доступ к закрытым записям"
+    is Where.Link -> "подтверждение привязки устройства"
+    is Where.Transfer -> if (where.virtualUserId == null) "приём аккаунта" else "передача аккаунта"
+    is Where.Settings -> "настройки" + (where.item?.let { ": " + it.title } ?: "")
 }
 
 /**

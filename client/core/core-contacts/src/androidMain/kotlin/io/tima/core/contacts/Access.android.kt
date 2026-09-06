@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import io.tima.core.diag.Journal
 import android.net.Uri
 import android.provider.Settings
 
@@ -63,6 +64,9 @@ object AndroidContactsAccess {
     fun answered(requestCode: Int, results: IntArray) {
         if (requestCode != REQUEST) return
         val granted = results.isNotEmpty() && results[0] == PackageManager.PERMISSION_GRANTED
+        // Половина «не работает» на Android — это невыданное разрешение, и по отчёту
+        // это должно быть видно сразу (правило журнала, группа «разрешение»).
+        Journal.note("разрешение", if (granted) "контакты: выдано" else "контакты: отказано")
         waiting?.invoke(granted)
         waiting = null
     }

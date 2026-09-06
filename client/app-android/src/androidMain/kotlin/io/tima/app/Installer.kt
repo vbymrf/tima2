@@ -9,6 +9,7 @@ import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import io.tima.core.diag.Journal
 import io.tima.feature.shell.InstallOutcome
 import io.tima.feature.shell.UpdateInstaller
 import io.tima.feature.shell.UpdateOffer
@@ -45,6 +46,7 @@ class AndroidInstaller(private val context: Context) : UpdateInstaller {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
                 !context.packageManager.canRequestPackageInstalls()
             ) {
+                Journal.trouble("разрешение", "установка пакетов не разрешена — увожу в настройки")
                 openInstallSettings()
                 return@withContext InstallOutcome.Refused(
                     "Android спрашивает разрешение отдельно: разрешите TIMA ставить приложения и нажмите ещё раз",
@@ -59,11 +61,18 @@ class AndroidInstaller(private val context: Context) : UpdateInstaller {
             } catch (e: Throwable) {
                 false
             }
-            if (!downloaded) return@withContext InstallOutcome.NoConnection
+            if (!downloaded) {
+                Journal.trouble("обновление", "пакет не докачался")
+                return@withContext InstallOutcome.NoConnection
+            }
+            Journal.note("обновление", "пакет скачан, проверяю подпись")
 
             when (val checked = verify(target, offer)) {
-                null -> Unit
+                null -> Journal.note("обновление", "подпись сошлась, отдаю системе")
                 else -> {
+                    // Отчёт должен объяснять, а не сообщать код: «подпись не та» и «файл
+                    // побит» человек не различит, а нам важно, что ставить это нельзя.
+                    Journal.trouble("обновление", "скачанное не прошло проверку — не ставлю")
                     target.delete()
                     return@withContext checked
                 }

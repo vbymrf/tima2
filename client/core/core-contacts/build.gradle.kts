@@ -22,6 +22,9 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            // Журнал: выдано разрешение или нет — половина «не работает» на Android
+            // именно про это (ПЛАН-ОТЛАДКИ.md, правило состава журнала).
+            implementation(projects.core.coreDiag)
             // Строка книги объявлена в домене: модуль отдаёт то, что домен умеет принять,
             // а не свой тип, который потом пришлось бы перекладывать.
             api(projects.domain.domainChat)

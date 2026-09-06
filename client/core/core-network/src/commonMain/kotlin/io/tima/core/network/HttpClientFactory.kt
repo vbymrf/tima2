@@ -78,11 +78,25 @@ fun HttpClientConfig<*>.timaDefaults(
             on(Send) { request ->
                 val first = proceed(request)
                 if (first.response.status != HttpStatusCode.Unauthorized) return@on first
-                val fresh = renewal.renew?.invoke() ?: return@on first
-                Journal.note("вход", "токен обновлён после 401, повторяем запрос")
+                val path = shortPath(request.url.build().encodedPath)
+                // Объясняющая строка (правило журнала): не «401», а что мы из него поняли
+                // и что делаем дальше. Отчёт читают ради причины, а не ради кода.
+                Journal.trouble("вход", "сервер не принял токен на " + path + " — пробую обновить")
+                val fresh = renewal.renew?.invoke()
+                if (fresh == null) {
+                    Journal.trouble("вход", "обновить не вышло: работаем без доступа, ручки под токеном будут отказывать")
+                    return@on first
+                }
+                Journal.note("вход", "токен обновлён, повторяю " + path)
                 request.headers.remove(HttpHeaders.Authorization)
                 request.headers.append(HttpHeaders.Authorization, "Bearer " + fresh)
-                proceed(request)
+                val second = proceed(request)
+                if (second.response.status == HttpStatusCode.Unauthorized) {
+                    // Второй отказ означает не срок: устройство отозвано либо ключ не тот.
+                    // Сказать это здесь дешевле, чем оставить читающему два одинаковых 401.
+                    Journal.trouble("вход", "и с новым токеном " + path + " → 401: дело не в сроке, устройство отозвано или ключ не тот")
+                }
+                second
             }
         })
     }

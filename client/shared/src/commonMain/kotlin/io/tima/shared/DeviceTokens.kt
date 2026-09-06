@@ -47,8 +47,25 @@ class DeviceTokens(
      */
     suspend fun renewIfStale(): Boolean {
         val expires = expiresAt(access)
+        // Срок токена — четвёртый вопрос правила журнала: «в каком состоянии был вход».
+        // Именно его не хватило 2026-09-06, когда 401 был виден, а причина — нет.
+        Journal.note("вход", state(expires))
         val soon = expires == null || expires - now() < MARGIN
         return if (soon) renew() else false
+    }
+
+    /**
+     * Состояние входа человеческими словами.
+     *
+     * «Токен истёк 40 минут назад» вместо «exp=1757169600»: отчёт читают, чтобы понять
+     * причину, и перекладывать перевод чисел на читающего — значит терять половину смысла.
+     */
+    private fun state(expires: Long?): String = when {
+        access.isBlank() -> "токена нет: устройство не вошло"
+        expires == null -> "токен есть, срок прочитать не удалось — обновляю на всякий случай"
+        expires <= now() -> "токен истёк " + howLong(now() - expires) + " назад — обновляю"
+        expires - now() < MARGIN -> "токен живёт ещё " + howLong(expires - now()) + " — обновляю заранее"
+        else -> "токен жив ещё " + howLong(expires - now())
     }
 
     /** Обновить сейчас. `false` — не вышло; прежний токен остаётся на месте. */
@@ -86,6 +103,15 @@ class DeviceTokens(
                 Journal.trouble("вход", "сервер не обновил токен: " + answer.status + " " + answer.code)
                 false
             }
+        }
+    }
+
+    private fun howLong(millis: Long): String {
+        val minutes = millis / 60_000
+        return when {
+            minutes < 1 -> "меньше минуты"
+            minutes < 60 -> "$minutes мин"
+            else -> (minutes / 60).toString() + " ч " + (minutes % 60) + " мин"
         }
     }
 
