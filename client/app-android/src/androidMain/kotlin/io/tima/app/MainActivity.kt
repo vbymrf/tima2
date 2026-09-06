@@ -67,7 +67,7 @@ class MainActivity : ComponentActivity() {
      * сразу и стираются вместе с приложением, что здесь и правильно.
      */
     private fun appearanceStore(): AppearanceStore {
-        val prefs = getSharedPreferences("оформление", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("appearance", Context.MODE_PRIVATE)
         return AppearanceStore(
             load = { prefs.getString(KEY_APPEARANCE, null) },
             save = { prefs.edit().putString(KEY_APPEARANCE, it).apply() },
@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
      * Не база — обновляются и до входа, а база открывается после.
      */
     private fun updateMemory(): UpdateMemory {
-        val prefs = getSharedPreferences("обновление", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("update", Context.MODE_PRIVATE)
         return UpdateMemory(
             load = { prefs.getString(KEY_UPDATE, null) },
             save = { prefs.edit().putString(KEY_UPDATE, it).apply() },
@@ -204,9 +204,9 @@ class MainActivity : ComponentActivity() {
         const val DATABASE_NAME = "tima.db"
 
         /** Ключ строки оформления в настройках приложения. */
-        const val KEY_APPEARANCE = "оформление"
+        const val KEY_APPEARANCE = "appearance"
 
         /** Ключ памяти о начатой установке. */
-        const val KEY_UPDATE = "начатая"
+        const val KEY_UPDATE = "started"
     }
 }

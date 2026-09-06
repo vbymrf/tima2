@@ -243,9 +243,17 @@ private fun dataCatalog(): File {
     return File(base, "TIMA")
 }
 
+/**
+ * Имена того, что приложение кладёт на диск, — **латиницей**.
+ *
+ * Решение заказчика 2026-09-06, и это продолжение правила про имена в коде: кириллица в
+ * пути ломается о кодировку консоли, о `git status` с восьмеричными кодами и о инструменты,
+ * которым этот путь приходится передавать при разборе. Читает эти файлы не человек с
+ * улицы, а тот, кто чинит.
+ */
 private const val DATABASE_NAME = "tima.db"
-private const val APPEARANCE_NAME = "оформление.txt"
-private const val REPORTS_NAME = "отчёты.json"
-private const val DIARY_CATALOG = "журнал"
-private const val DIARY_POLICY = "журнал-срок.txt"
-private const val UPDATE_NAME = "обновление.txt"
+private const val APPEARANCE_NAME = "appearance.txt"
+private const val REPORTS_NAME = "reports.json"
+private const val DIARY_CATALOG = "logs"
+private const val DIARY_POLICY = "logs-policy.txt"
+private const val UPDATE_NAME = "update.txt"

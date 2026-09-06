@@ -78,7 +78,7 @@ class TimaApplication : Application() {
  * удалении приложения, и это правильно: журнал удалённого приложения никому не нужен.
  */
 internal fun androidDiaryFiles(application: Application): DiaryFiles {
-    val catalog = java.io.File(application.filesDir, "журнал")
+    val catalog = java.io.File(application.filesDir, "logs")
     fun day(name: String) = java.io.File(catalog, name + ".txt")
     return DiaryFiles(
         days = {
@@ -99,10 +99,10 @@ internal fun androidDiaryFiles(application: Application): DiaryFiles {
 
 /** Где телефон держит выбранный срок хранения журнала: обычные настройки приложения. */
 internal fun androidDiaryPolicy(application: Application): io.tima.shared.AppearanceStore {
-    val prefs = application.getSharedPreferences("журнал", android.content.Context.MODE_PRIVATE)
+    val prefs = application.getSharedPreferences("logs", android.content.Context.MODE_PRIVATE)
     return io.tima.shared.AppearanceStore(
-        load = { prefs.getString("срок", null) },
-        save = { text -> prefs.edit().putString("срок", text).apply() },
+        load = { prefs.getString("policy", null) },
+        save = { text -> prefs.edit().putString("policy", text).apply() },
     )
 }
 
@@ -114,9 +114,9 @@ internal fun androidDiaryPolicy(application: Application): io.tima.shared.Appear
  * правильно: отчёт от удалённого приложения отправлять некому и незачем.
  */
 internal fun androidReportsStore(application: Application): ReportsStore {
-    val prefs = application.getSharedPreferences("отчёты", android.content.Context.MODE_PRIVATE)
+    val prefs = application.getSharedPreferences("reports", android.content.Context.MODE_PRIVATE)
     return ReportsStore(
-        load = { prefs.getString("очередь", null) },
-        save = { text -> prefs.edit().putString("очередь", text).apply() },
+        load = { prefs.getString("queue", null) },
+        save = { text -> prefs.edit().putString("queue", text).apply() },
     )
 }
