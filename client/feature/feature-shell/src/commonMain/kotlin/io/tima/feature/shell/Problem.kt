@@ -336,12 +336,44 @@ fun ProblemScreen(
 ) {
     state.origin?.let { Secondary(it.words()) }
 
+    // ── Исход, помеха и кнопка — НАВЕРХУ (решение заказчика 2026-09-06) ───────
+    //
+    // Экран вырос: описание, «когда началось», ярлыки, состав отчёта, — и кнопка уехала
+    // за нижний край. Человек, который дописал текст, не видит ни её, ни причины, по
+    // которой она не работает: чтобы найти их, надо догадаться прокрутить.
+    //
+    // Наверху они видны всегда и в одном порядке: что получилось → что мешает → что
+    // нажать. Форма ниже — её и так читают сверху вниз.
+    state.outcome?.let { Result(it) }
+
+    state.missing?.let { Alarm(it) }
+
+    Button(
+        label = when {
+            state.delivered -> "Отчёт отправлен"
+            state.sending -> "Отправляем…"
+            else -> "Отправить"
+        },
+        onClick = onSend,
+        // Красная кнопка «Отчёт отправлен» — не кнопка больше, а отметка о сделанном
+        // (решение заказчика 2026-09-06). Она держится до повторного входа на экран.
+        kind = if (state.delivered) ButtonKind.Done else ButtonKind.Action,
+        enabled = state.canSend,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    if (state.delivered) {
+        Secondary("Чтобы написать ещё раз, выйдите и снова откройте «Сообщить о проблеме».")
+    }
+
     Caption("Что случилось", fontSize = TimaType.sz4, weight = FontWeight.Bold)
     Field(
         value = state.text,
         onChange = onText,
         hint = "Опишите словами: что делали и что пошло не так",
     )
+    if (state.text.isBlank()) {
+        Tertiary("Журнал покажет, что происходило, но не то, чего вы ждали, — это можете сказать только вы.")
+    }
 
     Caption("Когда это началось", fontSize = TimaType.sz5, weight = FontWeight.Bold)
     Began.entries.forEach { began ->
@@ -386,30 +418,6 @@ fun ProblemScreen(
         Tertiary(if (state.log.isBlank()) "Журнал пуст" else state.log)
     }
 
-    state.outcome?.let { Result(it) }
-
-    // Причина неактивности — НАД кнопкой и обычным текстом, а не мелкой пометкой под ней.
-    // Человек читает сверху вниз и до кнопки; сказанное после неё он уже не ищет.
-    state.missing?.let { Alarm(it) }
-
-    Button(
-        label = when {
-            state.delivered -> "Отчёт отправлен"
-            state.sending -> "Отправляем…"
-            else -> "Отправить"
-        },
-        onClick = onSend,
-        // Красная кнопка «Отчёт отправлен» — не кнопка больше, а отметка о сделанном
-        // (решение заказчика 2026-09-06). Она держится до повторного входа на экран.
-        kind = if (state.delivered) ButtonKind.Done else ButtonKind.Action,
-        enabled = state.canSend,
-        modifier = Modifier.fillMaxWidth(),
-    )
-    if (state.delivered) {
-        Secondary("Чтобы написать ещё раз, выйдите и снова откройте «Сообщить о проблеме».")
-    } else if (state.text.isBlank()) {
-        Tertiary("Журнал покажет, что происходило, но не то, чего вы ждали, — это можете сказать только вы.")
-    }
 }
 
 /** Чем кончилось — своими словами: от исхода зависит, что человеку делать дальше. */
