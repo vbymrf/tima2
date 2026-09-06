@@ -432,7 +432,7 @@ private fun Result(outcome: SendOutcome) {
             // диктует в разговоре, и мелким его переписывают с ошибкой (решение
             // заказчика 2026-09-06).
             Caption(outcome.number, fontSize = TimaType.sz1, weight = FontWeight.ExtraBold)
-            Secondary("Назовите его, если будете писать нам ещё раз.")
+            Secondary("Назовите его, если будете общаться с технической поддержкой.")
         }
 
         SendOutcome.Queued -> {
