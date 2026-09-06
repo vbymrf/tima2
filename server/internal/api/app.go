@@ -1,7 +1,7 @@
-// Проверка обновлений приложения (self-distributed APK, вне Google Play):
-// клиент опрашивает GET /api/v1/app/version и сравнивает version_code со своим.
-// Конфигурация — из env (main.go): APP_LATEST_VERSION_CODE/NAME, APP_APK_URL,
-// APP_UPDATE_NOTES, APP_STREAM.
+// Проверка обновлений приложения (self-distributed пакеты, вне Google Play и вне
+// Microsoft Store): клиент опрашивает GET /api/v1/app/version и сравнивает version_code
+// со своим. Конфигурация — из env (main.go): APP_LATEST_VERSION_CODE/NAME, APP_APK_URL,
+// APP_APK_SHA256, APP_UPDATE_NOTES, APP_STREAM и те же поля с префиксом APP_WIN_ для ПК.
 package api
 
 import (
@@ -19,20 +19,57 @@ import (
 // Поле необязательное, потому что API только расширяется: установленный клиент,
 // который про stream не знает, читает ответ ровно как читал. Пустой stream означает
 // «сервер поток не объявляет» — и новый клиент из осторожности не предлагает ничего.
+//
+// **SHA256 и Size добавлены 2026-09-06 и тоже необязательны** (ПЛАН-ОБНОВЛЕНИЯ.md, О1).
+// Подписи пакета у нас нет — сертификат подписи кода не покупается (решение заказчика
+// 2026-09-06), — поэтому единственное, чем клиент может проверить скачанное на ПК, это
+// объявленный здесь хэш. На Android проверка другая и сильнее: там сверяется отпечаток
+// подписи APK с подписью уже установленного приложения, и хэш ей не замена.
+//
+// Пустой SHA256 означает «сервер хэш не объявляет». Клиент в этом случае **не ставит**:
+// поставить непроверенное молча хуже, чем не поставить и сказать.
 type AppVersion struct {
 	VersionCode int    `json:"version_code"`
 	VersionName string `json:"version_name"`
-	APKUrl      string `json:"url"`
-	Notes       string `json:"notes"`
-	Stream      string `json:"stream,omitempty"`
+	// PackageURL — ссылка на пакет. Для Android это APK, для ПК — MSI; поле называется
+	// «url» с самого начала и переименования не требует. Имя в Go поправлено 2026-09-06:
+	// «APKUrl» перестало быть правдой, когда появилась вторая платформа.
+	PackageURL string `json:"url"`
+	Notes      string `json:"notes"`
+	Stream     string `json:"stream,omitempty"`
+	SHA256     string `json:"sha256,omitempty"`
+	Size       int64  `json:"size,omitempty"`
+	// MinClient — версия, ниже которой клиент работать не должен (задача С3.1, уровень 2
+	// обновления). 0 — порога нет.
+	//
+	// **Отсутствие поля означает «гейта нет», а не «блокировать».** Иначе откат сервера
+	// на предыдущую версию превратил бы установленные приложения в кирпичи, то есть самая
+	// опасная кнопка в системе оказалась бы у того, кто всего лишь откатывает выкатку
+	// (Plan.md §3.5). Правило исполняет клиент; здесь оно записано, чтобы поле не
+	// «починили», сделав обязательным.
+	MinClient int `json:"min_client,omitempty"`
 }
 
 // appVersion — публичный (без токена): клиент опрашивает его на старте.
-func (s *Server) appVersion(w http.ResponseWriter, _ *http.Request) {
-	if s.AppVer == nil || s.AppVer.VersionCode == 0 || s.AppVer.APKUrl == "" {
+//
+// **Платформа выбирается параметром, а умолчание — Android.** Так отвечал сервер до
+// 2026-09-06, и установленный клиент, который про параметр не знает, обязан получить
+// прежний ответ: правило проекта — API расширяется, а не меняется.
+//
+// Неизвестная платформа получает 204, а не пакет для Android: отдать чужой пакет значит
+// предложить человеку поставить то, что у него не запустится.
+func (s *Server) appVersion(w http.ResponseWriter, r *http.Request) {
+	var ver *AppVersion
+	switch r.URL.Query().Get("platform") {
+	case "", "android":
+		ver = s.AppVer
+	case "windows":
+		ver = s.AppVerWin
+	}
+	if ver == nil || ver.VersionCode == 0 || ver.PackageURL == "" {
 		w.WriteHeader(http.StatusNoContent) // обновления не настроены — клиент молчит
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(s.AppVer)
+	_ = json.NewEncoder(w).Encode(ver)
 }

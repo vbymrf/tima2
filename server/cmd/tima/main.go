@@ -223,24 +223,55 @@ func serve() {
 		} else {
 			log.Print("ESCROW_URL не задан — /escrow/pubkey отвечает 503 (подними cmd/escrow-stub)")
 		}
-		// Авто-обновление клиента (self-distributed APK): версия и ссылка на APK из env.
+		// Авто-обновление клиента (self-distributed пакеты): версия и ссылка из env.
+		// Поток один на обе платформы: он говорит, какому ряду сборок принадлежит
+		// предложение, а не на чём его ставят.
+		stream := os.Getenv("APP_STREAM")
 		if code := atoiOr("APP_LATEST_VERSION_CODE", 0); code > 0 {
 			srv.AppVer = &api.AppVersion{
 				VersionCode: code,
 				VersionName: os.Getenv("APP_LATEST_VERSION_NAME"),
-				APKUrl:      os.Getenv("APP_APK_URL"),
+				PackageURL:  os.Getenv("APP_APK_URL"),
 				Notes:       os.Getenv("APP_UPDATE_NOTES"),
-				Stream:      os.Getenv("APP_STREAM"),
+				Stream:      stream,
+				SHA256:      os.Getenv("APP_APK_SHA256"),
+				Size:        int64(atoiOr("APP_APK_SIZE", 0)),
+				MinClient:   atoiOr("APP_MIN_CLIENT", 0),
 			}
 			// Поток печатаем отдельно: без него клиент v2 предложение проигнорирует,
 			// и молчащая вкладка «Обновление» выглядит как поломка, а не как настройка.
 			if srv.AppVer.Stream == "" {
 				log.Print("APP_STREAM не задан — клиенты, различающие потоки, это предложение пропустят")
 			}
-			log.Printf("Авто-обновление: последняя версия %d поток %q (%s)",
-				code, srv.AppVer.Stream, srv.AppVer.APKUrl)
+			log.Printf("Авто-обновление Android: версия %d поток %q (%s)",
+				code, srv.AppVer.Stream, srv.AppVer.PackageURL)
 		} else {
-			log.Print("APP_LATEST_VERSION_CODE не задан — /app/version отдаёт 204 (обновления выключены)")
+			log.Print("APP_LATEST_VERSION_CODE не задан — /app/version отдаёт 204 (обновления Android выключены)")
+		}
+		// ПК: те же поля с префиксом APP_WIN_. Отдельный номер, потому что платформы
+		// выпускаются порознь: собранный MSI может отставать от APK на день, и общий
+		// номер предложил бы человеку версию, которой для его платформы ещё нет.
+		if code := atoiOr("APP_WIN_VERSION_CODE", 0); code > 0 {
+			srv.AppVerWin = &api.AppVersion{
+				VersionCode: code,
+				VersionName: os.Getenv("APP_WIN_VERSION_NAME"),
+				PackageURL:  os.Getenv("APP_MSI_URL"),
+				Notes:       os.Getenv("APP_WIN_UPDATE_NOTES"),
+				Stream:      stream,
+				SHA256:      os.Getenv("APP_MSI_SHA256"),
+				Size:        int64(atoiOr("APP_MSI_SIZE", 0)),
+				MinClient:   atoiOr("APP_WIN_MIN_CLIENT", 0),
+			}
+			// Хэш для ПК — единственная проверка скачанного: подписи кода у пакета нет
+			// (решение заказчика 2026-09-06). Без него клиент честно откажется ставить,
+			// и человек увидит «сервер не объявил хэш», а не молчащую кнопку.
+			if srv.AppVerWin.SHA256 == "" {
+				log.Print("APP_MSI_SHA256 не задан — ПК не поставит это обновление: проверять скачанное будет нечем")
+			}
+			log.Printf("Авто-обновление ПК: версия %d поток %q (%s)",
+				code, srv.AppVerWin.Stream, srv.AppVerWin.PackageURL)
+		} else {
+			log.Print("APP_WIN_VERSION_CODE не задан — /app/version?platform=windows отдаёт 204")
 		}
 		srv.Register(mux)
 		log.Print("Auth + Message Service подключены")

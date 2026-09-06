@@ -67,6 +67,12 @@ type Server struct {
 
 	// AppVer — последняя версия клиента для авто-обновления (nil → /app/version отдаёт 204)
 	AppVer *AppVersion
+	// AppVerWin — то же для ПК: отдаётся по ?platform=windows (ПЛАН-ОБНОВЛЕНИЯ.md, О1).
+	//
+	// Отдельное поле, а не карта платформ: платформ ровно две, и карта потребовала бы
+	// проверять ключи там, где сейчас достаточно прочитать поле. Появится третья —
+	// тогда и карта.
+	AppVerWin *AppVersion
 }
 
 // requireActiveDevice verifies both the device JWT and the device's current
