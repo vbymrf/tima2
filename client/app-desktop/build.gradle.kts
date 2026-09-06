@@ -99,6 +99,23 @@ compose.desktop {
             targetFormats(TargetFormat.Msi)
             packageName = "TIMA"
             packageVersion = msiVersion
+
+            // ── Модули JVM: без них пакет собирается и падает ────────────────
+            //
+            // Внутрь пакета кладётся не весь JDK, а обрезанный `jlink`-образ, и режет он
+            // по тому, что видит в байт-коде. Отражения он не видит: JDBC-драйвер SQLite
+            // достаётся через `DriverManager`, и в первой раздаваемой сборке (версия 3,
+            // 2026-09-06) `java.sql` в образ не попал. Приложение вставало, рисовало окно
+            // и падало на открытии базы:
+            //
+            //     java.lang.NoClassDefFoundError: java/sql/DriverManager
+            //         at …JdbcSqliteDriver.getConnection
+            //         at io.tima.core.database.DesktopDriverKt.desktopDatabase
+            //
+            // Список — из `gradlew :app-desktop:suggestRuntimeModules`, а не из головы.
+            // `jdk.crypto.ec` анализатор находит сам (без него не работает TLS), поэтому
+            // здесь его нет; проверять состав образа — `runtime/release`, строка MODULES.
+            modules("java.instrument", "java.management", "java.sql", "jdk.unsupported")
             // ── Описание ЛАТИНИЦЕЙ, и это не небрежность ────────────────────
             //
             // Первая сборка упала так: `light.exe … exited with 311 code`. Код 311 у WiX
