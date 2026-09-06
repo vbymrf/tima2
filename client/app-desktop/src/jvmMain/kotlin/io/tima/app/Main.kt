@@ -55,6 +55,11 @@ fun main() = application {
             // платформенный, и это единственное, что здесь платформенного.
             deviceDatabase = { name -> desktopDatabase(File(dataCatalog(), name)) },
             appearanceStore = appearanceStore(),
+            // Обновление ставит платформа: скачать, сверить хэш, позвать msiexec.
+            // Приложение при этом закрывается — MSI не заменит файлы работающей
+            // программы, и Windows вместо установки предложила бы перезагрузку.
+            installer = DesktopInstaller(),
+            onLeaving = ::exitApplication,
             // Версия порождается сборкой из gradle.properties — одна на Android и ПК.
             // До 2026-08-26 десктоп её не знал и показывал «Установлена —»: вопрос
             // «какая версия стоит» задают, когда что-то пошло не так, и остаться без

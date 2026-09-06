@@ -106,6 +106,9 @@ import io.tima.core.ui.TimaTheme
 import androidx.compose.foundation.isSystemInDarkTheme
 import io.tima.feature.shell.AppearanceScreen
 import io.tima.feature.shell.SettingsScreen
+import io.tima.feature.shell.UpdateGate
+import io.tima.feature.shell.UpdateInstaller
+import io.tima.feature.shell.UpdateState
 import io.tima.feature.shell.UpdateOffer
 import io.tima.feature.shell.UpdateSection
 import io.tima.feature.shell.UpdateStore
@@ -160,6 +163,16 @@ fun Root(
      * повторить разбор, который уже делает платформа, принимая переход.
      */
     transferCode: String? = null,
+    /**
+     * Кто ставит скачанное обновление (ПЛАН-ОБНОВЛЕНИЯ.md, О3).
+     *
+     * `null` — платформа этого не умеет: на iOS обновление приходит из App Store, а на
+     * сборке без установщика кнопки просто не будет. Кнопка, которая ничего не делает,
+     * хуже её отсутствия — по ней судят, что приложение сломано.
+     */
+    installer: UpdateInstaller? = null,
+    /** Установщик запущен — платформе пора закрыть приложение. */
+    onLeaving: () -> Unit = {},
     /** Номер сборки от платформы: общий код его знать не может и не должен. */
     build: Build = Build(),
 ) {
@@ -176,6 +189,8 @@ fun Root(
             deviceDatabase = deviceDatabase,
             linkCode = linkCode,
             transferCode = transferCode,
+            installer = installer,
+            onLeaving = onLeaving,
             build = build,
             appearance = appearance,
             onAppearance = {
@@ -218,6 +233,8 @@ private fun Inside(
     deviceDatabase: (String) -> TimaDatabase,
     linkCode: String?,
     transferCode: String?,
+    installer: UpdateInstaller?,
+    onLeaving: () -> Unit,
     build: Build,
     appearance: Appearance,
     onAppearance: (Appearance) -> Unit,
@@ -251,6 +268,8 @@ private fun Inside(
         deviceSecret = current.secret,
         linkCode = linkCode,
         transferCode = transferCode,
+        installer = installer,
+        onLeaving = onLeaving,
         build = build,
         appearance = appearance,
         onAppearance = onAppearance,
@@ -435,6 +454,10 @@ private fun App(
     linkCode: String?,
     /** Код передачи, принесённый камерой (Д12). См. пояснение у [Root]. */
     transferCode: String? = null,
+    /** Кто ставит обновление; `null` — платформа не умеет. См. пояснение у [Root]. */
+    installer: UpdateInstaller? = null,
+    /** Установщик запущен — пора закрыть приложение. */
+    onLeaving: () -> Unit = {},
     /** Номер сборки — показывается в «Устройствах», см. пояснение там. */
     build: Build,
     appearance: Appearance,
@@ -478,6 +501,23 @@ private fun App(
     // «открыто, но некого» не стало возможным состоянием.
     var inviting by remember { mutableStateOf<BookEntry?>(null) }
     var newContact by remember { mutableStateOf(false) }
+
+    // Обновление живёт на уровне окна, а не внутри вкладки настроек, и причина не в
+    // экономии: у него два потребителя. Вкладка «Обновление» — один; второй — порог
+    // совместимости (уровень 2), который обязан сработать до того, как человек куда-то
+    // нажал. Два магазина означали бы два разных ответа сервера на один вопрос.
+    val update = remember {
+        UpdateStore(
+            versions = { versionOffer(network, platform) },
+            scope = scope,
+            installed = build.name,
+            installedCode = build.code,
+            stream = build.stream,
+            installer = installer,
+            onLeaving = onLeaving,
+        )
+    }
+    val updateState by update.state.collectAsState()
 
     val contacts = remember {
         NewContactStore(
@@ -656,6 +696,20 @@ private fun App(
                 onSwitchAccount(leaving)
             },
             onClose = { leavingTo = null },
+        )
+        return
+    }
+
+    // Порог совместимости (уровень 2, О5). Стоит раньше всего остального: сервер сказал,
+    // что с этой сборкой больше не работает, и показывать список переписок значило бы
+    // обещать доставку, которой не будет. Обходного пути нет намеренно — обходить нечего.
+    if (updateState.mustUpdate) {
+        UpdateGate(
+            state = updateState,
+            onInstall = update::ask,
+            onConfirm = update::install,
+            onDismiss = update::dismiss,
+            canInstall = update.canInstall,
         )
         return
     }
@@ -912,6 +966,8 @@ private fun App(
                         virtualsState = virtualsState,
                         onNewVirtual = { where = Where.NewVirtual },
                         onTransfer = { userId -> where = Where.Transfer(userId) },
+                        update = update,
+                        updateState = updateState,
                     )
                 }
             }
@@ -1131,6 +1187,9 @@ private fun Settings(
     onNewVirtual: () -> Unit,
     /** `null` — принимаем чужой; иначе передаём свой. */
     onTransfer: (String?) -> Unit,
+    /** Обновление: один магазин на приложение, здесь только его вкладка (О3, О5). */
+    update: UpdateStore,
+    updateState: UpdateState,
 ) {
     val fleet = remember { DevicesStore(network.myFleet, scope) }
     val devices by fleet.state.collectAsState()
@@ -1197,7 +1256,7 @@ private fun Settings(
 
             SettingsItem.APPEARANCE -> AppearanceScreen(appearance, onAppearance)
 
-            SettingsItem.UPDATE -> Update(network, scope, platform, build)
+            SettingsItem.UPDATE -> Update(update, updateState)
 
             else -> TabStub(
                 willWhat = item.title,
@@ -1231,47 +1290,44 @@ private fun Devices(
  * Ktor не знает и знать не должна.
  */
 @Composable
-private fun Update(
-    network: DevicePorts,
-    scope: kotlinx.coroutines.CoroutineScope,
-    platform: Platform,
-    build: Build,
-) {
-    val store = remember {
-        UpdateStore(
-            versions = {
-                when (val answer = network.appVersion.latest()) {
-                    is AppVersionResult.Version -> UpdateOffer(
-                        versionCode = answer.versionCode,
-                        versionName = answer.versionName,
-                        url = answer.url,
-                        notes = answer.notes,
-                        stream = answer.stream,
-                    )
-                    AppVersionResult.NotConfigured -> null
-                    is AppVersionResult.NoConnection -> error("нет связи")
-                    is AppVersionResult.Refused -> error("отказ ${answer.status}")
-                }
-            },
-            scope = scope,
-            installed = build.name,
-            installedCode = build.code,
-            stream = build.stream,
-        )
-    }
-    val state by store.state.collectAsState()
+private fun Update(store: UpdateStore, state: UpdateState) {
     UpdateSection(
         state = state,
         onCheck = store::check,
-        // Скачивание — платформенное действие: на ПК это браузер, на телефоне установщик.
-        // Пока не заведено, ссылка просто не нажимается, и это честнее кнопки, которая
-        // делает вид. Платформа рядом, чтобы вопрос не потерялся при разводке.
-        onInstall = { _ -> },
+        onInstall = store::ask,
+        onConfirm = store::install,
+        onDismiss = store::dismiss,
+        canInstall = store.canInstall,
     )
-    // Платформа участвует в сборке состояния и будет нужна установщику; ссылка на неё
-    // держится явно, чтобы её не выкинули как неиспользуемую.
-    check(platform.server.isNotBlank())
 }
+
+/**
+ * Что предлагает сервер этой платформе.
+ *
+ * Платформу называем в самом вопросе: пакеты у ПК и телефона разные, а сервер без этого
+ * слова отвечает про Android — так он отвечал до 2026-09-06, и установленные клиенты на
+ * это рассчитывают (О1).
+ *
+ * Ошибки связи здесь становятся исключением, а не пустым ответом: `null` означает «сервер
+ * обновления не раздаёт», и подменять им «мы не дозвонились» значило бы сказать человеку,
+ * что обновлений нет, когда мы этого не знаем.
+ */
+private suspend fun versionOffer(network: DevicePorts, platform: Platform): UpdateOffer? =
+    when (val answer = network.appVersion.latest(platform.packageKind)) {
+        is AppVersionResult.Version -> UpdateOffer(
+            versionCode = answer.versionCode,
+            versionName = answer.versionName,
+            url = answer.url,
+            notes = answer.notes,
+            stream = answer.stream,
+            sha256 = answer.sha256,
+            size = answer.size,
+            minClient = answer.minClient,
+        )
+        AppVersionResult.NotConfigured -> null
+        is AppVersionResult.NoConnection -> error("нет связи")
+        is AppVersionResult.Refused -> error("отказ ${answer.status}")
+    }
 
 
 
