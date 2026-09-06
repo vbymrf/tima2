@@ -16,6 +16,7 @@ import io.tima.domain.chat.Friends
 import io.tima.domain.account.Profile
 import io.tima.domain.account.ConfirmDeviceLink
 import io.tima.core.network.AppVersionApi
+import io.tima.core.network.ProblemsOverHttp
 import io.tima.domain.account.MyDevices
 import io.tima.domain.account.TransfersApi
 import io.tima.domain.account.VirtualsApi
@@ -129,6 +130,14 @@ interface DevicePorts {
      * смотрят, чем читают, — в настройках.
      */
     val appVersion: AppVersionApi
+
+    /**
+     * Отправка отчётов о проблеме (ПЛАН-ОТЛАДКИ.md, Б3).
+     *
+     * Токен внутри необязателен: отчёт принимается и без входа — «не могу войти» это
+     * самая частая жалоба, и требовать для неё авторизацию значит её не услышать.
+     */
+    val problems: ProblemsOverHttp
 
     /** Объявление платформы серверу: телефон это или ПК (key-lifecycle.md §2). */
     val devices: DevicesApi

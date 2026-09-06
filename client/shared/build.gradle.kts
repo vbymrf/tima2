@@ -40,6 +40,8 @@ kotlin {
             implementation(projects.core.coreSecrets)
             implementation(projects.core.coreContacts)
             implementation(projects.core.coreNetwork)
+            // Журнал приложения: из него делается отчёт о проблеме (ПЛАН-ОТЛАДКИ.md).
+            implementation(projects.core.coreDiag)
             implementation(projects.feature.featureChat)
             implementation(projects.feature.featureGroup)
             implementation(projects.feature.featureAuth)

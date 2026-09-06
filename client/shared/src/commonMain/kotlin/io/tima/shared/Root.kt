@@ -106,6 +106,14 @@ import io.tima.core.ui.TimaTheme
 import androidx.compose.foundation.isSystemInDarkTheme
 import io.tima.feature.shell.AppearanceScreen
 import io.tima.feature.shell.SettingsScreen
+import io.tima.core.diag.Journal
+import io.tima.core.network.ProblemPost
+import io.tima.core.network.ProblemSendResult
+import io.tima.feature.shell.Origin
+import io.tima.feature.shell.ProblemFacts
+import io.tima.feature.shell.ProblemScreen
+import io.tima.feature.shell.ProblemStore
+import io.tima.feature.shell.SendOutcome
 import io.tima.feature.shell.UpdateGate
 import io.tima.feature.shell.UpdateInstaller
 import io.tima.feature.shell.UpdateState
@@ -173,6 +181,15 @@ fun Root(
     installer: UpdateInstaller? = null,
     /** Установщик запущен — платформе пора закрыть приложение. */
     onLeaving: () -> Unit = {},
+    /**
+     * Что платформа знает о себе для отчёта о проблеме (ПЛАН-ОТЛАДКИ.md, Б3).
+     *
+     * Модель и версия системы — единственное, чего общий код о себе не знает, а в разборе
+     * они решают половину дела: «на realme не работает, на Xiaomi работает».
+     */
+    facts: ProblemFacts = ProblemFacts(),
+    /** Где платформа держит неотправленные отчёты. */
+    reportsStore: ReportsStore = ReportsStore.Forgetful,
     /** Номер сборки от платформы: общий код его знать не может и не должен. */
     build: Build = Build(),
 ) {
@@ -191,6 +208,8 @@ fun Root(
             transferCode = transferCode,
             installer = installer,
             onLeaving = onLeaving,
+            facts = facts,
+            reportsStore = reportsStore,
             build = build,
             appearance = appearance,
             onAppearance = {
@@ -235,6 +254,8 @@ private fun Inside(
     transferCode: String?,
     installer: UpdateInstaller?,
     onLeaving: () -> Unit,
+    facts: ProblemFacts,
+    reportsStore: ReportsStore,
     build: Build,
     appearance: Appearance,
     onAppearance: (Appearance) -> Unit,
@@ -270,6 +291,8 @@ private fun Inside(
         transferCode = transferCode,
         installer = installer,
         onLeaving = onLeaving,
+        facts = facts,
+        reportsStore = reportsStore,
         build = build,
         appearance = appearance,
         onAppearance = onAppearance,
@@ -458,6 +481,10 @@ private fun App(
     installer: UpdateInstaller? = null,
     /** Установщик запущен — пора закрыть приложение. */
     onLeaving: () -> Unit = {},
+    /** Что платформа знает о себе для отчёта о проблеме (Б3). */
+    facts: ProblemFacts = ProblemFacts(),
+    /** Где платформа держит неотправленные отчёты. */
+    reportsStore: ReportsStore = ReportsStore.Forgetful,
     /** Номер сборки — показывается в «Устройствах», см. пояснение там. */
     build: Build,
     appearance: Appearance,
@@ -518,6 +545,15 @@ private fun App(
         )
     }
     val updateState by update.state.collectAsState()
+
+    // Отчёты, не ушедшие в прошлый раз, — включая записанные при падении. Досылка при
+    // запуске, а не по кнопке: человек, у которого приложение закрылось само, второй раз
+    // за отчётом не пойдёт (ПЛАН-ОТЛАДКИ.md, Б7).
+    val reporting = remember { Reporting(network.problems, ReportQueue(reportsStore)) }
+    LaunchedEffect(assembled) {
+        val sent = reporting.deliver()
+        if (sent > 0) Journal.note("отчёты", "досланы отложенные: " + sent)
+    }
 
     val contacts = remember {
         NewContactStore(
@@ -591,6 +627,16 @@ private fun App(
     // страница у человека, и второй показывал бы то же самое со своим отставанием.
     val page = remember { PageStore(network.pages, scope) }
     var phoneTab by remember { mutableStateOf("Чаты") }
+
+    // Откуда ушли в настройки (ПЛАН-ОТЛАДКИ.md, Б2). Запоминается ЗДЕСЬ, в момент
+    // перехода: к моменту отправки отчёта «текущее окно» будет «Настройки», то есть
+    // бесполезным. Вкладка есть только у окна «Телефон» — у остальных её пока нет, и
+    // выдумывать нечего.
+    var cameFrom by remember { mutableStateOf<Origin?>(null) }
+    val toSettings: () -> Unit = {
+        cameFrom = Origin(window, if (window == Window.Phone) phoneTab else "")
+        where = Where.Settings()
+    }
 
     val new = remember {
         NewChatStore(
@@ -776,7 +822,7 @@ private fun App(
                     where = Where.Nothing
                 },
                 counters = windowCounters(listState),
-                onSettings = { where = Where.Settings() },
+                onSettings = toSettings,
             )
         },
         column = {
@@ -798,7 +844,7 @@ private fun App(
                         }
                     },
                     onNew = { where = Where.New },
-                    onSettings = { where = Where.Settings() },
+                    onSettings = toSettings,
                     onSwitchWindows = { windowSwitcher = true },
                     onNeighbourWindow = switchWindow,
                     onView = { bookView = true },
@@ -818,7 +864,7 @@ private fun App(
                     SocialWindow(
                         onSwitchWindows = { windowSwitcher = true },
                         onSearch = {},
-                        onSettings = { where = Where.Settings() },
+                        onSettings = toSettings,
                         onNeighbourWindow = switchWindow,
                         catalog = {
                             CatalogTab(
@@ -834,21 +880,21 @@ private fun App(
                 Window.Media -> MediaWindow(
                     onSwitchWindows = { windowSwitcher = true },
                     onSearch = {},
-                    onSettings = { where = Where.Settings() },
+                    onSettings = toSettings,
                     onNeighbourWindow = switchWindow,
                 )
 
                 Window.Activity -> ActivityWindow(
                     onSwitchWindows = { windowSwitcher = true },
                     onSearch = {},
-                    onSettings = { where = Where.Settings() },
+                    onSettings = toSettings,
                     onNeighbourWindow = switchWindow,
                 )
 
                 Window.Page -> PageWindow(
                     onSwitchWindows = { windowSwitcher = true },
                     onSearch = {},
-                    onSettings = { where = Where.Settings() },
+                    onSettings = toSettings,
                     onNeighbourWindow = switchWindow,
                     // Своя страница: принесённое и своё вперемешку. Обновляется при
                     // открытии вкладки — список меняется от чужих действий (автор удалил,
@@ -968,6 +1014,15 @@ private fun App(
                         onTransfer = { userId -> where = Where.Transfer(userId) },
                         update = update,
                         updateState = updateState,
+                        problemFacts = facts.copy(
+                            build = build.name,
+                            stream = build.stream,
+                            nickname = profileState.nickname,
+                            userId = session.userId,
+                            deviceId = session.deviceId,
+                        ),
+                        origin = cameFrom,
+                        reporting = reporting,
                     )
                 }
             }
@@ -1190,6 +1245,12 @@ private fun Settings(
     /** Обновление: один магазин на приложение, здесь только его вкладка (О3, О5). */
     update: UpdateStore,
     updateState: UpdateState,
+    /** Что уйдёт в отчёте о проблеме, кроме текста и журнала (ПЛАН-ОТЛАДКИ.md, Б3). */
+    problemFacts: ProblemFacts,
+    /** Откуда человек ушёл в настройки. `null` — попал сюда не из окна (Б2). */
+    origin: Origin?,
+    /** Сеть плюс очередь: отчёт не теряется, даже если связи нет. */
+    reporting: Reporting,
 ) {
     val fleet = remember { DevicesStore(network.myFleet, scope) }
     val devices by fleet.state.collectAsState()
@@ -1258,6 +1319,11 @@ private fun Settings(
 
             SettingsItem.UPDATE -> Update(update, updateState)
 
+            // Отчёт о проблеме. Магазин создаётся ЗДЕСЬ, при открытии раздела: журнал
+            // снимается в момент, когда человек пришёл жаловаться, а не когда дописал
+            // текст — к тому времени начало поломки успело бы вытесниться.
+            SettingsItem.PROBLEM -> Problem(problemFacts, origin, reporting, scope, platform)
+
             else -> TabStub(
                 willWhat = item.title,
                 thanHolds = "Раздел из макета настроек. Экрана пока нет — " +
@@ -1298,6 +1364,63 @@ private fun Update(store: UpdateStore, state: UpdateState) {
         onConfirm = store::install,
         onDismiss = store::dismiss,
         canInstall = store.canInstall,
+    )
+}
+
+/**
+ * Отчёт о проблеме — ПЛАН-ОТЛАДКИ.md, Б3.
+ *
+ * Порты объявляет оболочка, а подставляются они здесь: журнал приходит из `core-diag`,
+ * отправка — из сети с очередью. Оболочка про них не знает и знать не должна.
+ */
+@Composable
+private fun Problem(
+    facts: ProblemFacts,
+    origin: Origin?,
+    reporting: Reporting,
+    scope: kotlinx.coroutines.CoroutineScope,
+    platform: Platform,
+) {
+    val store = remember {
+        ProblemStore(
+            log = { Journal.diary.dump() },
+            sender = { report ->
+                val result = reporting.send(
+                    ProblemPost(
+                        kind = report.kind.name.lowercase(),
+                        text = report.text,
+                        origin = report.origin,
+                        platform = platform.packageKind.ifBlank { platform.server },
+                        model = report.facts.model,
+                        os = report.facts.os,
+                        build = report.facts.build,
+                        stream = report.facts.stream,
+                        nickname = report.facts.nickname,
+                        log = report.log,
+                    ),
+                )
+                when (result) {
+                    is ProblemSendResult.Sent -> SendOutcome.Sent(result.number)
+                    // Связи нет — отчёт уже лежит в очереди, и человеку говорим именно
+                    // это, а не «ошибка отправки»: он должен знать, что жалоба не пропала.
+                    is ProblemSendResult.NoConnection -> SendOutcome.Queued
+                    is ProblemSendResult.Refused ->
+                        if (result.status == 0) SendOutcome.Queued
+                        else SendOutcome.Refused("Сервер не принял отчёт (" + result.status + ")")
+                }
+            },
+            scope = scope,
+            origin = origin,
+            facts = facts,
+        )
+    }
+    val state by store.state.collectAsState()
+    ProblemScreen(
+        state = state,
+        onText = store::changedText,
+        onKind = store::chose,
+        onShow = store::toggleShowing,
+        onSend = store::send,
     )
 }
 

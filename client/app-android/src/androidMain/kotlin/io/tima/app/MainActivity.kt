@@ -10,6 +10,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import io.tima.core.database.androidDatabase
+import io.tima.feature.shell.ProblemFacts
 import io.tima.core.ui.TimaTheme
 import io.tima.shared.Entry
 import io.tima.shared.Platform
@@ -114,6 +115,15 @@ class MainActivity : ComponentActivity() {
                 // ПК, не нужно: Android сам покажет установщик поверх, а замену пакета
                 // проведёт, когда сочтёт нужным.
                 installer = AndroidInstaller(applicationContext),
+                // Что телефон знает о себе для отчёта о проблеме. Производитель и модель
+                // решают половину разбора: «на realme не работает, на Xiaomi работает».
+                facts = ProblemFacts(
+                    platform = "android",
+                    model = android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL,
+                    os = "Android " + android.os.Build.VERSION.RELEASE +
+                        " (SDK " + android.os.Build.VERSION.SDK_INT + ")",
+                ),
+                reportsStore = androidReportsStore(application),
                 // Имя и номер разом: имя говорит, что за версия, номер — что
                 // установка действительно сменилась. По одному имени обновление
                 // «2.0.0-dev → 2.0.0-dev» неотличимо от его отсутствия.

@@ -2,6 +2,10 @@ package io.tima.core.network
 
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
+import io.ktor.client.plugins.api.createClientPlugin
+import io.ktor.util.AttributeKey
+import io.tima.core.diag.Journal
+import kotlinx.datetime.Clock
 import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.websocket.WebSockets
@@ -54,7 +58,31 @@ fun HttpClientConfig<*>.timaDefaults(tuning: TransportTuning = TransportTuning()
         connectTimeoutMillis = tuning.connectTimeoutMs
         socketTimeoutMillis = tuning.socketTimeoutMs
     }
+    // ── Каждый вызов попадает в журнал (ПЛАН-ОТЛАДКИ.md, Б1) ───────────────────
+    //
+    // Здесь, а не в каждом Api по отдельности: сетевых классов у нас полтора десятка, и
+    // «забыли записать в новом» — вопрос времени. Пишется путь, код ответа и время;
+    // **тело не пишется никогда** — в нём переписка.
+    //
+    // Путь при этом без строки запроса: в ней бывают коды и идентификаторы сессий.
+    install(createClientPlugin("ЖурналВызовов") {
+        onRequest { request, _ ->
+            request.attributes.put(startedAt, Clock.System.now().toEpochMilliseconds())
+        }
+        onResponse { response ->
+            val started = response.call.request.attributes.getOrNull(startedAt)
+            val spent = started?.let { Clock.System.now().toEpochMilliseconds() - it } ?: -1
+            val path = response.call.request.url.encodedPath
+            val line = response.call.request.method.value + " " + path +
+                " → " + response.status.value + (if (spent >= 0) " за ${spent} мс" else "")
+            if (response.status.value >= 400) Journal.trouble("сеть", line)
+            else Journal.note("сеть", line)
+        }
+    })
 }
+
+/** Когда ушёл запрос — чтобы в журнале было время ответа, а не только его код. */
+private val startedAt = AttributeKey<Long>("tima-started-at")
 
 /** Клиент для боевого хода: движок по платформе, настройки общие. */
 fun timaHttpClient(tuning: TransportTuning = TransportTuning()): HttpClient =

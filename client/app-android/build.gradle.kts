@@ -28,6 +28,9 @@ kotlin {
             // Оболочка объявляет порт установщика обновлений, реализация платформенная и
             // живёт здесь (О4): DownloadManager, проверка подписи, PackageInstaller.
             implementation(project(":feature:feature-shell"))
+            // Журнал: точка входа ловит падения и кладёт их в очередь отчётов вместе с
+            // тем, что человек успел сделать (ПЛАН-ОТЛАДКИ.md, Б7).
+            implementation(project(":core:core-diag"))
             implementation(libs.androidx.activity.compose)
             // foundation нужен самой Activity: тема системы (isSystemInDarkTheme) живёт там.
             implementation(compose.foundation)

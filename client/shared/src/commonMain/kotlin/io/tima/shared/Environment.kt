@@ -30,6 +30,7 @@ import io.tima.core.network.AuthApi
 import io.tima.core.network.DeviceLinkConfirmOverHttp
 import io.tima.core.network.DeviceLinkStartOverHttp
 import io.tima.core.network.AppVersionApi
+import io.tima.core.network.ProblemsOverHttp
 import io.tima.core.network.DeviceBookOverHttp
 import io.tima.core.network.DevicesApi
 import io.tima.core.network.EscrowApi
@@ -337,6 +338,11 @@ class Network(
 
     /** Версия на сервере. Без токена: её спрашивают и до входа. */
     override val appVersion: AppVersionApi = AppVersionApi(link.route, link.client)
+
+    // Отчёт о проблеме уходит с токеном, если он есть: сервер тогда сам свяжет отчёт с
+    // аккаунтом и устройством, не веря присланному.
+    override val problems: ProblemsOverHttp =
+        ProblemsOverHttp(link.route, link.client) { session.accessToken }
 
     /**
      * Подтверждение привязки нового устройства.

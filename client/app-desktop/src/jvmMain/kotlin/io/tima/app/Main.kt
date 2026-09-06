@@ -9,7 +9,11 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import io.tima.core.database.desktopDatabase
+import io.tima.core.diag.Journal
+import io.tima.feature.shell.ProblemFacts
 import io.tima.shared.Build
+import io.tima.shared.ReportsStore
+import io.tima.shared.rememberCrash
 import io.tima.shared.Entry
 import io.tima.shared.Platform
 import io.tima.shared.AppearanceStore
@@ -26,7 +30,30 @@ import java.io.File
  *
  * Файл этим и ценен: он короткий. Стало длинно — значит в него протекло общее.
  */
-fun main() = application {
+fun main() {
+    // Падения ловятся ДО того, как поднято окно: упасть можно и на сборке окружения, и
+    // такой отчёт ценнее прочих — человек в этот момент видит только исчезнувшее окно
+    // (ПЛАН-ОТЛАДКИ.md, Б7).
+    val store = reportsStore()
+    Thread.setDefaultUncaughtExceptionHandler { _, error ->
+        runCatching {
+            rememberCrash(
+                store = store,
+                platform = "windows",
+                model = System.getProperty("os.name").orEmpty(),
+                os = System.getProperty("os.name").orEmpty() + " " + System.getProperty("os.version").orEmpty(),
+                build = BUILD_NAME,
+                stream = BUILD_STREAM,
+                log = Journal.diary.dump(),
+                error = error,
+            )
+        }
+        error.printStackTrace()
+    }
+    window(store)
+}
+
+private fun window(store: ReportsStore) = application {
     // Переменная окружения читается ЗДЕСЬ: на ПК она есть, в общем коде её нет вовсе —
     // `System.getenv` отсутствует на iOS. Адрес по умолчанию — стенд.
     val entry = remember {
@@ -55,6 +82,14 @@ fun main() = application {
             // платформенный, и это единственное, что здесь платформенного.
             deviceDatabase = { name -> desktopDatabase(File(dataCatalog(), name)) },
             appearanceStore = appearanceStore(),
+            // Что ПК знает о себе для отчёта о проблеме. Модель здесь — имя системы:
+            // «производителя» у ПК нет, а различать сборки Windows иногда приходится.
+            facts = ProblemFacts(
+                platform = "windows",
+                model = System.getProperty("os.name").orEmpty(),
+                os = System.getProperty("os.name").orEmpty() + " " + System.getProperty("os.version").orEmpty(),
+            ),
+            reportsStore = store,
             // Обновление ставит платформа: скачать, сверить хэш, позвать msiexec.
             // Приложение при этом закрывается — MSI не заменит файлы работающей
             // программы, и Windows вместо установки предложила бы перезагрузку.
@@ -67,6 +102,25 @@ fun main() = application {
             build = Build(name = BUILD_NAME, code = BUILD_CODE, stream = BUILD_STREAM),
         )
     }
+}
+
+/**
+ * Где ПК держит неотправленные отчёты: файл рядом с базой.
+ *
+ * Не база: отчёт нужен и тогда, когда база не открылась, — а это как раз тот случай,
+ * ради которого всё и делается.
+ */
+private fun reportsStore(): ReportsStore {
+    val file = File(dataCatalog(), REPORTS_NAME)
+    return ReportsStore(
+        load = { runCatching { file.readText() }.getOrNull() },
+        save = { text ->
+            runCatching {
+                file.parentFile?.mkdirs()
+                file.writeText(text)
+            }
+        },
+    )
 }
 
 /**
@@ -104,3 +158,4 @@ private fun dataCatalog(): File {
 
 private const val DATABASE_NAME = "tima.db"
 private const val APPEARANCE_NAME = "оформление.txt"
+private const val REPORTS_NAME = "отчёты.json"
