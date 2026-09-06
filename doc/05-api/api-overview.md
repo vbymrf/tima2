@@ -260,7 +260,7 @@
 > запись устройства**, а не просто действительный JWT. Отозванное устройство
 > теряет доступ немедленно, не дожидаясь истечения токена.
 
-## Без токена — восемь маршрутов
+## Без токена — десять маршрутов
 
 Список короткий намеренно: каждый пункт здесь — это поверхность, доступная кому
 угодно, и её стоит знать наизусть.
@@ -274,80 +274,118 @@
 | `POST /auth/register` | `register` | устройства ещё не существует |
 | `POST /link/start` | `linkStart` | у нового устройства нет аккаунта |
 | `POST /link/claim` | `linkClaim` | оно же опрашивает результат подтверждения |
+| `POST /auth/device/token` | замыкание в `device_token.go` | истёкший токен обновляют **без** токена: подпись ключом устройства и есть доказательство |
+| `POST /problem-reports` | замыкание в `problems.go` | «не могу войти» — самая частая жалоба, и требовать для неё авторизацию значит её не услышать |
 | `POST /livekit/webhook` | `livekitWebhook` | зовёт LiveKit; проверяется подписью вебхука, а не токеном |
 
-## Все 71 маршрут
+## Все 96 маршрутов под `/api/v1`
+
+> **Сведено из кода 2026-09-06**, а не переписано руками: команда — под таблицей.
+> До этого здесь стояло «71 маршрут» — верное на 2026-08-26 и устаревшее на четверть
+> с приходом социального слоя, контактов, отчётов о проблеме и обновления токена.
 
 | Метод и путь | Обработчик | Токен |
 |---|---|---|
 | `DELETE /channels/{channelID}/subscribe` | `unsubscribeChannel` | да |
-| `DELETE /chats/{chatID}/archive` | `setChatArchived` | да |
+| `DELETE /chats/{chatID}/archive` | `unarchiveChat` | да |
 | `DELETE /devices/{deviceID}` | `revokeDevice` | да |
-| `DELETE /groups/{groupID}/members/{userID}` | `removeGroupMember` | да |
 | `DELETE /groups/{groupID}` | `deleteGroup` | да |
+| `DELETE /groups/{groupID}/members/{userID}` | `removeGroupMember` | да |
 | `DELETE /users/me` | `deleteAccount` | да |
+| `DELETE /users/me/feed/items/{postID}` | `removeFeedItem` | да |
+| `DELETE /users/me/feed/subscribers/{userID}` | `removeFeedSubscriber` | да |
+| `DELETE /users/me/virtuals/{userID}/transfer` | `cancelTransfer` | да |
 | `GET /app/version` | `appVersion` | **нет** |
+| `GET /channels` | `listMyChannels` | да |
 | `GET /channels/discover` | `discoverChannels` | да |
 | `GET /channels/{channelID}/posts` | `listChannelPosts` | да |
-| `GET /channels` | `listMyChannels` | да |
 | `GET /chats/archived` | `listArchivedChats` | да |
 | `GET /chats/{chatID}/backup` | `chatBackupList` | да |
 | `GET /chats/{chatID}/messages` | `listMessages` | да |
 | `GET /devices` | `listMyDevices` | да |
 | `GET /escrow/key` | `escrowKeyForChat` | да |
 | `GET /escrow/pubkey` | `escrowPubkey` | да |
+| `GET /groups` | `listMyGroups` | да |
+| `GET /groups/cards` | `listMyCards` | да |
+| `GET /groups/{groupID}` | `getGroup` | да |
+| `GET /groups/{groupID}/join-requests` | `listJoinRequests` | да |
 | `GET /groups/{groupID}/keys` | `groupKeys` | да |
+| `GET /groups/{groupID}/level-grants` | `listLevelGrants` | да |
 | `GET /groups/{groupID}/members` | `listGroupMembers` | да |
 | `GET /groups/{groupID}/messages` | `listGroupMessages` | да |
-| `GET /groups/{groupID}` | `getGroup` | да |
-| `GET /groups` | `listMyGroups` | да |
 | `GET /keys/devices` | `listDeviceKeys` | да |
 | `GET /media/{mediaID}/url` | `mediaURL` | да |
+| `GET /nicknames/{nick}` | `lookupByNickname` | да |
+| `GET /nicknames/{nick}/free` | `nicknameFree` | да |
 | `GET /users/lookup` | `lookupUser` | да |
+| `GET /users/me/feed` | `myFeed` | да |
+| `GET /users/me/feed/subscribers` | `feedSubscribers` | да |
+| `GET /users/me/virtuals` | `listVirtuals` | да |
+| `GET /users/{userID}/feed` | `userFeed` | да |
 | `GET /voice-rooms` | `listVoiceRooms` | да |
-| `GET /ws` | `handleWS` | **нет** |
 | `PATCH /groups/{groupID}` | `patchGroup` | да |
+| `PATCH /groups/{groupID}/join-requests/{userID}` | `patchJoinRequest` | да |
+| `PATCH /groups/{groupID}/messages/{messageID}` | `patchGroupMessageLevel` | да |
 | `PATCH /users/me/name` | `setDisplayName` | да |
+| `PATCH /users/me/nickname` | `setNickname` | да |
+| `POST /auth/device/token` | — замыкание в `api\device_token.go` | **нет** |
 | `POST /auth/register` | `register` | **нет** |
 | `POST /auth/sms/request` | `smsRequest` | **нет** |
 | `POST /auth/sms/verify` | `smsVerify` | **нет** |
+| `POST /calls` | `startCall` | да |
 | `POST /calls/group` | `startGroupCall` | да |
 | `POST /calls/{callID}/answer` | `answerCall` | да |
 | `POST /calls/{callID}/end` | `endCall` | да |
 | `POST /calls/{callID}/join` | `joinCall` | да |
-| `POST /calls` | `startCall` | да |
+| `POST /channels` | `createChannel` | да |
 | `POST /channels/{channelID}/posts` | `postToChannel` | да |
 | `POST /channels/{channelID}/subscribe` | `subscribeChannel` | да |
-| `POST /channels` | `createChannel` | да |
 | `POST /chats/{chatID}/backup` | `chatBackupSave` | да |
 | `POST /chats/{chatID}/read` | `chatRead` | да |
-| `POST /chats/{chatID}/recover/provide` | `chatRecoverProvide` | да |
 | `POST /chats/{chatID}/recover` | `chatRecover` | да |
+| `POST /chats/{chatID}/recover/provide` | `chatRecoverProvide` | да |
 | `POST /chats/{chatID}/typing` | `chatTyping` | да |
-| `POST /groups/{groupID}/keys/recover/provide` | `groupKeyProvide` | да |
-| `POST /groups/{groupID}/keys/recover` | `groupKeyRecover` | да |
-| `POST /groups/{groupID}/keys` | `groupRotate` | да |
-| `POST /groups/{groupID}/members/{userID}/ban` | `banGroupMember` | да |
-| `POST /groups/{groupID}/members` | `addGroupMember` | да |
-| `POST /groups/{groupID}/messages` | `postGroupMessage` | да |
 | `POST /groups` | `createGroup` | да |
+| `POST /groups/{groupID}/join-requests` | `postJoinRequest` | да |
+| `POST /groups/{groupID}/keys` | `groupRotate` | да |
+| `POST /groups/{groupID}/keys/recover` | `groupKeyRecover` | да |
+| `POST /groups/{groupID}/keys/recover/provide` | `groupKeyProvide` | да |
+| `POST /groups/{groupID}/level-requests` | `postLevelRequest` | да |
+| `POST /groups/{groupID}/members` | `addGroupMember` | да |
+| `POST /groups/{groupID}/members/{userID}/ban` | `banGroupMember` | да |
+| `POST /groups/{groupID}/messages` | `postGroupMessage` | да |
 | `POST /link/claim` | `linkClaim` | **нет** |
 | `POST /link/confirm` | `linkConfirm` | да |
 | `POST /link/start` | `linkStart` | **нет** |
-| `POST /livekit/webhook` | `livekitWebhook` | **нет** |
 | `POST /media/complete` | `mediaComplete` | да |
 | `POST /media/init` | `mediaInit` | да |
 | `POST /messages` | `postMessage` | да |
+| `POST /problem-reports` | — замыкание в `api\problems.go` | **нет** |
+| `POST /transfers/accept` | `acceptTransfer` | да |
 | `POST /users/discover` | `discoverContacts` | да |
 | `POST /users/identities` | `resolveIdentities` | да |
-| `POST /users/me/reidentify/challenge` | `reidentifyChallenge` | да |
+| `POST /users/me/feed/items` | `carryToFeed` | да |
+| `POST /users/me/feed/subscribers` | `addFeedSubscriber` | да |
 | `POST /users/me/reidentify` | `reidentify` | да |
+| `POST /users/me/reidentify/challenge` | `reidentifyChallenge` | да |
+| `POST /users/me/virtuals` | `createVirtual` | да |
+| `POST /users/me/virtuals/{userID}/transfer` | `startTransfer` | да |
 | `POST /users/names` | `resolveNames` | да |
+| `POST /voice-rooms` | `createVoiceRoom` | да |
 | `POST /voice-rooms/{roomID}/grant` | `grantSpeaker` | да |
 | `POST /voice-rooms/{roomID}/hand` | `raiseHand` | да |
 | `POST /voice-rooms/{roomID}/join` | `joinVoiceRoom` | да |
 | `POST /voice-rooms/{roomID}/revoke` | `revokeSpeaker` | да |
-| `POST /voice-rooms` | `createVoiceRoom` | да |
-| `PUT /chats/{chatID}/archive` | `setChatArchived` | да |
+| `PUT /chats/{chatID}/archive` | `archiveChat` | да |
 | `PUT /devices/me/platform` | `setMyPlatform` | да |
+| `PUT /groups/{groupID}/audience` | `putGroupAudience` | да |
+| `PUT /groups/{groupID}/level-grants/{userID}` | `putLevelGrant` | да |
 | `PUT /groups/{groupID}/members/{userID}/role` | `setGroupRole` | да |
+| `PUT /groups/{groupID}/members/{userID}/term` | `putMembershipTerm` | да |
+
+```bash
+# пересобрать эту таблицу
+grep -rhoE 'HandleFunc\("[A-Z]+ /api/v1[^"]*"' server/internal/api/*.go | sort -u | wc -l
+```
+
+`/ws` и `/livekit/webhook` живут вне `/api/v1` и в счёт не входят.
