@@ -97,4 +97,71 @@ class DiaryTest {
         assertEquals(diary.dump(), diary.tail().joinToString("\n") { it.line() })
         assertEquals(1, diary.size())
     }
+
+    /** Хранилище на одной строке: ровно то, что делает платформа с файлом. */
+    private fun store(held: Array<String?>) =
+        DiaryStore(load = { held[0] }, save = { held[0] = it })
+
+    @Test
+    fun журнал_переживает_перезапуск() {
+        // Главное здесь. Жалуются после перезапуска, и журнал, начинающийся с этого
+        // запуска, рассказывает про всё, кроме поломки.
+        val held = arrayOf<String?>(null)
+        val first = Diary(now = { now }, store = store(held))
+        first.note(LogCode.NET_ERROR, "вчерашний отказ")
+        first.flush()
+
+        now += 60_000
+        val second = Diary(now = { now }, store = store(held))
+        second.note(LogCode.APP_START, "запустились заново")
+
+        val text = second.dump()
+        assertContains(text, "вчерашний отказ", message = "запись прошлого запуска обязана приехать с диска")
+        assertContains(text, "запустились заново")
+        assertTrue(
+            text.indexOf("вчерашний отказ") < text.indexOf("запустились заново"),
+            "старое обязано идти первым: журнал читают сверху вниз",
+        )
+    }
+
+    @Test
+    fun беда_сбрасывается_сразу() {
+        // После беды процесс вполне может не дожить до сброса пачкой: падение и убийство
+        // системой случаются именно в такие моменты.
+        val held = arrayOf<String?>(null)
+        val diary = Diary(now = { now }, store = store(held))
+        diary.note(LogCode.NET_CALL, "обычный вызов")
+        assertEquals(null, held[0], "ход дела на диск не пишется — это износ памяти телефона")
+
+        diary.trouble(LogCode.QUEUE_STUCK, "очередь не двигается")
+        assertContains(held[0].orEmpty(), "очередь не двигается")
+    }
+
+    @Test
+    fun с_диска_не_берётся_старше_срока() {
+        // Трое суток — решение заказчика. Файл, переживший отпуск, не должен превращать
+        // отчёт в архив.
+        val held = arrayOf<String?>(null)
+        val old = Diary(now = { now }, store = store(held))
+        old.trouble(LogCode.NET_ERROR, "древний отказ")
+
+        now += 4 * Diary.DAY
+        val fresh = Diary(now = { now }, store = store(held))
+        fresh.note(LogCode.APP_START, "новый запуск")
+
+        assertFalse(fresh.dump().contains("древний отказ"), "запись старше срока обязана уйти")
+    }
+
+    @Test
+    fun испорченный_файл_не_ломает_журнал() {
+        // Файл переживает смену версии и обрыв записи. Строка без разбираемого времени —
+        // это либо повреждение, либо чужой формат; доверять ей нечего.
+        val held = arrayOf<String?>("мусор без времени\n\nещё мусор")
+        val diary = Diary(now = { now }, store = store(held))
+        diary.note(LogCode.APP_START, "запустились")
+
+        val text = diary.dump()
+        assertFalse(text.contains("мусор"), "непонятные строки в отчёт не идут")
+        assertContains(text, "запустились")
+    }
 }

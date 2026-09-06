@@ -22,14 +22,35 @@ import kotlinx.datetime.Instant
  */
 class Diary(
     private val now: () -> Long,
-    /** Сколько держим записи. Сутки: отчёт про сегодня, а не про неделю. */
-    private val keepMillis: Long = DAY,
+    /**
+     * Сколько держим записи **на диске**: трое суток (решение заказчика 2026-09-06).
+     *
+     * В отчёт уходит меньше — [reportMillis]: жалуются в день поломки, а трое суток
+     * лежат на случай «началось позавчера».
+     */
+    private val keepMillis: Long = KEEP,
+    /** Сколько журнала прикладывается к отчёту. */
+    private val reportMillis: Long = DAY,
     /** Предел числа записей — защита от разговорчивого цикла. */
     private val maxNotes: Int = MAX_NOTES,
     /** Предел длины одной записи: длинное здесь всегда либо дамп, либо секрет. */
     private val maxLength: Int = MAX_LENGTH,
+    /** Где хранить между запусками. По умолчанию нигде — как было до 2026-09-06. */
+    private val store: DiaryStore = DiaryStore.Forgetful,
 ) {
     private val notes = ArrayDeque<Note>()
+
+    /**
+     * Строки прошлых запусков, прочитанные с диска один раз при создании.
+     *
+     * Текстом, а не записями: разбирать их незачем — читает их человек, а фильтрация по
+     * сроку смотрит только на время в начале строки.
+     */
+    private val carried: MutableList<String> =
+        carriedLines(store.load().orEmpty(), now() - keepMillis, maxNotes).toMutableList()
+
+    /** Сколько записей появилось с последнего сброса — по ним решается, когда писать. */
+    private var sinceFlush = 0
 
     /**
      * Записать.
@@ -59,7 +80,11 @@ class Diary(
         synchronizedNotes {
             notes.addLast(note)
             while (notes.size > maxNotes) notes.removeFirst()
+            sinceFlush++
         }
+        // Беда сбрасывается сразу: после неё процесс вполне может не дожить до следующей
+        // пачки — падение и убийство системой случаются именно в такие моменты.
+        if (level == Level.Trouble || sinceFlush >= FLUSH_EVERY) flush()
     }
 
     /** То же, но для беды: отдельный уровень, чтобы её было видно в отчёте. */
@@ -79,9 +104,40 @@ class Diary(
      * Журнал текстом — ровно то, что человек увидит по кнопке «Смотреть» и что уйдёт на
      * сервер. Одно и то же: показывать одно, а отправлять другое нельзя.
      */
-    fun dump(): String = tail().joinToString("\n") { it.line() }
+    fun dump(): String {
+        // Сначала прошлые запуски, потом текущий: жалоба «сломалось вчера» иначе пришла
+        // бы с журналом, начинающимся сегодня.
+        val past = carriedLines(carried.joinToString("\n"), now() - reportMillis, maxNotes)
+        return (past + tail().map { it.line() }).joinToString("\n")
+    }
 
-    fun clear() = synchronizedNotes { notes.clear() }
+    /**
+     * Сбросить на диск.
+     *
+     * **Пачками, а не на каждую запись** (решение заказчика 2026-09-06): запись на диск на
+     * каждый сетевой вызов — это лишний расход батареи и износ памяти телефона. Поводов
+     * три: беда, каждые [FLUSH_EVERY] записей и по требованию — уход в фон, составление
+     * отчёта, закрытие приложения.
+     */
+    fun flush() {
+        val text = synchronizedNotes {
+            sinceFlush = 0
+            carriedLines(
+                (carried + notes.map { it.line() }).joinToString("\n"),
+                now() - keepMillis,
+                maxNotes,
+            ).joinToString("\n")
+        }
+        // Ошибка записи гасится: журнал — не то, ради чего стоит ронять приложение.
+        // Потерянный сброс означает лишь, что часть строк не переживёт перезапуск.
+        runCatching { store.save(text) }
+    }
+
+    fun clear() = synchronizedNotes {
+        notes.clear()
+        carried.clear()
+        runCatching { store.save("") }
+    }
 
     /** Сколько записей сейчас — для экрана «Что приложится». */
     fun size(): Int = tail().size
@@ -92,7 +148,15 @@ class Diary(
         const val DAY: Long = 24L * 60 * 60 * 1000
 
         /** Хранение — трое суток (решение заказчика 2026-09-06); в отчёт уходят сутки. */
-        const val KEEP_DAYS: Long = 3 * DAY
+        const val KEEP: Long = 3 * DAY
+
+        /**
+         * Через сколько записей сбрасывать на диск.
+         *
+         * Полсотни: на глаз это несколько минут обычной работы. Реже — теряется больше при
+         * внезапном убийстве; чаще — запись на диск начинает стоить заметно.
+         */
+        const val FLUSH_EVERY: Int = 50
         const val MAX_NOTES: Int = 4000
         const val MAX_LENGTH: Int = 300
 

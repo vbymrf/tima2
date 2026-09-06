@@ -9,6 +9,8 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import io.tima.core.database.desktopDatabase
+import io.tima.core.diag.Diary
+import io.tima.core.diag.DiaryStore
 import io.tima.core.diag.Journal
 import io.tima.feature.shell.ProblemFacts
 import io.tima.shared.Build
@@ -31,6 +33,12 @@ import java.io.File
  * Файл этим и ценен: он короткий. Стало длинно — значит в него протекло общее.
  */
 fun main() {
+    // Журнал поднимается первым — раньше окна и раньше обработчика падений. Всё, что
+    // случится дальше, обязано в него попасть, а прошлые запуски — приехать с диска:
+    // жалуются обычно после перезапуска, и журнал, начинающийся с этого запуска,
+    // рассказывает про всё, кроме поломки.
+    Journal.replace(Diary(now = { System.currentTimeMillis() }, store = diaryStore()))
+
     // Падения ловятся ДО того, как поднято окно: упасть можно и на сборке окружения, и
     // такой отчёт ценнее прочих — человек в этот момент видит только исчезнувшее окно
     // (ПЛАН-ОТЛАДКИ.md, Б7).
@@ -70,7 +78,9 @@ private fun window(store: ReportsStore) = application {
     )
 
     Window(
-        onCloseRequest = ::exitApplication,
+        // Закрытие — последний надёжный повод сбросить журнал: дальше процесса не будет,
+        // а записи, не дожившие до сброса пачкой, пропали бы вместе с ним.
+        onCloseRequest = { Journal.diary.flush(); exitApplication() },
         state = windowState,
         title = "TIMA",
     ) {
@@ -94,7 +104,7 @@ private fun window(store: ReportsStore) = application {
             // Приложение при этом закрывается — MSI не заменит файлы работающей
             // программы, и Windows вместо установки предложила бы перезагрузку.
             installer = DesktopInstaller(),
-            onLeaving = ::exitApplication,
+            onLeaving = { Journal.diary.flush(); exitApplication() },
             // Версия порождается сборкой из gradle.properties — одна на Android и ПК.
             // До 2026-08-26 десктоп её не знал и показывал «Установлена —»: вопрос
             // «какая версия стоит» задают, когда что-то пошло не так, и остаться без
@@ -113,6 +123,29 @@ private fun window(store: ReportsStore) = application {
 private fun reportsStore(): ReportsStore {
     val file = File(dataCatalog(), REPORTS_NAME)
     return ReportsStore(
+        load = { runCatching { file.readText() }.getOrNull() },
+        save = { text ->
+            runCatching {
+                file.parentFile?.mkdirs()
+                file.writeText(text)
+            }
+        },
+    )
+}
+
+/**
+ * Где ПК держит журнал между запусками: файл рядом с базой.
+ *
+ * Обычный текстовый файл, а не база и не сжатый формат: его открывают, когда всё
+ * остальное уже не работает, и открывать его должно быть нечем — блокнотом.
+ *
+ * Ошибки чтения и записи гасятся: журнал — не то, ради чего стоит не пускать человека в
+ * переписку. Не прочиталось — начнём с пустого; не записалось — журнал доживёт до
+ * перезапуска и не дальше.
+ */
+private fun diaryStore(): DiaryStore {
+    val file = File(dataCatalog(), DIARY_NAME)
+    return DiaryStore(
         load = { runCatching { file.readText() }.getOrNull() },
         save = { text ->
             runCatching {
@@ -159,3 +192,4 @@ private fun dataCatalog(): File {
 private const val DATABASE_NAME = "tima.db"
 private const val APPEARANCE_NAME = "оформление.txt"
 private const val REPORTS_NAME = "отчёты.json"
+private const val DIARY_NAME = "журнал.txt"

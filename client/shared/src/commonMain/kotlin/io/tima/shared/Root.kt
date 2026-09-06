@@ -1427,7 +1427,10 @@ private fun Problem(
 ) {
     val store = remember {
         ProblemStore(
-            log = { Journal.diary.dump() },
+            // Сброс перед выгрузкой: отчёт составляют ровно тогда, когда приложение
+            // ведёт себя плохо, и следующего повода записать на диск может не быть —
+            // человек закроет его силой, а система добьёт процесс.
+            log = { Journal.diary.flush(); Journal.diary.dump() },
             sender = { report ->
                 val result = reporting.send(
                     ProblemPost(

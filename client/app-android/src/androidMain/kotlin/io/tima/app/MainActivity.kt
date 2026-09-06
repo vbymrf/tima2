@@ -10,6 +10,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import io.tima.core.database.androidDatabase
+import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
 import io.tima.feature.shell.ProblemFacts
 import io.tima.core.ui.TimaTheme
 import io.tima.shared.Entry
@@ -70,6 +72,33 @@ class MainActivity : ComponentActivity() {
             save = { prefs.edit().putString(KEY_APPEARANCE, it).apply() },
         )
     }
+
+    /**
+     * Ушли в фон — и это единственный надёжный момент сбросить журнал на диск.
+     *
+     * Дальше система вправе убить процесс без предупреждения, и `onDestroy` при этом не
+     * зовётся. Записи, не дожившие до сброса пачкой, пропали бы вместе с процессом —
+     * именно те, которые объясняют, чем кончился сеанс.
+     *
+     * Строка в журнале нужна не меньше сброса: без неё тишина фона неотличима от
+     * зависания, а «приложение висело полчаса» — частая формулировка жалобы.
+     */
+    override fun onStop() {
+        wasBackground = true
+        Journal.note(LogCode.APP_BACKGROUND, "ушли в фон")
+        Journal.diary.flush()
+        super.onStop()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Только после настоящего ухода в фон: первый `onStart` идёт сразу за запуском, и
+        // «вернулись» рядом с `APP-START` было бы неправдой и лишней строкой.
+        if (wasBackground) Journal.note(LogCode.APP_FOREGROUND, "вернулись из фона")
+    }
+
+    /** Был ли уже уход в фон — см. [onStart]. */
+    private var wasBackground = false
 
     override fun onDestroy() {
         // Удержанная активность — это утечка целого экрана. Отдаём именно себя:
