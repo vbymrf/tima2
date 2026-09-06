@@ -40,17 +40,30 @@ fun Button(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     kind: ButtonKind = ButtonKind.Action,
+    /**
+     * Нажимается ли. `false` — **и выглядит иначе, и не срабатывает**.
+     *
+     * Второе важнее первого: кнопка, гасящая нажатие молча, читается как поломка
+     * приложения. До 2026-09-06 «Отправить» на пустом отчёте была именно такой — тихой
+     * на вид, но кликабельной, и человек жал её, не получая в ответ ничего.
+     */
+    enabled: Boolean = true,
 ) {
     val colors = Tima.colors
-    val background = when (kind) {
-        ButtonKind.Action -> colors.navigation
-        ButtonKind.Quiet -> colors.softAccent
-        // Опасное — БЕЗ ЦВЕТА: красного в палитре нет вовсе. Остаются слово,
-        // незаполненная кнопка и последнее место в списке.
-        ButtonKind.Dangerous -> Color.Transparent
+    val background = when {
+        !enabled -> colors.quiet
+        kind == ButtonKind.Action -> colors.navigation
+        kind == ButtonKind.Quiet -> colors.softAccent
+        // Сделано: заливка тревоги. Не «опасно» и не «ошибка», а наоборот — «получилось,
+        // повторять не надо». Кнопка перестаёт звать и начинает отчитываться.
+        kind == ButtonKind.Done -> colors.alarm
+        // Опасное — БЕЗ ЦВЕТА, и это отдельное решение макета, оставшееся в силе:
+        // отличают его слово, незаполненная кнопка и последнее место в списке.
+        else -> Color.Transparent
     }
-    val colorLabel = when (kind) {
-        ButtonKind.Action -> colors.onAccent
+    val colorLabel = when {
+        !enabled -> colors.text3
+        kind == ButtonKind.Action || kind == ButtonKind.Done -> colors.onAccent
         else -> colors.text
     }
 
@@ -65,7 +78,7 @@ fun Button(
                     Modifier
                 },
             )
-            .clickable(onClick = onClick)
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 20.dp, vertical = TimaSpacing.about2),
         contentAlignment = Alignment.Center,
     ) {
@@ -74,12 +87,14 @@ fun Button(
 }
 
 /**
- * Виды кнопок из макета.
+ * Виды кнопок.
  *
- * Опасного действия **красным цветом не бывает**: красного в палитре нет. Отличается
- * оно словом, незаполненной кнопкой и местом — последним в списке.
+ * **Опасного действия красным цветом не бывает** — решение макета, и оно осталось в силе:
+ * отличается оно словом, незаполненной кнопкой и последним местом в списке. Красный
+ * достался [ButtonKind.Done] — «сделано, повторять не надо», — и это разные вещи: одна
+ * зовёт осторожно, вторая уже не зовёт вовсе.
  */
-enum class ButtonKind { Action, Quiet, Dangerous }
+enum class ButtonKind { Action, Quiet, Dangerous, Done }
 
 /**
  * Кнопка-иконка: круг 36 px. `.икона`.

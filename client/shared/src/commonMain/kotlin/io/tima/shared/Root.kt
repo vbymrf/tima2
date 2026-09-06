@@ -118,6 +118,7 @@ import io.tima.feature.shell.Snapshot
 import io.tima.feature.shell.SendOutcome
 import io.tima.feature.shell.UpdateGate
 import io.tima.feature.shell.UpdateMemory
+import io.tima.feature.shell.UpdateNews
 import io.tima.feature.shell.UpdateNewsWindow
 import io.tima.feature.shell.UpdateInstaller
 import io.tima.feature.shell.UpdateState
@@ -803,6 +804,24 @@ private fun App(
     // (решение заказчика 2026-09-06). После порога, а не до: там работать нельзя вовсе,
     // и новость об успешной установке поверх этого была бы издевательством.
     val news = updateState.news
+    // Факт установки пишется ЗДЕСЬ, а не в UpdateStore: оболочка про журнал не знает и
+    // знать не должна — она зависит только от core-ui. Здесь же сходятся оба.
+    LaunchedEffect(news) {
+        when (news) {
+            is UpdateNews.Installed -> Journal.note(
+                LogCode.UPD_INSTALLED,
+                "обновление встало",
+                "версия" to news.versionName,
+            )
+            is UpdateNews.Broken -> Journal.trouble(
+                LogCode.UPD_BROKEN,
+                "установку начали и не довели",
+                "хотели" to news.wanted,
+                "осталось" to news.current,
+            )
+            else -> Unit
+        }
+    }
     if (news != null) {
         UpdateNewsWindow(
             state = updateState,

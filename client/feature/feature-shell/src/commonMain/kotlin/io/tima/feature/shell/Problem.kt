@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import io.tima.core.ui.Alarm
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Caption
@@ -170,7 +171,28 @@ data class ProblemState(
     val sending: Boolean = false,
     val outcome: SendOutcome? = null,
 ) {
-    val canSend: Boolean get() = text.isNotBlank() && !sending
+    val canSend: Boolean get() = text.isNotBlank() && !sending && !delivered
+
+    /**
+     * Отчёт уже принят — сервером или очередью. Повторять нечего.
+     *
+     * **Держится до повторного входа на экран** (решение заказчика 2026-09-06). Пока
+     * состояние сбрасывалось на первом же нажатии клавиши, человек не понимал, ушло ли
+     * что-нибудь, и жал ещё раз: 2026-09-06 в базу так легли два одинаковых отчёта с
+     * одного телефона — `K2PD` и `NAWR`, оба по 78 697 знаков.
+     *
+     * Сброс — выход и повторный вход: экран пересоздаёт своё состояние, и это ровно то
+     * действие, которым человек говорит «хочу написать ещё раз».
+     */
+    val delivered: Boolean get() = outcome is SendOutcome.Sent || outcome == SendOutcome.Queued
+
+    /** Чего не хватает для отправки. `null` — всё на месте. */
+    val missing: String?
+        get() = when {
+            delivered -> null
+            text.isBlank() -> "Напишите, что случилось — без этого отчёт не отправить."
+            else -> null
+        }
 }
 
 /**
@@ -195,7 +217,10 @@ class ProblemStore(
     val state: StateFlow<ProblemState> = _state.asStateFlow()
 
     fun changedText(line: String) {
-        _state.value = _state.value.copy(text = line, outcome = null)
+        // Исход НЕ стирается: отправленный отчёт остаётся отправленным, что бы человек ни
+        // печатал дальше. Стирать его здесь значило бы гасить единственный признак того,
+        // что отчёт ушёл, — см. [ProblemState.delivered].
+        _state.value = _state.value.copy(text = line)
     }
 
     fun chose(kind: ProblemKind) {
@@ -292,14 +317,27 @@ fun ProblemScreen(
 
     state.outcome?.let { Result(it) }
 
+    // Причина неактивности — НАД кнопкой и обычным текстом, а не мелкой пометкой под ней.
+    // Человек читает сверху вниз и до кнопки; сказанное после неё он уже не ищет.
+    state.missing?.let { Alarm(it) }
+
     Button(
-        label = if (state.sending) "Отправляем…" else "Отправить",
+        label = when {
+            state.delivered -> "Отчёт отправлен"
+            state.sending -> "Отправляем…"
+            else -> "Отправить"
+        },
         onClick = onSend,
-        kind = if (state.canSend) ButtonKind.Action else ButtonKind.Quiet,
+        // Красная кнопка «Отчёт отправлен» — не кнопка больше, а отметка о сделанном
+        // (решение заказчика 2026-09-06). Она держится до повторного входа на экран.
+        kind = if (state.delivered) ButtonKind.Done else ButtonKind.Action,
+        enabled = state.canSend,
         modifier = Modifier.fillMaxWidth(),
     )
-    if (state.text.isBlank()) {
-        Tertiary("Без описания отчёт бесполезен: журнал покажет, что происходило, но не то, чего вы ждали.")
+    if (state.delivered) {
+        Secondary("Чтобы написать ещё раз, выйдите и снова откройте «Сообщить о проблеме».")
+    } else if (state.text.isBlank()) {
+        Tertiary("Журнал покажет, что происходило, но не то, чего вы ждали, — это можете сказать только вы.")
     }
 }
 
@@ -308,8 +346,12 @@ fun ProblemScreen(
 private fun Result(outcome: SendOutcome) {
     when (outcome) {
         is SendOutcome.Sent -> {
-            Caption("Отправлено", fontSize = TimaType.sz4, weight = FontWeight.Bold)
-            Secondary("Отчёт № " + outcome.number + " — назовите его, если будете писать нам ещё раз.")
+            Secondary("Отчёт получен, номер:")
+            // Крупно, потому что это единственное, что человек отсюда унесёт: номер он
+            // диктует в разговоре, и мелким его переписывают с ошибкой (решение
+            // заказчика 2026-09-06).
+            Caption(outcome.number, fontSize = TimaType.sz1, weight = FontWeight.ExtraBold)
+            Secondary("Назовите его, если будете писать нам ещё раз.")
         }
 
         SendOutcome.Queued -> {

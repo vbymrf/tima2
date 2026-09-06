@@ -138,4 +138,66 @@ class ProblemStoreTest {
         // Номера телефона в отчёте нет: он есть у сервера по userId (решение заказчика).
         assertFalse(lines.any { it.contains("+7") })
     }
+
+    // ── Что видно про отправку (решение заказчика 2026-09-06) ─────────────────
+
+    @Test
+    fun пустому_отчёту_сказано_чего_не_хватает() {
+        // Кнопка, которая просто не работает, читается как поломка приложения.
+        val store = store(kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined))
+        val state = store.state.value
+
+        assertFalse(state.canSend)
+        assertEquals("Напишите, что случилось — без этого отчёт не отправить.", state.missing)
+    }
+
+    @Test
+    fun с_текстом_претензий_нет() {
+        val store = store(kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined))
+        store.changedText("не уходят сообщения")
+
+        assertTrue(store.state.value.canSend)
+        assertEquals(null, store.state.value.missing)
+    }
+
+    @Test
+    fun отправленный_отчёт_остаётся_отправленным() = runTest {
+        // 2026-09-06 в базу легли два одинаковых отчёта с одного телефона — K2PD и NAWR,
+        // оба по 78 697 знаков: человек не понял, ушло ли, и нажал ещё раз.
+        val store = store(backgroundScope, sender = Sender(SendOutcome.Sent("A7K3")))
+        store.changedText("что-то не так")
+        store.send()
+        store.state.first { it.outcome != null }
+
+        assertTrue(store.state.value.delivered)
+        assertFalse(store.state.value.canSend, "второй отчёт уходит только после повторного входа")
+
+        // Правка текста исход НЕ стирает: иначе исчезнет единственный признак отправки.
+        store.changedText("что-то не так, дописал")
+        assertTrue(store.state.value.delivered)
+        assertFalse(store.state.value.canSend)
+    }
+
+    @Test
+    fun отчёт_в_очереди_тоже_считается_доставленным() = runTest {
+        // Для человека разницы нет: жалоба принята и уйдёт сама. Повторять незачем.
+        val store = store(backgroundScope, sender = Sender(SendOutcome.Queued))
+        store.changedText("нет сети")
+        store.send()
+        store.state.first { it.outcome != null }
+
+        assertTrue(store.state.value.delivered)
+    }
+
+    @Test
+    fun отказ_сервера_позволяет_повторить() = runTest {
+        // Отказ — не доставка: здесь повтор как раз имеет смысл.
+        val store = store(backgroundScope, sender = Sender(SendOutcome.Refused("сервер не принял")))
+        store.changedText("что-то не так")
+        store.send()
+        store.state.first { it.outcome != null }
+
+        assertFalse(store.state.value.delivered)
+        assertTrue(store.state.value.canSend)
+    }
 }
