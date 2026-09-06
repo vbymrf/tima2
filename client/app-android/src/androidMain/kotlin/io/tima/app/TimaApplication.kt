@@ -4,7 +4,8 @@ import android.app.Application
 import android.os.Build
 import io.tima.core.contacts.AndroidContacts
 import io.tima.core.diag.Diary
-import io.tima.core.diag.DiaryStore
+import io.tima.core.diag.DiaryFiles
+import io.tima.core.diag.DiaryPolicy
 import io.tima.core.diag.Journal
 import io.tima.core.secrets.AndroidSecrets
 import io.tima.shared.ReportsStore
@@ -30,7 +31,16 @@ class TimaApplication : Application() {
         // должно быть видно, а прошлые запуски обязаны приехать с диска. На телефоне это
         // важнее, чем на ПК: систему никто не спрашивает, когда она убивает процесс в
         // фоне, и журнал в памяти пропадал бы вместе с ним по нескольку раз в день.
-        Journal.replace(Diary(now = { System.currentTimeMillis() }, store = androidDiaryStore(this)))
+        // Старый журнал одним файлом больше не читается: с 2026-09-06 дни лежат порознь.
+        // Разбирать его по дням незачем — решение заказчика.
+        runCatching { java.io.File(filesDir, "журнал.txt").delete() }
+        Journal.replace(
+            Diary(
+                now = { System.currentTimeMillis() },
+                files = androidDiaryFiles(this),
+                policy = DiaryPolicy.read(androidDiaryPolicy(this).load()),
+            ),
+        )
 
         // До первого обращения к хранилищу — то есть до всего остального.
         AndroidSecrets.install(this)
@@ -64,28 +74,48 @@ class TimaApplication : Application() {
 }
 
 /**
+ * Где телефон держит журнал: каталог в песочнице приложения, **файл на день**.
+ *
+ * Файлы, а не `SharedPreferences`: там строка на сотни килобайт читается и пишется целиком
+ * в основном потоке, и это заметно. Каталог выбирает Android — он же стирает его при
+ * удалении приложения, и это правильно: журнал удалённого приложения никому не нужен.
+ */
+internal fun androidDiaryFiles(application: Application): DiaryFiles {
+    val catalog = java.io.File(application.filesDir, "журнал")
+    fun day(name: String) = java.io.File(catalog, name + ".txt")
+    return DiaryFiles(
+        days = {
+            catalog.listFiles()
+                ?.filter { it.isFile && it.name.endsWith(".txt") }
+                ?.map { it.name.removeSuffix(".txt") }
+                .orEmpty()
+        },
+        append = { name, text ->
+            catalog.mkdirs()
+            day(name).appendText(text)
+        },
+        read = { name -> runCatching { day(name).readText() }.getOrNull() },
+        remove = { name -> day(name).delete() },
+        size = { name -> day(name).length() },
+    )
+}
+
+/** Где телефон держит выбранный срок хранения журнала: обычные настройки приложения. */
+internal fun androidDiaryPolicy(application: Application): io.tima.shared.AppearanceStore {
+    val prefs = application.getSharedPreferences("журнал", android.content.Context.MODE_PRIVATE)
+    return io.tima.shared.AppearanceStore(
+        load = { prefs.getString("срок", null) },
+        save = { text -> prefs.edit().putString("срок", text).apply() },
+    )
+}
+
+/**
  * Где телефон держит неотправленные отчёты.
  *
  * `SharedPreferences`, а не база: отчёт нужен и тогда, когда база не открылась — а это как
  * раз тот случай, ради которого всё и делается. Стираются они вместе с приложением, и это
  * правильно: отчёт от удалённого приложения отправлять некому и незачем.
  */
-/**
- * Где телефон держит журнал между запусками: файл в песочнице приложения.
- *
- * Файл, а не `SharedPreferences`: там строка на несколько сотен килобайт читается и
- * пишется целиком в основном потоке, и это заметно. Каталог выбирает Android — он же
- * стирает его при удалении приложения, и это правильно: журнал удалённого приложения
- * никому не нужен.
- */
-internal fun androidDiaryStore(application: Application): DiaryStore {
-    val file = java.io.File(application.filesDir, "журнал.txt")
-    return DiaryStore(
-        load = { runCatching { file.readText() }.getOrNull() },
-        save = { text -> runCatching { file.writeText(text) } },
-    )
-}
-
 internal fun androidReportsStore(application: Application): ReportsStore {
     val prefs = application.getSharedPreferences("отчёты", android.content.Context.MODE_PRIVATE)
     return ReportsStore(

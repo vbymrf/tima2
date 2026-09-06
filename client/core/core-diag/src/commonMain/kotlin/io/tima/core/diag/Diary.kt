@@ -12,45 +12,51 @@ import kotlinx.datetime.Instant
  * `java.sql`. Свой буфер работает одинаково на обеих платформах и переживает то, что
  * вывод некуда печатать.
  *
- * **Границы две, и обе нужны** (решение заказчика 2026-09-06). По времени — чтобы отчёт
- * рассказывал про сегодняшнюю поломку, а не про прошлую неделю. По числу записей — чтобы
- * одна разговорчивая ошибка в цикле не вытеснила всё, что было до неё, и чтобы отчёт не
- * рос неограниченно.
+ * **В памяти живёт только несброшенное.** Прошлые дни лежат на диске файлами и читаются
+ * лишь тогда, когда составляется отчёт. До 2026-09-06 журнал целиком читался в память при
+ * каждом запуске — на трёх сутках это было незаметно, на месяце стало бы дорого.
  *
  * **Часы приходят снаружи.** Журнал, который сам зовёт «сейчас», нельзя проверить на
  * вытеснение по времени, не прождав сутки.
  */
 class Diary(
     private val now: () -> Long,
-    /**
-     * Сколько держим записи **на диске**: трое суток (решение заказчика 2026-09-06).
-     *
-     * В отчёт уходит меньше — [reportMillis]: жалуются в день поломки, а трое суток
-     * лежат на случай «началось позавчера».
-     */
-    private val keepMillis: Long = KEEP,
-    /** Сколько журнала прикладывается к отчёту. */
+    /** Сколько журнала прикладывается к отчёту. Сутки — и это держится твёрдо. */
     private val reportMillis: Long = DAY,
-    /** Предел числа записей — защита от разговорчивого цикла. */
+    /** Предел записей В ПАМЯТИ — защита от разговорчивого цикла между сбросами. */
     private val maxNotes: Int = MAX_NOTES,
     /** Предел длины одной записи: длинное здесь всегда либо дамп, либо секрет. */
     private val maxLength: Int = MAX_LENGTH,
-    /** Где хранить между запусками. По умолчанию нигде — как было до 2026-09-06. */
-    private val store: DiaryStore = DiaryStore.Forgetful,
+    /** Где лежат дни. По умолчанию нигде — журнал живёт до перезапуска. */
+    private val files: DiaryFiles = DiaryFiles.Forgetful,
+    policy: DiaryPolicy = DiaryPolicy(),
 ) {
+    /**
+     * Сколько держим — меняется из настроек на живом журнале.
+     *
+     * `var`, а не параметр конструктора: человек правит срок в «Памяти и трафике», и
+     * пересоздавать журнал ради этого значило бы потерять несброшенные записи.
+     */
+    var policy: DiaryPolicy = policy
+        set(value) {
+            field = value
+            sweep()
+        }
+
+    /** Что видно на экране «Что приложится» и что уйдёт в отчёт из текущего запуска. */
     private val notes = ArrayDeque<Note>()
 
-    /**
-     * Строки прошлых запусков, прочитанные с диска один раз при создании.
-     *
-     * Текстом, а не записями: разбирать их незачем — читает их человек, а фильтрация по
-     * сроку смотрит только на время в начале строки.
-     */
-    private val carried: MutableList<String> =
-        carriedLines(store.load().orEmpty(), now() - keepMillis, maxNotes).toMutableList()
+    /** Что ещё не дописано на диск. Пишется в конец файла дня и очищается. */
+    private val pending = ArrayList<Note>()
 
-    /** Сколько записей появилось с последнего сброса — по ним решается, когда писать. */
-    private var sinceFlush = 0
+    /** День, в который сбрасывали в прошлый раз, — по нему видно, что наступил новый. */
+    private var lastDay: String = dayOf(now())
+
+    init {
+        // Уборка при запуске, а не по расписанию: другого надёжного повода нет — фоновой
+        // работы у приложения пока не бывает вовсе.
+        sweep()
+    }
 
     /**
      * Записать.
@@ -80,63 +86,118 @@ class Diary(
         synchronizedNotes {
             notes.addLast(note)
             while (notes.size > maxNotes) notes.removeFirst()
-            sinceFlush++
+            pending.add(note)
         }
         // Беда сбрасывается сразу: после неё процесс вполне может не дожить до следующей
         // пачки — падение и убийство системой случаются именно в такие моменты.
-        if (level == Level.Trouble || sinceFlush >= FLUSH_EVERY) flush()
+        if (level == Level.Trouble || pending.size >= FLUSH_EVERY) flush()
     }
 
     /** То же, но для беды: отдельный уровень, чтобы её было видно в отчёте. */
     fun trouble(code: String, text: String = "", vararg details: Pair<String, Any?>) =
         note(code, text, *details, level = Level.Trouble)
 
-    /** Что уйдёт в отчёт: всё, что уложилось в обе границы, от старого к новому. */
-    fun tail(): List<Note> {
-        val edge = now() - keepMillis
-        return synchronizedNotes {
-            while (notes.isNotEmpty() && notes.first().atMillis < edge) notes.removeFirst()
-            notes.toList()
-        }
-    }
+    /** Записи текущего запуска, от старого к новому. */
+    fun tail(): List<Note> = synchronizedNotes { notes.toList() }
 
     /**
      * Журнал текстом — ровно то, что человек увидит по кнопке «Смотреть» и что уйдёт на
      * сервер. Одно и то же: показывать одно, а отправлять другое нельзя.
+     *
+     * Читает с диска столько дней, сколько нужно для [reportMillis], и отбрасывает в них
+     * всё, что старше. Прошлых дней читается ровно два — сегодня и вчера: жалоба «вчера
+     * не приходили сообщения» иначе пришла бы с журналом, начинающимся сегодня.
      */
     fun dump(): String {
-        // Сначала прошлые запуски, потом текущий: жалоба «сломалось вчера» иначе пришла
-        // бы с журналом, начинающимся сегодня.
-        val past = carriedLines(carried.joinToString("\n"), now() - reportMillis, maxNotes)
-        return (past + tail().map { it.line() }).joinToString("\n")
+        flush()
+        val since = now() - reportMillis
+        val wanted = listOf(dayOf(since), dayOf(now())).distinct()
+        val fromDisk = wanted
+            .mapNotNull { day -> runCatching { files.read(day) }.getOrNull() }
+            .joinToString("\n")
+        val onDisk = linesSince(fromDisk, since, MAX_REPORT_LINES)
+        val inMemory = synchronizedNotes { notes.filter { it.atMillis >= since }.map { it.line() } }
+        // Диск и память складываются, а не заменяют друг друга. Память — это текущий
+        // запуск, диск — прошлые дни плюс уже сброшенная часть текущего; их пересечение
+        // убирается по совпадению строки целиком (время там с миллисекундами).
+        //
+        // Без сложения журнал оказался бы пустым на платформе, которая хранить ещё не
+        // умеет, — и отчёт о проблеме приходил бы пустым именно оттуда, откуда он нужнее
+        // всего. Сортировать при этом нечего: обе части идут по времени, а хвост памяти
+        // всегда новее всего, что лежит на диске.
+        val kept = LinkedHashSet<String>(onDisk.size + inMemory.size)
+        kept.addAll(onDisk)
+        kept.addAll(inMemory)
+        return kept.joinToString("\n")
     }
 
     /**
-     * Сбросить на диск.
+     * Сбросить на диск — дописать несброшенное в файл сегодняшнего дня.
      *
      * **Пачками, а не на каждую запись** (решение заказчика 2026-09-06): запись на диск на
      * каждый сетевой вызов — это лишний расход батареи и износ памяти телефона. Поводов
-     * три: беда, каждые [FLUSH_EVERY] записей и по требованию — уход в фон, составление
-     * отчёта, закрытие приложения.
+     * четыре: беда, каждые [FLUSH_EVERY] записей, уход в фон и составление отчёта.
      */
     fun flush() {
+        val today = dayOf(now())
         val text = synchronizedNotes {
-            sinceFlush = 0
-            carriedLines(
-                (carried + notes.map { it.line() }).joinToString("\n"),
-                now() - keepMillis,
-                maxNotes,
-            ).joinToString("\n")
+            if (pending.isEmpty()) return@synchronizedNotes ""
+            val block = pending.joinToString("") { it.line() + "\n" }
+            pending.clear()
+            block
         }
-        // Ошибка записи гасится: журнал — не то, ради чего стоит ронять приложение.
-        // Потерянный сброс означает лишь, что часть строк не переживёт перезапуск.
-        runCatching { store.save(text) }
+        if (text.isNotEmpty()) {
+            // Ошибка записи гасится: журнал — не то, ради чего стоит ронять приложение.
+            // Потерянный сброс означает лишь, что часть строк не переживёт перезапуск.
+            runCatching { files.append(today, text) }
+        }
+        // Новый день — повод убраться: старший файл мог выйти за срок именно сейчас.
+        if (today != lastDay) {
+            lastDay = today
+            sweep()
+        }
     }
 
-    fun clear() = synchronizedNotes {
-        notes.clear()
-        carried.clear()
-        runCatching { store.save("") }
+    /**
+     * Убрать лишнее: сначала по сроку, потом по объёму.
+     *
+     * Порядок именно такой. Срок — это обещание человеку («держим месяц»), объём —
+     * страховка от одного разговорчивого дня. Сначала исполняем обещание, потом смотрим,
+     * не осталось ли всё равно слишком много.
+     */
+    fun sweep() {
+        runCatching {
+            val edge = dayOf(now() - policy.days.toLong() * DAY)
+            val days = files.days().sorted()
+            val kept = ArrayList<String>()
+            for (day in days) {
+                // Сравнение строк, а не дат: `2026-09-06` в лексикографическом порядке
+                // совпадает с хронологическим — на то и выбран этот вид записи.
+                if (day < edge) files.remove(day) else kept.add(day)
+            }
+            var total = kept.sumOf { files.size(it) }
+            // С самого старого: свежее нужнее. Последний день не трогаем никогда — иначе
+            // на устройстве с одним огромным днём журнал исчезал бы целиком.
+            var index = 0
+            while (total > policy.bytes && index < kept.size - 1) {
+                val day = kept[index]
+                total -= files.size(day)
+                files.remove(day)
+                index++
+            }
+        }
+    }
+
+    /** Сколько всего занимают дни на диске — для экрана «Память и трафик». */
+    fun occupied(): Long = runCatching { files.days().sumOf { files.size(it) } }.getOrDefault(0)
+
+    /** Стереть журнал целиком: и память, и диск. Кнопка «Очистить сейчас». */
+    fun clear() {
+        synchronizedNotes {
+            notes.clear()
+            pending.clear()
+        }
+        runCatching { files.days().forEach { files.remove(it) } }
     }
 
     /** Сколько записей сейчас — для экрана «Что приложится». */
@@ -147,9 +208,6 @@ class Diary(
     companion object {
         const val DAY: Long = 24L * 60 * 60 * 1000
 
-        /** Хранение — трое суток (решение заказчика 2026-09-06); в отчёт уходят сутки. */
-        const val KEEP: Long = 3 * DAY
-
         /**
          * Через сколько записей сбрасывать на диск.
          *
@@ -159,6 +217,15 @@ class Diary(
         const val FLUSH_EVERY: Int = 50
         const val MAX_NOTES: Int = 4000
         const val MAX_LENGTH: Int = 300
+
+        /**
+         * Предел строк в отчёте.
+         *
+         * Держится отдельно от предела в памяти: журнал на диске теперь месячный, а отчёт
+         * обязан оставаться отправляемым. Xiaomi 2026-09-06 прислал 78 697 знаков за одни
+         * сутки — этого достаточно для разбора и уже много для одного письма.
+         */
+        const val MAX_REPORT_LINES: Int = 4000
 
         /** Предел значения в хвосте: там числа и пути, длинному там взяться неоткуда. */
         const val DETAIL_LENGTH: Int = 120

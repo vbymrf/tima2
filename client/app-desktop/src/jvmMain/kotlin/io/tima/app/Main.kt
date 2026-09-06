@@ -10,7 +10,8 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import io.tima.core.database.desktopDatabase
 import io.tima.core.diag.Diary
-import io.tima.core.diag.DiaryStore
+import io.tima.core.diag.DiaryFiles
+import io.tima.core.diag.DiaryPolicy
 import io.tima.core.diag.Journal
 import io.tima.feature.shell.ProblemFacts
 import io.tima.feature.shell.UpdateMemory
@@ -38,7 +39,16 @@ fun main() {
     // случится дальше, обязано в него попасть, а прошлые запуски — приехать с диска:
     // жалуются обычно после перезапуска, и журнал, начинающийся с этого запуска,
     // рассказывает про всё, кроме поломки.
-    Journal.replace(Diary(now = { System.currentTimeMillis() }, store = diaryStore()))
+    // Старый журнал одним файлом больше не читается: с 2026-09-06 дни лежат порознь.
+    // Разбирать его по дням незачем — решение заказчика, накопленного там несколько часов.
+    runCatching { File(dataCatalog(), OLD_DIARY_NAME).delete() }
+    Journal.replace(
+        Diary(
+            now = { System.currentTimeMillis() },
+            files = diaryFiles(),
+            policy = DiaryPolicy.read(runCatching { File(dataCatalog(), DIARY_POLICY).readText() }.getOrNull()),
+        ),
+    )
 
     // Падения ловятся ДО того, как поднято окно: упасть можно и на сборке окружения, и
     // такой отчёт ценнее прочих — человек в этот момент видит только исчезнувшее окно
@@ -101,6 +111,7 @@ private fun window(store: ReportsStore) = application {
                 os = System.getProperty("os.name").orEmpty() + " " + System.getProperty("os.version").orEmpty(),
             ),
             reportsStore = store,
+            diaryPolicy = diaryPolicyStore(),
             // Начатая установка помнится файлом рядом с базой: MSI закрывает приложение,
             // и спросить у самих себя, чем всё кончилось, потом будет некого.
             updateMemory = updateMemory(),
@@ -157,18 +168,41 @@ private fun updateMemory(): UpdateMemory {
 }
 
 /**
- * Где ПК держит журнал между запусками: файл рядом с базой.
+ * Где ПК держит журнал: каталог рядом с базой, **файл на день**.
  *
- * Обычный текстовый файл, а не база и не сжатый формат: его открывают, когда всё
- * остальное уже не работает, и открывать его должно быть нечем — блокнотом.
+ * Обычные текстовые файлы, а не база и не сжатый формат: их открывают, когда всё
+ * остальное уже не работает, и открывать их должно быть нечем — блокнотом.
  *
  * Ошибки чтения и записи гасятся: журнал — не то, ради чего стоит не пускать человека в
- * переписку. Не прочиталось — начнём с пустого; не записалось — журнал доживёт до
- * перезапуска и не дальше.
+ * переписку. Не прочиталось — начнём с пустого; не записалось — часть строк не переживёт
+ * перезапуск.
  */
-private fun diaryStore(): DiaryStore {
-    val file = File(dataCatalog(), DIARY_NAME)
-    return DiaryStore(
+private fun diaryFiles(): DiaryFiles {
+    val catalog = File(dataCatalog(), DIARY_CATALOG)
+    fun day(name: String) = File(catalog, name + ".txt")
+    return DiaryFiles(
+        // Имена дней достаются из имён файлов: отдельный указатель разошёлся бы с тем,
+        // что на диске, ровно в тот раз, когда запись оборвалась.
+        days = {
+            catalog.listFiles()
+                ?.filter { it.isFile && it.name.endsWith(".txt") }
+                ?.map { it.name.removeSuffix(".txt") }
+                .orEmpty()
+        },
+        append = { name, text ->
+            catalog.mkdirs()
+            day(name).appendText(text)
+        },
+        read = { name -> runCatching { day(name).readText() }.getOrNull() },
+        remove = { name -> day(name).delete() },
+        size = { name -> day(name).length() },
+    )
+}
+
+/** Где ПК держит выбранный срок хранения журнала: строка рядом с оформлением. */
+private fun diaryPolicyStore(): AppearanceStore {
+    val file = File(dataCatalog(), DIARY_POLICY)
+    return AppearanceStore(
         load = { runCatching { file.readText() }.getOrNull() },
         save = { text ->
             runCatching {
@@ -215,5 +249,9 @@ private fun dataCatalog(): File {
 private const val DATABASE_NAME = "tima.db"
 private const val APPEARANCE_NAME = "оформление.txt"
 private const val REPORTS_NAME = "отчёты.json"
-private const val DIARY_NAME = "журнал.txt"
+private const val DIARY_CATALOG = "журнал"
+private const val DIARY_POLICY = "журнал-срок.txt"
+
+/** Журнал прежней схемы — одним файлом. Удаляется при первом запуске новой версии. */
+private const val OLD_DIARY_NAME = "журнал.txt"
 private const val UPDATE_NAME = "обновление.txt"

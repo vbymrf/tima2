@@ -106,6 +106,7 @@ import io.tima.core.ui.TimaTheme
 import androidx.compose.foundation.isSystemInDarkTheme
 import io.tima.feature.shell.AppearanceScreen
 import io.tima.feature.shell.SettingsScreen
+import io.tima.core.diag.DiaryPolicy
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
 import io.tima.core.network.ProblemPost
@@ -116,6 +117,10 @@ import io.tima.feature.shell.ProblemScreen
 import io.tima.feature.shell.ProblemStore
 import io.tima.feature.shell.Snapshot
 import io.tima.feature.shell.SendOutcome
+import io.tima.feature.shell.DiaryLimits
+import io.tima.feature.shell.KeepFor
+import io.tima.feature.shell.KeepUnit
+import io.tima.feature.shell.StorageScreen
 import io.tima.feature.shell.UpdateGate
 import io.tima.feature.shell.UpdateMemory
 import io.tima.feature.shell.UpdateNews
@@ -197,6 +202,8 @@ fun Root(
     reportsStore: ReportsStore = ReportsStore.Forgetful,
     /** Где платформа помнит начатую установку — чтобы сказать при запуске, чем кончилось. */
     updateMemory: UpdateMemory = UpdateMemory.Forgetful,
+    /** Где платформа держит выбранный срок хранения журнала. Та же пара лямбд, что у темы. */
+    diaryPolicy: AppearanceStore = AppearanceStore.Forgetful,
     /** Номер сборки от платформы: общий код его знать не может и не должен. */
     build: Build = Build(),
 ) {
@@ -218,6 +225,7 @@ fun Root(
             facts = facts,
             reportsStore = reportsStore,
             updateMemory = updateMemory,
+            diaryPolicy = diaryPolicy,
             build = build,
             appearance = appearance,
             onAppearance = {
@@ -265,6 +273,7 @@ private fun Inside(
     facts: ProblemFacts,
     reportsStore: ReportsStore,
     updateMemory: UpdateMemory,
+    diaryPolicy: AppearanceStore,
     build: Build,
     appearance: Appearance,
     onAppearance: (Appearance) -> Unit,
@@ -303,6 +312,7 @@ private fun Inside(
         facts = facts,
         reportsStore = reportsStore,
         updateMemory = updateMemory,
+        diaryPolicy = diaryPolicy,
         build = build,
         appearance = appearance,
         onAppearance = onAppearance,
@@ -497,6 +507,8 @@ private fun App(
     reportsStore: ReportsStore = ReportsStore.Forgetful,
     /** Где платформа помнит начатую установку. */
     updateMemory: UpdateMemory = UpdateMemory.Forgetful,
+    /** Где платформа держит выбранный срок хранения журнала. */
+    diaryPolicy: AppearanceStore = AppearanceStore.Forgetful,
     /** Номер сборки — показывается в «Устройствах», см. пояснение там. */
     build: Build,
     appearance: Appearance,
@@ -1099,6 +1111,7 @@ private fun App(
                         ),
                         origin = cameFrom,
                         reporting = reporting,
+                        diaryPolicy = diaryPolicy,
                         // Снимок считается ЗДЕСЬ и в момент открытия экрана: человек
                         // жалуется тогда, когда у него не работает, — это и есть нужный
                         // момент. Собрать его может только сборка: у неё есть и токен, и
@@ -1340,6 +1353,8 @@ private fun Settings(
     reporting: Reporting,
     /** Снимок состояния — считается в момент открытия экрана отчёта. */
     snapshot: () -> Snapshot,
+    /** Где платформа держит выбранный срок хранения журнала. */
+    diaryPolicy: AppearanceStore,
 ) {
     val fleet = remember { DevicesStore(network.myFleet, scope) }
     val devices by fleet.state.collectAsState()
@@ -1413,6 +1428,8 @@ private fun Settings(
             // текст — к тому времени начало поломки успело бы вытесниться.
             SettingsItem.PROBLEM -> Problem(problemFacts, origin, reporting, scope, platform, snapshot)
 
+            SettingsItem.STORAGE -> Storage(diaryPolicy)
+
             else -> TabStub(
                 willWhat = item.title,
                 thanHolds = "Раздел из макета настроек. Экрана пока нет — " +
@@ -1454,6 +1471,60 @@ private fun Update(store: UpdateStore, state: UpdateState) {
         onDismiss = store::dismiss,
         canInstall = store.canInstall,
     )
+}
+
+/**
+ * «Память и трафик»: что занимает место и когда убирается (ПЛАН-ПАМЯТИ.md).
+ *
+ * Порты подставляются здесь: оболочка про `core-diag` не знает и не должна — она зависит
+ * только от `core-ui`. Экран получает готовые значения и отдаёт обратно выбор.
+ */
+@Composable
+private fun Storage(policyStore: AppearanceStore) {
+    var limits by remember { mutableStateOf(limitsOf(Journal.diary.policy)) }
+    // Занятое пересчитывается после каждого действия, а не раз при открытии: человек
+    // нажал «очистить» и обязан увидеть, что стало пусто, — иначе он нажмёт ещё раз.
+    var occupied by remember { mutableStateOf(Journal.diary.occupied()) }
+
+    StorageScreen(
+        limits = limits,
+        occupied = occupied,
+        onLimits = { chosen ->
+            limits = chosen
+            val policy = DiaryPolicy(
+                days = chosen.keep.days,
+                bytes = chosen.megabytes.toLong() * DiaryPolicy.MB,
+            )
+            // Присвоение само зовёт уборку: новый срок обязан подействовать сразу, а не
+            // при следующем запуске — иначе человек, поставивший неделю вместо месяца,
+            // не увидит освободившегося места и решит, что настройка не работает.
+            Journal.diary.policy = policy
+            policyStore.save(policy.write())
+            occupied = Journal.diary.occupied()
+        },
+        onClear = {
+            Journal.diary.clear()
+            occupied = Journal.diary.occupied()
+        },
+    )
+}
+
+/**
+ * Пределы журнала словами человека — из того, чем их держит `core-diag`.
+ *
+ * Единица восстанавливается из числа дней: делится на 30 — месяцы, иначе недели. Ровно
+ * то, что могло получиться на этом экране; хранить единицу отдельно значило бы завести
+ * второе представление одного числа и следить, чтобы они не разошлись.
+ */
+private fun limitsOf(policy: DiaryPolicy): DiaryLimits {
+    val keep = when {
+        policy.days % KeepUnit.Months.days == 0 ->
+            KeepFor(KeepUnit.Months, policy.days / KeepUnit.Months.days)
+        policy.days % KeepUnit.Weeks.days == 0 ->
+            KeepFor(KeepUnit.Weeks, policy.days / KeepUnit.Weeks.days)
+        else -> KeepFor(KeepUnit.Months, 1)
+    }
+    return DiaryLimits(keep = keep, megabytes = (policy.bytes / DiaryPolicy.MB).toInt().coerceAtLeast(1))
 }
 
 /**
