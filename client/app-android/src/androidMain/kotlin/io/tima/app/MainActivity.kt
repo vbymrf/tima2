@@ -47,6 +47,15 @@ class MainActivity : ComponentActivity() {
     private val code = mutableStateOf<String?>(null)
 
     /**
+     * Код передачи аккаунта, пришедший снаружи (Д12).
+     *
+     * Держится отдельно от [code] по той же причине, по какой их разделяет `Root`:
+     * привязка добавляет устройство к своему аккаунту, передача забирает чужой. Общее
+     * поле означало бы, что выбор экрана зависит от порядка двух переходов.
+     */
+    private val transfer = mutableStateOf<String?>(null)
+
+    /**
      * Где Android хранит оформление: обычные настройки приложения.
      *
      * Не база и не хранилище секретов: выбранная тема не секрет и нужна раньше, чем
@@ -85,7 +94,8 @@ class MainActivity : ComponentActivity() {
         // Разрешение на контакты спрашивает ОКНО, а не приложение: контекст от
         // Application для системного диалога не годится (Д3).
         AndroidContactsAccess.attach(this)
-        code.value = codeFrom(intent)
+        code.value = linkFrom(intent)
+        transfer.value = transferFrom(intent)
         setContent {
             val entry = remember { Entry.create(Platform.Android) }
             // Тема здесь больше не решается: её выбирает человек в настройках, и
@@ -99,6 +109,7 @@ class MainActivity : ComponentActivity() {
                 deviceDatabase = { name -> androidDatabase(applicationContext, name) },
                 appearanceStore = appearanceStore(),
                 linkCode = code.value,
+                transferCode = transfer.value,
                 // Имя и номер разом: имя говорит, что за версия, номер — что
                 // установка действительно сменилась. По одному имени обновление
                 // «2.0.0-dev → 2.0.0-dev» неотличимо от его отсутствия.
@@ -115,12 +126,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        codeFrom(intent)?.let { code.value = it }
+        linkFrom(intent)?.let { code.value = it }
+        transferFrom(intent)?.let { transfer.value = it }
     }
 
     /** Наш ли это переход. Чужие ссылки нас не касаются, даже если система их принесла. */
-    private fun codeFrom(intent: Intent?): String? =
+    private fun linkFrom(intent: Intent?): String? =
         intent?.data?.toString()?.takeIf { it.startsWith("tima://link/") }
+
+    /** Код передачи аккаунта: та же схема, другой хост, другой экран. */
+    private fun transferFrom(intent: Intent?): String? =
+        intent?.data?.toString()?.takeIf { it.startsWith("tima://transfer/") }
 
     private companion object {
         const val DATABASE_NAME = "tima.db"

@@ -92,8 +92,15 @@ class TransferStore(
 
     // ── сторона принимающего ────────────────────────────────────────────────
 
-    fun takingSide() {
-        _state.value = TransferState(side = TransferSide.Taking)
+    /**
+     * Встать на сторону принимающего.
+     *
+     * @param brought код, принесённый снаружи камерой. Ссылка целиком, а не разобранный
+     *   код: разбор один и живёт в [take] — иначе строгая проверка формата окажется в
+     *   двух местах и однажды разойдётся.
+     */
+    fun takingSide(brought: String = "") {
+        _state.value = TransferState(side = TransferSide.Taking, brought = brought)
     }
 
     fun changedCode(line: String) {

@@ -151,6 +151,15 @@ fun Root(
     /** Где платформа хранит выбранное оформление. */
     appearanceStore: AppearanceStore,
     linkCode: String? = null,
+    /**
+     * Код передачи аккаунта, принесённый снаружи (Д12).
+     *
+     * Отдельный параметр, а не одна «принесённая ссылка» на оба случая: привязка и
+     * передача ведут на разные экраны и означают разное — одно добавляет устройство к
+     * своему аккаунту, другое забирает чужой. Разбирать их по префиксу здесь значило бы
+     * повторить разбор, который уже делает платформа, принимая переход.
+     */
+    transferCode: String? = null,
     /** Номер сборки от платформы: общий код его знать не может и не должен. */
     build: Build = Build(),
 ) {
@@ -166,6 +175,7 @@ fun Root(
             entry = entry,
             deviceDatabase = deviceDatabase,
             linkCode = linkCode,
+            transferCode = transferCode,
             build = build,
             appearance = appearance,
             onAppearance = {
@@ -207,6 +217,7 @@ private fun Inside(
     entry: Entry,
     deviceDatabase: (String) -> TimaDatabase,
     linkCode: String?,
+    transferCode: String?,
     build: Build,
     appearance: Appearance,
     onAppearance: (Appearance) -> Unit,
@@ -239,6 +250,7 @@ private fun Inside(
         platform = entry.platform,
         deviceSecret = current.secret,
         linkCode = linkCode,
+        transferCode = transferCode,
         build = build,
         appearance = appearance,
         onAppearance = onAppearance,
@@ -400,8 +412,11 @@ private sealed interface Where {
      *
      * @param virtualUserId кого передаём. `null` — мы принимающая сторона: принимающий
      *   не знает идентификатора до предъявления кода, и знать не должен.
+     * @param brought код, принесённый снаружи: человек навёл штатную камеру на QR, та
+     *   увидела `tima://transfer/…` и открыла нас. Пусто — пришли из настроек и код
+     *   впишут руками.
      */
-    data class Transfer(val virtualUserId: String?) : Where
+    data class Transfer(val virtualUserId: String?, val brought: String = "") : Where
 }
 
 /**
@@ -418,6 +433,8 @@ private fun App(
     platform: Platform,
     deviceSecret: ByteArray,
     linkCode: String?,
+    /** Код передачи, принесённый камерой (Д12). См. пояснение у [Root]. */
+    transferCode: String? = null,
     /** Номер сборки — показывается в «Устройствах», см. пояснение там. */
     build: Build,
     appearance: Appearance,
@@ -551,6 +568,13 @@ private fun App(
     // ждёт ответа именно на это.
     LaunchedEffect(linkCode) {
         linkCode?.let { where = Where.Link(it) }
+    }
+
+    // Код передачи приходит тем же путём и ведёт на приём: человек навёл камеру на чужой
+    // QR, и единственное, чего он ждёт, — поле для фразы. Сторона задаётся здесь, а не
+    // переключателем на экране: принёсший код — принимающий, других вариантов нет.
+    LaunchedEffect(transferCode) {
+        transferCode?.let { where = Where.Transfer(virtualUserId = null, brought = it) }
     }
 
     val socialState by social.state.collectAsState()
@@ -798,7 +822,7 @@ private fun App(
                         // экране: «передаю» и «принимаю» — разные намерения, и путать их
                         // здесь дороже всего.
                         val кого = current.virtualUserId
-                        if (кого != null) transfer.giveCode(кого) else transfer.takingSide()
+                        if (кого != null) transfer.giveCode(кого) else transfer.takingSide(current.brought)
                     }
                     TransferScreen(
                         state = transferState,
