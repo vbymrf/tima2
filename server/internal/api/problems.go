@@ -124,7 +124,7 @@ func RegisterProblems(mux *http.ServeMux, st ProblemStore, tokens func() *auth.I
 			Build:    cut(req.Build, maxProblemWord),
 			Stream:   cut(req.Stream, maxProblemWord),
 			Nickname: cut(req.Nickname, maxProblemWord),
-			Log:      cut(req.Log, maxProblemLog),
+			Log:      cutTail(req.Log, maxProblemLog),
 			FromAddr: addr,
 		})
 		if err != nil {
@@ -201,10 +201,29 @@ func clientAddr(r *http.Request) string {
 
 // cut обрезает по длине в рунах, а не в байтах: обрезка посреди кириллической буквы
 // оставила бы в базе битый UTF-8.
+//
+// Оставляет НАЧАЛО — и для текста жалобы это верно: человек пишет главное первым.
 func cut(value string, limit int) string {
 	runes := []rune(value)
 	if len(runes) <= limit {
 		return value
 	}
 	return string(runes[:limit])
+}
+
+// cutTail оставляет КОНЕЦ — для журнала, и это не мелочь (находка 2026-09-06).
+//
+// До этой правки журнал резался тем же cut, то есть с начала: при отчёте длиннее предела
+// сервер сохранял самое старое, а самое свежее — тот момент, ради которого отчёт и
+// прислали, — выбрасывал. Пока журнал был суточным (78 КБ при пределе 512), это не
+// срабатывало; с месячным хранением сработало бы сразу.
+//
+// Клиент режет сам и с запасом, так что сюда обрезка доходить не должна. Но предел на
+// приёме — не украшение: он защищает от клиента, который посчитал иначе.
+func cutTail(value string, limit int) string {
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[len(runes)-limit:])
 }

@@ -39,9 +39,6 @@ fun main() {
     // случится дальше, обязано в него попасть, а прошлые запуски — приехать с диска:
     // жалуются обычно после перезапуска, и журнал, начинающийся с этого запуска,
     // рассказывает про всё, кроме поломки.
-    // Старый журнал одним файлом больше не читается: с 2026-09-06 дни лежат порознь.
-    // Разбирать его по дням незачем — решение заказчика, накопленного там несколько часов.
-    runCatching { File(dataCatalog(), OLD_DIARY_NAME).delete() }
     Journal.replace(
         Diary(
             now = { System.currentTimeMillis() },
@@ -251,7 +248,4 @@ private const val APPEARANCE_NAME = "оформление.txt"
 private const val REPORTS_NAME = "отчёты.json"
 private const val DIARY_CATALOG = "журнал"
 private const val DIARY_POLICY = "журнал-срок.txt"
-
-/** Журнал прежней схемы — одним файлом. Удаляется при первом запуске новой версии. */
-private const val OLD_DIARY_NAME = "журнал.txt"
 private const val UPDATE_NAME = "обновление.txt"

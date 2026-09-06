@@ -91,8 +91,14 @@ enum class ProblemKind(val label: String) {
 
 /** Журнал — узкий порт: оболочка не знает, кто и как его копит. */
 fun interface ProblemLog {
-    /** Всё, что уложилось в границы журнала, текстом. */
-    fun dump(): String
+    /**
+     * Журнал текстом за столько дней, сколько попросили.
+     *
+     * Глубина приходит от человека — из ответа «когда это началось», — а не задана
+     * жёстко: журнал теперь хранится месяц, и отправлять из него всегда сутки значило бы
+     * хранить месяц впустую.
+     */
+    fun dump(days: Int): String
 }
 
 /**
@@ -128,6 +134,8 @@ data class Snapshot(
 /** Собранный отчёт. Ровно это уходит на сервер и ровно это показывает «Смотреть». */
 data class ProblemReport(
     val kind: ProblemKind,
+    /** Что человек ответил на вопрос «когда началось» — уходит первой строкой отчёта. */
+    val began: Began = Began.Today,
     val text: String,
     val origin: String,
     val facts: ProblemFacts,
@@ -151,6 +159,24 @@ sealed interface SendOutcome {
     data class Refused(val why: String) : SendOutcome
 }
 
+/**
+ * Когда началась поломка — и, значит, сколько журнала прикладывать.
+ *
+ * **Спрашиваем то, что человек знает.** «Отправить журнал за семь дней» — вопрос к
+ * инженеру; «когда это началось» знает любой. Срок мы выводим сами (решение заказчика
+ * 2026-09-06).
+ *
+ * Ответ ценен и сам по себе: до этого в отчёте не было ни слова о том, когда всё
+ * началось, а при разборе это первое, что хочется знать.
+ */
+enum class Began(val label: String, val days: Int) {
+    Today("Сегодня", 1),
+    Week("На этой неделе", 7),
+
+    /** Всё, что храним. Сколько именно — решает настройка в «Памяти и трафике». */
+    Earlier("Раньше", 400),
+}
+
 /** Кто отправляет. Реализация живёт в приложении, оболочка про сеть не знает. */
 fun interface ProblemSender {
     suspend fun send(report: ProblemReport): SendOutcome
@@ -162,6 +188,8 @@ data class ProblemState(
     val facts: ProblemFacts = ProblemFacts(),
     val kind: ProblemKind = ProblemKind.Other,
     val text: String = "",
+    /** Когда началось — от этого зависит, сколько журнала уйдёт. */
+    val began: Began = Began.Today,
     /** Раскрыт ли блок «Что приложится». */
     val showing: Boolean = false,
     /** Журнал, который уйдёт. Берётся при открытии экрана, а не при отправке. */
@@ -185,6 +213,19 @@ data class ProblemState(
      * действие, которым человек говорит «хочу написать ещё раз».
      */
     val delivered: Boolean get() = outcome is SendOutcome.Sent || outcome == SendOutcome.Queued
+
+    /** «Уйдёт журнал за неделю — 412 строк, 78 КБ». Человек видит это до нажатия. */
+    fun attachment(): String {
+        if (log.isBlank()) return "Журнал пуст: приложению нечего рассказать о себе."
+        val lines = log.lineSequence().count()
+        val kilobytes = (log.length + 512) / 1024
+        val depth = when (began) {
+            Began.Today -> "за сутки"
+            Began.Week -> "за неделю"
+            Began.Earlier -> "за всё, что сохранилось"
+        }
+        return "Уйдёт журнал " + depth + " — " + lines + " строк, " + kilobytes + " КБ."
+    }
 
     /** Чего не хватает для отправки. `null` — всё на месте. */
     val missing: String?
@@ -212,7 +253,12 @@ class ProblemStore(
     snapshot: Snapshot = Snapshot(),
 ) {
     private val _state = MutableStateFlow(
-        ProblemState(origin = origin, facts = facts, log = log.dump(), snapshot = snapshot),
+        ProblemState(
+            origin = origin,
+            facts = facts,
+            log = log.dump(Began.Today.days),
+            snapshot = snapshot,
+        ),
     )
     val state: StateFlow<ProblemState> = _state.asStateFlow()
 
@@ -227,6 +273,16 @@ class ProblemStore(
         _state.value = _state.value.copy(kind = kind)
     }
 
+    /**
+     * Ответили, когда началось: журнал берётся заново, на нужную глубину.
+     *
+     * Пересчёт здесь, а не при отправке: человек видит в «Что приложится» ровно то, что
+     * уйдёт, и видит это до нажатия. Показывать одно, а отправлять другое нельзя.
+     */
+    fun chose(began: Began) {
+        _state.value = _state.value.copy(began = began, log = log.dump(began.days))
+    }
+
     /** «Смотреть» — показать целиком то, что уйдёт. */
     fun toggleShowing() {
         _state.value = _state.value.copy(showing = !_state.value.showing)
@@ -239,6 +295,7 @@ class ProblemStore(
             _state.value = state.copy(sending = true, outcome = null)
             val report = ProblemReport(
                 kind = state.kind,
+                began = state.began,
                 text = state.text.trim(),
                 origin = state.origin?.short().orEmpty(),
                 facts = state.facts,
@@ -268,6 +325,8 @@ fun ProblemScreen(
     state: ProblemState,
     onText: (String) -> Unit,
     onKind: (ProblemKind) -> Unit,
+    /** Ответили, когда началось: журнал берётся на другую глубину. */
+    onBegan: (Began) -> Unit,
     onShow: () -> Unit,
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
@@ -283,6 +342,14 @@ fun ProblemScreen(
         onChange = onText,
         hint = "Опишите словами: что делали и что пошло не так",
     )
+
+    Caption("Когда это началось", fontSize = TimaType.sz5, weight = FontWeight.Bold)
+    Began.entries.forEach { began ->
+        ListLine(
+            onClick = { onBegan(began) },
+            middle = { Name(if (began == state.began) "● " + began.label else "○ " + began.label) },
+        )
+    }
 
     Caption("О чём это", fontSize = TimaType.sz5, weight = FontWeight.Bold)
     ProblemKind.entries.forEach { kind ->
@@ -300,6 +367,10 @@ fun ProblemScreen(
     // Про автоматическую отправку падений человек узнаёт здесь, а не постфактум: решение
     // заказчика 2026-09-06 — отправлять их самим, и молчать об этом было бы нечестно.
     Tertiary("Отчёты о внезапном закрытии приложение отправляет само, тем же составом.")
+
+    // Сколько именно уходит — цифрой, а не на веру. До 2026-09-06 нигде не было сказано
+    // даже того, что журнал берётся за сутки.
+    Tertiary(state.attachment())
 
     Button(
         label = if (state.showing) "Скрыть" else "Смотреть",

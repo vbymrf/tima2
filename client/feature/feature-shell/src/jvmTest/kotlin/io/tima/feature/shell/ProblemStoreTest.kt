@@ -17,7 +17,12 @@ import kotlin.test.assertTrue
 class ProblemStoreTest {
 
     private class Log(var text: String) : ProblemLog {
-        override fun dump(): String = text
+        var askedFor: Int = 0
+
+        override fun dump(days: Int): String {
+            askedFor = days
+            return text
+        }
     }
 
     private class Sender(val outcome: SendOutcome = SendOutcome.Sent("A7K3")) : ProblemSender {
@@ -199,5 +204,43 @@ class ProblemStoreTest {
 
         assertFalse(store.state.value.delivered)
         assertTrue(store.state.value.canSend)
+    }
+
+    @Test
+    fun глубина_журнала_идёт_от_ответа_человека() {
+        // «Отправить журнал за семь дней» — вопрос к инженеру; «когда началось» знает
+        // любой. Срок выводим сами (решение заказчика 2026-09-06).
+        val log = Log("строка")
+        val store = ProblemStore(
+            log = log,
+            sender = Sender(),
+            scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined),
+            origin = null,
+            facts = facts,
+        )
+        assertEquals(1, log.askedFor, "по умолчанию сутки")
+
+        store.chose(Began.Week)
+        assertEquals(7, log.askedFor)
+        assertEquals(Began.Week, store.state.value.began)
+
+        store.chose(Began.Earlier)
+        assertTrue(log.askedFor > 30, "«раньше» — это всё, что сохранилось")
+    }
+
+    @Test
+    fun сказано_сколько_уйдёт() {
+        // До 2026-09-06 нигде не было сказано даже того, что журнал берётся за сутки.
+        val store = ProblemStore(
+            log = Log(listOf("одна", "две", "три").joinToString("\n")),
+            sender = Sender(),
+            scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined),
+            origin = null,
+            facts = facts,
+        )
+
+        val said = store.state.value.attachment()
+        assertContains(said, "за сутки")
+        assertContains(said, "3 строк")
     }
 }

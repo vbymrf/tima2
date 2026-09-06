@@ -88,6 +88,26 @@ data class DiaryPolicy(
     fun write(): String = "$days $bytes"
 }
 
+/**
+ * Похоже ли имя на день — `2026-09-06`.
+ *
+ * Проверяется форма, а не существование даты: `2026-99-99` тоже уйдёт в уборку по сроку,
+ * и разбирать его календарём незачем. Задача проверки — отличить наш файл от чужого.
+ */
+internal fun looksLikeDay(name: String): Boolean =
+    name.length == 10 &&
+        name[4] == '-' && name[7] == '-' &&
+        name.filterIndexed { index, _ -> index != 4 && index != 7 }.all { it.isDigit() }
+
+/**
+ * Следующий день после `2026-09-06`.
+ *
+ * Считается через `Instant`, а не сложением чисел в строке: конец месяца и високосный год
+ * иначе пришлось бы держать в голове.
+ */
+internal fun nextDay(day: String): String =
+    dayOf(Instant.parse(day + "T00:00:00Z").toEpochMilliseconds() + 24L * 60 * 60 * 1000)
+
 /** Имя дня по времени: `2026-09-06`, UTC. */
 internal fun dayOf(millis: Long): String =
     Instant.fromEpochMilliseconds(millis).toString().take(10)

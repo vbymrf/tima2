@@ -106,6 +106,7 @@ import io.tima.core.ui.TimaTheme
 import androidx.compose.foundation.isSystemInDarkTheme
 import io.tima.feature.shell.AppearanceScreen
 import io.tima.feature.shell.SettingsScreen
+import io.tima.core.diag.Diary
 import io.tima.core.diag.DiaryPolicy
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
@@ -117,6 +118,7 @@ import io.tima.feature.shell.ProblemScreen
 import io.tima.feature.shell.ProblemStore
 import io.tima.feature.shell.Snapshot
 import io.tima.feature.shell.SendOutcome
+import io.tima.feature.shell.Began
 import io.tima.feature.shell.DiaryLimits
 import io.tima.feature.shell.KeepFor
 import io.tima.feature.shell.KeepUnit
@@ -1547,7 +1549,10 @@ private fun Problem(
             // Сброс перед выгрузкой: отчёт составляют ровно тогда, когда приложение
             // ведёт себя плохо, и следующего повода записать на диск может не быть —
             // человек закроет его силой, а система добьёт процесс.
-            log = { Journal.diary.flush(); Journal.diary.dump() },
+            log = { days ->
+                Journal.diary.flush()
+                Journal.diary.dump(days.toLong() * Diary.DAY)
+            },
             sender = { report ->
                 val result = reporting.send(
                     ProblemPost(
@@ -1564,7 +1569,7 @@ private fun Problem(
                         // есть часть того, что читают. Отдельное поле пришлось бы
                         // добавлять в таблицу, в ручку и в разбор — ради текста, который
                         // и так читается сверху вниз.
-                        log = reportBody(report.snapshot, report.log),
+                        log = reportBody(report.began, report.snapshot, report.log),
                     ),
                 )
                 when (result) {
@@ -1588,6 +1593,7 @@ private fun Problem(
         state = state,
         onText = store::changedText,
         onKind = store::chose,
+        onBegan = store::chose,
         onShow = store::toggleShowing,
         onSend = store::send,
     )
@@ -1601,8 +1607,11 @@ private fun Problem(
  * заводится: это тот же текст, и отдельное поле пришлось бы вести в таблице, в ручке и в
  * разборе ради того, что и так читается сверху вниз.
  */
-private fun reportBody(snapshot: Snapshot, log: String): String = buildString {
+private fun reportBody(began: Began, snapshot: Snapshot, log: String): String = buildString {
     appendLine("СОСТОЯНИЕ")
+    // Первой строкой — ответ человека «когда началось». При разборе это первое, что
+    // хочется знать, и до 2026-09-06 в отчёте этого не было вовсе.
+    appendLine("  началось: " + began.label.lowercase())
     snapshot.lines().forEach { appendLine("  " + it) }
     appendLine()
     appendLine("ЧТО ПРОИСХОДИЛО")

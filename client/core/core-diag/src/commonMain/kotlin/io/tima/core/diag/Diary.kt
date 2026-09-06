@@ -108,10 +108,14 @@ class Diary(
      * всё, что старше. Прошлых дней читается ровно два — сегодня и вчера: жалоба «вчера
      * не приходили сообщения» иначе пришла бы с журналом, начинающимся сегодня.
      */
-    fun dump(): String {
+    fun dump(depthMillis: Long = reportMillis): String {
         flush()
-        val since = now() - reportMillis
-        val wanted = listOf(dayOf(since), dayOf(now())).distinct()
+        val since = now() - depthMillis
+        // Дней столько, сколько накрывает срез: при «сегодня» это один-два, при «раньше»
+        // — весь месяц. Больше журнал и не хранится.
+        val wanted = generateSequence(dayOf(since)) { day ->
+            if (day >= dayOf(now())) null else nextDay(day)
+        }.take(MAX_DAYS_READ).toList()
         val fromDisk = wanted
             .mapNotNull { day -> runCatching { files.read(day) }.getOrNull() }
             .joinToString("\n")
@@ -128,7 +132,31 @@ class Diary(
         val kept = LinkedHashSet<String>(onDisk.size + inMemory.size)
         kept.addAll(onDisk)
         kept.addAll(inMemory)
-        return kept.joinToString("\n")
+        return withinLimit(kept.toList())
+    }
+
+    /**
+     * Уложить в предел, оставив **свежее**.
+     *
+     * Набираем с конца, пока влезает. Если что-то отброшено, первой строкой идёт честная
+     * пометка: читающий обязан знать, что журнал начинается не с начала поломки.
+     *
+     * **Режем здесь, а не отдаём это приёму.** Сервер укорачивает журнал до полумегабайта
+     * и до 2026-09-06 отбрасывал последние знаки — то есть при большом журнале сохранял
+     * самое старое, а самое свежее, ради которого отчёт и шлют, терял.
+     */
+    private fun withinLimit(lines: List<String>): String {
+        var total = 0
+        var from = lines.size
+        while (from > 0) {
+            val length = lines[from - 1].length + 1
+            if (total + length > MAX_REPORT_CHARS) break
+            total += length
+            from--
+        }
+        if (from == 0) return lines.joinToString("\n")
+        return (listOf("… журнал обрезан: не поместилось $from строк, показано свежее") +
+            lines.subList(from, lines.size)).joinToString("\n")
     }
 
     /**
@@ -171,9 +199,16 @@ class Diary(
             val days = files.days().sorted()
             val kept = ArrayList<String>()
             for (day in days) {
-                // Сравнение строк, а не дат: `2026-09-06` в лексикографическом порядке
-                // совпадает с хронологическим — на то и выбран этот вид записи.
-                if (day < edge) files.remove(day) else kept.add(day)
+                when {
+                    // В каталоге журнала лежат только дни. Всё прочее — обрывок, чужое
+                    // или наследство прошлой схемы; это правило, а не разовая миграция,
+                    // и потому оно не превращается в код, который потом некому убрать.
+                    !looksLikeDay(day) -> files.remove(day)
+                    // Сравнение строк, а не дат: `2026-09-06` в лексикографическом порядке
+                    // совпадает с хронологическим — на то и выбран этот вид записи.
+                    day < edge -> files.remove(day)
+                    else -> kept.add(day)
+                }
             }
             var total = kept.sumOf { files.size(it) }
             // С самого старого: свежее нужнее. Последний день не трогаем никогда — иначе
@@ -225,7 +260,19 @@ class Diary(
          * обязан оставаться отправляемым. Xiaomi 2026-09-06 прислал 78 697 знаков за одни
          * сутки — этого достаточно для разбора и уже много для одного письма.
          */
-        const val MAX_REPORT_LINES: Int = 4000
+        const val MAX_REPORT_LINES: Int = 40_000
+
+        /**
+         * Предел отчёта в знаках.
+         *
+         * Согласован с приёмом: сервер режет журнал до 512 000 знаков, и упереться в его
+         * предел значит отдать обрезку тому, кто не знает, какой конец важнее. Четыреста
+         * тысяч — с запасом на снимок состояния, который идёт первым блоком.
+         */
+        const val MAX_REPORT_CHARS: Int = 400_000
+
+        /** Сколько дней читаем разом: месяц с запасом. Дольше журнал и не хранится. */
+        const val MAX_DAYS_READ: Int = 40
 
         /** Предел значения в хвосте: там числа и пути, длинному там взяться неоткуда. */
         const val DETAIL_LENGTH: Int = 120
