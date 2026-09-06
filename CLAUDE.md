@@ -75,6 +75,7 @@
 | `messenger-crypto/**`, `server/internal/crypto/**`, `schema/**` | `.cursor/rules/crypto-invariants.mdc` |
 | `server/migrations/**`, `server/internal/store/**`, `server/internal/api/**` | `.cursor/rules/server-compatibility.mdc` |
 | запуск сервера, стека, эмулятора, десктопа | `.cursor/rules/runtime-launchers.mdc` |
+| **подключение к телефону** (установка, снимок, журнал, живой прогон) | `doc_mig/ВЕРСИИ/ОТЛАДКА.md` — **читать до первой команды `adb`** |
 | прогон тестов, сборка, проверка результата | `.cursor/skills/adaptive-test-runner/` |
 | починка окружения, запуск служб, эмулятор | `.cursor/skills/adaptive-ops-runner/` |
 | выкатка на сервер | `doc_mig/ПЕРЕУСТАНОВКА-СЕРВЕРА.md`, `doc_mig/ВЕРСИИ/СТЕНД.md` |
