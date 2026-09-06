@@ -121,6 +121,22 @@ fun HttpClientConfig<*>.timaDefaults(
         onRequest { request, _ ->
             request.attributes.put(startedAt, Clock.System.now().toEpochMilliseconds())
         }
+        // Не дошли вовсе — это отдельный код, а не «ошибка». Первая развилка любого
+        // разбора: сервер отказал или связи не было? `onResponse` на это не отвечает —
+        // он не срабатывает, когда ответа нет.
+        on(Send) { request ->
+            try {
+                proceed(request)
+            } catch (e: Throwable) {
+                Journal.trouble(
+                    LogCode.NET_OFFLINE,
+                    "до сервера не дошли",
+                    "путь" to (request.method.value + " " + shortPath(request.url.build().encodedPath)),
+                    "причина" to (e::class.simpleName ?: "неизвестно"),
+                )
+                throw e
+            }
+        }
         onResponse { response ->
             val started = response.call.request.attributes.getOrNull(startedAt)
             val spent = started?.let { Clock.System.now().toEpochMilliseconds() - it } ?: -1

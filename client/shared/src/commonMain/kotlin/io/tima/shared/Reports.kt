@@ -152,11 +152,23 @@ class Reporting(
         val result = try {
             network.send(post)
         } catch (e: Throwable) {
-            queue.add(post)
+            hold(post, "связи нет")
             return ProblemSendResult.Refused(0, "не дошло, лежит в очереди")
         }
-        if (result !is ProblemSendResult.Sent) queue.add(post)
+        if (result !is ProblemSendResult.Sent) hold(post, "сервер не принял")
         return result
+    }
+
+    /**
+     * Положить в очередь и сказать об этом в журнал.
+     *
+     * Строка нужна ровно потому, что отчёт может уехать через сутки: без неё в отчёте
+     * видна только жалоба, а не то, что человек нажал «отправить» гораздо раньше и
+     * связи тогда не было.
+     */
+    private fun hold(post: ProblemPost, why: String) {
+        queue.add(post)
+        Journal.trouble(LogCode.REPORT_QUEUED, "отчёт лёг в очередь: $why", "ждут" to queue.waiting().size)
     }
 
     /**
