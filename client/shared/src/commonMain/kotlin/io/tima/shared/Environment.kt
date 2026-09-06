@@ -30,6 +30,8 @@ import io.tima.core.network.AuthApi
 import io.tima.core.network.DeviceLinkConfirmOverHttp
 import io.tima.core.network.DeviceLinkStartOverHttp
 import io.tima.core.network.AppVersionApi
+import io.tima.core.network.DeviceTokenApi
+import io.tima.core.network.TokenRenewal
 import io.tima.core.network.ProblemsOverHttp
 import io.tima.core.network.DeviceBookOverHttp
 import io.tima.core.network.DevicesApi
@@ -173,6 +175,20 @@ class Entry private constructor(
     fun rememberAccount(account: Account, session: Session, deviceSecret: ByteArray) =
         accounts.remember(account, session, deviceSecret)
 
+    /**
+     * Сохранить обновлённый токен (находка 2026-09-06).
+     *
+     * Токен живёт сутки и обновляется сам; незаписанный — означает, что после перезапуска
+     * приложение снова придёт за новым, и так каждый запуск. Пишется в хранилище того
+     * аккаунта, чья это сессия, а не «текущего»: обновиться может и не тот, кто открыт.
+     */
+    fun rememberSession(session: Session) {
+        accounts.store(session.userId).saveSession(session)
+        // Прежнее одиночное место тоже обновляем, пока оно есть: до Д11 сессия лежала
+        // там, и человек, не переехавший в список, иначе остался бы со старым токеном.
+        if (accounts.current() == null) secrets.saveSession(session)
+    }
+
     /** Всё, что нужно приложению после входа: ключ покоя базы и кто мы для сервера. */
     class Device(val secret: ByteArray, val session: Session)
 
@@ -242,42 +258,54 @@ class Entry private constructor(
 class Network(
     private val link: ServerLink,
     private val session: Session,
+    /**
+     * Живой токен устройства (находка 2026-09-06).
+     *
+     * Раньше здесь стояло `session.accessToken` — значение, не менявшееся никогда. Через
+     * сутки оно превращалось в мёртвое, и каждый вызов возвращал `401`. Теперь токен
+     * спрашивается у держателя, который умеет его обновить; `null` — держателя нет
+     * (проверки), и берётся то, что было в сессии.
+     */
+    private val tokens: DeviceTokens? = null,
 ) : ChatPorts, GroupPorts, DevicePorts {
-    override val keys: KeysApi = KeysApi(link.route, link.client, token = { session.accessToken })
-    override val escrow: EscrowApi = EscrowApi(link.route, link.client, token = { session.accessToken })
-    val transport: HttpMessageTransport = HttpMessageTransport(link.route, link.client, token = { session.accessToken })
+
+    /** Тот токен, которым подписывается ЭТОТ вызов. */
+    private fun token(): String = tokens?.access ?: session.accessToken
+    override val keys: KeysApi = KeysApi(link.route, link.client, token = { token() })
+    override val escrow: EscrowApi = EscrowApi(link.route, link.client, token = { token() })
+    val transport: HttpMessageTransport = HttpMessageTransport(link.route, link.client, token = { token() })
 
     /** Справочник: кто скрывается за номером телефона. Нужен, чтобы начать переписку. */
-    override val directory: UsersApi = UsersApi(link.route, link.client, token = { session.accessToken })
+    override val directory: UsersApi = UsersApi(link.route, link.client, token = { token() })
 
     /** Сверка книги: `POST /users/discover`, куда уходит номер, а хранится слепой индекс. */
     override val discovery: ContactDiscovery =
-        ContactsOverHttp(link.route, link.client, token = { session.accessToken })
+        ContactsOverHttp(link.route, link.client, token = { token() })
 
     /** Друзья: свой список, правит только владелец. */
     override val friends: Friends =
-        FriendsOverHttp(link.route, link.client, token = { session.accessToken })
+        FriendsOverHttp(link.route, link.client, token = { token() })
 
     /** Профиль: имя свободно, ник с проверкой занятости. */
     override val profile: Profile =
-        ProfileOverHttp(link.route, link.client, token = { session.accessToken })
+        ProfileOverHttp(link.route, link.client, token = { token() })
 
     /** Устройства аккаунта: объявить платформу, показать список, отключить. */
-    override val devices: DevicesApi = DevicesApi(link.route, link.client, token = { session.accessToken })
+    override val devices: DevicesApi = DevicesApi(link.route, link.client, token = { token() })
 
     /** Виртуальные аккаунты: завести своей подписью, перечислить свои (Д10). */
     override val virtuals: VirtualsApi =
-        VirtualsOverHttp(link.route, link.client, token = { session.accessToken })
+        VirtualsOverHttp(link.route, link.client, token = { token() })
 
     /** Передача: выдать код, отменить, предъявить код с фразой (Д12). */
     override val transfers: TransfersApi =
-        TransfersOverHttp(link.route, link.client, token = { session.accessToken })
+        TransfersOverHttp(link.route, link.client, token = { token() })
 
     /** Группы: создание, состав, роли. */
-    override val groups: GroupsApi = GroupsApi(link.route, link.client, token = { session.accessToken })
+    override val groups: GroupsApi = GroupsApi(link.route, link.client, token = { token() })
 
     /** Групповые ключи: ротация и выдача обёрток этому устройству. */
-    override val groupKeys: GroupKeysApi = GroupKeysApi(link.route, link.client, token = { session.accessToken })
+    override val groupKeys: GroupKeysApi = GroupKeysApi(link.route, link.client, token = { token() })
 
     /**
      * Отправка сообщений группы.
@@ -286,7 +314,7 @@ class Network(
      * обёрток на устройства — есть версия ключа либо открытый текст.
      */
     val groupMessages: GroupMessagesApi =
-        GroupMessagesApi(link.route, link.client, token = { session.accessToken })
+        GroupMessagesApi(link.route, link.client, token = { token() })
 
     /**
      * Сужение круга у уже отправленного сообщения (ADR-0019 §6).
@@ -302,13 +330,13 @@ class Network(
      * текста.
      */
     override val pages: UserPagesOverHttp =
-        UserPagesOverHttp(link.route, link.client, token = { session.accessToken }, codec = TextBodyCodec)
+        UserPagesOverHttp(link.route, link.client, token = { token() }, codec = TextBodyCodec)
 
     override val access: LevelAccessOverHttp =
-        LevelAccessOverHttp(link.route, link.client, token = { session.accessToken })
+        LevelAccessOverHttp(link.route, link.client, token = { token() })
 
     override val messageLevels: MessageLevelsOverHttp =
-        MessageLevelsOverHttp(link.route, link.client, token = { session.accessToken })
+        MessageLevelsOverHttp(link.route, link.client, token = { token() })
 
     /**
      * Недостающие версии ключа: попросить и отдать.
@@ -317,7 +345,7 @@ class Network(
      * здесь передача уже существующей тому, кому её не выдавали.
      */
     override val keyRecovery: GroupKeyRecoveryApi =
-        GroupKeyRecoveryApi(link.route, link.client, token = { session.accessToken })
+        GroupKeyRecoveryApi(link.route, link.client, token = { token() })
 
     /**
      * То же самое под именем порта групп.
@@ -342,7 +370,7 @@ class Network(
     // Отчёт о проблеме уходит с токеном, если он есть: сервер тогда сам свяжет отчёт с
     // аккаунтом и устройством, не веря присланному.
     override val problems: ProblemsOverHttp =
-        ProblemsOverHttp(link.route, link.client) { session.accessToken }
+        ProblemsOverHttp(link.route, link.client) { token() }
 
     /**
      * Подтверждение привязки нового устройства.
@@ -351,7 +379,7 @@ class Network(
      * приложение, потому что он живёт в хранилище платформы, а не в сети.
      */
     override fun linkConfirmation(identity: DeviceIdentity): ConfirmDeviceLink = ConfirmDeviceLink(
-        api = DeviceLinkConfirmOverHttp(LinkConfirmApi(link.route, link.client, token = { session.accessToken })),
+        api = DeviceLinkConfirmOverHttp(LinkConfirmApi(link.route, link.client, token = { token() })),
         signer = LinkSignerOverKodium(identity),
     )
 
@@ -362,20 +390,44 @@ class Network(
      * было целью — Ktor не поднимается выше core-network. Приёмник получает готовый
      * поток и про транспорт не знает.
      */
-    fun eventChannel(): EventStream = EventStream(link.route, link.client, token = { session.accessToken })
+    fun eventChannel(): EventStream = EventStream(link.route, link.client, token = { token() })
+
+    /** Держатель токена: он же обновляет его по сроку и по `401`. */
+    val tokenKeeper: DeviceTokens? get() = tokens
 
     companion object {
         /** Тот же адрес и тот же клиент, что у входа: сервер один. */
         fun create(
             session: Session,
             host: String = Entry.STAND,
-        ): Network = Network(
-            // Соединение собирает core-network: Ktor выше него не поднимается. Живой
-            // канал ставится на тот же клиент — второй означал бы второй набор
-            // настроек, и они разошлись бы.
-            link = ServerLink.open(host, liveChannel = true),
-            session = session,
-        )
+            /**
+             * Подписать байты ключом устройства — для обновления токена.
+             *
+             * `null` означает «обновлять нечем»: тогда токен остаётся тем, что был в
+             * сессии, и через сутки всё вернётся к `401`. Так собирают Network проверки,
+             * которым сеть не нужна вовсе.
+             */
+            sign: ((ByteArray) -> ByteArray?)? = null,
+            /** Куда сохранить обновлённую сессию, чтобы она пережила перезапуск. */
+            remember: (Session) -> Unit = {},
+            now: () -> Long = { nowMillis() },
+        ): Network {
+            // Обновление ставится на КЛИЕНТ, а не на каждый вызов: `401` ловится в одном
+            // месте, там же запрос и повторяется с новым токеном.
+            val renewal = TokenRenewal()
+            val link = ServerLink.open(host, liveChannel = true, renewal = renewal)
+            val tokens = sign?.let {
+                DeviceTokens(
+                    api = DeviceTokenApi(link.route, link.client),
+                    session = session,
+                    sign = it,
+                    now = now,
+                    remember = remember,
+                )
+            }
+            renewal.renew = { if (tokens?.renew() == true) tokens.access else null }
+            return Network(link = link, session = session, tokens = tokens)
+        }
     }
 }
 

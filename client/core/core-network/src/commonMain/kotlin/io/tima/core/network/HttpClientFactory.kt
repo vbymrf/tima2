@@ -2,7 +2,10 @@ package io.tima.core.network
 
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
+import io.ktor.client.plugins.api.Send
 import io.ktor.client.plugins.api.createClientPlugin
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import io.ktor.util.AttributeKey
 import io.tima.core.diag.Journal
 import kotlinx.datetime.Clock
@@ -50,7 +53,11 @@ data class TransportTuning(
  * своему же правилу «исключение → [SendOutcome.Retry]» повторял бы вечно конверт,
  * который сервер уже отверг по сути.
  */
-fun HttpClientConfig<*>.timaDefaults(tuning: TransportTuning = TransportTuning()) {
+fun HttpClientConfig<*>.timaDefaults(
+    tuning: TransportTuning = TransportTuning(),
+    /** Чем обновлять токен при `401`. `null` — не обновлять вовсе (проверки, вход). */
+    renewal: TokenRenewal? = null,
+) {
     followRedirects = false
     expectSuccess = false
     install(HttpTimeout) {
@@ -58,6 +65,28 @@ fun HttpClientConfig<*>.timaDefaults(tuning: TransportTuning = TransportTuning()
         connectTimeoutMillis = tuning.connectTimeoutMs
         socketTimeoutMillis = tuning.socketTimeoutMs
     }
+    // ── Просроченный токен обновляется сам (находка 2026-09-06) ────────────────
+    //
+    // Токен живёт сутки, и до этой правки истёкший означал `401` на каждой ручке под
+    // токеном — молча, без единого слова человеку. Здесь единственное место, где это
+    // лечится один раз для всех полутора десятков Api: ответ `401` → обновить → повторить.
+    //
+    // **Повтор ровно один.** Если и он вернул `401`, дело не в сроке: устройство отозвано
+    // или ключ не тот, и второй круг ничего не изменит, зато превратит отказ в петлю.
+    if (renewal != null) {
+        install(createClientPlugin("ОбновлениеТокена") {
+            on(Send) { request ->
+                val first = proceed(request)
+                if (first.response.status != HttpStatusCode.Unauthorized) return@on first
+                val fresh = renewal.renew?.invoke() ?: return@on first
+                Journal.note("вход", "токен обновлён после 401, повторяем запрос")
+                request.headers.remove(HttpHeaders.Authorization)
+                request.headers.append(HttpHeaders.Authorization, "Bearer " + fresh)
+                proceed(request)
+            }
+        })
+    }
+
     // ── Каждый вызов попадает в журнал (ПЛАН-ОТЛАДКИ.md, Б1) ───────────────────
     //
     // Здесь, а не в каждом Api по отдельности: сетевых классов у нас полтора десятка, и
@@ -83,6 +112,21 @@ fun HttpClientConfig<*>.timaDefaults(tuning: TransportTuning = TransportTuning()
 
 /** Когда ушёл запрос — чтобы в журнале было время ответа, а не только его код. */
 private val startedAt = AttributeKey<Long>("tima-started-at")
+
+/**
+ * Кто умеет обновить токен доступа, когда сервер ответил `401`.
+ *
+ * **Ссылка, заполняемая позже, и это не небрежность.** Клиент создаётся раньше, чем
+ * известно устройство: адрес сервера нужен и на экране входа, где сессии ещё нет. Держать
+ * ради этого два клиента с разными настройками — верный способ их разойтись.
+ *
+ * `null` в [renew] означает «обновлять нечем»: человек не вошёл, ключа устройства нет.
+ * Тогда `401` остаётся `401` и разбирается вызывающим, как разбирался всегда.
+ */
+class TokenRenewal {
+    /** Возвращает новый токен или `null`, если обновить не удалось. */
+    var renew: (suspend () -> String?)? = null
+}
 
 /**
  * Путь для журнала: длинные сегменты заменяются на `{id}`.
@@ -111,8 +155,10 @@ internal fun shortPath(path: String): String =
 private const val LONG_SEGMENT = 16
 
 /** Клиент для боевого хода: движок по платформе, настройки общие. */
-fun timaHttpClient(tuning: TransportTuning = TransportTuning()): HttpClient =
-    HttpClient(httpEngine()) { timaDefaults(tuning) }
+fun timaHttpClient(
+    tuning: TransportTuning = TransportTuning(),
+    renewal: TokenRenewal? = null,
+): HttpClient = HttpClient(httpEngine()) { timaDefaults(tuning, renewal) }
 
 /**
  * Тот же клиент, но с живым каналом.
@@ -125,11 +171,13 @@ fun timaHttpClient(tuning: TransportTuning = TransportTuning()): HttpClient =
  * Живёт здесь, а не в композиции приложения: `HttpClient` не должен подниматься выше
  * этого модуля, иначе смена движка или политики токенов задевает всех потребителей.
  */
-fun timaHttpClientWithChannel(tuning: TransportTuning = TransportTuning()): HttpClient =
-    HttpClient(httpEngine()) {
-        timaDefaults(tuning)
-        install(WebSockets)
-    }
+fun timaHttpClientWithChannel(
+    tuning: TransportTuning = TransportTuning(),
+    renewal: TokenRenewal? = null,
+): HttpClient = HttpClient(httpEngine()) {
+    timaDefaults(tuning, renewal)
+    install(WebSockets)
+}
 
 /**
  * Движок по платформе — единственное, что здесь платформенное.
@@ -153,9 +201,15 @@ class ServerLink(val route: ServerRoute, val client: HttpClient) {
          * @param живойКанал ставить ли WebSockets. Клиент при этом остаётся ОДИН:
          *   второй означал бы второй набор настроек, и они разошлись бы.
          */
-        fun open(host: String, liveChannel: Boolean = false): ServerLink = ServerLink(
+        fun open(
+            host: String,
+            liveChannel: Boolean = false,
+            /** Чем обновлять токен при `401`; `null` — не обновлять (вход, проверки). */
+            renewal: TokenRenewal? = null,
+        ): ServerLink = ServerLink(
             route = ServerRoute.from(RouteConfig(host = host)),
-            client = if (liveChannel) timaHttpClientWithChannel() else timaHttpClient(),
+            client = if (liveChannel) timaHttpClientWithChannel(renewal = renewal)
+            else timaHttpClient(renewal = renewal),
         )
     }
 }

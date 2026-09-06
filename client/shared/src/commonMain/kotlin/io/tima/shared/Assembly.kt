@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import io.tima.core.database.TimaDatabase
 import io.tima.domain.account.Session
+import io.tima.core.encryption.DeviceTokenSignerOverKodium
 import io.tima.core.encryption.deviceIdentityFrom
 
 /**
@@ -67,8 +68,20 @@ fun assemble(
             device.secret,
             device.session.userId,
         )
-        val network = Network.create(device.session, entry.host)
         val identity = deviceIdentityFrom(device.secret)
+
+        // Подпись ключом ЭТОГО устройства — то, чем обновляется просроченный токен
+        // (находка 2026-09-06). Ключ выводится из секрета, который здесь уже открыт:
+        // второй путь к хранилищу означал бы второе место, где его можно потерять.
+        val signer = DeviceTokenSignerOverKodium(identity)
+        val network = Network.create(
+            session = device.session,
+            host = entry.host,
+            sign = signer::sign,
+            // Новый токен переживает перезапуск: иначе каждый запуск начинался бы с
+            // обновления, а первый запрос до него — с 401.
+            remember = { session -> entry.rememberSession(session) },
+        )
 
         // Оркестр ключей собирается ЗДЕСЬ, а не внутри приёмника: ему нужны escrow,
         // крипта, сеть и хранилище разом — это работа сборки, а не канала.

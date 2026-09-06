@@ -137,6 +137,11 @@ func (s *Server) Register(mux *http.ServeMux) {
 	RegisterVirtuals(mux, s.Store, func() VirtualTokens { return s.Auth }, s.requireActiveDevice)
 	RegisterTransfers(mux, s.Store, func() VirtualTokens { return s.Auth }, s.requireActiveDevice)
 
+	// Обновление токена доступа подписью устройства. Публичная по необходимости: её
+	// зовут ровно тогда, когда прежний токен уже не принимается, и требовать для неё
+	// токен значило бы требовать то, за чем сюда и пришли.
+	RegisterDeviceToken(mux, s.Store, func() TokenIssuer { return s.Auth })
+
 	// Отчёты о проблеме (ПЛАН-ОТЛАДКИ.md, Б4). Ручка публичная: токен разбирается
 	// внутри и необязателен — «не могу войти» самая частая жалоба, и требовать для неё
 	// авторизацию значит её не услышать.

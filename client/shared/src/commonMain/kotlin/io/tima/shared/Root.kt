@@ -551,6 +551,11 @@ private fun App(
     // за отчётом не пойдёт (ПЛАН-ОТЛАДКИ.md, Б7).
     val reporting = remember { Reporting(network.problems, ReportQueue(reportsStore)) }
     LaunchedEffect(assembled) {
+        // Токен обновляется ДО первых вызовов, а не по первому отказу: приложение,
+        // открытое через сутки, иначе начинало бы работу с череды 401 — их бы починил
+        // перехват, но человек успел бы увидеть пустые списки (находка 2026-09-06).
+        network.tokenKeeper?.renewIfStale()
+
         val sent = reporting.deliver()
         if (sent > 0) Journal.note("отчёты", "досланы отложенные: " + sent)
     }
