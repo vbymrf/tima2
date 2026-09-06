@@ -1,9 +1,13 @@
 package io.tima.core.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
 
 /**
  * Тема приложения — У.1.
@@ -36,7 +40,17 @@ fun TimaTheme(
     colors: TimaColors,
     content: @Composable () -> Unit,
 ) {
-    CompositionLocalProvider(LocalTimaColors provides colors, content = content)
+    CompositionLocalProvider(LocalTimaColors provides colors) {
+        // **Тема даёт непрозрачный фон, и это не украшение** (находка 2026-09-06).
+        //
+        // Фон красили только `Stage` и `SettingsScreen`. Всё, что рисуется вместо них —
+        // порог обновления, подокно «Обновление не завершилось», переключение окон, —
+        // оказывалось прозрачным: кнопки со своей заливкой было видно, а текст читался
+        // поверх чужого слоя и выглядел затемнённым. Заказчик увидел это первым.
+        //
+        // Чинить каждое окно по отдельности значило бы ждать, пока следующее забудут.
+        Box(Modifier.fillMaxSize().background(colors.surface)) { content() }
+    }
 }
 
 /**

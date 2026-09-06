@@ -116,6 +116,41 @@ fun interface AppVersionPort {
 }
 
 /**
+ * Новость об обновлении как событие для подокна ([Notice]).
+ *
+ * Тексты живут здесь, а не в `Root`: оболочка знает, что человеку сказать про обновление,
+ * а сборка приложения — нет. Действия подставляет тот, кто знает, куда вести.
+ */
+fun UpdateNews.notice(): Notice = when (this) {
+    is UpdateNews.Installed -> Notice(
+        title = "Обновление установлено",
+        text = "Работает версия " + versionName + ".",
+        details = listOfNotNull(notes.takeIf { it.isNotBlank() }?.let { "Что изменилось: " + it }),
+    )
+
+    is UpdateNews.Broken -> Notice(
+        title = "Обновление не завершилось",
+        // Названы обе версии: «не завершилось» без чисел человек читает как «что-то
+        // сломалось», а с числами — как «осталось прежнее», что и есть правда.
+        text = "Вы начали ставить " + wanted + ", но установка не дошла до конца — " +
+            "работает прежняя " + current.ifBlank { "версия" } + ".",
+        details = listOfNotNull(
+            notes.takeIf { it.isNotBlank() }?.let { "Что изменилось: " + it },
+            "Переписка и аккаунт не пострадали: установщик их не трогает.",
+        ),
+    )
+
+    is UpdateNews.Important -> Notice(
+        title = "Вышло важное обновление",
+        text = "Доступна " + versionName + ".",
+        details = listOfNotNull(
+            notes.takeIf { it.isNotBlank() }?.let { "Что изменилось: " + it },
+            "Старая версия может работать неправильно.",
+        ),
+    )
+}
+
+/**
  * Кто ставит скачанное. Тоже порт потребителя: качать и запускать установщик умеет
  * только платформа, и оболочке нельзя про неё знать.
  *
@@ -364,10 +399,14 @@ class UpdateStore(
                     )
                 }
             }
-            _state.value = _state.value.copy(
-                installing = outcome is InstallOutcome.Started,
-                outcome = outcome,
-            )
+            // **Скачивание кончилось при ЛЮБОМ исходе, включая успех** — находка
+            // 2026-09-06, и это была настоящая поломка. Раньше здесь стояло
+            // `installing = outcome is Started`, то есть при успехе экран навсегда
+            // оставался в «Скачиваем 100% · не закрывайте приложение». На ПК этого не
+            // видно: следом закрывается само приложение. На Android оно живёт, системный
+            // установщик показывается поверх, и отказ от него возвращал человека на экран
+            // без единой кнопки — выйти можно было только выгрузив приложение из памяти.
+            _state.value = _state.value.copy(installing = false, outcome = outcome)
             // Приложение закрывается ПОСЛЕ того, как исход записан в состояние: иначе на
             // платформе, которая закрытие игнорирует, экран остался бы в «скачиваем».
             if (outcome is InstallOutcome.Started) onLeaving()
@@ -414,8 +453,9 @@ fun UpdateSection(
 
         state.asking -> Asking(state, onConfirm, onDismiss)
 
-        state.outcome != null && state.outcome !is InstallOutcome.Started ->
-            Failed(state.outcome, onInstall)
+        state.outcome is InstallOutcome.Started -> Handed(onInstall)
+
+        state.outcome != null -> Failed(state.outcome, onInstall)
 
         state.expect -> Secondary("Спрашиваем сервер…")
 
@@ -451,90 +491,11 @@ fun UpdateSection(
         else -> Secondary("Установлена последняя версия")
     }
 
-    Button(label = "Проверить ещё раз", onClick = onCheck, kind = ButtonKind.Quiet)
-}
-
-/**
- * Подокно при запуске: чем кончилась прошлая установка и не пора ли обновиться.
- *
- * **Отдельное окно, а не строка в настройках** (решение заказчика 2026-09-06). Прежде и
- * успех, и обрыв выглядели одинаково — молчанием: приложение исчезало, человек запускал
- * его заново и не знал, поставилось ли. Строку в настройках он бы не увидел: туда
- * заходят, когда о чём-то подумали, а здесь надо сказать первым.
- *
- * **Закрывается всегда.** Даже важное: оно вернётся при следующем запуске, и это уже
- * достаточно настойчиво. Не закрывается только [UpdateGate] — там работать правда
- * нельзя, и «продолжить» было бы ложью.
- */
-@Composable
-fun UpdateNewsWindow(
-    state: UpdateState,
-    news: UpdateNews,
-    /** Нажали «Установить»: дальше вопрос, а не загрузка. */
-    onInstall: () -> Unit,
-    /** Подтвердили установку. */
-    onConfirm: () -> Unit = {},
-    /** Отказались от установки — но окно остаётся: человек ещё не ответил на него. */
-    onDismiss: () -> Unit = {},
-    /** Закрыли окно. */
-    onClose: () -> Unit,
-    /** Умеет ли эта сборка ставить обновление сама. */
-    canInstall: Boolean = false,
-    modifier: Modifier = Modifier,
-) = Column(
-    modifier.fillMaxSize().padding(TimaSpacing.about5),
-    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
-) {
-    // Установка идёт прямо здесь, а не «перейдите на вкладку Обновление»: человек уже
-    // нажал, и отправлять его искать другое место значит терять половину нажавших.
-    when {
-        state.installing -> {
-            Downloading(state.percent)
-            return@Column
-        }
-
-        state.asking -> {
-            Asking(state, onConfirm, onDismiss)
-            return@Column
-        }
-
-        state.outcome != null && state.outcome !is InstallOutcome.Started -> {
-            Failed(state.outcome, onInstall)
-            Button(label = "Закрыть", onClick = onClose, kind = ButtonKind.Quiet)
-            return@Column
-        }
-    }
-
-    when (news) {
-        is UpdateNews.Installed -> {
-            Caption("Обновление установлено", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-            Secondary("Работает версия " + news.versionName + ".")
-            if (news.notes.isNotBlank()) Secondary("Что изменилось: " + news.notes)
-            Button(label = "Понятно", onClick = onClose)
-        }
-
-        is UpdateNews.Broken -> {
-            Caption("Обновление не завершилось", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-            // Названы обе версии: «не завершилось» без чисел человек читает как «что-то
-            // сломалось», а с числами — как «осталось прежнее», что и есть правда.
-            Secondary(
-                "Вы начали ставить " + news.wanted + ", но установка не дошла до конца — " +
-                    "работает прежняя " + news.current.ifBlank { "версия" } + ".",
-            )
-            if (news.notes.isNotBlank()) Secondary("Что изменилось: " + news.notes)
-            Secondary("Переписка и аккаунт не пострадали: установщик их не трогает.")
-            if (canInstall) Button(label = "Установить", onClick = onInstall)
-            Button(label = "Позже", onClick = onClose, kind = ButtonKind.Quiet)
-        }
-
-        is UpdateNews.Important -> {
-            Caption("Вышло важное обновление", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-            Secondary("Доступна " + news.versionName + ".")
-            if (news.notes.isNotBlank()) Secondary("Что изменилось: " + news.notes)
-            Secondary("Старая версия может работать неправильно.")
-            if (canInstall) Button(label = "Установить", onClick = onInstall)
-            Button(label = "Позже", onClick = onClose, kind = ButtonKind.Quiet)
-        }
+    // Во время скачивания и вопроса кнопки нет вовсе: спрашивать сервер, пока идёт
+    // загрузка, нечего — ответ ничего не изменит, а нажатие выглядит как способ
+    // прервать её. Не «неактивна», а именно нет: неактивная кнопка тоже зовёт нажать.
+    if (!state.installing && !state.asking) {
+        Button(label = "Проверить ещё раз", onClick = onCheck, kind = ButtonKind.Quiet)
     }
 }
 
@@ -574,8 +535,9 @@ fun UpdateGate(
 
         state.asking -> Asking(state, onConfirm, onDismiss)
 
-        state.outcome != null && state.outcome !is InstallOutcome.Started ->
-            Failed(state.outcome, onInstall)
+        state.outcome is InstallOutcome.Started -> Handed(onInstall)
+
+        state.outcome != null -> Failed(state.outcome, onInstall)
 
         canInstall -> Button(label = "Обновить", onClick = onInstall)
 
@@ -624,6 +586,22 @@ private fun Asking(state: UpdateState, onConfirm: () -> Unit, onDismiss: () -> U
     )
     Button(label = "Установить", onClick = onConfirm)
     Button(label = "Не сейчас", onClick = onDismiss, kind = ButtonKind.Quiet)
+}
+
+/**
+ * Пакет отдан системе — дальше решает она.
+ *
+ * **Состояние, которого не было**, и его отсутствие было тупиком: на Android приложение
+ * после запуска установщика живёт, а человек, отказавшийся от системного окна, попадал
+ * обратно на «Скачиваем 100%» без кнопок. Отсюда правило: **из любого исхода должен быть
+ * выход**. На ПК этот блок никто не увидит — приложение закрывается раньше.
+ */
+@Composable
+private fun Handed(onRetry: () -> Unit) {
+    Caption("Установщик запущен", fontSize = TimaType.sz3, weight = FontWeight.Bold)
+    Secondary("Подтвердите установку в окне системы.")
+    Secondary("Если окно закрылось или вы отказались — нажмите ещё раз.")
+    Button(label = "Установить", onClick = onRetry)
 }
 
 /** Не получилось. Причина названа своими словами: от неё зависит, что делать дальше. */

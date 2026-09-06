@@ -125,8 +125,12 @@ import io.tima.feature.shell.KeepUnit
 import io.tima.feature.shell.StorageScreen
 import io.tima.feature.shell.UpdateGate
 import io.tima.feature.shell.UpdateMemory
+import io.tima.core.ui.ButtonKind
+import io.tima.feature.shell.Notice
+import io.tima.feature.shell.NoticeAction
+import io.tima.feature.shell.NoticeScreen
 import io.tima.feature.shell.UpdateNews
-import io.tima.feature.shell.UpdateNewsWindow
+import io.tima.feature.shell.notice
 import io.tima.feature.shell.UpdateInstaller
 import io.tima.feature.shell.UpdateState
 import io.tima.feature.shell.UpdateOffer
@@ -837,14 +841,26 @@ private fun App(
         }
     }
     if (news != null) {
-        UpdateNewsWindow(
-            state = updateState,
-            news = news,
-            onInstall = update::ask,
-            onConfirm = update::install,
-            onDismiss = update::dismiss,
+        NoticeScreen(
+            notice = news.notice(),
+            // Действие уводит туда, где обновление и живёт, — на вкладку настроек
+            // (решение заказчика 2026-09-06): «единая область, одна логика». Установки
+            // внутри события нет вовсе, и второй копии экрана обновления больше нет.
+            actions = when (news) {
+                // Установилось — решать нечего, и вести некуда.
+                is UpdateNews.Installed -> listOf(
+                    NoticeAction("Понятно", onPick = update::dismissNews),
+                )
+
+                else -> listOf(
+                    NoticeAction("Перейти к обновлению") {
+                        update.dismissNews()
+                        where = Where.Settings(SettingsItem.UPDATE)
+                    },
+                    NoticeAction("Позже", ButtonKind.Quiet, update::dismissNews),
+                )
+            },
             onClose = update::dismissNews,
-            canInstall = update.canInstall,
         )
         return
     }

@@ -3,6 +3,7 @@ package io.tima.feature.shell
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -262,5 +263,35 @@ class UpdateStoreTest {
         store.dismissNews()
 
         assertEquals(null, store.state.value.news, "окно обязано закрываться — даже важное")
+    }
+
+    @Test
+    fun после_запуска_установщика_скачивание_кончается() = runTest {
+        // Поломка 2026-09-06: `installing` оставался true при успехе. На ПК не видно —
+        // приложение закрывается; на Android оно живёт, и отказ от системного окна
+        // возвращал человека на «Скачиваем 100%» без единой кнопки. Выйти можно было
+        // только выгрузив приложение из памяти.
+        val store = store(backgroundScope, Fake(InstallOutcome.Started))
+        store.state.first { it.offer != null }
+
+        store.ask()
+        store.install()
+        store.state.first { it.outcome != null }
+
+        assertFalse(store.state.value.installing, "экран навсегда остался бы в «скачиваем»")
+        assertEquals(InstallOutcome.Started, store.state.value.outcome)
+    }
+
+    @Test
+    fun новость_превращается_в_событие() {
+        // Тексты живут в оболочке, а не в сборке приложения: подокно события получает
+        // готовое сообщение и подставляет к нему переходы.
+        val broken = UpdateNews.Broken(wanted = "2.0.8-dev", current = "2.0.7-dev", notes = "")
+        val notice = broken.notice()
+
+        assertEquals("Обновление не завершилось", notice.title)
+        assertContains(notice.text, "2.0.8-dev")
+        assertContains(notice.text, "2.0.7-dev", message = "без обеих версий это читается как поломка")
+        assertTrue(notice.details.any { it.contains("не пострадали") })
     }
 }
