@@ -136,6 +136,11 @@ func (s *Server) Register(mux *http.ServeMux) {
 	RegisterFeeds(mux, s.Store, s.requireActiveDevice)
 	RegisterVirtuals(mux, s.Store, func() VirtualTokens { return s.Auth }, s.requireActiveDevice)
 	RegisterTransfers(mux, s.Store, func() VirtualTokens { return s.Auth }, s.requireActiveDevice)
+
+	// Отчёты о проблеме (ПЛАН-ОТЛАДКИ.md, Б4). Ручка публичная: токен разбирается
+	// внутри и необязателен — «не могу войти» самая частая жалоба, и требовать для неё
+	// авторизацию значит её не услышать.
+	RegisterProblems(mux, s.Store, func() *auth.Issuer { return s.Auth })
 	// Звонки, групповые звонки и аудио-комнаты (шаг 4): сюда же уехали поля
 	// Calls, Rooms и LiveKitURL — их видят только эти двенадцать маршрутов.
 	RegisterCalls(mux, s.Store, s.livekitSettings, s.notifier(), s.requireActiveDevice)
