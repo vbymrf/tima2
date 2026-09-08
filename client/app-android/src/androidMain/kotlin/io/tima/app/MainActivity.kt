@@ -206,6 +206,9 @@ class MainActivity : ComponentActivity() {
         /** Ключ строки оформления в настройках приложения. */
         const val KEY_APPEARANCE = "appearance"
 
+        /** Ключ выбранного языка. Отдельный от темы: это разные решения человека. */
+        const val KEY_LANGUAGE = "language"
+
         /** Ключ памяти о начатой установке. */
         const val KEY_UPDATE = "started"
     }

@@ -38,9 +38,17 @@ fun TimaTheme(
 @Composable
 fun TimaTheme(
     colors: TimaColors,
+    /**
+     * Словарь надписей (ПЛАН-ЯЗЫКА Я1). Умолчание — русский: приложение обязано говорить
+     * даже там, где язык ещё не выбран.
+     *
+     * Раздаётся тем же способом, что цвета, и по той же причине: смена языка на лету —
+     * это подмена словаря, а не перезапуск экрана.
+     */
+    words: Words = RussianWords,
     content: @Composable () -> Unit,
 ) {
-    CompositionLocalProvider(LocalTimaColors provides colors) {
+    CompositionLocalProvider(LocalTimaColors provides colors, LocalWords provides words) {
         // **Тема даёт непрозрачный фон, и это не украшение** (находка 2026-09-06).
         //
         // Фон красили только `Stage` и `SettingsScreen`. Всё, что рисуется вместо них —

@@ -108,6 +108,9 @@ import io.tima.core.ui.merged
 import io.tima.core.ui.TimaTheme
 import androidx.compose.foundation.isSystemInDarkTheme
 import io.tima.feature.shell.AppearanceScreen
+import io.tima.core.ui.Language
+import io.tima.core.ui.RussianWords
+import io.tima.feature.shell.LanguageScreen
 import io.tima.feature.shell.SettingsScreen
 import io.tima.core.diag.Diary
 import io.tima.core.diag.DiaryPolicy
@@ -189,6 +192,17 @@ fun Root(
     deviceDatabase: (String) -> TimaDatabase,
     /** Где платформа хранит выбранное оформление. */
     appearanceStore: AppearanceStore,
+    /**
+     * Где платформа хранит выбранный язык (ПЛАН-ЯЗЫКА Я1).
+     *
+     * Отдельно от оформления, хотя хранилище то же по устройству: это разные решения
+     * человека, и общая строка означала бы, что смена темы трогает язык.
+     *
+     * Умолчание — «не хранит»: приложение обязано открыться и там, где места ещё нет.
+     * Названо честно, а не подделкой: выбранный при таком хранилище язык живёт до
+     * перезапуска.
+     */
+    languageStore: AppearanceStore = AppearanceStore.Forgetful,
     linkCode: String? = null,
     /**
      * Код передачи аккаунта, принесённый снаружи (Д12).
@@ -231,8 +245,11 @@ fun Root(
     var appearance by remember {
         mutableStateOf(Appearance.read(appearanceStore.load(), systemDark))
     }
+    // Язык читается один раз при запуске и меняется только человеком. Незнакомый тег —
+    // русский: приложение обязано открыться, а не остаться без надписей.
+    var language by remember { mutableStateOf(Language.of(languageStore.load().orEmpty())) }
 
-    TimaTheme(colors = appearance.colors) {
+    TimaTheme(colors = appearance.colors, words = language.words ?: RussianWords) {
         Inside(
             entry = entry,
             deviceDatabase = deviceDatabase,
@@ -249,6 +266,15 @@ fun Root(
             onAppearance = {
                 appearance = it
                 appearanceStore.save(it.write())
+            },
+            language = language,
+            onLanguage = {
+                // Словари без надписей не выбираются экраном; здесь это ещё раз
+                // проверяется, потому что вызов может прийти и не от экрана.
+                if (it.available) {
+                    language = it
+                    languageStore.save(it.tag)
+                }
             },
         )
     }
@@ -295,6 +321,8 @@ private fun Inside(
     build: Build,
     appearance: Appearance,
     onAppearance: (Appearance) -> Unit,
+    language: Language,
+    onLanguage: (Language) -> Unit,
 ) {
     var device by remember { mutableStateOf(entry.created()) }
 
@@ -334,6 +362,8 @@ private fun Inside(
         build = build,
         appearance = appearance,
         onAppearance = onAppearance,
+        language = language,
+        onLanguage = onLanguage,
         accounts = entry.accountList(),
         unsent = unsent,
         // Число оставляет тот аккаунт, что открыт: чужую очередь не прочитать — её база
@@ -547,6 +577,8 @@ private fun App(
     build: Build,
     appearance: Appearance,
     onAppearance: (Appearance) -> Unit,
+    language: Language,
+    onLanguage: (Language) -> Unit,
     /** Аккаунты этого устройства: основной и его виртуальные (Д11). */
     accounts: List<Account> = emptyList(),
     onSwitchAccount: (String) -> Unit = {},
@@ -1214,6 +1246,8 @@ private fun App(
                         build = build,
                         appearance = appearance,
                         onAppearance = onAppearance,
+                        language = language,
+                        onLanguage = onLanguage,
                         onBack = { where = Where.Nothing },
                         profile = profile,
                         profileState = profileState,
@@ -1501,6 +1535,8 @@ private fun Settings(
     build: Build,
     appearance: Appearance,
     onAppearance: (Appearance) -> Unit,
+    language: Language,
+    onLanguage: (Language) -> Unit,
     onBack: () -> Unit,
     /** Профиль общий с переключением окон: один Store, два входа. */
     profile: ProfileStore,
@@ -1589,6 +1625,14 @@ private fun Settings(
             SettingsItem.DEVICES -> Devices(fleet, devices, build.name)
 
             SettingsItem.APPEARANCE -> AppearanceScreen(appearance, onAppearance)
+
+            // Выбор языка приложения (ПЛАН-ЯЗЫКА Я1). Сообщения не переводятся, и экран
+            // говорит это строкой: перевода сообщений нет вовсе.
+            SettingsItem.LANGUAGE -> LanguageScreen(
+                current = language.tag,
+                onChoose = onLanguage,
+                onBack = { onOpen(null) },
+            )
 
             SettingsItem.UPDATE -> Update(update, updateState)
 
