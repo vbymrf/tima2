@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import io.tima.core.ui.FormatTima
 import io.tima.core.ui.Stage
+import io.tima.core.ui.WindowTab
 import io.tima.core.ui.TimaContrast
 import io.tima.core.ui.TimaColors
 import io.tima.testui.FOREIGN_BACKGROUND
@@ -77,8 +78,8 @@ class SecondRowTest {
      */
     @Test
     fun выбранное_в_переключателе_залито() {
-        val open = capture("ряд-режим-1", 160, 44, dark = false) { switchOnly("Открытое") }
-        val personal = capture("ряд-режим-2", 160, 44, dark = false) { switchOnly("Личное") }
+        val open = capture("ряд-режим-1", 160, 44, dark = false) { switchOnly(WindowTab.Open) }
+        val personal = capture("ряд-режим-2", 160, 44, dark = false) { switchOnly(WindowTab.Personal) }
         assertTrue(
             open.difference(personal) > 0.0,
             "смена режима ничего не изменила — выбранный сегмент неотличим",
@@ -224,18 +225,20 @@ class SecondRowTest {
      * «сплошного салатового пятна нет» ловила бы его, а не переключатель.
      */
     @Composable
-    private fun switchOnly(selected: String) = Box(Modifier.fillMaxSize()) {
-        ModeSwitch(listOf("Открытое", "Личное"), selected, {})
+    private fun switchOnly(selected: WindowTab) = Box(Modifier.fillMaxSize()) {
+        ModeSwitch(listOf(WindowTab.Open, WindowTab.Personal), selected, {})
     }
 
     /** Ряд «Коллекций» окна 5 целиком: три подвкладки и переключатель контура. */
     @Composable
     private fun collections() = Box(Modifier.fillMaxSize()) {
         FilterRow(
-            items = listOf("Медиа", "Сообщения", "Каталог"),
-            selected = "Медиа",
+            items = listOf(WindowTab.Media, WindowTab.Messages, WindowTab.Catalogue),
+            selected = WindowTab.Media,
             onPick = {},
-            trailing = { ModeSwitch(listOf("Открытое", "Личное"), "Личное", {}) },
+            trailing = {
+                ModeSwitch(listOf(WindowTab.Open, WindowTab.Personal), WindowTab.Personal, {})
+            },
         )
     }
 

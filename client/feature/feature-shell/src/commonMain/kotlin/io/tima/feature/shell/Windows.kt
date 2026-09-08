@@ -6,6 +6,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import io.tima.core.ui.Tima
+import io.tima.core.ui.WindowTab
+import io.tima.core.ui.words
 
 /**
  * Окна 2–5 по макету: вкладки и вторые ряды настоящие, содержимое честно пустое.
@@ -61,13 +64,13 @@ fun SocialWindow(
     modifier = modifier,
 ) { tab ->
     when (tab) {
-        "Общая" -> TabStub(
+        WindowTab.Common -> TabStub(
             "Здесь будет общая лента",
             "Рекомендации и подписки. Сервер социального слоя не готов: постов, " +
                 "оценок и подписок на нём нет вовсе.",
         )
 
-        "Друзья" -> friends?.invoke() ?: TabStub(
+        WindowTab.Friends -> friends?.invoke() ?: TabStub(
             "Здесь будет лента друзей",
             "То, что положили себе на страницу люди из вашей книги.",
         )
@@ -113,18 +116,18 @@ fun MediaWindow(
         modifier = modifier,
         tabsTrailing = { ModeSwitch(MEDIA_MODES, mode, { mode = it }) },
     ) { tab ->
-        val looking = if (mode == "Слайды") {
+        val looking = if (mode == WindowTab.Slides) {
             "Кадр во весь экран, отклики под ним, листание вверх и вниз."
         } else {
             "Карточками, как в остальных окнах."
         }
         when (tab) {
-            "Общая" -> TabStub(
+            WindowTab.Common -> TabStub(
                 "Здесь будет медиа-лента: $mode",
                 "$looking Ни медиа-постов, ни ленты сервер не отдаёт.",
             )
 
-            "Друзья" -> TabStub(
+            WindowTab.Friends -> TabStub(
                 "Здесь будут медиа друзей: $mode",
                 "$looking Тот же социальный слой, которого на сервере нет.",
             )
@@ -157,22 +160,22 @@ fun ActivityWindow(
         onNeighbourWindow = onNeighbourWindow,
         modifier = modifier,
         secondRow = { tab ->
-            if (tab == "Реакции") {
+            if (tab == WindowTab.Reactions) {
                 FilterRow(REACTION_FILTERS, reactions, { reactions = it })
             }
         },
     ) { tab ->
         when (tab) {
-            "Ответы" -> TabStub(
+            WindowTab.Answers -> TabStub(
                 "Здесь будет то, где вам ответили",
                 "Ветки обсуждений и отслеживаемое. Комментариев и веток на сервере нет.",
             )
 
-            "Реакции" -> TabStub(
-                "Здесь будет, как оценили ваше: ${reactions.lowercase()}",
+            WindowTab.Reactions -> TabStub(
+                "Здесь будет, как оценили ваше: " + Tima.words.tabs.label(reactions).lowercase(),
                 when (reactions) {
-                    "Комментарии" -> "Только комментарии к вашим записям. Комментариев на сервере нет."
-                    "Оценки" -> "Только эмоции и «плюсы». Шкала эмоций на сервере не заведена."
+                    WindowTab.Comments -> "Только комментарии к вашим записям. Комментариев на сервере нет."
+                    WindowTab.Marks -> "Только эмоции и «плюсы». Шкала эмоций на сервере не заведена."
                     else -> "Комментарии и оценки вперемешку. Ни того, ни другого на сервере нет."
                 },
             )
@@ -221,12 +224,12 @@ fun PageWindow(
         onNeighbourWindow = onNeighbourWindow,
         modifier = modifier,
         secondRow = { tab ->
-            if (tab == "Коллекции") {
+            if (tab == WindowTab.Collections) {
                 FilterRow(
                     items = COLLECTION_TABS,
                     selected = collections,
                     onPick = { collections = it },
-                    trailing = if (collections == "Каталог") {
+                    trailing = if (collections == WindowTab.Catalogue) {
                         null
                     } else {
                         { ModeSwitch(COLLECTION_MODES, outline, { outline = it }) }
@@ -236,12 +239,12 @@ fun PageWindow(
         },
     ) { tab ->
         when (tab) {
-            "Подписан" -> TabStub(
+            WindowTab.Subscribed -> TabStub(
                 "Здесь будут каналы и сообщества",
                 "На них подписываются. Подписок на сервере нет.",
             )
 
-            "Лента" -> if (feed != null) {
+            WindowTab.Feed -> if (feed != null) {
                 feed()
             } else {
                 TabStub(
@@ -251,8 +254,8 @@ fun PageWindow(
                 )
             }
 
-            "Коллекции" -> when (collections) {
-                "Каталог" -> TabStub(
+            WindowTab.Collections -> when (collections) {
+                WindowTab.Catalogue -> TabStub(
                     "Здесь будет ваша собственность",
                     "Каналы, сообщества, группы и голосовые комнаты — то, чем вы " +
                         "управляете. Переключателем контура каталог не управляется. " +
@@ -260,8 +263,9 @@ fun PageWindow(
                 )
 
                 else -> TabStub(
-                    "Здесь будет собранное вами: ${collections.lowercase()}, ${outline.lowercase()}",
-                    if (outline == "Личное") {
+                    "Здесь будет собранное вами: " + Tima.words.tabs.label(collections).lowercase() +
+                        ", " + Tima.words.tabs.label(outline).lowercase(),
+                    if (outline == WindowTab.Personal) {
                         "Контур под сквозным шифрованием, метка «E2E · личная». " +
                             "Коллекций на сервере нет."
                     } else {
@@ -287,29 +291,30 @@ fun PageWindow(
  * тест мерил бы старые слова и уверял, что всё помещается.
  */
 /** Вкладки окон 2 и 3 (`§4`, `§5`). */
-internal val COMMON_TABS = listOf("Общая", "Друзья", "Каталог")
+internal val COMMON_TABS = listOf(WindowTab.Common, WindowTab.Friends, WindowTab.Catalogue)
 
 /** Вкладки окна 4 (`§6`). */
-internal val SOCIAL_TABS = listOf("Ответы", "Реакции", "Коллекции")
+internal val SOCIAL_TABS = listOf(WindowTab.Answers, WindowTab.Reactions, WindowTab.Collections)
 
 /** Вкладки окна 5 (`§7`). */
-internal val PAGE_TABS = listOf("Подписан", "Лента", "Коллекции", "Группы")
+internal val PAGE_TABS =
+    listOf(WindowTab.Subscribed, WindowTab.Feed, WindowTab.Collections, WindowTab.Groups)
 
 /** «Лента» и «Слайды» — два способа смотреть одно и то же (`§5`). */
-internal val MEDIA_MODES = listOf("Лента", "Слайды")
+internal val MEDIA_MODES = listOf(WindowTab.Feed, WindowTab.Slides)
 
 /** Фильтры «Реакций» (`§6`). */
-internal val REACTION_FILTERS = listOf("Все", "Комментарии", "Оценки")
+internal val REACTION_FILTERS = listOf(WindowTab.All, WindowTab.Comments, WindowTab.Marks)
 
 /** Подвкладки «Коллекций» (`§7`). */
-internal val COLLECTION_TABS = listOf("Медиа", "Сообщения", "Каталог")
+internal val COLLECTION_TABS = listOf(WindowTab.Media, WindowTab.Messages, WindowTab.Catalogue)
 
 /**
  * Контур коллекций (`§7`). Открывается окно на «Личном»: это своё хозяйство, и
  * показывать его сначала публичной частью значило бы прятать от человека его же
  * содержимое — так и в макете, где залито «Личное».
  */
-internal val COLLECTION_MODES = listOf("Открытое", "Личное")
+internal val COLLECTION_MODES = listOf(WindowTab.Open, WindowTab.Personal)
 
 /**
  * Фильтры журнала звонков — `интерфейс.md §2`, ряд под вкладками окна 1.
@@ -319,7 +324,8 @@ internal val COLLECTION_MODES = listOf("Открытое", "Личное")
  * бы, что мерить ряд на перенос нечем — [RowFitTest] лежит в этом модуле и до чужого
  * `private` не дотянется.
  */
-val CALL_FILTERS = listOf("Все", "Контактов", "Неизвестные", "Пропущенные")
+val CALL_FILTERS =
+    listOf(WindowTab.All, WindowTab.FromBook, WindowTab.Unknown, WindowTab.Missed)
 
 /**
  * Общий вид окна, у которого пока нет содержимого.
@@ -331,7 +337,7 @@ val CALL_FILTERS = listOf("Все", "Контактов", "Неизвестны�
 @Composable
 private fun WindowWithTabs(
     window: Window,
-    tabs: List<String>,
+    tabs: List<WindowTab>,
     onSwitchWindows: () -> Unit,
     onSearch: () -> Unit,
     onSettings: () -> Unit,
@@ -340,8 +346,8 @@ private fun WindowWithTabs(
     /** Хвост ряда вкладок: режим всего окна, он вкладку переживает. */
     tabsTrailing: (@Composable () -> Unit)? = null,
     /** Ряд под вкладками. Получает выбранную вкладку: у разных вкладок он разный. */
-    secondRow: (@Composable (String) -> Unit)? = null,
-    content: @Composable (String) -> Unit,
+    secondRow: (@Composable (WindowTab) -> Unit)? = null,
+    content: @Composable (WindowTab) -> Unit,
 ) {
     var selected by remember(window) { mutableStateOf(tabs.first()) }
     val row = secondRow

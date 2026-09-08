@@ -110,6 +110,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import io.tima.feature.shell.AppearanceScreen
 import io.tima.core.ui.Language
 import io.tima.core.ui.Tima
+import io.tima.core.ui.WindowTab
 import io.tima.core.ui.words
 import io.tima.core.ui.RussianWords
 import io.tima.feature.shell.LanguageScreen
@@ -754,7 +755,7 @@ private fun App(
     LaunchedEffect(commentPing) {
         if (commentPing != 0L) page.refresh()
     }
-    var phoneTab by remember { mutableStateOf("Чаты") }
+    var phoneTab by remember { mutableStateOf(WindowTab.Chats) }
 
     // Откуда ушли в настройки (ПЛАН-ОТЛАДКИ.md, Б2). Запоминается ЗДЕСЬ, в момент
     // перехода: к моменту отправки отчёта «текущее окно» будет «Настройки», то есть
@@ -768,7 +769,13 @@ private fun App(
     val startedAt = remember { nowMillis() }
     val startedWords = { howLongSince(startedAt) }
     val toSettings: () -> Unit = {
-        cameFrom = Origin(window, if (window == Window.Phone) phoneTab else "")
+        cameFrom = Origin(
+            window,
+            // Вкладка в отчёте называется ПО-РУССКИ и всегда: отчёт читает тот, кто
+            // чинит, и переведённый он перестаёт совпадать с тем, что ищут поиском
+            // (ПЛАН-ЯЗЫКА, «что не переводится»).
+            if (window == Window.Phone) RussianWords.tabs.label(phoneTab) else "",
+        )
         where = Where.Settings()
     }
 
@@ -2090,8 +2097,8 @@ private const val INVITE_TEXT =
  */
 @Composable
 private fun PhoneWindow(
-    tab: String,
-    onTab: (String) -> Unit,
+    tab: WindowTab,
+    onTab: (WindowTab) -> Unit,
     list: ChatsState,
     book: BookState,
     onSearchInBook: (String) -> Unit,
@@ -2115,7 +2122,7 @@ private fun PhoneWindow(
     var calls by remember { mutableStateOf(CALL_FILTERS.first()) }
     WindowFrame(
         window = Window.Phone,
-        tabs = listOf("Чаты", "Контакты", "Звонки"),
+        tabs = listOf(WindowTab.Chats, WindowTab.Contacts, WindowTab.Calls),
         selected = tab,
         onTab = onTab,
         onSwitchWindows = onSwitchWindows,
@@ -2124,28 +2131,28 @@ private fun PhoneWindow(
         onNeighbourWindow = onNeighbourWindow,
         // «Вид» стоит последней вкладкой и только у «Контактов»: у чатов и журнала
         // настраивать нечего, и кнопка там означала бы несуществующее.
-        tabsTrailing = if (tab == "Контакты") {
-            { Tab(label = "Вид", current = false, onClick = onView) }
+        tabsTrailing = if (tab == WindowTab.Contacts) {
+            { Tab(label = Tima.words.tabs.label(WindowTab.View), current = false, onClick = onView) }
         } else {
             null
         },
         // Второй ряд: у журнала фильтры, у «Контактов» в виде «меню» — разделы.
         secondRow = when {
-            tab == "Звонки" -> { { FilterRow(CALL_FILTERS, calls, { calls = it }) } }
-            tab == "Контакты" && !book.view.folders && book.tabs.size > 1 ->
+            tab == WindowTab.Calls -> { { FilterRow(CALL_FILTERS, calls, { calls = it }) } }
+            tab == WindowTab.Contacts && !book.view.folders && book.tabs.size > 1 ->
                 { { FilterRow(book.tabs, book.chosen.ifBlank { "Все" }, onChooseSection) } }
             else -> null
         },
     ) {
         when (tab) {
-            "Чаты" -> ChatsScreen(
+            WindowTab.Chats -> ChatsScreen(
                 state = list,
                 onOpen = onOpen,
                 onNew = onNew,
                 onSettings = onSettings,
             )
 
-            "Контакты" -> {
+            WindowTab.Contacts -> {
                 // Телефонная книга читается при открытии вкладки, а не при запуске:
                 // разрешение, спрошенное на первом экране, объяснить нечем — человек
                 // ещё не видел ни одного контакта.
@@ -2165,9 +2172,9 @@ private fun PhoneWindow(
             // не меняется, неотличим от сломанного — в него тыкают повторно.
             else -> TabStub(
                 willWhat = when (calls) {
-                    "Контактов" -> "Здесь будет журнал звонков от людей из книги"
-                    "Неизвестные" -> "Здесь будет журнал звонков с чужих номеров"
-                    "Пропущенные" -> "Здесь будет журнал пропущенных"
+                    WindowTab.FromBook -> "Здесь будет журнал звонков от людей из книги"
+                    WindowTab.Unknown -> "Здесь будет журнал звонков с чужих номеров"
+                    WindowTab.Missed -> "Здесь будет журнал пропущенных"
                     else -> "Здесь будет журнал звонков"
                 },
                 thanHolds = "Входящие, исходящие и пропущенные — направление стрелкой, " +

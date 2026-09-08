@@ -20,6 +20,8 @@ import io.tima.core.ui.Caption
 import io.tima.core.ui.Chip
 import io.tima.core.ui.ChipKind
 import io.tima.core.ui.TimaSpacing
+import io.tima.core.ui.WindowTab
+import io.tima.core.ui.words
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.Tima
 
@@ -73,13 +75,42 @@ import io.tima.core.ui.Tima
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FilterRow(
-    /** Чипы ряда. Пусто — законный случай: бывает ряд из одного только режима. */
+    /**
+     * Чипы ряда — **строками**: так приходят разделы книги контактов, которые придумал
+     * человек. Это данные, а не словарь, и переводить их нельзя.
+     *
+     * Свои фильтры зовут второй вид этой же функции — по ключам [WindowTab].
+     */
     items: List<String> = emptyList(),
     selected: String = "",
     onPick: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     /** Хвост ряда: переключатель режимов. Есть не у всякого ряда. */
     trailing: (@Composable () -> Unit)? = null,
+) = ChipsRow(items, selected, onPick, modifier, trailing) { it }
+
+/**
+ * Тот же ряд, но по ключам: наши фильтры, у которых надпись приходит из словаря
+ * (ПЛАН-ЯЗЫКА Я2).
+ */
+@Composable
+fun FilterRow(
+    items: List<WindowTab>,
+    selected: WindowTab,
+    onPick: (WindowTab) -> Unit,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
+) = ChipsRow(items, selected, onPick, modifier, trailing) { Tima.words.tabs.label(it) }
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun <T> ChipsRow(
+    items: List<T>,
+    selected: T,
+    onPick: (T) -> Unit,
+    modifier: Modifier,
+    trailing: (@Composable () -> Unit)?,
+    label: @Composable (T) -> String,
 ) {
     val colors = Tima.colors
     FlowRow(
@@ -90,14 +121,14 @@ fun FilterRow(
         horizontalArrangement = Arrangement.spacedBy(ROW_GAP),
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
     ) {
-        for (name in items) {
+        for (item in items) {
             Chip(
-                label = name,
+                label = label(item),
                 // Нейтральная подложка, а не тихая: ряд подвкладок обязан читаться
                 // иначе, чем ряд вкладок над ним. Решение заказчика — «серый, темнее
                 // фона; активная — тот же салатовый».
-                kind = if (name == selected) ChipKind.Selected else ChipKind.Neutral,
-                onClick = { onPick(name) },
+                kind = if (item == selected) ChipKind.Selected else ChipKind.Neutral,
+                onClick = { onPick(item) },
                 horizontalPadding = CHIP_SIDE,
             )
         }
@@ -150,12 +181,13 @@ fun FilterRow(
  */
 @Composable
 fun ModeSwitch(
-    modes: List<String>,
-    selected: String,
-    onPick: (String) -> Unit,
+    modes: List<WindowTab>,
+    selected: WindowTab,
+    onPick: (WindowTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = Tima.colors
+    val words = Tima.words.tabs
     Row(
         modifier = modifier
             .background(colors.quiet, CircleShape)
@@ -175,7 +207,7 @@ fun ModeSwitch(
                 contentAlignment = Alignment.Center,
             ) {
                 Caption(
-                    text = mode,
+                    text = words.label(mode),
                     fontSize = TimaType.sz6,
                     weight = FontWeight.Bold,
                     color = if (current) colors.onAccent else colors.text2,

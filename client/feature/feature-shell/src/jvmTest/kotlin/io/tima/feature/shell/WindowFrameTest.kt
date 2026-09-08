@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import io.tima.core.ui.Stage
+import io.tima.core.ui.WindowTab
 import io.tima.core.ui.TimaColors
 import io.tima.core.ui.TimaContrast
 import io.tima.testui.Snapshot
@@ -168,11 +169,11 @@ class WindowFrameTest {
     }
 
     @Composable
-    private fun window(selected: String = "Общая") = Stage(
+    private fun window(selected: WindowTab = WindowTab.Common) = Stage(
         column = {
             WindowFrame(
                 window = Window.Social,
-                tabs = listOf("Общая", "Друзья", "Каталог"),
+                tabs = listOf(WindowTab.Common, WindowTab.Friends, WindowTab.Catalogue),
                 selected = selected,
                 onTab = {},
                 onSwitchWindows = {},

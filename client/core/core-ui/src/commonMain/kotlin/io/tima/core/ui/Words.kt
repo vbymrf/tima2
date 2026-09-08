@@ -46,6 +46,17 @@ interface Words {
     val appearance: AppearanceWords
     val comments: CommentWords
     val communities: CommunityWords
+    val tabs: TabWords
+}
+
+/**
+ * Названия вкладок, фильтров и режимов окон.
+ *
+ * Ключ — [WindowTab], слово — здесь. До Я2 вкладка была строкой и служила и тем, и другим:
+ * перевести её было нельзя, потому что перевод сменил бы ключ.
+ */
+interface TabWords {
+    fun label(tab: WindowTab): String
 }
 
 /** Слова, встречающиеся всюду: кнопки, состояния, беды. */
@@ -274,6 +285,42 @@ object RussianWords : Words {
         override val postGone = "Записи больше нет"
         override val postGoneAbout = "Разговор ушёл вместе с ней"
         override val loading = "Загружаем разговор…"
+    }
+
+    override val tabs = object : TabWords {
+        override fun label(tab: WindowTab) = when (tab) {
+            WindowTab.Chats -> "Чаты"
+            WindowTab.Contacts -> "Контакты"
+            WindowTab.Calls -> "Звонки"
+            WindowTab.View -> "Вид"
+
+            WindowTab.All -> "Все"
+            WindowTab.FromBook -> "Контактов"
+            WindowTab.Unknown -> "Неизвестные"
+            WindowTab.Missed -> "Пропущенные"
+
+            WindowTab.Common -> "Общая"
+            WindowTab.Friends -> "Друзья"
+            WindowTab.Catalogue -> "Каталог"
+
+            WindowTab.Feed -> "Лента"
+            WindowTab.Slides -> "Слайды"
+
+            WindowTab.Answers -> "Ответы"
+            WindowTab.Reactions -> "Реакции"
+            WindowTab.Collections -> "Коллекции"
+
+            WindowTab.Comments -> "Комментарии"
+            WindowTab.Marks -> "Оценки"
+
+            WindowTab.Subscribed -> "Подписан"
+            WindowTab.Groups -> "Группы"
+
+            WindowTab.Media -> "Медиа"
+            WindowTab.Messages -> "Сообщения"
+            WindowTab.Open -> "Открытое"
+            WindowTab.Personal -> "Личное"
+        }
     }
 
     override val communities = object : CommunityWords {

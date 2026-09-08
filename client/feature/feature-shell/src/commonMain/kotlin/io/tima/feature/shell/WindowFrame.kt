@@ -18,6 +18,8 @@ import io.tima.core.ui.IconButton
 import io.tima.core.ui.LayoutLocal
 import io.tima.core.ui.ControlRow
 import io.tima.core.ui.TimaSpacing
+import io.tima.core.ui.WindowTab
+import io.tima.core.ui.words
 import io.tima.core.ui.Tima
 import io.tima.core.ui.Tab
 import io.tima.core.ui.WindowHeader
@@ -51,9 +53,9 @@ import io.tima.core.ui.bottomLine
 @Composable
 fun WindowFrame(
     window: Window,
-    tabs: List<String>,
-    selected: String,
-    onTab: (String) -> Unit,
+    tabs: List<WindowTab>,
+    selected: WindowTab,
+    onTab: (WindowTab) -> Unit,
     onSwitchWindows: () -> Unit,
     onSearch: () -> Unit,
     onSettings: () -> Unit,
@@ -146,9 +148,9 @@ enum class InSide { Previous, Next }
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TabRow(
-    tabs: List<String>,
-    selected: String,
-    onTab: (String) -> Unit,
+    tabs: List<WindowTab>,
+    selected: WindowTab,
+    onTab: (WindowTab) -> Unit,
     modifier: Modifier = Modifier,
     /** Хвост ряда: переключатель режима окна. */
     trailing: (@Composable () -> Unit)? = null,
@@ -162,14 +164,14 @@ fun TabRow(
         horizontalArrangement = Arrangement.spacedBy(ROW_GAP),
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
     ) {
-        for (name in tabs) {
+        for (tab in tabs) {
             // Вкладка, а не чип: невыбранная — слово без заливки (`.таб` макета).
             // Пока она была чипом, ряд вкладок и ряд подвкладок под ним читались как
             // один ряд из шести одинаковых пилюль — заказчик увидел это 2026-09-02.
             Tab(
-                label = name,
-                current = name == selected,
-                onClick = { onTab(name) },
+                label = Tima.words.tabs.label(tab),
+                current = tab == selected,
+                onClick = { onTab(tab) },
             )
         }
         trailing?.invoke()

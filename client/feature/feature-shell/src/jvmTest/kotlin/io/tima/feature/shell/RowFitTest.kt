@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import io.tima.core.ui.WindowTab
 import io.tima.core.ui.TimaColors
 import io.tima.testui.FOREIGN_BACKGROUND
 import io.tima.testui.Snapshot
@@ -92,7 +93,7 @@ class RowFitTest {
          * разошлась бы с окном, и тест мерил бы слова, которых на экране уже нет.
          */
         val ROWS: Map<String, @Composable () -> Unit> = mapOf(
-            "телефон-звонки" to { Row { FilterRow(CALL_FILTERS, "Все", {}) } },
+            "телефон-звонки" to { Row { FilterRow(CALL_FILTERS, WindowTab.All, {}) } },
             "медиа-вкладки" to {
                 Row {
                     TabRow(COMMON_TABS, COMMON_TABS.first(), {}) {
@@ -100,12 +101,12 @@ class RowFitTest {
                     }
                 }
             },
-            "социум-реакции" to { Row { FilterRow(REACTION_FILTERS, "Все", {}) } },
-            "страница-вкладки" to { Row { TabRow(PAGE_TABS, "Коллекции", {}) } },
+            "социум-реакции" to { Row { FilterRow(REACTION_FILTERS, WindowTab.All, {}) } },
+            "страница-вкладки" to { Row { TabRow(PAGE_TABS, WindowTab.Collections, {}) } },
             "страница-коллекции" to {
                 Row {
                     FilterRow(COLLECTION_TABS, COLLECTION_TABS.first(), {}) {
-                        ModeSwitch(COLLECTION_MODES, "Личное", {})
+                        ModeSwitch(COLLECTION_MODES, WindowTab.Personal, {})
                     }
                 }
             },
