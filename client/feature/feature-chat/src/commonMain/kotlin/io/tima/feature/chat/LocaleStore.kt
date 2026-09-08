@@ -1,5 +1,9 @@
 package io.tima.feature.chat
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
+import io.tima.core.ui.ChatWords
 import io.tima.domain.chat.FeedFilter
 import io.tima.domain.chat.PersonLocale
 import io.tima.domain.chat.PersonLocales
@@ -28,6 +32,14 @@ class LocaleStore(
     private val locales: PersonLocales,
     private val settings: Settings,
     private val scope: CoroutineScope,
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
 
     private val _state = MutableStateFlow(LocaleState())
@@ -55,7 +67,7 @@ class LocaleStore(
         scope.launch {
             val locale = locales.read()
             _state.value = if (locale == null) {
-                _state.value.copy(loaded = true, trouble = "Не удалось прочитать язык и страну")
+                _state.value.copy(loaded = true, trouble = words().settings.localeNotRead)
             } else {
                 _state.value.copy(locale = locale, loaded = true, trouble = null)
             }
@@ -79,7 +91,7 @@ class LocaleStore(
         _state.value = _state.value.copy(locale = locale)
         scope.launch {
             if (!locales.write(locale)) {
-                _state.value = _state.value.copy(trouble = "Не удалось сохранить — попробуйте позже")
+                _state.value = _state.value.copy(trouble = words().settings.localeNotSaved)
             }
         }
     }

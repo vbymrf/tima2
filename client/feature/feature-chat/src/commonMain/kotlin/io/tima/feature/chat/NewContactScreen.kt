@@ -70,13 +70,13 @@ fun NewContactScreen(
 
                 // Исход сверки: сказан обычным текстом, а не отказом. «Не найден» — не
                 // ошибка человека, а состояние мира.
-                state.about?.let { Secondary(it) }
+                state.about(words)?.let { Secondary(it) }
                 state.trouble?.let { Trouble(it) }
 
                 // Кнопка не гаснет, а отвечает словами: погашенная кнопка не
                 // объясняет, чего ей не хватает, и в неё жмут повторно.
                 Button(
-                    label = state.saveWord,
+                    label = state.saveWord(words),
                     onClick = { if (state.canSave) onSave() },
                     kind = if (state.canSave) ButtonKind.Action else ButtonKind.Quiet,
                 )

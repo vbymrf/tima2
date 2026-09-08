@@ -1,5 +1,6 @@
 package io.tima.feature.chat
 
+import io.tima.core.ui.BookWords
 import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.ObserveBook
 import io.tima.domain.chat.Settings
@@ -14,7 +15,7 @@ import kotlinx.coroutines.launch
 /**
  * Вкладка «Контакты» окна «Телефон» — ПЛАН-КОНТАКТОВ.md, Д5.
  *
- * Список приходит **потоком из базы**, как у [ChatsStore]: прочитанное с телефона и
+ * Список приходит **потоком из базы**, как у [ChatsStore]: прочитанное с outsidersа и
  * итог сверки появляются сами, без опроса.
  *
  * **Поиск фильтрует уже полученный список.** Людей в книге сотни, а не тысячи, и второй
@@ -43,7 +44,7 @@ class BookStore(
     }
 
     /**
-     * Прочитать телефонную книгу и сверить.
+     * Прочитать outsidersную книгу и сверить.
      *
      * Зовётся при открытии вкладки, а не при запуске приложения: разрешение, спрошенное
      * на первом экране, объяснить нечем — человек ещё не видел ни одного контакта.
@@ -61,9 +62,9 @@ class BookStore(
     }
 
     fun openedSection(name: String) {
-        val было = _state.value.collapsed
+        val was = _state.value.collapsed
         _state.value = _state.value.copy(
-            collapsed = if (name in было) было - name else было + name,
+            collapsed = if (name in was) was - name else was + name,
         )
     }
 
@@ -86,8 +87,8 @@ data class BookView(
     /** Показывать раздел «Телефон» — тех, кого нет в TIMa. */
     val showOutsiders: Boolean = true,
     /**
-     * Чем называть человека. Ни одной галки — порядок по умолчанию, тот же самый:
-     * имя → имя пользователя → ник → телефон → «Без имени».
+     * Чем называть человека. Ни одной галки — order по умолчанию, тот же самый:
+     * имя → имя пользователя → ник → outsiders → «Без имени».
      */
     val showName: Boolean = true,
     val showUserName: Boolean = false,
@@ -151,17 +152,17 @@ data class BookState(
      *
      * Ищется по имени, **нику и номеру** — по тому же, по чему человека находят на
      * сервере. По имени поиск здесь местный и другим быть не может: сервер по имени не
-     * ищет вовсе (решение 2026-09-05), а имена своих контактов и так лежат на устройстве.
+     * ищет вовсе (решение 2026-09-05), а имена oursх контактов и так лежат на устройстве.
      */
     val visible: List<BookEntry>
         get() {
             val request = search.trim()
-            val списком = if (view.showOutsiders) all else all.filter { it.inTima }
-            if (request.isEmpty()) return списком
-            val цифры = request.filter { it.isDigit() }
-            return списком.filter { person ->
+            val listed = if (view.showOutsiders) all else all.filter { it.inTima }
+            if (request.isEmpty()) return listed
+            val digits = request.filter { it.isDigit() }
+            return listed.filter { person ->
                 person.name?.contains(request, ignoreCase = true) == true ||
-                    (цифры.isNotEmpty() && person.phone.contains(цифры))
+                    (digits.isNotEmpty() && person.phone.contains(digits))
             }
         }
 
@@ -169,21 +170,23 @@ data class BookState(
      * Разделы с людьми. **«Телефон» всегда последний** и всегда отдельный: в нём те,
      * кого нет в TIMa, и у них вместо звонка «Пригласить».
      */
-    val groups: List<BookGroup>
-        get() {
-            val (свои, чужие) = visible.partition { it.inTima }
-            val порядок = sections + listOf("")
-            val обычные = порядок.mapNotNull { name ->
-                val люди = свои.filter { it.section == name }
-                if (люди.isEmpty()) null else BookGroup(name.ifBlank { "Общий" }, люди)
-            }
-            val телефон = if (чужие.isEmpty()) emptyList()
-            else listOf(BookGroup("Телефон", чужие, outsiders = true))
-            return обычные + телефон
+    fun groups(words: BookWords): List<BookGroup> {
+        val (ours, strangers) = visible.partition { it.inTima }
+        val order = sections + listOf("")
+        val usual = order.mapNotNull { name ->
+            val people = ours.filter { it.section == name }
+            if (people.isEmpty()) null else BookGroup(name.ifBlank { words.commonSection }, people)
         }
+        val outsiders = if (strangers.isEmpty()) {
+            emptyList()
+        } else {
+            listOf(BookGroup(words.phoneSection, strangers, outsiders = true))
+        }
+        return usual + outsiders
+    }
 
     /** Вкладки вида «меню»: «Все», разделы, «Телефон» — последним. */
-    val tabs: List<String> get() = listOf("Все") + groups.map { it.name }
+    fun tabs(words: BookWords): List<String> = listOf(words.everyone) + groups(words).map { it.name }
 
     /** Список пуст потому, что ничего не нашлось, а не потому, что книга пуста. */
     val notFoundNothing: Boolean get() = all.isNotEmpty() && visible.isEmpty()
@@ -191,6 +194,6 @@ data class BookState(
     /** Разрешения нет — вкладка не пуста, ей есть что предложить нажать. */
     val needPermission: Boolean get() = sync == SyncStep.NeedPermission
 
-    /** Платформа без телефонной книги: предлагать «разрешить» нечего. */
+    /** Платформа без outsidersной книги: предлагать «разрешить» нечего. */
     val noBook: Boolean get() = sync == SyncStep.NoBook
 }

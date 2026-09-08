@@ -93,7 +93,7 @@ fun ProfileScreen(
                 Field(value = state.nickname, onChange = onNickname, hint = "petr_smirnov")
                 // Занятость сказана до нажатия: узнать о ней после отправки формы значит
                 // потерять уже введённое.
-                state.aboutNick?.let { Secondary(it) }
+                state.aboutNick(Tima.words)?.let { Secondary(it) }
                 state.trouble?.let { Trouble(it) }
                 if (state.saved) Secondary(words.saved)
 

@@ -1,5 +1,8 @@
 package io.tima.feature.auth
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
 import io.tima.domain.account.TransferAcceptStep
 import io.tima.domain.account.TransferStartStep
 import io.tima.domain.account.TransferVirtual
@@ -28,6 +31,14 @@ class TransferStore(
     /** Разбор принесённого: ссылка, голый код или мусор. */
     private val parse: (String) -> String?,
     private val scope: CoroutineScope,
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
     private val _state = MutableStateFlow(TransferState())
     val state: StateFlow<TransferState> = _state.asStateFlow()
@@ -60,11 +71,11 @@ class TransferStore(
                 )
                 TransferStartStep.NotYours -> _state.value.copy(
                     working = false,
-                    trouble = "Это не ваш виртуальный аккаунт",
+                    trouble = words().auth.notYourVirtual,
                 )
                 TransferStartStep.Offline -> _state.value.copy(
                     working = false,
-                    trouble = "Не дошло до сервера. Попробуйте ещё раз",
+                    trouble = words().trouble.didNotReach,
                 )
             }
         }
@@ -83,7 +94,7 @@ class TransferStore(
                 // следить за кодом — а тот ещё жив.
                 _state.value.copy(
                     working = false,
-                    trouble = "Отмена не дошла до сервера. Код ещё действует — попробуйте ещё раз",
+                    trouble = words().auth.cancelDidNotReach,
                 )
             }
             if (ушло) onCancelled()
@@ -117,11 +128,11 @@ class TransferStore(
         if (state.working) return
         val code = parse(state.brought)
         if (code == null) {
-            _state.value = state.copy(trouble = "Это не код передачи — проверьте, что вставили целиком")
+            _state.value = state.copy(trouble = words().auth.notTransferCode)
             return
         }
         if (state.phrase.isBlank()) {
-            _state.value = state.copy(trouble = "Нужна фраза передаваемого аккаунта — её даёт тот, кто передаёт")
+            _state.value = state.copy(trouble = words().auth.needAccountPhrase)
             return
         }
         val words = state.phrase.trim().split(' ', '\n', '\t').filter { it.isNotEmpty() }
@@ -136,22 +147,22 @@ class TransferStore(
                 TransferAcceptStep.BadPhrase -> _state.value.copy(
                     working = false,
                     phrase = "",
-                    trouble = "Фраза не подходит. Осталось меньше попыток — после третьей код придётся выдать заново",
+                    trouble = words().auth.phraseDoesNotFit,
                 )
                 TransferAcceptStep.Burned -> _state.value.copy(
                     working = false,
                     phrase = "",
-                    trouble = "Три неверные попытки — код сгорел. Попросите новый",
+                    trouble = words().auth.threeTriesBurned,
                 )
                 TransferAcceptStep.CodeGone -> _state.value.copy(
                     working = false,
                     phrase = "",
-                    trouble = "Код не действует: он погашен, отменён или ему больше получаса",
+                    trouble = words().auth.codeNotValid,
                 )
                 TransferAcceptStep.Offline -> _state.value.copy(
                     working = false,
                     phrase = "",
-                    trouble = "Не дошло до сервера. Попробуйте ещё раз",
+                    trouble = words().trouble.didNotReach,
                 )
             }
         }

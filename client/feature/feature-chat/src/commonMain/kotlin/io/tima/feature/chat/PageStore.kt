@@ -1,5 +1,9 @@
 package io.tima.feature.chat
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
+import io.tima.core.ui.ChatWords
 import io.tima.domain.chat.CarryStep
 import io.tima.domain.chat.CarryToPage
 import io.tima.domain.chat.CommentSwitches
@@ -35,6 +39,14 @@ class PageStore(
     private val switches: CommentSwitches? = null,
     /** Чья страница. `me` — своя. */
     private val userId: String = ReadPage.PAGE_MINE,
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
 
     private val read = ReadPage(pages)
@@ -55,8 +67,9 @@ class PageStore(
                 )
                 // Не ошибка и не тайна: страницу просто ещё не завели.
                 PageStep.NoPage -> _state.value.copy(entries = emptyList(), loaded = true, trouble = null)
-                is PageStep.Offline -> _state.value.copy(loaded = true, trouble = "Нет связи с сервером")
-                is PageStep.Refused -> _state.value.copy(loaded = true, trouble = "Сервер отказал: ${outcome.reason}")
+                is PageStep.Offline -> _state.value.copy(loaded = true, trouble = words().trouble.offline)
+                is PageStep.Refused ->
+                    _state.value.copy(loaded = true, trouble = words().trouble.refused(outcome.reason))
             }
         }
     }
@@ -83,10 +96,10 @@ class PageStore(
                 carried = if (outcome is CarryStep.Carried) _state.value.carried + messageId else _state.value.carried,
                 trouble = when (outcome) {
                     is CarryStep.Carried -> null
-                    CarryStep.CannotCarry -> "Эту запись нельзя унести к себе"
-                    CarryStep.NotFound -> "Записи больше нет"
-                    is CarryStep.Offline -> "Нет связи с сервером"
-                    is CarryStep.Refused -> "Сервер отказал: ${outcome.reason}"
+                    CarryStep.CannotCarry -> words().page.cannotCarry
+                    CarryStep.NotFound -> words().page.entryGone
+                    is CarryStep.Offline -> words().trouble.offline
+                    is CarryStep.Refused -> words().trouble.refused(outcome.reason)
                 },
             )
             if (outcome is CarryStep.Carried) refresh()
@@ -98,8 +111,9 @@ class PageStore(
         scope.launch {
             when (val outcome = pages.remove(postId)) {
                 is CarryStep.Carried -> refresh()
-                is CarryStep.Refused -> _state.value = _state.value.copy(trouble = "Сервер отказал: ${outcome.reason}")
-                else -> _state.value = _state.value.copy(trouble = "Не удалось убрать запись")
+                is CarryStep.Refused ->
+                    _state.value = _state.value.copy(trouble = words().trouble.refused(outcome.reason))
+                else -> _state.value = _state.value.copy(trouble = words().page.couldNotRemove)
             }
         }
     }
@@ -119,12 +133,12 @@ class PageStore(
             when (val outcome = SwitchComments(switch).channel(channelId, enabled)) {
                 SwitchStep.Switched -> refresh()
                 SwitchStep.NotAllowed ->
-                    _state.value = _state.value.copy(trouble = "Обсуждения выключает владелец страницы")
+                    _state.value = _state.value.copy(trouble = words().page.ownerSwitchesPage)
 
-                SwitchStep.NotFound -> _state.value = _state.value.copy(trouble = "Страницы больше нет")
-                is SwitchStep.Offline -> _state.value = _state.value.copy(trouble = "Нет связи с сервером")
+                SwitchStep.NotFound -> _state.value = _state.value.copy(trouble = words().page.pageGone)
+                is SwitchStep.Offline -> _state.value = _state.value.copy(trouble = words().trouble.offline)
                 is SwitchStep.Refused ->
-                    _state.value = _state.value.copy(trouble = "Сервер отказал: ${outcome.reason}")
+                    _state.value = _state.value.copy(trouble = words().trouble.refused(outcome.reason))
             }
         }
     }
@@ -138,12 +152,12 @@ class PageStore(
             when (val outcome = SwitchComments(switch).post(channelId, postId, closed)) {
                 SwitchStep.Switched -> refresh()
                 SwitchStep.NotAllowed ->
-                    _state.value = _state.value.copy(trouble = "Обсуждение закрывает владелец или модератор")
+                    _state.value = _state.value.copy(trouble = words().page.ownerOrModeratorCloses)
 
-                SwitchStep.NotFound -> _state.value = _state.value.copy(trouble = "Записи больше нет")
-                is SwitchStep.Offline -> _state.value = _state.value.copy(trouble = "Нет связи с сервером")
+                SwitchStep.NotFound -> _state.value = _state.value.copy(trouble = words().page.entryGone)
+                is SwitchStep.Offline -> _state.value = _state.value.copy(trouble = words().trouble.offline)
                 is SwitchStep.Refused ->
-                    _state.value = _state.value.copy(trouble = "Сервер отказал: ${outcome.reason}")
+                    _state.value = _state.value.copy(trouble = words().trouble.refused(outcome.reason))
             }
         }
     }

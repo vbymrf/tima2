@@ -1,5 +1,9 @@
 package io.tima.feature.chat
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
+import io.tima.core.ui.ChatWords
 import io.tima.domain.chat.StartChatResult
 import io.tima.domain.chat.StartPersonalChat
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +26,14 @@ class NewChatStore(
     private val start: StartPersonalChat,
     private val myUserId: String,
     private val scope: CoroutineScope,
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
 
     private val _state = MutableStateFlow(NewChatState())
@@ -45,10 +57,12 @@ class NewChatStore(
                 // а не сообщает об ошибке.
                 StartChatResult.NotFound -> current.copy(expect = false, invite = true)
 
-                StartChatResult.Myself -> current.copyWithTrouble("Это ваш собственный номер")
-                is StartChatResult.BadPhone -> current.copyWithTrouble("Номер не тот: ${outcome.reason}")
+                StartChatResult.Myself -> current.copyWithTrouble(words().chat.ownNumber)
+                is StartChatResult.BadPhone -> current.copyWithTrouble(words().chat.badPhone(outcome.reason))
                 is StartChatResult.Offline -> current.copyWithTrouble(
-                    "Нет связи с сервером — повторим через ${(outcome.retryAfterMs / 1000).coerceAtLeast(1)} с",
+                    words().trouble.retryIn(
+                        (outcome.retryAfterMs / 1000).coerceAtLeast(1).toInt(),
+                    ),
                 )
                 is StartChatResult.Refused -> current.copyWithTrouble(outcome.reason)
             }

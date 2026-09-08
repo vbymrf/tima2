@@ -1,5 +1,9 @@
 package io.tima.feature.chat
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
+import io.tima.core.ui.ChatWords
 import io.tima.domain.chat.AddContact
 import io.tima.domain.chat.AddStep
 import io.tima.domain.chat.Book
@@ -26,6 +30,14 @@ class NewContactStore(
     private val book: Book,
     private val discovery: ContactDiscovery,
     private val scope: CoroutineScope,
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
     private val _state = MutableStateFlow(NewContactState())
     val state: StateFlow<NewContactState> = _state.asStateFlow()
@@ -64,7 +76,7 @@ class NewContactStore(
     fun save(onDone: (AddStep) -> Unit) {
         val state = _state.value
         if (state.normalized == null) {
-            _state.value = state.copy(trouble = "Из этого номера не выходит телефона")
+            _state.value = state.copy(trouble = words().chat.notAPhone)
             return
         }
         scope.launch {
@@ -101,12 +113,13 @@ data class NewContactState(
      * «Написать» обещает переписку, и обещать её тому, кого в TIMa нет, нельзя — писать
      * ещё некому. Пока исход неизвестен, слово нейтральное.
      */
-    val saveWord: String get() = if (checked == true) "Добавить и написать" else "Добавить в контакты"
+    fun saveWord(words: ChatWords): String =
+        if (checked == true) words.addAndWrite else words.addToContacts
 
     /** Что сказать об исходе сверки до нажатия. */
-    val about: String? get() = when (checked) {
-        true -> "Найден в TIMa — подписка на его ленту оформится сама"
-        false -> "В TIMa его нет. Контакт сохранится — позвонить можно телефоном"
+    fun about(words: ChatWords): String? = when (checked) {
+        true -> words.foundInTima
+        false -> words.notInTima
         null -> null
     }
 }

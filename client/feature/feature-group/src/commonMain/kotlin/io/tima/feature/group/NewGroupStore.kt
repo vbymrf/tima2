@@ -1,5 +1,8 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
 import io.tima.domain.chat.ChannelStep
 import io.tima.domain.chat.CommunityItem
 import io.tima.domain.chat.CommunityStep
@@ -42,6 +45,14 @@ class NewGroupStore(
     private val communities: CreateCommunity? = null,
     /** Что можно внести в сообщество: свои группы и каналы, ещё не связанные ни с чем. */
     private val linkable: (suspend () -> List<CommunityItem>)? = null,
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
 
     private val _state = MutableStateFlow(NewGroupState())
@@ -212,7 +223,7 @@ class NewGroupStore(
         if (number in current.numbers) {
             // Молча проглотить повтор нельзя: человек будет жать снова, думая, что не
             // сработало. Сказать словами — дешевле.
-            _state.value = current.copy(number = "", trouble = "Этот номер уже в списке")
+            _state.value = current.copy(number = "", trouble = words().social.numberAlreadyListed)
             return
         }
         _state.value = current.copy(numbers = current.numbers + number, number = "", trouble = null)
@@ -249,7 +260,9 @@ class NewGroupStore(
                 )
                 is CreateGroupStep.BadTitle -> current.copyWithTrouble(outcome.reason)
                 is CreateGroupStep.Offline -> current.copyWithTrouble(
-                    "Нет связи с сервером — повторим через ${(outcome.retryAfterMs / 1000).coerceAtLeast(1)} с",
+                    words().trouble.retryIn(
+                        (outcome.retryAfterMs / 1000).coerceAtLeast(1).toInt(),
+                    ),
                 )
                 is CreateGroupStep.Refused -> current.copyWithTrouble(outcome.reason)
             }
@@ -268,8 +281,8 @@ class NewGroupStore(
             _state.value = when (outcome) {
                 is ChannelStep.Created -> current.copy(expect = false, created = outcome.channelId)
                 is ChannelStep.BadTitle -> current.copyWithTrouble(outcome.reason)
-                is ChannelStep.Offline -> current.copyWithTrouble("Нет связи с сервером")
-                is ChannelStep.Refused -> current.copyWithTrouble("Сервер отказал: " + outcome.reason)
+                is ChannelStep.Offline -> current.copyWithTrouble(words().trouble.offline)
+                is ChannelStep.Refused -> current.copyWithTrouble(words().trouble.refused(outcome.reason))
             }
         }
     }
@@ -292,8 +305,8 @@ class NewGroupStore(
                 )
 
                 is CommunityStep.BadTitle -> current.copyWithTrouble(outcome.reason)
-                is CommunityStep.Offline -> current.copyWithTrouble("Нет связи с сервером")
-                is CommunityStep.Refused -> current.copyWithTrouble("Сервер отказал: " + outcome.reason)
+                is CommunityStep.Offline -> current.copyWithTrouble(words().trouble.offline)
+                is CommunityStep.Refused -> current.copyWithTrouble(words().trouble.refused(outcome.reason))
             }
         }
     }

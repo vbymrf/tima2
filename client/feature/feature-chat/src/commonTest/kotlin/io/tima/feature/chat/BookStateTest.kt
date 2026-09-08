@@ -1,5 +1,6 @@
 package io.tima.feature.chat
 
+import io.tima.core.ui.RussianWords
 import io.tima.domain.chat.BookEntry
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -24,7 +25,7 @@ class BookStateTest {
 
     @Test
     fun телефон_идёт_последним_разделом() {
-        val groups = состояние(виктор, борис, анна).groups
+        val groups = состояние(виктор, борис, анна).groups(RussianWords.book)
         assertEquals(listOf("Работа", "Общий", "Телефон"), groups.map { it.name })
         assertTrue(groups.last().outsiders, "последний раздел не отмечен как «не в TIMa»")
         assertEquals(listOf(виктор), groups.last().people)
@@ -34,14 +35,14 @@ class BookStateTest {
     fun пустой_раздел_не_показывается() {
         // «Работа» есть в списке разделов, но людей в ней нет — полосы быть не должно:
         // пустая полоса в списке выглядит как потерянные контакты.
-        val groups = состояние(анна).groups
+        val groups = состояние(анна).groups(RussianWords.book)
         assertEquals(listOf("Общий"), groups.map { it.name })
     }
 
     @Test
     fun выключенные_чужие_гасят_только_раздел_телефон() {
         val state = состояние(виктор, борис, view = BookView(showOutsiders = false))
-        assertEquals(listOf("Работа"), state.groups.map { it.name })
+        assertEquals(listOf("Работа"), state.groups(RussianWords.book).map { it.name })
         // Контакт при этом никуда не делся — он просто не показан.
         assertTrue(виктор in state.all)
     }
@@ -93,7 +94,7 @@ class BookStateTest {
 
     @Test
     fun безымянный_называется_номером() {
-        val groups = состояние(поликлиника).groups
+        val groups = состояние(поликлиника).groups(RussianWords.book)
         assertEquals(listOf(поликлиника), groups.single().people)
         // Имя не выдумывается: у строки его нет, и показывать её будет номер.
         assertEquals(null, поликлиника.name)

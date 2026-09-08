@@ -1,5 +1,8 @@
 package io.tima.feature.auth
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
 import io.tima.domain.account.AccountIdentities
 import io.tima.domain.account.CodeRequestStep
 import io.tima.domain.account.LinkAwaitStep
@@ -43,6 +46,14 @@ class AuthStore(
     private val link: LinkNewDevice? = null,
     /** Как это устройство назовётся человеку на телефоне. Он увидит имя перед «Доверить». */
     private val deviceName: String = "Устройство",
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
 
     /**
@@ -92,7 +103,7 @@ class AuthStore(
                     standHint = step.devCode,
                 )
 
-                is CodeRequestStep.BadPhone -> current.copyWithTrouble("Номер не тот: ${step.reason}")
+                is CodeRequestStep.BadPhone -> current.copyWithTrouble(words().auth.badPhone(step.reason))
                 is CodeRequestStep.Offline -> current.copyWithTrouble(noLinks(step.retryAfterMs))
                 is CodeRequestStep.Refused -> current.copyWithTrouble(step.reason)
             }
@@ -137,13 +148,13 @@ class AuthStore(
 
                 // Код остаётся в поле. Отобрать набранное нельзя даже когда оно неверно:
                 // человек чаще опечатался в одной цифре, чем набрал наугад.
-                RegistrationStep.WrongCode -> current.copyWithTrouble("Код неверен или просрочен")
+                RegistrationStep.WrongCode -> current.copyWithTrouble(words().auth.wrongCode)
 
                 // Токен регистрации живёт минуты. Начинать надо с запроса кода, и сказать
                 // это надо явно — иначе человек будет повторять код, который уже не примут.
                 RegistrationStep.CodeExpired -> AuthState.Phone(
                     number = current.phone,
-                    trouble = "Код просрочен — запросите новый",
+                    trouble = words().auth.codeExpired,
                 )
 
                 // Не отказ, а другой путь: аккаунт существует, и владение им доказывает
@@ -176,7 +187,7 @@ class AuthStore(
         val words = current.phrase.split(SEPARATOR).filter { it.isNotBlank() }
         val key = identities.fromWords(words)
         if (key == null) {
-            _state.value = current.copyWithTrouble("Фраза не та — проверьте запись")
+            _state.value = current.copyWithTrouble(words().auth.wrongPhrase)
             return
         }
         _state.value = current.copy(expect = true, trouble = null)
@@ -186,13 +197,13 @@ class AuthStore(
                 // Фразу показывать не надо: она у человека есть, он её только что ввёл.
                 is RegistrationStep.Registered -> AuthState.Done(step.userId, step.deviceId)
                 RegistrationStep.AlreadyRegistered -> AuthState.CreatedAlready
-                is RegistrationStep.IdentityMismatch -> current.copyWithTrouble("Фраза не та — проверьте запись")
-                RegistrationStep.WrongCode -> current.copyWithTrouble("Код неверен или просрочен")
+                is RegistrationStep.IdentityMismatch -> current.copyWithTrouble(words().auth.wrongPhrase)
+                RegistrationStep.WrongCode -> current.copyWithTrouble(words().auth.wrongCode)
                 // Токен живёт десять минут. Истёк — начинать с запроса кода, и сказать об
                 // этом надо именно так: «введите фразу заново» здесь бесполезно.
                 RegistrationStep.CodeExpired -> AuthState.Phone(
                     number = current.phone,
-                    trouble = "Время истекло — запросите код заново",
+                    trouble = words().auth.timeIsUp,
                 )
                 is RegistrationStep.Offline -> current.copyWithTrouble(noLinks(step.retryAfterMs))
                 is RegistrationStep.Refused -> current.copyWithTrouble(step.reason)
@@ -232,12 +243,12 @@ class AuthStore(
                     deviceId = step.deviceId,
                 )
                 RegistrationStep.AlreadyRegistered -> AuthState.CreatedAlready
-                RegistrationStep.WrongCode -> current.copyWithTrouble("Код неверен или просрочен")
+                RegistrationStep.WrongCode -> current.copyWithTrouble(words().auth.wrongCode)
                 RegistrationStep.CodeExpired -> AuthState.Phone(
                     number = current.phone,
-                    trouble = "Время истекло — запросите код заново",
+                    trouble = words().auth.timeIsUp,
                 )
-                is RegistrationStep.IdentityMismatch -> current.copyWithTrouble("Сервер отказал в смене личности")
+                is RegistrationStep.IdentityMismatch -> current.copyWithTrouble(words().auth.identityRefused)
                 is RegistrationStep.Offline -> current.copyWithTrouble(noLinks(step.retryAfterMs))
                 is RegistrationStep.Refused -> current.copyWithTrouble(step.reason)
             }
@@ -291,7 +302,7 @@ class AuthStore(
             is LinkAwaitStep.Linked -> AuthState.Done(step.userId, step.deviceId)
             LinkAwaitStep.Expired -> AuthState.DisplayCode(
                 code = null,
-                trouble = "Срок кода вышел — попросите новый",
+                trouble = words().auth.codeTermOver,
             )
             is LinkAwaitStep.Refused -> AuthState.DisplayCode(code = null, trouble = step.reason)
         }
@@ -326,9 +337,9 @@ class AuthStore(
          * Число обязательно: «попробуйте позже» человек читает как «сломалось». Названный
          * срок — это обещание, которое можно проверить.
          */
-        fun noLinks(retryAfterMs: Long): String {
+        fun noLinks(retryAfterMs: Long, words: Words = RussianWords): String {
             val seconds = (retryAfterMs / 1000).coerceAtLeast(1)
-            return "Нет связи с сервером — повторим через $seconds с"
+            return words.trouble.retryIn(seconds.toInt())
         }
     }
 }

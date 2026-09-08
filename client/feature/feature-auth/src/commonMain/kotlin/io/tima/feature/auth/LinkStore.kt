@@ -1,5 +1,8 @@
 package io.tima.feature.auth
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
 import io.tima.domain.account.ConfirmDeviceLink
 import io.tima.domain.account.LinkConfirmStep
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +27,14 @@ class LinkStore(
     private val confirm: ConfirmDeviceLink,
     private val scope: CoroutineScope,
     code: String,
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
 
     private val _state = MutableStateFlow<LinkState>(parse(code))
@@ -43,20 +54,20 @@ class LinkStore(
 
                 // Каждый отказ — своё действие человека, поэтому и текст свой.
                 LinkConfirmStep.NotAPhone -> current.copyWithTrouble(
-                    "Подтвердить подключение может только телефон — на компьютере это не работает",
+                    words().auth.onlyPhoneConfirms,
                 )
                 LinkConfirmStep.SessionGone -> current.copyWithTrouble(
-                    "Код больше не действует — попросите на том устройстве новый",
+                    words().auth.codeNoLongerValid,
                 )
                 LinkConfirmStep.BadSignature -> current.copyWithTrouble(
-                    "Код прочитан неверно — отсканируйте заново",
+                    words().auth.codeReadWrong,
                 )
                 LinkConfirmStep.NotOurCode -> LinkState.NotOurCode
                 LinkConfirmStep.CannotSign -> current.copyWithTrouble(
-                    "Это устройство не может подтверждать: у него нет своего ключа",
+                    words().auth.deviceHasNoKey,
                 )
                 is LinkConfirmStep.Offline -> current.copyWithTrouble(
-                    "Нет связи — попробуйте ещё раз",
+                    words().auth.tryAgain,
                 )
                 is LinkConfirmStep.Refused -> current.copyWithTrouble(step.reason)
             }

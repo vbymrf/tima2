@@ -1,5 +1,8 @@
 package io.tima.feature.auth
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
 import io.tima.domain.account.AccountDevice
 import io.tima.domain.account.DevicesStep
 import io.tima.domain.account.MyDevices
@@ -21,6 +24,14 @@ import kotlinx.coroutines.launch
 class DevicesStore(
     private val devices: MyDevices,
     private val scope: CoroutineScope,
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
 
     private val _state = MutableStateFlow(DevicesState(expect = true))
@@ -41,7 +52,7 @@ class DevicesStore(
                 )
                 is DevicesStep.Offline -> _state.value.copy(
                     expect = false,
-                    trouble = "Нет связи — список показать не из чего",
+                    trouble = words().auth.listHasNothing,
                 )
                 is DevicesStep.Refused -> _state.value.copy(expect = false, trouble = step.reason)
             }
@@ -76,11 +87,11 @@ class DevicesStore(
                 RevokeStep.LastDevice -> _state.value = _state.value.copy(
                     ask = null,
                     expect = false,
-                    trouble = "Это единственное устройство аккаунта — отключить его нельзя",
+                    trouble = words().auth.lastDevice,
                 )
                 is RevokeStep.Offline -> _state.value = _state.value.copy(
                     expect = false,
-                    trouble = "Нет связи — устройство не отключено",
+                    trouble = words().auth.deviceNotDisconnected,
                 )
                 is RevokeStep.Refused -> _state.value = _state.value.copy(
                     ask = null,

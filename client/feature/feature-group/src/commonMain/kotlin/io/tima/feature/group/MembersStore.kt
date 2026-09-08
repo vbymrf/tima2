@@ -1,5 +1,8 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
 import io.tima.domain.chat.GroupMember
 import io.tima.domain.chat.GroupRole
 import io.tima.domain.chat.ManageGroupMembers
@@ -28,6 +31,14 @@ class MembersStore(
     private val groupId: String,
     private val myUserId: String,
     private val scope: CoroutineScope,
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
 
     private val _state = MutableStateFlow(MembersState())
@@ -45,7 +56,7 @@ class MembersStore(
                         ?: GroupRole.Unknown,
                 )
                 is MembersStep.Offline -> _state.value.copyWithTrouble(
-                    "Нет связи с сервером — список может быть устаревшим",
+                    words().social.membersMayBeStale,
                 )
                 is MembersStep.Refused -> _state.value.copyWithTrouble(outcome.reason)
             }
@@ -82,12 +93,14 @@ class MembersStore(
             is MembershipStep.DoneWithoutRotation -> database.copy(warning = step.warning)
 
             MembershipStep.NoSuchUser -> database.copy(
-                trouble = "Этого номера в TIMA нет — позовите человека в мессенджер",
+                trouble = words().social.noSuchNumber,
                 number = _state.value.number,
             )
-            MembershipStep.Forbidden -> database.copy(trouble = "Менять состав может владелец или админ")
+            MembershipStep.Forbidden -> database.copy(trouble = words().social.ownerOrAdminChangesMembers)
             is MembershipStep.Offline -> database.copy(
-                trouble = "Нет связи с сервером — повторим через ${(step.retryAfterMs / 1000).coerceAtLeast(1)} с",
+                trouble = words().trouble.retryIn(
+                    (step.retryAfterMs / 1000).coerceAtLeast(1).toInt(),
+                ),
             )
             is MembershipStep.Refused -> database.copy(trouble = step.reason)
         }

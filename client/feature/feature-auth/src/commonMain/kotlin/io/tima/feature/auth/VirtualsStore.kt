@@ -1,5 +1,8 @@
 package io.tima.feature.auth
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
 import io.tima.domain.account.VirtualAccount
 import io.tima.domain.account.VirtualsApi
 import kotlinx.coroutines.CoroutineScope
@@ -21,6 +24,14 @@ import kotlinx.coroutines.launch
 class VirtualsStore(
     private val api: VirtualsApi,
     private val scope: CoroutineScope,
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
     private val _state = MutableStateFlow(VirtualsState())
     val state: StateFlow<VirtualsState> = _state.asStateFlow()
@@ -34,7 +45,7 @@ class VirtualsStore(
                 // Пустой список и «не дошли до сервера» — разные вещи: первое означает
                 // «их нет», второе «мы не знаем». Показать второе как первое значит
                 // сказать человеку, что его аккаунты исчезли.
-                _state.value.copy(working = false, trouble = "Список не дошёл — нет связи с сервером")
+                _state.value.copy(working = false, trouble = words().auth.listDidNotCome)
             } else {
                 _state.value.copy(working = false, accounts = list, asked = true)
             }

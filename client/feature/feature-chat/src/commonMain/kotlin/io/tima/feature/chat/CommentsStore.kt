@@ -1,5 +1,9 @@
 package io.tima.feature.chat
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
+import io.tima.core.ui.ChatWords
 import io.tima.domain.chat.CommentEntry
 import io.tima.domain.chat.CommentStep
 import io.tima.domain.chat.CommentsStep
@@ -32,6 +36,14 @@ class CommentsStore(
     private val channelId: String,
     /** Запись, под которой идёт разговор. */
     private val rootId: Long,
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
 
     private val read = ReadComments(comments)
@@ -56,9 +68,9 @@ class CommentsStore(
                 CommentsStep.NoRoot ->
                     _state.value.copy(entries = emptyList(), loaded = true, gone = true, trouble = null)
 
-                is CommentsStep.Offline -> _state.value.copy(loaded = true, trouble = "Нет связи с сервером")
+                is CommentsStep.Offline -> _state.value.copy(loaded = true, trouble = words().trouble.offline)
                 is CommentsStep.Refused ->
-                    _state.value.copy(loaded = true, trouble = "Сервер отказал: ${outcome.reason}")
+                    _state.value.copy(loaded = true, trouble = words().trouble.refused(outcome.reason))
             }
         }
     }
@@ -90,11 +102,14 @@ class CommentsStore(
                 // Пустое поле — не беда и не сообщение: человек ещё ничего не написал.
                 CommentStep.Empty -> _state.value.copy(sending = false)
                 CommentStep.TooLong ->
-                    _state.value.copy(sending = false, trouble = "Слишком длинно: до ${WriteComment.MAX_CHARS} знаков")
+                    _state.value.copy(sending = false, trouble = words().chat.tooLong(WriteComment.MAX_CHARS))
 
-                is CommentStep.Offline -> _state.value.copy(sending = false, trouble = "Нет связи с сервером")
+                is CommentStep.Offline -> _state.value.copy(sending = false, trouble = words().trouble.offline)
                 is CommentStep.Refused ->
-                    _state.value.copy(sending = false, trouble = "Сервер отказал: ${outcome.reason}")
+                    _state.value.copy(
+                        sending = false,
+                        trouble = words().trouble.refused(outcome.reason),
+                    )
             }
             if (outcome is CommentStep.Written) refresh()
         }

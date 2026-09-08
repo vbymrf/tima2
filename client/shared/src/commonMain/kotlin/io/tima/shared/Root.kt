@@ -1,6 +1,7 @@
 package io.tima.shared
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -44,6 +45,7 @@ import io.tima.feature.group.MembersStore
 import io.tima.feature.group.NewGroupScreen
 import io.tima.feature.group.MemberScreen
 import io.tima.core.database.TimaDatabase
+import io.tima.core.ui.CurrentWords
 import io.tima.core.ui.SettingsItem
 import io.tima.core.ui.Stage
 import io.tima.domain.account.Session
@@ -254,7 +256,13 @@ fun Root(
     // русский: приложение обязано открыться, а не остаться без надписей.
     var language by remember { mutableStateOf(Language.of(languageStore.load().orEmpty())) }
 
-    TimaTheme(colors = appearance.colors, words = language.words ?: RussianWords) {
+    val words = language.words ?: RussianWords
+    // Тем, кто не рисует, словарь нужен ссылкой: store не @Composable и LocalWords не
+    // видит (ПЛАН-ЯЗЫКА, Я2-беды). Пишется отсюда и только отсюда — из того же значения,
+    // что уходит в тему, поэтому разойтись им негде.
+    SideEffect { CurrentWords.value = words }
+
+    TimaTheme(colors = appearance.colors, words = words) {
         Inside(
             entry = entry,
             deviceDatabase = deviceDatabase,
@@ -2126,6 +2134,7 @@ private fun PhoneWindow(
     onAllowContacts: () -> Unit,
 ) {
     var calls by remember { mutableStateOf(CALL_FILTERS.first()) }
+    val bookWords = Tima.words.book
     WindowFrame(
         window = Window.Phone,
         tabs = listOf(WindowTab.Chats, WindowTab.Contacts, WindowTab.Calls),
@@ -2145,8 +2154,8 @@ private fun PhoneWindow(
         // Второй ряд: у журнала фильтры, у «Контактов» в виде «меню» — разделы.
         secondRow = when {
             tab == WindowTab.Calls -> { { FilterRow(CALL_FILTERS, calls, { calls = it }) } }
-            tab == WindowTab.Contacts && !book.view.folders && book.tabs.size > 1 ->
-                { { FilterRow(book.tabs, book.chosen.ifBlank { "Все" }, onChooseSection) } }
+            tab == WindowTab.Contacts && !book.view.folders && book.tabs(bookWords).size > 1 ->
+                { { FilterRow(book.tabs(bookWords), book.chosen.ifBlank { bookWords.everyone }, onChooseSection) } }
             else -> null
         },
     ) {

@@ -1,5 +1,9 @@
 package io.tima.feature.auth
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.AuthWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
 import io.tima.domain.account.CreateVirtual
 import io.tima.domain.account.Profile
 import io.tima.domain.account.VirtualStep
@@ -27,6 +31,14 @@ class NewVirtualStore(
     private val create: CreateVirtual,
     private val profile: Profile,
     private val scope: CoroutineScope,
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
     private val _state = MutableStateFlow(NewVirtualState())
     val state: StateFlow<NewVirtualState> = _state.asStateFlow()
@@ -80,27 +92,27 @@ class NewVirtualStore(
                 )
                 VirtualStep.BadPhrase -> _state.value.copy(
                     working = false, phrase = "",
-                    trouble = "Фраза не подошла. Это фраза вашего основного аккаунта — двенадцать слов через пробел",
+                    trouble = words().auth.phraseNotMain,
                 )
                 VirtualStep.NicknameTaken -> _state.value.copy(
                     step = NewVirtualStep.Nickname, working = false, phrase = "", free = false,
-                    trouble = "Этот ник уже занят — придумайте другой",
+                    trouble = words().auth.nicknameTaken,
                 )
                 VirtualStep.BadNickname -> _state.value.copy(
                     step = NewVirtualStep.Nickname, working = false, phrase = "",
-                    trouble = "Ник — от 10 до 20 знаков: латиница, цифры, подчёркивание",
+                    trouble = words().auth.nicknameRules,
                 )
                 VirtualStep.TooMany -> _state.value.copy(
                     working = false, phrase = "",
-                    trouble = "Больше пяти виртуальных аккаунтов на номер нельзя",
+                    trouble = words().auth.fiveIsLimit,
                 )
                 VirtualStep.NotAllowed -> _state.value.copy(
                     working = false, phrase = "",
-                    trouble = "Виртуальный аккаунт не заводит виртуальных",
+                    trouble = words().auth.virtualHasNoVirtuals,
                 )
                 VirtualStep.Offline -> _state.value.copy(
                     working = false, phrase = "",
-                    trouble = "Не дошло до сервера. Попробуйте ещё раз",
+                    trouble = words().trouble.didNotReach,
                 )
             }
         }
@@ -129,12 +141,17 @@ data class NewVirtualState(
 ) {
     val nickFits: Boolean get() = nicknameFits(nickname)
 
-    /** Что сказать про ник. Молчание, пока не о чем говорить. */
-    val aboutNick: String? get() = when {
+    /**
+     * Что сказать про ник. Молчание, пока не о чем говорить.
+     *
+     * Словарь приходит доводом, а не берётся из состояния: состояние — это данные, и
+     * слова в нём не живут (ПЛАН-ЯЗЫКА, Я2-беды).
+     */
+    fun aboutNick(words: AuthWords): String? = when {
         nickname.isBlank() -> null
-        !nickFits -> "10…20 знаков: латиница, цифры, подчёркивание"
-        free == true -> "Свободен"
-        free == false -> "Занят"
+        !nickFits -> words.nicknameRulesShort
+        free == true -> words.nicknameFree
+        free == false -> words.nicknameBusy
         else -> null
     }
 

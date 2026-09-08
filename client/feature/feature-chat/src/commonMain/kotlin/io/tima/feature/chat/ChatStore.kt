@@ -1,5 +1,9 @@
 package io.tima.feature.chat
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
+import io.tima.core.ui.ChatWords
 import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.NarrowMessageLevel
@@ -74,6 +78,14 @@ class ChatStore(
     private val anyKey: (() -> Boolean)? = null,
     /** Сколько строк держать на экране. Столько же просит и запрос к базе. */
     pageSize: Int = ObserveChat.DEFAULT_PAGE,
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
 
     // Признак берётся из наличия случая, а не задаётся отдельно: два источника одной
@@ -233,15 +245,15 @@ class ChatStore(
                     // всем устройствам, включая наше, и второй источник правды здесь
                     // означал бы расхождение между тем, что видим мы, и что видят другие.
                     is NarrowStep.Narrowed -> ChatNotice.Narrowed(MessageCircle.of(outcome.level).title)
-                    NarrowStep.Wider -> ChatNotice.NarrowRefused("Круг можно только сузить — расширить нельзя")
+                    NarrowStep.Wider -> ChatNotice.NarrowRefused(words().chat.onlyNarrow)
                     NarrowStep.AlreadySecret ->
-                        ChatNotice.NarrowRefused("Зашифрованное сообщение читают только участники — сужать нечего")
+                        ChatNotice.NarrowRefused(words().chat.secretIsNarrow)
                     NarrowStep.CannotEncryptLater ->
-                        ChatNotice.NarrowRefused("Открытое сообщение уже разошлось — зашифровать его задним числом нельзя")
-                    NarrowStep.NotAllowed -> ChatNotice.NarrowRefused("Чужое сообщение сужает админ группы")
-                    NarrowStep.NotFound -> ChatNotice.NarrowRefused("Сообщения больше нет в группе")
-                    is NarrowStep.Offline -> ChatNotice.NarrowRefused("Нет связи с сервером — повторите позже")
-                    is NarrowStep.Refused -> ChatNotice.NarrowRefused("Сервер отказал: ${outcome.reason}")
+                        ChatNotice.NarrowRefused(words().chat.openAlreadyOut)
+                    NarrowStep.NotAllowed -> ChatNotice.NarrowRefused(words().chat.strangerNarrowsAdmin)
+                    NarrowStep.NotFound -> ChatNotice.NarrowRefused(words().chat.messageGone)
+                    is NarrowStep.Offline -> ChatNotice.NarrowRefused(words().chat.offlineRetryLater)
+                    is NarrowStep.Refused -> ChatNotice.NarrowRefused(words().trouble.refused(outcome.reason))
                 },
             )
         }
@@ -314,9 +326,11 @@ class ChatStore(
                     RequestKeysStep.NoHelpers -> ChatNotice.KeysNoHelpers
                     RequestKeysStep.NothingMissing -> ChatNotice.KeysNothingMissing
                     RequestKeysStep.NeedsSecretPhrase -> ChatNotice.KeysNeedPhrase
-                    RequestKeysStep.NotMember -> ChatNotice.KeysRefused("Вы больше не участник этой группы")
+                    RequestKeysStep.NotMember -> ChatNotice.KeysRefused(words().chat.notMemberAnyMore)
                     is RequestKeysStep.Offline -> ChatNotice.KeysRefused(
-                        "Нет связи с сервером — повторите через ${(outcome.retryAfterMs / 1000).coerceAtLeast(1)} с",
+                        words().chat.offlineRetryIn(
+                            (outcome.retryAfterMs / 1000).coerceAtLeast(1).toInt(),
+                        ),
                     )
                     is RequestKeysStep.Refused -> ChatNotice.KeysRefused(outcome.reason)
                 },

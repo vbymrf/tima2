@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import io.tima.core.ui.CurrentWords
 import io.tima.core.ui.Alarm
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
@@ -361,7 +362,7 @@ class UpdateStore(
                 // ошибки Ktor. Ему нужно одно — что делать дальше.
                 _state.value.copy(
                     expect = false,
-                    trouble = RussianWords.update.cannotAskServer,
+                    trouble = CurrentWords.value.update.cannotAskServer,
                 )
             }
         }
@@ -390,7 +391,7 @@ class UpdateStore(
                     _state.value = _state.value.copy(percent = percent)
                 }
             } catch (e: Throwable) {
-                InstallOutcome.Refused(RussianWords.update.installerDidNotStart)
+                InstallOutcome.Refused(CurrentWords.value.update.installerDidNotStart)
             }
             // Запись — ПЕРЕД закрытием и только на успешном запуске установщика: до
             // этого момента ставить ещё нечего, а после него нас могут не спросить.

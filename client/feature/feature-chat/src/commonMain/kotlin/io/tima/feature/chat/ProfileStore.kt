@@ -1,5 +1,8 @@
 package io.tima.feature.chat
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
 import io.tima.domain.account.NickStep
 import io.tima.domain.account.Profile
 import io.tima.domain.account.nicknameFits
@@ -25,6 +28,13 @@ class ProfileStore(
     private val scope: CoroutineScope,
     name: String = "",
     nickname: String = "",
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
     private val _state = MutableStateFlow(
         ProfileState(phone = phone, name = name, nickname = nickname, savedNickname = nickname),
@@ -61,11 +71,11 @@ class ProfileStore(
 
             _state.value = when {
                 ник == NickStep.Busy -> state.copy(working = false, free = false,
-                    trouble = "Этот ник уже занят — придумайте другой")
+                    trouble = words().auth.nicknameTaken)
                 ник == NickStep.OutOfBounds -> state.copy(working = false,
-                    trouble = "Ник — от 10 до 20 знаков: латиница, цифры, подчёркивание")
+                    trouble = words().auth.nicknameRules)
                 ник == NickStep.Offline || !имя -> state.copy(working = false,
-                    trouble = "Не дошло до сервера. Попробуйте ещё раз")
+                    trouble = words().trouble.didNotReach)
                 else -> state.copy(working = false, saved = true, savedNickname = state.nickname)
             }
         }
@@ -93,12 +103,12 @@ data class ProfileState(
      *
      * Молчание, пока не о чем говорить: подсказка на каждую букву мешает печатать.
      */
-    val aboutNick: String? get() = when {
+    fun aboutNick(words: Words): String? = when {
         nickname.isBlank() -> null
-        !nickFits -> "10…20 знаков: латиница, цифры, подчёркивание"
-        nickname == savedNickname -> "Ваш ник"
-        free == true -> "Свободен"
-        free == false -> "Занят"
+        !nickFits -> words.auth.nicknameRulesShort
+        nickname == savedNickname -> words.chat.yourNickname
+        free == true -> words.auth.nicknameFree
+        free == false -> words.auth.nicknameBusy
         else -> null
     }
 

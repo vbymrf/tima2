@@ -1,5 +1,8 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
 import io.tima.domain.chat.AccessGrant
 import io.tima.domain.chat.AccessPort
 import io.tima.domain.chat.AccessState
@@ -35,6 +38,14 @@ class AccessStore(
      * сегодня месяц.
      */
     epochAfter: (Int) -> String = { "" },
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
 
     private val access = LevelAccess(port)
@@ -42,8 +53,8 @@ class AccessStore(
     private val _state = MutableStateFlow(
         AccessState2(
             terms = listOf(
-                AccessTerm("Месяц", epochAfter(1)),
-                AccessTerm("Три месяца", epochAfter(3)),
+                AccessTerm(words().social.month, epochAfter(1)),
+                AccessTerm(words().social.threeMonths, epochAfter(3)),
             ).filter { it.epoch.isNotBlank() },
         ),
     )
@@ -66,8 +77,9 @@ class AccessStore(
                     trouble = null,
                 )
 
-                is GrantsStep.Offline -> _state.value.copy(loaded = true, trouble = "Нет связи с сервером")
-                is GrantsStep.Refused -> _state.value.copy(loaded = true, trouble = "Сервер отказал: ${outcome.reason}")
+                is GrantsStep.Offline -> _state.value.copy(loaded = true, trouble = words().trouble.offline)
+                is GrantsStep.Refused ->
+                    _state.value.copy(loaded = true, trouble = words().trouble.refused(outcome.reason))
             }
         }
     }
@@ -86,8 +98,8 @@ class AccessStore(
                 mine = (outcome as? AskAccessStep.Asked)?.state ?: _state.value.mine,
                 trouble = when (outcome) {
                     is AskAccessStep.Asked -> null
-                    is AskAccessStep.Offline -> "Нет связи с сервером"
-                    is AskAccessStep.Refused -> "Сервер отказал: ${outcome.reason}"
+                    is AskAccessStep.Offline -> words().trouble.offline
+                    is AskAccessStep.Refused -> words().trouble.refused(outcome.reason)
                 },
             )
         }
@@ -108,10 +120,10 @@ class AccessStore(
                 deciding = _state.value.deciding - userId,
                 trouble = when (outcome) {
                     GrantStep.Done -> null
-                    GrantStep.BadTerm -> "Срок пишется как 2026-10 — год и месяц"
-                    GrantStep.NotAllowed -> "Доступ открывает админ группы"
-                    is GrantStep.Offline -> "Нет связи с сервером"
-                    is GrantStep.Refused -> "Сервер отказал: ${outcome.reason}"
+                    GrantStep.BadTerm -> words().social.badTerm
+                    GrantStep.NotAllowed -> words().social.adminOpensAccess
+                    is GrantStep.Offline -> words().trouble.offline
+                    is GrantStep.Refused -> words().trouble.refused(outcome.reason)
                 },
             )
             if (outcome == GrantStep.Done) refresh()

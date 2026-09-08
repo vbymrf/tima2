@@ -90,7 +90,7 @@ private fun Nickname(state: NewVirtualState, onNickname: (String) -> Unit, onNex
     )
 
     Field(value = state.nickname, onChange = onNickname, hint = "petr_smirnov")
-    state.aboutNick?.let { Secondary(it) }
+    state.aboutNick(words)?.let { Secondary(it) }
     state.trouble?.let { Trouble(it) }
 
     Button(

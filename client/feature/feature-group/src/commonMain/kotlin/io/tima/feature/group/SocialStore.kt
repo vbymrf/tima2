@@ -1,5 +1,8 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
 import io.tima.domain.chat.AskStep
 import io.tima.domain.chat.Communities
 import io.tima.domain.chat.CommunityPage
@@ -33,6 +36,14 @@ class SocialStore(
      * интересны только группы.
      */
     private val communities: Communities? = null,
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
 
     private val _state = MutableStateFlow(SocialState())
@@ -82,21 +93,23 @@ class SocialStore(
                 )
                 is AskStep.Offline -> current.copy(
                     asking = current.asking - groupId,
-                    trouble = "Нет связи с сервером — повторим через ${(answer.retryAfterMs / 1000).coerceAtLeast(1)} с",
+                    trouble = words().trouble.retryIn(
+                        (answer.retryAfterMs / 1000).coerceAtLeast(1).toInt(),
+                    ),
                 )
                 is AskStep.Refused -> current.copy(
                     asking = current.asking - groupId,
-                    trouble = "Не получилось попроситься: ${answer.reason}",
+                    trouble = words().social.couldNotAsk(answer.reason),
                 )
             }
         }
     }
 
     private fun troubleOf(mine: GroupsStep, cards: CardsStep): String? = when {
-        mine is GroupsStep.Offline -> "Нет связи с сервером — список групп может быть неполным"
-        mine is GroupsStep.Refused -> "Сервер отказал: ${mine.reason}"
-        cards is CardsStep.Offline -> "Нет связи с сервером — карточки друзей могут быть неполными"
-        cards is CardsStep.Refused -> "Сервер отказал: ${cards.reason}"
+        mine is GroupsStep.Offline -> words().social.groupsMayBeIncomplete
+        mine is GroupsStep.Refused -> words().trouble.refused(mine.reason)
+        cards is CardsStep.Offline -> words().social.cardsMayBeIncomplete
+        cards is CardsStep.Refused -> words().trouble.refused(cards.reason)
         else -> null
     }
 }

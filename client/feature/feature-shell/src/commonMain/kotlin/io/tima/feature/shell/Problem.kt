@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import io.tima.core.ui.CurrentWords
 import io.tima.core.ui.ProblemWords
 import io.tima.core.ui.words
 import io.tima.core.ui.Words
@@ -250,7 +251,7 @@ data class ProblemState(
     val missing: String?
         get() = when {
             delivered -> null
-            text.isBlank() -> RussianWords.problem.writeWhatHappened
+            text.isBlank() -> CurrentWords.value.problem.writeWhatHappened
             else -> null
         }
 }
@@ -324,7 +325,7 @@ class ProblemStore(
             val outcome = try {
                 sender.send(report)
             } catch (e: Throwable) {
-                SendOutcome.Refused(RussianWords.problem.couldNotSend)
+                SendOutcome.Refused(CurrentWords.value.problem.couldNotSend)
             }
             _state.value = _state.value.copy(sending = false, outcome = outcome)
         }

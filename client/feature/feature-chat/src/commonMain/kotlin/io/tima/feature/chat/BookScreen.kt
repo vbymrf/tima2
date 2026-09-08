@@ -126,7 +126,7 @@ fun BookScreen(
             }
 
             else -> LazyColumn(Modifier.fillMaxSize()) {
-                state.groups.forEach { group ->
+                state.groups(words).forEach { group ->
                     // В виде «меню» разделы стоят вторым рядом вкладок, и полоса внутри
                     // списка была бы вторым способом сказать то же самое.
                     if (state.view.folders) {
@@ -147,8 +147,8 @@ fun BookScreen(
                             middle = {
                                 Column {
                                     Name(shown(person, state.view) ?: words.nameless)
-                                    val вторая = second(person, state.view)
-                                    if (вторая != null) Tertiary(вторая, lineOne = true)
+                                    val second = second(person, state.view)
+                                    if (second != null) Tertiary(second, lineOne = true)
                                 }
                             },
                             right = if (group.outsiders && onInvite != null) {

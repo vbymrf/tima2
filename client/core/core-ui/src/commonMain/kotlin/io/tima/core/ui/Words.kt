@@ -3,6 +3,7 @@ package io.tima.core.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
+import kotlin.concurrent.Volatile
 
 /**
  * Словарь надписей (ПЛАН-ЯЗЫКА Я1, Я2).
@@ -59,6 +60,24 @@ interface Words {
     val settings2: SettingsListWords
     val problem: ProblemWords
     val switching: SwitchingWords
+    val trouble: TroubleWords
+}
+
+/**
+ * Беды, общие всему приложению (ПЛАН-ЯЗЫКА, Я2-беды).
+ *
+ * «Нет связи» и «сервер отказал» приходят из десятка разных мест и обязаны звучать
+ * одинаково: разные слова об одном и том же человек читает как разные поломки.
+ *
+ * `refused` подставляет причину **как она пришла с сервера** — она не переводится и
+ * переводиться не может: это его слова, а не наши.
+ */
+interface TroubleWords {
+    val offline: String
+    fun refused(reason: String): String
+    val didNotReach: String
+    fun retryIn(seconds: Int): String
+    val noConnection: String
 }
 
 /**
@@ -289,6 +308,28 @@ interface SocialWords {
     val forever: String
     val decline: String
     val deciding: String
+
+    // Сроки доступа: три кнопки и «бессрочно» рядом с ними.
+    val month: String
+    val threeMonths: String
+
+    // Беды социума.
+    val badTerm: String
+    val adminOpensAccess: String
+    val communityDidNotOpen: String
+    val subscriptionNotChanged: String
+    fun alreadyInAnother(title: String): String
+    val ownerLinks: String
+    val couldNotLink: String
+    val ownerUnlinks: String
+    val couldNotUnlink: String
+    fun couldNotAsk(reason: String): String
+    val groupsMayBeIncomplete: String
+    val cardsMayBeIncomplete: String
+    val numberAlreadyListed: String
+    val membersMayBeStale: String
+    val noSuchNumber: String
+    val ownerOrAdminChangesMembers: String
 }
 
 /**
@@ -309,6 +350,9 @@ interface BookWords {
     val bookEmpty: String
     val bookEmptyAbout: String
     val nameless: String
+    val everyone: String
+    val commonSection: String
+    val phoneSection: String
 
     // Подокно «Вид».
     val view: String
@@ -349,6 +393,14 @@ interface PageWords {
     val openDiscussion: String
     val closeDiscussion: String
     val remove: String
+
+    // Беды страницы.
+    val cannotCarry: String
+    val entryGone: String
+    val couldNotRemove: String
+    val ownerSwitchesPage: String
+    val pageGone: String
+    val ownerOrModeratorCloses: String
 }
 
 /**
@@ -371,6 +423,27 @@ interface ChatWords {
     val narrow: String
     val messageHint: String
     val nameless: String
+    val yourNickname: String
+
+    // Беды переписки.
+    val onlyNarrow: String
+    val secretIsNarrow: String
+    val openAlreadyOut: String
+    val strangerNarrowsAdmin: String
+    val messageGone: String
+    val offlineRetryLater: String
+    fun offlineRetryIn(seconds: Int): String
+    val notMemberAnyMore: String
+    fun tooLong(limit: Int): String
+    val notAPhone: String
+    val ownNumber: String
+    fun badPhone(reason: String): String
+
+    // Книга контактов и новый контакт.
+    val addAndWrite: String
+    val addToContacts: String
+    val foundInTima: String
+    val notInTima: String
 
     // Полоса сообщений о ключах и круге.
     fun tooLarge(bytes: Int, limit: Int): String
@@ -546,6 +619,39 @@ interface AuthWords {
     val keep: String
 
     // Виртуальные аккаунты списком.
+    // Беды входа.
+    fun badPhone(reason: String): String
+    val wrongCode: String
+    val codeExpired: String
+    val timeIsUp: String
+    val wrongPhrase: String
+    val identityRefused: String
+    val codeTermOver: String
+    val notYourVirtual: String
+    val cancelDidNotReach: String
+    val notTransferCode: String
+    val needAccountPhrase: String
+    val phraseDoesNotFit: String
+    val threeTriesBurned: String
+    val codeNotValid: String
+    val phraseNotMain: String
+    val nicknameTaken: String
+    val nicknameRules: String
+    val nicknameRulesShort: String
+    val fiveIsLimit: String
+    val virtualHasNoVirtuals: String
+    val nicknameFree: String
+    val nicknameBusy: String
+    val onlyPhoneConfirms: String
+    val codeNoLongerValid: String
+    val codeReadWrong: String
+    val deviceHasNoKey: String
+    val tryAgain: String
+    val listHasNothing: String
+    val lastDevice: String
+    val deviceNotDisconnected: String
+    val listDidNotCome: String
+
     val virtualAboutShort: String
     val yourAccounts: String
     val noPhoneFoundByNickname: String
@@ -674,6 +780,10 @@ interface SettingsWords {
     val off: String
     val chosen: String
     val soon: String
+
+    // Беды настроек языка и страны.
+    val localeNotRead: String
+    val localeNotSaved: String
 }
 
 /**
@@ -781,6 +891,8 @@ object RussianWords : Words {
         override val on = "включено"
         override val off = "выключено"
         override val chosen = "выбран"
+        override val localeNotRead = "Не удалось прочитать язык и страну"
+        override val localeNotSaved = "Не удалось сохранить — попробуйте позже"
         override val soon = "скоро"
     }
 
@@ -873,6 +985,14 @@ object RussianWords : Words {
         override val postGone = "Записи больше нет"
         override val postGoneAbout = "Разговор ушёл вместе с ней"
         override val loading = "Загружаем разговор…"
+    }
+
+    override val trouble = object : TroubleWords {
+        override val offline = "Нет связи с сервером"
+        override fun refused(reason: String) = "Сервер отказал: $reason"
+        override val didNotReach = "Не дошло до сервера. Попробуйте ещё раз"
+        override fun retryIn(seconds: Int) = "Нет связи с сервером — повторим через $seconds с"
+        override val noConnection = "Нет связи"
     }
 
     override val problem = object : ProblemWords {
@@ -1152,9 +1272,34 @@ object RussianWords : Words {
         override val forever = "Бессрочно"
         override val decline = "Отказать"
         override val deciding = "решаем…"
+
+        override val month = "Месяц"
+        override val threeMonths = "Три месяца"
+
+        override val badTerm = "Срок пишется как 2026-10 — год и месяц"
+        override val adminOpensAccess = "Доступ открывает админ группы"
+        override val communityDidNotOpen = "Сообщество не открылось"
+        override val subscriptionNotChanged = "Не удалось изменить подписку"
+        override fun alreadyInAnother(title: String) = "«$title» уже в другом сообществе"
+        override val ownerLinks = "Вносить может владелец сообщества и владелец элемента"
+        override val couldNotLink = "Не удалось внести"
+        override val ownerUnlinks = "Вынимать может владелец сообщества и владелец элемента"
+        override val couldNotUnlink = "Не удалось вынуть"
+        override fun couldNotAsk(reason: String) = "Не получилось попроситься: $reason"
+        override val groupsMayBeIncomplete =
+            "Нет связи с сервером — список групп может быть неполным"
+        override val cardsMayBeIncomplete =
+            "Нет связи с сервером — карточки друзей могут быть неполными"
+        override val numberAlreadyListed = "Этот номер уже в списке"
+        override val membersMayBeStale = "Нет связи с сервером — список может быть устаревшим"
+        override val noSuchNumber = "Этого номера в TIMA нет — позовите человека в мессенджер"
+        override val ownerOrAdminChangesMembers = "Менять состав может владелец или админ"
     }
 
     override val book = object : BookWords {
+        override val everyone = "Все"
+        override val commonSection = "Общий"
+        override val phoneSection = "Телефон"
         override val search = "Поиск по имени, нику или номеру…"
         override val notRead = "Контакты не прочитаны"
         override val notReadAbout =
@@ -1168,7 +1313,6 @@ object RussianWords : Words {
         override val bookEmpty = "В контактах пока никого"
         override val bookEmptyAbout = "Прочитаем телефонную книгу или добавьте человека по номеру."
         override val nameless = "Без имени"
-
         override val view = "Вид"
         override val subsections = "Отображение подразделов"
         override val folders = "Папки"
@@ -1206,9 +1350,39 @@ object RussianWords : Words {
         override val openDiscussion = "Открыть обсуждение"
         override val closeDiscussion = "Закрыть обсуждение"
         override val remove = "Убрать"
+
+        override val cannotCarry = "Эту запись нельзя унести к себе"
+        override val entryGone = "Записи больше нет"
+        override val couldNotRemove = "Не удалось убрать запись"
+        override val ownerSwitchesPage = "Обсуждения выключает владелец страницы"
+        override val pageGone = "Страницы больше нет"
+        override val ownerOrModeratorCloses = "Обсуждение закрывает владелец или модератор"
     }
 
     override val chat = object : ChatWords {
+        override val yourNickname = "Ваш ник"
+
+        override val onlyNarrow = "Круг можно только сузить — расширить нельзя"
+        override val secretIsNarrow =
+            "Зашифрованное сообщение читают только участники — сужать нечего"
+        override val openAlreadyOut =
+            "Открытое сообщение уже разошлось — зашифровать его задним числом нельзя"
+        override val strangerNarrowsAdmin = "Чужое сообщение сужает админ группы"
+        override val messageGone = "Сообщения больше нет в группе"
+        override val offlineRetryLater = "Нет связи с сервером — повторите позже"
+        override fun offlineRetryIn(seconds: Int) =
+            "Нет связи с сервером — повторите через $seconds с"
+        override val notMemberAnyMore = "Вы больше не участник этой группы"
+        override fun tooLong(limit: Int) = "Слишком длинно: до $limit знаков"
+        override val notAPhone = "Из этого номера не выходит телефона"
+        override val ownNumber = "Это ваш собственный номер"
+        override fun badPhone(reason: String) = "Номер не тот: $reason"
+
+        override val addAndWrite = "Добавить и написать"
+        override val addToContacts = "Добавить в контакты"
+        override val foundInTima = "Найден в TIMa — подписка на его ленту оформится сама"
+        override val notInTima = "В TIMa его нет. Контакт сохранится — позвонить можно телефоном"
+
         override val access = "Доступность"
         override val members = "Участники"
         override val someone = "Участник"
@@ -1449,6 +1623,43 @@ object RussianWords : Words {
                 "нельзя — на нём придётся подключаться заново."
         override val keep = "Оставить"
 
+        override fun badPhone(reason: String) = "Номер не тот: $reason"
+        override val wrongCode = "Код неверен или просрочен"
+        override val codeExpired = "Код просрочен — запросите новый"
+        override val timeIsUp = "Время истекло — запросите код заново"
+        override val wrongPhrase = "Фраза не та — проверьте запись"
+        override val identityRefused = "Сервер отказал в смене личности"
+        override val codeTermOver = "Срок кода вышел — попросите новый"
+        override val notYourVirtual = "Это не ваш виртуальный аккаунт"
+        override val cancelDidNotReach =
+            "Отмена не дошла до сервера. Код ещё действует — попробуйте ещё раз"
+        override val notTransferCode = "Это не код передачи — проверьте, что вставили целиком"
+        override val needAccountPhrase =
+            "Нужна фраза передаваемого аккаунта — её даёт тот, кто передаёт"
+        override val phraseDoesNotFit =
+            "Фраза не подходит. Осталось меньше попыток — после третьей код придётся выдать заново"
+        override val threeTriesBurned = "Три неверные попытки — код сгорел. Попросите новый"
+        override val codeNotValid = "Код не действует: он погашен, отменён или ему больше получаса"
+        override val phraseNotMain =
+            "Фраза не подошла. Это фраза вашего основного аккаунта — двенадцать слов через пробел"
+        override val nicknameTaken = "Этот ник уже занят — придумайте другой"
+        override val nicknameRules = "Ник — от 10 до 20 знаков: латиница, цифры, подчёркивание"
+        override val nicknameRulesShort = "10…20 знаков: латиница, цифры, подчёркивание"
+        override val fiveIsLimit = "Больше пяти виртуальных аккаунтов на номер нельзя"
+        override val virtualHasNoVirtuals = "Виртуальный аккаунт не заводит виртуальных"
+        override val nicknameFree = "Свободен"
+        override val nicknameBusy = "Занят"
+        override val onlyPhoneConfirms =
+            "Подтвердить подключение может только телефон — на компьютере это не работает"
+        override val codeNoLongerValid = "Код больше не действует — попросите на том устройстве новый"
+        override val codeReadWrong = "Код прочитан неверно — отсканируйте заново"
+        override val deviceHasNoKey = "Это устройство не может подтверждать: у него нет своего ключа"
+        override val tryAgain = "Нет связи — попробуйте ещё раз"
+        override val listHasNothing = "Нет связи — список показать не из чего"
+        override val lastDevice = "Это единственное устройство аккаунта — отключить его нельзя"
+        override val deviceNotDisconnected = "Нет связи — устройство не отключено"
+        override val listDidNotCome = "Список не дошёл — нет связи с сервером"
+
         override val virtualAboutShort =
             "Виртуальный аккаунт — отдельный пользователь: своя переписка, свои ключи, " +
                 "своя секретная фраза. Телефона у него нет, находят его по нику."
@@ -1628,6 +1839,27 @@ enum class Language(val tag: String, val ownName: String, val words: Words?) {
  * ещё не выбран.
  */
 val LocalWords: ProvidableCompositionLocal<Words> = staticCompositionLocalOf { RussianWords }
+
+/**
+ * Текущий словарь для тех, кто **не рисует** (ПЛАН-ЯЗЫКА, Я2-беды).
+ *
+ * Store — обычный класс, не `@Composable`, и [LocalWords] ему недоступен. Он получает
+ * словарь **ссылкой** — `words: () -> Words`, — и умолчанием этой ссылки служит вот это
+ * поле: лямбда читает его в момент беды, а не при создании store, поэтому язык всегда
+ * текущий.
+ *
+ * **Пишет сюда один [io.tima.shared.Root]** — там же, где выбранный язык уходит в
+ * [TimaTheme], и из того же значения. Второго писателя быть не должно: `TimaTheme` зовут
+ * и с готовым набором цветов ради предпросмотра оформления, и запись оттуда сбрасывала бы
+ * язык на русский.
+ *
+ * Глобальное состояние здесь законно: язык приложения один на процесс, и другого у него
+ * не бывает.
+ */
+object CurrentWords {
+    @Volatile
+    var value: Words = RussianWords
+}
 
 /** Короткий доступ: `Tima.words.comments.thread`. */
 val Tima.words: Words

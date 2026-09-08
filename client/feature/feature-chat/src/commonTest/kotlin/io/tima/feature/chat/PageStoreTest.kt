@@ -1,5 +1,8 @@
 package io.tima.feature.chat
 
+import io.tima.core.ui.RussianWords
+import io.tima.core.ui.TroubleWords
+import io.tima.core.ui.Words
 import io.tima.domain.chat.CarryStep
 import io.tima.domain.chat.PageEntry
 import io.tima.domain.chat.PageStep
@@ -95,6 +98,36 @@ class PageStoreTest {
         assertTrue(store.state.value.entries.isEmpty())
         assertNull(store.state.value.trouble, "отсутствие ленты названо бедой")
         assertTrue(store.state.value.loaded)
+    }
+
+
+    /**
+     * Беда приходит на **текущем** языке, а не на том, что был при создании store.
+     *
+     * Ради этого словарь и передаётся ссылкой (ПЛАН-ЯЗЫКА, Я2-беды): store живёт дольше,
+     * чем выбор языка. Проверка держит решение — переданный значением словарь уронит её.
+     */
+    @Test
+    fun беда_говорит_на_текущем_языке() = runTest {
+        val pages = CountingPages(page = { PageStep.Offline(0) })
+        var chosen: Words = RussianWords
+        val store = PageStore(pages, backgroundScope, words = { chosen })
+
+        store.refresh()
+        runCurrent()
+        assertEquals(RussianWords.trouble.offline, store.state.value.trouble)
+
+        chosen = OtherTongue
+        store.refresh()
+        runCurrent()
+        assertEquals("no connection", store.state.value.trouble, "язык сменился, беда — нет")
+    }
+
+    /** Словарь-подмена: отличается ровно одним словом, остальное берётся у русского. */
+    private object OtherTongue : Words by RussianWords {
+        override val trouble = object : TroubleWords by RussianWords.trouble {
+            override val offline = "no connection"
+        }
     }
 
     private class CountingPages(

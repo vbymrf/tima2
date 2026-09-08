@@ -1,5 +1,8 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.CurrentWords
+import io.tima.core.ui.Words
+import io.tima.core.ui.RussianWords
 import io.tima.domain.chat.Communities
 import io.tima.domain.chat.CommunityItem
 import io.tima.domain.chat.LinkStep
@@ -21,6 +24,14 @@ class CommunityStore(
     private val communities: Communities,
     private val scope: CoroutineScope,
     private val communityId: String,
+    /**
+     * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
+     *
+     * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
+     * беды, поэтому язык всегда текущий: переданный значением, он запомнился бы на всю
+     * жизнь store, и после смены языка беда пришла бы на прежнем.
+     */
+    private val words: () -> Words = { CurrentWords.value },
 ) {
 
     private val _state = MutableStateFlow(CommunityState())
@@ -36,7 +47,7 @@ class CommunityStore(
             _state.value = if (page == null) {
                 // Сообщества нет или оно нам не показано — различать эти случаи мы не
                 // должны, и потому текст один.
-                _state.value.copy(loaded = true, trouble = "Сообщество не открылось")
+                _state.value.copy(loaded = true, trouble = words().social.communityDidNotOpen)
             } else {
                 CommunityState(
                     title = page.title,
@@ -58,7 +69,7 @@ class CommunityStore(
             if (communities.subscribe(communityId, on)) {
                 refresh()
             } else {
-                _state.value = _state.value.copy(trouble = "Не удалось изменить подписку")
+                _state.value = _state.value.copy(trouble = words().social.subscriptionNotChanged)
             }
         }
     }
@@ -78,11 +89,11 @@ class CommunityStore(
                     _state.value.copy(trouble = null)
                 }
 
-                LinkStep.Busy -> _state.value.copy(trouble = "«${item.title}» уже в другом сообществе")
+                LinkStep.Busy -> _state.value.copy(trouble = words().social.alreadyInAnother(item.title))
                 LinkStep.NotAllowed ->
-                    _state.value.copy(trouble = "Вносить может владелец сообщества и владелец элемента")
+                    _state.value.copy(trouble = words().social.ownerLinks)
 
-                LinkStep.Failed -> _state.value.copy(trouble = "Не удалось внести")
+                LinkStep.Failed -> _state.value.copy(trouble = words().social.couldNotLink)
             }
         }
     }
@@ -97,9 +108,9 @@ class CommunityStore(
                 }
 
                 LinkStep.NotAllowed ->
-                    _state.value.copy(trouble = "Вынимать может владелец сообщества и владелец элемента")
+                    _state.value.copy(trouble = words().social.ownerUnlinks)
 
-                else -> _state.value.copy(trouble = "Не удалось вынуть")
+                else -> _state.value.copy(trouble = words().social.couldNotUnlink)
             }
         }
     }
