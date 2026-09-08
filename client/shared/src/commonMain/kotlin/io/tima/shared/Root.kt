@@ -692,7 +692,7 @@ private fun App(
     val social = remember { SocialStore(GroupsOverHttp(network.groups), scope) }
     // Окно 5 «Страница»: своя лента — своё и принесённое. Один Store на приложение: одна
     // страница у человека, и второй показывал бы то же самое со своим отставанием.
-    val page = remember { PageStore(network.pages, scope) }
+    val page = remember { PageStore(network.pages, scope, switches = network.commentSwitches) }
     var phoneTab by remember { mutableStateOf("Чаты") }
 
     // Откуда ушли в настройки (ПЛАН-ОТЛАДКИ.md, Б2). Запоминается ЗДЕСЬ, в момент
@@ -1034,6 +1034,10 @@ private fun App(
                                     where = Where.Comments(state.channelId, postId)
                                 }
                             },
+                            // Своя страница — значит выключатели свои. На чужой их нет
+                            // вовсе: PageStore получает их только для «me».
+                            onPageComments = page::commentsOnPage,
+                            onPostComments = { postId, closed -> page.commentsOnPost(postId, closed) },
                             onCloseTrouble = page::troubleDismissed,
                         )
                     },

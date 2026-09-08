@@ -2,6 +2,9 @@ package io.tima.feature.chat
 
 import io.tima.domain.chat.CarryStep
 import io.tima.domain.chat.CarryToPage
+import io.tima.domain.chat.CommentSwitches
+import io.tima.domain.chat.SwitchComments
+import io.tima.domain.chat.SwitchStep
 import io.tima.domain.chat.PageEntry
 import io.tima.domain.chat.PageStep
 import io.tima.domain.chat.ReadPage
@@ -25,6 +28,11 @@ import kotlinx.coroutines.launch
 class PageStore(
     private val pages: UserPages,
     private val scope: CoroutineScope,
+    /**
+     * Выключатели обсуждения (ADR-0024 §6). `null` — страница чужая: выключать чужое
+     * нельзя, и кнопки быть не должно.
+     */
+    private val switches: CommentSwitches? = null,
     /** Чья страница. `me` — своя. */
     private val userId: String = ReadPage.PAGE_MINE,
 ) {
@@ -41,6 +49,7 @@ class PageStore(
                 is PageStep.Page -> _state.value.copy(
                     entries = outcome.entries,
                     channelId = outcome.channelId,
+                    commentsEnabled = outcome.commentsEnabled,
                     loaded = true,
                     trouble = null,
                 )
@@ -95,6 +104,50 @@ class PageStore(
         }
     }
 
+    /**
+     * Выключить или включить обсуждения на своей странице целиком.
+     *
+     * Страница перечитывается после ответа сервера, а не меняется на месте: состояние
+     * выключателя приходит оттуда же, откуда записи, и второй источник правды разошёлся
+     * бы с первым при первом же отказе.
+     */
+    fun commentsOnPage(enabled: Boolean) {
+        val switch = switches ?: return
+        val channelId = _state.value.channelId
+        if (channelId.isBlank()) return
+        scope.launch {
+            when (val outcome = SwitchComments(switch).channel(channelId, enabled)) {
+                SwitchStep.Switched -> refresh()
+                SwitchStep.NotAllowed ->
+                    _state.value = _state.value.copy(trouble = "Обсуждения выключает владелец страницы")
+
+                SwitchStep.NotFound -> _state.value = _state.value.copy(trouble = "Страницы больше нет")
+                is SwitchStep.Offline -> _state.value = _state.value.copy(trouble = "Нет связи с сервером")
+                is SwitchStep.Refused ->
+                    _state.value = _state.value.copy(trouble = "Сервер отказал: ${outcome.reason}")
+            }
+        }
+    }
+
+    /** Закрыть или открыть обсуждение одной записи. */
+    fun commentsOnPost(postId: Long, closed: Boolean) {
+        val switch = switches ?: return
+        val channelId = _state.value.channelId
+        if (channelId.isBlank()) return
+        scope.launch {
+            when (val outcome = SwitchComments(switch).post(channelId, postId, closed)) {
+                SwitchStep.Switched -> refresh()
+                SwitchStep.NotAllowed ->
+                    _state.value = _state.value.copy(trouble = "Обсуждение закрывает владелец или модератор")
+
+                SwitchStep.NotFound -> _state.value = _state.value.copy(trouble = "Записи больше нет")
+                is SwitchStep.Offline -> _state.value = _state.value.copy(trouble = "Нет связи с сервером")
+                is SwitchStep.Refused ->
+                    _state.value = _state.value.copy(trouble = "Сервер отказал: ${outcome.reason}")
+            }
+        }
+    }
+
     fun troubleDismissed() {
         _state.value = _state.value.copy(trouble = null)
     }
@@ -110,6 +163,8 @@ data class PageState(
      * записью, и страница человека — такой же канал.
      */
     val channelId: String = "",
+    /** Принимает ли страница обсуждения вообще. Второй выключатель — у каждой записи. */
+    val commentsEnabled: Boolean = true,
     /** Своя ли страница: у чужой нельзя убирать записи. */
     val mine: Boolean = true,
     /**

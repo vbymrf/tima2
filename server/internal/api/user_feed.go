@@ -428,6 +428,11 @@ func writeFeedLevels(
 		})
 	}
 	ответ := map[string]any{"channel_id": channelID, "items": out}
+	// Выключатель канала целиком. Спрашивается здесь, а не в каждой строке: он один на
+	// страницу, и повторять его двадцать раз значит двадцать раз сказать одно и то же.
+	if ch, err := st.GetChannel(r.Context(), channelID); err == nil {
+		ответ["comments_enabled"] = ch.CommentsEnabled
+	}
 	// Признак дружбы — только у чужой ленты: на своей он бессмыслен, и молчание тут
 	// честнее, чем «вы дружите с собой».
 	if friend != nil {

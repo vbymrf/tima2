@@ -3,6 +3,7 @@ package io.tima.shared
 import io.tima.core.encryption.DeviceIdentity
 import io.tima.domain.chat.AccessPort
 import io.tima.domain.chat.MessageLevels
+import io.tima.domain.chat.CommentSwitches
 import io.tima.domain.chat.PostComments
 import io.tima.domain.chat.UserPages
 import io.tima.core.network.DevicesApi
@@ -95,6 +96,9 @@ interface ChatPorts {
      * до того же канала.
      */
     val comments: PostComments
+
+    /** Выключатели обсуждения: канал целиком и одна запись (ADR-0024 §6). */
+    val commentSwitches: CommentSwitches
 }
 
 /** Группы: создание, состав, ротация ключа при смене состава. */

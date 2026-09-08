@@ -42,6 +42,7 @@ import io.tima.core.network.GroupKeysApi
 import io.tima.core.network.GroupMessagesApi
 import io.tima.core.network.LevelAccessOverHttp
 import io.tima.core.network.MessageLevelsOverHttp
+import io.tima.core.network.CommentSwitchesOverHttp
 import io.tima.core.network.PostCommentsOverHttp
 import io.tima.core.network.UserPagesOverHttp
 import io.tima.core.network.GroupsApi
@@ -342,6 +343,9 @@ class Network(
      */
     override val comments: PostCommentsOverHttp =
         PostCommentsOverHttp(link.route, link.client, token = { token() })
+
+    override val commentSwitches: CommentSwitchesOverHttp =
+        CommentSwitchesOverHttp(link.route, link.client, token = { token() })
 
     override val access: LevelAccessOverHttp =
         LevelAccessOverHttp(link.route, link.client, token = { token() })

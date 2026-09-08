@@ -104,6 +104,8 @@ data class PageEntry(
      * а не у ссылки на него.
      */
     val comments: Int = 0,
+    /** Обсуждение этой записи выключено владельцем (ADR-0024 §6). Старые ответы видны. */
+    val commentsClosed: Boolean = false,
 )
 
 /** Чтение страницы. Своя — [PAGE_MINE], чужая — идентификатор человека. */
@@ -123,7 +125,12 @@ sealed interface PageStep {
      *   разговор под записью: адрес комментария — канал и запись в нём, и страница
      *   человека здесь ничем не отличается от канала (решение заказчика 2026-09-04).
      */
-    data class Page(val entries: List<PageEntry>, val channelId: String = "") : PageStep
+    data class Page(
+        val entries: List<PageEntry>,
+        val channelId: String = "",
+        /** Принимает ли страница обсуждения вообще. Второй выключатель — у записи. */
+        val commentsEnabled: Boolean = true,
+    ) : PageStep
 
     /** Ленты нет: человек ещё ничего себе не клал. Не поломка и не тайна. */
     data object NoPage : PageStep

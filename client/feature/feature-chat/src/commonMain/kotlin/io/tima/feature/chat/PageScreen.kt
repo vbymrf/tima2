@@ -48,6 +48,12 @@ fun PageScreen(
      * Показать её здесь значило бы обещать второй разговор о том же посте.
      */
     onComments: ((Long) -> Unit)? = null,
+    /**
+     * Выключатель обсуждений всей страницы (ADR-0024 §6). `null` — страница чужая.
+     */
+    onPageComments: ((Boolean) -> Unit)? = null,
+    /** Закрыть или открыть обсуждение одной записи: `(postId, закрыть)`. */
+    onPostComments: ((Long, Boolean) -> Unit)? = null,
     onCloseTrouble: () -> Unit = {},
 ) = Column(modifier.fillMaxSize()) {
     state.trouble?.let { text ->
@@ -58,6 +64,26 @@ fun PageScreen(
         ) {
             Caption(text, fontSize = TimaType.sz5, modifier = Modifier.weight(1f))
             Chip("Скрыть", kind = ChipKind.Quiet, onClick = onCloseTrouble)
+        }
+    }
+
+    // Выключатель страницы — над списком и один: он про всю страницу, и повторять его у
+    // каждой записи значило бы двадцать раз сказать одно и то же.
+    if (onPageComments != null && state.loaded) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about3),
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Tertiary(
+                if (state.commentsEnabled) "Записи можно обсуждать" else "Обсуждения выключены",
+                lineOne = true,
+            )
+            Chip(
+                if (state.commentsEnabled) "Выключить обсуждения" else "Включить",
+                kind = ChipKind.Quiet,
+                onClick = { onPageComments(!state.commentsEnabled) },
+            )
         }
     }
 
@@ -89,7 +115,7 @@ fun PageScreen(
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
     ) {
         items(state.entries, key = { it.postId }) { entry ->
-            PageRow(entry, onRemove.takeIf { state.mine }, onComments)
+            PageRow(entry, onRemove.takeIf { state.mine }, onComments, onPostComments)
         }
     }
 }
@@ -99,6 +125,7 @@ private fun PageRow(
     entry: PageEntry,
     onRemove: ((Long) -> Unit)?,
     onComments: ((Long) -> Unit)? = null,
+    onPostComments: ((Long, Boolean) -> Unit)? = null,
 ) = Column(
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
 ) {
@@ -131,6 +158,16 @@ private fun PageRow(
                 if (entry.comments > 0) "💬 ${entry.comments}" else "💬",
                 kind = ChipKind.Quiet,
                 onClick = { onComments(entry.postId) },
+            )
+        }
+        // «Закрыть обсуждение» — у своей записи и рядом с «Убрать»: оба про эту запись
+        // и оба принадлежат владельцу. Написанное раньше при закрытии остаётся видно, и
+        // это сказано на самом подокне разговора, а не здесь.
+        if (onPostComments != null && entry.carriedBy.isBlank()) {
+            Chip(
+                if (entry.commentsClosed) "Открыть обсуждение" else "Закрыть обсуждение",
+                kind = ChipKind.Quiet,
+                onClick = { onPostComments(entry.postId, !entry.commentsClosed) },
             )
         }
         if (onRemove != null) {

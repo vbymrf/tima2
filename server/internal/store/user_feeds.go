@@ -58,6 +58,8 @@ type FeedItem struct {
 	Signature    []byte
 	SenderDevice string
 	Kind         int32
+	// CommentsClosed — обсуждение этой записи выключено (ADR-0024 §6).
+	CommentsClosed bool
 }
 
 // FeedOf — канал-лента этого человека.
@@ -225,7 +227,7 @@ func (s *Store) ListFeed(
 		before = ^uint64(0) >> 1
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT p.post_id, p.level, p.created_at_unix_ms,
+		SELECT p.post_id, p.level, p.created_at_unix_ms, p.comments_closed,
 		       COALESCE(src.text, p.text) AS text,
 		       COALESCE(src.nodes, p.nodes) AS nodes,
 		       COALESCE(o.sender_id::text, src.author_id::text, p.author_id::text) AS author_id,
@@ -263,7 +265,7 @@ func (s *Store) ListFeed(
 	var out []FeedItem
 	for rows.Next() {
 		var it FeedItem
-		if err := rows.Scan(&it.PostID, &it.Level, &it.CreatedAtUnixMs, &it.Text, &it.Nodes,
+		if err := rows.Scan(&it.PostID, &it.Level, &it.CreatedAtUnixMs, &it.CommentsClosed, &it.Text, &it.Nodes,
 			&it.AuthorID, &it.CarriedBy, &it.RefKind, &it.RefContainerID,
 			&it.RefMessageID, &it.SourceTitle,
 			&it.Payload, &it.Signature, &it.SenderDevice, &it.Kind); err != nil {

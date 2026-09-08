@@ -17,6 +17,9 @@ type Channel struct {
 	Description string
 	OwnerID     string
 	IsPublic    bool
+	// CommentsEnabled — принимает ли канал обсуждения вообще (ADR-0024 §6). Второй
+	// выключатель — у отдельной записи; они про разные желания и потому оба.
+	CommentsEnabled bool
 }
 
 type ChannelView struct {
@@ -40,6 +43,9 @@ type ChannelPost struct {
 	// ParentPostID — корень, если это комментарий (ADR-0024). Ноль значит обычная
 	// запись. Своего круга у комментария нет: он берётся у корня при выдаче.
 	ParentPostID uint64
+	// CommentsClosed — обсуждение этой записи выключено владельцем (ADR-0024 §6).
+	// Старые комментарии при этом остаются видны: выключено значит «новых не принимаем».
+	CommentsClosed bool
 }
 
 // CreateChannel создаёт канал и подписывает владельца одной транзакцией.
@@ -67,9 +73,9 @@ func (s *Store) CreateChannel(ctx context.Context, c Channel) (string, error) {
 func (s *Store) GetChannel(ctx context.Context, channelID string) (Channel, error) {
 	var c Channel
 	err := s.pool.QueryRow(ctx, `
-		SELECT channel_id, title, description, owner_id, is_public
+		SELECT channel_id, title, description, owner_id, is_public, comments_enabled
 		FROM channels WHERE channel_id = $1 AND deleted_at IS NULL`, channelID).
-		Scan(&c.ChannelID, &c.Title, &c.Description, &c.OwnerID, &c.IsPublic)
+		Scan(&c.ChannelID, &c.Title, &c.Description, &c.OwnerID, &c.IsPublic, &c.CommentsEnabled)
 	if errors.Is(err, pgx.ErrNoRows) || isBadUUID(err) {
 		return c, ErrChannelNotFound
 	}
@@ -79,7 +85,7 @@ func (s *Store) GetChannel(ctx context.Context, channelID string) (Channel, erro
 // MyChannels — каналы, где пользователь владелец или подписчик.
 func (s *Store) MyChannels(ctx context.Context, userID string) ([]ChannelView, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT c.channel_id, c.title, c.description, c.owner_id, c.is_public,
+		SELECT c.channel_id, c.title, c.description, c.owner_id, c.is_public, c.comments_enabled,
 		       TRUE AS subscribed, (c.owner_id = $1) AS owner
 		FROM channels c
 		JOIN channel_subscriptions s ON s.channel_id = c.channel_id AND s.subscriber_id = $1
@@ -97,7 +103,7 @@ func (s *Store) DiscoverChannels(ctx context.Context, userID string, limit int) 
 		limit = 50
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT c.channel_id, c.title, c.description, c.owner_id, c.is_public,
+		SELECT c.channel_id, c.title, c.description, c.owner_id, c.is_public, c.comments_enabled,
 		       FALSE AS subscribed, (c.owner_id = $1) AS owner
 		FROM channels c
 		WHERE c.deleted_at IS NULL AND c.is_public
@@ -116,7 +122,7 @@ func scanChannelViews(rows pgx.Rows) ([]ChannelView, error) {
 	var out []ChannelView
 	for rows.Next() {
 		var v ChannelView
-		if err := rows.Scan(&v.ChannelID, &v.Title, &v.Description, &v.OwnerID, &v.IsPublic,
+		if err := rows.Scan(&v.ChannelID, &v.Title, &v.Description, &v.OwnerID, &v.IsPublic, &v.CommentsEnabled,
 			&v.Subscribed, &v.Owner); err != nil {
 			return nil, err
 		}
@@ -203,7 +209,7 @@ func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, 
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT p.channel_id, p.post_id, p.author_id, p.text, p.nodes, p.markup,
-		       p.markup_version, p.created_at_unix_ms, p.level
+		       p.markup_version, p.created_at_unix_ms, p.level, p.comments_closed
 		FROM channel_posts p
 		LEFT JOIN feed_level_grants fg
 		       ON fg.channel_id = p.channel_id AND fg.post_id = p.post_id
@@ -220,7 +226,7 @@ func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, 
 	for rows.Next() {
 		var p ChannelPost
 		if err := rows.Scan(&p.ChannelID, &p.PostID, &p.AuthorID, &p.Text, &p.Nodes, &p.Markup,
-			&p.MarkupVersion, &p.CreatedAtUnixMs, &p.Level); err != nil {
+			&p.MarkupVersion, &p.CreatedAtUnixMs, &p.Level, &p.CommentsClosed); err != nil {
 			return nil, err
 		}
 		out = append(out, p)

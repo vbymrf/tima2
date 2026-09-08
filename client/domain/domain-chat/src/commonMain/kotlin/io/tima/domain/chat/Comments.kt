@@ -125,3 +125,48 @@ interface PostComments {
     /** Убрать свой комментарий. Владелец и модератор канала убирают любой у себя. */
     suspend fun remove(channelId: String, postId: Long): CommentStep
 }
+
+
+/**
+ * Выключатели обсуждения (ADR-0024 §6, ПЛАН-КАНАЛОВ К7).
+ *
+ * **Два, а не один.** «Канал без обсуждений» и «эту запись не обсуждаем» — разные
+ * желания, и второе просят чаще. Один выключатель заставил бы владельца выбирать между
+ * закрытым каналом и открытой записью, о которой он как раз и не хочет разговора.
+ *
+ * **Выключено значит «новых не принимаем».** Написанное раньше остаётся видно: иначе одно
+ * нажатие молча стирает чужие слова, и человек, у которого разговор исчез, читает это как
+ * поломку. Убрать разговор целиком — отдельное действие, и его здесь нет.
+ */
+class SwitchComments(private val switches: CommentSwitches) {
+
+    /** Канал или страница целиком. */
+    suspend fun channel(channelId: String, enabled: Boolean): SwitchStep {
+        if (channelId.isBlank()) return SwitchStep.Refused("bad_request")
+        return switches.channel(channelId, enabled)
+    }
+
+    /** Одна запись. */
+    suspend fun post(channelId: String, postId: Long, closed: Boolean): SwitchStep {
+        if (channelId.isBlank() || postId <= 0) return SwitchStep.Refused("bad_request")
+        return switches.post(channelId, postId, closed)
+    }
+}
+
+/** Что вышло из попытки переключить. */
+sealed interface SwitchStep {
+    data object Switched : SwitchStep
+
+    /** Это может владелец канала или модератор — а мы не они. */
+    data object NotAllowed : SwitchStep
+
+    data object NotFound : SwitchStep
+    data class Offline(val retryAfterMs: Long) : SwitchStep
+    data class Refused(val reason: String) : SwitchStep
+}
+
+/** Порт к серверу: выключатели обсуждения. */
+interface CommentSwitches {
+    suspend fun channel(channelId: String, enabled: Boolean): SwitchStep
+    suspend fun post(channelId: String, postId: Long, closed: Boolean): SwitchStep
+}

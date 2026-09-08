@@ -76,7 +76,13 @@ class UserPagesOverHttp(
         val body = response.jsonBody()
         return when {
             response.status == HttpStatusCode.OK ->
-                PageStep.Page(entriesOf(body), body?.str("channel_id").orEmpty())
+                PageStep.Page(
+                    entries = entriesOf(body),
+                    channelId = body?.str("channel_id").orEmpty(),
+                    // Поля нет — считаем, что обсуждения открыты: так было до появления
+                    // выключателя, и молчание не должно закрывать разговор.
+                    commentsEnabled = body?.bool("comments_enabled") ?: true,
+                )
             response.status == HttpStatusCode.NotFound -> PageStep.NoPage
             else -> PageStep.Refused(body.codeOf())
         }
@@ -118,6 +124,7 @@ class UserPagesOverHttp(
                 refContainerId = row.str("ref_container_id").orEmpty(),
                 refMessageId = row.long("ref_message_id") ?: 0,
                 comments = row.int("comments") ?: 0,
+                commentsClosed = row.bool("comments_closed") ?: false,
             )
         }
     }
