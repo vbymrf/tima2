@@ -71,7 +71,11 @@ type FeedStore interface {
 	FeedOf(ctx context.Context, userID string) (string, error)
 	EnsureFeed(ctx context.Context, userID, title string) (string, error)
 	SubscribeToFeed(ctx context.Context, channelID, userID string) error
-	CarryToFeed(ctx context.Context, channelID, carrierID, srcGroupID string, srcMessageID int64, level, visibleTo int16) (uint64, error)
+	CarryToFeed(ctx context.Context, channelID, carrierID, srcKind, srcContainerID string, srcMessageID int64, level, visibleTo int16) (uint64, error)
+
+	// Источником переноса стал ещё и канал (К2): право спрашивается у него — подписка
+	// и круг, а не роль в группе.
+	GetChannel(ctx context.Context, channelID string) (store.Channel, error)
 	ListFeed(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16) ([]store.FeedItem, error)
 	RemoveFeedItem(ctx context.Context, channelID string, postID uint64, ownerID string) error
 
@@ -298,10 +302,14 @@ func writeFeedLevels(
 			"nodes":              it.Nodes,
 			// Пусто у своей записи, заполнено у принесённой. По этим трём полям экран
 			// показывает её «от лица группы», а не как свою.
-			"carried_by":     it.CarriedBy,
-			"ref_group_id":   it.RefGroupID,
-			"ref_message_id": it.RefMessageID,
-			"source_title":   it.SourceTitle,
+			"carried_by": it.CarriedBy,
+			// Вид контейнера оригинала — новое поле; `ref_group_id` остаётся как было
+			// и заполнено у ссылки на группу (API только расширяется).
+			"ref_kind":         it.RefKind,
+			"ref_container_id": it.RefContainerID,
+			"ref_group_id":     it.RefGroupID,
+			"ref_message_id":   it.RefMessageID,
+			"source_title":     it.SourceTitle,
 			// Содержимое оригинала как есть: подпись считается по этим байтам, и
 			// пересобирать их нельзя.
 			"payload":       b64.EncodeToString(it.Payload),
@@ -325,16 +333,32 @@ func carryToFeed(st FeedStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
 		var req struct {
-			GroupID   string `json:"group_id"`
-			MessageID int64  `json:"message_id"`
-			Level     *int16 `json:"level"`
+			// Адрес оригинала. Вид контейнера — новое поле, и оно необязательное:
+			// не прислали — «группа», как было до появления второго источника
+			// (ПРАВИЛА-РАБОТЫ §3, API только расширяется).
+			Kind        string `json:"kind,omitempty"`
+			ContainerID string `json:"container_id,omitempty"`
+			GroupID     string `json:"group_id,omitempty"`
+			MessageID   int64  `json:"message_id"`
+			Level       *int16 `json:"level"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
 			return
 		}
-		if req.GroupID == "" || req.MessageID <= 0 {
-			writeErr(w, http.StatusBadRequest, "bad_request", "нужны group_id и message_id")
+		kind, container := req.Kind, req.ContainerID
+		if kind == "" {
+			kind, container = "group", req.GroupID
+		}
+		if container == "" && req.GroupID != "" {
+			container = req.GroupID
+		}
+		if kind != "group" && kind != "channel" {
+			writeErr(w, http.StatusBadRequest, "bad_kind", "kind — group или channel")
+			return
+		}
+		if container == "" || req.MessageID <= 0 {
+			writeErr(w, http.StatusBadRequest, "bad_request", "нужны container_id и message_id")
 			return
 		}
 		// Круг у себя назначает принёсший (ADR-0019 §7). Не назвал — «всем»: страница по
@@ -349,19 +373,34 @@ func carryToFeed(st FeedStore) http.HandlerFunc {
 		}
 
 		// **Унести можно только то, что тебе показали.** Иначе перенос стал бы способом
-		// достать запись, которую сервер тебе не отдавал.
-		role, err := st.GroupRole(r.Context(), req.GroupID, id.UserID)
-		if err != nil && !errors.Is(err, store.ErrNotMember) {
-			log.Printf("carryToFeed: role: %v", err)
-			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-			return
-		}
-		visible := maxLevelFor(role)
-		if role != "" && visible < levelByGrant {
-			if granted, err := st.GrantedLevelFor(r.Context(), req.GroupID, id.UserID); err != nil {
-				log.Printf("carryToFeed: grant: %v", err)
-			} else if granted > visible {
-				visible = granted
+		// достать запись, которую сервер тебе не отдавал. Спрашивается это у контейнера
+		// оригинала, и потому вид контейнера решает, кого спрашивать.
+		var visible int16
+		if kind == "channel" {
+			ch, err := st.GetChannel(r.Context(), container)
+			if errors.Is(err, store.ErrChannelNotFound) {
+				writeErr(w, http.StatusNotFound, "message_not_found", "записи нет")
+				return
+			} else if err != nil {
+				log.Printf("carryToFeed: канал: %v", err)
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+				return
+			}
+			visible = maxLevelInChannel(r, st, ch, id.UserID)
+		} else {
+			role, err := st.GroupRole(r.Context(), container, id.UserID)
+			if err != nil && !errors.Is(err, store.ErrNotMember) {
+				log.Printf("carryToFeed: role: %v", err)
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+				return
+			}
+			visible = maxLevelFor(role)
+			if role != "" && visible < levelByGrant {
+				if granted, err := st.GrantedLevelFor(r.Context(), container, id.UserID); err != nil {
+					log.Printf("carryToFeed: grant: %v", err)
+				} else if granted > visible {
+					visible = granted
+				}
 			}
 		}
 
@@ -372,10 +411,15 @@ func carryToFeed(st FeedStore) http.HandlerFunc {
 			return
 		}
 
-		postID, err := st.CarryToFeed(r.Context(), channelID, id.UserID, req.GroupID, req.MessageID, level, visible)
+		postID, err := st.CarryToFeed(r.Context(), channelID, id.UserID, kind, container, req.MessageID, level, visible)
 		switch {
 		case errors.Is(err, store.ErrGroupMessageNotFound):
 			writeErr(w, http.StatusNotFound, "message_not_found", "записи нет")
+			return
+		case errors.Is(err, store.ErrAlreadyCarried):
+			// Повтор — не ошибка человека: он нажал дважды. Отдельный код, чтобы экран
+			// сказал «уже у вас», а не «что-то пошло не так».
+			writeErr(w, http.StatusConflict, "already_carried", "эта запись уже на вашей странице")
 			return
 		case errors.Is(err, store.ErrCannotCarry):
 			writeErr(w, http.StatusForbidden, "cannot_carry", "эту запись нельзя унести к себе")

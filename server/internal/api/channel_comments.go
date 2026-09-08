@@ -20,6 +20,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -32,6 +33,14 @@ import (
 	"tima/server/internal/store"
 )
 
+// subscriptionChecker — минимум, которым считается круг: подписан ли этот человек.
+//
+// Интерфейс отдельный и узкий, потому что границу считают два потребителя с разными
+// хранилищами: маршруты каналов и маршруты ленты. Общий тип связал бы их без нужды.
+type subscriptionChecker interface {
+	IsSubscribed(ctx context.Context, channelID, userID string) (bool, error)
+}
+
 // maxLevelInChannel — граница выдачи в канале или ленте.
 //
 // Владелец видит всё; подписчик — до «своим»; посторонний — «всем». Для ленты человека
@@ -40,7 +49,7 @@ import (
 //
 // Уровень 3 в канале сегодня достаётся только владельцу: поимённые разрешения у ленты —
 // этап К4, до него список пуст.
-func maxLevelInChannel(r *http.Request, st ChannelStore, ch store.Channel, userID string) int16 {
+func maxLevelInChannel(r *http.Request, st subscriptionChecker, ch store.Channel, userID string) int16 {
 	if ch.OwnerID == userID {
 		return levelByGrant
 	}

@@ -21,6 +21,11 @@ var ErrNoFeed = errors.New("ленты нет")
 // (ADR-0019 §7). Ни то, ни другое ссылкой не передаётся.
 var ErrCannotCarry = errors.New("запись не выносится")
 
+// ErrAlreadyCarried — эта запись уже лежит на странице. Не поломка: повтор ничего не
+// добавляет, а в ленте выглядел бы дубликатом. Держит это уникальный индекс, а не проверка
+// перед вставкой, — иначе два нажатия подряд успевают пройти оба.
+var ErrAlreadyCarried = errors.New("запись уже принесена")
+
 // FeedItem — строка ленты: своя запись или ссылка на чужую.
 //
 // У ссылки содержимое приходит из оригинала, поэтому автор здесь **не** владелец ленты:
@@ -35,9 +40,18 @@ type FeedItem struct {
 	Nodes           []string
 	// CarriedBy — кто принёс. Пусто у собственной записи.
 	CarriedBy string
-	// RefGroupID/RefMessageID — адрес оригинала; пусто у собственной записи.
-	RefGroupID   string
-	RefMessageID int64
+	// RefKind/RefContainerID/RefMessageID — адрес оригинала: вид контейнера, сам
+	// контейнер и запись в нём. Пусто у собственной записи.
+	//
+	// Вид нужен потому, что правило комментариев говорит про КОНТЕЙНЕР оригинала:
+	// принесена из канала — комментарий уходит в тот канал; из группы — комментариев
+	// нет вовсе (ADR-0024 §3).
+	RefKind        string
+	RefContainerID string
+	RefMessageID   int64
+	// RefGroupID — прежнее имя того же адреса, когда вид контейнера «группа». Живёт
+	// ради ответа API, который не сужается (ПРАВИЛА-РАБОТЫ §3); у ссылки на канал пуст.
+	RefGroupID string
 	// SourceTitle — от чьего лица показывать: название группы, откуда принесено.
 	SourceTitle string
 	// Payload/Signature/SenderDevice/Kind — содержимое оригинала как есть, чтобы клиент
@@ -129,15 +143,26 @@ func (s *Store) SubscribeToFeed(ctx context.Context, channelID, userID string) e
 // его нет или он удалён.
 func (s *Store) CarryToFeed(
 	ctx context.Context,
-	channelID, carrierID, srcGroupID string,
+	channelID, carrierID, srcKind, srcContainerID string,
 	srcMessageID int64,
 	level, visibleTo int16,
 ) (uint64, error) {
 	var srcLevel int16
-	err := s.pool.QueryRow(ctx, `
-		SELECT level FROM group_messages
-		 WHERE group_id = $1 AND message_id = $2 AND NOT deleted`,
-		srcGroupID, srcMessageID).Scan(&srcLevel)
+	var err error
+	switch srcKind {
+	case "channel":
+		err = s.pool.QueryRow(ctx, `
+			SELECT level FROM channel_posts
+			 WHERE channel_id = $1 AND post_id = $2 AND NOT deleted
+			   AND parent_post_id IS NULL`,
+			srcContainerID, srcMessageID).Scan(&srcLevel)
+	default:
+		srcKind = "group"
+		err = s.pool.QueryRow(ctx, `
+			SELECT level FROM group_messages
+			 WHERE group_id = $1 AND message_id = $2 AND NOT deleted`,
+			srcContainerID, srcMessageID).Scan(&srcLevel)
+	}
 	if errors.Is(err, pgx.ErrNoRows) || isBadUUID(err) {
 		return 0, ErrGroupMessageNotFound
 	}
@@ -159,14 +184,23 @@ func (s *Store) CarryToFeed(
 	// заполняется нигде (Plan.md §0.0 решение 9).
 	err = s.pool.QueryRow(ctx, `
 		INSERT INTO channel_posts
-		    (channel_id, author_id, text, nodes, created_at_unix_ms, level, ref_group_id, ref_message_id)
-		VALUES ($1, $2, '', '{}', (EXTRACT(EPOCH FROM now()) * 1000)::bigint, $3, $4, $5)
+		    (channel_id, author_id, text, nodes, created_at_unix_ms, level,
+		     ref_kind, ref_container_id, ref_message_id)
+		VALUES ($1, $2, '', '{}', (EXTRACT(EPOCH FROM now()) * 1000)::bigint, $3, $4, $5, $6)
 		RETURNING post_id`,
-		channelID, carrierID, level, srcGroupID, srcMessageID).Scan(&postID)
+		channelID, carrierID, level, srcKind, srcContainerID, srcMessageID).Scan(&postID)
+	if err != nil && isUniqueViolation(err) {
+		return 0, ErrAlreadyCarried
+	}
 	return postID, err
 }
 
 // ListFeed — лента с раскрытыми ссылками.
+//
+// **Содержимое ссылки берётся у оригинала, и способ зависит от вида контейнера.**
+// У группового сообщения это `payload`+`signature`: подпись считается по тем байтам, что
+// были отправлены, и пересобирать их нельзя. У поста канала подписи нет вовсе — контур
+// открытый, — поэтому берутся `nodes` и `text` оригинала.
 //
 // **Комментарии в ленту не попадают** (ADR-0024, следствие 1): они лежат в той же
 // таблице, и без `parent_post_id IS NULL` ветка вылезла бы на страницу как запись.
@@ -189,21 +223,33 @@ func (s *Store) ListFeed(
 		before = ^uint64(0) >> 1
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT p.post_id, p.level, p.created_at_unix_ms, p.text, p.nodes,
-		       COALESCE(o.sender_id::text, p.author_id::text) AS author_id,
-		       CASE WHEN p.ref_group_id IS NULL THEN '' ELSE p.author_id::text END AS carried_by,
-		       COALESCE(p.ref_group_id::text, ''), COALESCE(p.ref_message_id, 0),
-		       COALESCE(g.title, ''),
+		SELECT p.post_id, p.level, p.created_at_unix_ms,
+		       COALESCE(src.text, p.text) AS text,
+		       COALESCE(src.nodes, p.nodes) AS nodes,
+		       COALESCE(o.sender_id::text, src.author_id::text, p.author_id::text) AS author_id,
+		       CASE WHEN p.ref_container_id IS NULL THEN '' ELSE p.author_id::text END AS carried_by,
+		       COALESCE(p.ref_kind, ''),
+		       COALESCE(p.ref_container_id::text, ''),
+		       CASE WHEN p.ref_kind = 'group' THEN COALESCE(p.ref_container_id::text, '') ELSE '' END,
+		       COALESCE(p.ref_message_id, 0),
+		       COALESCE(g.title, sc.title, ''),
 		       COALESCE(o.payload, ''::bytea), COALESCE(o.signature, ''::bytea),
 		       COALESCE(o.sender_device::text, ''), COALESCE(o.kind, 0)
 		  FROM channel_posts p
 		  LEFT JOIN group_messages o
-		         ON o.group_id = p.ref_group_id AND o.message_id = p.ref_message_id AND NOT o.deleted
-		  LEFT JOIN groups g ON g.group_id = p.ref_group_id
+		         ON p.ref_kind = 'group' AND o.group_id = p.ref_container_id
+		        AND o.message_id = p.ref_message_id AND NOT o.deleted
+		  LEFT JOIN channel_posts src
+		         ON p.ref_kind = 'channel' AND src.channel_id = p.ref_container_id
+		        AND src.post_id = p.ref_message_id AND NOT src.deleted
+		  LEFT JOIN groups g ON p.ref_kind = 'group' AND g.group_id = p.ref_container_id
+		  LEFT JOIN channels sc ON p.ref_kind = 'channel' AND sc.channel_id = p.ref_container_id
 		 WHERE p.channel_id = $1 AND p.post_id < $2 AND NOT p.deleted
 		   AND p.parent_post_id IS NULL
 		   AND p.level <= $4
-		   AND (p.ref_group_id IS NULL OR (o.message_id IS NOT NULL AND o.level BETWEEN 0 AND 2))
+		   AND (p.ref_container_id IS NULL
+		        OR (p.ref_kind = 'group'   AND o.message_id IS NOT NULL AND o.level   BETWEEN 0 AND 2)
+		        OR (p.ref_kind = 'channel' AND src.post_id  IS NOT NULL AND src.level BETWEEN 0 AND 2))
 		 ORDER BY p.post_id DESC
 		 LIMIT $3`, channelID, before, limit, maxLevel)
 	if err != nil {
@@ -214,7 +260,8 @@ func (s *Store) ListFeed(
 	for rows.Next() {
 		var it FeedItem
 		if err := rows.Scan(&it.PostID, &it.Level, &it.CreatedAtUnixMs, &it.Text, &it.Nodes,
-			&it.AuthorID, &it.CarriedBy, &it.RefGroupID, &it.RefMessageID, &it.SourceTitle,
+			&it.AuthorID, &it.CarriedBy, &it.RefKind, &it.RefContainerID, &it.RefGroupID,
+			&it.RefMessageID, &it.SourceTitle,
 			&it.Payload, &it.Signature, &it.SenderDevice, &it.Kind); err != nil {
 			return nil, err
 		}
