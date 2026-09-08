@@ -30,6 +30,9 @@ import io.tima.domain.chat.ChatNames
 import io.tima.domain.chat.CreateGroupChat
 import io.tima.domain.chat.ManageGroupMembers
 import io.tima.domain.chat.RequestGroupKeys
+import io.tima.domain.chat.CommunityKinds
+import io.tima.feature.group.CommunityScreen
+import io.tima.feature.group.CommunityStore
 import io.tima.feature.group.SocialStore
 import io.tima.feature.group.CatalogTab
 import io.tima.feature.group.FriendsTab
@@ -455,6 +458,14 @@ private sealed interface Where {
     data class Access(val groupId: String, val name: String?) : Where
 
     /**
+     * Страница сообщества: состав, описание, подписка (ПЛАН-СООБЩЕСТВ С6).
+     *
+     * Хранится только идентификатор: название приезжает вместе со страницей, и держать
+     * его здесь значило бы иметь два источника одного слова.
+     */
+    data class Community(val communityId: String) : Where
+
+    /**
      * Разговор под записью (ADR-0024).
      *
      * Адрес — канал и запись в нём: страница человека тоже канал, поэтому одного вида
@@ -691,7 +702,7 @@ private fun App(
     }
     // Окно 2 «Социум»: свои группы и карточки, которые открыли контакты. Списки живут
     // здесь, а не в оболочке: рама знает раму, работа с сервером — дело feature-group.
-    val social = remember { SocialStore(GroupsOverHttp(network.groups), scope) }
+    val social = remember { SocialStore(GroupsOverHttp(network.groups), scope, network.communities) }
     // Окно 5 «Страница»: своя лента — своё и принесённое. Один Store на приложение: одна
     // страница у человека, и второй показывал бы то же самое со своим отставанием.
     val page = remember { PageStore(network.pages, scope, switches = network.commentSwitches) }
@@ -1003,6 +1014,7 @@ private fun App(
                                 state = socialState,
                                 onOpen = { where = Where.Chat(it.groupId, it.title) },
                                 onNew = { where = Where.NewGroup },
+                                onOpenCommunity = { where = Where.Community(it) },
                             )
                         },
                         friends = { FriendsTab(state = socialState, onAsk = social::ask) },
@@ -1080,6 +1092,33 @@ private fun App(
                             where = Where.Nothing
                             transferState.taken?.let(onTransferTaken)
                         },
+                    )
+                }
+            }
+
+            is Where.Community -> {
+                {
+                    val store = remember(current) {
+                        CommunityStore(network.communities, scope, current.communityId)
+                    }
+                    val communityState by store.state.collectAsState()
+                    LaunchedEffect(current) { store.refresh() }
+                    CommunityScreen(
+                        state = communityState,
+                        onBack = { where = Where.Nothing },
+                        onSubscribe = store::subscribe,
+                        // Элемент состава открывается тем же экраном, что и обычно:
+                        // сообщество ничем не владеет, и «открыть группу изнутри» — это
+                        // просто открыть группу.
+                        onOpenItem = { item ->
+                            if (item.kind == CommunityKinds.GROUP) {
+                                where = Where.Chat(item.id, item.title)
+                            }
+                        },
+                        // Вносить и вынимать может владелец: у остальных кнопок нет
+                        // вовсе, а не «есть, но отвергается».
+                        onLink = if (communityState.owner) store::link else null,
+                        onUnlink = if (communityState.owner) store::unlink else null,
                     )
                 }
             }
@@ -1780,6 +1819,7 @@ private fun whereWords(where: Where): String = when (where) {
     // Ни канала, ни номера записи: в журнале нужно знать, что человек читал разговор, а
     // не под какой записью — идентификатор чужого поста в отчёте не нужен никому.
     is Where.Comments -> "комментарии"
+    is Where.Community -> "сообщество"
     is Where.Link -> "подтверждение привязки устройства"
     is Where.Transfer -> if (where.virtualUserId == null) "приём аккаунта" else "передача аккаунта"
     is Where.Settings -> "настройки" + (where.item?.let { ": " + it.title } ?: "")

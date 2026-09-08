@@ -1,6 +1,8 @@
 package io.tima.feature.group
 
 import io.tima.domain.chat.AskStep
+import io.tima.domain.chat.Communities
+import io.tima.domain.chat.CommunityPage
 import io.tima.domain.chat.CardsStep
 import io.tima.domain.chat.GroupCard
 import io.tima.domain.chat.GroupInfo
@@ -26,6 +28,11 @@ import kotlinx.coroutines.launch
 class SocialStore(
     private val groups: GroupRegistry,
     private val scope: CoroutineScope,
+    /**
+     * Свои сообщества. `null` — списка нет вовсе: так работают проверки, которым
+     * интересны только группы.
+     */
+    private val communities: Communities? = null,
 ) {
 
     private val _state = MutableStateFlow(SocialState())
@@ -40,11 +47,16 @@ class SocialStore(
         scope.launch {
             val mine = groups.mine()
             val cards = groups.cards()
+            // Сообщества — третий список того же окна. Спрашиваются здесь же, а не своим
+            // экраном: человек открывает «Социум» один раз, и три похода в сеть подряд
+            // он видит как одну задержку, а не как три.
+            val communities = communities?.mine() ?: emptyList()
             _state.value = _state.value.copy(
                 expect = false,
                 loaded = true,
                 mine = (mine as? GroupsStep.Groups)?.groups ?: _state.value.mine,
                 cards = (cards as? CardsStep.Cards)?.cards ?: _state.value.cards,
+                communities = communities,
                 trouble = troubleOf(mine, cards),
             )
         }
@@ -95,6 +107,14 @@ data class SocialState(
     val mine: List<GroupInfo> = emptyList(),
     /** Что открыли контакты — вкладка «Друзья». */
     val cards: List<GroupCard> = emptyList(),
+    /**
+     * Свои сообщества — там же, в «Каталоге».
+     *
+     * Отдельной вкладки им не заводится: сообщество это контейнер того же каталога, а не
+     * другой вид отношений. Четвёртая вкладка заставила бы человека помнить, где что
+     * лежит, вместо того чтобы видеть.
+     */
+    val communities: List<CommunityPage> = emptyList(),
     /** Идёт запрос: списки могли ещё не приехать. */
     val expect: Boolean = false,
     /** Списки хоть раз доехали. До этого «пусто» означает «не знаем», а не «нет». */

@@ -35,9 +35,32 @@ fun CatalogTab(
     onOpen: (GroupInfo) -> Unit,
     onNew: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Открыть сообщество. `null` — сообществ в этой сборке нет (проверки). */
+    onOpenCommunity: ((String) -> Unit)? = null,
 ) {
     Column(modifier.fillMaxSize()) {
         state.trouble?.let { Trouble(it, Modifier.padding(TimaSpacing.about4)) }
+
+        // Сообщества — первыми и одной группой строк: контейнер стоит выше того, что в
+        // нём лежит, иначе состав читается раньше, чем то, чему он принадлежит.
+        if (onOpenCommunity != null && state.communities.isNotEmpty()) {
+            Caption("Сообщества", modifier = Modifier.padding(TimaSpacing.about4))
+            for (community in state.communities) {
+                ListLine(
+                    onClick = { onOpenCommunity(community.communityId) },
+                    left = { Avatar(letters = community.title.take(2).uppercase()) },
+                    middle = {
+                        Column {
+                            Name(community.title)
+                            Secondary(
+                                if (community.owner) "ваше сообщество" else "вы подписаны",
+                                lineOne = true,
+                            )
+                        }
+                    },
+                )
+            }
+        }
 
         if (state.mine.isEmpty()) {
             // «Пусто» и «ещё не знаем» — разные вещи, и человек не должен их путать.
