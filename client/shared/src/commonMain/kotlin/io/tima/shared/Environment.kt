@@ -42,6 +42,7 @@ import io.tima.core.network.GroupKeysApi
 import io.tima.core.network.GroupMessagesApi
 import io.tima.core.network.LevelAccessOverHttp
 import io.tima.core.network.MessageLevelsOverHttp
+import io.tima.core.network.PostCommentsOverHttp
 import io.tima.core.network.UserPagesOverHttp
 import io.tima.core.network.GroupsApi
 import io.tima.core.network.HttpMessageTransport
@@ -331,6 +332,16 @@ class Network(
      */
     override val pages: UserPagesOverHttp =
         UserPagesOverHttp(link.route, link.client, token = { token() }, codec = TextBodyCodec)
+
+    /**
+     * Комментарии: текст приходит открытым, кодек здесь не нужен вовсе.
+     *
+     * Это не небрежность и не упущение: у комментария нет подписи автора — контур
+     * публичный, как у постов канала. Байты с подписью бывают только у записей,
+     * принесённых из группы.
+     */
+    override val comments: PostCommentsOverHttp =
+        PostCommentsOverHttp(link.route, link.client, token = { token() })
 
     override val access: LevelAccessOverHttp =
         LevelAccessOverHttp(link.route, link.client, token = { token() })

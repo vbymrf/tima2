@@ -72,7 +72,8 @@ class UserPagesOverHttp(
         }
         val body = response.jsonBody()
         return when {
-            response.status == HttpStatusCode.OK -> PageStep.Page(entriesOf(body))
+            response.status == HttpStatusCode.OK ->
+                PageStep.Page(entriesOf(body), body?.str("channel_id").orEmpty())
             response.status == HttpStatusCode.NotFound -> PageStep.NoPage
             else -> PageStep.Refused(body.codeOf())
         }
@@ -112,6 +113,7 @@ class UserPagesOverHttp(
                 sourceTitle = row.str("source_title").orEmpty(),
                 refGroupId = row.str("ref_group_id").orEmpty(),
                 refMessageId = row.long("ref_message_id") ?: 0,
+                comments = row.int("comments") ?: 0,
             )
         }
     }

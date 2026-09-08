@@ -263,7 +263,7 @@ func removeFeedSubscriber(st FeedStore) http.HandlerFunc {
 // feedGrants — GET /users/me/feed/items/{postID}/grants: кому открыта эта запись.
 func feedGrants(st FeedStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		channelID, postID, ok := свояЗапись(w, r, st)
+		channelID, postID, ok := myFeedPost(w, r, st)
 		if !ok {
 			return
 		}
@@ -291,7 +291,7 @@ func feedGrants(st FeedStore) http.HandlerFunc {
 // setFeedGrant — POST /users/me/feed/items/{postID}/grants: открыть запись или закрыть.
 func setFeedGrant(st FeedStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		channelID, postID, ok := свояЗапись(w, r, st)
+		channelID, postID, ok := myFeedPost(w, r, st)
 		if !ok {
 			return
 		}
@@ -338,8 +338,8 @@ func setFeedGrant(st FeedStore) http.HandlerFunc {
 	}
 }
 
-// свояЗапись — лента этого человека и номер записи из пути.
-func свояЗапись(w http.ResponseWriter, r *http.Request, st FeedStore) (string, uint64, bool) {
+// myFeedPost — лента этого человека и номер записи из пути.
+func myFeedPost(w http.ResponseWriter, r *http.Request, st FeedStore) (string, uint64, bool) {
 	postID, err := strconv.ParseUint(r.PathValue("postID"), 10, 64)
 	if err != nil || postID == 0 {
 		writeErr(w, http.StatusBadRequest, "bad_post_id", "post_id — целое число")
@@ -351,7 +351,7 @@ func свояЗапись(w http.ResponseWriter, r *http.Request, st FeedStore) 
 		writeErr(w, http.StatusNotFound, "feed_not_found", "ленты нет")
 		return "", 0, false
 	} else if err != nil {
-		log.Printf("свояЗапись: %v", err)
+		log.Printf("myFeedPost: %v", err)
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return "", 0, false
 	}

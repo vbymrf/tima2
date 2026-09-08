@@ -10,7 +10,7 @@ import (
 // поля адреса, и оба про группу. Теперь адрес несёт вид контейнера, и проверяется, что
 // перенос из канала работает так же — ссылкой, а не копией.
 
-type свояЛента struct {
+type ownFeedAnswer struct {
 	Items []struct {
 		PostID         uint64   `json:"post_id"`
 		Level          int16    `json:"level"`
@@ -31,21 +31,21 @@ func TestПереносИзКаналаСсылкойАНеКопией(t *testi
 	owner := registerDevice(t, ts, "+79990000130")
 	reader := registerDevice(t, ts, "+79990000131")
 
-	ch, post := каналСЗаписью(t, ts, owner, levelEveryone)
+	ch, post := channelWithPost(t, ts, owner, levelEveryone)
 
 	if code := postAuthed(t, ts, reader.token, "POST", "/api/v1/users/me/feed/items",
 		map[string]any{"kind": "channel", "container_id": ch, "message_id": post}, nil); code != 201 {
 		t.Fatalf("перенос из канала: %d", code)
 	}
 
-	var лента свояЛента
-	if code := getAuthed(t, ts, reader.token, "/api/v1/users/me/feed", &лента); code != 200 {
-		t.Fatalf("своя лента: %d", code)
+	var feed ownFeedAnswer
+	if code := getAuthed(t, ts, reader.token, "/api/v1/users/me/feed", &feed); code != 200 {
+		t.Fatalf("своя feed: %d", code)
 	}
-	if len(лента.Items) != 1 {
-		t.Fatalf("на странице обязана быть одна запись: %+v", лента.Items)
+	if len(feed.Items) != 1 {
+		t.Fatalf("на странице обязана быть одна запись: %+v", feed.Items)
 	}
-	it := лента.Items[0]
+	it := feed.Items[0]
 	// Ссылка, а не копия: автор остаётся автором, принёсший назван отдельно.
 	if it.AuthorID != owner.userID {
 		t.Fatalf("автором принесённой записи обязан остаться автор оригинала: %+v", it)
@@ -73,7 +73,7 @@ func TestПовторныйПереносНеПлодитСтрок(t *testing.T
 	ts, _ := setup(t)
 	owner := registerDevice(t, ts, "+79990000132")
 	reader := registerDevice(t, ts, "+79990000133")
-	ch, post := каналСЗаписью(t, ts, owner, levelEveryone)
+	ch, post := channelWithPost(t, ts, owner, levelEveryone)
 
 	тело := map[string]any{"kind": "channel", "container_id": ch, "message_id": post}
 	if code := postAuthed(t, ts, reader.token, "POST", "/api/v1/users/me/feed/items", тело, nil); code != 201 {
@@ -82,16 +82,16 @@ func TestПовторныйПереносНеПлодитСтрок(t *testing.T
 	if code := postAuthed(t, ts, reader.token, "POST", "/api/v1/users/me/feed/items", тело, nil); code != 409 {
 		t.Fatalf("повторный перенос: %d, ожидалось 409", code)
 	}
-	var лента свояЛента
-	if code := getAuthed(t, ts, reader.token, "/api/v1/users/me/feed", &лента); code != 200 || len(лента.Items) != 1 {
-		t.Fatalf("после повтора на странице %d записей", len(лента.Items))
+	var feed ownFeedAnswer
+	if code := getAuthed(t, ts, reader.token, "/api/v1/users/me/feed", &feed); code != 200 || len(feed.Items) != 1 {
+		t.Fatalf("после повтора на странице %d записей", len(feed.Items))
 	}
 }
 
 func TestУровень3ИзКаналаНеВыносится(t *testing.T) {
 	ts, _ := setup(t)
 	owner := registerDevice(t, ts, "+79990000134")
-	ch, post := каналСЗаписью(t, ts, owner, levelByGrant)
+	ch, post := channelWithPost(t, ts, owner, levelByGrant)
 
 	// Владелец видит свою запись уровня 3 — и всё равно не может её вынести: уровень 3
 	// не переносится вовсе (ADR-0019 §7), потому что список названных поимённо ссылкой
@@ -105,12 +105,12 @@ func TestУровень3ИзКаналаНеВыносится(t *testing.T) {
 func TestНеПоказаннуюЗаписьКаналаУнестиНельзя(t *testing.T) {
 	ts, _ := setup(t)
 	owner := registerDevice(t, ts, "+79990000135")
-	чужой := registerDevice(t, ts, "+79990000136")
-	ch, post := каналСЗаписью(t, ts, owner, levelMembers)
+	outsider := registerDevice(t, ts, "+79990000136")
+	ch, post := channelWithPost(t, ts, owner, levelMembers)
 
 	// Не подписан — записи уровня «своим» для него не существует. Отказ обязан быть
 	// неотличим от отсутствия: иначе перенос становится способом узнать, что запись есть.
-	if code := postAuthed(t, ts, чужой.token, "POST", "/api/v1/users/me/feed/items",
+	if code := postAuthed(t, ts, outsider.token, "POST", "/api/v1/users/me/feed/items",
 		map[string]any{"kind": "channel", "container_id": ch, "message_id": post}, nil); code != 404 {
 		t.Fatalf("унесена непоказанная запись: %d, ожидалось 404", code)
 	}
@@ -118,13 +118,13 @@ func TestНеПоказаннуюЗаписьКаналаУнестиНельз�
 
 func TestПереносИзГруппыПрежнимТеломРаботает(t *testing.T) {
 	ts, _ := setup(t)
-	чужой := registerDevice(t, ts, "+79990000137")
+	outsider := registerDevice(t, ts, "+79990000137")
 
 	// Тело без `kind` — прежний вид запроса. Он обязан остаться рабочим: API
 	// расширяется, а не меняется (ПРАВИЛА-РАБОТЫ §3). Группы здесь нет, поэтому ответ —
 	// «записи нет», а не «плохой запрос»: важно, что запрос разобран как перенос из
 	// группы, а не отвергнут на разборе.
-	if code := postAuthed(t, ts, чужой.token, "POST", "/api/v1/users/me/feed/items",
+	if code := postAuthed(t, ts, outsider.token, "POST", "/api/v1/users/me/feed/items",
 		map[string]any{"group_id": "aaaaaaaa-0000-0000-0000-0000000000ff", "message_id": 1}, nil); code != 404 {
 		t.Fatalf("прежнее тело переноса: %d, ожидалось 404", code)
 	}

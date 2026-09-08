@@ -38,7 +38,12 @@ class PageStore(
     fun refresh() {
         scope.launch {
             _state.value = when (val outcome = read.page(userId)) {
-                is PageStep.Page -> _state.value.copy(entries = outcome.entries, loaded = true, trouble = null)
+                is PageStep.Page -> _state.value.copy(
+                    entries = outcome.entries,
+                    channelId = outcome.channelId,
+                    loaded = true,
+                    trouble = null,
+                )
                 // Не ошибка и не тайна: страницу просто ещё не завели.
                 PageStep.NoPage -> _state.value.copy(entries = emptyList(), loaded = true, trouble = null)
                 is PageStep.Offline -> _state.value.copy(loaded = true, trouble = "Нет связи с сервером")
@@ -92,6 +97,13 @@ class PageStore(
 /** Что видно на странице. */
 data class PageState(
     val entries: List<PageEntry> = emptyList(),
+    /**
+     * Канал, которым эта страница является. Пусто — страницы ещё не читали.
+     *
+     * Нужен для одного: открыть разговор под записью. Комментарий адресуется каналом и
+     * записью, и страница человека — такой же канал.
+     */
+    val channelId: String = "",
     /** Своя ли страница: у чужой нельзя убирать записи. */
     val mine: Boolean = true,
     /**

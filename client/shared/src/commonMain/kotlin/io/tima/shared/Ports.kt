@@ -3,6 +3,7 @@ package io.tima.shared
 import io.tima.core.encryption.DeviceIdentity
 import io.tima.domain.chat.AccessPort
 import io.tima.domain.chat.MessageLevels
+import io.tima.domain.chat.PostComments
 import io.tima.domain.chat.UserPages
 import io.tima.core.network.DevicesApi
 import io.tima.core.network.EscrowApi
@@ -85,6 +86,15 @@ interface ChatPorts {
      * на саму реплику, и страница — то место, куда это ведёт.
      */
     val pages: UserPages
+
+    /**
+     * Разговор под записью: комментарии канала и страницы (ADR-0024).
+     *
+     * Здесь же, а не отдельным портом: комментарии открывают из ленты, глядя на запись, —
+     * там же, где стоит перенос к себе. Отдельный порт означал бы второй способ добраться
+     * до того же канала.
+     */
+    val comments: PostComments
 }
 
 /** Группы: создание, состав, ротация ключа при смене состава. */

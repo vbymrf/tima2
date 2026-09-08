@@ -137,8 +137,10 @@ import io.tima.feature.shell.UpdateOffer
 import io.tima.feature.shell.UpdateSection
 import io.tima.feature.shell.UpdateStore
 import io.tima.feature.chat.NewChatStore
+import io.tima.feature.chat.CommentsStore
 import io.tima.feature.chat.PageStore
 import io.tima.feature.chat.NewChatScreen
+import io.tima.feature.chat.CommentsScreen
 import io.tima.feature.chat.PageScreen
 import io.tima.feature.chat.ChatScreen
 import io.tima.feature.chat.ChatsScreen
@@ -444,6 +446,14 @@ private sealed interface Where {
 
     /** Доступ к закрытым записям: просьбы и выдача. Открывается из состава группы. */
     data class Access(val groupId: String, val name: String?) : Where
+
+    /**
+     * Разговор под записью (ADR-0024).
+     *
+     * Адрес — канал и запись в нём: страница человека тоже канал, поэтому одного вида
+     * достаточно и для ленты, и для канала.
+     */
+    data class Comments(val channelId: String, val postId: Long) : Where
 
     /**
      * Подтверждение привязки нового устройства.
@@ -1011,6 +1021,14 @@ private fun App(
                         PageScreen(
                             state = state,
                             onRemove = page::remove,
+                            onComments = { postId ->
+                                // Канал страницы приходит вместе с ней: адрес разговора —
+                                // канал и запись, и вычислять его здесь было бы вторым
+                                // источником того же знания.
+                                if (state.channelId.isNotBlank()) {
+                                    where = Where.Comments(state.channelId, postId)
+                                }
+                            },
                             onCloseTrouble = page::troubleDismissed,
                         )
                     },
@@ -1041,6 +1059,32 @@ private fun App(
                             where = Where.Nothing
                             transferState.taken?.let(onTransferTaken)
                         },
+                    )
+                }
+            }
+
+            is Where.Comments -> {
+                {
+                    val comments = remember(current) {
+                        CommentsStore(network.comments, scope, current.channelId, current.postId)
+                    }
+                    val commentsState by comments.state.collectAsState()
+                    LaunchedEffect(current) { comments.refresh() }
+                    CommentsScreen(
+                        state = commentsState,
+                        // Имя берётся из книги: экран её не читает сам, иначе у каждого
+                        // экрана завёлся бы свой способ звать человека.
+                        nameOf = { userId ->
+                            bookState.all.firstOrNull { it.userId == userId }?.name
+                                // Имени нет — показываем короткий номер, а не пустоту:
+                                // строка без подписи читается как поломка списка.
+                                ?: userId.take(8)
+                        },
+                        onBack = { where = Where.Nothing },
+                        onDraft = comments::draft,
+                        onSend = comments::send,
+                        onReply = comments::reply,
+                        onCloseTrouble = comments::closeTrouble,
                     )
                 }
             }
@@ -1665,6 +1709,9 @@ private fun whereWords(where: Where): String = when (where) {
     is Where.Members -> "состав группы"
     is Where.Chat -> "переписка"
     is Where.Access -> "доступ к закрытым записям"
+    // Ни канала, ни номера записи: в журнале нужно знать, что человек читал разговор, а
+    // не под какой записью — идентификатор чужого поста в отчёте не нужен никому.
+    is Where.Comments -> "комментарии"
     is Where.Link -> "подтверждение привязки устройства"
     is Where.Transfer -> if (where.virtualUserId == null) "приём аккаунта" else "передача аккаунта"
     is Where.Settings -> "настройки" + (where.item?.let { ": " + it.title } ?: "")

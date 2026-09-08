@@ -40,6 +40,14 @@ fun PageScreen(
     modifier: Modifier = Modifier,
     /** Убрать запись со своей страницы. `null` — страница чужая. */
     onRemove: ((Long) -> Unit)? = null,
+    /**
+     * Открыть разговор под записью (ADR-0024).
+     *
+     * Кнопка стоит у **своей** записи и не стоит у принесённой ссылки: разговор один на
+     * запись и лежит у оригинала, а ссылка своих комментариев не собирает (ADR-0024 §3).
+     * Показать её здесь значило бы обещать второй разговор о том же посте.
+     */
+    onComments: ((Long) -> Unit)? = null,
     onCloseTrouble: () -> Unit = {},
 ) = Column(modifier.fillMaxSize()) {
     state.trouble?.let { text ->
@@ -81,13 +89,17 @@ fun PageScreen(
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
     ) {
         items(state.entries, key = { it.postId }) { entry ->
-            PageRow(entry, onRemove.takeIf { state.mine })
+            PageRow(entry, onRemove.takeIf { state.mine }, onComments)
         }
     }
 }
 
 @Composable
-private fun PageRow(entry: PageEntry, onRemove: ((Long) -> Unit)?) = Column(
+private fun PageRow(
+    entry: PageEntry,
+    onRemove: ((Long) -> Unit)?,
+    onComments: ((Long) -> Unit)? = null,
+) = Column(
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
 ) {
     Row(
@@ -108,8 +120,20 @@ private fun PageRow(entry: PageEntry, onRemove: ((Long) -> Unit)?) = Column(
         entry.text ?: "Запись недоступна",
         fontSize = TimaType.sz4,
     )
-    if (onRemove != null) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2, Alignment.End),
+    ) {
+        // Счётчик приходит вместе с записью, поэтому число видно до открытия разговора.
+        // «Комментарии» без числа означали бы, что о содержимом узнают только нажав.
+        if (onComments != null && entry.carriedBy.isBlank()) {
+            Chip(
+                if (entry.comments > 0) "💬 ${entry.comments}" else "💬",
+                kind = ChipKind.Quiet,
+                onClick = { onComments(entry.postId) },
+            )
+        }
+        if (onRemove != null) {
             Chip("Убрать", kind = ChipKind.Quiet, onClick = { onRemove(entry.postId) })
         }
     }

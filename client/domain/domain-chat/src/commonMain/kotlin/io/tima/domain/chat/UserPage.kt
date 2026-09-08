@@ -78,6 +78,16 @@ data class PageEntry(
     val sourceTitle: String = "",
     val refGroupId: String = "",
     val refMessageId: Long = 0,
+    /**
+     * Сколько комментариев под записью (ADR-0024, следствие 4).
+     *
+     * Приходит вместе со страницей, а не отдельным запросом на строку: страница из
+     * двадцати записей иначе становится двадцатью одним запросом.
+     *
+     * У принесённой ссылки он всегда ноль: разговор один на запись и лежит у оригинала,
+     * а не у ссылки на него.
+     */
+    val comments: Int = 0,
 )
 
 /** Чтение страницы. Своя — [PAGE_MINE], чужая — идентификатор человека. */
@@ -92,7 +102,12 @@ class ReadPage(private val pages: UserPages) {
 
 /** Что вышло из запроса страницы. */
 sealed interface PageStep {
-    data class Page(val entries: List<PageEntry>) : PageStep
+    /**
+     * @param channelId канал, которым эта страница является. Нужен, чтобы открыть
+     *   разговор под записью: адрес комментария — канал и запись в нём, и страница
+     *   человека здесь ничем не отличается от канала (решение заказчика 2026-09-04).
+     */
+    data class Page(val entries: List<PageEntry>, val channelId: String = "") : PageStep
 
     /** Ленты нет: человек ещё ничего себе не клал. Не поломка и не тайна. */
     data object NoPage : PageStep
