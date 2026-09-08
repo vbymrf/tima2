@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import io.tima.core.ui.Chip
+import io.tima.core.ui.Field
 import io.tima.core.ui.ChipKind
 import io.tima.core.ui.Language
 import io.tima.core.ui.ListLine
@@ -16,6 +17,7 @@ import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Tertiary
+import io.tima.core.ui.Trouble
 import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.words
@@ -41,6 +43,20 @@ fun LanguageScreen(
     onChoose: (Language) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Страна человека (ПЛАН-ЯЗЫКА Я7). `null` — настройки отбора не показываются вовсе:
+     * экран остаётся выбором языка приложения.
+     *
+     * Простые значения, а не тип домена: оболочка знает раму, а не работу с сервером —
+     * это правило модулей, и ради одного экрана его не нарушают.
+     */
+    country: String? = null,
+    onlyMyCountry: Boolean = true,
+    onlyMyLanguages: Boolean = true,
+    localeTrouble: String? = null,
+    onCountry: (String) -> Unit = {},
+    onOnlyMyCountry: (Boolean) -> Unit = {},
+    onOnlyMyLanguages: (Boolean) -> Unit = {},
 ) {
     val colors = Tima.colors
     val words = Tima.words
@@ -54,6 +70,42 @@ fun LanguageScreen(
             Tertiary(words.languageAbout)
         }
 
+        country?.let { chosenCountry ->
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(TimaSpacing.about4),
+                verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            ) {
+                localeTrouble?.let { Trouble(it) }
+
+                // Страна — не язык, и это разные ответы: русский пишут и в Казахстане.
+                // Пустая законна: «не указана» значит «видит всё», а не «ничего».
+                Name("Страна")
+                Tertiary("Ею сервер отбирает выдачу: своё, а не весь мир. Пусто — показывать всё")
+                Field(
+                    value = chosenCountry,
+                    onChange = onCountry,
+                    hint = "RU",
+                )
+
+                Name("Что показывать")
+                ChoiceSwitch(
+                    title = "Только моя страна",
+                    on = onlyMyCountry,
+                    onChange = onOnlyMyCountry,
+                )
+                ChoiceSwitch(
+                    title = "Только мои языки",
+                    on = onlyMyLanguages,
+                    onChange = onOnlyMyLanguages,
+                )
+                // Названо прямо, потому что человек ждёт обратного: отбор не касается
+                // переписки и ленты друзей — друг остаётся другом, уехав и заговорив
+                // на другом языке.
+                Tertiary("Переписки и ленты друзей это не касается")
+            }
+        }
+
+        Name("Язык приложения", modifier = Modifier.padding(horizontal = TimaSpacing.about4))
         for (language in Language.entries) {
             ListLine(
                 onClick = if (language.available) {
@@ -77,4 +129,20 @@ fun LanguageScreen(
             )
         }
     }
+}
+
+
+/** Переключатель одной строкой: название слева, состояние справа. */
+@Composable
+private fun ChoiceSwitch(title: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    ListLine(
+        onClick = { onChange(!on) },
+        middle = { Name(title) },
+        right = {
+            Chip(
+                if (on) "включено" else "выключено",
+                kind = if (on) ChipKind.Selected else ChipKind.Quiet,
+            )
+        },
+    )
 }

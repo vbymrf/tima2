@@ -6,6 +6,7 @@ import io.tima.domain.chat.MessageLevels
 import io.tima.domain.chat.Channels
 import io.tima.domain.chat.CommentSwitches
 import io.tima.domain.chat.Communities
+import io.tima.domain.chat.PersonLocales
 import io.tima.domain.chat.PostComments
 import io.tima.domain.chat.UserPages
 import io.tima.core.network.DevicesApi
@@ -107,6 +108,9 @@ interface ChatPorts {
 
     /** Сообщества: создание, страница, связывание готового. */
     val communities: Communities
+
+    /** Страна и язык в профиле (ПЛАН-ЯЗЫКА Я7): ими сервер штампует запись. */
+    val locales: PersonLocales
 }
 
 /** Группы: создание, состав, ротация ключа при смене состава. */

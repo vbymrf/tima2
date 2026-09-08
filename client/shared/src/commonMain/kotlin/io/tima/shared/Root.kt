@@ -150,6 +150,7 @@ import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.CommentEntry
 import io.tima.domain.chat.WriteComment
 import io.tima.feature.chat.CommentsStore
+import io.tima.feature.chat.LocaleStore
 import io.tima.feature.chat.PageStore
 import io.tima.feature.chat.NewChatScreen
 import io.tima.feature.chat.CommentsScreen
@@ -738,6 +739,9 @@ private fun App(
     // Окно 5 «Страница»: своя лента — своё и принесённое. Один Store на приложение: одна
     // страница у человека, и второй показывал бы то же самое со своим отставанием.
     val page = remember { PageStore(network.pages, scope, switches = network.commentSwitches) }
+    // Страна, язык письма и два переключателя отбора. Один магазин на приложение: настройка
+    // одна, и второй показывал бы то же самое со своим отставанием.
+    val locale = remember { LocaleStore(network.locales, environment.settings, scope) }
     // Под записью ответили — перечитываем страницу, если она открыта. Счётчик под записью
     // меняется сам, без нажатия (ADR-0024, следствие 5).
     //
@@ -1248,6 +1252,7 @@ private fun App(
                         onAppearance = onAppearance,
                         language = language,
                         onLanguage = onLanguage,
+                        locale = locale,
                         onBack = { where = Where.Nothing },
                         profile = profile,
                         profileState = profileState,
@@ -1537,6 +1542,8 @@ private fun Settings(
     onAppearance: (Appearance) -> Unit,
     language: Language,
     onLanguage: (Language) -> Unit,
+    /** Страна и отбор выдачи (ПЛАН-ЯЗЫКА Я7): живут рядом с выбором языка. */
+    locale: LocaleStore,
     onBack: () -> Unit,
     /** Профиль общий с переключением окон: один Store, два входа. */
     profile: ProfileStore,
@@ -1628,11 +1635,22 @@ private fun Settings(
 
             // Выбор языка приложения (ПЛАН-ЯЗЫКА Я1). Сообщения не переводятся, и экран
             // говорит это строкой: перевода сообщений нет вовсе.
-            SettingsItem.LANGUAGE -> LanguageScreen(
-                current = language.tag,
-                onChoose = onLanguage,
-                onBack = { onOpen(null) },
-            )
+            SettingsItem.LANGUAGE -> {
+                val localeState by locale.state.collectAsState()
+                LaunchedEffect(Unit) { locale.refresh() }
+                LanguageScreen(
+                    current = language.tag,
+                    onChoose = onLanguage,
+                    onBack = { onOpen(null) },
+                    country = localeState.locale.country,
+                    onlyMyCountry = localeState.filter.onlyMyCountry,
+                    onlyMyLanguages = localeState.filter.onlyMyLanguages,
+                    localeTrouble = localeState.trouble,
+                    onCountry = locale::country,
+                    onOnlyMyCountry = locale::onlyMyCountry,
+                    onOnlyMyLanguages = locale::onlyMyLanguages,
+                )
+            }
 
             SettingsItem.UPDATE -> Update(update, updateState)
 

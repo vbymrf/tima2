@@ -45,6 +45,7 @@ import io.tima.core.network.MessageLevelsOverHttp
 import io.tima.core.network.ChannelsOverHttp
 import io.tima.core.network.CommentSwitchesOverHttp
 import io.tima.core.network.CommunitiesOverHttp
+import io.tima.core.network.PersonLocalesOverHttp
 import io.tima.core.network.PostCommentsOverHttp
 import io.tima.core.network.UserPagesOverHttp
 import io.tima.core.network.GroupsApi
@@ -356,6 +357,9 @@ class Network(
      * Сообщества. Кто мы — нужно самому порту: «что можно внести» значит «где я владелец»,
      * и отбор идёт по владельцу в ответах серверных списков.
      */
+    override val locales: PersonLocalesOverHttp =
+        PersonLocalesOverHttp(link.route, link.client, token = { token() })
+
     override val communities: CommunitiesOverHttp =
         CommunitiesOverHttp(link.route, link.client, token = { token() }, me = { session.userId })
 
