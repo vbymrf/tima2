@@ -21,23 +21,25 @@ func carry(t *testing.T, ts *httptest.Server, token, groupID string, messageID i
 		PostID uint64 `json:"post_id"`
 	}
 	code := authedJSON(t, ts, "POST", "/api/v1/users/me/feed/items", token, map[string]any{
-		"group_id":   groupID,
-		"message_id": messageID,
-		"level":      level,
+		"kind":         "group",
+		"container_id": groupID,
+		"message_id":   messageID,
+		"level":        level,
 	}, &resp)
 	return code, resp.PostID
 }
 
 // feedItem — одна строка чужой или своей ленты.
 type feedItem struct {
-	PostID       uint64 `json:"post_id"`
-	Level        int16  `json:"level"`
-	AuthorID     string `json:"author_id"`
-	CarriedBy    string `json:"carried_by"`
-	RefGroupID   string `json:"ref_group_id"`
-	RefMessageID int64  `json:"ref_message_id"`
-	SourceTitle  string `json:"source_title"`
-	Payload      string `json:"payload"`
+	PostID         uint64 `json:"post_id"`
+	Level          int16  `json:"level"`
+	AuthorID       string `json:"author_id"`
+	CarriedBy      string `json:"carried_by"`
+	RefKind        string `json:"ref_kind"`
+	RefContainerID string `json:"ref_container_id"`
+	RefMessageID   int64  `json:"ref_message_id"`
+	SourceTitle    string `json:"source_title"`
+	Payload        string `json:"payload"`
 }
 
 func feedOf(t *testing.T, ts *httptest.Server, token, path string) []feedItem {
@@ -88,8 +90,8 @@ func TestПереносСоздаётСсылкуАНеЗапись(t *testing.T
 	if it.CarriedBy != reader.userID {
 		t.Fatalf("принёсший не назван: %q", it.CarriedBy)
 	}
-	if it.RefGroupID != groupID || it.RefMessageID != messageID {
-		t.Fatalf("ссылка не ведёт к оригиналу: %s/%d", it.RefGroupID, it.RefMessageID)
+	if it.RefKind != "group" || it.RefContainerID != groupID || it.RefMessageID != messageID {
+		t.Fatalf("ссылка не ведёт к оригиналу: %s %s/%d", it.RefKind, it.RefContainerID, it.RefMessageID)
 	}
 	if it.Payload == "" {
 		t.Fatal("содержимое оригинала не приехало — читателю нечего показать")

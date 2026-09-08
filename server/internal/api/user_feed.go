@@ -38,8 +38,8 @@
 // Уточнение заказчика 2026-09-05: писать в чужую ленту нельзя — как в канал. Отвечать
 // можно **комментарием**, и уходит он туда, где лежит контейнер оригинала:
 //
-//   • запись принесена из КАНАЛА  → комментарий уходит в тот канал;
-//   • запись принесена из ГРУППЫ  → комментариев нет вовсе.
+//   - запись принесена из КАНАЛА  → комментарий уходит в тот канал;
+//   - запись принесена из ГРУППЫ  → комментариев нет вовсе.
 //
 // **Ни того, ни другого сейчас не существует**, и это надо знать, читая правило:
 // комментариев на сервере нет ни в каком виде, а перенос умеет только группу
@@ -403,7 +403,7 @@ func writeFeedLevels(
 			// Разговор один на запись: у принесённой ссылки своих комментариев нет,
 			// они лежат у оригинала (ADR-0024 §3). Здесь считаются комментарии этой
 			// строки — и у ссылки их всегда ноль.
-			"comments": counts[it.PostID],
+			"comments":           counts[it.PostID],
 			"post_id":            it.PostID,
 			"level":              it.Level,
 			"created_at_unix_ms": it.CreatedAtUnixMs,
@@ -412,11 +412,11 @@ func writeFeedLevels(
 			// Пусто у своей записи, заполнено у принесённой. По этим трём полям экран
 			// показывает её «от лица группы», а не как свою.
 			"carried_by": it.CarriedBy,
-			// Вид контейнера оригинала — новое поле; `ref_group_id` остаётся как было
-			// и заполнено у ссылки на группу (API только расширяется).
+			// Адрес оригинала целиком: вид контейнера, сам контейнер, запись в нём.
+			// Прежнее `ref_group_id` снято решением заказчика 2026-09-08 — оно было
+			// половиной адреса и молчало о том, что источником бывает канал.
 			"ref_kind":         it.RefKind,
 			"ref_container_id": it.RefContainerID,
-			"ref_group_id":     it.RefGroupID,
 			"ref_message_id":   it.RefMessageID,
 			"source_title":     it.SourceTitle,
 			// Содержимое оригинала как есть: подпись считается по этим байтам, и
@@ -442,12 +442,11 @@ func carryToFeed(st FeedStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
 		var req struct {
-			// Адрес оригинала. Вид контейнера — новое поле, и оно необязательное:
-			// не прислали — «группа», как было до появления второго источника
-			// (ПРАВИЛА-РАБОТЫ §3, API только расширяется).
-			Kind        string `json:"kind,omitempty"`
-			ContainerID string `json:"container_id,omitempty"`
-			GroupID     string `json:"group_id,omitempty"`
+			// Адрес оригинала: вид контейнера, контейнер, запись в нём. Все три
+			// обязательны — вид не угадывается по умолчанию, потому что «контейнер» и
+			// есть то, о чём говорит правило комментариев (ADR-0024 §3).
+			Kind        string `json:"kind"`
+			ContainerID string `json:"container_id"`
 			MessageID   int64  `json:"message_id"`
 			Level       *int16 `json:"level"`
 		}
@@ -456,12 +455,6 @@ func carryToFeed(st FeedStore) http.HandlerFunc {
 			return
 		}
 		kind, container := req.Kind, req.ContainerID
-		if kind == "" {
-			kind, container = "group", req.GroupID
-		}
-		if container == "" && req.GroupID != "" {
-			container = req.GroupID
-		}
 		if kind != "group" && kind != "channel" {
 			writeErr(w, http.StatusBadRequest, "bad_kind", "kind — group или channel")
 			return

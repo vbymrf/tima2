@@ -58,11 +58,17 @@ class PageStore(
      * Круг оригинала проверяется до запроса — тем же правилом, что и на сервере. Оно
      * живёт в домене, а не здесь: одно правило, два места применения.
      */
-    fun carry(groupId: String, messageId: Long, was: Int, level: Int = CarryToPage.LEVEL_EVERYONE) {
+    fun carry(
+        kind: String,
+        containerId: String,
+        messageId: Long,
+        was: Int,
+        level: Int = CarryToPage.LEVEL_EVERYONE,
+    ) {
         if (messageId in _state.value.carrying) return
         _state.value = _state.value.copy(carrying = _state.value.carrying + messageId)
         scope.launch {
-            val outcome = carry.carry(groupId, messageId, was, level)
+            val outcome = carry.carry(kind, containerId, messageId, was, level)
             _state.value = _state.value.copy(
                 carrying = _state.value.carrying - messageId,
                 carried = if (outcome is CarryStep.Carried) _state.value.carried + messageId else _state.value.carried,

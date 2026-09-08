@@ -21,6 +21,24 @@ until v2 works.** Debugging a client against a moving server means three unknown
 at once. Once v2 ships to real phones, compatibility between its own versions
 becomes a separate decision, taken then and not assumed now.
 
+## Relaxed until v2 ships (customer decision, 2026-09-08)
+
+**Tables may be rewritten in place, without keeping the old shape.** A column can be
+dropped in the same migration that stops using it, and the client's local SQLite may be
+recreated instead of migrated. The customer said it plainly: losing old messages is not a
+problem at this stage.
+
+What this does **not** relax, and do not let it drift:
+
+- the envelope format and crypto — `Plan.md §0.0` decisions 4 and 5 stand, test vectors and
+  `KodiumPrivateKey.fromRaw` are untouchable;
+- the deployment order — server before client, always;
+- the widening-only API rule below. One removal was authorised separately (variant B): the
+  transitional fields that existed only because of the previous additive rule.
+
+The relaxation ends when v2 first reaches real users; after that the rules below apply as
+written.
+
 ## Migrations are additive
 
 - A new column carries `DEFAULT` or is `NULL`-able.

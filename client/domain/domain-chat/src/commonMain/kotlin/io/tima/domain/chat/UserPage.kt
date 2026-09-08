@@ -18,20 +18,34 @@ class CarryToPage(private val pages: UserPages) {
     /**
      * Унести запись к себе.
      *
+     * @param kind вид контейнера оригинала: [CONTAINER_GROUP] или [CONTAINER_CHANNEL].
+     *   Обязателен и не угадывается: «контейнер» и есть то, о чём говорит правило
+     *   комментариев — принесена из канала, значит и разговор в том канале (ADR-0024 §3).
      * @param was круг оригинала. Проверяется здесь, а не только на сервере: предлагать
      *   действие, которое заведомо отвергнут, значит обещать несбыточное.
      * @param level круг, под которым запись ляжет на страницу.
      */
-    suspend fun carry(groupId: String, messageId: Long, was: Int, level: Int = LEVEL_EVERYONE): CarryStep {
-        if (groupId.isBlank() || messageId <= 0) return CarryStep.Refused("bad_request")
+    suspend fun carry(
+        kind: String,
+        containerId: String,
+        messageId: Long,
+        was: Int,
+        level: Int = LEVEL_EVERYONE,
+    ): CarryStep {
+        if (kind != CONTAINER_GROUP && kind != CONTAINER_CHANNEL) return CarryStep.Refused("bad_kind")
+        if (containerId.isBlank() || messageId <= 0) return CarryStep.Refused("bad_request")
         if (!canCarry(was)) return CarryStep.CannotCarry
         if (level < 0 || level > 3) return CarryStep.Refused("bad_level")
-        return pages.carry(groupId, messageId, level)
+        return pages.carry(kind, containerId, messageId, level)
     }
 
     companion object {
         /** Круг «всем»: умолчание страницы. */
         const val LEVEL_EVERYONE: Int = 1
+
+        /** Виды контейнера оригинала. Третьего пока нет, и потому их два, а не enum. */
+        const val CONTAINER_GROUP: String = "group"
+        const val CONTAINER_CHANNEL: String = "channel"
 
         /**
          * Выносится ли запись этого круга.
@@ -76,7 +90,9 @@ data class PageEntry(
     val carriedBy: String = "",
     /** Откуда принесено: название группы. Пусто у своей записи. */
     val sourceTitle: String = "",
-    val refGroupId: String = "",
+    /** Вид контейнера оригинала: `group` или `channel`. Пусто у своей записи. */
+    val refKind: String = "",
+    val refContainerId: String = "",
     val refMessageId: Long = 0,
     /**
      * Сколько комментариев под записью (ADR-0024, следствие 4).
@@ -118,7 +134,7 @@ sealed interface PageStep {
 
 /** Порт к серверу: страница человека и перенос к себе. */
 interface UserPages {
-    suspend fun carry(groupId: String, messageId: Long, level: Int): CarryStep
+    suspend fun carry(kind: String, containerId: String, messageId: Long, level: Int): CarryStep
     suspend fun page(userId: String): PageStep
 
     /** Убрать запись со своей страницы. Оригинала это не касается. */

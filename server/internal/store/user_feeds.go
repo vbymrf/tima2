@@ -49,9 +49,6 @@ type FeedItem struct {
 	RefKind        string
 	RefContainerID string
 	RefMessageID   int64
-	// RefGroupID — прежнее имя того же адреса, когда вид контейнера «группа». Живёт
-	// ради ответа API, который не сужается (ПРАВИЛА-РАБОТЫ §3); у ссылки на канал пуст.
-	RefGroupID string
 	// SourceTitle — от чьего лица показывать: название группы, откуда принесено.
 	SourceTitle string
 	// Payload/Signature/SenderDevice/Kind — содержимое оригинала как есть, чтобы клиент
@@ -235,7 +232,6 @@ func (s *Store) ListFeed(
 		       CASE WHEN p.ref_container_id IS NULL THEN '' ELSE p.author_id::text END AS carried_by,
 		       COALESCE(p.ref_kind, ''),
 		       COALESCE(p.ref_container_id::text, ''),
-		       CASE WHEN p.ref_kind = 'group' THEN COALESCE(p.ref_container_id::text, '') ELSE '' END,
 		       COALESCE(p.ref_message_id, 0),
 		       COALESCE(g.title, sc.title, ''),
 		       COALESCE(o.payload, ''::bytea), COALESCE(o.signature, ''::bytea),
@@ -268,7 +264,7 @@ func (s *Store) ListFeed(
 	for rows.Next() {
 		var it FeedItem
 		if err := rows.Scan(&it.PostID, &it.Level, &it.CreatedAtUnixMs, &it.Text, &it.Nodes,
-			&it.AuthorID, &it.CarriedBy, &it.RefKind, &it.RefContainerID, &it.RefGroupID,
+			&it.AuthorID, &it.CarriedBy, &it.RefKind, &it.RefContainerID,
 			&it.RefMessageID, &it.SourceTitle,
 			&it.Payload, &it.Signature, &it.SenderDevice, &it.Kind); err != nil {
 			return nil, err

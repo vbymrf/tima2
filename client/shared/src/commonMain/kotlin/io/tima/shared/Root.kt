@@ -137,6 +137,7 @@ import io.tima.feature.shell.UpdateOffer
 import io.tima.feature.shell.UpdateSection
 import io.tima.feature.shell.UpdateStore
 import io.tima.feature.chat.NewChatStore
+import io.tima.domain.chat.CarryToPage
 import io.tima.feature.chat.CommentsStore
 import io.tima.feature.chat.PageStore
 import io.tima.feature.chat.NewChatScreen
@@ -1214,7 +1215,11 @@ private fun App(
                         scope = scope,
                         onBack = { where = Where.Nothing },
                         onMembers = { where = Where.Members(current.chatId, current.name) },
-                        onCarry = { messageId, was -> page.carry(current.chatId, messageId, was) },
+                        onCarry = { messageId, was ->
+                            // Из переписки уносится сообщение группы: вид контейнера
+                            // назван прямо, а не подразумевается умолчанием.
+                            page.carry(CarryToPage.CONTAINER_GROUP, current.chatId, messageId, was)
+                        },
                     )
                 }
             }

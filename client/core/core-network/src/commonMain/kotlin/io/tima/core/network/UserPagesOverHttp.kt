@@ -42,12 +42,15 @@ class UserPagesOverHttp(
     private val codec: MessageBodyCodec,
 ) : UserPages {
 
-    override suspend fun carry(groupId: String, messageId: Long, level: Int): CarryStep {
+    override suspend fun carry(kind: String, containerId: String, messageId: Long, level: Int): CarryStep {
         val response = try {
             client.post(route.api("/api/v1/users/me/feed/items")) {
                 header("Authorization", "Bearer ${token()}")
                 contentType(ContentType.Application.Json)
-                setBody("{\"group_id\":\"$groupId\",\"message_id\":$messageId,\"level\":$level}")
+                setBody(
+                    "{\"kind\":\"$kind\",\"container_id\":\"$containerId\"" +
+                        ",\"message_id\":$messageId,\"level\":$level}",
+                )
             }
         } catch (e: Throwable) {
             return CarryStep.Offline(classifyFailure(e).retryDelayMs)
@@ -111,7 +114,8 @@ class UserPagesOverHttp(
                     ?.let { codec.decodeText(it) },
                 carriedBy = row.str("carried_by").orEmpty(),
                 sourceTitle = row.str("source_title").orEmpty(),
-                refGroupId = row.str("ref_group_id").orEmpty(),
+                refKind = row.str("ref_kind").orEmpty(),
+                refContainerId = row.str("ref_container_id").orEmpty(),
                 refMessageId = row.long("ref_message_id") ?: 0,
                 comments = row.int("comments") ?: 0,
             )

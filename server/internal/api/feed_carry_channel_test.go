@@ -18,7 +18,6 @@ type ownFeedAnswer struct {
 		CarriedBy      string   `json:"carried_by"`
 		RefKind        string   `json:"ref_kind"`
 		RefContainerID string   `json:"ref_container_id"`
-		RefGroupID     string   `json:"ref_group_id"`
 		RefMessageID   int64    `json:"ref_message_id"`
 		SourceTitle    string   `json:"source_title"`
 		Nodes          []string `json:"nodes"`
@@ -55,10 +54,6 @@ func TestПереносИзКаналаСсылкойАНеКопией(t *testi
 	}
 	if it.RefKind != "channel" || it.RefContainerID != ch || it.RefMessageID != int64(post) {
 		t.Fatalf("адрес оригинала: %+v", it)
-	}
-	// Прежнее поле у ссылки на канал пусто — оно про группу.
-	if it.RefGroupID != "" {
-		t.Fatalf("ref_group_id обязан быть пуст у ссылки на канал: %+v", it)
 	}
 	if it.SourceTitle != "Ядро" {
 		t.Fatalf("не видно, откуда принесено: %+v", it)
@@ -116,16 +111,15 @@ func TestНеПоказаннуюЗаписьКаналаУнестиНельз�
 	}
 }
 
-func TestПереносИзГруппыПрежнимТеломРаботает(t *testing.T) {
+func TestПереносБезВидаКонтейнераОтвергается(t *testing.T) {
 	ts, _ := setup(t)
 	outsider := registerDevice(t, ts, "+79990000137")
 
-	// Тело без `kind` — прежний вид запроса. Он обязан остаться рабочим: API
-	// расширяется, а не меняется (ПРАВИЛА-РАБОТЫ §3). Группы здесь нет, поэтому ответ —
-	// «записи нет», а не «плохой запрос»: важно, что запрос разобран как перенос из
-	// группы, а не отвергнут на разборе.
+	// Прежнее тело с `group_id` снято решением заказчика 2026-09-08 (вариант B): вид
+	// контейнера обязателен, потому что «контейнер» и есть то, о чём говорит правило
+	// комментариев. Запрос без него — плохой запрос, а не перенос из группы по умолчанию.
 	if code := postAuthed(t, ts, outsider.token, "POST", "/api/v1/users/me/feed/items",
-		map[string]any{"group_id": "aaaaaaaa-0000-0000-0000-0000000000ff", "message_id": 1}, nil); code != 404 {
-		t.Fatalf("прежнее тело переноса: %d, ожидалось 404", code)
+		map[string]any{"group_id": "aaaaaaaa-0000-0000-0000-0000000000ff", "message_id": 1}, nil); code != 400 {
+		t.Fatalf("тело без kind: %d, ожидалось 400", code)
 	}
 }

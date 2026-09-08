@@ -27,7 +27,7 @@ class PageStoreTest {
         val pages = CountingPages()
         val store = PageStore(pages, backgroundScope)
 
-        store.carry(groupId = "g-1", messageId = 7, was = 3)
+        store.carry(kind = "group", containerId = "g-1", messageId = 7, was = 3)
         runCurrent()
 
         assertEquals(0, pages.carries, "уровень «по разрешению» ушёл на сервер")
@@ -39,7 +39,7 @@ class PageStoreTest {
         val pages = CountingPages()
         val store = PageStore(pages, backgroundScope)
 
-        store.carry(groupId = "g-1", messageId = 7, was = -1)
+        store.carry(kind = "group", containerId = "g-1", messageId = 7, was = -1)
         runCurrent()
 
         assertEquals(0, pages.carries, "зашифрованное ушло на сервер")
@@ -50,7 +50,7 @@ class PageStoreTest {
         val pages = CountingPages()
         val store = PageStore(pages, backgroundScope)
 
-        store.carry(groupId = "g-1", messageId = 7, was = 1)
+        store.carry(kind = "group", containerId = "g-1", messageId = 7, was = 1)
         runCurrent()
 
         assertEquals(1, pages.carries)
@@ -66,8 +66,8 @@ class PageStoreTest {
         val pages = CountingPages(slow = true)
         val store = PageStore(pages, backgroundScope)
 
-        store.carry("g-1", 7, was = 1)
-        store.carry("g-1", 7, was = 1)
+        store.carry("group", "g-1", 7, was = 1)
+        store.carry("group", "g-1", 7, was = 1)
         runCurrent()
 
         assertEquals(1, pages.carries, "второе нажатие послало второй запрос")
@@ -110,7 +110,8 @@ class PageStoreTest {
                         text = "чужая запись",
                         carriedBy = "u-me",
                         sourceTitle = "Ядро",
-                        refGroupId = "g-1",
+                        refKind = "group",
+                        refContainerId = "g-1",
                         refMessageId = 7,
                     ),
                 ),
@@ -122,7 +123,7 @@ class PageStoreTest {
         var reads = 0
             private set
 
-        override suspend fun carry(groupId: String, messageId: Long, level: Int): CarryStep {
+        override suspend fun carry(kind: String, containerId: String, messageId: Long, level: Int): CarryStep {
             carries++
             // «Медленный» ответ нужен, чтобы второе нажатие пришло до исхода первого.
             return if (slow) CarryStep.Offline(1_000) else CarryStep.Carried(carries.toLong())
