@@ -26,7 +26,9 @@ import io.tima.core.ui.ListLine
 import io.tima.core.ui.Counter
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.Tertiary
+import io.tima.core.ui.ChatWords
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.WindowHeader
 import io.tima.domain.chat.ChatSummary
 import io.tima.domain.chat.MessageDisplay
@@ -57,6 +59,7 @@ fun ChatsScreen(
     onNew: () -> Unit = {},
 ) {
     val colors = Tima.colors
+    val words = Tima.words.chat
     Column(modifier.fillMaxSize().background(colors.surface)) {
         // ── ШАПКИ ЗДЕСЬ БОЛЬШЕ НЕТ ───────────────────────────────────────────
         //
@@ -86,7 +89,7 @@ fun ChatsScreen(
                     Arrow(Side.Right, color = colors.onAccent)
                 }
             },
-            caption = "Написать",
+            caption = words.write,
             modifier = Modifier.weight(1f),
         ) {
             when {
@@ -95,8 +98,8 @@ fun ChatsScreen(
                 !state.read -> Box(Modifier.fillMaxSize())
 
                 state.chats.isEmpty() -> EmptyArea(
-                    title = "Переписок пока нет",
-                    explanation = "Напишите первому собеседнику",
+                    title = words.noChatsYet,
+                    explanation = words.writeFirst,
                 )
 
                 else -> List(state.chats, onOpen)
@@ -148,9 +151,9 @@ private fun ChatLine(chat: ChatSummary, onClick: () -> Unit) = ListLine(
     middle = {
         // Имени может не быть: профиль не приезжал. Строку это не отменяет — сообщение
         // есть, и человек должен его видеть.
-        Name(chat.title ?: "Без имени")
+        Name(chat.title ?: Tima.words.chat.nameless)
         // Превью обрезается: иначе строка списка растёт от чужого длинного сообщения.
-        Secondary(preview(chat), lineOne = true)
+        Secondary(preview(chat, Tima.words.chat), lineOne = true)
     },
 )
 
@@ -160,10 +163,10 @@ private fun ChatLine(chat: ChatSummary, onClick: () -> Unit) = ListLine(
  * У неразобранного или нечитаемого входящего текста нет, и вместо него — слова, а не
  * пустота: пустая строка выглядит как поломка списка, а не как состояние сообщения.
  */
-private fun preview(chat: ChatSummary): String = chat.preview
+private fun preview(chat: ChatSummary, words: ChatWords): String = chat.preview
     ?: when (chat.lastDisplay) {
-        MessageDisplay.UNREADABLE -> "сообщение не читается"
-        else -> "новое сообщение"
+        MessageDisplay.UNREADABLE -> words.messageUnreadable
+        else -> words.newMessage
     }
 
 /**

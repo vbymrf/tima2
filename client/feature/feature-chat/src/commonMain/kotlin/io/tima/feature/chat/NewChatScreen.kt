@@ -21,6 +21,7 @@ import io.tima.core.ui.Caption
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.SubwindowHeader
 
 /**
@@ -41,8 +42,9 @@ fun NewChatScreen(
     modifier: Modifier = Modifier,
 ) {
     val colors = Tima.colors
+    val words = Tima.words.chat
     Column(modifier.fillMaxSize().background(colors.surface)) {
-        SubwindowHeader(title = "Новая переписка", onBack = onBack)
+        SubwindowHeader(title = words.newChat, onBack = onBack)
 
         Box(
             modifier = Modifier.fillMaxSize().padding(TimaSpacing.about5),
@@ -54,8 +56,8 @@ fun NewChatScreen(
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about4),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Caption("Кому написать", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-                Secondary("Номер телефона в TIMA")
+                Caption(words.whomToWrite, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+                Secondary(words.phoneInTima)
 
                 Field(
                     value = state.number,
@@ -68,11 +70,11 @@ fun NewChatScreen(
 
                 // Не беда, а предложение: человека, которого нет в TIMA, надо позвать.
                 if (state.invite) {
-                    Trouble("Этого номера в TIMA нет — позовите человека")
+                    Trouble(words.noSuchNumber)
                 }
 
                 Button(
-                    label = if (state.expect) "Ищем…" else "Найти",
+                    label = if (state.expect) words.searching else words.find,
                     onClick = onFind,
                     modifier = Modifier.fillMaxWidth(),
                 )

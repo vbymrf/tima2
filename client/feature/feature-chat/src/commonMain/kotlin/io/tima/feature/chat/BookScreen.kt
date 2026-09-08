@@ -219,11 +219,11 @@ private fun shown(person: BookEntry, view: BookView): String? {
  * Пустого поля здесь не бывает: у кого нет ника, у того нет и строки о нём, а не «@—».
  */
 private fun second(person: BookEntry, view: BookView): String? {
-    val первая = shown(person, view)
-    val части = buildList {
-        if (view.showPhone && person.phone != первая) add(person.phone)
+    val first = shown(person, view)
+    val parts = buildList {
+        if (view.showPhone && person.phone != first) add(person.phone)
     }
-    return части.joinToString(" · ").ifBlank { null }
+    return parts.joinToString(" · ").ifBlank { null }
 }
 
 /** Буквы аватара: первая показанного имени, иначе первая номера. */

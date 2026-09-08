@@ -22,6 +22,7 @@ import io.tima.core.ui.Secondary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.Trouble
@@ -49,8 +50,9 @@ fun ProfileScreen(
     modifier: Modifier = Modifier,
 ) {
     val colors = Tima.colors
+    val words = Tima.words.chat
     Column(modifier.fillMaxSize().background(colors.surface)) {
-        SubwindowHeader(title = "Профиль", onBack = onBack)
+        SubwindowHeader(title = words.profile, onBack = onBack)
 
         Box(
             modifier = Modifier.fillMaxSize().padding(TimaSpacing.about5),
@@ -67,7 +69,7 @@ fun ProfileScreen(
                     Avatar(letters = state.name.take(1).ifBlank { "＋" }.uppercase())
                     Column {
                         Caption(
-                            text = state.name.ifBlank { "Без имени" },
+                            text = state.name.ifBlank { words.nameless },
                             fontSize = TimaType.sz3,
                             weight = FontWeight.ExtraBold,
                         )
@@ -81,29 +83,29 @@ fun ProfileScreen(
                 if (state.nameless) {
                     // Пустое имя не прячется: пока его нет, собеседники видят номер, и
                     // человек должен узнать об этом здесь, а не от собеседника.
-                    Secondary("Пока имя не задано, собеседники видят ваш номер.")
+                    Secondary(words.nameNotSetYet)
                 }
 
-                Caption("Имя — как вас показывать другим", fontSize = TimaType.sz5, weight = FontWeight.Bold)
-                Field(value = state.name, onChange = onName, hint = "Пётр Смирнов")
+                Caption(words.nameHowShown, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+                Field(value = state.name, onChange = onName, hint = words.nameExample)
 
-                Caption("Ник — по нему вас найдут", fontSize = TimaType.sz5, weight = FontWeight.Bold)
+                Caption(words.nicknameFound, fontSize = TimaType.sz5, weight = FontWeight.Bold)
                 Field(value = state.nickname, onChange = onNickname, hint = "petr_smirnov")
                 // Занятость сказана до нажатия: узнать о ней после отправки формы значит
                 // потерять уже введённое.
                 state.aboutNick?.let { Secondary(it) }
                 state.trouble?.let { Trouble(it) }
-                if (state.saved) Secondary("Сохранено")
+                if (state.saved) Secondary(words.saved)
 
                 Button(
-                    label = "Сохранить",
+                    label = words.save,
                     onClick = { if (state.canSave) onSave() },
                     kind = if (state.canSave) ButtonKind.Action else ButtonKind.Quiet,
                 )
 
                 // Сказано прямо, а не умолчанием: ник, однажды занятый, остаётся за
                 // человеком — иначе старые упоминания начали бы указывать на другого.
-                Tertiary("Занятый ник не освобождается: сменив его, вы не отдадите прежний.")
+                Tertiary(words.nicknameNeverFreed)
             }
         }
     }

@@ -96,6 +96,6 @@ class WordsBudgetTest {
          * - около 30 — тело отчёта о проблеме. Оно **не переводится по решению**: его
          *   читает чинящий.
          */
-        const val BUDGET = 535
+        const val BUDGET = 464
     }
 }

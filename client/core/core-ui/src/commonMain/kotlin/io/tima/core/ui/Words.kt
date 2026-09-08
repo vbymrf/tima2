@@ -49,6 +49,89 @@ interface Words {
     val tabs: TabWords
     val wizard: WizardWords
     val auth: AuthWords
+    val chat: ChatWords
+}
+
+/**
+ * Переписка: шапка, пузыри, полосы сообщений и подокна вокруг неё.
+ *
+ * `replies` — **склонение живёт здесь**, а не на экране (ПЛАН-ЯЗЫКА Я3). Правило числа у
+ * каждого языка своё: у русского три формы, у английского две, у испанского две с другой
+ * границей. Экран знает число, словарь — слово.
+ */
+interface ChatWords {
+    // Шапка и лента.
+    val access: String
+    val members: String
+    val someone: String
+    fun thread(count: Int): String
+    val messageUnavailable: String
+    val decrypting: String
+    val addToSelf: String
+    val narrowTo: String
+    val narrow: String
+    val messageHint: String
+    val nameless: String
+
+    // Полоса сообщений о ключах и круге.
+    fun tooLarge(bytes: Int, limit: Int): String
+    fun keysAsked(devices: Int): String
+    val keysNoHelpers: String
+    val keysNothingMissing: String
+    val keysNeedPhrase: String
+    fun narrowWarning(circle: String): String
+    fun narrowed(circle: String): String
+    val noGroupKey: String
+    val noGroupKeyAbout: String
+    val askKey: String
+    val asking: String
+    val phraseWords: String
+    val storyUnavailable: String
+
+    // Список переписок и новая переписка.
+    val write: String
+    val noChatsYet: String
+    val writeFirst: String
+    val messageUnreadable: String
+    val newMessage: String
+    val newChat: String
+    val whomToWrite: String
+    val phoneInTima: String
+    val noSuchNumber: String
+    val searching: String
+    val find: String
+
+    // Новый контакт.
+    val newContact: String
+    val phoneNumber: String
+    val nameYouCall: String
+    val optional: String
+    val section: String
+    val commonSection: String
+    val newSection: String
+    val title: String
+    val sectionExample: String
+    val moveLater: String
+    val createSection: String
+
+    // Приглашение.
+    fun notInTima(phone: String): String
+    val sendSms: String
+    val sendSmsAbout: String
+    val call: String
+    val callAbout: String
+    val share: String
+    val shareAbout: String
+
+    // Профиль.
+    val profile: String
+    val nameNotSetYet: String
+    val nameHowShown: String
+    val nameExample: String
+    val nicknameFound: String
+    val saved: String
+    val save: String
+    val nicknameNeverFreed: String
 }
 
 /**
@@ -491,6 +574,98 @@ object RussianWords : Words {
         override val postGone = "Записи больше нет"
         override val postGoneAbout = "Разговор ушёл вместе с ней"
         override val loading = "Загружаем разговор…"
+    }
+
+    override val chat = object : ChatWords {
+        override val access = "Доступность"
+        override val members = "Участники"
+        override val someone = "Участник"
+        override fun thread(count: Int): String {
+            val tens = count % 100
+            val word = if (tens in 11..14) {
+                "ответов"
+            } else {
+                when (count % 10) {
+                    1 -> "ответ"
+                    2, 3, 4 -> "ответа"
+                    else -> "ответов"
+                }
+            }
+            return "ветка · $count $word"
+        }
+        override val messageUnavailable = "сообщение недоступно"
+        override val decrypting = "расшифровывается…"
+        override val addToSelf = "Добавить себе"
+        override val narrowTo = "сузить до"
+        override val narrow = "Сузить"
+        override val messageHint = "Сообщение"
+        override val nameless = "Без имени"
+
+        override fun tooLarge(bytes: Int, limit: Int) =
+            "Слишком большое: $bytes байт при пределе $limit"
+        override fun keysAsked(devices: Int) =
+            "Ключ запрошен у $devices устройств — история появится, когда кто-то ответит"
+        override val keysNoHelpers =
+            "Этих ключей нет ни у кого из участников — история до вашего прихода утрачена"
+        override val keysNothingMissing =
+            "Все ключи уже у вас: сообщение не читается по другой причине"
+        override val keysNeedPhrase =
+            "Нужна секретная фраза: ею аккаунт защищён от угона номера. " +
+                "Не знаете её здесь — напишите в группу с другого своего устройства: " +
+                "ключ сменится, и новые сообщения откроются. Прежние — только по фразе"
+        override fun narrowWarning(circle: String) =
+            "Сузить до «$circle»? У тех, кто уже унёс сообщение к себе, оно останется"
+        override fun narrowed(circle: String) = "Круг сужен: теперь «$circle»"
+        override val noGroupKey = "Ключа этой группы на устройстве нет — поэтому она пуста"
+        override val noGroupKeyAbout =
+            "Сообщения есть, но открыть их нечем. Попросите ключ у участников или напишите " +
+                "в группу с другого своего устройства: ключ сменится, и группа откроется вперёд."
+        override val askKey = "Запросить ключ"
+        override val asking = "Просим…"
+        override val phraseWords = "Двенадцать слов через пробел"
+        override val storyUnavailable = "Часть истории недоступна: она была до вашего прихода"
+
+        override val write = "Написать"
+        override val noChatsYet = "Переписок пока нет"
+        override val writeFirst = "Напишите первому собеседнику"
+        override val messageUnreadable = "сообщение не читается"
+        override val newMessage = "новое сообщение"
+        override val newChat = "Новая переписка"
+        override val whomToWrite = "Кому написать"
+        override val phoneInTima = "Номер телефона в TIMA"
+        override val noSuchNumber = "Этого номера в TIMA нет — позовите человека"
+        override val searching = "Ищем…"
+        override val find = "Найти"
+
+        override val newContact = "Новый контакт"
+        override val phoneNumber = "Номер телефона"
+        override val nameYouCall = "Имя — как будете звать его вы"
+        override val optional = "необязательно"
+        override val section = "Раздел"
+        override val commonSection = "Общий"
+        override val newSection = "Новый раздел"
+        override val title = "Название"
+        override val sectionExample = "Дача"
+        override val moveLater = "Людей переложите в него потом — из строки контакта."
+        override val createSection = "Создать раздел"
+
+        override fun notInTima(phone: String) = "$phone · нет в TIMa"
+        override val sendSms = "Отправить СМС"
+        override val sendSmsAbout = "откроется приложение сообщений с готовым текстом"
+        override val call = "Позвонить"
+        override val callAbout = "обычный звонок телефоном"
+        override val share = "Поделиться"
+        override val shareAbout = "ссылка в любое приложение на телефоне"
+
+        override val profile = "Профиль"
+        override val nameNotSetYet = "Пока имя не задано, собеседники видят ваш номер."
+        override val nameHowShown = "Имя — как вас показывать другим"
+        override val nameExample = "Пётр Смирнов"
+        override val nicknameFound = "Ник — по нему вас найдут"
+        override val saved = "Сохранено"
+        override val save = "Сохранить"
+        override val nicknameNeverFreed =
+            "Занятый ник не освобождается: сменив его, вы не отдадите прежний."
     }
 
     override val auth = object : AuthWords {

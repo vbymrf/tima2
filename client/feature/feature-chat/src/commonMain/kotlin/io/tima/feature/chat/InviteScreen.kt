@@ -14,6 +14,7 @@ import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.domain.chat.BookEntry
 
 /**
@@ -41,6 +42,7 @@ fun InviteScreen(
     trouble: String? = null,
 ) {
     val colors = Tima.colors
+    val words = Tima.words.chat
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -59,16 +61,16 @@ fun InviteScreen(
                 middle = {
                     Column {
                         Name(person.name ?: person.phone)
-                        Tertiary("${person.phone} · нет в TIMa", lineOne = true)
+                        Tertiary(words.notInTima(person.phone), lineOne = true)
                     }
                 },
                 right = { Tertiary("✕", lineOne = true) },
                 onClick = onClose,
             )
 
-            Way("Отправить СМС", "откроется приложение сообщений с готовым текстом", onSms)
-            Way("Позвонить", "обычный звонок телефоном", onCall)
-            Way("Поделиться", "ссылка в любое приложение на телефоне", onShare)
+            Way(words.sendSms, words.sendSmsAbout, onSms)
+            Way(words.call, words.callAbout, onCall)
+            Way(words.share, words.shareAbout, onShare)
 
             trouble?.let { ListLine(middle = { Tertiary(it, lineOne = false) }) }
         }

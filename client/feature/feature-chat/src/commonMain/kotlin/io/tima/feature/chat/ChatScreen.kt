@@ -35,6 +35,7 @@ import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.TimaZones
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Chip
@@ -127,6 +128,7 @@ fun ChatScreen(
     onThread: ((Long) -> Unit)? = null,
 ) {
     val colors = Tima.colors
+    val words = Tima.words.chat
     Column(modifier.fillMaxSize().background(colors.surface)) {
         SubwindowHeader(
             title = peer,
@@ -139,13 +141,13 @@ fun ChatScreen(
                             // Слово «доступность», а не «уровни»: человек видит, кому
                             // открыта реплика, а не понятие сервера.
                             Chip(
-                                label = "Доступность",
+                                label = words.access,
                                 kind = if (state.showCircles) ChipKind.Selected else ChipKind.Quiet,
                                 onClick = { switch(!state.showCircles) },
                             )
                         }
                         onMembers?.let { open ->
-                            Chip("Участники", kind = ChipKind.Selected, onClick = open)
+                            Chip(words.members, kind = ChipKind.Selected, onClick = open)
                         }
                     }
                 }
@@ -170,7 +172,7 @@ fun ChatScreen(
             // «Участник» честнее чужого имени.
             authorName = { line ->
                 if (!state.group) null
-                else state.names[line.senderId] ?: "Участник"
+                else state.names[line.senderId] ?: words.someone
             },
             modifier = Modifier.weight(1f),
             showCircles = state.showCircles,
@@ -326,23 +328,12 @@ private fun Reply(
                 horizontalArrangement = if (line.outgoing) Arrangement.End else Arrangement.Start,
             ) {
                 Chip(
-                    "ветка · ${line.replies} ${repliesWord(line.replies)}",
+                    Tima.words.chat.thread(line.replies),
                     kind = ChipKind.Quiet,
                     onClick = { onThread(line.serverId) },
                 )
             }
         }
-    }
-}
-
-/** Склонение: одна форма на числа, а не три строки по месту вызова. */
-private fun repliesWord(n: Int): String {
-    val tens = n % 100
-    if (tens in 11..14) return "ответов"
-    return when (n % 10) {
-        1 -> "ответ"
-        2, 3, 4 -> "ответа"
-        else -> "ответов"
     }
 }
 
@@ -389,9 +380,9 @@ private fun Bubbled(
         // базе лежало разобранным. Список переписок при этом различал их правильно — то
         // есть два места в одном приложении говорили человеку разное.
         line.display == MessageDisplay.UNREADABLE ->
-            Chip("сообщение недоступно", kind = ChipKind.Quiet)
+            Chip(Tima.words.chat.messageUnavailable, kind = ChipKind.Quiet)
 
-        else -> Chip("расшифровывается…", kind = ChipKind.Quiet)
+        else -> Chip(Tima.words.chat.decrypting, kind = ChipKind.Quiet)
     }
 
     // Кнопка «Добавить себе» — в конце сообщения, у чужих реплик и только у выносимых.
@@ -425,7 +416,7 @@ private fun CarryButton(roomy: Boolean, onClick: () -> Unit) = Row(
     horizontalArrangement = Arrangement.End,
 ) {
     if (roomy) {
-        Chip("Добавить себе", kind = ChipKind.Quiet, onClick = onClick)
+        Chip(Tima.words.chat.addToSelf, kind = ChipKind.Quiet, onClick = onClick)
     } else {
         // Тот же знак, что у метки круга: запись не скачивается, а уходит дальше.
         ButtonCircle(onClick = onClick) { Arrow(Side.Right, color = Tima.colors.text2) }
@@ -460,7 +451,7 @@ private fun NarrowChoice(was: Int, onPick: (Int) -> Unit) {
     val narrower = MessageCircle.narrowerThan(was)
     if (narrower.isEmpty()) return
     Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-        Tertiary("сузить до", lineOne = true)
+        Tertiary(Tima.words.chat.narrowTo, lineOne = true)
         for (circle in narrower) {
             Chip(circle.title, kind = ChipKind.Quiet, onClick = { onPick(circle.level) })
         }
@@ -534,7 +525,7 @@ private fun InputZone(
                 .padding(horizontal = TimaSpacing.about4, vertical = 10.dp),
         ) {
             if (typed.isEmpty()) {
-                Caption("Сообщение", fontSize = TimaType.sz4, color = colors.text3)
+                Caption(Tima.words.chat.messageHint, fontSize = TimaType.sz4, color = colors.text3)
             }
             BasicTextField(
                 value = typed,
@@ -567,32 +558,31 @@ private fun Trouble(trouble: ChatNotice, onClose: () -> Unit, onConfirm: (() -> 
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        val words = Tima.words.chat
         val text = when (trouble) {
             // Числа обязательны: «слишком большое» без размера человеку бесполезно —
             // он не знает, насколько сокращать.
             is ChatNotice.TooLarge ->
-                "Слишком большое: ${trouble.bytes} байт при пределе ${trouble.limit}"
+                words.tooLarge(trouble.bytes, trouble.limit)
 
             // Просьба ушла живым устройствам, а не «серверу»: человеку важно понимать,
             // что ответ зависит от того, откроет ли кто-то из участников приложение.
             is ChatNotice.KeysAsked ->
-                "Ключ запрошен у ${trouble.devices} устройств — история появится, когда кто-то ответит"
+                words.keysAsked(trouble.devices)
 
             // Не «попробуйте позже»: ждать здесь бесполезно, и сказать надо именно это.
             ChatNotice.KeysNoHelpers ->
-                "Этих ключей нет ни у кого из участников — история до вашего прихода утрачена"
+                words.keysNoHelpers
 
             ChatNotice.KeysNothingMissing ->
-                "Все ключи уже у вас: сообщение не читается по другой причине"
+                words.keysNothingMissing
 
             // Не ошибка, а действие. И названы ОБА выхода: устройство, подключённое по
             // QR-коду, фразы не знает, и сообщение «нужна фраза» для него — тупик.
             // Смену ключа при этом может запустить любой участник, то есть сам человек
             // с другого своего устройства, — и после неё группа начнёт читаться вперёд.
             ChatNotice.KeysNeedPhrase ->
-                "Нужна секретная фраза: ею аккаунт защищён от угона номера. " +
-                    "Не знаете её здесь — напишите в группу с другого своего устройства: " +
-                    "ключ сменится, и новые сообщения откроются. Прежние — только по фразе"
+                words.keysNeedPhrase
 
             is ChatNotice.KeysRefused -> trouble.text
 
@@ -600,9 +590,9 @@ private fun Trouble(trouble: ChatNotice, onClose: () -> Unit, onConfirm: (() -> 
             // тех, кто уже унёс запись к себе, она останется, и узнать об этом человек
             // обязан ДО нажатия.
             is ChatNotice.NarrowWarning ->
-                "Сузить до «${trouble.circle}»? У тех, кто уже унёс сообщение к себе, оно останется"
+                words.narrowWarning(trouble.circle)
 
-            is ChatNotice.Narrowed -> "Круг сужен: теперь «${trouble.circle}»"
+            is ChatNotice.Narrowed -> words.narrowed(trouble.circle)
             is ChatNotice.NarrowRefused -> trouble.text
         }
         Caption(
@@ -611,7 +601,7 @@ private fun Trouble(trouble: ChatNotice, onClose: () -> Unit, onConfirm: (() -> 
             weight = FontWeight.Bold,
             modifier = Modifier.weight(1f),
         )
-        onConfirm?.let { Chip("Сузить", kind = ChipKind.Selected, onClick = it) }
+        onConfirm?.let { Chip(words.narrow, kind = ChipKind.Selected, onClick = it) }
         ButtonCircle(onClick = onClose) { Arrow(Side.Right, color = colors.text2) }
     }
 }
@@ -630,6 +620,7 @@ private fun Trouble(trouble: ChatNotice, onClose: () -> Unit, onConfirm: (() -> 
 @Composable
 private fun NoKeyYet(expect: Boolean, onRequest: () -> Unit) {
     val colors = Tima.colors
+    val words = Tima.words.chat
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -638,19 +629,18 @@ private fun NoKeyYet(expect: Boolean, onRequest: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
     ) {
         Caption(
-            "Ключа этой группы на устройстве нет — поэтому она пуста",
+            words.noGroupKey,
             fontSize = TimaType.sz5,
             weight = FontWeight.Bold,
         )
         Caption(
-            "Сообщения есть, но открыть их нечем. Попросите ключ у участников или напишите " +
-                "в группу с другого своего устройства: ключ сменится, и группа откроется вперёд.",
+            words.noGroupKeyAbout,
             fontSize = TimaType.sz5,
         )
         if (!expect) {
-            Chip("Запросить ключ", kind = ChipKind.Selected, onClick = onRequest)
+            Chip(words.askKey, kind = ChipKind.Selected, onClick = onRequest)
         } else {
-            Chip("Просим…", kind = ChipKind.Quiet)
+            Chip(words.asking, kind = ChipKind.Quiet)
         }
     }
 }
@@ -672,12 +662,13 @@ private fun StoryUnavailable(
     onRequest: () -> Unit,
 ) {
     val colors = Tima.colors
+    val words = Tima.words.chat
     Column(modifier = Modifier.fillMaxWidth().background(colors.functional)) {
         if (phraseInputNeeded) {
             Field(
                 value = phrase,
                 onChange = onPhrase,
-                hint = "Двенадцать слов через пробел",
+                hint = words.phraseWords,
                 modifier = Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
             )
         }
@@ -690,11 +681,11 @@ private fun StoryUnavailable(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Caption(
-            "Часть истории недоступна: она была до вашего прихода",
+            words.storyUnavailable,
             fontSize = TimaType.sz5,
             modifier = Modifier.weight(1f),
         )
-        Button(label = if (expect) "Просим…" else "Запросить ключ", onClick = onRequest)
+        Button(label = if (expect) words.asking else words.askKey, onClick = onRequest)
     }
     }
 }

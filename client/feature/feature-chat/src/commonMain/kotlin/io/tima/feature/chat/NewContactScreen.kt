@@ -19,6 +19,7 @@ import io.tima.core.ui.Field
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.Trouble
@@ -46,8 +47,9 @@ fun NewContactScreen(
     modifier: Modifier = Modifier,
 ) {
     val colors = Tima.colors
+    val words = Tima.words.chat
     Column(modifier.fillMaxSize().background(colors.surface)) {
-        SubwindowHeader(title = "Новый контакт", onBack = onBack)
+        SubwindowHeader(title = words.newContact, onBack = onBack)
 
         Box(
             modifier = Modifier.fillMaxSize().padding(TimaSpacing.about5),
@@ -57,14 +59,14 @@ fun NewContactScreen(
                 modifier = Modifier.widthIn(max = 420.dp),
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about4),
             ) {
-                Caption("Номер телефона", fontSize = TimaType.sz5, weight = FontWeight.Bold)
+                Caption(words.phoneNumber, fontSize = TimaType.sz5, weight = FontWeight.Bold)
                 Field(value = state.phone, onChange = onPhone, hint = "+7 916 000-11-22")
 
-                Caption("Имя — как будете звать его вы", fontSize = TimaType.sz5, weight = FontWeight.Bold)
-                Field(value = state.name, onChange = onName, hint = "необязательно")
+                Caption(words.nameYouCall, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+                Field(value = state.name, onChange = onName, hint = words.optional)
 
-                Caption("Раздел", fontSize = TimaType.sz5, weight = FontWeight.Bold)
-                Field(value = state.section, onChange = onSection, hint = "Общий")
+                Caption(words.section, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+                Field(value = state.section, onChange = onSection, hint = words.commonSection)
 
                 // Исход сверки: сказан обычным текстом, а не отказом. «Не найден» — не
                 // ошибка человека, а состояние мира.
@@ -98,8 +100,9 @@ fun NewSectionScreen(
     modifier: Modifier = Modifier,
 ) {
     val colors = Tima.colors
+    val words = Tima.words.chat
     Column(modifier.fillMaxSize().background(colors.surface)) {
-        SubwindowHeader(title = "Новый раздел", onBack = onBack)
+        SubwindowHeader(title = words.newSection, onBack = onBack)
 
         Box(
             modifier = Modifier.fillMaxSize().padding(TimaSpacing.about5),
@@ -109,13 +112,13 @@ fun NewSectionScreen(
                 modifier = Modifier.widthIn(max = 420.dp),
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about4),
             ) {
-                Caption("Название", fontSize = TimaType.sz5, weight = FontWeight.Bold)
-                Field(value = name, onChange = onName, hint = "Дача")
+                Caption(words.title, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+                Field(value = name, onChange = onName, hint = words.sectionExample)
                 // Людей в раздел кладут потом: заставлять выбирать их сейчас значит
                 // требовать решения там, где человек ещё только придумал имя папки.
-                Secondary("Людей переложите в него потом — из строки контакта.")
+                Secondary(words.moveLater)
                 Button(
-                    label = "Создать раздел",
+                    label = words.createSection,
                     onClick = { if (name.isNotBlank()) onSave() },
                     kind = if (name.isNotBlank()) ButtonKind.Action else ButtonKind.Quiet,
                 )
