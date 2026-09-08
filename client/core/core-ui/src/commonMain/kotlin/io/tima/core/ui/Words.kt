@@ -47,6 +47,86 @@ interface Words {
     val comments: CommentWords
     val communities: CommunityWords
     val tabs: TabWords
+    val wizard: WizardWords
+}
+
+/**
+ * Мастер создания: разделы, шаги и их пояснения (ПЛАН-СООБЩЕСТВ С5).
+ *
+ * Названия разделов и способов вступления лежат здесь, а не в перечислениях `Section` и
+ * `Joining`: то же решение, что у тем и цветовых мест — перечисление остаётся ключом.
+ */
+interface WizardWords {
+    val create: String
+    val creating: String
+    val next: String
+    val gotIt: String
+
+    // Шаги.
+    val whatCreate: String
+    val whichGroup: String
+    val howJoin: String
+    val howFound: String
+    val discussable: String
+    val naming: String
+    val bringing: String
+
+    // Разделы.
+    val sectionGroup: String
+    val sectionGroupAbout: String
+    val sectionChannel: String
+    val sectionChannelAbout: String
+    val sectionCommunity: String
+    val sectionCommunityAbout: String
+    val sectionVoice: String
+    val sectionVoiceAbout: String
+
+    /** Подпись у раздела, которого ещё нет. Не «скоро»: это решение, а не очередь. */
+    val waitsImplementation: String
+
+    // Вид группы.
+    val personal: String
+    val personalAbout: String
+    val personalExplain: String
+    val public: String
+    val publicAbout: String
+    val publicExplain: String
+    val kindIsFinal: String
+
+    // Вступление.
+    val openJoining: String
+    val openJoiningAbout: String
+    val closedJoining: String
+    val closedJoiningAbout: String
+    val noneForPersonal: String
+    val openExplain: String
+    val closedExplain: String
+    val personalAlwaysClosed: String
+
+    // Канал.
+    val inCatalogue: String
+    val inCatalogueAbout: String
+    val inCatalogueExplain: String
+    val byLink: String
+    val byLinkAbout: String
+    val byLinkExplain: String
+    val commentsAllowed: String
+    val commentsAllowedAbout: String
+    val commentsAllowedExplain: String
+    val commentsForbidden: String
+    val commentsForbiddenAbout: String
+    val commentsForbiddenExplain: String
+
+    // Название и приглашения.
+    val groupName: String
+    val descriptionAbout: String
+    val whomInvite: String
+    val add: String
+    val remove: String
+    val numberAlreadyListed: String
+    val groupCreatedNotInvited: String
+    val communityCreatedNotLinked: String
+    val nothingFreeToBring: String
 }
 
 /**
@@ -285,6 +365,83 @@ object RussianWords : Words {
         override val postGone = "Записи больше нет"
         override val postGoneAbout = "Разговор ушёл вместе с ней"
         override val loading = "Загружаем разговор…"
+    }
+
+    override val wizard = object : WizardWords {
+        override val create = "Создать"
+        override val creating = "Создаём…"
+        override val next = "Далее"
+        override val gotIt = "Понятно"
+
+        override val whatCreate = "Что создаём?"
+        override val whichGroup = "Какая группа?"
+        override val howJoin = "Как вступают?"
+        override val howFound = "Как находят канал?"
+        override val discussable = "Записи можно обсуждать?"
+        override val naming = "Название и описание"
+        override val bringing = "Что вносим?"
+
+        override val sectionGroup = "Группа"
+        override val sectionGroupAbout = "Общение нескольких участников. Личная или публичная"
+        override val sectionChannel = "Канал"
+        override val sectionChannelAbout = "Публикации для подписчиков"
+        override val sectionCommunity = "Сообщество"
+        override val sectionCommunityAbout =
+            "Контейнер: группы и каналы. Связывает готовое, а не создаёт новое"
+        override val sectionVoice = "Звуковой чат"
+        override val sectionVoiceAbout = "Голосовая комната. Ждёт реализации"
+        override val waitsImplementation = "ждёт реализации"
+
+        override val personal = "Личная"
+        override val personalAbout = "Сообщения зашифрованы. Поиском не находится — зовут по знакомству"
+        override val personalExplain =
+            "Личная группа: сквозное шифрование, сервер переписки не видит. " +
+                "Поиском не находится — о ней узнают по цепочке знакомств."
+        override val public = "Публичная"
+        override val publicAbout = "Находится поиском. Открытый и закрытый доступ участников"
+        override val publicExplain =
+            "Публичная группа: открытое общение, находится поиском и каталогом. " +
+                "Шифрования переписки нет."
+        override val kindIsFinal = "Вид не меняется после создания: от него зависит шифрование"
+
+        override val openJoining = "Открытая"
+        override val openJoiningAbout = "Нашёл и вступил сам"
+        override val closedJoining = "Закрытая"
+        override val closedJoiningAbout = "Подал заявку, админ разрешил"
+        override val noneForPersonal = "у личной нет"
+        override val openExplain = "Открытая: человек находит группу и вступает сам."
+        override val closedExplain = "Закрытая: человек подаёт заявку, админ разрешает."
+        override val personalAlwaysClosed =
+            "Личная группа всегда закрытая: её не находят поиском, и вступить самому некуда"
+
+        override val inCatalogue = "Открытый"
+        override val inCatalogueAbout = "Виден в каталоге, подписаться может любой"
+        override val inCatalogueExplain = "Открытый канал. Виден в каталоге, подписаться может любой"
+        override val byLink = "По подписке"
+        override val byLinkAbout = "В каталоге не показывается — находят по ссылке"
+        override val byLinkExplain = "По подписке. Канала нет в каталоге, его находят по ссылке"
+        override val commentsAllowed = "Можно"
+        override val commentsAllowedAbout =
+            "Под записью открывается разговор. Комментирует тот, кто видит запись"
+        override val commentsAllowedExplain =
+            "Комментирует тот, кто видит запись: отдельного права нет"
+        override val commentsForbidden = "Нельзя"
+        override val commentsForbiddenAbout = "Канал без обсуждений. Это можно поменять потом"
+        override val commentsForbiddenExplain =
+            "Выключено значит «новых не принимаем»: написанное раньше остаётся"
+
+        override val groupName = "Название группы"
+        override val descriptionAbout = "Описание — его видят все, кому открыта карточка"
+        override val whomInvite = "Кого позвать"
+        override val add = "Добавить"
+        override val remove = "убрать"
+        override val numberAlreadyListed = "Этот номер уже в списке"
+        override val groupCreatedNotInvited =
+            "Группа создана. Этих номеров в TIMA нет — позовите людей:"
+        override val communityCreatedNotLinked =
+            "Сообщество создано. Это внести не удалось — они уже в другом:"
+        override val nothingFreeToBring =
+            "Своих групп и каналов, свободных для внесения, нет. Сообщество можно создать пустым"
     }
 
     override val tabs = object : TabWords {

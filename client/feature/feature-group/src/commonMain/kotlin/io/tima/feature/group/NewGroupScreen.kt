@@ -28,6 +28,7 @@ import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.Trouble
@@ -80,6 +81,7 @@ fun NewGroupScreen(
     onItem: (CommunityItem) -> Unit = {},
 ) {
     val colors = Tima.colors
+    val words = Tima.words.wizard
     Column(modifier.fillMaxSize().background(colors.surface)) {
         SubwindowHeader(title = stepTitle(state.step), onBack = onBack)
         StepBar(state.step)
@@ -110,23 +112,23 @@ fun NewGroupScreen(
 
                 if (state.step == lastStep(state.section)) {
                     Button(
-                        label = if (state.expect) "Создаём…" else "Создать",
+                        label = if (state.expect) words.creating else words.create,
                         onClick = onCreate,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     // Появляется только после создания: до него говорить о непозванных нечего.
                     if (state.notInvited.isNotEmpty()) {
-                        Secondary("Группа создана. Этих номеров в TIMA нет — позовите людей:")
+                        Secondary(words.groupCreatedNotInvited)
                         for (number in state.notInvited) Name(number)
                     }
                     // То же самое для сообщества: что не внеслось, названо поимённо.
                     // Молчание означало бы, что человек считает связанным то, чего нет.
                     if (state.notLinked.isNotEmpty()) {
-                        Secondary("Сообщество создано. Это внести не удалось — они уже в другом:")
+                        Secondary(words.communityCreatedNotLinked)
                         for (title in state.notLinked) Name(title)
                     }
                 } else {
-                    Button(label = "Далее", onClick = onForward, modifier = Modifier.fillMaxWidth())
+                    Button(label = words.next, onClick = onForward, modifier = Modifier.fillMaxWidth())
                 }
 
                 state.explaining?.let { Explanation(it, onClose = { onExplain(null) }) }
@@ -144,20 +146,43 @@ private fun SectionStep(
     onSection: (Section) -> Unit,
     onExplain: (String?) -> Unit,
 ) {
-    Caption("Что создаём?", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    val words = Tima.words.wizard
+    Caption(words.whatCreate, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
     for (section in Section.entries) {
         val available = ready(section)
+        val title = sectionTitle(section)
+        val about = sectionAbout(section)
         ChoiceLine(
-            title = section.title,
-            about = section.about,
+            title = title,
+            about = about,
             chosen = state.section == section,
             available = available,
             // «Ждёт реализации» — это не «выключено» и не «скоро»: у звукового чата нет
             // ни сервера, ни решения о хранении, и подпись говорит именно это.
-            note = if (available) null else "ждёт реализации",
+            note = if (available) null else words.waitsImplementation,
             onChoose = { onSection(section) },
-            onExplain = { onExplain(section.title + ". " + section.about) },
+            onExplain = { onExplain(title + ". " + about) },
         )
+    }
+}
+
+@Composable
+private fun sectionTitle(section: Section): String = with(Tima.words.wizard) {
+    when (section) {
+        Section.Group -> sectionGroup
+        Section.Channel -> sectionChannel
+        Section.Community -> sectionCommunity
+        Section.VoiceRoom -> sectionVoice
+    }
+}
+
+@Composable
+private fun sectionAbout(section: Section): String = with(Tima.words.wizard) {
+    when (section) {
+        Section.Group -> sectionGroupAbout
+        Section.Channel -> sectionChannelAbout
+        Section.Community -> sectionCommunityAbout
+        Section.VoiceRoom -> sectionVoiceAbout
     }
 }
 
@@ -172,20 +197,21 @@ private fun CatalogueStep(
     onCatalogue: (Boolean) -> Unit,
     onExplain: (String?) -> Unit,
 ) {
-    Caption("Как находят канал?", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    val words = Tima.words.wizard
+    Caption(words.howFound, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
     ChoiceLine(
-        title = "Открытый",
-        about = "Виден в каталоге, подписаться может любой",
+        title = words.inCatalogue,
+        about = words.inCatalogueAbout,
         chosen = state.inCatalogue,
         onChoose = { onCatalogue(true) },
-        onExplain = { onExplain("Открытый канал. Виден в каталоге, подписаться может любой") },
+        onExplain = { onExplain(words.inCatalogueExplain) },
     )
     ChoiceLine(
-        title = "По подписке",
-        about = "В каталоге не показывается — находят по ссылке",
+        title = words.byLink,
+        about = words.byLinkAbout,
         chosen = !state.inCatalogue,
         onChoose = { onCatalogue(false) },
-        onExplain = { onExplain("По подписке. Канала нет в каталоге, его находят по ссылке") },
+        onExplain = { onExplain(words.byLinkExplain) },
     )
 }
 
@@ -196,20 +222,21 @@ private fun CommentsStep(
     onComments: (Boolean) -> Unit,
     onExplain: (String?) -> Unit,
 ) {
-    Caption("Записи можно обсуждать?", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    val words = Tima.words.wizard
+    Caption(words.discussable, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
     ChoiceLine(
-        title = "Можно",
-        about = "Под записью открывается разговор. Комментирует тот, кто видит запись",
+        title = words.commentsAllowed,
+        about = words.commentsAllowedAbout,
         chosen = state.comments,
         onChoose = { onComments(true) },
-        onExplain = { onExplain("Комментирует тот, кто видит запись: отдельного права нет") },
+        onExplain = { onExplain(words.commentsAllowedExplain) },
     )
     ChoiceLine(
-        title = "Нельзя",
-        about = "Канал без обсуждений. Это можно поменять потом",
+        title = words.commentsForbidden,
+        about = words.commentsForbiddenAbout,
         chosen = !state.comments,
         onChoose = { onComments(false) },
-        onExplain = { onExplain("Выключено значит «новых не принимаем»: написанное раньше остаётся") },
+        onExplain = { onExplain(words.commentsForbiddenExplain) },
     )
 }
 
@@ -222,16 +249,21 @@ private fun CommentsStep(
  */
 @Composable
 private fun BringingStep(state: NewGroupState, onItem: (CommunityItem) -> Unit) {
-    Caption("Что вносим?", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-    Secondary("Переписка, участники и ключи не меняются — меняется одна ссылка")
+    val words = Tima.words
+    Caption(words.wizard.bringing, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    Secondary(words.communities.bringingKeepsEverything)
     if (state.linkable.isEmpty()) {
-        Secondary("Своих групп и каналов, свободных для внесения, нет. Сообщество можно создать пустым")
+        Secondary(words.wizard.nothingFreeToBring)
         return
     }
     for (item in state.linkable) {
         ChoiceLine(
             title = item.title,
-            about = if (item.kind == CommunityKinds.CHANNEL) "канал" else "группа",
+            about = if (item.kind == CommunityKinds.CHANNEL) {
+                words.communities.channel
+            } else {
+                words.communities.group
+            },
             chosen = state.bringing.any { it.id == item.id },
             onChoose = { onItem(item) },
             onExplain = {},
@@ -245,27 +277,28 @@ private fun KindStep(
     onKind: (GroupKind) -> Unit,
     onExplain: (String?) -> Unit,
 ) {
-    Caption("Какая группа?", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    val words = Tima.words.wizard
+    Caption(words.whichGroup, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
     ChoiceLine(
-        title = "Личная",
-        about = "Сообщения зашифрованы. Поиском не находится — зовут по знакомству",
+        title = words.personal,
+        about = words.personalAbout,
         chosen = state.kind == GroupKind.Personal,
         available = true,
         note = "E2E",
         onChoose = { onKind(GroupKind.Personal) },
-        onExplain = { onExplain("Личная группа: сквозное шифрование, сервер переписки не видит. Поиском не находится — о ней узнают по цепочке знакомств.") },
+        onExplain = { onExplain(words.personalExplain) },
     )
     ChoiceLine(
-        title = "Публичная",
-        about = "Находится поиском. Открытый и закрытый доступ участников",
+        title = words.public,
+        about = words.publicAbout,
         chosen = state.kind == GroupKind.Public,
         available = true,
         onChoose = { onKind(GroupKind.Public) },
-        onExplain = { onExplain("Публичная группа: открытое общение, находится поиском и каталогом. Шифрования переписки нет.") },
+        onExplain = { onExplain(words.publicExplain) },
     )
     // Говорится до выбора, а не после: перешифровать «на месте» нельзя, и человек
     // должен знать это раньше, чем нажмёт.
-    Secondary("Вид не меняется после создания: от него зависит шифрование")
+    Secondary(words.kindIsFinal)
 }
 
 @Composable
@@ -274,28 +307,29 @@ private fun JoiningStep(
     onJoining: (Joining) -> Unit,
     onExplain: (String?) -> Unit,
 ) {
-    Caption("Как вступают?", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    val words = Tima.words.wizard
+    Caption(words.howJoin, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
     ChoiceLine(
-        title = Joining.Open.title,
-        about = Joining.Open.about,
+        title = words.openJoining,
+        about = words.openJoiningAbout,
         chosen = state.joining == Joining.Open,
         available = state.openJoiningAllowed,
-        note = if (state.openJoiningAllowed) null else "у личной нет",
+        note = if (state.openJoiningAllowed) null else words.noneForPersonal,
         onChoose = { onJoining(Joining.Open) },
-        onExplain = { onExplain("Открытая: человек находит группу и вступает сам.") },
+        onExplain = { onExplain(words.openExplain) },
     )
     ChoiceLine(
-        title = Joining.Closed.title,
-        about = Joining.Closed.about,
+        title = words.closedJoining,
+        about = words.closedJoiningAbout,
         chosen = state.joining == Joining.Closed,
         available = true,
         onChoose = { onJoining(Joining.Closed) },
-        onExplain = { onExplain("Закрытая: человек подаёт заявку, админ разрешает.") },
+        onExplain = { onExplain(words.closedExplain) },
     )
     if (!state.openJoiningAllowed) {
         // Причина, а не запрет: личную группу не находят поиском, поэтому «вступить
         // самому» некуда — сначала надо найти.
-        Secondary("Личная группа всегда закрытая: её не находят поиском, и вступить самому некуда")
+        Secondary(words.personalAlwaysClosed)
     }
 }
 
@@ -308,11 +342,12 @@ private fun NamingStep(
     onAddNumber: () -> Unit,
     onRemoveNumber: (String) -> Unit,
 ) {
-    Caption("Название и описание", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-    Field(value = state.title, onChange = onTitle, hint = "Название группы")
-    Field(value = state.description, onChange = onDescription, hint = "Описание — его видят все, кому открыта карточка")
+    val words = Tima.words.wizard
+    Caption(words.naming, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    Field(value = state.title, onChange = onTitle, hint = words.groupName)
+    Field(value = state.description, onChange = onDescription, hint = words.descriptionAbout)
 
-    Secondary("Кого позвать")
+    Secondary(words.whomInvite)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
@@ -321,12 +356,12 @@ private fun NamingStep(
         Box(Modifier.weight(1f)) {
             Field(value = state.number, onChange = onNumber, hint = "+7…", numeric = true)
         }
-        Button(label = "Добавить", onClick = onAddNumber)
+        Button(label = words.add, onClick = onAddNumber)
     }
     for (number in state.numbers) {
         ListLine(
             left = { Avatar(letters = "№") },
-            right = { Secondary("убрать", Modifier.padding(start = TimaSpacing.about2)) },
+            right = { Secondary(words.remove, Modifier.padding(start = TimaSpacing.about2)) },
             onClick = { onRemoveNumber(number) },
             middle = { Name(number) },
         )
@@ -417,18 +452,21 @@ private fun Explanation(text: String, onClose: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
     ) {
         Secondary(text)
-        Button(label = "Понятно", onClick = onClose)
+        Button(label = Tima.words.wizard.gotIt, onClick = onClose)
     }
 }
 
-private fun stepTitle(step: Step): String = when (step) {
-    Step.Section -> "Что создаём?"
-    Step.Kind -> "Какая группа?"
-    Step.Joining -> "Как вступают?"
-    Step.Catalogue -> "Как находят канал?"
-    Step.Comments -> "Записи можно обсуждать?"
-    Step.Naming -> "Название и описание"
-    Step.Bringing -> "Что вносим?"
+@Composable
+private fun stepTitle(step: Step): String = with(Tima.words.wizard) {
+    when (step) {
+        Step.Section -> whatCreate
+        Step.Kind -> whichGroup
+        Step.Joining -> howJoin
+        Step.Catalogue -> howFound
+        Step.Comments -> discussable
+        Step.Naming -> naming
+        Step.Bringing -> bringing
+    }
 }
 
 /** Приглушение недоступной строки. Отдельной функцией, чтобы не плодить магию в разметке. */
