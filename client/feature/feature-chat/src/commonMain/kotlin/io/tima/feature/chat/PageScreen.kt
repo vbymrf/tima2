@@ -18,7 +18,9 @@ import io.tima.core.ui.ChipKind
 import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Tertiary
+import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
+import io.tima.core.ui.words
 import io.tima.core.ui.TimaType
 import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.PageEntry
@@ -56,6 +58,7 @@ fun PageScreen(
     onPostComments: ((Long, Boolean) -> Unit)? = null,
     onCloseTrouble: () -> Unit = {},
 ) = Column(modifier.fillMaxSize()) {
+    val words = Tima.words.page
     state.trouble?.let { text ->
         Row(
             modifier = Modifier.fillMaxWidth().padding(TimaSpacing.about3),
@@ -63,7 +66,7 @@ fun PageScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Caption(text, fontSize = TimaType.sz5, modifier = Modifier.weight(1f))
-            Chip("Скрыть", kind = ChipKind.Quiet, onClick = onCloseTrouble)
+            Chip(Tima.words.common.hide, kind = ChipKind.Quiet, onClick = onCloseTrouble)
         }
     }
 
@@ -76,11 +79,11 @@ fun PageScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Tertiary(
-                if (state.commentsEnabled) "Записи можно обсуждать" else "Обсуждения выключены",
+                if (state.commentsEnabled) words.commentsOn else words.commentsOff,
                 lineOne = true,
             )
             Chip(
-                if (state.commentsEnabled) "Выключить обсуждения" else "Включить",
+                if (state.commentsEnabled) words.turnCommentsOff else words.turnCommentsOn,
                 kind = ChipKind.Quiet,
                 onClick = { onPageComments(!state.commentsEnabled) },
             )
@@ -94,16 +97,16 @@ fun PageScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (state.loaded) {
-                Name("Здесь пока пусто")
+                Name(words.emptyHere)
                 Secondary(
                     if (state.mine) {
-                        "Записи, которые вы принесёте к себе, появятся тут"
+                        words.emptyMine
                     } else {
-                        "Этот человек ещё ничего не показывает"
+                        words.emptyTheirs
                     },
                 )
             } else {
-                Secondary("Загружаем…")
+                Secondary(words.loading)
             }
         }
         return@Column
@@ -129,11 +132,12 @@ private fun PageRow(
 ) = Column(
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
 ) {
+    val words = Tima.words.page
     Row(
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Name(entry.sourceTitle.ifBlank { "Ваша запись" })
+        Name(entry.sourceTitle.ifBlank { words.yourEntry })
         // Метка круга — та же, что в переписке: человек читает одно и то же слово в обоих
         // местах, и объяснять их различие не приходится.
         Chip(MessageCircle.of(entry.level).title, kind = ChipKind.Quiet)
@@ -141,10 +145,10 @@ private fun PageRow(
     // Строка происхождения: «группа · принесено вами». Без неё принесённая запись выглядит
     // написанной хозяином страницы.
     if (entry.carriedBy.isNotBlank()) {
-        Tertiary("принесено вами", lineOne = true)
+        Tertiary(words.carriedByYou, lineOne = true)
     }
     Caption(
-        entry.text ?: "Запись недоступна",
+        entry.text ?: words.entryUnavailable,
         fontSize = TimaType.sz4,
     )
     Row(
@@ -165,13 +169,13 @@ private fun PageRow(
         // это сказано на самом подокне разговора, а не здесь.
         if (onPostComments != null && entry.carriedBy.isBlank()) {
             Chip(
-                if (entry.commentsClosed) "Открыть обсуждение" else "Закрыть обсуждение",
+                if (entry.commentsClosed) words.openDiscussion else words.closeDiscussion,
                 kind = ChipKind.Quiet,
                 onClick = { onPostComments(entry.postId, !entry.commentsClosed) },
             )
         }
         if (onRemove != null) {
-            Chip("Убрать", kind = ChipKind.Quiet, onClick = { onRemove(entry.postId) })
+            Chip(words.remove, kind = ChipKind.Quiet, onClick = { onRemove(entry.postId) })
         }
     }
 }

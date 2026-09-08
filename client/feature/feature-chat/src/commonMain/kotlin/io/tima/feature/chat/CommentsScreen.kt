@@ -94,7 +94,7 @@ fun CommentsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Trouble(it)
-                    Chip("Скрыть", kind = ChipKind.Quiet, onClick = onCloseTrouble)
+                    Chip(Tima.words.common.hide, kind = ChipKind.Quiet, onClick = onCloseTrouble)
                 }
             }
 

@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import io.tima.core.ui.SocialWords
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.Button
 import io.tima.core.ui.Caption
@@ -40,6 +41,7 @@ fun CatalogTab(
     /** Открыть сообщество. `null` — сообществ в этой сборке нет (проверки). */
     onOpenCommunity: ((String) -> Unit)? = null,
 ) {
+    val words = Tima.words.social
     Column(modifier.fillMaxSize()) {
         state.trouble?.let { Trouble(it, Modifier.padding(TimaSpacing.about4)) }
 
@@ -71,11 +73,11 @@ fun CatalogTab(
         if (state.mine.isEmpty()) {
             // «Пусто» и «ещё не знаем» — разные вещи, и человек не должен их путать.
             EmptyTab(
-                title = if (state.loaded) "Групп пока нет" else "Смотрим, какие есть группы…",
+                title = if (state.loaded) words.noGroupsYet else words.lookingForGroups,
                 about = if (state.loaded) {
-                    "Создайте первую: плюс в правом нижнем углу."
+                    words.createFirst
                 } else {
-                    "Если список не появится, значит не дошли до сервера — тогда здесь будет сказано."
+                    words.ifListNeverComes
                 },
             )
         } else {
@@ -87,7 +89,7 @@ fun CatalogTab(
                         middle = {
                             Column {
                                 Name(group.title)
-                                Secondary(roleWord(group))
+                                Secondary(roleWord(group, words))
                             }
                         },
                     )
@@ -98,7 +100,7 @@ fun CatalogTab(
         // Плюс — вход в мастер создания. Стоит в каталоге, как и решено: прежний вход в
         // окне 1 был придуманным и убран.
         Box(Modifier.fillMaxWidth().padding(TimaSpacing.about4), contentAlignment = Alignment.CenterEnd) {
-            Button(label = "＋ Создать", onClick = onNew)
+            Button(label = words.create, onClick = onNew)
         }
     }
 }
@@ -115,13 +117,14 @@ fun FriendsTab(
     onAsk: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val words = Tima.words.social
     Column(modifier.fillMaxSize()) {
         state.trouble?.let { Trouble(it, Modifier.padding(TimaSpacing.about4)) }
 
         if (state.cards.isEmpty()) {
             EmptyTab(
-                title = if (state.loaded) "Карточек пока нет" else "Смотрим, что открыли друзья…",
-                about = "Здесь появляются группы, которые люди из вашей книги положили себе на страницу.",
+                title = if (state.loaded) words.noCardsYet else words.lookingWhatFriendsOpened,
+                about = words.cardsAbout,
             )
             return@Column
         }
@@ -141,15 +144,16 @@ fun FriendsTab(
 
 @Composable
 private fun CardLine(card: GroupCard, asked: Boolean, asking: Boolean, onAsk: () -> Unit) {
+    val words = Tima.words.social
     ListLine(
         left = { Avatar(letters = card.title.take(2).uppercase()) },
         right = {
             when {
                 // Сказано словами, а не отсутствием кнопки: человек должен понимать, что
                 // просьба ушла, иначе будет жать снова.
-                asked -> Secondary("просьба ушла")
-                asking -> Secondary("просим…")
-                else -> Button(label = "Попроситься", onClick = onAsk)
+                asked -> Secondary(words.askSent)
+                asking -> Secondary(words.asking)
+                else -> Button(label = words.askToJoin, onClick = onAsk)
             }
         },
         middle = {
@@ -157,7 +161,7 @@ private fun CardLine(card: GroupCard, asked: Boolean, asking: Boolean, onAsk: ()
                 Name(card.title)
                 Secondary(
                     card.description.ifBlank {
-                        if (card.kind == GroupKind.Personal) "Личная группа" else "Публичная группа"
+                        if (card.kind == GroupKind.Personal) words.personalGroup else words.publicGroup
                     },
                 )
             }
@@ -177,9 +181,10 @@ private fun EmptyTab(title: String, about: String) {
     }
 }
 
-private fun roleWord(group: GroupInfo): String = when (group.myRole.name.lowercase()) {
-    "owner" -> "вы владелец"
-    "admin" -> "вы админ"
-    "moderator" -> "вы модератор"
-    else -> "вы участник"
-}
+private fun roleWord(group: GroupInfo, words: SocialWords): String =
+    when (group.myRole.name.lowercase()) {
+        "owner" -> words.youOwner
+        "admin" -> words.youAdmin
+        "moderator" -> words.youModerator
+        else -> words.youMember
+    }

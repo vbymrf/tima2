@@ -50,6 +50,134 @@ interface Words {
     val wizard: WizardWords
     val auth: AuthWords
     val chat: ChatWords
+    val book: BookWords
+    val page: PageWords
+    val social: SocialWords
+}
+
+/**
+ * Группы, каналы и сообщества: списки, состав и доступ к закрытым записям.
+ *
+ * Роль названа **от лица человека** — «вы владелец», а не «владелец»: строка стоит под
+ * названием группы и отвечает на вопрос «кто я здесь», а не «кто такой владелец».
+ */
+interface SocialWords {
+    // Списки.
+    val noGroupsYet: String
+    val lookingForGroups: String
+    val createFirst: String
+    val ifListNeverComes: String
+    val create: String
+    val noCardsYet: String
+    val lookingWhatFriendsOpened: String
+    val cardsAbout: String
+    val askSent: String
+    val asking: String
+    val askToJoin: String
+    val personalGroup: String
+    val publicGroup: String
+    val youOwner: String
+    val youAdmin: String
+    val youModerator: String
+    val youMember: String
+
+    // Состав.
+    val members: String
+    val access: String
+    val invite: String
+    val readingMembers: String
+    val nobodyHereYet: String
+    val inviteByPhone: String
+    val exclude: String
+    fun bannedUntil(until: String): String
+    val owner: String
+    val admin: String
+    val moderator: String
+    val member: String
+    val roleUnknown: String
+
+    // Доступ к закрытым записям.
+    val closedAccess: String
+    val nobodyAsksAccess: String
+    val loading: String
+    val accessOpen: String
+    val accessOpenAbout: String
+    val askSentTitle: String
+    val askSentAbout: String
+    val declined: String
+    val declinedAbout: String
+    val askAgain: String
+    val noAccess: String
+    val noAccessAbout: String
+    val ask: String
+    val asksAccess: String
+    val openForever: String
+    fun openUntil(epoch: String): String
+    val declinedShort: String
+    val noAccessShort: String
+    val forever: String
+    val decline: String
+    val deciding: String
+}
+
+/**
+ * Книга контактов и подокно «Вид».
+ *
+ * Пустых состояний здесь четыре, и они разные: нет разрешения, нет книги у платформы,
+ * поиск ничего не нашёл, книга прочитана и пуста. Одно слово на все четыре — это
+ * «ничего нет» вместо ответа, что делать дальше.
+ */
+interface BookWords {
+    val search: String
+    val notRead: String
+    val notReadAbout: String
+    val addByHand: String
+    val noBookHere: String
+    val nobodyFound: String
+    fun nothingMatches(search: String): String
+    val bookEmpty: String
+    val bookEmptyAbout: String
+    val nameless: String
+
+    // Подокно «Вид».
+    val view: String
+    val subsections: String
+    val folders: String
+    val foldersAbout: String
+    val menu: String
+    val menuAbout: String
+    val showPersonAs: String
+    val name: String
+    val nameAbout: String
+    val userName: String
+    val userNameAbout: String
+    val nickname: String
+    val nicknameAbout: String
+    val phone: String
+    val phoneAbout: String
+    val whatToShow: String
+    val showSearch: String
+    val showSearchAbout: String
+    val showOutsiders: String
+    val showOutsidersAbout: String
+}
+
+/** Страница человека: принесённые записи и обсуждения под ними. */
+interface PageWords {
+    val commentsOn: String
+    val commentsOff: String
+    val turnCommentsOff: String
+    val turnCommentsOn: String
+    val emptyHere: String
+    val emptyMine: String
+    val emptyTheirs: String
+    val loading: String
+    val yourEntry: String
+    val carriedByYou: String
+    val entryUnavailable: String
+    val openDiscussion: String
+    val closeDiscussion: String
+    val remove: String
 }
 
 /**
@@ -574,6 +702,120 @@ object RussianWords : Words {
         override val postGone = "Записи больше нет"
         override val postGoneAbout = "Разговор ушёл вместе с ней"
         override val loading = "Загружаем разговор…"
+    }
+
+    override val social = object : SocialWords {
+        override val noGroupsYet = "Групп пока нет"
+        override val lookingForGroups = "Смотрим, какие есть группы…"
+        override val createFirst = "Создайте первую: плюс в правом нижнем углу."
+        override val ifListNeverComes =
+            "Если список не появится, значит не дошли до сервера — тогда здесь будет сказано."
+        override val create = "＋ Создать"
+        override val noCardsYet = "Карточек пока нет"
+        override val lookingWhatFriendsOpened = "Смотрим, что открыли друзья…"
+        override val cardsAbout =
+            "Здесь появляются группы, которые люди из вашей книги положили себе на страницу."
+        override val askSent = "просьба ушла"
+        override val asking = "просим…"
+        override val askToJoin = "Попроситься"
+        override val personalGroup = "Личная группа"
+        override val publicGroup = "Публичная группа"
+        override val youOwner = "вы владелец"
+        override val youAdmin = "вы админ"
+        override val youModerator = "вы модератор"
+        override val youMember = "вы участник"
+
+        override val members = "Участники"
+        override val access = "Доступ"
+        override val invite = "Позвать"
+        override val readingMembers = "Читаем состав"
+        override val nobodyHereYet = "Здесь пока никого"
+        override val inviteByPhone = "Позовите людей по номеру телефона"
+        override val exclude = "Исключить"
+        override fun bannedUntil(until: String) = "заблокирован до $until"
+        override val owner = "владелец"
+        override val admin = "админ"
+        override val moderator = "модератор"
+        override val member = "участник"
+        override val roleUnknown = "роль неизвестна"
+
+        override val closedAccess = "Доступ к закрытым записям"
+        override val nobodyAsksAccess = "Доступ никому не открыт и никто его не просит"
+        override val loading = "Загружаем…"
+        override val accessOpen = "Доступ открыт"
+        override val accessOpenAbout =
+            "Вы видите закрытые записи этой группы. Срок покажет админ в описании."
+        override val askSentTitle = "Просьба ушла"
+        override val askSentAbout = "Админ ответит — ответ придёт сюда же. Повторно просить не нужно."
+        override val declined = "Отказано"
+        override val declinedAbout = "Админ не открыл доступ. Попросить можно снова — решение не вечно."
+        override val askAgain = "Попросить снова"
+        override val noAccess = "Доступа нет"
+        override val noAccessAbout =
+            "Часть записей вам не показана. Их существование не скрыто — скрыто содержимое."
+        override val ask = "Попросить"
+        override val asksAccess = "просит доступ"
+        override val openForever = "доступ открыт · бессрочно"
+        override fun openUntil(epoch: String) = "доступ открыт · до $epoch"
+        override val declinedShort = "отказано"
+        override val noAccessShort = "доступа нет"
+        override val forever = "Бессрочно"
+        override val decline = "Отказать"
+        override val deciding = "решаем…"
+    }
+
+    override val book = object : BookWords {
+        override val search = "Поиск по имени, нику или номеру…"
+        override val notRead = "Контакты не прочитаны"
+        override val notReadAbout =
+            "Приложение возьмёт из телефонной книги имена и номера, чтобы " +
+                "показать, кто из них уже в TIMa. Номера уходят на сервер " +
+                "закрытыми: он сверяет их, не читая."
+        override val addByHand = "Здесь контакты добавляют вручную"
+        override val noBookHere = "Телефонной книги у настольной системы нет — добавьте по номеру."
+        override val nobodyFound = "Никого не нашлось"
+        override fun nothingMatches(search: String) = "По «$search» в контактах совпадений нет"
+        override val bookEmpty = "В контактах пока никого"
+        override val bookEmptyAbout = "Прочитаем телефонную книгу или добавьте человека по номеру."
+        override val nameless = "Без имени"
+
+        override val view = "Вид"
+        override val subsections = "Отображение подразделов"
+        override val folders = "Папки"
+        override val foldersAbout = "разделы полосами, сворачиваются"
+        override val menu = "Меню"
+        override val menuAbout = "разделы строкой под вкладками"
+        override val showPersonAs = "Отображать пользователя как"
+        override val name = "Имя"
+        override val nameAbout = "своё, иначе из телефонной книги"
+        override val userName = "Имя пользователя"
+        override val userNameAbout = "как он сам себя назвал"
+        override val nickname = "Ник"
+        override val nicknameAbout = "если человек его задал"
+        override val phone = "Телефон"
+        override val phoneAbout = "номер из книги"
+        override val whatToShow = "Что показывать"
+        override val showSearch = "Показывать поиск"
+        override val showSearchAbout = "строкой над списком"
+        override val showOutsiders = "Показывать тех, кого нет в TIMa"
+        override val showOutsidersAbout = "раздел «Телефон» в конце списка"
+    }
+
+    override val page = object : PageWords {
+        override val commentsOn = "Записи можно обсуждать"
+        override val commentsOff = "Обсуждения выключены"
+        override val turnCommentsOff = "Выключить обсуждения"
+        override val turnCommentsOn = "Включить"
+        override val emptyHere = "Здесь пока пусто"
+        override val emptyMine = "Записи, которые вы принесёте к себе, появятся тут"
+        override val emptyTheirs = "Этот человек ещё ничего не показывает"
+        override val loading = "Загружаем…"
+        override val yourEntry = "Ваша запись"
+        override val carriedByYou = "принесено вами"
+        override val entryUnavailable = "Запись недоступна"
+        override val openDiscussion = "Открыть обсуждение"
+        override val closeDiscussion = "Закрыть обсуждение"
+        override val remove = "Убрать"
     }
 
     override val chat = object : ChatWords {

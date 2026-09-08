@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.Name
 import io.tima.core.ui.SectionTitle
 import io.tima.core.ui.Tertiary
@@ -39,39 +40,44 @@ fun BookViewScreen(
         modifier.fillMaxWidth().padding(vertical = TimaSpacing.about2),
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
     ) {
-        SectionTitle("Отображение подразделов")
+        val words = Tima.words.book
+        SectionTitle(words.subsections)
         Choice(
-            title = "Папки",
-            hint = "разделы полосами, сворачиваются",
+            title = words.folders,
+            hint = words.foldersAbout,
             chosen = view.folders,
             onClick = { onChange(view.copy(folders = true)) },
         )
         Choice(
-            title = "Меню",
-            hint = "разделы строкой под вкладками",
+            title = words.menu,
+            hint = words.menuAbout,
             chosen = !view.folders,
             onClick = { onChange(view.copy(folders = false)) },
         )
 
-        SectionTitle("Отображать пользователя как")
-        Check("Имя", "своё, иначе из телефонной книги", view.showName) {
+        SectionTitle(words.showPersonAs)
+        Check(words.name, words.nameAbout, view.showName) {
             onChange(view.copy(showName = it))
         }
-        Check("Имя пользователя", "как он сам себя назвал", view.showUserName) {
+        Check(words.userName, words.userNameAbout, view.showUserName) {
             onChange(view.copy(showUserName = it))
         }
-        Check("Ник", "если человек его задал", view.showNickname) {
+        Check(words.nickname, words.nicknameAbout, view.showNickname) {
             onChange(view.copy(showNickname = it))
         }
-        Check("Телефон", "номер из книги", view.showPhone) {
+        Check(words.phone, words.phoneAbout, view.showPhone) {
             onChange(view.copy(showPhone = it))
         }
 
-        SectionTitle("Что показывать")
-        Check("Показывать поиск", "строкой над списком", view.showSearch) {
+        SectionTitle(words.whatToShow)
+        Check(words.showSearch, words.showSearchAbout, view.showSearch) {
             onChange(view.copy(showSearch = it))
         }
-        Check("Показывать тех, кого нет в TIMa", "раздел «Телефон» в конце списка", view.showOutsiders) {
+        Check(
+            words.showOutsiders,
+            words.showOutsidersAbout,
+            view.showOutsiders,
+        ) {
             onChange(view.copy(showOutsiders = it))
         }
     }
@@ -143,7 +149,7 @@ fun BookViewSheet(
         ) {
             ListLine(
                 onClick = onClose,
-                middle = { Name("Вид") },
+                middle = { Name(Tima.words.book.view) },
                 right = { Tertiary("✕", lineOne = true) },
             )
             BookViewScreen(view = view, onChange = onChange)

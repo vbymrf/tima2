@@ -23,7 +23,9 @@ import io.tima.core.ui.Field
 import io.tima.core.ui.EmptyArea
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.TimaSpacing
+import io.tima.core.ui.SocialWords
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.domain.chat.GroupMember
@@ -56,11 +58,14 @@ fun MemberScreen(
     onAccess: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
+    val words = Tima.words.social
     Column(modifier.fillMaxSize().background(colors.surface)) {
         SubwindowHeader(
-            title = "Участники",
+            title = words.members,
             onBack = onBack,
-            right = onAccess?.let { open -> { Chip("Доступ", kind = ChipKind.Selected, onClick = open) } },
+            right = onAccess?.let { open ->
+                { Chip(words.access, kind = ChipKind.Selected, onClick = open) }
+            },
         )
 
         Column(
@@ -84,15 +89,15 @@ fun MemberScreen(
                             numeric = true,
                         )
                     }
-                    Button(label = if (state.expect) "…" else "Позвать", onClick = onInvite)
+                    Button(label = if (state.expect) "…" else words.invite, onClick = onInvite)
                 }
             }
 
             if (state.members.isEmpty()) {
                 EmptyArea(
                     glyph = "👥",
-                    title = if (state.expect) "Читаем состав" else "Здесь пока никого",
-                    explanation = if (state.expect) null else "Позовите людей по номеру телефона",
+                    title = if (state.expect) words.readingMembers else words.nobodyHereYet,
+                    explanation = if (state.expect) null else words.inviteByPhone,
                 )
             } else {
                 for (member in state.members) {
@@ -119,30 +124,31 @@ private fun MemberLine(
     removeMay: Boolean,
     onRemove: () -> Unit,
 ) {
+    val words = Tima.words.social
     ListLine(
         left = { Avatar(letters = member.userId.take(2).uppercase()) },
         right = {
             if (removeMay) {
-                Button(label = "Исключить", onClick = onRemove)
+                Button(label = words.exclude, onClick = onRemove)
             } else {
-                Tertiary(roleCaption(member.role))
+                Tertiary(roleCaption(member.role, words))
             }
         },
         middle = {
             Column {
                 Name(member.userId)
-                member.bannedUntil?.let { Secondary("заблокирован до $it") }
+                member.bannedUntil?.let { Secondary(words.bannedUntil(it)) }
             }
         },
     )
 }
 
-private fun roleCaption(role: GroupRole): String = when (role) {
-    GroupRole.Owner -> "владелец"
-    GroupRole.Admin -> "админ"
-    GroupRole.Moderator -> "модератор"
-    GroupRole.Member -> "участник"
+private fun roleCaption(role: GroupRole, words: SocialWords): String = when (role) {
+    GroupRole.Owner -> words.owner
+    GroupRole.Admin -> words.admin
+    GroupRole.Moderator -> words.moderator
+    GroupRole.Member -> words.member
     // Роль, которой этот клиент не знает: сервер новее нас. Показать «участник» значило бы
     // соврать про права, которых мы не понимаем.
-    GroupRole.Unknown -> "роль неизвестна"
+    GroupRole.Unknown -> words.roleUnknown
 }

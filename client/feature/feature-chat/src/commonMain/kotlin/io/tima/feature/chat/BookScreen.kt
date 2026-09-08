@@ -21,7 +21,9 @@ import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.SectionTitle
 import io.tima.core.ui.Tertiary
+import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
+import io.tima.core.ui.words
 import io.tima.domain.chat.BookEntry
 
 /**
@@ -54,6 +56,7 @@ fun BookScreen(
     /** Разрешение на чтение книги телефона просит платформа, а не этот экран. */
     onAllow: (() -> Unit)? = null,
 ) {
+    val words = Tima.words.book
     Column(modifier.fillMaxSize()) {
         if (state.view.showSearch) {
             Row(
@@ -66,7 +69,7 @@ fun BookScreen(
                 Field(
                     value = state.search,
                     onChange = onSearch,
-                    hint = "Поиск по имени, нику или номеру…",
+                    hint = words.search,
                     modifier = Modifier.weight(1f),
                 )
                 if (onAdd != null) {
@@ -82,14 +85,10 @@ fun BookScreen(
                     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
                     modifier = Modifier.padding(TimaSpacing.about5),
                 ) {
-                    Name("Контакты не прочитаны")
+                    Name(words.notRead)
                     // Сказано, что будет и чего не будет: разрешение, о котором не
                     // объяснили, отклоняют — и правильно делают.
-                    Secondary(
-                        "Приложение возьмёт из телефонной книги имена и номера, чтобы " +
-                            "показать, кто из них уже в TIMa. Номера уходят на сервер " +
-                            "закрытыми: он сверяет их, не читая.",
-                    )
+                    Secondary(words.notReadAbout)
                     if (onAllow != null) {
                         ControlRow { IconButton(glyph = "✓", onClick = onAllow, live = true) }
                     }
@@ -102,16 +101,16 @@ fun BookScreen(
                     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
                     modifier = Modifier.padding(TimaSpacing.about5),
                 ) {
-                    Name("Здесь контакты добавляют вручную")
+                    Name(words.addByHand)
                     // Не «разрешите доступ»: на этой платформе разрешать нечего.
-                    Secondary("Телефонной книги у настольной системы нет — добавьте по номеру.")
+                    Secondary(words.noBookHere)
                 }
             }
 
             state.notFoundNothing -> InCenter(Modifier.fillMaxSize()) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Name("Никого не нашлось")
-                    Secondary("По «${state.search}» в контактах совпадений нет")
+                    Name(words.nobodyFound)
+                    Secondary(words.nothingMatches(state.search))
                 }
             }
 
@@ -121,8 +120,8 @@ fun BookScreen(
                     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
                     modifier = Modifier.padding(TimaSpacing.about5),
                 ) {
-                    Name("В контактах пока никого")
-                    Secondary("Прочитаем телефонную книгу или добавьте человека по номеру.")
+                    Name(words.bookEmpty)
+                    Secondary(words.bookEmptyAbout)
                 }
             }
 
@@ -147,7 +146,7 @@ fun BookScreen(
                             left = { Avatar(letters = letters(person, state.view)) },
                             middle = {
                                 Column {
-                                    Name(shown(person, state.view) ?: "Без имени")
+                                    Name(shown(person, state.view) ?: words.nameless)
                                     val вторая = second(person, state.view)
                                     if (вторая != null) Tertiary(вторая, lineOne = true)
                                 }

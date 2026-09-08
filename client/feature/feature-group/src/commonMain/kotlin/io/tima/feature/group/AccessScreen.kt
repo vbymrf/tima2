@@ -21,7 +21,9 @@ import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Tertiary
+import io.tima.core.ui.SocialWords
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.Trouble
 import io.tima.domain.chat.AccessGrant
@@ -51,8 +53,9 @@ fun AccessScreen(
     onCloseTrouble: () -> Unit = {},
 ) {
     val colors = Tima.colors
+    val words = Tima.words.social
     Column(modifier.fillMaxSize().background(colors.surface)) {
-        SubwindowHeader(title = "Доступ к закрытым записям", onBack = onBack)
+        SubwindowHeader(title = words.closedAccess, onBack = onBack)
 
         Column(
             modifier = Modifier.fillMaxSize().padding(TimaSpacing.about4),
@@ -65,7 +68,7 @@ fun AccessScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Trouble(it)
-                    Chip("Скрыть", kind = ChipKind.Quiet, onClick = onCloseTrouble)
+                    Chip(Tima.words.common.hide, kind = ChipKind.Quiet, onClick = onCloseTrouble)
                 }
             }
 
@@ -77,9 +80,9 @@ fun AccessScreen(
             if (state.grants.isEmpty()) {
                 EmptyArea(
                     if (state.loaded) {
-                        "Доступ никому не открыт и никто его не просит"
+                        words.nobodyAsksAccess
                     } else {
-                        "Загружаем…"
+                        words.loading
                     },
                 )
                 return@Column
@@ -102,31 +105,30 @@ fun AccessScreen(
 private fun MyAccess(state: AccessState2, onAsk: () -> Unit) = Column(
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
 ) {
+    val words = Tima.words.social
     when {
         state.myLevel >= 3 -> {
-            Name("Доступ открыт")
-            Secondary("Вы видите закрытые записи этой группы. Срок покажет админ в описании.")
+            Name(words.accessOpen)
+            Secondary(words.accessOpenAbout)
         }
 
         state.mine == AccessState.Asked || state.asked -> {
-            Name("Просьба ушла")
-            Secondary("Админ ответит — ответ придёт сюда же. Повторно просить не нужно.")
+            Name(words.askSentTitle)
+            Secondary(words.askSentAbout)
         }
 
         // Отказ — отдельное состояние, а не «пока нет доступа». Иначе человек будет
         // просить снова и снова, считая, что его просто не заметили.
         state.mine == AccessState.Declined -> {
-            Name("Отказано")
-            Secondary("Админ не открыл доступ. Попросить можно снова — решение не вечно.")
-            Button("Попросить снова", onClick = onAsk, kind = ButtonKind.Quiet)
+            Name(words.declined)
+            Secondary(words.declinedAbout)
+            Button(words.askAgain, onClick = onAsk, kind = ButtonKind.Quiet)
         }
 
         else -> {
-            Name("Доступа нет")
-            Secondary(
-                "Часть записей вам не показана. Их существование не скрыто — скрыто содержимое.",
-            )
-            Button("Попросить", onClick = onAsk)
+            Name(words.noAccess)
+            Secondary(words.noAccessAbout)
+            Button(words.ask, onClick = onAsk)
         }
     }
 }
@@ -141,6 +143,7 @@ private fun GrantLine(
 ) = Column(
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
 ) {
+    val words = Tima.words.social
     ListLine(left = { Avatar(grant.userId.take(1).uppercase()) }) {
         Column {
             Name(grant.userId)
@@ -148,14 +151,14 @@ private fun GrantLine(
             // подпись у них заставила бы человека просить снова там, где уже отказали.
             Secondary(
                 when (grant.state) {
-                    AccessState.Asked -> "просит доступ"
+                    AccessState.Asked -> words.asksAccess
                     AccessState.Granted -> if (grant.untilEpoch.isBlank()) {
-                        "доступ открыт · бессрочно"
+                        words.openForever
                     } else {
-                        "доступ открыт · до ${grant.untilEpoch}"
+                        words.openUntil(grant.untilEpoch)
                     }
-                    AccessState.Declined -> "отказано"
-                    AccessState.None -> "доступа нет"
+                    AccessState.Declined -> words.declinedShort
+                    AccessState.None -> words.noAccessShort
                 },
                 lineOne = true,
             )
@@ -165,15 +168,15 @@ private fun GrantLine(
         Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
             // Три срока и отказ — ровно то, что в макете. Дня в сроке нет: сервер считает
             // месяцами, и день в интерфейсе обещал бы точность, которой нет.
-            Chip("Бессрочно", kind = ChipKind.Quiet, onClick = { onDecide(grant.userId, true, "") })
+            Chip(words.forever, kind = ChipKind.Quiet, onClick = { onDecide(grant.userId, true, "") })
             for (term in terms) {
                 Chip(term.title, kind = ChipKind.Quiet, onClick = { onDecide(grant.userId, true, term.epoch) })
             }
             if (grant.state != AccessState.Declined) {
-                Chip("Отказать", kind = ChipKind.Quiet, onClick = { onDecide(grant.userId, false, "") })
+                Chip(words.decline, kind = ChipKind.Quiet, onClick = { onDecide(grant.userId, false, "") })
             }
         }
     } else {
-        Tertiary("решаем…", lineOne = true)
+        Tertiary(words.deciding, lineOne = true)
     }
 }
