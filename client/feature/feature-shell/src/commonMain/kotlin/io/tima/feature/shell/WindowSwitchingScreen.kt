@@ -90,6 +90,7 @@ fun WindowSwitchingScreen(
     onNewAccount: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
+    val words = Tima.words.switching
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -112,23 +113,23 @@ fun WindowSwitchingScreen(
             Header(name, alias, onClose, onProfile)
 
             if (accounts.size > 1 || onNewAccount != null) {
-                SectionTitle("Аккаунты")
+                SectionTitle(words.accounts)
                 // Один аккаунт — списка нет: строка «переключиться» там, где переключаться
                 // не на что, обещает несуществующее. Строка «завести» при этом остаётся.
                 if (accounts.size > 1) {
                     accounts.forEach { (userId, label) ->
-                        val лежит = unsent[userId] ?: 0
+                        val waiting = unsent[userId] ?: 0
                         ListLine(
                             onClick = { if (userId != currentAccount) onAccount(userId) },
                             left = { Glyph(if (userId == currentAccount) "●" else "○") },
-                            right = { if (лежит > 0) Counter(лежит) },
+                            right = { if (waiting > 0) Counter(waiting) },
                             middle = {
                                 Column {
                                     Name(label)
                                     // Число само по себе непонятно: у окон рядом такой же
                                     // счётчик означает непрочитанное. Здесь наоборот —
                                     // несказанное, и это надо назвать словом.
-                                    if (лежит > 0) Secondary("не отправлено", lineOne = true)
+                                    if (waiting > 0) Secondary(words.notSent, lineOne = true)
                                 }
                             },
                         )
@@ -138,7 +139,7 @@ fun WindowSwitchingScreen(
                     ListLine(
                         onClick = it,
                         left = { Glyph("＋") },
-                        middle = { Name("Виртуальный аккаунт") },
+                        middle = { Name(words.virtualAccount) },
                     )
                 }
             }
@@ -156,7 +157,7 @@ fun WindowSwitchingScreen(
                 ListLine(
                     onClick = onSettings,
                     left = { Glyph("⚙") },
-                    middle = { Name("Настройки, помощь, баги") },
+                    middle = { Name(words.settingsHelpBugs) },
                 )
             }
 
@@ -181,6 +182,7 @@ private fun Header(
     onProfile: (() -> Unit)?,
 ) {
     val colors = Tima.colors
+    val words = Tima.words.switching
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -226,6 +228,7 @@ private fun Item(window: Window, current: Boolean, howMany: Int, onClick: () -> 
 @Composable
 private fun Glyph(glyph: String) {
     val colors = Tima.colors
+    val words = Tima.words.switching
     Box(
         modifier = Modifier
             .background(colors.softAccent, RoundedCornerShape(TimaShapes.smallSquare))
@@ -246,14 +249,14 @@ private const val DIM = 0.32f
  *
  * Почему вопрос вообще возникает: конверт собирается перед посылкой, а не при написании
  * (ADR-0020 §3), — значит для отправки нужны ключи аккаунта, живые и в памяти. Вышел из
- * аккаунта — ключей нет, и написанное лежит до возвращения. Досылка «на выходе», пока
+ * аккаунта — ключей нет, и написанное waiting до возвращения. Досылка «на выходе», пока
  * ключи ещё в памяти, покрывает почти всё, ради чего иначе пришлось бы заводить очередь
  * как службу — а служба заставила бы устройство работать от имени аккаунта, в который
  * никто не вошёл.
  */
 @Composable
 fun AccountLeavingSheet(
-    /** Сколько лежит неотправленного. Ноль сюда не приходит: вопроса тогда нет. */
+    /** Сколько waiting неотправленного. Ноль сюда не приходит: вопроса тогда нет. */
     howMany: Int,
     onWait: () -> Unit,
     onLeaveNow: () -> Unit,
@@ -261,6 +264,7 @@ fun AccountLeavingSheet(
     modifier: Modifier = Modifier,
 ) {
     val colors = Tima.colors
+    val words = Tima.words.switching
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -277,27 +281,20 @@ fun AccountLeavingSheet(
                 .padding(TimaSpacing.about4),
             verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
         ) {
-            SectionTitle("Не отправлено")
-            Name(
-                if (howMany == 1) {
-                    "Одно сообщение ещё не ушло."
-                } else {
-                    "$howMany сообщений ещё не ушли."
-                },
-            )
+            SectionTitle(words.notSentSection)
+            Name(words.waiting(howMany))
             Secondary(
-                "Пока вы в этом аккаунте, они дойдут. Уйдёте — будут ждать вашего " +
-                    "возвращения: отправить их от имени другого аккаунта нельзя.",
+                words.waitingAbout,
             )
             ListLine(
                 onClick = onWait,
                 left = { Glyph("↑") },
-                middle = { Name("Подождать отправки") },
+                middle = { Name(words.waitForSending) },
             )
             ListLine(
                 onClick = onLeaveNow,
                 left = { Glyph("→") },
-                middle = { Name("Уйти сейчас") },
+                middle = { Name(words.leaveNow) },
             )
         }
     }

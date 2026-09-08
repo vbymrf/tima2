@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import io.tima.core.ui.ProblemWords
 import io.tima.core.ui.words
 import io.tima.core.ui.Words
 import io.tima.core.ui.Tima
@@ -100,11 +101,11 @@ data class ProblemFacts(
 }
 
 /** О чём жалоба. Четыре ярлыка — решение заказчика 2026-09-06 вместо макетных. */
-enum class ProblemKind(val label: String) {
-    Messages("Не приходят / не уходят сообщения"),
-    Calls("Проблемы с звонком"),
-    Looks("Отображение в приложении"),
-    Other("Другое"),
+enum class ProblemKind {
+    Messages,
+    Calls,
+    Looks,
+    Other,
 }
 
 /** Журнал — узкий порт: оболочка не знает, кто и как его копит. */
@@ -187,12 +188,12 @@ sealed interface SendOutcome {
  * Ответ ценен и сам по себе: до этого в отчёте не было ни слова о том, когда всё
  * началось, а при разборе это первое, что хочется знать.
  */
-enum class Began(val label: String, val days: Int) {
-    Today("Сегодня", 1),
-    Week("На этой неделе", 7),
+enum class Began(val days: Int) {
+    Today(1),
+    Week(7),
 
     /** Всё, что храним. Сколько именно — решает настройка в «Памяти и трафике». */
-    Earlier("Раньше", 400),
+    Earlier(400),
 }
 
 /** Кто отправляет. Реализация живёт в приложении, оболочка про сеть не знает. */
@@ -249,7 +250,7 @@ data class ProblemState(
     val missing: String?
         get() = when {
             delivered -> null
-            text.isBlank() -> "Напишите, что случилось — без этого отчёт не отправить."
+            text.isBlank() -> RussianWords.problem.writeWhatHappened
             else -> null
         }
 }
@@ -323,7 +324,7 @@ class ProblemStore(
             val outcome = try {
                 sender.send(report)
             } catch (e: Throwable) {
-                SendOutcome.Refused("Не удалось отправить — попробуйте ещё раз")
+                SendOutcome.Refused(RussianWords.problem.couldNotSend)
             }
             _state.value = _state.value.copy(sending = false, outcome = outcome)
         }
@@ -352,6 +353,7 @@ fun ProblemScreen(
     modifier.fillMaxSize().padding(TimaSpacing.about4).verticalScroll(rememberScrollState()),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
 ) {
+    val words = Tima.words.problem
     // ── Исход, помеха и кнопка — В САМОМ ВЕРХУ (решение заказчика 2026-09-06) ─
     //
     // Экран вырос: описание, «когда началось», ярлыки, состав отчёта, — и кнопка уехала
@@ -366,9 +368,9 @@ fun ProblemScreen(
 
     Button(
         label = when {
-            state.delivered -> "Отчёт отправлен"
-            state.sending -> "Отправляем…"
-            else -> "Отправить"
+            state.delivered -> words.reportSent
+            state.sending -> words.sending
+            else -> words.send
         },
         onClick = onSend,
         // Красная кнопка «Отчёт отправлен» — не кнопка больше, а отметка о сделанном
@@ -378,64 +380,69 @@ fun ProblemScreen(
         modifier = Modifier.fillMaxWidth(),
     )
     if (state.delivered) {
-        Secondary("Чтобы написать ещё раз, выйдите и снова откройте «Сообщить о проблеме».")
+        Secondary(words.writeAgainHow)
     }
 
     // Откуда пришли — под кнопкой, а не над ней: это справка о том, что мы уже поняли,
     // а не то, ради чего человек сюда шёл.
     state.origin?.let { Secondary(it.words(Tima.words)) }
 
-    Caption("Что случилось", fontSize = TimaType.sz4, weight = FontWeight.Bold)
+    Caption(words.whatHappened, fontSize = TimaType.sz4, weight = FontWeight.Bold)
     Field(
         value = state.text,
         onChange = onText,
-        hint = "Опишите словами: что делали и что пошло не так",
+        hint = words.describeHint,
     )
     if (state.text.isBlank()) {
-        Tertiary("Журнал покажет, что происходило, но не то, чего вы ждали, — это можете сказать только вы.")
+        Tertiary(words.onlyYouKnow)
     }
 
-    Caption("Когда это началось", fontSize = TimaType.sz5, weight = FontWeight.Bold)
+    Caption(words.whenBegan, fontSize = TimaType.sz5, weight = FontWeight.Bold)
     Began.entries.forEach { began ->
         ListLine(
             onClick = { onBegan(began) },
-            middle = { Name(if (began == state.began) "● " + began.label else "○ " + began.label) },
+            middle = {
+                val label = beganLabel(began, words)
+                Name(if (began == state.began) "● $label" else "○ $label")
+            },
         )
     }
 
-    Caption("О чём это", fontSize = TimaType.sz5, weight = FontWeight.Bold)
+    Caption(words.whatAbout, fontSize = TimaType.sz5, weight = FontWeight.Bold)
     ProblemKind.entries.forEach { kind ->
         ListLine(
             onClick = { onKind(kind) },
-            middle = { Name(if (kind == state.kind) "● " + kind.label else "○ " + kind.label) },
+            middle = {
+                val label = kindLabel(kind, words)
+                Name(if (kind == state.kind) "● $label" else "○ $label")
+            },
         )
     }
 
-    Caption("Что приложится", fontSize = TimaType.sz5, weight = FontWeight.Bold)
+    Caption(words.whatGoes, fontSize = TimaType.sz5, weight = FontWeight.Bold)
     Secondary(
-        "Переписка и файлы НЕ отправляются. В журнал попадают действия и ошибки — " +
-            "что нажимали и что ответил сервер, — а не содержимое сообщений.",
+        words.whatGoesAbout,
     )
     // Про автоматическую отправку падений человек узнаёт здесь, а не постфактум: решение
     // заказчика 2026-09-06 — отправлять их самим, и молчать об этом было бы нечестно.
-    Tertiary("Отчёты о внезапном закрытии приложение отправляет само, тем же составом.")
+    Tertiary(words.crashesSentThemselves)
 
     // Сколько именно уходит — цифрой, а не на веру. До 2026-09-06 нигде не было сказано
     // даже того, что журнал берётся за сутки.
     Tertiary(state.attachment())
 
     Button(
-        label = if (state.showing) "Скрыть" else "Смотреть",
+        label = if (state.showing) Tima.words.common.hide else words.watch,
         onClick = onShow,
         kind = ButtonKind.Quiet,
     )
     if (state.showing) {
         state.facts.lines().forEach { Tertiary(it) }
         // Снимок идёт ПЕРЕД журналом: он отвечает «что сейчас», журнал — «как дошли».
-        Caption("Состояние сейчас", fontSize = TimaType.sz5, weight = FontWeight.Bold)
+        Caption(words.stateNow, fontSize = TimaType.sz5, weight = FontWeight.Bold)
         state.snapshot.lines().forEach { Tertiary(it) }
-        Caption("Что происходило", fontSize = TimaType.sz5, weight = FontWeight.Bold)
-        Tertiary(if (state.log.isBlank()) "Журнал пуст" else state.log)
+        Caption(words.whatHappenedLog, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+        Tertiary(if (state.log.isBlank()) words.emptyDiary else state.log)
     }
 
 }
@@ -443,24 +450,43 @@ fun ProblemScreen(
 /** Чем кончилось — своими словами: от исхода зависит, что человеку делать дальше. */
 @Composable
 private fun Result(outcome: SendOutcome) {
+    val words = Tima.words.problem
     when (outcome) {
         is SendOutcome.Sent -> {
-            Secondary("Отчёт получен, номер:")
+            Secondary(words.reportNumber)
             // Крупно, потому что это единственное, что человек отсюда унесёт: номер он
             // диктует в разговоре, и мелким его переписывают с ошибкой (решение
             // заказчика 2026-09-06).
             Caption(outcome.number, fontSize = TimaType.sz1, weight = FontWeight.ExtraBold)
-            Secondary("Назовите его, если будете общаться с технической поддержкой.")
+            Secondary(words.nameItToSupport)
         }
 
         SendOutcome.Queued -> {
-            Caption("Отправим, когда появится связь", fontSize = TimaType.sz4, weight = FontWeight.Bold)
+            Caption(words.willSendWhenOnline, fontSize = TimaType.sz4, weight = FontWeight.Bold)
             Secondary(
-                "Сети сейчас нет, отчёт сохранён на устройстве и уйдёт сам. Приложение " +
-                    "можно закрыть.",
+                words.willSendWhenOnlineAbout,
             )
         }
 
         is SendOutcome.Refused -> Trouble(outcome.why)
     }
+}
+
+/**
+ * Подпись «когда началось»: ключ в перечислении, слово в словаре.
+ *
+ * Не приватная: тем же словом тело отчёта называет срок, только всегда по-русски.
+ */
+fun beganLabel(began: Began, words: ProblemWords = RussianWords.problem): String = when (began) {
+    Began.Today -> words.today
+    Began.Week -> words.thisWeek
+    Began.Earlier -> words.earlier
+}
+
+/** Подпись «о чём это»: там же и по той же причине. */
+private fun kindLabel(kind: ProblemKind, words: ProblemWords): String = when (kind) {
+    ProblemKind.Messages -> words.kindMessages
+    ProblemKind.Calls -> words.kindCalls
+    ProblemKind.Looks -> words.kindLooks
+    ProblemKind.Other -> words.kindOther
 }

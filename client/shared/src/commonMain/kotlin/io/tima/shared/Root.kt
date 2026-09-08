@@ -90,6 +90,7 @@ import io.tima.feature.chat.ProfileScreen
 import io.tima.feature.chat.ProfileState
 import io.tima.feature.chat.ProfileStore
 import io.tima.feature.chat.BookScreen
+import io.tima.feature.shell.beganLabel
 import io.tima.feature.shell.AccountLeavingSheet
 import io.tima.feature.shell.CALL_FILTERS
 import io.tima.core.ui.Window
@@ -1853,7 +1854,8 @@ private fun reportBody(began: Began, snapshot: Snapshot, log: String): String = 
     appendLine("СОСТОЯНИЕ")
     // Первой строкой — ответ человека «когда началось». При разборе это первое, что
     // хочется знать, и до 2026-09-06 в отчёте этого не было вовсе.
-    appendLine("  началось: " + began.label.lowercase())
+    // По-русски всегда: тело отчёта читает чинящий (ПЛАН-ЯЗЫКА §4).
+    appendLine("  началось: " + beganLabel(began).lowercase())
     snapshot.lines().forEach { appendLine("  " + it) }
     appendLine()
     appendLine("ЧТО ПРОИСХОДИЛО")

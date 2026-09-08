@@ -57,6 +57,60 @@ interface Words {
     val storage: StorageWords
     val windows: WindowWords
     val settings2: SettingsListWords
+    val problem: ProblemWords
+    val switching: SwitchingWords
+}
+
+/**
+ * Экран «Сообщить о проблеме» — то, что читает жалующийся.
+ *
+ * **Тело отчёта сюда не входит и не войдёт.** Факты об устройстве, снимок состояния и
+ * журнал остаются по-русски всегда: их читает чинящий, а не тот, кто прислал отчёт
+ * (ПЛАН-ЯЗЫКА §4). Переведённый отчёт пришлось бы переводить обратно.
+ */
+interface ProblemWords {
+    val whatHappened: String
+    val describeHint: String
+    val onlyYouKnow: String
+    val whenBegan: String
+    val today: String
+    val thisWeek: String
+    val earlier: String
+    val whatAbout: String
+    val kindMessages: String
+    val kindCalls: String
+    val kindLooks: String
+    val kindOther: String
+    val whatGoes: String
+    val whatGoesAbout: String
+    val crashesSentThemselves: String
+    val watch: String
+    val stateNow: String
+    val whatHappenedLog: String
+    val emptyDiary: String
+    val reportSent: String
+    val sending: String
+    val send: String
+    val writeAgainHow: String
+    val reportNumber: String
+    val nameItToSupport: String
+    val willSendWhenOnline: String
+    val willSendWhenOnlineAbout: String
+    val couldNotSend: String
+    val writeWhatHappened: String
+}
+
+/** Переключатель окон: аккаунты, настройки и неотправленное. */
+interface SwitchingWords {
+    val accounts: String
+    val notSent: String
+    val virtualAccount: String
+    val settingsHelpBugs: String
+    val notSentSection: String
+    fun waiting(howMany: Int): String
+    val waitingAbout: String
+    val waitForSending: String
+    val leaveNow: String
 }
 
 /**
@@ -819,6 +873,64 @@ object RussianWords : Words {
         override val postGone = "Записи больше нет"
         override val postGoneAbout = "Разговор ушёл вместе с ней"
         override val loading = "Загружаем разговор…"
+    }
+
+    override val problem = object : ProblemWords {
+        override val whatHappened = "Что случилось"
+        override val describeHint = "Опишите словами: что делали и что пошло не так"
+        override val onlyYouKnow =
+            "Журнал покажет, что происходило, но не то, чего вы ждали, — " +
+                "это можете сказать только вы."
+        override val whenBegan = "Когда это началось"
+        override val today = "Сегодня"
+        override val thisWeek = "На этой неделе"
+        override val earlier = "Раньше"
+        override val whatAbout = "О чём это"
+        override val kindMessages = "Не приходят / не уходят сообщения"
+        override val kindCalls = "Проблемы с звонком"
+        override val kindLooks = "Отображение в приложении"
+        override val kindOther = "Другое"
+        override val whatGoes = "Что приложится"
+        override val whatGoesAbout =
+            "Переписка и файлы НЕ отправляются. В журнал попадают действия и ошибки — " +
+                "что нажимали и что ответил сервер, — а не содержимое сообщений."
+        override val crashesSentThemselves =
+            "Отчёты о внезапном закрытии приложение отправляет само, тем же составом."
+        override val watch = "Смотреть"
+        override val stateNow = "Состояние сейчас"
+        override val whatHappenedLog = "Что происходило"
+        override val emptyDiary = "Журнал пуст"
+        override val reportSent = "Отчёт отправлен"
+        override val sending = "Отправляем…"
+        override val send = "Отправить"
+        override val writeAgainHow =
+            "Чтобы написать ещё раз, выйдите и снова откройте «Сообщить о проблеме»."
+        override val reportNumber = "Отчёт получен, номер:"
+        override val nameItToSupport = "Назовите его, если будете общаться с технической поддержкой."
+        override val willSendWhenOnline = "Отправим, когда появится связь"
+        override val willSendWhenOnlineAbout =
+            "Сети сейчас нет, отчёт сохранён на устройстве и уйдёт сам. Приложение " +
+                "можно закрыть."
+        override val couldNotSend = "Не удалось отправить — попробуйте ещё раз"
+        override val writeWhatHappened = "Напишите, что случилось — без этого отчёт не отправить."
+    }
+
+    override val switching = object : SwitchingWords {
+        override val accounts = "Аккаунты"
+        override val notSent = "не отправлено"
+        override val virtualAccount = "Виртуальный аккаунт"
+        override val settingsHelpBugs = "Настройки, помощь, баги"
+        override val notSentSection = "Не отправлено"
+        override fun waiting(howMany: Int) = if (howMany == 1) {
+            "Одно сообщение ещё не ушло."
+        } else {
+            "$howMany сообщений ещё не ушли."
+        }
+        override val waitingAbout =
+            "Пока вы в этом аккаунте, они дойдут. Уйдёте — будут ждать вашего " +
+                "возвращения: отправить их от имени другого аккаунта нельзя."
+        override val waitForSending = "Подождать отправки"
+        override val leaveNow = "Уйти сейчас"
     }
 
     override val windows = object : WindowWords {
