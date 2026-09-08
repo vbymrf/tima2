@@ -93,8 +93,16 @@ func rootForComments(w http.ResponseWriter, r *http.Request, st ChannelStore) (s
 	}
 	id, _ := auth.FromContext(r.Context())
 	if root.Level > maxLevelInChannel(r, st, ch, id.UserID) {
-		writeErr(w, http.StatusNotFound, "post_not_found", "записи нет")
-		return store.ChannelPost{}, false
+		// Уровень 3 открывается поимённо (К4). Разговор наследует круг корня, значит и
+		// разрешение тоже: названному владельцем видна и запись, и то, что под ней.
+		granted, err := st.FeedGrantActive(r.Context(), channelID, postID, id.UserID)
+		if err != nil {
+			log.Printf("rootForComments: разрешение: %v", err)
+		}
+		if !granted {
+			writeErr(w, http.StatusNotFound, "post_not_found", "записи нет")
+			return store.ChannelPost{}, false
+		}
 	}
 	// Комментарий к комментарию отклонён: глубина два уровня, дальше — упоминанием
 	// (ADR-0024 §7). Для читателя это тоже «записи нет»: разговора под комментарием не

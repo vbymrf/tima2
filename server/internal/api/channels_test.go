@@ -189,7 +189,7 @@ func TestChannelPostNodesAndMarkup(t *testing.T) {
 	}
 
 	// Хранилище тоже видит открытым текстом — это и есть смысл публичного контура.
-	posts, err := srv.Store.ListPosts(ctx, ch, 0, 10, levelByGrant)
+	posts, err := srv.Store.ListPosts(ctx, ch, 0, 10, levelByGrant, owner.userID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestChannelPostNodesAndMarkup(t *testing.T) {
 		map[string]string{"text": "Простой пост"}, nil); code != 201 {
 		t.Fatalf("post без nodes: %d", code)
 	}
-	posts, err = srv.Store.ListPosts(ctx, ch, 0, 10, levelByGrant)
+	posts, err = srv.Store.ListPosts(ctx, ch, 0, 10, levelByGrant, owner.userID)
 	if err != nil {
 		t.Fatal(err)
 	}

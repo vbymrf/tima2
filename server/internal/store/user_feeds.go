@@ -197,6 +197,10 @@ func (s *Store) CarryToFeed(
 
 // ListFeed — лента с раскрытыми ссылками.
 //
+// **Уровень 3 открывается поимённо** (К4): названный владельцем видит эту запись, хотя
+// граница его круга ниже. Разрешение проверяется тем же запросом — списком в `WHERE`, а
+// не вторым обращением на каждую строку.
+//
 // **Содержимое ссылки берётся у оригинала, и способ зависит от вида контейнера.**
 // У группового сообщения это `payload`+`signature`: подпись считается по тем байтам, что
 // были отправлены, и пересобирать их нельзя. У поста канала подписи нет вовсе — контур
@@ -215,6 +219,7 @@ func (s *Store) ListFeed(
 	before uint64,
 	limit int,
 	maxLevel int16,
+	viewerID string,
 ) ([]FeedItem, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
@@ -244,14 +249,17 @@ func (s *Store) ListFeed(
 		        AND src.post_id = p.ref_message_id AND NOT src.deleted
 		  LEFT JOIN groups g ON p.ref_kind = 'group' AND g.group_id = p.ref_container_id
 		  LEFT JOIN channels sc ON p.ref_kind = 'channel' AND sc.channel_id = p.ref_container_id
+		  LEFT JOIN feed_level_grants fg
+		         ON fg.channel_id = p.channel_id AND fg.post_id = p.post_id
+		        AND fg.user_id = $5 AND (fg.until IS NULL OR fg.until > now())
 		 WHERE p.channel_id = $1 AND p.post_id < $2 AND NOT p.deleted
 		   AND p.parent_post_id IS NULL
-		   AND p.level <= $4
+		   AND (p.level <= $4 OR fg.user_id IS NOT NULL)
 		   AND (p.ref_container_id IS NULL
 		        OR (p.ref_kind = 'group'   AND o.message_id IS NOT NULL AND o.level   BETWEEN 0 AND 2)
 		        OR (p.ref_kind = 'channel' AND src.post_id  IS NOT NULL AND src.level BETWEEN 0 AND 2))
 		 ORDER BY p.post_id DESC
-		 LIMIT $3`, channelID, before, limit, maxLevel)
+		 LIMIT $3`, channelID, before, limit, maxLevel, viewerID)
 	if err != nil {
 		return nil, err
 	}

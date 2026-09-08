@@ -58,6 +58,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"tima/server/internal/auth"
 	"tima/server/internal/store"
@@ -76,7 +77,12 @@ type FeedStore interface {
 	// Источником переноса стал ещё и канал (К2): право спрашивается у него — подписка
 	// и круг, а не роль в группе.
 	GetChannel(ctx context.Context, channelID string) (store.Channel, error)
-	ListFeed(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16) ([]store.FeedItem, error)
+	ListFeed(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16, viewerID string) ([]store.FeedItem, error)
+
+	// Поимённое разрешение на свою запись (К4): владелец называет, кому она открыта,
+	// бессрочно или до даты.
+	SetFeedGrant(ctx context.Context, channelID string, postID uint64, ownerID, userID string, until *time.Time, grant bool) error
+	FeedGrants(ctx context.Context, channelID string, postID uint64) ([]store.FeedGrant, error)
 	RemoveFeedItem(ctx context.Context, channelID string, postID uint64, ownerID string) error
 
 	// Подписка и есть дружба: подписан на ленту владельца — свой (Д1б, пересмотр).
@@ -107,6 +113,10 @@ func RegisterFeeds(mux *http.ServeMux, st FeedStore, requireDevice Middleware) {
 	mux.HandleFunc("GET /api/v1/users/me/feed/subscribers", requireDevice(feedSubscribers(st)))
 	mux.HandleFunc("POST /api/v1/users/me/feed/subscribers", requireDevice(addFeedSubscriber(st)))
 	mux.HandleFunc("DELETE /api/v1/users/me/feed/subscribers/{userID}", requireDevice(removeFeedSubscriber(st)))
+	// Кому открыта конкретная запись уровня 3 — поимённо, бессрочно или до даты (К4).
+	// Отдельно от подписчиков: подписка это «свой», а разрешение — «эта запись, этому».
+	mux.HandleFunc("GET /api/v1/users/me/feed/items/{postID}/grants", requireDevice(feedGrants(st)))
+	mux.HandleFunc("POST /api/v1/users/me/feed/items/{postID}/grants", requireDevice(setFeedGrant(st)))
 	// Позже «me», иначе «me» будет принято за идентификатор пользователя.
 	mux.HandleFunc("GET /api/v1/users/{userID}/feed", requireDevice(userFeed(st)))
 }
@@ -250,6 +260,104 @@ func removeFeedSubscriber(st FeedStore) http.HandlerFunc {
 	}
 }
 
+// feedGrants — GET /users/me/feed/items/{postID}/grants: кому открыта эта запись.
+func feedGrants(st FeedStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		channelID, postID, ok := свояЗапись(w, r, st)
+		if !ok {
+			return
+		}
+		grants, err := st.FeedGrants(r.Context(), channelID, postID)
+		if err != nil {
+			log.Printf("feedGrants: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		out := make([]map[string]any, 0, len(grants))
+		for _, g := range grants {
+			item := map[string]any{"user_id": g.UserID, "granted_at": g.GrantedAt.UTC().Format(time.RFC3339)}
+			// Пусто значит «бессрочно», и это не то же самое, что «срок в прошлом»:
+			// первое открыто навсегда, второе закрылось само.
+			if g.Until != nil {
+				item["until"] = g.Until.UTC().Format(time.RFC3339)
+			}
+			out = append(out, item)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"grants": out})
+	}
+}
+
+// setFeedGrant — POST /users/me/feed/items/{postID}/grants: открыть запись или закрыть.
+func setFeedGrant(st FeedStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		channelID, postID, ok := свояЗапись(w, r, st)
+		if !ok {
+			return
+		}
+		var req struct {
+			UserID string `json:"user_id"`
+			// Until — RFC 3339; пусто значит бессрочно. Прошедшее время не отвергается:
+			// это законный способ закрыть доступ, оставив в списке след, что он был.
+			Until string `json:"until,omitempty"`
+			Grant *bool  `json:"grant,omitempty"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&req); err != nil || req.UserID == "" {
+			writeErr(w, http.StatusBadRequest, "bad_json", "нужен user_id")
+			return
+		}
+		var until *time.Time
+		if req.Until != "" {
+			t, err := time.Parse(time.RFC3339, req.Until)
+			if err != nil {
+				writeErr(w, http.StatusBadRequest, "bad_until", "until — время в формате RFC 3339")
+				return
+			}
+			until = &t
+		}
+		grant := true
+		if req.Grant != nil {
+			grant = *req.Grant
+		}
+		id, _ := auth.FromContext(r.Context())
+		err := st.SetFeedGrant(r.Context(), channelID, postID, id.UserID, req.UserID, until, grant)
+		switch {
+		case errors.Is(err, store.ErrNotAllowed):
+			writeErr(w, http.StatusForbidden, "not_allowed", "это может владелец страницы")
+			return
+		case errors.Is(err, store.ErrChannelNotFound):
+			writeErr(w, http.StatusNotFound, "item_not_found", "записи нет на вашей странице")
+			return
+		case err != nil:
+			log.Printf("setFeedGrant: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"granted": grant})
+	}
+}
+
+// свояЗапись — лента этого человека и номер записи из пути.
+func свояЗапись(w http.ResponseWriter, r *http.Request, st FeedStore) (string, uint64, bool) {
+	postID, err := strconv.ParseUint(r.PathValue("postID"), 10, 64)
+	if err != nil || postID == 0 {
+		writeErr(w, http.StatusBadRequest, "bad_post_id", "post_id — целое число")
+		return "", 0, false
+	}
+	id, _ := auth.FromContext(r.Context())
+	channelID, err := st.FeedOf(r.Context(), id.UserID)
+	if errors.Is(err, store.ErrNoFeed) {
+		writeErr(w, http.StatusNotFound, "feed_not_found", "ленты нет")
+		return "", 0, false
+	} else if err != nil {
+		log.Printf("свояЗапись: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return "", 0, false
+	}
+	return channelID, postID, true
+}
+
 // writeFeedWithFriend — лента и признак «владелец дружит со мной».
 func writeFeedWithFriend(
 	w http.ResponseWriter, st FeedStore, r *http.Request,
@@ -272,7 +380,8 @@ func writeFeedLevels(
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 
-	items, err := st.ListFeed(r.Context(), channelID, before, limit, maxLevel)
+	id, _ := auth.FromContext(r.Context())
+	items, err := st.ListFeed(r.Context(), channelID, before, limit, maxLevel, id.UserID)
 	if err != nil {
 		log.Printf("writeFeed: %v", err)
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")

@@ -189,10 +189,12 @@ func (s *Store) CreatePost(ctx context.Context, p ChannelPost) (uint64, error) {
 //
 // maxLevel — граница выдачи: владельцу 3, подписчику 2, постороннему 1 (ADR-0019).
 //
+// Названный поимённо видит запись уровня 3, хотя граница его круга ниже (К4).
+//
 // **Комментарии исключены здесь и в ListFeed** условием `parent_post_id IS NULL`. Они
 // лежат в той же таблице, и без этого условия ветка вылезает в ленту как запись
 // (ADR-0024, следствие 1). Условие покрыто отдельным тестом.
-func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16) ([]ChannelPost, error) {
+func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16, viewerID string) ([]ChannelPost, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
@@ -200,11 +202,16 @@ func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, 
 		before = ^uint64(0) >> 1
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT channel_id, post_id, author_id, text, nodes, markup, markup_version, created_at_unix_ms, level
-		FROM channel_posts
-		WHERE channel_id = $1 AND post_id < $2 AND NOT deleted
-		  AND parent_post_id IS NULL AND level <= $4
-		ORDER BY post_id DESC LIMIT $3`, channelID, before, limit, maxLevel)
+		SELECT p.channel_id, p.post_id, p.author_id, p.text, p.nodes, p.markup,
+		       p.markup_version, p.created_at_unix_ms, p.level
+		FROM channel_posts p
+		LEFT JOIN feed_level_grants fg
+		       ON fg.channel_id = p.channel_id AND fg.post_id = p.post_id
+		      AND fg.user_id = $5 AND (fg.until IS NULL OR fg.until > now())
+		WHERE p.channel_id = $1 AND p.post_id < $2 AND NOT p.deleted
+		  AND p.parent_post_id IS NULL
+		  AND (p.level <= $4 OR fg.user_id IS NOT NULL)
+		ORDER BY p.post_id DESC LIMIT $3`, channelID, before, limit, maxLevel, viewerID)
 	if err != nil {
 		return nil, err
 	}

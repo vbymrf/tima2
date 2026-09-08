@@ -41,7 +41,7 @@ type ChannelStore interface {
 	IsSubscribed(ctx context.Context, channelID, userID string) (bool, error)
 	SubscriberIDs(ctx context.Context, channelID string) ([]string, error)
 	CreatePost(ctx context.Context, p store.ChannelPost) (uint64, error)
-	ListPosts(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16) ([]store.ChannelPost, error)
+	ListPosts(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16, viewerID string) ([]store.ChannelPost, error)
 
 	// Комментарии (ADR-0024): та же таблица, тот же вид записи — отсюда и то, что
 	// методы лежат в этом же интерфейсе, а не в отдельном.
@@ -50,6 +50,10 @@ type ChannelStore interface {
 	ListComments(ctx context.Context, channelID string, rootID, after uint64, limit int) ([]store.ChannelPost, error)
 	CommentCounts(ctx context.Context, channelID string, rootIDs []uint64) (map[uint64]int, error)
 	CommentsAllowed(ctx context.Context, channelID string, rootID uint64) (bool, error)
+
+	// Поимённое разрешение на запись уровня 3 (К4): разговор наследует круг корня,
+	// значит и разрешение проверяется по корню.
+	FeedGrantActive(ctx context.Context, channelID string, postID uint64, userID string) (bool, error)
 }
 
 // Проверка соответствия — обязанность компилятора, а не прогона: разошлись
@@ -287,7 +291,7 @@ func listChannelPosts(st ChannelStore) http.HandlerFunc {
 			before, _ = strconv.ParseUint(v, 10, 64)
 		}
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-		posts, err := st.ListPosts(r.Context(), channelID, before, limit, maxLevelInChannel(r, st, ch, id.UserID))
+		posts, err := st.ListPosts(r.Context(), channelID, before, limit, maxLevelInChannel(r, st, ch, id.UserID), id.UserID)
 		if err != nil {
 			log.Printf("listChannelPosts: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
