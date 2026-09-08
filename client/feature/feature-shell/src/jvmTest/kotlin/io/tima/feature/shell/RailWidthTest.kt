@@ -5,7 +5,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
-import io.tima.core.ui.RussianWords
+import io.tima.core.ui.Language
 import io.tima.core.ui.Window
 import io.tima.core.ui.FormatTima
 import io.tima.core.ui.TimaType
@@ -27,9 +27,13 @@ import kotlin.test.assertTrue
  * подпись, измеренную настоящим измерителем текста тем же кеглем и начертанием, каким
  * она рисуется.
  *
- * ── ЧТО БУДЕТ С ДРУГИМ ЯЗЫКОМ ───────────────────────────────────────────────
+ * ── ДРУГИЕ ЯЗЫКИ ────────────────────────────────────────────────────────────
  *
- * Этот тест покраснеет. Так и задумано, и это лучший из доступных исходов.
+ * Меряются **все заведённые словари**, а не один русский (ПЛАН-ЯЗЫКА Я11). Испанское
+ * «Configuración» длиннее русских «Настроек», и узнать об этом надо здесь, а не по
+ * снимку с обрезанной подписью.
+ *
+ * Новый язык роняет этот тест, и так задумано: это лучший из доступных исходов.
  *
  * Считать ширину рейки по содержимому в бегу — соблазн, от которого отказались: от неё
  * зависит `DESKTOP_THRESHOLD`, то есть появится ли четвёртая полоса. Раскладка, которая
@@ -47,6 +51,7 @@ class RailWidthTest {
         val forCaption = around.value.toInt()
 
         val widths = mutableMapOf<String, Int>()
+        val captions = captions()
         capture("рейка-мера", 200, 60, dark = false) {
             val measurer = rememberTextMeasurer()
             remember {
@@ -88,11 +93,14 @@ class RailWidthTest {
         /**
          * Всё, что рейка печатает подписью: имена окон и «Настройки» внизу.
          *
-         * Список собран из [Window] и одной строки рейки, а не переписан руками: новое
-         * окно попадёт сюда само и само же проверится.
+         * Собрано из [Window] и [Language], а не переписано руками: новое окно и новый
+         * язык попадут сюда сами и сами же проверятся.
          */
-        val captions: List<String> =
-            Window.entries.map { RussianWords.windows.full(it) } + "Настройки"
+        fun captions(): List<String> = Language.entries
+            .mapNotNull { it.words }
+            .flatMap { words ->
+                Window.entries.map { words.windows.full(it) } + words.settings2.settings
+            }
 
         /** «Свободное общение», `sz4` полужирный — измерено 2026-09-02. */
         const val LONGEST = 152

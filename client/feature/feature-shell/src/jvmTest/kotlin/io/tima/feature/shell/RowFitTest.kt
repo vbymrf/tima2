@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.CompositionLocalProvider
+import io.tima.core.ui.LocalWords
+import io.tima.core.ui.Language
 import io.tima.core.ui.WindowTab
 import io.tima.core.ui.TimaColors
 import io.tima.testui.FOREIGN_BACKGROUND
@@ -44,19 +47,29 @@ class RowFitTest {
 
     @Test
     fun известно_какие_ряды_переносятся_на_телефоне() {
-        val wrapping = ROWS.filter { (name, row) ->
-            val narrow = capture("ряд-мера-узкий-$name", PHONE, 200, dark = false, backdrop = FOREIGN_BACKGROUND) { row() }
-            val wide = capture("ряд-мера-широкий-$name", WIDE, 200, dark = false, backdrop = FOREIGN_BACKGROUND) { row() }
-            height(narrow) > height(wide)
-        }.keys
+        // Меряется каждый заведённый словарь: перенос — свойство слов, а не разметки, и
+        // английские вкладки короче русских, испанские длиннее (ПЛАН-ЯЗЫКА Я11).
+        for (language in Language.entries) {
+            val words = language.words ?: continue
+            val wrapping = ROWS.filter { (name, row) ->
+                val tag = "${language.tag}-$name"
+                val narrow = capture("ряд-мера-узкий-$tag", PHONE, 200, dark = false, backdrop = FOREIGN_BACKGROUND) {
+                    CompositionLocalProvider(LocalWords provides words) { row() }
+                }
+                val wide = capture("ряд-мера-широкий-$tag", WIDE, 200, dark = false, backdrop = FOREIGN_BACKGROUND) {
+                    CompositionLocalProvider(LocalWords provides words) { row() }
+                }
+                height(narrow) > height(wide)
+            }.keys
 
-        assertEquals(
-            WRAPS_ON_PHONE,
-            wrapping,
-            "перечень переносящихся рядов изменился. Перенос сам по себе не брак — " +
-                "брак в том, чтобы он появился незамеченным. Либо укоротите ряд, либо " +
-                "впишите его сюда осознанно",
-        )
+            assertEquals(
+                WRAPS_ON_PHONE[language.tag].orEmpty(),
+                wrapping,
+                "перечень переносящихся рядов изменился на языке «${language.ownName}». " +
+                    "Перенос сам по себе не брак — брак в том, чтобы он появился " +
+                    "незамеченным. Либо укоротите ряд, либо впишите его сюда осознанно",
+            )
+        }
     }
 
     /** Высота серой полосы ряда: до какой строки сверху идёт функциональный фон. */
@@ -155,8 +168,15 @@ class RowFitTest {
          * **Перенос остаётся живым на узком ПК.** Колонка списка там 340 точек, и ряд
          * «Коллекций» в неё по-прежнему не встаёт — это проверяет
          * [SecondRowTest.не_поместившееся_переносится_а_не_прячется].
+         *
+         * **Английский переносит меньше**, и это не заслуга разметки: его слова
+         * короче. Перечень заведён по языкам именно поэтому — «одинаково для всех»
+         * оказалось бы неправдой в обе стороны.
          */
-        val WRAPS_ON_PHONE = setOf("медиа-вкладки")
+        val WRAPS_ON_PHONE: Map<String, Set<String>> = mapOf(
+            "ru" to setOf("медиа-вкладки"),
+            "en" to setOf("медиа-вкладки"),
+        )
     }
 }
 

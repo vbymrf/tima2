@@ -1834,13 +1834,28 @@ object RussianWords : Words {
  * испанский заводятся вместе со своими словарями (Я9, Я10); до тех пор список знает о них,
  * но выбрать можно лишь то, у чего словарь есть — [available].
  */
-enum class Language(val tag: String, val ownName: String, val words: Words?) {
-    Russian("ru", "Русский", RussianWords),
-    English("en", "English", null),
+enum class Language(
+    val tag: String,
+    val ownName: String,
+    /**
+     * Способ получить словарь, а не сам словарь.
+     *
+     * Перечисление создаётся целиком при первом обращении, и держи оно словари
+     * значением — запуск собирал бы каждый, включая те два, которых человек не увидит
+     * (замер 2026-09-08: 10 мс на словарь, холодная JVM). Лямбда собирает только
+     * выбранный.
+     */
+    private val dictionary: (() -> Words)?,
+) {
+    Russian("ru", "Русский", { RussianWords }),
+    English("en", "English", { EnglishWords }),
     Spanish("es", "Español", null);
 
+    /** Словарь языка. `null` — словаря ещё нет. */
+    val words: Words? get() = dictionary?.invoke()
+
     /** Есть ли словарь. Выбирать язык без словаря — обещать надписи, которых нет. */
-    val available: Boolean get() = words != null
+    val available: Boolean get() = dictionary != null
 
     companion object {
         /** По тегу из настроек. Незнакомый тег — русский: приложение обязано открыться. */
