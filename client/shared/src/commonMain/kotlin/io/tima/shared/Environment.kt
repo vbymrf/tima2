@@ -42,7 +42,9 @@ import io.tima.core.network.GroupKeysApi
 import io.tima.core.network.GroupMessagesApi
 import io.tima.core.network.LevelAccessOverHttp
 import io.tima.core.network.MessageLevelsOverHttp
+import io.tima.core.network.ChannelsOverHttp
 import io.tima.core.network.CommentSwitchesOverHttp
+import io.tima.core.network.CommunitiesOverHttp
 import io.tima.core.network.PostCommentsOverHttp
 import io.tima.core.network.UserPagesOverHttp
 import io.tima.core.network.GroupsApi
@@ -346,6 +348,16 @@ class Network(
 
     override val commentSwitches: CommentSwitchesOverHttp =
         CommentSwitchesOverHttp(link.route, link.client, token = { token() })
+
+    override val channels: ChannelsOverHttp =
+        ChannelsOverHttp(link.route, link.client, token = { token() })
+
+    /**
+     * Сообщества. Кто мы — нужно самому порту: «что можно внести» значит «где я владелец»,
+     * и отбор идёт по владельцу в ответах серверных списков.
+     */
+    override val communities: CommunitiesOverHttp =
+        CommunitiesOverHttp(link.route, link.client, token = { token() }, me = { session.userId })
 
     override val access: LevelAccessOverHttp =
         LevelAccessOverHttp(link.route, link.client, token = { token() })

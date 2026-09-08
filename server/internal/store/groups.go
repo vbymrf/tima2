@@ -22,6 +22,9 @@ type Group struct {
 	SlowModeSec   int32
 	Premoderation bool
 	ThreadsOnly   bool
+	// CommunityID — сообщество, с которым группа связана. Пусто — группа отдельная.
+	// Нужен клиенту ровно для одного: не предлагать вносить то, что уже внесено.
+	CommunityID string
 }
 
 type Member struct {
@@ -203,7 +206,8 @@ type MyGroup struct {
 func (s *Store) ListGroupsForUser(ctx context.Context, userID string) ([]MyGroup, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT g.group_id, g.kind, g.title, COALESCE(g.description, ''), g.owner_id,
-		       COALESCE(g.slow_mode_sec, 0), g.premoderation, g.threads_only, m.role
+		       COALESCE(g.slow_mode_sec, 0), g.premoderation, g.threads_only,
+		       COALESCE(g.community_id::text, ''), m.role
 		FROM memberships m
 		JOIN groups g ON g.group_id = m.target_id AND g.deleted_at IS NULL
 		WHERE m.target_type = 'group' AND m.user_id = $1 AND m.left_at IS NULL
@@ -216,7 +220,7 @@ func (s *Store) ListGroupsForUser(ctx context.Context, userID string) ([]MyGroup
 	for rows.Next() {
 		var g MyGroup
 		if err := rows.Scan(&g.GroupID, &g.Kind, &g.Title, &g.Description, &g.OwnerID,
-			&g.SlowModeSec, &g.Premoderation, &g.ThreadsOnly, &g.MyRole); err != nil {
+			&g.SlowModeSec, &g.Premoderation, &g.ThreadsOnly, &g.CommunityID, &g.MyRole); err != nil {
 			return nil, err
 		}
 		out = append(out, g)

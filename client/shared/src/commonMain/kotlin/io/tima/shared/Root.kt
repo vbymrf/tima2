@@ -138,6 +138,8 @@ import io.tima.feature.shell.UpdateSection
 import io.tima.feature.shell.UpdateStore
 import io.tima.feature.chat.NewChatStore
 import io.tima.domain.chat.CarryToPage
+import io.tima.domain.chat.CreateChannel
+import io.tima.domain.chat.CreateCommunity
 import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.CommentEntry
 import io.tima.domain.chat.WriteComment
@@ -1247,6 +1249,7 @@ private fun App(
                     NewGroup(
                         environment = environment,
                         network = network,
+                        social = network,
                         scope = scope,
                         onBack = { where = Where.Nothing },
                         onCreated = { groupId, title -> where = Where.Chat(groupId, title) },
@@ -1823,6 +1826,12 @@ private suspend fun versionOffer(network: DevicePorts, platform: Platform): Upda
 private fun NewGroup(
     environment: Environment,
     network: GroupPorts,
+    /**
+     * Каналы и сообщества мастера. Отдельным параметром, а не через [network]: тот про
+     * группы, а мастер создаёт три разные вещи, и складывать всё в один порт значило бы
+     * связать группы с сообществами без нужды.
+     */
+    social: ChatPorts,
     scope: kotlinx.coroutines.CoroutineScope,
     onBack: () -> Unit,
     onCreated: (String, String) -> Unit,
@@ -1835,6 +1844,12 @@ private fun NewGroup(
                 chats = SqlChatBook(environment.db, environment.cipher),
             ),
             scope = scope,
+            // Канал и сообщество перестали быть серыми: у мастера есть чем их выполнить.
+            // Звуковой чат остаётся серым — он ждёт реализации (решение заказчика
+            // 2026-09-08), и признак «готов» считается по наличию случая, а не по флагу.
+            channels = CreateChannel(social.channels),
+            communities = CreateCommunity(social.communities),
+            linkable = { social.communities.linkable() },
         )
     }
     val state by store.state.collectAsState()
@@ -1865,6 +1880,10 @@ private fun NewGroup(
         onAddNumber = store::addNumber,
         onRemoveNumber = store::removeNumber,
         onCreate = store::create,
+        ready = store::ready,
+        onCatalogue = store::choseCatalogue,
+        onComments = store::choseComments,
+        onItem = store::choseItem,
         // «Назад» с первого шага закрывает мастер, с остальных — шаг назад: человек,
         // ошибшийся на третьем шаге, не должен начинать заново.
         onBack = {

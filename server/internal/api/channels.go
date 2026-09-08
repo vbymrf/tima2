@@ -81,6 +81,13 @@ func createChannel(st ChannelStore) http.HandlerFunc {
 		var req struct {
 			Title       string `json:"title"`
 			Description string `json:"description"`
+			// Виден ли канал в каталоге. Поле необязательное: не прислали — виден, как
+			// было до его появления. «По подписке» значит «не в каталоге»: канал
+			// находят по ссылке, а не листая список.
+			IsPublic *bool `json:"is_public,omitempty"`
+			// Принимает ли канал обсуждения (ADR-0024 §6). Тоже необязательное: молчание
+			// не должно закрывать разговор.
+			CommentsEnabled *bool `json:"comments_enabled,omitempty"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -90,9 +97,18 @@ func createChannel(st ChannelStore) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_title", "title обязателен, до 200 байт")
 			return
 		}
+		public := true
+		if req.IsPublic != nil {
+			public = *req.IsPublic
+		}
+		comments := true
+		if req.CommentsEnabled != nil {
+			comments = *req.CommentsEnabled
+		}
 		id, _ := auth.FromContext(r.Context())
 		channelID, err := st.CreateChannel(r.Context(), store.Channel{
-			Title: req.Title, Description: req.Description, OwnerID: id.UserID, IsPublic: true,
+			Title: req.Title, Description: req.Description, OwnerID: id.UserID,
+			IsPublic: public, CommentsEnabled: comments,
 		})
 		if err != nil {
 			log.Printf("createChannel: %v", err)
@@ -109,6 +125,10 @@ func channelJSON(c store.ChannelView) map[string]any {
 	return map[string]any{
 		"channel_id": c.ChannelID, "title": c.Title, "description": c.Description,
 		"owner_id": c.OwnerID, "is_public": c.IsPublic, "subscribed": c.Subscribed, "owner": c.Owner,
+		// Выключатель обсуждений канала (ADR-0024 §6) и сообщество, с которым канал
+		// связан. Второе клиенту нужно ровно для того, чтобы не предлагать внести
+		// уже внесённое.
+		"comments_enabled": c.CommentsEnabled, "community_id": c.CommunityID,
 	}
 }
 

@@ -20,6 +20,8 @@ type Channel struct {
 	// CommentsEnabled — принимает ли канал обсуждения вообще (ADR-0024 §6). Второй
 	// выключатель — у отдельной записи; они про разные желания и потому оба.
 	CommentsEnabled bool
+	// CommunityID — сообщество, с которым канал связан. Пусто — отдельный.
+	CommunityID string
 }
 
 type ChannelView struct {
@@ -58,9 +60,9 @@ func (s *Store) CreateChannel(ctx context.Context, c Channel) (string, error) {
 
 	var id string
 	if err := tx.QueryRow(ctx, `
-		INSERT INTO channels (title, description, owner_id, is_public)
-		VALUES ($1,$2,$3,$4) RETURNING channel_id`,
-		c.Title, c.Description, c.OwnerID, c.IsPublic).Scan(&id); err != nil {
+		INSERT INTO channels (title, description, owner_id, is_public, comments_enabled)
+		VALUES ($1,$2,$3,$4,$5) RETURNING channel_id`,
+		c.Title, c.Description, c.OwnerID, c.IsPublic, c.CommentsEnabled).Scan(&id); err != nil {
 		return "", err
 	}
 	if _, err := tx.Exec(ctx, `
@@ -86,6 +88,7 @@ func (s *Store) GetChannel(ctx context.Context, channelID string) (Channel, erro
 func (s *Store) MyChannels(ctx context.Context, userID string) ([]ChannelView, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT c.channel_id, c.title, c.description, c.owner_id, c.is_public, c.comments_enabled,
+		       COALESCE(c.community_id::text, ''),
 		       TRUE AS subscribed, (c.owner_id = $1) AS owner
 		FROM channels c
 		JOIN channel_subscriptions s ON s.channel_id = c.channel_id AND s.subscriber_id = $1
@@ -104,6 +107,7 @@ func (s *Store) DiscoverChannels(ctx context.Context, userID string, limit int) 
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT c.channel_id, c.title, c.description, c.owner_id, c.is_public, c.comments_enabled,
+		       COALESCE(c.community_id::text, ''),
 		       FALSE AS subscribed, (c.owner_id = $1) AS owner
 		FROM channels c
 		WHERE c.deleted_at IS NULL AND c.is_public
@@ -123,6 +127,7 @@ func scanChannelViews(rows pgx.Rows) ([]ChannelView, error) {
 	for rows.Next() {
 		var v ChannelView
 		if err := rows.Scan(&v.ChannelID, &v.Title, &v.Description, &v.OwnerID, &v.IsPublic, &v.CommentsEnabled,
+			&v.CommunityID,
 			&v.Subscribed, &v.Owner); err != nil {
 			return nil, err
 		}

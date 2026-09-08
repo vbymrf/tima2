@@ -31,6 +31,8 @@ import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.Trouble
+import io.tima.domain.chat.CommunityItem
+import io.tima.domain.chat.CommunityKinds
 import io.tima.domain.chat.GroupKind
 
 /**
@@ -65,6 +67,17 @@ fun NewGroupScreen(
     onCreate: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Готов ли раздел. Спрашивается у состояния, а не берётся из самого раздела: он готов
+     * тогда, когда есть чем его выполнить, и знает об этом Store.
+     */
+    ready: (Section) -> Boolean = { it == Section.Group },
+    /** Канал: виден ли в каталоге. */
+    onCatalogue: (Boolean) -> Unit = {},
+    /** Канал: принимает ли обсуждения. */
+    onComments: (Boolean) -> Unit = {},
+    /** Сообщество: отметить или снять элемент на шаге «что вносим». */
+    onItem: (CommunityItem) -> Unit = {},
 ) {
     val colors = Tima.colors
     Column(modifier.fillMaxSize().background(colors.surface)) {
@@ -82,17 +95,20 @@ fun NewGroupScreen(
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about4),
             ) {
                 when (state.step) {
-                    Step.Section -> SectionStep(state, onSection, onExplain)
+                    Step.Section -> SectionStep(state, ready, onSection, onExplain)
                     Step.Kind -> KindStep(state, onKind, onExplain)
                     Step.Joining -> JoiningStep(state, onJoining, onExplain)
+                    Step.Catalogue -> CatalogueStep(state, onCatalogue, onExplain)
+                    Step.Comments -> CommentsStep(state, onComments, onExplain)
                     Step.Naming -> NamingStep(
                         state, onTitle, onDescription, onNumber, onAddNumber, onRemoveNumber,
                     )
+                    Step.Bringing -> BringingStep(state, onItem)
                 }
 
                 state.trouble?.let { Trouble(it) }
 
-                if (state.step == Step.Naming) {
+                if (state.step == lastStep(state.section)) {
                     Button(
                         label = if (state.expect) "Создаём…" else "Создать",
                         onClick = onCreate,
@@ -102,6 +118,12 @@ fun NewGroupScreen(
                     if (state.notInvited.isNotEmpty()) {
                         Secondary("Группа создана. Этих номеров в TIMA нет — позовите людей:")
                         for (number in state.notInvited) Name(number)
+                    }
+                    // То же самое для сообщества: что не внеслось, названо поимённо.
+                    // Молчание означало бы, что человек считает связанным то, чего нет.
+                    if (state.notLinked.isNotEmpty()) {
+                        Secondary("Сообщество создано. Это внести не удалось — они уже в другом:")
+                        for (title in state.notLinked) Name(title)
                     }
                 } else {
                     Button(label = "Далее", onClick = onForward, modifier = Modifier.fillMaxWidth())
@@ -118,21 +140,101 @@ fun NewGroupScreen(
 @Composable
 private fun SectionStep(
     state: NewGroupState,
+    ready: (Section) -> Boolean,
     onSection: (Section) -> Unit,
     onExplain: (String?) -> Unit,
 ) {
     Caption("Что создаём?", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
     for (section in Section.entries) {
+        val available = ready(section)
         ChoiceLine(
             title = section.title,
             about = section.about,
             chosen = state.section == section,
-            available = section.ready,
-            // «Скоро» — это не «выключено»: раздел показан, чтобы был виден замысел
-            // целиком, и подпись говорит, почему в него нельзя.
-            note = if (section.ready) null else "скоро",
+            available = available,
+            // «Ждёт реализации» — это не «выключено» и не «скоро»: у звукового чата нет
+            // ни сервера, ни решения о хранении, и подпись говорит именно это.
+            note = if (available) null else "ждёт реализации",
             onChoose = { onSection(section) },
-            onExplain = { onExplain("${section.title}. ${section.about}") },
+            onExplain = { onExplain(section.title + ". " + section.about) },
+        )
+    }
+}
+
+/** Последний шаг раздела: там стоит «Создать», а не «Далее». */
+private fun lastStep(section: Section): Step =
+    if (section == Section.Community) Step.Bringing else Step.Naming
+
+/** Канал: виден ли в каталоге. «По подписке» значит «не в каталоге». */
+@Composable
+private fun CatalogueStep(
+    state: NewGroupState,
+    onCatalogue: (Boolean) -> Unit,
+    onExplain: (String?) -> Unit,
+) {
+    Caption("Как находят канал?", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    ChoiceLine(
+        title = "Открытый",
+        about = "Виден в каталоге, подписаться может любой",
+        chosen = state.inCatalogue,
+        onChoose = { onCatalogue(true) },
+        onExplain = { onExplain("Открытый канал. Виден в каталоге, подписаться может любой") },
+    )
+    ChoiceLine(
+        title = "По подписке",
+        about = "В каталоге не показывается — находят по ссылке",
+        chosen = !state.inCatalogue,
+        onChoose = { onCatalogue(false) },
+        onExplain = { onExplain("По подписке. Канала нет в каталоге, его находят по ссылке") },
+    )
+}
+
+/** Канал: принимает ли обсуждения (ADR-0024 §6). */
+@Composable
+private fun CommentsStep(
+    state: NewGroupState,
+    onComments: (Boolean) -> Unit,
+    onExplain: (String?) -> Unit,
+) {
+    Caption("Записи можно обсуждать?", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    ChoiceLine(
+        title = "Можно",
+        about = "Под записью открывается разговор. Комментирует тот, кто видит запись",
+        chosen = state.comments,
+        onChoose = { onComments(true) },
+        onExplain = { onExplain("Комментирует тот, кто видит запись: отдельного права нет") },
+    )
+    ChoiceLine(
+        title = "Нельзя",
+        about = "Канал без обсуждений. Это можно поменять потом",
+        chosen = !state.comments,
+        onChoose = { onComments(false) },
+        onExplain = { onExplain("Выключено значит «новых не принимаем»: написанное раньше остаётся") },
+    )
+}
+
+/**
+ * Сообщество: что вносим.
+ *
+ * **Список — из уже существующего.** Сообщество связывает готовое, а не создаёт новое, и
+ * шаг обязан это показывать: галочки стоят напротив своих групп и каналов, а строкой ниже
+ * сказано, что переписка и участники не меняются.
+ */
+@Composable
+private fun BringingStep(state: NewGroupState, onItem: (CommunityItem) -> Unit) {
+    Caption("Что вносим?", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    Secondary("Переписка, участники и ключи не меняются — меняется одна ссылка")
+    if (state.linkable.isEmpty()) {
+        Secondary("Своих групп и каналов, свободных для внесения, нет. Сообщество можно создать пустым")
+        return
+    }
+    for (item in state.linkable) {
+        ChoiceLine(
+            title = item.title,
+            about = if (item.kind == CommunityKinds.CHANNEL) "канал" else "группа",
+            chosen = state.bringing.any { it.id == item.id },
+            onChoose = { onItem(item) },
+            onExplain = {},
         )
     }
 }
@@ -244,8 +346,10 @@ private fun ChoiceLine(
     title: String,
     about: String,
     chosen: Boolean,
-    available: Boolean,
     onChoose: () -> Unit,
+    // Доступна ли строка. Умолчание «да»: недоступной бывает только строка раздела,
+    // и говорить об этом на каждом вызове значило бы повторять очевидное.
+    available: Boolean = true,
     onExplain: () -> Unit,
     note: String? = null,
 ) {
@@ -321,7 +425,10 @@ private fun stepTitle(step: Step): String = when (step) {
     Step.Section -> "Что создаём?"
     Step.Kind -> "Какая группа?"
     Step.Joining -> "Как вступают?"
+    Step.Catalogue -> "Как находят канал?"
+    Step.Comments -> "Записи можно обсуждать?"
     Step.Naming -> "Название и описание"
+    Step.Bringing -> "Что вносим?"
 }
 
 /** Приглушение недоступной строки. Отдельной функцией, чтобы не плодить магию в разметке. */

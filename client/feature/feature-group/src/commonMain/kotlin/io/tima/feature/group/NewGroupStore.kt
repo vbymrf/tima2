@@ -1,5 +1,10 @@
 package io.tima.feature.group
 
+import io.tima.domain.chat.ChannelStep
+import io.tima.domain.chat.CommunityItem
+import io.tima.domain.chat.CommunityStep
+import io.tima.domain.chat.CreateChannel
+import io.tima.domain.chat.CreateCommunity
 import io.tima.domain.chat.CreateGroupChat
 import io.tima.domain.chat.CreateGroupStep
 import io.tima.domain.chat.GroupKind
@@ -28,6 +33,15 @@ import kotlinx.coroutines.launch
 class NewGroupStore(
     private val creation: CreateGroupChat,
     private val scope: CoroutineScope,
+    /**
+     * Создание канала. `null` — раздел «Канал» остаётся серым: показывать шаг, которым
+     * нечего выполнить, значит обещать несуществующее.
+     */
+    private val channels: CreateChannel? = null,
+    /** Создание сообщества. `null` — раздел серый по той же причине. */
+    private val communities: CreateCommunity? = null,
+    /** Что можно внести в сообщество: свои группы и каналы, ещё не связанные ни с чем. */
+    private val linkable: (suspend () -> List<CommunityItem>)? = null,
 ) {
 
     private val _state = MutableStateFlow(NewGroupState())
@@ -35,10 +49,57 @@ class NewGroupStore(
 
     // ── шаги ────────────────────────────────────────────────────────────────
 
+    /**
+     * Готов ли раздел: показывается ли он выбираемым.
+     *
+     * Считается по наличию того, чем его выполнить, а не отдельным признаком: два
+     * источника одной правды разошлись бы, и человек нажал бы на раздел, который некому
+     * обслужить.
+     */
+    fun ready(section: Section): Boolean = when (section) {
+        Section.Group -> true
+        Section.Channel -> channels != null
+        Section.Community -> communities != null
+        // Звуковой чат ждёт реализации (решение заказчика 2026-09-08): ни сервера, ни
+        // хранения. Серым он остаётся по решению, а не потому, что не дошли руки.
+        Section.VoiceRoom -> false
+    }
+
     /** Выбрать раздел. Недоступные молча игнорируются: они и не нажимаются. */
     fun choseSection(section: Section) {
-        if (!section.ready) return
+        if (!ready(section)) return
         _state.value = _state.value.copy(section = section, trouble = null)
+        // Сообществу на последнем шаге нужен список того, что можно внести. Спрашивается
+        // при входе в раздел, а не при открытии мастера: за списком идёт сеть, и тому,
+        // кто создаёт группу, он не нужен вовсе.
+        if (section == Section.Community) loadLinkable()
+    }
+
+    private fun loadLinkable() {
+        val ask = linkable ?: return
+        scope.launch { _state.value = _state.value.copy(linkable = ask()) }
+    }
+
+    /** Отметить или снять элемент в списке «что вносим». */
+    fun choseItem(item: CommunityItem) {
+        val chosen = _state.value.bringing
+        _state.value = _state.value.copy(
+            bringing = if (chosen.any { it.id == item.id }) {
+                chosen.filterNot { it.id == item.id }
+            } else {
+                chosen + item
+            },
+        )
+    }
+
+    /** Виден ли канал в каталоге. «По подписке» значит «не в каталоге». */
+    fun choseCatalogue(inCatalogue: Boolean) {
+        _state.value = _state.value.copy(inCatalogue = inCatalogue, trouble = null)
+    }
+
+    /** Принимает ли канал обсуждения (ADR-0024 §6). */
+    fun choseComments(comments: Boolean) {
+        _state.value = _state.value.copy(comments = comments, trouble = null)
     }
 
     /**
@@ -61,13 +122,62 @@ class NewGroupStore(
     /** Вперёд по шагам. Дальше последнего не идёт: там создание. */
     fun forward() {
         val current = _state.value
-        _state.value = current.copy(step = current.step.next(), trouble = null)
+        _state.value = current.copy(step = stepAfter(current), trouble = null)
     }
 
     /** Назад по шагам; с первого — выход из мастера (решает вызывающий по [NewGroupState.step]). */
     fun back() {
         val current = _state.value
-        _state.value = current.copy(step = current.step.previous(), trouble = null)
+        _state.value = current.copy(step = stepBefore(current), trouble = null)
+    }
+
+    /**
+     * Порядок шагов **зависит от раздела**, и это не украшение.
+     *
+     * У группы спрашивают вид и способ вступления; у канала — каталог и обсуждения; у
+     * сообщества вида нет вовсе, зато есть «что вносим». Один линейный порядок заставил
+     * бы показывать вопросы, у которых в этом разделе нет ответа.
+     */
+    private fun stepAfter(state: NewGroupState): Step = when (state.section) {
+        Section.Group -> when (state.step) {
+            Step.Section -> Step.Kind
+            Step.Kind -> Step.Joining
+            else -> Step.Naming
+        }
+
+        Section.Channel -> when (state.step) {
+            Step.Section -> Step.Catalogue
+            Step.Catalogue -> Step.Comments
+            else -> Step.Naming
+        }
+
+        Section.Community -> when (state.step) {
+            Step.Section -> Step.Naming
+            else -> Step.Bringing
+        }
+
+        Section.VoiceRoom -> state.step
+    }
+
+    private fun stepBefore(state: NewGroupState): Step = when (state.section) {
+        Section.Group -> when (state.step) {
+            Step.Naming -> Step.Joining
+            Step.Joining -> Step.Kind
+            else -> Step.Section
+        }
+
+        Section.Channel -> when (state.step) {
+            Step.Naming -> Step.Comments
+            Step.Comments -> Step.Catalogue
+            else -> Step.Section
+        }
+
+        Section.Community -> when (state.step) {
+            Step.Bringing -> Step.Naming
+            else -> Step.Section
+        }
+
+        Section.VoiceRoom -> Step.Section
     }
 
     /** Открыть или закрыть подокно «что это такое» — круг с вопросом у строки выбора. */
@@ -118,6 +228,12 @@ class NewGroupStore(
         if (current.expect) return
         _state.value = current.copy(expect = true, trouble = null)
 
+        when (current.section) {
+            Section.Channel -> return createChannel(current)
+            Section.Community -> return createCommunity(current)
+            else -> Unit
+        }
+
         scope.launch {
             val outcome = creation.create(
                 title = current.title,
@@ -136,6 +252,48 @@ class NewGroupStore(
                     "Нет связи с сервером — повторим через ${(outcome.retryAfterMs / 1000).coerceAtLeast(1)} с",
                 )
                 is CreateGroupStep.Refused -> current.copyWithTrouble(outcome.reason)
+            }
+        }
+    }
+
+    private fun createChannel(current: NewGroupState) {
+        val case = channels ?: return
+        scope.launch {
+            val outcome = case.create(
+                title = current.title,
+                description = current.description,
+                inCatalogue = current.inCatalogue,
+                comments = current.comments,
+            )
+            _state.value = when (outcome) {
+                is ChannelStep.Created -> current.copy(expect = false, created = outcome.channelId)
+                is ChannelStep.BadTitle -> current.copyWithTrouble(outcome.reason)
+                is ChannelStep.Offline -> current.copyWithTrouble("Нет связи с сервером")
+                is ChannelStep.Refused -> current.copyWithTrouble("Сервер отказал: " + outcome.reason)
+            }
+        }
+    }
+
+    private fun createCommunity(current: NewGroupState) {
+        val case = communities ?: return
+        scope.launch {
+            val outcome = case.create(
+                title = current.title,
+                description = current.description,
+                items = current.bringing,
+            )
+            _state.value = when (outcome) {
+                is CommunityStep.Created -> current.copy(
+                    expect = false,
+                    created = outcome.communityId,
+                    // Что не внеслось — названо поимённо. Молчание здесь означало бы,
+                    // что человек считает связанным то, чего в сообществе нет.
+                    notLinked = outcome.notLinked,
+                )
+
+                is CommunityStep.BadTitle -> current.copyWithTrouble(outcome.reason)
+                is CommunityStep.Offline -> current.copyWithTrouble("Нет связи с сервером")
+                is CommunityStep.Refused -> current.copyWithTrouble("Сервер отказал: " + outcome.reason)
             }
         }
     }
@@ -165,6 +323,16 @@ data class NewGroupState(
     val created: String? = null,
     /** Номера, которых нет в TIMA. Группа при этом создана. */
     val notInvited: List<String> = emptyList(),
+    /** Канал: виден ли в каталоге. «По подписке» значит «не в каталоге». */
+    val inCatalogue: Boolean = true,
+    /** Канал: принимает ли обсуждения (ADR-0024 §6). */
+    val comments: Boolean = true,
+    /** Сообщество: что можно внести — свои группы и каналы, ещё не связанные ни с чем. */
+    val linkable: List<CommunityItem> = emptyList(),
+    /** Сообщество: что человек отметил на шаге «что вносим». */
+    val bringing: List<CommunityItem> = emptyList(),
+    /** Сообщество создано, но эти элементы внести не удалось: они уже в другом. */
+    val notLinked: List<String> = emptyList(),
 ) {
     fun copyWithTrouble(text: String) = copy(trouble = text, expect = false)
 
@@ -174,10 +342,21 @@ data class NewGroupState(
 
 /** Шаги мастера. Названы по тому, что человек выбирает, а не по номеру. */
 enum class Step {
-    Section, Kind, Joining, Naming;
+    Section,
 
-    fun next(): Step = entries.getOrElse(ordinal + 1) { this }
-    fun previous(): Step = entries.getOrElse(ordinal - 1) { this }
+    // Группа: вид и способ вступления.
+    Kind,
+    Joining,
+
+    // Канал: каталог и обсуждения.
+    Catalogue,
+    Comments,
+
+    Naming,
+
+    // Сообщество: что вносим. Последний шаг именно здесь — сначала называют, потом
+    // наполняют: список внесённого без названия сообщества читается как список ничего.
+    Bringing,
 }
 
 /**
@@ -186,11 +365,11 @@ enum class Step {
  * `ready = false` значит «показываем, но не выбирается»: у таких строк круг выбора
  * пунктирный и подпись «скоро».
  */
-enum class Section(val title: String, val about: String, val ready: Boolean) {
-    Group("Группа", "Общение нескольких участников. Личная или публичная", true),
-    Channel("Канал", "Публикации для подписчиков", false),
-    Community("Сообщество", "Контейнер: группы, каналы и звуковые чаты", false),
-    VoiceRoom("Звуковой чат", "Голосовая комната внутри сообщества", false),
+enum class Section(val title: String, val about: String) {
+    Group("Группа", "Общение нескольких участников. Личная или публичная"),
+    Channel("Канал", "Публикации для подписчиков"),
+    Community("Сообщество", "Контейнер: группы и каналы. Связывает готовое, а не создаёт новое"),
+    VoiceRoom("Звуковой чат", "Голосовая комната. Ждёт реализации"),
 }
 
 /** Способ вступления — вторая ось (ADR-0019, `doc_UI/33` шаг 3). */

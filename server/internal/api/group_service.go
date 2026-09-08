@@ -117,6 +117,9 @@ func groupJSON(g store.Group, myRole string) map[string]any {
 		"group_id": g.GroupID, "kind": g.Kind, "title": g.Title, "description": g.Description,
 		"owner_id": g.OwnerID, "slow_mode_sec": g.SlowModeSec,
 		"premoderation": g.Premoderation, "threads_only": g.ThreadsOnly, "my_role": myRole,
+		// Сообщество, с которым группа связана; пусто — отдельная. Клиенту нужно ровно
+		// для того, чтобы не предлагать внести уже внесённое.
+		"community_id": g.CommunityID,
 	}
 }
 
