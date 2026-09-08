@@ -131,6 +131,10 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// Каналы — первая группа, вынесенная в registrar (шаг 4 программы). Дальше
 	// сюда добавляются вызовы Register<Группа>, а не строки маршрутов.
 	RegisterChannels(mux, s.Store, s.notifier(), s.requireActiveDevice)
+	// Выключатели обсуждения, удаление записей и модераторы канала (К3). Отдельным
+	// регистратором, а не внутри каналов: у него свой узкий интерфейс, и модерация
+	// будет расти отдельно от вещания.
+	RegisterChannelModeration(mux, s.Store, s.requireActiveDevice)
 	// Страница человека: своя лента и перенос к себе. Лента — канал, который ищут по
 	// человеку, поэтому регистратор стоит рядом с каналами, а не с группами.
 	RegisterFeeds(mux, s.Store, s.requireActiveDevice)

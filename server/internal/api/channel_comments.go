@@ -174,6 +174,16 @@ func addComment(st ChannelStore, n *Notifier) http.HandlerFunc {
 			}
 			markup = []byte(req.Markup)
 		}
+		// Выключено — новых не принимаем, старые отдаём (ADR-0024 §6). Проверка стоит
+		// здесь, а не в чтении: закрытый разговор остаётся видимым.
+		if allowed, err := st.CommentsAllowed(r.Context(), root.ChannelID, root.PostID); err != nil {
+			log.Printf("addComment: выключатели: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		} else if !allowed {
+			writeErr(w, http.StatusForbidden, "comments_closed", "обсуждение закрыто")
+			return
+		}
 		id, _ := auth.FromContext(r.Context())
 		now := time.Now().UnixMilli()
 		postID, err := st.CreateComment(r.Context(), store.ChannelPost{

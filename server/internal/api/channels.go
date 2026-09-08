@@ -49,6 +49,7 @@ type ChannelStore interface {
 	CreateComment(ctx context.Context, p store.ChannelPost, rootID uint64) (uint64, error)
 	ListComments(ctx context.Context, channelID string, rootID, after uint64, limit int) ([]store.ChannelPost, error)
 	CommentCounts(ctx context.Context, channelID string, rootIDs []uint64) (map[uint64]int, error)
+	CommentsAllowed(ctx context.Context, channelID string, rootID uint64) (bool, error)
 }
 
 // Проверка соответствия — обязанность компилятора, а не прогона: разошлись
