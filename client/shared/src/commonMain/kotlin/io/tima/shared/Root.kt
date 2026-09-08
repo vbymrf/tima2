@@ -44,6 +44,7 @@ import io.tima.feature.group.MembersStore
 import io.tima.feature.group.NewGroupScreen
 import io.tima.feature.group.MemberScreen
 import io.tima.core.database.TimaDatabase
+import io.tima.core.ui.SettingsItem
 import io.tima.core.ui.Stage
 import io.tima.domain.account.Session
 import io.tima.domain.chat.StartPersonalChat
@@ -91,7 +92,7 @@ import io.tima.feature.chat.ProfileStore
 import io.tima.feature.chat.BookScreen
 import io.tima.feature.shell.AccountLeavingSheet
 import io.tima.feature.shell.CALL_FILTERS
-import io.tima.feature.shell.Window
+import io.tima.core.ui.Window
 import io.tima.feature.shell.MediaWindow
 import io.tima.feature.shell.ActivityWindow
 import io.tima.feature.shell.SocialWindow
@@ -102,7 +103,6 @@ import io.tima.feature.shell.Rail
 import io.tima.feature.shell.TabStub
 import io.tima.feature.shell.FilterRow
 import io.tima.feature.shell.WindowSwitchingScreen
-import io.tima.feature.shell.SettingsItem
 import io.tima.core.ui.Appearance
 import io.tima.core.ui.merged
 import io.tima.core.ui.TimaTheme
@@ -615,7 +615,9 @@ private fun App(
     // чего его открывают чаще всего, а остальные окна пока пусты по существу.
     var window by remember { mutableStateOf(Window.Phone) }
     // Смена окна — тоже «что человек делал»: половина жалоб про конкретное окно.
-    LaunchedEffect(window) { Journal.note(LogCode.WINDOW_OPEN, window.short) }
+    // В журнал — ключ, а не надпись: журнал читает чинящий, и запись не должна менять
+    // вид от языка приложения.
+    LaunchedEffect(window) { Journal.note(LogCode.WINDOW_OPEN, window.name) }
     var windowSwitcher by remember { mutableStateOf(false) }
     // Куда уходим, если очередь непуста. null — вопрос не задан: отдельного флага
     // «спрашиваем» не заводим, чтобы «спрашиваем, но некуда» не стало возможным.
@@ -1673,7 +1675,7 @@ private fun Settings(
             SettingsItem.STORAGE -> Storage(diaryPolicy)
 
             else -> TabStub(
-                willWhat = item.title,
+                willWhat = Tima.words.settings2.item(item),
                 thanHolds = "Раздел из макета настроек. Экрана пока нет — " +
                     "doc/Layout-UI-light/пк/настройки.html",
             )
@@ -1895,7 +1897,9 @@ private fun whereWords(where: Where): String = when (where) {
     is Where.Community -> "сообщество"
     is Where.Link -> "подтверждение привязки устройства"
     is Where.Transfer -> if (where.virtualUserId == null) "приём аккаунта" else "передача аккаунта"
-    is Where.Settings -> "настройки" + (where.item?.let { ": " + it.title } ?: "")
+    // Место в журнале — по-русски и всегда: журнал читает чинящий (ПЛАН-ЯЗЫКА §4).
+    is Where.Settings ->
+        "настройки" + (where.item?.let { ": " + RussianWords.settings2.item(it) } ?: "")
 }
 
 /**

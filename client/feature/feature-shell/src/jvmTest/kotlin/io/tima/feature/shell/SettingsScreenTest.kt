@@ -2,6 +2,9 @@ package io.tima.feature.shell
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import io.tima.core.ui.SettingsItem
+import io.tima.core.ui.SettingsGroup
+import io.tima.core.ui.RussianWords
 import io.tima.core.ui.Name
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -50,7 +53,7 @@ class SettingsScreenTest {
     /** У каждого пункта своя надпись и свой знак: два одинаковых знака неразличимы в списке. */
     @Test
     fun надписи_и_знаки_не_повторяются() {
-        val надписи = SettingsItem.entries.map { it.title }
+        val надписи = SettingsItem.entries.map { RussianWords.settings2.item(it) }
         assertEquals(надписи.size, надписи.distinct().size, "две одинаковые надписи в списке")
         val знаки = SettingsItem.entries.map { it.glyph }
         assertEquals(знаки.size, знаки.distinct().size, "два одинаковых знака в списке")
@@ -98,7 +101,9 @@ class SettingsScreenTest {
 
     @Composable
     private fun раздел() = Box(Modifier.fillMaxSize()) {
-        SettingsScreen(opened = SettingsItem.UPDATE, onOpen = {}, onBack = {}) { Name(it.title) }
+        SettingsScreen(opened = SettingsItem.UPDATE, onOpen = {}, onBack = {}) {
+            Name(RussianWords.settings2.item(it))
+        }
     }
 
     private companion object {

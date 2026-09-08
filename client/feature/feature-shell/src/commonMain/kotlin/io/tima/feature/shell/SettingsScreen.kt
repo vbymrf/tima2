@@ -8,7 +8,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import io.tima.core.ui.words
 import io.tima.core.ui.ListLine
+import io.tima.core.ui.SettingsGroup
+import io.tima.core.ui.SettingsItem
 import io.tima.core.ui.Name
 import io.tima.core.ui.SectionTitle
 import io.tima.core.ui.Secondary
@@ -47,11 +50,12 @@ fun SettingsScreen(
     content: @Composable (SettingsItem) -> Unit,
 ) {
     val colors = Tima.colors
+    val words = Tima.words.settings2
     Column(modifier.fillMaxSize().background(colors.surface)) {
         // Шапка одна на подокно, и заголовок в ней — имя открытого пункта. Человеку
         // нужно знать, где он, а «Настройки» этого уже не отвечают, когда он внутри.
         SubwindowHeader(
-            title = opened?.title ?: "Настройки",
+            title = opened?.let { words.item(it) } ?: words.settings,
             // «Назад» из пункта возвращает к списку, а не из настроек целиком: выйти
             // наружу одним нажатием из глубины — это потерять место, куда шёл.
             onBack = onBack,
@@ -64,77 +68,16 @@ fun SettingsScreen(
 
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             for (group in SettingsGroup.entries) {
-                SectionTitle(group.title)
+                SectionTitle(words.group(group))
                 for (item in SettingsItem.entries.filter { it.group == group }) {
                     ListLine(
                         onClick = { onOpen(item) },
                         left = { Name(item.glyph) },
                         right = value(item).takeIf { it.isNotBlank() }?.let { { Secondary(it) } },
-                        middle = { Name(item.title) },
+                        middle = { Name(words.item(item)) },
                     )
                 }
             }
         }
     }
-}
-
-/** Группы разделов — те же четыре, что в макете. */
-enum class SettingsGroup(val title: String) {
-    ACCOUNT("Аккаунт"),
-    APPLICATION("Приложение"),
-    BLOGGER("Блогер"),
-    HELP("Помощь"),
-}
-
-/**
- * Пункт настроек.
- *
- * Перечень, а не строки у вызывающего: имя пункта — одновременно ключ навигации и надпись
- * на экране, и, разъехавшись в двух местах, они дают пункт, который не открывается.
- *
- * Порядок объявления — порядок на экране. Он взят из макета и держится на нём, а не на
- * вкусе: «Профиль» первым потому, что чаще всего заходят посмотреть на себя.
- */
-enum class SettingsItem(val group: SettingsGroup, val title: String, val glyph: String) {
-    PROFILE(SettingsGroup.ACCOUNT, "Профиль", "👤"),
-
-    /**
-     * Фраза и устройства — один пункт, а не два.
-     *
-     * Так в макете, и это не экономия строки: фраза и есть то, чем заводят новое
-     * устройство. Разведённые по разным пунктам, они выглядят как несвязанные вещи, и
-     * человек, потерявший телефон, ищет не там.
-     */
-    DEVICES(SettingsGroup.ACCOUNT, "Секретная фраза и устройства", "🔑"),
-    NOTIFICATIONS(SettingsGroup.ACCOUNT, "Уведомления", "🔔"),
-
-    /**
-     * Виртуальные аккаунты — ПЛАН-КОНТАКТОВ.md, Д10…Д12.
-     *
-     * В разделе «Аккаунт», а не в отдельном месте: это распоряжение своими аккаунтами —
-     * завести, передать, принять. Переключаются между ними в другом месте (переключение
-     * окон), и это не противоречие: переключаются часто, распоряжаются редко.
-     */
-    VIRTUALS(SettingsGroup.ACCOUNT, "Виртуальные аккаунты", "🎭"),
-
-    APPEARANCE(SettingsGroup.APPLICATION, "Оформление", "🎨"),
-    LANGUAGE(SettingsGroup.APPLICATION, "Язык", "🌐"),
-    PRIVACY(SettingsGroup.APPLICATION, "Приватность и блокировки", "🔒"),
-    STORAGE(SettingsGroup.APPLICATION, "Память и трафик", "💾"),
-
-    BLOGGER(SettingsGroup.BLOGGER, "Окна блогера", "📈"),
-
-    QUESTIONS(SettingsGroup.HELP, "Частые вопросы", "❓"),
-    PROBLEM(SettingsGroup.HELP, "Сообщить о проблеме", "🐞"),
-
-    /**
-     * Обновление — пункт заказчика от 2026-08-26.
-     *
-     * **В макете на его месте «О приложении» с версией справа.** Разделение сделано
-     * потому, что это разные вопросы: «что у меня стоит» — справка, «есть ли новее» —
-     * действие, и действию нужна кнопка. Расхождение с макетом названо здесь, чтобы его
-     * не обнаружили как ошибку: правится оно решением заказчика, а не молча.
-     */
-    UPDATE(SettingsGroup.HELP, "Обновление", "📥"),
-    ABOUT(SettingsGroup.HELP, "О приложении", "ℹ"),
 }

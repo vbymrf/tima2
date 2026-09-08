@@ -15,6 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import io.tima.core.ui.words
+import io.tima.core.ui.Window
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Name
 import io.tima.core.ui.SectionTitle
@@ -208,11 +210,12 @@ private fun Item(window: Window, current: Boolean, howMany: Int, onClick: () -> 
         right = { if (howMany > 0) Counter(howMany) },
         middle = {
             Column {
-                Name(window.full)
+                val words = Tima.words.windows
+                Name(words.full(window))
                 Secondary(
                     // Текущее окно называет себя текущим словом, а не только цветом:
                     // цвет здесь один на всё приложение и уже занят навигацией.
-                    if (current) "${window.about} · вы здесь" else window.about,
+                    if (current) words.youAreHere(words.about(window)) else words.about(window),
                     lineOne = true,
                 )
             }

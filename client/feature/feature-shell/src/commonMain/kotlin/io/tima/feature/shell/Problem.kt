@@ -10,6 +10,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import io.tima.core.ui.words
+import io.tima.core.ui.Words
+import io.tima.core.ui.Tima
+import io.tima.core.ui.RussianWords
+import io.tima.core.ui.Window
 import io.tima.core.ui.Alarm
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
@@ -38,12 +43,25 @@ import kotlinx.coroutines.launch
  */
 data class Origin(val window: Window, val tab: String = "") {
     /** Человеку — строкой; ему видно, что мы поняли, где он был, и объяснять не надо. */
-    fun words(): String =
-        if (tab.isBlank()) "Вы пришли из окна «${window.short}»"
-        else "Вы пришли из окна «${window.short}», вкладка «$tab»"
+    fun words(dictionary: Words = RussianWords): String {
+        val name = dictionary.windows.short(window)
+        return if (tab.isBlank()) {
+            dictionary.windows.cameFrom(name)
+        } else {
+            dictionary.windows.cameFromTab(name, tab)
+        }
+    }
 
-    /** Отчёту — коротко и без кавычек-ёлочек, чтобы читалось в списке. */
-    fun short(): String = if (tab.isBlank()) window.short else "${window.short} · $tab"
+    /**
+     * Отчёту — коротко и без кавычек-ёлочек, чтобы читалось в списке.
+     *
+     * **По-русски всегда**: тело отчёта читает чинящий, а не тот, кто его прислал
+     * (ПЛАН-ЯЗЫКА §4). Переведённое место в отчёте пришлось бы переводить обратно.
+     */
+    fun short(): String {
+        val name = RussianWords.windows.short(window)
+        return if (tab.isBlank()) name else "$name · $tab"
+    }
 }
 
 /**
@@ -365,7 +383,7 @@ fun ProblemScreen(
 
     // Откуда пришли — под кнопкой, а не над ней: это справка о том, что мы уже поняли,
     // а не то, ради чего человек сюда шёл.
-    state.origin?.let { Secondary(it.words()) }
+    state.origin?.let { Secondary(it.words(Tima.words)) }
 
     Caption("Что случилось", fontSize = TimaType.sz4, weight = FontWeight.Bold)
     Field(

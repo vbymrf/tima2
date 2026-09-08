@@ -5,6 +5,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import io.tima.core.ui.RussianWords
+import io.tima.core.ui.Window
 import io.tima.core.ui.FormatTima
 import io.tima.core.ui.TimaType
 import io.tima.testui.capture
@@ -89,7 +91,8 @@ class RailWidthTest {
          * Список собран из [Window] и одной строки рейки, а не переписан руками: новое
          * окно попадёт сюда само и само же проверится.
          */
-        val captions: List<String> = Window.entries.map { it.full } + "Настройки"
+        val captions: List<String> =
+            Window.entries.map { RussianWords.windows.full(it) } + "Настройки"
 
         /** «Свободное общение», `sz4` полужирный — измерено 2026-09-02. */
         const val LONGEST = 152

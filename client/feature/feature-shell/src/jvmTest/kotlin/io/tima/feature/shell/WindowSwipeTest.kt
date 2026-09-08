@@ -1,5 +1,7 @@
 package io.tima.feature.shell
 
+import io.tima.core.ui.RussianWords
+import io.tima.core.ui.Window
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -50,7 +52,7 @@ class WindowSwipeTest {
         // переключателе.
         assertEquals(
             listOf("Телефон", "Социальная лента", "Медиа-лента", "Свободное общение", "Личная страница"),
-            Window.entries.map { it.full },
+            Window.entries.map { RussianWords.windows.full(it) },
         )
     }
 

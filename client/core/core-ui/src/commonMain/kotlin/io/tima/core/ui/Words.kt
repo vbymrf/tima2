@@ -55,6 +55,32 @@ interface Words {
     val social: SocialWords
     val update: UpdateWords
     val storage: StorageWords
+    val windows: WindowWords
+    val settings2: SettingsListWords
+}
+
+/**
+ * Имена окон: длинное для переключателя и рейки, короткое для собственной шапки.
+ *
+ * Два имени одного окна — решение макета (`интерфейс.md §1`), и разводить их по разным
+ * местам нельзя: разошедшись, они дают окно, называющееся по-разному в двух местах
+ * одного экрана.
+ */
+interface WindowWords {
+    fun full(window: Window): String
+    fun short(window: Window): String
+    fun about(window: Window): String
+    /** Пометка у окна, в котором человек сейчас: цвет здесь занят навигацией. */
+    fun youAreHere(about: String): String
+    fun cameFrom(window: String): String
+    fun cameFromTab(window: String, tab: String): String
+}
+
+/** Список настроек: четыре группы и их пункты. */
+interface SettingsListWords {
+    val settings: String
+    fun group(group: SettingsGroup): String
+    fun item(item: SettingsItem): String
 }
 
 /**
@@ -793,6 +819,64 @@ object RussianWords : Words {
         override val postGone = "Записи больше нет"
         override val postGoneAbout = "Разговор ушёл вместе с ней"
         override val loading = "Загружаем разговор…"
+    }
+
+    override val windows = object : WindowWords {
+        override fun full(window: Window) = when (window) {
+            Window.Phone -> "Телефон"
+            Window.Social -> "Социальная лента"
+            Window.Media -> "Медиа-лента"
+            Window.Activity -> "Свободное общение"
+            Window.Page -> "Личная страница"
+        }
+
+        override fun short(window: Window) = when (window) {
+            Window.Phone -> "Телефон"
+            Window.Social -> "Социум"
+            Window.Media -> "Медиа"
+            Window.Activity -> "Общение"
+            Window.Page -> "Страница"
+        }
+
+        override fun about(window: Window) = when (window) {
+            Window.Phone -> "чаты, книга, звонки"
+            Window.Social -> "общая, друзья, каталог"
+            Window.Media -> "лента и слайды"
+            Window.Activity -> "истории, ответы, реакции"
+            Window.Page -> "профиль, коллекции, роли"
+        }
+
+        override fun youAreHere(about: String) = "$about · вы здесь"
+        override fun cameFrom(window: String) = "Вы пришли из окна «$window»"
+        override fun cameFromTab(window: String, tab: String) =
+            "Вы пришли из окна «$window», вкладка «$tab»"
+    }
+
+    override val settings2 = object : SettingsListWords {
+        override val settings = "Настройки"
+
+        override fun group(group: SettingsGroup) = when (group) {
+            SettingsGroup.ACCOUNT -> "Аккаунт"
+            SettingsGroup.APPLICATION -> "Приложение"
+            SettingsGroup.BLOGGER -> "Блогер"
+            SettingsGroup.HELP -> "Помощь"
+        }
+
+        override fun item(item: SettingsItem) = when (item) {
+            SettingsItem.PROFILE -> "Профиль"
+            SettingsItem.DEVICES -> "Секретная фраза и устройства"
+            SettingsItem.NOTIFICATIONS -> "Уведомления"
+            SettingsItem.VIRTUALS -> "Виртуальные аккаунты"
+            SettingsItem.APPEARANCE -> "Оформление"
+            SettingsItem.LANGUAGE -> "Язык"
+            SettingsItem.PRIVACY -> "Приватность и блокировки"
+            SettingsItem.STORAGE -> "Память и трафик"
+            SettingsItem.BLOGGER -> "Окна блогера"
+            SettingsItem.QUESTIONS -> "Частые вопросы"
+            SettingsItem.PROBLEM -> "Сообщить о проблеме"
+            SettingsItem.UPDATE -> "Обновление"
+            SettingsItem.ABOUT -> "О приложении"
+        }
     }
 
     override val update = object : UpdateWords {

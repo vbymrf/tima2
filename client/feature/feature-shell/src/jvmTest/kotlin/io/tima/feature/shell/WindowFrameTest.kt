@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import io.tima.core.ui.Window
 import io.tima.core.ui.Stage
 import io.tima.core.ui.WindowTab
 import io.tima.core.ui.TimaColors

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import io.tima.core.ui.Window
 import io.tima.core.ui.InCenter
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Name
@@ -90,7 +91,7 @@ fun WindowFrame(
         // тем «двумя разными фонами», от которых уходили. Поймал это снимок.
         Column(Modifier.bottomLine(colors.line)) {
             WindowHeader(
-                title = window.short,
+                title = Tima.words.windows.short(window),
                 logo = "Т",
                 onSwitchWindows = onSwitchWindows,
                 right = {

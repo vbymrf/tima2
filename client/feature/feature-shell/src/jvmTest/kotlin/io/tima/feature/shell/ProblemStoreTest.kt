@@ -1,5 +1,7 @@
 package io.tima.feature.shell
 
+import io.tima.core.ui.RussianWords
+import io.tima.core.ui.Window
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -63,7 +65,7 @@ class ProblemStoreTest {
         // Вкладки есть не у всех окон. Пустая строка в отчёте лучше выдуманной «Главная».
         val origin = Origin(Window.Media)
 
-        assertEquals("Вы пришли из окна «${Window.Media.short}»", origin.words())
+        assertEquals("Вы пришли из окна «${RussianWords.windows.short(Window.Media)}»", origin.words())
         assertFalse(origin.words().contains("вкладка"))
     }
 

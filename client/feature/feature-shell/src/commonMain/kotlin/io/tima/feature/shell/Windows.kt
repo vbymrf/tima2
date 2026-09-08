@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import io.tima.core.ui.Window
 import io.tima.core.ui.Tima
 import io.tima.core.ui.WindowTab
 import io.tima.core.ui.words
