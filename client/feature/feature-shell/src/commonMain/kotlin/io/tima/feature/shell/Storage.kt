@@ -17,6 +17,10 @@ import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Tertiary
+import io.tima.core.ui.RussianWords
+import io.tima.core.ui.StorageWords
+import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 
@@ -26,9 +30,12 @@ import io.tima.core.ui.TimaType
  * Две единицы, а не свободный ввод дней: «месяц» человек называет сам, а «тридцать дней»
  * ему приходится сначала посчитать. Внутри всё равно дни — мусорщик удаляет по дням.
  */
-enum class KeepUnit(val label: String, val days: Int, val forms: Triple<String, String, String>) {
-    Weeks("Недели", 7, Triple("неделя", "недели", "недель")),
-    Months("Месяцы", 30, Triple("месяц", "месяца", "месяцев")),
+//
+// **Надписи и формы числа лежат в словаре** (ПЛАН-ЯЗЫКА Я2, Я3): перечисление осталось
+// ключом и сроком в днях, а слово приходит из `Words.storage`.
+enum class KeepUnit(val days: Int) {
+    Weeks(7),
+    Months(30),
 }
 
 /**
@@ -41,17 +48,8 @@ data class KeepFor(val unit: KeepUnit = KeepUnit.Months, val count: Int = 1) {
     val days: Int get() = unit.days * count
 
     /** «1 месяц», «3 недели» — то, что человек читает в строке настройки. */
-    fun words(): String {
-        val hundred = count % 100
-        val ten = count % 10
-        val form = when {
-            hundred in 11..14 -> unit.forms.third
-            ten == 1 -> unit.forms.first
-            ten in 2..4 -> unit.forms.second
-            else -> unit.forms.third
-        }
-        return "$count $form"
-    }
+    fun words(words: StorageWords = RussianWords.storage): String =
+        words.keepFor(count, unit == KeepUnit.Weeks)
 }
 
 /** Пределы журнала: срок и объём. Срабатывает тот, что наступит раньше. */
@@ -84,34 +82,31 @@ fun StorageScreen(
     modifier.fillMaxSize().padding(TimaSpacing.about4).verticalScroll(rememberScrollState()),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
 ) {
-    Caption("Медиа и другие файлы", fontSize = TimaType.sz4, weight = FontWeight.Bold)
+    val words = Tima.words.storage
+    Caption(words.mediaAndFiles, fontSize = TimaType.sz4, weight = FontWeight.Bold)
     Tertiary(
-        "Пока нечего убирать: приложение не сохраняет вложения на устройство — они " +
-            "открываются с сервера. Появятся файлы — появится и срок.",
+        words.mediaAndFilesAbout,
     )
 
-    Caption("Сообщения", fontSize = TimaType.sz4, weight = FontWeight.Bold)
+    Caption(words.messages, fontSize = TimaType.sz4, weight = FontWeight.Bold)
     Tertiary(
-        "Срок для переписки не заводим, пока не решено, что значит «удалить». Стереть " +
-            "сообщение на устройстве — не то же, что освободить место: вернуть его можно " +
-            "только у собеседника, и то если у него оно ещё есть.",
+        words.messagesAbout,
     )
 
-    Caption("Журнал", fontSize = TimaType.sz4, weight = FontWeight.Bold)
+    Caption(words.diary, fontSize = TimaType.sz4, weight = FontWeight.Bold)
     Secondary(
-        "Что приложение записывает о своей работе — то, что уходит в отчёт о проблеме. " +
-            "Переписки в нём нет.",
+        words.diaryAbout,
     )
     ListLine(
-        middle = { Name("Занимает") },
+        middle = { Name(words.occupies) },
         right = { Secondary(megabytes(occupied)) },
     )
 
-    Caption("Держать", fontSize = TimaType.sz5, weight = FontWeight.Bold)
+    Caption(words.keep, fontSize = TimaType.sz5, weight = FontWeight.Bold)
     Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
         KeepUnit.entries.forEach { unit ->
             Button(
-                label = unit.label,
+                label = if (unit == KeepUnit.Weeks) words.weeks else words.months,
                 onClick = { onLimits(limits.copy(keep = limits.keep.copy(unit = unit))) },
                 kind = if (limits.keep.unit == unit) ButtonKind.Action else ButtonKind.Quiet,
             )
@@ -124,7 +119,7 @@ fun StorageScreen(
             kind = ButtonKind.Quiet,
             enabled = limits.keep.count > 1,
         )
-        Button(label = limits.keep.words(), onClick = {}, enabled = false)
+        Button(label = limits.keep.words(words), onClick = {}, enabled = false)
         Button(
             label = "+",
             onClick = { onLimits(limits.copy(keep = limits.keep.copy(count = limits.keep.count + 1))) },
@@ -134,13 +129,13 @@ fun StorageScreen(
             enabled = limits.keep.count < MAX_COUNT,
         )
     }
-    Tertiary("Записи старше " + limits.keep.words() + " удаляются сами, по дням.")
+    Tertiary(words.olderThan(limits.keep.words(words)))
 
-    Caption("Но не больше", fontSize = TimaType.sz5, weight = FontWeight.Bold)
+    Caption(words.butNoMore, fontSize = TimaType.sz5, weight = FontWeight.Bold)
     Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
         SIZES.forEach { size ->
             Button(
-                label = size.toString() + " МБ",
+                label = words.megabytes(size),
                 onClick = { onLimits(limits.copy(megabytes = size)) },
                 kind = if (limits.megabytes == size) ButtonKind.Action else ButtonKind.Quiet,
             )
@@ -148,12 +143,11 @@ fun StorageScreen(
     }
     // Два предела нужны оба, и это стоит сказать словами: срок защищает от давности,
     // объём — от одного разговорчивого дня, который сам съест сотню мегабайт.
-    Tertiary("Что наступит раньше. Лишнее убирается с самых старых дней.")
+    Tertiary(words.whicheverFirst)
 
-    Button(label = "Очистить журнал сейчас", onClick = onClear, kind = ButtonKind.Dangerous)
+    Button(label = words.clearDiaryNow, onClick = onClear, kind = ButtonKind.Dangerous)
     Tertiary(
-        "Журнал нужен, когда что-то сломалось: очищенный придётся набирать заново, и " +
-            "отчёт о проблеме до тех пор будет пустым.",
+        words.clearDiaryAbout,
     )
 }
 

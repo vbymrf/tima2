@@ -53,6 +53,97 @@ interface Words {
     val book: BookWords
     val page: PageWords
     val social: SocialWords
+    val update: UpdateWords
+    val storage: StorageWords
+}
+
+/**
+ * Обновление: событие о версии, вкладка настроек и заслон «нужно обновиться».
+ *
+ * Здесь три текста красным (`Alarm`) — решение заказчика 2026-09-06. Красным то, что
+ * человек обязан сделать сам; серым то, что просто происходит. При переводе это различие
+ * важнее слов: серая просьба подтвердить установку не выполняется.
+ */
+interface UpdateWords {
+    // Событие о версии.
+    val installed: String
+    fun runningVersion(version: String): String
+    fun whatChanged(notes: String): String
+    val broken: String
+    fun brokenText(wanted: String, current: String): String
+    val version: String
+    val chatsUntouched: String
+    val importantOut: String
+    fun availableVersion(version: String): String
+    val oldMayMisbehave: String
+
+    // Вкладка настроек.
+    fun installedVersion(version: String): String
+    val streamNotDeclared: String
+    val askingServer: String
+    val notConfigured: String
+    fun download(megabytes: String): String
+    val install: String
+    val notSelfUpdating: String
+    fun alienStream(version: String): String
+    val latestInstalled: String
+    val checkAgain: String
+
+    // Заслон.
+    val mustUpdate: String
+    val mustUpdateAbout: String
+    val notSelfUpdatingLong: String
+
+    // Скачивание, вопрос, исход.
+    fun downloading(percent: Int): String
+    val dontCloseApp: String
+    fun installVersion(version: String): String
+    val installNow: String
+    val appWillClose: String
+    val confirmSystemAsk: String
+    val comeBackAfter: String
+    val dataStays: String
+    val notNow: String
+    val installerStarted: String
+    val confirmInSystem: String
+    val pressAgain: String
+    val notDownloaded: String
+    val notDownloadedAbout: String
+    val badPackage: String
+    val badPackageAbout: String
+    val noHash: String
+    val noHashAbout: String
+    val installNotStarted: String
+    val tryAgain: String
+    val installerDidNotStart: String
+    val cannotAskServer: String
+}
+
+/**
+ * Память и журнал.
+ *
+ * `keepFor` — **склонение срока**: «1 месяц», «3 недели», «5 недель». Формы живут здесь
+ * же, где слова: у английского их две, и хранить тройку в перечислении значило бы
+ * записать русскую грамматику в код.
+ */
+interface StorageWords {
+    val weeks: String
+    val months: String
+    fun keepFor(count: Int, weeks: Boolean): String
+    val mediaAndFiles: String
+    val mediaAndFilesAbout: String
+    val messages: String
+    val messagesAbout: String
+    val diary: String
+    val diaryAbout: String
+    val occupies: String
+    val keep: String
+    val butNoMore: String
+    fun olderThan(term: String): String
+    val whicheverFirst: String
+    val clearDiaryNow: String
+    val clearDiaryAbout: String
+    fun megabytes(value: Int): String
 }
 
 /**
@@ -702,6 +793,109 @@ object RussianWords : Words {
         override val postGone = "Записи больше нет"
         override val postGoneAbout = "Разговор ушёл вместе с ней"
         override val loading = "Загружаем разговор…"
+    }
+
+    override val update = object : UpdateWords {
+        override val installed = "Обновление установлено"
+        override fun runningVersion(version: String) = "Работает версия $version."
+        override fun whatChanged(notes: String) = "Что изменилось: $notes"
+        override val broken = "Обновление не завершилось"
+        override fun brokenText(wanted: String, current: String) =
+            "Вы начали ставить $wanted, но установка не дошла до конца — " +
+                "работает прежняя $current."
+        override val version = "версия"
+        override val chatsUntouched = "Переписка и аккаунт не пострадали: установщик их не трогает."
+        override val importantOut = "Вышло важное обновление"
+        override fun availableVersion(version: String) = "Доступна $version."
+        override val oldMayMisbehave = "Старая версия может работать неправильно."
+
+        override fun installedVersion(version: String) = "Установлена $version"
+        override val streamNotDeclared = "поток не объявлен"
+        override val askingServer = "Спрашиваем сервер…"
+        override val notConfigured = "Сервер обновлений не раздаёт"
+        override fun download(megabytes: String) = "Скачать $megabytes МБ"
+        override val install = "Обновить"
+        override val notSelfUpdating =
+            "Эта сборка обновляется не сама: поставьте новую версию обычным способом."
+        override fun alienStream(version: String) =
+            "Сервер предлагает $version — это другая сборка, не для этой версии"
+        override val latestInstalled = "Установлена последняя версия"
+        override val checkAgain = "Проверить ещё раз"
+
+        override val mustUpdate = "Нужно обновиться"
+        override val mustUpdateAbout =
+            "Сервер больше не работает с этой версией приложения. Переписка и аккаунт на " +
+                "месте — их ничто не трогает, — но отправлять и получать до обновления не выйдет."
+        override val notSelfUpdatingLong =
+            "Эта сборка обновляется не сама: поставьте новую версию обычным способом — " +
+                "тем же, каким ставили эту."
+
+        override fun downloading(percent: Int) = "Скачиваем $percent%"
+        override val dontCloseApp = "Не закрывайте приложение, пока идёт скачивание"
+        override fun installVersion(version: String) = "Установить $version"
+        override val installNow = "Установить"
+        override val appWillClose = "Приложение закроется, и запустится установщик. Это займёт минуту."
+        override val confirmSystemAsk = "Если система спросит разрешение на установку — подтвердите."
+        override val comeBackAfter =
+            "Когда установщик запустится, приложение автоматически закроется — войдите заново."
+        override val dataStays =
+            "Переписка, аккаунт и настройки останутся: они лежат отдельно от программы, и " +
+                "установщик их не трогает. Неотправленное дойдёт после запуска новой версии."
+        override val notNow = "Не сейчас"
+        override val installerStarted = "Установщик запущен"
+        override val confirmInSystem = "Подтвердите установку в окне системы."
+        override val pressAgain = "Если окно закрылось или вы отказались — нажмите ещё раз."
+        override val notDownloaded = "Обновление не скачалось"
+        override val notDownloadedAbout = "Связь оборвалась. Попробуйте ещё раз."
+        override val badPackage = "Скачанное не совпало с тем, что объявил сервер"
+        override val badPackageAbout =
+            "Ставить это нельзя: файл либо не докачался, либо подменён. Попробуйте ещё раз."
+        override val noHash = "Сервер не объявил, что именно он раздаёт"
+        override val noHashAbout =
+            "Без этого проверить скачанное нечем, и мы не ставим. Это чинится на сервере."
+        override val installNotStarted = "Установка не началась"
+        override val tryAgain = "Попробовать ещё раз"
+        override val installerDidNotStart = "установщик не запустился"
+        override val cannotAskServer = "Не удалось спросить сервер — проверьте связь"
+    }
+
+    override val storage = object : StorageWords {
+        override val weeks = "Недели"
+        override val months = "Месяцы"
+        override fun keepFor(count: Int, weeks: Boolean): String {
+            val hundred = count % 100
+            val ten = count % 10
+            val form = when {
+                hundred in 11..14 -> if (weeks) "недель" else "месяцев"
+                ten == 1 -> if (weeks) "неделя" else "месяц"
+                ten in 2..4 -> if (weeks) "недели" else "месяца"
+                else -> if (weeks) "недель" else "месяцев"
+            }
+            return "$count $form"
+        }
+        override val mediaAndFiles = "Медиа и другие файлы"
+        override val mediaAndFilesAbout =
+            "Пока нечего убирать: приложение не сохраняет вложения на устройство — они " +
+                "открываются с сервера. Появятся файлы — появится и срок."
+        override val messages = "Сообщения"
+        override val messagesAbout =
+            "Срок для переписки не заводим, пока не решено, что значит «удалить». Стереть " +
+                "сообщение на устройстве — не то же, что освободить место: вернуть его можно " +
+                "только у собеседника, и то если у него оно ещё есть."
+        override val diary = "Журнал"
+        override val diaryAbout =
+            "Что приложение записывает о своей работе — то, что уходит в отчёт о проблеме. " +
+                "Переписки в нём нет."
+        override val occupies = "Занимает"
+        override val keep = "Держать"
+        override val butNoMore = "Но не больше"
+        override fun olderThan(term: String) = "Записи старше $term удаляются сами, по дням."
+        override val whicheverFirst = "Что наступит раньше. Лишнее убирается с самых старых дней."
+        override val clearDiaryNow = "Очистить журнал сейчас"
+        override val clearDiaryAbout =
+            "Журнал нужен, когда что-то сломалось: очищенный придётся набирать заново, и " +
+                "отчёт о проблеме до тех пор будет пустым."
+        override fun megabytes(value: Int) = "$value МБ"
     }
 
     override val social = object : SocialWords {

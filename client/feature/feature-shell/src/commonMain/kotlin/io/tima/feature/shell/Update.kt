@@ -15,6 +15,10 @@ import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Tertiary
+import io.tima.core.ui.RussianWords
+import io.tima.core.ui.Tima
+import io.tima.core.ui.UpdateWords
+import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.Trouble
@@ -121,31 +125,30 @@ fun interface AppVersionPort {
  * Тексты живут здесь, а не в `Root`: оболочка знает, что человеку сказать про обновление,
  * а сборка приложения — нет. Действия подставляет тот, кто знает, куда вести.
  */
-fun UpdateNews.notice(): Notice = when (this) {
+fun UpdateNews.notice(words: UpdateWords = RussianWords.update): Notice = when (this) {
     is UpdateNews.Installed -> Notice(
-        title = "Обновление установлено",
-        text = "Работает версия " + versionName + ".",
-        details = listOfNotNull(notes.takeIf { it.isNotBlank() }?.let { "Что изменилось: " + it }),
+        title = words.installed,
+        text = words.runningVersion(versionName),
+        details = listOfNotNull(notes.takeIf { it.isNotBlank() }?.let { words.whatChanged(it) }),
     )
 
     is UpdateNews.Broken -> Notice(
-        title = "Обновление не завершилось",
+        title = words.broken,
         // Названы обе версии: «не завершилось» без чисел человек читает как «что-то
         // сломалось», а с числами — как «осталось прежнее», что и есть правда.
-        text = "Вы начали ставить " + wanted + ", но установка не дошла до конца — " +
-            "работает прежняя " + current.ifBlank { "версия" } + ".",
+        text = words.brokenText(wanted, current.ifBlank { words.version }),
         details = listOfNotNull(
-            notes.takeIf { it.isNotBlank() }?.let { "Что изменилось: " + it },
-            "Переписка и аккаунт не пострадали: установщик их не трогает.",
+            notes.takeIf { it.isNotBlank() }?.let { words.whatChanged(it) },
+            words.chatsUntouched,
         ),
     )
 
     is UpdateNews.Important -> Notice(
-        title = "Вышло важное обновление",
-        text = "Доступна " + versionName + ".",
+        title = words.importantOut,
+        text = words.availableVersion(versionName),
         details = listOfNotNull(
-            notes.takeIf { it.isNotBlank() }?.let { "Что изменилось: " + it },
-            "Старая версия может работать неправильно.",
+            notes.takeIf { it.isNotBlank() }?.let { words.whatChanged(it) },
+            words.oldMayMisbehave,
         ),
     )
 }
@@ -356,7 +359,10 @@ class UpdateStore(
             } catch (e: Throwable) {
                 // Сообщение исключения человеку не показываем: там адрес сервера и класс
                 // ошибки Ktor. Ему нужно одно — что делать дальше.
-                _state.value.copy(expect = false, trouble = "Не удалось спросить сервер — проверьте связь")
+                _state.value.copy(
+                    expect = false,
+                    trouble = RussianWords.update.cannotAskServer,
+                )
             }
         }
     }
@@ -384,7 +390,7 @@ class UpdateStore(
                     _state.value = _state.value.copy(percent = percent)
                 }
             } catch (e: Throwable) {
-                InstallOutcome.Refused("установщик не запустился")
+                InstallOutcome.Refused(RussianWords.update.installerDidNotStart)
             }
             // Запись — ПЕРЕД закрытием и только на успешном запуске установщика: до
             // этого момента ставить ещё нечего, а после него нас могут не спросить.
@@ -441,9 +447,10 @@ fun UpdateSection(
     modifier.fillMaxSize().padding(TimaSpacing.about4),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
 ) {
+    val words = Tima.words.update
     ListLine(
-        middle = { Name("Установлена " + state.installed.ifBlank { "—" }) },
-        right = { Secondary(state.stream.ifBlank { "поток не объявлен" }) },
+        middle = { Name(words.installedVersion(state.installed.ifBlank { "—" })) },
+        right = { Secondary(state.stream.ifBlank { words.streamNotDeclared }) },
     )
 
     when {
@@ -457,27 +464,27 @@ fun UpdateSection(
 
         state.outcome != null -> Failed(state.outcome, onInstall)
 
-        state.expect -> Secondary("Спрашиваем сервер…")
+        state.expect -> Secondary(words.askingServer)
 
         state.trouble != null -> Trouble(state.trouble)
 
-        state.notConfigured -> Secondary("Сервер обновлений не раздаёт")
+        state.notConfigured -> Secondary(words.notConfigured)
 
         state.updateAvailable -> {
             val offer = requireNotNull(state.offer)
             Caption(
-                "Доступна " + offer.versionName,
+                words.availableVersion(offer.versionName),
                 fontSize = TimaType.sz3,
                 weight = FontWeight.ExtraBold,
             )
             if (offer.notes.isNotBlank()) Secondary(offer.notes)
-            if (offer.size > 0) Tertiary("Скачать " + megabytes(offer.size) + " МБ")
+            if (offer.size > 0) Tertiary(words.download(megabytes(offer.size)))
             if (canInstall) {
-                Button(label = "Обновить", onClick = onInstall)
+                Button(label = words.install, onClick = onInstall)
             } else {
                 // Кнопки нет, а не «есть и молчит»: сборка без установщика ставить не
                 // умеет, и делать вид — худшее из двух.
-                Tertiary("Эта сборка обновляется не сама: поставьте новую версию обычным способом.")
+                Tertiary(words.notSelfUpdating)
             }
         }
 
@@ -485,17 +492,17 @@ fun UpdateSection(
             val offer = requireNotNull(state.offer)
             // Прямо и словами. Спрятать предложение значило бы, что человек, знающий про
             // «версию 0.6.5 на сайте», решит, будто приложение сломано.
-            Secondary("Сервер предлагает " + offer.versionName + " — это другая сборка, не для этой версии")
+            Secondary(words.alienStream(offer.versionName))
         }
 
-        else -> Secondary("Установлена последняя версия")
+        else -> Secondary(words.latestInstalled)
     }
 
     // Во время скачивания и вопроса кнопки нет вовсе: спрашивать сервер, пока идёт
     // загрузка, нечего — ответ ничего не изменит, а нажатие выглядит как способ
     // прервать её. Не «неактивна», а именно нет: неактивная кнопка тоже зовёт нажать.
     if (!state.installing && !state.asking) {
-        Button(label = "Проверить ещё раз", onClick = onCheck, kind = ButtonKind.Quiet)
+        Button(label = words.checkAgain, onClick = onCheck, kind = ButtonKind.Quiet)
     }
 }
 
@@ -521,12 +528,10 @@ fun UpdateGate(
     modifier.fillMaxSize().padding(TimaSpacing.about5),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
 ) {
-    Caption("Нужно обновиться", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-    Secondary(
-        "Сервер больше не работает с этой версией приложения. Переписка и аккаунт на " +
-            "месте — их ничто не трогает, — но отправлять и получать до обновления не выйдет.",
-    )
-    Tertiary("Установлена " + state.installed.ifBlank { "—" })
+    val words = Tima.words.update
+    Caption(words.mustUpdate, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    Secondary(words.mustUpdateAbout)
+    Tertiary(words.installedVersion(state.installed.ifBlank { "—" }))
 
     when {
         state.installing -> {
@@ -539,12 +544,9 @@ fun UpdateGate(
 
         state.outcome != null -> Failed(state.outcome, onInstall)
 
-        canInstall -> Button(label = "Обновить", onClick = onInstall)
+        canInstall -> Button(label = words.install, onClick = onInstall)
 
-        else -> Secondary(
-            "Эта сборка обновляется не сама: поставьте новую версию обычным способом — " +
-                "тем же, каким ставили эту.",
-        )
+        else -> Secondary(words.notSelfUpdatingLong)
     }
 }
 
@@ -559,8 +561,9 @@ fun UpdateGate(
  */
 @Composable
 private fun Downloading(percent: Int) {
-    Caption("Скачиваем " + percent + "%", fontSize = TimaType.sz3, weight = FontWeight.Bold)
-    Alarm("Не закрывайте приложение, пока идёт скачивание")
+    val words = Tima.words.update
+    Caption(words.downloading(percent), fontSize = TimaType.sz3, weight = FontWeight.Bold)
+    Alarm(words.dontCloseApp)
 }
 
 /**
@@ -573,19 +576,21 @@ private fun Downloading(percent: Int) {
 @Composable
 private fun Asking(state: UpdateState, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val offer = state.offer
-    Caption("Установить " + (offer?.versionName ?: ""), fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
+    val words = Tima.words.update
+    Caption(
+        words.installVersion(offer?.versionName ?: ""),
+        fontSize = TimaType.sz3,
+        weight = FontWeight.ExtraBold,
+    )
     // Красным все три строки, и это решение заказчика 2026-09-06. Каждая — про то, что
     // человек обязан сделать сам: не испугаться исчезнувшего окна, подтвердить системный
     // вопрос, вернуться в приложение. Серым он их прочтёт как примечание и не сделает.
-    Alarm("Приложение закроется, и запустится установщик. Это займёт минуту.")
-    Alarm("Если система спросит разрешение на установку — подтвердите.")
-    Alarm("Когда установщик запустится, приложение автоматически закроется — войдите заново.")
-    Secondary(
-        "Переписка, аккаунт и настройки останутся: они лежат отдельно от программы, и " +
-            "установщик их не трогает. Неотправленное дойдёт после запуска новой версии.",
-    )
-    Button(label = "Установить", onClick = onConfirm)
-    Button(label = "Не сейчас", onClick = onDismiss, kind = ButtonKind.Quiet)
+    Alarm(words.appWillClose)
+    Alarm(words.confirmSystemAsk)
+    Alarm(words.comeBackAfter)
+    Secondary(words.dataStays)
+    Button(label = words.installNow, onClick = onConfirm)
+    Button(label = words.notNow, onClick = onDismiss, kind = ButtonKind.Quiet)
 }
 
 /**
@@ -598,30 +603,27 @@ private fun Asking(state: UpdateState, onConfirm: () -> Unit, onDismiss: () -> U
  */
 @Composable
 private fun Handed(onRetry: () -> Unit) {
-    Caption("Установщик запущен", fontSize = TimaType.sz3, weight = FontWeight.Bold)
-    Secondary("Подтвердите установку в окне системы.")
-    Secondary("Если окно закрылось или вы отказались — нажмите ещё раз.")
-    Button(label = "Установить", onClick = onRetry)
+    val words = Tima.words.update
+    Caption(words.installerStarted, fontSize = TimaType.sz3, weight = FontWeight.Bold)
+    Secondary(words.confirmInSystem)
+    Secondary(words.pressAgain)
+    Button(label = words.installNow, onClick = onRetry)
 }
 
 /** Не получилось. Причина названа своими словами: от неё зависит, что делать дальше. */
 @Composable
 private fun Failed(outcome: InstallOutcome, onRetry: () -> Unit) {
-    val (что, что_дальше) = when (outcome) {
-        InstallOutcome.NoConnection ->
-            "Обновление не скачалось" to "Связь оборвалась. Попробуйте ещё раз."
-        InstallOutcome.BadPackage ->
-            "Скачанное не совпало с тем, что объявил сервер" to
-                "Ставить это нельзя: файл либо не докачался, либо подменён. Попробуйте ещё раз."
-        InstallOutcome.NoHash ->
-            "Сервер не объявил, что именно он раздаёт" to
-                "Без этого проверить скачанное нечем, и мы не ставим. Это чинится на сервере."
-        is InstallOutcome.Refused -> "Установка не началась" to outcome.why
+    val words = Tima.words.update
+    val (what, whatNext) = when (outcome) {
+        InstallOutcome.NoConnection -> words.notDownloaded to words.notDownloadedAbout
+        InstallOutcome.BadPackage -> words.badPackage to words.badPackageAbout
+        InstallOutcome.NoHash -> words.noHash to words.noHashAbout
+        is InstallOutcome.Refused -> words.installNotStarted to outcome.why
         InstallOutcome.Started -> "" to ""
     }
-    Trouble(что)
-    Secondary(что_дальше)
-    Button(label = "Попробовать ещё раз", onClick = onRetry)
+    Trouble(what)
+    Secondary(whatNext)
+    Button(label = words.tryAgain, onClick = onRetry)
 }
 
 /** Мегабайты с одним знаком: точные байты человеку не говорят ничего. */
