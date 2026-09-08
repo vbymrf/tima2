@@ -27,6 +27,7 @@ import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 
 /**
  * Экран входа — К5.1.
@@ -95,7 +96,7 @@ fun EntryScreen(
             // тому, кто проверяет, доехало ли обновление: без него «поставил новую
             // версию» проверяется только на слово.
             if (buildVersion.isNotBlank()) {
-                Tertiary("сборка $buildVersion")
+                Tertiary(Tima.words.auth.build(buildVersion))
             }
         }
     }
@@ -109,8 +110,9 @@ private fun Phone(
     onRequest: () -> Unit,
     onConnect: (() -> Unit)?,
 ) {
-    Caption("Добро пожаловать", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-    Secondary("Введите номер телефона — пришлём код")
+    val words = Tima.words.auth
+    Caption(words.welcome, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    Secondary(words.enterPhone)
 
     // ── ДВА ПОЛЯ, А НЕ ОДНО ──────────────────────────────────────────────────
     //
@@ -149,7 +151,7 @@ private fun Phone(
     state.trouble?.let { Trouble(it) }
 
     Button(
-        label = if (state.expect) "Отправляем…" else "Получить код",
+        label = if (state.expect) words.sending else words.getCode,
         onClick = onRequest,
         modifier = Modifier.fillMaxWidth(),
     )
@@ -158,9 +160,9 @@ private fun Phone(
     // таких большинство. Кнопки нет вовсе, если путь недоступен: обещать человеку то,
     // чего нет, дороже, чем не обещать.
     onConnect?.let {
-        Tertiary("Аккаунт уже есть на телефоне? Это устройство можно подключить к нему — код подтвердите телефоном.")
+        Tertiary(words.alreadyHaveAccount)
         Button(
-            label = "Подключить к аккаунту",
+            label = words.connectToAccount,
             onClick = it,
             kind = ButtonKind.Quiet,
             modifier = Modifier.fillMaxWidth(),
@@ -184,17 +186,15 @@ private fun DisplayCode(
     onBack: () -> Unit,
     onNewCode: (() -> Unit)?,
 ) {
-    Caption("Подключение устройства", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-    Secondary(
-        "Откройте камеру на телефоне, где вы уже вошли, и наведите её на этот код. " +
-            "Телефон спросит подтверждение — код действует пять минут.",
-    )
+    val words = Tima.words.auth
+    Caption(words.connectingDevice, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    Secondary(words.connectingDeviceAbout)
 
     state.trouble?.let { Trouble(it) }
 
     val code = state.code
     if (code == null) {
-        if (state.trouble == null) Secondary("Просим код у сервера…")
+        if (state.trouble == null) Secondary(words.askingCode)
     } else {
         QrCodeImage(code, modifier = Modifier.fillMaxWidth())
     }
@@ -202,24 +202,21 @@ private fun DisplayCode(
     // На привязанном устройстве переписки не будет: ключи прошлых сообщений оборачивались
     // на устройства, которые существовали тогда. Сказать это надо ЗАРАНЕЕ — иначе пустой
     // список человек прочтёт как потерю переписки.
-    Tertiary(
-        "Прежняя переписка на это устройство не переедет: ключи старых сообщений " +
-            "оборачивались на другие устройства. Новые письма будут приходить на оба.",
-    )
+    Tertiary(words.oldChatsWontMove)
 
     // Код умер — нужен новый, и просить его должно быть чем. Кнопка появляется только
     // тогда, когда просить есть за чем: висеть рядом с живым кодом ей незачем, а нажми
     // человек её случайно — прежний код перестанет работать, и телефон покажет отказ.
     if (state.code == null && state.trouble != null && onNewCode != null) {
         Button(
-            label = "Новый код",
+            label = words.newCode,
             onClick = onNewCode,
             modifier = Modifier.fillMaxWidth(),
         )
     }
 
     Button(
-        label = "Назад",
+        label = Tima.words.common.back,
         onClick = onBack,
         kind = ButtonKind.Quiet,
         modifier = Modifier.fillMaxWidth(),
@@ -233,8 +230,9 @@ private fun Code(
     onConfirm: () -> Unit,
     onBack: () -> Unit,
 ) {
-    Caption("Подтверждение", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-    Secondary("Код отправлен на ${state.phone}")
+    val words = Tima.words.auth
+    Caption(words.confirmation, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    Secondary(words.codeSentTo(state.phone))
 
     Field(
         value = state.code,
@@ -246,17 +244,17 @@ private fun Code(
 
     // Подсказка стенда: код приходит в ответе только там, где сервер сам его прислал.
     // Написано вслух, чтобы её не приняли за «код виден всем».
-    state.standHint?.let { Tertiary("Стенд прислал код в ответе: $it") }
+    state.standHint?.let { Tertiary(words.standSentCode(it)) }
 
     state.trouble?.let { Trouble(it) }
 
     Button(
-        label = if (state.expect) "Проверяем…" else "Подтвердить",
+        label = if (state.expect) words.checking else words.confirm,
         onClick = onConfirm,
         modifier = Modifier.fillMaxWidth(),
     )
     Button(
-        label = "Изменить номер",
+        label = words.changeNumber,
         onClick = onBack,
         kind = ButtonKind.Quiet,
         modifier = Modifier.fillMaxWidth(),
@@ -275,11 +273,9 @@ private fun Code(
  */
 @Composable
 private fun Phrase(state: AuthState.Phrase, onSaved: () -> Unit) {
-    Caption("Секретная фраза", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-    Secondary(
-        "Двенадцать слов — единственный способ вернуться в аккаунт, если телефон потерян. " +
-            "Запишите их по порядку и держите отдельно от телефона.",
-    )
+    val words = Tima.words.auth
+    Caption(words.secretPhrase, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    Secondary(words.secretPhraseAbout)
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -311,7 +307,7 @@ private fun Phrase(state: AuthState.Phrase, onSaved: () -> Unit) {
         }
     }
 
-    Button(label = "Записал", onClick = onSaved, modifier = Modifier.fillMaxWidth())
+    Button(label = words.wroteDown, onClick = onSaved, modifier = Modifier.fillMaxWidth())
 }
 
 /**
@@ -332,19 +328,20 @@ private fun PhraseInput(
     onAnew: () -> Unit,
     onOtherNumber: () -> Unit,
 ) {
-    Caption("Вход по фразе", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-    Secondary("У номера ${state.phone} уже есть аккаунт. Введите его секретную фразу — двенадцать слов через пробел.")
+    val words = Tima.words.auth
+    Caption(words.phraseEntry, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    Secondary(words.accountExistsFor(state.phone))
 
     Field(
         value = state.phrase,
         onChange = onPhrase,
-        hint = "слово слово слово…",
+        hint = words.phraseHint,
     )
 
     state.trouble?.let { Trouble(it) }
 
     Button(
-        label = if (state.expect) "Проверяем…" else "Войти",
+        label = if (state.expect) words.checking else words.enter,
         onClick = onEnter,
         modifier = Modifier.fillMaxWidth(),
     )
@@ -353,17 +350,14 @@ private fun PhraseInput(
     // без этой кнопки оставались только «вспомнить фразу» и «начать заново», а второе
     // стирает прежнюю личность — то есть опечатка стоила бы аккаунта.
     Button(
-        label = "Другой номер",
+        label = words.otherNumber,
         onClick = onOtherNumber,
         modifier = Modifier.fillMaxWidth(),
     )
 
-    Tertiary(
-        "Фразы нет? Можно начать заново: прежняя переписка не вернётся, а собеседники " +
-            "увидят предупреждение о смене личности.",
-    )
+    Tertiary(words.noPhrase)
     Button(
-        label = "Начать заново",
+        label = words.startAnew,
         onClick = onAnew,
         kind = ButtonKind.Dangerous,
         modifier = Modifier.fillMaxWidth(),

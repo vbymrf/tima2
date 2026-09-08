@@ -48,6 +48,132 @@ interface Words {
     val communities: CommunityWords
     val tabs: TabWords
     val wizard: WizardWords
+    val auth: AuthWords
+}
+
+/**
+ * Вход, привязка устройства, виртуальные аккаунты и передача аккаунта.
+ *
+ * Здесь много длинных предупреждений, и они не украшение: экран входа объясняет цену
+ * действия до кнопки, а не после. Переводить их придётся целиком — сокращать нельзя.
+ *
+ * Куски с подстановкой сделаны **функциями**, а не склейкой на экране: в другом языке
+ * порядок слов иной, и «Код отправлен на » + номер перевести невозможно.
+ */
+interface AuthWords {
+    /** Номер сборки внизу экрана входа: его спрашивает чинящий, а не человек. */
+    fun build(version: String): String
+
+    // Номер и код.
+    val welcome: String
+    val enterPhone: String
+    val sending: String
+    val getCode: String
+    val alreadyHaveAccount: String
+    val connectToAccount: String
+    val confirmation: String
+    fun codeSentTo(phone: String): String
+    fun standSentCode(code: String): String
+    val checking: String
+    val confirm: String
+    val changeNumber: String
+
+    // Привязка второго устройства.
+    val connectingDevice: String
+    val connectingDeviceAbout: String
+    val askingCode: String
+    val oldChatsWontMove: String
+    val newCode: String
+
+    // Секретная фраза.
+    val secretPhrase: String
+    val secretPhraseAbout: String
+    val wroteDown: String
+    val phraseHint: String
+    val phraseEntry: String
+    fun accountExistsFor(phone: String): String
+    val enter: String
+    val otherNumber: String
+    val noPhrase: String
+    val startAnew: String
+
+    // Виртуальный аккаунт.
+    val virtualAccount: String
+    val newNickname: String
+    val newNicknameAbout: String
+    val further: String
+    val fiveAtMost: String
+    val linkNotHiddenFromUs: String
+    val yourSecretPhrase: String
+    val yourSecretPhraseAbout: String
+    val creating: String
+    fun createAccount(nickname: String): String
+    val wordsGoNowhere: String
+    fun phraseOf(nickname: String): String
+    val virtualPhraseSaved: String
+    val virtualEntryFromYourNumber: String
+
+    // Передача аккаунта.
+    val giveAccount: String
+    val takeAccount: String
+    val whatHappens: String
+    val transferTakesAll: String
+    val transferCutsFuture: String
+    val othersWontNotice: String
+    val preparingCode: String
+    val issueTransferCode: String
+    val transferCode: String
+    fun codeLives(minutes: Int): String
+    val phraseSeparately: String
+    val wrongPhraseCosts: String
+    val transferCancelled: String
+    val cancelTransfer: String
+    val takeAccountAbout: String
+    val accountPhrase: String
+    val bringCodeHint: String
+    val entryFromYourNumber: String
+    val accountYours: String
+    val accountYoursAbout: String
+    val rotateGroupKeys: String
+    val enterAccount: String
+
+    // Подтверждение подключения на телефоне.
+    val deviceConnected: String
+    val deviceConnectedAbout: String
+    val notConnectionCode: String
+    val notConnectionCodeAbout: String
+    val confirmConnection: String
+    fun deviceNamed(name: String): String
+    val deviceUnnamed: String
+    val connectedDeviceCan: String
+    val connecting: String
+    val trust: String
+    val reject: String
+
+    // Список устройств.
+    val watching: String
+    val listNotCame: String
+    val noDevices: String
+    val reasonAbove: String
+    val emptyListIsOurs: String
+    val nameless: String
+    val thisDevice: String
+    val disconnect: String
+    val disconnectDevice: String
+    val disconnectAbout: String
+    val keep: String
+
+    // Виртуальные аккаунты списком.
+    val virtualAboutShort: String
+    val yourAccounts: String
+    val noPhoneFoundByNickname: String
+    val give: String
+    val noVirtualsYet: String
+    val actions: String
+    val createVirtual: String
+    val fiveAtMostShort: String
+    val takeNeedsCodeAndPhrase: String
+    val linkNotHiddenLong: String
 }
 
 /**
@@ -365,6 +491,171 @@ object RussianWords : Words {
         override val postGone = "Записи больше нет"
         override val postGoneAbout = "Разговор ушёл вместе с ней"
         override val loading = "Загружаем разговор…"
+    }
+
+    override val auth = object : AuthWords {
+        override fun build(version: String) = "сборка $version"
+
+        override val welcome = "Добро пожаловать"
+        override val enterPhone = "Введите номер телефона — пришлём код"
+        override val sending = "Отправляем…"
+        override val getCode = "Получить код"
+        override val alreadyHaveAccount =
+            "Аккаунт уже есть на телефоне? Это устройство можно подключить к нему — " +
+                "код подтвердите телефоном."
+        override val connectToAccount = "Подключить к аккаунту"
+        override val confirmation = "Подтверждение"
+        override fun codeSentTo(phone: String) = "Код отправлен на $phone"
+        override fun standSentCode(code: String) = "Стенд прислал код в ответе: $code"
+        override val checking = "Проверяем…"
+        override val confirm = "Подтвердить"
+        override val changeNumber = "Изменить номер"
+
+        override val connectingDevice = "Подключение устройства"
+        override val connectingDeviceAbout =
+            "Откройте камеру на телефоне, где вы уже вошли, и наведите её на этот код. " +
+                "Телефон спросит подтверждение — код действует пять минут."
+        override val askingCode = "Просим код у сервера…"
+        override val oldChatsWontMove =
+            "Прежняя переписка на это устройство не переедет: ключи старых сообщений " +
+                "оборачивались на другие устройства. Новые письма будут приходить на оба."
+        override val newCode = "Новый код"
+
+        override val secretPhrase = "Секретная фраза"
+        override val secretPhraseAbout =
+            "Двенадцать слов — единственный способ вернуться в аккаунт, если телефон " +
+                "потерян. Запишите их по порядку и держите отдельно от телефона."
+        override val wroteDown = "Записал"
+        override val phraseHint = "слово слово слово…"
+        override val phraseEntry = "Вход по фразе"
+        override fun accountExistsFor(phone: String) =
+            "У номера $phone уже есть аккаунт. Введите его секретную фразу — " +
+                "двенадцать слов через пробел."
+        override val enter = "Войти"
+        override val otherNumber = "Другой номер"
+        override val noPhrase =
+            "Фразы нет? Можно начать заново: прежняя переписка не вернётся, а собеседники " +
+                "увидят предупреждение о смене личности."
+        override val startAnew = "Начать заново"
+
+        override val virtualAccount = "Виртуальный аккаунт"
+        override val newNickname = "Ник нового аккаунта"
+        override val newNicknameAbout =
+            "Это отдельный пользователь: своя переписка, свои ключи, своя секретная фраза. " +
+                "Телефона у него нет — находят его только по нику, поэтому ник обязателен."
+        override val further = "Дальше"
+        override val fiveAtMost =
+            "Виртуальных аккаунтов на один номер — не больше пяти. Занятый ник не " +
+                "освобождается никогда."
+        override val linkNotHiddenFromUs =
+            "Собеседники не увидят связи с вашим основным аккаунтом. От нас она не скрыта: " +
+                "привязка хранится на сервере."
+        override val yourSecretPhrase = "Ваша секретная фраза"
+        override val yourSecretPhraseAbout =
+            "Новый аккаунт заводится вашей подписью: телефона у него нет, и код на него не " +
+                "придёт. Введите двенадцать слов вашего основного аккаунта — через пробел."
+        override val creating = "Заводим…"
+        override fun createAccount(nickname: String) = "Завести аккаунт «$nickname»"
+        override val wordsGoNowhere =
+            "Слова никуда не отправляются: из них считается подпись, и на этом они забываются."
+        override fun phraseOf(nickname: String) = "Фраза аккаунта «$nickname»"
+        override val virtualPhraseSaved =
+            "Аккаунт заведён. Эти двенадцать слов — единственный способ вернуться в него. " +
+                "Запишите их по порядку: показать второй раз будет нечем."
+        override val virtualEntryFromYourNumber =
+            "Войти в этот аккаунт заново можно только с вашего номера: своего телефона у " +
+                "него нет, и код придёт вам."
+
+        override val giveAccount = "Передать аккаунт"
+        override val takeAccount = "Принять аккаунт"
+        override val whatHappens = "Что произойдёт"
+        override val transferTakesAll =
+            "Аккаунт уйдёт целиком: переписка, группы, каналы, роли и владение. Ваши " +
+                "устройства в нём будут отключены, и войти в него вы больше не сможете — " +
+                "код на вход приходит владельцу, а владельцем станет другой человек."
+        override val transferCutsFuture =
+            "Передача отрезает будущее, а не прошлое: всё, что вы уже прочитали, осталось " +
+                "на вашем телефоне, и передача этого не стирает."
+        override val othersWontNotice =
+            "Собеседники ничего не заметят: у аккаунта нет телефона, и они с самого начала " +
+                "разговаривают с ником, а не с номером."
+        override val preparingCode = "Готовим код…"
+        override val issueTransferCode = "Выдать код передачи"
+        override val transferCode = "Код передачи"
+        override fun codeLives(minutes: Int) =
+            "Покажите его тому, кому передаёте: он наведёт камеру. Код живёт " +
+                "$minutes минут и годится один раз."
+        override val phraseSeparately =
+            "Фразу аккаунта передайте ОТДЕЛЬНО и другим путём — не тем сообщением, что код. " +
+                "Вместе они и есть аккаунт: перехвативший одну переписку получит оба."
+        override val wrongPhraseCosts =
+            "Неверная фраза тратит попытку: после третьей код сгорит, и придётся выдать новый."
+        override val transferCancelled = "Передача отменена — код больше не действует"
+        override val cancelTransfer = "Отменить передачу"
+        override val takeAccountAbout =
+            "Нужны две вещи, и обе от того, кто передаёт: код и секретная фраза аккаунта. " +
+                "Одного кода мало — он ничего не открывает без фразы."
+        override val accountPhrase = "Секретная фраза аккаунта"
+        override val bringCodeHint = "наведите камеру или вставьте код"
+        override val entryFromYourNumber =
+            "Дальше входить в этот аккаунт вы будете со своего номера: своего телефона у " +
+                "него нет, и код придёт вам."
+        override val accountYours = "Аккаунт ваш"
+        override val accountYoursAbout =
+            "Устройства прежнего владельца отключены, и вход в аккаунт теперь ваш. " +
+                "Фразу смените: прежнюю знает тот, кто вам её дал."
+        override val rotateGroupKeys =
+            "В группах этого аккаунта нужно сменить ключ: до этого прежний владелец " +
+                "продолжит читать в них новое. Откройте состав группы и смените ключ."
+        override val enterAccount = "Войти в аккаунт"
+
+        override val deviceConnected = "Устройство подключено"
+        override val deviceConnectedAbout =
+            "Новые сообщения будут приходить и на него. Прежняя переписка туда не " +
+                "переедет: ключи старых сообщений оборачивались на другие устройства."
+        override val notConnectionCode = "Это не код подключения"
+        override val notConnectionCodeAbout =
+            "Отсканирован другой код. Откройте на компьютере «Подключить к аккаунту» " +
+                "и наведите камеру на код оттуда."
+        override val confirmConnection = "Подтвердить подключение?"
+        override fun deviceNamed(name: String) = "Устройство: $name"
+        override val deviceUnnamed = "Устройство себя не назвало"
+        override val connectedDeviceCan =
+            "Подключённое устройство сможет читать новые сообщения этого аккаунта и писать " +
+                "от вашего имени. Отключить его можно в списке устройств."
+        override val connecting = "Подключаем…"
+        override val trust = "Доверить"
+        override val reject = "Отклонить"
+
+        override val watching = "Смотрим…"
+        override val listNotCame = "Список не пришёл"
+        override val noDevices = "Устройств нет"
+        override val reasonAbove = "Причина выше. Это не значит, что устройств нет"
+        override val emptyListIsOurs =
+            "Сервер пустой список не отдаёт — значит дело на этой стороне"
+        override val nameless = "Без имени"
+        override val thisDevice = "это устройство"
+        override val disconnect = "Отключить"
+        override val disconnectDevice = "Отключить устройство?"
+        override val disconnectAbout =
+            "Оно перестанет получать сообщения и потеряет доступ к аккаунту. Вернуть его " +
+                "нельзя — на нём придётся подключаться заново."
+        override val keep = "Оставить"
+
+        override val virtualAboutShort =
+            "Виртуальный аккаунт — отдельный пользователь: своя переписка, свои ключи, " +
+                "своя секретная фраза. Телефона у него нет, находят его по нику."
+        override val yourAccounts = "Ваши аккаунты"
+        override val noPhoneFoundByNickname = "нет телефона · находят по нику"
+        override val give = "Передать"
+        override val noVirtualsYet = "Виртуальных аккаунтов пока нет."
+        override val actions = "Действия"
+        override val createVirtual = "Завести виртуальный аккаунт"
+        override val fiveAtMostShort = "не больше пяти на номер"
+        override val takeNeedsCodeAndPhrase = "нужны код и фраза от того, кто передаёт"
+        override val linkNotHiddenLong =
+            "Связь с вашим основным аккаунтом не видна собеседникам. От нас она не " +
+                "скрыта: привязка хранится на сервере — иначе её нечем было бы проверять."
     }
 
     override val wizard = object : WizardWords {

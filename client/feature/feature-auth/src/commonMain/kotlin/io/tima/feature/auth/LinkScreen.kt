@@ -16,6 +16,7 @@ import io.tima.core.ui.Button
 import io.tima.core.ui.Caption
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.Tertiary
 
 /**
@@ -41,25 +42,29 @@ fun LinkScreen(
         .padding(TimaSpacing.about4),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
 ) {
+    val words = Tima.words.auth
     when (state) {
         is LinkState.Ask -> Ask(state, onTrust, onCancel)
 
         is LinkState.Done -> {
-            Caption("Устройство подключено", weight = FontWeight.ExtraBold)
-            Secondary(
-                "Новые сообщения будут приходить и на него. Прежняя переписка туда не " +
-                    "переедет: ключи старых сообщений оборачивались на другие устройства.",
+            Caption(words.deviceConnected, weight = FontWeight.ExtraBold)
+            Secondary(words.deviceConnectedAbout)
+            Button(
+                Tima.words.common.ready,
+                onClick = onCancel,
+                modifier = Modifier.fillMaxWidth(),
             )
-            Button("Готово", onClick = onCancel, modifier = Modifier.fillMaxWidth())
         }
 
         LinkState.NotOurCode -> {
-            Caption("Это не код подключения", weight = FontWeight.ExtraBold)
-            Secondary(
-                "Отсканирован другой код. Откройте на компьютере «Подключить к аккаунту» " +
-                    "и наведите камеру на код оттуда.",
+            Caption(words.notConnectionCode, weight = FontWeight.ExtraBold)
+            Secondary(words.notConnectionCodeAbout)
+            Button(
+                Tima.words.common.hide,
+                onClick = onCancel,
+                kind = ButtonKind.Quiet,
+                modifier = Modifier.fillMaxWidth(),
             )
-            Button("Закрыть", onClick = onCancel, kind = ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -70,26 +75,24 @@ private fun Ask(
     onTrust: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    Caption("Подтвердить подключение?", weight = FontWeight.ExtraBold)
+    val words = Tima.words.auth
+    Caption(words.confirmConnection, weight = FontWeight.ExtraBold)
 
     // Имя устройства — то, что человек видел минуту назад на своём компьютере. Если его
     // в коде не было, так и говорим: подставленное имя он примет за настоящее.
-    Secondary(state.name?.let { "Устройство: $it" } ?: "Устройство себя не назвало")
+    Secondary(state.name?.let { words.deviceNamed(it) } ?: words.deviceUnnamed)
 
-    Tertiary(
-        "Подключённое устройство сможет читать новые сообщения этого аккаунта и писать " +
-            "от вашего имени. Отключить его можно в списке устройств.",
-    )
+    Tertiary(words.connectedDeviceCan)
 
     state.trouble?.let { Trouble(it) }
 
     Button(
-        label = if (state.expect) "Подключаем…" else "Доверить",
+        label = if (state.expect) words.connecting else words.trust,
         onClick = onTrust,
         modifier = Modifier.fillMaxWidth(),
     )
     Button(
-        label = "Отклонить",
+        label = words.reject,
         onClick = onCancel,
         kind = ButtonKind.Dangerous,
         modifier = Modifier.fillMaxWidth(),

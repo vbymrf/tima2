@@ -18,6 +18,7 @@ import io.tima.core.ui.SectionTitle
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.Trouble
 
@@ -42,6 +43,7 @@ fun VirtualsScreen(
     modifier: Modifier = Modifier,
 ) {
     val colors = Tima.colors
+    val words = Tima.words.auth
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -50,10 +52,7 @@ fun VirtualsScreen(
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
     ) {
         Column(modifier = Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about3)) {
-            Secondary(
-                "Виртуальный аккаунт — отдельный пользователь: своя переписка, свои ключи, " +
-                    "своя секретная фраза. Телефона у него нет, находят его по нику.",
-            )
+            Secondary(words.virtualAboutShort)
         }
 
         state.trouble?.let {
@@ -61,19 +60,19 @@ fun VirtualsScreen(
         }
 
         if (state.accounts.isNotEmpty()) {
-            SectionTitle("Ваши аккаунты")
+            SectionTitle(words.yourAccounts)
             state.accounts.forEach { account ->
                 ListLine(
                     left = { Avatar(letters = account.nickname.take(1).uppercase().ifBlank { "?" }) },
                     middle = {
                         Column {
                             Name(account.nickname.ifBlank { account.userId.take(8) })
-                            Tertiary("нет телефона · находят по нику", lineOne = true)
+                            Tertiary(words.noPhoneFoundByNickname, lineOne = true)
                         }
                     },
                     right = {
                         Button(
-                            label = "Передать",
+                            label = words.give,
                             onClick = { onGive(account.userId) },
                             kind = ButtonKind.Quiet,
                         )
@@ -84,18 +83,18 @@ fun VirtualsScreen(
             // Пустоту называем словами только после ответа сервера: до него она означает
             // «мы ещё не спрашивали», а не «их нет».
             Column(modifier = Modifier.padding(horizontal = TimaSpacing.about4)) {
-                Secondary("Виртуальных аккаунтов пока нет.")
+                Secondary(words.noVirtualsYet)
             }
         }
 
-        SectionTitle("Действия")
+        SectionTitle(words.actions)
         ListLine(
             onClick = onCreate,
             left = { Avatar(letters = "＋") },
             middle = {
                 Column {
-                    Name("Завести виртуальный аккаунт")
-                    Tertiary("не больше пяти на номер", lineOne = true)
+                    Name(words.createVirtual)
+                    Tertiary(words.fiveAtMostShort, lineOne = true)
                 }
             },
         )
@@ -104,17 +103,14 @@ fun VirtualsScreen(
             left = { Avatar(letters = "↓") },
             middle = {
                 Column {
-                    Name("Принять аккаунт")
-                    Tertiary("нужны код и фраза от того, кто передаёт", lineOne = true)
+                    Name(words.takeAccount)
+                    Tertiary(words.takeNeedsCodeAndPhrase, lineOne = true)
                 }
             },
         )
 
         Column(modifier = Modifier.padding(TimaSpacing.about4)) {
-            Tertiary(
-                "Связь с вашим основным аккаунтом не видна собеседникам. От нас она не " +
-                    "скрыта: привязка хранится на сервере — иначе её нечем было бы проверять.",
-            )
+            Tertiary(words.linkNotHiddenLong)
         }
     }
 }

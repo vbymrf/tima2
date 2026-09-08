@@ -23,6 +23,7 @@ import io.tima.core.ui.Secondary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.Trouble
@@ -54,7 +55,7 @@ fun NewVirtualScreen(
 ) {
     val colors = Tima.colors
     Column(modifier.fillMaxSize().background(colors.surface)) {
-        SubwindowHeader(title = "Виртуальный аккаунт", onBack = onBack)
+        SubwindowHeader(title = Tima.words.auth.virtualAccount, onBack = onBack)
 
         Box(
             modifier = Modifier.fillMaxSize().padding(TimaSpacing.about5),
@@ -82,10 +83,10 @@ fun NewVirtualScreen(
  */
 @Composable
 private fun Nickname(state: NewVirtualState, onNickname: (String) -> Unit, onNext: () -> Unit) {
-    Caption("Ник нового аккаунта", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    val words = Tima.words.auth
+    Caption(words.newNickname, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
     Secondary(
-        "Это отдельный пользователь: своя переписка, свои ключи, своя секретная фраза. " +
-            "Телефона у него нет — находят его только по нику, поэтому ник обязателен.",
+        words.newNicknameAbout,
     )
 
     Field(value = state.nickname, onChange = onNickname, hint = "petr_smirnov")
@@ -93,7 +94,7 @@ private fun Nickname(state: NewVirtualState, onNickname: (String) -> Unit, onNex
     state.trouble?.let { Trouble(it) }
 
     Button(
-        label = "Дальше",
+        label = words.further,
         onClick = { if (state.canGoOn) onNext() },
         kind = if (state.canGoOn) ButtonKind.Action else ButtonKind.Quiet,
         modifier = Modifier.fillMaxWidth(),
@@ -101,14 +102,12 @@ private fun Nickname(state: NewVirtualState, onNickname: (String) -> Unit, onNex
 
     // Сказано до того, как человек начал: узнать про предел после ввода фразы обиднее.
     Tertiary(
-        "Виртуальных аккаунтов на один номер — не больше пяти. Занятый ник не " +
-            "освобождается никогда.",
+        words.fiveAtMost,
     )
     // Обещать анонимность от нас самих виртуальный аккаунт не может — см. пояснение
     // к экрану. Лучше сказать это здесь, чем дать человеку узнать это самому.
     Tertiary(
-        "Собеседники не увидят связи с вашим основным аккаунтом. От нас она не скрыта: " +
-            "привязка хранится на сервере.",
+        words.linkNotHiddenFromUs,
     )
 }
 
@@ -122,23 +121,23 @@ private fun Nickname(state: NewVirtualState, onNickname: (String) -> Unit, onNex
  */
 @Composable
 private fun Phrase(state: NewVirtualState, onPhrase: (String) -> Unit, onConfirm: () -> Unit) {
-    Caption("Ваша секретная фраза", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    val words = Tima.words.auth
+    Caption(words.yourSecretPhrase, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
     Secondary(
-        "Новый аккаунт заводится вашей подписью: телефона у него нет, и код на него не " +
-            "придёт. Введите двенадцать слов вашего основного аккаунта — через пробел.",
+        words.yourSecretPhraseAbout,
     )
 
-    Field(value = state.phrase, onChange = onPhrase, hint = "слово слово слово…")
+    Field(value = state.phrase, onChange = onPhrase, hint = words.phraseHint)
     state.trouble?.let { Trouble(it) }
 
     Button(
-        label = if (state.working) "Заводим…" else "Завести аккаунт «${state.nickname}»",
+        label = if (state.working) words.creating else words.createAccount(state.nickname),
         onClick = { if (!state.working) onConfirm() },
         kind = if (state.working) ButtonKind.Quiet else ButtonKind.Action,
         modifier = Modifier.fillMaxWidth(),
     )
 
-    Tertiary("Слова никуда не отправляются: из них считается подпись, и на этом они забываются.")
+    Tertiary(words.wordsGoNowhere)
 }
 
 /**
@@ -149,10 +148,10 @@ private fun Phrase(state: NewVirtualState, onPhrase: (String) -> Unit, onConfirm
  */
 @Composable
 private fun Words(state: NewVirtualState, onDone: () -> Unit) {
-    Caption("Фраза аккаунта «${state.nickname}»", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    val words = Tima.words.auth
+    Caption(words.phraseOf(state.nickname), fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
     Secondary(
-        "Аккаунт заведён. Эти двенадцать слов — единственный способ вернуться в него. " +
-            "Запишите их по порядку: показать второй раз будет нечем.",
+        words.virtualPhraseSaved,
     )
 
     Column(
@@ -185,10 +184,9 @@ private fun Words(state: NewVirtualState, onDone: () -> Unit) {
         }
     }
 
-    Button(label = "Записал", onClick = onDone, modifier = Modifier.fillMaxWidth())
+    Button(label = words.wroteDown, onClick = onDone, modifier = Modifier.fillMaxWidth())
 
     Tertiary(
-        "Войти в этот аккаунт заново можно только с вашего номера: своего телефона у " +
-            "него нет, и код придёт вам.",
+        words.virtualEntryFromYourNumber,
     )
 }

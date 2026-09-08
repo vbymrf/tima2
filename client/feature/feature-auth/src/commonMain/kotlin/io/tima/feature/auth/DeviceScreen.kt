@@ -22,6 +22,7 @@ import io.tima.core.ui.EmptyArea
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.Tertiary
 import io.tima.domain.account.AccountDevice
 
@@ -47,6 +48,7 @@ fun DeviceScreen(
      */
     buildVersion: String = "",
 ) = Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
+    val words = Tima.words.auth
     // Фон заливается явно. Экран без своего фона показывает то, что под ним, — на телефоне
     // это выглядело как тёмный экран внутри светлой темы, и найдено это было только глазами
     // на устройстве: снимки видят компонент, а не окно.
@@ -61,7 +63,7 @@ fun DeviceScreen(
     // не показалась бы вовсе. А спрашивают версию как раз тогда, когда что-то не так.
     if (buildVersion.isNotBlank()) {
         Tertiary(
-            "сборка $buildVersion",
+            Tima.words.auth.build(buildVersion),
             Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
         )
     }
@@ -93,17 +95,17 @@ fun DeviceScreen(
         // сообщения об одном, причём второе — неправда, и именно оно бросается в глаза.
         EmptyArea(
             title = when {
-                state.expect -> "Смотрим…"
-                state.trouble != null -> "Список не пришёл"
-                else -> "Устройств нет"
+                state.expect -> words.watching
+                state.trouble != null -> words.listNotCame
+                else -> words.noDevices
             },
             explanation = when {
                 state.expect -> null
                 // Причина уже сказана баннером выше; повторять её здесь — шуметь.
-                state.trouble != null -> "Причина выше. Это не значит, что устройств нет"
+                state.trouble != null -> words.reasonAbove
                 // Сюда попасть можно только при 200 с пустым списком, а такого ответа
                 // сервер не строит. Остаётся клиент: не тот адрес, не тот разбор.
-                else -> "Сервер пустой список не отдаёт — значит дело на этой стороне"
+                else -> words.emptyListIsOurs
             },
         )
         return@Column
@@ -122,6 +124,7 @@ fun DeviceScreen(
 
 @Composable
 private fun Line(device: AccountDevice, onAsk: (String) -> Unit) {
+    val words = Tima.words.auth
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
@@ -129,7 +132,7 @@ private fun Line(device: AccountDevice, onAsk: (String) -> Unit) {
     ) {
         Column(Modifier.weight(1f)) {
             Caption(
-                text = device.name.ifEmpty { "Без имени" },
+                text = device.name.ifEmpty { words.nameless },
                 weight = FontWeight.Bold,
                 lineOne = true,
             )
@@ -137,7 +140,7 @@ private fun Line(device: AccountDevice, onAsk: (String) -> Unit) {
             // «что это за железка».
             Tertiary(
                 text = listOfNotNull(
-                    if (device.current) "это устройство" else null,
+                    if (device.current) words.thisDevice else null,
                     device.createdAt,
                 ).joinToString(" · ").ifEmpty { "—" },
                 lineOne = true,
@@ -147,7 +150,7 @@ private fun Line(device: AccountDevice, onAsk: (String) -> Unit) {
         // последствиями, и оно живёт в настройках аккаунта.
         if (!device.current) {
             Button(
-                label = "Отключить",
+                label = words.disconnect,
                 onClick = { onAsk(device.deviceId) },
                 kind = ButtonKind.Quiet,
             )
@@ -166,21 +169,19 @@ private fun Question(name: String, onConfirm: () -> Unit, onChangedMind: () -> U
     modifier = Modifier.fillMaxSize().padding(TimaSpacing.about4),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
 ) {
-    Caption("Отключить устройство?", fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
-    Secondary(name.ifEmpty { "Без имени" })
-    Secondary(
-        "Оно перестанет получать сообщения и потеряет доступ к аккаунту. Вернуть его " +
-            "нельзя — на нём придётся подключаться заново.",
-    )
+    val words = Tima.words.auth
+    Caption(words.disconnectDevice, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
+    Secondary(name.ifEmpty { words.nameless })
+    Secondary(words.disconnectAbout)
 
     Button(
-        label = "Отключить",
+        label = words.disconnect,
         onClick = onConfirm,
         kind = ButtonKind.Dangerous,
         modifier = Modifier.fillMaxWidth(),
     )
     Button(
-        label = "Оставить",
+        label = words.keep,
         onClick = onChangedMind,
         modifier = Modifier.fillMaxWidth(),
     )

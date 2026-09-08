@@ -22,6 +22,7 @@ import io.tima.core.ui.Secondary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.Trouble
@@ -55,7 +56,9 @@ fun TransferScreen(
     val colors = Tima.colors
     Column(modifier.fillMaxSize().background(colors.surface)) {
         SubwindowHeader(
-            title = if (state.side == TransferSide.Giving) "Передать аккаунт" else "Принять аккаунт",
+            title = with(Tima.words.auth) {
+                if (state.side == TransferSide.Giving) giveAccount else takeAccount
+            },
             onBack = onBack,
         )
 
@@ -86,27 +89,24 @@ fun TransferScreen(
  */
 @Composable
 private fun Warning(state: TransferState, onGiveCode: () -> Unit) {
-    Caption("Что произойдёт", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    val words = Tima.words.auth
+    Caption(words.whatHappens, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
     Secondary(
-        "Аккаунт уйдёт целиком: переписка, группы, каналы, роли и владение. Ваши " +
-            "устройства в нём будут отключены, и войти в него вы больше не сможете — " +
-            "код на вход приходит владельцу, а владельцем станет другой человек.",
+        words.transferTakesAll,
     )
     // Это единственное, чего передача не может, и молчать об этом нельзя: человек,
     // который отдаёт аккаунт «чтобы там ничего не осталось», должен узнать правду здесь.
     Secondary(
-        "Передача отрезает будущее, а не прошлое: всё, что вы уже прочитали, осталось " +
-            "на вашем телефоне, и передача этого не стирает.",
+        words.transferCutsFuture,
     )
     Secondary(
-        "Собеседники ничего не заметят: у аккаунта нет телефона, и они с самого начала " +
-            "разговаривают с ником, а не с номером.",
+        words.othersWontNotice,
     )
 
     state.trouble?.let { Trouble(it) }
 
     Button(
-        label = if (state.working) "Готовим код…" else "Выдать код передачи",
+        label = if (state.working) words.preparingCode else words.issueTransferCode,
         onClick = { if (!state.working) onGiveCode() },
         kind = if (state.working) ButtonKind.Quiet else ButtonKind.Dangerous,
         modifier = Modifier.fillMaxWidth(),
@@ -121,11 +121,9 @@ private fun Warning(state: TransferState, onGiveCode: () -> Unit) {
  */
 @Composable
 private fun Code(state: TransferState, onCancel: () -> Unit) {
-    Caption("Код передачи", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-    Secondary(
-        "Покажите его тому, кому передаёте: он наведёт камеру. Код живёт " +
-            "${state.minutesLeft} минут и годится один раз.",
-    )
+    val words = Tima.words.auth
+    Caption(words.transferCode, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    Secondary(words.codeLives(state.minutesLeft))
 
     state.payload?.let { QrCodeImage(data = it) }
 
@@ -135,18 +133,17 @@ private fun Code(state: TransferState, onCancel: () -> Unit) {
     // Главное предупреждение экрана. Код без фразы не передаёт ничего — и в этом весь
     // расчёт; посланные вместе, они его отменяют.
     Secondary(
-        "Фразу аккаунта передайте ОТДЕЛЬНО и другим путём — не тем сообщением, что код. " +
-            "Вместе они и есть аккаунт: перехвативший одну переписку получит оба.",
+        words.phraseSeparately,
     )
     Tertiary(
-        "Неверная фраза тратит попытку: после третьей код сгорит, и придётся выдать новый.",
+        words.wrongPhraseCosts,
     )
 
     state.trouble?.let { Trouble(it) }
-    if (state.cancelled) Secondary("Передача отменена — код больше не действует")
+    if (state.cancelled) Secondary(words.transferCancelled)
 
     Button(
-        label = "Отменить передачу",
+        label = words.cancelTransfer,
         onClick = onCancel,
         kind = ButtonKind.Quiet,
         modifier = Modifier.fillMaxWidth(),
@@ -167,40 +164,39 @@ private fun Taking(
     onPhrase: (String) -> Unit,
     onTake: () -> Unit,
 ) {
-    Caption("Принять аккаунт", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    val words = Tima.words.auth
+    Caption(words.takeAccount, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
     Secondary(
-        "Нужны две вещи, и обе от того, кто передаёт: код и секретная фраза аккаунта. " +
-            "Одного кода мало — он ничего не открывает без фразы.",
+        words.takeAccountAbout,
     )
 
-    Caption("Код передачи", fontSize = TimaType.sz5, weight = FontWeight.Bold)
-    Field(value = state.brought, onChange = onCode, hint = "наведите камеру или вставьте код")
+    Caption(words.transferCode, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+    Field(value = state.brought, onChange = onCode, hint = words.bringCodeHint)
 
-    Caption("Секретная фраза аккаунта", fontSize = TimaType.sz5, weight = FontWeight.Bold)
-    Field(value = state.phrase, onChange = onPhrase, hint = "слово слово слово…")
+    Caption(words.accountPhrase, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+    Field(value = state.phrase, onChange = onPhrase, hint = words.phraseHint)
 
     state.trouble?.let { Trouble(it) }
 
     Button(
-        label = if (state.working) "Проверяем…" else "Принять аккаунт",
+        label = if (state.working) words.checking else words.takeAccount,
         onClick = { if (!state.working) onTake() },
         kind = if (state.working) ButtonKind.Quiet else ButtonKind.Action,
         modifier = Modifier.fillMaxWidth(),
     )
 
     Tertiary(
-        "Дальше входить в этот аккаунт вы будете со своего номера: своего телефона у " +
-            "него нет, и код придёт вам.",
+        words.entryFromYourNumber,
     )
 }
 
 /** Аккаунт перешёл. */
 @Composable
 private fun Taken(state: TransferState, onDone: () -> Unit) {
-    Caption("Аккаунт ваш", fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+    val words = Tima.words.auth
+    Caption(words.accountYours, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
     Secondary(
-        "Устройства прежнего владельца отключены, и вход в аккаунт теперь ваш. " +
-            "Фразу смените: прежнюю знает тот, кто вам её дал.",
+        words.accountYoursAbout,
     )
 
     // Ротацию сервер сделать не может: групповые ключи выпускают участники (ADR-0017).
@@ -208,10 +204,9 @@ private fun Taken(state: TransferState, onDone: () -> Unit) {
     // — и молчать об этом нельзя, человек считает передачу законченной.
     if (state.taken?.rotateNeeded == true) {
         Secondary(
-            "В группах этого аккаунта нужно сменить ключ: до этого прежний владелец " +
-                "продолжит читать в них новое. Откройте состав группы и смените ключ.",
+            words.rotateGroupKeys,
         )
     }
 
-    Button(label = "Войти в аккаунт", onClick = onDone, modifier = Modifier.fillMaxWidth())
+    Button(label = words.enterAccount, onClick = onDone, modifier = Modifier.fillMaxWidth())
 }
