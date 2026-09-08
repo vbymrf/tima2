@@ -2,7 +2,6 @@ package io.tima.core.ui
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -25,9 +24,10 @@ class WordsTest {
     fun язык_без_словаря_не_выбирается() {
         assertTrue(Language.Russian.available, "русский словарь есть с первого дня")
         assertTrue(Language.English.available, "английский словарь заведён в Я9")
-        // Испанский заводится вместе со своим словарём (Я10). До тех пор список знает о
-        // нём, но выбрать его нельзя: это обещало бы надписи, которых нет.
-        assertFalse(Language.Spanish.available)
+        assertTrue(Language.Spanish.available, "испанский словарь заведён в Я10")
+        // Правило остаётся: язык без словаря не выбирается — это обещало бы надписи,
+        // которых нет. Сегодня словари есть у всех трёх.
+        assertTrue(Language.entries.all { it.available }, "у языка из списка нет словаря")
     }
 
     @Test
@@ -75,6 +75,7 @@ class WordsTest {
     fun у_словарей_свои_теги() {
         assertEquals("ru", RussianWords.tag)
         assertEquals("en", EnglishWords.tag)
+        assertEquals("es", SpanishWords.tag)
     }
 
     /**

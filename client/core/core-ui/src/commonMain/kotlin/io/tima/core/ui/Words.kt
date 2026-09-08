@@ -1849,7 +1849,7 @@ enum class Language(
 ) {
     Russian("ru", "Русский", { RussianWords }),
     English("en", "English", { EnglishWords }),
-    Spanish("es", "Español", null);
+    Spanish("es", "Español", { SpanishWords });
 
     /** Словарь языка. `null` — словаря ещё нет. */
     val words: Words? get() = dictionary?.invoke()
