@@ -34,6 +34,12 @@ type ChannelPost struct {
 	Markup          []byte   // компактный JSON (ADR-0011 §6); nil = без разметки
 	MarkupVersion   int32
 	CreatedAtUnixMs int64
+	// Level — круг записи (ADR-0019): 0 всем и всегда, 1 всем, 2 подписчикам,
+	// 3 поимённо. Шифра в канале нет, поэтому −1 здесь не бывает.
+	Level int16
+	// ParentPostID — корень, если это комментарий (ADR-0024). Ноль значит обычная
+	// запись. Своего круга у комментария нет: он берётся у корня при выдаче.
+	ParentPostID uint64
 }
 
 // CreateChannel создаёт канал и подписывает владельца одной транзакцией.
@@ -172,14 +178,21 @@ func (s *Store) CreatePost(ctx context.Context, p ChannelPost) (uint64, error) {
 	}
 	var id uint64
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO channel_posts (channel_id, author_id, text, nodes, markup, markup_version, created_at_unix_ms)
-		VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING post_id`,
-		p.ChannelID, p.AuthorID, p.Text, p.Nodes, markupParam, p.MarkupVersion, p.CreatedAtUnixMs).Scan(&id)
+		INSERT INTO channel_posts (channel_id, author_id, text, nodes, markup, markup_version, created_at_unix_ms, level)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING post_id`,
+		p.ChannelID, p.AuthorID, p.Text, p.Nodes, markupParam, p.MarkupVersion, p.CreatedAtUnixMs,
+		p.Level).Scan(&id)
 	return id, err
 }
 
 // ListPosts — лента канала (новые → старые).
-func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, limit int) ([]ChannelPost, error) {
+//
+// maxLevel — граница выдачи: владельцу 3, подписчику 2, постороннему 1 (ADR-0019).
+//
+// **Комментарии исключены здесь и в ListFeed** условием `parent_post_id IS NULL`. Они
+// лежат в той же таблице, и без этого условия ветка вылезает в ленту как запись
+// (ADR-0024, следствие 1). Условие покрыто отдельным тестом.
+func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16) ([]ChannelPost, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
@@ -187,10 +200,11 @@ func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, 
 		before = ^uint64(0) >> 1
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT channel_id, post_id, author_id, text, nodes, markup, markup_version, created_at_unix_ms
+		SELECT channel_id, post_id, author_id, text, nodes, markup, markup_version, created_at_unix_ms, level
 		FROM channel_posts
 		WHERE channel_id = $1 AND post_id < $2 AND NOT deleted
-		ORDER BY post_id DESC LIMIT $3`, channelID, before, limit)
+		  AND parent_post_id IS NULL AND level <= $4
+		ORDER BY post_id DESC LIMIT $3`, channelID, before, limit, maxLevel)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +213,7 @@ func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, 
 	for rows.Next() {
 		var p ChannelPost
 		if err := rows.Scan(&p.ChannelID, &p.PostID, &p.AuthorID, &p.Text, &p.Nodes, &p.Markup,
-			&p.MarkupVersion, &p.CreatedAtUnixMs); err != nil {
+			&p.MarkupVersion, &p.CreatedAtUnixMs, &p.Level); err != nil {
 			return nil, err
 		}
 		out = append(out, p)

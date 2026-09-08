@@ -41,7 +41,14 @@ type ChannelStore interface {
 	IsSubscribed(ctx context.Context, channelID, userID string) (bool, error)
 	SubscriberIDs(ctx context.Context, channelID string) ([]string, error)
 	CreatePost(ctx context.Context, p store.ChannelPost) (uint64, error)
-	ListPosts(ctx context.Context, channelID string, before uint64, limit int) ([]store.ChannelPost, error)
+	ListPosts(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16) ([]store.ChannelPost, error)
+
+	// Комментарии (ADR-0024): та же таблица, тот же вид записи — отсюда и то, что
+	// методы лежат в этом же интерфейсе, а не в отдельном.
+	GetPost(ctx context.Context, channelID string, postID uint64) (store.ChannelPost, error)
+	CreateComment(ctx context.Context, p store.ChannelPost, rootID uint64) (uint64, error)
+	ListComments(ctx context.Context, channelID string, rootID, after uint64, limit int) ([]store.ChannelPost, error)
+	CommentCounts(ctx context.Context, channelID string, rootIDs []uint64) (map[uint64]int, error)
 }
 
 // Проверка соответствия — обязанность компилятора, а не прогона: разошлись
@@ -57,6 +64,11 @@ func RegisterChannels(mux *http.ServeMux, st ChannelStore, n *Notifier, requireD
 	mux.HandleFunc("DELETE /api/v1/channels/{channelID}/subscribe", requireDevice(unsubscribeChannel(st)))
 	mux.HandleFunc("POST /api/v1/channels/{channelID}/posts", requireDevice(postToChannel(st, n)))
 	mux.HandleFunc("GET /api/v1/channels/{channelID}/posts", requireDevice(listChannelPosts(st)))
+
+	// Разговор под записью. Тот же набор обслуживает и ленту человека: она сделана
+	// каналом, и комментарий к её записи лежит в ней же.
+	mux.HandleFunc("GET /api/v1/channels/{channelID}/posts/{postID}/comments", requireDevice(listComments(st)))
+	mux.HandleFunc("POST /api/v1/channels/{channelID}/posts/{postID}/comments", requireDevice(addComment(st, n)))
 }
 
 func createChannel(st ChannelStore) http.HandlerFunc {
@@ -190,6 +202,11 @@ func postToChannel(st ChannelStore, n *Notifier) http.HandlerFunc {
 			// тот же переходный путь, что и у личных сообщений.
 			Nodes  []string `json:"nodes,omitempty"`
 			Markup string   `json:"markup,omitempty"` // компактный JSON (ADR-0011 §6); пусто = без разметки
+			// Level — круг записи (ADR-0019). Поле НЕОБЯЗАТЕЛЬНОЕ: не прислали —
+			// «всем», как было до его появления. Колонка `level` живёт с миграции
+			// 0036, но обработчик её не принимал, и уровень 2 в канале был
+			// недостижим — а ответ «уровень 2 — подписчик» без него не проверить.
+			Level *int16 `json:"level,omitempty"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&req); err != nil || req.Text == "" {
 			writeErr(w, http.StatusBadRequest, "bad_text", "нужен непустой text")
@@ -207,10 +224,19 @@ func postToChannel(st ChannelStore, n *Notifier) http.HandlerFunc {
 			}
 			markup = []byte(req.Markup)
 		}
+		// Шифра в канале нет вовсе — трансляция открытая, поэтому −1 здесь не бывает.
+		level := levelEveryone
+		if req.Level != nil {
+			level = *req.Level
+		}
+		if level < levelPublicShowcase || level > levelByGrant {
+			writeErr(w, http.StatusBadRequest, "bad_level", "круг вне 0…3")
+			return
+		}
 		now := time.Now().UnixMilli()
 		postID, err := st.CreatePost(r.Context(), store.ChannelPost{
 			ChannelID: channelID, AuthorID: id.UserID, Text: req.Text,
-			Nodes: nodes, Markup: markup, MarkupVersion: 1, CreatedAtUnixMs: now,
+			Nodes: nodes, Markup: markup, MarkupVersion: 1, CreatedAtUnixMs: now, Level: level,
 		})
 		if err != nil {
 			log.Printf("postToChannel: %v", err)
@@ -221,7 +247,7 @@ func postToChannel(st ChannelStore, n *Notifier) http.HandlerFunc {
 		// в журнал, потом live» держит Notifier — здесь про него знать не нужно.
 		post := map[string]any{
 			"channel_id": channelID, "post_id": postID, "author_id": id.UserID,
-			"text": req.Text, "nodes": nodes, "created_at_unix_ms": now,
+			"text": req.Text, "nodes": nodes, "created_at_unix_ms": now, "level": level,
 		}
 		if len(markup) > 0 {
 			post["markup"] = json.RawMessage(markup)
@@ -248,8 +274,8 @@ func listChannelPosts(st ChannelStore) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
+		id, _ := auth.FromContext(r.Context())
 		if !ch.IsPublic {
-			id, _ := auth.FromContext(r.Context())
 			if sub, _ := st.IsSubscribed(r.Context(), channelID, id.UserID); !sub && ch.OwnerID != id.UserID {
 				writeErr(w, http.StatusForbidden, "not_subscribed", "лента приватного канала — для подписчиков")
 				return
@@ -260,17 +286,29 @@ func listChannelPosts(st ChannelStore) http.HandlerFunc {
 			before, _ = strconv.ParseUint(v, 10, 64)
 		}
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-		posts, err := st.ListPosts(r.Context(), channelID, before, limit)
+		posts, err := st.ListPosts(r.Context(), channelID, before, limit, maxLevelInChannel(r, st, ch, id.UserID))
 		if err != nil {
 			log.Printf("listChannelPosts: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
+		}
+		// Счётчик комментариев приходит вместе с записями — одним запросом на всю
+		// страницу, а не по одному на запись (ADR-0024, следствие 4).
+		ids := make([]uint64, 0, len(posts))
+		for _, p := range posts {
+			ids = append(ids, p.PostID)
+		}
+		counts, err := st.CommentCounts(r.Context(), channelID, ids)
+		if err != nil {
+			log.Printf("listChannelPosts: счётчик: %v", err)
+			counts = nil
 		}
 		out := make([]map[string]any, 0, len(posts))
 		for _, p := range posts {
 			item := map[string]any{
 				"post_id": p.PostID, "author_id": p.AuthorID, "text": p.Text,
 				"nodes": p.Nodes, "created_at_unix_ms": p.CreatedAtUnixMs,
+				"level": p.Level, "comments": counts[p.PostID],
 			}
 			if len(p.Markup) > 0 {
 				item["markup"] = json.RawMessage(p.Markup)

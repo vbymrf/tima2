@@ -168,6 +168,9 @@ func (s *Store) CarryToFeed(
 
 // ListFeed — лента с раскрытыми ссылками.
 //
+// **Комментарии в ленту не попадают** (ADR-0024, следствие 1): они лежат в той же
+// таблице, и без `parent_post_id IS NULL` ветка вылезла бы на страницу как запись.
+//
 // **Ссылка отдаётся только вместе с живым оригиналом.** Оригинал удалён — строки нет; круг
 // оригинала сужен до «по разрешению» — строки нет. Так и выполняются обещания ADR-0019 §7:
 // «удалил оригинал — исчезло везде», «сузил доступ — подействовало везде». Проверка живёт
@@ -198,6 +201,7 @@ func (s *Store) ListFeed(
 		         ON o.group_id = p.ref_group_id AND o.message_id = p.ref_message_id AND NOT o.deleted
 		  LEFT JOIN groups g ON g.group_id = p.ref_group_id
 		 WHERE p.channel_id = $1 AND p.post_id < $2 AND NOT p.deleted
+		   AND p.parent_post_id IS NULL
 		   AND p.level <= $4
 		   AND (p.ref_group_id IS NULL OR (o.message_id IS NOT NULL AND o.level BETWEEN 0 AND 2))
 		 ORDER BY p.post_id DESC

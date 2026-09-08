@@ -84,6 +84,10 @@ type FeedStore interface {
 	// показали. Роль и поимённое разрешение отвечают на этот вопрос вместе.
 	GroupRole(ctx context.Context, groupID, userID string) (string, error)
 	GrantedLevelFor(ctx context.Context, groupID, userID string) (int16, error)
+
+	// Счётчик комментариев к записям страницы — одним запросом на страницу (ADR-0024,
+	// следствие 4). Сам разговор живёт в маршрутах канала: лента и есть канал.
+	CommentCounts(ctx context.Context, channelID string, rootIDs []uint64) (map[uint64]int, error)
 }
 
 var _ FeedStore = (*store.Store)(nil)
@@ -270,10 +274,23 @@ func writeFeedLevels(
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return
 	}
+	ids := make([]uint64, 0, len(items))
+	for _, it := range items {
+		ids = append(ids, it.PostID)
+	}
+	counts, err := st.CommentCounts(r.Context(), channelID, ids)
+	if err != nil {
+		log.Printf("writeFeed: счётчик комментариев: %v", err)
+		counts = nil
+	}
 	b64 := base64.RawURLEncoding
 	out := make([]map[string]any, 0, len(items))
 	for _, it := range items {
 		out = append(out, map[string]any{
+			// Разговор один на запись: у принесённой ссылки своих комментариев нет,
+			// они лежат у оригинала (ADR-0024 §3). Здесь считаются комментарии этой
+			// строки — и у ссылки их всегда ноль.
+			"comments": counts[it.PostID],
 			"post_id":            it.PostID,
 			"level":              it.Level,
 			"created_at_unix_ms": it.CreatedAtUnixMs,
