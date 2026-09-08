@@ -1,6 +1,8 @@
 package io.tima.shared
 
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.runtime.remember
 import io.tima.core.database.TimaDatabase
 import io.tima.domain.account.Session
@@ -36,6 +38,17 @@ class Assembled(
     val groupSender: GroupSender,
     val receiver: Receiver,
     val keyOrchestrator: GroupKeyOrchestrator,
+    /**
+     * Звонок «под вашей записью ответили» (ADR-0024, следствие 5).
+     *
+     * Поток, а не обратный вызов: экран страницы появляется и исчезает, а канал живёт всё
+     * время работы приложения. Отдавать ему ссылку на живой экран значило бы держать
+     * закрытый экран в памяти ради события, которое ему уже некуда показать.
+     *
+     * Значение — номер записи, под которой ответили; каждое событие меняет его, и этого
+     * достаточно, чтобы открытая страница перечиталась.
+     */
+    val commentPings: StateFlow<Long>,
 )
 
 /**
@@ -92,6 +105,10 @@ fun assemble(
             msNow = ::msNow,
         )
 
+        // Звонки о комментариях: канал кладёт сюда, страница читает. Заводится здесь,
+        // потому что живёт столько же, сколько сборка, — а не столько, сколько экран.
+        val commentPings = MutableStateFlow(0L)
+
         Assembled(
             session = device.session,
             environment = environment,
@@ -116,7 +133,9 @@ fun assemble(
                 session = device.session,
                 identity = identity,
                 keyOrchestrator = keyOrchestrator,
+                onComment = { _, postId -> commentPings.value = postId },
             ),
             keyOrchestrator = keyOrchestrator,
+            commentPings = commentPings,
         )
     }

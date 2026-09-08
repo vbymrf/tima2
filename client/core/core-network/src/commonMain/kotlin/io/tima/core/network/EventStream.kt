@@ -56,6 +56,11 @@ class EventStream(
          * где переписки нет вовсе (проверки транспорта).
          */
         onLevelNarrowed: suspend (EventStreamProtocol.Decision.LevelNarrowed) -> Unit = {},
+        /**
+         * Кто-то прокомментировал нашу запись (ADR-0024). По умолчанию ничего: канал
+         * обязан работать и там, где страницы нет вовсе.
+         */
+        onComment: suspend (EventStreamProtocol.Decision.CommentArrived) -> Unit = {},
         persist: suspend (EventStreamProtocol.IncomingEvent) -> Unit,
     ): StreamOutcome {
         var last = cursor
@@ -110,6 +115,17 @@ class EventStream(
                         // смысле, что событие доставлено тому, кто им занимается.
                         is EventStreamProtocol.Decision.LevelNarrowed -> {
                             onLevelNarrowed(decision)
+                            decision.eventId?.let {
+                                last = it
+                                send(Frame.Text(protocol.ackFrame(it)))
+                            }
+                        }
+
+                        // Комментарий подтверждается так же: доставлено — значит
+                        // обработано. Не подтвердить — значит получать его снова при
+                        // каждом подключении.
+                        is EventStreamProtocol.Decision.CommentArrived -> {
+                            onComment(decision)
                             decision.eventId?.let {
                                 last = it
                                 send(Frame.Text(protocol.ackFrame(it)))

@@ -42,6 +42,13 @@ class Receiver(
     private val session: Session,
     private val identity: DeviceIdentity,
     private val keyOrchestrator: GroupKeyOrchestrator,
+    /**
+     * Кому сказать, что под записью ответили: `(channelId, postId)`.
+     *
+     * Приёмник не знает ни экранов, ни состояний — он только приносит. По умолчанию
+     * ничего: канал обязан работать и там, где страницы на экране нет.
+     */
+    private val onComment: (String, Long) -> Unit = { _, _ -> },
 ) {
 
     /** Что случилось с каналом в последний раз. Для диагностики, не для решений. */
@@ -73,6 +80,7 @@ class Receiver(
                         cursor = null,
                         onGroupKeys = { decision -> aboutKeys(decision) },
                         onLevelNarrowed = { decision -> aboutLevel(decision) },
+                        onComment = { decision -> aboutComment(decision) },
                     ) { event -> accept(event.chatId, event.messageId, event.envelope) }
             }
             lastOutcome = outcome.fold(
@@ -81,6 +89,28 @@ class Receiver(
             )
             delay(ПАУЗА_ПЕРЕД_ПОВТОРОМ_МС)
         }
+    }
+
+    /**
+     * Под нашей записью ответили (ADR-0024, следствие 5).
+     *
+     * **Что делает клиент.** Записывает в журнал и зовёт [onComment] — того, кто сейчас
+     * показывает страницу. Открытая страница перечитывается, и счётчик под записью
+     * меняется сам.
+     *
+     * **Чего он не делает, и это названо, а не забыто.** Полки уведомлений в приложении
+     * нет вовсе: ни списка событий, ни значка на окне, ни push. Уведомление автору —
+     * решение ADR-0024, и оно выполнено настолько, насколько у клиента есть куда его
+     * показать. Значок и push заводятся вместе с полкой уведомлений, отдельной работой.
+     */
+    private fun aboutComment(decision: EventStreamProtocol.Decision.CommentArrived) {
+        environment.journal.note(
+            chatId = decision.channelId,
+            key = "comment/${decision.channelId}/${decision.postId}/${decision.commentId}",
+            text = "Под вашей записью ответили",
+            atMs = msNow(),
+        )
+        onComment(decision.channelId, decision.postId)
     }
 
     /**

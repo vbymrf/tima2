@@ -76,6 +76,24 @@ class EventStreamProtocol {
         data class KeysArrived(val groupId: String, val eventId: Long?) : Decision
 
         /**
+         * Кто-то прокомментировал нашу запись (ADR-0024, следствие 5).
+         *
+         * Отдельный вид, а не «сообщение»: у комментария нет конверта, он не ложится в
+         * переписку и не требует ключа. Всё, что с ним делает клиент, — показывает автору,
+         * что под его записью ответили.
+         *
+         * О переносе к себе такого кадра нет и не будет (ADR-0019 §7): там автору нечего
+         * делать, а на комментарий отвечают.
+         */
+        data class CommentArrived(
+            val channelId: String,
+            val postId: Long,
+            val commentId: Long,
+            val authorId: String,
+            val eventId: Long?,
+        ) : Decision
+
+        /**
          * Участник просит недостающие версии ключа (`recovery.gk_request`).
          *
          * Просьба адресована нам, потому что сервер знает: эти версии у нас есть.
@@ -252,6 +270,22 @@ class EventStreamProtocol {
                     Decision.Skip("message.level_narrowed без обязательных полей", eventId)
                 } else {
                     Decision.LevelNarrowed(groupId, messageId, level, json.string("by") ?: "", eventId)
+                }
+            }
+
+            "channel.comment" -> {
+                val channelId = json.string("channel_id")
+                val postId = json["post_id"]?.jsonPrimitive?.longOrNull
+                if (channelId == null || postId == null) {
+                    Decision.Skip("channel.comment без обязательных полей", eventId)
+                } else {
+                    Decision.CommentArrived(
+                        channelId = channelId,
+                        postId = postId,
+                        commentId = json["comment_id"]?.jsonPrimitive?.longOrNull ?: 0,
+                        authorId = json.string("author_id") ?: "",
+                        eventId = eventId,
+                    )
                 }
             }
 

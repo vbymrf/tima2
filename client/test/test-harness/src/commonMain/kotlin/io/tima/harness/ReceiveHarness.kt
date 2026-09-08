@@ -33,6 +33,7 @@ class ReceiveHarness(private val inbox: Inbox) {
 
     /** Кадры про групповые ключи: что пришло. Выполнение — не дело стенда. */
     val aboutKeys = mutableListOf<String>()
+    val comments = mutableListOf<String>()
 
     /**
      * Обрабатывает кадр сервера так, как это делает живой канал.
@@ -66,6 +67,13 @@ class ReceiveHarness(private val inbox: Inbox) {
             // курсор застрянет, и следующие сообщения не приедут.
             is EventStreamProtocol.Decision.KeysArrived -> {
                 aboutKeys += "keys:${decision.groupId}"
+                decision.eventId?.let { sent += protocol.ackFrame(it) }
+            }
+
+            // Комментарий стенд подтверждает и запоминает: показывать его здесь нечему —
+            // экрана у стенда нет, — но курсор обязан двигаться.
+            is EventStreamProtocol.Decision.CommentArrived -> {
+                comments += "comment:${decision.channelId}/${decision.postId}"
                 decision.eventId?.let { sent += protocol.ackFrame(it) }
             }
 
