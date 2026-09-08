@@ -286,7 +286,7 @@ class AppearanceTest {
             assertEquals(
                 listOf(pair),
                 wrecked.merged(),
-                "«${pair.where}»: одинаковые цвета не признаны слившимися",
+                "«${RussianWords.appearance.place(pair)}»: одинаковые цвета не признаны слившимися",
             )
         }
     }

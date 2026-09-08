@@ -72,7 +72,7 @@ fun Rail(
         if (onSettings != null) {
             Item(
                 glyph = "⚙",
-                caption = "Настройки",
+                caption = Tima.words.settings2.settings,
                 selected = false,
                 howMany = 0,
                 withCaption = withCaptions,

@@ -243,6 +243,8 @@ interface StorageWords {
     val clearDiaryNow: String
     val clearDiaryAbout: String
     fun megabytes(value: Int): String
+    fun kilobytesOccupied(value: String): String
+    fun megabytesOccupied(value: String): String
 }
 
 /**
@@ -817,6 +819,9 @@ interface AppearanceWords {
     /** Два цвета слились: экран перестал читаться, и «назад» подождёт. */
     val merged: String
     fun mergedAbout(front: String, back: String, ratio: String, where: String): String
+
+    /** Где видна защищаемая пара — словами, которые человек прочтёт в предупреждении. */
+    fun place(pair: VitalPair): String
 }
 
 /** Разговор под записью и ветка в группе (ADR-0024). */
@@ -854,6 +859,7 @@ interface CommunityWords {
     val youOwner: String
     val youAdmin: String
     val youNotSubscribed: String
+    fun inside(howMany: Int, role: String): String
 }
 
 /**
@@ -969,6 +975,11 @@ object RussianWords : Words {
 
         // Фраза собирается целиком, а не склеивается из кусков на экране: на другом языке
         // порядок слов другой, и склейка разваливается первой (ПЛАН-ЯЗЫКА §3).
+        override fun place(pair: VitalPair) = when (pair) {
+            VitalPair.PLATE -> "имя окна в шапке и стрелка «назад»"
+            VitalPair.CONTENT -> "переключение окон и список настроек"
+        }
+
         override fun mergedAbout(front: String, back: String, ratio: String, where: String) =
             "«$front» и «$back» слились: $ratio : 1. Этим нарисовано $where — " +
                 "без них до оформления уже не дойти, поэтому «назад» подождёт." 
@@ -1212,6 +1223,8 @@ object RussianWords : Words {
             "Журнал нужен, когда что-то сломалось: очищенный придётся набирать заново, и " +
                 "отчёт о проблеме до тех пор будет пустым."
         override fun megabytes(value: Int) = "$value МБ"
+        override fun kilobytesOccupied(value: String) = "$value КБ"
+        override fun megabytesOccupied(value: String) = "$value МБ"
     }
 
     override val social = object : SocialWords {
@@ -1810,6 +1823,7 @@ object RussianWords : Words {
         override val youOwner = "вы владелец"
         override val youAdmin = "вы админ"
         override val youNotSubscribed = "вы не подписаны"
+        override fun inside(howMany: Int, role: String) = "$howMany внутри · $role"
     }
 }
 

@@ -166,5 +166,5 @@ private fun caption(state: CommunityState): String {
         state.subscribed -> words.youSubscribed
         else -> words.youNotSubscribed
     }
-    return "${state.items.size} внутри · $role"
+    return words.inside(state.items.size, role)
 }

@@ -258,7 +258,7 @@ private fun Merged(pair: VitalPair, ratio: Double, onFix: () -> Unit) = Column(
             front = words.appearance.slot(pair.front),
             back = words.appearance.slot(pair.back),
             ratio = ratio.rounded(),
-            where = pair.where,
+            where = words.appearance.place(pair),
         ),
     )
     Button(label = words.appearance.takeFromLight, onClick = onFix)

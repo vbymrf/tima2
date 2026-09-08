@@ -99,7 +99,7 @@ fun StorageScreen(
     )
     ListLine(
         middle = { Name(words.occupies) },
-        right = { Secondary(megabytes(occupied)) },
+        right = { Secondary(megabytes(occupied, words)) },
     )
 
     Caption(words.keep, fontSize = TimaType.sz5, weight = FontWeight.Bold)
@@ -158,8 +158,8 @@ private const val MAX_COUNT = 12
 private val SIZES = listOf(20, 50, 100)
 
 /** Мегабайты с одним знаком: точные байты человеку не говорят ничего. */
-private fun megabytes(bytes: Long): String {
-    if (bytes < 1024L * 1024) return (bytes / 1024).toString() + " КБ"
+private fun megabytes(bytes: Long, words: StorageWords = RussianWords.storage): String {
+    if (bytes < 1024L * 1024) return words.kilobytesOccupied((bytes / 1024).toString())
     val tenths = (bytes * 10 + 524_288) / 1_048_576
-    return (tenths / 10).toString() + "," + (tenths % 10) + " МБ"
+    return words.megabytesOccupied((tenths / 10).toString() + "," + (tenths % 10))
 }

@@ -154,14 +154,12 @@ fun TimaColors.with(slot: ColorSlot, color: Color): TimaColors = when (slot) {
  * а короткий путь через «⚙» — нет. Пара не добавлена: «защищаем **только**» сказано
  * прямо, а решение расширить список — за заказчиком.
  */
-enum class VitalPair(
-    val front: ColorSlot,
-    val back: ColorSlot,
-    /** Где это видно человеку — словами, которые он прочтёт в предупреждении. */
-    val where: String,
-) {
-    PLATE(ColorSlot.ON_ACCENT, ColorSlot.NAVIGATION, "имя окна в шапке и стрелка «назад»"),
-    CONTENT(ColorSlot.TEXT, ColorSlot.SURFACE, "переключение окон и список настроек"),
+//
+// **Где это видно человеку — в словаре** (`AppearanceWords.place`): перечисление осталось
+// ключом, как темы и цветовые места рядом (ПЛАН-ЯЗЫКА Я2).
+enum class VitalPair(val front: ColorSlot, val back: ColorSlot) {
+    PLATE(ColorSlot.ON_ACCENT, ColorSlot.NAVIGATION),
+    CONTENT(ColorSlot.TEXT, ColorSlot.SURFACE),
 }
 
 /**

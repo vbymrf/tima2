@@ -130,7 +130,7 @@ fun BookScreen(
                     // В виде «меню» разделы стоят вторым рядом вкладок, и полоса внутри
                     // списка была бы вторым способом сказать то же самое.
                     if (state.view.folders) {
-                        item(key = "раздел-${group.name}") {
+                        item(key = "section-${group.name}") {
                             SectionHeader(
                                 title = group.name,
                                 count = group.people.size,
