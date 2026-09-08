@@ -135,6 +135,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// регистратором, а не внутри каналов: у него свой узкий интерфейс, и модерация
 	// будет расти отдельно от вещания.
 	RegisterChannelModeration(mux, s.Store, s.requireActiveDevice)
+	// Сообщества: контейнер, который связывает готовые группы и каналы. Стоит рядом с
+	// каналами, потому что в них и складывается.
+	RegisterCommunities(mux, s.Store, s.requireActiveDevice)
 	// Страница человека: своя лента и перенос к себе. Лента — канал, который ищут по
 	// человеку, поэтому регистратор стоит рядом с каналами, а не с группами.
 	RegisterFeeds(mux, s.Store, s.requireActiveDevice)
