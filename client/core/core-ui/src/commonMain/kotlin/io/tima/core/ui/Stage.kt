@@ -133,7 +133,11 @@ fun InCenter(modifier: Modifier = Modifier, content: @Composable () -> Unit) = B
 @Composable
 fun EmptyArea(
     glyph: String? = null,
-    title: String = "Ничего не выбрано",
+    /**
+     * Заголовок. Умолчание приходит из словаря (ПЛАН-ЯЗЫКА Я2): раньше оно стояло здесь
+     * строкой, и на другом языке пустая область осталась бы русской.
+     */
+    title: String = LocalWords.current.common.nothingChosen,
     explanation: String? = null,
     modifier: Modifier = Modifier,
 ) = Column(

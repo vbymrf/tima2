@@ -40,6 +40,7 @@ import io.tima.core.ui.contrastOf
 import io.tima.core.ui.merged
 import io.tima.core.ui.ThemeChoice
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.TimaFixed
 import io.tima.core.ui.TimaTheme
 import io.tima.core.ui.TimaColors
@@ -116,6 +117,7 @@ private fun Inside(
     onAppearance: (Appearance) -> Unit,
     modifier: Modifier,
 ) {
+    val words = Tima.words
     // Какой цвет сейчас правят. `null` — правят не цвет, а тему.
     var editing by remember { mutableStateOf<ColorSlot?>(null) }
 
@@ -154,7 +156,7 @@ private fun Inside(
                 } else {
                     null
                 },
-                middle = { Name(choice.title) },
+                middle = { Name(words.appearance.theme(choice)) },
             )
         }
 
@@ -178,8 +180,9 @@ private fun Inside(
                 right = { Secondary(value.hex()) },
                 middle = {
                     Column {
-                        Name(slot.title)
-                        if (slot.about.isNotBlank()) Tertiary(slot.about)
+                        Name(words.appearance.slot(slot))
+                        val about = words.appearance.about(slot)
+                        if (about.isNotBlank()) Tertiary(about)
                     }
                 },
             )
@@ -244,9 +247,11 @@ private fun Merged(pair: VitalPair, ratio: Double, onFix: () -> Unit) = Column(
         .padding(TimaSpacing.about4),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
 ) {
+    val words = Tima.words
     Name("Так отсюда не выйти")
     Tertiary(
-        "«${pair.front.title}» и «${pair.back.title}» слились: ${ratio.rounded()} : 1. " +
+        "«${words.appearance.slot(pair.front)}» и «${words.appearance.slot(pair.back)}» " +
+            "слились: ${ratio.rounded()} : 1. " +
             "Этим нарисовано ${pair.where} — без них до оформления уже не дойти, " +
             "поэтому «назад» подождёт.",
     )
@@ -295,6 +300,7 @@ private fun Editor(
     onColor: (androidx.compose.ui.graphics.Color) -> Unit,
     onDone: () -> Unit,
 ) {
+    val words = Tima.words
     var typed by remember(slot) { mutableStateOf(value) }
     var palette by remember(slot) { mutableStateOf(false) }
     val problem = colorProblem(typed)
@@ -340,7 +346,7 @@ private fun Editor(
         }
 
         Tertiary(
-            text = problem
+            text = problem?.let { words.appearance.colorTrouble(it) }
                 ?: "Первые два знака — непрозрачность: FF непрозрачный, 00 невидимый",
         )
 

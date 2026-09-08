@@ -44,15 +44,39 @@ class WordsTest {
         // Пустая надпись — это пропущенный перевод, который прошёл компилятор: имя есть,
         // значения нет. Здесь он ловится.
         val words = RussianWords
-        val all = listOf(
-            words.back, words.cancel, words.ready, words.send, words.hide, words.noConnection,
-            words.settings, words.language, words.languageAbout,
-            words.comments, words.thread, words.commentHint, words.reply,
-            words.commentsClosed, words.commentsClosedOld, words.nobodyWroteYet, words.postGone,
-            words.community, words.communities, words.subscribe, words.unsubscribe,
-            words.bringHere, words.takeOut, words.bringingKeepsEverything,
-        )
+        val all = with(words) {
+            listOf(
+                common.back, common.cancel, common.ready, common.send, common.hide,
+                common.noConnection, common.nothingChosen,
+                settings.settings, settings.language, settings.languageAbout, settings.appLanguage,
+                settings.country, settings.countryAbout, settings.countryHint, settings.whatToShow,
+                settings.onlyMyCountry, settings.onlyMyLanguages, settings.filterNotForChats,
+                settings.on, settings.off, settings.chosen, settings.soon,
+                comments.comments, comments.thread, comments.hint, comments.reply,
+                comments.closed, comments.closedButOldStay, comments.nobodyWroteYet,
+                comments.postGone, comments.postGoneAbout, comments.loading,
+                communities.community, communities.communities, communities.subscribe,
+                communities.unsubscribe, communities.bring, communities.takeOut,
+                communities.bringOwn, communities.bringingKeepsEverything,
+                communities.noDescription, communities.emptyInside, communities.opening,
+                communities.channel, communities.group, communities.personalGroup,
+                communities.yourCommunity, communities.youSubscribed, communities.youOwner,
+                communities.youAdmin, communities.youNotSubscribed,
+                appearance.qrTooLong, appearance.qrTooLongAbout,
+            )
+        }
         assertTrue(all.none { it.isBlank() }, "в словаре есть пустая надпись")
+
+        // Названия тем и цветовых мест — тоже словарь, и пустых среди них быть не должно.
+        // Пояснение у трёх мест пусто намеренно, и потому проверяются только названия.
+        assertTrue(
+            ThemeChoice.entries.none { words.appearance.theme(it).isBlank() },
+            "у темы нет названия",
+        )
+        assertTrue(
+            ColorSlot.entries.none { words.appearance.slot(it).isBlank() },
+            "у цветового места нет названия",
+        )
         assertEquals("ru", words.tag)
     }
 }

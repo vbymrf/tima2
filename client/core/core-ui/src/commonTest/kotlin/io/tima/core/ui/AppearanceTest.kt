@@ -30,7 +30,7 @@ class AppearanceTest {
             assertEquals(
                 before.custom.slot(slot),
                 after.custom.slot(slot),
-                "цвет «${slot.title}» не пережил запись",
+                "цвет «${RussianWords.appearance.slot(slot)}» не пережил запись",
             )
         }
     }
@@ -164,7 +164,7 @@ class AppearanceTest {
         // в перечне быть не может, иначе две строки экрана правили бы одно значение.
         assertEquals(
             ColorSlot.entries.size,
-            ColorSlot.entries.map { it.title }.distinct().size,
+            ColorSlot.entries.map { RussianWords.appearance.slot(it) }.distinct().size,
             "две строки с одним названием",
         )
         assertNotEquals(custom, TimaColors.light, "ни один цвет не применился — набор мёртв")
@@ -183,18 +183,23 @@ class AppearanceTest {
         assertNull(colorProblem("8AC44A"), "правильный цвет не может быть проблемой")
         assertNull(colorProblem("#ff8ac44a"), "решётка и строчные — тоже правильно")
 
+        // Беда отдаётся ВИДОМ, а фразу собирает словарь (ПЛАН-ЯЗЫКА Я2): проверяем и то,
+        // что вид верен, и то, что фраза называет знак — на другом языке она построится
+        // иначе, но знак в ней останется.
         val strange = colorProblem("8AC44Ж")!!
-        assertTrue(strange.contains("Ж"), "чужой знак обязан быть назван: «$strange»")
+        assertTrue(strange is ColorTrouble.NotHex && strange.listed.contains("Ж"), "чужой знак не назван: $strange")
+        assertTrue(RussianWords.appearance.colorTrouble(strange).contains("Ж"))
 
         val cyrillic = colorProblem("8AC44С")!!
         assertTrue(
-            cyrillic.contains("С"),
-            "русская «С» неотличима от латинской на глаз — её обязательно назвать: «$cyrillic»",
+            cyrillic is ColorTrouble.NotHex && cyrillic.listed.contains("С"),
+            "русская «С» неотличима от латинской на глаз — её обязательно назвать: $cyrillic",
         )
 
         val short = colorProblem("8AC44")!!
-        assertTrue(short.contains("5"), "длина обязана быть названа числом: «$short»")
-        assertTrue(colorProblem("")!!.isNotBlank(), "у пустого поля тоже есть что сказать")
+        assertTrue(short is ColorTrouble.WrongLength && short.length == 5, "длина не названа: $short")
+        assertTrue(RussianWords.appearance.colorTrouble(short).contains("5"))
+        assertTrue(colorProblem("") == ColorTrouble.Empty, "у пустого поля тоже есть что сказать")
     }
 
     /**
@@ -206,7 +211,7 @@ class AppearanceTest {
     @Test
     fun чужой_знак_называется_раньше_длины() {
         val both = colorProblem("Ж")!!
-        assertTrue(both.contains("Ж"), "при двух бедах сразу называется знак, а не длина: «$both»")
+        assertTrue(both is ColorTrouble.NotHex, "при двух бедах сразу называется знак, а не длина: $both")
     }
 
     /**
@@ -222,11 +227,11 @@ class AppearanceTest {
             assertEquals(
                 TimaColors.light.slot(slot),
                 palette.first(),
-                "«${slot.title}»: первым обязано стоять значение светлой темы",
+                "«${RussianWords.appearance.slot(slot)}»: первым обязано стоять значение светлой темы",
             )
             assertTrue(
                 palette.contains(TimaColors.dark.slot(slot)),
-                "«${slot.title}»: значения тёмной темы в палитре нет",
+                "«${RussianWords.appearance.slot(slot)}»: значения тёмной темы в палитре нет",
             )
             assertEquals(palette.size, palette.distinct().size, "в палитре повторы")
             assertTrue(palette.size > ColorSlot.entries.size, "палитра беднее одной темы")
@@ -309,9 +314,9 @@ class AppearanceTest {
         val mark = Color(0xFF123456)
         for (slot in ColorSlot.entries) {
             val changed = TimaColors.light.with(slot, mark)
-            assertEquals(mark, changed.slot(slot), "«${slot.title}» не применился")
+            assertEquals(mark, changed.slot(slot), "«${RussianWords.appearance.slot(slot)}» не применился")
             val others = ColorSlot.entries.filter { it != slot && changed.slot(it) != TimaColors.light.slot(it) }
-            assertTrue(others.isEmpty(), "«${slot.title}» задел заодно: ${others.map { it.title }}")
+            assertTrue(others.isEmpty(), "«${RussianWords.appearance.slot(slot)}» задел заодно: ${others.map { RussianWords.appearance.slot(it) }}")
         }
     }
 }

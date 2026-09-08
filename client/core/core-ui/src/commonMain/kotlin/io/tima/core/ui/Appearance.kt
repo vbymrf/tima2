@@ -16,15 +16,15 @@ import kotlin.math.roundToInt
  * которого не просили, потом объясняют. Система при этом не забыта — она решает, **какая
  * тема стоит при первом запуске**, и на этом её роль заканчивается.
  */
-enum class ThemeChoice(val title: String) {
-    Light("Светлая"),
-    Dark("Тёмная"),
+enum class ThemeChoice {
+    Light,
+    Dark,
 
     /**
      * Своя тема. Начинается копией светлой или тёмной — той, что стояла в момент
      * первого захода: пустая палитра из чёрного по чёрному никому не нужна.
      */
-    Custom("Пользовательская"),
+    Custom,
 }
 
 /**
@@ -49,27 +49,31 @@ enum class ThemeChoice(val title: String) {
  *
  * Порядок объявления — порядок на экране: сначала то, что видно всегда и всем.
  */
-enum class ColorSlot(val title: String, val about: String) {
-    NAVIGATION("Навигация и действие", "логотип, текущее окно, «назад», «отправить»"),
-    ACTIVITY("Активность", "счётчик непрочитанного"),
-    CONFIRMED("Подтверждено", "доставлено, прочитано, метка E2E"),
+//
+// **Надписи лежат в словаре, а не здесь** (ПЛАН-ЯЗЫКА Я2): перечисление осталось ключом,
+// а слово приходит из `Words.appearance`. До Я2 они стояли прямо в перечислении — это
+// ровно тот случай, ради которого выбран словарь на Kotlin, а не файл ресурсов.
+enum class ColorSlot {
+    NAVIGATION,
+    ACTIVITY,
+    CONFIRMED,
 
-    SURFACE("Фон содержимого", "лента и переписка"),
-    FUNCTIONAL("Фон панелей", "шапка, вкладки, строка ввода"),
-    TEXT("Текст", "основной"),
-    TEXT_2("Текст потише", "подписи, время"),
-    TEXT_3("Текст ещё тише", "третий уровень"),
+    SURFACE,
+    FUNCTIONAL,
+    TEXT,
+    TEXT_2,
+    TEXT_3,
 
-    MY("Фон моих сообщений", ""),
-    AUTHOR("Фон чужих сообщений", ""),
-    BORDER("Рамка сообщения", ""),
-    LINE("Линия списка", "между записями"),
+    MY,
+    AUTHOR,
+    BORDER,
+    LINE,
 
-    ON_ACCENT("Текст на зелёном", "на кнопках, вкладках, плашке шапки"),
-    ON_AMBER("Текст на янтаре", "на счётчике непрочитанного"),
-    IN_PLATE("Внутри плашки", "логотип и кнопки на салатовом"),
-    SOFT_ACCENT("Тихая подложка", "невыбранная вкладка, поле ввода"),
-    QUIET("Нейтральная подложка", "невыбранная подвкладка, капсула переключателя"),
+    ON_ACCENT,
+    ON_AMBER,
+    IN_PLATE,
+    SOFT_ACCENT,
+    QUIET,
 }
 
 /** Значение цвета из набора. */
@@ -312,19 +316,36 @@ private const val HEX = "0123456789ABCDEF"
  * указанием, что не так». Проверки идут от частного к общему: сначала называется чужой
  * знак — он и есть причина, — и только потом длина.
  */
-fun colorProblem(text: String): String? {
+fun colorProblem(text: String): ColorTrouble? {
     val clean = text.trim().removePrefix("#").uppercase()
-    if (clean.isEmpty()) return "Пусто. Наберите цвет: шесть знаков или восемь"
+    if (clean.isEmpty()) return ColorTrouble.Empty
 
     val strangers = clean.filter { it !in HEX }.toSet()
     if (strangers.isNotEmpty()) {
-        val listed = strangers.joinToString("», «", prefix = "«", postfix = "»")
-        return "Не шестнадцатеричные знаки: $listed. Допустимы 0–9 и A–F"
+        return ColorTrouble.NotHex(strangers.joinToString("», «", prefix = "«", postfix = "»"))
     }
     if (clean.length != 6 && clean.length != 8) {
-        return "Знаков ${clean.length}, а нужно 6 (цвет) или 8 (с непрозрачностью)"
+        return ColorTrouble.WrongLength(clean.length)
     }
     return null
+}
+
+/**
+ * Беда с набранным цветом — **видом, а не готовой фразой** (ПЛАН-ЯЗЫКА Я2).
+ *
+ * Фраза собирается в словаре: «знаков 5, а нужно 6» на другом языке строится иначе, и
+ * склейка из кусков здесь разваливается первой. Поэтому наружу отдаётся то, ЧТО не так,
+ * а слово об этом — дело словаря.
+ */
+sealed interface ColorTrouble {
+    /** Поле пустое. */
+    data object Empty : ColorTrouble
+
+    /** Чужие знаки: их перечисление уже собрано в строку — это данные, а не фраза. */
+    data class NotHex(val listed: String) : ColorTrouble
+
+    /** Не та длина: шесть знаков или восемь. */
+    data class WrongLength(val length: Int) : ColorTrouble
 }
 
 /**

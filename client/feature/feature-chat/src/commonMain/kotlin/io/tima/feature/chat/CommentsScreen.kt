@@ -25,6 +25,7 @@ import io.tima.core.ui.Secondary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.Trouble
 import io.tima.domain.chat.CommentEntry
@@ -67,14 +68,18 @@ fun CommentsScreen(
      * «отличие: первой строкой исходное сообщение целиком»).
      */
     root: CommentEntry? = null,
-    /** Название подокна: у канала «Комментарии», у группы «Ветка». */
-    title: String = "Комментарии",
+    /**
+     * Название подокна: у канала «Комментарии», у группы «Ветка». `null` — берётся из
+     * словаря: подокно чаще всего именно комментарии (ПЛАН-ЯЗЫКА Я2).
+     */
+    title: String? = null,
     onCloseTrouble: () -> Unit = {},
 ) {
     val colors = Tima.colors
+    val words = Tima.words
     Column(modifier.fillMaxSize().background(colors.surface)) {
         SubwindowHeader(
-            title = title,
+            title = title ?: words.comments.comments,
             onBack = onBack,
             caption = caption(state),
         )
@@ -104,12 +109,12 @@ fun CommentsScreen(
             }
 
             when {
-                state.gone -> EmptyArea(title = "Записи больше нет", explanation = "Разговор ушёл вместе с ней")
+                state.gone -> EmptyArea(title = words.comments.postGone, explanation = words.comments.postGoneAbout)
                 state.entries.isEmpty() && state.loaded && state.closed ->
-                    EmptyArea(title = "Обсуждение закрыто")
+                    EmptyArea(title = words.comments.closed)
 
-                state.entries.isEmpty() && state.loaded -> EmptyArea(title = "Здесь ещё никто не написал")
-                state.entries.isEmpty() -> EmptyArea(title = "Загружаем разговор…")
+                state.entries.isEmpty() && state.loaded -> EmptyArea(title = words.comments.nobodyWroteYet)
+                state.entries.isEmpty() -> EmptyArea(title = words.comments.loading)
                 else -> state.entries.forEach { entry ->
                     CommentLine(entry, nameOf(entry.authorId), onReply)
                 }
@@ -119,7 +124,7 @@ fun CommentsScreen(
             // не пустотой поля ввода.
             if (state.closed && state.entries.isNotEmpty()) {
                 Tertiary(
-                    "Обсуждение закрыто. Написанное раньше осталось",
+                    words.comments.closedButOldStay,
                     modifier = Modifier.padding(TimaSpacing.about4),
                 )
             }
@@ -134,7 +139,7 @@ fun CommentsScreen(
                 Field(
                     value = state.draft,
                     onChange = onDraft,
-                    hint = "Написать комментарий…",
+                    hint = words.comments.hint,
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(glyph = "➤", onClick = onSend, live = true)
@@ -165,7 +170,7 @@ private fun CommentLine(entry: CommentEntry, name: String, onReply: (String) -> 
                 Secondary(entry.text)
                 // «Ответить» подставляет «@имя» в поле ввода: третьего уровня вложения
                 // нет, ответ цепляется к тому же корню.
-                Chip("Ответить", kind = ChipKind.Quiet, onClick = { onReply(name) })
+                Chip(Tima.words.comments.reply, kind = ChipKind.Quiet, onClick = { onReply(name) })
             }
         },
     )

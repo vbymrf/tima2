@@ -61,13 +61,13 @@ fun LanguageScreen(
     val colors = Tima.colors
     val words = Tima.words
     Column(modifier.fillMaxSize().background(colors.surface)) {
-        SubwindowHeader(title = words.language, onBack = onBack)
+        SubwindowHeader(title = words.settings.language, onBack = onBack)
 
         Column(
             modifier = Modifier.fillMaxWidth().padding(TimaSpacing.about4),
             verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
         ) {
-            Tertiary(words.languageAbout)
+            Tertiary(words.settings.languageAbout)
         }
 
         country?.let { chosenCountry ->
@@ -79,33 +79,33 @@ fun LanguageScreen(
 
                 // Страна — не язык, и это разные ответы: русский пишут и в Казахстане.
                 // Пустая законна: «не указана» значит «видит всё», а не «ничего».
-                Name("Страна")
-                Tertiary("Ею сервер отбирает выдачу: своё, а не весь мир. Пусто — показывать всё")
+                Name(words.settings.country)
+                Tertiary(words.settings.countryAbout)
                 Field(
                     value = chosenCountry,
                     onChange = onCountry,
-                    hint = "RU",
+                    hint = words.settings.countryHint,
                 )
 
-                Name("Что показывать")
+                Name(words.settings.whatToShow)
                 ChoiceSwitch(
-                    title = "Только моя страна",
+                    title = words.settings.onlyMyCountry,
                     on = onlyMyCountry,
                     onChange = onOnlyMyCountry,
                 )
                 ChoiceSwitch(
-                    title = "Только мои языки",
+                    title = words.settings.onlyMyLanguages,
                     on = onlyMyLanguages,
                     onChange = onOnlyMyLanguages,
                 )
                 // Названо прямо, потому что человек ждёт обратного: отбор не касается
                 // переписки и ленты друзей — друг остаётся другом, уехав и заговорив
                 // на другом языке.
-                Tertiary("Переписки и ленты друзей это не касается")
+                Tertiary(words.settings.filterNotForChats)
             }
         }
 
-        Name("Язык приложения", modifier = Modifier.padding(horizontal = TimaSpacing.about4))
+        Name(words.settings.appLanguage, modifier = Modifier.padding(horizontal = TimaSpacing.about4))
         for (language in Language.entries) {
             ListLine(
                 onClick = if (language.available) {
@@ -121,8 +121,8 @@ fun LanguageScreen(
                 },
                 right = {
                     when {
-                        language.tag == current -> Chip("выбран", kind = ChipKind.Selected)
-                        !language.available -> Chip("скоро", kind = ChipKind.Quiet)
+                        language.tag == current -> Chip(words.settings.chosen, kind = ChipKind.Selected)
+                        !language.available -> Chip(words.settings.soon, kind = ChipKind.Quiet)
                         else -> Unit
                     }
                 },
@@ -135,12 +135,13 @@ fun LanguageScreen(
 /** Переключатель одной строкой: название слева, состояние справа. */
 @Composable
 private fun ChoiceSwitch(title: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    val words = Tima.words
     ListLine(
         onClick = { onChange(!on) },
         middle = { Name(title) },
         right = {
             Chip(
-                if (on) "включено" else "выключено",
+                if (on) words.settings.on else words.settings.off,
                 kind = if (on) ChipKind.Selected else ChipKind.Quiet,
             )
         },

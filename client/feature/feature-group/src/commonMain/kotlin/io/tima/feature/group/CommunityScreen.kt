@@ -20,6 +20,7 @@ import io.tima.core.ui.Secondary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.Trouble
@@ -53,9 +54,10 @@ fun CommunityScreen(
     onUnlink: ((CommunityItem) -> Unit)? = null,
 ) {
     val colors = Tima.colors
+    val words = Tima.words
     Column(modifier.fillMaxSize().background(colors.surface)) {
         SubwindowHeader(
-            title = state.title.ifBlank { "Сообщество" },
+            title = state.title.ifBlank { words.communities.community },
             onBack = onBack,
             caption = caption(state),
         )
@@ -67,14 +69,14 @@ fun CommunityScreen(
             state.trouble?.let { Trouble(it) }
 
             if (!state.loaded) {
-                Secondary("Открываем сообщество…")
+                Secondary(words.communities.opening)
                 return@Column
             }
 
             // Описание идёт первым и целиком: это то, ради чего страницу открывают
             // впервые. Пусто — так и говорим, а не оставляем молчание.
             if (state.description.isEmpty()) {
-                Tertiary("Описания пока нет", lineOne = true)
+                Tertiary(words.communities.noDescription, lineOne = true)
             } else {
                 for (line in state.description) Caption(line, fontSize = TimaType.sz4)
             }
@@ -83,7 +85,7 @@ fun CommunityScreen(
             // читаешь его каналы. Членства в личных группах она не даёт (ADR-0018).
             if (!state.owner) {
                 Button(
-                    label = if (state.subscribed) "Отписаться" else "Подписаться",
+                    label = if (state.subscribed) words.communities.unsubscribe else words.communities.subscribe,
                     onClick = { onSubscribe(!state.subscribed) },
                     kind = if (state.subscribed) ButtonKind.Quiet else ButtonKind.Action,
                     modifier = Modifier.fillMaxWidth(),
@@ -93,7 +95,7 @@ fun CommunityScreen(
 
         if (state.loaded && state.items.isEmpty()) {
             Secondary(
-                "В сообществе пока ничего нет",
+                words.communities.emptyInside,
                 modifier = Modifier.padding(horizontal = TimaSpacing.about4),
             )
             return@Column
@@ -111,7 +113,7 @@ fun CommunityScreen(
                         }
                     },
                     right = if (onUnlink != null) {
-                        { Button(label = "Вынуть", onClick = { onUnlink(item) }, kind = ButtonKind.Quiet) }
+                        { Button(label = words.communities.takeOut, onClick = { onUnlink(item) }, kind = ButtonKind.Quiet) }
                     } else {
                         null
                     },
@@ -124,8 +126,8 @@ fun CommunityScreen(
             if (onLink != null && state.linkable.isNotEmpty()) {
                 item {
                     Column(Modifier.padding(TimaSpacing.about4)) {
-                        Name("Внести своё")
-                        Tertiary("Переписка, участники и ключи не меняются — меняется одна ссылка")
+                        Name(words.communities.bringOwn)
+                        Tertiary(words.communities.bringingKeepsEverything)
                     }
                 }
                 items(state.linkable, key = { "free:" + it.kind + it.id }) { item ->
@@ -137,7 +139,7 @@ fun CommunityScreen(
                                 Secondary(kindWord(item), lineOne = true)
                             }
                         },
-                        right = { Button(label = "Внести", onClick = { onLink(item) }) },
+                        right = { Button(label = words.communities.bring, onClick = { onLink(item) }) },
                     )
                 }
             }
@@ -146,20 +148,23 @@ fun CommunityScreen(
 }
 
 /** Как назвать элемент состава одним словом. */
+@Composable
 private fun kindWord(item: CommunityItem): String = when {
-    item.kind == CommunityKinds.CHANNEL -> "канал"
-    item.personal -> "личная группа"
-    else -> "группа"
+    item.kind == CommunityKinds.CHANNEL -> Tima.words.communities.channel
+    item.personal -> Tima.words.communities.personalGroup
+    else -> Tima.words.communities.group
 }
 
 /** Подпись под названием: сколько внутри и чем человек здесь является. */
+@Composable
 private fun caption(state: CommunityState): String {
     if (!state.loaded) return ""
+    val words = Tima.words.communities
     val role = when {
-        state.owner -> "вы владелец"
-        state.admin -> "вы админ"
-        state.subscribed -> "вы подписаны"
-        else -> "вы не подписаны"
+        state.owner -> words.youOwner
+        state.admin -> words.youAdmin
+        state.subscribed -> words.youSubscribed
+        else -> words.youNotSubscribed
     }
     return "${state.items.size} внутри · $role"
 }

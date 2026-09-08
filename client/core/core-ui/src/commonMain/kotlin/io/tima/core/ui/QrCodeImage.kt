@@ -30,7 +30,12 @@ import kotlin.math.floor
 fun QrCodeImage(data: String, modifier: Modifier = Modifier) {
     val matrix = remember(data) { QrCode.matrix(data) }
     if (matrix == null) {
-        EmptyArea(title = "Код не показать", explanation = "Он слишком длинный для QR", modifier = modifier)
+        val words = Tima.words
+        EmptyArea(
+            title = words.appearance.qrTooLong,
+            explanation = words.appearance.qrTooLongAbout,
+            modifier = modifier,
+        )
         return
     }
 

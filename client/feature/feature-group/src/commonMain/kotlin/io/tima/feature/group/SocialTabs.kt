@@ -14,6 +14,8 @@ import androidx.compose.ui.Modifier
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.Button
 import io.tima.core.ui.Caption
+import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
@@ -44,7 +46,7 @@ fun CatalogTab(
         // Сообщества — первыми и одной группой строк: контейнер стоит выше того, что в
         // нём лежит, иначе состав читается раньше, чем то, чему он принадлежит.
         if (onOpenCommunity != null && state.communities.isNotEmpty()) {
-            Caption("Сообщества", modifier = Modifier.padding(TimaSpacing.about4))
+            Caption(Tima.words.communities.communities, modifier = Modifier.padding(TimaSpacing.about4))
             for (community in state.communities) {
                 ListLine(
                     onClick = { onOpenCommunity(community.communityId) },
@@ -53,7 +55,11 @@ fun CatalogTab(
                         Column {
                             Name(community.title)
                             Secondary(
-                                if (community.owner) "ваше сообщество" else "вы подписаны",
+                                if (community.owner) {
+                                    Tima.words.communities.yourCommunity
+                                } else {
+                                    Tima.words.communities.youSubscribed
+                                },
                                 lineOne = true,
                             )
                         }

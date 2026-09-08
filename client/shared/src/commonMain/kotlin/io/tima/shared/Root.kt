@@ -109,6 +109,8 @@ import io.tima.core.ui.TimaTheme
 import androidx.compose.foundation.isSystemInDarkTheme
 import io.tima.feature.shell.AppearanceScreen
 import io.tima.core.ui.Language
+import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 import io.tima.core.ui.RussianWords
 import io.tima.feature.shell.LanguageScreen
 import io.tima.feature.shell.SettingsScreen
@@ -1445,7 +1447,7 @@ private fun Chat(
             onSend = { store.threadSendPressed() },
             onReply = { name -> store.threadDraftChanged(WriteComment.mention(name, state.threadDraft)) },
             root = open.root.asComment(0),
-            title = "Ветка",
+            title = Tima.words.comments.thread,
         )
         return
     }
@@ -1568,6 +1570,8 @@ private fun Settings(
     /** Где платформа держит выбранный срок хранения журнала. */
     diaryPolicy: AppearanceStore,
 ) {
+    // Название темы считается в составе, а не в лямбде списка: лямбда не composable.
+    val themeName = Tima.words.appearance.theme(appearance.choice)
     val fleet = remember { DevicesStore(network.myFleet, scope) }
     val devices by fleet.state.collectAsState()
 
@@ -1600,7 +1604,7 @@ private fun Settings(
                 SettingsItem.ABOUT -> build.name
                 // Тема видна, не заходя внутрь: половина заходов в настройки на этом и
                 // заканчивается — человек посмотрел и вышел.
-                SettingsItem.APPEARANCE -> appearance.choice.title.lowercase()
+                SettingsItem.APPEARANCE -> themeName.lowercase()
                 else -> ""
             }
         },
