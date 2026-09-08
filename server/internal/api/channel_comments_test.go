@@ -24,6 +24,8 @@ type feedAnswer struct {
 		Level    int16  `json:"level"`
 		Comments int    `json:"comments"`
 		Text     string `json:"text"`
+		Lang     string `json:"lang"`
+		Country  string `json:"country"`
 	} `json:"posts"`
 }
 

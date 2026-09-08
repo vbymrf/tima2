@@ -20,6 +20,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"tima/server/internal/auth"
@@ -35,7 +36,7 @@ type ChannelStore interface {
 	CreateChannel(ctx context.Context, c store.Channel) (string, error)
 	GetChannel(ctx context.Context, channelID string) (store.Channel, error)
 	MyChannels(ctx context.Context, userID string) ([]store.ChannelView, error)
-	DiscoverChannels(ctx context.Context, userID string, limit int) ([]store.ChannelView, error)
+	DiscoverChannels(ctx context.Context, userID string, limit int, country string, langs []string) ([]store.ChannelView, error)
 	Subscribe(ctx context.Context, channelID, userID string) error
 	Unsubscribe(ctx context.Context, channelID, userID string) error
 	IsSubscribed(ctx context.Context, channelID, userID string) (bool, error)
@@ -150,7 +151,11 @@ func discoverChannels(st ChannelStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-		channels, err := st.DiscoverChannels(r.Context(), id.UserID, limit)
+		// Отбор по стране и языкам — параметрами запроса (ПЛАН-ЯЗЫКА Я6). Настройка
+		// живёт на клиенте, а `WHERE` отрабатывает здесь: отфильтровать полученное
+		// клиент может у списка контактов, но не у ленты, которая листается.
+		channels, err := st.DiscoverChannels(r.Context(), id.UserID, limit,
+			r.URL.Query().Get("country"), langsOf(r.URL.Query().Get("langs")))
 		if err != nil {
 			log.Printf("discoverChannels: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -158,6 +163,24 @@ func discoverChannels(st ChannelStore) http.HandlerFunc {
 		}
 		writeChannels(w, channels)
 	}
+}
+
+// langsOf — список языков из параметра `langs=ru,en`. Пусто — отбора по языку нет.
+//
+// Язык — элемент выбора: читатель говорит, на каких языках хочет видеть выдачу. Пустой
+// список значит «на любых», а не «ни на каких»: молчание не должно закрывать человеку
+// всё сразу.
+func langsOf(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	out := make([]string, 0, 4)
+	for _, part := range strings.Split(raw, ",") {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 func writeChannels(w http.ResponseWriter, channels []store.ChannelView) {
@@ -232,6 +255,10 @@ func postToChannel(st ChannelStore, n *Notifier) http.HandlerFunc {
 			// 0036, но обработчик её не принимал, и уровень 2 в канале был
 			// недостижим — а ответ «уровень 2 — подписчик» без него не проверить.
 			Level *int16 `json:"level,omitempty"`
+			// Lang — язык записи, если автор указал его сам (ПЛАН-ЯЗЫКА Я8). Пусто —
+			// берётся из профиля автора. Страну клиент не присылает вовсе: её ставит
+			// сервер, иначе «своя страна» перестала бы что-либо значить.
+			Lang string `json:"lang,omitempty"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&req); err != nil || req.Text == "" {
 			writeErr(w, http.StatusBadRequest, "bad_text", "нужен непустой text")
@@ -262,6 +289,7 @@ func postToChannel(st ChannelStore, n *Notifier) http.HandlerFunc {
 		postID, err := st.CreatePost(r.Context(), store.ChannelPost{
 			ChannelID: channelID, AuthorID: id.UserID, Text: req.Text,
 			Nodes: nodes, Markup: markup, MarkupVersion: 1, CreatedAtUnixMs: now, Level: level,
+			Lang: req.Lang,
 		})
 		if err != nil {
 			log.Printf("postToChannel: %v", err)
@@ -334,6 +362,12 @@ func listChannelPosts(st ChannelStore) http.HandlerFunc {
 				"post_id": p.PostID, "author_id": p.AuthorID, "text": p.Text,
 				"nodes": p.Nodes, "created_at_unix_ms": p.CreatedAtUnixMs,
 				"level": p.Level, "comments": counts[p.PostID],
+				// Выключатель обсуждения этой записи (ADR-0024 §6): экран говорит
+				// «обсуждение закрыто» словом, а не пустым списком.
+				"comments_closed": p.CommentsClosed,
+				// Язык и страна записи (ПЛАН-ЯЗЫКА Я5): по ним клиент отсеивает, а
+				// сервер готовит региональные ленты. Метаданные открытые.
+				"lang": p.Lang, "country": p.Country,
 			}
 			if len(p.Markup) > 0 {
 				item["markup"] = json.RawMessage(p.Markup)

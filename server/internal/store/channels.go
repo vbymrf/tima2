@@ -42,6 +42,10 @@ type ChannelPost struct {
 	// Level — круг записи (ADR-0019): 0 всем и всегда, 1 всем, 2 подписчикам,
 	// 3 поимённо. Шифра в канале нет, поэтому −1 здесь не бывает.
 	Level int16
+	// Lang/Country — язык и страна записи (ПЛАН-ЯЗЫКА Я5). Ставятся ШТАМПОМ при
+	// публикации, из профиля автора: переезд автора не должен переписывать прошлое.
+	Lang    string
+	Country string
 	// ParentPostID — корень, если это комментарий (ADR-0024). Ноль значит обычная
 	// запись. Своего круга у комментария нет: он берётся у корня при выдаче.
 	ParentPostID uint64
@@ -101,7 +105,24 @@ func (s *Store) MyChannels(ctx context.Context, userID string) ([]ChannelView, e
 }
 
 // DiscoverChannels — публичные каналы, на которые пользователь ещё НЕ подписан.
-func (s *Store) DiscoverChannels(ctx context.Context, userID string, limit int) ([]ChannelView, error) {
+//
+// **Отбор по стране и языку** (ПЛАН-ЯЗЫКА Я6): канал считается подходящим, если у него
+// есть хоть одна запись нужной страны и языка. Отбирается именно по записям, а не по
+// каналу: у канала своей страны нет — он там, откуда в нём пишут.
+//
+// Пустая страна и пустой список языков значат «без отбора». Молчание не должно закрывать
+// человеку всё сразу, а незаполненная настройка — это молчание.
+//
+// `COALESCE(cardinality(...), 0)` не для красоты: пустой список приезжает из Go как NULL, а
+// `cardinality(NULL) = 0` — это NULL, то есть «не истина». Без обёртки условие тихо
+// отсекало бы ВСЕ каналы у всех, кто не задал языки, — что и случилось на первом прогоне.
+func (s *Store) DiscoverChannels(
+	ctx context.Context,
+	userID string,
+	limit int,
+	country string,
+	langs []string,
+) ([]ChannelView, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
@@ -113,8 +134,16 @@ func (s *Store) DiscoverChannels(ctx context.Context, userID string, limit int) 
 		WHERE c.deleted_at IS NULL AND c.is_public
 		  AND NOT EXISTS (SELECT 1 FROM channel_subscriptions s
 		                  WHERE s.channel_id = c.channel_id AND s.subscriber_id = $1)
+		  AND ($3 = '' OR EXISTS (
+		        SELECT 1 FROM channel_posts p
+		         WHERE p.channel_id = c.channel_id AND NOT p.deleted
+		           AND p.parent_post_id IS NULL AND p.country = $3))
+		  AND (COALESCE(cardinality($4::text[]), 0) = 0 OR EXISTS (
+		        SELECT 1 FROM channel_posts p
+		         WHERE p.channel_id = c.channel_id AND NOT p.deleted
+		           AND p.parent_post_id IS NULL AND p.lang = ANY($4)))
 		ORDER BY c.created_at DESC
-		LIMIT $2`, userID, limit)
+		LIMIT $2`, userID, limit, country, langs)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +205,14 @@ func (s *Store) SubscriberIDs(ctx context.Context, channelID string) ([]string, 
 	return out, rows.Err()
 }
 
-// CreatePost — ADR-0011 §4: публичный контур хранит nodes/markup открытым текстом
+// CreatePost — запись канала со штампом языка и страны.
+//
+// **Штамп ставит сервер, а не клиент**, и ставит из профиля автора одним запросом с
+// вставкой: чтение профиля отдельным шагом дало бы окно, в котором человек меняет страну
+// между чтением и записью. Язык клиент может назвать сам (автор указал принудительно) —
+// тогда берётся присланный; страна всегда из профиля.
+//
+// ADR-0011 §4: публичный контур хранит nodes/markup открытым текстом
 // отдельными колонками (в отличие от приватного, где они едут внутри
 // зашифрованной нагрузки и база их не видит вовсе).
 func (s *Store) CreatePost(ctx context.Context, p ChannelPost) (uint64, error) {
@@ -189,10 +225,15 @@ func (s *Store) CreatePost(ctx context.Context, p ChannelPost) (uint64, error) {
 	}
 	var id uint64
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO channel_posts (channel_id, author_id, text, nodes, markup, markup_version, created_at_unix_ms, level)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING post_id`,
+		INSERT INTO channel_posts
+		    (channel_id, author_id, text, nodes, markup, markup_version, created_at_unix_ms, level,
+		     lang, country)
+		SELECT $1,$2,$3,$4,$5,$6,$7,$8,
+		       COALESCE(NULLIF($9, ''), u.lang), u.country
+		  FROM users u WHERE u.user_id = $2
+		RETURNING post_id`,
 		p.ChannelID, p.AuthorID, p.Text, p.Nodes, markupParam, p.MarkupVersion, p.CreatedAtUnixMs,
-		p.Level).Scan(&id)
+		p.Level, p.Lang).Scan(&id)
 	return id, err
 }
 
@@ -214,7 +255,8 @@ func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, 
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT p.channel_id, p.post_id, p.author_id, p.text, p.nodes, p.markup,
-		       p.markup_version, p.created_at_unix_ms, p.level, p.comments_closed
+		       p.markup_version, p.created_at_unix_ms, p.level, p.comments_closed,
+		       p.lang, p.country
 		FROM channel_posts p
 		LEFT JOIN feed_level_grants fg
 		       ON fg.channel_id = p.channel_id AND fg.post_id = p.post_id
@@ -231,7 +273,8 @@ func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, 
 	for rows.Next() {
 		var p ChannelPost
 		if err := rows.Scan(&p.ChannelID, &p.PostID, &p.AuthorID, &p.Text, &p.Nodes, &p.Markup,
-			&p.MarkupVersion, &p.CreatedAtUnixMs, &p.Level, &p.CommentsClosed); err != nil {
+			&p.MarkupVersion, &p.CreatedAtUnixMs, &p.Level, &p.CommentsClosed,
+			&p.Lang, &p.Country); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
