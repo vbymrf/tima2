@@ -146,7 +146,7 @@ private fun Inside(
             )
         }
 
-        SectionTitle("Тема")
+        SectionTitle(words.appearance.theme)
         for (choice in ThemeChoice.entries) {
             ListLine(
                 onClick = { onAppearance(appearance.copy(choice = choice)) },
@@ -164,14 +164,13 @@ private fun Inside(
             // Строки цветов показываются только у своей темы. Показать их у светлой
             // значило бы предложить править то, что не применится.
             Tertiary(
-                text = "Свои цвета показываются, когда выбрана «Пользовательская». " +
-                    "Правки в ней сохраняются и при переключении на светлую или тёмную.",
+                text = words.appearance.customOnly,
                 modifier = Modifier.padding(TimaSpacing.about4),
             )
             return@Column
         }
 
-        SectionTitle("Цвета")
+        SectionTitle(words.appearance.colors)
         for (slot in ColorSlot.entries) {
             val value = appearance.custom.slot(slot)
             ListLine(
@@ -206,9 +205,14 @@ private fun Inside(
             horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
             verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
         ) {
-            for ((label, base) in RESETS) {
+            for ((theme, base) in RESETS) {
                 Button(
-                    label = label,
+                    // Надпись собирается из словаря: «Вернуть светлую» — это глагол плюс
+                    // название темы, и на другом языке порядок слов другой.
+                    label = when (theme) {
+                        ThemeChoice.Light -> words.appearance.backToLight
+                        else -> words.appearance.backToDark
+                    },
                     kind = ButtonKind.Dangerous,
                     onClick = {
                         onAppearance(appearance.copy(custom = base))
@@ -248,14 +252,16 @@ private fun Merged(pair: VitalPair, ratio: Double, onFix: () -> Unit) = Column(
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
 ) {
     val words = Tima.words
-    Name("Так отсюда не выйти")
+    Name(words.appearance.merged)
     Tertiary(
-        "«${words.appearance.slot(pair.front)}» и «${words.appearance.slot(pair.back)}» " +
-            "слились: ${ratio.rounded()} : 1. " +
-            "Этим нарисовано ${pair.where} — без них до оформления уже не дойти, " +
-            "поэтому «назад» подождёт.",
+        words.appearance.mergedAbout(
+            front = words.appearance.slot(pair.front),
+            back = words.appearance.slot(pair.back),
+            ratio = ratio.rounded(),
+            where = pair.where,
+        ),
     )
-    Button(label = "Взять из светлой", onClick = onFix)
+    Button(label = words.appearance.takeFromLight, onClick = onFix)
 }
 
 /** Контраст числом, каким его читает человек: «1,4», а не «1.3999999». */
@@ -271,9 +277,9 @@ private fun Double.rounded(): String {
  * как решение. Третьей темы здесь взяться неоткуда — своя как раз и есть то, от чего
  * возвращаются.
  */
-internal val RESETS: List<Pair<String, TimaColors>> = listOf(
-    "Вернуть светлую" to TimaColors.light,
-    "Вернуть тёмную" to TimaColors.dark,
+internal val RESETS: List<Pair<ThemeChoice, TimaColors>> = listOf(
+    ThemeChoice.Light to TimaColors.light,
+    ThemeChoice.Dark to TimaColors.dark,
 )
 
 /**
@@ -328,7 +334,7 @@ private fun Editor(
             // применению один, и он проходит через «Применить». Иначе получилось бы,
             // что набранное требует подтверждения, а выбранное — нет.
             Button(
-                label = if (palette) "Скрыть" else "Палитра",
+                label = if (palette) words.common.hide else words.appearance.palette,
                 kind = ButtonKind.Quiet,
                 onClick = { palette = !palette },
             )
@@ -341,13 +347,12 @@ private fun Editor(
                 color = colorOf(typed) ?: colorOf(value) ?: Tima.colors.surface,
                 onPick = { typed = it.hex() },
             )
-            Tertiary("Цвета проекта")
+            Tertiary(words.appearance.projectColors)
             Ready(slot) { typed = it.hex() }
         }
 
         Tertiary(
-            text = problem?.let { words.appearance.colorTrouble(it) }
-                ?: "Первые два знака — непрозрачность: FF непрозрачный, 00 невидимый",
+            text = problem?.let { words.appearance.colorTrouble(it) } ?: words.appearance.alphaHint,
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
@@ -355,7 +360,7 @@ private fun Editor(
             // упёрлись. Ровно поэтому же кнопка не «Готово»: она применяет, и называть
             // её надо тем, что она делает.
             Button(
-                label = "Применить",
+                label = words.appearance.apply,
                 kind = if (ready == null) ButtonKind.Quiet else ButtonKind.Action,
                 onClick = {
                     val color = colorOf(typed) ?: return@Button
@@ -363,7 +368,7 @@ private fun Editor(
                     onDone()
                 },
             )
-            Button(label = "Отмена", kind = ButtonKind.Dangerous, onClick = onDone)
+            Button(label = words.common.cancel, kind = ButtonKind.Dangerous, onClick = onDone)
         }
     }
 }

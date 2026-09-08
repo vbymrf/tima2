@@ -93,6 +93,21 @@ interface AppearanceWords {
     fun colorTrouble(trouble: ColorTrouble): String
     val qrTooLong: String
     val qrTooLongAbout: String
+
+    val theme: String
+    val colors: String
+    val palette: String
+    val projectColors: String
+    val customOnly: String
+    val alphaHint: String
+    val apply: String
+    val takeFromLight: String
+    val backToLight: String
+    val backToDark: String
+
+    /** Два цвета слились: экран перестал читаться, и «назад» подождёт. */
+    val merged: String
+    fun mergedAbout(front: String, back: String, ratio: String, where: String): String
 }
 
 /** Разговор под записью и ветка в группе (ADR-0024). */
@@ -225,6 +240,27 @@ object RussianWords : Words {
         }
         override val qrTooLong = "Код не показать"
         override val qrTooLongAbout = "Он слишком длинный для QR"
+
+        override val theme = "Тема"
+        override val colors = "Цвета"
+        override val palette = "Палитра"
+        override val projectColors = "Цвета проекта"
+        override val customOnly =
+            "Свои цвета показываются, когда выбрана «Пользовательская». " +
+                "Правки в ней сохраняются и при переключении на светлую или тёмную."
+        override val alphaHint = "Первые два знака — непрозрачность: FF непрозрачный, 00 невидимый"
+        override val apply = "Применить"
+        override val takeFromLight = "Взять из светлой"
+        override val backToLight = "Вернуть светлую"
+        override val backToDark = "Вернуть тёмную"
+
+        override val merged = "Так отсюда не выйти"
+
+        // Фраза собирается целиком, а не склеивается из кусков на экране: на другом языке
+        // порядок слов другой, и склейка разваливается первой (ПЛАН-ЯЗЫКА §3).
+        override fun mergedAbout(front: String, back: String, ratio: String, where: String) =
+            "«$front» и «$back» слились: $ratio : 1. Этим нарисовано $where — " +
+                "без них до оформления уже не дойти, поэтому «назад» подождёт." 
     }
 
     override val comments = object : CommentWords {
