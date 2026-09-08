@@ -43,7 +43,14 @@ class InMemoryInboxStore : InboxStore {
         rows[entry.key] = entry
     }
 
-    override fun storeParsed(chatId: String, messageId: Long, body: ByteArray, senderId: String, level: Int) {
+    override fun storeParsed(
+        chatId: String,
+        messageId: Long,
+        body: ByteArray,
+        senderId: String,
+        level: Int,
+        threadRoot: Long,
+    ) {
         if (failOnEntryBody) error("диск отказал")
         bodies[key(chatId, messageId)] = body
         authors[key(chatId, messageId)] = senderId

@@ -159,6 +159,7 @@ class SendGroupMessageTest {
             signature: ByteArray,
             createdAtUnixMs: Long,
             level: Int,
+            threadRoot: Long,
         ): GroupSendStep {
             version = gkVersion
             this.level = level

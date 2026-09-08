@@ -101,7 +101,7 @@ class NarrowInChatStoreTest {
     )
 
     private fun send() = SendMessage(
-        queue = OutgoingQueue { _, _, _, _ -> true },
+        queue = OutgoingQueue { _, _, _, _, _ -> true },
         codec = object : MessageBodyCodec {
             override fun encodeText(text: String) = ByteArray(1)
             override fun decodeText(body: ByteArray): String? = null

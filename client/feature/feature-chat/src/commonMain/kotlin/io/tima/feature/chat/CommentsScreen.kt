@@ -58,12 +58,23 @@ fun CommentsScreen(
     onSend: () -> Unit,
     onReply: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Исходное сообщение целиком — первой строкой. `null` — разговор под записью канала:
+     * там запись видна на самой странице, с которой сюда пришли.
+     *
+     * Ветке в группе он обязателен: она открывается из общего списка, где ответы
+     * свёрнуты, и без корня начинается с ответа на неизвестно что (макет `комментарии`,
+     * «отличие: первой строкой исходное сообщение целиком»).
+     */
+    root: CommentEntry? = null,
+    /** Название подокна: у канала «Комментарии», у группы «Ветка». */
+    title: String = "Комментарии",
     onCloseTrouble: () -> Unit = {},
 ) {
     val colors = Tima.colors
     Column(modifier.fillMaxSize().background(colors.surface)) {
         SubwindowHeader(
-            title = "Комментарии",
+            title = title,
             onBack = onBack,
             caption = caption(state),
         )
@@ -79,6 +90,16 @@ fun CommentsScreen(
                 ) {
                     Trouble(it)
                     Chip("Скрыть", kind = ChipKind.Quiet, onClick = onCloseTrouble)
+                }
+            }
+
+            root?.let { line ->
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(TimaSpacing.about4),
+                    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
+                ) {
+                    Name(nameOf(line.authorId))
+                    Secondary(line.text)
                 }
             }
 

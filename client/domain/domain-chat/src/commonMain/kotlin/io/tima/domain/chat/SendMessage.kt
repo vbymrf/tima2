@@ -34,7 +34,17 @@ class SendMessage(
     /**
      * @param level круг сообщения (ADR-0019). По умолчанию шифр — прежнее поведение.
      */
-    fun send(chatId: String, text: String, level: Int = LEVEL_SECRET): SendMessageResult {
+    /**
+     * @param threadRoot корень ветки (ADR-0024): 0 — обычное сообщение, иначе серверный
+     *   номер того, на что отвечают. Ответ в ветке шифруется **тем же ключом группы**:
+     *   ветка — это те же сообщения, а не второй контур.
+     */
+    fun send(
+        chatId: String,
+        text: String,
+        level: Int = LEVEL_SECRET,
+        threadRoot: Long = 0,
+    ): SendMessageResult {
         require(chatId.isNotBlank()) { "chatId пустой" }
 
         // Пустое отсекаем до всего остального: очередь, кодек и ключ на нём тратить
@@ -52,7 +62,7 @@ class SendMessage(
         val dedupKey = keys.newKey()
         require(dedupKey.isNotBlank()) { "ключ идемпотентности пустой" }
 
-        return if (queue.enqueue(dedupKey, chatId, body, level)) {
+        return if (queue.enqueue(dedupKey, chatId, body, level, threadRoot)) {
             SendMessageResult.Queued(dedupKey)
         } else {
             // Такой ключ уже в очереди. Не ошибка: так выглядит повторное нажатие,
@@ -88,7 +98,7 @@ fun interface OutgoingQueue {
      *   очереди, потому что решение «нужен ли ключ» принимается при отправке, а она
      *   может случиться после перезапуска.
      */
-    fun enqueue(dedupKey: String, chatId: String, body: ByteArray, level: Int): Boolean
+    fun enqueue(dedupKey: String, chatId: String, body: ByteArray, level: Int, threadRoot: Long): Boolean
 }
 
 /** Круг по умолчанию: шифр. Всё, что было в очереди до появления кругов, — именно он. */

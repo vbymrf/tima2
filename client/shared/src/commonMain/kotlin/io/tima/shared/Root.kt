@@ -138,10 +138,14 @@ import io.tima.feature.shell.UpdateSection
 import io.tima.feature.shell.UpdateStore
 import io.tima.feature.chat.NewChatStore
 import io.tima.domain.chat.CarryToPage
+import io.tima.domain.chat.ChatLine
+import io.tima.domain.chat.CommentEntry
+import io.tima.domain.chat.WriteComment
 import io.tima.feature.chat.CommentsStore
 import io.tima.feature.chat.PageStore
 import io.tima.feature.chat.NewChatScreen
 import io.tima.feature.chat.CommentsScreen
+import io.tima.feature.chat.CommentsState
 import io.tima.feature.chat.PageScreen
 import io.tima.feature.chat.ChatScreen
 import io.tima.feature.chat.ChatsScreen
@@ -1329,6 +1333,27 @@ private fun Chat(
         )
     }
     val state by store.state.collectAsState()
+    // Ветка открыта — показываем её вместо переписки, тем же подокном, что и комментарии
+    // канала (ADR-0024: механизм один, на экране разные слова). «Назад» из ветки
+    // возвращает в переписку, а не закрывает её: человек не уходил из группы.
+    state.thread?.let { open ->
+        CommentsScreen(
+            state = CommentsState(
+                entries = open.replies.map { it.asComment(open.rootId) },
+                level = open.root.level,
+                loaded = true,
+                draft = state.threadDraft,
+            ),
+            nameOf = { userId -> state.names[userId] ?: "Участник" },
+            onBack = store::threadClosed,
+            onDraft = store::threadDraftChanged,
+            onSend = { store.threadSendPressed() },
+            onReply = { name -> store.threadDraftChanged(WriteComment.mention(name, state.threadDraft)) },
+            root = open.root.asComment(0),
+            title = "Ветка",
+        )
+        return
+    }
     ChatScreen(
         state = state,
         peer = name ?: "Без имени",
@@ -1353,8 +1378,29 @@ private fun Chat(
         // делает PageStore, а не ChatStore: страница одна, и знать о принесённом обязана
         // она, а не окно переписки.
         onCarry = if (group) { messageId, was -> onCarry(messageId, was) } else null,
+        // Ветка — только в группе: в личной переписке отвечать некому, кроме одного
+        // собеседника, и разговор о реплике совпадает с самой перепиской.
+        onThread = if (group) store::threadOpened else null,
     )
 }
+
+/**
+ * Реплика переписки глазами подокна разговора.
+ *
+ * Ветка в группе и комментарии канала показываются одним подокном (ADR-0024): механизм
+ * один, а слова на экране разные. Отсюда и перевод — не потому, что типы «похожи», а
+ * потому что это одно и то же: сообщение, у которого назван корень.
+ *
+ * Текста нет — значит не расшифровалось. Строка всё равно остаётся: человек должен видеть,
+ * что ответ был, иначе он ждёт продолжения разговора, которого, по его сведениям, нет.
+ */
+private fun ChatLine.asComment(root: Long) = CommentEntry(
+    postId = serverId,
+    authorId = senderId.orEmpty(),
+    text = text ?: "Сообщение не читается",
+    atMs = atMs,
+    parentPostId = root,
+)
 
 
 /**

@@ -39,7 +39,13 @@ class MessageLevelInQueueTest {
         var lastLevel: Int = Int.MIN_VALUE
             private set
 
-        override fun enqueue(dedupKey: String, chatId: String, body: ByteArray, level: Int): Boolean {
+        override fun enqueue(
+            dedupKey: String,
+            chatId: String,
+            body: ByteArray,
+            level: Int,
+            threadRoot: Long,
+        ): Boolean {
             lastLevel = level
             return true
         }

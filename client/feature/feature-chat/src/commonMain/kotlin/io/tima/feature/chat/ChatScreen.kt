@@ -118,6 +118,13 @@ fun ChatScreen(
      * забытый флаг, о котором вспоминают, когда метки уже мешают.
      */
     onCircles: ((Boolean) -> Unit)? = null,
+    /**
+     * Открыть ветку под сообщением (ADR-0024, К6). `null` — веток нет: личная переписка.
+     *
+     * Строка «ветка · N ответов» стоит под сообщением, а сами ответы в общем списке не
+     * показываются: прочитать разговор дважды — в списке и в ветке — значит удвоить его.
+     */
+    onThread: ((Long) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     Column(modifier.fillMaxSize().background(colors.surface)) {
@@ -169,6 +176,7 @@ fun ChatScreen(
             showCircles = state.showCircles,
             onNarrow = onNarrow,
             onCarry = onCarry,
+            onThread = onThread,
         )
 
         // Полоса недоступной истории — над вводом и ОДНА на экран, а не у каждой строки.
@@ -225,6 +233,7 @@ private fun Feed(
     showCircles: Boolean = false,
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
     onCarry: ((Long, Int) -> Unit)? = null,
+    onThread: ((Long) -> Unit)? = null,
 ) =
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
@@ -250,6 +259,7 @@ private fun Feed(
                 showCircle = showCircles,
                 onNarrow = onNarrow,
                 onCarry = onCarry,
+                onThread = onThread,
             )
         }
     }
@@ -293,6 +303,7 @@ private fun Reply(
     showCircle: Boolean = false,
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
     onCarry: ((Long, Int) -> Unit)? = null,
+    onThread: ((Long) -> Unit)? = null,
 ) {
     // Служебная строка — не реплика: у неё нет автора, стороны и времени отправки. Пузырь
     // приписал бы ей всё это разом, поэтому она идёт полосой по центру.
@@ -300,7 +311,39 @@ private fun Reply(
         SystemLine(line.text.orEmpty())
         return
     }
-    Bubbled(line, author, continuation, showCircle, onNarrow, onCarry)
+    // Пузырь и строка ветки — один элемент списка, поэтому столбец: два соседа в
+    // элементе ленивого списка легли бы друг на друга.
+    Column {
+        Bubbled(line, author, continuation, showCircle, onNarrow, onCarry)
+        // «Ветка · N ответов» — под сообщением, отдельной строкой, а не внутри пузыря:
+        // это не часть сказанного, а вход в разговор о нём (ADR-0024 §7).
+        //
+        // Строки нет, когда ответов нет: пустая ветка обещала бы разговор, которого не
+        // было.
+        if (onThread != null && line.replies > 0 && line.serverId > 0) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = TimaSpacing.about1),
+                horizontalArrangement = if (line.outgoing) Arrangement.End else Arrangement.Start,
+            ) {
+                Chip(
+                    "ветка · ${line.replies} ${repliesWord(line.replies)}",
+                    kind = ChipKind.Quiet,
+                    onClick = { onThread(line.serverId) },
+                )
+            }
+        }
+    }
+}
+
+/** Склонение: одна форма на числа, а не три строки по месту вызова. */
+private fun repliesWord(n: Int): String {
+    val tens = n % 100
+    if (tens in 11..14) return "ответов"
+    return when (n % 10) {
+        1 -> "ответ"
+        2, 3, 4 -> "ответа"
+        else -> "ответов"
+    }
 }
 
 /** Служебная строка: сказанное приложением, а не человеком. */

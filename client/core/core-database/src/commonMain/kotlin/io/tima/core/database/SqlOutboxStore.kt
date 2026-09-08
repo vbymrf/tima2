@@ -43,6 +43,9 @@ class SqlOutboxStore(
             next_attempt_at = entry.nextAttemptAtMs,
             reply_to = null,
             level = entry.level.toLong(),
+            // Корень ветки: 0 у обычного сообщения. Кладётся при постановке, потому что
+            // отправка бывает после перезапуска, когда экрана с веткой уже нет.
+            thread_root = entry.threadRoot,
             body_enc = cipher.seal(entry.body),
         )
         // INSERT OR IGNORE молчит при конфликте, поэтому «поставили» отличается от
@@ -116,6 +119,7 @@ class SqlOutboxStore(
         serverMessageId = server_id,
         sealedForEpoch = sealed_epoch,
         level = level.toInt(),
+        threadRoot = thread_root,
     )
 
     private companion object {

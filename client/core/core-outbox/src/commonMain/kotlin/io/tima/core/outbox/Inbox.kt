@@ -98,6 +98,13 @@ sealed interface OpenOutcome {
          * Круг сообщения (ADR-0019). У личной переписки всегда −1: там открытых не бывает.
          */
         val level: Int = -1,
+        /**
+         * Корень ветки (ADR-0024): 0 — обычное сообщение.
+         *
+         * Берётся из кадра, а не из тела: сервер отдаёт его открытым полем, потому что по
+         * нему строится выдача. В подписи его нет — как и уровня.
+         */
+        val threadRoot: Long = 0,
     ) : OpenOutcome
 
     /**
@@ -146,7 +153,7 @@ interface InboxStore {
      * означало «разобрано и потеряно». Обязанность, которую можно передать пустой
      * лямбдой, однажды передадут пустой лямбдой везде.
      */
-    fun storeParsed(chatId: String, messageId: Long, body: ByteArray, senderId: String, level: Int)
+    fun storeParsed(chatId: String, messageId: Long, body: ByteArray, senderId: String, level: Int, threadRoot: Long)
 
     /**
      * Перевести всё разобранное этой переписки в «прочитано».
@@ -214,7 +221,14 @@ class Inbox(
         val entry = store.nextReceived() ?: return null
         val updated = when (val outcome = open(entry)) {
             is OpenOutcome.Opened -> {
-                store.storeParsed(entry.chatId, entry.messageId, outcome.body, outcome.senderId, outcome.level)
+                store.storeParsed(
+                    entry.chatId,
+                    entry.messageId,
+                    outcome.body,
+                    outcome.senderId,
+                    outcome.level,
+                    outcome.threadRoot,
+                )
                 entry.copy(state = IncomingState.STORED, undecryptableReason = null)
             }
             is OpenOutcome.NoKey -> entry.copy(

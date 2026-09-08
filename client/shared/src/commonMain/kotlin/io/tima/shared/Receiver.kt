@@ -146,7 +146,7 @@ class Receiver(
             senderSigningPublic = captionKey,
             groupKey = groupKey,
         ).fold(
-            onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId, frame.level) },
+            onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId, frame.level, frame.threadRoot) },
             onFailure = { OpenOutcome.Rejected("сообщение группы не открылось: ${it.message}") },
         )
     }

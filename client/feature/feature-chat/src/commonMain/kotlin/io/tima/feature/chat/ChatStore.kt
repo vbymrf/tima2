@@ -83,6 +83,14 @@ class ChatStore(
     )
     val state: StateFlow<ChatState> = _state.asStateFlow()
 
+    /**
+     * Последний список из базы **целиком**, вместе с ответами веток.
+     *
+     * Экрану отдаётся свёрнутый (ответы убраны в ветки), а здесь лежит полный: открытие
+     * ветки не должно ходить в базу второй раз за тем, что уже пришло потоком.
+     */
+    private var known: List<ChatLine> = emptyList()
+
     init {
         // Список приходит потоком: обновление от самой базы, а не по нажатию. Значит
         // пришедшее сообщение и смена состояния отправки появляются на экране сами.
@@ -91,7 +99,23 @@ class ChatStore(
                 // Признак пересчитывается на каждом обновлении: ключ может приехать в
                 // любой момент — ротацией, догоном или ответом на просьбу, — и полоса
                 // обязана исчезнуть сама, без повторного открытия переписки.
-                _state.value = _state.value.copy(lines = lines, noGroupKey = anyKey?.invoke() == false)
+                // Ветка сворачивается здесь, а не на экране: список реплик — одно
+                // место, и решать в двух значило бы однажды показать ответы дважды.
+                // Под корнем остаётся строка «ветка · N ответов» (ADR-0024 §7, К6).
+                known = lines
+                val replies = lines.filter { it.threadRoot != 0L }.groupingBy { it.threadRoot }.eachCount()
+                val shown = lines.filter { it.threadRoot == 0L }
+                    .map { line -> line.copy(replies = replies[line.serverId] ?: 0) }
+                _state.value = _state.value.copy(
+                    lines = shown,
+                    thread = _state.value.thread?.let { open ->
+                        // Тот же список, из которого собран экран переписки.
+                        // Открытая ветка обновляется тем же потоком: пришедший ответ
+                        // появляется в ней сам, без перечитывания.
+                        open.copy(replies = lines.filter { it.threadRoot == open.rootId })
+                    },
+                    noGroupKey = anyKey?.invoke() == false,
+                )
                 // Имена спрашиваются по одному разу на автора и только в группе: список
                 // обновляется на каждое сообщение, и поход за именем на каждой строке
                 // означал бы запрос к серверу на каждую реплику.
@@ -123,6 +147,51 @@ class ChatStore(
      * Возвращает исход, потому что вызывающему бывает нужно знать, состоялось ли
      * действие — например чтобы убрать клавиатуру. Состояние при этом уже обновлено.
      */
+    /**
+     * Человек открыл ветку под сообщением (ADR-0024, К6).
+     *
+     * Корень называется **серверным** номером: ветку зовут одним числом на всех
+     * устройствах, а местный ключ знает только наше.
+     */
+    fun threadOpened(rootId: Long) {
+        val root = known.firstOrNull { it.serverId == rootId } ?: return
+        _state.value = _state.value.copy(
+            thread = ThreadState(
+                rootId = rootId,
+                root = root,
+                // Ответы берутся из того же потока, что и переписка: второй источник
+                // разошёлся бы с первым ровно в момент прихода нового ответа.
+                replies = known.filter { it.threadRoot == rootId },
+            ),
+        )
+    }
+
+    /** Человек закрыл ветку. */
+    fun threadClosed() {
+        _state.value = _state.value.copy(thread = null, threadDraft = "")
+    }
+
+    /** Правка поля ввода в ветке. Отдельно от общего черновика: это два разных текста. */
+    fun threadDraftChanged(text: String) {
+        _state.value = _state.value.copy(threadDraft = text)
+    }
+
+    /**
+     * Ответ в ветке.
+     *
+     * Уходит **тем же путём и тем же ключом**, что обычное сообщение: ветка — не второй
+     * контур, а сообщение с названным корнем. Круг тоже общий: у ответа своего нет, он
+     * берётся у корня — сервер отдаёт ветку тем же, кому отдал корень.
+     */
+    fun threadSendPressed(): SendMessageResult {
+        val open = _state.value.thread ?: return SendMessageResult.Empty
+        val outcome = send.send(chatId, _state.value.threadDraft, open.root.level, threadRoot = open.rootId)
+        if (outcome is SendMessageResult.Queued || outcome is SendMessageResult.AlreadyQueued) {
+            _state.value = _state.value.copy(threadDraft = "")
+        }
+        return outcome
+    }
+
     /** Человек включил или выключил показ меток круга. */
     fun circlesShown(show: Boolean) {
         _state.value = _state.value.copy(showCircles = show)
@@ -285,6 +354,10 @@ data class ChatState(
      * заменяет его при первом же касании.
      */
     val level: Int = -1,
+    /** Открытая ветка (ADR-0024, К6). `null` — ветка закрыта. */
+    val thread: ThreadState? = null,
+    /** Набранное в ветке. Отдельно от общего черновика: это два разных текста. */
+    val threadDraft: String = "",
     /**
      * Показывать ли метки круга у реплик.
      *
@@ -357,3 +430,15 @@ sealed interface ChatNotice {
 
     data class NarrowRefused(val text: String) : ChatNotice
 }
+
+/**
+ * Открытая ветка: исходное сообщение и ответы на него (ADR-0024 §7, К6).
+ *
+ * Корень лежит целиком, а не одним номером: подокно показывает его первой строкой — так
+ * нарисовано в макете, и без него ветка начинается с ответа на неизвестно что.
+ */
+data class ThreadState(
+    val rootId: Long,
+    val root: ChatLine,
+    val replies: List<ChatLine> = emptyList(),
+)

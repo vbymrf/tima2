@@ -131,6 +131,9 @@ class GroupSender(
             payload = assembled.payload,
             signature = assembled.signature,
             createdAtUnixMs = entry.createdAtMs,
+            // Ветка уходит тем же путём и тем же ключом: это не второй контур, а
+            // сообщение, у которого назван корень (ADR-0024).
+            threadRoot = entry.threadRoot,
             level = entry.level,
         )
 

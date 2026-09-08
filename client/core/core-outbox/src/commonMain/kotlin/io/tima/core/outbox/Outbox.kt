@@ -80,6 +80,14 @@ data class OutboxEntry(
      * уровень знает сервер — здесь это данные, а не ось.
      */
     val level: Int = LEVEL_SECRET,
+    /**
+     * Корень ветки (ADR-0024): 0 — обычное сообщение. Номер СЕРВЕРНЫЙ: ветку называют
+     * одним числом на всех устройствах.
+     *
+     * Лежит в очереди, а не подставляется при отправке, по той же причине, что и круг:
+     * отправка может случиться после перезапуска, и к этому времени экрана уже нет.
+     */
+    val threadRoot: Long = 0,
     val state: OutboxState = OutboxState.QUEUED,
     val attempts: Int = 0,
     val nextAttemptAtMs: Long = 0,
@@ -260,14 +268,21 @@ class Outbox(
      */
     private val cachedEpochs = HashMap<String, Long>()
 
-    override fun enqueue(dedupKey: String, chatId: String, body: ByteArray, level: Int): Boolean =
-        enqueue(dedupKey, chatId, body, level, now = nowMs())
+    override fun enqueue(dedupKey: String, chatId: String, body: ByteArray, level: Int, threadRoot: Long): Boolean =
+        enqueue(dedupKey, chatId, body, level, threadRoot, now = nowMs())
 
     /** Тот же вызов с умолчанием: круг по умолчанию — шифр. */
     fun enqueue(dedupKey: String, chatId: String, body: ByteArray): Boolean =
-        enqueue(dedupKey, chatId, body, LEVEL_SECRET)
+        enqueue(dedupKey, chatId, body, LEVEL_SECRET, threadRoot = 0)
 
-    private fun enqueue(dedupKey: String, chatId: String, body: ByteArray, level: Int, now: Long): Boolean {
+    private fun enqueue(
+        dedupKey: String,
+        chatId: String,
+        body: ByteArray,
+        level: Int,
+        threadRoot: Long,
+        now: Long,
+    ): Boolean {
         require(dedupKey.isNotBlank()) { "dedupKey пустой: по нему опознаётся повтор" }
         require(body.isNotEmpty()) { "тело пустое" }
         return store.putIfAbsent(
@@ -276,6 +291,7 @@ class Outbox(
                 chatId = chatId,
                 body = body,
                 level = level,
+                threadRoot = threadRoot,
                 state = OutboxState.QUEUED,
                 nextAttemptAtMs = now,
                 createdAtMs = now,
