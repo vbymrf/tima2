@@ -88,11 +88,24 @@ jobs:
       # падала, потому что в multiplatform-модуле задачи с именем «test» нет вовсе, а
       # Gradle на исключении несуществующей задачи останавливается. Прогон форков на
       # симуляторе делает отдельная задача «крипто · iOS-симулятор».
+      # ── ПОЧЕМУ НЕ `| tail -3` ────────────────────────────────────────────
+      # Так было до 2026-09-14, и это стоило целого круга CI: шаг падал, а в
+      # журнале оставалось «BUILD FAILED in 1m 1s» — три последние строки, среди
+      # которых причины нет никогда. Настоящая ошибка (сверка контрольных сумм)
+      # печатается выше и обрезалась. Теперь при удаче печатается хвост, при
+      # падении — весь вывод.
       - name: 'форки крипто · в mavenLocal'
         run: |
           set -o pipefail
-          (cd third-party/KeccakKotlin && ./gradlew publishToMavenLocal --console=plain) 2>&1 | tail -3
-          (cd third-party/KyberKotlin  && ./gradlew publishToMavenLocal --console=plain) 2>&1 | tail -3
+          for f in KeccakKotlin KyberKotlin; do
+            if ! (cd "third-party/$f" && ./gradlew publishToMavenLocal --console=plain) > "/tmp/$f.log" 2>&1; then
+              echo "::group::$f — полный вывод"; cat "/tmp/$f.log"; echo "::endgroup::"
+              msg=$(grep -aE 'What went wrong|artifact failed|Dependency verification|^\s+- |Could not|error:' "/tmp/$f.log" | head -n 20 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
+              echo "::error::$f не опубликовался:%0A${msg}"
+              exit 1
+            fi
+            tail -3 "/tmp/$f.log"
+          done
       - name: 'jvm · сборка и тесты'
         working-directory: client
         run: |
@@ -144,11 +157,24 @@ jobs:
       # падала, потому что в multiplatform-модуле задачи с именем «test» нет вовсе, а
       # Gradle на исключении несуществующей задачи останавливается. Прогон форков на
       # симуляторе делает отдельная задача «крипто · iOS-симулятор».
+      # ── ПОЧЕМУ НЕ `| tail -3` ────────────────────────────────────────────
+      # Так было до 2026-09-14, и это стоило целого круга CI: шаг падал, а в
+      # журнале оставалось «BUILD FAILED in 1m 1s» — три последние строки, среди
+      # которых причины нет никогда. Настоящая ошибка (сверка контрольных сумм)
+      # печатается выше и обрезалась. Теперь при удаче печатается хвост, при
+      # падении — весь вывод.
       - name: 'форки крипто · в mavenLocal'
         run: |
           set -o pipefail
-          (cd third-party/KeccakKotlin && ./gradlew publishToMavenLocal --console=plain) 2>&1 | tail -3
-          (cd third-party/KyberKotlin  && ./gradlew publishToMavenLocal --console=plain) 2>&1 | tail -3
+          for f in KeccakKotlin KyberKotlin; do
+            if ! (cd "third-party/$f" && ./gradlew publishToMavenLocal --console=plain) > "/tmp/$f.log" 2>&1; then
+              echo "::group::$f — полный вывод"; cat "/tmp/$f.log"; echo "::endgroup::"
+              msg=$(grep -aE 'What went wrong|artifact failed|Dependency verification|^\s+- |Could not|error:' "/tmp/$f.log" | head -n 20 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
+              echo "::error::$f не опубликовался:%0A${msg}"
+              exit 1
+            fi
+            tail -3 "/tmp/$f.log"
+          done
       - name: 'ios · окружение'
         run: |
           echo "arch: $(uname -m)"
@@ -431,8 +457,18 @@ jobs:
       #
       # Postgres и Redis этим не задеты: их тянет сам раннер как service
       # containers, у него свои права.
+      #
+      # Загрузка образа повторяется трижды: 2026-09-14 quay.io ответил
+      # «503 Service Unavailable», и из-за минутной недоступности чужого реестра
+      # покраснел весь прогон. Падение реестра — не падение нашего кода, и
+      # отличать одно от другого должен CI, а не человек по утрам.
       - name: 'сервер · поднять MinIO'
         run: |
+          for try in 1 2 3; do
+            if docker pull quay.io/minio/minio:latest; then break; fi
+            echo "реестр не отдал образ (попытка $try), жду 10 с"
+            sleep 10
+          done
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=tima-admin \
             -e MINIO_ROOT_PASSWORD=tima-dev-only \
