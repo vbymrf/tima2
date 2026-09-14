@@ -6,6 +6,7 @@ import io.tima.core.diag.scrub
 import io.tima.core.network.ProblemPost
 import io.tima.core.network.ProblemSendResult
 import io.tima.core.network.ProblemsOverHttp
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
 /**
@@ -45,10 +46,22 @@ class ReportQueue(private val store: ReportsStore, private val limit: Int = LIMI
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    /**
+     * Сериализатор списка — **явно, а не выводом типа**.
+     *
+     * `encodeToString(posts)` без него собирался на JVM и **не собирался под iOS**: там
+     * приезжает своя версия kotlinx.serialization, в которой это расширение, а не член, и
+     * без импорта компилятор выбирает двухаргументный `encodeToString(serializer, value)`.
+     * Ошибка при этом выглядит как «не выводится тип T», то есть указывает не туда.
+     *
+     * Явный сериализатор снимает вопрос на всех версиях сразу.
+     */
+    private val asList = ListSerializer(ProblemPost.serializer())
+
     fun waiting(): List<ProblemPost> {
         val raw = store.load()?.takeIf { it.isNotBlank() } ?: return emptyList()
         return try {
-            json.decodeFromString<List<ProblemPost>>(raw)
+            json.decodeFromString(asList, raw)
         } catch (e: Throwable) {
             // Разбор не удался — очередь испорчена. Держаться за неё нечего: отчёты не
             // ценность сами по себе, а испорченный список будет мешать новым.
@@ -70,7 +83,7 @@ class ReportQueue(private val store: ReportsStore, private val limit: Int = LIMI
     fun clear() = write(emptyList())
 
     private fun write(posts: List<ProblemPost>) {
-        store.save(if (posts.isEmpty()) "" else json.encodeToString(posts))
+        store.save(if (posts.isEmpty()) "" else json.encodeToString(asList, posts))
     }
 
     private companion object {
