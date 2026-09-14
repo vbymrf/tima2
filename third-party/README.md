@@ -104,8 +104,7 @@ Apple нет, и падает с «no matching variant» — до нашего k
 | `reference/aiogram-dev-3.x` | [aiogram/aiogram](https://github.com/aiogram/aiogram), ветка `dev-3.x` | образец слоя API и очередей |
 | `reference/mobile-mcp` | [mobile-next/mobile-mcp](https://github.com/mobile-next/mobile-mcp) `63a5974d9bfa` | модель 3 прогонов на телефонах |
 | `reference/mobilecli` | [mobile-next/mobilecli](https://github.com/mobile-next/mobilecli) `f7148582b01a` | **им модель 3 говорит с устройствами**: здесь ответы про adb и iOS |
-| `reference/MobileCLI-mobilecli` | [MobileCLI/mobilecli](https://github.com/MobileCLI/mobilecli) `7f874f6867f7` | **полный тёзка предыдущего с обратной задачей** — транслирует терминал на телефон, а не управляет телефоном |
-| `reference/apple-aiml-research-ml-mobileclip` | [apple-aiml-research/ml-mobileclip](https://github.com/apple-aiml-research/ml-mobileclip) `48faa0fea4b0` | к тестированию не относится вовсе: модели «изображение-текст» от Apple. Взято по вопросу заказчика, удаляется без потерь |
+| `reference/Maestro` | [mobile-dev-inc/Maestro](https://github.com/mobile-dev-inc/Maestro) `01a3e442afba` | **сценарии на YAML без агента** — модель 4, выбрана основной |
 
 Каталог **не отслеживается git** (`.gitignore`) — это чужой код, он не наш и на вторую
 машину не едет.
@@ -115,15 +114,15 @@ Apple нет, и падает с «no matching variant» — до нашего k
 которые сайты отвечали уклончиво, закрылись чтением исходников за минуту — как `mobilecli`
 зовёт `adb`, на какой адрес зашит сервер MobAI, и чем занимается тёзка.
 
-**Копии MobAI (`mobai-mcp`, `mobai-ci`, `mobile-harness`) удалены** вместе с самой моделью:
-решение заказчика 2026-09-14 — не используем.
+**Копии MobAI удалены** вместе с самой моделью: решение заказчика 2026-09-14 — не
+используем. **Удалены и копии, к тестам не относившиеся** — их брали, чтобы ответить на
+вопрос «что это такое», ответ записан, копии не нужны.
 
-> **Два имени, которые легко перепутать, и это уже чуть не стоило ошибки.**
-> `mobile-next/mobilecli` — наш: управляет телефоном с компьютера, Go, ставится бинарями из
-> пакетов `@mobilenext/mobilecli-<платформа>`.
-> `MobileCLI/mobilecli` — чужой: транслирует терминал **на** телефон, Rust, ставится
-> `curl | bash` или `cargo`. Задачи противоположные, имена одинаковые.
-> Третий, `ml-mobileclip`, к этому вовсе не относится — там `mobileclip`, с буквой `p`.
+**У Maestro переименованы `AGENTS.md` → `AGENTS.upstream.md` и `.claude/` →
+`claude-commands.upstream/`** — по тому же правилу, что у `aiogram-dev-3.x`.
+
+> **Имя `mobilecli` в npm занято не тем.** Нужный нам бинарь лежит в пакетах
+> `@mobilenext/mobilecli-<платформа>-<архитектура>`, а не в пакете `mobilecli`.
 
 Проверено при взятии: **файлов-указаний агентам** (`AGENTS.md`, `CLAUDE.md`, `.claude/`,
 `.cursor/`) ни в одной копии нет, переименовывать нечего. Появятся при обновлении —
