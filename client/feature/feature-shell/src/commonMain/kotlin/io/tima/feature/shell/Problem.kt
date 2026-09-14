@@ -10,13 +10,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import io.tima.core.ui.CurrentWords
-import io.tima.core.ui.ProblemWords
+import io.tima.core.words.CurrentWords
+import io.tima.core.words.ProblemWords
 import io.tima.core.ui.words
-import io.tima.core.ui.Words
+import io.tima.core.words.Words
 import io.tima.core.ui.Tima
-import io.tima.core.ui.RussianWords
-import io.tima.core.ui.Window
+import io.tima.core.words.RussianWords
 import io.tima.core.ui.Alarm
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind

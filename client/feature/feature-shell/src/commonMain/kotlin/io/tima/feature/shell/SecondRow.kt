@@ -20,7 +20,6 @@ import io.tima.core.ui.Caption
 import io.tima.core.ui.Chip
 import io.tima.core.ui.ChipKind
 import io.tima.core.ui.TimaSpacing
-import io.tima.core.ui.WindowTab
 import io.tima.core.ui.words
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.Tima

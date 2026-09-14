@@ -1,7 +1,6 @@
 package io.tima.feature.shell
 
-import io.tima.core.ui.RussianWords
-import io.tima.core.ui.Window
+import io.tima.core.words.RussianWords
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test

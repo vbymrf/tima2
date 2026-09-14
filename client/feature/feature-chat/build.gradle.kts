@@ -37,6 +37,7 @@ kotlin {
             // переписке, — иначе он потерялся бы при смене личности (миграция 0019).
             implementation(projects.domain.domainAccount)
             // Дизайн-система: экран собирается из её деталей и своих цветов не имеет.
+            implementation(projects.core.coreWords)
             implementation(projects.core.coreUi)
             implementation(compose.runtime)
             implementation(compose.foundation)

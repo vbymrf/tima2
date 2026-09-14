@@ -11,7 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import io.tima.core.ui.SocialWords
+import io.tima.core.words.SocialWords
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.Button
 import io.tima.core.ui.Caption

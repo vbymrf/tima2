@@ -1,6 +1,8 @@
 package io.tima.core.ui
 
 import androidx.compose.ui.graphics.Color
+import io.tima.core.words.AppearanceWords
+import io.tima.core.words.Words
 import kotlin.math.roundToInt
 
 /**

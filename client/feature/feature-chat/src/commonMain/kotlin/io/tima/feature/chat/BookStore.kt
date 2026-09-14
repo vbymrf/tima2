@@ -1,6 +1,6 @@
 package io.tima.feature.chat
 
-import io.tima.core.ui.BookWords
+import io.tima.core.words.BookWords
 import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.ObserveBook
 import io.tima.domain.chat.Settings

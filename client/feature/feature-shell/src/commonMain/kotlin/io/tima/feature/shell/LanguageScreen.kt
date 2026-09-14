@@ -11,7 +11,7 @@ import androidx.compose.ui.Modifier
 import io.tima.core.ui.Chip
 import io.tima.core.ui.Field
 import io.tima.core.ui.ChipKind
-import io.tima.core.ui.Language
+import io.tima.core.words.Language
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary

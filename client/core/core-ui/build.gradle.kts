@@ -33,6 +33,9 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            // Словарь надписей. api: `Tima.words` и `TimaTheme(words = …)` — публичная
+            // поверхность дизайн-системы, и потребитель обязан видеть тип.
+            api(projects.core.coreWords)
             implementation(compose.runtime)
             // foundation, а не material3: у нас своя система форм и цветов, и брать
             // чужую тему значило бы спорить с макетом в каждом компоненте.

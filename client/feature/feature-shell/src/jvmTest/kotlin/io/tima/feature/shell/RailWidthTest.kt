@@ -5,8 +5,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
-import io.tima.core.ui.Language
-import io.tima.core.ui.Window
+import io.tima.core.words.Language
 import io.tima.core.ui.FormatTima
 import io.tima.core.ui.TimaType
 import io.tima.testui.capture

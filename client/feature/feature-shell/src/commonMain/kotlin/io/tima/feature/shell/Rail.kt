@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.tima.core.ui.words
-import io.tima.core.ui.Window
 import io.tima.core.ui.Name
 import io.tima.core.ui.Layout
 import io.tima.core.ui.Counter

@@ -1,9 +1,9 @@
 package io.tima.feature.chat
 
-import io.tima.core.ui.CurrentWords
-import io.tima.core.ui.Words
-import io.tima.core.ui.RussianWords
-import io.tima.core.ui.ChatWords
+import io.tima.core.words.CurrentWords
+import io.tima.core.words.Words
+import io.tima.core.words.RussianWords
+import io.tima.core.words.ChatWords
 import io.tima.domain.chat.FeedFilter
 import io.tima.domain.chat.PersonLocale
 import io.tima.domain.chat.PersonLocales

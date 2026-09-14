@@ -21,7 +21,7 @@ import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Tertiary
-import io.tima.core.ui.SocialWords
+import io.tima.core.words.SocialWords
 import io.tima.core.ui.Tima
 import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing

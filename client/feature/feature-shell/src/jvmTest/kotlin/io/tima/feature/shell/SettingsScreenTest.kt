@@ -2,9 +2,7 @@ package io.tima.feature.shell
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import io.tima.core.ui.SettingsItem
-import io.tima.core.ui.SettingsGroup
-import io.tima.core.ui.RussianWords
+import io.tima.core.words.RussianWords
 import io.tima.core.ui.Name
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier

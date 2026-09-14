@@ -6,8 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.CompositionLocalProvider
 import io.tima.core.ui.LocalWords
-import io.tima.core.ui.Language
-import io.tima.core.ui.WindowTab
+import io.tima.core.words.Language
 import io.tima.core.ui.TimaColors
 import io.tima.testui.FOREIGN_BACKGROUND
 import io.tima.testui.Snapshot

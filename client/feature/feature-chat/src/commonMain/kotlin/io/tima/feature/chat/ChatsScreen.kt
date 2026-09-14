@@ -26,7 +26,7 @@ import io.tima.core.ui.ListLine
 import io.tima.core.ui.Counter
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.Tertiary
-import io.tima.core.ui.ChatWords
+import io.tima.core.words.ChatWords
 import io.tima.core.ui.Tima
 import io.tima.core.ui.words
 import io.tima.core.ui.WindowHeader

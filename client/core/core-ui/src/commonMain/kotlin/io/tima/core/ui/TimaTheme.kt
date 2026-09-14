@@ -8,6 +8,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import io.tima.core.words.RussianWords
+import io.tima.core.words.Words
 
 /**
  * Тема приложения — У.1.

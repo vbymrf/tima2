@@ -34,6 +34,7 @@ kotlin {
             // право импортировать что угодно из восьми модулей. Так и появляются
             // теневые рёбра: код компилируется, а в манифесте о зависимости
             // ничего не сказано.
+            implementation(projects.core.coreWords)
             implementation(projects.core.coreUi)
             implementation(projects.core.coreDatabase)
             implementation(projects.core.coreEncryption)

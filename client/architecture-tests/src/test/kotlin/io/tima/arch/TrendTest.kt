@@ -8,7 +8,11 @@ import kotlin.test.Test
  *
  * Числа ниже — размер общих мест, в которые упирается каждая новая функция:
  * маршруты сервера, методы общих receiver-ов, публичные свойства `Сеть`, импорты
- * `Root.kt`. Программа архитектурных изменений ставит целью «функция = файл»:
+ * `Root.kt`, размер словаря.
+ *
+ * Словарь попал сюда с опозданием (Я-D): он вырос до самого свежего хаба проекта — новый
+ * экран правит четыре файла в `core-words`, которых не касается ничья другая работа, — и
+ * всё это время был невидим отчёту, заведённому считать ровно такое. Программа архитектурных изменений ставит целью «функция = файл»:
  * новый раздел добавляет свой файл, а эти счётчики не растут.
  *
  * Порог здесь намеренно не задан. Счётчик, который валит сборку, обходят
@@ -58,6 +62,19 @@ class TrendTest {
                 "Чужих модулей видит `shared`",
                 "различные io.tima.* модули в импортах production-файлов shared",
                 spreadShared(),
+            ),
+            Counter(
+                "Надписей в словаре",
+                "объявления val и fun в интерфейсах core-words/Words.kt",
+                countInFile(
+                    File(clientRoot, "core/core-words/src/commonMain/kotlin/io/tima/core/words/Words.kt"),
+                    Regex("""^(val|fun) """),
+                ),
+            ),
+            Counter(
+                "Групп в словаре",
+                "свойства корневого интерфейса Words",
+                groupsInDictionary(),
             ),
             Counter(
                 "Классов `*Api` в core-network",
@@ -119,6 +136,29 @@ class TrendTest {
 
     private fun root(): File =
         File(clientRoot, "shared/src/commonMain/kotlin/io/tima/shared/Root.kt")
+
+    /**
+     * Групп в корневом интерфейсе `Words` — считая только его собственные свойства.
+     *
+     * Без границ интерфейса счёт вышел бы вдвое больше: тип `…Words` носят и вложенные
+     * свойства групп — семнадцать цветовых мест объявлены как `ColorSlotWords`.
+     */
+    private fun groupsInDictionary(): Int {
+        val file = File(
+            clientRoot,
+            "core/core-words/src/commonMain/kotlin/io/tima/core/words/Words.kt",
+        )
+        if (!file.isFile) return -1
+        var inside = false
+        var count = 0
+        for (line in file.readLines()) {
+            if (line == "interface Words {") { inside = true; continue }
+            if (!inside) continue
+            if (line == "}") break
+            if (Regex("""^    val \w+: \w+Words$""").containsMatchIn(line)) count++
+        }
+        return count
+    }
 
     private fun countInFile(file: File, what: Regex): Int =
         if (!file.isFile) -1 else file.readLines().count { what.containsMatchIn(it.trim()) }

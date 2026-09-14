@@ -1,7 +1,6 @@
 package io.tima.feature.shell
 
-import io.tima.core.ui.RussianWords
-import io.tima.core.ui.Window
+import io.tima.core.words.RussianWords
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

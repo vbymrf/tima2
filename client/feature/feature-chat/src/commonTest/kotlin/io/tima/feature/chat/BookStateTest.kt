@@ -1,6 +1,6 @@
 package io.tima.feature.chat
 
-import io.tima.core.ui.RussianWords
+import io.tima.core.words.RussianWords
 import io.tima.domain.chat.BookEntry
 import kotlin.test.Test
 import kotlin.test.assertEquals

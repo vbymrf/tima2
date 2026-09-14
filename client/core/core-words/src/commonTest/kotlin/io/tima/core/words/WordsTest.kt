@@ -1,4 +1,4 @@
-package io.tima.core.ui
+package io.tima.core.words
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -10,6 +10,10 @@ import kotlin.test.assertTrue
  * Проверяется не текст — он меняется, — а устройство: язык без словаря не выбирается,
  * незнакомый тег не оставляет приложение без надписей, названия языков написаны на них
  * самих, и **ни один словарь не отвечает пустотой**.
+ *
+ * **Перечни здесь не обходятся, и это не пропуск** (Я-D). Окна, вкладки и пункты настроек
+ * живут в оболочке, цветовые места — в дизайн-системе; словарь их не знает, и проверяет
+ * их полноту тот, чьи это ключи: `ShellWordsTest` и `AppearanceTest`.
  */
 class WordsTest {
 
@@ -47,26 +51,6 @@ class WordsTest {
             assertTrue(
                 sample(words).none { it.isBlank() },
                 "в словаре «${language.ownName}» есть пустая надпись",
-            )
-            assertTrue(
-                ThemeChoice.entries.none { words.appearance.theme(it).isBlank() },
-                "в словаре «${language.ownName}» у темы нет названия",
-            )
-            assertTrue(
-                ColorSlot.entries.none { words.appearance.slot(it).isBlank() },
-                "в словаре «${language.ownName}» у цветового места нет названия",
-            )
-            assertTrue(
-                WindowTab.entries.none { words.tabs.label(it).isBlank() },
-                "в словаре «${language.ownName}» у вкладки нет названия",
-            )
-            assertTrue(
-                SettingsItem.entries.none { words.settings2.item(it).isBlank() },
-                "в словаре «${language.ownName}» у пункта настроек нет названия",
-            )
-            assertTrue(
-                Window.entries.none { words.windows.full(it).isBlank() },
-                "в словаре «${language.ownName}» у окна нет имени",
             )
         }
     }

@@ -1,8 +1,8 @@
 package io.tima.feature.chat
 
-import io.tima.core.ui.RussianWords
-import io.tima.core.ui.TroubleWords
-import io.tima.core.ui.Words
+import io.tima.core.words.RussianWords
+import io.tima.core.words.TroubleWords
+import io.tima.core.words.Words
 import io.tima.domain.chat.CarryStep
 import io.tima.domain.chat.PageEntry
 import io.tima.domain.chat.PageStep

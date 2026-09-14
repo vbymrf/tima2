@@ -1,4 +1,4 @@
-package io.tima.core.ui
+package io.tima.core.words
 
 /**
  * Испанский словарь (ПЛАН-ЯЗЫКА Я10).
@@ -68,57 +68,84 @@ object SpanishWords : Words {
     }
 
     override val appearance = object : AppearanceWords {
-        override fun theme(choice: ThemeChoice) = when (choice) {
-            ThemeChoice.Light -> "Claro"
-            ThemeChoice.Dark -> "Oscuro"
-            ThemeChoice.Custom -> "Personalizado"
-        }
+        override val themeLight = "Claro"
+        override val themeDark = "Oscuro"
+        override val themeCustom = "Personalizado"
 
-        override fun slot(slot: ColorSlot) = when (slot) {
-            ColorSlot.NAVIGATION -> "Navegación y acción"
-            ColorSlot.ACTIVITY -> "Actividad"
-            ColorSlot.CONFIRMED -> "Confirmado"
-            ColorSlot.SURFACE -> "Fondo del contenido"
-            ColorSlot.FUNCTIONAL -> "Fondo de los paneles"
-            ColorSlot.TEXT -> "Texto"
-            ColorSlot.TEXT_2 -> "Texto más suave"
-            ColorSlot.TEXT_3 -> "Texto aún más suave"
-            ColorSlot.MY -> "Mis mensajes"
-            ColorSlot.AUTHOR -> "Mensajes de otros"
-            ColorSlot.BORDER -> "Borde del mensaje"
-            ColorSlot.LINE -> "Línea de la lista"
-            ColorSlot.ON_ACCENT -> "Texto sobre verde"
-            ColorSlot.ON_AMBER -> "Texto sobre ámbar"
-            ColorSlot.IN_PLATE -> "Dentro de la placa"
-            ColorSlot.SOFT_ACCENT -> "Fondo suave"
-            ColorSlot.QUIET -> "Fondo neutro"
-        }
+        override val slotNavigation = ColorSlotWords(
+            name = "Navegación y acción",
+            about = "logotipo, ventana actual, «atrás», «enviar»",
+        )
+        override val slotActivity = ColorSlotWords(
+            name = "Actividad",
+            about = "contador de no leídos",
+        )
+        override val slotConfirmed = ColorSlotWords(
+            name = "Confirmado",
+            about = "entregado, leído, la marca E2E",
+        )
+        override val slotSurface = ColorSlotWords(
+            name = "Fondo del contenido",
+            about = "novedades y chat",
+        )
+        override val slotFunctional = ColorSlotWords(
+            name = "Fondo de los paneles",
+            about = "cabecera, pestañas, línea de entrada",
+        )
+        override val slotText = ColorSlotWords(
+            name = "Texto",
+            about = "principal",
+        )
+        override val slotText2 = ColorSlotWords(
+            name = "Texto más suave",
+            about = "leyendas, hora",
+        )
+        override val slotText3 = ColorSlotWords(
+            name = "Texto aún más suave",
+            about = "tercer nivel",
+        )
+        override val slotMy = ColorSlotWords(
+            name = "Mis mensajes",
+            about = "",
+        )
+        override val slotAuthor = ColorSlotWords(
+            name = "Mensajes de otros",
+            about = "",
+        )
+        override val slotBorder = ColorSlotWords(
+            name = "Borde del mensaje",
+            about = "",
+        )
+        override val slotLine = ColorSlotWords(
+            name = "Línea de la lista",
+            about = "entre entradas",
+        )
+        override val slotOnAccent = ColorSlotWords(
+            name = "Texto sobre verde",
+            about = "en botones, pestañas y la placa de la cabecera",
+        )
+        override val slotOnAmber = ColorSlotWords(
+            name = "Texto sobre ámbar",
+            about = "en el contador de no leídos",
+        )
+        override val slotInPlate = ColorSlotWords(
+            name = "Dentro de la placa",
+            about = "logotipo y botones sobre verde claro",
+        )
+        override val slotSoftAccent = ColorSlotWords(
+            name = "Fondo suave",
+            about = "pestaña no elegida, campo de entrada",
+        )
+        override val slotQuiet = ColorSlotWords(
+            name = "Fondo neutro",
+            about = "subpestaña no elegida, cápsula del selector",
+        )
 
-        override fun about(slot: ColorSlot) = when (slot) {
-            ColorSlot.NAVIGATION -> "logotipo, ventana actual, «atrás», «enviar»"
-            ColorSlot.ACTIVITY -> "contador de no leídos"
-            ColorSlot.CONFIRMED -> "entregado, leído, la marca E2E"
-            ColorSlot.SURFACE -> "novedades y chat"
-            ColorSlot.FUNCTIONAL -> "cabecera, pestañas, línea de entrada"
-            ColorSlot.TEXT -> "principal"
-            ColorSlot.TEXT_2 -> "leyendas, hora"
-            ColorSlot.TEXT_3 -> "tercer nivel"
-            ColorSlot.LINE -> "entre entradas"
-            ColorSlot.ON_ACCENT -> "en botones, pestañas y la placa de la cabecera"
-            ColorSlot.ON_AMBER -> "en el contador de no leídos"
-            ColorSlot.IN_PLATE -> "logotipo y botones sobre verde claro"
-            ColorSlot.SOFT_ACCENT -> "pestaña no elegida, campo de entrada"
-            ColorSlot.QUIET -> "subpestaña no elegida, cápsula del selector"
-            ColorSlot.MY, ColorSlot.AUTHOR, ColorSlot.BORDER -> ""
-        }
-
-        override fun colorTrouble(trouble: ColorTrouble) = when (trouble) {
-            ColorTrouble.Empty -> "Vacío. Escriba un color: seis caracteres u ocho"
-            is ColorTrouble.NotHex ->
-                "Caracteres no hexadecimales: ${trouble.listed}. Se admiten 0–9 y A–F"
-            is ColorTrouble.WrongLength ->
-                "Hay ${trouble.length} caracteres y hacen falta 6 (color) u 8 (con opacidad)"
-        }
+        override val colorEmpty = "Vacío. Escriba un color: seis caracteres u ocho"
+        override fun colorNotHex(listed: String) =
+            "Caracteres no hexadecimales: $listed. Se admiten 0–9 y A–F"
+        override fun colorWrongLength(length: Int) =
+            "Hay $length caracteres y hacen falta 6 (color) u 8 (con opacidad)"
 
         override val qrTooLong = "No se puede mostrar el código"
         override val qrTooLongAbout = "Es demasiado largo para un QR"
@@ -137,10 +164,8 @@ object SpanishWords : Words {
         override val backToDark = "Restaurar el oscuro"
         override val merged = "Así no se puede salir de aquí"
 
-        override fun place(pair: VitalPair) = when (pair) {
-            VitalPair.PLATE -> "el nombre de la ventana en la cabecera y la flecha «atrás»"
-            VitalPair.CONTENT -> "el cambio de ventana y la lista de ajustes"
-        }
+        override val placePlate = "el nombre de la ventana en la cabecera y la flecha «atrás»"
+        override val placeContent = "el cambio de ventana y la lista de ajustes"
 
         override fun mergedAbout(front: String, back: String, ratio: String, where: String) =
             "«$front» y «$back» se han fundido: $ratio : 1. Con ellos se dibuja $where — " +
@@ -230,29 +255,32 @@ object SpanishWords : Words {
     }
 
     override val windows = object : WindowWords {
-        override fun full(window: Window) = when (window) {
-            Window.Phone -> "Teléfono"
-            Window.Social -> "Red social"
-            Window.Media -> "Multimedia"
-            Window.Activity -> "Conversación"
-            Window.Page -> "Página personal"
-        }
 
-        override fun short(window: Window) = when (window) {
-            Window.Phone -> "Teléfono"
-            Window.Social -> "Social"
-            Window.Media -> "Media"
-            Window.Activity -> "Charla"
-            Window.Page -> "Página"
-        }
-
-        override fun about(window: Window) = when (window) {
-            Window.Phone -> "chats, contactos, llamadas"
-            Window.Social -> "común, amigos, catálogo"
-            Window.Media -> "novedades y diapositivas"
-            Window.Activity -> "historias, respuestas, reacciones"
-            Window.Page -> "perfil, colecciones, roles"
-        }
+        override val phone = WindowName(
+            full = "Teléfono",
+            short = "Teléfono",
+            about = "chats, contactos, llamadas",
+        )
+        override val social = WindowName(
+            full = "Red social",
+            short = "Social",
+            about = "común, amigos, catálogo",
+        )
+        override val media = WindowName(
+            full = "Multimedia",
+            short = "Media",
+            about = "novedades y diapositivas",
+        )
+        override val activity = WindowName(
+            full = "Conversación",
+            short = "Charla",
+            about = "historias, respuestas, reacciones",
+        )
+        override val page = WindowName(
+            full = "Página personal",
+            short = "Página",
+            about = "perfil, colecciones, roles",
+        )
 
         override fun youAreHere(about: String) = "$about · está aquí"
         override fun cameFrom(window: String) = "Viene de la ventana «$window»"
@@ -263,28 +291,24 @@ object SpanishWords : Words {
     override val settings2 = object : SettingsListWords {
         override val settings = "Ajustes"
 
-        override fun group(group: SettingsGroup) = when (group) {
-            SettingsGroup.ACCOUNT -> "Cuenta"
-            SettingsGroup.APPLICATION -> "Aplicación"
-            SettingsGroup.BLOGGER -> "Blogger"
-            SettingsGroup.HELP -> "Ayuda"
-        }
+        override val groupAccount = "Cuenta"
+        override val groupApplication = "Aplicación"
+        override val groupBlogger = "Blogger"
+        override val groupHelp = "Ayuda"
 
-        override fun item(item: SettingsItem) = when (item) {
-            SettingsItem.PROFILE -> "Perfil"
-            SettingsItem.DEVICES -> "Frase de recuperación y dispositivos"
-            SettingsItem.NOTIFICATIONS -> "Notificaciones"
-            SettingsItem.VIRTUALS -> "Cuentas virtuales"
-            SettingsItem.APPEARANCE -> "Apariencia"
-            SettingsItem.LANGUAGE -> "Idioma"
-            SettingsItem.PRIVACY -> "Privacidad y bloqueos"
-            SettingsItem.STORAGE -> "Memoria y datos"
-            SettingsItem.BLOGGER -> "Ventanas de blogger"
-            SettingsItem.QUESTIONS -> "Preguntas frecuentes"
-            SettingsItem.PROBLEM -> "Informar de un problema"
-            SettingsItem.UPDATE -> "Actualización"
-            SettingsItem.ABOUT -> "Acerca de la aplicación"
-        }
+        override val itemProfile = "Perfil"
+        override val itemDevices = "Frase de recuperación y dispositivos"
+        override val itemNotifications = "Notificaciones"
+        override val itemVirtuals = "Cuentas virtuales"
+        override val itemAppearance = "Apariencia"
+        override val itemLanguage = "Idioma"
+        override val itemPrivacy = "Privacidad y bloqueos"
+        override val itemStorage = "Memoria y datos"
+        override val itemBlogger = "Ventanas de blogger"
+        override val itemQuestions = "Preguntas frecuentes"
+        override val itemProblem = "Informar de un problema"
+        override val itemUpdate = "Actualización"
+        override val itemAbout = "Acerca de la aplicación"
     }
 
     override val update = object : UpdateWords {
@@ -944,32 +968,30 @@ object SpanishWords : Words {
     }
 
     override val tabs = object : TabWords {
-        override fun label(tab: WindowTab) = when (tab) {
-            WindowTab.Chats -> "Chats"
-            WindowTab.Contacts -> "Contactos"
-            WindowTab.Calls -> "Llamadas"
-            WindowTab.View -> "Vista"
-            WindowTab.All -> "Todas"
-            WindowTab.FromBook -> "De contactos"
-            WindowTab.Unknown -> "Desconocidas"
-            WindowTab.Missed -> "Perdidas"
-            WindowTab.Common -> "Común"
-            WindowTab.Friends -> "Amigos"
-            WindowTab.Catalogue -> "Catálogo"
-            WindowTab.Feed -> "Novedades"
-            WindowTab.Slides -> "Diapositivas"
-            WindowTab.Answers -> "Respuestas"
-            WindowTab.Reactions -> "Reacciones"
-            WindowTab.Collections -> "Colecciones"
-            WindowTab.Comments -> "Comentarios"
-            WindowTab.Marks -> "Valoraciones"
-            WindowTab.Subscribed -> "Suscrito"
-            WindowTab.Groups -> "Grupos"
-            WindowTab.Media -> "Media"
-            WindowTab.Messages -> "Mensajes"
-            WindowTab.Open -> "Abierto"
-            WindowTab.Personal -> "Privado"
-        }
+        override val chats = "Chats"
+        override val contacts = "Contactos"
+        override val calls = "Llamadas"
+        override val view = "Vista"
+        override val all = "Todas"
+        override val fromBook = "De contactos"
+        override val unknown = "Desconocidas"
+        override val missed = "Perdidas"
+        override val common = "Común"
+        override val friends = "Amigos"
+        override val catalogue = "Catálogo"
+        override val feed = "Novedades"
+        override val slides = "Diapositivas"
+        override val answers = "Respuestas"
+        override val reactions = "Reacciones"
+        override val collections = "Colecciones"
+        override val comments = "Comentarios"
+        override val marks = "Valoraciones"
+        override val subscribed = "Suscrito"
+        override val groups = "Grupos"
+        override val media = "Media"
+        override val messages = "Mensajes"
+        override val open = "Abierto"
+        override val personal = "Privado"
     }
 
     override val communities = object : CommunityWords {

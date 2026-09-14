@@ -1,8 +1,8 @@
 package io.tima.feature.group
 
-import io.tima.core.ui.CurrentWords
-import io.tima.core.ui.Words
-import io.tima.core.ui.RussianWords
+import io.tima.core.words.CurrentWords
+import io.tima.core.words.Words
+import io.tima.core.words.RussianWords
 import io.tima.domain.chat.ChannelStep
 import io.tima.domain.chat.CommunityItem
 import io.tima.domain.chat.CommunityStep

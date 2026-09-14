@@ -10,8 +10,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import io.tima.core.ui.words
 import io.tima.core.ui.ListLine
-import io.tima.core.ui.SettingsGroup
-import io.tima.core.ui.SettingsItem
 import io.tima.core.ui.Name
 import io.tima.core.ui.SectionTitle
 import io.tima.core.ui.Secondary

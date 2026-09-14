@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import io.tima.core.ui.Window
 import io.tima.core.ui.InCenter
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Name
@@ -19,7 +18,6 @@ import io.tima.core.ui.IconButton
 import io.tima.core.ui.LayoutLocal
 import io.tima.core.ui.ControlRow
 import io.tima.core.ui.TimaSpacing
-import io.tima.core.ui.WindowTab
 import io.tima.core.ui.words
 import io.tima.core.ui.Tima
 import io.tima.core.ui.Tab

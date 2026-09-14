@@ -1,8 +1,8 @@
 package io.tima.feature.auth
 
-import io.tima.core.ui.CurrentWords
-import io.tima.core.ui.Words
-import io.tima.core.ui.RussianWords
+import io.tima.core.words.CurrentWords
+import io.tima.core.words.Words
+import io.tima.core.words.RussianWords
 import io.tima.domain.account.VirtualAccount
 import io.tima.domain.account.VirtualsApi
 import kotlinx.coroutines.CoroutineScope

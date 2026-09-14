@@ -1,6 +1,7 @@
 package io.tima.core.ui
 
 import androidx.compose.ui.graphics.Color
+import io.tima.core.words.RussianWords
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals

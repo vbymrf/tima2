@@ -52,6 +52,11 @@ import io.tima.core.ui.paletteFor
 import io.tima.core.ui.hex
 import io.tima.core.ui.slot
 import io.tima.core.ui.with
+import io.tima.core.ui.theme
+import io.tima.core.ui.slot
+import io.tima.core.ui.about
+import io.tima.core.ui.place
+import io.tima.core.ui.colorTrouble
 
 /**
  * «Оформление» — раздел настроек: какая тема и из чего состоит своя.

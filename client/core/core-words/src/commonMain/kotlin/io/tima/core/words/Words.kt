@@ -1,8 +1,5 @@
-package io.tima.core.ui
+package io.tima.core.words
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.ProvidableCompositionLocal
-import androidx.compose.runtime.staticCompositionLocalOf
 import kotlin.concurrent.Volatile
 
 /**
@@ -140,20 +137,54 @@ interface SwitchingWords {
  * одного экрана.
  */
 interface WindowWords {
-    fun full(window: Window): String
-    fun short(window: Window): String
-    fun about(window: Window): String
+    val phone: WindowName
+    val social: WindowName
+    val media: WindowName
+    val activity: WindowName
+    val page: WindowName
     /** Пометка у окна, в котором человек сейчас: цвет здесь занят навигацией. */
     fun youAreHere(about: String): String
     fun cameFrom(window: String): String
     fun cameFromTab(window: String, tab: String): String
 }
 
+/**
+ * Три имени одного окна — вместе, а не тремя списками.
+ *
+ * Держать их порознь значит однажды получить окно, которое в переключателе называется
+ * одним словом, а в собственной шапке другим. Здесь они физически рядом, и разойтись им
+ * негде.
+ */
+data class WindowName(
+    /** Длинное: переключатель окон и рейка. */
+    val full: String,
+    /** Короткое: собственная шапка окна. «Социум» вместо «Социальная лента». */
+    val short: String,
+    /** Что внутри — строкой под названием. */
+    val about: String,
+)
+
 /** Список настроек: четыре группы и их пункты. */
 interface SettingsListWords {
     val settings: String
-    fun group(group: SettingsGroup): String
-    fun item(item: SettingsItem): String
+    val groupAccount: String
+    val groupApplication: String
+    val groupBlogger: String
+    val groupHelp: String
+
+    val itemProfile: String
+    val itemDevices: String
+    val itemNotifications: String
+    val itemVirtuals: String
+    val itemAppearance: String
+    val itemLanguage: String
+    val itemPrivacy: String
+    val itemStorage: String
+    val itemBlogger: String
+    val itemQuestions: String
+    val itemProblem: String
+    val itemUpdate: String
+    val itemAbout: String
 }
 
 /**
@@ -748,11 +779,49 @@ interface WizardWords {
 /**
  * Названия вкладок, фильтров и режимов окон.
  *
- * Ключ — [WindowTab], слово — здесь. До Я2 вкладка была строкой и служила и тем, и другим:
+ * Ключ — перечень вкладок в оболочке, слово — здесь. До Я2 вкладка была строкой и служила и тем, и другим:
  * перевести её было нельзя, потому что перевод сменил бы ключ.
  */
 interface TabWords {
-    fun label(tab: WindowTab): String
+    // Окно «Телефон».
+    val chats: String
+    val contacts: String
+    val calls: String
+    val view: String
+
+    // Фильтры журнала звонков.
+    val all: String
+    val fromBook: String
+    val unknown: String
+    val missed: String
+
+    // Окна 2 и 3.
+    val common: String
+    val friends: String
+    val catalogue: String
+
+    // Окно 3: два способа смотреть одно и то же.
+    val feed: String
+    val slides: String
+
+    // Окно 4.
+    val answers: String
+    val reactions: String
+    val collections: String
+
+    // Фильтры «Реакций».
+    val comments: String
+    val marks: String
+
+    // Окно 5.
+    val subscribed: String
+    val groups: String
+
+    // Подвкладки и контур «Коллекций».
+    val media: String
+    val messages: String
+    val open: String
+    val personal: String
 }
 
 /** Слова, встречающиеся всюду: кнопки, состояния, беды. */
@@ -796,12 +865,38 @@ interface SettingsWords {
  * остаётся ключом, а слово приходит из словаря.
  */
 interface AppearanceWords {
-    fun theme(choice: ThemeChoice): String
-    fun slot(slot: ColorSlot): String
-    fun about(slot: ColorSlot): String
+    val themeLight: String
+    val themeDark: String
+    val themeCustom: String
 
-    /** Беда с набранным цветом — фраза собирается здесь, из вида беды. */
-    fun colorTrouble(trouble: ColorTrouble): String
+    val slotNavigation: ColorSlotWords
+    val slotActivity: ColorSlotWords
+    val slotConfirmed: ColorSlotWords
+    val slotSurface: ColorSlotWords
+    val slotFunctional: ColorSlotWords
+    val slotText: ColorSlotWords
+    val slotText2: ColorSlotWords
+    val slotText3: ColorSlotWords
+    val slotMy: ColorSlotWords
+    val slotAuthor: ColorSlotWords
+    val slotBorder: ColorSlotWords
+    val slotLine: ColorSlotWords
+    val slotOnAccent: ColorSlotWords
+    val slotOnAmber: ColorSlotWords
+    val slotInPlate: ColorSlotWords
+    val slotSoftAccent: ColorSlotWords
+    val slotQuiet: ColorSlotWords
+
+    /**
+     * Беда с набранным цветом — фраза собирается здесь, из частей.
+     *
+     * Видом беды (`ColorTrouble`) она была до Я-D; вид остался в `core-ui`, где цвет и
+     * разбирается, а словарю достались части фразы. Склеивать их на экране нельзя: на
+     * другом языке порядок слов другой.
+     */
+    val colorEmpty: String
+    fun colorNotHex(listed: String): String
+    fun colorWrongLength(length: Int): String
     val qrTooLong: String
     val qrTooLongAbout: String
 
@@ -821,8 +916,18 @@ interface AppearanceWords {
     fun mergedAbout(front: String, back: String, ratio: String, where: String): String
 
     /** Где видна защищаемая пара — словами, которые человек прочтёт в предупреждении. */
-    fun place(pair: VitalPair): String
+    val placePlate: String
+    val placeContent: String
 }
+
+/**
+ * Цветовое место: название и пояснение под ним.
+ *
+ * Вместе по той же причине, что и [WindowName]: пояснение без названия — сирота, и
+ * разойтись им негде. У трёх мест пояснение пустое, и это решение, а не пропуск:
+ * название говорит само, подпись под ним была бы повтором.
+ */
+data class ColorSlotWords(val name: String, val about: String)
 
 /** Разговор под записью и ветка в группе (ADR-0024). */
 interface CommentWords {
@@ -903,58 +1008,84 @@ object RussianWords : Words {
     }
 
     override val appearance = object : AppearanceWords {
-        override fun theme(choice: ThemeChoice) = when (choice) {
-            ThemeChoice.Light -> "Светлая"
-            ThemeChoice.Dark -> "Тёмная"
-            ThemeChoice.Custom -> "Пользовательская"
-        }
+        override val themeLight = "Светлая"
+        override val themeDark = "Тёмная"
+        override val themeCustom = "Пользовательская"
 
-        override fun slot(slot: ColorSlot) = when (slot) {
-            ColorSlot.NAVIGATION -> "Навигация и действие"
-            ColorSlot.ACTIVITY -> "Активность"
-            ColorSlot.CONFIRMED -> "Подтверждено"
-            ColorSlot.SURFACE -> "Фон содержимого"
-            ColorSlot.FUNCTIONAL -> "Фон панелей"
-            ColorSlot.TEXT -> "Текст"
-            ColorSlot.TEXT_2 -> "Текст потише"
-            ColorSlot.TEXT_3 -> "Текст ещё тише"
-            ColorSlot.MY -> "Фон моих сообщений"
-            ColorSlot.AUTHOR -> "Фон чужих сообщений"
-            ColorSlot.BORDER -> "Рамка сообщения"
-            ColorSlot.LINE -> "Линия списка"
-            ColorSlot.ON_ACCENT -> "Текст на зелёном"
-            ColorSlot.ON_AMBER -> "Текст на янтаре"
-            ColorSlot.IN_PLATE -> "Внутри плашки"
-            ColorSlot.SOFT_ACCENT -> "Тихая подложка"
-            ColorSlot.QUIET -> "Нейтральная подложка"
-        }
+        override val slotNavigation = ColorSlotWords(
+            name = "Навигация и действие",
+            about = "логотип, текущее окно, «назад», «отправить»",
+        )
+        override val slotActivity = ColorSlotWords(
+            name = "Активность",
+            about = "счётчик непрочитанного",
+        )
+        override val slotConfirmed = ColorSlotWords(
+            name = "Подтверждено",
+            about = "доставлено, прочитано, метка E2E",
+        )
+        override val slotSurface = ColorSlotWords(
+            name = "Фон содержимого",
+            about = "лента и переписка",
+        )
+        override val slotFunctional = ColorSlotWords(
+            name = "Фон панелей",
+            about = "шапка, вкладки, строка ввода",
+        )
+        override val slotText = ColorSlotWords(
+            name = "Текст",
+            about = "основной",
+        )
+        override val slotText2 = ColorSlotWords(
+            name = "Текст потише",
+            about = "подписи, время",
+        )
+        override val slotText3 = ColorSlotWords(
+            name = "Текст ещё тише",
+            about = "третий уровень",
+        )
+        override val slotMy = ColorSlotWords(
+            name = "Фон моих сообщений",
+            about = "",
+        )
+        override val slotAuthor = ColorSlotWords(
+            name = "Фон чужих сообщений",
+            about = "",
+        )
+        override val slotBorder = ColorSlotWords(
+            name = "Рамка сообщения",
+            about = "",
+        )
+        override val slotLine = ColorSlotWords(
+            name = "Линия списка",
+            about = "между записями",
+        )
+        override val slotOnAccent = ColorSlotWords(
+            name = "Текст на зелёном",
+            about = "на кнопках, вкладках, плашке шапки",
+        )
+        override val slotOnAmber = ColorSlotWords(
+            name = "Текст на янтаре",
+            about = "на счётчике непрочитанного",
+        )
+        override val slotInPlate = ColorSlotWords(
+            name = "Внутри плашки",
+            about = "логотип и кнопки на салатовом",
+        )
+        override val slotSoftAccent = ColorSlotWords(
+            name = "Тихая подложка",
+            about = "невыбранная вкладка, поле ввода",
+        )
+        override val slotQuiet = ColorSlotWords(
+            name = "Нейтральная подложка",
+            about = "невыбранная подвкладка, капсула переключателя",
+        )
 
-        override fun about(slot: ColorSlot) = when (slot) {
-            ColorSlot.NAVIGATION -> "логотип, текущее окно, «назад», «отправить»"
-            ColorSlot.ACTIVITY -> "счётчик непрочитанного"
-            ColorSlot.CONFIRMED -> "доставлено, прочитано, метка E2E"
-            ColorSlot.SURFACE -> "лента и переписка"
-            ColorSlot.FUNCTIONAL -> "шапка, вкладки, строка ввода"
-            ColorSlot.TEXT -> "основной"
-            ColorSlot.TEXT_2 -> "подписи, время"
-            ColorSlot.TEXT_3 -> "третий уровень"
-            ColorSlot.LINE -> "между записями"
-            ColorSlot.ON_ACCENT -> "на кнопках, вкладках, плашке шапки"
-            ColorSlot.ON_AMBER -> "на счётчике непрочитанного"
-            ColorSlot.IN_PLATE -> "логотип и кнопки на салатовом"
-            ColorSlot.SOFT_ACCENT -> "невыбранная вкладка, поле ввода"
-            ColorSlot.QUIET -> "невыбранная подвкладка, капсула переключателя"
-            // У трёх мест пояснения нет: название говорит само, и подпись под ним была бы
-            // повтором. Пустая строка здесь — решение, а не пропуск.
-            ColorSlot.MY, ColorSlot.AUTHOR, ColorSlot.BORDER -> ""
-        }
-
-        override fun colorTrouble(trouble: ColorTrouble) = when (trouble) {
-            ColorTrouble.Empty -> "Пусто. Наберите цвет: шесть знаков или восемь"
-            is ColorTrouble.NotHex -> "Не шестнадцатеричные знаки: ${trouble.listed}. Допустимы 0–9 и A–F"
-            is ColorTrouble.WrongLength ->
-                "Знаков ${trouble.length}, а нужно 6 (цвет) или 8 (с непрозрачностью)"
-        }
+        override val colorEmpty = "Пусто. Наберите цвет: шесть знаков или восемь"
+        override fun colorNotHex(listed: String) =
+            "Не шестнадцатеричные знаки: $listed. Допустимы 0–9 и A–F"
+        override fun colorWrongLength(length: Int) =
+            "Знаков $length, а нужно 6 (цвет) или 8 (с непрозрачностью)"
         override val qrTooLong = "Код не показать"
         override val qrTooLongAbout = "Он слишком длинный для QR"
 
@@ -975,10 +1106,8 @@ object RussianWords : Words {
 
         // Фраза собирается целиком, а не склеивается из кусков на экране: на другом языке
         // порядок слов другой, и склейка разваливается первой (ПЛАН-ЯЗЫКА §3).
-        override fun place(pair: VitalPair) = when (pair) {
-            VitalPair.PLATE -> "имя окна в шапке и стрелка «назад»"
-            VitalPair.CONTENT -> "переключение окон и список настроек"
-        }
+        override val placePlate = "имя окна в шапке и стрелка «назад»"
+        override val placeContent = "переключение окон и список настроек"
 
         override fun mergedAbout(front: String, back: String, ratio: String, where: String) =
             "«$front» и «$back» слились: $ratio : 1. Этим нарисовано $where — " +
@@ -1065,29 +1194,32 @@ object RussianWords : Words {
     }
 
     override val windows = object : WindowWords {
-        override fun full(window: Window) = when (window) {
-            Window.Phone -> "Телефон"
-            Window.Social -> "Социальная лента"
-            Window.Media -> "Медиа-лента"
-            Window.Activity -> "Свободное общение"
-            Window.Page -> "Личная страница"
-        }
 
-        override fun short(window: Window) = when (window) {
-            Window.Phone -> "Телефон"
-            Window.Social -> "Социум"
-            Window.Media -> "Медиа"
-            Window.Activity -> "Общение"
-            Window.Page -> "Страница"
-        }
-
-        override fun about(window: Window) = when (window) {
-            Window.Phone -> "чаты, книга, звонки"
-            Window.Social -> "общая, друзья, каталог"
-            Window.Media -> "лента и слайды"
-            Window.Activity -> "истории, ответы, реакции"
-            Window.Page -> "профиль, коллекции, роли"
-        }
+        override val phone = WindowName(
+            full = "Телефон",
+            short = "Телефон",
+            about = "чаты, книга, звонки",
+        )
+        override val social = WindowName(
+            full = "Социальная лента",
+            short = "Социум",
+            about = "общая, друзья, каталог",
+        )
+        override val media = WindowName(
+            full = "Медиа-лента",
+            short = "Медиа",
+            about = "лента и слайды",
+        )
+        override val activity = WindowName(
+            full = "Свободное общение",
+            short = "Общение",
+            about = "истории, ответы, реакции",
+        )
+        override val page = WindowName(
+            full = "Личная страница",
+            short = "Страница",
+            about = "профиль, коллекции, роли",
+        )
 
         override fun youAreHere(about: String) = "$about · вы здесь"
         override fun cameFrom(window: String) = "Вы пришли из окна «$window»"
@@ -1098,28 +1230,24 @@ object RussianWords : Words {
     override val settings2 = object : SettingsListWords {
         override val settings = "Настройки"
 
-        override fun group(group: SettingsGroup) = when (group) {
-            SettingsGroup.ACCOUNT -> "Аккаунт"
-            SettingsGroup.APPLICATION -> "Приложение"
-            SettingsGroup.BLOGGER -> "Блогер"
-            SettingsGroup.HELP -> "Помощь"
-        }
+        override val groupAccount = "Аккаунт"
+        override val groupApplication = "Приложение"
+        override val groupBlogger = "Блогер"
+        override val groupHelp = "Помощь"
 
-        override fun item(item: SettingsItem) = when (item) {
-            SettingsItem.PROFILE -> "Профиль"
-            SettingsItem.DEVICES -> "Секретная фраза и устройства"
-            SettingsItem.NOTIFICATIONS -> "Уведомления"
-            SettingsItem.VIRTUALS -> "Виртуальные аккаунты"
-            SettingsItem.APPEARANCE -> "Оформление"
-            SettingsItem.LANGUAGE -> "Язык"
-            SettingsItem.PRIVACY -> "Приватность и блокировки"
-            SettingsItem.STORAGE -> "Память и трафик"
-            SettingsItem.BLOGGER -> "Окна блогера"
-            SettingsItem.QUESTIONS -> "Частые вопросы"
-            SettingsItem.PROBLEM -> "Сообщить о проблеме"
-            SettingsItem.UPDATE -> "Обновление"
-            SettingsItem.ABOUT -> "О приложении"
-        }
+        override val itemProfile = "Профиль"
+        override val itemDevices = "Секретная фраза и устройства"
+        override val itemNotifications = "Уведомления"
+        override val itemVirtuals = "Виртуальные аккаунты"
+        override val itemAppearance = "Оформление"
+        override val itemLanguage = "Язык"
+        override val itemPrivacy = "Приватность и блокировки"
+        override val itemStorage = "Память и трафик"
+        override val itemBlogger = "Окна блогера"
+        override val itemQuestions = "Частые вопросы"
+        override val itemProblem = "Сообщить о проблеме"
+        override val itemUpdate = "Обновление"
+        override val itemAbout = "О приложении"
     }
 
     override val update = object : UpdateWords {
@@ -1767,39 +1895,37 @@ object RussianWords : Words {
     }
 
     override val tabs = object : TabWords {
-        override fun label(tab: WindowTab) = when (tab) {
-            WindowTab.Chats -> "Чаты"
-            WindowTab.Contacts -> "Контакты"
-            WindowTab.Calls -> "Звонки"
-            WindowTab.View -> "Вид"
+        override val chats = "Чаты"
+        override val contacts = "Контакты"
+        override val calls = "Звонки"
+        override val view = "Вид"
 
-            WindowTab.All -> "Все"
-            WindowTab.FromBook -> "Контактов"
-            WindowTab.Unknown -> "Неизвестные"
-            WindowTab.Missed -> "Пропущенные"
+        override val all = "Все"
+        override val fromBook = "Контактов"
+        override val unknown = "Неизвестные"
+        override val missed = "Пропущенные"
 
-            WindowTab.Common -> "Общая"
-            WindowTab.Friends -> "Друзья"
-            WindowTab.Catalogue -> "Каталог"
+        override val common = "Общая"
+        override val friends = "Друзья"
+        override val catalogue = "Каталог"
 
-            WindowTab.Feed -> "Лента"
-            WindowTab.Slides -> "Слайды"
+        override val feed = "Лента"
+        override val slides = "Слайды"
 
-            WindowTab.Answers -> "Ответы"
-            WindowTab.Reactions -> "Реакции"
-            WindowTab.Collections -> "Коллекции"
+        override val answers = "Ответы"
+        override val reactions = "Реакции"
+        override val collections = "Коллекции"
 
-            WindowTab.Comments -> "Комментарии"
-            WindowTab.Marks -> "Оценки"
+        override val comments = "Комментарии"
+        override val marks = "Оценки"
 
-            WindowTab.Subscribed -> "Подписан"
-            WindowTab.Groups -> "Группы"
+        override val subscribed = "Подписан"
+        override val groups = "Группы"
 
-            WindowTab.Media -> "Медиа"
-            WindowTab.Messages -> "Сообщения"
-            WindowTab.Open -> "Открытое"
-            WindowTab.Personal -> "Личное"
-        }
+        override val media = "Медиа"
+        override val messages = "Сообщения"
+        override val open = "Открытое"
+        override val personal = "Личное"
     }
 
     override val communities = object : CommunityWords {
@@ -1864,21 +1990,16 @@ enum class Language(
 }
 
 /**
- * Раздача словаря. Умолчание — русский: приложение обязано говорить даже там, где язык
- * ещё не выбран.
- */
-val LocalWords: ProvidableCompositionLocal<Words> = staticCompositionLocalOf { RussianWords }
-
-/**
  * Текущий словарь для тех, кто **не рисует** (ПЛАН-ЯЗЫКА, Я2-беды).
  *
- * Store — обычный класс, не `@Composable`, и [LocalWords] ему недоступен. Он получает
+ * Store — обычный класс, не `@Composable`, и `LocalWords` из `core-ui` ему недоступен —
+ * да и Compose здесь нет вовсе (Я-D). Он получает
  * словарь **ссылкой** — `words: () -> Words`, — и умолчанием этой ссылки служит вот это
  * поле: лямбда читает его в момент беды, а не при создании store, поэтому язык всегда
  * текущий.
  *
  * **Пишет сюда один [io.tima.shared.Root]** — там же, где выбранный язык уходит в
- * [TimaTheme], и из того же значения. Второго писателя быть не должно: `TimaTheme` зовут
+ * `TimaTheme`, и из того же значения. Второго писателя быть не должно: `TimaTheme` зовут
  * и с готовым набором цветов ради предпросмотра оформления, и запись оттуда сбрасывала бы
  * язык на русский.
  *
@@ -1889,7 +2010,3 @@ object CurrentWords {
     @Volatile
     var value: Words = RussianWords
 }
-
-/** Короткий доступ: `Tima.words.comments.thread`. */
-val Tima.words: Words
-    @Composable get() = LocalWords.current

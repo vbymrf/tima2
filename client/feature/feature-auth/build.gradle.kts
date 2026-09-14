@@ -37,6 +37,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(projects.domain.domainAccount)
+            implementation(projects.core.coreWords)
             implementation(projects.core.coreUi)
             implementation(compose.runtime)
             implementation(compose.foundation)

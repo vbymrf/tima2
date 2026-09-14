@@ -159,6 +159,19 @@ object ArchitectureRules {
                 "смена движка или политики токенов задевает всех потребителей.",
         ),
         Rule(
+            name = "core-words без зависимостей",
+            appliesToPathContaining = listOf("/core/core-words/"),
+            forbiddenImportPrefixes = listOf(
+                "io.", "kotlinx.", "com.", "app.", "org.", "androidx.", "java.", "javax.",
+            ),
+            why = "Словарь называет надписи и ничего больше. Стоит ему узнать чужой тип — " +
+                "перечисление окон, вкладок, пунктов настроек, — и это перечисление " +
+                "обязано переехать под него: слой не может зависеть от того, что над ним. " +
+                "Ровно так до 2026-09-14 дизайн-система узнала, что окон пять и что " +
+                "порядок их объявления есть порядок свайпа (ПЛАН-ЯЗЫКА, Я-D). Раскладку " +
+                "«ключ → надпись» делает тот, чей ключ. Разрешены kotlin.* и свой пакет.",
+        ),
+        Rule(
             name = "core-model без зависимостей",
             appliesToPathContaining = listOf("/core/core-model/"),
             forbiddenImportPrefixes = listOf("io.", "kotlinx.", "com.", "app.", "org.", "java.", "javax."),

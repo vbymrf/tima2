@@ -17,8 +17,8 @@ import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Tertiary
-import io.tima.core.ui.RussianWords
-import io.tima.core.ui.StorageWords
+import io.tima.core.words.RussianWords
+import io.tima.core.words.StorageWords
 import io.tima.core.ui.Tima
 import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing

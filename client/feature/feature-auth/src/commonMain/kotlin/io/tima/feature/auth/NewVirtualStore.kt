@@ -1,9 +1,9 @@
 package io.tima.feature.auth
 
-import io.tima.core.ui.CurrentWords
-import io.tima.core.ui.AuthWords
-import io.tima.core.ui.Words
-import io.tima.core.ui.RussianWords
+import io.tima.core.words.CurrentWords
+import io.tima.core.words.AuthWords
+import io.tima.core.words.Words
+import io.tima.core.words.RussianWords
 import io.tima.domain.account.CreateVirtual
 import io.tima.domain.account.Profile
 import io.tima.domain.account.VirtualStep

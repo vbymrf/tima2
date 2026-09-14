@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import io.tima.core.ui.CurrentWords
+import io.tima.core.words.CurrentWords
 import io.tima.core.ui.Alarm
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
@@ -16,9 +16,9 @@ import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Tertiary
-import io.tima.core.ui.RussianWords
+import io.tima.core.words.RussianWords
 import io.tima.core.ui.Tima
-import io.tima.core.ui.UpdateWords
+import io.tima.core.words.UpdateWords
 import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType

@@ -23,7 +23,7 @@ import io.tima.core.ui.Field
 import io.tima.core.ui.EmptyArea
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.TimaSpacing
-import io.tima.core.ui.SocialWords
+import io.tima.core.words.SocialWords
 import io.tima.core.ui.Tima
 import io.tima.core.ui.words
 import io.tima.core.ui.Tertiary

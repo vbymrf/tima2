@@ -45,8 +45,8 @@ import io.tima.feature.group.MembersStore
 import io.tima.feature.group.NewGroupScreen
 import io.tima.feature.group.MemberScreen
 import io.tima.core.database.TimaDatabase
-import io.tima.core.ui.CurrentWords
-import io.tima.core.ui.SettingsItem
+import io.tima.core.words.CurrentWords
+import io.tima.feature.shell.SettingsItem
 import io.tima.core.ui.Stage
 import io.tima.domain.account.Session
 import io.tima.domain.chat.StartPersonalChat
@@ -95,7 +95,7 @@ import io.tima.feature.chat.BookScreen
 import io.tima.feature.shell.beganLabel
 import io.tima.feature.shell.AccountLeavingSheet
 import io.tima.feature.shell.CALL_FILTERS
-import io.tima.core.ui.Window
+import io.tima.feature.shell.Window
 import io.tima.feature.shell.MediaWindow
 import io.tima.feature.shell.ActivityWindow
 import io.tima.feature.shell.SocialWindow
@@ -111,11 +111,11 @@ import io.tima.core.ui.merged
 import io.tima.core.ui.TimaTheme
 import androidx.compose.foundation.isSystemInDarkTheme
 import io.tima.feature.shell.AppearanceScreen
-import io.tima.core.ui.Language
+import io.tima.core.words.Language
 import io.tima.core.ui.Tima
-import io.tima.core.ui.WindowTab
+import io.tima.feature.shell.WindowTab
 import io.tima.core.ui.words
-import io.tima.core.ui.RussianWords
+import io.tima.core.words.RussianWords
 import io.tima.feature.shell.LanguageScreen
 import io.tima.feature.shell.SettingsScreen
 import io.tima.core.diag.Diary
@@ -164,6 +164,9 @@ import io.tima.feature.chat.CommentsState
 import io.tima.feature.chat.PageScreen
 import io.tima.feature.chat.ChatScreen
 import io.tima.feature.chat.ChatsScreen
+import io.tima.core.ui.theme
+import io.tima.feature.shell.item
+import io.tima.feature.shell.label
 
 /**
  * Корень приложения — общий для всех платформ.
