@@ -102,9 +102,23 @@ Apple нет, и падает с «no matching variant» — до нашего k
 | `reference/kodium-main` | [eu.livotov.labs/kodium](https://github.com/livotovlabs/kodium) — KMP-порт TweetNaCl с Double Ratchet и PQC | сверка подходов к тем же примитивам, что в `messenger-crypto` |
 | `reference/livekit-master` | исходники [livekit/livekit](https://github.com/livekit/livekit) | сервер звонков стенда; конфигурация и поведение |
 | `reference/aiogram-dev-3.x` | [aiogram/aiogram](https://github.com/aiogram/aiogram), ветка `dev-3.x` | образец слоя API и очередей |
+| `reference/mobile-mcp` | [mobile-next/mobile-mcp](https://github.com/mobile-next/mobile-mcp) `63a5974d9bfa` | модель 3 прогонов на телефонах |
+| `reference/mobilecli` | [mobile-next/mobilecli](https://github.com/mobile-next/mobilecli) `f7148582b01a` | **им модель 3 говорит с устройствами**: здесь ответы про adb и iOS |
+| `reference/mobai-mcp` | [mobai-app/mobai-mcp](https://github.com/mobai-app/mobai-mcp) `dc62046c313c` | модель 2 |
+| `reference/mobai-ci` | [mobai-app/mobai-ci](https://github.com/mobai-app/mobai-ci) `16ecf8ae7ad8` | прогон `.mob` в CI |
+| `reference/mobile-harness` | [mobai-app/mobile-harness](https://github.com/mobai-app/mobile-harness) `bc7943781d24` | переиспользуемые навыки агента |
 
 Каталог **не отслеживается git** (`.gitignore`) — это чужой код, он не наш и на вторую
 машину не едет.
+
+**Пять нижних копий взяты 2026-09-14** по решению заказчика — под разбор способов гонять
+живые прогоны на телефонах (`doc_mig/ТЕСТЫ-НА-ТЕЛЕФОНАХ/МОДЕЛИ.md`). Сразу пригодились:
+два вопроса, на которые сайты отвечали уклончиво, закрылись чтением исходников за минуту —
+как `mobilecli` зовёт `adb` и на какой адрес зашит `mobai-mcp`.
+
+Проверено при взятии: **файлов-указаний агентам** (`AGENTS.md`, `CLAUDE.md`, `.claude/`,
+`.cursor/`) ни в одной из пяти нет, переименовывать нечего. Появятся при обновлении —
+переименовать, как сделано у `aiogram-dev-3.x`.
 
 До 2026-09-03 эти копии лежали в корне репозитория (`Kodium git/`, `livekit-master git/`,
 `aiogram-dev-3.x/`) и потому попадали в любой поиск по проекту наравне с нашим кодом.
