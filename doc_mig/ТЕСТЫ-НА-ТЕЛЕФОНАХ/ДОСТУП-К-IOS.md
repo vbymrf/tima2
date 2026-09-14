@@ -174,9 +174,29 @@ BrowserStack, Sauce Labs, LambdaTest, AWS Device Farm. У mobile-mcp для эт
 
 Три вещи, каждая дешёвая и каждая уменьшает будущую работу.
 
-1. **Прогнать `crypto-ios` на раннере macOS в CI** — он уже настроен, а тир числится
-   непроверенным. Это ответ на вопрос «работает ли у нас ML-KEM на Apple», и ответ нужен
-   **до** того, как начнётся iOS-приложение, а не после.
+1. ~~**Прогнать `crypto-ios` на раннере macOS в CI**~~ — **прогнали 2026-09-14, и ответа не
+   получили**. Задача `крипто · iOS-симулятор (гейт К2)` падает на **первом же шаге**, не
+   дойдя до векторов:
+
+   ```
+   A problem occurred configuring root project 'KeccakKotlin'.
+   > Dependency verification failed for configuration ':classpath'
+     3 artifacts failed verification:
+       - jackson-base-2.15.3.pom (com.fasterxml.jackson:jackson-base:2.15.3)
+   ```
+
+   **И это не про iOS.** Та же ошибка валит `messenger-crypto`, `архитектурные правила` и
+   `client · JVM` — то есть **весь CI красный по одной причине**, и красный он как минимум с
+   2026-09-06 (прогоны 34060196765 и 34274496470 — тоже падения). Локально всё зелёное: 884
+   теста, 0 падений.
+
+   Причина в сверке контрольных сумм: `gradle/verification-metadata.xml` не покрывает часть
+   артефактов сборочного классpath. Файлов таких четыре — `client`, `messenger-crypto`,
+   `third-party/KeccakKotlin`, `third-party/KyberKotlin`, — и обёртки у них разных версий
+   Gradle (8.4, 8.14.3, 9.3.1), а разные версии тянут разный классpath.
+
+   **Пока это не починено, вопрос «работает ли ML-KEM на Apple» остаётся без ответа** — и
+   заодно у нас нет CI вообще.
 2. **Проверить, что модули собираются под iOS** дальше klib: `compileTestKotlinIosSimulatorArm64`
    на Windows проходит, но в профиле честно сказано, что это не доказательство. Линковка
    покажет больше.
