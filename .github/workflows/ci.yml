@@ -418,12 +418,25 @@ jobs:
       # MinIO не может быть service container: образу нужна команда `server /data`,
       # а service container команду задать не даёт — только образ, env и options.
       # Поэтому обычным docker run. Бакет media-test создаёт сам тест (blob.New).
+      # ── ПОЧЕМУ quay.io, А НЕ DOCKER HUB ──────────────────────────────────
+      # `minio/minio:latest` с Docker Hub перестал скачиваться анонимно:
+      #   pull access denied for minio/minio, repository does not exist
+      #   or may require 'docker login'
+      # Образ публичный, и текст обманывает: так Docker Hub отвечает на
+      # исчерпанный предел анонимных загрузок с раннеров GitHub. Лечится не
+      # логином, а обращением к официальному реестру MinIO — quay.io, откуда
+      # проект и раздаёт свои образы. Это же и наше правило: ходить к
+      # официальному источнику, а не к посреднику (settings.gradle.kts,
+      # отключение зеркала aliyun).
+      #
+      # Postgres и Redis этим не задеты: их тянет сам раннер как service
+      # containers, у него свои права.
       - name: 'сервер · поднять MinIO'
         run: |
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=tima-admin \
             -e MINIO_ROOT_PASSWORD=tima-dev-only \
-            minio/minio:latest server /data
+            quay.io/minio/minio:latest server /data
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:9000/minio/health/live >/dev/null; then
               echo "MinIO готов на попытке $i"; exit 0
