@@ -73,6 +73,7 @@ forbids:   treating successful compilation as proof; calling the tier skipped on
 expects:   at least 70 tests, 0 failures, 0 errors, 0 skipped. Fewer than jvmTest — CrossImplementationTest is JVM-only
 frozen:    —
 runs_unfrozen: 0
+last_run:  2026-09-14, CI 34893985607 on commit 43ecc26 — 94 tests, 0 failures, 0 errors, 0 skipped. First green run ever; the report is doc_mig/отчёты/2026-09-14-крипто-iOS.md
 
 > **Compilation proves nothing here, and the project has a scar to show it.** In v1
 > the ML-KEM implementation inside Kodium compiled, passed its own tests, and filled
