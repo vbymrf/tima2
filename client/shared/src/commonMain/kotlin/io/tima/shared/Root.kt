@@ -1666,7 +1666,6 @@ private fun Settings(
                 LanguageScreen(
                     current = language.tag,
                     onChoose = onLanguage,
-                    onBack = { onOpen(null) },
                     country = localeState.locale.country,
                     writingLanguage = localeState.locale.lang,
                     readingLanguages = localeState.languagesText,

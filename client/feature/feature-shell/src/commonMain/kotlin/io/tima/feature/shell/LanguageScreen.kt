@@ -2,6 +2,8 @@ package io.tima.feature.shell
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,7 +17,6 @@ import io.tima.core.words.Language
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
-import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Trouble
 import io.tima.core.ui.Tima
@@ -41,7 +42,6 @@ import io.tima.core.ui.words
 fun LanguageScreen(
     current: String,
     onChoose: (Language) -> Unit,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
     /**
      * Страна человека (ПЛАН-ЯЗЫКА Я7). `null` — настройки отбора не показываются вовсе:
@@ -70,9 +70,23 @@ fun LanguageScreen(
 ) {
     val colors = Tima.colors
     val words = Tima.words
-    Column(modifier.fillMaxSize().background(colors.surface)) {
-        SubwindowHeader(title = words.settings.language, onBack = onBack)
-
+    // ── ПРОКРУТКА, И ПОЧЕМУ ОНА ЗДЕСЬ ОБЯЗАТЕЛЬНА ────────────────────────────
+    //
+    // Экран вырос: страна (Я7), язык письма и языки чтения (Я12), два переключателя —
+    // и список языков приложения уехал за нижний край. На телефоне 720×1600 его стало
+    // **не достать вовсе**: экран не прокручивался. Поймано живым прогоном 2026-09-14,
+    // до него ни один тест этого не видел — снимки рисуются в заданном размере, а не в
+    // телефонном.
+    //
+    // Своей шапки здесь нет намеренно: её рисует `SettingsScreen` — «шапка одна на
+    // подокно», и заголовок в ней уже имя открытого пункта. Вторая давала две
+    // одинаковые строки «Язык» с двумя кнопками «назад».
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(colors.surface)
+            .verticalScroll(rememberScrollState()),
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(TimaSpacing.about4),
             verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),

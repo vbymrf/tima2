@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import io.tima.core.ui.words
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
@@ -69,6 +70,7 @@ fun SettingsScreen(
                 SectionTitle(words.group(group))
                 for (item in SettingsItem.entries.filter { it.group == group }) {
                     ListLine(
+                        modifier = Modifier.testTag(item.tag()),
                         onClick = { onOpen(item) },
                         left = { Name(item.glyph) },
                         right = value(item).takeIf { it.isNotBlank() }?.let { { Secondary(it) } },

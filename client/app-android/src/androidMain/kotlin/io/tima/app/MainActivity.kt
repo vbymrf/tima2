@@ -6,6 +6,12 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import io.tima.core.contacts.AndroidContactsAccess
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +41,7 @@ import io.tima.shared.Root
  *
  * Файл этим и ценен: он короткий. Стало длинно — значит в него протекло общее.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 class MainActivity : ComponentActivity() {
 
     /**
@@ -143,6 +150,23 @@ class MainActivity : ComponentActivity() {
         transfer.value = transferFrom(intent)
         setContent {
             val entry = remember { Entry.create(Platform.Android) }
+            // ── МЕТКИ СЦЕНАРИЕВ ПОПАДАЮТ В ДЕРЕВО ДОСТУПНОСТИ ────────────────
+            //
+            // `Modifier.testTag` сам по себе виден только тестам Compose. Прогонщику
+            // живых сценариев (Maestro) нужен `resource-id` — как у обычного вида
+            // Android. Эта строка и делает одно в другое, и работает она на весь
+            // экран разом, поэтому стоит здесь, а не у каждой метки.
+            //
+            // Почему в точке входа Android, а не в теме: свойство платформенное, в
+            // общем коде его нет. Настольной версии оно не нужно вовсе — там нет
+            // ни дерева доступности Android, ни прогонщика.
+            //
+            // Зачем всё это: отбор в живых прогонах идёт либо по видимому тексту,
+            // либо по метке. Текста у нас три языка, и сценарий с `tapOn: "Чаты"`
+            // на английском не находит ничего.
+            Box(
+                Modifier.fillMaxSize().semantics { testTagsAsResourceId = true },
+            ) {
             // Тема здесь больше не решается: её выбирает человек в настройках, и
             // держит выбор `Root`. Платформе осталось только место для хранения строки.
             //
@@ -182,7 +206,8 @@ class MainActivity : ComponentActivity() {
                     code = BuildConfig.VERSION_CODE,
                     stream = BuildConfig.TIMA_STREAM,
                 ),
-            )
+                )
+            }
         }
     }
 

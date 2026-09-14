@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import io.tima.core.ui.InCenter
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Name
@@ -171,6 +172,7 @@ fun TabRow(
                 label = Tima.words.tabs.label(tab),
                 current = tab == selected,
                 onClick = { onTab(tab) },
+                modifier = Modifier.testTag(tab.tag()),
             )
         }
         trailing?.invoke()

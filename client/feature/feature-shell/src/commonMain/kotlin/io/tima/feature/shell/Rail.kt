@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.tima.core.ui.words
@@ -95,6 +96,7 @@ private fun Item(
     howMany,
     withCaption,
     onClick,
+    window.tag(),
 )
 
 @Composable
@@ -105,10 +107,13 @@ private fun Item(
     howMany: Int,
     withCaption: Boolean,
     onClick: () -> Unit,
+    /** Метка для сценариев; пусто — метки нет (строка рейки без своего ключа). */
+    tag: String = "",
 ) {
     val colors = Tima.colors
     Row(
         modifier = Modifier
+            .then(if (tag.isEmpty()) Modifier else Modifier.testTag(tag))
             .then(if (withCaption) Modifier.fillMaxWidth() else Modifier)
             .background(
                 if (selected) colors.navigation else colors.functional,

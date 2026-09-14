@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import io.tima.core.ui.Caption
@@ -86,7 +87,7 @@ fun FilterRow(
     modifier: Modifier = Modifier,
     /** Хвост ряда: переключатель режимов. Есть не у всякого ряда. */
     trailing: (@Composable () -> Unit)? = null,
-) = ChipsRow(items, selected, onPick, modifier, trailing) { it }
+) = ChipsRow(items, selected, onPick, modifier, trailing, tag = { null }) { it }
 
 /**
  * Тот же ряд, но по ключам: наши фильтры, у которых надпись приходит из словаря
@@ -99,7 +100,7 @@ fun FilterRow(
     onPick: (WindowTab) -> Unit,
     modifier: Modifier = Modifier,
     trailing: (@Composable () -> Unit)? = null,
-) = ChipsRow(items, selected, onPick, modifier, trailing) { Tima.words.tabs.label(it) }
+) = ChipsRow(items, selected, onPick, modifier, trailing, tag = { it.tag() }) { Tima.words.tabs.label(it) }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -109,6 +110,8 @@ private fun <T> ChipsRow(
     onPick: (T) -> Unit,
     modifier: Modifier,
     trailing: (@Composable () -> Unit)?,
+    /** Метка для сценариев; `null` — метки нет. Разделы книги её не имеют: их придумал человек. */
+    tag: (T) -> String?,
     label: @Composable (T) -> String,
 ) {
     val colors = Tima.colors
@@ -129,6 +132,7 @@ private fun <T> ChipsRow(
                 kind = if (item == selected) ChipKind.Selected else ChipKind.Neutral,
                 onClick = { onPick(item) },
                 horizontalPadding = CHIP_SIDE,
+                modifier = tag(item)?.let { Modifier.testTag(it) } ?: Modifier,
             )
         }
         if (trailing != null) {
