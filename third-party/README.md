@@ -104,20 +104,29 @@ Apple нет, и падает с «no matching variant» — до нашего k
 | `reference/aiogram-dev-3.x` | [aiogram/aiogram](https://github.com/aiogram/aiogram), ветка `dev-3.x` | образец слоя API и очередей |
 | `reference/mobile-mcp` | [mobile-next/mobile-mcp](https://github.com/mobile-next/mobile-mcp) `63a5974d9bfa` | модель 3 прогонов на телефонах |
 | `reference/mobilecli` | [mobile-next/mobilecli](https://github.com/mobile-next/mobilecli) `f7148582b01a` | **им модель 3 говорит с устройствами**: здесь ответы про adb и iOS |
-| `reference/mobai-mcp` | [mobai-app/mobai-mcp](https://github.com/mobai-app/mobai-mcp) `dc62046c313c` | модель 2 |
-| `reference/mobai-ci` | [mobai-app/mobai-ci](https://github.com/mobai-app/mobai-ci) `16ecf8ae7ad8` | прогон `.mob` в CI |
-| `reference/mobile-harness` | [mobai-app/mobile-harness](https://github.com/mobai-app/mobile-harness) `bc7943781d24` | переиспользуемые навыки агента |
+| `reference/MobileCLI-mobilecli` | [MobileCLI/mobilecli](https://github.com/MobileCLI/mobilecli) `7f874f6867f7` | **полный тёзка предыдущего с обратной задачей** — транслирует терминал на телефон, а не управляет телефоном |
+| `reference/apple-aiml-research-ml-mobileclip` | [apple-aiml-research/ml-mobileclip](https://github.com/apple-aiml-research/ml-mobileclip) `48faa0fea4b0` | к тестированию не относится вовсе: модели «изображение-текст» от Apple. Взято по вопросу заказчика, удаляется без потерь |
 
 Каталог **не отслеживается git** (`.gitignore`) — это чужой код, он не наш и на вторую
 машину не едет.
 
-**Пять нижних копий взяты 2026-09-14** по решению заказчика — под разбор способов гонять
-живые прогоны на телефонах (`doc_mig/ТЕСТЫ-НА-ТЕЛЕФОНАХ/МОДЕЛИ.md`). Сразу пригодились:
-два вопроса, на которые сайты отвечали уклончиво, закрылись чтением исходников за минуту —
-как `mobilecli` зовёт `adb` и на какой адрес зашит `mobai-mcp`.
+**Нижние копии взяты 2026-09-14** по решению заказчика — под разбор способов гонять живые
+прогоны на телефонах (`doc_mig/ТЕСТЫ-НА-ТЕЛЕФОНАХ/МОДЕЛИ.md`). Сразу пригодились: вопросы, на
+которые сайты отвечали уклончиво, закрылись чтением исходников за минуту — как `mobilecli`
+зовёт `adb`, на какой адрес зашит сервер MobAI, и чем занимается тёзка.
+
+**Копии MobAI (`mobai-mcp`, `mobai-ci`, `mobile-harness`) удалены** вместе с самой моделью:
+решение заказчика 2026-09-14 — не используем.
+
+> **Два имени, которые легко перепутать, и это уже чуть не стоило ошибки.**
+> `mobile-next/mobilecli` — наш: управляет телефоном с компьютера, Go, ставится бинарями из
+> пакетов `@mobilenext/mobilecli-<платформа>`.
+> `MobileCLI/mobilecli` — чужой: транслирует терминал **на** телефон, Rust, ставится
+> `curl | bash` или `cargo`. Задачи противоположные, имена одинаковые.
+> Третий, `ml-mobileclip`, к этому вовсе не относится — там `mobileclip`, с буквой `p`.
 
 Проверено при взятии: **файлов-указаний агентам** (`AGENTS.md`, `CLAUDE.md`, `.claude/`,
-`.cursor/`) ни в одной из пяти нет, переименовывать нечего. Появятся при обновлении —
+`.cursor/`) ни в одной копии нет, переименовывать нечего. Появятся при обновлении —
 переименовать, как сделано у `aiogram-dev-3.x`.
 
 До 2026-09-03 эти копии лежали в корне репозитория (`Kodium git/`, `livekit-master git/`,
