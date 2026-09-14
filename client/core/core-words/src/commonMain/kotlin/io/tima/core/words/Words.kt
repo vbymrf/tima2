@@ -843,6 +843,23 @@ interface SettingsWords {
     val country: String
     val countryAbout: String
     val countryHint: String
+
+    /**
+     * **Язык, на котором человек пишет, — не язык приложения** (Я12).
+     *
+     * Списком из наших трёх словарей он не выражается: сервер держит `lang` свободным
+     * текстом, и человек вправе писать по-немецки, хотя немецкого интерфейса у нас нет.
+     * Поэтому поле, а не список.
+     */
+    val writingLanguage: String
+    val writingLanguageAbout: String
+    val writingLanguageHint: String
+
+    /** Какие языки человек читает. Пусто — только его собственный. */
+    val readingLanguages: String
+    val readingLanguagesAbout: String
+    val readingLanguagesHint: String
+
     val whatToShow: String
     val onlyMyCountry: String
     val onlyMyLanguages: String
@@ -995,6 +1012,14 @@ object RussianWords : Words {
         override val country = "Страна"
         override val countryAbout = "Ею сервер отбирает выдачу: своё, а не весь мир. Пусто — показывать всё"
         override val countryHint = "RU"
+        override val writingLanguage = "Язык, на котором я пишу"
+        override val writingLanguageAbout =
+            "По нему вас находят в языковых лентах. Это не язык приложения — их можно " +
+                "выбрать разными"
+        override val writingLanguageHint = "ru, en, de — код языка"
+        override val readingLanguages = "Какие языки читать"
+        override val readingLanguagesAbout = "Через запятую. Пусто — только ваш язык"
+        override val readingLanguagesHint = "ru, en, es"
         override val whatToShow = "Что показывать"
         override val onlyMyCountry = "Только моя страна"
         override val onlyMyLanguages = "Только мои языки"

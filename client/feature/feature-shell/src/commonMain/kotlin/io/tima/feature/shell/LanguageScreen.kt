@@ -51,10 +51,20 @@ fun LanguageScreen(
      * это правило модулей, и ради одного экрана его не нарушают.
      */
     country: String? = null,
+    /**
+     * Язык, на котором человек **пишет** (Я12) — не тот, что выбран ниже для надписей.
+     * Свободный тег, а не выбор из списка: сервер держит его свободным текстом, и писать
+     * по-немецки при русском интерфейсе законно.
+     */
+    writingLanguage: String = "",
+    /** Какие языки читать, как набрано: через запятую. Пусто — язык человека. */
+    readingLanguages: String = "",
     onlyMyCountry: Boolean = true,
     onlyMyLanguages: Boolean = true,
     localeTrouble: String? = null,
     onCountry: (String) -> Unit = {},
+    onWritingLanguage: (String) -> Unit = {},
+    onReadingLanguages: (String) -> Unit = {},
     onOnlyMyCountry: (Boolean) -> Unit = {},
     onOnlyMyLanguages: (Boolean) -> Unit = {},
 ) {
@@ -87,6 +97,17 @@ fun LanguageScreen(
                     hint = words.settings.countryHint,
                 )
 
+                // Язык письма стоит рядом со страной, а не рядом с выбором языка
+                // приложения ниже: это метаданные, которыми сервер отбирает ленты, и
+                // соседство с надписями сбивало бы с толку ровно тех, у кого они разные.
+                Name(words.settings.writingLanguage)
+                Tertiary(words.settings.writingLanguageAbout)
+                Field(
+                    value = writingLanguage,
+                    onChange = onWritingLanguage,
+                    hint = words.settings.writingLanguageHint,
+                )
+
                 Name(words.settings.whatToShow)
                 ChoiceSwitch(
                     title = words.settings.onlyMyCountry,
@@ -98,6 +119,17 @@ fun LanguageScreen(
                     on = onlyMyLanguages,
                     onChange = onOnlyMyLanguages,
                 )
+                // Список языков показывается, только пока отбор включён: поле, которое ни
+                // на что не влияет, человек заполняет и ждёт действия.
+                if (onlyMyLanguages) {
+                    Name(words.settings.readingLanguages)
+                    Tertiary(words.settings.readingLanguagesAbout)
+                    Field(
+                        value = readingLanguages,
+                        onChange = onReadingLanguages,
+                        hint = words.settings.readingLanguagesHint,
+                    )
+                }
                 // Названо прямо, потому что человек ждёт обратного: отбор не касается
                 // переписки и ленты друзей — друг остаётся другом, уехав и заговорив
                 // на другом языке.

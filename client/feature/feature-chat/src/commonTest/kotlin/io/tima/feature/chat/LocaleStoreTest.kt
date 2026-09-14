@@ -1,5 +1,7 @@
 package io.tima.feature.chat
 
+import io.tima.core.words.RussianWords
+import io.tima.core.words.Words
 import io.tima.domain.chat.FeedFilter
 import io.tima.domain.chat.PersonLocale
 import io.tima.domain.chat.PersonLocales
@@ -20,6 +22,10 @@ import kotlin.test.assertTrue
  *
  * Проверяется то, ради чего они заведены: пустая настройка означает «показывать всё», а не
  * «не показывать ничего», и выключенный переключатель убирает отбор, а не подменяет его.
+ *
+ * С Я12 сюда добавился язык, на котором человек **пишет**. До него этот тег не
+ * устанавливал никто: `language()` не вызывался ниоткуда, `KEY_LANGUAGES` читался без
+ * сеттера, и отбор лент работал от умолчания сервера.
  */
 class LocaleStoreTest {
 
@@ -79,6 +85,70 @@ class LocaleStoreTest {
         val onlyCountry = FeedFilter(onlyMyCountry = true, onlyMyLanguages = false)
         assertEquals("RU", onlyCountry.countryFor(locale))
         assertTrue(onlyCountry.languagesFor(locale).isEmpty())
+    }
+
+    @Test
+    fun язык_письма_записывается_строчными() = runTest {
+        val locales = FakeLocales()
+        val store = LocaleStore(locales, FakeSettings(), backgroundScope)
+        store.refresh()
+        runCurrent()
+
+        store.writingLanguage("  DE  ")
+        runCurrent()
+        // Зеркально стране, которая приводится к верхнему: «DE» и «de» один язык, и две
+        // записи о нём дали бы отбор, промахивающийся через раз.
+        assertEquals("de", locales.written?.lang)
+        assertEquals("de", store.state.value.locale.lang, "показанное обязано совпасть с записанным")
+    }
+
+    @Test
+    fun пустой_язык_письма_не_пишется() = runTest {
+        val locales = FakeLocales()
+        val store = LocaleStore(locales, FakeSettings(), backgroundScope)
+        store.refresh()
+        runCurrent()
+
+        store.writingLanguage("   ")
+        runCurrent()
+        // «Не указан» настраивают не стиранием поля: пустой тег уехал бы на сервер и
+        // выключил человеку языковые ленты молча.
+        assertEquals(null, locales.written, "пустой тег записан на сервер")
+    }
+
+    @Test
+    fun язык_письма_которого_нет_берётся_у_приложения() = runTest {
+        val locales = FakeLocales(answer = PersonLocale(lang = "", country = "ES"))
+        val store = LocaleStore(locales, FakeSettings(), backgroundScope, words = { Spanish })
+        store.refresh()
+        runCurrent()
+
+        // Догадка сразу записывается: показанное на экране обязано совпадать с тем, по
+        // чему сервер отбирает ленты.
+        assertEquals("es", locales.written?.lang, "язык приложения не стал догадкой")
+        assertEquals("es", store.state.value.locale.lang)
+    }
+
+    @Test
+    fun какие_языки_читать_кладутся_как_набраны_а_отбор_их_разбирает() = runTest {
+        val settings = FakeSettings()
+        val store = LocaleStore(FakeLocales(), settings, backgroundScope)
+        runCurrent()
+
+        store.readingLanguages("ru, EN , ,es")
+        runCurrent()
+
+        // В настройках — как набрано: разбор при записи отнял бы у человека запятую
+        // из-под курсора на середине слова.
+        assertEquals("ru, EN , ,es", settings.values.value["feed.languages"])
+        assertEquals("ru, EN , ,es", store.state.value.languagesText)
+        // Отбору достаётся разобранное: пробелы убраны, регистр опущен, пустые выброшены.
+        assertEquals(listOf("ru", "en", "es"), store.state.value.filter.languages)
+    }
+
+    /** Словарь с другим тегом: язык приложения, отличный от русского. */
+    private object Spanish : Words by RussianWords {
+        override val tag = "es"
     }
 
     @Test

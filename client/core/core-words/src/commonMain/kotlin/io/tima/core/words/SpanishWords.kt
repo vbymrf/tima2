@@ -55,6 +55,14 @@ object SpanishWords : Words {
             "El servidor lo usa para elegir lo que verá: lo suyo, no el mundo entero. " +
                 "Vacío significa mostrarlo todo"
         override val countryHint = "ES"
+        override val writingLanguage = "El idioma en el que escribo"
+        override val writingLanguageAbout =
+            "Por él lo encuentran en las novedades por idioma. No es el idioma de la " +
+                "aplicación: pueden ser distintos"
+        override val writingLanguageHint = "ru, en, de — código de idioma"
+        override val readingLanguages = "Qué idiomas leer"
+        override val readingLanguagesAbout = "Separados por comas. Vacío significa solo su idioma"
+        override val readingLanguagesHint = "ru, en, es"
         override val whatToShow = "Qué mostrar"
         override val onlyMyCountry = "Solo mi país"
         override val onlyMyLanguages = "Solo mis idiomas"

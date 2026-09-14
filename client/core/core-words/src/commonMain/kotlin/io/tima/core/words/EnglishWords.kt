@@ -57,6 +57,14 @@ object EnglishWords : Words {
             "The server uses it to pick what you see: your own, not the whole world. " +
                 "Empty means show everything"
         override val countryHint = "GB"
+        override val writingLanguage = "The language I write in"
+        override val writingLanguageAbout =
+            "Language feeds find you by it. This is not the app language — the two can " +
+                "be different"
+        override val writingLanguageHint = "ru, en, de — language code"
+        override val readingLanguages = "Languages to read"
+        override val readingLanguagesAbout = "Comma separated. Empty means your language only"
+        override val readingLanguagesHint = "ru, en, es"
         override val whatToShow = "What to show"
         override val onlyMyCountry = "Only my country"
         override val onlyMyLanguages = "Only my languages"
