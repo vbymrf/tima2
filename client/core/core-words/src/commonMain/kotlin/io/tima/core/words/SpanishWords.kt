@@ -175,6 +175,13 @@ object SpanishWords : Words {
         override val placePlate = "el nombre de la ventana en la cabecera y la flecha «atrás»"
         override val placeContent = "el cambio de ventana y la lista de ajustes"
 
+        override val savedLooks = "Apariencias guardadas"
+        override val savedNone = "Elija los colores y guarde — la apariencia aparecerá aquí"
+        override val saveName = "Nombre"
+        override val saveLook = "Guardar"
+        override val forgetLook = "Quitar"
+        override fun saveWillReplace(name: String) = "«" + name + "» se sobrescribirá"
+
         override fun mergedAbout(front: String, back: String, ratio: String, where: String) =
             "«$front» y «$back» se han fundido: $ratio : 1. Con ellos se dibuja $where — " +
                 "sin ellos ya no se llega a la apariencia, así que «atrás» espera."

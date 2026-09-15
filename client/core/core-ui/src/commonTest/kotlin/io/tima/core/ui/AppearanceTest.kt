@@ -207,7 +207,7 @@ class AppearanceTest {
      * О длине сообщают только тогда, когда знаки уже верные.
      *
      * Иначе человек чинит длину, дописывает знак, получает ту же ошибку и не понимает,
-     * что дело было в другом знаке с самого начала.
+     * что дело before2 в другом знаке с самого начала.
      */
     @Test
     fun чужой_знак_называется_раньше_длины() {
@@ -319,5 +319,80 @@ class AppearanceTest {
             val others = ColorSlot.entries.filter { it != slot && changed.slot(it) != TimaColors.light.slot(it) }
             assertTrue(others.isEmpty(), "«${RussianWords.appearance.slot(slot)}» задел заодно: ${others.map { RussianWords.appearance.slot(it) }}")
         }
+    }
+
+    // ── Сохранённые оформления ──────────────────────────────────────────────
+    //
+    // Заведены 2026-09-15 по просьбе заказчика. Своя палитра одна, и до этого второй
+    // вариант подобрать before2 негде: правишь те же семнадцать мест — теряешь первый.
+
+    @Test
+    fun сохранённое_переживает_перезапуск_вместе_с_палитрой() {
+        val evening = TimaColors.dark.with(ColorSlot.NAVIGATION, Color(0xFF884400))
+        val before = Appearance(ThemeChoice.Custom, evening)
+            .save("Вечер")
+            .copy(custom = TimaColors.light)
+            .save("День")
+
+        val after = Appearance.read(before.write(), systemDark = false)
+
+        assertEquals(listOf("Вечер", "День"), after.saved.map { it.name })
+        for (slot in ColorSlot.entries) {
+            assertEquals(
+                evening.slot(slot),
+                after.saved[0].colors.slot(slot),
+                "«${RussianWords.appearance.slot(slot)}» у «Вечера» не тот, что сохраняли",
+            )
+        }
+    }
+
+    @Test
+    fun имя_с_тем_же_написанием_перезаписывает_а_не_двоится() {
+        val before2 = Appearance(ThemeChoice.Custom, TimaColors.light).save("Вечер")
+        val after2 = before2.copy(custom = TimaColors.dark).save("  ВЕЧЕР ")
+
+        assertEquals(1, after2.saved.size, "в списке два «Вечера» — человек выберет наугад")
+        assertEquals("ВЕЧЕР", after2.saved[0].name, "перезапись оставила прежнее написание")
+        assertEquals(TimaColors.dark.surface, after2.saved[0].colors.surface)
+    }
+
+    @Test
+    fun безымянное_не_сохраняется() {
+        val before2 = Appearance(ThemeChoice.Custom, TimaColors.light)
+        assertTrue(before2.save("   ").saved.isEmpty(), "список безымянных строк бесполезен")
+    }
+
+    @Test
+    fun взятое_сохранённое_становится_своей_палитрой_и_отмечается() {
+        val night = TimaColors.dark.with(ColorSlot.SURFACE, Color(0xFF101010))
+        val before2 = Appearance(ThemeChoice.Light, TimaColors.light)
+            .copy(custom = night).save("Ночь")
+            .copy(choice = ThemeChoice.Light, custom = TimaColors.light, from = null)
+
+        val after2 = before2.take("Ночь")
+
+        assertEquals(ThemeChoice.Custom, after2.choice, "взяли сохранённое, а тема осталась чужой")
+        assertEquals(night.surface, after2.custom.surface)
+        assertEquals("Ночь", after2.from)
+    }
+
+    @Test
+    fun убранное_не_уносит_с_собой_нынешнюю_палитру() {
+        val before2 = Appearance(ThemeChoice.Custom, TimaColors.dark).save("Ночь")
+        val after2 = before2.forget("ночь")
+
+        assertTrue(after2.saved.isEmpty(), "сравнение имени оказалось с учётом регистра")
+        assertNull(after2.from, "отметка осталась на том, чего больше нет")
+        assertEquals(TimaColors.dark.surface, after2.custom.surface, "убрали заодно и работу человека")
+    }
+
+    @Test
+    fun имя_с_равенством_внутри_читается_целиком() {
+        // Ключ вида `saved.<имя>.CVET` разобрался бы неверно на первом же таком имени —
+        // поэтому в записи стоит номер, а не имя.
+        val before2 = Appearance(ThemeChoice.Custom, TimaColors.light).save("a=b.c")
+        val after2 = Appearance.read(before2.write(), systemDark = false)
+
+        assertEquals(listOf("a=b.c"), after2.saved.map { it.name })
     }
 }

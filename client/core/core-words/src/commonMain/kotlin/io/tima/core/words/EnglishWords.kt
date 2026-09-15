@@ -177,6 +177,13 @@ object EnglishWords : Words {
         override val placePlate = "the window name in the header and the «back» arrow"
         override val placeContent = "window switching and the settings list"
 
+        override val savedLooks = "Saved looks"
+        override val savedNone = "Pick the colours and save — the look will appear here"
+        override val saveName = "Name"
+        override val saveLook = "Save"
+        override val forgetLook = "Remove"
+        override fun saveWillReplace(name: String) = "«" + name + "» will be overwritten"
+
         override fun mergedAbout(front: String, back: String, ratio: String, where: String) =
             "«$front» and «$back» have merged: $ratio : 1. They draw $where — " +
                 "without them you could not get back to appearance, so «back» waits."

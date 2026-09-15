@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Appearance
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
+import io.tima.core.ui.Field
 import io.tima.core.ui.ColorPicker
 import io.tima.core.ui.ColorSlot
 import io.tima.core.ui.Field
@@ -125,6 +126,9 @@ private fun Inside(
     val words = Tima.words
     // Какой цвет сейчас правят. `null` — правят не цвет, а тему.
     var editing by remember { mutableStateOf<ColorSlot?>(null) }
+    // Набранное имя для сохранения. Держится здесь, а не в [Appearance]: оно не часть
+    // оформления и в хранилище ему делать нечего — это черновик одного захода.
+    var naming by remember { mutableStateOf("") }
 
     Column(
         modifier
@@ -165,6 +169,40 @@ private fun Inside(
             )
         }
 
+        // Сохранённые — ПОД готовыми: сначала то, что есть у всех, потом собранное
+        // самим. Раздел виден всегда, даже пустым: пустой он объясняет, откуда берётся,
+        // а спрятанный не объясняет ничего — и человек не узнает, что так можно.
+        SectionTitle(words.appearance.savedLooks)
+        if (appearance.saved.isEmpty()) {
+            Tertiary(
+                text = words.appearance.savedNone,
+                modifier = Modifier.padding(TimaSpacing.about4),
+            )
+        }
+        for (look in appearance.saved) {
+            ListLine(
+                onClick = { onAppearance(appearance.take(look.name)) },
+                left = { Sample(look.colors.surface) },
+                right = {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // Галка стоит, только пока палитра и вправду его: правка цвета
+                        // сбрасывает `from`, и галка уходит. Иначе она врала бы о том,
+                        // что на экране.
+                        if (appearance.from == look.name) Name("✓")
+                        Button(
+                            label = words.appearance.forgetLook,
+                            kind = ButtonKind.Dangerous,
+                            onClick = { onAppearance(appearance.forget(look.name)) },
+                        )
+                    }
+                },
+                middle = { Name(look.name) },
+            )
+        }
+
         if (appearance.choice != ThemeChoice.Custom) {
             // Строки цветов показываются только у своей темы. Показать их у светлой
             // значило бы предложить править то, что не применится.
@@ -194,10 +232,50 @@ private fun Inside(
                 Editor(
                     slot = slot,
                     value = value.hex(),
-                    onColor = { onAppearance(appearance.copy(custom = appearance.custom.with(slot, it))) },
+                    onColor = {
+                        onAppearance(
+                            // `from = null`: палитра перестала совпадать с сохранённой, и
+                            // говорить, что стоит «Вечер», значит врать. Сохранят снова —
+                            // имя вернётся.
+                            appearance.copy(custom = appearance.custom.with(slot, it), from = null),
+                        )
+                    },
                     onDone = { editing = null },
                 )
             }
+        }
+
+        // ── Сохранить подобранное ────────────────────────────────────────────
+        //
+        // Стоит после цветов, а не до: сохранять нечего, пока не подобрано. И до кнопок
+        // возврата, потому что возврат — соседняя мысль: «не получилось, верните как
+        // было». Между ними и должно стоять «получилось, запомните».
+        val clean = naming.trim()
+        val taken = appearance.saved.any { it.name.equals(clean, ignoreCase = true) }
+        Column(
+            modifier = Modifier.padding(TimaSpacing.about4),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        ) {
+            Field(
+                value = naming,
+                onChange = { naming = it },
+                hint = words.appearance.saveName,
+            )
+            // Предупреждение, а не отказ: перезаписать своё же — законное намерение, и
+            // человек вправе его исполнить. Но узнать об этом он должен ДО нажатия.
+            if (taken) Tertiary(words.appearance.saveWillReplace(clean))
+            Button(
+                label = words.appearance.saveLook,
+                // Тихая, пока имени нет: кнопка, которая ничего не сделает, обязана
+                // выглядеть иначе, чем кнопка, которая сделает.
+                kind = if (clean.isEmpty()) ButtonKind.Quiet else ButtonKind.Action,
+                onClick = {
+                    if (clean.isEmpty()) return@Button
+                    onAppearance(appearance.save(clean))
+                    naming = ""
+                    editing = null
+                },
+            )
         }
 
         // Две кнопки, а не одна: возврат обязан быть выбором, а не догадкой.

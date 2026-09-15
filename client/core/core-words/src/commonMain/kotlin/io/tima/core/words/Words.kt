@@ -935,6 +935,22 @@ interface AppearanceWords {
     /** Где видна защищаемая пара — словами, которые человек прочтёт в предупреждении. */
     val placePlate: String
     val placeContent: String
+
+    /**
+     * Свои сохранённые оформления.
+     *
+     * Список стоит ПОД готовыми темами: сначала то, что есть у всех, потом собранное
+     * самим. Пусто — вместо списка одна строка [savedNone]: пустой заголовок не
+     * объясняет ничего, а строка объясняет, откуда список берётся.
+     */
+    val savedLooks: String
+    val savedNone: String
+    val saveName: String
+    val saveLook: String
+    val forgetLook: String
+
+    /** Имя занято: сохранение перезапишет прежнее. Предупреждение, а не отказ. */
+    fun saveWillReplace(name: String): String
 }
 
 /**
@@ -1133,6 +1149,13 @@ object RussianWords : Words {
         // порядок слов другой, и склейка разваливается первой (ПЛАН-ЯЗЫКА §3).
         override val placePlate = "имя окна в шапке и стрелка «назад»"
         override val placeContent = "переключение окон и список настроек"
+
+        override val savedLooks = "Сохранённые оформления"
+        override val savedNone = "Подберите цвета и сохраните — оформление появится здесь"
+        override val saveName = "Название"
+        override val saveLook = "Сохранить"
+        override val forgetLook = "Убрать"
+        override fun saveWillReplace(name: String) = "«" + name + "» будет перезаписано"
 
         override fun mergedAbout(front: String, back: String, ratio: String, where: String) =
             "«$front» и «$back» слились: $ratio : 1. Этим нарисовано $where — " +

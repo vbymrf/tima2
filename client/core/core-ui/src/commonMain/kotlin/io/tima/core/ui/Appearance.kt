@@ -199,7 +199,29 @@ private fun solid(color: Color, under: Color): Color =
     if (color.alpha < 1f) TimaContrast.overlay(color, under) else color
 
 /**
- * Выбранная тема и своя палитра.
+ * Своё оформление под именем.
+ *
+ * ── ЗАЧЕМ ИМЕНА ─────────────────────────────────────────────────────────────
+ *
+ * Своя палитра одна, и до 2026-09-15 вторую было негде держать: подобрал ночную —
+ * дневная потеряна, потому что цвета правятся поверх тех же семнадцати мест. Человек
+ * либо не пробует второй вариант, либо теряет первый.
+ *
+ * Имя здесь не украшение, а единственный способ отличить одно своё оформление от
+ * другого: цвета словами не описываются, а «Своя 2» через неделю не значит ничего.
+ *
+ * ── ПОЧЕМУ ЭТО НЕ ЧЕТВЁРТАЯ ТЕМА ────────────────────────────────────────────
+ *
+ * Сохранённое — **заготовка для своей темы**, а не тема рядом со светлой и тёмной.
+ * Выбрать сохранённое значит положить его цвета в [Appearance.custom] и встать на
+ * [ThemeChoice.Custom]: дальше его правят как обычно, и правка не трогает сохранённое,
+ * пока не нажали «Сохранить» ещё раз. Готовых тем по-прежнему две, и это решение
+ * 2026-09-02 про «три, а не четыре» не отменяет.
+ */
+data class SavedLook(val name: String, val colors: TimaColors)
+
+/**
+ * Выбранная тема, своя палитра и сохранённые оформления.
  *
  * Своя палитра хранится **всегда**, даже когда выбрана светлая: иначе переключение
  * туда-обратно стирало бы работу человека, а «я же настраивал» — худший вид потери.
@@ -207,6 +229,16 @@ private fun solid(color: Color, under: Color): Color =
 data class Appearance(
     val choice: ThemeChoice,
     val custom: TimaColors,
+    /** Сохранённые свои оформления, в порядке сохранения. */
+    val saved: List<SavedLook> = emptyList(),
+    /**
+     * Имя сохранённого, из которого взята нынешняя палитра. `null` — ни из какого.
+     *
+     * Нужно ровно для одного: показать в списке, какое оформление сейчас стоит. Правка
+     * цвета его сбрасывает — палитра перестала совпадать с сохранённой, и говорить, что
+     * стоит «Вечер», значит врать.
+     */
+    val from: String? = null,
 ) {
     /** Цвета, которыми рисовать. */
     val colors: TimaColors
@@ -217,6 +249,38 @@ data class Appearance(
         }
 
     /**
+     * Сохранить нынешнюю палитру под именем.
+     *
+     * Имя с тем же написанием **перезаписывает**, а не добавляет второе: два «Вечера» в
+     * списке человек не различит, и выбирать он будет наугад. Сравнение без учёта
+     * регистра и краёв — «Вечер», «вечер » и «ВЕЧЕР» для человека одно имя.
+     *
+     * Пустое имя не сохраняется: список безымянных строк бесполезен. Проверку делает и
+     * экран, но здесь она тоже есть — модель не должна зависеть от того, что её
+     * правильно позвали.
+     */
+    fun save(name: String): Appearance {
+        val clean = name.trim().replace('\n', ' ')
+        if (clean.isEmpty()) return this
+        val look = SavedLook(clean, custom)
+        val same = saved.indexOfFirst { it.name.equals(clean, ignoreCase = true) }
+        val list = if (same >= 0) saved.toMutableList().apply { set(same, look) } else saved + look
+        return copy(saved = list, from = clean)
+    }
+
+    /** Убрать сохранённое. Нынешнюю палитру не трогает: её человек не просил стирать. */
+    fun forget(name: String): Appearance = copy(
+        saved = saved.filterNot { it.name.equals(name, ignoreCase = true) },
+        from = if (from.equals(name, ignoreCase = true)) null else from,
+    )
+
+    /** Взять сохранённое в работу: его цвета становятся своей палитрой. */
+    fun take(name: String): Appearance {
+        val look = saved.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: return this
+        return copy(choice = ThemeChoice.Custom, custom = look.colors, from = look.name)
+    }
+
+    /**
      * Запись для хранилища: строки `ключ=значение`, по одной на цвет.
      *
      * Формат нарочно простой и человекочитаемый. Его читает и пишет только приложение,
@@ -225,13 +289,27 @@ data class Appearance(
      */
     fun write(): String = buildString {
         append(KEY_CHOICE).append('=').append(choice.name).append('\n')
+        from?.let { append(KEY_FROM).append('=').append(it).append('\n') }
         for (slot in ColorSlot.entries) {
             append(slot.name).append('=').append(custom.slot(slot).hex()).append('\n')
+        }
+        // Сохранённые — по номеру, а не по имени в ключе. Имя человек набирает сам, в нём
+        // может оказаться и «=», и точка; ключ с именем внутри разобрался бы неверно на
+        // первом же таком. Номер же про имя ничего не обещает.
+        saved.forEachIndexed { at, look ->
+            append(KEY_SAVED).append('.').append(at).append(".name=")
+                .append(look.name).append('\n')
+            for (slot in ColorSlot.entries) {
+                append(KEY_SAVED).append('.').append(at).append('.').append(slot.name)
+                    .append('=').append(look.colors.slot(slot).hex()).append('\n')
+            }
         }
     }
 
     companion object {
         private const val KEY_CHOICE = "choice"
+        private const val KEY_FROM = "from"
+        private const val KEY_SAVED = "saved"
 
         /**
          * Что показать, когда сохранённого нет или оно испорчено.
@@ -266,7 +344,24 @@ data class Appearance(
             for (slot in ColorSlot.entries) {
                 pairs[slot.name]?.let { hex -> colorOf(hex)?.let { custom = custom.with(slot, it) } }
             }
-            return Appearance(choice, custom)
+            // Сохранённые читаются по номерам подряд и обрываются на первом пропуске.
+            // Дыра в нумерации означает испорченную запись, а не «перескочить и читать
+            // дальше»: молча собранный из огрызков список хуже короткого.
+            val saved = mutableListOf<SavedLook>()
+            var at = 0
+            while (true) {
+                val name = pairs["$KEY_SAVED.$at.name"]?.takeIf { it.isNotBlank() } ?: break
+                var colors = custom
+                for (slot in ColorSlot.entries) {
+                    pairs["$KEY_SAVED.$at.${slot.name}"]
+                        ?.let { hex -> colorOf(hex)?.let { colors = colors.with(slot, it) } }
+                }
+                saved += SavedLook(name, colors)
+                at++
+            }
+
+            val from = pairs[KEY_FROM]?.takeIf { name -> saved.any { it.name == name } }
+            return Appearance(choice, custom, saved, from)
         }
     }
 }
