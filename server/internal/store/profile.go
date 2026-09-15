@@ -58,3 +58,33 @@ func (s *Store) Me(ctx context.Context, userID string) (Me, error) {
 	}
 	return me, nil
 }
+
+// ErrAvatarNotOwned — медиа не этого человека или ещё не загружено до конца.
+var ErrAvatarNotOwned = errors.New("медиа не принадлежит аккаунту или не завершено")
+
+// SetAvatar — сменить или убрать аватар. Пустой mediaID убирает.
+//
+// Проверка владения и статуса — в том же запросе, что и запись: между отдельным
+// SELECT и UPDATE объект могли бы удалить. Ноль строк при живом аккаунте — чужое или
+// незавершённое медиа.
+func (s *Store) SetAvatar(ctx context.Context, userID, mediaID string) error {
+	if mediaID == "" {
+		_, err := s.pool.Exec(ctx, `
+			UPDATE persons SET avatar_media_id = NULL
+			WHERE person_id = (SELECT person_id FROM users WHERE user_id = $1)`, userID)
+		return err
+	}
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE persons SET avatar_media_id = $2::uuid
+		WHERE person_id = (SELECT person_id FROM users WHERE user_id = $1)
+		  AND EXISTS (SELECT 1 FROM media_objects
+		               WHERE media_id = $2::uuid AND owner_id = $1 AND status = 'complete')`,
+		userID, mediaID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrAvatarNotOwned
+	}
+	return nil
+}

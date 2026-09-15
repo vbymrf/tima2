@@ -23,6 +23,7 @@ type UserStore interface {
 	SetDisplayName(ctx context.Context, userID, name string) error
 	// Кто я: телефон, имя, ник и его замок, аватар (Д8)
 	Me(ctx context.Context, userID string) (store.Me, error)
+	SetAvatar(ctx context.Context, userID, mediaID string) error
 
 	// Ник: занять, проверить занятость, найти по нему (Д1)
 	SetNickname(ctx context.Context, userID, nick string) error
@@ -73,6 +74,7 @@ func RegisterUsers(mux *http.ServeMux, st UserStore, tokens func() IdentityToken
 	mux.HandleFunc("GET /api/v1/users/lookup", requireDevice(lookupUser(deps)))
 	mux.HandleFunc("POST /api/v1/users/discover", requireDevice(discoverContacts(deps)))
 	mux.HandleFunc("GET /api/v1/users/me", requireDevice(me(deps)))
+	mux.HandleFunc("PATCH /api/v1/users/me/avatar", requireDevice(setAvatar(deps)))
 	mux.HandleFunc("PATCH /api/v1/users/me/name", requireDevice(setDisplayName(deps)))
 	mux.HandleFunc("PATCH /api/v1/users/me/nickname", requireDevice(setNickname(deps)))
 	// Ники — своя ветка, а не «/users/...»: там уже стоит «/users/{userID}/feed»,

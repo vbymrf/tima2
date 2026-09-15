@@ -248,3 +248,59 @@ func TestНикВидноВСпискеИмён(t *testing.T) {
 		t.Fatalf("пустой ник попал в ответ: %v", resp.Nicknames)
 	}
 }
+
+func TestАватарТолькоСвойИЗавершённый(t *testing.T) {
+	ts, srv := setup(t)
+	ctx := context.Background()
+	пётр := registerDevice(t, ts, "+79990000010")
+	анна := registerDevice(t, ts, "+79990000011")
+
+	// Чужое медиа, пусть и завершённое, — 403.
+	чужое, err := srv.Store.CreateMedia(ctx, store.Media{OwnerID: анна.userID, Mime: "image/jpeg", SizeBytes: 10, ChunkCount: 1}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.Store.CompleteMedia(ctx, чужое.MediaID, анна.userID, 10); err != nil {
+		t.Fatal(err)
+	}
+	if code := authedJSON(t, ts, "PATCH", "/api/v1/users/me/avatar", пётр.token,
+		map[string]any{"media_id": чужое.MediaID}, nil); code != http.StatusForbidden {
+		t.Fatalf("чужое медиа стало аватаром: %d", code)
+	}
+
+	// Своё, но незавершённое — тоже 403: картинки ещё нет.
+	своё, err := srv.Store.CreateMedia(ctx, store.Media{OwnerID: пётр.userID, Mime: "image/jpeg", SizeBytes: 10, ChunkCount: 1}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code := authedJSON(t, ts, "PATCH", "/api/v1/users/me/avatar", пётр.token,
+		map[string]any{"media_id": своё.MediaID}, nil); code != http.StatusForbidden {
+		t.Fatalf("незавершённое медиа стало аватаром: %d", code)
+	}
+
+	// Завершённое своё — принимается и видно в «кто я».
+	if err := srv.Store.CompleteMedia(ctx, своё.MediaID, пётр.userID, 10); err != nil {
+		t.Fatal(err)
+	}
+	if code := authedJSON(t, ts, "PATCH", "/api/v1/users/me/avatar", пётр.token,
+		map[string]any{"media_id": своё.MediaID}, nil); code != http.StatusOK {
+		t.Fatalf("своё завершённое не принято: %d", code)
+	}
+	var me struct {
+		Avatar string `json:"avatar_media_id"`
+	}
+	authedJSON(t, ts, "GET", "/api/v1/users/me", пётр.token, nil, &me)
+	if me.Avatar != своё.MediaID {
+		t.Fatalf("аватар не отдан в me: %q", me.Avatar)
+	}
+
+	// Пустой — убирает.
+	if code := authedJSON(t, ts, "PATCH", "/api/v1/users/me/avatar", пётр.token,
+		map[string]any{"media_id": ""}, nil); code != http.StatusOK {
+		t.Fatalf("убрать аватар: %d", code)
+	}
+	authedJSON(t, ts, "GET", "/api/v1/users/me", пётр.token, nil, &me)
+	if me.Avatar != "" {
+		t.Fatalf("аватар не убран: %q", me.Avatar)
+	}
+}
