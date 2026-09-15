@@ -691,6 +691,11 @@ object EnglishWords : Words {
         override val save = "Save"
         override val nicknameNeverFreed =
             "A taken nickname is never released: changing it does not give the old one away."
+        override val nicknameOnce =
+            "The nickname is set once. It can only be changed together with a new secret phrase."
+        override val nicknameLocked =
+            "The nickname is set and tied to this phrase. Start over with another one — and you may change it or keep it."
+        override val phone = "Phone"
     }
 
     override val auth = object : AuthWords {

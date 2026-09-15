@@ -4,7 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -49,6 +53,14 @@ fun WindowSwitchingScreen(
     name: String,
     alias: String,
     onSelect: (Window) -> Unit,
+    /**
+     * Номер телефона — в шапке, под именем (решение заказчика 2026-09-15, как в макете).
+     *
+     * Номер — то, чем человека находят и что он диктует, чтобы его добавили; ник —
+     * второй способ. Пусто — строки нет: сессия номер не хранит, он приходит из
+     * `GET /users/me`, и до ответа выдумывать строку на его месте нельзя.
+     */
+    phone: String = "",
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     /** Непрочитанное по окнам. Нет записи — нет и числа. */
@@ -90,7 +102,7 @@ fun WindowSwitchingScreen(
 ) {
     val colors = Tima.colors
     val words = Tima.words.switching
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             // Затемнение поверх окна, из которого пришли: человек не ушёл никуда, а
@@ -101,21 +113,29 @@ fun WindowSwitchingScreen(
             .clickable(onClick = onClose),
         contentAlignment = Alignment.BottomCenter,
     ) {
+        // Панель не выше ~85 % экрана и прокручивается внутри. До 2026-09-15 прокрутки не
+        // было вовсе — на телефоне это видно, стоит развернуть список: семь окон, шапка,
+        // аккаунты и настройки в 640 точек высоты не помещаются, и низ уезжал за край
+        // без единого способа до него добраться. Ограничение нужно вместе с прокруткой:
+        // Column, растущий по содержимому, прокручивать нечему.
+        val ceiling = maxHeight * PANEL_SHARE
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(max = ceiling)
                 .clip(RoundedCornerShape(topStart = TimaShapes.radius, topEnd = TimaShapes.radius))
                 .background(colors.surface)
                 // Нажатие по самой панели не должно закрывать её вместе с фоном.
-                .clickable(enabled = false, onClick = {}),
+                .clickable(enabled = false, onClick = {})
+                .verticalScroll(rememberScrollState()),
         ) {
-            Header(name, alias, onClose, onProfile)
+            Header(name, alias, phone, onClose, onProfile)
 
-            if (accounts.size > 1 || onNewAccount != null) {
+            if (accounts.size > 1) {
                 SectionTitle(words.accounts)
                 // Один аккаунт — списка нет: строка «переключиться» там, где переключаться
-                // не на что, обещает несуществующее. Строка «завести» при этом остаётся.
-                if (accounts.size > 1) {
+                // не на что, обещает несуществующее.
+                run {
                     accounts.forEach { (userId, label) ->
                         val waiting = unsent[userId] ?: 0
                         ListLine(
@@ -133,13 +153,6 @@ fun WindowSwitchingScreen(
                             },
                         )
                     }
-                }
-                onNewAccount?.let {
-                    ListLine(
-                        onClick = it,
-                        left = { Glyph("＋") },
-                        middle = { Name(words.virtualAccount) },
-                    )
                 }
             }
 
@@ -160,6 +173,19 @@ fun WindowSwitchingScreen(
                 )
             }
 
+            // «Завести виртуальный аккаунт» — САМЫМ нижним пунктом (решение заказчика
+            // 2026-09-15). До этого строка стояла над окнами, рядом со списком аккаунтов, и
+            // человек, открывший панель ради смены окна, первым видел предложение завести
+            // второго себя. Заводят его редко, окна выбирают каждый раз — редкое внизу.
+            // Показывается и при единственном аккаунте: иначе завести второй неоткуда.
+            onNewAccount?.let {
+                ListLine(
+                    onClick = it,
+                    left = { Glyph("＋") },
+                    middle = { Name(words.virtualAccount) },
+                )
+            }
+
             // Блогерские окна включаются в настройках; пока их нет, заголовок раздела
             // тоже не рисуем: пустой раздел обещает то, чего не существует.
         }
@@ -177,6 +203,7 @@ fun WindowSwitchingScreen(
 private fun Header(
     name: String,
     alias: String,
+    phone: String,
     onClose: () -> Unit,
     onProfile: (() -> Unit)?,
 ) {
@@ -195,7 +222,10 @@ private fun Header(
             // Кто я — здесь, а не в шапке окна: имя нужно тому, кто выбирает, от чьего
             // лица он сейчас в приложении, а не тому, кто читает переписку.
             Name(name)
-            Tertiary(alias, lineOne = true)
+            // Номер выше ника: им человека находят в первую очередь (макет «Телефон, а
+            // не псевдоним»). Пустой — строки нет.
+            if (phone.isNotBlank()) Tertiary(phone, lineOne = true)
+            if (alias.isNotBlank()) Tertiary(alias, lineOne = true)
         }
         // «Изменить» — первый из двух входов в профиль; второй в настройках.
         if (onProfile != null) IconButton(glyph = "✎", onClick = onProfile)
@@ -238,6 +268,14 @@ private fun Glyph(glyph: String) {
 
 /** Насколько затемняется окно под панелью. Меньше — панель «висит», больше — окно исчезает. */
 private const val DIM = 0.32f
+
+/**
+ * Доля высоты экрана, выше которой панель не растёт — дальше прокрутка.
+ *
+ * Не 100 %: над панелью обязана остаться полоса того окна, откуда пришли, — она и
+ * говорит, что это панель поверх, а не новый экран. 85 % оставляет её на любом телефоне.
+ */
+private const val PANEL_SHARE = 0.85f
 
 /**
  * Уход из аккаунта с непустой очередью — ПЛАН-КОНТАКТОВ.md, Д11 (путь Б, смягчение 1).

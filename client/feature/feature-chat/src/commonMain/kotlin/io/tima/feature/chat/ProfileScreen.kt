@@ -35,7 +35,12 @@ import io.tima.core.ui.Trouble
  * «где это поменять», не помня, откуда он туда попал.
  *
  * **Телефон показан, но не правится**: по нему заведён аккаунт, и сменить его — не
- * правка профиля, а другая работа.
+ * правка профиля, а другая работа. Приходит из `GET /users/me` вместе с именем и
+ * ником (0050): до этого экран открывался пустым.
+ *
+ * **Ник — один раз на личность, имя — сколько угодно** (решение заказчика 2026-09-15).
+ * Заперт ник показывается текстом, а не полем: поле, не принимающее правку, выглядит
+ * поломкой.
  *
  * **Аватара как картинки нет**: буквы имени — то же, что в списках. Загрузка изображений
  * — отдельная работа с медиа, и рисовать «＋» там, где грузить нечем, значит обещать.
@@ -90,10 +95,20 @@ fun ProfileScreen(
                 Field(value = state.name, onChange = onName, hint = words.nameExample)
 
                 Caption(words.nicknameFound, fontSize = TimaType.sz5, weight = FontWeight.Bold)
-                Field(value = state.nickname, onChange = onNickname, hint = "petr_smirnov")
-                // Занятость сказана до нажатия: узнать о ней после отправки формы значит
-                // потерять уже введённое.
-                state.aboutNick(Tima.words)?.let { Secondary(it) }
+                if (state.nickEditable) {
+                    Field(value = state.nickname, onChange = onNickname, hint = "petr_smirnov")
+                    // Занятость сказана до нажатия: узнать о ней после отправки формы значит
+                    // потерять уже введённое.
+                    state.aboutNick(Tima.words)?.let { Secondary(it) }
+                    // И то, что попытка одна, — тоже до нажатия. Узнать об этом после
+                    // «Сохранить» значит узнать, что поправить опечатку уже нельзя.
+                    Tertiary(words.nicknameOnce)
+                } else {
+                    // Задан и закреплён за этой фразой: текст, а не поле. Поле, которое
+                    // не принимает правку, выглядит поломкой; текст выглядит фактом.
+                    Caption("@" + state.nickname, fontSize = TimaType.sz3, weight = FontWeight.Bold)
+                    Tertiary(words.nicknameLocked)
+                }
                 state.trouble?.let { Trouble(it) }
                 if (state.saved) Secondary(words.saved)
 
@@ -105,7 +120,7 @@ fun ProfileScreen(
 
                 // Сказано прямо, а не умолчанием: ник, однажды занятый, остаётся за
                 // человеком — иначе старые упоминания начали бы указывать на другого.
-                Tertiary(words.nicknameNeverFreed)
+                if (state.nickEditable) Tertiary(words.nicknameNeverFreed)
             }
         }
     }

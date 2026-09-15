@@ -41,6 +41,30 @@ class ProfileStore(
     )
     val state: StateFlow<ProfileState> = _state.asStateFlow()
 
+    /**
+     * Перечитать себя с сервера. Зовётся при открытии экрана.
+     *
+     * До `GET /users/me` (0050) экран открывался с тем, что передали при создании, — то
+     * есть ПУСТЫМ: сессия знает userId, а не имя и не телефон. Ответ сервера
+     * перекрывает только незатронутое: если человек уже начал печатать, его буквы не
+     * затираются пришедшими с задержкой старыми.
+     */
+    fun refresh() {
+        scope.launch {
+            val me = profile.me() ?: return@launch
+            val now = _state.value
+            _state.value = now.copy(
+                phone = me.phone.ifBlank { now.phone },
+                name = if (now.name == now.loadedName) me.name else now.name,
+                loadedName = me.name,
+                nickname = if (now.nickname == now.savedNickname) me.nickname else now.nickname,
+                savedNickname = me.nickname,
+                nickLocked = me.nickLocked,
+                avatarMediaId = me.avatarMediaId,
+            )
+        }
+    }
+
     fun changedName(line: String) {
         _state.value = _state.value.copy(name = line, saved = false)
     }
@@ -62,21 +86,31 @@ class ProfileStore(
         scope.launch {
             _state.value = state.copy(working = true, trouble = null)
 
-            val имя = if (state.name.isNotBlank()) profile.setName(state.name.trim()) else true
-            val ник = when {
+            val nameOk = if (state.name.isNotBlank()) profile.setName(state.name.trim()) else true
+            val nickStep = when {
                 state.nickname.isBlank() -> NickStep.Taken
                 state.nickname == state.savedNickname -> NickStep.Taken
                 else -> profile.setNickname(state.nickname)
             }
 
             _state.value = when {
-                ник == NickStep.Busy -> state.copy(working = false, free = false,
+                nickStep == NickStep.Busy -> state.copy(working = false, free = false,
                     trouble = words().auth.nicknameTaken)
-                ник == NickStep.OutOfBounds -> state.copy(working = false,
+                // Сервер запер, а экран не знал: например, ник задали с другого
+                // устройства минуту назад. Запираем и здесь — поле сменится текстом.
+                nickStep == NickStep.Locked -> state.copy(working = false, nickLocked = true,
+                    nickname = state.savedNickname, trouble = words().chat.nicknameLocked)
+                nickStep == NickStep.OutOfBounds -> state.copy(working = false,
                     trouble = words().auth.nicknameRules)
-                ник == NickStep.Offline || !имя -> state.copy(working = false,
+                nickStep == NickStep.Offline || !nameOk -> state.copy(working = false,
                     trouble = words().trouble.didNotReach)
-                else -> state.copy(working = false, saved = true, savedNickname = state.nickname)
+                // Ник только что задан — и тем самым закреплён: второго раза у этой
+                // личности не будет, экран обязан показать это сразу, а не после перезахода.
+                else -> state.copy(
+                    working = false, saved = true, loadedName = state.name,
+                    savedNickname = state.nickname,
+                    nickLocked = state.nickLocked || state.nickname.isNotBlank(),
+                )
             }
         }
     }
@@ -89,6 +123,18 @@ data class ProfileState(
     val nickname: String = "",
     /** Ник, который уже стоит на сервере: с ним сравнивают, чтобы не спрашивать зря. */
     val savedNickname: String = "",
+    /** Имя, каким его прислал сервер: чтобы перечитывание не затирало набранное. */
+    val loadedName: String = "",
+    /**
+     * Ник закреплён за этой личностью — поле сменяется текстом (0050).
+     *
+     * Правило заказчика 2026-09-15: ник задаётся один раз на секретную фразу. Новая
+     * фраза («Начать заново») даёт право сменить или оставить; имя же меняется сколько
+     * угодно.
+     */
+    val nickLocked: Boolean = false,
+    /** Аватар — медиа-объект. Пусто — картинки нет. */
+    val avatarMediaId: String = "",
     /** `null` — не спрашивали или не ответили. */
     val free: Boolean? = null,
     val working: Boolean = false,
@@ -119,4 +165,7 @@ data class ProfileState(
     val nameless: Boolean get() = name.isBlank()
 
     val canSave: Boolean get() = !working && nickFits && free != false
+
+    /** Ник ещё можно задать: не заперт. */
+    val nickEditable: Boolean get() = !nickLocked
 }

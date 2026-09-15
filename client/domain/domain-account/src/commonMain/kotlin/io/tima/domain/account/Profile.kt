@@ -10,6 +10,15 @@ package io.tima.domain.account
  */
 interface Profile {
 
+    /**
+     * Кто я — то, чем заполняется экран профиля (`GET /users/me`).
+     *
+     * @return `null`, если сети нет. Экран тогда открывается с тем, что знал, а не с
+     *   пустыми полями: пустое поле имени поверх заполненного аккаунта выглядит как
+     *   «имя пропало».
+     */
+    suspend fun me(): Me?
+
     /** @return удалось ли. Имя не проверяется никем — отказать может только сеть. */
     suspend fun setName(name: String): Boolean
 
@@ -24,6 +33,21 @@ interface Profile {
     suspend fun setNickname(nick: String): NickStep
 }
 
+/**
+ * Запись о себе. Пустая строка — не задано.
+ *
+ * [nickLocked] — ник задан этой личностью и второй раз не задаётся (решение заказчика
+ * 2026-09-15). Право вернётся с новой личностью — «Начать заново» с другой фразой; не
+ * воспользовался — прежний ник остаётся по умолчанию. Имя такого замка не имеет.
+ */
+data class Me(
+    val phone: String = "",
+    val name: String = "",
+    val nickname: String = "",
+    val nickLocked: Boolean = false,
+    val avatarMediaId: String = "",
+)
+
 /** Чем кончилась попытка занять ник. */
 enum class NickStep {
     Taken,
@@ -31,6 +55,8 @@ enum class NickStep {
     Busy,
     /** 10…20 знаков, латиница, цифры, подчёркивание — что-то из этого нарушено. */
     OutOfBounds,
+    /** Эта личность свой ник уже задала. Не «занят» и не «неверно» — сменить нельзя вовсе. */
+    Locked,
     Offline,
 }
 

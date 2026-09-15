@@ -9,8 +9,10 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.tima.domain.account.Me
 import io.tima.domain.account.NickStep
 import io.tima.domain.account.Profile
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -33,11 +35,36 @@ class ProfileOverHttp(
     private val token: () -> String,
 ) : Profile {
 
+    override suspend fun me(): Me? = try {
+        val response = client.get(route.api("/api/v1/users/me")) {
+            header("Authorization", "Bearer ${token()}")
+        }
+        if (response.status != HttpStatusCode.OK) {
+            null
+        } else {
+            val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+            fun text(key: String) = body[key]?.jsonPrimitive?.content?.takeIf { it != "null" } ?: ""
+            Me(
+                phone = text("phone"),
+                name = text("display_name"),
+                nickname = text("nickname"),
+                nickLocked = body["nickname_locked"]?.jsonPrimitive?.booleanOrNull == true,
+                avatarMediaId = text("avatar_media_id"),
+            )
+        }
+    } catch (_: Throwable) {
+        null
+    }
+
     override suspend fun setName(name: String): Boolean = try {
         client.patch(route.api("/api/v1/users/me/name")) {
             header("Authorization", "Bearer ${token()}")
             contentType(ContentType.Application.Json)
-            setBody(buildJsonObject { put("name", JsonPrimitive(name)) }.toString())
+            // `display_name`, как читает сервер. До 2026-09-15 здесь стояло `name` — и
+            // сервер молча писал ПУСТОЕ имя: поле не совпадало, декодер оставлял его
+            // незаполненным, а 200 приходил как ни в чём не бывало. Имя не сохранялось
+            // никогда, и никто этого не видел, потому что экран не перечитывал профиль.
+            setBody(buildJsonObject { put("display_name", JsonPrimitive(name)) }.toString())
         }.status == HttpStatusCode.OK
     } catch (_: Throwable) {
         false
@@ -66,7 +93,13 @@ class ProfileOverHttp(
         }
         when (response.status) {
             HttpStatusCode.OK -> NickStep.Taken
-            HttpStatusCode.Conflict -> NickStep.Busy
+            // 409 двух видов: место занято (nickname_taken) и попытка занята (nickname_locked).
+            HttpStatusCode.Conflict -> {
+                val code = runCatching {
+                    Json.parseToJsonElement(response.bodyAsText()).jsonObject["code"]?.jsonPrimitive?.content
+                }.getOrNull()
+                if (code == "nickname_locked") NickStep.Locked else NickStep.Busy
+            }
             HttpStatusCode.BadRequest -> NickStep.OutOfBounds
             else -> NickStep.Offline
         }

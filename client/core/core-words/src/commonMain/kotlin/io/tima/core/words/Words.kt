@@ -537,6 +537,14 @@ interface ChatWords {
     val saved: String
     val save: String
     val nicknameNeverFreed: String
+
+    /**
+     * Ник задаётся один раз на личность (решение заказчика 2026-09-15). Пока не задан —
+     * поле и это пояснение; задан — текст вместо поля и [nicknameLocked].
+     */
+    val nicknameOnce: String
+    val nicknameLocked: String
+    val phone: String
 }
 
 /**
@@ -1661,6 +1669,11 @@ object RussianWords : Words {
         override val save = "Сохранить"
         override val nicknameNeverFreed =
             "Занятый ник не освобождается: сменив его, вы не отдадите прежний."
+        override val nicknameOnce =
+            "Ник задаётся один раз. Сменить его можно будет только с новой секретной фразой."
+        override val nicknameLocked =
+            "Ник задан и закреплён за этой фразой. Начнёте заново с другой — сможете сменить его или оставить."
+        override val phone = "Телефон"
     }
 
     override val auth = object : AuthWords {

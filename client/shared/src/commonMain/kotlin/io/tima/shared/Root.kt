@@ -703,6 +703,9 @@ private fun App(
         ProfileStore(profile = network.profile, phone = "", scope = scope)
     }
     val profileState by profile.state.collectAsState()
+    // Кто я — с сервера, один раз на сборку корня. Телефон отсюда уходит и в шапку
+    // переключения окон: сессия его не хранит (0050).
+    LaunchedEffect(profile) { profile.refresh() }
 
     // Виртуальный аккаунт: ник проверяется тем же профилем, что и свой, а создание
     // заверяется фразой владельца — кода из SMS у аккаунта без телефона не будет.
@@ -965,8 +968,11 @@ private fun App(
     if (windowSwitcher) {
         WindowSwitchingScreen(
             current = window,
-            name = session.userId,
-            alias = "@" + session.userId.take(8),
+            // Имя, ник и телефон — из профиля (0050). До этого здесь стояли заглушки:
+            // userId вместо имени и «@» с восемью знаками id вместо ника.
+            name = profileState.name.ifBlank { Tima.words.chat.nameless },
+            alias = profileState.savedNickname.takeIf { it.isNotBlank() }?.let { "@$it" } ?: "",
+            phone = profileState.phone,
             counters = windowCounters(listState),
             onSelect = { selected ->
                 window = selected

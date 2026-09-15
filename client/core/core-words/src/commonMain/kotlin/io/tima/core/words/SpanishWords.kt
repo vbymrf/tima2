@@ -692,6 +692,11 @@ object SpanishWords : Words {
         override val save = "Guardar"
         override val nicknameNeverFreed =
             "Un apodo ocupado no se libera: cambiarlo no devuelve el anterior."
+        override val nicknameOnce =
+            "El apodo se establece una vez. Solo podrá cambiarse junto con una nueva frase secreta."
+        override val nicknameLocked =
+            "El apodo está establecido y ligado a esta frase. Empiece de nuevo con otra — y podrá cambiarlo o dejarlo."
+        override val phone = "Teléfono"
     }
 
     override val auth = object : AuthWords {
