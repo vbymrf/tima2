@@ -3,14 +3,18 @@ package api
 // Ник (ПЛАН-КОНТАКТОВ.md, Д1).
 //
 // Проверяются не ответы ручек, а четыре обещания, на которых ник держится:
-// он один на всех, регистр не создаёт второго, короткие зарезервированы, и он
+// он один на всех, регистр не создаёт второго, короткие зарезервированы, он
 // переживает смену личности — иначе ссылка на человека обрывается там, где он
-// как раз и остался собой.
+// как раз и остался собой, — и задаётся один раз на личность (0050).
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"tima/server/internal/store"
 )
 
 func занятьНик(t *testing.T, ts *httptest.Server, token, nick string) int {
@@ -122,24 +126,100 @@ func TestЗанятостьОтвечаетДоСохранения(t *testing.T
 	}
 }
 
-func TestНикСменяетсяИСтарыйНеОсвобождается(t *testing.T) {
+func TestНикЗадаётсяОдинРазНаЛичность(t *testing.T) {
+	// Решение заказчика 2026-09-15 (0050): ник — то, чем человека находят, и менять
+	// его по настроению значит рвать чужие ссылки. Один раз на личность.
 	ts, _ := setup(t)
+	пётр := registerDevice(t, ts, "+79990000010")
+
+	if code := занятьНик(t, ts, пётр.token, "pervyy_nik_00"); code != http.StatusOK {
+		t.Fatalf("первый ник: %d", code)
+	}
+	var resp struct {
+		Error string `json:"code"`
+	}
+	code := authedJSON(t, ts, "PATCH", "/api/v1/users/me/nickname", пётр.token,
+		map[string]any{"nickname": "vtoroy_nik_000"}, &resp)
+	if code != http.StatusConflict || resp.Error != "nickname_locked" {
+		t.Fatalf("вторая попытка той же личностью должна быть 409 nickname_locked, а не %d %q", code, resp.Error)
+	}
+	// Прежний ник на месте: отказ ничего не тронул.
+	if code, id := поНику(t, ts, пётр.token, "pervyy_nik_00"); code != http.StatusOK || id != пётр.userID {
+		t.Fatalf("после отказа ник потерян: %d %s", code, id)
+	}
+}
+
+func TestНоваяЛичностьМожетСменитьНикОдинРаз(t *testing.T) {
+	// «Начать заново» заводит новую личность — и у неё право на ник появляется снова.
+	// Не воспользовалась — прежний ник остаётся: он принадлежит аккаунту, а не фразе.
+	ts, srv := setup(t)
+	ctx := context.Background()
 	пётр := registerDevice(t, ts, "+79990000010")
 	анна := registerDevice(t, ts, "+79990000011")
 
 	if code := занятьНик(t, ts, пётр.token, "pervyy_nik_00"); code != http.StatusOK {
 		t.Fatalf("первый ник: %d", code)
 	}
-	if code := занятьНик(t, ts, пётр.token, "vtoroy_nik_000"); code != http.StatusOK {
-		t.Fatalf("смена ника: %d", code)
+	person, err := srv.Store.PersonOfUser(ctx, пётр.userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := srv.Store.StartNewIdentity(ctx, person, пётр.userID, []byte("proof"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Пока новая личность ничего не решила — ник прежний, и ведёт он к аккаунту.
+	if code, _ := поНику(t, ts, анна.token, "pervyy_nik_00"); code != http.StatusOK {
+		t.Fatalf("после смены личности ник пропал: %d", code)
+	}
+
+	// Новая личность меняет — можно, ровно один раз.
+	if err := srv.Store.SetNickname(ctx, second, "vtoroy_nik_000"); err != nil {
+		t.Fatalf("новая личность не смогла сменить ник: %v", err)
+	}
+	if err := srv.Store.SetNickname(ctx, second, "tretiy_nik_0000"); !errors.Is(err, store.ErrNicknameLocked) {
+		t.Fatalf("вторая смена той же новой личностью должна быть заперта, а вышло: %v", err)
 	}
 	// Смена меняет ник, а не заводит второй: по прежнему уже никого нет.
 	if code, _ := поНику(t, ts, анна.token, "pervyy_nik_00"); code != http.StatusNotFound {
 		t.Fatalf("прежний ник всё ещё ведёт к человеку: %d", code)
 	}
-	code, id := поНику(t, ts, анна.token, "vtoroy_nik_000")
-	if code != http.StatusOK || id != пётр.userID {
-		t.Fatalf("новый ник не ведёт к человеку: %d %s", code, id)
+}
+
+func TestКтоЯ(t *testing.T) {
+	// GET /users/me — то, чем заполняется экран профиля. До ручки он открывался пустым.
+	ts, _ := setup(t)
+	пётр := registerDevice(t, ts, "+79990000010")
+
+	var me struct {
+		Phone          string `json:"phone"`
+		DisplayName    string `json:"display_name"`
+		Nickname       string `json:"nickname"`
+		NicknameLocked bool   `json:"nickname_locked"`
+	}
+	if code := authedJSON(t, ts, "GET", "/api/v1/users/me", пётр.token, nil, &me); code != http.StatusOK {
+		t.Fatalf("me: %d", code)
+	}
+	if me.Phone != "+79990000010" {
+		t.Fatalf("свой телефон не отдан: %q", me.Phone)
+	}
+	if me.Nickname != "" || me.NicknameLocked {
+		t.Fatalf("у нового аккаунта ник должен быть пуст и не заперт: %q %v", me.Nickname, me.NicknameLocked)
+	}
+
+	if code := authedJSON(t, ts, "PATCH", "/api/v1/users/me/name", пётр.token,
+		map[string]any{"display_name": "Пётр"}, nil); code != http.StatusOK {
+		t.Fatalf("имя: %d", code)
+	}
+	if code := занятьНик(t, ts, пётр.token, "pervyy_nik_00"); code != http.StatusOK {
+		t.Fatalf("ник: %d", code)
+	}
+	if code := authedJSON(t, ts, "GET", "/api/v1/users/me", пётр.token, nil, &me); code != http.StatusOK {
+		t.Fatalf("me второй раз: %d", code)
+	}
+	if me.DisplayName != "Пётр" || me.Nickname != "pervyy_nik_00" || !me.NicknameLocked {
+		t.Fatalf("после правок me врёт: %+v", me)
 	}
 }
 

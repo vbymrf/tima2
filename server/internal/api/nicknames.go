@@ -39,6 +39,12 @@ func setNickname(deps usersDeps) http.HandlerFunc {
 			// различает «исправь написание» и «придумай другой».
 			writeErr(w, http.StatusConflict, "nickname_taken", "этот ник уже занят")
 			return
+		case errors.Is(err, store.ErrNicknameLocked):
+			// Тоже 409, но другой код: место не занято, занята ПОПЫТКА — эта
+			// личность свой ник уже задала. Клиент показывает ник текстом, а не полем.
+			writeErr(w, http.StatusConflict, "nickname_locked",
+				"ник задаётся один раз; сменить его сможет новая личность после «Начать заново»")
+			return
 		case err != nil:
 			log.Printf("setNickname: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")

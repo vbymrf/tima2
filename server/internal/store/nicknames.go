@@ -21,6 +21,11 @@ var ErrNicknameTaken = errors.New("ник занят")
 // подчёркивание. Короче десяти зарезервировано.
 var ErrNicknameBad = errors.New("ник не проходит границы")
 
+// ErrNicknameLocked — ник этой личностью уже задан, второй раз нельзя (0050;
+// решение заказчика 2026-09-15). Право на смену возвращает только новая личность —
+// «Начать заново» с другой фразой. Не воспользовалась — прежний ник остаётся.
+var ErrNicknameLocked = errors.New("ник этой личностью уже задан")
+
 // Те же границы, что в CHECK миграции 0037. Проверка стоит дважды намеренно:
 // база защищает от второго приложения, код — отвечает человеку словами, а не
 // ошибкой драйвера.
@@ -31,22 +36,34 @@ var nicknameRe = regexp.MustCompile(`^[A-Za-z0-9_]{10,20}$`)
 // негодного значения незачем.
 func ValidNickname(nick string) bool { return nicknameRe.MatchString(nick) }
 
-// SetNickname — занять ник или сменить свой.
+// SetNickname — занять ник. Один раз на личность.
 //
 // Сравнение без учёта регистра делает частичный уникальный индекс по lower(nickname)
 // (0037). Хранится ник как введён: человек видит своё написание.
+//
+// Замок — в самом UPDATE, а не отдельным SELECT перед ним: две одновременные попытки
+// одной личности иначе прошли бы обе. Условие пропускает, когда ник задавала другая
+// личность (nickname_set_by иной) или не задавал никто (NULL); свою же личность —
+// нет. Ноль строк при живом аккаунте и означает замок.
 func (s *Store) SetNickname(ctx context.Context, userID, nick string) error {
 	if !ValidNickname(nick) {
 		return ErrNicknameBad
 	}
-	_, err := s.pool.Exec(ctx, `
-		UPDATE persons SET nickname = $2
-		WHERE person_id = (SELECT person_id FROM users WHERE user_id = $1)`, userID, nick)
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE persons SET nickname = $2, nickname_set_by = $1
+		WHERE person_id = (SELECT person_id FROM users WHERE user_id = $1)
+		  AND (nickname_set_by IS NULL OR nickname_set_by <> $1)`, userID, nick)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		return ErrNicknameTaken
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNicknameLocked
+	}
+	return nil
 }
 
 // NicknameFree — свободен ли ник. Отвечает и о своём собственном: занявший его
