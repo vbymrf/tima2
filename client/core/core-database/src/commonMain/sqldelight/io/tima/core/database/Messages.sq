@@ -85,6 +85,13 @@ CREATE INDEX idx_messages_chat_order ON messages(chat_id, server_ts, client_ts, 
 -- отправки читает всю таблицу.
 CREATE INDEX idx_messages_queue ON messages(direction, state, next_attempt_at);
 
+-- Ветка (ADR-0024): выборка ответов идёт по чату и корню. Индекс заведён миграцией
+-- 7.sqm, и здесь он обязан быть слово в слово: свежая база строится по этому файлу, а
+-- обновлённая — по миграции. Разойдутся — и у поставленного с нуля устройства ветка
+-- читается перебором всей таблицы, а у обновлённого нет. Ровно это и ловит
+-- `verifyMigration`, и ровно это он тут и поймал.
+CREATE INDEX idx_messages_thread ON messages(chat_id, thread_root, local_id);
+
 -- ── Очередь исходящих ───────────────────────────────────────────────────────
 
 insertQueued:
