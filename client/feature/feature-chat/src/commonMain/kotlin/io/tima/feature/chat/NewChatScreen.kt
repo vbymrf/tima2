@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Trouble
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Button
-import io.tima.core.ui.Field
+import io.tima.core.ui.PhoneFields
 import io.tima.core.ui.Caption
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
@@ -37,6 +37,7 @@ import io.tima.core.ui.SubwindowHeader
 fun NewChatScreen(
     state: NewChatState,
     onNumber: (String) -> Unit,
+    onCountryCode: (String) -> Unit = {},
     onFind: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -59,11 +60,12 @@ fun NewChatScreen(
                 Caption(words.whomToWrite, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
                 Secondary(words.phoneInTima)
 
-                Field(
-                    value = state.number,
-                    onChange = onNumber,
-                    hint = "+7…",
-                    numeric = true,
+                // Два поля, плюс нарисован: на цифровой клавиатуре его нет (2026-09-15).
+                PhoneFields(
+                    countryCode = state.countryCode,
+                    number = state.number,
+                    onCountryCode = onCountryCode,
+                    onNumber = onNumber,
                 )
 
                 state.trouble?.let { Trouble(it) }

@@ -22,6 +22,7 @@ import io.tima.core.ui.Secondary
 import io.tima.core.ui.QrCodeImage
 import io.tima.core.ui.Button
 import io.tima.core.ui.Field
+import io.tima.core.ui.PhoneFields
 import io.tima.core.ui.Caption
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
@@ -122,31 +123,13 @@ private fun Phone(
     //
     // Код страны и номер — разные величины и для человека: код меняется раз в жизни,
     // номер набирают каждый раз. Слитое поле заставляло стирать «+7» вместе с номером.
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Плюс нарисован, а не введён: в значении его нет, иначе «+7» и «7» стали бы
-        // разными кодами одной страны.
-        Caption("+", fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
-        Box(Modifier.width(72.dp)) {
-            Field(
-                value = state.countryCode,
-                onChange = onCodeCountry,
-                hint = "7",
-                numeric = true,
-            )
-        }
-        Box(Modifier.weight(1f)) {
-            Field(
-                value = state.number,
-                onChange = onNumber,
-                hint = "999 000 00 00",
-                numeric = true,
-            )
-        }
-    }
+    // Общий компонент: та же пара полей стоит и в «кому написать», и в группах.
+    PhoneFields(
+        countryCode = state.countryCode,
+        number = state.number,
+        onCountryCode = onCodeCountry,
+        onNumber = onNumber,
+    )
 
     state.trouble?.let { Trouble(it) }
 

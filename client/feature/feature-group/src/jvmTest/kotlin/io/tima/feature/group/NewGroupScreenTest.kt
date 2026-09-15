@@ -121,6 +121,7 @@ class NewGroupScreenTest {
             onTitle = {},
             onDescription = {},
             onNumber = {},
+            onCountryCode = {},
             onAddNumber = {},
             onRemoveNumber = {},
             onCreate = {},

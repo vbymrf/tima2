@@ -23,6 +23,7 @@ import io.tima.core.ui.Avatar
 import io.tima.core.ui.Button
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Field
+import io.tima.core.ui.PhoneFields
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
@@ -63,6 +64,7 @@ fun NewGroupScreen(
     onTitle: (String) -> Unit,
     onDescription: (String) -> Unit,
     onNumber: (String) -> Unit,
+    onCountryCode: (String) -> Unit,
     onAddNumber: () -> Unit,
     onRemoveNumber: (String) -> Unit,
     onCreate: () -> Unit,
@@ -103,7 +105,7 @@ fun NewGroupScreen(
                     Step.Catalogue -> CatalogueStep(state, onCatalogue, onExplain)
                     Step.Comments -> CommentsStep(state, onComments, onExplain)
                     Step.Naming -> NamingStep(
-                        state, onTitle, onDescription, onNumber, onAddNumber, onRemoveNumber,
+                        state, onTitle, onDescription, onNumber, onCountryCode, onAddNumber, onRemoveNumber,
                     )
                     Step.Bringing -> BringingStep(state, onItem)
                 }
@@ -339,6 +341,7 @@ private fun NamingStep(
     onTitle: (String) -> Unit,
     onDescription: (String) -> Unit,
     onNumber: (String) -> Unit,
+    onCountryCode: (String) -> Unit,
     onAddNumber: () -> Unit,
     onRemoveNumber: (String) -> Unit,
 ) {
@@ -354,7 +357,12 @@ private fun NamingStep(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.weight(1f)) {
-            Field(value = state.number, onChange = onNumber, hint = "+7…", numeric = true)
+            PhoneFields(
+                countryCode = state.countryCode,
+                number = state.number,
+                onCountryCode = onCountryCode,
+                onNumber = onNumber,
+            )
         }
         Button(label = words.add, onClick = onAddNumber)
     }

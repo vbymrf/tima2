@@ -19,7 +19,7 @@ import io.tima.core.ui.Name
 import io.tima.core.ui.Button
 import io.tima.core.ui.Chip
 import io.tima.core.ui.ChipKind
-import io.tima.core.ui.Field
+import io.tima.core.ui.PhoneFields
 import io.tima.core.ui.EmptyArea
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.TimaSpacing
@@ -47,6 +47,7 @@ import io.tima.domain.chat.GroupRole
 fun MemberScreen(
     state: MembersState,
     onNumber: (String) -> Unit,
+    onCountryCode: (String) -> Unit = {},
     onInvite: () -> Unit,
     onRemove: (String) -> Unit,
     onBack: () -> Unit,
@@ -82,11 +83,11 @@ fun MemberScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.weight(1f)) {
-                        Field(
-                            value = state.number,
-                            onChange = onNumber,
-                            hint = "+7…",
-                            numeric = true,
+                        PhoneFields(
+                            countryCode = state.countryCode,
+                            number = state.number,
+                            onCountryCode = onCountryCode,
+                            onNumber = onNumber,
                         )
                     }
                     Button(label = if (state.expect) "…" else words.invite, onClick = onInvite)

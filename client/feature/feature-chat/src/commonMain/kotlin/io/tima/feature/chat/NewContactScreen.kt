@@ -16,6 +16,7 @@ import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Field
+import io.tima.core.ui.PhoneFields
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Tima
@@ -40,6 +41,7 @@ import io.tima.core.ui.Trouble
 fun NewContactScreen(
     state: NewContactState,
     onPhone: (String) -> Unit,
+    onCountryCode: (String) -> Unit = {},
     onName: (String) -> Unit,
     onSection: (String) -> Unit,
     onSave: () -> Unit,
@@ -60,7 +62,14 @@ fun NewContactScreen(
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about4),
             ) {
                 Caption(words.phoneNumber, fontSize = TimaType.sz5, weight = FontWeight.Bold)
-                Field(value = state.phone, onChange = onPhone, hint = "+7 916 000-11-22")
+                // Два поля, плюс нарисован: на цифровой клавиатуре его нет (2026-09-15).
+                PhoneFields(
+                    countryCode = state.countryCode,
+                    number = state.phone,
+                    onCountryCode = onCountryCode,
+                    onNumber = onPhone,
+                    hint = "916 000-11-22",
+                )
 
                 Caption(words.nameYouCall, fontSize = TimaType.sz5, weight = FontWeight.Bold)
                 Field(value = state.name, onChange = onName, hint = words.optional)

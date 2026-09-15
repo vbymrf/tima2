@@ -1,5 +1,6 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.fullPhone
 import io.tima.core.words.CurrentWords
 import io.tima.core.words.Words
 import io.tima.core.words.RussianWords
@@ -206,6 +207,10 @@ class NewGroupStore(
         _state.value = _state.value.copy(description = text, trouble = null)
     }
 
+    fun changedCountryCode(text: String) {
+        _state.value = _state.value.copy(countryCode = text, trouble = null)
+    }
+
     fun changedNumber(text: String) {
         _state.value = _state.value.copy(number = text, trouble = null)
     }
@@ -218,7 +223,8 @@ class NewGroupStore(
      */
     fun addNumber() {
         val current = _state.value
-        val number = current.number.trim()
+        // В список — уже собранный E.164: сравнивать и звать по нему, а не по набранному.
+        val number = fullPhone(current.countryCode, current.number)
         if (number.isEmpty()) return
         if (number in current.numbers) {
             // Молча проглотить повтор нельзя: человек будет жать снова, думая, что не
@@ -325,6 +331,8 @@ data class NewGroupState(
     val joining: Joining = Joining.Closed,
     val title: String = "",
     val description: String = "",
+    /** Код страны отдельным полем: на цифровой клавиатуре нет плюса (2026-09-15). */
+    val countryCode: String = "7",
     val number: String = "",
     /** Кого зовут: накопленные номера. */
     val numbers: List<String> = emptyList(),

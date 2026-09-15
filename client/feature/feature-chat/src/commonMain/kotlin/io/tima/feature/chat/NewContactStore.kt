@@ -1,5 +1,6 @@
 package io.tima.feature.chat
 
+import io.tima.core.ui.fullPhone
 import io.tima.core.words.CurrentWords
 import io.tima.core.words.Words
 import io.tima.core.words.RussianWords
@@ -42,9 +43,35 @@ class NewContactStore(
     private val _state = MutableStateFlow(NewContactState())
     val state: StateFlow<NewContactState> = _state.asStateFlow()
 
+    fun changedCountryCode(text: String) {
+        _state.value = _state.value.copy(countryCode = text, checked = null)
+        recompose()
+    }
+
     fun changedPhone(line: String) {
-        val phone = normalizePhone(line)
-        _state.value = _state.value.copy(phone = line, normalized = phone, checked = null)
+        _state.value = _state.value.copy(phone = line, checked = null)
+        recompose()
+    }
+
+    /**
+     * Собрать номер из кода страны и набранного и, если сложился целиком, сверить.
+     *
+     * Два поля (2026-09-15): на цифровой клавиатуре нет плюса. Но контакт часто
+     * ВСТАВЛЯЮТ из книги телефона — «+7 916…» или «8 916…». Первое берётся целиком
+     * (правило [fullPhone]); второе — российская запись с восьмёркой — по-прежнему
+     * распознаётся [normalizePhone]: приписать к ней код дало бы «+78916…», номер,
+     * которого нет.
+     */
+    private fun recompose() {
+        val s = _state.value
+        val typed = s.phone.trim()
+        val digits = typed.filter(Char::isDigit)
+        val phone = when {
+            typed.startsWith("+") -> normalizePhone(typed)
+            digits.length == 11 && digits.startsWith("8") && s.countryCode.filter(Char::isDigit) == "7" -> normalizePhone(typed)
+            else -> normalizePhone(fullPhone(s.countryCode, typed))
+        }
+        _state.value = s.copy(normalized = phone)
         // Сверяем, только когда номер сложился целиком: до этого спрашивать не о ком.
         if (phone != null) check(phone)
     }
@@ -81,7 +108,7 @@ class NewContactStore(
         }
         scope.launch {
             _state.value = state.copy(working = true, trouble = null)
-            val step = add.add(state.phone, state.name.ifBlank { null }, state.section)
+            val step = add.add(state.normalized ?: state.phone, state.name.ifBlank { null }, state.section)
             _state.value = _state.value.copy(working = false)
             onDone(step)
         }
@@ -95,6 +122,8 @@ class NewContactStore(
 }
 
 data class NewContactState(
+    /** Код страны отдельным полем: на цифровой клавиатуре нет плюса (2026-09-15). */
+    val countryCode: String = "7",
     val phone: String = "",
     /** Номер в E.164 либо `null` — тогда сохранять нечего. */
     val normalized: String? = null,

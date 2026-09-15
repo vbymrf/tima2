@@ -1,5 +1,6 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.fullPhone
 import io.tima.core.words.CurrentWords
 import io.tima.core.words.Words
 import io.tima.core.words.RussianWords
@@ -63,6 +64,10 @@ class MembersStore(
         }
     }
 
+    fun changedCountryCode(text: String) {
+        _state.value = _state.value.copy(countryCode = text, trouble = null)
+    }
+
     fun changedNumber(text: String) {
         _state.value = _state.value.copy(number = text, trouble = null, warning = null)
     }
@@ -73,7 +78,7 @@ class MembersStore(
         _state.value = current.copy(expect = true, trouble = null, warning = null)
 
         scope.launch {
-            apply(members.invite(groupId, current.number), clearNumber = true)
+            apply(members.invite(groupId, fullPhone(current.countryCode, current.number)), clearNumber = true)
         }
     }
 
@@ -114,6 +119,8 @@ class MembersStore(
 data class MembersState(
     val members: List<GroupMember> = emptyList(),
     val myRole: GroupRole = GroupRole.Unknown,
+    /** Код страны отдельным полем: на цифровой клавиатуре нет плюса (2026-09-15). */
+    val countryCode: String = "7",
     val number: String = "",
     val expect: Boolean = false,
     val trouble: String? = null,

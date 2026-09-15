@@ -868,6 +868,7 @@ private fun App(
         NewContactScreen(
             state = contactsState,
             onPhone = contacts::changedPhone,
+            onCountryCode = contacts::changedCountryCode,
             onName = contacts::changedName,
             onSection = contacts::changedSection,
             onSave = { contacts.save { newContact = false } },
@@ -1263,6 +1264,7 @@ private fun App(
                     NewChatScreen(
                         state = newState,
                         onNumber = new::changedNumber,
+                        onCountryCode = new::changedCountryCode,
                         onFind = new::find,
                         onBack = {
                             where = Where.Nothing
@@ -2024,6 +2026,7 @@ private fun NewGroup(
         onTitle = store::changedTitle,
         onDescription = store::changedDescription,
         onNumber = store::changedNumber,
+        onCountryCode = store::changedCountryCode,
         onAddNumber = store::addNumber,
         onRemoveNumber = store::removeNumber,
         onCreate = store::create,
@@ -2089,6 +2092,7 @@ private fun Members(
     MemberScreen(
         state = state,
         onNumber = store::changedNumber,
+        onCountryCode = store::changedCountryCode,
         onInvite = store::invite,
         onRemove = store::remove,
         onBack = onBack,

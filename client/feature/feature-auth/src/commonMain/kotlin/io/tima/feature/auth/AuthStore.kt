@@ -1,5 +1,6 @@
 package io.tima.feature.auth
 
+import io.tima.core.ui.fullPhone
 import io.tima.core.words.CurrentWords
 import io.tima.core.words.Words
 import io.tima.core.words.RussianWords
@@ -374,13 +375,7 @@ sealed interface AuthState {
          * получить «+77999…» — номер, которого нет. Поймано тестом, который вставлял
          * именно так.
          */
-        val fullNumber: String get() {
-            val entered = number.trim()
-            if (entered.startsWith("+")) {
-                return "+" + entered.drop(1).filter { it.isDigit() }
-            }
-            return "+" + countryCode.filter { it.isDigit() } + entered.filter { it.isDigit() }
-        }
+        val fullNumber: String get() = fullPhone(countryCode, number)
 
         fun copyWithTrouble(text: String) = copy(trouble = text, expect = false)
     }

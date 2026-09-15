@@ -1,5 +1,6 @@
 package io.tima.feature.chat
 
+import io.tima.core.ui.fullPhone
 import io.tima.core.words.CurrentWords
 import io.tima.core.words.Words
 import io.tima.core.words.RussianWords
@@ -43,6 +44,10 @@ class NewChatStore(
         _state.value = _state.value.copy(number = text, trouble = null, invite = false)
     }
 
+    fun changedCountryCode(text: String) {
+        _state.value = _state.value.copy(countryCode = text, trouble = null, invite = false)
+    }
+
     /** Человек нажал «Найти». */
     fun find() {
         val current = _state.value
@@ -50,7 +55,7 @@ class NewChatStore(
         _state.value = current.copy(expect = true, trouble = null, invite = false)
 
         scope.launch {
-            _state.value = when (val outcome = start.byPhone(myUserId, current.number)) {
+            _state.value = when (val outcome = start.byPhone(myUserId, current.fullNumber)) {
                 is StartChatResult.Started -> current.copy(expect = false, started = outcome.chatId)
 
                 // Отдельное состояние, а не текст беды: экран предлагает позвать человека,
@@ -77,6 +82,8 @@ class NewChatStore(
 
 /** Что видно на экране новой переписки. */
 data class NewChatState(
+    /** Код страны отдельным полем: на цифровой клавиатуре нет плюса (2026-09-15). */
+    val countryCode: String = "7",
     val number: String = "",
     val trouble: String? = null,
     val expect: Boolean = false,
@@ -85,5 +92,8 @@ data class NewChatState(
     /** Номера нет в TIMA: предложить позвать человека. */
     val invite: Boolean = false,
 ) {
+    /** Что уходит серверу: E.164 из кода страны и номера. */
+    val fullNumber: String get() = fullPhone(countryCode, number)
+
     fun copyWithTrouble(text: String) = copy(trouble = text, expect = false)
 }
