@@ -40,6 +40,7 @@ kotlin {
             implementation(projects.core.coreEncryption)
             implementation(projects.core.coreSecrets)
             implementation(projects.core.coreContacts)
+            implementation(projects.core.coreMedia)
             implementation(projects.core.coreNetwork)
             // Журнал приложения: из него делается отчёт о проблеме (ПЛАН-ОТЛАДКИ.md).
             implementation(projects.core.coreDiag)

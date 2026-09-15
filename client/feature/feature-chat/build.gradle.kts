@@ -39,6 +39,8 @@ kotlin {
             // Дизайн-система: экран собирается из её деталей и своих цветов не имеет.
             implementation(projects.core.coreWords)
             implementation(projects.core.coreUi)
+            // Аватар: выбор картинки, обрезка, кодек, порт медиа (Д8).
+            implementation(projects.core.coreMedia)
             implementation(compose.runtime)
             implementation(compose.foundation)
             // Время сообщения — kotlinx-datetime: java.time запрещён архитектурным

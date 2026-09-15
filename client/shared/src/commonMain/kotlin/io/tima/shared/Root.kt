@@ -65,6 +65,7 @@ import io.tima.feature.chat.ChatsStore
 import io.tima.feature.chat.BookState
 import io.tima.core.contacts.askContactsAccess
 import io.tima.core.contacts.platformInvite
+import io.tima.core.media.decodeImage
 import io.tima.core.secrets.Account
 import io.tima.core.contacts.platformPhoneBook
 import io.tima.core.ui.Tab
@@ -700,7 +701,7 @@ private fun App(
         // сервер отдаёт телефон только собеседникам по переписке. Строка номера в
         // профиле поэтому пуста — до тех пор, пока номер не начнёт храниться рядом
         // с сессией. Числится в ПЛАН-КОНТАКТОВ.md, Д8.
-        ProfileStore(profile = network.profile, phone = "", scope = scope)
+        ProfileStore(profile = network.profile, phone = "", scope = scope, media = network.media)
     }
     val profileState by profile.state.collectAsState()
     // Кто я — с сервера, один раз на сборку корня. Телефон отсюда уходит и в шапку
@@ -973,6 +974,7 @@ private fun App(
             name = profileState.name.ifBlank { Tima.words.chat.nameless },
             alias = profileState.savedNickname.takeIf { it.isNotBlank() }?.let { "@$it" } ?: "",
             phone = profileState.phone,
+            avatar = remember(profileState.avatarBytes) { profileState.avatarBytes?.let(::decodeImage) },
             counters = windowCounters(listState),
             onSelect = { selected ->
                 window = selected
@@ -1250,6 +1252,8 @@ private fun App(
                         onNickname = profile::changedNickname,
                         onSave = profile::save,
                         onBack = { where = Where.Nothing },
+                        onAvatar = profile::croppedAvatar,
+                        onAvatarRemove = profile::removeAvatar,
                     )
                 }
             }
@@ -1646,6 +1650,8 @@ private fun Settings(
                 onNickname = profile::changedNickname,
                 onSave = profile::save,
                 onBack = { onOpen(null) },
+                onAvatar = profile::croppedAvatar,
+                onAvatarRemove = profile::removeAvatar,
             )
 
             SettingsItem.VIRTUALS -> {

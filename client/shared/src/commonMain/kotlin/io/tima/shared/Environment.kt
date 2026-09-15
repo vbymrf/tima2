@@ -53,6 +53,8 @@ import io.tima.core.network.HttpMessageTransport
 import io.tima.core.network.KeysApi
 import io.tima.core.network.ContactsOverHttp
 import io.tima.core.network.FriendsOverHttp
+import io.tima.core.media.Media
+import io.tima.core.network.MediaOverHttp
 import io.tima.core.network.ProfileOverHttp
 import io.tima.core.network.TransfersOverHttp
 import io.tima.core.network.VirtualsOverHttp
@@ -291,9 +293,12 @@ class Network(
     override val friends: Friends =
         FriendsOverHttp(link.route, link.client, token = { token() })
 
-    /** Профиль: имя свободно, ник с проверкой занятости. */
+    /** Профиль: имя свободно, ник один раз на личность, аватар ссылкой на медиа. */
     override val profile: Profile =
         ProfileOverHttp(link.route, link.client, token = { token() })
+
+    /** Медиа-хранилище: init → PUT → complete. Пока единственный потребитель — аватар. */
+    val media: Media = MediaOverHttp(link.route, link.client, token = { token() })
 
     /** Устройства аккаунта: объявить платформу, показать список, отключить. */
     override val devices: DevicesApi = DevicesApi(link.route, link.client, token = { token() })

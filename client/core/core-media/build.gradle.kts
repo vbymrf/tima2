@@ -36,6 +36,12 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
+        jvmTest.dependencies {
+            // Обрезка рисует в ImageBitmap — под JVM это Skia, и её родная библиотека
+            // приезжает только с настольным Compose. Без него тесты падают на
+            // org.jetbrains.skia.ColorSpace ещё до первой проверки.
+            implementation(compose.desktop.currentOs)
+        }
     }
 }
 

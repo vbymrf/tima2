@@ -1,5 +1,6 @@
 package io.tima.feature.chat
 
+import io.tima.core.media.Media
 import io.tima.core.words.CurrentWords
 import io.tima.core.words.Words
 import io.tima.core.words.RussianWords
@@ -28,6 +29,11 @@ class ProfileStore(
     private val scope: CoroutineScope,
     name: String = "",
     nickname: String = "",
+    /**
+     * Медиа-хранилище для аватара. `Media.None` — аватар не грузится и не скачивается:
+     * харнесс и снимки живут без сети.
+     */
+    private val media: Media = Media.None,
     /**
      * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
      *
@@ -62,7 +68,25 @@ class ProfileStore(
                 nickLocked = me.nickLocked,
                 avatarMediaId = me.avatarMediaId,
             )
+            // Картинка скачивается отдельно и позже: профиль обязан открыться сразу, а
+            // байты аватара — второй запрос. Скачиваем, только если ещё не показано то же.
+            if (me.avatarMediaId.isNotBlank() && _state.value.avatarPending == null) {
+                val bytes = media.download(me.avatarMediaId) ?: return@launch
+                if (_state.value.avatarMediaId == me.avatarMediaId) {
+                    _state.value = _state.value.copy(avatarBytes = bytes)
+                }
+            }
         }
+    }
+
+    /** Обрезанный JPEG с экрана: показывается сразу, уходит на сервер по «Сохранить». */
+    fun croppedAvatar(jpeg: ByteArray) {
+        _state.value = _state.value.copy(avatarPending = jpeg, avatarBytes = jpeg, avatarRemove = false, saved = false)
+    }
+
+    /** Убрать аватар. Тоже до «Сохранить»: передумать можно. */
+    fun removeAvatar() {
+        _state.value = _state.value.copy(avatarPending = null, avatarBytes = null, avatarRemove = true, saved = false)
     }
 
     fun changedName(line: String) {
@@ -87,6 +111,20 @@ class ProfileStore(
             _state.value = state.copy(working = true, trouble = null)
 
             val nameOk = if (state.name.isNotBlank()) profile.setName(state.name.trim()) else true
+
+            // Аватар: сначала байты в медиа, потом ссылка в профиль. Неудача на любом
+            // шаге — «не дошло», и картинка на экране остаётся ожидающей: человек
+            // нажмёт «Сохранить» ещё раз, а не будет выбирать фото заново.
+            var avatarId = state.avatarMediaId
+            val avatarOk = when {
+                state.avatarPending != null -> {
+                    val id = media.upload(state.avatarPending, "image/jpeg")
+                    if (id != null && profile.setAvatar(id)) { avatarId = id; true } else false
+                }
+                state.avatarRemove && state.avatarMediaId.isNotBlank() ->
+                    profile.setAvatar("").also { if (it) avatarId = "" }
+                else -> true
+            }
             val nickStep = when {
                 state.nickname.isBlank() -> NickStep.Taken
                 state.nickname == state.savedNickname -> NickStep.Taken
@@ -102,7 +140,7 @@ class ProfileStore(
                     nickname = state.savedNickname, trouble = words().chat.nicknameLocked)
                 nickStep == NickStep.OutOfBounds -> state.copy(working = false,
                     trouble = words().auth.nicknameRules)
-                nickStep == NickStep.Offline || !nameOk -> state.copy(working = false,
+                nickStep == NickStep.Offline || !nameOk || !avatarOk -> state.copy(working = false,
                     trouble = words().trouble.didNotReach)
                 // Ник только что задан — и тем самым закреплён: второго раза у этой
                 // личности не будет, экран обязан показать это сразу, а не после перезахода.
@@ -110,6 +148,7 @@ class ProfileStore(
                     working = false, saved = true, loadedName = state.name,
                     savedNickname = state.nickname,
                     nickLocked = state.nickLocked || state.nickname.isNotBlank(),
+                    avatarMediaId = avatarId, avatarPending = null, avatarRemove = false,
                 )
             }
         }
@@ -133,8 +172,14 @@ data class ProfileState(
      * угодно.
      */
     val nickLocked: Boolean = false,
-    /** Аватар — медиа-объект. Пусто — картинки нет. */
+    /** Аватар — медиа-объект на сервере. Пусто — картинки нет. */
     val avatarMediaId: String = "",
+    /** Что показывать: скачанное или только что обрезанное. `null` — буквы. */
+    val avatarBytes: ByteArray? = null,
+    /** Обрезанное, но ещё не отправленное: уйдёт по «Сохранить». */
+    val avatarPending: ByteArray? = null,
+    /** Человек убрал картинку, но ещё не сохранил. */
+    val avatarRemove: Boolean = false,
     /** `null` — не спрашивали или не ответили. */
     val free: Boolean? = null,
     val working: Boolean = false,

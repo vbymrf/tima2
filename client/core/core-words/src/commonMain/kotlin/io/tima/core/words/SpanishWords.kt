@@ -697,6 +697,11 @@ object SpanishWords : Words {
         override val nicknameLocked =
             "El apodo está establecido y ligado a esta frase. Empiece de nuevo con otra — y podrá cambiarlo o dejarlo."
         override val phone = "Teléfono"
+        override val avatarChange = "Cambiar foto"
+        override val avatarRemove = "Quitar foto"
+        override val avatarCrop = "Recortar"
+        override val avatarCropHint = "Arrastre y estire: lo que se ve en el cuadrado es lo que queda"
+        override val avatarNotImage = "Esto no es una imagen o el archivo está dañado"
     }
 
     override val auth = object : AuthWords {

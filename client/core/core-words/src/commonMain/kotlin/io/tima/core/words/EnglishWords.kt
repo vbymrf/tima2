@@ -696,6 +696,11 @@ object EnglishWords : Words {
         override val nicknameLocked =
             "The nickname is set and tied to this phrase. Start over with another one — and you may change it or keep it."
         override val phone = "Phone"
+        override val avatarChange = "Change photo"
+        override val avatarRemove = "Remove photo"
+        override val avatarCrop = "Crop"
+        override val avatarCropHint = "Drag and stretch: what you see in the square is what stays"
+        override val avatarNotImage = "This is not a picture, or the file is damaged"
     }
 
     override val auth = object : AuthWords {

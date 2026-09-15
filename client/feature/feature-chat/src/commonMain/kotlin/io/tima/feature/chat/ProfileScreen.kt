@@ -9,7 +9,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.ImageBitmap
+import io.tima.core.media.decodeImage
+import io.tima.core.media.encodeJpeg
+import io.tima.core.media.rememberImagePicker
+import io.tima.core.ui.AvatarSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,8 +51,10 @@ import io.tima.core.ui.Trouble
  * Заперт ник показывается текстом, а не полем: поле, не принимающее правку, выглядит
  * поломкой.
  *
- * **Аватара как картинки нет**: буквы имени — то же, что в списках. Загрузка изображений
- * — отдельная работа с медиа, и рисовать «＋» там, где грузить нечем, значит обещать.
+ * **Аватар — картинка с устройства, обрезанная квадратом** (решение заказчика 2026-09-15).
+ * Выбор — системным выборщиком, обрезка — [AvatarCropScreen], на сервер уходит JPEG
+ * 512×512 через медиа-хранилище по «Сохранить». Нет картинки — буквы имени, как в
+ * списках.
  */
 @Composable
 fun ProfileScreen(
@@ -53,9 +64,36 @@ fun ProfileScreen(
     onSave: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Обрезанный аватар в JPEG. `null` — выбор аватара на этом экране не предлагается. */
+    onAvatar: ((ByteArray) -> Unit)? = null,
+    onAvatarRemove: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
+
+    // Выбранная, но ещё не обрезанная картинка: пока она есть, вместо профиля — обрезка.
+    var cropping by remember { mutableStateOf<ImageBitmap?>(null) }
+    var notImage by remember { mutableStateOf(false) }
+    val pick = rememberImagePicker { picked ->
+        if (picked == null) return@rememberImagePicker
+        val decoded = decodeImage(picked.bytes)
+        notImage = decoded == null
+        cropping = decoded
+    }
+    cropping?.let { image ->
+        AvatarCropScreen(
+            image = image,
+            onDone = { cut ->
+                onAvatar?.invoke(encodeJpeg(cut))
+                cropping = null
+            },
+            onCancel = { cropping = null },
+            modifier = modifier,
+        )
+        return
+    }
+    val shown = remember(state.avatarBytes) { state.avatarBytes?.let(::decodeImage) }
+
     Column(modifier.fillMaxSize().background(colors.surface)) {
         SubwindowHeader(title = words.profile, onBack = onBack)
 
@@ -71,7 +109,11 @@ fun ProfileScreen(
                     horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Avatar(letters = state.name.take(1).ifBlank { "＋" }.uppercase())
+                    Avatar(
+                        letters = state.name.take(1).ifBlank { "＋" }.uppercase(),
+                        size = AvatarSize.Big,
+                        image = shown,
+                    )
                     Column {
                         Caption(
                             text = state.name.ifBlank { words.nameless },
@@ -83,6 +125,17 @@ fun ProfileScreen(
                         // на его месте нельзя.
                         if (state.phone.isNotBlank()) Tertiary(state.phone, lineOne = true)
                     }
+                }
+
+                if (onAvatar != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                        Button(label = words.avatarChange, kind = ButtonKind.Quiet, onClick = pick)
+                        // «Убрать» есть, только когда есть что убирать.
+                        if (shown != null && onAvatarRemove != null) {
+                            Button(label = words.avatarRemove, kind = ButtonKind.Dangerous, onClick = onAvatarRemove)
+                        }
+                    }
+                    if (notImage) Secondary(words.avatarNotImage)
                 }
 
                 if (state.nameless) {

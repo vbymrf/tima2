@@ -545,6 +545,13 @@ interface ChatWords {
     val nicknameOnce: String
     val nicknameLocked: String
     val phone: String
+
+    /** Аватар: выбрать картинку, обрезать квадратом, убрать (Д8, 2026-09-15). */
+    val avatarChange: String
+    val avatarRemove: String
+    val avatarCrop: String
+    val avatarCropHint: String
+    val avatarNotImage: String
 }
 
 /**
@@ -1674,6 +1681,11 @@ object RussianWords : Words {
         override val nicknameLocked =
             "Ник задан и закреплён за этой фразой. Начнёте заново с другой — сможете сменить его или оставить."
         override val phone = "Телефон"
+        override val avatarChange = "Сменить фото"
+        override val avatarRemove = "Убрать фото"
+        override val avatarCrop = "Обрезать"
+        override val avatarCropHint = "Двигайте и растягивайте: в квадрат попадёт то, что видно"
+        override val avatarNotImage = "Это не картинка или файл повреждён"
     }
 
     override val auth = object : AuthWords {

@@ -85,6 +85,16 @@ class ProfileOverHttp(
         null
     }
 
+    override suspend fun setAvatar(mediaId: String): Boolean = try {
+        client.patch(route.api("/api/v1/users/me/avatar")) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("media_id", JsonPrimitive(mediaId)) }.toString())
+        }.status == HttpStatusCode.OK
+    } catch (_: Throwable) {
+        false
+    }
+
     override suspend fun setNickname(nick: String): NickStep = try {
         val response = client.patch(route.api("/api/v1/users/me/nickname")) {
             header("Authorization", "Bearer ${token()}")

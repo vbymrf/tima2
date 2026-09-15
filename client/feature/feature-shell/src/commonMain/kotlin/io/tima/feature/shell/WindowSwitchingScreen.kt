@@ -19,6 +19,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.ImageBitmap
+import io.tima.core.ui.Avatar
 import io.tima.core.ui.words
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Name
@@ -61,6 +63,8 @@ fun WindowSwitchingScreen(
      * `GET /users/me`, и до ответа выдумывать строку на его месте нельзя.
      */
     phone: String = "",
+    /** Аватар в шапке. `null` — буква, как и было. */
+    avatar: ImageBitmap? = null,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     /** Непрочитанное по окнам. Нет записи — нет и числа. */
@@ -129,7 +133,7 @@ fun WindowSwitchingScreen(
                 .clickable(enabled = false, onClick = {})
                 .verticalScroll(rememberScrollState()),
         ) {
-            Header(name, alias, phone, onClose, onProfile)
+            Header(name, alias, phone, avatar, onClose, onProfile)
 
             if (accounts.size > 1) {
                 SectionTitle(words.accounts)
@@ -204,6 +208,7 @@ private fun Header(
     name: String,
     alias: String,
     phone: String,
+    avatar: ImageBitmap?,
     onClose: () -> Unit,
     onProfile: (() -> Unit)?,
 ) {
@@ -217,7 +222,8 @@ private fun Header(
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Glyph("Т")
+        // Картинка, если есть; иначе первая буква имени — тот же аватар, что в списках.
+        Avatar(letters = name.take(1).ifBlank { "Т" }.uppercase(), image = avatar)
         Column(modifier = Modifier.weight(1f)) {
             // Кто я — здесь, а не в шапке окна: имя нужно тому, кто выбирает, от чьего
             // лица он сейчас в приложении, а не тому, кто читает переписку.

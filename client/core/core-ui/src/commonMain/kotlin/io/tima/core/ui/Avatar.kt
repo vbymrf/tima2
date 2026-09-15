@@ -1,13 +1,18 @@
 package io.tima.core.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -30,23 +35,38 @@ fun Avatar(
     size: AvatarSize = AvatarSize.Normal,
     /** Заливка. `null` — тихая подложка темы: аватар не спорит с содержимым. */
     background: Color? = null,
+    /**
+     * Картинка. Есть — рисуется она, букв не видно; нет — буквы, как и было.
+     *
+     * Та же форма, что у букв: квадрат со скруглением. Картинка не делает аватар круглым —
+     * правило формы (квадрат — «кто-то», круг — «нажми») от содержимого не зависит.
+     */
+    image: ImageBitmap? = null,
 ) {
     val colors = Tima.colors
+    val shape = RoundedCornerShape(size.rounding)
     Box(
         modifier = modifier
             .size(size.side)
-            .background(
-                color = background ?: colors.softAccent,
-                shape = RoundedCornerShape(size.rounding),
-            ),
+            .clip(shape)
+            .background(color = background ?: colors.softAccent, shape = shape),
         contentAlignment = Alignment.Center,
     ) {
-        Caption(
-            text = letters,
-            fontSize = size.fontSize,
-            weight = FontWeight.ExtraBold,
-            color = colors.text,
-        )
+        if (image != null) {
+            Image(
+                bitmap = image,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Caption(
+                text = letters,
+                fontSize = size.fontSize,
+                weight = FontWeight.ExtraBold,
+                color = colors.text,
+            )
+        }
     }
 }
 

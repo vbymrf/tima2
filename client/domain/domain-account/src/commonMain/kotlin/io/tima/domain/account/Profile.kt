@@ -31,6 +31,14 @@ interface Profile {
     suspend fun freeNickname(nick: String): Boolean?
 
     suspend fun setNickname(nick: String): NickStep
+
+    /**
+     * Поставить аватар — ссылку на уже загруженное медиа; пустая строка убирает.
+     *
+     * Сама картинка сюда не приходит: её кладёт медиа-хранилище (`core-media`), и здесь
+     * только идентификатор. @return удалось ли.
+     */
+    suspend fun setAvatar(mediaId: String): Boolean
 }
 
 /**

@@ -1,5 +1,6 @@
 package io.tima.feature.chat
 
+import io.tima.core.media.Media
 import io.tima.domain.account.Me
 import io.tima.domain.account.NickStep
 import io.tima.domain.account.Profile
@@ -25,6 +26,14 @@ class ProfileStoreTest {
         override suspend fun setName(name: String) = true
         override suspend fun freeNickname(nick: String): Boolean? = true
         override suspend fun setNickname(nick: String): NickStep = onNick
+        var avatarSet: String? = null
+        override suspend fun setAvatar(mediaId: String): Boolean { avatarSet = mediaId; return true }
+    }
+
+    private class FakeMedia : Media {
+        var uploaded: ByteArray? = null
+        override suspend fun upload(bytes: ByteArray, mime: String): String? { uploaded = bytes; return "media-1" }
+        override suspend fun download(mediaId: String): ByteArray? = byteArrayOf(9, 9, 9)
     }
 
     @Test
@@ -91,5 +100,45 @@ class ProfileStoreTest {
         val s = store.state.value
         assertTrue(s.saved, "запертый ник не должен мешать сменить имя")
         assertEquals("Пётр Второй", s.name)
+    }
+
+    // ── Аватар ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun обрезанный_аватар_показывается_сразу_а_уходит_по_сохранить() = runTest {
+        val profile = FakeProfile(answer = Me(phone = "+7"))
+        val media = FakeMedia()
+        val store = ProfileStore(profile, phone = "", scope = this, media = media)
+        val jpeg = byteArrayOf(1, 2, 3)
+
+        store.croppedAvatar(jpeg)
+        assertTrue(store.state.value.avatarBytes.contentEquals(jpeg), "картинка обязана появиться на экране до сохранения")
+        assertEquals(null, media.uploaded, "до «Сохранить» в сеть ничего не уходит")
+
+        store.save()
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(media.uploaded.contentEquals(jpeg), "по «Сохранить» байты ушли в медиа")
+        assertEquals("media-1", profile.avatarSet, "и ссылка на них — в профиль")
+        val s = store.state.value
+        assertEquals("media-1", s.avatarMediaId)
+        assertEquals(null, s.avatarPending, "ожидающего больше нет — оно отправлено")
+    }
+
+    @Test
+    fun убрать_аватар_это_пустая_ссылка_по_сохранить() = runTest {
+        val profile = FakeProfile(answer = Me(phone = "+7", avatarMediaId = "media-0"))
+        val store = ProfileStore(profile, phone = "", scope = this, media = FakeMedia())
+        store.refresh()
+        testScheduler.advanceUntilIdle()
+        assertTrue(store.state.value.avatarBytes != null, "аватар с сервера должен был скачаться")
+
+        store.removeAvatar()
+        assertEquals(null, store.state.value.avatarBytes, "убрали — букв ждём сразу, не после сохранения")
+        store.save()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals("", profile.avatarSet, "убрать — это поставить пустую ссылку")
+        assertEquals("", store.state.value.avatarMediaId)
     }
 }
