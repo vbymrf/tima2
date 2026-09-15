@@ -17,8 +17,9 @@ import androidx.compose.ui.unit.TextUnit
  * начинался бы с их отключения. Спорить с чужой темой в каждом месте дороже, чем
  * написать одну подпись.
  *
- * Шрифт пока системный. В макете первым стоит Inter, но кладут шрифт в сборку
- * отдельным решением — у него лицензия и вес, и «пусть будет» здесь неуместно.
+ * Шрифт пока системный — см. [LocalFontFamily]. В макете первым стоит Inter, но кладут
+ * шрифт в сборку отдельным решением — у него лицензия и вес, и «пусть будет» здесь
+ * неуместно. План — `doc_mig/ИНТЕРФЕЙС/ШРИФТЫ.md`.
  */
 @Composable
 fun Caption(
@@ -38,7 +39,14 @@ fun Caption(
     BasicText(
         text = text,
         modifier = modifier,
-        style = TextStyle(color = color, fontSize = fontSize, fontWeight = weight),
+        style = TextStyle(
+            color = color,
+            fontSize = fontSize,
+            fontWeight = weight,
+            // `null` — системный шрифт, как и было. Подставляют сюда только снимочные
+            // проверки, чтобы их ответ не зависел от машины: см. [LocalFontFamily].
+            fontFamily = LocalFontFamily.current,
+        ),
         maxLines = if (lineOne) 1 else Int.MAX_VALUE,
         overflow = if (lineOne) TextOverflow.Ellipsis else TextOverflow.Clip,
     )

@@ -1,5 +1,7 @@
 package io.tima.testui
 
+import androidx.compose.runtime.CompositionLocalProvider
+import io.tima.core.ui.LocalFontFamily
 import io.tima.core.ui.TimaColors
 import io.tima.core.ui.TimaTheme
 import io.tima.core.ui.Tima
@@ -145,8 +147,12 @@ fun capture(
     content: @Composable () -> Unit,
 ): Snapshot {
     val scene = ImageComposeScene(width = width, height = height, density = Density(1f)) {
-        TimaTheme(dark = dark) {
-            Box(Modifier.fillMaxSize().background(backdrop ?: Tima.colors.surface)) { content() }
+        // Шрифт эталонный, а не системный: иначе снимок мерит машину, а не интерфейс.
+        // Подробности и найденный случай — [ReferenceFont].
+        CompositionLocalProvider(LocalFontFamily provides ReferenceFont.family) {
+            TimaTheme(dark = dark) {
+                Box(Modifier.fillMaxSize().background(backdrop ?: Tima.colors.surface)) { content() }
+            }
         }
     }
     try {

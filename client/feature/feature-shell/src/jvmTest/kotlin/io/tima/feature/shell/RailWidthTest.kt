@@ -8,12 +8,13 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import io.tima.core.words.Language
 import io.tima.core.ui.FormatTima
 import io.tima.core.ui.TimaType
+import io.tima.testui.ReferenceFont
 import io.tima.testui.capture
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Ширина рейки выведена из текста, а не выбрана.
+ * Рейка вмещает подпись — измеренную ЭТАЛОННЫМ шрифтом, а не шрифтом машины.
  *
  * ── ЗАЧЕМ ЭТА ПРОВЕРКА СУЩЕСТВУЕТ ───────────────────────────────────────────
  *
@@ -41,6 +42,18 @@ import kotlin.test.assertTrue
  *
  * Поэтому решение остаётся человеческим — поднять число или укоротить слово, — а тест
  * лишь не даёт принять его молча.
+ *
+ * ── ПОЧЕМУ ЗДЕСЬ ЭТАЛОННЫЙ ШРИФТ ────────────────────────────────────────────
+ *
+ * До 2026-09-15 мерилось системным шрифтом — то есть шрифтом машины. Тест был зелёным
+ * на машине разработки и красным на раннере сборки, и **ни один из двух ответов не
+ * относился к телефону**: там рисует Roboto. Проверки «влезает ли при любом шрифте» не
+ * существует и не требуется — требуется одна: влезает ли при том шрифте, под который
+ * интерфейс размечен. Эталон — [ReferenceFont].
+ *
+ * Правило, которое отсюда НЕ следует: размеры интерфейса шрифтом не управляются. Полосы
+ * и рейка — числа в [FormatTima]; тесно тексту — он переносится. Здесь проверяется
+ * обратное направление: что число [FormatTima.CAPTION_RAIL] не разошлось со словами.
  */
 class RailWidthTest {
 
@@ -55,7 +68,12 @@ class RailWidthTest {
             val measurer = rememberTextMeasurer()
             remember {
                 // Тот же кегль и то же начертание, каким подпись рисует `Name`.
-                val style = TextStyle(fontSize = TimaType.sz4, fontWeight = FontWeight.Bold)
+                val style = TextStyle(
+                    fontSize = TimaType.sz4,
+                    fontWeight = FontWeight.Bold,
+                    // Эталонный, а не системный: иначе тест мерит шрифт машины.
+                    fontFamily = ReferenceFont.family,
+                )
                 for (caption in captions) {
                     widths[caption] = measurer.measure(AnnotatedString(caption), style).size.width
                 }
