@@ -1652,6 +1652,8 @@ private fun Settings(
                 onBack = { onOpen(null) },
                 onAvatar = profile::croppedAvatar,
                 onAvatarRemove = profile::removeAvatar,
+                // Шапку рисуют настройки — «одна на подокно».
+                withHeader = false,
             )
 
             SettingsItem.VIRTUALS -> {

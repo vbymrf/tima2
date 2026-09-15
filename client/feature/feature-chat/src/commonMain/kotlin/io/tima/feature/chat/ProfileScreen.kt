@@ -1,6 +1,8 @@
 package io.tima.feature.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,6 +69,14 @@ fun ProfileScreen(
     /** Обрезанный аватар в JPEG. `null` — выбор аватара на этом экране не предлагается. */
     onAvatar: ((ByteArray) -> Unit)? = null,
     onAvatarRemove: (() -> Unit)? = null,
+    /**
+     * Рисовать ли свою шапку. Из настроек — `false`: там шапку подокна рисует
+     * `SettingsScreen`, «одна на подокно», и вторая с тем же словом «Профиль» стояла
+     * под первой. Поймано живьём 2026-09-15 на Samsung — ровно та же поломка, что
+     * была у экрана языка неделей раньше. Из переключения окон экран стоит сам и
+     * шапка нужна.
+     */
+    withHeader: Boolean = true,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -95,10 +105,12 @@ fun ProfileScreen(
     val shown = remember(state.avatarBytes) { state.avatarBytes?.let(::decodeImage) }
 
     Column(modifier.fillMaxSize().background(colors.surface)) {
-        SubwindowHeader(title = words.profile, onBack = onBack)
+        if (withHeader) SubwindowHeader(title = words.profile, onBack = onBack)
 
+        // Прокрутка обязательна: аватар, три поля, две подсказки и кнопка на телефоне
+        // в 640 точек не помещаются — а без прокрутки низ просто нет (урок экрана языка).
         Box(
-            modifier = Modifier.fillMaxSize().padding(TimaSpacing.about5),
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(TimaSpacing.about5),
             contentAlignment = Alignment.TopCenter,
         ) {
             Column(
