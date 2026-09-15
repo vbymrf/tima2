@@ -124,11 +124,37 @@ jobs:
           # Имена и сообщения упавших тестов из XML-отчётов. В выводе Gradle их нет:
           # он говорит «There were failing tests. See the report at file://…», а файл
           # на раннере мне недоступен.
-          f=$(find . -path '*/build/test-results/*' -name '*.xml' 2>/dev/null | head -n 40)
-          [ -z "$f" ] && { echo "::error::XML-отчётов тестов не найдено"; exit 0; }
-          msg=$(grep -ho 'testcase name="[^"]*"' $f | head -n 8 | tr -d '\r' | awk '{printf "%s%%0A", $0}')
-          det=$(grep -hoE '(message|type)="[^"]{0,200}"' $f | grep -v 'type="junit' | head -n 10 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
-          echo "::error::упавшие тесты:%0A${msg}%0A${det}"
+          #
+          # ── ПОЧЕМУ РАЗБОР, А НЕ grep ─────────────────────────────────────
+          # Так было до 2026-09-15: grep по «testcase name=» печатал имена ВСЕХ тестов
+          # подряд под заголовком «упавшие тесты». Когда сборка падала не на тестах, а
+          # раньше — на сверке контрольных сумм, — в аннотацию уезжал список из восьми
+          # зелёных тестов, и читающий шёл искать поломку в них. Ложное указание хуже
+          # молчания: молчание отправляет в журнал, ложное — в сторону.
+          #
+          # Упавший тест в JUnit-XML — это <testcase>, ВНУТРИ которого есть <failure>
+          # или <error>. Пустой <testcase .../> — пройденный.
+          python3 - <<'PYEOF'
+          import glob, xml.etree.ElementTree as ET
+          беды = []
+          for f in glob.glob('**/build/test-results/**/*.xml', recursive=True):
+              try:
+                  корень = ET.parse(f).getroot()
+              except Exception:
+                  continue
+              for т in корень.iter('testcase'):
+                  for б in list(т):
+                      if б.tag in ('failure', 'error'):
+                          имя = (т.get('classname') or '') + '.' + (т.get('name') or '')
+                          беды.append((имя, (б.get('message') or б.tag)[:200]))
+          if not беды:
+              print('::error::упавших тестов в XML-отчётах нет — сборка встала до тестов; '
+                    'причина в предыдущей аннотации')
+          else:
+              тело = ''.join('%s%%0A    %s%%0A' % (и, с.replace('%', '%25'))
+                             for и, с in беды[:8])
+              print('::error::упавших тестов %d:%%0A%s' % (len(беды), тело))
+          PYEOF
 
   # ── Клиент v2: iOS ────────────────────────────────────────────────────────
   client-ios:
