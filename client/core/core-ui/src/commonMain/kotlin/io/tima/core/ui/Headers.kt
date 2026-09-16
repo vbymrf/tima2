@@ -11,6 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -111,6 +115,47 @@ fun WindowHeader(
 }
 
 /**
+ * Заголовок шапки: переносится, если слов больше одного; иначе ужимается.
+ *
+ * ── ПОЧЕМУ ТАК, А НЕ ОДНОЙ СТРОКОЙ С МНОГОТОЧИЕМ ────────────────────────────
+ *
+ * Многоточие в заголовке — это потеря единственного ответа на вопрос «где я».
+ * «Секретная фраза и устройст…» ещё читается, «Frase de recuperación y disp…» уже нет,
+ * а именно так выглядел испанский заголовок ПРИ ОБЫЧНОМ размере.
+ *
+ * Перенести можно то, в чём есть пробел. Одно слово перенести некуда — его ужимает
+ * сам `BasicText` (`TextAutoSize.StepBased`), подбирая кегль под ширину. Нижняя граница
+ * не ниже `sz5`: мельче — уже не заголовок.
+ */
+@Composable
+private fun HeaderTitle(title: String) {
+    val colors = Tima.colors
+    val scale = LocalTextScale.current
+    val крупный = TimaType.sz3 * scale
+    if (title.trim().contains(' ')) {
+        Caption(title, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold, maxLines = 2)
+    } else {
+        BasicText(
+            text = title,
+            style = TextStyle(
+                color = colors.text,
+                fontWeight = FontWeight.ExtraBold,
+                fontFamily = LocalFontFamily.current,
+            ),
+            maxLines = 1,
+            autoSize = TextAutoSize.StepBased(
+                minFontSize = TimaType.sz5,
+                maxFontSize = крупный,
+                stepSize = STEP,
+            ),
+        )
+    }
+}
+
+/** Шаг подбора кегля: мельче точки разница не видна, а проб становится втрое больше. */
+private val STEP = 1.sp
+
+/**
  * Шапка подокна: полоса без плашки.
  *
  * «Назад» здесь **салатовая** — это навигация, и она главная кнопка шапки подокна.
@@ -126,11 +171,16 @@ fun SubwindowHeader(
     right: (@Composable () -> Unit)? = null,
 ) {
     val colors = Tima.colors
+    ProvidePlace(TextPlace.HEADERS) {
     Row(
         modifier = modifier
             .fillMaxWidth()
             .background(colors.functional)
             .bottomLine(colors.line)
+            // heightIn(MIN), а не фиксированная высота: шапка РАСТЁТ под перенесённый
+            // заголовок — решение заказчика 2026-09-16. До Ш2 заголовок стоял в одну
+            // строку и молча обрезался: «Секретная фраза и устройст…» уже при ×1.3, а
+            // по-испански — при обычном размере.
             .heightIn(min = TimaZones.zone1)
             .padding(horizontal = TimaSpacing.about4),
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
@@ -142,10 +192,14 @@ fun SubwindowHeader(
             Arrow(Side.Left, color = colors.onAccent)
         }
         androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
-            Caption(title, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold, lineOne = true)
+            // Многословный заголовок переносится, однословный ужимается по ширине:
+            // на плашке одно слово перенести некуда, а обрезать его нельзя — от него
+            // и зависит, понял ли человек, где он (решение заказчика 2026-09-16).
+            HeaderTitle(title)
             // Подпись шапки — одна строка: шапка не растёт от длинного имени.
             caption?.let { Tertiary(it, lineOne = true) }
         }
         right?.invoke()
+    }
     }
 }

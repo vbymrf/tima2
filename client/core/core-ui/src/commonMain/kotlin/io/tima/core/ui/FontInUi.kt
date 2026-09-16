@@ -66,3 +66,23 @@ fun ProvideTextScale(scale: Float, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalTextScale provides scale, content = content)
 }
 
+/**
+ * Выбранные шрифт и размеры — то, что человек задал в «Шрифтах и размерах».
+ *
+ * Раздаётся темой, как цвета и словарь. Нужно, чтобы **место само** узнавало свой
+ * множитель: передавать его параметром через десяток экранов значило бы протащить
+ * настройку вида сквозь всю навигацию.
+ */
+val LocalTextLook = staticCompositionLocalOf { TextLook() }
+
+/**
+ * Обернуть содержимое множителем своей группы.
+ *
+ * Зовётся у **container**, а не у каждой надписи: шапка ставит [TextPlace.HEADERS], ряд
+ * вкладок — `TABS`, список настроек — `MENU`, и весь текст внутри наследует.
+ */
+@Composable
+fun ProvidePlace(place: TextPlace, content: @Composable () -> Unit) {
+    ProvideTextScale(LocalTextLook.current.scaleOf(place), content)
+}
+

@@ -48,9 +48,25 @@ fun TimaTheme(
      * это подмена словаря, а не перезапуск экрана.
      */
     words: Words = RussianWords,
+    /**
+     * Шрифт приложения (ПЛАН-ШРИФТОВ Ш1). Раздаётся тем же способом, что цвета и
+     * словарь: смена шрифта — подмена, а не перезапуск экрана.
+     *
+     * Умолчание `System` — то, что было до Ш1: платформенный шрифт. Приложение
+     * подставляет сюда выбранное в «Шрифтах и размерах».
+     */
+    font: AppFont = AppFont.System,
+    /** Размеры текста по местам (ПЛАН-ШРИФТОВ Ш3). Умолчание — обычные кегли. */
+    text: TextLook = TextLook(),
     content: @Composable () -> Unit,
 ) {
-    CompositionLocalProvider(LocalTimaColors provides colors, LocalWords provides words) {
+    val family = familyOf(font)
+    CompositionLocalProvider(
+        LocalTimaColors provides colors,
+        LocalWords provides words,
+        LocalFontFamily provides family,
+        LocalTextLook provides text,
+    ) {
         // **Тема даёт непрозрачный фон, и это не украшение** (находка 2026-09-06).
         //
         // Фон красили только `Stage` и `SettingsScreen`. Всё, что рисуется вместо них —

@@ -232,6 +232,13 @@ data class Appearance(
     /** Сохранённые свои оформления, в порядке сохранения. */
     val saved: List<SavedLook> = emptyList(),
     /**
+     * Шрифт и размеры текста — ПЛАН-ШРИФТОВ Ш3.
+     *
+     * Здесь, а не отдельным хранилищем: для человека это одна настройка вида, и
+     * заводить ей второй файл значило бы однажды потерять половину.
+     */
+    val text: TextLook = TextLook(),
+    /**
      * Имя сохранённого, из которого взята нынешняя палитра. `null` — ни из какого.
      *
      * Нужно ровно для одного: показать в списке, какое оформление сейчас стоит. Правка
@@ -296,6 +303,11 @@ data class Appearance(
         // Сохранённые — по номеру, а не по имени в ключе. Имя человек набирает сам, в нём
         // может оказаться и «=», и точка; ключ с именем внутри разобрался бы неверно на
         // первом же таком. Номер же про имя ничего не обещает.
+        append(KEY_FONT).append('=').append(text.font.name).append('\n')
+        for (place in TextPlace.entries) {
+            append(KEY_SIZE).append('.').append(place.name).append('=')
+                .append(text.sizeOf(place)).append('\n')
+        }
         saved.forEachIndexed { at, look ->
             append(KEY_SAVED).append('.').append(at).append(".name=")
                 .append(look.name).append('\n')
@@ -310,6 +322,8 @@ data class Appearance(
         private const val KEY_CHOICE = "choice"
         private const val KEY_FROM = "from"
         private const val KEY_SAVED = "saved"
+        private const val KEY_FONT = "font"
+        private const val KEY_SIZE = "size"
 
         /**
          * Что показать, когда сохранённого нет или оно испорчено.
@@ -361,7 +375,18 @@ data class Appearance(
             }
 
             val from = pairs[KEY_FROM]?.takeIf { name -> saved.any { it.name == name } }
-            return Appearance(choice, custom, saved, from)
+
+            // Шрифт и размеры. Непонятное значение — умолчание, а не падение: оформление
+            // не то, ради чего стоит не пускать человека в переписку.
+            val sizes = buildMap {
+                for (place in TextPlace.entries) {
+                    val точек = pairs["$KEY_SIZE.${place.name}"]?.toIntOrNull() ?: continue
+                    if (точек in place.steps.first()..place.steps.last()) put(place, точек)
+                }
+            }
+            val text = TextLook(font = AppFont.of(pairs[KEY_FONT]), size = sizes)
+
+            return Appearance(choice, custom, saved, text, from)
         }
     }
 }

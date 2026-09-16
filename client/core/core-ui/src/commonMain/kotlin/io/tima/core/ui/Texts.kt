@@ -35,6 +35,14 @@ fun Caption(
      * списка растёт от чужого длинного имени, и список перестаёт быть списком.
      */
     lineOne: Boolean = false,
+    /**
+     * Сколько строк разрешено. Больше одной — текст переносится и НЕ обрезается.
+     *
+     * Заведено 2026-09-16 для шапок и меню: до этого выбор был бинарный — либо одна
+     * строка с многоточием, либо сколько угодно. Заголовку нужно ровно две: одна режет,
+     * без предела — растёт без края от чужого длинного имени.
+     */
+    maxLines: Int = Int.MAX_VALUE,
 ) {
     BasicText(
         text = text,
@@ -49,7 +57,7 @@ fun Caption(
             // проверки, чтобы их ответ не зависел от машины: см. [LocalFontFamily].
             fontFamily = LocalFontFamily.current,
         ),
-        maxLines = if (lineOne) 1 else Int.MAX_VALUE,
+        maxLines = if (lineOne) 1 else maxLines,
         overflow = if (lineOne) TextOverflow.Ellipsis else TextOverflow.Clip,
     )
 }

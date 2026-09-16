@@ -120,6 +120,7 @@ import io.tima.core.ui.words
 import io.tima.core.words.RussianWords
 import io.tima.feature.shell.LanguageScreen
 import io.tima.feature.shell.SettingsScreen
+import io.tima.feature.shell.TextLookScreen
 import io.tima.core.diag.Diary
 import io.tima.core.diag.DiaryPolicy
 import io.tima.core.diag.Journal
@@ -267,7 +268,13 @@ fun Root(
     // что уходит в тему, поэтому разойтись им негде.
     SideEffect { CurrentWords.value = words }
 
-    TimaTheme(colors = appearance.colors, words = words) {
+    // Шрифт — отсюда же, что цвета и словарь (ПЛАН-ШРИФТОВ Ш1): одна подмена на всё.
+    TimaTheme(
+        colors = appearance.colors,
+        words = words,
+        font = appearance.text.font,
+        text = appearance.text,
+    ) {
         Inside(
             entry = entry,
             deviceDatabase = deviceDatabase,
@@ -1674,6 +1681,9 @@ private fun Settings(
             SettingsItem.DEVICES -> Devices(fleet, devices, build.name)
 
             SettingsItem.APPEARANCE -> AppearanceScreen(appearance, onAppearance)
+
+            // Шрифты и размеры — второй пункт вида (ПЛАН-ШРИФТОВ Ш4).
+            SettingsItem.TEXT -> TextLookScreen(appearance, onAppearance)
 
             // Выбор языка приложения (ПЛАН-ЯЗЫКА Я1). Сообщения не переводятся, и экран
             // говорит это строкой: перевода сообщений нет вовсе.

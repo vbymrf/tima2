@@ -28,6 +28,8 @@ import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.Tertiary
 import io.tima.core.words.ChatWords
 import io.tima.core.ui.Tima
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.words
 import io.tima.core.ui.WindowHeader
 import io.tima.domain.chat.ChatSummary
@@ -60,6 +62,10 @@ fun ChatsScreen(
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
+    // Список чатов — группа «списки» (ПЛАН-ШРИФТОВ Ш3). Строки здесь ОБРЕЗАЮТСЯ, и
+    // это решение: иначе от чужого длинного имени растёт строка и список перестаёт
+    // быть списком. Поэтому и ручка своя, отдельная от сообщений в переписке.
+    ProvidePlace(TextPlace.LISTS) {
     Column(modifier.fillMaxSize().background(colors.surface)) {
         // ── ШАПКИ ЗДЕСЬ БОЛЬШЕ НЕТ ───────────────────────────────────────────
         //
@@ -105,6 +111,7 @@ fun ChatsScreen(
                 else -> List(state.chats, onOpen)
             }
         }
+    }
     }
 }
 

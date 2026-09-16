@@ -22,6 +22,8 @@ import io.tima.core.ui.Secondary
 import io.tima.core.ui.SectionTitle
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.words
 import io.tima.domain.chat.BookEntry
@@ -57,6 +59,9 @@ fun BookScreen(
     onAllow: (() -> Unit)? = null,
 ) {
     val words = Tima.words.book
+    // Книга — та же группа «списки», что и чаты: строка обрезается и обязана быть
+    // одной высоты.
+    ProvidePlace(TextPlace.LISTS) {
     Column(modifier.fillMaxSize()) {
         if (state.view.showSearch) {
             Row(
@@ -161,6 +166,7 @@ fun BookScreen(
                 }
             }
         }
+    }
     }
 }
 

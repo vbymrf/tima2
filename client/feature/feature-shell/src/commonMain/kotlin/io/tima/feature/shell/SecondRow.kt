@@ -24,6 +24,8 @@ import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.words
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.Tima
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 
 /**
  * Второй ряд окна: фильтры и режимы под вкладками.
@@ -115,6 +117,7 @@ private fun <T> ChipsRow(
     label: @Composable (T) -> String,
 ) {
     val colors = Tima.colors
+    ProvidePlace(TextPlace.TABS) {
     FlowRow(
         modifier = modifier
             .fillMaxWidth()
@@ -142,6 +145,7 @@ private fun <T> ChipsRow(
             Box(Modifier.weight(1f))
             trailing()
         }
+    }
     }
 }
 

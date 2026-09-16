@@ -34,6 +34,8 @@ import io.tima.core.ui.Arrow
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.TimaZones
+import io.tima.core.ui.ProvidePlace
+import io.tima.core.ui.TextPlace
 import io.tima.core.ui.Tima
 import io.tima.core.ui.words
 import io.tima.core.ui.Tertiary
@@ -237,6 +239,9 @@ private fun Feed(
     onCarry: ((Long, Int) -> Unit)? = null,
     onThread: ((Long) -> Unit)? = null,
 ) =
+    // Сообщения — своя группа размера (ПЛАН-ШРИФТОВ Ш3): её укрупняют чаще всего, и
+    // от списка чатов она не зависит.
+    ProvidePlace(TextPlace.MESSAGES) {
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         reverseLayout = true,
@@ -264,6 +269,7 @@ private fun Feed(
                 onThread = onThread,
             )
         }
+    }
     }
 
 /**

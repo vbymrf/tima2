@@ -175,6 +175,22 @@ object SpanishWords : Words {
         override val placePlate = "el nombre de la ventana en la cabecera y la flecha «atrás»"
         override val placeContent = "el cambio de ventana y la lista de ajustes"
 
+        override val fontAndSize = "Fuentes y tamaños"
+        override val fontChoice = "Fuente"
+        override val fontRoboto = "Roboto"
+        override val fontOpenSans = "Open Sans"
+        override val fontSystem = "Del sistema"
+
+        override val sizes = "Tamaño del texto"
+        override val sizeMessages = "Mensajes"
+        override val sizeTabs = "Pestañas de ventana"
+        override val sizeMenu = "Menú y ajustes"
+        override val sizeHeaders = "Cabeceras"
+        override val sizeLists = "Listas: chats, contactos, catálogos"
+        override val sizeSample = "Cómo se verá"
+        override val sizeSampleAbout = "La muestra cambia junto con los ajustes"
+        override fun points(value: Int) = value.toString()
+
         override val savedLooks = "Apariencias guardadas"
         override val savedNone = "Elija los colores y guarde — la apariencia aparecerá aquí"
         override val saveName = "Nombre"
@@ -315,7 +331,8 @@ object SpanishWords : Words {
         override val itemDevices = "Frase de recuperación y dispositivos"
         override val itemNotifications = "Notificaciones"
         override val itemVirtuals = "Cuentas virtuales"
-        override val itemAppearance = "Apariencia"
+        override val itemAppearance = "Colores"
+        override val itemText = "Fuentes y tamaños"
         override val itemLanguage = "Idioma"
         override val itemPrivacy = "Privacidad y bloqueos"
         override val itemStorage = "Memoria y datos"

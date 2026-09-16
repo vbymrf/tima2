@@ -15,6 +15,11 @@ import io.tima.core.ui.Name
 import io.tima.core.ui.SectionTitle
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.SubwindowHeader
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
+import io.tima.core.ui.TimaType
+import io.tima.core.ui.Caption
+import androidx.compose.ui.text.font.FontWeight
 import io.tima.core.ui.Tima
 
 /**
@@ -53,6 +58,8 @@ fun SettingsScreen(
     Column(modifier.fillMaxSize().background(colors.surface)) {
         // Шапка одна на подокно, и заголовок в ней — имя открытого пункта. Человеку
         // нужно знать, где он, а «Настройки» этого уже не отвечают, когда он внутри.
+        // Меню и шапка — разные группы размера (ПЛАН-ШРИФТОВ Ш3): человек укрупняет
+        // список настроек, не раздувая шапку, и наоборот.
         SubwindowHeader(
             title = opened?.let { words.item(it) } ?: words.settings,
             // «Назад» из пункта возвращает к списку, а не из настроек целиком: выйти
@@ -65,6 +72,9 @@ fun SettingsScreen(
             return@Column
         }
 
+        // Список настроек — группа «меню» (ПЛАН-ШРИФТОВ Ш3): своя ручка, отдельная
+        // от шапки над ним и от списков переписки.
+        ProvidePlace(TextPlace.MENU) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             for (group in SettingsGroup.entries) {
                 SectionTitle(words.group(group))
@@ -74,10 +84,20 @@ fun SettingsScreen(
                         onClick = { onOpen(item) },
                         left = { Name(item.glyph) },
                         right = value(item).takeIf { it.isNotBlank() }?.let { { Secondary(it) } },
-                        middle = { Name(words.item(item)) },
+                        // Перенос, а не обрезка (ПЛАН-ШРИФТОВ Ш2): «Секретная фраза и
+                        // устройства» обрезалась уже при ×1.3, а по-испански при ×1.
+                        middle = {
+                            Caption(
+                                words.item(item),
+                                fontSize = TimaType.sz4,
+                                weight = FontWeight.Bold,
+                                maxLines = 2,
+                            )
+                        },
                     )
                 }
             }
+        }
         }
     }
 }

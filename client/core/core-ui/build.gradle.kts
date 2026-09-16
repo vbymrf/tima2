@@ -40,6 +40,9 @@ kotlin {
             // foundation, а не material3: у нас своя система форм и цветов, и брать
             // чужую тему значило бы спорить с макетом в каждом компоненте.
             implementation(compose.foundation)
+            // Шрифты в сборке (ПЛАН-ШРИФТОВ Ш1). Ресурсы Compose, а не classpath:
+            // на iOS classpath нет вовсе, и файл оттуда не прочитать.
+            implementation(compose.components.resources)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
@@ -69,3 +72,12 @@ tasks.matching { it.name.startsWith("lint") }.configureEach { enabled = false }
 // Хостовые unit-тесты Android не нужны: они наследуют commonTest и прогнали бы то же
 // самое, что уже идёт на таргете jvm. Платформенного у этого модуля нет вовсе.
 tasks.matching { it.name.endsWith("UnitTest") }.configureEach { enabled = false }
+
+// Имя пакета сгенерированного `Res`: без него берётся имя модуля, и в коде появляется
+// `core_ui.generated.resources` — путь, по которому не догадаешься искать.
+compose.resources {
+    publicResClass = true
+    packageOfResClass = "io.tima.core.ui.resources"
+    generateResClass = auto
+}
+

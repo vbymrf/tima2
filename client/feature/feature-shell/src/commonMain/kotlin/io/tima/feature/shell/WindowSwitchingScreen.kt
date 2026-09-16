@@ -32,6 +32,8 @@ import io.tima.core.ui.TimaShapes
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 
 /**
  * Подокно «Переключение окон» — единственный видимый способ сменить окно на телефоне.
@@ -123,6 +125,8 @@ fun WindowSwitchingScreen(
         // без единого способа до него добраться. Ограничение нужно вместе с прокруткой:
         // Column, растущий по содержимому, прокручивать нечему.
         val ceiling = maxHeight * PANEL_SHARE
+        // Переключение окон — то же «меню», что и настройки: это список переходов.
+        ProvidePlace(TextPlace.MENU) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -192,6 +196,7 @@ fun WindowSwitchingScreen(
 
             // Блогерские окна включаются в настройках; пока их нет, заголовок раздела
             // тоже не рисуем: пустой раздел обещает то, чего не существует.
+        }
         }
     }
 }

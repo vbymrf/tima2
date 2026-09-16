@@ -47,6 +47,15 @@ enum class SettingsItem(val group: SettingsGroup, val glyph: String) {
     VIRTUALS(SettingsGroup.ACCOUNT, "🎭"),
 
     APPEARANCE(SettingsGroup.APPLICATION, "🎨"),
+
+    /**
+     * Шрифты и размеры — отдельным пунктом от цветов (решение заказчика 2026-09-16).
+     *
+     * Раньше это был один «Оформление», и он разросся: семнадцать цветов, сохранённые
+     * наборы, а теперь ещё шрифт и пять ручек размера. Один пункт на всё означал бы
+     * экран, по которому надо прокручивать, чтобы найти известное.
+     */
+    TEXT(SettingsGroup.APPLICATION, "🔠"),
     LANGUAGE(SettingsGroup.APPLICATION, "🌐"),
     PRIVACY(SettingsGroup.APPLICATION, "🔒"),
     STORAGE(SettingsGroup.APPLICATION, "💾"),

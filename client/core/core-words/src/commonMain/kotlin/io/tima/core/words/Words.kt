@@ -177,6 +177,8 @@ interface SettingsListWords {
     val itemNotifications: String
     val itemVirtuals: String
     val itemAppearance: String
+    /** «Шрифты и размеры» — второй пункт вида (ПЛАН-ШРИФТОВ Ш4, 2026-09-16). */
+    val itemText: String
     val itemLanguage: String
     val itemPrivacy: String
     val itemStorage: String
@@ -958,6 +960,29 @@ interface AppearanceWords {
      * самим. Пусто — вместо списка одна строка [savedNone]: пустой заголовок не
      * объясняет ничего, а строка объясняет, откуда список берётся.
      */
+
+    /**
+     * Шрифты и размеры — ПЛАН-ШРИФТОВ, решения заказчика 2026-09-15 и 2026-09-16.
+     *
+     * Размер показывается ЧИСЛОМ точек, а не процентом: в группе несколько кеглей, и
+     * число называет главную строку — остальные едут за ней.
+     */
+    val fontAndSize: String
+    val fontChoice: String
+    val fontRoboto: String
+    val fontOpenSans: String
+    val fontSystem: String
+
+    val sizes: String
+    val sizeMessages: String
+    val sizeTabs: String
+    val sizeMenu: String
+    val sizeHeaders: String
+    val sizeLists: String
+    val sizeSample: String
+    val sizeSampleAbout: String
+    fun points(value: Int): String
+
     val savedLooks: String
     val savedNone: String
     val saveName: String
@@ -1165,6 +1190,22 @@ object RussianWords : Words {
         override val placePlate = "имя окна в шапке и стрелка «назад»"
         override val placeContent = "переключение окон и список настроек"
 
+        override val fontAndSize = "Шрифты и размеры"
+        override val fontChoice = "Шрифт"
+        override val fontRoboto = "Roboto"
+        override val fontOpenSans = "Open Sans"
+        override val fontSystem = "Системный"
+
+        override val sizes = "Размер текста"
+        override val sizeMessages = "Сообщения"
+        override val sizeTabs = "Вкладки окон"
+        override val sizeMenu = "Меню и настройки"
+        override val sizeHeaders = "Шапки"
+        override val sizeLists = "Списки: чаты, контакты, каталоги"
+        override val sizeSample = "Как это будет выглядеть"
+        override val sizeSampleAbout = "Образец меняется вместе с настройками"
+        override fun points(value: Int) = value.toString()
+
         override val savedLooks = "Сохранённые оформления"
         override val savedNone = "Подберите цвета и сохраните — оформление появится здесь"
         override val saveName = "Название"
@@ -1302,7 +1343,8 @@ object RussianWords : Words {
         override val itemDevices = "Секретная фраза и устройства"
         override val itemNotifications = "Уведомления"
         override val itemVirtuals = "Виртуальные аккаунты"
-        override val itemAppearance = "Оформление"
+        override val itemAppearance = "Цвета"
+        override val itemText = "Шрифты и размеры"
         override val itemLanguage = "Язык"
         override val itemPrivacy = "Приватность и блокировки"
         override val itemStorage = "Память и трафик"

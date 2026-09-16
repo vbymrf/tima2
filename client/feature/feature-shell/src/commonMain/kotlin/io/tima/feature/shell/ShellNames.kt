@@ -119,6 +119,7 @@ fun SettingsListWords.item(item: SettingsItem): String = when (item) {
     SettingsItem.NOTIFICATIONS -> itemNotifications
     SettingsItem.VIRTUALS -> itemVirtuals
     SettingsItem.APPEARANCE -> itemAppearance
+    SettingsItem.TEXT -> itemText
     SettingsItem.LANGUAGE -> itemLanguage
     SettingsItem.PRIVACY -> itemPrivacy
     SettingsItem.STORAGE -> itemStorage

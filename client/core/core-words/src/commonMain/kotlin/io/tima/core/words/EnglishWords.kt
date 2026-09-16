@@ -177,6 +177,22 @@ object EnglishWords : Words {
         override val placePlate = "the window name in the header and the «back» arrow"
         override val placeContent = "window switching and the settings list"
 
+        override val fontAndSize = "Fonts and sizes"
+        override val fontChoice = "Font"
+        override val fontRoboto = "Roboto"
+        override val fontOpenSans = "Open Sans"
+        override val fontSystem = "System"
+
+        override val sizes = "Text size"
+        override val sizeMessages = "Messages"
+        override val sizeTabs = "Window tabs"
+        override val sizeMenu = "Menu and settings"
+        override val sizeHeaders = "Headers"
+        override val sizeLists = "Lists: chats, contacts, catalogues"
+        override val sizeSample = "How it will look"
+        override val sizeSampleAbout = "The sample changes along with the settings"
+        override fun points(value: Int) = value.toString()
+
         override val savedLooks = "Saved looks"
         override val savedNone = "Pick the colours and save — the look will appear here"
         override val saveName = "Name"
@@ -317,7 +333,8 @@ object EnglishWords : Words {
         override val itemDevices = "Recovery phrase and devices"
         override val itemNotifications = "Notifications"
         override val itemVirtuals = "Virtual accounts"
-        override val itemAppearance = "Appearance"
+        override val itemAppearance = "Colours"
+        override val itemText = "Fonts and sizes"
         override val itemLanguage = "Language"
         override val itemPrivacy = "Privacy and blocking"
         override val itemStorage = "Storage and traffic"
