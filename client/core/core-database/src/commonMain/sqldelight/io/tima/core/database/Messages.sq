@@ -221,6 +221,19 @@ markChatRead:
 UPDATE messages SET state = :read
 WHERE direction = 1 AND chat_id = :chatId AND state = :stored;
 
+-- Сколько сообщений В ЭТОЙ переписке ещё не отмечены прочитанными.
+--
+-- Нужен, чтобы НЕ выполнять markChatRead, когда отмечать нечего. Причина не в экономии:
+-- SQLDelight оповещает слушателей таблицы по факту выполнения изменяющего запроса, а не
+-- по числу изменённых строк. Поток ленты слушает `messages`; отметка внутри его же
+-- сборщика будила запрос, запрос звал отметку снова — и приложение уходило в круг.
+--
+-- Поймано 2026-09-17 на realme: 210 % процессора у нашего процесса, 654 826 промахов
+-- страниц за 55 секунд, главный поток в SQLiteConnectionPool.waitForConnection.
+unreadInChat:
+SELECT count(*) FROM messages
+WHERE direction = 1 AND chat_id = :chatId AND state = :stored;
+
 updateIncoming:
 UPDATE messages SET state = ?, attempts = ?, undecryptable_reason = ? WHERE dedup_key = ?;
 

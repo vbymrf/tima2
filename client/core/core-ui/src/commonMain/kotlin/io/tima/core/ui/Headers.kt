@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -168,11 +170,26 @@ fun SubwindowHeader(
     modifier: Modifier = Modifier,
     /** Подпись под названием: «в сети», «3 участника». */
     caption: String? = null,
+    /**
+     * Буквы аватара собеседника — между «назад» и именем, как в макете подокна чата.
+     *
+     * `null` — аватара нет: у настроек, у секретной фразы, у любого подокна, за которым
+     * не стоит человек. Аватар там был бы чужой картинкой на месте, где никого нет.
+     */
+    avatar: String? = null,
     right: (@Composable () -> Unit)? = null,
 ) {
     val colors = Tima.colors
     ProvidePlace(TextPlace.HEADERS) {
-    Row(
+    // FlowRow, а не Row: если содержимое шапки в строку не влезает, правый блок уходит на
+    // ВТОРУЮ строку, а имя занимает первую целиком. Так в макете — у зоны 1 стоит
+    // `flex-wrap: wrap`.
+    //
+    // Поймано 2026-09-16 на телефоне: как только между «назад» и именем встал аватар,
+    // групповой переписке с чипами «Доступность» и «Участники» осталось на имя так мало,
+    // что «наша» переносилось ПО БУКВАМ — «наш» и «а». Row умеет только ужимать, и ужимал
+    // он то, ради чего шапка и нужна.
+    FlowRow(
         modifier = modifier
             .fillMaxWidth()
             .background(colors.functional)
@@ -182,16 +199,23 @@ fun SubwindowHeader(
             // строку и молча обрезался: «Секретная фраза и устройст…» уже при ×1.3, а
             // по-испански — при обычном размере.
             .heightIn(min = TimaZones.zone1)
-            .padding(horizontal = TimaSpacing.about4),
+            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         // «Назад» рисуется, а не набирается глифом: «‹» есть не во всяком шрифте, а
         // пропавший знак навигации — это кнопка без надписи. См. Знаки.kt.
         ButtonCircle(onClick = onBack, live = true) {
             Arrow(Side.Left, color = colors.onAccent)
         }
-        androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
+        // Аватар стоит СРАЗУ за «назад» и до имени — так в макете
+        // `doc/Layout-UI-light/телефон/подокна/чат.html`, зона 1. Мелкий: шапка не должна
+        // расти от него, она и так растёт от перенесённого заголовка.
+        avatar?.let { Avatar(letters = it, size = AvatarSize.Small) }
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier.weight(1f).widthIn(min = TITLE_MIN),
+        ) {
             // Многословный заголовок переносится, однословный ужимается по ширине:
             // на плашке одно слово перенести некуда, а обрезать его нельзя — от него
             // и зависит, понял ли человек, где он (решение заказчика 2026-09-16).
@@ -203,3 +227,12 @@ fun SubwindowHeader(
     }
     }
 }
+
+/**
+ * Нижний предел ширины имени в шапке.
+ *
+ * Без него правый блок шапки отжимает заголовок до нечитаемого: 2026-09-16 на телефоне
+ * групповая переписка с чипами «Доступность» и «Участники» ломала слово «наша» по буквам —
+ * «наш» и «а». Предел заставляет правый блок уйти на вторую строку, а не давить имя.
+ */
+private val TITLE_MIN = 96.dp

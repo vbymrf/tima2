@@ -136,6 +136,9 @@ fun ChatScreen(
             title = peer,
             onBack = onBack,
             caption = caption,
+            // Аватар собеседника — по макету подокна чата. Буквы, а не картинка: картинки
+            // приезжают вместе с медиа, а место под них тут то же самое.
+            avatar = peerLetters(peer),
             right = if (onMembers != null || onCircles != null) {
                 {
                     Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
@@ -695,3 +698,14 @@ private fun StoryUnavailable(
     }
     }
 }
+
+/**
+ * Буквы аватара собеседника: первые буквы одного-двух слов имени.
+ *
+ * `?` — когда имени нет вовсе: в шапке в этом случае стоит «Без имени», и пустой аватар
+ * выглядел бы дырой, а не отсутствием имени.
+ */
+private fun peerLetters(name: String): String =
+    name.trim().split(" ").filter { it.isNotBlank() }.take(2)
+        .joinToString("") { it.first().uppercase() }
+        .ifEmpty { "?" }

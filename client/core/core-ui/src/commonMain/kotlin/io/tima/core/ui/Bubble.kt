@@ -14,13 +14,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.RoundRect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -153,8 +153,19 @@ private fun showName(show: Boolean, author: String?): Boolean =
  * второго прямоугольника не требуется. Подложка под пузырём давала бы на скруглениях
  * зазор, который читается как брак.
  */
-private fun Modifier.authorStrip(color: Color): Modifier = drawBehind {
+private fun Modifier.authorStrip(color: Color): Modifier = drawWithCache {
     val radius = TimaShapes.radius.toPx()
+    val width = STRIP.toPx()
+
+    // Полоса — это ЛЕВАЯ ГРАНИЦА пузыря, как `border-left` в макете, а не брусок рядом с
+    // ним. Разница видна на углах: граница уходит в скругление и сходит на нет, брусок
+    // обрывается плоско. Первая редакция заливала прямоугольник и отсекала его по форме
+    // пузыря — на снимке с телефона 2026-09-16 полоса кончалась ровным срезом, и это
+    // читалось как «рамка без округления».
+    //
+    // Поэтому здесь ОБВОДКА по той же скруглённой форме, вдвое шире полосы (половина
+    // обводки уходит наружу и срезается), и отсечение узкой полосой слева. Обводка сама
+    // огибает оба угла ровно так, как это делает `border-left`.
     val shape = Path().apply {
         addRoundRect(
             RoundRect(
@@ -166,10 +177,19 @@ private fun Modifier.authorStrip(color: Color): Modifier = drawBehind {
             ),
         )
     }
-    clipPath(shape) {
-        drawRect(color = color, size = Size(STRIP.toPx(), size.height))
+    val stroke = Stroke(width = width * 2f)
+
+    // `drawWithCache`, а не `drawBehind`: форма пересчитывается при смене РАЗМЕРА, а не на
+    // каждом кадре. В прежней редакции `Path` и `RoundRect` создавались внутри отрисовки,
+    // то есть на каждый кадр каждого пузыря, — на длинной переписке это выделение памяти
+    // в цикле прокрутки, и именно оно там стоило дороже всего остального.
+    onDrawBehind {
+        clipRect(right = width) {
+            drawPath(path = shape, color = color, style = stroke)
+        }
     }
 }
+
 /** Ширина полосы автора: `border-left: 4px`. */
 private val STRIP = 4.dp
 

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Передний план иконки: белая «Т» на салатовой подложке — тот же знак, что стоит в шапке
+  приложения.
+
+  Холст адаптивной иконки 108×108, но видно из него только центральные 72×72: края
+  срезает маска, своя у каждой прошивки. Поэтому знак нарисован в пределах примерно
+  34…74 — внутри безопасной зоны, и его не обрежет ни круглая маска, ни квадратная.
+
+  Буква набрана путями, а не шрифтом: шрифта в ресурсах иконки нет, и отрисовать текст
+  здесь нечем.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Перекладина «Т» -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,36 h40 v10 h-40 z" />
+    <!-- Ножка «Т» -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M49,46 h10 v28 h-10 z" />
+</vector>

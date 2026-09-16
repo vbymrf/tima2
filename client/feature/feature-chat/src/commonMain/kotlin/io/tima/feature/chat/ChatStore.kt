@@ -16,12 +16,14 @@ import io.tima.domain.chat.RequestKeysStep
 import io.tima.domain.chat.SendMessage
 import io.tima.domain.chat.SendMessageResult
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Состояние окна переписки — К4.4.
@@ -114,6 +116,12 @@ class ChatStore(
                 // Ветка сворачивается здесь, а не на экране: список реплик — одно
                 // место, и решать в двух значило бы однажды показать ответы дважды.
                 // Под корнем остаётся строка «ветка · N ответов» (ADR-0024 §7, К6).
+                // Оба похода в базу — ВНЕ главного потока. Сборщик этого потока живёт в
+                // scope экрана, то есть на главном; до 2026-09-17 и проверка ключа, и
+                // отметка прочтения шли прямо здесь. Стек зависания с realme показал
+                // главный поток стоящим в `SQLiteConnectionPool.waitForConnection` внутри
+                // транзакции отметки — то есть рисование ждало базу.
+                val noKey = withContext(Dispatchers.Default) { anyKey?.invoke() == false }
                 known = lines
                 val replies = lines.filter { it.threadRoot != 0L }.groupingBy { it.threadRoot }.eachCount()
                 val shown = lines.filter { it.threadRoot == 0L }
@@ -126,7 +134,7 @@ class ChatStore(
                         // появляется в ней сам, без перечитывания.
                         open.copy(replies = lines.filter { it.threadRoot == open.rootId })
                     },
-                    noGroupKey = anyKey?.invoke() == false,
+                    noGroupKey = noKey,
                 )
                 // Имена спрашиваются по одному разу на автора и только в группе: список
                 // обновляется на каждое сообщение, и поход за именем на каждой строке
@@ -143,7 +151,12 @@ class ChatStore(
                 }
                 // Переписка на экране — значит прочитана. Порядок именно такой: сначала
                 // показать, потом отметить; иначе отметка обгонит то, что человек увидит.
-                markRead?.chat(chatId)
+                //
+                // Круг «запись будит запрос, запрос зовёт запись» разорван не здесь, а в
+                // `SqlInboxStore.markChatRead`: он не трогает базу, когда отмечать нечего.
+                // Сторожить это в экране было бы вторым местом для одной правды — и
+                // ушедшим бы первым, потому что отметку зовут не только отсюда.
+                withContext(Dispatchers.Default) { markRead?.chat(chatId) }
             }
             .launchIn(scope)
     }

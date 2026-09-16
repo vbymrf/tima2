@@ -97,11 +97,28 @@ class SqlInboxStore(
         )
     }
 
+    /**
+     * Отметить прочитанным — и НЕ трогать базу, когда отмечать нечего.
+     *
+     * Проверка не ради экономии записи. SQLDelight оповещает слушателей таблицы по факту
+     * выполнения изменяющего запроса, а не по числу изменённых строк. Поток ленты слушает
+     * `messages`, а отметка зовётся из его же сборщика — значит пустая отметка будила
+     * запрос, запрос звал отметку снова, и так без конца.
+     *
+     * Поймано 2026-09-17 на realme стеком зависания: главный поток стоял в
+     * `SQLiteConnectionPool.waitForConnection` внутри этой самой транзакции, а процесс ел
+     * 210 % процессора. Выглядело это как «приложение не отвечает на группе без ключа», а
+     * ключ был ни при чём — круг замыкался на любой открытой переписке.
+     */
     override fun markChatRead(chatId: String): Int = db.transactionWithResult {
+        val stored = IncomingState.STORED.ordinal.toLong()
+        if (q.unreadInChat(chatId = chatId, stored = stored).executeAsOne() == 0L) {
+            return@transactionWithResult 0
+        }
         q.markChatRead(
             read = IncomingState.READ.ordinal.toLong(),
             chatId = chatId,
-            stored = IncomingState.STORED.ordinal.toLong(),
+            stored = stored,
         )
         q.changes().executeAsOne().toInt()
     }

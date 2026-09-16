@@ -36,9 +36,17 @@
     -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!--
+      Имя и иконка. До 2026-09-16 `android:icon` здесь не было ВОВСЕ, а каталога ресурсов
+      у модуля не существовало: всё это время телефон рисовал системную заглушку, и
+      выглядело это как «иконка не обновилась». Подпись при этом читалась «TIMA v2» —
+      внутреннее имя потока сборки, попавшее человеку на рабочий стол.
+    -->
     <application
         android:name=".TimaApplication"
-        android:label="TIMA v2"
+        android:label="TIMA"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true">
 
         <!--
@@ -47,10 +55,23 @@
           ниже. Тема устройства, а не своя: светлую и тёмную решает человек в настройках
           телефона, и наш `isSystemInDarkTheme()` читает то же самое.
         -->
+        <!--
+          `adjustResize` — окно УЖИМАЕТСЯ под клавиатуру, а не съезжает вверх.
+
+          Пока режим не задан, система выбирает его сама и на этих прошивках сдвигала всё
+          окно: шапка уходила за верхний край вместе с кнопкой «назад», а низ переписки
+          прятался под клавиатуру и обрезался. Выглядело это тремя разными бедами, а
+          причина была одна (ПЛАН-ЧАТА.md, Ч1).
+
+          Одного этого мало: ужатое окно означает, что нижняя часть содержимого лежит
+          под клавиатурой, пока ей не дать отступ. Отступ ставится там, где рисуется
+          поле ввода, — см. `imePadding` в экранах.
+        -->
         <activity
             android:name=".MainActivity"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
             android:exported="true"
+            android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
