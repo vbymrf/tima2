@@ -69,6 +69,7 @@ import io.tima.core.media.decodeImage
 import io.tima.core.secrets.Account
 import io.tima.core.contacts.platformPhoneBook
 import io.tima.core.ui.Tab
+import io.tima.core.ui.TabButton
 import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.AddContact
 import io.tima.domain.chat.SyncBook
@@ -2171,7 +2172,11 @@ private fun PhoneWindow(
         // «Вид» стоит последней вкладкой и только у «Контактов»: у чатов и журнала
         // настраивать нечего, и кнопка там означала бы несуществующее.
         tabsTrailing = if (tab == WindowTab.Contacts) {
-            { Tab(label = Tima.words.tabs.label(WindowTab.View), current = false, onClick = onView) }
+            {
+                // Кнопка, а не вкладка: она открывает подокно, а не переключает
+                // показанное. В макете это `.таб-вид` — залитая таблетка со значком.
+                TabButton(label = Tima.words.tabs.label(WindowTab.View), glyph = "▤", onClick = onView)
+            }
         } else {
             null
         },

@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Tima
+import io.tima.core.ui.RadioMark
+import io.tima.core.ui.CheckMark
 import io.tima.core.ui.words
 import io.tima.core.ui.Name
 import io.tima.core.ui.SectionTitle
@@ -94,9 +96,11 @@ private fun Choice(title: String, hint: String, chosen: Boolean, onClick: () -> 
                 Tertiary(hint, lineOne = true)
             }
         },
-        right = { Tertiary(if (chosen) "●" else "○", lineOne = true) },
+        right = { RadioMark(chosen) },
     )
 }
+
+
 
 /**
  * Галка: включено или нет.
@@ -114,7 +118,7 @@ private fun Check(title: String, hint: String, on: Boolean, onChange: (Boolean) 
                 Tertiary(hint, lineOne = true)
             }
         },
-        right = { Tertiary(if (on) "☑" else "☐", lineOne = true) },
+        right = { CheckMark(on) },
     )
 }
 

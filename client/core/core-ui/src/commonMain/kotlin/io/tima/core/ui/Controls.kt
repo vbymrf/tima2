@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -275,6 +276,116 @@ fun Chip(
  * 348 доступных на телефоне и переносился; при одиннадцати просит 328. Ряд теперь
  * стоит строкой — это проверяет [RowFitTest], а не глаз.
  */
+/**
+ * Кнопка в ряду вкладок — `.таб-вид` макета.
+ *
+ * ── ПОЧЕМУ НЕ ПРОСТО `Tab` ──────────────────────────────────────────────────
+ *
+ * До 2026-09-16 «Вид» рисовался как `Tab(current = false)`: прозрачный фон и тихий
+ * текст — то есть **ровно как невыбранная вкладка**. Заказчик сказал прямо: «кнопка
+ * Вид не выглядит кнопкой», и это не вкусовщина — вкладка и кнопка означают разное.
+ * Вкладка переключает то, ЧТО показано; кнопка открывает подокно. Одинаковый вид у
+ * разного смысла — это обещание, которого интерфейс не держит.
+ *
+ * В макете различие есть и задано явно (`стиль.css`):
+ *
+ * ```css
+ * .таб     { font-size: var(--щ5); color: var(--чёрный-50) }        без фона
+ * .таб-вид { background: var(--чёрный-6); font-size: var(--щ6);     ЗАЛИТА,
+ *            font-weight: 800; gap: 5px }                            со значком
+ * ```
+ *
+ * Фон — [TimaColors.quiet] («тихая нецветная подложка», тот самый `--чёрный-6`), а не
+ * `softAccent`: салатовый оттенок здесь означал бы навигацию, а кнопка не навигация.
+ * Кегль на ступень мельче вкладки и начертание тяжелее — так она не спорит с ними за
+ * внимание, оставаясь при этом видимой.
+ */
+/**
+ * Отметка в списке — галка или точка, **нарисованная**, а не знаком шрифта.
+ *
+ * ── ПОЧЕМУ НАРИСОВАННАЯ ─────────────────────────────────────────────────────
+ *
+ * До 2026-09-16 здесь стояли знаки `☑` и `●` обычным текстом. Заказчик сказал: «плохо
+ * видно галочки и точки, выбранное сделай зелёным». Знак `●` покрасился, а `☑` — нет:
+ * **платформа рисует его цветным эмодзи и наш цвет игнорирует**. На снимке галки
+ * вышли синими — цветом системного эмодзи, которого в нашей палитре нет вовсе.
+ *
+ * Знак шрифта нельзя ни покрасить наверняка, ни задать ему размер: у эмодзи своя
+ * метрика, и `sz2` меняет её не так, как у буквы. Поэтому отметка рисуется фигурой —
+ * тогда и цвет наш, и размер наш, и выглядит она одинаково на любом телефоне.
+ *
+ * Размеры из макета (`стиль.css`, `.галка`): квадрат 22, скругление 6, рамка 2.
+ * Включённая залита навигацией, знак внутри белый — `.галка.вкл`.
+ *
+ * ── КВАДРАТ И КРУГ ЗНАЧАТ РАЗНОЕ ────────────────────────────────────────────
+ *
+ * [CheckMark] — квадрат: «сколько угодно, в том числе ничего».
+ * [RadioMark] — круг: «одно из». Это то же правило формы, что у аватара и кнопки, и
+ * менять его на «покрасим поярче» нельзя: форма отвечает на вопрос, сколько можно
+ * выбрать, а цвет — только на вопрос, выбрано ли.
+ */
+@Composable
+fun CheckMark(on: Boolean, modifier: Modifier = Modifier) {
+    val colors = Tima.colors
+    Box(
+        modifier = modifier
+            .size(MARK_SIDE)
+            .background(if (on) colors.navigation else Color.Transparent, RoundedCornerShape(MARK_ROUNDING))
+            .border(MARK_BORDER, if (on) colors.navigation else colors.border, RoundedCornerShape(MARK_ROUNDING)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (on) {
+            Caption(text = "✓", fontSize = TimaType.sz5, weight = FontWeight.ExtraBold, color = colors.onAccent)
+        }
+    }
+}
+
+/** Точка выбора: круг той же меры, что и галка, — «одно из». */
+@Composable
+fun RadioMark(on: Boolean, modifier: Modifier = Modifier) {
+    val colors = Tima.colors
+    Box(
+        modifier = modifier
+            .size(MARK_SIDE)
+            .background(if (on) colors.navigation else Color.Transparent, CircleShape)
+            .border(MARK_BORDER, if (on) colors.navigation else colors.border, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (on) {
+            Box(Modifier.size(MARK_DOT).background(colors.onAccent, CircleShape))
+        }
+    }
+}
+
+/** Мера отметки — `.галка { width: 22px; border-radius: 6px; border: 2px }` макета. */
+private val MARK_SIDE = 22.dp
+private val MARK_ROUNDING = 6.dp
+private val MARK_BORDER = 2.dp
+
+/** Точка внутри круга: видна, но не заполняет его целиком. */
+private val MARK_DOT = 8.dp
+
+@Composable
+fun TabButton(
+    label: String,
+    glyph: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = Tima.colors
+    Row(
+        modifier = modifier
+            .background(colors.quiet, CircleShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 9.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Caption(text = glyph, fontSize = TimaType.sz6, weight = FontWeight.ExtraBold, color = colors.text2)
+        Caption(text = label, fontSize = TimaType.sz6, weight = FontWeight.ExtraBold, color = colors.text2)
+    }
+}
+
 @Composable
 fun Tab(
     label: String,
