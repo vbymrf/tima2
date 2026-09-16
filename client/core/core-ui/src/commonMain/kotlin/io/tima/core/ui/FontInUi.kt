@@ -1,5 +1,7 @@
 package io.tima.core.ui
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.font.FontFamily
 
@@ -34,3 +36,33 @@ import androidx.compose.ui.text.font.FontFamily
  * существует.
  */
 val LocalFontFamily = staticCompositionLocalOf<FontFamily?> { null }
+
+/**
+ * Во сколько раз крупнее обычного набран текст **в этом месте экрана**.
+ *
+ * ── ПОЧЕМУ МНОЖИТЕЛЬ, А НЕ СВОИ КЕГЛИ ───────────────────────────────────────
+ *
+ * Решение заказчика 2026-09-16. Групп четыре — сообщения, вкладки окон, меню, шапки, —
+ * и у каждой своя ручка. Своими кеглями это дало бы двадцать четыре числа на выбор
+ * человеку; множителем — четыре ползунка по четыре ступени, и вёрстка сдвигается
+ * предсказуемо.
+ *
+ * ── ПОЧЕМУ МЕСТО, А НЕ РОЛЬ ТЕКСТА ──────────────────────────────────────────
+ *
+ * Группы заданы местами на экране, а не ролями ([Name], [Secondary], [Tertiary]): в
+ * шапке и в сообщении встречается одна и та же роль, а укрупнять их человек хочет
+ * порознь. Поэтому множитель ставит **container** — каркас окна на своей шапке, ряд
+ * вкладок на себе, список настроек на себе, — а всякий текст внутри его наследует.
+ * Точек подстановки получается несколько штук вместо сотен.
+ *
+ * Умолчание 1 — обычный кегль. Место, которое множитель не поставило, не меняется:
+ * это осознанно, а не пропуск.
+ */
+val LocalTextScale = staticCompositionLocalOf { 1f }
+
+/** Задать множитель для всего, что внутри. */
+@Composable
+fun ProvideTextScale(scale: Float, content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalTextScale provides scale, content = content)
+}
+

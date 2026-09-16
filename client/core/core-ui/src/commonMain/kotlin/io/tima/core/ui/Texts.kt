@@ -41,7 +41,9 @@ fun Caption(
         modifier = modifier,
         style = TextStyle(
             color = color,
-            fontSize = fontSize,
+            // Множитель места: шапки, вкладки, меню и сообщения укрупняются порознь
+            // (решение заказчика 2026-09-16). См. [LocalTextScale].
+            fontSize = fontSize * LocalTextScale.current,
             fontWeight = weight,
             // `null` — системный шрифт, как и было. Подставляют сюда только снимочные
             // проверки, чтобы их ответ не зависел от машины: см. [LocalFontFamily].

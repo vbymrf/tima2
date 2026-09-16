@@ -80,7 +80,7 @@ class RowFitTest {
         return last
     }
 
-    private companion object {
+    internal companion object {
         /**
          * Узкая телефонная ширина — **360, а не 380**.
          *
