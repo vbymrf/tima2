@@ -1,5 +1,6 @@
 package io.tima.feature.chat
 
+import io.tima.domain.chat.ChatKind
 import io.tima.domain.chat.ChatSummary
 import io.tima.domain.chat.ObserveChats
 import kotlinx.coroutines.CoroutineScope
@@ -44,4 +45,18 @@ data class ChatsState(
      * список в этом состоянии не означает «переписок нет».
      */
     val read: Boolean = false,
-)
+) {
+    /**
+     * Личные переписки — то, что показывает окно 1 «Телефон».
+     *
+     * **Деление по роду, а не по списку исключений.** Группы, каналы, сообщества и
+     * голосовые комнаты живут в каталоге окна 2 и на своей вкладке окна 5 (решение
+     * заказчика, записано в `ИНТЕРФЕЙС/ПРАВИЛО.md`); в окне 1 — только личные. Пока из
+     * этого ряда существуют одни группы, но условие написано по роду, чтобы следующий
+     * род не пришлось разыскивать по окнам заново.
+     */
+    val personal: List<ChatSummary> get() = chats.filter { it.kind == ChatKind.Personal }
+
+    /** Групповые переписки — вкладка «Группы» окна 5. */
+    val groups: List<ChatSummary> get() = chats.filter { it.kind == ChatKind.Group }
+}

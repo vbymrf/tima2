@@ -76,6 +76,9 @@ class GroupChatStoreTest {
     )
 
     private fun store(scope: kotlinx.coroutines.CoroutineScope, directory: ChatNames?) = ChatStore(
+        // Немедленный диспетчер: работа с базой делается тут же, и тест с виртуальным
+        // временем её дожидается.
+        io = kotlinx.coroutines.Dispatchers.Unconfined,
         chatId = "g-1",
         observe = ObserveChat(ChatFeed { _, _ -> stream }),
         send = SendMessage(

@@ -15,6 +15,7 @@ import io.tima.domain.chat.RequestGroupKeys
 import io.tima.domain.chat.RequestKeysStep
 import io.tima.domain.chat.SendMessage
 import io.tima.domain.chat.SendMessageResult
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -88,6 +89,16 @@ class ChatStore(
      * жизнь store, и после смены языка беда пришла бы на прежнем.
      */
     private val words: () -> Words = { CurrentWords.value },
+    /**
+     * Где делается работа с базой. По умолчанию — фоновый пул.
+     *
+     * **Зависимостью, а не литералом внутри.** Сборщик потока живёт в scope экрана, то
+     * есть на главном потоке, и ходить оттуда в базу нельзя (БЕДЫ/2026-09-17). Но
+     * прибитый гвоздями `Dispatchers.Default` уводит работу из планировщика теста: тест с
+     * виртуальным временем её не дожидается и видит пустое состояние. Так и вышло —
+     * четыре теста покраснели ровно на этом.
+     */
+    private val io: CoroutineDispatcher = Dispatchers.Default,
 ) {
 
     // Признак берётся из наличия случая, а не задаётся отдельно: два источника одной
@@ -121,7 +132,7 @@ class ChatStore(
                 // отметка прочтения шли прямо здесь. Стек зависания с realme показал
                 // главный поток стоящим в `SQLiteConnectionPool.waitForConnection` внутри
                 // транзакции отметки — то есть рисование ждало базу.
-                val noKey = withContext(Dispatchers.Default) { anyKey?.invoke() == false }
+                val noKey = withContext(io) { anyKey?.invoke() == false }
                 known = lines
                 val replies = lines.filter { it.threadRoot != 0L }.groupingBy { it.threadRoot }.eachCount()
                 val shown = lines.filter { it.threadRoot == 0L }
@@ -156,7 +167,7 @@ class ChatStore(
                 // `SqlInboxStore.markChatRead`: он не трогает базу, когда отмечать нечего.
                 // Сторожить это в экране было бы вторым местом для одной правды — и
                 // ушедшим бы первым, потому что отметку зовут не только отсюда.
-                withContext(Dispatchers.Default) { markRead?.chat(chatId) }
+                withContext(io) { markRead?.chat(chatId) }
             }
             .launchIn(scope)
     }

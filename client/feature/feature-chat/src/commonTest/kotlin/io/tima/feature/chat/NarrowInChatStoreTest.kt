@@ -79,6 +79,9 @@ class NarrowInChatStoreTest {
         // `narrow = null` — переписка личная: круга у сообщения нет, и нажатие не должно
         // приводить ни к запросу, ни к предупреждению о том, чего не будет.
         val store = ChatStore(
+        // Немедленный диспетчер: работа с базой делается тут же, и тест с виртуальным
+        // временем её дожидается.
+        io = kotlinx.coroutines.Dispatchers.Unconfined,
             chatId = "chat-1",
             observe = ObserveChat(feed),
             send = send(),
@@ -93,6 +96,9 @@ class NarrowInChatStoreTest {
     }
 
     private fun store(scope: kotlinx.coroutines.CoroutineScope, port: MessageLevels) = ChatStore(
+        // Немедленный диспетчер: работа с базой делается тут же, и тест с виртуальным
+        // временем её дожидается.
+        io = kotlinx.coroutines.Dispatchers.Unconfined,
         chatId = "g-1",
         observe = ObserveChat(feed),
         send = send(),

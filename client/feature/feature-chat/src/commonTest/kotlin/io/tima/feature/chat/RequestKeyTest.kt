@@ -85,6 +85,9 @@ class RequestKeyTest {
     private val stream = MutableStateFlow<List<ChatLine>>(emptyList())
 
     private fun store(scope: kotlinx.coroutines.CoroutineScope, request: RequestGroupKeys?) = ChatStore(
+        // Немедленный диспетчер: работа с базой делается тут же, и тест с виртуальным
+        // временем её дожидается.
+        io = kotlinx.coroutines.Dispatchers.Unconfined,
         chatId = "gggggggg-0000-0000-0000-000000000001",
         observe = ObserveChat(ChatFeed { _, _ -> stream }),
         send = SendMessage(

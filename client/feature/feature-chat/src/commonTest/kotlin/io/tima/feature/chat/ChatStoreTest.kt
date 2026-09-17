@@ -33,6 +33,9 @@ class ChatStoreTest {
     private var bodySize = 10
 
     private fun store(scope: kotlinx.coroutines.CoroutineScope) = ChatStore(
+        // Немедленный диспетчер: работа с базой делается тут же, и тест с виртуальным
+        // временем её дожидается.
+        io = kotlinx.coroutines.Dispatchers.Unconfined,
         chatId = "chat-1",
         observe = ObserveChat(feed),
         send = SendMessage(
@@ -70,6 +73,9 @@ class ChatStoreTest {
     fun открытая_переписка_отмечается_прочитанной() = runTest {
         val marked = mutableListOf<String>()
         val store = ChatStore(
+        // Немедленный диспетчер: работа с базой делается тут же, и тест с виртуальным
+        // временем её дожидается.
+        io = kotlinx.coroutines.Dispatchers.Unconfined,
             chatId = "chat-1",
             observe = ObserveChat(feed),
             send = SendMessage(

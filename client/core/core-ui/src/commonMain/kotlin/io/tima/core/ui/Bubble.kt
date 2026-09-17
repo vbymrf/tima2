@@ -16,12 +16,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -155,55 +154,66 @@ private fun showName(show: Boolean, author: String?): Boolean =
  * зазор, который читается как брак.
  */
 private fun Modifier.authorStrip(color: Color): Modifier = drawWithCache {
-    val radius = TimaShapes.radius.toPx()
-    val width = STRIP.toPx()
-
-    // Полоса — это ЛЕВАЯ ГРАНИЦА пузыря, как `border-left` в макете, а не брусок рядом с
-    // ним. Разница видна на углах: граница уходит в скругление и сходит на нет, брусок
-    // обрывается плоско. Первая редакция заливала прямоугольник и отсекала его по форме
-    // пузыря — на снимке с телефона 2026-09-16 полоса кончалась ровным срезом, и это
-    // читалось как «рамка без округления».
+    // ── ПОЧЕМУ ЗДЕСЬ ГЕОМЕТРИЯ, А НЕ ПРЯМОУГОЛЬНИК ──────────────────────────────
     //
-    // Поэтому здесь ОБВОДКА по той же скруглённой форме, вдвое шире полосы (половина
-    // обводки уходит наружу и срезается), и отсечение узкой полосой слева. Обводка сама
-    // огибает оба угла ровно так, как это делает `border-left`.
-    val shape = Path().apply {
+    // В макете это `border-left: 4px` у пузыря со скруглением. Браузер рисует такую рамку
+    // не полосой: на угловой дуге её толщина едет от левой (4) к верхней (1), и полоса
+    // СХОДИТ НА НЕТ, превращаясь в тонкую серую рамку. Отрисовка макета браузером и
+    // увеличение угла в десять раз показывают именно это.
+    //
+    // Две прежние попытки повторили вид приблизительно и обе были отвергнуты глазом
+    // заказчика: залитый прямоугольник обрывался плоским срезом, обводка постоянной
+    // ширины — вертикальным. Оба раза не хватало схода на нет, и оба раза это называлось
+    // «огибания нет».
+    //
+    // Поэтому здесь строится то же, что строит браузер:
+    //   кольцо = внешний контур МИНУС внутренний,
+    //   где внутренний отступает слева на 4, с прочих сторон на 1, отчего его углы
+    //   становятся ЭЛЛИПТИЧЕСКИМИ — и зазор между контурами сам едет от 4 к 1;
+    //   клин = левая доля, отрезанная по линии стыка углов (у рамок она идёт от внешнего
+    //   угла к внутреннему), чтобы покрасить левую сторону, а не обвести пузырь кругом.
+    val r = TimaShapes.radius.toPx()
+    val left = STRIP.toPx()
+    val thin = HAIRLINE.toPx()
+    val w = size.width
+    val h = size.height
+
+    val outer = Path().apply {
+        addRoundRect(RoundRect(0f, 0f, w, h, CornerRadius(r, r)))
+    }
+    val inner = Path().apply {
         addRoundRect(
             RoundRect(
-                left = 0f,
-                top = 0f,
-                right = size.width,
-                bottom = size.height,
-                cornerRadius = CornerRadius(radius, radius),
+                rect = Rect(left, thin, (w - thin).coerceAtLeast(left), (h - thin).coerceAtLeast(thin)),
+                topLeft = CornerRadius((r - left).coerceAtLeast(0f), (r - thin).coerceAtLeast(0f)),
+                topRight = CornerRadius((r - thin).coerceAtLeast(0f), (r - thin).coerceAtLeast(0f)),
+                bottomRight = CornerRadius((r - thin).coerceAtLeast(0f), (r - thin).coerceAtLeast(0f)),
+                bottomLeft = CornerRadius((r - left).coerceAtLeast(0f), (r - thin).coerceAtLeast(0f)),
             ),
         )
     }
-    val stroke = Stroke(width = width * 2f)
+    val ring = Path.combine(PathOperation.Difference, outer, inner)
 
-    // `drawWithCache`, а не `drawBehind`: форма пересчитывается при смене РАЗМЕРА, а не на
-    // каждом кадре. В прежней редакции `Path` и `RoundRect` создавались внутри отрисовки,
-    // то есть на каждый кадр каждого пузыря, — на длинной переписке это выделение памяти
-    // в цикле прокрутки, и именно оно там стоило дороже всего остального.
-    onDrawBehind {
-        // Отсечений ДВА, и оба обязательны.
-        //
-        // `clipPath(shape)` — по самой форме пузыря: обводка нарисована по центру линии,
-        // то есть половина её ширины уходит НАРУЖУ. Без этого отсечения зелёное вылезало
-        // за верхний и нижний край пузыря — поймано на телефоне 2026-09-17, и это была
-        // вторая попытка починить одно и то же место.
-        //
-        // `clipRect(right = width)` — узкой полосой слева: оставить только левую границу,
-        // а не обвести пузырь кругом.
-        //
-        // Вместе они дают ровно `border-left: 4px` по скруглённой рамке: полоса лежит
-        // ВНУТРИ пузыря и огибает оба угла.
-        clipPath(shape) {
-            clipRect(right = width) {
-                drawPath(path = shape, color = color, style = stroke)
-            }
-        }
+    // Линия стыка: от внешнего угла (0,0) в направлении внутреннего (4,1). Клин обрезан по
+    // x = радиус — дальше кольца слева всё равно нет, а узкий клин дешевле.
+    val slope = if (left > 0f) thin / left else 0f
+    val wedge = Path().apply {
+        moveTo(0f, 0f)
+        lineTo(r, r * slope)
+        lineTo(r, h - r * slope)
+        lineTo(0f, h)
+        close()
     }
+    val strip = Path.combine(PathOperation.Intersect, ring, wedge)
+
+    // `drawWithCache`: обе фигуры и их пересечение считаются при смене РАЗМЕРА, а не на
+    // каждом кадре. Прежняя редакция создавала `Path` внутри отрисовки — на длинной
+    // переписке это выделение памяти в цикле прокрутки.
+    onDrawBehind { drawPath(path = strip, color = color) }
 }
+
+/** Толщина рамки пузыря с прочих сторон: `border: 1px` из макета. */
+private val HAIRLINE = 1.dp
 
 /** Ширина полосы автора: `border-left: 4px`. */
 private val STRIP = 4.dp

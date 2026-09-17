@@ -36,6 +36,9 @@ class ThreadInChatStoreTest {
         sent: MutableList<Enqueued>,
         scope: kotlinx.coroutines.CoroutineScope,
     ): ChatStore = ChatStore(
+        // Немедленный диспетчер: работа с базой делается тут же, и тест с виртуальным
+        // временем её дожидается.
+        io = kotlinx.coroutines.Dispatchers.Unconfined,
         chatId = "g-1",
         observe = ObserveChat(
             object : ChatFeed {

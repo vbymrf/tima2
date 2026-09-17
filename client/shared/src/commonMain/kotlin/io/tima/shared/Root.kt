@@ -62,6 +62,7 @@ import io.tima.feature.auth.EntryScreen
 import io.tima.feature.chat.ChatStore
 import io.tima.feature.chat.ChatsState
 import io.tima.feature.chat.ChatsStore
+import io.tima.feature.chat.GroupsScreen
 import io.tima.feature.chat.BookState
 import io.tima.core.contacts.askContactsAccess
 import io.tima.core.contacts.platformInvite
@@ -1049,7 +1050,11 @@ private fun App(
                 Window.Phone -> PhoneWindow(
                     tab = phoneTab,
                     onTab = { phoneTab = it },
-                    list = listState,
+                    // ТОЛЬКО личные. Группы ушли на свою вкладку окна 5 — решение
+                    // заказчика 2026-09-17; до него они стояли здесь вперемешку с
+                    // личными, и это было временным размещением, записанным в
+                    // `ИНТЕРФЕЙС/04-социум/ФУНКЦИОНАЛ.md`.
+                    list = listState.copy(chats = listState.personal),
                     book = bookState,
                     onSearchInBook = book::changedSearch,
                     onOpen = { where = Where.Chat(it.chatId, it.title) },
@@ -1120,6 +1125,14 @@ private fun App(
                     // открытии вкладки — список меняется от чужих действий (автор удалил,
                     // автор сузил), и держать его закэшированным значило бы показывать то,
                     // чего уже нет.
+                    // Группы человека. Тот же список из базы, что у окна 1, только
+                    // другого рода: второго похода в базу для этого не нужно.
+                    groups = {
+                        GroupsScreen(
+                            state = listState,
+                            onOpen = { where = Where.Chat(it.chatId, it.title) },
+                        )
+                    },
                     feed = {
                         val state by page.state.collectAsState()
                         LaunchedEffect(Unit) { page.refresh() }
@@ -2119,8 +2132,16 @@ private fun Members(
  * а правда в том, что считать нечего — социального слоя на сервере нет.
  */
 private fun windowCounters(list: ChatsState): Map<Window, Int> {
-    val unread = list.chats.sumOf { it.unread }
-    return if (unread > 0) mapOf(Window.Phone to unread) else emptyMap()
+    // Счётчик идёт ЗА перепиской, а не остаётся там, где она лежала. Группы уехали на
+    // вкладку окна 5 — значит и непрочитанное в них считается окну 5. Иначе человек видит
+    // янтарную точку на «Телефоне», открывает его и не находит там ничего: счётчик
+    // указывает в пустоту, и это хуже отсутствующего счётчика.
+    val phone = list.personal.sumOf { it.unread }
+    val page = list.groups.sumOf { it.unread }
+    return buildMap {
+        if (phone > 0) put(Window.Phone, phone)
+        if (page > 0) put(Window.Page, page)
+    }
 }
 
 /**
