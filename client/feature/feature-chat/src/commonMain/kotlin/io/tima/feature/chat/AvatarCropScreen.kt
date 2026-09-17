@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -28,6 +29,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import io.tima.core.media.SquareCrop
+import io.tima.core.media.rotateQuarters
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Secondary
@@ -59,7 +61,14 @@ fun AvatarCropScreen(
     val words = Tima.words.chat
     val density = LocalDensity.current
     val viewportPx = with(density) { VIEWPORT.toPx() }
-    val crop = remember(image, viewportPx) { SquareCrop(image, viewportPx) }
+
+    // Поворот хранится ЧЕТВЕРТЯМИ, а сама картинка поворачивается один раз на каждое
+    // изменение. Держать угол в `graphicsLayer` было бы дешевле на глаз, но обрезка
+    // считает по пикселям исходника — и вырезала бы неповёрнутое, то есть не то, что
+    // человек видит. Расхождение показанного и вырезанного здесь и есть беда.
+    var quarters by remember(image) { mutableIntStateOf(0) }
+    val shown = remember(image, quarters) { rotateQuarters(image, quarters) }
+    val crop = remember(shown, viewportPx) { SquareCrop(shown, viewportPx) }
 
     var zoom by remember { mutableFloatStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
@@ -91,7 +100,7 @@ fun AvatarCropScreen(
                     // ровно baseScale), а сдвиг и увеличение — слоем поверх. Та же геометрия,
                     // что считает SquareCrop.cut.
                     Image(
-                        bitmap = image,
+                        bitmap = shown,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
@@ -106,6 +115,17 @@ fun AvatarCropScreen(
                 }
                 Secondary(words.avatarCropHint)
                 Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                    // Поворот сбрасывает сдвиг и увеличение: после поворота они указывают
+                    // на другое место картинки, и оставленные как есть уводят кадр в угол.
+                    Button(
+                        label = words.avatarRotate,
+                        kind = ButtonKind.Quiet,
+                        onClick = {
+                            quarters += 1
+                            zoom = 1f
+                            pan = Offset.Zero
+                        },
+                    )
                     Button(label = words.avatarCrop, onClick = { onDone(crop.cut(pan, zoom)) })
                     Button(label = Tima.words.common.cancel, kind = ButtonKind.Quiet, onClick = onCancel)
                 }

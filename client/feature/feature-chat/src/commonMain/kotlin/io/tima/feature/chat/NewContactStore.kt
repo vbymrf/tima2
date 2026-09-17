@@ -145,10 +145,16 @@ data class NewContactState(
     fun saveWord(words: ChatWords): String =
         if (checked == true) words.addAndWrite else words.addToContacts
 
-    /** Что сказать об исходе сверки до нажатия. */
+    /**
+     * Что сказать об исходе сверки до нажатия.
+     *
+     * Отрицательный исход называет ПРОВЕРЕННЫЙ номер, а не просто «его нет». Разница
+     * найдена на стенде 2026-09-17: контакт с лишним нулём выглядел как человек без
+     * приложения, и беду искали в определении, которое работало исправно.
+     */
     fun about(words: ChatWords): String? = when (checked) {
         true -> words.foundInTima
-        false -> words.notInTima
+        false -> normalized?.let { words.notInTimaChecked(it) } ?: words.notInTima
         null -> null
     }
 }

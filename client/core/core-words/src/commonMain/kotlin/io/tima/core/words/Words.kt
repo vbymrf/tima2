@@ -480,6 +480,19 @@ interface ChatWords {
     val foundInTima: String
     val notInTima: String
 
+    /**
+     * То же, но с номером, который проверяли.
+     *
+     * **Без номера сообщение неотличимо от опечатки.** 2026-09-17 на стенде контакт был
+     * заведён с лишним нулём — `+799900000101` вместо `+79990000101`, — и экран честно
+     * сказал «в TIMa его нет». Сказал правду: такого номера в TIMa действительно нет.
+     * Человек прочитал это как «у него не стоит приложение» и искал беду в приложении.
+     *
+     * Поэтому сообщение обязано называть то, что проверялось: номер на экране и номер,
+     * ушедший серверу, — разные строки, и расходятся они молча.
+     */
+    fun notInTimaChecked(phone: String): String
+
     // Полоса сообщений о ключах и круге.
     fun tooLarge(bytes: Int, limit: Int): String
     fun keysAsked(devices: Int): String
@@ -553,6 +566,15 @@ interface ChatWords {
     val avatarRemove: String
     val avatarCrop: String
     val avatarCropHint: String
+
+    /**
+     * Кнопка «Повернуть» на подрезке аватара.
+     *
+     * Нужна даже после того, как метка поворота камеры стала учитываться: метки не бывает
+     * у снимков экрана и у картинок, прошедших через чужой редактор, а фотографию,
+     * лежащую боком, человеку иначе не выправить — в приложение её уже внесли.
+     */
+    val avatarRotate: String
     val avatarNotImage: String
 }
 
@@ -1628,6 +1650,9 @@ object RussianWords : Words {
         override val addToContacts = "Добавить в контакты"
         override val foundInTima = "Найден в TIMa — подписка на его ленту оформится сама"
         override val notInTima = "В TIMa его нет. Контакт сохранится — позвонить можно телефоном"
+        override fun notInTimaChecked(phone: String) =
+            "В TIMa нет номера $phone. Контакт сохранится — позвонить можно телефоном. " +
+                "Если человек в TIMa есть, проверьте номер"
 
         override val access = "Доступность"
         override val members = "Участники"
@@ -1727,6 +1752,7 @@ object RussianWords : Words {
         override val avatarRemove = "Убрать фото"
         override val avatarCrop = "Обрезать"
         override val avatarCropHint = "Двигайте и растягивайте: в квадрат попадёт то, что видно"
+        override val avatarRotate = "Повернуть"
         override val avatarNotImage = "Это не картинка или файл повреждён"
     }
 

@@ -623,6 +623,9 @@ object SpanishWords : Words {
         override val addToContacts = "Añadir a contactos"
         override val foundInTima = "Encontrado en TIMa — se suscribirá a sus novedades automáticamente"
         override val notInTima = "No está en TIMa. El contacto se guardará — puede llamar por teléfono"
+        override fun notInTimaChecked(phone: String) =
+            "TIMa no tiene el número $phone. El contacto se guardará — puede llamar por " +
+                "teléfono. Si la persona está en TIMa, revise el número"
 
         override val access = "Audiencia"
         override val members = "Miembros"
@@ -718,6 +721,7 @@ object SpanishWords : Words {
         override val avatarRemove = "Quitar foto"
         override val avatarCrop = "Recortar"
         override val avatarCropHint = "Arrastre y estire: lo que se ve en el cuadrado es lo que queda"
+        override val avatarRotate = "Girar"
         override val avatarNotImage = "Esto no es una imagen o el archivo está dañado"
     }
 

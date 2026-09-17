@@ -49,6 +49,13 @@ class Diary(
     /** Что ещё не дописано на диск. Пишется в конец файла дня и очищается. */
     private val pending = ArrayList<Note>()
 
+    /** Когда начали считать текущий всплеск по коду и сколько насчитали. */
+    private val burstStart = HashMap<String, Long>()
+    private val burstCount = HashMap<String, Int>()
+
+    /** По каким кодам всплеск уже назван и записи временно не ведутся. */
+    private val burstNamed = HashSet<String>()
+
     /** День, в который сбрасывали в прошлый раз, — по нему видно, что наступил новый. */
     private var lastDay: String = dayOf(now())
 
@@ -83,15 +90,64 @@ class Diary(
                 value?.let { name to scrub(it.toString()).take(DETAIL_LENGTH) }
             },
         )
+        // Круг замечается ЗДЕСЬ, через одну точку, а не в местах, где пишут: место,
+        // ушедшее в круг, как раз и не знает, что оно в круге.
+        val suspect = synchronizedNotes { countRepeat(code, note.atMillis) }
+
         synchronizedNotes {
-            notes.addLast(note)
-            while (notes.size > maxNotes) notes.removeFirst()
-            pending.add(note)
+            if (code !in burstNamed) {
+                notes.addLast(note)
+                while (notes.size > maxNotes) notes.removeFirst()
+                pending.add(note)
+            }
+        }
+
+        // Строка про круг пишется ОДНА на всплеск. Иначе журнал утонет ровно в том, что
+        // взялся описывать, — а хранилище у него на сутки, и утопить его значит потерять
+        // всё остальное за этот день.
+        if (suspect != null) {
+            trouble(
+                LogCode.LOOP_SUSPECT,
+                "похоже на работу по кругу: одно и то же повторяется слишком часто",
+                "код" to code,
+                "раз" to suspect.times,
+                "мс" to suspect.millis,
+            )
         }
         // Беда сбрасывается сразу: после неё процесс вполне может не дожить до следующей
         // пачки — падение и убийство системой случаются именно в такие моменты.
         if (level == Level.Trouble || pending.size >= FLUSH_EVERY) flush()
     }
+
+    /**
+     * Счётчик повторов одного кода в скользящем окне.
+     *
+     * @return описание всплеска, если он ТОЛЬКО ЧТО перевалил за порог, иначе `null`.
+     *   Второй раз для того же всплеска не вернётся: строка про круг нужна одна.
+     *
+     * Окно сбрасывается, когда между записями прошло больше [BURST_WINDOW]: значит это
+     * уже не всплеск, а обычная жизнь, и считать надо заново. Тем же сбросом кончается
+     * молчание — после паузы код снова пишется как ни в чём не бывало.
+     */
+    private fun countRepeat(code: String, atMillis: Long): Burst? {
+        // Себя не считаем: иначе запись про круг сама станет кругом.
+        if (code == LogCode.LOOP_SUSPECT) return null
+
+        val started = burstStart[code]
+        if (started == null || atMillis - started > BURST_WINDOW) {
+            burstStart[code] = atMillis
+            burstCount[code] = 1
+            burstNamed.remove(code)
+            return null
+        }
+        val times = (burstCount[code] ?: 0) + 1
+        burstCount[code] = times
+        if (times < BURST_LIMIT || code in burstNamed) return null
+        burstNamed.add(code)
+        return Burst(times = times, millis = atMillis - started)
+    }
+
+    private data class Burst(val times: Int, val millis: Long)
 
     /** То же, но для беды: отдельный уровень, чтобы её было видно в отчёте. */
     fun trouble(code: String, text: String = "", vararg details: Pair<String, Any?>) =
@@ -250,6 +306,23 @@ class Diary(
          * внезапном убийстве; чаще — запись на диск начинает стоить заметно.
          */
         const val FLUSH_EVERY: Int = 50
+        /**
+         * Окно, в котором считаются повторы одного кода.
+         *
+         * Две секунды: круг успевает проявить себя сотнями записей, а обычная работа —
+         * открытие экрана, проход очереди — столько за это время не пишет и близко.
+         */
+        const val BURST_WINDOW: Long = 2_000L
+
+        /**
+         * Сколько повторов в окне считать кругом.
+         *
+         * Полсотни за две секунды — это 25 записей в секунду одним кодом. Человек столько
+         * не нажимает, сеть столько не отвечает; так пишет только то, что само себя
+         * вызывает.
+         */
+        const val BURST_LIMIT: Int = 50
+
         const val MAX_NOTES: Int = 4000
         const val MAX_LENGTH: Int = 300
 
