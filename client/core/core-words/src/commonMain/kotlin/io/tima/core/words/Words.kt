@@ -575,6 +575,22 @@ interface ChatWords {
      * лежащую боком, человеку иначе не выправить — в приложение её уже внесли.
      */
     val avatarRotate: String
+
+    /** Кнопка «Выбрать раздел»: открывает список тех, что уже заведены. */
+    val pickSection: String
+
+
+    /**
+     * Кнопка «Создать раздел „X“» — когда набранного раздела ещё нет.
+     *
+     * Без неё контакт уходил В НЕСУЩЕСТВУЮЩИЙ раздел и пропадал с экрана: строка в книге
+     * была, а показать её было негде — списки строятся по заведённым разделам. Ошибки при
+     * этом не было никакой. Найдено заказчиком 2026-09-17.
+     */
+    fun createSectionNamed(name: String): String
+
+    /** Отказ сохранить, пока раздела нет. */
+    fun noSuchSection(name: String): String
     val avatarNotImage: String
 }
 
@@ -745,6 +761,15 @@ interface AuthWords {
 interface WizardWords {
     val create: String
     val creating: String
+
+    /**
+     * Кнопка «Перейти в группу» после создания.
+     *
+     * Нужна ровно в одном случае: часть номеров не нашлась, экран остался показывать
+     * непозванных — и уйти с него было НЕЧЕМ. Кнопка при этом оставалась «Создать», и
+     * нажатие на неё заводило ещё одну группу. Без предела. Найдено заказчиком 2026-09-17.
+     */
+    val goToCreated: String
     val next: String
     val gotIt: String
 
@@ -1753,6 +1778,11 @@ object RussianWords : Words {
         override val avatarCrop = "Обрезать"
         override val avatarCropHint = "Двигайте и растягивайте: в квадрат попадёт то, что видно"
         override val avatarRotate = "Повернуть"
+        override val pickSection = "Выбрать раздел"
+        override fun createSectionNamed(name: String) = "Создать раздел «$name»"
+        override fun noSuchSection(name: String) =
+            "Раздела «$name» нет. Создайте его или выберите из списка — иначе контакт " +
+                "попадёт туда, где его не видно"
         override val avatarNotImage = "Это не картинка или файл повреждён"
     }
 
@@ -1961,6 +1991,7 @@ object RussianWords : Words {
     override val wizard = object : WizardWords {
         override val create = "Создать"
         override val creating = "Создаём…"
+        override val goToCreated = "Перейти в группу"
         override val next = "Далее"
         override val gotIt = "Понятно"
 

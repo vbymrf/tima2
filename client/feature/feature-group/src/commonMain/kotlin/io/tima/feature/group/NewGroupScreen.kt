@@ -68,6 +68,8 @@ fun NewGroupScreen(
     onAddNumber: () -> Unit,
     onRemoveNumber: (String) -> Unit,
     onCreate: () -> Unit,
+    /** Уйти в созданную группу. `null` — переход делает кто-то другой. */
+    onOpenCreated: (() -> Unit)? = null,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     /**
@@ -113,11 +115,23 @@ fun NewGroupScreen(
                 state.trouble?.let { Trouble(it) }
 
                 if (state.step == lastStep(state.section)) {
-                    Button(
-                        label = if (state.expect) words.creating else words.create,
-                        onClick = onCreate,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    // После создания кнопка МЕНЯЕТСЯ, а не остаётся «Создать». Экран
+                    // задерживается здесь намеренно — показать непозванных, — и если бы
+                    // кнопка осталась прежней, единственным способом уйти было бы создать
+                    // ещё одну группу. Так и выходило.
+                    if (state.created != null && onOpenCreated != null) {
+                        Button(
+                            label = words.goToCreated,
+                            onClick = onOpenCreated,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        Button(
+                            label = if (state.expect) words.creating else words.create,
+                            onClick = onCreate,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                     // Появляется только после создания: до него говорить о непозванных нечего.
                     if (state.notInvited.isNotEmpty()) {
                         Secondary(words.groupCreatedNotInvited)

@@ -1,6 +1,7 @@
 package io.tima.feature.chat
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -62,7 +63,10 @@ fun BookScreen(
     // Книга — та же группа «списки», что и чаты: строка обрезается и обязана быть
     // одной высоты.
     ProvidePlace(TextPlace.LISTS) {
-    Column(modifier.fillMaxSize()) {
+    // Box поверх колонки: «＋» без строки поиска становится плавающей кнопкой в правом
+    // нижнем углу — там же, где «написать» в списке чатов.
+    Box(modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize()) {
         if (state.view.showSearch) {
             Row(
                 modifier = Modifier
@@ -164,6 +168,20 @@ fun BookScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+        // Завести контакт можно всегда. До 2026-09-17 «＋» жил ВНУТРИ строки поиска, и
+        // снятая галочка «Показывать поиск» уносила вместе с ним единственный способ
+        // добавить человека руками. Найдено заказчиком; чинится не возвратом поиска, а
+        // тем, что кнопка перестаёт от него зависеть.
+        if (onAdd != null && !state.view.showSearch) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(TimaSpacing.about5),
+            ) {
+                IconButton(glyph = "＋", onClick = onAdd, live = true)
             }
         }
     }

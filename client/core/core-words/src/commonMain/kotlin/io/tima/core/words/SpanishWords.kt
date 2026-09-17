@@ -722,6 +722,11 @@ object SpanishWords : Words {
         override val avatarCrop = "Recortar"
         override val avatarCropHint = "Arrastre y estire: lo que se ve en el cuadrado es lo que queda"
         override val avatarRotate = "Girar"
+        override val pickSection = "Elegir sección"
+        override fun createSectionNamed(name: String) = "Crear la sección «$name»"
+        override fun noSuchSection(name: String) =
+            "No existe la sección «$name». Créela o elija una de la lista — si no, el " +
+                "contacto irá a donde nadie lo ve"
         override val avatarNotImage = "Esto no es una imagen o el archivo está dañado"
     }
 
@@ -936,6 +941,7 @@ object SpanishWords : Words {
     override val wizard = object : WizardWords {
         override val create = "Crear"
         override val creating = "Creando…"
+        override val goToCreated = "Abrir el grupo"
         override val next = "Siguiente"
         override val gotIt = "Entendido"
 

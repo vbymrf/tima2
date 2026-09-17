@@ -882,6 +882,9 @@ private fun App(
             onSection = contacts::changedSection,
             onSave = { contacts.save { newContact = false } },
             onBack = { newContact = false },
+            // Завести раздел прямо из подокна контакта: человек уже набрал его имя, и
+            // отсылать его за тем же именем в другое место значит набрать дважды.
+            onCreateSection = contacts::createTypedSection,
         )
         return
     }
@@ -2054,6 +2057,14 @@ private fun NewGroup(
         onAddNumber = store::addNumber,
         onRemoveNumber = store::removeNumber,
         onCreate = store::create,
+        // Уйти с экрана, когда он задержался ради непозванных: без этой кнопки уйти было
+        // нечем, а прежняя «Создать» заводила ещё одну группу.
+        onOpenCreated = {
+            state.created?.let { groupId ->
+                onCreated(groupId, state.title)
+                store.reset()
+            }
+        },
         ready = store::ready,
         onCatalogue = store::choseCatalogue,
         onComments = store::choseComments,

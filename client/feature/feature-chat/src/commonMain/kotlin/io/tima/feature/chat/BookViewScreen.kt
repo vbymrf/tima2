@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -17,9 +19,13 @@ import io.tima.core.ui.RadioMark
 import io.tima.core.ui.CheckMark
 import io.tima.core.ui.words
 import io.tima.core.ui.Name
+import io.tima.core.ui.ProvidePlace
+import io.tima.core.ui.TextPlace
 import io.tima.core.ui.SectionTitle
 import io.tima.core.ui.Tertiary
+import io.tima.core.ui.IconButton
 import io.tima.core.ui.TimaSpacing
+import io.tima.core.ui.TimaZones
 
 /**
  * Подокно «Вид» — ПЛАН-КОНТАКТОВ.md, Д5.
@@ -151,11 +157,27 @@ fun BookViewSheet(
                 // Проглатывает касание: нажатие внутри панели не должно её закрывать.
                 .clickable(enabled = false, onClick = {}),
         ) {
-            ListLine(
-                onClick = onClose,
-                middle = { Name(Tima.words.book.view) },
-                right = { Tertiary("✕", lineOne = true) },
-            )
+            // Шапка подокна, а не строка списка. Прежде здесь стоял `ListLine` с
+            // третьестепенным «✕»: название читалось как пункт, а крестик — как текст,
+            // и оба были мельче всего вокруг. Крестик к тому же не выглядел кнопкой —
+            // у него не было круглой подложки, которая есть у всех прочих (подокно
+            // переходов, шапки окон). Замечено заказчиком 2026-09-17.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = TimaZones.zone1)
+                    .padding(horizontal = TimaSpacing.about4),
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Кегль шапки, а не строки списка: подокно называет себя так же, как
+                // называют себя окна. `ProvidePlace` берёт размер из настроек человека —
+                // «Шрифты и размеры», группа «шапки».
+                Box(Modifier.weight(1f)) {
+                    ProvidePlace(TextPlace.HEADERS) { Name(Tima.words.book.view) }
+                }
+                IconButton(glyph = "✕", onClick = onClose)
+            }
             BookViewScreen(view = view, onChange = onChange)
         }
     }

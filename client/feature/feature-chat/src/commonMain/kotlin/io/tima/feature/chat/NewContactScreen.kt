@@ -1,13 +1,23 @@
 package io.tima.feature.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -16,12 +26,18 @@ import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Field
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
+import io.tima.core.ui.Name
+import io.tima.core.ui.ListLine
+import io.tima.core.ui.IconButton
 import io.tima.core.ui.PhoneFields
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Tima
 import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing
+import io.tima.core.ui.TimaShapes
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.Trouble
 
@@ -31,8 +47,13 @@ import io.tima.core.ui.Trouble
  * **Обязателен только номер.** По нему приложение находит человека; имя и раздел можно не
  * заполнять — имя подставится из телефонной книги, раздел будет общим.
  *
- * **Исход сверки сказан до нажатия**, и слово на кнопке от него зависит: «Написать»
- * обещает переписку, а обещать её тому, кого в TIMa нет, нельзя — писать ещё некому.
+ * **Исход сверки сказан до нажатия и стоит ПЕРВЫМ** (решение заказчика 2026-09-17).
+ * Раньше он стоял внизу, под всеми полями: человек набирал номер, имя, раздел — и только
+ * потом узнавал, с кем имеет дело. Ответ на «кого я добавляю» обязан быть там, где его
+ * увидят, а не там, где до него дочитают.
+ *
+ * Слово на кнопке от исхода зависит: «Написать» обещает переписку, а обещать её тому, кого
+ * в TIMa нет, нельзя — писать ещё некому.
  *
  * **Имя здесь местное.** Оно живёт в нашей книге и обратно в телефон не пишется:
  * «Витя-сосед» — то, как его зовёте вы, а не то, как он назвался.
@@ -47,20 +68,52 @@ fun NewContactScreen(
     onSave: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Завести набранный раздел. `null` — заводить нечем, кнопки не будет. */
+    onCreateSection: (() -> Unit)? = null,
 ) {
+    var picking by remember { mutableStateOf(false) }
     val colors = Tima.colors
     val words = Tima.words.chat
+    Box(Modifier.fillMaxSize()) {
     Column(modifier.fillMaxSize().background(colors.surface)) {
         SubwindowHeader(title = words.newContact, onBack = onBack)
 
         Box(
-            modifier = Modifier.fillMaxSize().padding(TimaSpacing.about5),
+            modifier = Modifier
+                .fillMaxSize()
+                // Прокрутка, а не «уместится как-нибудь». С поднятой клавиатурой окно
+                // ужимается (`adjustResize`), и нижняя кнопка уезжала за край: увидеть её
+                // можно было, только свернув клавиатуру. Найдено заказчиком 2026-09-17.
+                .verticalScroll(rememberScrollState())
+                .padding(TimaSpacing.about5),
             contentAlignment = Alignment.TopCenter,
         ) {
             Column(
                 modifier = Modifier.widthIn(max = 420.dp),
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about4),
             ) {
+                // Исход сверки — ПЕРВЫМ, до полей. Найденный обведён салатовым: это
+                // хорошая новость, и она должна читаться за мгновение, а не вычитываться.
+                state.about(words)?.let { said ->
+                    if (state.checked == true) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(colors.navigation, RoundedCornerShape(TimaShapes.radius))
+                                .padding(TimaSpacing.about3),
+                        ) {
+                            Caption(
+                                said,
+                                fontSize = TimaType.sz5,
+                                weight = FontWeight.Bold,
+                                color = colors.onAccent,
+                            )
+                        }
+                    } else {
+                        Secondary(said)
+                    }
+                }
+
                 Caption(words.phoneNumber, fontSize = TimaType.sz5, weight = FontWeight.Bold)
                 // Два поля, плюс нарисован: на цифровой клавиатуре его нет (2026-09-15).
                 PhoneFields(
@@ -77,9 +130,26 @@ fun NewContactScreen(
                 Caption(words.section, fontSize = TimaType.sz5, weight = FontWeight.Bold)
                 Field(value = state.section, onChange = onSection, hint = words.commonSection)
 
-                // Исход сверки: сказан обычным текстом, а не отказом. «Не найден» — не
-                // ошибка человека, а состояние мира.
-                state.about(words)?.let { Secondary(it) }
+                // Два входа в раздел: выбрать из заведённых и завести набранный. Раньше
+                // было одно поле, и набранное в нём имя несуществующего раздела уводило
+                // контакт туда, где его не видно, — без единого слова.
+                Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                    if (state.sections.isNotEmpty()) {
+                        Button(
+                            label = words.pickSection,
+                            kind = ButtonKind.Quiet,
+                            onClick = { picking = true },
+                        )
+                    }
+                    if (state.sectionMissing && onCreateSection != null) {
+                        Button(
+                            label = words.createSectionNamed(state.section.trim()),
+                            kind = ButtonKind.Quiet,
+                            onClick = onCreateSection,
+                        )
+                    }
+                }
+
                 state.trouble?.let { Trouble(it) }
 
                 // Кнопка не гаснет, а отвечает словами: погашенная кнопка не
@@ -92,8 +162,59 @@ fun NewContactScreen(
             }
         }
     }
-}
 
+    // Подокно выбора раздела: затемнение и панель снизу — тот же приём, что у «Вида».
+    // Списком, а не набором в поле: заведённые разделы человек уже называл, и набирать
+    // их второй раз значит позволить ему ошибиться в собственном же имени.
+    if (picking) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(colors.text.copy(alpha = 0.45f))
+                .clickable { picking = false },
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.surface)
+                    .clickable(enabled = false) {},
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about3),
+                    horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.weight(1f)) {
+                        ProvidePlace(TextPlace.HEADERS) { Name(words.pickSection) }
+                    }
+                    IconButton(glyph = "✕", onClick = { picking = false })
+                }
+                // «Общий» первым и всегда: он существует без своей строки в разделах —
+                // это пустое значение, а не название.
+                ListLine(
+                    onClick = {
+                        onSection("")
+                        picking = false
+                    },
+                    middle = { Name(words.commonSection) },
+                )
+                state.sections.forEach { name ->
+                    ListLine(
+                        onClick = {
+                            onSection(name)
+                            picking = false
+                        },
+                        middle = { Name(name) },
+                    )
+                }
+            }
+        }
+    }
+    }
+}
 /**
  * Новый раздел книги — то же подокно, второй его смысл.
  *

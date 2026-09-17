@@ -242,7 +242,11 @@ class NewGroupStore(
     /** Человек нажал «Создать». */
     fun create() {
         val current = _state.value
-        if (current.expect) return
+        // Уже создано — второй раз не создаём. Прежде стоял только `expect`, а он гаснет
+        // сразу после ответа сервера: если часть номеров не нашлась, экран оставался
+        // открытым с живой кнопкой «Создать», и каждое нажатие заводило НОВУЮ группу.
+        // Предела этому не было. Найдено заказчиком 2026-09-17.
+        if (current.expect || current.created != null) return
         _state.value = current.copy(expect = true, trouble = null)
 
         when (current.section) {

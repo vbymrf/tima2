@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -42,6 +43,14 @@ class NewContactStore(
 ) {
     private val _state = MutableStateFlow(NewContactState())
     val state: StateFlow<NewContactState> = _state.asStateFlow()
+
+    init {
+        // Разделы читаются один раз при открытии подокна: пока оно открыто, завести новый
+        // можно только отсюда, и этот случай дописывает список сам.
+        scope.launch {
+            _state.value = _state.value.copy(sections = book.sections().first())
+        }
+    }
 
     fun changedCountryCode(text: String) {
         _state.value = _state.value.copy(countryCode = text, checked = null)
@@ -81,7 +90,22 @@ class NewContactStore(
     }
 
     fun changedSection(name: String) {
-        _state.value = _state.value.copy(section = name)
+        _state.value = _state.value.copy(section = name, trouble = null)
+    }
+
+    /**
+     * Завести набранный раздел прямо отсюда.
+     *
+     * Здесь, а не «потом в настройках»: человек уже назвал раздел, и отсылать его в
+     * другое место за тем же именем значит заставить набрать его дважды.
+     */
+    fun createTypedSection() {
+        val name = _state.value.section.trim()
+        if (name.isBlank()) return
+        scope.launch {
+            book.addSection(name)
+            _state.value = _state.value.copy(sections = _state.value.sections + name, trouble = null)
+        }
     }
 
     private fun check(phone: String) {
@@ -104,6 +128,12 @@ class NewContactStore(
         val state = _state.value
         if (state.normalized == null) {
             _state.value = state.copy(trouble = words().chat.notAPhone)
+            return
+        }
+        // Раздела нет — контакт не сохраняется. Прежде он сохранялся и пропадал с экрана:
+        // строка в книге была, а показать её было негде. Молчаливая пропажа хуже отказа.
+        if (state.sectionMissing) {
+            _state.value = state.copy(trouble = words().chat.noSuchSection(state.section.trim()))
             return
         }
         scope.launch {
@@ -129,12 +159,25 @@ data class NewContactState(
     val normalized: String? = null,
     val name: String = "",
     val section: String = "",
+    /**
+     * Разделы, которые уже заведены. Нужны здесь, а не только на экране выбора: по ним
+     * решается, существует ли набранный, — а от этого зависит, можно ли сохранять.
+     */
+    val sections: List<String> = emptyList(),
     /** `null` — не сверяли или не смогли; иначе — нашёлся ли номер в TIMa. */
     val checked: Boolean? = null,
     val working: Boolean = false,
     val trouble: String? = null,
 ) {
-    val canSave: Boolean get() = normalized != null && !working
+    /**
+     * Раздел набран, но такого нет.
+     *
+     * Пустой раздел — это «Общий», он существует всегда и в списке разделов не значится.
+     */
+    val sectionMissing: Boolean
+        get() = section.isNotBlank() && sections.none { it.equals(section.trim(), ignoreCase = true) }
+
+    val canSave: Boolean get() = normalized != null && !working && !sectionMissing
 
     /**
      * Слово на кнопке.
