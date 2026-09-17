@@ -20,6 +20,7 @@ import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -184,8 +185,22 @@ private fun Modifier.authorStrip(color: Color): Modifier = drawWithCache {
     // то есть на каждый кадр каждого пузыря, — на длинной переписке это выделение памяти
     // в цикле прокрутки, и именно оно там стоило дороже всего остального.
     onDrawBehind {
-        clipRect(right = width) {
-            drawPath(path = shape, color = color, style = stroke)
+        // Отсечений ДВА, и оба обязательны.
+        //
+        // `clipPath(shape)` — по самой форме пузыря: обводка нарисована по центру линии,
+        // то есть половина её ширины уходит НАРУЖУ. Без этого отсечения зелёное вылезало
+        // за верхний и нижний край пузыря — поймано на телефоне 2026-09-17, и это была
+        // вторая попытка починить одно и то же место.
+        //
+        // `clipRect(right = width)` — узкой полосой слева: оставить только левую границу,
+        // а не обвести пузырь кругом.
+        //
+        // Вместе они дают ровно `border-left: 4px` по скруглённой рамке: полоса лежит
+        // ВНУТРИ пузыря и огибает оба угла.
+        clipPath(shape) {
+            clipRect(right = width) {
+                drawPath(path = shape, color = color, style = stroke)
+            }
         }
     }
 }
