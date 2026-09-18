@@ -25,6 +25,9 @@ import io.tima.core.network.GroupsOverHttp
 import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.NarrowMessageLevel
 import io.tima.domain.chat.ChatKind
+import io.tima.domain.chat.GroupKeyRotator
+import io.tima.domain.chat.HealGroupKey
+import io.tima.domain.chat.RotateStep
 import io.tima.domain.chat.ChatSummary
 import io.tima.domain.chat.Contact
 import io.tima.domain.chat.ChatNames
@@ -1407,6 +1410,7 @@ private fun App(
             is Where.Chat -> {
                 {
                     Chat(
+                        heal = assembled.keyOrchestrator.heal,
                         environment = environment,
                         network = network,
                         chatId = current.chatId,
@@ -1429,6 +1433,9 @@ private fun App(
             Where.NewGroup -> {
                 {
                     NewGroup(
+                        rotator = { groupId, reason ->
+                            if (assembled.keyOrchestrator.rotate(groupId, reason)) RotateStep.Rotated else RotateStep.Refused("ротация не удалась")
+                        },
                         environment = environment,
                         network = network,
                         social = network,
@@ -1491,6 +1498,8 @@ private fun Chat(
     onMembers: () -> Unit,
     /** Унести реплику к себе на страницу: `(messageId, круг записи)`. */
     onCarry: (Long, Int) -> Unit = { _, _ -> },
+    /** Лечение группы без ключа при открытии; `null` — лечить нечем. */
+    heal: HealGroupKey? = null,
 ) {
     // Групповая ли переписка — решает столбец `kind`, а не догадка по идентификатору.
     // От этого зависит трое: показывать ли автора у реплик, спрашивать ли имена и есть ли
@@ -1514,6 +1523,9 @@ private fun Chat(
             } else {
                 null
             },
+            // Лечение группы без ключа при открытии: обёртки, а если ключа не было ни у
+            // кого — первый выпуск. Стенд 2026-09-16…18: группы рождались без ключа.
+            heal = if (group) heal else null,
             names = if (group) {
                 ChatNames { userId -> network.directory.nameOrNumber(userId) ?: userId }
             } else {
@@ -2056,6 +2068,8 @@ private fun NewGroup(
     scope: kotlinx.coroutines.CoroutineScope,
     onBack: () -> Unit,
     onCreated: (String, String) -> Unit,
+    /** Выпуск первого ключа при рождении группы. */
+    rotator: GroupKeyRotator? = null,
 ) {
     val store = remember {
         NewGroupStore(
@@ -2063,6 +2077,9 @@ private fun NewGroup(
                 groups = GroupsOverHttp(network.groups),
                 directory = network.directory,
                 chats = SqlChatBook(environment.db, environment.cipher),
+                // Первый ключ — при рождении группы, как в v1. Без этого группа немая:
+                // отправка отвечает NoKey, а просить ключ не у кого (2026-09-16…18).
+                rotator = rotator,
             ),
             scope = scope,
             // Канал и сообщество перестали быть серыми: у мастера есть чем их выполнить.

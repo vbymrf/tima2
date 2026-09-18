@@ -125,7 +125,7 @@ class MembersStoreTest {
     ): MembersStore {
         groups.myRole = myRole
         return MembersStore(
-            members = ManageGroupMembers(groups, Directory, GroupKeyRotator { rotation }),
+            members = ManageGroupMembers(groups, Directory, GroupKeyRotator { _, _ -> rotation }),
             groupId = group,
             myUserId = me,
             scope = scope,

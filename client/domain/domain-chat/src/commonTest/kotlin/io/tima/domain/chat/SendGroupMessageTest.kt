@@ -118,7 +118,7 @@ class SendGroupMessageTest {
 
     private class FakeRotation : GroupKeyRotator {
         val calls = mutableListOf<String>()
-        override suspend fun rotate(groupId: String): RotateStep {
+        override suspend fun rotate(groupId: String, reason: RotationReason): RotateStep {
             calls += groupId
             return RotateStep.Rotated
         }

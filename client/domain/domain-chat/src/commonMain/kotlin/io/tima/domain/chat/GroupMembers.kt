@@ -39,7 +39,7 @@ class ManageGroupMembers(
             is UserLookup.Found -> answer.userId
             else -> return MembershipStep.NoSuchUser
         }
-        return apply(groupId, groups.addMember(groupId, found))
+        return apply(groupId, groups.addMember(groupId, found), RotationReason.MemberJoin)
     }
 
     /**
@@ -49,10 +49,10 @@ class ManageGroupMembers(
      * что человек не увидит группу в своём списке, продолжая расшифровывать её сообщения.
      */
     suspend fun remove(groupId: String, userId: String): MembershipStep =
-        apply(groupId, groups.removeMember(groupId, userId))
+        apply(groupId, groups.removeMember(groupId, userId), RotationReason.MemberLeave)
 
-    private suspend fun apply(groupId: String, step: MemberStep): MembershipStep = when (step) {
-        MemberStep.Done -> when (val rotation = rotator.rotate(groupId)) {
+    private suspend fun apply(groupId: String, step: MemberStep, reason: RotationReason): MembershipStep = when (step) {
+        MemberStep.Done -> when (val rotation = rotator.rotate(groupId, reason)) {
             RotateStep.Rotated -> MembershipStep.Done(switchedKey = true)
 
             // Кто-то ротировал раньше нас: версия уже другая, и наша попытка не нужна.
@@ -83,7 +83,37 @@ class ManageGroupMembers(
  * устройства участников, крипта и сеть разом — то есть ровно то, что домен не видит.
  */
 fun interface GroupKeyRotator {
-    suspend fun rotate(groupId: String): RotateStep
+    /**
+     * @param reason зачем ротируем — уходит серверу и решает, срочная ли ротация.
+     *
+     * До 2026-09-18 клиент слал одну строку на всё — `member_change`, — которой в списке
+     * сервера (ADR-0017 §7) **нет**. Сервер отвечал 400 `bad_reason`, и ни одна ротация с
+     * клиента v2 не проходила: ни при приглашении, ни при исключении, ни по счётчику.
+     * Группы жили без ключа, а экран винил «устройство». Причина теперь перечнем: строку
+     * не с чем сверить, перечень — не соврёт.
+     */
+    suspend fun rotate(groupId: String, reason: RotationReason): RotateStep
+}
+
+/**
+ * Причины ротации — ровно те, что принимает сервер (`groups.go`, `reasonAllowed`).
+ *
+ * Срочные (`MemberJoin`, `MemberLeave`, `Compromise`) сервер проводит сразу; несрочные
+ * (`Epoch`, `Periodic`) — не чаще раза в пятнадцать минут. Первый выпуск ключа идёт как
+ * `MemberJoin`: так делал v1, и порог к нему не применяется — предыдущей ротации нет.
+ */
+enum class RotationReason(val wire: String) {
+    Epoch("epoch"),
+    Periodic("periodic"),
+    MemberJoin("member_join"),
+    MemberLeave("member_leave"),
+    Compromise("compromise"),
+    ;
+
+    companion object {
+        /** Причина из кадра сервера; неизвестная — `Periodic`, самая безопасная. */
+        fun fromWire(wire: String): RotationReason = entries.firstOrNull { it.wire == wire } ?: Periodic
+    }
 }
 
 sealed interface RotateStep {

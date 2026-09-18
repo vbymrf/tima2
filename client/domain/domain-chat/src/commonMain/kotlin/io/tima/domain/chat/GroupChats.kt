@@ -16,6 +16,23 @@ class CreateGroupChat(
     private val groups: GroupRegistry,
     private val directory: UserDirectory,
     private val chats: ChatBook,
+    /**
+     * Выпуск группового ключа. `null` — без ключа (так собирают тесты состава).
+     *
+     * ── ПОЧЕМУ ОН ЗДЕСЬ, И ЧТО БЫЛО БЕЗ НЕГО ────────────────────────────────────
+     *
+     * Группа без ключа — тупик, и в нём побывал стенд 2026-09-16…18. Создание группы
+     * ключа не выпускало; отправка в группу без ключа отвечает `NoKey`; экран говорил
+     * «ключа этой группы на устройстве нет — попросите у участников». У владельца свежей
+     * группы участников нет, а выпустить ключ мог только он — и не мог: ни одно действие
+     * к выпуску не вело. На сервере у таких групп пусты и история ключей, и обёртки, и
+     * сообщения.
+     *
+     * В v1 (`ref/client-v1`, `TimaChatService.createGroup`) сразу после добавления
+     * участников шёл `rotateGroup(groupId, currentVersion = 0)` — группа рождалась с
+     * ключом версии 1. При переписывании на `CreateGroupChat` этот вызов потерялся.
+     */
+    private val rotator: GroupKeyRotator? = null,
 ) {
 
     /**
@@ -68,7 +85,18 @@ class CreateGroupChat(
             }
         }
 
-        return CreateGroupStep.Created(groupId = groupId, notInvited = notInvited)
+        // Первый ключ — сразу, ПОСЛЕ добавления участников: ротация заворачивает ключ
+        // на устройства всех, кто в группе на этот момент, и добавленные до неё получат
+        // его без второй ротации. Провал ротации группу не отменяет — она уже есть, и ключ
+        // выпустит первое же открытие (см. `HealGroupKey`); но сказать о нём наружу стоит.
+        // Только личной: у публичной группы ключа нет по замыслу, сервер ответит not_e2e.
+        val keyed = if (kind == GroupKind.Personal) {
+            rotator?.rotate(groupId, RotationReason.MemberJoin).let { it == null || it is RotateStep.Rotated || it is RotateStep.VersionConflict }
+        } else {
+            true
+        }
+
+        return CreateGroupStep.Created(groupId = groupId, notInvited = notInvited, keyIssued = keyed)
     }
 
     private companion object {
@@ -221,7 +249,12 @@ sealed interface CreateGroupStep {
      * @param непозванные номера, которых нет в TIMA или которых не удалось добавить. Группа
      *   при этом создана: терять её из-за одного номера человек не согласится.
      */
-    data class Created(val groupId: String, val notInvited: List<String>) : CreateGroupStep
+    data class Created(
+        val groupId: String,
+        val notInvited: List<String>,
+        /** Ключ выпущен. `false` — группа есть, ключа нет; его выпустит первое открытие. */
+        val keyIssued: Boolean = true,
+    ) : CreateGroupStep
 
     data class BadTitle(val reason: String) : CreateGroupStep
     data class Offline(val retryAfterMs: Long) : CreateGroupStep

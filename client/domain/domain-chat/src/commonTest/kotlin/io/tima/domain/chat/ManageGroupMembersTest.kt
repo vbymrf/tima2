@@ -98,7 +98,7 @@ class ManageGroupMembersTest {
 
     private class FakeRotation(private val answer: RotateStep) : GroupKeyRotator {
         val rotated = mutableListOf<String>()
-        override suspend fun rotate(groupId: String): RotateStep {
+        override suspend fun rotate(groupId: String, reason: RotationReason): RotateStep {
             rotated += groupId
             return answer
         }

@@ -13,6 +13,8 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import io.tima.domain.chat.ShareGroupKeys
+import io.tima.domain.chat.HealGroupKey
+import io.tima.domain.chat.RotationReason
 import io.tima.domain.chat.SyncGroupKeys
 
 /**
@@ -45,6 +47,12 @@ class GroupKeyOrchestrator(
         keys = groupKeys,
     )
 
+    /**
+     * Лечение группы без ключа при открытии — забрать обёртки, а если ключа не было ни у
+     * кого, выпустить первый. Собирается здесь: те же `sync` и `rotation`.
+     */
+    val heal: HealGroupKey get() = HealGroupKey(sync = sync, rotator = rotation)
+
     private val sharing = ShareGroupKeys(
         keys = groupKeys,
         wrap = GroupKeyWrapOverKodium,
@@ -70,8 +78,8 @@ class GroupKeyOrchestrator(
      * эпохе (ADR-0017 §2), иначе сообщение окажется невосстановимым по ордеру в день
      * отправки.
      */
-    suspend fun rotate(groupId: String): Boolean =
-        rotation.rotate(groupId) is RotateStep.Rotated
+    suspend fun rotate(groupId: String, reason: RotationReason = RotationReason.Epoch): Boolean =
+        rotation.rotate(groupId, reason) is RotateStep.Rotated
 
     /**
      * Устарела ли версия ключа группы: эпоха её выпуска ≠ текущая.
@@ -117,7 +125,7 @@ class GroupKeyOrchestrator(
             // Сервер сам ротировать не может — ключа он не видит (ADR-0017 §3).
             is EventStreamProtocol.Decision.RotationNeeded ->
                 "ротация по просьбе сервера (${decision.reason}): " +
-                    rotation.rotate(decision.groupId)
+                    rotation.rotate(decision.groupId, RotationReason.fromWire(decision.reason))
 
             else -> null
         }

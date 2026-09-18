@@ -5,6 +5,8 @@ import io.tima.core.words.Words
 import io.tima.core.words.RussianWords
 import io.tima.core.words.ChatWords
 import io.tima.domain.chat.ChatLine
+import io.tima.domain.chat.HealGroupKey
+import io.tima.domain.chat.HealStep
 import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.NarrowMessageLevel
 import io.tima.domain.chat.NarrowStep
@@ -79,6 +81,14 @@ class ChatStore(
      * имеет ни одной версии ключа, и до ближайшей смены группа для него нема.
      */
     private val anyKey: (() -> Boolean)? = null,
+    /**
+     * Лечение группы без ключа. `null` — переписка личная либо лечить нечем (тесты).
+     *
+     * Зовётся один раз за жизнь store, при первом «ключа нет»: забрать обёртки, а если
+     * ключа не было ни у кого — выпустить первый. Публичной группе сообщает, что ключ ей
+     * не положен, и баннер снимается. Подробности — `HealGroupKey`.
+     */
+    private val heal: HealGroupKey? = null,
     /** Сколько строк держать на экране. Столько же просит и запрос к базе. */
     pageSize: Int = ObserveChat.DEFAULT_PAGE,
     /**
@@ -132,7 +142,11 @@ class ChatStore(
                 // отметка прочтения шли прямо здесь. Стек зависания с realme показал
                 // главный поток стоящим в `SQLiteConnectionPool.waitForConnection` внутри
                 // транзакции отметки — то есть рисование ждало базу.
-                val noKey = withContext(io) { anyKey?.invoke() == false }
+                val noKey = withContext(io) { anyKey?.invoke() == false } && !_state.value.openGroup
+                if (noKey && !healed) {
+                    healed = true
+                    heal?.let { launchHeal(it) }
+                }
                 known = lines
                 val replies = lines.filter { it.threadRoot != 0L }.groupingBy { it.threadRoot }.eachCount()
                 val shown = lines.filter { it.threadRoot == 0L }
@@ -170,6 +184,31 @@ class ChatStore(
                 withContext(io) { markRead?.chat(chatId) }
             }
             .launchIn(scope)
+    }
+
+    /** Лечение запускалось: второй раз не надо — ответ придёт потоком из базы. */
+    private var healed = false
+
+    private fun launchHeal(case: HealGroupKey) {
+        scope.launch {
+            when (withContext(io) { case.heal(chatId) }) {
+                // Ключ выпущен или приехал — снять баннер СЕЙЧАС. Состояние «ключа нет»
+                // пересчитывается по потоку сообщений, а ключ в базе этот поток не будит:
+                // на стенде 2026-09-18 ротация прошла, а баннер висел до следующего
+                // сообщения, которого в пустой группе не бывает.
+                HealStep.Issued, is HealStep.Fetched -> _state.value = _state.value.copy(noGroupKey = false)
+
+                // Публичная группа: баннер снять, а отправлять по умолчанию «Всем» —
+                // шифровать тут нечем и незачем.
+                HealStep.NotEncrypted -> _state.value = _state.value.copy(
+                    openGroup = true,
+                    noGroupKey = false,
+                    level = if (_state.value.level == MessageCircle.Secret.level) MessageCircle.Outside.level else _state.value.level,
+                )
+
+                HealStep.NeedAsk, HealStep.Unknown -> Unit
+            }
+        }
     }
 
     /** Человек набирает текст. */
@@ -413,6 +452,12 @@ data class ChatState(
      * об этом надо прямо — иначе человек решит, что группа пуста.
      */
     val noGroupKey: Boolean = false,
+    /**
+     * Группа публичная: ключа у неё нет по замыслу, сообщения идут открытыми уровнями.
+     * Узнаётся от сервера при первом открытии (`HealGroupKey`) — своего поля «род группы»
+     * у переписки пока нет.
+     */
+    val openGroup: Boolean = false,
     /**
      * Сужение, о котором человека предупредили и которого он ещё не подтвердил.
      *

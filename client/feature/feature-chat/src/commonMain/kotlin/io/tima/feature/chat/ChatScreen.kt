@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -500,20 +501,29 @@ private fun InputZone(
     // Круг стоит рядом с «Отправить», а не в настройках: он выбирается для каждого
     // сообщения, и последствие у него необратимое — сузить можно, расширить нельзя.
     if (circle != null && onCircle != null) {
-        Row(
+        // FlowRow и пояснение отдельной строкой. В `Row` пять чипов и пояснение в одну
+        // строку не влезали: последний чип ужимался до одной буквы в ширину, и пояснение
+        // вытягивалось столбиком на весь экран — поле ввода уезжало за нижний край, и
+        // написать в группу было НЕЛЬЗЯ. Поймано на Redmi 2026-09-18, при разборе ключа
+        // группы: ключ вылечили, а отправить всё равно было нечем.
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(colors.functional)
                 .padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about1),
-            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
         ) {
-            for (option in MessageCircle.entries) {
-                Chip(
-                    label = option.title,
-                    kind = if (option == circle) ChipKind.Selected else ChipKind.Quiet,
-                    onClick = { onCircle(option) },
-                )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
+            ) {
+                for (option in MessageCircle.entries) {
+                    Chip(
+                        label = option.title,
+                        kind = if (option == circle) ChipKind.Selected else ChipKind.Quiet,
+                        onClick = { onCircle(option) },
+                    )
+                }
             }
             Caption(circle.about, fontSize = TimaType.sz6, color = colors.text3)
         }

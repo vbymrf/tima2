@@ -16,6 +16,7 @@ import io.tima.core.network.RotateResult
 import io.tima.domain.chat.GroupKeyBook
 import io.tima.domain.chat.GroupKeyRotator
 import io.tima.domain.chat.RotateStep
+import io.tima.domain.chat.RotationReason
 
 /**
  * Ротация группового ключа — составление, а не логика.
@@ -47,7 +48,7 @@ class GroupKeyRotation(
     private val msNow: () -> Long,
 ) : GroupKeyRotator {
 
-    override suspend fun rotate(groupId: String): RotateStep {
+    override suspend fun rotate(groupId: String, reason: RotationReason): RotateStep {
         val enclave = EscrowTrust.enclaveSigningPub
             ?: return RotateStep.Refused("нет ключа подписи анклава: ротация отказана")
 
@@ -120,7 +121,9 @@ class GroupKeyRotation(
             escrowWrappedKey = issue.escrowWrappedKey,
             escrowKeyVersion = issue.escrowKeyVersion,
             wrappedKeys = issue.wrappedKeys,
-            reason = "member_change",
+            // Причина — из перечня сервера. `member_change`, что стояло здесь до
+            // 2026-09-18, в перечне не было, и сервер отвечал 400 на каждую ротацию.
+            reason = reason.wire,
         )
 
         return when (send) {

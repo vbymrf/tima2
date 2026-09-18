@@ -76,7 +76,7 @@ class SendGroupMessage(
                     // Провал ротации не отменяет отправку: сообщение доставлено, а ключ
                     // сменится при следующей попытке. Сказать об этом наружу стоит, но
                     // ронять из-за этого отправку — нет.
-                    rotator.rotate(groupId)
+                    rotator.rotate(groupId, RotationReason.Periodic)
                 }
                 SendGroupStep.Sent(outcome.messageId, launchedRotation = due)
             }
