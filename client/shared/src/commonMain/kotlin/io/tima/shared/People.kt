@@ -9,8 +9,11 @@ import io.tima.domain.chat.ChatFaces
 import io.tima.domain.chat.ChatPeople
 import io.tima.domain.chat.ChatPerson
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -63,6 +66,55 @@ class People(
     val cards: StateFlow<Map<String, ChatPerson>> = _cards.asStateFlow()
 
     private val asked = HashSet<String>()
+
+    /** Чья карточка сменилась — для открытых экранов, которые держат свой снимок. */
+    private val _changed = MutableSharedFlow<String>(extraBufferCapacity = 64)
+    val changed: SharedFlow<String> = _changed.asSharedFlow()
+
+    private val _hues = MutableStateFlow<Map<String, Map<String, Int>>>(emptyMap())
+
+    /** Выбранные цвета полос: группа → (человек → номер оттенка). Из событий и из списка участников. */
+    val hues: StateFlow<Map<String, Map<String, Int>>> = _hues.asStateFlow()
+
+    /**
+     * Штамп отправителя из события о сообщении (сервер 0052/0053): счётчик его профиля и
+     * цвет в группе. Счётчик отличается от запомненного — карточка переспрашивается одним
+     * запросом; совпадает — ничего. Так смена аватара или имени доезжает с первым же
+     * сообщением автора, а пока никто ничего не менял, запросов нет вовсе.
+     */
+    fun stamp(userId: String, profileRev: Int?, groupId: String?, hue: Int?) {
+        if (groupId != null) setHue(groupId, userId, hue)
+        if (profileRev == null) return
+        val known = _cards.value[userId]
+        if (known != null && known.rev == profileRev) return
+        if (known == null && userId in asked) return // ответ ещё в пути
+        scope.launch { refresh(userId) }
+    }
+
+    /** Переспросить карточку человека и сказать об этом тем, кто её показывает. */
+    suspend fun refresh(userId: String) {
+        val card = directory.cards(listOf(userId))?.get(userId) ?: return
+        asked.add(userId)
+        val before = _cards.value[userId]
+        _cards.value = _cards.value + (userId to card)
+        if (before?.avatar != card.avatar) {
+            // Новый аватар — старую картинку забыть, следующий показ скачает новую.
+            _faces.value = _faces.value - userId
+            fetching.remove(userId)
+        }
+        if (before != card) _changed.tryEmit(userId)
+    }
+
+    /** Цвета участников группы — из списка участников (`hue`) или события (`sender_hue`). */
+    fun setHue(groupId: String, userId: String, hue: Int?) {
+        val group = _hues.value[groupId].orEmpty()
+        val next = if (hue == null) group - userId else group + (userId to hue)
+        if (next != group) _hues.value = _hues.value + (groupId to next)
+    }
+
+    fun setHues(groupId: String, hues: Map<String, Int>) {
+        if (_hues.value[groupId] != hues) _hues.value = _hues.value + (groupId to hues)
+    }
 
     /** Спросить справочник о тех, кого ещё не спрашивали. Ответ приедет в [cards]. */
     fun want(ids: Collection<String>) {

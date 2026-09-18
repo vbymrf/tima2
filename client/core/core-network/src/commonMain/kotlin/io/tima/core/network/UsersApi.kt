@@ -18,6 +18,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.putJsonArray
 
@@ -85,8 +86,9 @@ class UsersApi(
         val nicks = map("nicknames")
         val phones = map("phones")
         val avatars = map("avatars")
+        val revs = (body["profile_revs"] as? JsonObject)?.mapValues { it.value.jsonPrimitive.intOrNull } ?: emptyMap()
         return ids.associateWith { id ->
-            ChatPerson(userName = names[id], nick = nicks[id], phone = phones[id], avatar = avatars[id])
+            ChatPerson(userName = names[id], nick = nicks[id], phone = phones[id], avatar = avatars[id], rev = revs[id])
         }
     }
 

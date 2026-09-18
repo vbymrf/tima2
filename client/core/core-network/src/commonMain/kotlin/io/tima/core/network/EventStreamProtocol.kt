@@ -143,6 +143,13 @@ class EventStreamProtocol {
         /** Идентификатор, назначенный **отправителем**: по нему опознаётся повтор. */
         val messageId: Long,
         val envelope: ByteArray,
+        /**
+         * Штамп отправителя из обёртки события (сервер 0052/0053): счётчик смен его
+         * профиля и его цвет полосы в этой группе. Не часть подписи, в равенство не входит:
+         * это подсказка получателю, а не содержимое сообщения. `null` — сервер старше.
+         */
+        val senderProfileRev: Int? = null,
+        val senderHue: Int? = null,
     ) {
         override fun equals(other: Any?): Boolean = other is IncomingEvent &&
             eventId == other.eventId && chatId == other.chatId &&
@@ -201,7 +208,12 @@ class EventStreamProtocol {
                     // надо — иначе он застрянет на испорченном событии навсегда.
                     Decision.Skip("message.new без обязательных полей", eventId)
                 } else {
-                    Decision.Deliver(IncomingEvent(eventId, chatId, messageId, envelope))
+                    Decision.Deliver(
+                        IncomingEvent(
+                            eventId, chatId, messageId, envelope,
+                            senderProfileRev = json["sender_profile_rev"]?.jsonPrimitive?.intOrNull,
+                        ),
+                    )
                 }
             }
 
@@ -233,6 +245,8 @@ class EventStreamProtocol {
                             // подпись считается по тем значениям, что пришли, и наша
                             // пересборка могла бы их незаметно нормализовать.
                             envelope = GroupFrame.toStored(json.toString()),
+                            senderProfileRev = json["sender_profile_rev"]?.jsonPrimitive?.intOrNull,
+                            senderHue = json["sender_hue"]?.jsonPrimitive?.intOrNull,
                         ),
                     )
                 }

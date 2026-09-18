@@ -142,6 +142,8 @@ fun ChatScreen(
     authorLook: PersonLook = PersonLook.DEFAULT,
     /** Владелец группы — его полоса салатовая, темы. `null` — неизвестен: все по порядку. */
     ownerId: String? = null,
+    /** Выбранные участниками номера оттенков (сервер 0053): человек → 0…99. */
+    hues: Map<String, Int> = emptyMap(),
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -178,6 +180,7 @@ fun ChatScreen(
             },
             authorLetter = { line -> state.names[line.senderId]?.letter() ?: "+" },
             ownerId = if (state.group) ownerId else null,
+            hues = hues,
             // Полосы авторов — только в группе: в личной переписке собеседник один.
             stripes = state.group,
             authorFace = { line -> if (state.group) state.faces[line.senderId] else null },
@@ -240,6 +243,7 @@ private fun Feed(
     authorLetter: (ChatLine) -> String = { "+" },
     authorFace: (ChatLine) -> ImageBitmap? = { null },
     ownerId: String? = null,
+    hues: Map<String, Int> = emptyMap(),
     stripes: Boolean = false,
     modifier: Modifier = Modifier,
     /** Показывать ли метку круга у реплик. По умолчанию нет — см. [ChatState.showCircles]. */
@@ -264,14 +268,17 @@ private fun Feed(
         // список идёт новым сверху, поэтому считается с конца. Свои и владелец в счёт не идут —
         // у своих полосы нет, у владельца она салатовая. На двух устройствах одного аккаунта
         // порядок совпадает: сообщения выстроены по времени написания.
+        // Выбравшие цвет сами в порядок не входят: у них номер свой, а автомат обходит их
+        // номера (`taken`), чтобы не подсадить новичка на чужой цвет.
         val order: Map<String, Int> = if (stripes) {
             lines.asReversed().asSequence()
-                .filter { !it.outgoing && it.senderId != null && it.senderId != ownerId }
+                .filter { !it.outgoing && it.senderId != null && it.senderId != ownerId && it.senderId !in hues }
                 .map { it.senderId!! }.distinct()
                 .withIndex().associate { (at, who) -> who to at }
         } else {
             emptyMap()
         }
+        val taken = hues.values.toSet()
         items(lines, key = { it.dedupKey }) { line ->
             val index = lines.indexOf(line)
             // Предыдущее по времени лежит НИЖЕ в списке: список идёт новым сверху.
@@ -281,7 +288,7 @@ private fun Feed(
                 author = authorName(line),
                 letter = authorLetter(line),
                 face = authorFace(line),
-                strip = if (stripes) authorStrip(order[line.senderId], owner = line.senderId == ownerId) else null,
+                strip = if (stripes) authorStrip(order[line.senderId], owner = line.senderId == ownerId, hue = hues[line.senderId], taken = taken) else null,
                 // Смена автора разрывает цепочку, даже когда обе реплики чужие: иначе в
                 // группе два человека подряд слились бы в одного, и имя второго не
                 // показалось бы вовсе.

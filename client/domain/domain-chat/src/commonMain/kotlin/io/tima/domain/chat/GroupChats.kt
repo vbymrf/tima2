@@ -212,7 +212,13 @@ class GroupInfo(
 )
 
 /** Участник группы. */
-class GroupMember(val userId: String, val role: GroupRole, val bannedUntil: String?)
+class GroupMember(
+    val userId: String,
+    val role: GroupRole,
+    val bannedUntil: String?,
+    /** Номер оттенка полосы 0…99, который участник выбрал себе в этой группе; `null` — автомат. */
+    val hue: Int? = null,
+)
 
 /**
  * Роль в группе.

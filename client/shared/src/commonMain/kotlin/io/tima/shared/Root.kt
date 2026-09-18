@@ -78,6 +78,10 @@ import io.tima.feature.chat.ChatsState
 import io.tima.feature.chat.ChatsStore
 import io.tima.feature.chat.GroupsScreen
 import io.tima.feature.chat.ChatMenuSheet
+import io.tima.domain.chat.letter
+import io.tima.feature.chat.MyColorSheet
+import io.tima.core.network.MembersResult
+import io.tima.core.network.MemberResult
 import io.tima.feature.chat.SectionTab
 import io.tima.feature.chat.ALL_SECTION
 import io.tima.feature.chat.COMMON_SECTION
@@ -692,6 +696,13 @@ private fun App(
     val people = remember(assembled) { People(network.directory, environment.bookStorage, scope, network.media) }
     val peopleCards by people.cards.collectAsState()
     val peopleFaces by people.faces.collectAsState()
+    val peopleHues by people.hues.collectAsState()
+    val wordsNow = Tima.words
+    // Штамп отправителя из каждого события о сообщении (сервер 0052/0053): счётчик профиля
+    // и цвет в группе. Карточка переспрашивается только при разнице счётчика.
+    LaunchedEffect(assembled) {
+        assembled.senderStamps.collect { people.stamp(it.userId, it.profileRev, it.groupId, it.hue) }
+    }
     var communitySectionsScreen by remember { mutableStateOf(false) }
     /** Выбранный раздел в каталоге и свёрнутые разделы гармошки. */
     var catalogSection by remember { mutableStateOf("") }
@@ -1608,6 +1619,35 @@ private fun App(
                         // Владелец — из списка групп; список свежий: он сверяется при входе
                         // в Социум и при открытии группы ниже.
                         ownerId = socialState.mine.firstOrNull { it.groupId == current.chatId }?.ownerId?.ifBlank { null },
+                        hues = peopleHues[current.chatId].orEmpty(),
+                        myUserId = session.userId,
+                        myName = profileState.name.ifBlank { profileState.nickname.ifBlank { session.userId.take(2) } },
+                        // Список групп (владелец) и участники (цвета) — при открытии группы,
+                        // чтобы полосы стояли верно с первого кадра, а не после чьего-то сообщения.
+                        onOpened = { chatId ->
+                            social.refresh()
+                            scope.launch {
+                                (network.groups.members(chatId) as? MembersResult.Members)?.let { answer ->
+                                    people.setHues(chatId, answer.members.mapNotNull { m -> m.hue?.let { m.userId to it } }.toMap())
+                                }
+                            }
+                        },
+                        onMyColor = { chatId, hue, done ->
+                            // Слова — снаружи корутины: внутри неё @Composable недоступны.
+                            val taken = wordsNow.chat.myColorTaken
+                            val retry = wordsNow.trouble.retryIn(5)
+                            scope.launch {
+                                when (val outcome = network.groups.setMyHue(chatId, hue)) {
+                                    MemberResult.Done -> {
+                                        people.setHue(chatId, session.userId, hue)
+                                        done(null)
+                                    }
+                                    is MemberResult.Refused -> done(if (outcome.code == "hue_taken") taken else outcome.code)
+                                    is MemberResult.NoConnection -> done(retry)
+                                    else -> done(outcome.toString())
+                                }
+                            }
+                        },
                         // Личная переписка: раздел — у собеседника в книге (Р4), меню «•••»
                         // переносит его туда же (заказчик 2026-09-18).
                         bookSections = bookStateForChats.sections,
@@ -1731,6 +1771,15 @@ private fun Chat(
     authorLook: PersonLook = PersonLook.DEFAULT,
     /** Владелец группы — его полоса салатовая. */
     ownerId: String? = null,
+    /** Выбранные участниками цвета полос: человек → номер оттенка (сервер 0053). */
+    hues: Map<String, Int> = emptyMap(),
+    myUserId: String = "",
+    /** Как меня зовут — для образца «мой пузырь глазами остальных». */
+    myName: String = "",
+    /** Открыли группу: обновить владельца и цвета участников. */
+    onOpened: (String) -> Unit = {},
+    /** Поставить или сбросить (`null`) мой цвет; `done(беда)` — итог, `null` — вышло. */
+    onMyColor: ((chatId: String, hue: Int?, done: (String?) -> Unit) -> Unit)? = null,
     /** Разделы книги для «•••» личной переписки: раздел переписки — раздел собеседника. */
     bookSections: List<Section> = emptyList(),
     currentBookSection: String = "",
@@ -1801,10 +1850,14 @@ private fun Chat(
         )
         return
     }
+    LaunchedEffect(chatId, group) { if (group) onOpened(chatId) }
+    var myColor by remember { mutableStateOf(false) }
+    var myColorTrouble by remember { mutableStateOf<String?>(null) }
     ChatScreen(
         state = state,
         authorLook = authorLook,
         ownerId = ownerId,
+        hues = hues,
         peer = name ?: "Без имени",
         onSet = store::draftChanged,
         onSend = { store.sendPressed() },
@@ -1842,6 +1895,23 @@ private fun Chat(
             circlesShown = state.showCircles,
             onCircles = store::circlesShown,
             onMembers = onMembers,
+            onMyColor = if (onMyColor != null) { { myColor = true } } else null,
+        )
+    }
+    if (myColor && group && onMyColor != null) {
+        // Занятые — буквой того, кто взял; свой номер в занятые не идёт.
+        MyColorSheet(
+            mine = hues[myUserId],
+            taken = hues.filterKeys { it != myUserId }.entries.associate { (who, hue) ->
+                hue to (state.names[who]?.letter() ?: "•")
+            },
+            members = maxOf(state.names.size + 1, hues.size),
+            author = myName,
+            letter = myName.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "+",
+            onPick = { hue -> onMyColor(chatId, hue) { myColorTrouble = it } },
+            onReset = { onMyColor(chatId, null) { myColorTrouble = it } },
+            onClose = { myColor = false; myColorTrouble = null },
+            trouble = myColorTrouble,
         )
     }
     // Личная переписка: тот же лист, набор — разделы книги, без доступности и участников.

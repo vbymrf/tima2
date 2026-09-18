@@ -53,6 +53,8 @@ fun ChatMenuSheet(
     circlesShown: Boolean? = null,
     onCircles: ((Boolean) -> Unit)? = null,
     onMembers: (() -> Unit)? = null,
+    /** «Мой цвет в группе» — подокно выбора оттенка полосы (сервер 0053). `null` — пункта нет. */
+    onMyColor: (() -> Unit)? = null,
     /** Групповая переписка — заголовок «Настройка группы», иначе «Настройка переписки». */
     group: Boolean = circlesShown != null,
 ) {
@@ -128,6 +130,18 @@ fun ChatMenuSheet(
                 ListLine(
                     onClick = { onMembers(); onClose() },
                     middle = { Name(words.members) },
+                    right = { Tertiary("›", lineOne = true) },
+                )
+            }
+            if (onMyColor != null) {
+                ListLine(
+                    onClick = { onMyColor(); onClose() },
+                    middle = {
+                        Column {
+                            Name(words.myColor)
+                            Tertiary(words.myColorAbout, lineOne = true)
+                        }
+                    },
                     right = { Tertiary("›", lineOne = true) },
                 )
             }

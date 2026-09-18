@@ -24,6 +24,7 @@ import io.tima.domain.chat.SendMessageResult
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -72,6 +73,12 @@ class ChatStore(
     private val names: ChatPeople? = null,
     /** Аватары авторов — только в группе, по одному походу на автора. */
     private val faces: ChatFaces? = null,
+    /**
+     * Чья карточка сменилась (счётчик профиля с сервера). Открытая переписка держит свой
+     * снимок имён и лиц, и без этого потока смена аватара доехала бы только при повторном
+     * открытии.
+     */
+    private val peopleChanges: Flow<String>? = null,
     /**
      * Сужение круга у уже отправленного сообщения. `null` — переписка личная: там у
      * сообщений кругов нет, и предлагать сужение нечему.
@@ -133,6 +140,15 @@ class ChatStore(
     private var known: List<ChatLine> = emptyList()
 
     init {
+        peopleChanges?.onEach { who ->
+            if (who !in _state.value.names) return@onEach
+            names?.let { directory ->
+                _state.value = _state.value.copy(names = _state.value.names + (who to directory.person(who)))
+            }
+            faces?.let { album ->
+                _state.value = _state.value.copy(faces = _state.value.faces + (who to album.face(who)?.let(::decodeImage)))
+            }
+        }?.launchIn(scope)
         // Список приходит потоком: обновление от самой базы, а не по нажатию. Значит
         // пришедшее сообщение и смена состояния отправки появляются на экране сами.
         observe.page(chatId, pageSize)

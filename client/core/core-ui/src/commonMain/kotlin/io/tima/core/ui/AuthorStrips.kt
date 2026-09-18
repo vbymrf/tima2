@@ -81,6 +81,21 @@ object AuthorStrips {
         val table = if (dark) this.dark else light
         return table[1 + (order.coerceAtLeast(0) % (table.size - 1))]
     }
+
+    /** Цвет по НОМЕРУ оттенка 0…99 — тому, что человек выбрал себе сам (сервер 0053). */
+    fun hue(index: Int, dark: Boolean): Color {
+        val table = if (dark) this.dark else light
+        return table[index.coerceIn(0, table.lastIndex)]
+    }
+
+    /**
+     * Номер оттенка автору без выбора: по порядку появления, обходя выбранные другими —
+     * чтобы автомат не подсадил новичка на чужой цвет. №0 не выдаётся.
+     */
+    fun autoHue(order: Int, taken: Set<Int>): Int {
+        val free = (1..99).filter { it !in taken }.ifEmpty { (1..99).toList() }
+        return free[order.coerceAtLeast(0) % free.size]
+    }
 }
 
 /**
@@ -97,12 +112,14 @@ val LocalStripLook = staticCompositionLocalOf { StripLook() }
  * личная переписка): салатовый темы, как было.
  */
 @Composable
-fun authorStrip(order: Int?, owner: Boolean): Color {
+fun authorStrip(order: Int?, owner: Boolean, hue: Int? = null, taken: Set<Int> = emptySet()): Color {
     val look = LocalStripLook.current
     val colors = Tima.colors
     return when {
         !look.colored -> colors.border
+        // Выбранный самим человеком цвет — первым: он и у владельца перебивает салатовый.
+        hue != null -> AuthorStrips.hue(hue, look.dark)
         owner || order == null -> colors.navigation
-        else -> AuthorStrips.of(order, look.dark)
+        else -> AuthorStrips.hue(AuthorStrips.autoHue(order, taken), look.dark)
     }
 }

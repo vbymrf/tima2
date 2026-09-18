@@ -63,7 +63,7 @@ class GroupsOverHttp(private val api: GroupsApi) : GroupRegistry {
 
     override suspend fun members(groupId: String): MembersStep = when (val answer = api.members(groupId)) {
         is MembersResult.Members -> MembersStep.Members(
-            answer.members.map { GroupMember(it.userId, GroupRole.from(it.role), it.bannedUntil) },
+            answer.members.map { GroupMember(it.userId, GroupRole.from(it.role), it.bannedUntil, hue = it.hue) },
         )
         is MembersResult.NoConnection -> MembersStep.Offline(answer.link.retryDelayMs)
         is MembersResult.Refused -> MembersStep.Refused(answer.code)

@@ -51,6 +51,11 @@ class Receiver(
      * ничего: канал обязан работать и там, где страницы на экране нет.
      */
     private val onComment: (String, Long) -> Unit = { _, _ -> },
+    /**
+     * Штамп отправителя из обёртки события (сервер 0052/0053): кто, счётчик его профиля,
+     * группа и цвет. Наружу, а не в базу: это подсказка карточкам людей, а не сообщение.
+     */
+    private val onStamp: (SenderStamp) -> Unit = {},
 ) {
 
     /** Что случилось с каналом в последний раз. Для диагностики, не для решений. */
@@ -91,7 +96,10 @@ class Receiver(
                         onGroupKeys = { decision -> aboutKeys(decision) },
                         onLevelNarrowed = { decision -> aboutLevel(decision) },
                         onComment = { decision -> aboutComment(decision) },
-                    ) { event -> accept(event.chatId, event.messageId, event.envelope) }
+                    ) { event ->
+                        accept(event.chatId, event.messageId, event.envelope)
+                        stamp(event)
+                    }
             }
             lastOutcome = outcome.fold(
                 onSuccess = { it.toString() },
@@ -228,6 +236,15 @@ class Receiver(
      * Возвращается **только после записи**: подтверждение уходит сразу после нас, а
      * подтверждённое сервер больше не пришлёт.
      */
+    /** Штамп отправителя — если сервер его прислал. Автор берётся из самого кадра. */
+    private fun stamp(event: EventStreamProtocol.IncomingEvent) {
+        if (event.senderProfileRev == null && event.senderHue == null) return
+        val group = GroupFrame.isGroupFrame(event.envelope)
+        val sender = if (group) GroupFrame.parse(event.envelope)?.senderId else envelopeSender(event.envelope)?.userId
+        if (sender.isNullOrBlank() || sender == session.userId) return
+        onStamp(SenderStamp(sender, event.senderProfileRev, if (group) event.chatId else null, event.senderHue))
+    }
+
     private suspend fun accept(chatId: String, messageId: Long, envelope: ByteArray) {
         // Групповое сообщение приходит тем же путём, но открывается иначе: у него нет
         // конверта, а подпись считается по метаданным вместе с payload.
@@ -330,3 +347,6 @@ class Receiver(
         const val ПАУЗА_ПЕРЕД_ПОВТОРОМ_МС = 2_000L
     }
 }
+
+/** Что сервер приложил к сообщению об отправителе: счётчик профиля и цвет в группе. */
+data class SenderStamp(val userId: String, val profileRev: Int?, val groupId: String?, val hue: Int?)

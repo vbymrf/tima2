@@ -1,6 +1,7 @@
 package io.tima.shared
 
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.runtime.remember
@@ -38,6 +39,11 @@ class Assembled(
     val groupSender: GroupSender,
     val receiver: Receiver,
     val keyOrchestrator: GroupKeyOrchestrator,
+    /**
+     * Штампы отправителей из событий о сообщениях — потоком, по той же причине, что и
+     * звонок ниже: карточки людей живут в `Root`, а канал — всё время работы.
+     */
+    val senderStamps: MutableSharedFlow<SenderStamp> = MutableSharedFlow(extraBufferCapacity = 64),
     /**
      * Звонок «под вашей записью ответили» (ADR-0024, следствие 5).
      *
@@ -108,6 +114,7 @@ fun assemble(
 
         // Звонки о комментариях: канал кладёт сюда, страница читает. Заводится здесь,
         // потому что живёт столько же, сколько сборка, — а не столько, сколько экран.
+        val senderStamps = MutableSharedFlow<SenderStamp>(extraBufferCapacity = 64)
         val commentPings = MutableStateFlow(0L)
 
         Assembled(
@@ -135,8 +142,10 @@ fun assemble(
                 identity = identity,
                 keyOrchestrator = keyOrchestrator,
                 onComment = { _, postId -> commentPings.value = postId },
+                onStamp = { senderStamps.tryEmit(it) },
             ),
             keyOrchestrator = keyOrchestrator,
             commentPings = commentPings,
+            senderStamps = senderStamps,
         )
     }

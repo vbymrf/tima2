@@ -524,6 +524,12 @@ interface ChatWords {
     val chatMenu: String
     val groupSettings: String
     val chatSettings: String
+    /** «Мой цвет в группе» — выбор оттенка полосы (заказчик 2026-09-19). */
+    val myColor: String
+    val myColorAbout: String
+    val myColorAuto: String
+    val myColorTaken: String
+    val myColorReset: String
     val moveToSection: String
     val moveToSectionAbout: String
     fun inSection(name: String): String
@@ -1783,6 +1789,11 @@ object RussianWords : Words {
         override val chatMenu = "Переписка"
         override val groupSettings = "Настройка группы"
         override val chatSettings = "Настройка переписки"
+        override val myColor = "Мой цвет в группе"
+        override val myColorAbout = "полоса у моих реплик — как её видят остальные"
+        override val myColorAuto = "автоматический"
+        override val myColorTaken = "занят"
+        override val myColorReset = "Сбросить — автоматический"
         override val moveToSection = "Перенести в раздел"
         override val moveToSectionAbout = "куда положить эту группу"
         override fun inSection(name: String) = "сейчас — «$name»"

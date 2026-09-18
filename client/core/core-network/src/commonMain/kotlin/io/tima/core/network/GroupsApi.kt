@@ -2,6 +2,9 @@ package io.tima.core.network
 
 import io.ktor.client.HttpClient
 import io.ktor.client.request.delete
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.intOrNull
+import io.ktor.client.request.put
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -153,6 +156,7 @@ class GroupsApi(
                 role = objectValue.str("role").orEmpty(),
                 joinedAt = objectValue.str("joined_at"),
                 bannedUntil = objectValue.str("banned_until"),
+                hue = objectValue["hue"]?.jsonPrimitive?.intOrNull,
             )
         }
         return members?.let { MembersResult.Members(it) }
@@ -179,6 +183,29 @@ class GroupsApi(
     }
 
     /** `DELETE /api/v1/groups/{id}/members/{userId}` — убрать участника или выйти самому. */
+    /**
+     * Мой цвет полосы в группе: `PUT …/members/me/color {hue}`, `null` — `DELETE`, сбросить.
+     * Занят другим (пока участников не больше 80 % оттенков) — `Refused(409, "hue_taken")`.
+     */
+    suspend fun setMyHue(groupId: String, hue: Int?): MemberResult {
+        val response = try {
+            if (hue == null) {
+                client.delete(route.api("/api/v1/groups/$groupId/members/me/color")) {
+                    header("Authorization", "Bearer ${token()}")
+                }
+            } else {
+                client.put(route.api("/api/v1/groups/$groupId/members/me/color")) {
+                    header("Authorization", "Bearer ${token()}")
+                    contentType(ContentType.Application.Json)
+                    setBody("{\"hue\":$hue}")
+                }
+            }
+        } catch (e: Throwable) {
+            return MemberResult.NoConnection(classifyFailure(e))
+        }
+        return outcome(response)
+    }
+
     suspend fun removeMember(groupId: String, userId: String): MemberResult {
         val response = try {
             client.delete(route.api("/api/v1/groups/$groupId/members/$userId")) {
@@ -242,6 +269,8 @@ class RemoteMember(
     val joinedAt: String?,
     /** Забанен до этого времени. `null` — не забанен. */
     val bannedUntil: String?,
+    /** Номер оттенка полосы 0…99 в этой группе; `null` — не выбирал (сервер 0053). */
+    val hue: Int? = null,
 )
 
 sealed interface GroupCreateResult {
