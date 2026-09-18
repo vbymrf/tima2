@@ -155,13 +155,17 @@ data class BookView(
     val showNickname: Boolean = false,
     val showPhone: Boolean = true,
 ) {
-    suspend fun save(settings: Settings) {
-        settings.put(VIEW, if (folders) FOLDERS else MENU)
-        settings.put(ICONS, icons.toString())
-        settings.put(TILE_SIZE, tileSize.wire)
-        settings.put(SEARCH, showSearch.toString())
-        settings.put(OUTSIDERS, showOutsiders.toString())
-        settings.put(NAMES, listOfNotNull(
+    /**
+     * @param prefix чей это вид: `book` — контакты, `community` — набор сообществ
+     *   (каталог Социума). У каждого набора свой «Вид» — как и свой список разделов.
+     */
+    suspend fun save(settings: Settings, prefix: String = BOOK) {
+        settings.put("$prefix.$VIEW", if (folders) FOLDERS else MENU)
+        settings.put("$prefix.$ICONS", icons.toString())
+        settings.put("$prefix.$TILE_SIZE", tileSize.wire)
+        settings.put("$prefix.$SEARCH", showSearch.toString())
+        settings.put("$prefix.$OUTSIDERS", showOutsiders.toString())
+        settings.put("$prefix.$NAMES", listOfNotNull(
             "name".takeIf { showName },
             "user".takeIf { showUserName },
             "nick".takeIf { showNickname },
@@ -170,12 +174,16 @@ data class BookView(
     }
 
     companion object {
-        private const val VIEW = "book.view"
-        private const val ICONS = "book.icons"
-        private const val TILE_SIZE = "book.tile_size"
-        private const val SEARCH = "book.search"
-        private const val OUTSIDERS = "book.outsiders"
-        private const val NAMES = "book.names"
+        /** Префикс вида контактов — прежние ключи `book.*`, чтобы настройки телефонов не пропали. */
+        const val BOOK = "book"
+        /** Префикс вида набора сообществ — каталог Социума и «Группы» Страницы. */
+        const val COMMUNITY = "community"
+        private const val VIEW = "view"
+        private const val ICONS = "icons"
+        private const val TILE_SIZE = "tile_size"
+        private const val SEARCH = "search"
+        private const val OUTSIDERS = "outsiders"
+        private const val NAMES = "names"
         private const val FOLDERS = "folders"
         private const val MENU = "menu"
 
@@ -183,14 +191,14 @@ data class BookView(
          * Умолчание — **меню** (решение заказчика 2026-09-05), поэтому «папки» здесь
          * включаются явным значением, а не отсутствием строки.
          */
-        fun from(saved: Map<String, String>): BookView {
-            val names = saved[NAMES]?.split(",")?.filter { it.isNotBlank() }
+        fun from(saved: Map<String, String>, prefix: String = BOOK): BookView {
+            val names = saved["$prefix.$NAMES"]?.split(",")?.filter { it.isNotBlank() }
             return BookView(
-                icons = saved[ICONS] == "true",
-                tileSize = TileSize.fromWire(saved[TILE_SIZE]),
-                folders = saved[VIEW] == FOLDERS,
-                showSearch = saved[SEARCH]?.toBooleanStrictOrNull() ?: true,
-                showOutsiders = saved[OUTSIDERS]?.toBooleanStrictOrNull() ?: true,
+                icons = saved["$prefix.$ICONS"] == "true",
+                tileSize = TileSize.fromWire(saved["$prefix.$TILE_SIZE"]),
+                folders = saved["$prefix.$VIEW"] == FOLDERS,
+                showSearch = saved["$prefix.$SEARCH"]?.toBooleanStrictOrNull() ?: true,
+                showOutsiders = saved["$prefix.$OUTSIDERS"]?.toBooleanStrictOrNull() ?: true,
                 showName = names?.contains("name") ?: true,
                 showUserName = names?.contains("user") ?: false,
                 showNickname = names?.contains("nick") ?: false,
@@ -260,7 +268,14 @@ data class BookState(
         // «Всё» и «Общий» — не одно и то же (`разделы.md`): у «Всё» пустой выбор, у
         // «Общего» — свой ключ на полосе, который здесь переводится в пустой идентификатор.
         val wanted = if (chosen == COMMON_SECTION) "" else chosen
-        val narrowed = if ((!view.folders || tiles) && chosen.isNotEmpty()) order.filter { it.first == wanted } else order
+        // «Всё» в плитке — свой ключ, а не пустой выбор: пустой выбор в плитке означает
+        // «показать плитку», и ярлычок «Всё» с пустым ключом никуда не вёл (заказчик
+        // 2026-09-18: «раздел Все нельзя зайти»). Внутри — все, без сужения.
+        val narrowed = if ((!view.folders || tiles) && chosen.isNotEmpty() && chosen != ALL_SECTION) {
+            order.filter { it.first == wanted }
+        } else {
+            order
+        }
         // В гармошке (Б) пустой раздел ВИДЕН — заголовком без строк: его завели осознанно,
         // и он ждёт наполнения (`разделы.md`). На полосе и в плитке внутри раздела пустой
         // не показывается — там он был бы заголовком над пустотой.
@@ -298,12 +313,13 @@ data class BookState(
      * На полосе пустых нет — там чип, за которым пустота, не нужен.
      */
     fun tiles(words: BookWords): List<SectionTab> =
-        listOf(SectionTab("", words.everyone, 0)) +
+        listOf(SectionTab(ALL_SECTION, words.everyone, 0)) +
             sections.map { SectionTab(it.id, it.name, it.icon) } +
             SectionTab(COMMON_SECTION, words.commonSection, 0)
 
     /** Сколько наших людей в разделе по ключу полосы: «Общий» переводится в пустой идентификатор. */
     fun countIn(key: String): Int {
+        if (key == ALL_SECTION) return all.count { it.inTima }
         val id = if (key == COMMON_SECTION) "" else key
         return all.count { it.inTima && it.sectionId == id }
     }
@@ -333,3 +349,9 @@ data class SectionTab(val id: String, val name: String, val icon: Int)
  * настоящий идентификатор так не выглядит: они случайные.
  */
 const val COMMON_SECTION = "common"
+
+/**
+ * Ключ ярлычка «Всё» в плитке (А). Не пустая строка: пустой выбор в плитке — это сама
+ * плитка, и «Всё» с пустым ключом было некуда открыть. Внутри — все люди без сужения.
+ */
+const val ALL_SECTION = "*"

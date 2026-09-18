@@ -40,6 +40,12 @@ fun CatalogTab(
     modifier: Modifier = Modifier,
     /** Открыть сообщество. `null` — сообществ в этой сборке нет (проверки). */
     onOpenCommunity: ((String) -> Unit)? = null,
+    /**
+     * Раскладка групп по разделам — снаружи: разделы набора сообществ и их вид («Вид»
+     * каталога) знает `shared`, а здесь только строка группы. `null` — простой список.
+     * Получает группы и то, как рисовать одну.
+     */
+    layout: (@Composable (groups: List<GroupInfo>, line: @Composable (GroupInfo) -> Unit) -> Unit)? = null,
 ) {
     val words = Tima.words.social
     Column(modifier.fillMaxSize()) {
@@ -80,20 +86,11 @@ fun CatalogTab(
                     words.ifListNeverComes
                 },
             )
+        } else if (layout != null) {
+            Box(Modifier.weight(1f)) { layout(state.mine) { group -> GroupLine(group, onOpen) } }
         } else {
             LazyColumn(Modifier.weight(1f)) {
-                items(state.mine, key = { it.groupId }) { group ->
-                    ListLine(
-                        onClick = { onOpen(group) },
-                        left = { Avatar(letters = group.title.take(2).uppercase()) },
-                        middle = {
-                            Column {
-                                Name(group.title)
-                                Secondary(roleWord(group, words))
-                            }
-                        },
-                    )
-                }
+                items(state.mine, key = { it.groupId }) { group -> GroupLine(group, onOpen) }
             }
         }
 
@@ -103,6 +100,22 @@ fun CatalogTab(
             Button(label = words.create, onClick = onNew)
         }
     }
+}
+
+/** Строка группы каталога: имя и моя роль в ней. */
+@Composable
+fun GroupLine(group: GroupInfo, onOpen: (GroupInfo) -> Unit) {
+    val words = Tima.words.social
+    ListLine(
+        onClick = { onOpen(group) },
+        left = { Avatar(letters = group.title.take(2).uppercase()) },
+        middle = {
+            Column {
+                Name(group.title)
+                Secondary(roleWord(group, words))
+            }
+        },
+    )
 }
 
 /**

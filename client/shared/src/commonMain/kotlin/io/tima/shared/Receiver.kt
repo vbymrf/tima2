@@ -4,6 +4,7 @@ import io.tima.core.database.SqlChatBook
 import io.tima.core.encryption.GroupMessages
 import io.tima.core.network.EventStreamProtocol
 import io.tima.core.network.GroupFrame
+import io.tima.core.network.GroupsOverHttp
 import io.tima.core.encryption.DeviceIdentity
 import io.tima.core.encryption.PersonalMessages
 import io.tima.core.network.DeviceKeysResult
@@ -13,6 +14,7 @@ import io.tima.core.outbox.OpenOutcome
 import io.tima.domain.account.Session
 import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.ChatKind
+import io.tima.domain.chat.SyncGroupChats
 import kotlinx.coroutines.delay
 
 /**
@@ -59,6 +61,14 @@ class Receiver(
     private val senderKeys = HashMap<String, ByteArray>()
 
     private val book = SqlChatBook(environment.db, environment.cipher)
+
+    /**
+     * Сверка групп с сервером — за настоящим названием. До 2026-09-18 она не была
+     * подключена никуда: группа, куда меня позвали, узнавалась по первому сообщению и
+     * навсегда оставалась «Группа», хотя у сервера название было. Так и разошлись шапки
+     * «gruppa» у создателя и «Группа» у приглашённого.
+     */
+    private val groupsSync = SyncGroupChats(GroupsOverHttp(network.groups), book)
 
     // ── Групповые ключи ──────────────────────────────────────────────────────
     //
@@ -123,7 +133,8 @@ class Receiver(
      */
     private suspend fun acceptGroup(groupId: String, messageId: Long, frame: ByteArray) {
         val parsed = GroupFrame.parse(frame)
-        environment.incoming.receive(groupId, messageId, frame)
+        // Время написания — из кадра: по нему переписка на всех устройствах в одном порядке.
+        environment.incoming.receive(groupId, messageId, frame, sentAtMs = parsed?.createdAtUnixMs ?: 0)
 
         // Ключ подписи спрашивается до разбора: сам разбор синхронный, и ходить за ним
         // изнутри нельзя. Промах кэша означает лишь, что сообщение откроется следующей
@@ -141,8 +152,11 @@ class Receiver(
         }
 
         // Группа в списке переписок: без строки человек не увидит, куда пришло сообщение.
+        // Сначала — как есть, чтобы строка была даже без сети; следом — настоящее
+        // название с сервера, оно перекроет заглушку.
         if (!environment.chatFacts.knows(groupId)) {
             book.remember(chatId = groupId, kind = ChatKind.Group, title = "Группа", peerId = null)
+            groupsSync.refresh()
         }
     }
 
@@ -236,7 +250,7 @@ class Receiver(
             return
         }
 
-        environment.incoming.receive(chatId, messageId, envelope)
+        environment.incoming.receive(chatId, messageId, envelope, sentAtMs = sender?.createdAtMs ?: 0)
 
         // Разбор — уже после записи. Упадёт — сообщение останется на повтор.
         val key = sender?.let { captionKey(it.userId, it.deviceId) }
@@ -290,7 +304,7 @@ class Receiver(
     /** Кто прислал — по открытой части конверта. Доверенным станет после проверки подписи. */
     private fun envelopeSender(envelope: ByteArray): SentBy? =
         PersonalMessages.peekSender(envelope)?.let {
-            SentBy(userId = it.userId, deviceId = it.deviceId)
+            SentBy(userId = it.userId, deviceId = it.deviceId, createdAtMs = it.createdAtMs)
         }
 
     private suspend fun captionKey(userId: String, deviceId: String): ByteArray? {
@@ -303,7 +317,7 @@ class Receiver(
         return senderKeys[deviceId]
     }
 
-    private class SentBy(val userId: String, val deviceId: String)
+    private class SentBy(val userId: String, val deviceId: String, val createdAtMs: Long)
 
     private companion object {
         /**

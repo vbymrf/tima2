@@ -56,6 +56,12 @@ data class IncomingEntry(
     val state: IncomingState = IncomingState.RECEIVED,
     val attempts: Int = 0,
     val receivedAtMs: Long = 0,
+    /**
+     * Когда сообщение НАПИСАНО — по часам отправителя, из подписанных метаданных. Ноль —
+     * неизвестно. Именно по нему переписка выстраивается на всех устройствах одинаково:
+     * время приёма у каждого своё, а время написания одно.
+     */
+    val sentAtMs: Long = 0,
     /** Почему не расшифровалось — для диагностики и для показа человеку. */
     val undecryptableReason: String? = null,
 ) {
@@ -192,7 +198,7 @@ class Inbox(
      *
      * @return `true`, если принято впервые.
      */
-    fun receive(chatId: String, messageId: Long, envelope: ByteArray): Boolean {
+    fun receive(chatId: String, messageId: Long, envelope: ByteArray, sentAtMs: Long = 0): Boolean {
         require(chatId.isNotBlank()) { "chatId пустой" }
         require(messageId > 0) { "messageId должен быть положительным: получено $messageId" }
         require(envelope.isNotEmpty()) { "конверт пустой" }
@@ -203,6 +209,7 @@ class Inbox(
                 envelope = envelope,
                 state = IncomingState.RECEIVED,
                 receivedAtMs = nowMs(),
+                sentAtMs = sentAtMs,
             ),
         )
     }

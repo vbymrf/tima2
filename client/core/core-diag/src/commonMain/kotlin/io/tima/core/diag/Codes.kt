@@ -110,6 +110,9 @@ object LogCode {
      */
     const val BOOK_COPY = "BOOK-COPY"
 
+    /** Сверка списка групп с сервером при запуске: сколько групп, либо отказ. */
+    const val GROUPS_SYNC = "GROUPS-SYNC"
+
     // ── Разрешения ────────────────────────────────────────────────────────────
     const val PERM_GRANTED = "PERM-GRANTED"
     const val PERM_DENIED = "PERM-DENIED"

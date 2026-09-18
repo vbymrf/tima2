@@ -175,3 +175,11 @@ fun interface ChatNames {
     /** Имя или номер. Пустого ответа не бывает: строка без автора хуже, чем номер. */
     suspend fun name(userId: String): String
 }
+
+/**
+ * Порт аватаров авторов: байты картинки либо `null` — аватара нет или не доехал.
+ * Составляется в `shared` из справочника (`avatars` в ответе имён) и медиа.
+ */
+fun interface ChatFaces {
+    suspend fun face(userId: String): ByteArray?
+}

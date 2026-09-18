@@ -177,9 +177,15 @@ SELECT count(*) FROM messages;
 -- Отдельного индекса под входящие не нужно: idx_messages_queue начинается с
 -- direction, и обе выборки идут по нему.
 
+-- server_ts у входящего — время НАПИСАНИЯ по часам отправителя из подписанных
+-- метаданных, а client_ts — время приёма. В порядке переписки первое главнее второго
+-- (chatPage): у своего сообщения client_ts и есть время написания, и так на всех
+-- устройствах одна и та же переписка выстраивается одинаково. До 2026-09-18 server_ts
+-- не писался вовсе, и порядок шёл по приёму: сообщение, ждавшее ключа минуту, у автора
+-- стояло выше, у собеседника ниже.
 insertIncoming:
-INSERT OR IGNORE INTO messages(dedup_key, server_id, chat_id, sender_id, client_ts, direction, state, attempts, body_enc)
-VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?);
+INSERT OR IGNORE INTO messages(dedup_key, server_id, chat_id, sender_id, client_ts, server_ts, direction, state, attempts, body_enc)
+VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?);
 
 nextReceived:
 SELECT * FROM messages WHERE direction = 1 AND state = ? ORDER BY local_id LIMIT 1;

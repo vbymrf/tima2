@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -45,6 +47,12 @@ fun BookViewScreen(
     modifier: Modifier = Modifier,
     /** Открыть управление разделами. `null` — пункта в меню не будет. */
     onSections: (() -> Unit)? = null,
+    /**
+     * Список — про людей: есть «как называть человека» и «раздел Телефон». У набора
+     * сообществ (каталог) этих пунктов нет — там группы, и называть их можно одним
+     * способом.
+     */
+    forPeople: Boolean = true,
 ) {
     Column(
         modifier.fillMaxWidth().padding(vertical = TimaSpacing.about2),
@@ -113,30 +121,32 @@ fun BookViewScreen(
             )
         }
 
-        SectionTitle(words.showPersonAs)
-        Check(words.name, words.nameAbout, view.showName) {
-            onChange(view.copy(showName = it))
-        }
-        Check(words.userName, words.userNameAbout, view.showUserName) {
-            onChange(view.copy(showUserName = it))
-        }
-        Check(words.nickname, words.nicknameAbout, view.showNickname) {
-            onChange(view.copy(showNickname = it))
-        }
-        Check(words.phone, words.phoneAbout, view.showPhone) {
-            onChange(view.copy(showPhone = it))
-        }
+        if (forPeople) {
+            SectionTitle(words.showPersonAs)
+            Check(words.name, words.nameAbout, view.showName) {
+                onChange(view.copy(showName = it))
+            }
+            Check(words.userName, words.userNameAbout, view.showUserName) {
+                onChange(view.copy(showUserName = it))
+            }
+            Check(words.nickname, words.nicknameAbout, view.showNickname) {
+                onChange(view.copy(showNickname = it))
+            }
+            Check(words.phone, words.phoneAbout, view.showPhone) {
+                onChange(view.copy(showPhone = it))
+            }
 
-        SectionTitle(words.whatToShow)
-        Check(words.showSearch, words.showSearchAbout, view.showSearch) {
-            onChange(view.copy(showSearch = it))
-        }
-        Check(
-            words.showOutsiders,
-            words.showOutsidersAbout,
-            view.showOutsiders,
-        ) {
-            onChange(view.copy(showOutsiders = it))
+            SectionTitle(words.whatToShow)
+            Check(words.showSearch, words.showSearchAbout, view.showSearch) {
+                onChange(view.copy(showSearch = it))
+            }
+            Check(
+                words.showOutsiders,
+                words.showOutsidersAbout,
+                view.showOutsiders,
+            ) {
+                onChange(view.copy(showOutsiders = it))
+            }
         }
     }
 }
@@ -192,6 +202,7 @@ fun BookViewSheet(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     onSections: (() -> Unit)? = null,
+    forPeople: Boolean = true,
 ) {
     val colors = Tima.colors
     Box(
@@ -204,6 +215,9 @@ fun BookViewSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // Поле сверху — прозрачное: сквозь него видно затемнение, и нажатие туда
+                // закрывает подокно даже при самом длинном содержимом.
+                .padding(top = TimaZones.zone1)
                 .background(colors.surface)
                 // Проглатывает касание: нажатие внутри панели не должно её закрывать.
                 .clickable(enabled = false, onClick = {}),
@@ -229,7 +243,19 @@ fun BookViewSheet(
                 }
                 IconButton(glyph = "✕", onClick = onClose)
             }
-            BookViewScreen(view = view, onChange = onChange, onSections = onSections)
+            // Прокрутка — у содержимого, а не у всей панели: шапка с крестиком стоит на
+            // месте, пункты под ней едут. На телефоне с крупным шрифтом пунктов больше
+            // экрана, и без прокрутки нижние были недостижимы (заказчик 2026-09-18).
+            // `weight(fill = false)`: короткое содержимое — панель по содержимому, длинное —
+            // не выше экрана, а дальше едет. Сверху всегда остаётся полоса затемнения (поле
+            // панели), по которой подокно закрывают.
+            BookViewScreen(
+                view = view,
+                onChange = onChange,
+                onSections = onSections,
+                modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                forPeople = forPeople,
+            )
         }
     }
 }

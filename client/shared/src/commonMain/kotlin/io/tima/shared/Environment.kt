@@ -304,7 +304,7 @@ class Network(
         AccountStoreOverHttp(link.route, link.client, token = { token() })
 
     /** Медиа-хранилище: init → PUT → complete. Пока единственный потребитель — аватар. */
-    val media: Media = MediaOverHttp(link.route, link.client, token = { token() })
+    override val media: Media = MediaOverHttp(link.route, link.client, token = { token() })
 
     /** Устройства аккаунта: объявить платформу, показать список, отключить. */
     override val devices: DevicesApi = DevicesApi(link.route, link.client, token = { token() })

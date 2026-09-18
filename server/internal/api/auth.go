@@ -441,9 +441,19 @@ func resolveNames(deps usersDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
+		// Аватары — как ники: публичны, кто поставил — того и видно. Нужны подписи у
+		// реплик в группе: до 2026-09-18 у чужой реплики стояла буква, потому что чужой
+		// аватар сервер не отдавал ничем.
+		avatars, err := deps.store.AvatarsOf(r.Context(), req.IDs)
+		if err != nil {
+			log.Printf("resolveNames avatars: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"names": names, "phones": phones, "nicknames": nicks, "has_phone": hasPhone,
+			"avatars": avatars,
 		})
 	}
 }

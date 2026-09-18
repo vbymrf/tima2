@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -165,6 +166,7 @@ fun ChatScreen(
                 if (!state.group) null
                 else state.names[line.senderId] ?: words.someone
             },
+            authorFace = { line -> if (state.group) state.faces[line.senderId] else null },
             modifier = Modifier.weight(1f),
             showCircles = state.showCircles,
             onNarrow = onNarrow,
@@ -221,6 +223,7 @@ fun ChatScreen(
 private fun Feed(
     lines: List<ChatLine>,
     authorName: (ChatLine) -> String?,
+    authorFace: (ChatLine) -> ImageBitmap? = { null },
     modifier: Modifier = Modifier,
     /** Показывать ли метку круга у реплик. По умолчанию нет — см. [ChatState.showCircles]. */
     showCircles: Boolean = false,
@@ -247,6 +250,7 @@ private fun Feed(
             Reply(
                 line = line,
                 author = authorName(line),
+                face = authorFace(line),
                 // Смена автора разрывает цепочку, даже когда обе реплики чужие: иначе в
                 // группе два человека подряд слились бы в одного, и имя второго не
                 // показалось бы вовсе.
@@ -297,6 +301,7 @@ private fun Reply(
     line: ChatLine,
     author: String?,
     continuation: Boolean,
+    face: ImageBitmap? = null,
     showCircle: Boolean = false,
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
     onCarry: ((Long, Int) -> Unit)? = null,
@@ -311,7 +316,7 @@ private fun Reply(
     // Пузырь и строка ветки — один элемент списка, поэтому столбец: два соседа в
     // элементе ленивого списка легли бы друг на друга.
     Column {
-        Bubbled(line, author, continuation, showCircle, onNarrow, onCarry)
+        Bubbled(line, author, face, continuation, showCircle, onNarrow, onCarry)
         // «Ветка · N ответов» — под сообщением, отдельной строкой, а не внутри пузыря:
         // это не часть сказанного, а вход в разговор о нём (ADR-0024 §7).
         //
@@ -345,6 +350,7 @@ private fun SystemLine(text: String) = Row(
 private fun Bubbled(
     line: ChatLine,
     author: String?,
+    face: ImageBitmap?,
     continuation: Boolean,
     showCircle: Boolean,
     onNarrow: ((Long, Int, Int) -> Unit)?,
@@ -353,6 +359,7 @@ private fun Bubbled(
     my = line.outgoing,
     author = author,
     avatar = author?.take(1)?.uppercase(),
+    avatarImage = face,
     continuation = continuation,
     bottom = {
         Tertiary(time(line.atMs), lineOne = true)

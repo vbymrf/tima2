@@ -12,7 +12,10 @@ import io.tima.domain.chat.NarrowMessageLevel
 import io.tima.domain.chat.NarrowStep
 import io.tima.domain.chat.MarkRead
 import io.tima.domain.chat.ObserveChat
+import io.tima.domain.chat.ChatFaces
 import io.tima.domain.chat.ChatNames
+import io.tima.core.media.decodeImage
+import androidx.compose.ui.graphics.ImageBitmap
 import io.tima.domain.chat.RequestGroupKeys
 import io.tima.domain.chat.RequestKeysStep
 import io.tima.domain.chat.SendMessage
@@ -66,6 +69,8 @@ class ChatStore(
      * каждую его реплику именем значит шуметь.
      */
     private val names: ChatNames? = null,
+    /** Аватары авторов — только в группе, по одному походу на автора. */
+    private val faces: ChatFaces? = null,
     /**
      * Сужение круга у уже отправленного сообщения. `null` — переписка личная: там у
      * сообщений кругов нет, и предлагать сужение нечему.
@@ -172,6 +177,14 @@ class ChatStore(
                         val padded = _state.value.names.toMutableMap()
                         for (who in new) padded[who] = directory.name(who)
                         _state.value = _state.value.copy(names = padded)
+                        // Аватары — следом за именами, по тем же новым авторам. «Не
+                        // доехал» тоже запоминается, иначе поход повторялся бы на каждой
+                        // строке; за новой картинкой сходим при следующем открытии.
+                        faces?.let { album ->
+                            val pictures = _state.value.faces.toMutableMap()
+                            for (who in new) pictures[who] = album.face(who)?.let(::decodeImage)
+                            _state.value = _state.value.copy(faces = pictures)
+                        }
                     }
                 }
                 // Переписка на экране — значит прочитана. Порядок именно такой: сначала
@@ -445,6 +458,8 @@ data class ChatState(
     val showCircles: Boolean = false,
     /** Имена авторов по идентификатору. Пусто для личной переписки. */
     val names: Map<String, String> = emptyMap(),
+    /** Аватары авторов по `senderId`; `null` — спрашивали, нет. */
+    val faces: Map<String, ImageBitmap?> = emptyMap(),
     /**
      * У устройства нет ни одной версии ключа этой группы.
      *

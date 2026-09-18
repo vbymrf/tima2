@@ -33,6 +33,7 @@ import io.tima.domain.chat.HealGroupKey
 import io.tima.domain.chat.RotateStep
 import io.tima.domain.chat.ChatSummary
 import io.tima.domain.chat.Contact
+import io.tima.domain.chat.ChatFaces
 import io.tima.domain.chat.ChatNames
 import io.tima.domain.chat.CreateGroupChat
 import io.tima.domain.chat.ManageGroupMembers
@@ -71,7 +72,9 @@ import io.tima.feature.chat.ChatsStore
 import io.tima.feature.chat.GroupsScreen
 import io.tima.feature.chat.ChatMenuSheet
 import io.tima.feature.chat.SectionTab
+import io.tima.feature.chat.ALL_SECTION
 import io.tima.feature.chat.COMMON_SECTION
+import io.tima.feature.chat.BookView
 import io.tima.feature.chat.SectionsRow
 import io.tima.feature.chat.SectionsScreen
 import io.tima.feature.chat.BookState
@@ -662,6 +665,16 @@ private fun App(
     val communityShelves by environment.communitySections.sections().collectAsState(initial = emptyList())
     /** Выбранный раздел на вкладке «Группы» Страницы. */
     var groupSection by remember { mutableStateOf("") }
+    // ── «Вид» набора сообществ: каталог Социума (решение заказчика 2026-09-18) ──
+    // Свой вид под своим префиксом настроек: у набора сообществ свои разделы, и как их
+    // показывать — тоже своё. Читается тем же потоком настроек, что и вид книги.
+    val settingsNow by environment.settings.all().collectAsState(initial = emptyMap())
+    val communityView = remember(settingsNow) { BookView.from(settingsNow, BookView.COMMUNITY) }
+    var communityViewSheet by remember { mutableStateOf(false) }
+    var communitySectionsScreen by remember { mutableStateOf(false) }
+    /** Выбранный раздел в каталоге и свёрнутые разделы гармошки. */
+    var catalogSection by remember { mutableStateOf("") }
+    var catalogCollapsed by remember { mutableStateOf(setOf<String>()) }
     /** Экран управления разделами — из меню «Вид» (ПЛАН-РАЗДЕЛОВ Р2). */
     var sectionsScreen by remember { mutableStateOf(false) }
     // Кого приглашаем. null — подокно закрыто: отдельного флага не заводим, чтобы
@@ -864,7 +877,8 @@ private fun App(
     // перепискам: у переписки есть непрочитанное, у собеседника — раздел в книге.
     val newInSection: (String) -> Int = { key ->
         val id = if (key == COMMON_SECTION) "" else key
-        listState.personal.count { chat -> chat.unread > 0 && (key.isEmpty() || sectionOfChat(chat) == id) }
+        val everyone = key.isEmpty() || key == ALL_SECTION
+        listState.personal.count { chat -> chat.unread > 0 && (everyone || sectionOfChat(chat) == id) }
     }
     val chatSections: List<SectionTab> = remember(bookStateForChats.sections, bookStateForChats.all, listState.chats) {
         val used = listState.personal.map(sectionOfChat).toSet()
@@ -949,6 +963,49 @@ private fun App(
             onMove = book::moveSection,
             onRemove = book::removeSection,
             onBack = { sectionsScreen = false },
+        )
+        return
+    }
+
+    // Управление набором сообществ — тот же экран, что у книги, другой набор.
+    if (communitySectionsScreen) {
+        val shelves = environment.communitySections
+        SectionsScreen(
+            sections = communityShelves,
+            countOf = { id -> listState.groups.count { it.sectionId == id } },
+            onAdd = { name, icon -> scope.launch { shelves.add(name.trim(), icon) } },
+            onRename = { id, name, icon -> scope.launch { shelves.rename(id, name.trim(), icon) } },
+            onMove = { id, up ->
+                // Как у книги: меняем места двух соседей, порядок остаётся плотным.
+                val at = communityShelves.indexOfFirst { it.id == id }
+                val to = if (up) at - 1 else at + 1
+                if (at >= 0 && to in communityShelves.indices) {
+                    scope.launch {
+                        shelves.place(communityShelves[at].id, communityShelves[to].place)
+                        shelves.place(communityShelves[to].id, communityShelves[at].place)
+                    }
+                }
+            },
+            onRemove = { id ->
+                scope.launch { shelves.remove(id) }
+                if (catalogSection == id) catalogSection = ""
+                if (groupSection == id) groupSection = ""
+            },
+            onBack = { communitySectionsScreen = false },
+        )
+        return
+    }
+
+    if (communityViewSheet) {
+        BookViewSheet(
+            view = communityView,
+            onChange = { changed -> scope.launch { changed.save(environment.settings, BookView.COMMUNITY) } },
+            onClose = { communityViewSheet = false },
+            onSections = {
+                communityViewSheet = false
+                communitySectionsScreen = true
+            },
+            forPeople = false,
         )
         return
     }
@@ -1163,17 +1220,63 @@ private fun App(
                     // Списки обновляются при входе в окно: возвращаясь из группы, человек
                     // должен видеть её на месте, а не прежний снимок.
                     LaunchedEffect(Unit) { social.refresh() }
+                    // Раздел группы — из местной базы (`chats.section_id`); сервер разделов
+                    // не знает. Группы без строки в базе — общий раздел.
+                    val sectionOfGroup: (String) -> String = { id ->
+                        listState.groups.firstOrNull { it.chatId == id }?.sectionId.orEmpty()
+                    }
+                    val freshInCatalog: (String) -> Int = { key ->
+                        val id = if (key == COMMON_SECTION) "" else key
+                        val everyone = key.isEmpty() || key == ALL_SECTION
+                        listState.groups.count { it.unread > 0 && (everyone || it.sectionId == id) }
+                    }
+                    val catalogTabs = listOf(SectionTab("", bookWordsNow().everyone, 0)) +
+                        communityShelves.map { SectionTab(it.id, it.name, it.icon) } +
+                        SectionTab(COMMON_SECTION, bookWordsNow().commonSection, 0)
                     SocialWindow(
                         onSwitchWindows = { windowSwitcher = true },
                         onSearch = {},
                         onSettings = toSettings,
                         onNeighbourWindow = switchWindow,
+                        onCatalogView = { communityViewSheet = true },
+                        // Полоса разделов (В/Г) — только в виде «полоса» и когда есть что выбирать.
+                        catalogRow = if (!communityView.folders && communityShelves.isNotEmpty()) {
+                            {
+                                SectionsRow(
+                                    tabs = catalogTabs,
+                                    chosen = catalogSection,
+                                    icons = communityView.icons,
+                                    onPick = { catalogSection = it },
+                                    newIn = freshInCatalog,
+                                )
+                            }
+                        } else {
+                            null
+                        },
                         catalog = {
                             CatalogTab(
                                 state = socialState,
                                 onOpen = { where = Where.Chat(it.groupId, it.title) },
                                 onNew = { where = Where.NewGroup },
                                 onOpenCommunity = { where = Where.Community(it) },
+                                // Разделы каталога — набор сообществ по «Виду» каталога.
+                                layout = { groups, line ->
+                                    CatalogSectioned(
+                                        groups = groups,
+                                        line = line,
+                                        view = communityView,
+                                        sections = communityShelves,
+                                        sectionOf = sectionOfGroup,
+                                        chosen = catalogSection,
+                                        onChoose = { catalogSection = it },
+                                        collapsed = catalogCollapsed,
+                                        onToggle = { id ->
+                                            catalogCollapsed = if (id in catalogCollapsed) catalogCollapsed - id else catalogCollapsed + id
+                                        },
+                                        freshIn = freshInCatalog,
+                                        onSections = { communitySectionsScreen = true },
+                                    )
+                                },
                             )
                         },
                         friends = { FriendsTab(state = socialState, onAsk = social::ask) },
@@ -1216,11 +1319,13 @@ private fun App(
                                 SectionsRow(
                                     tabs = tabs,
                                     chosen = groupSection,
-                                    icons = bookStateForChats.view.icons,
+                                    // Значки или слова — по «Виду» набора сообществ, как в каталоге.
+                                    icons = communityView.icons,
                                     onPick = { groupSection = it },
                                     newIn = { key ->
                                         val id = if (key == COMMON_SECTION) "" else key
-                                        listState.groups.count { it.unread > 0 && (key.isEmpty() || it.sectionId == id) }
+                                        val everyone = key.isEmpty() || key == ALL_SECTION
+                                        listState.groups.count { it.unread > 0 && (everyone || it.sectionId == id) }
                                     },
                                 )
                             }
@@ -1585,6 +1690,13 @@ private fun Chat(
             heal = if (group) heal else null,
             names = if (group) {
                 ChatNames { userId -> network.directory.nameOrNumber(userId) ?: userId }
+            } else {
+                null
+            },
+            // Аватар автора: медиа из справочника, байты из медиа-хранилища. Только в
+            // группе — в личной переписке подписи у реплик нет вовсе.
+            faces = if (group) {
+                ChatFaces { userId -> network.directory.avatarOf(userId)?.let { network.media.download(it) } }
             } else {
                 null
             },

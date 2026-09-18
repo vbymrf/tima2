@@ -88,3 +88,33 @@ func (s *Store) SetAvatar(ctx context.Context, userID, mediaID string) error {
 	}
 	return nil
 }
+
+// AvatarsOf — аватары по user_id: media_id тех, у кого он поставлен. Пустой в карту не
+// попадает — как и у Nicknames: клиент обязан отличать «аватара нет» от «сервер не
+// ответил». Аватар публичен так же, как ник: человек поставил его сам, и видят его все,
+// кто видит его сообщения. Медиа по id отдаётся любому вошедшему — так устроен mediaURL.
+func (s *Store) AvatarsOf(ctx context.Context, ids []string) (map[string]string, error) {
+	out := make(map[string]string, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT u.user_id, p.avatar_media_id::text FROM users u
+		JOIN persons p ON p.person_id = u.person_id
+		WHERE u.user_id = ANY($1) AND p.avatar_media_id IS NOT NULL`, ids)
+	if err != nil {
+		if isBadUUID(err) {
+			return out, nil
+		}
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, media string
+		if err := rows.Scan(&id, &media); err != nil {
+			return nil, err
+		}
+		out[id] = media
+	}
+	return out, rows.Err()
+}

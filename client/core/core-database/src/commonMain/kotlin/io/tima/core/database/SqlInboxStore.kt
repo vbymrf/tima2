@@ -43,6 +43,7 @@ class SqlInboxStore(
             // выдуманное значение, которое потом придётся отличать от настоящего.
             sender_id = "",
             client_ts = entry.receivedAtMs,
+            server_ts = entry.sentAtMs.takeIf { it > 0 },
             state = entry.state.ordinal.toLong(),
             attempts = entry.attempts.toLong(),
             body_enc = cipher.seal(entry.envelope),
@@ -140,6 +141,7 @@ class SqlInboxStore(
         state = incomingStateOf(state),
         attempts = attempts.toInt(),
         receivedAtMs = client_ts,
+        sentAtMs = server_ts ?: 0,
         undecryptableReason = undecryptable_reason,
     )
 

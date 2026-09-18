@@ -1,6 +1,11 @@
 package io.tima.core.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,6 +59,8 @@ fun Bubble(
     author: String? = null,
     /** Буквы аватара автора. */
     avatar: String? = null,
+    /** Картинка аватара автора. Есть — вместо букв, в том же квадрате. */
+    avatarImage: ImageBitmap? = null,
     /**
      * Продолжение серии: перед этим сообщением есть предыдущее от того же автора.
      * Тогда аватара и имени нет — вопроса «кто это» сообщение не задаёт.
@@ -121,22 +128,32 @@ fun Bubble(
 
             if (showAuthor && avatar != null) {
                 // Выступает вверх, в зазор между репликами, и перекрывает полосу.
+                val shape = RoundedCornerShape(TimaShapes.square)
                 Box(
                     modifier = Modifier
                         .offset(x = (-1).dp, y = (-12).dp)
-                        .background(
-                            color = if (my) colors.my else colors.author,
-                            shape = RoundedCornerShape(TimaShapes.square),
-                        )
-                        .border(1.dp, colors.border, RoundedCornerShape(TimaShapes.square))
-                        .padding(FIELD_AVATAR),
+                        .background(color = if (my) colors.my else colors.author, shape = shape)
+                        .border(1.dp, colors.border, shape),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Caption(
-                        text = avatar,
-                        fontSize = TimaType.sz6,
-                        weight = FontWeight.ExtraBold,
-                        color = colors.text,
-                    )
+                    if (avatarImage != null) {
+                        // Картинка — тем же квадратом, что буквы: размер задаёт буква с
+                        // полем, чтобы ряд реплик не «дышал» от того, у кого есть фото.
+                        Image(
+                            bitmap = avatarImage,
+                            contentDescription = null,
+                            modifier = Modifier.size(AVATAR_SIDE).clip(shape),
+                            contentScale = ContentScale.Crop,
+                        )
+                    } else {
+                        Caption(
+                            text = avatar,
+                            fontSize = TimaType.sz6,
+                            weight = FontWeight.ExtraBold,
+                            color = colors.text,
+                            modifier = Modifier.padding(FIELD_AVATAR),
+                        )
+                    }
                 }
             }
         }
@@ -223,6 +240,9 @@ private val ОТСТУП_ПОД_АВАТАР = 33.dp
 
 /** Поле внутри аватара пузыря: он 40×40 при кегле 10. */
 private val FIELD_AVATAR = 13.dp
+
+/** Сторона квадрата картинки: буква `sz6` с полем `FIELD_AVATAR` с двух сторон. */
+private val AVATAR_SIDE = 44.dp
 
 /** `max-width: 290px` из макета. */
 private val ПРЕДЕЛ_ШИРИНЫ = 290.dp

@@ -65,6 +65,7 @@ class SqlChatFeedTest {
         state: IncomingState,
         ts: Long = 2_000,
         body: ByteArray = Codec.encodeText("ответ"),
+        sentAtMs: Long = 0,
     ) {
         inbox.putIfAbsent(
             IncomingEntry(
@@ -73,6 +74,7 @@ class SqlChatFeedTest {
                 envelope = body,
                 state = IncomingState.RECEIVED,
                 receivedAtMs = ts,
+                sentAtMs = sentAtMs,
             ),
         )
         val entry = inbox.byKey("chat-1", messageId)!!
@@ -114,6 +116,23 @@ class SqlChatFeedTest {
         val entry = lines.single { !it.outgoing }
         assertEquals(MessageDisplay.PENDING, outcome.display, "исходящее в состоянии 1 — ожидание")
         assertEquals(MessageDisplay.UNREADABLE, entry.display, "входящее в состоянии 1 — нечитаемое")
+    }
+
+    @Test
+    fun порядок_переписки_по_времени_написания_а_не_приёма() = runTest {
+        // Живой случай 2026-09-18, группа «gruppa»: собеседник написал в 00 с, но его
+        // сообщение ждало ключ и дошло в 63 с; я написал своё в 61 с. У него его строка
+        // выше моей, у меня — ниже. Одинаково на обоих будет только по времени написания.
+        outgoing("mine", OutboxState.SENT, clientTs = 61_000)
+        incoming(3, IncomingState.READ, ts = 62_000, sentAtMs = 0)
+        incoming(4, IncomingState.READ, ts = 63_000, sentAtMs = 0)
+        // Приём в 63 с, написано в 0 с — оно первое.
+        incoming(5, IncomingState.READ, ts = 63_500, sentAtMs = 100)
+
+        val order = chat.page("chat-1").first().sortedBy { it.atMs }.map { it.dedupKey }
+
+        assertEquals("chat-1/5", order.first(), "написанное раньше всех стоит первым, хотя принято последним")
+        assertEquals(listOf("chat-1/5", "mine", "chat-1/3", "chat-1/4"), order)
     }
 
     @Test

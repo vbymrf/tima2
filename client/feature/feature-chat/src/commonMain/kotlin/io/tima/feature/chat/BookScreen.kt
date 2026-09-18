@@ -236,7 +236,7 @@ fun BookScreen(
  * и без числа непонятно, стоит ли его разворачивать.
  */
 @Composable
-private fun SectionHeader(tab: SectionTab, count: Int, fresh: Int, open: Boolean, onClick: () -> Unit) {
+fun SectionHeader(tab: SectionTab, count: Int, fresh: Int, open: Boolean, onClick: () -> Unit) {
     val colors = Tima.colors
     // Строка раздела по макету `новости.html` («Каталог»), правило `.разд`: знак, зелёный
     // кружок «сколько внутри», имя; справа янтарный «сколько нового» и круглый шеврон.

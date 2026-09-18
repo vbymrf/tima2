@@ -3,7 +3,10 @@ package io.tima.shared
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import io.tima.core.diag.Journal
+import io.tima.core.database.SqlChatBook
 import io.tima.core.diag.LogCode
+import io.tima.domain.chat.SyncGroupChats
+import io.tima.core.network.GroupsOverHttp
 import io.tima.core.network.PlatformResult
 import kotlinx.coroutines.delay
 
@@ -39,6 +42,15 @@ fun BackgroundLoops(
     // регистрация бывает один раз, а объявление нужно и тем, кто уже завёлся.
     LaunchedEffect(assembled) {
         declarePlatform(assembled.network, platform)
+    }
+
+    // Группы — с сервера при каждом запуске: в группу добавляет кто-то другой, и без
+    // сверки о ней узнают по первому сообщению, а название — никогда (до 2026-09-18 так и
+    // было: у приглашённого в шапке стояло «Группа», у создателя — настоящее имя).
+    LaunchedEffect(assembled) {
+        val environment = assembled.environment
+        val step = SyncGroupChats(GroupsOverHttp(assembled.network.groups), SqlChatBook(environment.db, environment.cipher)).refresh()
+        Journal.note(LogCode.GROUPS_SYNC, "группы сверены с сервером", "итог" to step.toString())
     }
 
     // Отправка идёт ОТ ИЗМЕНЕНИЙ, а не по таймеру: список приходит потоком из базы, и

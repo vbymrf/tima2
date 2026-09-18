@@ -79,7 +79,7 @@ class PersonalMessages(escrowKey: EscrowEpochKey) {
          */
         fun peekSender(envelopeBytes: ByteArray): EnvelopeSender? =
             MessageSerializer.decodeEnvelope(envelopeBytes).getOrNull()?.meta?.let {
-                EnvelopeSender(userId = it.senderId, deviceId = it.senderDevice)
+                EnvelopeSender(userId = it.senderId, deviceId = it.senderDevice, createdAtMs = it.createdAtUnixMs)
             }
 
         /**
@@ -158,4 +158,4 @@ data class ReceivedMessage(
  * это **конверт назвался**, а не «проверено, что прислал он». Пара `String` такого
  * не говорит, и через полгода её примут за доверенную.
  */
-data class EnvelopeSender(val userId: String, val deviceId: String)
+data class EnvelopeSender(val userId: String, val deviceId: String, val createdAtMs: Long = 0)

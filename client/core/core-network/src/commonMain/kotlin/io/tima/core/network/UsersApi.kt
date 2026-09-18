@@ -96,6 +96,26 @@ class UsersApi(
             ?.takeIf { it.isNotBlank() }
     }
 
+    /** Медиа аватара, если человек его поставил. Из того же ответа имён (`avatars`). */
+    suspend fun avatarOf(userId: String): String? = field("avatars", userId)
+
+    private suspend fun field(map: String, userId: String): String? {
+        val response = try {
+            client.post(route.api("/api/v1/users/names")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { putJsonArray("ids") { add(userId) } }.toString())
+            }
+        } catch (e: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        val body = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull()
+        return body?.get(map)?.let { (it as? JsonObject) }
+            ?.get(userId)?.jsonPrimitive?.content
+            ?.takeIf { it.isNotBlank() }
+    }
+
     /** Номер — вторым выбором: он известен только по собеседникам своих переписок. */
     private suspend fun number(userId: String): String? {
         val response = try {

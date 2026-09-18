@@ -15,6 +15,7 @@ import io.tima.core.network.GroupKeyRecoveryApi
 import io.tima.core.network.GroupKeysApi
 import io.tima.core.network.GroupsApi
 import io.tima.core.network.KeysApi
+import io.tima.core.media.Media
 import io.tima.core.network.UsersApi
 import io.tima.domain.chat.ContactDiscovery
 import io.tima.domain.chat.Friends
@@ -66,6 +67,9 @@ interface ChatPorts {
 
     /** Свой профиль: имя и ник (Д8). */
     val profile: Profile
+
+    /** Медиа-хранилище: аватары авторов в переписке и свой аватар. */
+    val media: Media
 
     /**
      * Недостающие версии группового ключа: попросить и отдать.

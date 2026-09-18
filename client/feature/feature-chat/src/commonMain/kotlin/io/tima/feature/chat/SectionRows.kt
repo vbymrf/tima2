@@ -211,7 +211,7 @@ fun SectionsTiles(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         for (tab in tabs) {
-            val all = tab.id == ALL_KEY
+            val all = tab.id == ALL_SECTION
             val total = countOf(tab.id)
             Tile(
                 tab = tab,
@@ -266,12 +266,15 @@ private fun Tile(
             contentAlignment = Alignment.Center,
         ) {
             Mark(tab, size = side * 0.45f, color = if (all) colors.onAccent else colors.text)
-            // Два счёта по углам: янтарный — новое, вверх; зелёный — всего, вниз.
+            // Два счёта по углам, ВНУТРИ квадрата: янтарный — новое, вверх; зелёный —
+            // всего, вниз. В макете они наполовину вылезали за угол; заказчик 2026-09-18:
+            // «переместить внутрь пузыря, увеличить в полтора раза» — на телефоне мелкий
+            // счёт на углу читался хуже подписи.
             if (fresh > 0) {
-                Box(Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-6).dp)) { Badge(fresh, amber = true) }
+                Box(Modifier.align(Alignment.TopEnd).padding(3.dp)) { Badge(fresh, amber = true, large = true) }
             }
             if (total != null) {
-                Box(Modifier.align(Alignment.BottomEnd).offset(x = 5.dp, y = 5.dp)) { Badge(total, amber = false) }
+                Box(Modifier.align(Alignment.BottomEnd).padding(3.dp)) { Badge(total, amber = false, large = true) }
             }
         }
         Caption(tab.name, fontSize = 10.5.sp, weight = FontWeight.Bold, lineOne = true)
@@ -306,7 +309,8 @@ private fun AddTile(label: String, side: Dp, onClick: () -> Unit) {
 fun Mark(tab: SectionTab, size: Dp, color: Color) {
     when {
         tab.icon != 0 -> SectionGlyph(index = tab.icon, size = size, color = color)
-        tab.id == ALL_KEY -> Caption("✦", fontSize = (size.value * 0.9f).sp, weight = FontWeight.Bold, color = color)
+        tab.id == ALL_KEY || tab.id == ALL_SECTION ->
+            Caption("✦", fontSize = (size.value * 0.9f).sp, weight = FontWeight.Bold, color = color)
         else -> Caption(
             tab.name.take(1).uppercase(),
             fontSize = (size.value * 0.75f).sp,
@@ -321,9 +325,14 @@ fun Mark(tab: SectionTab, size: Dp, color: Color) {
  * белая цифра и белая обводка 2, чтобы не сливаться с углом значка.
  */
 @Composable
-fun Badge(count: Int, amber: Boolean, small: Boolean = false) {
+fun Badge(count: Int, amber: Boolean, small: Boolean = false, large: Boolean = false) {
     val colors = Tima.colors
-    val height = if (small) 16.dp else 18.dp
+    // Крупный — в полтора раза от обычного: для плитки, где счёт стоит внутри квадрата.
+    val height = when {
+        small -> 16.dp
+        large -> 27.dp
+        else -> 18.dp
+    }
     Box(
         modifier = Modifier
             .then(if (!amber) Modifier.border(2.dp, colors.surface, CircleShape) else Modifier)
@@ -335,7 +344,11 @@ fun Badge(count: Int, amber: Boolean, small: Boolean = false) {
     ) {
         Caption(
             count.toString(),
-            fontSize = if (small) 9.5.sp else 10.sp,
+            fontSize = when {
+                small -> 9.5.sp
+                large -> 15.sp
+                else -> 10.sp
+            },
             weight = FontWeight.ExtraBold,
             color = if (amber) colors.onAmber else colors.onAccent,
         )

@@ -293,6 +293,19 @@ func TestАватарТолькоСвойИЗавершённый(t *testing.T) 
 	if me.Avatar != своё.MediaID {
 		t.Fatalf("аватар не отдан в me: %q", me.Avatar)
 	}
+	// И виден другим — в том же ответе, что имена: подпись реплики в группе берёт его
+	// оттуда. У кого аватара нет — того в карте нет.
+	var names struct {
+		Avatars map[string]string `json:"avatars"`
+	}
+	authedJSON(t, ts, "POST", "/api/v1/users/names", анна.token,
+		map[string]any{"ids": []string{пётр.userID, анна.userID}}, &names)
+	if names.Avatars[пётр.userID] != своё.MediaID {
+		t.Fatalf("чужой аватар не отдан в names: %v", names.Avatars)
+	}
+	if _, есть := names.Avatars[анна.userID]; есть {
+		t.Fatalf("пустой аватар попал в ответ: %v", names.Avatars)
+	}
 
 	// Пустой — убирает.
 	if code := authedJSON(t, ts, "PATCH", "/api/v1/users/me/avatar", пётр.token,

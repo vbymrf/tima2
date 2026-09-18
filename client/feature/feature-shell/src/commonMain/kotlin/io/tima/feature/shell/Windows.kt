@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import io.tima.core.ui.TabButton
 import io.tima.core.ui.Tima
 import io.tima.core.ui.words
 
@@ -53,6 +54,10 @@ fun SocialWindow(
     modifier: Modifier = Modifier,
     catalog: (@Composable () -> Unit)? = null,
     friends: (@Composable () -> Unit)? = null,
+    /** «Вид» каталога — кнопка в хвосте вкладок, только на «Каталоге». `null` — кнопки нет. */
+    onCatalogView: (() -> Unit)? = null,
+    /** Второй ряд каталога — полоса разделов набора сообществ (В/Г). `null` — ряда нет. */
+    catalogRow: (@Composable () -> Unit)? = null,
 ) = WindowWithTabs(
     window = Window.Social,
     tabs = COMMON_TABS,
@@ -61,6 +66,10 @@ fun SocialWindow(
     onSettings = onSettings,
     onNeighbourWindow = onNeighbourWindow,
     modifier = modifier,
+    // Хвост ряда вкладок зависит от вкладки, а `WindowWithTabs` держит выбор у себя —
+    // поэтому кнопка рисуется всегда, но пустой, когда вкладка не каталог: см. ниже.
+    tabsTrailing = onCatalogView?.let { { CatalogViewButton(it) } },
+    secondRow = catalogRow?.let { row -> { tab -> if (tab == WindowTab.Catalogue) row() } },
 ) { tab ->
     when (tab) {
         WindowTab.Common -> TabStub(
@@ -79,6 +88,15 @@ fun SocialWindow(
             "Группы, каналы, сообщества и голосовые чаты по разделам.",
         )
     }
+}
+
+/**
+ * Кнопка «Вид» каталога — та же таблетка, что у «Контактов» окна 1: открывает подокно
+ * вида набора сообществ (полоса/папки, имена/ярлычки, размер, разделы).
+ */
+@Composable
+private fun CatalogViewButton(onClick: () -> Unit) {
+    TabButton(label = Tima.words.tabs.label(WindowTab.View), glyph = "▤", onClick = onClick)
 }
 
 /**
