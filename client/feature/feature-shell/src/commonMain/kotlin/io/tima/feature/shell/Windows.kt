@@ -58,17 +58,25 @@ fun SocialWindow(
     onCatalogView: (() -> Unit)? = null,
     /** Второй ряд каталога — полоса разделов набора сообществ (В/Г). `null` — ряда нет. */
     catalogRow: (@Composable () -> Unit)? = null,
+    /**
+     * Вкладка снаружи: подокно «Вид» перестраивает окно целиком, и вкладка, живущая
+     * внутри, сбрасывалась бы на «Общую» при каждом закрытии подокна. `null` — своя.
+     */
+    tab: WindowTab? = null,
+    onTab: ((WindowTab) -> Unit)? = null,
 ) = WindowWithTabs(
     window = Window.Social,
     tabs = COMMON_TABS,
+    selectedOutside = tab,
+    onSelectOutside = onTab,
     onSwitchWindows = onSwitchWindows,
     onSearch = onSearch,
     onSettings = onSettings,
     onNeighbourWindow = onNeighbourWindow,
     modifier = modifier,
-    // Хвост ряда вкладок зависит от вкладки, а `WindowWithTabs` держит выбор у себя —
-    // поэтому кнопка рисуется всегда, но пустой, когда вкладка не каталог: см. ниже.
-    tabsTrailing = onCatalogView?.let { { CatalogViewButton(it) } },
+    // «Вид» — только на «Каталоге»: у лент настраивать нечего, и кнопка там означала бы
+    // несуществующее (то же правило, что у «Контактов» окна 1).
+    tabsTrailing = onCatalogView?.let { view -> { tab -> if (tab == WindowTab.Catalogue) CatalogViewButton(view) } },
     secondRow = catalogRow?.let { row -> { tab -> if (tab == WindowTab.Catalogue) row() } },
 ) { tab ->
     when (tab) {
@@ -131,7 +139,7 @@ fun MediaWindow(
         onSettings = onSettings,
         onNeighbourWindow = onNeighbourWindow,
         modifier = modifier,
-        tabsTrailing = { ModeSwitch(MEDIA_MODES, mode, { mode = it }) },
+        tabsTrailing = { _ -> ModeSwitch(MEDIA_MODES, mode, { mode = it }) },
     ) { tab ->
         val looking = if (mode == WindowTab.Slides) {
             "Кадр во весь экран, отклики под ним, листание вверх и вниз."
@@ -376,25 +384,30 @@ private fun WindowWithTabs(
     onSettings: () -> Unit,
     onNeighbourWindow: (InSide) -> Unit,
     modifier: Modifier = Modifier,
-    /** Хвост ряда вкладок: режим всего окна, он вкладку переживает. */
-    tabsTrailing: (@Composable () -> Unit)? = null,
+    /** Хвост ряда вкладок. Получает выбранную вкладку: у одних вкладок он есть, у других нет. */
+    tabsTrailing: (@Composable (WindowTab) -> Unit)? = null,
     /** Ряд под вкладками. Получает выбранную вкладку: у разных вкладок он разный. */
     secondRow: (@Composable (WindowTab) -> Unit)? = null,
+    /** Вкладка, которую держит вызывающий; `null` — окно держит её само. */
+    selectedOutside: WindowTab? = null,
+    onSelectOutside: ((WindowTab) -> Unit)? = null,
     content: @Composable (WindowTab) -> Unit,
 ) {
-    var selected by remember(window) { mutableStateOf(tabs.first()) }
+    var own by remember(window) { mutableStateOf(tabs.first()) }
+    val selected = selectedOutside ?: own
     val row = secondRow
+    val trailing = tabsTrailing
     WindowFrame(
         window = window,
         tabs = tabs,
         selected = selected,
-        onTab = { selected = it },
+        onTab = { own = it; onSelectOutside?.invoke(it) },
         onSwitchWindows = onSwitchWindows,
         onSearch = onSearch,
         onSettings = onSettings,
         onNeighbourWindow = onNeighbourWindow,
         modifier = modifier,
-        tabsTrailing = tabsTrailing,
+        tabsTrailing = if (trailing == null) null else ({ trailing(selected) }),
         secondRow = if (row == null) null else ({ row(selected) }),
     ) {
         content(selected)

@@ -358,7 +358,9 @@ private fun Bubbled(
 ) = Bubble(
     my = line.outgoing,
     author = author,
-    avatar = author?.take(1)?.uppercase(),
+    // Буква — первая буква имени; у автора без имени подпись — номер, и «+» в квадрате
+    // читался бы кнопкой. Тогда «?», как у безымянной переписки в списке.
+    avatar = author?.let { name -> name.firstOrNull { it.isLetter() }?.uppercase() ?: "?" },
     avatarImage = face,
     continuation = continuation,
     bottom = {

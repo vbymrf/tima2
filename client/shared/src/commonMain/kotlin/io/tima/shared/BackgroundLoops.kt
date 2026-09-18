@@ -6,6 +6,7 @@ import io.tima.core.diag.Journal
 import io.tima.core.database.SqlChatBook
 import io.tima.core.diag.LogCode
 import io.tima.domain.chat.SyncGroupChats
+import io.tima.domain.chat.SyncGroupsStep
 import io.tima.core.network.GroupsOverHttp
 import io.tima.core.network.PlatformResult
 import kotlinx.coroutines.delay
@@ -49,8 +50,16 @@ fun BackgroundLoops(
     // было: у приглашённого в шапке стояло «Группа», у создателя — настоящее имя).
     LaunchedEffect(assembled) {
         val environment = assembled.environment
-        val step = SyncGroupChats(GroupsOverHttp(assembled.network.groups), SqlChatBook(environment.db, environment.cipher)).refresh()
-        Journal.note(LogCode.GROUPS_SYNC, "группы сверены с сервером", "итог" to step.toString())
+        val sync = SyncGroupChats(GroupsOverHttp(assembled.network.groups), SqlChatBook(environment.db, environment.cipher))
+        // Сеть при запуске может ещё не подняться — повторить, а не ждать следующего запуска.
+        var pause = 5_000L
+        repeat(4) { attempt ->
+            val step = sync.refresh()
+            Journal.note(LogCode.GROUPS_SYNC, "группы сверены с сервером", "итог" to step.toString())
+            if (step !is SyncGroupsStep.Offline) return@LaunchedEffect
+            if (attempt < 3) delay(pause)
+            pause *= 3
+        }
     }
 
     // Отправка идёт ОТ ИЗМЕНЕНИЙ, а не по таймеру: список приходит потоком из базы, и

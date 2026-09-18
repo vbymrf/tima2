@@ -668,9 +668,16 @@ private fun App(
     // ── «Вид» набора сообществ: каталог Социума (решение заказчика 2026-09-18) ──
     // Свой вид под своим префиксом настроек: у набора сообществ свои разделы, и как их
     // показывать — тоже своё. Читается тем же потоком настроек, что и вид книги.
-    val settingsNow by environment.settings.all().collectAsState(initial = emptyMap())
-    val communityView = remember(settingsNow) { BookView.from(settingsNow, BookView.COMMUNITY) }
+    // В памяти — сразу, в настройки — следом: `save` пишет шесть ключей по одному, и вид,
+    // выведенный из настроек на полпути, затирал бы второе нажатие первым (так и вышло на
+    // Redmi 2026-09-18: «Папки» не удержались после «Ярлычков»).
+    var communityView by remember { mutableStateOf(BookView()) }
+    LaunchedEffect(environment) {
+        environment.settings.all().collect { communityView = BookView.from(it, BookView.COMMUNITY) }
+    }
     var communityViewSheet by remember { mutableStateOf(false) }
+    /** Вкладка Социума — здесь, чтобы пережить подокно «Вид» (оно перестраивает окно). */
+    var socialTab by remember { mutableStateOf(WindowTab.Common) }
     var communitySectionsScreen by remember { mutableStateOf(false) }
     /** Выбранный раздел в каталоге и свёрнутые разделы гармошки. */
     var catalogSection by remember { mutableStateOf("") }
@@ -999,7 +1006,10 @@ private fun App(
     if (communityViewSheet) {
         BookViewSheet(
             view = communityView,
-            onChange = { changed -> scope.launch { changed.save(environment.settings, BookView.COMMUNITY) } },
+            onChange = { changed ->
+                communityView = changed
+                scope.launch { changed.save(environment.settings, BookView.COMMUNITY) }
+            },
             onClose = { communityViewSheet = false },
             onSections = {
                 communityViewSheet = false
@@ -1239,6 +1249,8 @@ private fun App(
                         onSettings = toSettings,
                         onNeighbourWindow = switchWindow,
                         onCatalogView = { communityViewSheet = true },
+                        tab = socialTab,
+                        onTab = { socialTab = it },
                         // Полоса разделов (В/Г) — только в виде «полоса» и когда есть что выбирать.
                         catalogRow = if (!communityView.folders && communityShelves.isNotEmpty()) {
                             {

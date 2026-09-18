@@ -51,16 +51,26 @@ class SyncBookCopy(
         }
     }
 
+    /** Отпечаток последнего отданного: одно и то же дважды не гоняем. */
+    private var pushed: Int? = null
+
     suspend fun push(): CopyStep {
         val k = key() ?: return CopyStep.NoKey
         var attempts = 0
         while (true) {
             val next = revision.last() + 1
-            val snapshot = copy.snapshot().copy(revision = next, device = device())
+            val plain = copy.snapshot()
+            // Книга меняется и без правок человека — сверка с сервером дописывает
+            // user_id, — и каждое такое изменение звало отдачу. Содержимое копии при этом
+            // то же самое: сравниваем и молчим.
+            val print = plain.copy(revision = 0, device = "").hashCode()
+            if (print == pushed) return CopyStep.Unchanged
+            val snapshot = plain.copy(revision = next, device = device())
             val sealed = codec.seal(k, snapshot) ?: return CopyStep.Refused("не удалось закрыть копию")
             when (val sent = store.put(next, sealed)) {
                 AccountStoreStep.Stored -> {
                     revision.remember(next)
+                    pushed = print
                     return CopyStep.Pushed(next)
                 }
                 is AccountStoreStep.Conflict -> {
@@ -84,6 +94,11 @@ class SyncBookCopy(
         if (theirs.revision != blob.revision) return CopyStep.Refused("ревизия внутри копии не совпадает с внешней")
         copy.apply(theirs)
         revision.remember(blob.revision)
+        // Если после приёма наша книга совпала с принятой — отдавать нечего: иначе каждый
+        // запуск отвечал бы серверу его же копией под новой ревизией.
+        if (copy.snapshot().copy(revision = 0, device = "") == theirs.copy(revision = 0, device = "")) {
+            pushed = theirs.copy(revision = 0, device = "").hashCode()
+        }
         return CopyStep.Pulled(blob.revision, from = blob.device)
     }
 }
@@ -95,6 +110,8 @@ sealed interface CopyStep {
     data class Pushed(val revision: Long) : CopyStep
     /** Ключа служебной группы пока нет — ходов не делали. */
     data object NoKey : CopyStep
+    /** Содержимое то же, что уже отдано, — отдавать нечего. */
+    data object Unchanged : CopyStep
     data object Offline : CopyStep
     data class Refused(val reason: String) : CopyStep
 }

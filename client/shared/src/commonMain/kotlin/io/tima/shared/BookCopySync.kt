@@ -11,6 +11,7 @@ import io.tima.domain.chat.RevisionMemory
 import io.tima.domain.chat.Settings
 import io.tima.domain.chat.SyncBookCopy
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
@@ -80,8 +81,20 @@ class BookCopySync(
     fun start() {
         scope.launch {
             memory.load()
-            note("забрать при запуске", sync.pull())
-            note("отдать при запуске", sync.push())
+            // Сеть при запуске часто ещё не поднялась (Redmi 2026-09-18: UnknownHost в
+            // первые секунды после пробуждения). Без сети или без ключа — повторить с
+            // растущей паузой, а не ждать следующего запуска.
+            var pause = 5_000L
+            repeat(4) { attempt ->
+                val pulled = sync.pull()
+                note("забрать при запуске", pulled)
+                if (pulled !is CopyStep.Offline && pulled != CopyStep.NoKey) {
+                    note("отдать при запуске", sync.push())
+                    return@launch
+                }
+                if (attempt < 3) delay(pause)
+                pause *= 3
+            }
         }
         // После правки — отдать. Первая пара значений потоков — это чтение при запуске, а
         // не правка: пропускается.
@@ -104,6 +117,9 @@ class BookCopySync(
             CopyStep.Offline -> Journal.note(COPY, "копия книги: $what — без сети")
             CopyStep.NoKey -> Journal.note(COPY, "копия книги: $what — ключа служебной группы нет")
             CopyStep.Nothing -> Journal.note(COPY, "копия книги: $what — у сервера копии ещё нет")
+            // Ничего не менялось — в журнале не нужно: строка на каждую сверку с сервером
+            // и была бы тем шумом, ради которого отпечаток заведён.
+            CopyStep.Unchanged -> Unit
             is CopyStep.Pulled -> Journal.note(COPY, "копия книги: $what — принята", "ревизия" to step.revision, "с" to step.from)
             is CopyStep.Pushed -> Journal.note(COPY, "копия книги: $what — отдана", "ревизия" to step.revision)
         }
