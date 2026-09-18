@@ -4,6 +4,8 @@ import io.tima.core.ui.fullPhone
 import io.tima.core.words.CurrentWords
 import io.tima.core.words.Words
 import io.tima.core.words.RussianWords
+import io.tima.domain.chat.ChatPeople
+import io.tima.domain.chat.ChatPerson
 import io.tima.domain.chat.GroupMember
 import io.tima.domain.chat.GroupRole
 import io.tima.domain.chat.ManageGroupMembers
@@ -40,6 +42,8 @@ class MembersStore(
      * жизнь store, и после смены языка беда пришла бы на прежнем.
      */
     private val words: () -> Words = { CurrentWords.value },
+    /** Люди за идентификаторами — имена в списке состава. `null` — только идентификаторы. */
+    private val people: ChatPeople? = null,
 ) {
 
     private val _state = MutableStateFlow(MembersState())
@@ -50,12 +54,22 @@ class MembersStore(
         _state.value = _state.value.copy(expect = true, trouble = null)
         scope.launch {
             _state.value = when (val outcome = members.members(groupId)) {
-                is MembersStep.Members -> _state.value.copy(
-                    expect = false,
-                    members = outcome.members,
-                    myRole = outcome.members.firstOrNull { it.userId == myUserId }?.role
-                        ?: GroupRole.Unknown,
-                )
+                is MembersStep.Members -> {
+                    // Список — сразу, имена — следом и по разу на человека, как в переписке.
+                    _state.value = _state.value.copy(
+                        expect = false,
+                        members = outcome.members,
+                        myRole = outcome.members.firstOrNull { it.userId == myUserId }?.role
+                            ?: GroupRole.Unknown,
+                    )
+                    val known = _state.value.people.toMutableMap()
+                    people?.let { book ->
+                        for (member in outcome.members) {
+                            if (member.userId !in known) known[member.userId] = book.person(member.userId)
+                        }
+                    }
+                    _state.value.copy(people = known)
+                }
                 is MembersStep.Offline -> _state.value.copyWithTrouble(
                     words().social.membersMayBeStale,
                 )
@@ -82,14 +96,45 @@ class MembersStore(
         }
     }
 
+    fun changedNick(text: String) {
+        _state.value = _state.value.copy(nick = text, trouble = null, warning = null)
+    }
+
+    /** Позвать по нику (заказчик 2026-09-18). */
+    fun inviteByNick() {
+        val current = _state.value
+        if (current.expect || current.nick.isBlank()) return
+        _state.value = current.copy(expect = true, trouble = null, warning = null)
+        scope.launch { apply(members.inviteByNick(groupId, current.nick), clearNumber = false, clearNick = true, nick = true) }
+    }
+
+    /**
+     * Позвать из книги — по идентификатору, который у контакта уже есть. Подокно контактов
+     * при этом не закрывается: за один раз зовут нескольких.
+     */
+    fun inviteUser(userId: String) {
+        val current = _state.value
+        if (current.expect || current.members.any { it.userId == userId }) return
+        _state.value = current.copy(expect = true, trouble = null, warning = null)
+        scope.launch { apply(members.inviteUser(groupId, userId), clearNumber = false) }
+    }
+
+    fun contactsSheet(open: Boolean) {
+        _state.value = _state.value.copy(contactsOpen = open, trouble = null)
+    }
+
     fun remove(userId: String) {
         if (_state.value.expect) return
         _state.value = _state.value.copy(expect = true, trouble = null, warning = null)
         scope.launch { apply(members.remove(groupId, userId), clearNumber = false) }
     }
 
-    private fun apply(step: MembershipStep, clearNumber: Boolean) {
-        val database = _state.value.copy(expect = false, number = if (clearNumber) "" else _state.value.number)
+    private fun apply(step: MembershipStep, clearNumber: Boolean, clearNick: Boolean = false, nick: Boolean = false) {
+        val database = _state.value.copy(
+            expect = false,
+            number = if (clearNumber) "" else _state.value.number,
+            nick = if (clearNick) "" else _state.value.nick,
+        )
         _state.value = when (step) {
             is MembershipStep.Done -> database
 
@@ -98,8 +143,9 @@ class MembersStore(
             is MembershipStep.DoneWithoutRotation -> database.copy(warning = step.warning)
 
             MembershipStep.NoSuchUser -> database.copy(
-                trouble = words().social.noSuchNumber,
+                trouble = if (nick) words().social.noSuchNickname else words().social.noSuchNumber,
                 number = _state.value.number,
+                nick = _state.value.nick,
             )
             MembershipStep.Forbidden -> database.copy(trouble = words().social.ownerOrAdminChangesMembers)
             is MembershipStep.Offline -> database.copy(
@@ -122,6 +168,12 @@ data class MembersState(
     /** Код страны отдельным полем: на цифровой клавиатуре нет плюса (2026-09-15). */
     val countryCode: String = "7",
     val number: String = "",
+    /** Ник для «позвать по нику». */
+    val nick: String = "",
+    /** Люди за идентификаторами участников — что о них известно. */
+    val people: Map<String, ChatPerson> = emptyMap(),
+    /** Открыто ли подокно «Из контактов». */
+    val contactsOpen: Boolean = false,
     val expect: Boolean = false,
     val trouble: String? = null,
     /** Состав изменён, а ключ — нет. Не ошибка, но человек обязан знать. */

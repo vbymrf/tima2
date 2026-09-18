@@ -313,6 +313,11 @@ interface SocialWords {
     val readingMembers: String
     val nobodyHereYet: String
     val inviteByPhone: String
+    /** Позвать по нику: подпись поля и кнопка списка контактов (заказчик 2026-09-18). */
+    val nickField: String
+    val fromContacts: String
+    val noSuchNickname: String
+    val alreadyMember: String
     val exclude: String
     fun bannedUntil(until: String): String
     val owner: String
@@ -510,8 +515,11 @@ interface ChatWords {
     val foundInTima: String
     val notInTima: String
 
-    // Меню «•••» переписки (ПЛАН-РАЗДЕЛОВ Р5, ПЛАН-ЧАТА Ч2).
+    // Меню «•••» переписки (ПЛАН-РАЗДЕЛОВ Р5, ПЛАН-ЧАТА Ч2). Заголовок — «Настройка
+    // группы» / «Настройка переписки» (заказчик 2026-09-18), а не «Переписка».
     val chatMenu: String
+    val groupSettings: String
+    val chatSettings: String
     val moveToSection: String
     val moveToSectionAbout: String
     fun inSection(name: String): String
@@ -1577,6 +1585,10 @@ object RussianWords : Words {
         override val readingMembers = "Читаем состав"
         override val nobodyHereYet = "Здесь пока никого"
         override val inviteByPhone = "Позовите людей по номеру телефона"
+        override val nickField = "Ник"
+        override val fromContacts = "Из контактов"
+        override val noSuchNickname = "Никто не занял этот ник"
+        override val alreadyMember = "уже в группе"
         override val exclude = "Исключить"
         override fun bannedUntil(until: String) = "заблокирован до $until"
         override val owner = "владелец"
@@ -1754,6 +1766,8 @@ object RussianWords : Words {
         override val foundInTima = "Найден в TIMa — подписка на его ленту оформится сама"
         override val notInTima = "В TIMa его нет. Контакт сохранится — позвонить можно телефоном"
         override val chatMenu = "Переписка"
+        override val groupSettings = "Настройка группы"
+        override val chatSettings = "Настройка переписки"
         override val moveToSection = "Перенести в раздел"
         override val moveToSectionAbout = "куда положить эту группу"
         override fun inSection(name: String) = "сейчас — «$name»"

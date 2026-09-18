@@ -34,7 +34,11 @@ import io.tima.domain.chat.RotateStep
 import io.tima.domain.chat.ChatSummary
 import io.tima.domain.chat.Contact
 import io.tima.domain.chat.ChatFaces
-import io.tima.domain.chat.ChatNames
+import io.tima.feature.group.InviteCandidate
+import io.tima.domain.chat.PersonLook
+import io.tima.domain.chat.line
+import io.tima.domain.chat.ChatPerson
+import io.tima.domain.chat.ChatPeople
 import io.tima.domain.chat.CreateGroupChat
 import io.tima.domain.chat.ManageGroupMembers
 import io.tima.domain.chat.RequestGroupKeys
@@ -678,6 +682,9 @@ private fun App(
     var communityViewSheet by remember { mutableStateOf(false) }
     /** Вкладка Социума — здесь, чтобы пережить подокно «Вид» (оно перестраивает окно). */
     var socialTab by remember { mutableStateOf(WindowTab.Common) }
+    // Люди за идентификаторами — одно место на книгу, реплики и состав (2026-09-18).
+    val people = remember(assembled) { People(network.directory, environment.bookStorage, scope) }
+    val peopleCards by people.cards.collectAsState()
     var communitySectionsScreen by remember { mutableStateOf(false) }
     /** Выбранный раздел в каталоге и свёрнутые разделы гармошки. */
     var catalogSection by remember { mutableStateOf("") }
@@ -1188,6 +1195,11 @@ private fun App(
                 Window.Phone -> PhoneWindow(
                     tab = phoneTab,
                     onTab = { phoneTab = it },
+                    // Имя пользователя и ник у контактов — со справочника, пачкой по разу.
+                    personOf = { entry ->
+                        entry.userId?.let { people.want(listOf(it)) }
+                        (entry.userId?.let { peopleCards[it] } ?: ChatPerson()).withBookName(entry.name, entry.phone)
+                    },
                     // ТОЛЬКО личные. Группы ушли на свою вкладку окна 5 — решение
                     // заказчика 2026-09-17; до него они стояли здесь вперемешку с
                     // личными, и это было временным размещением, записанным в
@@ -1582,6 +1594,8 @@ private fun App(
                         heal = assembled.keyOrchestrator.heal,
                         environment = environment,
                         network = network,
+                        people = people,
+                        authorLook = communityView.look(),
                         chatId = current.chatId,
                         // Имя из списка, если строка уже пришла потоком; иначе то, с чем
                         // переписку открыли. Пустое место читалось бы как поломка.
@@ -1617,6 +1631,8 @@ private fun App(
 
             is Where.Members -> {
                 {
+                    // Кандидаты из книги — кто в TIMa; «уже в группе» отмечает сам экран.
+                    LaunchedEffect(bookStateForChats.all) { people.want(bookStateForChats.all.mapNotNull { it.userId }) }
                     Members(
                         environment = environment,
                         network = network,
@@ -1625,6 +1641,11 @@ private fun App(
                         scope = scope,
                         onBack = { where = Where.Chat(current.groupId, current.name) },
                         onAccess = { where = Where.Access(current.groupId, current.name) },
+                        people = people,
+                        look = communityView.look(),
+                        contacts = bookStateForChats.all.filter { it.inTima }.map { entry ->
+                            InviteCandidate(entry.userId!!, (peopleCards[entry.userId!!] ?: ChatPerson()).withBookName(entry.name, entry.phone))
+                        },
                     )
                 }
             }
@@ -1673,6 +1694,10 @@ private fun Chat(
     shelves: List<Section> = emptyList(),
     onMoveToShelf: ((chatId: String, sectionId: String) -> Unit)? = null,
     currentShelf: String = "",
+    /** Люди за идентификаторами авторов; `null` — только идентификаторы. */
+    people: ChatPeople? = null,
+    /** Как называть авторов — «Вид» набора сообществ. */
+    authorLook: PersonLook = PersonLook.DEFAULT,
 ) {
     // Групповая ли переписка — решает столбец `kind`, а не догадка по идентификатору.
     var chatMenu by remember { mutableStateOf(false) }
@@ -1700,11 +1725,7 @@ private fun Chat(
             // Лечение группы без ключа при открытии: обёртки, а если ключа не было ни у
             // кого — первый выпуск. Стенд 2026-09-16…18: группы рождались без ключа.
             heal = if (group) heal else null,
-            names = if (group) {
-                ChatNames { userId -> network.directory.nameOrNumber(userId) ?: userId }
-            } else {
-                null
-            },
+            names = if (group) people else null,
             // Аватар автора: медиа из справочника, байты из медиа-хранилища. Только в
             // группе — в личной переписке подписи у реплик нет вовсе.
             faces = if (group) {
@@ -1728,6 +1749,7 @@ private fun Chat(
     // Ветка открыта — показываем её вместо переписки, тем же подокном, что и комментарии
     // канала (ADR-0024: механизм один, на экране разные слова). «Назад» из ветки
     // возвращает в переписку, а не закрывает её: человек не уходил из группы.
+    val someone = Tima.words.chat.someone
     state.thread?.let { open ->
         CommentsScreen(
             state = CommentsState(
@@ -1736,7 +1758,7 @@ private fun Chat(
                 loaded = true,
                 draft = state.threadDraft,
             ),
-            nameOf = { userId -> state.names[userId] ?: "Участник" },
+            nameOf = { userId -> state.names[userId]?.line(authorLook) ?: someone },
             onBack = store::threadClosed,
             onDraft = store::threadDraftChanged,
             onSend = { store.threadSendPressed() },
@@ -1748,6 +1770,7 @@ private fun Chat(
     }
     ChatScreen(
         state = state,
+        authorLook = authorLook,
         peer = name ?: "Без имени",
         onSet = store::draftChanged,
         onSend = { store.sendPressed() },
@@ -2360,12 +2383,16 @@ private fun Members(
     onBack: () -> Unit,
     /** Открыть подокно «Доступ»: просьбы и выдача третьего круга. */
     onAccess: () -> Unit = {},
+    people: ChatPeople? = null,
+    look: PersonLook = PersonLook.DEFAULT,
+    contacts: List<InviteCandidate>? = null,
 ) {
     val store = remember(groupId) {
         MembersStore(
             members = ManageGroupMembers(
                 groups = GroupsOverHttp(network.groups),
                 directory = network.directory,
+                nicknames = network.directory,
                 rotator = GroupKeyRotation(
                     groups = network.groups,
                     deviceKeys = network.keys,
@@ -2378,6 +2405,7 @@ private fun Members(
             groupId = groupId,
             myUserId = session.userId,
             scope = scope,
+            people = people,
         )
     }
     val state by store.state.collectAsState()
@@ -2394,6 +2422,12 @@ private fun Members(
         onRemove = store::remove,
         onBack = onBack,
         onAccess = onAccess,
+        look = look,
+        onNick = store::changedNick,
+        onInviteNick = store::inviteByNick,
+        contacts = contacts,
+        onContacts = store::contactsSheet,
+        onInviteUser = store::inviteUser,
     )
 }
 
@@ -2444,6 +2478,8 @@ private fun PhoneWindow(
     onTab: (WindowTab) -> Unit,
     list: ChatsState,
     book: BookState,
+    /** Человек за строкой книги — имя из книги плюс карточка справочника. */
+    personOf: (BookEntry) -> ChatPerson = { ChatPerson(name = it.name, phone = it.phone) },
     onSearchInBook: (String) -> Unit,
     onOpen: (ChatSummary) -> Unit,
     onOpenPerson: (BookEntry) -> Unit,
@@ -2532,6 +2568,7 @@ private fun PhoneWindow(
                     state = book,
                     onSearch = onSearchInBook,
                     onOpen = onOpenPerson,
+                    personOf = personOf,
                     onToggleSection = onToggleSection,
                     onChooseSection = onChooseSection,
                     onSections = onSections,

@@ -23,6 +23,8 @@ class ManageGroupMembers(
     private val groups: GroupRegistry,
     private val directory: UserDirectory,
     private val rotator: GroupKeyRotator,
+    /** Справочник по нику; `null` — позвать можно только по номеру. */
+    private val nicknames: NicknameDirectory? = null,
 ) {
 
     suspend fun members(groupId: String): MembersStep = groups.members(groupId)
@@ -48,6 +50,20 @@ class ManageGroupMembers(
      * Ротация здесь — не гигиена, а смысл действия: без неё исключение означает лишь то,
      * что человек не увидит группу в своём списке, продолжая расшифровывать её сообщения.
      */
+    /** Позвать по нику (решение заказчика 2026-09-18). `@` в начале допускается. */
+    suspend fun inviteByNick(groupId: String, nick: String): MembershipStep {
+        val book = nicknames ?: return MembershipStep.NoSuchUser
+        val found = when (val answer = book.byNickname(nick.trim().removePrefix("@"))) {
+            is UserLookup.Found -> answer.userId
+            else -> return MembershipStep.NoSuchUser
+        }
+        return apply(groupId, groups.addMember(groupId, found), RotationReason.MemberJoin)
+    }
+
+    /** Позвать того, чей идентификатор уже известен — из книги. */
+    suspend fun inviteUser(groupId: String, userId: String): MembershipStep =
+        apply(groupId, groups.addMember(groupId, userId), RotationReason.MemberJoin)
+
     suspend fun remove(groupId: String, userId: String): MembershipStep =
         apply(groupId, groups.removeMember(groupId, userId), RotationReason.MemberLeave)
 

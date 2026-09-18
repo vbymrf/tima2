@@ -2,7 +2,8 @@ package io.tima.feature.chat
 
 import io.tima.domain.chat.ChatFeed
 import io.tima.domain.chat.ChatLine
-import io.tima.domain.chat.ChatNames
+import io.tima.domain.chat.ChatPeople
+import io.tima.domain.chat.ChatPerson
 import io.tima.domain.chat.DedupKeys
 import io.tima.domain.chat.MessageBodyCodec
 import io.tima.domain.chat.MessageDisplay
@@ -38,7 +39,7 @@ class GroupChatStoreTest {
         stream.value = listOf(line("m1", "u-2"), line("m2", "u-2"), line("m3", "u-3"))
         runCurrent()
 
-        assertEquals(mapOf("u-2" to "Имя u-2", "u-3" to "Имя u-3"), store.state.value.names)
+        assertEquals(mapOf("u-2" to ChatPerson(userName = "Имя u-2"), "u-3" to ChatPerson(userName = "Имя u-3")), store.state.value.names)
         assertEquals(listOf("u-2", "u-3"), directory.asked)
 
         // Пришло ещё одно от того же человека — второго запроса быть не должно.
@@ -75,7 +76,7 @@ class GroupChatStoreTest {
         senderId = author,
     )
 
-    private fun store(scope: kotlinx.coroutines.CoroutineScope, directory: ChatNames?) = ChatStore(
+    private fun store(scope: kotlinx.coroutines.CoroutineScope, directory: ChatPeople?) = ChatStore(
         // Немедленный диспетчер: работа с базой делается тут же, и тест с виртуальным
         // временем её дожидается.
         io = kotlinx.coroutines.Dispatchers.Unconfined,
@@ -94,11 +95,11 @@ class GroupChatStoreTest {
         names = directory,
     )
 
-    private class DirectoryCounting : ChatNames {
+    private class DirectoryCounting : ChatPeople {
         val asked = mutableListOf<String>()
-        override suspend fun name(userId: String): String {
+        override suspend fun person(userId: String): ChatPerson {
             asked += userId
-            return "Имя $userId"
+            return ChatPerson(userName = "Имя $userId")
         }
     }
 }

@@ -36,7 +36,12 @@ import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.words
+import io.tima.domain.chat.PersonField
+import io.tima.domain.chat.PersonLook
+import io.tima.domain.chat.letter
+import io.tima.domain.chat.line
 import io.tima.domain.chat.BookEntry
+import io.tima.domain.chat.ChatPerson
 
 /**
  * Вкладка «Контакты» окна «Телефон» — ПЛАН-КОНТАКТОВ.md, Д5.
@@ -73,6 +78,11 @@ fun BookScreen(
     onToggleSection: (String) -> Unit = {},
     /** Разрешение на чтение книги телефона просит платформа, а не этот экран. */
     onAllow: (() -> Unit)? = null,
+    /**
+     * Человек за строкой книги: имя — из книги, имя пользователя и ник — со справочника.
+     * По умолчанию — только то, что есть в книге: так собирают проверки без сети.
+     */
+    personOf: (BookEntry) -> ChatPerson = { ChatPerson(name = it.name, phone = it.phone) },
 ) {
     val words = Tima.words.book
     // Книга — та же группа «списки», что и чаты: строка обрезается и обязана быть
@@ -191,14 +201,17 @@ fun BookScreen(
                     }
                     if (state.view.folders && !state.tiles && group.name in state.collapsed) return@forEach
                     items(group.people, key = { it.phone }) { person ->
+                        val who = personOf(person)
                         ListLine(
                             onClick = { onOpen(person) },
-                            left = { Avatar(letters = letters(person, state.view)) },
+                            left = { Avatar(letters = who.letter()) },
                             middle = {
                                 Column {
-                                    Name(shown(person, state.view) ?: words.nameless)
-                                    val second = second(person, state.view)
-                                    if (second != null) Tertiary(second, lineOne = true)
+                                    // Первая строка — имя, ник, имя пользователя по «Виду»
+                                    // (галки через запятую, иначе первое, что есть); вторая
+                                    // — всегда телефон (решение заказчика 2026-09-18).
+                                    Name(who.line(state.view.look(), FIRST_LINE_FIELDS) ?: words.nameless)
+                                    Tertiary(person.phone, lineOne = true)
                                 }
                             },
                             right = if (group.outsiders && onInvite != null) {
@@ -280,32 +293,5 @@ private fun InviteButton(onClick: () -> Unit) {
     ControlRow { IconButton(glyph = "↗", onClick = onClick) }
 }
 
-/**
- * Что показать первой строкой.
- *
- * Порядок задан и не переставляется: имя → имя пользователя → ник → телефон. **Ни одной
- * галки — тот же порядок**: выбор «ничего» означает «как обычно», а не пустую строку.
- * Своё имя перебивает книжное — это внутри [BookEntry.name].
- */
-private fun shown(person: BookEntry, view: BookView): String? {
-    if (view.showName) person.name?.let { return it }
-    if (view.showPhone && !view.showName && !view.showNickname) return person.phone
-    return person.name ?: person.phone
-}
-
-/**
- * Вторая строка — всё выбранное, кроме того, что уже стоит первой, через «·».
- *
- * Пустого поля здесь не бывает: у кого нет ника, у того нет и строки о нём, а не «@—».
- */
-private fun second(person: BookEntry, view: BookView): String? {
-    val first = shown(person, view)
-    val parts = buildList {
-        if (view.showPhone && person.phone != first) add(person.phone)
-    }
-    return parts.joinToString(" · ").ifBlank { null }
-}
-
-/** Буквы аватара: первая показанного имени, иначе первая номера. */
-private fun letters(person: BookEntry, view: BookView): String =
-    (shown(person, view) ?: person.phone).trimStart('+').take(1).uppercase()
+/** Поля первой строки контакта: телефон стоит второй строкой всегда и в первую не берётся. */
+private val FIRST_LINE_FIELDS = setOf(PersonField.Name, PersonField.Nick, PersonField.UserName)

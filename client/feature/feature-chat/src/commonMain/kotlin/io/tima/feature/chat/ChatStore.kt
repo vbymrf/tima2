@@ -13,7 +13,8 @@ import io.tima.domain.chat.NarrowStep
 import io.tima.domain.chat.MarkRead
 import io.tima.domain.chat.ObserveChat
 import io.tima.domain.chat.ChatFaces
-import io.tima.domain.chat.ChatNames
+import io.tima.domain.chat.ChatPeople
+import io.tima.domain.chat.ChatPerson
 import io.tima.core.media.decodeImage
 import androidx.compose.ui.graphics.ImageBitmap
 import io.tima.domain.chat.RequestGroupKeys
@@ -68,7 +69,7 @@ class ChatStore(
      * Имена авторов. `null` — переписка личная: там собеседник один, и подписывать
      * каждую его реплику именем значит шуметь.
      */
-    private val names: ChatNames? = null,
+    private val names: ChatPeople? = null,
     /** Аватары авторов — только в группе, по одному походу на автора. */
     private val faces: ChatFaces? = null,
     /**
@@ -175,7 +176,7 @@ class ChatStore(
                         .filter { it !in _state.value.names }
                     if (new.isNotEmpty()) {
                         val padded = _state.value.names.toMutableMap()
-                        for (who in new) padded[who] = directory.name(who)
+                        for (who in new) padded[who] = directory.person(who)
                         _state.value = _state.value.copy(names = padded)
                         // Аватары — следом за именами, по тем же новым авторам. «Не
                         // доехал» тоже запоминается, иначе поход повторялся бы на каждой
@@ -457,7 +458,7 @@ data class ChatState(
      */
     val showCircles: Boolean = false,
     /** Имена авторов по идентификатору. Пусто для личной переписки. */
-    val names: Map<String, String> = emptyMap(),
+    val names: Map<String, ChatPerson> = emptyMap(),
     /** Аватары авторов по `senderId`; `null` — спрашивали, нет. */
     val faces: Map<String, ImageBitmap?> = emptyMap(),
     /**

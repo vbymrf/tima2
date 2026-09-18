@@ -1,6 +1,10 @@
 package io.tima.core.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.draw.clip
@@ -74,6 +78,14 @@ fun Bubble(
 ) {
     val colors = Tima.colors
     val showAuthor = !my && !continuation
+    // Строка автора НЕ масштабируется вместе с сообщениями: 22 — уже верхняя ступень
+    // настроек, и при укрупнённых сообщениях она вырастала бы до 32 (заказчик 2026-09-18:
+    // «первая строка либо не масштабируется, либо вместе с аватаром» — выбрано первое).
+    // Caption умножает кегль на множитель группы, поэтому здесь он заранее поделен.
+    val scale = LocalTextScale.current
+    val authorSize = AUTHOR_SIZE / scale
+    val nameLine = with(LocalDensity.current) { AUTHOR_SIZE.toDp() } * 1.35f
+    val avatarSide = nameLine + 10.dp
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = if (my) Arrangement.End else Arrangement.Start,
@@ -109,11 +121,16 @@ fun Bubble(
                     Caption(
                         text = author!!,
                         // Имя отходит на ширину аватара: обтекания нет, текст идёт во
-                        // всю ширину пузыря.
-                        modifier = Modifier.padding(start = ОТСТУП_ПОД_АВАТАР),
-                        fontSize = TimaType.sz6,
+                        // всю ширину пузыря. Отступ едет за кеглем вместе с аватаром.
+                        modifier = Modifier.padding(start = avatarSide + 6.dp).height(nameLine),
+                        // Кегль имени — 22, верхняя ступень «Сообщений» в настройках
+                        // (решение заказчика 2026-09-18): строка автора выше, и аватар
+                        // помещается рядом с ней, а не сползает на текст. Сам текст
+                        // сообщения при этом не меняется.
+                        fontSize = authorSize,
                         weight = FontWeight.ExtraBold,
                         color = colors.text2,
+                        lineOne = true,
                     )
                 }
                 content()
@@ -127,31 +144,32 @@ fun Bubble(
             }
 
             if (showAuthor && avatar != null) {
-                // Выступает вверх, в зазор между репликами, и перекрывает полосу.
+                // Стоит по центру строки автора и на неё же рассчитан размером: оба
+                // растут вместе с кеглем сообщений (заказчик 2026-09-18: «первая строка
+                // либо не масштабируется, либо масштабируется вместе с аватаром»).
                 val shape = RoundedCornerShape(TimaShapes.square)
                 Box(
                     modifier = Modifier
-                        .offset(x = (-1).dp, y = (-12).dp)
+                        .offset(x = (-1).dp, y = 11.dp + (nameLine - avatarSide) / 2)
+                        .size(avatarSide)
                         .background(color = if (my) colors.my else colors.author, shape = shape)
-                        .border(1.dp, colors.border, shape),
+                        .border(1.dp, colors.border, shape)
+                        .clip(shape),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (avatarImage != null) {
-                        // Картинка — тем же квадратом, что буквы: размер задаёт буква с
-                        // полем, чтобы ряд реплик не «дышал» от того, у кого есть фото.
                         Image(
                             bitmap = avatarImage,
                             contentDescription = null,
-                            modifier = Modifier.size(AVATAR_SIDE).clip(shape),
+                            modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop,
                         )
                     } else {
                         Caption(
                             text = avatar,
-                            fontSize = TimaType.sz6,
+                            fontSize = TimaType.sz4 / scale,
                             weight = FontWeight.ExtraBold,
                             color = colors.text,
-                            modifier = Modifier.padding(FIELD_AVATAR),
                         )
                     }
                 }
@@ -235,14 +253,8 @@ private val HAIRLINE = 1.dp
 /** Ширина полосы автора: `border-left: 4px`. */
 private val STRIP = 4.dp
 
-/** Насколько имя отходит вправо, освобождая место аватару: `padding-left: 33px`. */
-private val ОТСТУП_ПОД_АВАТАР = 33.dp
-
-/** Поле внутри аватара пузыря: он 40×40 при кегле 10. */
-private val FIELD_AVATAR = 13.dp
-
-/** Сторона квадрата картинки: буква `sz6` с полем `FIELD_AVATAR` с двух сторон. */
-private val AVATAR_SIDE = 44.dp
+/** Кегль имени автора: верхняя ступень «Сообщений» в настройках (заказчик 2026-09-18). */
+private val AUTHOR_SIZE = 22.sp
 
 /** `max-width: 290px` из макета. */
 private val ПРЕДЕЛ_ШИРИНЫ = 290.dp

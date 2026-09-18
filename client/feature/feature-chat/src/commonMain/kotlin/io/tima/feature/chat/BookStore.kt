@@ -1,6 +1,10 @@
 package io.tima.feature.chat
 
 import io.tima.core.words.BookWords
+import io.tima.domain.chat.PersonField
+import io.tima.domain.chat.PersonLook
+import io.tima.domain.chat.letter
+import io.tima.domain.chat.line
 import io.tima.domain.chat.Book
 import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.Section
@@ -154,7 +158,48 @@ data class BookView(
     val showUserName: Boolean = false,
     val showNickname: Boolean = false,
     val showPhone: Boolean = true,
+    /**
+     * Порядок полей сверху вниз (решение заказчика 2026-09-18: «теперь это список с
+     * сортировкой — что в самом верху, то показываем, если есть»). Галки — выше.
+     */
+    val order: List<PersonField> = PersonField.entries,
 ) {
+    /** Как называть человека: порядок и галки одним значением для строк списков. */
+    fun look(): PersonLook = PersonLook(
+        order = order,
+        checked = buildSet {
+            if (showName) add(PersonField.Name)
+            if (showUserName) add(PersonField.UserName)
+            if (showNickname) add(PersonField.Nick)
+            if (showPhone) add(PersonField.Phone)
+        },
+    )
+
+    fun checked(field: PersonField): Boolean = when (field) {
+        PersonField.Name -> showName
+        PersonField.UserName -> showUserName
+        PersonField.Nick -> showNickname
+        PersonField.Phone -> showPhone
+    }
+
+    fun withChecked(field: PersonField, on: Boolean): BookView = when (field) {
+        PersonField.Name -> copy(showName = on)
+        PersonField.UserName -> copy(showUserName = on)
+        PersonField.Nick -> copy(showNickname = on)
+        PersonField.Phone -> copy(showPhone = on)
+    }
+
+    /** Сдвинуть поле на одну позицию вверх или вниз; за край — без изменений. */
+    fun moved(field: PersonField, up: Boolean): BookView {
+        val at = order.indexOf(field)
+        val to = if (up) at - 1 else at + 1
+        if (at < 0 || to !in order.indices) return this
+        val next = order.toMutableList()
+        next[at] = order[to]
+        next[to] = field
+        return copy(order = next)
+    }
+
     /**
      * @param prefix чей это вид: `book` — контакты, `community` — набор сообществ
      *   (каталог Социума). У каждого набора свой «Вид» — как и свой список разделов.
@@ -171,6 +216,7 @@ data class BookView(
             "nick".takeIf { showNickname },
             "phone".takeIf { showPhone },
         ).joinToString(","))
+        settings.put("$prefix.$ORDER", order.joinToString(",") { it.wire })
     }
 
     companion object {
@@ -184,6 +230,7 @@ data class BookView(
         private const val SEARCH = "search"
         private const val OUTSIDERS = "outsiders"
         private const val NAMES = "names"
+        private const val ORDER = "names_order"
         private const val FOLDERS = "folders"
         private const val MENU = "menu"
 
@@ -191,8 +238,21 @@ data class BookView(
          * Умолчание — **меню** (решение заказчика 2026-09-05), поэтому «папки» здесь
          * включаются явным значением, а не отсутствием строки.
          */
+        /**
+         * Порядок из строки. Пропущенные поля дописываются в конец в порядке по умолчанию:
+         * набор полей мог вырасти после того, как строка легла на телефон.
+         */
+        private fun orderFrom(saved: String?): List<PersonField> {
+            val listed = saved?.split(",")?.mapNotNull { PersonField.byWire(it.trim()) }?.distinct() ?: emptyList()
+            return listed + PersonField.entries.filter { it !in listed }
+        }
+
         fun from(saved: Map<String, String>, prefix: String = BOOK): BookView {
             val names = saved["$prefix.$NAMES"]?.split(",")?.filter { it.isNotBlank() }
+            // Умолчания галок — по набору: у контактов телефон и так второй строкой, у
+            // авторов в группе номер не нужен, а имя пользователя — нужно: имени из книги у
+            // чужого участника чаще всего нет.
+            val community = prefix == COMMUNITY
             return BookView(
                 icons = saved["$prefix.$ICONS"] == "true",
                 tileSize = TileSize.fromWire(saved["$prefix.$TILE_SIZE"]),
@@ -200,9 +260,10 @@ data class BookView(
                 showSearch = saved["$prefix.$SEARCH"]?.toBooleanStrictOrNull() ?: true,
                 showOutsiders = saved["$prefix.$OUTSIDERS"]?.toBooleanStrictOrNull() ?: true,
                 showName = names?.contains("name") ?: true,
-                showUserName = names?.contains("user") ?: false,
+                showUserName = names?.contains("user") ?: community,
                 showNickname = names?.contains("nick") ?: false,
-                showPhone = names?.contains("phone") ?: true,
+                showPhone = names?.contains("phone") ?: !community,
+                order = orderFrom(saved["$prefix.$ORDER"]),
             )
         }
     }

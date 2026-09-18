@@ -43,6 +43,10 @@ import io.tima.core.ui.words
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Chip
+import io.tima.domain.chat.PersonField
+import io.tima.domain.chat.PersonLook
+import io.tima.domain.chat.letter
+import io.tima.domain.chat.line
 import io.tima.domain.chat.CarryToPage
 import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.ChatLine
@@ -132,6 +136,8 @@ fun ChatScreen(
      * показываются: прочитать разговор дважды — в списке и в ветке — значит удвоить его.
      */
     onThread: ((Long) -> Unit)? = null,
+    /** Как называть авторов в группе — «Вид» набора сообществ. */
+    authorLook: PersonLook = PersonLook.DEFAULT,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -164,8 +170,9 @@ fun ChatScreen(
             // «Участник» честнее чужого имени.
             authorName = { line ->
                 if (!state.group) null
-                else state.names[line.senderId] ?: words.someone
+                else state.names[line.senderId]?.line(authorLook) ?: words.someone
             },
+            authorLetter = { line -> state.names[line.senderId]?.letter() ?: "+" },
             authorFace = { line -> if (state.group) state.faces[line.senderId] else null },
             modifier = Modifier.weight(1f),
             showCircles = state.showCircles,
@@ -223,6 +230,7 @@ fun ChatScreen(
 private fun Feed(
     lines: List<ChatLine>,
     authorName: (ChatLine) -> String?,
+    authorLetter: (ChatLine) -> String = { "+" },
     authorFace: (ChatLine) -> ImageBitmap? = { null },
     modifier: Modifier = Modifier,
     /** Показывать ли метку круга у реплик. По умолчанию нет — см. [ChatState.showCircles]. */
@@ -250,6 +258,7 @@ private fun Feed(
             Reply(
                 line = line,
                 author = authorName(line),
+                letter = authorLetter(line),
                 face = authorFace(line),
                 // Смена автора разрывает цепочку, даже когда обе реплики чужие: иначе в
                 // группе два человека подряд слились бы в одного, и имя второго не
@@ -302,6 +311,7 @@ private fun Reply(
     author: String?,
     continuation: Boolean,
     face: ImageBitmap? = null,
+    letter: String = "+",
     showCircle: Boolean = false,
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
     onCarry: ((Long, Int) -> Unit)? = null,
@@ -316,7 +326,7 @@ private fun Reply(
     // Пузырь и строка ветки — один элемент списка, поэтому столбец: два соседа в
     // элементе ленивого списка легли бы друг на друга.
     Column {
-        Bubbled(line, author, face, continuation, showCircle, onNarrow, onCarry)
+        Bubbled(line, author, letter, face, continuation, showCircle, onNarrow, onCarry)
         // «Ветка · N ответов» — под сообщением, отдельной строкой, а не внутри пузыря:
         // это не часть сказанного, а вход в разговор о нём (ADR-0024 §7).
         //
@@ -350,6 +360,7 @@ private fun SystemLine(text: String) = Row(
 private fun Bubbled(
     line: ChatLine,
     author: String?,
+    letter: String,
     face: ImageBitmap?,
     continuation: Boolean,
     showCircle: Boolean,
@@ -358,9 +369,8 @@ private fun Bubbled(
 ) = Bubble(
     my = line.outgoing,
     author = author,
-    // Буква — первая буква имени; у автора без имени подпись — номер, и «+» в квадрате
-    // читался бы кнопкой. Тогда «?», как у безымянной переписки в списке.
-    avatar = author?.let { name -> name.firstOrNull { it.isLetter() }?.uppercase() ?: "?" },
+    // Буква — ник, иначе имя, иначе имя пользователя, иначе «+» (заказчик 2026-09-18).
+    avatar = if (author != null) letter else null,
     avatarImage = face,
     continuation = continuation,
     bottom = {

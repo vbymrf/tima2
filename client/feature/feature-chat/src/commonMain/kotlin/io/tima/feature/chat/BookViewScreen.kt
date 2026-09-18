@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import io.tima.domain.chat.PersonField
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Tima
 import io.tima.core.ui.RadioMark
@@ -121,21 +123,35 @@ fun BookViewScreen(
             )
         }
 
-        if (forPeople) {
-            SectionTitle(words.showPersonAs)
-            Check(words.name, words.nameAbout, view.showName) {
-                onChange(view.copy(showName = it))
-            }
-            Check(words.userName, words.userNameAbout, view.showUserName) {
-                onChange(view.copy(showUserName = it))
-            }
-            Check(words.nickname, words.nicknameAbout, view.showNickname) {
-                onChange(view.copy(showNickname = it))
-            }
-            Check(words.phone, words.phoneAbout, view.showPhone) {
-                onChange(view.copy(showPhone = it))
-            }
+        // Как называть человека — список с порядком и галками (решение заказчика
+        // 2026-09-18). Стрелки, а не перетаскивание: в прокручиваемой панели на телефоне
+        // перетаскивание промахивается. Один и тот же список у контактов и у авторов в
+        // группе — у каждого набора свой «Вид».
+        SectionTitle(words.showPersonAs)
+        for ((index, field) in view.order.withIndex()) {
+            PersonFieldRow(
+                title = when (field) {
+                    PersonField.Name -> words.name
+                    PersonField.UserName -> words.userName
+                    PersonField.Nick -> words.nickname
+                    PersonField.Phone -> words.phone
+                },
+                hint = when (field) {
+                    PersonField.Name -> words.nameAbout
+                    PersonField.UserName -> words.userNameAbout
+                    PersonField.Nick -> words.nicknameAbout
+                    PersonField.Phone -> words.phoneAbout
+                },
+                on = view.checked(field),
+                upMay = index > 0,
+                downMay = index < view.order.lastIndex,
+                onToggle = { onChange(view.withChecked(field, !view.checked(field))) },
+                onUp = { onChange(view.moved(field, up = true)) },
+                onDown = { onChange(view.moved(field, up = false)) },
+            )
+        }
 
+        if (forPeople) {
             SectionTitle(words.whatToShow)
             Check(words.showSearch, words.showSearchAbout, view.showSearch) {
                 onChange(view.copy(showSearch = it))
@@ -189,6 +205,39 @@ private fun Check(title: String, hint: String, on: Boolean, onChange: (Boolean) 
 }
 
 /**
+ * Строка поля человека: стрелки порядка, название с подсказкой, галка. Нажатие на строку —
+ * галка; стрелки — свои кнопки, чтобы одно не путалось с другим.
+ */
+@Composable
+private fun PersonFieldRow(
+    title: String,
+    hint: String,
+    on: Boolean,
+    upMay: Boolean,
+    downMay: Boolean,
+    onToggle: () -> Unit,
+    onUp: () -> Unit,
+    onDown: () -> Unit,
+) {
+    ListLine(
+        onClick = onToggle,
+        left = {
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                IconButton(glyph = "▲", onClick = onUp, live = upMay)
+                IconButton(glyph = "▼", onClick = onDown, live = downMay)
+            }
+        },
+        middle = {
+            Column {
+                Name(title)
+                Tertiary(hint, lineOne = true)
+            }
+        },
+        right = { CheckMark(on) },
+    )
+}
+
+/**
  * Подокно «Вид»: панель снизу поверх вкладки.
  *
  * Снизу, а не по центру: до низа экрана палец дотягивается, до середины — как повезёт.
@@ -230,6 +279,8 @@ fun BookViewSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    // Подложка шапки — как у подокна переходов (заказчик 2026-09-18).
+                    .background(colors.functional)
                     .heightIn(min = TimaZones.zone1)
                     .padding(horizontal = TimaSpacing.about4),
                 horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),

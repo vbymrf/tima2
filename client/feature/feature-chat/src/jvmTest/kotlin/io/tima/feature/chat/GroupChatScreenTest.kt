@@ -1,5 +1,6 @@
 package io.tima.feature.chat
 
+import io.tima.domain.chat.ChatPerson
 import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.MessageDisplay
 import io.tima.testui.capture
@@ -30,7 +31,7 @@ class GroupChatScreenTest {
                 ChatState(
                     lines = replies,
                     group = true,
-                    names = mapOf("u-2" to "Аня", "u-3" to "Петя"),
+                    names = mapOf("u-2" to ChatPerson(name = "Аня"), "u-3" to ChatPerson(name = "Петя")),
                 ),
             )
         }
@@ -76,7 +77,7 @@ class GroupChatScreenTest {
         const val WIDTH = 380
         const val HEIGHT = 600
 
-        val names = mapOf("u-2" to "Аня", "u-3" to "Петя")
+        val names = mapOf("u-2" to ChatPerson(name = "Аня"), "u-3" to ChatPerson(name = "Петя"))
 
         fun line(key: String, author: String, text: String) = ChatLine(
             dedupKey = key,

@@ -1,5 +1,17 @@
 package io.tima.feature.group
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import io.tima.core.ui.Field
+import io.tima.core.ui.IconButton
+import io.tima.core.ui.ProvidePlace
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.TimaZones
+import io.tima.domain.chat.ChatPerson
+import io.tima.domain.chat.PersonLook
+import io.tima.domain.chat.letter
+import io.tima.domain.chat.line
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,10 +69,20 @@ fun MemberScreen(
      * людей, а не на сообщения, — там же, где решают, кто вообще в группе.
      */
     onAccess: (() -> Unit)? = null,
+    /** Как называть людей — «Вид» набора сообществ, тот же, что у реплик в группе. */
+    look: PersonLook = PersonLook.DEFAULT,
+    /** Позвать по нику (заказчик 2026-09-18). `null` — поля нет. */
+    onNick: ((String) -> Unit)? = null,
+    onInviteNick: () -> Unit = {},
+    /** Позвать из книги: кандидаты — кто в TIMa и ещё не в группе. `null` — кнопки нет. */
+    contacts: List<InviteCandidate>? = null,
+    onContacts: (Boolean) -> Unit = {},
+    onInviteUser: (String) -> Unit = {},
 ) {
     val colors = Tima.colors
     val words = Tima.words.social
-    Column(modifier.fillMaxSize().background(colors.surface)) {
+    Box(modifier.fillMaxSize().background(colors.surface)) {
+    Column(Modifier.fillMaxSize()) {
         SubwindowHeader(
             title = words.members,
             onBack = onBack,
@@ -92,6 +114,23 @@ fun MemberScreen(
                     }
                     Button(label = if (state.expect) "…" else words.invite, onClick = onInvite)
                 }
+                // По нику — вторым полем: ник публичен, и звать по нему можно того, чьего
+                // номера нет (заказчик 2026-09-18).
+                if (onNick != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.weight(1f)) {
+                            Field(value = state.nick, onChange = onNick, hint = "@" + words.nickField.lowercase())
+                        }
+                        Button(label = if (state.expect) "…" else words.invite, onClick = onInviteNick)
+                    }
+                }
+                if (contacts != null) {
+                    Button(label = words.fromContacts, onClick = { onContacts(true) })
+                }
             }
 
             if (state.members.isEmpty()) {
@@ -104,8 +143,93 @@ fun MemberScreen(
                 for (member in state.members) {
                     MemberLine(
                         member = member,
+                        person = state.people[member.userId] ?: ChatPerson.EMPTY,
+                        look = look,
                         removeMay = state.memberEdit && !member.role.deliveryEdits,
                         onRemove = { onRemove(member.userId) },
+                    )
+                }
+            }
+        }
+    }
+    if (state.contactsOpen && contacts != null) {
+        ContactsSheet(
+            contacts = contacts,
+            members = state.members.map { it.userId }.toSet(),
+            look = look,
+            busy = state.expect,
+            trouble = state.trouble,
+            onInvite = onInviteUser,
+            onClose = { onContacts(false) },
+        )
+    }
+    }
+}
+
+/** Кому можно послать приглашение из книги: человек в TIMa, идентификатор известен. */
+data class InviteCandidate(val userId: String, val person: ChatPerson)
+
+/**
+ * Подокно «Из контактов»: список тех, кого можно позвать, с «＋» у каждой строки. Не
+ * закрывается после нажатия — за один раз зовут нескольких (заказчик 2026-09-18);
+ * позванный тут же отмечается «уже в группе».
+ */
+@Composable
+private fun ContactsSheet(
+    contacts: List<InviteCandidate>,
+    members: Set<String>,
+    look: PersonLook,
+    busy: Boolean,
+    trouble: String?,
+    onInvite: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    val colors = Tima.colors
+    val words = Tima.words.social
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.text.copy(alpha = 0.45f))
+            .clickable(onClick = onClose),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = TimaZones.zone1)
+                .background(colors.surface)
+                .clickable(enabled = false) {},
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.functional)
+                    .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about3),
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f)) { ProvidePlace(TextPlace.HEADERS) { Name(words.fromContacts) } }
+                IconButton(glyph = "✕", onClick = onClose)
+            }
+            trouble?.let { Trouble(it, Modifier.padding(TimaSpacing.about4)) }
+            LazyColumn(Modifier.weight(1f, fill = false)) {
+                items(contacts, key = { it.userId }) { candidate ->
+                    val inside = candidate.userId in members
+                    ListLine(
+                        left = { Avatar(letters = candidate.person.letter()) },
+                        middle = {
+                            Column {
+                                Name(candidate.person.line(look) ?: Tima.words.book.nameless)
+                                candidate.person.phone?.let { Tertiary(it, lineOne = true) }
+                            }
+                        },
+                        right = {
+                            if (inside) {
+                                Tertiary(words.alreadyMember, lineOne = true)
+                            } else {
+                                IconButton(glyph = if (busy) "…" else "＋", onClick = { onInvite(candidate.userId) }, live = !busy)
+                            }
+                        },
                     )
                 }
             }
@@ -122,12 +246,14 @@ fun MemberScreen(
 @Composable
 private fun MemberLine(
     member: GroupMember,
+    person: ChatPerson,
+    look: PersonLook,
     removeMay: Boolean,
     onRemove: () -> Unit,
 ) {
     val words = Tima.words.social
     ListLine(
-        left = { Avatar(letters = member.userId.take(2).uppercase()) },
+        left = { Avatar(letters = person.letter()) },
         right = {
             if (removeMay) {
                 Button(label = words.exclude, onClick = onRemove)
@@ -137,7 +263,9 @@ private fun MemberLine(
         },
         middle = {
             Column {
-                Name(member.userId)
+                // Как в переписке группы: по «Виду», а не идентификатором. Идентификатор —
+                // последнее прибежище, когда о человеке не известно ничего.
+                Name(person.line(look) ?: Tima.words.chat.someone)
                 member.bannedUntil?.let { Secondary(words.bannedUntil(it)) }
             }
         },

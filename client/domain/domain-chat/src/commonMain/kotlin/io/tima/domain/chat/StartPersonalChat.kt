@@ -79,6 +79,14 @@ fun interface UserDirectory {
     suspend fun byPhone(phone: String): UserLookup
 }
 
+/**
+ * Кто скрывается за ником (`GET /nicknames/{nick}`). Отдельный порт, а не второй метод
+ * [UserDirectory]: тот — функциональный интерфейс, и в проверках его собирают лямбдой.
+ */
+fun interface NicknameDirectory {
+    suspend fun byNickname(nick: String): UserLookup
+}
+
 /** Что вернул справочник. */
 sealed interface UserLookup {
     /** @param name отображаемое имя, если сервер его знает. */

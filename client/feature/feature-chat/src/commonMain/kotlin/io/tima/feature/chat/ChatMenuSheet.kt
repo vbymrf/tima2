@@ -53,6 +53,8 @@ fun ChatMenuSheet(
     circlesShown: Boolean? = null,
     onCircles: ((Boolean) -> Unit)? = null,
     onMembers: (() -> Unit)? = null,
+    /** Групповая переписка — заголовок «Настройка группы», иначе «Настройка переписки». */
+    group: Boolean = circlesShown != null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -72,14 +74,19 @@ fun ChatMenuSheet(
                 .background(colors.surface)
                 .clickable(enabled = false) {},
         ) {
+            // Шапка — на подложке, как первая строка подокна переходов: заголовок отделён
+            // от пунктов цветом, а не только кеглем (заказчик 2026-09-18).
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .background(colors.functional)
                     .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about3),
                 horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.weight(1f)) { ProvidePlace(TextPlace.HEADERS) { Name(words.chatMenu) } }
+                Box(Modifier.weight(1f)) {
+                    ProvidePlace(TextPlace.HEADERS) { Name(if (group) words.groupSettings else words.chatSettings) }
+                }
                 IconButton(glyph = "✕", onClick = onClose)
             }
 

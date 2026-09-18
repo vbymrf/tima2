@@ -10,6 +10,8 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.tima.domain.chat.ChatPerson
+import io.tima.domain.chat.NicknameDirectory
 import io.tima.domain.chat.UserDirectory
 import io.tima.domain.chat.UserLookup
 import kotlinx.serialization.json.Json
@@ -35,7 +37,57 @@ class UsersApi(
     private val route: ServerRoute,
     private val client: HttpClient,
     private val token: () -> String,
-) : UserDirectory {
+) : UserDirectory, NicknameDirectory {
+
+    /** Чей это ник — `GET /nicknames/{nick}`; 404 — ничей. */
+    override suspend fun byNickname(nick: String): UserLookup {
+        val response = try {
+            client.get(route.api("/api/v1/nicknames/$nick")) {
+                header("Authorization", "Bearer ${token()}")
+            }
+        } catch (e: Throwable) {
+            return UserLookup.Offline(classifyFailure(e).retryDelayMs)
+        }
+        val body = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull()
+        val code = body?.get("code")?.jsonPrimitive?.content
+        return when (response.status) {
+            HttpStatusCode.OK -> body?.get("user_id")?.jsonPrimitive?.content
+                ?.takeIf { it.isNotBlank() }
+                ?.let { UserLookup.Found(it) }
+                ?: UserLookup.Refused("в ответе нет user_id")
+            HttpStatusCode.NotFound -> UserLookup.NotFound
+            HttpStatusCode.BadRequest -> UserLookup.Refused(code ?: "ник не по правилам")
+            else -> UserLookup.Refused(code ?: "сервер отказал: ${response.status.value}")
+        }
+    }
+
+    /**
+     * Люди по идентификаторам — одним походом: имя, ник, номер (номер — только по
+     * собеседникам своих переписок). Кого сервер не знает — того в карте нет.
+     * `null` — сеть или отказ: вызывающий отличит «не знаем» от «не спросили».
+     */
+    suspend fun cards(ids: Collection<String>): Map<String, ChatPerson>? {
+        if (ids.isEmpty()) return emptyMap()
+        val response = try {
+            client.post(route.api("/api/v1/users/names")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { putJsonArray("ids") { ids.forEach { add(it) } } }.toString())
+            }
+        } catch (e: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        val body = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull() ?: return null
+        fun map(key: String): Map<String, String> =
+            (body[key] as? JsonObject)?.mapValues { it.value.jsonPrimitive.content }?.filterValues { it.isNotBlank() } ?: emptyMap()
+        val names = map("names")
+        val nicks = map("nicknames")
+        val phones = map("phones")
+        return ids.associateWith { id ->
+            ChatPerson(userName = names[id], nick = nicks[id], phone = phones[id])
+        }
+    }
 
     override suspend fun byPhone(phone: String): UserLookup {
         val response = try {
