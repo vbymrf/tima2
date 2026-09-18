@@ -7,6 +7,8 @@ import io.tima.core.outbox.OutboxEntry
 import io.tima.core.outbox.OutboxState
 import io.tima.core.outbox.SendOutcome
 import io.tima.domain.account.Session
+import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
 import io.tima.domain.chat.ChatKind
 import io.tima.domain.chat.GroupSendStep
 import io.tima.domain.chat.LEVEL_SECRET
@@ -159,6 +161,7 @@ class GroupSender(
 
             GroupSendStep.Banned -> {
                 lastTrouble = "вы заблокированы в этой группе"
+                Journal.trouble(LogCode.QUEUE_REFUSED, "сервер отказал сообщению навсегда", "причина" to "banned", "переписка" to entry.chatId)
                 environment.queue.onOutcome(entry.dedupKey, SendOutcome.Permanent("banned"))
                 true
             }
@@ -171,6 +174,9 @@ class GroupSender(
 
             is GroupSendStep.Refused -> {
                 lastTrouble = "сервер отказал: ${outcome.reason}"
+                // Причина — в журнал: крестик у сообщения сам ничего не объясняет, а
+                // `NET-ERROR 400` рядом не говорит, что именно не так.
+                Journal.trouble(LogCode.QUEUE_REFUSED, "сервер отказал сообщению навсегда", "причина" to outcome.reason, "переписка" to entry.chatId)
                 environment.queue.onOutcome(entry.dedupKey, SendOutcome.Permanent(outcome.reason))
                 true
             }

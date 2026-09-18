@@ -102,6 +102,8 @@ fun ChatScreen(
      */
     circle: MessageCircle? = null,
     onCircle: ((MessageCircle) -> Unit)? = null,
+    /** Какие круги предлагать — по виду группы; по умолчанию все (вид не известен). */
+    circles: List<MessageCircle> = MessageCircle.entries,
     /**
      * Сузить круг у уже отправленной реплики: `(messageId, было, стало)`.
      *
@@ -224,6 +226,7 @@ fun ChatScreen(
             onSend = onSend,
             circle = circle,
             onCircle = onCircle,
+            circles = circles,
         )
     }
 }
@@ -533,6 +536,7 @@ private fun InputZone(
     onSend: () -> Unit,
     circle: MessageCircle? = null,
     onCircle: ((MessageCircle) -> Unit)? = null,
+    circles: List<MessageCircle> = MessageCircle.entries,
 ) {
     val colors = Tima.colors
     // Круг стоит рядом с «Отправить», а не в настройках: он выбирается для каждого
@@ -554,7 +558,9 @@ private fun InputZone(
                 horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
             ) {
-                for (option in MessageCircle.entries) {
+                // Только круги, которые у группы этого вида есть: у личной — два, у
+                // публичной — четыре. Лишний чип — это 400 от сервера и крестик у сообщения.
+                for (option in circles) {
                     Chip(
                         label = option.title,
                         kind = if (option == circle) ChipKind.Selected else ChipKind.Quiet,

@@ -199,6 +199,22 @@ enum class GroupKind(val wire: String) {
 
     /** Публичная: сервер видит переписку, находится поиском и каталогом. */
     Public("public"),
+    ;
+
+    /**
+     * Какие круги сервер принимает у группы этого вида (`postGroupMessage`:
+     * `level_in_private`, `secret_in_public`). Предлагать другие — получать 400 и крестик:
+     * так и вышло с «nafig» на Redmi 2026-09-18 — «Своим» в личной группе.
+     */
+    val circles: List<MessageCircle>
+        get() = when (this) {
+            Personal -> listOf(MessageCircle.Secret, MessageCircle.Everyone)
+            Public -> MessageCircle.entries.filter { it != MessageCircle.Secret }
+        }
+
+    companion object {
+        fun fromWire(wire: String): GroupKind? = entries.firstOrNull { it.wire == wire }
+    }
 }
 
 /** Группа, как её знает сервер. */
@@ -209,6 +225,12 @@ class GroupInfo(
     val myRole: GroupRole,
     /** Владелец: его реплики — салатовой полосой темы, остальных — своими цветами. */
     val ownerId: String = "",
+    /**
+     * Вид группы: от него зависят круги сообщений. У личной сервер принимает только
+     * «Зашифровано» (−1) и «Всем и всегда» (0), у публичной — 0…3 без шифра. `null` —
+     * сервер вида не назвал.
+     */
+    val kind: GroupKind? = null,
 )
 
 /** Участник группы. */

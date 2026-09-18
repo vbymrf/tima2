@@ -32,6 +32,7 @@ import io.tima.domain.chat.NarrowMessageLevel
 import io.tima.domain.chat.ChatKind
 import io.tima.domain.chat.Section
 import io.tima.domain.chat.GroupKeyRotator
+import io.tima.domain.chat.GroupKind
 import io.tima.domain.chat.HealGroupKey
 import io.tima.domain.chat.RotateStep
 import io.tima.domain.chat.ChatSummary
@@ -1620,6 +1621,7 @@ private fun App(
                         // в Социум и при открытии группы ниже.
                         ownerId = socialState.mine.firstOrNull { it.groupId == current.chatId }?.ownerId?.ifBlank { null },
                         hues = peopleHues[current.chatId].orEmpty(),
+                        kind = socialState.mine.firstOrNull { it.groupId == current.chatId }?.kind,
                         myUserId = session.userId,
                         myName = profileState.name.ifBlank { profileState.nickname.ifBlank { session.userId.take(2) } },
                         // Список групп (владелец) и участники (цвета) — при открытии группы,
@@ -1773,6 +1775,8 @@ private fun Chat(
     ownerId: String? = null,
     /** Выбранные участниками цвета полос: человек → номер оттенка (сервер 0053). */
     hues: Map<String, Int> = emptyMap(),
+    /** Вид группы — от него круги сообщений; `null` — все, как было. */
+    kind: GroupKind? = null,
     myUserId: String = "",
     /** Как меня зовут — для образца «мой пузырь глазами остальных». */
     myName: String = "",
@@ -1851,6 +1855,12 @@ private fun Chat(
         return
     }
     LaunchedEffect(chatId, group) { if (group) onOpened(chatId) }
+    // Выбран круг, которого у группы этого вида нет (остался с прежней сборки или от
+    // другой группы) — сбросить на первый допустимый, иначе отправка получит 400.
+    LaunchedEffect(kind, state.level) {
+        val allowed = kind?.circles ?: return@LaunchedEffect
+        if (allowed.none { it.level == state.level }) store.circleChosen(allowed.first().level)
+    }
     var myColor by remember { mutableStateOf(false) }
     var myColorTrouble by remember { mutableStateOf<String?>(null) }
     ChatScreen(
@@ -1870,6 +1880,7 @@ private fun Chat(
         // Круг предлагается только в группе: в личной переписке всё зашифровано и
         // адресовано одному человеку — выбирать нечего.
         circle = if (group) MessageCircle.of(state.level) else null,
+        circles = kind?.circles ?: MessageCircle.entries,
         onCircle = if (group) { chosen -> store.circleChosen(chosen.level) } else null,
         // Сужение живёт рядом с меткой круга: показ включён — значит человек занят
         // доступом, а не чтением. Выключен — реплики выглядят как обычно.
