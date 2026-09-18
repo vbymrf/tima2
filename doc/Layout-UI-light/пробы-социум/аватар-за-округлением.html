@@ -1,0 +1,259 @@
+<meta charset="utf-8">
+<title>Аватар за округлением — проба</title>
+<link rel="stylesheet" href="../%D1%81%D1%82%D0%B8%D0%BB%D1%8C.css">
+<style>
+  .ряд-окон { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-start; }
+  .тел { width: auto; }
+  .замечание { font-size: 12.5px; color: var(--чёрный-70); width: 360px; margin-top: 6px; line-height: 1.5; }
+
+  /* ── Проба: аватар сдвинут вправо ЗА округление пузыря + 3 px ────────────
+     Сейчас (чат.html) аватар стоит на left:-1px — поверх полосы и скруглённого
+     угла рамки. Здесь он начинается там, где скругление (радиус 16) уже
+     кончилось, и ещё на 3 px правее: left = 16 + 3 = 19 px от края поля.
+     Имя отходит на ту же величину плюс ширина аватара и зазор 6:
+     19 + 40 + 6 = 65 px. Всё остальное — как в чат.html. */
+  .проба .реплика:not(.моя) .пузырь > .ава { left: 19px; }
+  .проба .реплика:not(.моя) .автор { padding-left: 65px; }
+
+  /* Фотографии, а не буквы: у аватара-картинки ни подложки, ни буквы, только
+     рамка и обрезка квадратом со скруглением. Портреты нарисованы SVG прямо
+     здесь — в макете картинок нет, а проба про место, не про лицо. */
+  .реплика:not(.моя) .пузырь > .ава.фото {
+    background-size: cover; background-position: center; color: transparent;
+    overflow: hidden;
+  }
+  .фото.бп { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' fill='%23c9d3ee'/><circle cx='20' cy='16' r='8' fill='%235b73c9'/><path d='M4 40c2-10 8-14 16-14s14 4 16 14z' fill='%235b73c9'/></svg>");
+  }
+  .фото.см { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' fill='%23f3d9c8'/><circle cx='20' cy='16' r='8' fill='%23d9713c'/><path d='M4 40c2-10 8-14 16-14s14 4 16 14z' fill='%23d9713c'/></svg>");
+  }
+  .фото.кр { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23d6ecc0'/><circle cx='16' cy='13' r='6.5' fill='%2385c447'/><path d='M3 32c2-8 6-11 13-11s11 3 13 11z' fill='%2385c447'/></svg>");
+    background-size: cover; color: transparent;
+  }
+</style>
+
+<div class="лист-док">
+<div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-социум / аватар-за-округлением.html</div>
+<h1>Аватар за округлением <span class="вид подокно">проба</span></h1>
+<p class="подзаголовок">
+  Групповой кадр из <a href="../телефон/подокна/чат.html">чат.html</a> — авторы, упоминание, ветка,
+  вложенная комната — в двух исполнениях: <b>как сейчас</b> (аватар на полосе, поверх скруглённого
+  угла) и <b>проба</b> (аватар сдвинут вправо за округление пузыря, ещё на 3 px). В обоих кадрах
+  аватары — картинки, а не буквы: по буквам место не оценить.
+</p>
+
+<div class="ряд-окон">
+
+<!-- ═══════════════════════ КАК СЕЙЧАС ═══════════════════════ -->
+<div class="тел">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+
+    <div class="зона-1 подокно">
+      <a class="икона" href="../телефон/окна/новости.html">‹</a>
+      <a class="ава мал фото кр" href="#">КР</a>
+      <a class="тянуть" href="#" style="text-decoration:none;color:inherit">
+        <div class="имя обрез" style="font-size:var(--щ5)">Команда разработки</div>
+        <div class="трет">3 участника · 2 в сети</div>
+      </a>
+      <a class="икона" href="#">📞</a>
+      <a class="икона" href="#">•••</a>
+    </div>
+
+    <div class="зона-2">
+      <div class="поток">
+        <div class="реплика" style="--полоса:#5b73c9">
+          <div class="пузырь">
+            <div class="ава мал фото бп">БП</div>
+            <div class="автор">Борис Петрович</div>
+            <span style="color:var(--акцент);font-weight:600">@Пётр</span>, смотри расписание релизов на квартал — я вынес миграции отдельной строкой, чтобы было видно, что от чего зависит.
+            <div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div>
+            <a class="кн-эмоция" href="#">☺</a>
+            <div class="эм-обёртка"><span class="метка-эмоции">👍 2</span></div>
+          </div>
+        </div>
+
+        <div class="реплика моя">
+          <div class="пузырь">
+            Посмотрел. Июль поедет, если не закрыть миграции.
+            <div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div>
+            <div class="эм-обёртка"><span class="метка-эмоции">🔍 1</span></div>
+          </div>
+        </div>
+
+        <div class="реплика" style="--полоса:#d9713c">
+          <div class="пузырь">
+            <div class="ава мал фото см">СМ</div>
+            <div class="автор">Сергей М.</div>
+            Согласен, надо считать по факту.
+            <div class="низ-пузыря"><span class="точка"></span><span>10:17</span></div>
+            <a class="кн-эмоция" href="#">☺</a>
+          </div>
+        </div>
+
+        <div class="реплика продолжение" style="--полоса:#d9713c">
+          <div class="пузырь">
+            Могу собрать цифры к пятнице.
+            <div class="низ-пузыря"><span class="точка"></span><span>10:18</span></div>
+            <a class="кн-эмоция" href="#">☺</a>
+          </div>
+        </div>
+
+        <div class="реплика" style="--полоса:#5b73c9">
+          <div class="пузырь">
+            <div class="ава мал фото бп">БП</div>
+            <div class="автор">Борис Петрович</div>
+            Тогда решаем так: миграции закрываем до пятницы, релиз двигаем на неделю.
+            <div class="низ-пузыря"><span class="точка видел"></span><span>10:22</span></div>
+            <a class="кн-эмоция" href="#">☺</a>
+            <div class="эм-обёртка"><span class="метка-эмоции">👍 12</span><span class="метка-эмоции">🔍 8</span><span class="метка-эмоции">😂 5</span></div>
+          </div>
+        </div>
+
+        <a class="чип акц" href="#" style="align-self:flex-start;margin-left:36px">ветка · 5 ответов</a>
+
+        <div class="системное">Борис добавил Дмитрия</div>
+
+        <div class="реплика" style="--полоса:var(--рамка)">
+          <div class="пузырь" style="border-color:var(--акцент);border-style:dashed">
+            <div class="ава мал">🔊</div>
+            <div class="имя" style="font-size:var(--щ5)">Планёрка · голосовой чат группы</div>
+            <div class="трет" style="margin-bottom:6px">2 в комнате, идёт 14 минут</div>
+            <a class="кн" href="#" style="min-height:30px">Войти</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="зона-3">
+        <a class="стрелка-вниз" href="#">↓<span class="бирка-новых">3</span></a>
+      </div>
+    </div>
+
+    <div class="зона-4">
+      <a class="икона" href="#">⊕</a>
+      <div class="ввод">Сообщение… «@» — упомянуть</div>
+      <a class="икона" href="#">🎙</a>
+      <a class="икона жив" href="#">➤</a>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">как сейчас: аватар на полосе, поверх угла (left −1 px)</div>
+  <div class="замечание">Картинка ложится на скруглённый угол рамки и на полосу автора: угол пузыря
+    под ней пропадает, а полоса начинается не от верха, а из-под аватара.</div>
+</div>
+
+<!-- ═══════════════════════ ПРОБА ═══════════════════════ -->
+<div class="тел проба">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+
+    <div class="зона-1 подокно">
+      <a class="икона" href="../телефон/окна/новости.html">‹</a>
+      <a class="ава мал фото кр" href="#">КР</a>
+      <a class="тянуть" href="#" style="text-decoration:none;color:inherit">
+        <div class="имя обрез" style="font-size:var(--щ5)">Команда разработки</div>
+        <div class="трет">3 участника · 2 в сети</div>
+      </a>
+      <a class="икона" href="#">📞</a>
+      <a class="икона" href="#">•••</a>
+    </div>
+
+    <div class="зона-2">
+      <div class="поток">
+        <div class="реплика" style="--полоса:#5b73c9">
+          <div class="пузырь">
+            <div class="ава мал фото бп">БП</div>
+            <div class="автор">Борис Петрович</div>
+            <span style="color:var(--акцент);font-weight:600">@Пётр</span>, смотри расписание релизов на квартал — я вынес миграции отдельной строкой, чтобы было видно, что от чего зависит.
+            <div class="низ-пузыря"><span class="точка видел"></span><span>10:15</span></div>
+            <a class="кн-эмоция" href="#">☺</a>
+            <div class="эм-обёртка"><span class="метка-эмоции">👍 2</span></div>
+          </div>
+        </div>
+
+        <div class="реплика моя">
+          <div class="пузырь">
+            Посмотрел. Июль поедет, если не закрыть миграции.
+            <div class="низ-пузыря"><span>10:16</span><span class="галки">✓✓</span></div>
+            <div class="эм-обёртка"><span class="метка-эмоции">🔍 1</span></div>
+          </div>
+        </div>
+
+        <div class="реплика" style="--полоса:#d9713c">
+          <div class="пузырь">
+            <div class="ава мал фото см">СМ</div>
+            <div class="автор">Сергей М.</div>
+            Согласен, надо считать по факту.
+            <div class="низ-пузыря"><span class="точка"></span><span>10:17</span></div>
+            <a class="кн-эмоция" href="#">☺</a>
+          </div>
+        </div>
+
+        <div class="реплика продолжение" style="--полоса:#d9713c">
+          <div class="пузырь">
+            Могу собрать цифры к пятнице.
+            <div class="низ-пузыря"><span class="точка"></span><span>10:18</span></div>
+            <a class="кн-эмоция" href="#">☺</a>
+          </div>
+        </div>
+
+        <div class="реплика" style="--полоса:#5b73c9">
+          <div class="пузырь">
+            <div class="ава мал фото бп">БП</div>
+            <div class="автор">Борис Петрович</div>
+            Тогда решаем так: миграции закрываем до пятницы, релиз двигаем на неделю.
+            <div class="низ-пузыря"><span class="точка видел"></span><span>10:22</span></div>
+            <a class="кн-эмоция" href="#">☺</a>
+            <div class="эм-обёртка"><span class="метка-эмоции">👍 12</span><span class="метка-эмоции">🔍 8</span><span class="метка-эмоции">😂 5</span></div>
+          </div>
+        </div>
+
+        <a class="чип акц" href="#" style="align-self:flex-start;margin-left:36px">ветка · 5 ответов</a>
+
+        <div class="системное">Борис добавил Дмитрия</div>
+
+        <div class="реплика" style="--полоса:var(--рамка)">
+          <div class="пузырь" style="border-color:var(--акцент);border-style:dashed">
+            <div class="ава мал">🔊</div>
+            <div class="имя" style="font-size:var(--щ5)">Планёрка · голосовой чат группы</div>
+            <div class="трет" style="margin-bottom:6px">2 в комнате, идёт 14 минут</div>
+            <a class="кн" href="#" style="min-height:30px">Войти</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="зона-3">
+        <a class="стрелка-вниз" href="#">↓<span class="бирка-новых">3</span></a>
+      </div>
+    </div>
+
+    <div class="зона-4">
+      <a class="икона" href="#">⊕</a>
+      <div class="ввод">Сообщение… «@» — упомянуть</div>
+      <a class="икона" href="#">🎙</a>
+      <a class="икона жив" href="#">➤</a>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">проба: аватар за округлением + 3 px (left 19 px, имя от 65 px)</div>
+  <div class="замечание">Угол пузыря и начало полосы видны целиком; аватар всё так же выступает
+    вверх в зазор между репликами и занимает строку имени. Цена — 20 px ширины строки имени:
+    длинное имя обрежется раньше. Комната «🔊» сдвинута тем же правилом — аватар у неё общий.</div>
+</div>
+
+</div>
+
+<div class="разбор">
+<h2>Что меняется</h2>
+<ul>
+  <li><b>Одно число.</b> `left: −1px` → `left: 19px` у аватара в пузыре чужой реплики; имя автора
+    `padding-left: 33px` → `65px`. Полоса, скругление, зазор, высота строки — прежние.</li>
+  <li><b>Что становится видно.</b> Верхний левый угол пузыря со скруглением 16 и полоса автора от
+    самого верха. Сейчас картинка их закрывает — на буквах это не бросалось в глаза, на фотографии
+    видно: угол под ней «отрезан».</li>
+  <li><b>Что теряется.</b> 20 px строки имени и опора аватара на край: он висит внутри пузыря, а не
+    сидит на его углу. У «продолжения серии» ничего не меняется — там аватара нет.</li>
+  <li><b>В клиенте</b> это `offset(x)` у аватара в `Bubble.kt` и отступ имени; числа считаются от
+    ширины полосы (4) и радиуса (16): 4 + 16 − 1 ≈ 19 в координатах поля пузыря.</li>
+</ul>
+</div>
+</div>
