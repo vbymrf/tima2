@@ -18,7 +18,7 @@ class PersonLookTest {
             order = listOf(PersonField.Nick, PersonField.Name, PersonField.UserName, PersonField.Phone),
             checked = setOf(PersonField.Name, PersonField.Nick),
         )
-        assertEquals("vitya, Витя", full.line(look))
+        assertEquals("@vitya, Витя", full.line(look))
     }
 
     @Test

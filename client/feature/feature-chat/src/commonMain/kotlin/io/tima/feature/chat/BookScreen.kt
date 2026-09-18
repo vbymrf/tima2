@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,8 +84,11 @@ fun BookScreen(
      * По умолчанию — только то, что есть в книге: так собирают проверки без сети.
      */
     personOf: (BookEntry) -> ChatPerson = { ChatPerson(name = it.name, phone = it.phone) },
+    /** Аватар человека за строкой, если он есть и уже доехал. */
+    faceOf: (BookEntry) -> ImageBitmap? = { null },
 ) {
     val words = Tima.words.book
+    val colors = Tima.colors
     // Книга — та же группа «списки», что и чаты: строка обрезается и обязана быть
     // одной высоты.
     ProvidePlace(TextPlace.LISTS) {
@@ -204,14 +208,17 @@ fun BookScreen(
                         val who = personOf(person)
                         ListLine(
                             onClick = { onOpen(person) },
-                            left = { Avatar(letters = who.letter()) },
+                            // Картинка, если человек поставил аватар; иначе буква.
+                            left = { Avatar(letters = who.letter(), image = faceOf(person)) },
                             middle = {
                                 Column {
                                     // Первая строка — имя, ник, имя пользователя по «Виду»
                                     // (галки через запятую, иначе первое, что есть); вторая
                                     // — всегда телефон (решение заказчика 2026-09-18).
-                                    Name(who.line(state.view.look(), FIRST_LINE_FIELDS) ?: words.nameless)
-                                    Tertiary(person.phone, lineOne = true)
+                                    Name(who.line(state.view.look(), CONTACT_FIRST_LINE) ?: words.nameless)
+                                    // Телефон крупнее третьестепенной строки в 1,3 раза — заказчик
+                                    // 2026-09-18: номер читают и набирают, ему нужен кегль.
+                                    Caption(person.phone, fontSize = TimaType.sz6 * 1.3f, weight = FontWeight.SemiBold, color = colors.text3, lineOne = true)
                                 }
                             },
                             right = if (group.outsiders && onInvite != null) {
@@ -293,5 +300,4 @@ private fun InviteButton(onClick: () -> Unit) {
     ControlRow { IconButton(glyph = "↗", onClick = onClick) }
 }
 
-/** Поля первой строки контакта: телефон стоит второй строкой всегда и в первую не берётся. */
-private val FIRST_LINE_FIELDS = setOf(PersonField.Name, PersonField.Nick, PersonField.UserName)
+

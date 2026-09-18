@@ -396,6 +396,10 @@ interface BookWords {
 
     // Подокно «Вид».
     val view: String
+    /** Пункт «Вид разделов» — вход в подокно с образцом (заказчик 2026-09-18). */
+    val sectionsLook: String
+    /** Заголовок над образцом в подокнах «Вида»: как будет выглядеть. */
+    val lookSample: String
     val subsections: String
     val folders: String
     val foldersAbout: String
@@ -1662,6 +1666,8 @@ object RussianWords : Words {
         override val bookEmptyAbout = "Прочитаем телефонную книгу или добавьте человека по номеру."
         override val nameless = "Без имени"
         override val view = "Вид"
+        override val sectionsLook = "Вид разделов"
+        override val lookSample = "Как будет выглядеть"
         override val subsections = "Отображение подразделов"
         override val folders = "Папки"
         override val foldersAbout = "разделы полосами, сворачиваются"

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -683,8 +684,9 @@ private fun App(
     /** Вкладка Социума — здесь, чтобы пережить подокно «Вид» (оно перестраивает окно). */
     var socialTab by remember { mutableStateOf(WindowTab.Common) }
     // Люди за идентификаторами — одно место на книгу, реплики и состав (2026-09-18).
-    val people = remember(assembled) { People(network.directory, environment.bookStorage, scope) }
+    val people = remember(assembled) { People(network.directory, environment.bookStorage, scope, network.media) }
     val peopleCards by people.cards.collectAsState()
+    val peopleFaces by people.faces.collectAsState()
     var communitySectionsScreen by remember { mutableStateOf(false) }
     /** Выбранный раздел в каталоге и свёрнутые разделы гармошки. */
     var catalogSection by remember { mutableStateOf("") }
@@ -1200,6 +1202,8 @@ private fun App(
                         entry.userId?.let { people.want(listOf(it)) }
                         (entry.userId?.let { peopleCards[it] } ?: ChatPerson()).withBookName(entry.name, entry.phone)
                     },
+                    // Картинка аватара — по карточке справочника, приезжает потоком.
+                    faceOf = { entry -> entry.userId?.let { people.wantFace(it); peopleFaces[it] } },
                     // ТОЛЬКО личные. Группы ушли на свою вкладку окна 5 — решение
                     // заказчика 2026-09-17; до него они стояли здесь вперемешку с
                     // личными, и это было временным размещением, записанным в
@@ -1596,6 +1600,25 @@ private fun App(
                         network = network,
                         people = people,
                         authorLook = communityView.look(),
+                        // Личная переписка: раздел — у собеседника в книге (Р4), меню «•••»
+                        // переносит его туда же (заказчик 2026-09-18).
+                        bookSections = bookStateForChats.sections,
+                        currentBookSection = listState.chats.firstOrNull { it.chatId == current.chatId }?.let(sectionOfChat) ?: "",
+                        onMoveToBookSection = { chatId, sectionId ->
+                            val peer = listState.chats.firstOrNull { it.chatId == chatId }?.peerId
+                            val entry = bookStateForChats.all.firstOrNull { it.userId != null && it.userId == peer }
+                            scope.launch {
+                                if (entry != null) {
+                                    environment.bookStorage.moveTo(entry.phone, sectionId)
+                                } else {
+                                    // Собеседника в книге нет — раздел положить некуда. Номер
+                                    // собеседника сервер отдаёт: заводим его в книге вручную,
+                                    // сразу в выбранном разделе. Номера нет — перенос молчит.
+                                    val phone = peer?.let { people.person(it).phone }
+                                    if (phone != null) environment.bookStorage.addManually(phone, null, sectionId)
+                                }
+                            }
+                        },
                         chatId = current.chatId,
                         // Имя из списка, если строка уже пришла потоком; иначе то, с чем
                         // переписку открыли. Пустое место читалось бы как поломка.
@@ -1695,9 +1718,13 @@ private fun Chat(
     onMoveToShelf: ((chatId: String, sectionId: String) -> Unit)? = null,
     currentShelf: String = "",
     /** Люди за идентификаторами авторов; `null` — только идентификаторы. */
-    people: ChatPeople? = null,
+    people: People? = null,
     /** Как называть авторов — «Вид» набора сообществ. */
     authorLook: PersonLook = PersonLook.DEFAULT,
+    /** Разделы книги для «•••» личной переписки: раздел переписки — раздел собеседника. */
+    bookSections: List<Section> = emptyList(),
+    currentBookSection: String = "",
+    onMoveToBookSection: ((chatId: String, sectionId: String) -> Unit)? = null,
 ) {
     // Групповая ли переписка — решает столбец `kind`, а не догадка по идентификатору.
     var chatMenu by remember { mutableStateOf(false) }
@@ -1728,11 +1755,7 @@ private fun Chat(
             names = if (group) people else null,
             // Аватар автора: медиа из справочника, байты из медиа-хранилища. Только в
             // группе — в личной переписке подписи у реплик нет вовсе.
-            faces = if (group) {
-                ChatFaces { userId -> network.directory.avatarOf(userId)?.let { network.media.download(it) } }
-            } else {
-                null
-            },
+            faces = if (group) people else null,
             // Сужение — только в группе: у личного сообщения круга нет, оно зашифровано и
             // адресовано одному человеку.
             narrow = if (group) NarrowMessageLevel(network.messageLevels) else null,
@@ -1779,7 +1802,7 @@ private fun Chat(
         onRequestKey = store::requestKey,
         onPhrase = store::changedPhrase,
         onMembers = if (group) onMembers else null,
-        onMore = if (group && onMoveToShelf != null) { { chatMenu = true } } else null,
+        onMore = if ((group && onMoveToShelf != null) || (!group && onMoveToBookSection != null)) { { chatMenu = true } } else null,
         // Круг предлагается только в группе: в личной переписке всё зашифровано и
         // адресовано одному человеку — выбирать нечего.
         circle = if (group) MessageCircle.of(state.level) else null,
@@ -1808,6 +1831,16 @@ private fun Chat(
             circlesShown = state.showCircles,
             onCircles = store::circlesShown,
             onMembers = onMembers,
+        )
+    }
+    // Личная переписка: тот же лист, набор — разделы книги, без доступности и участников.
+    if (chatMenu && !group && onMoveToBookSection != null) {
+        ChatMenuSheet(
+            sections = bookSections,
+            currentSection = currentBookSection,
+            onMoveTo = { sectionId -> onMoveToBookSection(chatId, sectionId) },
+            onClose = { chatMenu = false },
+            group = false,
         )
     }
 }
@@ -2480,6 +2513,7 @@ private fun PhoneWindow(
     book: BookState,
     /** Человек за строкой книги — имя из книги плюс карточка справочника. */
     personOf: (BookEntry) -> ChatPerson = { ChatPerson(name = it.name, phone = it.phone) },
+    faceOf: (BookEntry) -> ImageBitmap? = { null },
     onSearchInBook: (String) -> Unit,
     onOpen: (ChatSummary) -> Unit,
     onOpenPerson: (BookEntry) -> Unit,
@@ -2569,6 +2603,7 @@ private fun PhoneWindow(
                     onSearch = onSearchInBook,
                     onOpen = onOpenPerson,
                     personOf = personOf,
+                    faceOf = faceOf,
                     onToggleSection = onToggleSection,
                     onChooseSection = onChooseSection,
                     onSections = onSections,

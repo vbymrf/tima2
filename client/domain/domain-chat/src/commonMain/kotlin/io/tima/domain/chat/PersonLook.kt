@@ -41,7 +41,8 @@ data class PersonLook(
 fun ChatPerson.field(field: PersonField): String? = when (field) {
     PersonField.Name -> name
     PersonField.UserName -> userName
-    PersonField.Nick -> nick
+    // Ник — всегда с «@» (заказчик 2026-09-18): так его отличают от имени.
+    PersonField.Nick -> nick?.takeIf { it.isNotBlank() }?.let { "@" + it.removePrefix("@") }
     PersonField.Phone -> phone
 }?.takeIf { it.isNotBlank() }
 

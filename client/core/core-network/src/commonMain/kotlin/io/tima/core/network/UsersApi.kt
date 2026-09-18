@@ -84,8 +84,9 @@ class UsersApi(
         val names = map("names")
         val nicks = map("nicknames")
         val phones = map("phones")
+        val avatars = map("avatars")
         return ids.associateWith { id ->
-            ChatPerson(userName = names[id], nick = nicks[id], phone = phones[id])
+            ChatPerson(userName = names[id], nick = nicks[id], phone = phones[id], avatar = avatars[id])
         }
     }
 

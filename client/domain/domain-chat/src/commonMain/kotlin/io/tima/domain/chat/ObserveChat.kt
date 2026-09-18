@@ -180,6 +180,8 @@ data class ChatPerson(
     val userName: String? = null,
     val nick: String? = null,
     val phone: String? = null,
+    /** Медиа аватара, если человек его поставил; картинку по нему достаёт вызывающий. */
+    val avatar: String? = null,
 ) {
     companion object {
         val EMPTY = ChatPerson()

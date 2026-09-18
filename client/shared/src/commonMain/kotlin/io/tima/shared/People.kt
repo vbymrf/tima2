@@ -2,6 +2,10 @@ package io.tima.shared
 
 import io.tima.core.network.UsersApi
 import io.tima.domain.chat.Book
+import androidx.compose.ui.graphics.ImageBitmap
+import io.tima.core.media.Media
+import io.tima.core.media.decodeImage
+import io.tima.domain.chat.ChatFaces
 import io.tima.domain.chat.ChatPeople
 import io.tima.domain.chat.ChatPerson
 import kotlinx.coroutines.CoroutineScope
@@ -27,9 +31,33 @@ class People(
     private val directory: UsersApi,
     private val book: Book,
     private val scope: CoroutineScope,
-) : ChatPeople {
+    /** Медиа-хранилище — за картинками аватаров; `null` — только буквы. */
+    private val media: Media? = null,
+) : ChatPeople, ChatFaces {
 
     private val _cards = MutableStateFlow<Map<String, ChatPerson>>(emptyMap())
+    private val _faces = MutableStateFlow<Map<String, ImageBitmap>>(emptyMap())
+
+    /** Картинки аватаров по идентификатору — те, что уже доехали. */
+    val faces: StateFlow<Map<String, ImageBitmap>> = _faces.asStateFlow()
+
+    private val fetching = HashSet<String>()
+
+    /** Попросить картинку аватара; приедет в [faces]. Без аватара у карточки — ничего. */
+    fun wantFace(userId: String) {
+        val mediaId = _cards.value[userId]?.avatar ?: return
+        if (media == null || userId in _faces.value || !fetching.add(userId)) return
+        scope.launch {
+            val picture = media.download(mediaId)?.let(::decodeImage)
+            if (picture != null) _faces.value = _faces.value + (userId to picture) else fetching.remove(userId)
+        }
+    }
+
+    /** Байты аватара для переписки — тот же порт, что раньше собирали в Root. */
+    override suspend fun face(userId: String): ByteArray? {
+        val card = _cards.value[userId] ?: directory.cards(listOf(userId))?.get(userId) ?: return null
+        return card.avatar?.let { media?.download(it) }
+    }
 
     /** Что справочник рассказал о людях — по идентификатору. Без имени из книги. */
     val cards: StateFlow<Map<String, ChatPerson>> = _cards.asStateFlow()

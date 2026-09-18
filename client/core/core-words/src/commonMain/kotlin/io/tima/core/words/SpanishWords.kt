@@ -559,6 +559,8 @@ object SpanishWords : Words {
         override val nameless = "Sin nombre"
 
         override val view = "Vista"
+        override val sectionsLook = "Aspecto de las secciones"
+        override val lookSample = "Vista previa"
         override val subsections = "Cómo se muestran las secciones"
         override val folders = "Carpetas"
         override val foldersAbout = "secciones en barras, plegables"

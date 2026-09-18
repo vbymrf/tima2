@@ -559,6 +559,8 @@ object EnglishWords : Words {
         override val nameless = "No name"
 
         override val view = "View"
+        override val sectionsLook = "Sections look"
+        override val lookSample = "Preview"
         override val subsections = "How sections are shown"
         override val folders = "Folders"
         override val foldersAbout = "sections as bars, collapsible"

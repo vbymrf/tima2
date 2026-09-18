@@ -22,7 +22,7 @@ class BookViewScreenTest {
     @Test
     fun выбранная_отметка_зелёная() {
         val shot = capture("вид-отметки", 360, 640, dark = false) {
-            BookViewScreen(view = BookView(folders = true, showName = true), onChange = {})
+            SectionsLookPage(view = BookView(folders = true, showName = true), onChange = {})
         }
         // Салатовый навигации, а не «подтверждено»: так задано в макете
         // (`.галка.вкл { background: var(--навигация) }`). Зелёных в теме два, и
@@ -36,10 +36,10 @@ class BookViewScreenTest {
     @Test
     fun включённая_и_выключенная_галка_рисуются_по_разному() {
         val on = capture("вид-галка-вкл", 360, 640, dark = false) {
-            BookViewScreen(view = BookView(showName = true), onChange = {})
+            PersonLookPage(view = BookView(showName = true), onChange = {})
         }
         val off = capture("вид-галка-выкл", 360, 640, dark = false) {
-            BookViewScreen(view = BookView(showName = false), onChange = {})
+            PersonLookPage(view = BookView(showName = false), onChange = {})
         }
         assertTrue(on.difference(off) > 0.0, "с галкой и без неё экран одинаков — состояние не видно")
     }
