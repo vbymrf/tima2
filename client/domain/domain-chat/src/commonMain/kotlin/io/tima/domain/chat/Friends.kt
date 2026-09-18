@@ -45,7 +45,7 @@ class AddContact(
      * @return что вышло. Ненайденный номер — **не отказ**: контакт сохраняется, и кнопка
      *   до нажатия честно говорит «Добавить в контакты», а не «Написать».
      */
-    suspend fun add(raw: String, name: String?, section: String = ""): AddStep {
+    suspend fun add(raw: String, name: String?, sectionId: String = ""): AddStep {
         val phone = normalizePhone(raw) ?: return AddStep.BadPhone
 
         val userId = try {
@@ -56,11 +56,11 @@ class AddContact(
             null
         }
 
-        book.addManually(phone, name, section)
+        book.addManually(phone, name, sectionId)
         if (!userId.isNullOrBlank()) {
             book.matched(mapOf(phone to userId))
-            val подписан = friends.set(userId, friend = true)
-            return AddStep.InTima(phone, userId, subscribed = подписан)
+            val subscribed = friends.set(userId, friend = true)
+            return AddStep.InTima(phone, userId, subscribed = subscribed)
         }
         return AddStep.OnlyPhone(phone)
     }

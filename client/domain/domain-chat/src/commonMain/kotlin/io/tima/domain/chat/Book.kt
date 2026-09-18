@@ -22,7 +22,7 @@ class ObserveBook(private val book: Book) {
     fun list(): Flow<List<BookEntry>> = book.list()
 
     /** Разделы, включая пустые: раздел существует до того, как в него кого-то положили. */
-    fun sections(): Flow<List<String>> = book.sections()
+    fun sections(): Flow<List<Section>> = book.sections()
 }
 
 /**
@@ -44,7 +44,12 @@ data class BookEntry(
     val phone: String,
     val namePhone: String? = null,
     val nameOwn: String? = null,
-    val section: String = "",
+    /**
+     * Идентификатор раздела ([Section.id]). Пустая строка — «Общий»: он существует без
+     * своей строки в разделах. До 2026-09-18 здесь было ИМЯ раздела — см. миграцию 8 → 9,
+     * почему это не пережило бы синхронизацию.
+     */
+    val sectionId: String = "",
     val userId: String? = null,
     val manual: Boolean = false,
 ) {
@@ -64,7 +69,7 @@ data class BookEntry(
 /** Порт книги. Реализуется `core-database`. */
 interface Book {
     fun list(): Flow<List<BookEntry>>
-    fun sections(): Flow<List<String>>
+    fun sections(): Flow<List<Section>>
 
     /**
      * Положить прочитанное из телефонной книги.
@@ -75,20 +80,33 @@ interface Book {
      */
     suspend fun fromPhoneBook(entries: List<PhoneBookEntry>)
 
-    /** Завести руками. Номер обязателен, остальное — нет. */
-    suspend fun addManually(phone: String, name: String?, section: String)
+    /** Завести руками. Номер обязателен, остальное — нет. Раздел — идентификатором. */
+    suspend fun addManually(phone: String, name: String?, sectionId: String)
 
     suspend fun rename(phone: String, name: String?)
-    suspend fun moveTo(phone: String, section: String)
+    suspend fun moveTo(phone: String, sectionId: String)
     suspend fun hide(phone: String)
 
     /** Итог сверки: чей номер нашёлся в TIMa. Не найденные приходят с `null`. */
     suspend fun matched(found: Map<String, String?>)
 
-    suspend fun addSection(name: String)
+    /**
+     * Завести раздел.
+     *
+     * @return идентификатор — новый либо уже существующего раздела с тем же именем: имён-
+     *   двойников не заводим, два раздела «Работа» различимы только по порядку, а это не
+     *   различие. Сравнение без учёта регистра.
+     */
+    suspend fun addSection(name: String, icon: Int = SectionIcon.NONE.index): String
+
+    /** Переименовать и/или сменить значок. Ссылки контактов не трогаются — они по `id`. */
+    suspend fun renameSection(id: String, name: String, icon: Int)
+
+    /** Переставить: меньше [place] — выше в списке. */
+    suspend fun placeSection(id: String, place: Int)
 
     /** Убрать раздел. Люди из него возвращаются в общий, а не исчезают вместе с ним. */
-    suspend fun removeSection(name: String)
+    suspend fun removeSection(id: String)
 }
 
 /** Что прочитано с телефона: только имя и номер, больше ничего нам не нужно. */

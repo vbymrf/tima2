@@ -9,6 +9,7 @@ import io.tima.domain.chat.AddContact
 import io.tima.domain.chat.AddStep
 import io.tima.domain.chat.Book
 import io.tima.domain.chat.ContactDiscovery
+import io.tima.domain.chat.Section
 import io.tima.domain.chat.normalizePhone
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -103,8 +104,11 @@ class NewContactStore(
         val name = _state.value.section.trim()
         if (name.isBlank()) return
         scope.launch {
-            book.addSection(name)
-            _state.value = _state.value.copy(sections = _state.value.sections + name, trouble = null)
+            val id = book.addSection(name)
+            _state.value = _state.value.copy(
+                sections = _state.value.sections + Section(id = id, name = name),
+                trouble = null,
+            )
         }
     }
 
@@ -138,7 +142,7 @@ class NewContactStore(
         }
         scope.launch {
             _state.value = state.copy(working = true, trouble = null)
-            val step = add.add(state.normalized ?: state.phone, state.name.ifBlank { null }, state.section)
+            val step = add.add(state.normalized ?: state.phone, state.name.ifBlank { null }, state.sectionId)
             _state.value = _state.value.copy(working = false)
             onDone(step)
         }
@@ -158,12 +162,13 @@ data class NewContactState(
     /** Номер в E.164 либо `null` — тогда сохранять нечего. */
     val normalized: String? = null,
     val name: String = "",
+    /** Имя раздела, как его набрал или выбрал человек. Пустое — «Общий». */
     val section: String = "",
     /**
      * Разделы, которые уже заведены. Нужны здесь, а не только на экране выбора: по ним
      * решается, существует ли набранный, — а от этого зависит, можно ли сохранять.
      */
-    val sections: List<String> = emptyList(),
+    val sections: List<Section> = emptyList(),
     /** `null` — не сверяли или не смогли; иначе — нашёлся ли номер в TIMa. */
     val checked: Boolean? = null,
     val working: Boolean = false,
@@ -175,7 +180,14 @@ data class NewContactState(
      * Пустой раздел — это «Общий», он существует всегда и в списке разделов не значится.
      */
     val sectionMissing: Boolean
-        get() = section.isNotBlank() && sections.none { it.equals(section.trim(), ignoreCase = true) }
+        get() = section.isNotBlank() && chosenSection == null
+
+    /** Заведённый раздел, чьё имя набрано; `null` — такого нет либо набрано пустое («Общий»). */
+    val chosenSection: Section?
+        get() = sections.firstOrNull { it.name.equals(section.trim(), ignoreCase = true) }
+
+    /** Что уходит в книгу: идентификатор раздела, пустой — «Общий». */
+    val sectionId: String get() = chosenSection?.id ?: ""
 
     val canSave: Boolean get() = normalized != null && !working && !sectionMissing
 

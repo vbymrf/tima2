@@ -2,6 +2,7 @@ package io.tima.feature.chat
 
 import io.tima.core.words.RussianWords
 import io.tima.domain.chat.BookEntry
+import io.tima.domain.chat.Section
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -15,13 +16,14 @@ import kotlin.test.assertTrue
  */
 class BookStateTest {
 
-    private val борис = BookEntry("+79160001122", namePhone = "Борис", section = "Работа", userId = "u-1")
+    private val work = Section(id = "s-work", name = "Работа")
+    private val борис = BookEntry("+79160001122", namePhone = "Борис", sectionId = work.id, userId = "u-1")
     private val анна = BookEntry("+79035554433", namePhone = "Анна", userId = "u-2")
     private val виктор = BookEntry("+79267778899", nameOwn = "Виктор, сосед")
     private val поликлиника = BookEntry("+74951002030")
 
     private fun состояние(vararg люди: BookEntry, view: BookView = BookView()) =
-        BookState(all = люди.toList(), sections = listOf("Работа"), view = view)
+        BookState(all = люди.toList(), sections = listOf(work), view = view)
 
     @Test
     fun телефон_идёт_последним_разделом() {

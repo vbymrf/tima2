@@ -19,14 +19,14 @@ class AddContactTest {
     private class ПамятнаяКнига : Book {
         val строки = MutableStateFlow<List<BookEntry>>(emptyList())
         override fun list(): Flow<List<BookEntry>> = строки
-        override fun sections(): Flow<List<String>> = MutableStateFlow(emptyList())
+        override fun sections(): Flow<List<Section>> = MutableStateFlow(emptyList())
         override suspend fun fromPhoneBook(entries: List<PhoneBookEntry>) = Unit
-        override suspend fun addManually(phone: String, name: String?, section: String) {
+        override suspend fun addManually(phone: String, name: String?, sectionId: String) {
             строки.value = строки.value.filterNot { it.phone == phone } +
-                BookEntry(phone, nameOwn = name, section = section, manual = true)
+                BookEntry(phone, nameOwn = name, sectionId = sectionId, manual = true)
         }
         override suspend fun rename(phone: String, name: String?) = Unit
-        override suspend fun moveTo(phone: String, section: String) = Unit
+        override suspend fun moveTo(phone: String, sectionId: String) = Unit
         override suspend fun hide(phone: String) {
             строки.value = строки.value.filterNot { it.phone == phone }
         }
@@ -35,8 +35,10 @@ class AddContactTest {
                 if (found.containsKey(row.phone)) row.copy(userId = found[row.phone]) else row
             }
         }
-        override suspend fun addSection(name: String) = Unit
-        override suspend fun removeSection(name: String) = Unit
+        override suspend fun addSection(name: String, icon: Int): String = name
+        override suspend fun renameSection(id: String, name: String, icon: Int) = Unit
+        override suspend fun placeSection(id: String, place: Int) = Unit
+        override suspend fun removeSection(id: String) = Unit
     }
 
     private class ПамятныеДрузья : Friends {
@@ -57,7 +59,7 @@ class AddContactTest {
         assertEquals(AddStep.InTima("+79160001122", "u-1", subscribed = true), шаг)
         // Отдельного «подписаться» нет: спрашивать дважды об одном значит спрашивать зря.
         assertTrue("u-1" in друзья.добавлены)
-        assertEquals("Работа", книга.строки.value.single().section)
+        assertEquals("Работа", книга.строки.value.single().sectionId)
     }
 
     @Test

@@ -61,13 +61,14 @@ class SqlBookTest {
 
     @Test
     fun заведённый_руками_не_исчезает() = runTest {
-        book.addManually("+79267778899", "Виктор, сосед", "Дом")
+        val home = book.addSection("Дом")
+        book.addManually("+79267778899", "Виктор, сосед", home)
         // Синхронизация принесла телефонную книгу, и его там нет.
         book.fromPhoneBook(listOf(PhoneBookEntry("+79160001122", "Борис")))
 
         val виктор = строки().single { it.phone == "+79267778899" }
         assertEquals("Виктор, сосед", виктор.name)
-        assertEquals("Дом", виктор.section)
+        assertEquals(home, виктор.sectionId)
         assertTrue(виктор.manual)
     }
 
@@ -106,13 +107,13 @@ class SqlBookTest {
 
     @Test
     fun убранный_раздел_не_уносит_людей() = runTest {
-        book.addSection("Дача")
-        book.addManually("+79267778899", "Виктор", "Дача")
-        assertEquals(listOf("Дача"), наблюдение.sections().first())
+        val dacha = book.addSection("Дача")
+        book.addManually("+79267778899", "Виктор", dacha)
+        assertEquals(listOf("Дача"), наблюдение.sections().first().map { it.name })
 
-        book.removeSection("Дача")
+        book.removeSection(dacha)
         assertTrue(наблюдение.sections().first().isEmpty())
-        assertEquals("", строки().single().section, "человек исчез вместе с разделом")
+        assertEquals("", строки().single().sectionId, "человек исчез вместе с разделом")
     }
 
     @Test

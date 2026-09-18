@@ -201,13 +201,13 @@ fun NewContactScreen(
                     },
                     middle = { Name(words.commonSection) },
                 )
-                state.sections.forEach { name ->
+                state.sections.forEach { section ->
                     ListLine(
                         onClick = {
-                            onSection(name)
+                            onSection(section.name)
                             picking = false
                         },
-                        middle = { Name(name) },
+                        middle = { Name(section.name) },
                     )
                 }
             }

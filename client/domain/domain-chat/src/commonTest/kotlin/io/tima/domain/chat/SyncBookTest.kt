@@ -22,7 +22,7 @@ class SyncBookTest {
         var сверок = 0
 
         override fun list(): Flow<List<BookEntry>> = строки
-        override fun sections(): Flow<List<String>> = MutableStateFlow(emptyList())
+        override fun sections(): Flow<List<Section>> = MutableStateFlow(emptyList())
 
         override suspend fun fromPhoneBook(entries: List<PhoneBookEntry>) {
             val было = строки.value.associateBy { it.phone }
@@ -34,12 +34,12 @@ class SyncBookTest {
             строки.value = стало.values.toList()
         }
 
-        override suspend fun addManually(phone: String, name: String?, section: String) {
-            строки.value = строки.value + BookEntry(phone, nameOwn = name, section = section, manual = true)
+        override suspend fun addManually(phone: String, name: String?, sectionId: String) {
+            строки.value = строки.value + BookEntry(phone, nameOwn = name, sectionId = sectionId, manual = true)
         }
 
         override suspend fun rename(phone: String, name: String?) = Unit
-        override suspend fun moveTo(phone: String, section: String) = Unit
+        override suspend fun moveTo(phone: String, sectionId: String) = Unit
         override suspend fun hide(phone: String) = Unit
 
         override suspend fun matched(found: Map<String, String?>) {
@@ -49,8 +49,10 @@ class SyncBookTest {
             }
         }
 
-        override suspend fun addSection(name: String) = Unit
-        override suspend fun removeSection(name: String) = Unit
+        override suspend fun addSection(name: String, icon: Int): String = name
+        override suspend fun renameSection(id: String, name: String, icon: Int) = Unit
+        override suspend fun placeSection(id: String, place: Int) = Unit
+        override suspend fun removeSection(id: String) = Unit
     }
 
     private val книгаТелефона = listOf(

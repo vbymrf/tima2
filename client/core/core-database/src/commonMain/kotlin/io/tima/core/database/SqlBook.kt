@@ -5,6 +5,9 @@ import app.cash.sqldelight.coroutines.mapToList
 import io.tima.core.outbox.FieldCipher
 import io.tima.domain.chat.Book
 import io.tima.domain.chat.BookEntry
+import kotlin.uuid.Uuid
+import kotlin.uuid.ExperimentalUuidApi
+import io.tima.domain.chat.Section
 import io.tima.domain.chat.PhoneBookEntry
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +26,7 @@ import kotlinx.coroutines.withContext
  * зашифрованы, и `ORDER BY name_own_enc` дал бы порядок по шифртексту — случайный и
  * меняющийся при каждой перезаписи.
  */
+@OptIn(ExperimentalUuidApi::class)
 class SqlBook(
     private val db: TimaDatabase,
     private val cipher: FieldCipher,
@@ -39,7 +43,7 @@ class SqlBook(
                         phone = row.phone,
                         namePhone = row.name_phone_enc?.let(::open),
                         nameOwn = row.name_own_enc?.let(::open),
-                        section = row.section,
+                        sectionId = row.section_id,
                         userId = row.user_id,
                         manual = row.manual != 0L,
                     )
@@ -50,8 +54,10 @@ class SqlBook(
                 )
             }
 
-    override fun sections(): Flow<List<String>> =
-        db.bookQueries.sections().asFlow().mapToList(io).map { rows -> rows.map { it.name } }
+    override fun sections(): Flow<List<Section>> =
+        db.bookQueries.sections().asFlow().mapToList(io).map { rows ->
+            rows.map { Section(id = it.id, name = it.name, icon = it.icon.toInt(), place = it.place.toInt()) }
+        }
 
     override suspend fun fromPhoneBook(entries: List<PhoneBookEntry>) = withContext(io) {
         // Одной транзакцией: чтение книги телефона — сотни строк, и по строке на запрос
@@ -64,11 +70,11 @@ class SqlBook(
         }
     }
 
-    override suspend fun addManually(phone: String, name: String?, section: String) =
+    override suspend fun addManually(phone: String, name: String?, sectionId: String) =
         withContext(io) {
             db.transaction {
                 db.bookQueries.addManuallyInsert(phone)
-                db.bookQueries.addManuallyFields(name?.let(::seal), section, phone)
+                db.bookQueries.addManuallyFields(name?.let(::seal), sectionId, phone)
             }
         }
 
@@ -76,8 +82,8 @@ class SqlBook(
         db.bookQueries.setOwnName(name?.let(::seal), phone)
     }
 
-    override suspend fun moveTo(phone: String, section: String): Unit = withContext(io) {
-        db.bookQueries.setSection(section, phone)
+    override suspend fun moveTo(phone: String, sectionId: String): Unit = withContext(io) {
+        db.bookQueries.setSection(sectionId, phone)
     }
 
     override suspend fun hide(phone: String): Unit = withContext(io) {
@@ -99,18 +105,36 @@ class SqlBook(
         }
     }
 
-    override suspend fun addSection(name: String): Unit = withContext(io) {
-        // Порядок — по времени появления: раздел, заведённый позже, встаёт ниже.
-        // Число берётся из размера списка, а не из времени: время у двух разделов,
-        // заведённых подряд, совпадает.
-        val place = db.bookQueries.sections().executeAsList().size.toLong()
-        db.bookQueries.addSection(name, place)
+    override suspend fun addSection(name: String, icon: Int): String = withContext(io) {
+        val clean = name.trim()
+        db.transactionWithResult {
+            // Имён-двойников не заводим: два раздела «Работа» различимы только по порядку,
+            // а это не различие. Существующий — возвращается, как если бы завели его.
+            db.bookQueries.sectionByName(clean).executeAsOneOrNull()?.let { return@transactionWithResult it }
+            // Порядок — по времени появления: раздел, заведённый позже, встаёт ниже.
+            // Число берётся из размера списка, а не из времени: время у двух разделов,
+            // заведённых подряд, совпадает.
+            val place = db.bookQueries.sections().executeAsList().size.toLong()
+            // Идентификатор случайный и заводится здесь один раз — дальше он живёт в копии
+            // на всех устройствах человека и не меняется никогда (миграция 8 → 9).
+            val id = Uuid.random().toString()
+            db.bookQueries.addSection(id, clean, icon.toLong(), place)
+            id
+        }
     }
 
-    override suspend fun removeSection(name: String) = withContext(io) {
+    override suspend fun renameSection(id: String, name: String, icon: Int): Unit = withContext(io) {
+        db.bookQueries.renameSection(name.trim(), icon.toLong(), id)
+    }
+
+    override suspend fun placeSection(id: String, place: Int): Unit = withContext(io) {
+        db.bookQueries.placeSection(place.toLong(), id)
+    }
+
+    override suspend fun removeSection(id: String) = withContext(io) {
         db.transaction {
-            db.bookQueries.emptySection(name)
-            db.bookQueries.removeSection(name)
+            db.bookQueries.emptySection(id)
+            db.bookQueries.removeSection(id)
         }
     }
 

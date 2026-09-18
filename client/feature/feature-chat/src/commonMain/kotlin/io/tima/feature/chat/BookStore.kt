@@ -2,6 +2,7 @@ package io.tima.feature.chat
 
 import io.tima.core.words.BookWords
 import io.tima.domain.chat.BookEntry
+import io.tima.domain.chat.Section
 import io.tima.domain.chat.ObserveBook
 import io.tima.domain.chat.Settings
 import io.tima.domain.chat.SyncBook
@@ -139,7 +140,7 @@ data class BookGroup(val name: String, val people: List<BookEntry>, val outsider
 
 data class BookState(
     val all: List<BookEntry> = emptyList(),
-    val sections: List<String> = emptyList(),
+    val sections: List<Section> = emptyList(),
     val search: String = "",
     val view: BookView = BookView(),
     val collapsed: Set<String> = emptySet(),
@@ -172,10 +173,12 @@ data class BookState(
      */
     fun groups(words: BookWords): List<BookGroup> {
         val (ours, strangers) = visible.partition { it.inTima }
-        val order = sections + listOf("")
-        val usual = order.mapNotNull { name ->
-            val people = ours.filter { it.section == name }
-            if (people.isEmpty()) null else BookGroup(name.ifBlank { words.commonSection }, people)
+        // «Общий» — пустой идентификатор и всегда последний из обычных: у него нет своей
+        // строки в разделах, это отсутствие раздела.
+        val order = sections.map { it.id to it.name } + listOf("" to words.commonSection)
+        val usual = order.mapNotNull { (id, title) ->
+            val people = ours.filter { it.sectionId == id }
+            if (people.isEmpty()) null else BookGroup(title, people)
         }
         val outsiders = if (strangers.isEmpty()) {
             emptyList()
