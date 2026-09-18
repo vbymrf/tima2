@@ -78,14 +78,19 @@ fun Bubble(
 ) {
     val colors = Tima.colors
     val showAuthor = !my && !continuation
-    // Строка автора НЕ масштабируется вместе с сообщениями: 22 — уже верхняя ступень
-    // настроек, и при укрупнённых сообщениях она вырастала бы до 32 (заказчик 2026-09-18:
-    // «первая строка либо не масштабируется, либо вместе с аватаром» — выбрано первое).
-    // Caption умножает кегль на множитель группы, поэтому здесь он заранее поделен.
+    // Строка автора НЕ масштабируется вместе с сообщениями (заказчик 2026-09-18: «первая
+    // строка либо не масштабируется, либо вместе с аватаром» — выбрано первое). Caption
+    // умножает кегль на множитель группы, поэтому здесь он заранее поделен.
+    //
+    // Геометрия — по пробе `Layout-UI-light/пробы-социум/аватар-за-округлением.html`:
+    // аватар выступает вверх в зазор между репликами, не доставая до рамки предыдущей на
+    // один пункт; низ его — на нижней линии строки имени, в следующую строку он заходит не
+    // больше чем на два пункта; стоит за скруглением пузыря (радиус + 3), имя — вплотную.
     val scale = LocalTextScale.current
     val authorSize = AUTHOR_SIZE / scale
     val nameLine = with(LocalDensity.current) { AUTHOR_SIZE.toDp() } * 1.35f
-    val avatarSide = nameLine + 10.dp
+    val avatarRise = REPLY_GAP - 1.dp
+    val avatarSide = avatarRise + BUBBLE_TOP + nameLine + 1.dp
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = if (my) Arrangement.End else Arrangement.Start,
@@ -122,7 +127,9 @@ fun Bubble(
                         text = author!!,
                         // Имя отходит на ширину аватара: обтекания нет, текст идёт во
                         // всю ширину пузыря. Отступ едет за кеглем вместе с аватаром.
-                        modifier = Modifier.padding(start = avatarSide + 6.dp).height(nameLine),
+                        // Имя — сразу за аватаром: он стоит за скруглением, имя от его
+                        // правого края через 6, за вычетом поля пузыря, в котором мы уже.
+                        modifier = Modifier.padding(start = AVATAR_LEFT + avatarSide + 6.dp - 12.dp - STRIP).height(nameLine),
                         // Кегль имени — 22, верхняя ступень «Сообщений» в настройках
                         // (решение заказчика 2026-09-18): строка автора выше, и аватар
                         // помещается рядом с ней, а не сползает на текст. Сам текст
@@ -150,7 +157,7 @@ fun Bubble(
                 val shape = RoundedCornerShape(TimaShapes.square)
                 Box(
                     modifier = Modifier
-                        .offset(x = (-1).dp, y = 11.dp + (nameLine - avatarSide) / 2)
+                        .offset(x = AVATAR_LEFT, y = -avatarRise)
                         .size(avatarSide)
                         .background(color = if (my) colors.my else colors.author, shape = shape)
                         .border(1.dp, colors.border, shape)
@@ -253,8 +260,17 @@ private val HAIRLINE = 1.dp
 /** Ширина полосы автора: `border-left: 4px`. */
 private val STRIP = 4.dp
 
-/** Кегль имени автора: верхняя ступень «Сообщений» в настройках (заказчик 2026-09-18). */
-private val AUTHOR_SIZE = 22.sp
+/** Кегль имени автора: 22 (верхняя ступень настроек), уменьшенный в полтора раза — заказчик 2026-09-19. */
+private val AUTHOR_SIZE = 15.sp
+
+/** Зазор между репликами в ленте — `spacedBy(about3)` в `ChatScreen.Feed`. */
+private val REPLY_GAP = 12.dp
+
+/** Верхнее поле пузыря: `padding: 11px` из макета. */
+private val BUBBLE_TOP = 11.dp
+
+/** Аватар — за скруглением пузыря: радиус + 3 (проба «аватар-за-округлением»). */
+private val AVATAR_LEFT = TimaShapes.radius + 3.dp
 
 /** `max-width: 290px` из макета. */
 private val ПРЕДЕЛ_ШИРИНЫ = 290.dp

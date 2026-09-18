@@ -21,9 +21,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import io.tima.core.ui.Bubble
+import io.tima.core.ui.TimaType
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.Caption
 import io.tima.core.ui.CheckMark
@@ -143,7 +143,7 @@ enum class ViewPage { Sections, Person }
  * Образец — те же строки и плитки, что на вкладке, на выдуманных разделах.
  */
 @Composable
-fun SectionsLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modifier = Modifier) {
+fun SectionsLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modifier = Modifier, forPeople: Boolean = true) {
     val words = Tima.words.book
     val colors = Tima.colors
     Column(modifier.fillMaxWidth().padding(vertical = TimaSpacing.about2), verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
@@ -170,12 +170,12 @@ fun SectionsLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Mod
                 )
                 view.folders -> Column {
                     SectionHeader(tabs[1], count = 3, fresh = 1, open = true, onClick = {})
-                    SampleLine("Анна")
+                    SampleLine(forPeople)
                     SectionHeader(tabs[2], count = 2, fresh = 0, open = false, onClick = {})
                 }
                 else -> Column {
                     SectionsRow(tabs, chosen = "work", icons = view.icons, onPick = {}, newIn = { if (it == "work") 1 else 0 })
-                    SampleLine("Анна")
+                    SampleLine(forPeople)
                 }
             }
         }
@@ -213,7 +213,7 @@ fun SectionsLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Mod
  * со стрелками порядка и галками.
  */
 @Composable
-fun PersonLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modifier = Modifier) {
+fun PersonLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modifier = Modifier, forPeople: Boolean = true) {
     val words = Tima.words.book
     val colors = Tima.colors
     val sample = ChatPerson(name = "Анна Петрова", userName = "Anna P.", nick = "anna_p", phone = "+7 999 000-00-00")
@@ -224,25 +224,31 @@ fun PersonLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modif
             Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4)
                 .clip(RoundedCornerShape(TimaShapes.square)).background(colors.functional),
         ) {
-            // Строка контакта: первая — по галкам без телефона, вторая — всегда телефон.
-            ListLine(
-                onClick = {},
-                left = { Avatar(letters = sample.letter()) },
-                middle = {
-                    Column {
-                        Name(sample.line(look, CONTACT_FIRST_LINE) ?: words.nameless)
-                        Tertiary(sample.phone!!, lineOne = true)
+            if (forPeople) {
+                // Строка контакта: первая — по галкам без телефона, вторая — всегда телефон.
+                ListLine(
+                    onClick = {},
+                    left = { Avatar(letters = sample.letter()) },
+                    middle = {
+                        Column {
+                            Name(sample.line(look, CONTACT_FIRST_LINE) ?: words.nameless)
+                            Tertiary(sample.phone!!, lineOne = true)
+                        }
+                    },
+                )
+            } else {
+                // Набор сообществ: человека здесь видят автором реплики — образец и есть
+                // пузырь чужого сообщения (заказчик 2026-09-19).
+                Box(Modifier.padding(TimaSpacing.about3).padding(top = TimaSpacing.about3)) {
+                    ProvidePlace(TextPlace.MESSAGES) {
+                        Bubble(
+                            my = false,
+                            author = sample.line(look) ?: Tima.words.chat.someone,
+                            avatar = sample.letter(),
+                            bottom = { Tertiary("12:40", lineOne = true) },
+                        ) { Caption("Привет! Собираемся в семь", fontSize = TimaType.sz4) }
                     }
-                },
-            )
-            // Строка автора в группе: одной строкой, по всем галкам.
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
-                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Avatar(letters = sample.letter())
-                Caption(sample.line(look) ?: Tima.words.chat.someone, fontSize = 22.sp, weight = FontWeight.ExtraBold, color = colors.text2, lineOne = true)
+                }
             }
         }
 
@@ -279,15 +285,16 @@ private fun io.tima.core.words.BookWords.fieldAbout(field: PersonField): String 
     PersonField.Phone -> phoneAbout
 }
 
+/** Строка образца: у контактов — человек с телефоном, у сообществ — группа с описанием. */
 @Composable
-private fun SampleLine(name: String) {
+private fun SampleLine(forPeople: Boolean) {
     ListLine(
         onClick = {},
-        left = { Avatar(letters = name.take(1)) },
+        left = { Avatar(letters = if (forPeople) "А" else "КР") },
         middle = {
             Column {
-                Name(name)
-                Tertiary("+7 999 000-00-00", lineOne = true)
+                Name(if (forPeople) "Анна" else "Команда разработки")
+                Tertiary(if (forPeople) "+7 999 000-00-00" else "Планёрки, задачи, релизы", lineOne = true)
             }
         },
     )
@@ -437,8 +444,8 @@ fun BookViewSheet(
                     forPeople = forPeople,
                     onOpen = { page = it },
                 )
-                ViewPage.Sections -> SectionsLookPage(view, onChange, scrolling)
-                ViewPage.Person -> PersonLookPage(view, onChange, scrolling)
+                ViewPage.Sections -> SectionsLookPage(view, onChange, scrolling, forPeople)
+                ViewPage.Person -> PersonLookPage(view, onChange, scrolling, forPeople)
             }
         }
     }

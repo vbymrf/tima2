@@ -57,7 +57,9 @@ fun ListLine(
                     strokeWidth = thickness,
                 )
             }
-            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about3),
+            // Поле сверху и снизу — половина прежнего (заказчик 2026-09-19: «уменьши
+            // отступы между контактами в два раза, и далее везде по этому принципу»).
+            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about3 / 2),
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
