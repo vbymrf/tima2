@@ -270,6 +270,8 @@ class ProblemStore(
     facts: ProblemFacts,
     /** Снимок состояния — считается здесь же, при открытии экрана. */
     snapshot: Snapshot = Snapshot(),
+    /** Текст, с которого начинается отчёт: например, код отказа у неотправленного. */
+    draft: String = "",
 ) {
     private val _state = MutableStateFlow(
         ProblemState(
@@ -277,6 +279,7 @@ class ProblemStore(
             facts = facts,
             log = log.dump(Began.Today.days),
             snapshot = snapshot,
+            text = draft,
         ),
     )
     val state: StateFlow<ProblemState> = _state.asStateFlow()

@@ -530,6 +530,14 @@ interface ChatWords {
     val myColorAuto: String
     val myColorTaken: String
     val myColorReset: String
+    /** Неотправленное: подокно с причиной (заказчик 2026-09-19). */
+    val notSent: String
+    val notSentNoReason: String
+    val sendAgain: String
+    val deleteMessage: String
+    val reportProblem: String
+    /** Причина отказа словами по коду сервера; незнакомый код — `null`, покажется сам код. */
+    fun failReason(code: String): String?
     val moveToSection: String
     val moveToSectionAbout: String
     fun inSection(name: String): String
@@ -1794,6 +1802,22 @@ object RussianWords : Words {
         override val myColorAuto = "автоматический"
         override val myColorTaken = "занят"
         override val myColorReset = "Сбросить — автоматический"
+        override val notSent = "Не отправлено"
+        override val notSentNoReason = "Причина не сохранилась — сообщение старше этой сборки"
+        override val sendAgain = "Отправить ещё раз"
+        override val deleteMessage = "Удалить"
+        override val reportProblem = "Сообщить о проблеме"
+        override fun failReason(code: String): String? = when (code) {
+            "level_in_private" -> "в личной группе такого круга нет — только «Зашифровано» и «Всем и всегда»"
+            "secret_in_public" -> "публичная группа не шифруется — выберите открытый круг"
+            "banned" -> "вы заблокированы в этой группе"
+            "payload_too_large" -> "сообщение слишком большое"
+            "bad_level" -> "круг вне допустимых"
+            "unknown_gk_version" -> "сервер не знает нашей версии ключа группы"
+            "no_gk_version" -> "у зашифрованного сообщения нет версии ключа"
+            "not_member" -> "вы не участник этой группы"
+            else -> null
+        }
         override val moveToSection = "Перенести в раздел"
         override val moveToSectionAbout = "куда положить эту группу"
         override fun inSection(name: String) = "сейчас — «$name»"

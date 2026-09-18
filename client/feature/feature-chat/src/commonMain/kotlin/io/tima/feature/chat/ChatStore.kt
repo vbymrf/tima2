@@ -14,6 +14,7 @@ import io.tima.domain.chat.MarkRead
 import io.tima.domain.chat.ObserveChat
 import io.tima.domain.chat.ChatFaces
 import io.tima.domain.chat.ChatPeople
+import io.tima.domain.chat.DeadMessages
 import io.tima.domain.chat.ChatPerson
 import io.tima.core.media.decodeImage
 import androidx.compose.ui.graphics.ImageBitmap
@@ -79,6 +80,8 @@ class ChatStore(
      * открытии.
      */
     private val peopleChanges: Flow<String>? = null,
+    /** Повтор и удаление отказанного. `null` — нечем: крестик остаётся без действий. */
+    private val dead: DeadMessages? = null,
     /**
      * Сужение круга у уже отправленного сообщения. `null` — переписка личная: там у
      * сообщений кругов нет, и предлагать сужение нечему.
@@ -303,6 +306,17 @@ class ChatStore(
     }
 
     /** Человек выбрал круг для следующего сообщения (ADR-0019). */
+    /** Повторить отказанное — с кругом, выбранным сейчас: причиной чаще всего был круг. */
+    fun retryDead(dedupKey: String) {
+        val port = dead ?: return
+        scope.launch { withContext(io) { port.retry(dedupKey, _state.value.level) } }
+    }
+
+    fun deleteDead(dedupKey: String) {
+        val port = dead ?: return
+        scope.launch { withContext(io) { port.delete(dedupKey) } }
+    }
+
     fun circleChosen(level: Int) {
         _state.value = _state.value.copy(level = level)
     }

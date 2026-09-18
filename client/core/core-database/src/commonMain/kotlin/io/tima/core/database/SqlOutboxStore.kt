@@ -98,8 +98,25 @@ class SqlOutboxStore(
             next_attempt_at = entry.nextAttemptAtMs,
             sealed_epoch = entry.sealedForEpoch,
             server_id = entry.serverMessageId,
+            fail_reason = entry.failReason,
             dedup_key = entry.dedupKey,
         )
+    }
+
+    override fun retryDead(dedupKey: String, nowMs: Long, level: Int): Boolean = db.transactionWithResult {
+        q.retryDead(
+            queued = OutboxState.QUEUED.ordinal.toLong(),
+            now = nowMs,
+            level = level.toLong(),
+            dedupKey = dedupKey,
+            dead = OutboxState.DEAD.ordinal.toLong(),
+        )
+        q.changes().executeAsOne() > 0
+    }
+
+    override fun deleteDead(dedupKey: String): Boolean = db.transactionWithResult {
+        q.deleteDead(dedupKey, OutboxState.DEAD.ordinal.toLong())
+        q.changes().executeAsOne() > 0
     }
 
     private fun Messages.toEntry() = OutboxEntry(
@@ -120,6 +137,7 @@ class SqlOutboxStore(
         sealedForEpoch = sealed_epoch,
         level = level.toInt(),
         threadRoot = thread_root,
+        failReason = fail_reason,
     )
 
     private companion object {

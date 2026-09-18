@@ -136,7 +136,7 @@ class SqlOutboxStoreTest {
         put()
         db.messagesQueries.updateState(
             state = 99, attempts = 0, next_attempt_at = 0,
-            sealed_epoch = null, server_id = null, dedup_key = "d-1",
+            sealed_epoch = null, server_id = null, fail_reason = null, dedup_key = "d-1",
         )
         val error = runCatching { store.byDedupKey("d-1") }.exceptionOrNull()
         assertNotNull(error, "неизвестное состояние обязано быть ошибкой")

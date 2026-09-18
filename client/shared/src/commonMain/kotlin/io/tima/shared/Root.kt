@@ -75,6 +75,8 @@ import io.tima.core.network.AppVersionResult
 import io.tima.feature.auth.DeviceScreen
 import io.tima.feature.auth.EntryScreen
 import io.tima.feature.chat.ChatStore
+import io.tima.feature.chat.FailedMessageSheet
+import io.tima.domain.chat.DeadMessages
 import io.tima.feature.chat.ChatsState
 import io.tima.feature.chat.ChatsStore
 import io.tima.feature.chat.GroupsScreen
@@ -853,6 +855,8 @@ private fun App(
     // бесполезным. Вкладка есть только у окна «Телефон» — у остальных её пока нет, и
     // выдумывать нечего.
     var cameFrom by remember { mutableStateOf<Origin?>(null) }
+    /** Черновик отчёта о проблеме — подставляется из подокна неотправленного сообщения. */
+    var problemDraft by remember { mutableStateOf("") }
 
     // Когда начался этот запуск. В снимке отчёта из него получается строка «сеанс идёт
     // 6 мин» — она говорит, сколько журнала мы вообще застали: журнал живёт в памяти
@@ -1575,6 +1579,7 @@ private fun App(
                             signedIn = session.accessToken.isNotBlank(),
                         ),
                         origin = cameFrom,
+                        problemDraft = problemDraft,
                         reporting = reporting,
                         diaryPolicy = diaryPolicy,
                         // Снимок считается ЗДЕСЬ и в момент открытия экрана: человек
@@ -1677,6 +1682,13 @@ private fun App(
                         scope = scope,
                         onBack = { where = Where.Nothing },
                         onMembers = { where = Where.Members(current.chatId, current.name) },
+                        // «Сообщить о проблеме» из подокна неотправленного: отчёт с кодом
+                        // причины уже в тексте — человеку не надо ничего пересказывать.
+                        onReportFailed = { reason ->
+                            problemDraft = "Сообщение не отправилось. Причина: ${reason ?: "не сохранена"}. Переписка ${current.chatId.take(8)}."
+                            cameFrom = Origin(window, "не отправилось: ${reason ?: "без причины"}")
+                            where = Where.Settings(SettingsItem.PROBLEM)
+                        },
                         onCarry = { messageId, was ->
                             // Из переписки уносится сообщение группы: вид контейнера
                             // назван прямо, а не подразумевается умолчанием.
@@ -1759,6 +1771,8 @@ private fun Chat(
     scope: kotlinx.coroutines.CoroutineScope,
     onBack: () -> Unit,
     onMembers: () -> Unit,
+    /** Отчёт о проблеме из подокна неотправленного — с кодом причины. */
+    onReportFailed: ((reason: String?) -> Unit)? = null,
     /** Унести реплику к себе на страницу: `(messageId, круг записи)`. */
     onCarry: (Long, Int) -> Unit = { _, _ -> },
     /** Лечение группы без ключа при открытии; `null` — лечить нечем. */
@@ -1819,6 +1833,8 @@ private fun Chat(
             // Аватар автора: медиа из справочника, байты из медиа-хранилища. Только в
             // группе — в личной переписке подписи у реплик нет вовсе.
             faces = if (group) people else null,
+            // Повтор и удаление отказанного — поверх очереди, с журналом «отказ → повтор».
+            dead = deadMessages(environment),
             // Сужение — только в группе: у личного сообщения круга нет, оно зашифровано и
             // адресовано одному человеку.
             narrow = if (group) NarrowMessageLevel(network.messageLevels) else null,
@@ -1855,6 +1871,7 @@ private fun Chat(
         return
     }
     LaunchedEffect(chatId, group) { if (group) onOpened(chatId) }
+    var failed by remember { mutableStateOf<ChatLine?>(null) }
     // Выбран круг, которого у группы этого вида нет (остался с прежней сборки или от
     // другой группы) — сбросить на первый допустимый, иначе отправка получит 400.
     LaunchedEffect(kind, state.level) {
@@ -1895,8 +1912,20 @@ private fun Chat(
         // Ветка — только в группе: в личной переписке отвечать некому, кроме одного
         // собеседника, и разговор о реплике совпадает с самой перепиской.
         onThread = if (group) store::threadOpened else null,
+        onFailed = { line -> failed = line },
     )
 
+    // Подокно неотправленного — ПОСЛЕ экрана переписки: что позже в композиции, то сверху.
+    failed?.let { line ->
+        FailedMessageSheet(
+            text = line.text,
+            reason = line.failReason,
+            onRetry = { store.retryDead(line.dedupKey); failed = null },
+            onDelete = { store.deleteDead(line.dedupKey); failed = null },
+            onReport = onReportFailed?.let { report -> { report(line.failReason); failed = null } },
+            onClose = { failed = null },
+        )
+    }
     if (chatMenu && group && onMoveToShelf != null) {
         ChatMenuSheet(
             sections = shelves,
@@ -2017,6 +2046,8 @@ private fun Settings(
     updateState: UpdateState,
     /** Что уйдёт в отчёте о проблеме, кроме текста и журнала (ПЛАН-ОТЛАДКИ.md, Б3). */
     problemFacts: ProblemFacts,
+    /** Черновик отчёта о проблеме — из подокна неотправленного сообщения. */
+    problemDraft: String = "",
     /** Откуда человек ушёл в настройки. `null` — попал сюда не из окна (Б2). */
     origin: Origin?,
     /** Сеть плюс очередь: отчёт не теряется, даже если связи нет. */
@@ -2127,7 +2158,7 @@ private fun Settings(
             // Отчёт о проблеме. Магазин создаётся ЗДЕСЬ, при открытии раздела: журнал
             // снимается в момент, когда человек пришёл жаловаться, а не когда дописал
             // текст — к тому времени начало поломки успело бы вытесниться.
-            SettingsItem.PROBLEM -> Problem(problemFacts, origin, reporting, scope, platform, snapshot)
+            SettingsItem.PROBLEM -> Problem(problemFacts, origin, reporting, scope, platform, snapshot, draft = problemDraft)
 
             SettingsItem.STORAGE -> Storage(diaryPolicy)
 
@@ -2242,6 +2273,7 @@ private fun Problem(
     scope: kotlinx.coroutines.CoroutineScope,
     platform: Platform,
     snapshot: () -> Snapshot,
+    draft: String = "",
 ) {
     val store = remember {
         ProblemStore(
@@ -2285,6 +2317,7 @@ private fun Problem(
             origin = origin,
             facts = facts,
             snapshot = snapshot(),
+            draft = draft,
         )
     }
     val state by store.state.collectAsState()
@@ -2724,3 +2757,31 @@ private fun PhoneWindow(
 
 /** Слова книги там, где нет композиции: `Tima.words` требует `@Composable`. */
 private fun bookWordsNow() = io.tima.core.words.CurrentWords.value.book
+
+/**
+ * Повтор и удаление отказанного — поверх очереди. Журнал получает пару к `QUEUE-REFUSED`:
+ * что сделал человек, с какой прежней причиной и каким новым кругом.
+ */
+private fun deadMessages(environment: Environment): DeadMessages = object : DeadMessages {
+    override suspend fun retry(dedupKey: String, level: Int): Boolean {
+        val before = environment.queue.entry(dedupKey)
+        val done = environment.queue.retryDead(dedupKey, level)
+        Journal.note(
+            LogCode.QUEUE_RETRY, "человек повторил отказанное",
+            "действие" to "повтор", "причина" to (before?.failReason ?: "не сохранена"),
+            "круг" to level, "переписка" to (before?.chatId ?: "?"), "вышло" to done,
+        )
+        return done
+    }
+
+    override suspend fun delete(dedupKey: String): Boolean {
+        val before = environment.queue.entry(dedupKey)
+        val done = environment.queue.deleteDead(dedupKey)
+        Journal.note(
+            LogCode.QUEUE_RETRY, "человек убрал отказанное",
+            "действие" to "удалить", "причина" to (before?.failReason ?: "не сохранена"),
+            "переписка" to (before?.chatId ?: "?"), "вышло" to done,
+        )
+        return done
+    }
+}

@@ -92,6 +92,8 @@ data class OutboxEntry(
     val attempts: Int = 0,
     val nextAttemptAtMs: Long = 0,
     val createdAtMs: Long = 0,
+    /** Код отказа сервера, когда состояние DEAD; иначе `null`. Для подокна повтора и журнала. */
+    val failReason: String? = null,
     val serverMessageId: Long? = null,
     /**
      * Тип — `Long`, как у сервера (`escrow.key.id`). В первой редакции здесь стоял `Int`, и
@@ -183,6 +185,15 @@ interface OutboxStore {
     fun putIfAbsent(entry: OutboxEntry): Boolean
 
     fun byDedupKey(dedupKey: String): OutboxEntry?
+
+    /**
+     * Отказанное — обратно в очередь: время [nowMs], круг [level], попытки в ноль, причина
+     * стёрта. `false` — записи нет или она не DEAD.
+     */
+    fun retryDead(dedupKey: String, nowMs: Long, level: Int): Boolean
+
+    /** Убрать отказанное. `false` — записи нет или она не DEAD. */
+    fun deleteDead(dedupKey: String): Boolean
 
     /**
      * Следующая запись, готовая к запечатыванию: [OutboxState.QUEUED] и срок пришёл.
@@ -396,6 +407,17 @@ class Outbox(
         return claimed
     }
 
+    /**
+     * Повторить отказанное (решение заказчика 2026-09-19): та же запись, снова в очередь, с
+     * текущим кругом — причиной отказа чаще всего и был круг. Конверта у DEAD нет.
+     */
+    fun retryDead(dedupKey: String, level: Int): Boolean = store.retryDead(dedupKey, nowMs(), level)
+
+    /** Запись как есть — для журнала и подокна; `null` — нет такой. */
+    fun entry(dedupKey: String): OutboxEntry? = store.byDedupKey(dedupKey)
+
+    fun deleteDead(dedupKey: String): Boolean = store.deleteDead(dedupKey)
+
     fun onOutcome(dedupKey: String, outcome: SendOutcome) {
         val entry = store.byDedupKey(dedupKey)
             ?: error("нет записи $dedupKey: результат пришёл не на своё сообщение")
@@ -426,7 +448,7 @@ class Outbox(
             )
             is SendOutcome.Permanent -> {
                 sealedEnvelopes.remove(dedupKey)
-                entry.copy(state = OutboxState.DEAD, attempts = entry.attempts + 1)
+                entry.copy(state = OutboxState.DEAD, attempts = entry.attempts + 1, failReason = outcome.reason)
             }
         }
         store.update(updated)

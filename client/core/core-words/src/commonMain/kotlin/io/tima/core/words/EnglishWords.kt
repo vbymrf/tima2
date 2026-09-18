@@ -672,6 +672,22 @@ object EnglishWords : Words {
         override val myColorAuto = "automatic"
         override val myColorTaken = "taken"
         override val myColorReset = "Reset — automatic"
+        override val notSent = "Not sent"
+        override val notSentNoReason = "The reason was not saved — the message predates this build"
+        override val sendAgain = "Send again"
+        override val deleteMessage = "Delete"
+        override val reportProblem = "Report a problem"
+        override fun failReason(code: String): String? = when (code) {
+            "level_in_private" -> "a private group has no such circle — only “Encrypted” and “Everyone, always”"
+            "secret_in_public" -> "a public group is not encrypted — pick an open circle"
+            "banned" -> "you are banned in this group"
+            "payload_too_large" -> "the message is too large"
+            "bad_level" -> "circle out of range"
+            "unknown_gk_version" -> "the server does not know our group key version"
+            "no_gk_version" -> "an encrypted message has no key version"
+            "not_member" -> "you are not a member of this group"
+            else -> null
+        }
         override val moveToSection = "Move to section"
         override val moveToSectionAbout = "where this group lives"
         override fun inSection(name: String) = "now — “$name”"

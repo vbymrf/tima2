@@ -1,6 +1,7 @@
 package io.tima.feature.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -140,6 +141,8 @@ fun ChatScreen(
      * показываются: прочитать разговор дважды — в списке и в ветке — значит удвоить его.
      */
     onThread: ((Long) -> Unit)? = null,
+    /** Нажали на неотправленное (крестик): подокно с причиной, повтором и удалением. */
+    onFailed: ((ChatLine) -> Unit)? = null,
     /** Как называть авторов в группе — «Вид» набора сообществ. */
     authorLook: PersonLook = PersonLook.DEFAULT,
     /** Владелец группы — его полоса салатовая, темы. `null` — неизвестен: все по порядку. */
@@ -191,6 +194,7 @@ fun ChatScreen(
             onNarrow = onNarrow,
             onCarry = onCarry,
             onThread = onThread,
+            onFailed = onFailed,
         )
 
         // Полоса недоступной истории — над вводом и ОДНА на экран, а не у каждой строки.
@@ -254,6 +258,7 @@ private fun Feed(
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
     onCarry: ((Long, Int) -> Unit)? = null,
     onThread: ((Long) -> Unit)? = null,
+    onFailed: ((ChatLine) -> Unit)? = null,
 ) =
     // Сообщения — своя группа размера (ПЛАН-ШРИФТОВ Ш3): её укрупняют чаще всего, и
     // от списка чатов она не зависит.
@@ -301,6 +306,7 @@ private fun Feed(
                 onNarrow = onNarrow,
                 onCarry = onCarry,
                 onThread = onThread,
+                onFailed = onFailed,
             )
         }
     }
@@ -350,6 +356,7 @@ private fun Reply(
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
     onCarry: ((Long, Int) -> Unit)? = null,
     onThread: ((Long) -> Unit)? = null,
+    onFailed: ((ChatLine) -> Unit)? = null,
 ) {
     // Служебная строка — не реплика: у неё нет автора, стороны и времени отправки. Пузырь
     // приписал бы ей всё это разом, поэтому она идёт полосой по центру.
@@ -359,7 +366,10 @@ private fun Reply(
     }
     // Пузырь и строка ветки — один элемент списка, поэтому столбец: два соседа в
     // элементе ленивого списка легли бы друг на друга.
-    Column {
+    // Неотправленное нажимается целиком — крестик мал для пальца, а вопрос «что с ним
+    // делать» относится ко всему сообщению.
+    val failed = line.display == MessageDisplay.FAILED && onFailed != null
+    Column(if (failed) Modifier.clickable { onFailed!!(line) } else Modifier) {
         Bubbled(line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry)
         // «Ветка · N ответов» — под сообщением, отдельной строкой, а не внутри пузыря:
         // это не часть сказанного, а вход в разговор о нём (ADR-0024 §7).

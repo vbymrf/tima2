@@ -66,6 +66,7 @@ class SqlChatFeed(
         // Серверное время, если сообщение дошло; иначе часы устройства. Они врут, но
         // других на момент составления нет.
         atMs = server_ts ?: client_ts,
+        failReason = fail_reason,
         level = level.toInt(),
         localId = local_id,
         // Ноль, а не null: «сервер его ещё не видел» и «идентификатор ноль» — одно и то

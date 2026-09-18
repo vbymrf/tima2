@@ -672,6 +672,22 @@ object SpanishWords : Words {
         override val myColorAuto = "automático"
         override val myColorTaken = "ocupado"
         override val myColorReset = "Restablecer — automático"
+        override val notSent = "No enviado"
+        override val notSentNoReason = "El motivo no se guardó: el mensaje es anterior a esta versión"
+        override val sendAgain = "Enviar de nuevo"
+        override val deleteMessage = "Eliminar"
+        override val reportProblem = "Informar de un problema"
+        override fun failReason(code: String): String? = when (code) {
+            "level_in_private" -> "un grupo privado no tiene ese círculo: solo «Cifrado» y «Todos, siempre»"
+            "secret_in_public" -> "un grupo público no se cifra: elija un círculo abierto"
+            "banned" -> "está bloqueado en este grupo"
+            "payload_too_large" -> "el mensaje es demasiado grande"
+            "bad_level" -> "círculo fuera de rango"
+            "unknown_gk_version" -> "el servidor no conoce nuestra versión de la clave del grupo"
+            "no_gk_version" -> "un mensaje cifrado sin versión de clave"
+            "not_member" -> "no es miembro de este grupo"
+            else -> null
+        }
         override val moveToSection = "Mover a una sección"
         override val moveToSectionAbout = "dónde vive este grupo"
         override fun inSection(name: String) = "ahora — «$name»"

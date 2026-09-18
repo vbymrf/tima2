@@ -83,6 +83,8 @@ data class ChatLine(
     val atMs: Long,
     /** Порядок появления в базе — развязка при равном времени. */
     val localId: Long,
+    /** Код отказа сервера у неотправленного; `null` — не отказано или причина не сохранена. */
+    val failReason: String? = null,
     /**
      * Идентификатор, назначенный сервером. `0` — сообщение ещё не дошло.
      *
@@ -203,6 +205,16 @@ data class ChatPerson(
  */
 fun interface ChatPeople {
     suspend fun person(userId: String): ChatPerson
+}
+
+/**
+ * Отказанные сообщения — повторить или убрать (решение заказчика 2026-09-19). Реализуется
+ * в `shared` поверх очереди; там же пишется журнал «отказ → повтор».
+ */
+interface DeadMessages {
+    /** Снова в очередь с кругом [level]; `false` — записи нет или она не отказана. */
+    suspend fun retry(dedupKey: String, level: Int): Boolean
+    suspend fun delete(dedupKey: String): Boolean
 }
 
 /**

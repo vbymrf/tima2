@@ -50,7 +50,9 @@ fun Mark(kind: MarkKind, modifier: Modifier = Modifier, side: Dp = 12.dp) {
     val color = when (kind) {
         MarkKind.Waits -> colors.text3
         MarkKind.Left -> colors.text2
-        MarkKind.NotLeft -> colors.text
+        // Красный, а не чёрный: чёрный крестик читался как галочка (заказчик 2026-09-19).
+        // Второй потребитель тревожного цвета после «не закрывайте приложение».
+        MarkKind.NotLeft -> colors.alarm
     }
     Canvas(modifier.size(side)) {
         val thickness = size.minDimension * ТОЛЩИНА_ДОЛЯ

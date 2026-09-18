@@ -27,6 +27,28 @@ class InMemoryOutboxStore : OutboxStore {
 
     override fun byDedupKey(dedupKey: String): OutboxEntry? = rows[dedupKey]
 
+
+    override fun retryDead(dedupKey: String, nowMs: Long, level: Int): Boolean {
+
+        val entry = byDedupKey(dedupKey)?.takeIf { it.state == OutboxState.DEAD } ?: return false
+
+        update(entry.copy(state = OutboxState.QUEUED, attempts = 0, nextAttemptAtMs = 0, createdAtMs = nowMs, level = level, failReason = null))
+
+        return true
+
+    }
+
+
+    override fun deleteDead(dedupKey: String): Boolean {
+
+        val entry = byDedupKey(dedupKey)?.takeIf { it.state == OutboxState.DEAD } ?: return false
+
+        rows.remove(dedupKey)
+
+        return true
+
+    }
+
     override fun nextQueued(nowMs: Long): OutboxEntry? = rows.values.firstOrNull {
         it.state == OutboxState.QUEUED && it.nextAttemptAtMs <= nowMs
     }

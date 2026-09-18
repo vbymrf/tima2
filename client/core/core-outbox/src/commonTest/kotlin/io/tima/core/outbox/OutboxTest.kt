@@ -392,4 +392,39 @@ class OutboxTest {
     private companion object {
         const val CHAT = "chat-1"
     }
+
+    // ── повтор отказанного (решение заказчика 2026-09-19) ────────────────────
+
+    @Test
+    fun окончательный_отказ_хранит_причину_а_повтор_возвращает_в_очередь_с_новым_кругом() {
+        put()
+        deliver()
+        outbox.onOutcome("dedup-1", SendOutcome.Permanent("level_in_private"))
+
+        val dead = store.byDedupKey("dedup-1")!!
+        assertEquals(OutboxState.DEAD, dead.state)
+        assertEquals("level_in_private", dead.failReason, "причина отказа обязана лечь рядом с сообщением")
+        assertEquals(0, outbox.pending().size)
+
+        time = 5_000L
+        assertEquals(true, outbox.retryDead("dedup-1", level = 0))
+        val again = store.byDedupKey("dedup-1")!!
+        assertEquals(OutboxState.QUEUED, again.state)
+        assertEquals(0, again.attempts)
+        assertEquals(0, again.level, "круг — тот, что выбран сейчас, а не тот, с которым отказали")
+        assertEquals(5_000L, again.createdAtMs, "время — текущее, иначе сообщение всплывёт в прошлом")
+        assertEquals(null, again.failReason)
+        assertEquals(1, outbox.pending().size)
+    }
+
+    @Test
+    fun повторить_и_убрать_можно_только_отказанное() {
+        put()
+        assertEquals(false, outbox.retryDead("dedup-1", level = 0), "в очереди — повторять нечего")
+        assertEquals(false, outbox.deleteDead("dedup-1"))
+        deliver()
+        outbox.onOutcome("dedup-1", SendOutcome.Permanent("banned"))
+        assertEquals(true, outbox.deleteDead("dedup-1"))
+        assertEquals(null, store.byDedupKey("dedup-1"))
+    }
 }
