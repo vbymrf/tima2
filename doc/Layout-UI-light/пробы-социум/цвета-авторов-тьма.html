@@ -1,0 +1,226 @@
+<meta charset="utf-8">
+<title>Цвета полос авторов — тёмная тема, проба</title>
+<link rel="stylesheet" href="../%D1%81%D1%82%D0%B8%D0%BB%D1%8C.css">
+<link rel="stylesheet" href="../../Layout-UI-dark/%D1%82%D1%8C%D0%BC%D0%B0.css">
+<style>
+  .ряд-окон { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-start; }
+  .тел { width: auto; }
+  .замечание { font-size: 12.5px; color: var(--чёрный-70); width: 380px; margin-top: 6px; line-height: 1.5; }
+  .сетка { display: grid; grid-template-columns: repeat(10, 64px); gap: 6px; margin: 8px 0 18px; }
+  .цв { height: 44px; border-radius: 8px; background: var(--c); position: relative; color: #fff;
+        font-size: 10px; font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,.45); }
+  .цв b { position: absolute; left: 6px; top: 5px; }
+  .цв i { position: absolute; left: 6px; bottom: 4px; font-style: normal; font-weight: 600; opacity: .9; }
+  .пузырь .номер { color: var(--чёрный-35); font-weight: 600; }
+  h3 { margin: 22px 0 4px; }
+</style>
+<style>
+  .замечание { color: rgba(255,255,255,.7); }
+  .пузырь .номер { color: rgba(255,255,255,.45); }
+</style>
+<body style="padding:20px;max-width:1200px">
+<h2>Цвета полос авторов — тёмная тема, светлый набор №201–300</h2>
+<p class="замечание" style="width:auto">
+  Тот же экран под <code>тьма.css</code>. Полосы — светлый набор (L +0,10): по фону сообщения
+  <code>#3d3d3d</code> все читаются. Владелец — в двух вариантах: слева навигация темы
+  <code>#024408</code> (как решено — «что сейчас»), справа — №200 светлого набора, светло-салатовый.
+  Светлая версия и обсуждение — <a href="цвета-авторов.html">цвета-авторов.html</a>.
+</p>
+<div class="ряд-окон">
+<div class="тел">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+    <div class="зона-1 подокно">
+      <a class="икона" href="#">‹</a>
+      <a class="ава мал" href="#">КР</a>
+      <a class="тянуть" href="#" style="text-decoration:none;color:inherit">
+        <div class="имя обрез" style="font-size:var(--щ5)">Команда разработки</div>
+        <div class="трет">10 участников · 4 в сети</div>
+      </a>
+      <a class="икона" href="#">•••</a>
+    </div>
+    <div class="зона-2"><div class="поток">
+<div class="реплика" style="--полоса:var(--навигация)">
+  <div class="пузырь">
+    <div class="ава мал">БП</div>
+    <div class="автор">Борис Петрович <span class="номер">·&nbsp;владелец</span></div>
+    Смотри расписание релизов на квартал — миграции вынес отдельной строкой.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:15</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#feb8d4">
+  <div class="пузырь">
+    <div class="ава мал">СМ</div>
+    <div class="автор">Сергей М. <span class="номер">·&nbsp;№201</span></div>
+    Согласен, надо считать по факту.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:16</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#6de2fe">
+  <div class="пузырь">
+    <div class="ава мал">АП</div>
+    <div class="автор">Анна Петрова <span class="номер">·&nbsp;№202</span></div>
+    Могу собрать цифры к пятнице.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:17</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#ffc463">
+  <div class="пузырь">
+    <div class="ава мал">Д</div>
+    <div class="автор">Дмитрий <span class="номер">·&nbsp;№203</span></div>
+    А кто отвечает за стенд?
+    <div class="низ-пузыря"><span class="точка"></span><span>10:18</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#d8c3ff">
+  <div class="пузырь">
+    <div class="ава мал">L</div>
+    <div class="автор">@lena_k <span class="номер">·&nbsp;№204</span></div>
+    Я. Стенд обновлю после выкатки.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:19</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#47f0b1">
+  <div class="пузырь">
+    <div class="ава мал">П</div>
+    <div class="автор">Пётр <span class="номер">·&nbsp;№205</span></div>
+    Тогда решаем так: миграции до пятницы, релиз на неделю позже.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:20</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#ffbcb5">
+  <div class="пузырь">
+    <div class="ава мал">МТ</div>
+    <div class="автор">Марина Т. <span class="номер">·&nbsp;№206</span></div>
+    Ок, записала в план.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:21</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#aad4ff">
+  <div class="пузырь">
+    <div class="ава мал">И</div>
+    <div class="автор">Игорь <span class="номер">·&nbsp;№207</span></div>
+    Напомните про ключи групп — там была беда.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:22</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#d5d944">
+  <div class="пузырь">
+    <div class="ава мал">ОВ</div>
+    <div class="автор">Ольга В. <span class="номер">·&nbsp;№208</span></div>
+    Починено вчера, четыре причины, всё в БЕДЫ.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:23</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#ffb2f0">
+  <div class="пузырь">
+    <div class="ава мал">Т</div>
+    <div class="автор">Тимур <span class="номер">·&nbsp;№209</span></div>
+    Отлично. До связи в пятницу.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:24</span></div>
+  </div>
+</div>
+    </div></div>
+  </div>
+  <div class="замечание"><b>Владелец — навигация темы (#024408).</b> Полоса владельца по фону #3d3d3d почти не видна (1,06 : 1).</div>
+</div>
+<div class="тел">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+    <div class="зона-1 подокно">
+      <a class="икона" href="#">‹</a>
+      <a class="ава мал" href="#">КР</a>
+      <a class="тянуть" href="#" style="text-decoration:none;color:inherit">
+        <div class="имя обрез" style="font-size:var(--щ5)">Команда разработки</div>
+        <div class="трет">10 участников · 4 в сети</div>
+      </a>
+      <a class="икона" href="#">•••</a>
+    </div>
+    <div class="зона-2"><div class="поток">
+<div class="реплика" style="--полоса:#a9e56c">
+  <div class="пузырь">
+    <div class="ава мал">БП</div>
+    <div class="автор">Борис Петрович <span class="номер">·&nbsp;владелец</span></div>
+    Смотри расписание релизов на квартал — миграции вынес отдельной строкой.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:15</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#feb8d4">
+  <div class="пузырь">
+    <div class="ава мал">СМ</div>
+    <div class="автор">Сергей М. <span class="номер">·&nbsp;№201</span></div>
+    Согласен, надо считать по факту.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:16</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#6de2fe">
+  <div class="пузырь">
+    <div class="ава мал">АП</div>
+    <div class="автор">Анна Петрова <span class="номер">·&nbsp;№202</span></div>
+    Могу собрать цифры к пятнице.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:17</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#ffc463">
+  <div class="пузырь">
+    <div class="ава мал">Д</div>
+    <div class="автор">Дмитрий <span class="номер">·&nbsp;№203</span></div>
+    А кто отвечает за стенд?
+    <div class="низ-пузыря"><span class="точка"></span><span>10:18</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#d8c3ff">
+  <div class="пузырь">
+    <div class="ава мал">L</div>
+    <div class="автор">@lena_k <span class="номер">·&nbsp;№204</span></div>
+    Я. Стенд обновлю после выкатки.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:19</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#47f0b1">
+  <div class="пузырь">
+    <div class="ава мал">П</div>
+    <div class="автор">Пётр <span class="номер">·&nbsp;№205</span></div>
+    Тогда решаем так: миграции до пятницы, релиз на неделю позже.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:20</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#ffbcb5">
+  <div class="пузырь">
+    <div class="ава мал">МТ</div>
+    <div class="автор">Марина Т. <span class="номер">·&nbsp;№206</span></div>
+    Ок, записала в план.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:21</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#aad4ff">
+  <div class="пузырь">
+    <div class="ава мал">И</div>
+    <div class="автор">Игорь <span class="номер">·&nbsp;№207</span></div>
+    Напомните про ключи групп — там была беда.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:22</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#d5d944">
+  <div class="пузырь">
+    <div class="ава мал">ОВ</div>
+    <div class="автор">Ольга В. <span class="номер">·&nbsp;№208</span></div>
+    Починено вчера, четыре причины, всё в БЕДЫ.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:23</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#ffb2f0">
+  <div class="пузырь">
+    <div class="ава мал">Т</div>
+    <div class="автор">Тимур <span class="номер">·&nbsp;№209</span></div>
+    Отлично. До связи в пятницу.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:24</span></div>
+  </div>
+</div>
+    </div></div>
+  </div>
+  <div class="замечание"><b>Владелец — №200 светлого набора.</b> Тот же оттенок, что салатовый, светлее: виден, как и остальные.</div>
+</div>
+</div>
+<h3>Набор тёмной темы — №201–300 (L +0,10)</h3><p class="замечание" style="width:auto">№200 — светло-салатовый, предлагается владельцу в тёмной теме.</p><div class="сетка"><div class="цв" style="--c:#a9e56c" title="200 · #a9e56c"><b>200</b><i>#a9e56c</i></div><div class="цв" style="--c:#feb8d4" title="201 · #feb8d4"><b>201</b><i>#feb8d4</i></div><div class="цв" style="--c:#6de2fe" title="202 · #6de2fe"><b>202</b><i>#6de2fe</i></div><div class="цв" style="--c:#ffc463" title="203 · #ffc463"><b>203</b><i>#ffc463</i></div><div class="цв" style="--c:#d8c3ff" title="204 · #d8c3ff"><b>204</b><i>#d8c3ff</i></div><div class="цв" style="--c:#47f0b1" title="205 · #47f0b1"><b>205</b><i>#47f0b1</i></div><div class="цв" style="--c:#ffbcb5" title="206 · #ffbcb5"><b>206</b><i>#ffbcb5</i></div><div class="цв" style="--c:#aad4ff" title="207 · #aad4ff"><b>207</b><i>#aad4ff</i></div><div class="цв" style="--c:#d5d944" title="208 · #d5d944"><b>208</b><i>#d5d944</i></div><div class="цв" style="--c:#ffb2f0" title="209 · #ffb2f0"><b>209</b><i>#ffb2f0</i></div><div class="цв" style="--c:#11ecee" title="210 · #11ecee"><b>210</b><i>#11ecee</i></div><div class="цв" style="--c:#ffc191" title="211 · #ffc191"><b>211</b><i>#ffc191</i></div><div class="цв" style="--c:#c6cbff" title="212 · #c6cbff"><b>212</b><i>#c6cbff</i></div><div class="цв" style="--c:#89eb86" title="213 · #89eb86"><b>213</b><i>#89eb86</i></div><div class="цв" style="--c:#febac7" title="214 · #febac7"><b>214</b><i>#febac7</i></div><div class="цв" style="--c:#8edcff" title="215 · #8edcff"><b>215</b><i>#8edcff</i></div><div class="цв" style="--c:#f8ca2e" title="216 · #f8ca2e"><b>216</b><i>#f8ca2e</i></div><div class="цв" style="--c:#e7bcfe" title="217 · #e7bcfe"><b>217</b><i>#e7bcfe</i></div><div class="цв" style="--c:#13f0cb" title="218 · #13f0cb"><b>218</b><i>#13f0cb</i></div><div class="цв" style="--c:#ffbea9" title="219 · #ffbea9"><b>219</b><i>#ffbea9</i></div><div class="цв" style="--c:#b6d1fe" title="220 · #b6d1fe"><b>220</b><i>#b6d1fe</i></div><div class="цв" style="--c:#bbe15c" title="221 · #bbe15c"><b>221</b><i>#bbe15c</i></div><div class="цв" style="--c:#feb6dd" title="222 · #feb6dd"><b>222</b><i>#feb6dd</i></div><div class="цв" style="--c:#34e8ff" title="223 · #34e8ff"><b>223</b><i>#34e8ff</i></div><div class="цв" style="--c:#fec37b" title="224 · #fec37b"><b>224</b><i>#fec37b</i></div><div class="цв" style="--c:#d1c6ff" title="225 · #d1c6ff"><b>225</b><i>#d1c6ff</i></div><div class="цв" style="--c:#64efa1" title="226 · #64efa1"><b>226</b><i>#64efa1</i></div><div class="цв" style="--c:#ffbbbc" title="227 · #ffbbbc"><b>227</b><i>#ffbbbc</i></div><div class="цв" style="--c:#a1d7fe" title="228 · #a1d7fe"><b>228</b><i>#a1d7fe</i></div><div class="цв" style="--c:#e3d338" title="229 · #e3d338"><b>229</b><i>#e3d338</i></div><div class="цв" style="--c:#fdb0ff" title="230 · #fdb0ff"><b>230</b><i>#fdb0ff</i></div><div class="цв" style="--c:#03eee2" title="231 · #03eee2"><b>231</b><i>#03eee2</i></div><div class="цв" style="--c:#fec09c" title="232 · #fec09c"><b>232</b><i>#fec09c</i></div><div class="цв" style="--c:#c0cdff" title="233 · #c0cdff"><b>233</b><i>#c0cdff</i></div><div class="цв" style="--c:#9de776" title="234 · #9de776"><b>234</b><i>#9de776</i></div><div class="цв" style="--c:#feb9cf" title="235 · #feb9cf"><b>235</b><i>#feb9cf</i></div><div class="цв" style="--c:#7cdffe" title="236 · #7cdffe"><b>236</b><i>#7cdffe</i></div><div class="цв" style="--c:#ffc649" title="237 · #ffc649"><b>237</b><i>#ffc649</i></div><div class="цв" style="--c:#ddc1fe" title="238 · #ddc1fe"><b>238</b><i>#ddc1fe</i></div><div class="цв" style="--c:#30f1bb" title="239 · #30f1bb"><b>239</b><i>#30f1bb</i></div><div class="цв" style="--c:#ffbdb1" title="240 · #ffbdb1"><b>240</b><i>#ffbdb1</i></div><div class="цв" style="--c:#afd3ff" title="241 · #afd3ff"><b>241</b><i>#afd3ff</i></div><div class="цв" style="--c:#cbdc4d" title="242 · #cbdc4d"><b>242</b><i>#cbdc4d</i></div><div class="цв" style="--c:#ffb4e8" title="243 · #ffb4e8"><b>243</b><i>#ffb4e8</i></div><div class="цв" style="--c:#0debf6" title="244 · #0debf6"><b>244</b><i>#0debf6</i></div><div class="цв" style="--c:#ffc18a" title="245 · #ffc18a"><b>245</b><i>#ffc18a</i></div><div class="цв" style="--c:#cac9ff" title="246 · #cac9ff"><b>246</b><i>#cac9ff</i></div><div class="цв" style="--c:#7ced90" title="247 · #7ced90"><b>247</b><i>#7ced90</i></div><div class="цв" style="--c:#febbc3" title="248 · #febbc3"><b>248</b><i>#febbc3</i></div><div class="цв" style="--c:#97dafe" title="249 · #97dafe"><b>249</b><i>#97dafe</i></div><div class="цв" style="--c:#f0ce30" title="250 · #f0ce30"><b>250</b><i>#f0ce30</i></div><div class="цв" style="--c:#eeb9ff" title="251 · #eeb9ff"><b>251</b><i>#eeb9ff</i></div><div class="цв" style="--c:#03f0d4" title="252 · #03f0d4"><b>252</b><i>#03f0d4</i></div><div class="цв" style="--c:#ffbfa5" title="253 · #ffbfa5"><b>253</b><i>#ffbfa5</i></div><div class="цв" style="--c:#bacfff" title="254 · #bacfff"><b>254</b><i>#bacfff</i></div><div class="цв" style="--c:#b0e366" title="255 · #b0e366"><b>255</b><i>#b0e366</i></div><div class="цв" style="--c:#ffb7d7" title="256 · #ffb7d7"><b>256</b><i>#ffb7d7</i></div><div class="цв" style="--c:#5fe4fe" title="257 · #5fe4fe"><b>257</b><i>#5fe4fe</i></div><div class="цв" style="--c:#ffc46d" title="258 · #ffc46d"><b>258</b><i>#ffc46d</i></div><div class="цв" style="--c:#d5c5fe" title="259 · #d5c5fe"><b>259</b><i>#d5c5fe</i></div><div class="цв" style="--c:#53f0ab" title="260 · #53f0ab"><b>260</b><i>#53f0ab</i></div><div class="цв" style="--c:#febcb8" title="261 · #febcb8"><b>261</b><i>#febcb8</i></div><div class="цв" style="--c:#a6d5ff" title="262 · #a6d5ff"><b>262</b><i>#a6d5ff</i></div><div class="цв" style="--c:#dad73f" title="263 · #dad73f"><b>263</b><i>#dad73f</i></div><div class="цв" style="--c:#ffb1f6" title="264 · #ffb1f6"><b>264</b><i>#ffb1f6</i></div><div class="цв" style="--c:#02edea" title="265 · #02edea"><b>265</b><i>#02edea</i></div><div class="цв" style="--c:#fec096" title="266 · #fec096"><b>266</b><i>#fec096</i></div><div class="цв" style="--c:#c4ccfe" title="267 · #c4ccfe"><b>267</b><i>#c4ccfe</i></div><div class="цв" style="--c:#91ea80" title="268 · #91ea80"><b>268</b><i>#91ea80</i></div><div class="цв" style="--c:#ffb9ca" title="269 · #ffb9ca"><b>269</b><i>#ffb9ca</i></div><div class="цв" style="--c:#88ddfe" title="270 · #88ddfe"><b>270</b><i>#88ddfe</i></div><div class="цв" style="--c:#fcc82e" title="271 · #fcc82e"><b>271</b><i>#fcc82e</i></div><div class="цв" style="--c:#e3beff" title="272 · #e3beff"><b>272</b><i>#e3beff</i></div><div class="цв" style="--c:#00f1c5" title="273 · #00f1c5"><b>273</b><i>#00f1c5</i></div><div class="цв" style="--c:#febead" title="274 · #febead"><b>274</b><i>#febead</i></div><div class="цв" style="--c:#b3d2fe" title="275 · #b3d2fe"><b>275</b><i>#b3d2fe</i></div><div class="цв" style="--c:#c1df56" title="276 · #c1df56"><b>276</b><i>#c1df56</i></div><div class="цв" style="--c:#feb5e1" title="277 · #feb5e1"><b>277</b><i>#feb5e1</i></div><div class="цв" style="--c:#14eafd" title="278 · #14eafd"><b>278</b><i>#14eafd</i></div><div class="цв" style="--c:#ffc280" title="279 · #ffc280"><b>279</b><i>#ffc280</i></div><div class="цв" style="--c:#cec8ff" title="280 · #cec8ff"><b>280</b><i>#cec8ff</i></div><div class="цв" style="--c:#6dee9a" title="281 · #6dee9a"><b>281</b><i>#6dee9a</i></div><div class="цв" style="--c:#ffbbbf" title="282 · #ffbbbf"><b>282</b><i>#ffbbbf</i></div><div class="цв" style="--c:#9dd8fe" title="283 · #9dd8fe"><b>283</b><i>#9dd8fe</i></div><div class="цв" style="--c:#e8d135" title="284 · #e8d135"><b>284</b><i>#e8d135</i></div><div class="цв" style="--c:#f6b4fe" title="285 · #f6b4fe"><b>285</b><i>#f6b4fe</i></div><div class="цв" style="--c:#01efdd" title="286 · #01efdd"><b>286</b><i>#01efdd</i></div><div class="цв" style="--c:#febfa0" title="287 · #febfa0"><b>287</b><i>#febfa0</i></div><div class="цв" style="--c:#beceff" title="288 · #beceff"><b>288</b><i>#beceff</i></div><div class="цв" style="--c:#a5e670" title="289 · #a5e670"><b>289</b><i>#a5e670</i></div><div class="цв" style="--c:#ffb8d2" title="290 · #ffb8d2"><b>290</b><i>#ffb8d2</i></div><div class="цв" style="--c:#73e1fe" title="291 · #73e1fe"><b>291</b><i>#73e1fe</i></div><div class="цв" style="--c:#ffc55b" title="292 · #ffc55b"><b>292</b><i>#ffc55b</i></div><div class="цв" style="--c:#dac2ff" title="293 · #dac2ff"><b>293</b><i>#dac2ff</i></div><div class="цв" style="--c:#3ff1b5" title="294 · #3ff1b5"><b>294</b><i>#3ff1b5</i></div><div class="цв" style="--c:#ffbdb3" title="295 · #ffbdb3"><b>295</b><i>#ffbdb3</i></div><div class="цв" style="--c:#acd4fe" title="296 · #acd4fe"><b>296</b><i>#acd4fe</i></div><div class="цв" style="--c:#d1da48" title="297 · #d1da48"><b>297</b><i>#d1da48</i></div><div class="цв" style="--c:#ffb3ed" title="298 · #ffb3ed"><b>298</b><i>#ffb3ed</i></div><div class="цв" style="--c:#0eecf1" title="299 · #0eecf1"><b>299</b><i>#0eecf1</i></div></div>
+</body>
