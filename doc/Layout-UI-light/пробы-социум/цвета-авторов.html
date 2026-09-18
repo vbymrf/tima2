@@ -1,0 +1,260 @@
+<meta charset="utf-8">
+<title>Цвета полос авторов — проба</title>
+<link rel="stylesheet" href="../%D1%81%D1%82%D0%B8%D0%BB%D1%8C.css">
+<style>
+  .ряд-окон { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-start; }
+  .тел { width: auto; }
+  .замечание { font-size: 12.5px; color: var(--чёрный-70); width: 380px; margin-top: 6px; line-height: 1.5; }
+  .сетка { display: grid; grid-template-columns: repeat(10, 64px); gap: 6px; margin: 8px 0 18px; }
+  .цв { height: 44px; border-radius: 8px; background: var(--c); position: relative; color: #fff;
+        font-size: 10px; font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,.45); }
+  .цв b { position: absolute; left: 6px; top: 5px; }
+  .цв i { position: absolute; left: 6px; bottom: 4px; font-style: normal; font-weight: 600; opacity: .9; }
+  .цв:first-child { outline: 3px solid var(--текст); outline-offset: 1px; }
+  .пузырь .номер { color: var(--чёрный-35); font-weight: 600; }
+  /* Аватар-буква без фото: подложка — цвет полосы, бледный (как «мои»), буква цветом полосы. */
+  .реплика:not(.моя) .пузырь > .ава { background: color-mix(in srgb, var(--полоса) 18%, #fff); color: var(--полоса); border-color: var(--полоса); }
+  .лента-правило { display: flex; gap: 6px; align-items: center; margin: 6px 0 14px; flex-wrap: wrap; }
+  .лента-правило .цв { width: 44px; height: 30px; }
+  h3 { margin: 22px 0 4px; }
+</style>
+<body style="padding:20px;max-width:1200px">
+<h2>Цвета полос авторов в группе — проба, 2026-09-19</h2>
+<p class="замечание" style="width:auto">
+  Сейчас у всех чужих реплик одна полоса — салатовая <code>#8ac44a</code>. Проба: у каждого автора
+  своя. Сто цветов — <b>одной светлоты и насыщенности с салатовым</b> (в OKLCH: L 0,755 · C 0,164),
+  меняется только оттенок, поэтому ни один не «кричит» громче салатового и ни один не бледнее.
+  Оттенки идут по кругу не подряд, а шагом в золотое сечение (≈222,5°): <b>соседние номера — далёкие
+  цвета</b>, и первые десять авторов группы различимы гарантированно, без подбора.
+  Нулевой — тот самый салатовый, он обведён.
+</p>
+
+<h3>Сто цветов</h3><p class="замечание" style="width:auto">Номер — сверху, hex — снизу. Ряд — десять номеров подряд: видно, что соседи не похожи.</p><div class="сетка"><div class="цв" style="--c:#8ac44a" title="0 · #8ac44a"><b>0</b><i>#8ac44a</i></div><div class="цв" style="--c:#fd7fb8" title="1 · #fd7fb8"><b>1</b><i>#fd7fb8</i></div><div class="цв" style="--c:#10c4e5" title="2 · #10c4e5"><b>2</b><i>#10c4e5</i></div><div class="цв" style="--c:#e5a105" title="3 · #e5a105"><b>3</b><i>#e5a105</i></div><div class="цв" style="--c:#c098fe" title="4 · #c098fe"><b>4</b><i>#c098fe</i></div><div class="цв" style="--c:#00cf92" title="5 · #00cf92"><b>5</b><i>#00cf92</i></div><div class="цв" style="--c:#ff887e" title="6 · #ff887e"><b>6</b><i>#ff887e</i></div><div class="цв" style="--c:#68b6fe" title="7 · #68b6fe"><b>7</b><i>#68b6fe</i></div><div class="цв" style="--c:#b5b809" title="8 · #b5b809"><b>8</b><i>#b5b809</i></div><div class="цв" style="--c:#ec85db" title="9 · #ec85db"><b>9</b><i>#ec85db</i></div><div class="цв" style="--c:#03c8ca" title="10 · #03c8ca"><b>10</b><i>#03c8ca</i></div><div class="цв" style="--c:#fb912d" title="11 · #fb912d"><b>11</b><i>#fb912d</i></div><div class="цв" style="--c:#a1a6fe" title="12 · #a1a6fe"><b>12</b><i>#a1a6fe</i></div><div class="цв" style="--c:#69ca67" title="13 · #69ca67"><b>13</b><i>#69ca67</i></div><div class="цв" style="--c:#fe83a1" title="14 · #fe83a1"><b>14</b><i>#fe83a1</i></div><div class="цв" style="--c:#0cc0f8" title="15 · #0cc0f8"><b>15</b><i>#0cc0f8</i></div><div class="цв" style="--c:#d4aa00" title="16 · #d4aa00"><b>16</b><i>#d4aa00</i></div><div class="цв" style="--c:#d48ef9" title="17 · #d48ef9"><b>17</b><i>#d48ef9</i></div><div class="цв" style="--c:#0accac" title="18 · #0accac"><b>18</b><i>#0accac</i></div><div class="цв" style="--c:#ff8b66" title="19 · #ff8b66"><b>19</b><i>#ff8b66</i></div><div class="цв" style="--c:#82b0fe" title="20 · #82b0fe"><b>20</b><i>#82b0fe</i></div><div class="цв" style="--c:#9cc037" title="21 · #9cc037"><b>21</b><i>#9cc037</i></div><div class="цв" style="--c:#f781c6" title="22 · #f781c6"><b>22</b><i>#f781c6</i></div><div class="цв" style="--c:#0fc5da" title="23 · #0fc5da"><b>23</b><i>#0fc5da</i></div><div class="цв" style="--c:#ef9b03" title="24 · #ef9b03"><b>24</b><i>#ef9b03</i></div><div class="цв" style="--c:#b49eff" title="25 · #b49eff"><b>25</b><i>#b49eff</i></div><div class="цв" style="--c:#3bce82" title="26 · #3bce82"><b>26</b><i>#3bce82</i></div><div class="цв" style="--c:#ff868c" title="27 · #ff868c"><b>27</b><i>#ff868c</i></div><div class="цв" style="--c:#50bafe" title="28 · #50bafe"><b>28</b><i>#50bafe</i></div><div class="цв" style="--c:#c2b304" title="29 · #c2b304"><b>29</b><i>#c2b304</i></div><div class="цв" style="--c:#e488e7" title="30 · #e488e7"><b>30</b><i>#e488e7</i></div><div class="цв" style="--c:#09cabf" title="31 · #09cabf"><b>31</b><i>#09cabf</i></div><div class="цв" style="--c:#ff8d43" title="32 · #ff8d43"><b>32</b><i>#ff8d43</i></div><div class="цв" style="--c:#96aafe" title="33 · #96aafe"><b>33</b><i>#96aafe</i></div><div class="цв" style="--c:#7ec655" title="34 · #7ec655"><b>34</b><i>#7ec655</i></div><div class="цв" style="--c:#ff7faf" title="35 · #ff7faf"><b>35</b><i>#ff7faf</i></div><div class="цв" style="--c:#10c2ec" title="36 · #10c2ec"><b>36</b><i>#10c2ec</i></div><div class="цв" style="--c:#dea506" title="37 · #dea506"><b>37</b><i>#dea506</i></div><div class="цв" style="--c:#c893ff" title="38 · #c893ff"><b>38</b><i>#c893ff</i></div><div class="цв" style="--c:#02ce9d" title="39 · #02ce9d"><b>39</b><i>#02ce9d</i></div><div class="цв" style="--c:#ff8976" title="40 · #ff8976"><b>40</b><i>#ff8976</i></div><div class="цв" style="--c:#72b3ff" title="41 · #72b3ff"><b>41</b><i>#72b3ff</i></div><div class="цв" style="--c:#acbb20" title="42 · #acbb20"><b>42</b><i>#acbb20</i></div><div class="цв" style="--c:#f183d3" title="43 · #f183d3"><b>43</b><i>#f183d3</i></div><div class="цв" style="--c:#00c7d0" title="44 · #00c7d0"><b>44</b><i>#00c7d0</i></div><div class="цв" style="--c:#f7951f" title="45 · #f7951f"><b>45</b><i>#f7951f</i></div><div class="цв" style="--c:#a8a3ff" title="46 · #a8a3ff"><b>46</b><i>#a8a3ff</i></div><div class="цв" style="--c:#59cb71" title="47 · #59cb71"><b>47</b><i>#59cb71</i></div><div class="цв" style="--c:#ff8499" title="48 · #ff8499"><b>48</b><i>#ff8499</i></div><div class="цв" style="--c:#20beff" title="49 · #20beff"><b>49</b><i>#20beff</i></div><div class="цв" style="--c:#ceae06" title="50 · #ceae06"><b>50</b><i>#ceae06</i></div><div class="цв" style="--c:#da8bf2" title="51 · #da8bf2"><b>51</b><i>#da8bf2</i></div><div class="цв" style="--c:#01cbb4" title="52 · #01cbb4"><b>52</b><i>#01cbb4</i></div><div class="цв" style="--c:#fe8c5b" title="53 · #fe8c5b"><b>53</b><i>#fe8c5b</i></div><div class="цв" style="--c:#8aadff" title="54 · #8aadff"><b>54</b><i>#8aadff</i></div><div class="цв" style="--c:#91c243" title="55 · #91c243"><b>55</b><i>#91c243</i></div><div class="цв" style="--c:#fb80bd" title="56 · #fb80bd"><b>56</b><i>#fb80bd</i></div><div class="цв" style="--c:#10c4e1" title="57 · #10c4e1"><b>57</b><i>#10c4e1</i></div><div class="цв" style="--c:#e99f04" title="58 · #e99f04"><b>58</b><i>#e99f04</i></div><div class="цв" style="--c:#bb9aff" title="59 · #bb9aff"><b>59</b><i>#bb9aff</i></div><div class="цв" style="--c:#1dcf8c" title="60 · #1dcf8c"><b>60</b><i>#1dcf8c</i></div><div class="цв" style="--c:#ff8783" title="61 · #ff8783"><b>61</b><i>#ff8783</i></div><div class="цв" style="--c:#61b7fe" title="62 · #61b7fe"><b>62</b><i>#61b7fe</i></div><div class="цв" style="--c:#bab603" title="63 · #bab603"><b>63</b><i>#bab603</i></div><div class="цв" style="--c:#e986e0" title="64 · #e986e0"><b>64</b><i>#e986e0</i></div><div class="цв" style="--c:#0ac9c6" title="65 · #0ac9c6"><b>65</b><i>#0ac9c6</i></div><div class="цв" style="--c:#fd9035" title="66 · #fd9035"><b>66</b><i>#fd9035</i></div><div class="цв" style="--c:#9da7ff" title="67 · #9da7ff"><b>67</b><i>#9da7ff</i></div><div class="цв" style="--c:#71c860" title="68 · #71c860"><b>68</b><i>#71c860</i></div><div class="цв" style="--c:#ff81a6" title="69 · #ff81a6"><b>69</b><i>#ff81a6</i></div><div class="цв" style="--c:#0bc1f3" title="70 · #0bc1f3"><b>70</b><i>#0bc1f3</i></div><div class="цв" style="--c:#d8a800" title="71 · #d8a800"><b>71</b><i>#d8a800</i></div><div class="цв" style="--c:#d08ffc" title="72 · #d08ffc"><b>72</b><i>#d08ffc</i></div><div class="цв" style="--c:#07cda7" title="73 · #07cda7"><b>73</b><i>#07cda7</i></div><div class="цв" style="--c:#ff8a6c" title="74 · #ff8a6c"><b>74</b><i>#ff8a6c</i></div><div class="цв" style="--c:#7db1fe" title="75 · #7db1fe"><b>75</b><i>#7db1fe</i></div><div class="цв" style="--c:#a2be2f" title="76 · #a2be2f"><b>76</b><i>#a2be2f</i></div><div class="цв" style="--c:#f581cb" title="77 · #f581cb"><b>77</b><i>#f581cb</i></div><div class="цв" style="--c:#07c6d7" title="78 · #07c6d7"><b>78</b><i>#07c6d7</i></div><div class="цв" style="--c:#f39809" title="79 · #f39809"><b>79</b><i>#f39809</i></div><div class="цв" style="--c:#afa0fe" title="80 · #afa0fe"><b>80</b><i>#afa0fe</i></div><div class="цв" style="--c:#48cd7b" title="81 · #48cd7b"><b>81</b><i>#48cd7b</i></div><div class="цв" style="--c:#fe8691" title="82 · #fe8691"><b>82</b><i>#fe8691</i></div><div class="цв" style="--c:#43bbff" title="83 · #43bbff"><b>83</b><i>#43bbff</i></div><div class="цв" style="--c:#c7b105" title="84 · #c7b105"><b>84</b><i>#c7b105</i></div><div class="цв" style="--c:#e089ec" title="85 · #e089ec"><b>85</b><i>#e089ec</i></div><div class="цв" style="--c:#05cabb" title="86 · #05cabb"><b>86</b><i>#05cabb</i></div><div class="цв" style="--c:#ff8d4d" title="87 · #ff8d4d"><b>87</b><i>#ff8d4d</i></div><div class="цв" style="--c:#91abff" title="88 · #91abff"><b>88</b><i>#91abff</i></div><div class="цв" style="--c:#86c54e" title="89 · #86c54e"><b>89</b><i>#86c54e</i></div><div class="цв" style="--c:#fe7fb4" title="90 · #fe7fb4"><b>90</b><i>#fe7fb4</i></div><div class="цв" style="--c:#0bc3e8" title="91 · #0bc3e8"><b>91</b><i>#0bc3e8</i></div><div class="цв" style="--c:#e3a300" title="92 · #e3a300"><b>92</b><i>#e3a300</i></div><div class="цв" style="--c:#c396ff" title="93 · #c396ff"><b>93</b><i>#c396ff</i></div><div class="цв" style="--c:#00ce97" title="94 · #00ce97"><b>94</b><i>#00ce97</i></div><div class="цв" style="--c:#ff887b" title="95 · #ff887b"><b>95</b><i>#ff887b</i></div><div class="цв" style="--c:#6cb5ff" title="96 · #6cb5ff"><b>96</b><i>#6cb5ff</i></div><div class="цв" style="--c:#b2b914" title="97 · #b2b914"><b>97</b><i>#b2b914</i></div><div class="цв" style="--c:#ee84d8" title="98 · #ee84d8"><b>98</b><i>#ee84d8</i></div><div class="цв" style="--c:#01c8cc" title="99 · #01c8cc"><b>99</b><i>#01c8cc</i></div></div>
+
+<h3>Если сто кончились — сдвиг по светлоте</h3>
+<p class="замечание" style="width:auto">
+  101-й автор получает цвет №0, но <b>темнее</b> (L −0,12); 201-й — <b>светлее</b> (L +0,10) —
+  «текущие + сдвиг вниз, потом вверх по шкале». Ниже те же сто в обоих сдвигах. Светлые уже близки к
+  подложке пузыря, поэтому вверх — последним и один раз; дальше круг повторяется (300 различимых
+  полос на одну группу — с запасом).
+</p>
+<h3>Те же сто, темнее (101–200)</h3><p class="замечание" style="width:auto">L −0,12: полосы гуще, на белом пузыре читаются так же.</p><div class="сетка"><div class="цв" style="--c:#669e1a" title="0 · #669e1a"><b>0</b><i>#669e1a</i></div><div class="цв" style="--c:#d35993" title="1 · #d35993"><b>1</b><i>#d35993</i></div><div class="цв" style="--c:#039bb6" title="2 · #039bb6"><b>2</b><i>#039bb6</i></div><div class="цв" style="--c:#b67f00" title="3 · #b67f00"><b>3</b><i>#b67f00</i></div><div class="цв" style="--c:#9d6fdd" title="4 · #9d6fdd"><b>4</b><i>#9d6fdd</i></div><div class="цв" style="--c:#01a473" title="5 · #01a473"><b>5</b><i>#01a473</i></div><div class="цв" style="--c:#dd5b54" title="6 · #dd5b54"><b>6</b><i>#dd5b54</i></div><div class="цв" style="--c:#1a8fe8" title="7 · #1a8fe8"><b>7</b><i>#1a8fe8</i></div><div class="цв" style="--c:#8f9205" title="8 · #8f9205"><b>8</b><i>#8f9205</i></div><div class="цв" style="--c:#c35fb4" title="9 · #c35fb4"><b>9</b><i>#c35fb4</i></div><div class="цв" style="--c:#009fa0" title="10 · #009fa0"><b>10</b><i>#009fa0</i></div><div class="цв" style="--c:#cc6f04" title="11 · #cc6f04"><b>11</b><i>#cc6f04</i></div><div class="цв" style="--c:#7b7beb" title="12 · #7b7beb"><b>12</b><i>#7b7beb</i></div><div class="цв" style="--c:#41a341" title="13 · #41a341"><b>13</b><i>#41a341</i></div><div class="цв" style="--c:#d9587c" title="14 · #d9587c"><b>14</b><i>#d9587c</i></div><div class="цв" style="--c:#0098c6" title="15 · #0098c6"><b>15</b><i>#0098c6</i></div><div class="цв" style="--c:#a88707" title="16 · #a88707"><b>16</b><i>#a88707</i></div><div class="цв" style="--c:#ad68d0" title="17 · #ad68d0"><b>17</b><i>#ad68d0</i></div><div class="цв" style="--c:#04a288" title="18 · #04a288"><b>18</b><i>#04a288</i></div><div class="цв" style="--c:#db6037" title="19 · #db6037"><b>19</b><i>#db6037</i></div><div class="цв" style="--c:#4e87ed" title="20 · #4e87ed"><b>20</b><i>#4e87ed</i></div><div class="цв" style="--c:#799900" title="21 · #799900"><b>21</b><i>#799900</i></div><div class="цв" style="--c:#ce5ba0" title="22 · #ce5ba0"><b>22</b><i>#ce5ba0</i></div><div class="цв" style="--c:#069cad" title="23 · #069cad"><b>23</b><i>#069cad</i></div><div class="цв" style="--c:#be7a03" title="24 · #be7a03"><b>24</b><i>#be7a03</i></div><div class="цв" style="--c:#9173e4" title="25 · #9173e4"><b>25</b><i>#9173e4</i></div><div class="цв" style="--c:#02a561" title="26 · #02a561"><b>26</b><i>#02a561</i></div><div class="цв" style="--c:#dc5964" title="27 · #dc5964"><b>27</b><i>#dc5964</i></div><div class="цв" style="--c:#0594da" title="28 · #0594da"><b>28</b><i>#0594da</i></div><div class="цв" style="--c:#9a8d06" title="29 · #9a8d06"><b>29</b><i>#9a8d06</i></div><div class="цв" style="--c:#bc62c0" title="30 · #bc62c0"><b>30</b><i>#bc62c0</i></div><div class="цв" style="--c:#00a097" title="31 · #00a097"><b>31</b><i>#00a097</i></div><div class="цв" style="--c:#d66707" title="32 · #d66707"><b>32</b><i>#d66707</i></div><div class="цв" style="--c:#6c7fed" title="33 · #6c7fed"><b>33</b><i>#6c7fed</i></div><div class="цв" style="--c:#59a02b" title="34 · #59a02b"><b>34</b><i>#59a02b</i></div><div class="цв" style="--c:#d6598a" title="35 · #d6598a"><b>35</b><i>#d6598a</i></div><div class="цв" style="--c:#009abc" title="36 · #009abc"><b>36</b><i>#009abc</i></div><div class="цв" style="--c:#b18201" title="37 · #b18201"><b>37</b><i>#b18201</i></div><div class="цв" style="--c:#a36cd9" title="38 · #a36cd9"><b>38</b><i>#a36cd9</i></div><div class="цв" style="--c:#00a37c" title="39 · #00a37c"><b>39</b><i>#00a37c</i></div><div class="цв" style="--c:#dc5c49" title="40 · #dc5c49"><b>40</b><i>#dc5c49</i></div><div class="цв" style="--c:#348ceb" title="41 · #348ceb"><b>41</b><i>#348ceb</i></div><div class="цв" style="--c:#889401" title="42 · #889401"><b>42</b><i>#889401</i></div><div class="цв" style="--c:#c85dad" title="43 · #c85dad"><b>43</b><i>#c85dad</i></div><div class="цв" style="--c:#0c9ea5" title="44 · #0c9ea5"><b>44</b><i>#0c9ea5</i></div><div class="цв" style="--c:#c67402" title="45 · #c67402"><b>45</b><i>#c67402</i></div><div class="цв" style="--c:#8478e9" title="46 · #8478e9"><b>46</b><i>#8478e9</i></div><div class="цв" style="--c:#2ca54c" title="47 · #2ca54c"><b>47</b><i>#2ca54c</i></div><div class="цв" style="--c:#db5873" title="48 · #db5873"><b>48</b><i>#db5873</i></div><div class="цв" style="--c:#0697cc" title="49 · #0697cc"><b>49</b><i>#0697cc</i></div><div class="цв" style="--c:#a38901" title="50 · #a38901"><b>50</b><i>#a38901</i></div><div class="цв" style="--c:#b366ca" title="51 · #b366ca"><b>51</b><i>#b366ca</i></div><div class="цв" style="--c:#03a18e" title="52 · #03a18e"><b>52</b><i>#03a18e</i></div><div class="цв" style="--c:#d9622a" title="53 · #d9622a"><b>53</b><i>#d9622a</i></div><div class="цв" style="--c:#5a84ed" title="54 · #5a84ed"><b>54</b><i>#5a84ed</i></div><div class="цв" style="--c:#6d9c07" title="55 · #6d9c07"><b>55</b><i>#6d9c07</i></div><div class="цв" style="--c:#d15a98" title="56 · #d15a98"><b>56</b><i>#d15a98</i></div><div class="цв" style="--c:#059cb2" title="57 · #059cb2"><b>57</b><i>#059cb2</i></div><div class="цв" style="--c:#b87d06" title="58 · #b87d06"><b>58</b><i>#b87d06</i></div><div class="цв" style="--c:#9870e0" title="59 · #9870e0"><b>59</b><i>#9870e0</i></div><div class="цв" style="--c:#01a46d" title="60 · #01a46d"><b>60</b><i>#01a46d</i></div><div class="цв" style="--c:#dd5a5a" title="61 · #dd5a5a"><b>61</b><i>#dd5a5a</i></div><div class="цв" style="--c:#0591e5" title="62 · #0591e5"><b>62</b><i>#0591e5</i></div><div class="цв" style="--c:#939002" title="63 · #939002"><b>63</b><i>#939002</i></div><div class="цв" style="--c:#c160b9" title="64 · #c160b9"><b>64</b><i>#c160b9</i></div><div class="цв" style="--c:#039f9d" title="65 · #039f9d"><b>65</b><i>#039f9d</i></div><div class="цв" style="--c:#d06c00" title="66 · #d06c00"><b>66</b><i>#d06c00</i></div><div class="цв" style="--c:#767cec" title="67 · #767cec"><b>67</b><i>#767cec</i></div><div class="цв" style="--c:#4ba239" title="68 · #4ba239"><b>68</b><i>#4ba239</i></div><div class="цв" style="--c:#d85881" title="69 · #d85881"><b>69</b><i>#d85881</i></div><div class="цв" style="--c:#0399c2" title="70 · #0399c2"><b>70</b><i>#0399c2</i></div><div class="цв" style="--c:#ab8507" title="71 · #ab8507"><b>71</b><i>#ab8507</i></div><div class="цв" style="--c:#aa6ad4" title="72 · #aa6ad4"><b>72</b><i>#aa6ad4</i></div><div class="цв" style="--c:#0ba284" title="73 · #0ba284"><b>73</b><i>#0ba284</i></div><div class="цв" style="--c:#dc5e3e" title="74 · #dc5e3e"><b>74</b><i>#dc5e3e</i></div><div class="цв" style="--c:#4589ec" title="75 · #4589ec"><b>75</b><i>#4589ec</i></div><div class="цв" style="--c:#7f9704" title="76 · #7f9704"><b>76</b><i>#7f9704</i></div><div class="цв" style="--c:#cc5ca5" title="77 · #cc5ca5"><b>77</b><i>#cc5ca5</i></div><div class="цв" style="--c:#019daa" title="78 · #019daa"><b>78</b><i>#019daa</i></div><div class="цв" style="--c:#c17805" title="79 · #c17805"><b>79</b><i>#c17805</i></div><div class="цв" style="--c:#8c75e6" title="80 · #8c75e6"><b>80</b><i>#8c75e6</i></div><div class="цв" style="--c:#00a657" title="81 · #00a657"><b>81</b><i>#00a657</i></div><div class="цв" style="--c:#dc5869" title="82 · #dc5869"><b>82</b><i>#dc5869</i></div><div class="цв" style="--c:#0095d5" title="83 · #0095d5"><b>83</b><i>#0095d5</i></div><div class="цв" style="--c:#9d8c00" title="84 · #9d8c00"><b>84</b><i>#9d8c00</i></div><div class="цв" style="--c:#b964c4" title="85 · #b964c4"><b>85</b><i>#b964c4</i></div><div class="цв" style="--c:#0aa094" title="86 · #0aa094"><b>86</b><i>#0aa094</i></div><div class="цв" style="--c:#d76519" title="87 · #d76519"><b>87</b><i>#d76519</i></div><div class="цв" style="--c:#6581ed" title="88 · #6581ed"><b>88</b><i>#6581ed</i></div><div class="цв" style="--c:#619e21" title="89 · #619e21"><b>89</b><i>#619e21</i></div><div class="цв" style="--c:#d4598f" title="90 · #d4598f"><b>90</b><i>#d4598f</i></div><div class="цв" style="--c:#0b9bb8" title="91 · #0b9bb8"><b>91</b><i>#0b9bb8</i></div><div class="цв" style="--c:#b38005" title="92 · #b38005"><b>92</b><i>#b38005</i></div><div class="цв" style="--c:#9f6edc" title="93 · #9f6edc"><b>93</b><i>#9f6edc</i></div><div class="цв" style="--c:#05a377" title="94 · #05a377"><b>94</b><i>#05a377</i></div><div class="цв" style="--c:#dd5b50" title="95 · #dd5b50"><b>95</b><i>#dd5b50</i></div><div class="цв" style="--c:#268ee9" title="96 · #268ee9"><b>96</b><i>#268ee9</i></div><div class="цв" style="--c:#8c9304" title="97 · #8c9304"><b>97</b><i>#8c9304</i></div><div class="цв" style="--c:#c55fb1" title="98 · #c55fb1"><b>98</b><i>#c55fb1</i></div><div class="цв" style="--c:#0c9ea2" title="99 · #0c9ea2"><b>99</b><i>#0c9ea2</i></div></div>
+<h3>Те же сто, светлее (201–300)</h3><p class="замечание" style="width:auto">L +0,10: полосы бледнее; предел — дальше они сольются с подложкой пузыря.</p><div class="сетка"><div class="цв" style="--c:#a9e56c" title="0 · #a9e56c"><b>0</b><i>#a9e56c</i></div><div class="цв" style="--c:#feb8d4" title="1 · #feb8d4"><b>1</b><i>#feb8d4</i></div><div class="цв" style="--c:#6de2fe" title="2 · #6de2fe"><b>2</b><i>#6de2fe</i></div><div class="цв" style="--c:#ffc463" title="3 · #ffc463"><b>3</b><i>#ffc463</i></div><div class="цв" style="--c:#d8c3ff" title="4 · #d8c3ff"><b>4</b><i>#d8c3ff</i></div><div class="цв" style="--c:#47f0b1" title="5 · #47f0b1"><b>5</b><i>#47f0b1</i></div><div class="цв" style="--c:#ffbcb5" title="6 · #ffbcb5"><b>6</b><i>#ffbcb5</i></div><div class="цв" style="--c:#aad4ff" title="7 · #aad4ff"><b>7</b><i>#aad4ff</i></div><div class="цв" style="--c:#d5d944" title="8 · #d5d944"><b>8</b><i>#d5d944</i></div><div class="цв" style="--c:#ffb2f0" title="9 · #ffb2f0"><b>9</b><i>#ffb2f0</i></div><div class="цв" style="--c:#11ecee" title="10 · #11ecee"><b>10</b><i>#11ecee</i></div><div class="цв" style="--c:#ffc191" title="11 · #ffc191"><b>11</b><i>#ffc191</i></div><div class="цв" style="--c:#c6cbff" title="12 · #c6cbff"><b>12</b><i>#c6cbff</i></div><div class="цв" style="--c:#89eb86" title="13 · #89eb86"><b>13</b><i>#89eb86</i></div><div class="цв" style="--c:#febac7" title="14 · #febac7"><b>14</b><i>#febac7</i></div><div class="цв" style="--c:#8edcff" title="15 · #8edcff"><b>15</b><i>#8edcff</i></div><div class="цв" style="--c:#f8ca2e" title="16 · #f8ca2e"><b>16</b><i>#f8ca2e</i></div><div class="цв" style="--c:#e7bcfe" title="17 · #e7bcfe"><b>17</b><i>#e7bcfe</i></div><div class="цв" style="--c:#13f0cb" title="18 · #13f0cb"><b>18</b><i>#13f0cb</i></div><div class="цв" style="--c:#ffbea9" title="19 · #ffbea9"><b>19</b><i>#ffbea9</i></div><div class="цв" style="--c:#b6d1fe" title="20 · #b6d1fe"><b>20</b><i>#b6d1fe</i></div><div class="цв" style="--c:#bbe15c" title="21 · #bbe15c"><b>21</b><i>#bbe15c</i></div><div class="цв" style="--c:#feb6dd" title="22 · #feb6dd"><b>22</b><i>#feb6dd</i></div><div class="цв" style="--c:#34e8ff" title="23 · #34e8ff"><b>23</b><i>#34e8ff</i></div><div class="цв" style="--c:#fec37b" title="24 · #fec37b"><b>24</b><i>#fec37b</i></div><div class="цв" style="--c:#d1c6ff" title="25 · #d1c6ff"><b>25</b><i>#d1c6ff</i></div><div class="цв" style="--c:#64efa1" title="26 · #64efa1"><b>26</b><i>#64efa1</i></div><div class="цв" style="--c:#ffbbbc" title="27 · #ffbbbc"><b>27</b><i>#ffbbbc</i></div><div class="цв" style="--c:#a1d7fe" title="28 · #a1d7fe"><b>28</b><i>#a1d7fe</i></div><div class="цв" style="--c:#e3d338" title="29 · #e3d338"><b>29</b><i>#e3d338</i></div><div class="цв" style="--c:#fdb0ff" title="30 · #fdb0ff"><b>30</b><i>#fdb0ff</i></div><div class="цв" style="--c:#03eee2" title="31 · #03eee2"><b>31</b><i>#03eee2</i></div><div class="цв" style="--c:#fec09c" title="32 · #fec09c"><b>32</b><i>#fec09c</i></div><div class="цв" style="--c:#c0cdff" title="33 · #c0cdff"><b>33</b><i>#c0cdff</i></div><div class="цв" style="--c:#9de776" title="34 · #9de776"><b>34</b><i>#9de776</i></div><div class="цв" style="--c:#feb9cf" title="35 · #feb9cf"><b>35</b><i>#feb9cf</i></div><div class="цв" style="--c:#7cdffe" title="36 · #7cdffe"><b>36</b><i>#7cdffe</i></div><div class="цв" style="--c:#ffc649" title="37 · #ffc649"><b>37</b><i>#ffc649</i></div><div class="цв" style="--c:#ddc1fe" title="38 · #ddc1fe"><b>38</b><i>#ddc1fe</i></div><div class="цв" style="--c:#30f1bb" title="39 · #30f1bb"><b>39</b><i>#30f1bb</i></div><div class="цв" style="--c:#ffbdb1" title="40 · #ffbdb1"><b>40</b><i>#ffbdb1</i></div><div class="цв" style="--c:#afd3ff" title="41 · #afd3ff"><b>41</b><i>#afd3ff</i></div><div class="цв" style="--c:#cbdc4d" title="42 · #cbdc4d"><b>42</b><i>#cbdc4d</i></div><div class="цв" style="--c:#ffb4e8" title="43 · #ffb4e8"><b>43</b><i>#ffb4e8</i></div><div class="цв" style="--c:#0debf6" title="44 · #0debf6"><b>44</b><i>#0debf6</i></div><div class="цв" style="--c:#ffc18a" title="45 · #ffc18a"><b>45</b><i>#ffc18a</i></div><div class="цв" style="--c:#cac9ff" title="46 · #cac9ff"><b>46</b><i>#cac9ff</i></div><div class="цв" style="--c:#7ced90" title="47 · #7ced90"><b>47</b><i>#7ced90</i></div><div class="цв" style="--c:#febbc3" title="48 · #febbc3"><b>48</b><i>#febbc3</i></div><div class="цв" style="--c:#97dafe" title="49 · #97dafe"><b>49</b><i>#97dafe</i></div><div class="цв" style="--c:#f0ce30" title="50 · #f0ce30"><b>50</b><i>#f0ce30</i></div><div class="цв" style="--c:#eeb9ff" title="51 · #eeb9ff"><b>51</b><i>#eeb9ff</i></div><div class="цв" style="--c:#03f0d4" title="52 · #03f0d4"><b>52</b><i>#03f0d4</i></div><div class="цв" style="--c:#ffbfa5" title="53 · #ffbfa5"><b>53</b><i>#ffbfa5</i></div><div class="цв" style="--c:#bacfff" title="54 · #bacfff"><b>54</b><i>#bacfff</i></div><div class="цв" style="--c:#b0e366" title="55 · #b0e366"><b>55</b><i>#b0e366</i></div><div class="цв" style="--c:#ffb7d7" title="56 · #ffb7d7"><b>56</b><i>#ffb7d7</i></div><div class="цв" style="--c:#5fe4fe" title="57 · #5fe4fe"><b>57</b><i>#5fe4fe</i></div><div class="цв" style="--c:#ffc46d" title="58 · #ffc46d"><b>58</b><i>#ffc46d</i></div><div class="цв" style="--c:#d5c5fe" title="59 · #d5c5fe"><b>59</b><i>#d5c5fe</i></div><div class="цв" style="--c:#53f0ab" title="60 · #53f0ab"><b>60</b><i>#53f0ab</i></div><div class="цв" style="--c:#febcb8" title="61 · #febcb8"><b>61</b><i>#febcb8</i></div><div class="цв" style="--c:#a6d5ff" title="62 · #a6d5ff"><b>62</b><i>#a6d5ff</i></div><div class="цв" style="--c:#dad73f" title="63 · #dad73f"><b>63</b><i>#dad73f</i></div><div class="цв" style="--c:#ffb1f6" title="64 · #ffb1f6"><b>64</b><i>#ffb1f6</i></div><div class="цв" style="--c:#02edea" title="65 · #02edea"><b>65</b><i>#02edea</i></div><div class="цв" style="--c:#fec096" title="66 · #fec096"><b>66</b><i>#fec096</i></div><div class="цв" style="--c:#c4ccfe" title="67 · #c4ccfe"><b>67</b><i>#c4ccfe</i></div><div class="цв" style="--c:#91ea80" title="68 · #91ea80"><b>68</b><i>#91ea80</i></div><div class="цв" style="--c:#ffb9ca" title="69 · #ffb9ca"><b>69</b><i>#ffb9ca</i></div><div class="цв" style="--c:#88ddfe" title="70 · #88ddfe"><b>70</b><i>#88ddfe</i></div><div class="цв" style="--c:#fcc82e" title="71 · #fcc82e"><b>71</b><i>#fcc82e</i></div><div class="цв" style="--c:#e3beff" title="72 · #e3beff"><b>72</b><i>#e3beff</i></div><div class="цв" style="--c:#00f1c5" title="73 · #00f1c5"><b>73</b><i>#00f1c5</i></div><div class="цв" style="--c:#febead" title="74 · #febead"><b>74</b><i>#febead</i></div><div class="цв" style="--c:#b3d2fe" title="75 · #b3d2fe"><b>75</b><i>#b3d2fe</i></div><div class="цв" style="--c:#c1df56" title="76 · #c1df56"><b>76</b><i>#c1df56</i></div><div class="цв" style="--c:#feb5e1" title="77 · #feb5e1"><b>77</b><i>#feb5e1</i></div><div class="цв" style="--c:#14eafd" title="78 · #14eafd"><b>78</b><i>#14eafd</i></div><div class="цв" style="--c:#ffc280" title="79 · #ffc280"><b>79</b><i>#ffc280</i></div><div class="цв" style="--c:#cec8ff" title="80 · #cec8ff"><b>80</b><i>#cec8ff</i></div><div class="цв" style="--c:#6dee9a" title="81 · #6dee9a"><b>81</b><i>#6dee9a</i></div><div class="цв" style="--c:#ffbbbf" title="82 · #ffbbbf"><b>82</b><i>#ffbbbf</i></div><div class="цв" style="--c:#9dd8fe" title="83 · #9dd8fe"><b>83</b><i>#9dd8fe</i></div><div class="цв" style="--c:#e8d135" title="84 · #e8d135"><b>84</b><i>#e8d135</i></div><div class="цв" style="--c:#f6b4fe" title="85 · #f6b4fe"><b>85</b><i>#f6b4fe</i></div><div class="цв" style="--c:#01efdd" title="86 · #01efdd"><b>86</b><i>#01efdd</i></div><div class="цв" style="--c:#febfa0" title="87 · #febfa0"><b>87</b><i>#febfa0</i></div><div class="цв" style="--c:#beceff" title="88 · #beceff"><b>88</b><i>#beceff</i></div><div class="цв" style="--c:#a5e670" title="89 · #a5e670"><b>89</b><i>#a5e670</i></div><div class="цв" style="--c:#ffb8d2" title="90 · #ffb8d2"><b>90</b><i>#ffb8d2</i></div><div class="цв" style="--c:#73e1fe" title="91 · #73e1fe"><b>91</b><i>#73e1fe</i></div><div class="цв" style="--c:#ffc55b" title="92 · #ffc55b"><b>92</b><i>#ffc55b</i></div><div class="цв" style="--c:#dac2ff" title="93 · #dac2ff"><b>93</b><i>#dac2ff</i></div><div class="цв" style="--c:#3ff1b5" title="94 · #3ff1b5"><b>94</b><i>#3ff1b5</i></div><div class="цв" style="--c:#ffbdb3" title="95 · #ffbdb3"><b>95</b><i>#ffbdb3</i></div><div class="цв" style="--c:#acd4fe" title="96 · #acd4fe"><b>96</b><i>#acd4fe</i></div><div class="цв" style="--c:#d1da48" title="97 · #d1da48"><b>97</b><i>#d1da48</i></div><div class="цв" style="--c:#ffb3ed" title="98 · #ffb3ed"><b>98</b><i>#ffb3ed</i></div><div class="цв" style="--c:#0eecf1" title="99 · #0eecf1"><b>99</b><i>#0eecf1</i></div></div>
+
+<h3>Как это выглядит: десять авторов</h3>
+<div class="ряд-окон">
+<div class="тел">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+    <div class="зона-1 подокно">
+      <a class="икона" href="#">‹</a>
+      <a class="ава мал" href="#">КР</a>
+      <a class="тянуть" href="#" style="text-decoration:none;color:inherit">
+        <div class="имя обрез" style="font-size:var(--щ5)">Команда разработки</div>
+        <div class="трет">10 участников · 4 в сети</div>
+      </a>
+      <a class="икона" href="#">•••</a>
+    </div>
+    <div class="зона-2"><div class="поток">
+<div class="реплика" style="--полоса:#8ac44a">
+  <div class="пузырь">
+    <div class="ава мал">БП</div>
+    <div class="автор">Борис Петрович <span class="номер">·&nbsp;0</span></div>
+    Смотри расписание релизов на квартал — миграции вынес отдельной строкой.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:15</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#fd7fb8">
+  <div class="пузырь">
+    <div class="ава мал">СМ</div>
+    <div class="автор">Сергей М. <span class="номер">·&nbsp;1</span></div>
+    Согласен, надо считать по факту.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:16</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#10c4e5">
+  <div class="пузырь">
+    <div class="ава мал">АП</div>
+    <div class="автор">Анна Петрова <span class="номер">·&nbsp;2</span></div>
+    Могу собрать цифры к пятнице.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:17</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#e5a105">
+  <div class="пузырь">
+    <div class="ава мал">Д</div>
+    <div class="автор">Дмитрий <span class="номер">·&nbsp;3</span></div>
+    А кто отвечает за стенд?
+    <div class="низ-пузыря"><span class="точка"></span><span>10:18</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#c098fe">
+  <div class="пузырь">
+    <div class="ава мал">L</div>
+    <div class="автор">@lena_k <span class="номер">·&nbsp;4</span></div>
+    Я. Стенд обновлю после выкатки.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:19</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#00cf92">
+  <div class="пузырь">
+    <div class="ава мал">П</div>
+    <div class="автор">Пётр <span class="номер">·&nbsp;5</span></div>
+    Тогда решаем так: миграции до пятницы, релиз на неделю позже.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:20</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#ff887e">
+  <div class="пузырь">
+    <div class="ава мал">МТ</div>
+    <div class="автор">Марина Т. <span class="номер">·&nbsp;6</span></div>
+    Ок, записала в план.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:21</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#68b6fe">
+  <div class="пузырь">
+    <div class="ава мал">И</div>
+    <div class="автор">Игорь <span class="номер">·&nbsp;7</span></div>
+    Напомните про ключи групп — там была беда.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:22</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#b5b809">
+  <div class="пузырь">
+    <div class="ава мал">ОВ</div>
+    <div class="автор">Ольга В. <span class="номер">·&nbsp;8</span></div>
+    Починено вчера, четыре причины, всё в БЕДЫ.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:23</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#ec85db">
+  <div class="пузырь">
+    <div class="ава мал">Т</div>
+    <div class="автор">Тимур <span class="номер">·&nbsp;9</span></div>
+    Отлично. До связи в пятницу.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:24</span></div>
+  </div>
+</div>
+    </div></div>
+  </div>
+  <div class="замечание"><b>Только полоса.</b> Имя автора — серым, как сейчас; аватар-буква — бледная подложка цвета полосы. Номера у имён — для сверки с сеткой, в приложении их не будет.</div>
+</div>
+<div class="тел">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+    <div class="зона-1 подокно">
+      <a class="икона" href="#">‹</a>
+      <a class="ава мал" href="#">КР</a>
+      <a class="тянуть" href="#" style="text-decoration:none;color:inherit">
+        <div class="имя обрез" style="font-size:var(--щ5)">Команда разработки</div>
+        <div class="трет">10 участников · 4 в сети</div>
+      </a>
+      <a class="икона" href="#">•••</a>
+    </div>
+    <div class="зона-2"><div class="поток">
+<div class="реплика" style="--полоса:#8ac44a">
+  <div class="пузырь">
+    <div class="ава мал">БП</div>
+    <div class="автор" style="color:#8ac44a">Борис Петрович <span class="номер">·&nbsp;0</span></div>
+    Смотри расписание релизов на квартал — миграции вынес отдельной строкой.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:15</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#fd7fb8">
+  <div class="пузырь">
+    <div class="ава мал">СМ</div>
+    <div class="автор" style="color:#fd7fb8">Сергей М. <span class="номер">·&nbsp;1</span></div>
+    Согласен, надо считать по факту.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:16</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#10c4e5">
+  <div class="пузырь">
+    <div class="ава мал">АП</div>
+    <div class="автор" style="color:#10c4e5">Анна Петрова <span class="номер">·&nbsp;2</span></div>
+    Могу собрать цифры к пятнице.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:17</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#e5a105">
+  <div class="пузырь">
+    <div class="ава мал">Д</div>
+    <div class="автор" style="color:#e5a105">Дмитрий <span class="номер">·&nbsp;3</span></div>
+    А кто отвечает за стенд?
+    <div class="низ-пузыря"><span class="точка"></span><span>10:18</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#c098fe">
+  <div class="пузырь">
+    <div class="ава мал">L</div>
+    <div class="автор" style="color:#c098fe">@lena_k <span class="номер">·&nbsp;4</span></div>
+    Я. Стенд обновлю после выкатки.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:19</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#00cf92">
+  <div class="пузырь">
+    <div class="ава мал">П</div>
+    <div class="автор" style="color:#00cf92">Пётр <span class="номер">·&nbsp;5</span></div>
+    Тогда решаем так: миграции до пятницы, релиз на неделю позже.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:20</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#ff887e">
+  <div class="пузырь">
+    <div class="ава мал">МТ</div>
+    <div class="автор" style="color:#ff887e">Марина Т. <span class="номер">·&nbsp;6</span></div>
+    Ок, записала в план.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:21</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#68b6fe">
+  <div class="пузырь">
+    <div class="ава мал">И</div>
+    <div class="автор" style="color:#68b6fe">Игорь <span class="номер">·&nbsp;7</span></div>
+    Напомните про ключи групп — там была беда.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:22</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#b5b809">
+  <div class="пузырь">
+    <div class="ава мал">ОВ</div>
+    <div class="автор" style="color:#b5b809">Ольга В. <span class="номер">·&nbsp;8</span></div>
+    Починено вчера, четыре причины, всё в БЕДЫ.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:23</span></div>
+  </div>
+</div>
+<div class="реплика" style="--полоса:#ec85db">
+  <div class="пузырь">
+    <div class="ава мал">Т</div>
+    <div class="автор" style="color:#ec85db">Тимур <span class="номер">·&nbsp;9</span></div>
+    Отлично. До связи в пятницу.
+    <div class="низ-пузыря"><span class="точка"></span><span>10:24</span></div>
+  </div>
+</div>
+    </div></div>
+  </div>
+  <div class="замечание"><b>Полоса и имя.</b> Имя автора — цветом полосы. Быстрее находишь «кто», но экран пестрее.</div>
+</div>
+</div>
+
+<h3>Что обсуждаем</h3>
+<ul class="замечание" style="width:auto">
+  <li><b>Чей номер.</b> Вариант А — по порядку появления автора <i>в этой группе</i> (первый написавший
+    — №0 салатовый, второй — №1 розовый…): в каждой группе цвета различимы максимально, но один
+    человек в разных группах разного цвета. Вариант Б — номер из идентификатора человека (хеш):
+    один человек — один цвет во всех группах, но в маленькой группе двое могут совпасть (при ста
+    цветах у пяти человек — около 10 %). Предлагаю <b>А</b>: полоса отвечает на вопрос «кто это
+    здесь», а не «кто это вообще» — на второй отвечают имя и аватар.</li>
+  <li><b>Что красить.</b> Только полосу (левый кадр) — или полосу и имя автора (правый кадр). Имя
+    цветом читается быстрее, но десять цветных имён на экране — пестро. Предлагаю <b>только
+    полосу</b>, плюс подложку аватара-буквы бледным тем же цветом (как на кадрах).</li>
+  <li><b>Своё сообщение</b> остаётся без полосы, как сейчас.</li>
+  <li><b>Тёмная тема:</b> та же светлота 0,755 на тёмной подложке читается хорошо — полоса и так
+    светлее фона; отдельного набора не нужно, проверить снимком.</li>
+  <li><b>Где хранить номер.</b> Порядок появления считается из переписки (первое сообщение автора в
+    группе) — хранить ничего не надо, на двух устройствах одного аккаунта он совпадёт, потому что
+    порядок сообщений теперь один (время написания).</li>
+</ul>
+</body>
