@@ -65,7 +65,7 @@ func (s *Store) SetDisplayName(ctx context.Context, userID, name string) error {
 		return err
 	}
 	_, err = s.pool.Exec(ctx, `
-		UPDATE persons SET name_enc = $2
+		UPDATE persons SET name_enc = $2, profile_rev = profile_rev + 1
 		WHERE person_id = (SELECT person_id FROM users WHERE user_id = $1)`, userID, enc)
 	return err
 }

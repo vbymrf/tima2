@@ -70,12 +70,12 @@ var ErrAvatarNotOwned = errors.New("медиа не принадлежит ак�
 func (s *Store) SetAvatar(ctx context.Context, userID, mediaID string) error {
 	if mediaID == "" {
 		_, err := s.pool.Exec(ctx, `
-			UPDATE persons SET avatar_media_id = NULL
+			UPDATE persons SET avatar_media_id = NULL, profile_rev = profile_rev + 1
 			WHERE person_id = (SELECT person_id FROM users WHERE user_id = $1)`, userID)
 		return err
 	}
 	tag, err := s.pool.Exec(ctx, `
-		UPDATE persons SET avatar_media_id = $2::uuid
+		UPDATE persons SET avatar_media_id = $2::uuid, profile_rev = profile_rev + 1
 		WHERE person_id = (SELECT person_id FROM users WHERE user_id = $1)
 		  AND EXISTS (SELECT 1 FROM media_objects
 		               WHERE media_id = $2::uuid AND owner_id = $1 AND status = 'complete')`,
@@ -115,6 +115,35 @@ func (s *Store) AvatarsOf(ctx context.Context, ids []string) (map[string]string,
 			return nil, err
 		}
 		out[id] = media
+	}
+	return out, rows.Err()
+}
+
+// ProfileRevs — счётчики изменений профиля по user_id (миграция 0052). Клиент сравнивает
+// с запомненным и переспрашивает карточку при разнице. Кого не знаем — того в карте нет.
+func (s *Store) ProfileRevs(ctx context.Context, ids []string) (map[string]int32, error) {
+	out := make(map[string]int32, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT u.user_id, p.profile_rev FROM users u
+		JOIN persons p ON p.person_id = u.person_id
+		WHERE u.user_id = ANY($1)`, ids)
+	if err != nil {
+		if isBadUUID(err) {
+			return out, nil
+		}
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var rev int32
+		if err := rows.Scan(&id, &rev); err != nil {
+			return nil, err
+		}
+		out[id] = rev
 	}
 	return out, rows.Err()
 }

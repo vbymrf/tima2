@@ -240,10 +240,12 @@ func listGroupMembers(deps groupsDeps) http.HandlerFunc {
 			Role        string  `json:"role"`
 			JoinedAt    string  `json:"joined_at"`
 			BannedUntil *string `json:"banned_until,omitempty"`
+			// Номер оттенка полосы 0…99; нет — не выбирал (миграция 0053).
+			Hue *int16 `json:"hue,omitempty"`
 		}
 		out := make([]item, 0, len(members))
 		for _, m := range members {
-			it := item{UserID: m.UserID, Role: m.Role, JoinedAt: m.JoinedAt.UTC().Format("2006-01-02T15:04:05Z")}
+			it := item{UserID: m.UserID, Role: m.Role, JoinedAt: m.JoinedAt.UTC().Format("2006-01-02T15:04:05Z"), Hue: m.Hue}
 			if m.BannedUntil != nil {
 				v := m.BannedUntil.UTC().Format("2006-01-02T15:04:05Z")
 				it.BannedUntil = &v
@@ -413,6 +415,44 @@ func banGroupMember(deps groupsDeps) http.HandlerFunc {
 		}
 		if err := deps.store.BanGroupMember(r.Context(), r.PathValue("groupID"), targetID, req.Seconds); err != nil {
 			log.Printf("banGroupMember: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// setMyHue — PUT /groups/{groupID}/members/me/color {hue}: мой цвет полосы в этой группе;
+// DELETE — сбросить на автоматический. Решение заказчика 2026-09-19: только свой цвет;
+// совпадения запрещены (409 hue_taken), пока участников не больше 80 % оттенков.
+func setMyHue(deps groupsDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		groupID := r.PathValue("groupID")
+		var hue *int16
+		if r.Method != http.MethodDelete {
+			var req struct {
+				Hue *int16 `json:"hue"`
+			}
+			if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&req); err != nil || req.Hue == nil {
+				writeErr(w, http.StatusBadRequest, "bad_json", "нужен hue 0…99")
+				return
+			}
+			if *req.Hue < 0 || *req.Hue > 99 {
+				writeErr(w, http.StatusBadRequest, "bad_hue", "hue — от 0 до 99")
+				return
+			}
+			hue = req.Hue
+		}
+		switch err := deps.store.SetMemberHue(r.Context(), groupID, id.UserID, hue); {
+		case errors.Is(err, store.ErrNotMember):
+			writeErr(w, http.StatusNotFound, "group_not_found", "группа не найдена")
+			return
+		case errors.Is(err, store.ErrHueTaken):
+			writeErr(w, http.StatusConflict, "hue_taken", "этот цвет уже у другого участника")
+			return
+		case err != nil:
+			log.Printf("setMyHue: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}

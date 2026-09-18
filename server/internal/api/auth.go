@@ -450,10 +450,18 @@ func resolveNames(deps usersDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
+		// Счётчик профиля — чтобы клиент запомнил, какую карточку он видел, и переспросил
+		// только при разнице с тем, что придёт с сообщением (миграция 0052).
+		revs, err := deps.store.ProfileRevs(r.Context(), req.IDs)
+		if err != nil {
+			log.Printf("resolveNames revs: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"names": names, "phones": phones, "nicknames": nicks, "has_phone": hasPhone,
-			"avatars": avatars,
+			"avatars": avatars, "profile_revs": revs,
 		})
 	}
 }

@@ -32,11 +32,15 @@ type Member struct {
 	Role        string
 	JoinedAt    time.Time
 	BannedUntil *time.Time
+	// Номер оттенка полосы 0…99 (миграция 0053); nil — не выбирал.
+	Hue *int16
 }
 
 var (
 	ErrGroupNotFound = errors.New("группа не найдена")
 	ErrNotMember     = errors.New("пользователь не активный участник группы")
+	// ErrHueTaken — оттенок уже у другого участника, а участников меньше 80 % оттенков.
+	ErrHueTaken = errors.New("этот цвет уже у другого участника")
 	ErrUserUnknown   = errors.New("пользователь не существует")
 )
 
@@ -178,7 +182,7 @@ func (s *Store) BanGroupMember(ctx context.Context, groupID, userID string, seco
 
 func (s *Store) ListGroupMembers(ctx context.Context, groupID string) ([]Member, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT user_id, role, joined_at, banned_until FROM memberships
+		SELECT user_id, role, joined_at, banned_until, hue FROM memberships
 		WHERE target_type = 'group' AND target_id = $1 AND left_at IS NULL
 		ORDER BY joined_at`, groupID)
 	if err != nil {
@@ -188,12 +192,62 @@ func (s *Store) ListGroupMembers(ctx context.Context, groupID string) ([]Member,
 	var out []Member
 	for rows.Next() {
 		var m Member
-		if err := rows.Scan(&m.UserID, &m.Role, &m.JoinedAt, &m.BannedUntil); err != nil {
+		if err := rows.Scan(&m.UserID, &m.Role, &m.JoinedAt, &m.BannedUntil, &m.Hue); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// HueSharedLimit — до скольких активных участников совпадение цветов запрещено:
+// 80 % от 99 доступных оттенков (№0 клиент не выдаёт — он близок к салатовому владельца).
+const HueSharedLimit = 79
+
+// SetMemberHue ставит участнику номер оттенка полосы (nil — сбросить на автоматический).
+//
+// Проверка «занят ли» и запись — одним UPDATE: две проверки-потом-записи с двух телефонов
+// прошли бы обе. Занят и участников не больше HueSharedLimit — ErrHueTaken; не участник —
+// ErrNotMember.
+func (s *Store) SetMemberHue(ctx context.Context, groupID, userID string, hue *int16) error {
+	if hue != nil && (*hue < 0 || *hue > 99) {
+		return errors.New("номер оттенка — от 0 до 99")
+	}
+	ct, err := s.pool.Exec(ctx, `
+		UPDATE memberships SET hue = $3
+		WHERE target_type = 'group' AND target_id = $1 AND user_id = $2 AND left_at IS NULL
+		  AND ($3::smallint IS NULL
+		       OR NOT EXISTS (SELECT 1 FROM memberships o
+		                      WHERE o.target_type = 'group' AND o.target_id = $1
+		                        AND o.left_at IS NULL AND o.user_id <> $2 AND o.hue = $3)
+		       OR (SELECT count(*) FROM memberships c
+		           WHERE c.target_type = 'group' AND c.target_id = $1 AND c.left_at IS NULL) > $4)`,
+		groupID, userID, hue, HueSharedLimit)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		// Не обновилось: либо не участник, либо цвет занят. Различаем вторым запросом —
+		// он нужен только на отказе, то есть редко.
+		if _, roleErr := s.GroupRole(ctx, groupID, userID); roleErr != nil {
+			return ErrNotMember
+		}
+		return ErrHueTaken
+	}
+	return nil
+}
+
+// SenderStamp — что приложить к событию о сообщении, чтобы получатели узнали о смене
+// профиля и цвета без запроса: счётчик профиля отправителя и его оттенок в этой группе.
+// Один запрос по первичным ключам на отправку, а не на каждую доставку.
+func (s *Store) SenderStamp(ctx context.Context, groupID, userID string) (rev int32, hue *int16, err error) {
+	err = s.pool.QueryRow(ctx, `
+		SELECT p.profile_rev,
+		       (SELECT m.hue FROM memberships m
+		         WHERE m.target_type = 'group' AND m.target_id = $1 AND m.user_id = $2 AND m.left_at IS NULL)
+		FROM users u JOIN persons p ON p.person_id = u.person_id
+		WHERE u.user_id = $2`, groupID, userID).Scan(&rev, &hue)
+	return rev, hue, err
 }
 
 // MyGroup — группа глазами участника (список на главном экране клиента).

@@ -50,7 +50,7 @@ func (s *Store) SetNickname(ctx context.Context, userID, nick string) error {
 		return ErrNicknameBad
 	}
 	tag, err := s.pool.Exec(ctx, `
-		UPDATE persons SET nickname = $2, nickname_set_by = $1
+		UPDATE persons SET nickname = $2, nickname_set_by = $1, profile_rev = profile_rev + 1
 		WHERE person_id = (SELECT person_id FROM users WHERE user_id = $1)
 		  AND (nickname_set_by IS NULL OR nickname_set_by <> $1)`, userID, nick)
 	var pgErr *pgconn.PgError

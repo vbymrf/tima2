@@ -231,6 +231,17 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			log.Printf("postGroupMessage: member devices: %v", err)
 		}
 		eventPayload := groupMessageJSON(msg)
+		// Штамп отправителя — счётчик профиля и цвет в группе (0052, 0053): получатель
+		// сравнит с тем, что помнит, и переспросит карточку только при разнице. Не
+		// достался — событие уходит без него: сообщение важнее подписи к нему.
+		if rev, hue, err := deps.store.SenderStamp(r.Context(), groupID, id.UserID); err == nil {
+			eventPayload["sender_profile_rev"] = rev
+			if hue != nil {
+				eventPayload["sender_hue"] = *hue
+			}
+		} else {
+			log.Printf("postGroupMessage: sender stamp: %v", err)
+		}
 		for _, dev := range devices {
 			deps.notifier.Device(r.Context(), dev, "message.group", eventPayload)
 		}

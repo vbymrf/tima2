@@ -357,6 +357,12 @@ func postMessage(deps messagesDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
+		// Счётчик профиля отправителя (0052) — получатель переспросит карточку только при
+		// разнице с запомненным. Личная переписка без группы — цвета полосы здесь нет.
+		var senderRev int32
+		if revs, err := deps.store.ProfileRevs(r.Context(), []string{id.UserID}); err == nil {
+			senderRev = revs[id.UserID]
+		}
 		// Доставка адресатам: event log (+ live онлайн-устройствам) — конверт
 		// с единственной обёрткой адресата. Push-очередь офлайн — итерация worker-а.
 		for _, wk := range env.GetWrappedKeys() {
@@ -367,9 +373,10 @@ func postMessage(deps messagesDeps) http.HandlerFunc {
 				continue
 			}
 			deps.notifier.Device(r.Context(), wk.GetRecipient(), "message.new", map[string]any{
-				"chat_id":    meta.GetChatId(),
-				"message_id": meta.GetMessageId(),
-				"envelope":   base64.RawURLEncoding.EncodeToString(raw),
+				"chat_id":            meta.GetChatId(),
+				"message_id":         meta.GetMessageId(),
+				"envelope":           base64.RawURLEncoding.EncodeToString(raw),
+				"sender_profile_rev": senderRev,
 			})
 		}
 

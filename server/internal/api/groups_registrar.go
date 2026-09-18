@@ -25,6 +25,8 @@ type GroupStore interface {
 	SoftDeleteGroup(ctx context.Context, groupID string) error
 	ListGroupsForUser(ctx context.Context, userID string) ([]store.MyGroup, error)
 	ListGroupMembers(ctx context.Context, groupID string) ([]store.Member, error)
+	SetMemberHue(ctx context.Context, groupID, userID string, hue *int16) error
+	SenderStamp(ctx context.Context, groupID, userID string) (int32, *int16, error)
 	AddGroupMember(ctx context.Context, groupID, userID, role string) error
 	RemoveGroupMember(ctx context.Context, groupID, userID string) error
 	SetGroupRole(ctx context.Context, groupID, userID, role string) error
@@ -113,6 +115,9 @@ func RegisterGroups(
 	mux.HandleFunc("PUT /api/v1/groups/{groupID}/members/{userID}/term", requireDevice(putMembershipTerm(deps)))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}/members", requireDevice(listGroupMembers(deps)))
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/members", requireDevice(addGroupMember(deps)))
+	// Мой цвет полосы в группе (миграция 0053): поставить и сбросить.
+	mux.HandleFunc("PUT /api/v1/groups/{groupID}/members/me/color", requireDevice(setMyHue(deps)))
+	mux.HandleFunc("DELETE /api/v1/groups/{groupID}/members/me/color", requireDevice(setMyHue(deps)))
 	mux.HandleFunc("DELETE /api/v1/groups/{groupID}/members/{userID}", requireDevice(removeGroupMember(deps)))
 	mux.HandleFunc("PUT /api/v1/groups/{groupID}/members/{userID}/role", requireDevice(setGroupRole(deps)))
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/members/{userID}/ban", requireDevice(banGroupMember(deps)))

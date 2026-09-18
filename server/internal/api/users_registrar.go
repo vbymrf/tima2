@@ -31,6 +31,7 @@ type UserStore interface {
 	FindUserByNickname(ctx context.Context, nick string) (string, error)
 	Nicknames(ctx context.Context, ids []string) (map[string]string, error)
 	AvatarsOf(ctx context.Context, ids []string) (map[string]string, error)
+	ProfileRevs(ctx context.Context, ids []string) (map[string]int32, error)
 
 	// Есть ли у человека телефон. Виртуальный аккаунт — тот, у кого его нет (Д10):
 	// отдельного признака не заводится, но вычислить его может только сервер.
