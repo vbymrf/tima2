@@ -211,6 +211,9 @@ func (s *Store) ListGroupsForUser(ctx context.Context, userID string) ([]MyGroup
 		FROM memberships m
 		JOIN groups g ON g.group_id = m.target_id AND g.deleted_at IS NULL
 		WHERE m.target_type = 'group' AND m.user_id = $1 AND m.left_at IS NULL
+		  -- Служебная группа аккаунта (0051) — не переписка: её ключом шифруется копия
+		  -- книги, и в списке групп она была бы безымянной строкой, которую нельзя открыть.
+		  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.store_group_id = g.group_id)
 		ORDER BY m.joined_at DESC`, userID)
 	if err != nil {
 		return nil, err
