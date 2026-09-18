@@ -67,10 +67,10 @@ class SqlChatsFeedTest {
 
     private fun name(chatId: String, name: String, kind: Long = 0, peer: String? = "u-1") {
         db.chatsQueries.upsertChat(
-            chat_id = chatId,
+            chatId = chatId,
             kind = kind,
-            title_enc = cipher.seal(name.encodeToByteArray()),
-            peer_id = peer,
+            titleEnc = cipher.seal(name.encodeToByteArray()),
+            peerId = peer,
         )
     }
 

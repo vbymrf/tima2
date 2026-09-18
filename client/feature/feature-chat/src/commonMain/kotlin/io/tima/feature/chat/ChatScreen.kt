@@ -114,6 +114,8 @@ fun ChatScreen(
      * поимённо, шифр читают по ключу.
      */
     onCarry: ((Long, Int) -> Unit)? = null,
+    /** Меню «•••» в шапке. `null` — кнопки нет (личная переписка). */
+    onMore: (() -> Unit)? = null,
     /**
      * Показывать ли доступность у реплик. `null` — переписка личная: там показывать нечего.
      *
@@ -140,26 +142,9 @@ fun ChatScreen(
             // Аватар собеседника — по макету подокна чата. Буквы, а не картинка: картинки
             // приезжают вместе с медиа, а место под них тут то же самое.
             avatar = peerLetters(peer),
-            right = if (onMembers != null || onCircles != null) {
-                {
-                    Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-                        onCircles?.let { switch ->
-                            // Слово «доступность», а не «уровни»: человек видит, кому
-                            // открыта реплика, а не понятие сервера.
-                            Chip(
-                                label = words.access,
-                                kind = if (state.showCircles) ChipKind.Selected else ChipKind.Quiet,
-                                onClick = { switch(!state.showCircles) },
-                            )
-                        }
-                        onMembers?.let { open ->
-                            Chip(words.members, kind = ChipKind.Selected, onClick = open)
-                        }
-                    }
-                }
-            } else {
-                null
-            },
+            // Чипы «Доступность» и «Участники» из шапки убраны (решение заказчика
+            // 2026-09-17: это про группу, а не про переписку). Они живут в меню «•••».
+            onMore = onMore,
         )
 
         // Полоса «ключа нет вовсе» — НАД лентой, а не над вводом: она не про отдельные

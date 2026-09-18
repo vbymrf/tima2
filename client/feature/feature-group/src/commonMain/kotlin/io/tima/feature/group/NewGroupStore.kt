@@ -10,6 +10,9 @@ import io.tima.domain.chat.CommunityStep
 import io.tima.domain.chat.CreateChannel
 import io.tima.domain.chat.CreateCommunity
 import io.tima.domain.chat.CreateGroupChat
+import io.tima.domain.chat.Section as CommunitySection
+import io.tima.domain.chat.SectionSet
+import io.tima.domain.chat.ChatSections
 import io.tima.domain.chat.CreateGroupStep
 import io.tima.domain.chat.GroupKind
 import kotlinx.coroutines.CoroutineScope
@@ -36,6 +39,13 @@ import kotlinx.coroutines.launch
  */
 class NewGroupStore(
     private val creation: CreateGroupChat,
+    /**
+     * Набор разделов сообществ и раздел у переписки (Р5). `null` — шага раздела не будет.
+     * Раздел назначается при создании (решение заказчика 2026-09-18); перенести потом
+     * можно через «•••» в шапке.
+     */
+    private val shelves: SectionSet? = null,
+    private val chatSections: ChatSections? = null,
     private val scope: CoroutineScope,
     /**
      * Создание канала. `null` — раздел «Канал» остаётся серым: показывать шаг, которым
@@ -58,6 +68,13 @@ class NewGroupStore(
 
     private val _state = MutableStateFlow(NewGroupState())
     val state: StateFlow<NewGroupState> = _state.asStateFlow()
+
+    init {
+        // Разделы текут из базы: заведённый на шаге появляется в выборе сам.
+        shelves?.let { set ->
+            scope.launch { set.sections().collect { list -> _state.value = _state.value.copy(shelfList = list) } }
+        }
+    }
 
     // ── шаги ────────────────────────────────────────────────────────────────
 
@@ -199,6 +216,25 @@ class NewGroupStore(
 
     // ── поля последнего шага ────────────────────────────────────────────────
 
+    fun choseShelf(id: String) {
+        _state.value = _state.value.copy(shelfId = id, trouble = null)
+    }
+
+    fun changedNewShelf(text: String) {
+        _state.value = _state.value.copy(newShelf = text)
+    }
+
+    /** Завести раздел прямо на шаге и сразу выбрать его: человек уже назвал его. */
+    fun createShelf() {
+        val set = shelves ?: return
+        val name = _state.value.newShelf.trim()
+        if (name.isEmpty()) return
+        scope.launch {
+            val id = set.add(name)
+            _state.value = _state.value.copy(shelfId = id, newShelf = "")
+        }
+    }
+
     fun changedTitle(text: String) {
         _state.value = _state.value.copy(title = text, trouble = null)
     }
@@ -263,11 +299,18 @@ class NewGroupStore(
                 description = current.description,
             )
             _state.value = when (outcome) {
-                is CreateGroupStep.Created -> current.copy(
-                    expect = false,
-                    created = outcome.groupId,
-                    notInvited = outcome.notInvited,
-                )
+                is CreateGroupStep.Created -> {
+                    // Раздел — сразу после рождения, до показа: иначе группа мелькнёт в
+                    // «Общем» и перепрыгнет. Провал переноса группу не отменяет.
+                    if (current.shelfId.isNotEmpty()) {
+                        runCatching { chatSections?.moveTo(outcome.groupId, current.shelfId) }
+                    }
+                    current.copy(
+                        expect = false,
+                        created = outcome.groupId,
+                        notInvited = outcome.notInvited,
+                    )
+                }
                 is CreateGroupStep.BadTitle -> current.copyWithTrouble(outcome.reason)
                 is CreateGroupStep.Offline -> current.copyWithTrouble(
                     words().trouble.retryIn(
@@ -335,6 +378,12 @@ data class NewGroupState(
     val joining: Joining = Joining.Closed,
     val title: String = "",
     val description: String = "",
+    /** Раздел набора сообществ, куда положить созданное. Пусто — «Общий». */
+    val shelfId: String = "",
+    /** Заведённые разделы набора сообществ — для выбора на шаге. */
+    val shelfList: List<CommunitySection> = emptyList(),
+    /** Имя нового раздела, набираемое прямо на шаге. */
+    val newShelf: String = "",
     /** Код страны отдельным полем: на цифровой клавиатуре нет плюса (2026-09-15). */
     val countryCode: String = "7",
     val number: String = "",

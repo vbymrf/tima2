@@ -654,6 +654,10 @@ object EnglishWords : Words {
         override val addToContacts = "Add to contacts"
         override val foundInTima = "Found in TIMa — you will be subscribed to their feed automatically"
         override val notInTima = "Not in TIMa. The contact will be saved — you can call by phone"
+        override val chatMenu = "Chat"
+        override val moveToSection = "Move to section"
+        override val moveToSectionAbout = "where this group lives"
+        override fun inSection(name: String) = "now — “$name”"
         override fun notInTimaChecked(phone: String) =
             "TIMa has no $phone. The contact will be saved — you can call by phone. " +
                 "If the person is on TIMa, check the number"
@@ -973,6 +977,11 @@ object EnglishWords : Words {
         override val create = "Create"
         override val creating = "Creating…"
         override val goToCreated = "Open the group"
+        override val shelf = "Section"
+        override val shelfAbout = "where to put it: move later via “•••”"
+        override val shelfCommon = "General"
+        override val newShelfHint = "new section"
+        override val createShelf = "Create"
         override val next = "Next"
         override val gotIt = "Got it"
 

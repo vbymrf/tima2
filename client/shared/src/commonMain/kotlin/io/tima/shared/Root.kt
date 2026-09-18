@@ -1,6 +1,7 @@
 package io.tima.shared
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -10,6 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import io.tima.core.encryption.AccountIdentitiesOverKodium
 import io.tima.core.encryption.DeviceKeyFactoryOverKodium
@@ -25,6 +27,7 @@ import io.tima.core.network.GroupsOverHttp
 import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.NarrowMessageLevel
 import io.tima.domain.chat.ChatKind
+import io.tima.domain.chat.Section
 import io.tima.domain.chat.GroupKeyRotator
 import io.tima.domain.chat.HealGroupKey
 import io.tima.domain.chat.RotateStep
@@ -66,6 +69,7 @@ import io.tima.feature.chat.ChatStore
 import io.tima.feature.chat.ChatsState
 import io.tima.feature.chat.ChatsStore
 import io.tima.feature.chat.GroupsScreen
+import io.tima.feature.chat.ChatMenuSheet
 import io.tima.feature.chat.SectionTab
 import io.tima.feature.chat.COMMON_SECTION
 import io.tima.feature.chat.SectionsRow
@@ -654,6 +658,10 @@ private fun App(
     // Подокно «Вид» вкладки «Контакты»: настроек три группы и они независимы, перебор
     // по кругу не дал бы угадать следующее состояние.
     var bookView by remember { mutableStateOf(false) }
+    /** Разделы набора сообществ — поток из базы, читают Страница, меню чата и мастер. */
+    val communityShelves by environment.communitySections.sections().collectAsState(initial = emptyList())
+    /** Выбранный раздел на вкладке «Группы» Страницы. */
+    var groupSection by remember { mutableStateOf("") }
     /** Экран управления разделами — из меню «Вид» (ПЛАН-РАЗДЕЛОВ Р2). */
     var sectionsScreen by remember { mutableStateOf(false) }
     // Кого приглашаем. null — подокно закрыто: отдельного флага не заводим, чтобы
@@ -1186,10 +1194,30 @@ private fun App(
                     // Группы человека. Тот же список из базы, что у окна 1, только
                     // другого рода: второго похода в базу для этого не нужно.
                     groups = {
-                        GroupsScreen(
-                            state = listState,
-                            onOpen = { where = Where.Chat(it.chatId, it.title) },
-                        )
+                        Column {
+                            // Полоса разделов сообществ — тот же механизм, что у книги
+                            // (В/Г по «Виду»), набор свой. Появляется, когда есть что выбирать.
+                            val tabs = listOf(SectionTab("", bookWordsNow().everyone, 0)) +
+                                communityShelves.map { SectionTab(it.id, it.name, it.icon) } +
+                                SectionTab(COMMON_SECTION, bookWordsNow().commonSection, 0)
+                            if (communityShelves.isNotEmpty()) {
+                                SectionsRow(
+                                    tabs = tabs,
+                                    chosen = groupSection,
+                                    icons = bookStateForChats.view.icons,
+                                    onPick = { groupSection = it },
+                                    newIn = { key ->
+                                        val id = if (key == COMMON_SECTION) "" else key
+                                        listState.groups.count { it.unread > 0 && (key.isEmpty() || it.sectionId == id) }
+                                    },
+                                )
+                            }
+                            GroupsScreen(
+                                state = listState,
+                                onOpen = { where = Where.Chat(it.chatId, it.title) },
+                                chosen = groupSection,
+                            )
+                        }
                     },
                     feed = {
                         val state by page.state.collectAsState()
@@ -1417,6 +1445,11 @@ private fun App(
             is Where.Chat -> {
                 {
                     Chat(
+                        shelves = communityShelves,
+                        currentShelf = listState.chats.firstOrNull { it.chatId == current.chatId }?.sectionId ?: "",
+                        onMoveToShelf = { chatId, sectionId ->
+                            scope.launch { environment.communitySections.moveTo(chatId, sectionId) }
+                        },
                         heal = assembled.keyOrchestrator.heal,
                         environment = environment,
                         network = network,
@@ -1507,8 +1540,13 @@ private fun Chat(
     onCarry: (Long, Int) -> Unit = { _, _ -> },
     /** Лечение группы без ключа при открытии; `null` — лечить нечем. */
     heal: HealGroupKey? = null,
+    /** Меню «•••» (Р5): разделы набора сообществ и перенос. `null` — меню нет. */
+    shelves: List<Section> = emptyList(),
+    onMoveToShelf: ((chatId: String, sectionId: String) -> Unit)? = null,
+    currentShelf: String = "",
 ) {
     // Групповая ли переписка — решает столбец `kind`, а не догадка по идентификатору.
+    var chatMenu by remember { mutableStateOf(false) }
     // От этого зависит трое: показывать ли автора у реплик, спрашивать ли имена и есть ли
     // вход в состав.
     val group = remember(chatId) {
@@ -1582,6 +1620,7 @@ private fun Chat(
         onRequestKey = store::requestKey,
         onPhrase = store::changedPhrase,
         onMembers = if (group) onMembers else null,
+        onMore = if (group && onMoveToShelf != null) { { chatMenu = true } } else null,
         // Круг предлагается только в группе: в личной переписке всё зашифровано и
         // адресовано одному человеку — выбирать нечего.
         circle = if (group) MessageCircle.of(state.level) else null,
@@ -1600,6 +1639,18 @@ private fun Chat(
         // собеседника, и разговор о реплике совпадает с самой перепиской.
         onThread = if (group) store::threadOpened else null,
     )
+
+    if (chatMenu && group && onMoveToShelf != null) {
+        ChatMenuSheet(
+            sections = shelves,
+            currentSection = currentShelf,
+            onMoveTo = { sectionId -> onMoveToShelf(chatId, sectionId) },
+            onClose = { chatMenu = false },
+            circlesShown = state.showCircles,
+            onCircles = store::circlesShown,
+            onMembers = onMembers,
+        )
+    }
 }
 
 /**
@@ -2089,6 +2140,9 @@ private fun NewGroup(
                 rotator = rotator,
             ),
             scope = scope,
+            // Раздел при создании (Р5): набор сообществ и куда положить созданное.
+            shelves = environment.communitySections,
+            chatSections = environment.communitySections,
             // Канал и сообщество перестали быть серыми: у мастера есть чем их выполнить.
             // Звуковой чат остаётся серым — он ждёт реализации (решение заказчика
             // 2026-09-08), и признак «готов» считается по наличию случая, а не по флагу.
@@ -2126,6 +2180,9 @@ private fun NewGroup(
         onAddNumber = store::addNumber,
         onRemoveNumber = store::removeNumber,
         onCreate = store::create,
+        onShelf = store::choseShelf,
+        onNewShelf = store::changedNewShelf,
+        onCreateShelf = store::createShelf,
         // Уйти с экрана, когда он задержался ради непозванных: без этой кнопки уйти было
         // нечем, а прежняя «Создать» заводила ещё одну группу.
         onOpenCreated = {

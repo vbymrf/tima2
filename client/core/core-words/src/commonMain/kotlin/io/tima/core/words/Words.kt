@@ -510,6 +510,12 @@ interface ChatWords {
     val foundInTima: String
     val notInTima: String
 
+    // Меню «•••» переписки (ПЛАН-РАЗДЕЛОВ Р5, ПЛАН-ЧАТА Ч2).
+    val chatMenu: String
+    val moveToSection: String
+    val moveToSectionAbout: String
+    fun inSection(name: String): String
+
     /**
      * То же, но с номером, который проверяли.
      *
@@ -791,6 +797,13 @@ interface AuthWords {
 interface WizardWords {
     val create: String
     val creating: String
+
+    // Шаг раздела (ПЛАН-РАЗДЕЛОВ Р5): в какой раздел набора сообществ положить созданное.
+    val shelf: String
+    val shelfAbout: String
+    val shelfCommon: String
+    val newShelfHint: String
+    val createShelf: String
 
     /**
      * Кнопка «Перейти в группу» после создания.
@@ -1740,6 +1753,10 @@ object RussianWords : Words {
         override val addToContacts = "Добавить в контакты"
         override val foundInTima = "Найден в TIMa — подписка на его ленту оформится сама"
         override val notInTima = "В TIMa его нет. Контакт сохранится — позвонить можно телефоном"
+        override val chatMenu = "Переписка"
+        override val moveToSection = "Перенести в раздел"
+        override val moveToSectionAbout = "куда положить эту группу"
+        override fun inSection(name: String) = "сейчас — «$name»"
         override fun notInTimaChecked(phone: String) =
             "В TIMa нет номера $phone. Контакт сохранится — позвонить можно телефоном. " +
                 "Если человек в TIMa есть, проверьте номер"
@@ -2057,6 +2074,11 @@ object RussianWords : Words {
         override val create = "Создать"
         override val creating = "Создаём…"
         override val goToCreated = "Перейти в группу"
+        override val shelf = "Раздел"
+        override val shelfAbout = "куда положить: перенести можно потом через «•••»"
+        override val shelfCommon = "Общий"
+        override val newShelfHint = "новый раздел"
+        override val createShelf = "Создать"
         override val next = "Далее"
         override val gotIt = "Понятно"
 

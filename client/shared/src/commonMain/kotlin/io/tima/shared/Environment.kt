@@ -4,6 +4,7 @@ import io.tima.core.database.SqlChatJournal
 import io.tima.core.database.SqlChatFeed
 import io.tima.core.database.SqlChatFacts
 import io.tima.core.database.SqlBook
+import io.tima.core.database.SqlCommunitySections
 import io.tima.core.database.SqlContacts
 import io.tima.core.database.SqlSettings
 import io.tima.domain.chat.ChatFacts
@@ -525,6 +526,9 @@ class Environment private constructor(
 
     /** Своя книга контактов: телефонная книга плюс заведённое руками (Д2). */
     val bookStorage: Book = SqlBook(db, cipher)
+
+    /** Набор разделов сообществ и раздел у переписки (ПЛАН-РАЗДЕЛОВ Р5). */
+    val communitySections: SqlCommunitySections = SqlCommunitySections(db)
 
     val book: ObserveBook = ObserveBook(bookStorage)
 

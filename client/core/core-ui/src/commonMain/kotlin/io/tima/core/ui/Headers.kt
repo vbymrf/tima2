@@ -178,6 +178,12 @@ fun SubwindowHeader(
      */
     avatar: String? = null,
     right: (@Composable () -> Unit)? = null,
+    /**
+     * «•••» правее названия — меню подокна (решение заказчика 2026-09-18). Круглая
+     * кнопка, как «назад»: в макете `чат.html` они стоят по краям одной шапки и одного
+     * рода. `null` — меню нет, кнопки нет.
+     */
+    onMore: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     ProvidePlace(TextPlace.HEADERS) {
@@ -224,6 +230,7 @@ fun SubwindowHeader(
             caption?.let { Tertiary(it, lineOne = true) }
         }
         right?.invoke()
+        onMore?.let { IconButton(glyph = "•••", onClick = it) }
     }
     }
 }

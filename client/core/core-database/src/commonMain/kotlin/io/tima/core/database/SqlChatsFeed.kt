@@ -71,6 +71,7 @@ class SqlChatsFeed(
         // личная появляется от одного сообщения.
         kind = if (kind == GROUP) ChatKind.Group else ChatKind.Personal,
         peerId = peer_id,
+        sectionId = section_id ?: "",
         preview = preview(last_direction, last_state, last_body),
         // То же правило, что в переписке: входящее от себя же — своё.
         lastOutgoing = last_direction == OUTGOING ||
@@ -92,6 +93,7 @@ class SqlChatsFeed(
         title = title_enc?.let { cipher.open(it) }?.decodeToString(),
         kind = if (kind == GROUP) ChatKind.Group else ChatKind.Personal,
         peerId = peer_id,
+        sectionId = section_id,
         preview = null,
         lastOutgoing = false,
         lastDisplay = null,
@@ -133,10 +135,10 @@ class SqlChatBook(
 
     override fun remember(chatId: String, kind: ChatKind, title: String?, peerId: String?) {
         db.chatsQueries.upsertChat(
-            chat_id = chatId,
+            chatId = chatId,
             kind = if (kind == ChatKind.Group) 1L else 0L,
-            title_enc = title?.let { cipher.seal(it.encodeToByteArray()) },
-            peer_id = peerId,
+            titleEnc = title?.let { cipher.seal(it.encodeToByteArray()) },
+            peerId = peerId,
         )
     }
 }

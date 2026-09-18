@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +22,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.Button
+import io.tima.core.ui.ButtonKind
+import io.tima.core.ui.SectionGlyph
+import io.tima.core.ui.ChipKind
+import io.tima.core.ui.Chip
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Field
 import io.tima.core.ui.PhoneFields
@@ -70,6 +75,10 @@ fun NewGroupScreen(
     onCreate: () -> Unit,
     /** Уйти в созданную группу. `null` — переход делает кто-то другой. */
     onOpenCreated: (() -> Unit)? = null,
+    /** Выбор раздела на шаге имени (Р5). `null` — шага раздела нет. */
+    onShelf: ((String) -> Unit)? = null,
+    onNewShelf: (String) -> Unit = {},
+    onCreateShelf: () -> Unit = {},
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     /**
@@ -108,6 +117,7 @@ fun NewGroupScreen(
                     Step.Comments -> CommentsStep(state, onComments, onExplain)
                     Step.Naming -> NamingStep(
                         state, onTitle, onDescription, onNumber, onCountryCode, onAddNumber, onRemoveNumber,
+                        onShelf = onShelf, onNewShelf = onNewShelf, onCreateShelf = onCreateShelf,
                     )
                     Step.Bringing -> BringingStep(state, onItem)
                 }
@@ -358,11 +368,51 @@ private fun NamingStep(
     onCountryCode: (String) -> Unit,
     onAddNumber: () -> Unit,
     onRemoveNumber: (String) -> Unit,
+    onShelf: ((String) -> Unit)? = null,
+    onNewShelf: (String) -> Unit = {},
+    onCreateShelf: () -> Unit = {},
 ) {
     val words = Tima.words.wizard
     Caption(words.naming, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
     Field(value = state.title, onChange = onTitle, hint = words.groupName)
     Field(value = state.description, onChange = onDescription, hint = words.descriptionAbout)
+
+    // Раздел — здесь же, на шаге имени (Р5): человек называет вещь и говорит, куда её
+    // положить, одним движением. «Общий» первым; заведённые разделы; поле для нового.
+    if (onShelf != null) {
+        Caption(words.shelf, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+        Secondary(words.shelfAbout)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        ) {
+            Chip(
+                label = words.shelfCommon,
+                kind = if (state.shelfId.isEmpty()) ChipKind.Selected else ChipKind.Neutral,
+                onClick = { onShelf("") },
+            )
+            for (shelf in state.shelfList) {
+                Chip(
+                    label = shelf.name,
+                    kind = if (state.shelfId == shelf.id) ChipKind.Selected else ChipKind.Neutral,
+                    onClick = { onShelf(shelf.id) },
+                    leading = if (shelf.icon != 0) {
+                        { color -> SectionGlyph(index = shelf.icon, size = 14.dp, color = color) }
+                    } else {
+                        null
+                    },
+                )
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { Field(value = state.newShelf, onChange = onNewShelf, hint = words.newShelfHint) }
+            Button(
+                label = words.createShelf,
+                kind = if (state.newShelf.isNotBlank()) ButtonKind.Action else ButtonKind.Quiet,
+                onClick = { if (state.newShelf.isNotBlank()) onCreateShelf() },
+            )
+        }
+    }
 
     Secondary(words.whomInvite)
     Row(

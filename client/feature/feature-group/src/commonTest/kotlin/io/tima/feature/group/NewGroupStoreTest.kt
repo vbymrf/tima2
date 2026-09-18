@@ -173,7 +173,7 @@ class NewGroupStoreTest {
     // ── подделки ────────────────────────────────────────────────────────────
 
     private fun store(scope: TestScope, network: FakeGroups = FakeGroups()) =
-        NewGroupStore(CreateGroupChat(network, Directory, EntryMemorable()), scope)
+        NewGroupStore(CreateGroupChat(network, Directory, EntryMemorable()), scope = scope)
 
     private class FakeGroups : GroupRegistry {
         var creations = 0

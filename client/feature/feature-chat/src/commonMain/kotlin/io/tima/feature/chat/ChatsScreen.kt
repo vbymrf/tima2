@@ -134,8 +134,11 @@ fun GroupsScreen(
     state: ChatsState,
     onOpen: (ChatSummary) -> Unit,
     modifier: Modifier = Modifier,
+    /** Выбранный раздел набора сообществ — ключ полосы; пусто — «Всё». */
+    chosen: String = "",
 ) {
-    val groups = state.groups
+    val wanted = if (chosen == COMMON_SECTION) "" else chosen
+    val groups = if (chosen.isEmpty()) state.groups else state.groups.filter { it.sectionId == wanted }
     Box(modifier = modifier.fillMaxSize()) {
         when {
             !state.read -> Unit

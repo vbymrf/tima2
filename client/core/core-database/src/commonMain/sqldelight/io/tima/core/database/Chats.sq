@@ -34,7 +34,19 @@ CREATE TABLE chats (
     title_enc BLOB,
     -- Идентификатор собеседника личной переписки. Нужен, чтобы взять его ключи и
     -- открыть его страницу; для группы NULL.
-    peer_id   TEXT
+    peer_id   TEXT,
+    -- Раздел переписки из набора сообществ (миграция 9 → 10). Пустая строка — «Общий».
+    -- У личной переписки не используется: её раздел — раздел собеседника в книге.
+    section_id TEXT NOT NULL DEFAULT ''
+);
+
+-- Набор разделов сообществ: группы, каналы, сообщества, аудио. Строение — как у
+-- `book_section`; таблица своя, потому что набор свой (разделы.md, «Наборы разделов»).
+CREATE TABLE community_section (
+    id    TEXT    NOT NULL PRIMARY KEY,
+    name  TEXT    NOT NULL,
+    icon  INTEGER NOT NULL DEFAULT 0,
+    place INTEGER NOT NULL DEFAULT 0
 );
 
 -- Имя переписки: пришло с профилем или сменилось.
@@ -44,8 +56,16 @@ CREATE TABLE chats (
 -- и сообщил, отказавшись разбирать `ON CONFLICT`, — то есть ограничение проверяется, а
 -- не помнится. Здесь замена равнозначна: все столбцы задаются, и ссылок на строку нет.
 upsertChat:
-INSERT OR REPLACE INTO chats(chat_id, kind, title_enc, peer_id)
-VALUES (?, ?, ?, ?);
+INSERT OR REPLACE INTO chats(chat_id, kind, title_enc, peer_id, section_id)
+VALUES (
+    :chatId, :kind, :titleEnc, :peerId,
+    -- REPLACE переписывает строку целиком, и раздел, поставленный человеком, пропал бы при
+    -- каждом обновлении имени. Поэтому раздел берётся из прежней строки, если она есть.
+    COALESCE((SELECT section_id FROM chats WHERE chat_id = :chatId), '')
+);
+
+setChatSection:
+UPDATE chats SET section_id = ? WHERE chat_id = ?;
 
 chatById:
 SELECT * FROM chats WHERE chat_id = ?;
@@ -78,6 +98,7 @@ SELECT
     c.kind              AS kind,
     c.title_enc         AS title_enc,
     c.peer_id           AS peer_id,
+    c.section_id        AS section_id,
     (
         SELECT COUNT(*) FROM messages n
         WHERE n.chat_id = m.chat_id AND n.direction = 1 AND n.state != :readState
@@ -113,7 +134,7 @@ LIMIT :limit;
 -- и лечилось это LEFT JOIN. Два запроса и склейка в Kotlin — то же решение, только без
 -- ловушки типов.
 emptyChats:
-SELECT chat_id, kind, title_enc, peer_id
+SELECT chat_id, kind, title_enc, peer_id, section_id
 FROM chats
 WHERE NOT EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = chats.chat_id);
 
@@ -129,3 +150,28 @@ personalContacts:
 SELECT chat_id, peer_id, title_enc
 FROM chats
 WHERE kind = 0 AND peer_id IS NOT NULL;
+
+-- ── Разделы сообществ ────────────────────────────────────────────────────────
+--
+-- Те же пять запросов, что у разделов книги (`Book.sq`): механизм один, наборы разные.
+communitySections:
+SELECT id, name, icon, place FROM community_section ORDER BY place, name;
+
+communitySectionByName:
+SELECT id FROM community_section WHERE lower(name) = lower(?) LIMIT 1;
+
+addCommunitySection:
+INSERT INTO community_section (id, name, icon, place) VALUES (?, ?, ?, ?);
+
+renameCommunitySection:
+UPDATE community_section SET name = ?, icon = ? WHERE id = ?;
+
+placeCommunitySection:
+UPDATE community_section SET place = ? WHERE id = ?;
+
+removeCommunitySection:
+DELETE FROM community_section WHERE id = ?;
+
+-- Переписки убранного раздела возвращаются в «Общий», а не исчезают вместе с ним.
+emptyCommunitySection:
+UPDATE chats SET section_id = '' WHERE section_id = ?;
