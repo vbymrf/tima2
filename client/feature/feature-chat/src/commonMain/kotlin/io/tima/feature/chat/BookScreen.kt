@@ -12,10 +12,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.ControlRow
 import io.tima.core.ui.Field
 import io.tima.core.ui.IconButton
+import io.tima.core.ui.SectionGlyph
 import io.tima.core.ui.InCenter
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
@@ -51,6 +53,10 @@ fun BookScreen(
     onSearch: (String) -> Unit,
     onOpen: (BookEntry) -> Unit,
     modifier: Modifier = Modifier,
+    /** Выбор раздела на полосе и в плитке; пусто — «Всё» / назад к плитке. */
+    onChooseSection: (String) -> Unit = {},
+    /** Открыть управление разделами — «Добавить» в плитке. `null` — плитка без него. */
+    onSections: (() -> Unit)? = null,
     /** «＋» у строки поиска: завести контакт или раздел. */
     onAdd: (() -> Unit)? = null,
     /** «Пригласить» у того, кого нет в TIMa. */
@@ -134,21 +140,45 @@ fun BookScreen(
                 }
             }
 
+            // Исполнение А: плитка ярлычков, пока раздел не выбран. Выбор уводит внутрь —
+            // ниже тот же список, только одного раздела, и строка «назад» над ним.
+            state.tiles && state.chosen.isEmpty() && state.search.isBlank() -> Column(Modifier.fillMaxSize()) {
+                SectionsTiles(
+                    tabs = state.tiles(words),
+                    countOf = state::countIn,
+                    onOpen = onChooseSection,
+                    onAdd = onSections,
+                )
+            }
+
             else -> LazyColumn(Modifier.fillMaxSize()) {
+                if (state.tiles && state.chosen.isNotEmpty()) {
+                    // Внутри раздела плитки: «назад» к плитке и название — вместо ряда
+                    // вкладок, как в `разделы.md` («вкладки заменяются на назад и название»).
+                    item(key = "back") {
+                        ListLine(
+                            onClick = { onChooseSection("") },
+                            left = { IconButton(glyph = "‹", onClick = { onChooseSection("") }, live = true) },
+                            middle = { Name(state.tiles(words).firstOrNull { it.id == state.chosen }?.name ?: words.everyone) },
+                        )
+                    }
+                }
                 state.groups(words).forEach { group ->
-                    // В виде «меню» разделы стоят вторым рядом вкладок, и полоса внутри
-                    // списка была бы вторым способом сказать то же самое.
-                    if (state.view.folders) {
+                    // В исполнениях с полосой разделы стоят над списком, и заголовок внутри
+                    // списка был бы вторым способом сказать то же самое. В плитке внутри
+                    // раздела заголовок тоже лишний — раздел уже назван строкой «назад».
+                    if (state.view.folders && !state.tiles) {
                         item(key = "section-${group.name}") {
                             SectionHeader(
                                 title = group.name,
+                                icon = group.icon,
                                 count = group.people.size,
                                 open = group.name !in state.collapsed,
                                 onClick = { onToggleSection(group.name) },
                             )
                         }
                     }
-                    if (state.view.folders && group.name in state.collapsed) return@forEach
+                    if (state.view.folders && !state.tiles && group.name in state.collapsed) return@forEach
                     items(group.people, key = { it.phone }) { person ->
                         ListLine(
                             onClick = { onOpen(person) },
@@ -195,7 +225,7 @@ fun BookScreen(
  * и без числа непонятно, стоит ли его разворачивать.
  */
 @Composable
-private fun SectionHeader(title: String, count: Int, open: Boolean, onClick: () -> Unit) {
+private fun SectionHeader(title: String, icon: Int, count: Int, open: Boolean, onClick: () -> Unit) {
     ListLine(
         onClick = onClick,
         middle = {
@@ -203,6 +233,9 @@ private fun SectionHeader(title: String, count: Int, open: Boolean, onClick: () 
                 horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // Значок перед именем — гармошка из `разделы.md` (Б): «раздел строкой,
+                // зелёный кружок после значка». Без значка — только имя.
+                if (icon != 0) SectionGlyph(index = icon, size = 20.dp)
                 SectionTitle(title)
                 Tertiary(count.toString(), lineOne = true)
             }

@@ -63,6 +63,10 @@ import io.tima.feature.chat.ChatStore
 import io.tima.feature.chat.ChatsState
 import io.tima.feature.chat.ChatsStore
 import io.tima.feature.chat.GroupsScreen
+import io.tima.feature.chat.SectionTab
+import io.tima.feature.chat.COMMON_SECTION
+import io.tima.feature.chat.SectionsRow
+import io.tima.feature.chat.SectionsScreen
 import io.tima.feature.chat.BookState
 import io.tima.core.contacts.askContactsAccess
 import io.tima.core.contacts.platformInvite
@@ -647,6 +651,8 @@ private fun App(
     // Подокно «Вид» вкладки «Контакты»: настроек три группы и они независимы, перебор
     // по кругу не дал бы угадать следующее состояние.
     var bookView by remember { mutableStateOf(false) }
+    /** Экран управления разделами — из меню «Вид» (ПЛАН-РАЗДЕЛОВ Р2). */
+    var sectionsScreen by remember { mutableStateOf(false) }
     // Кого приглашаем. null — подокно закрыто: отдельного флага не заводим, чтобы
     // «открыто, но некого» не стало возможным состоянием.
     var inviting by remember { mutableStateOf<BookEntry?>(null) }
@@ -761,6 +767,7 @@ private fun App(
             settings = environment.settings,
             sync = SyncBook(platformPhoneBook(), environment.bookStorage, network.discovery),
             scope = scope,
+            edit = environment.bookStorage,
         )
     }
     // Окно 2 «Социум»: свои группы и карточки, которые открыли контакты. Списки живут
@@ -833,6 +840,21 @@ private fun App(
 
     val socialState by social.state.collectAsState()
     val listState by list.state.collectAsState()
+
+    // ── Р4: разделы у личных переписок ─────────────────────────────────────────
+    // Раздел переписки — раздел собеседника в книге. Считается здесь, где видны и книга,
+    // и переписки; своего поля у переписки нет и заводить его незачем.
+    var chatSection by remember { mutableStateOf("") }
+    val bookStateForChats by book.state.collectAsState()
+    val sectionOfChat: (ChatSummary) -> String = { chat ->
+        bookStateForChats.all.firstOrNull { it.userId != null && it.userId == chat.peerId }?.sectionId ?: ""
+    }
+    val chatSections: List<SectionTab> = remember(bookStateForChats.sections, bookStateForChats.all, listState.chats) {
+        val used = listState.personal.map(sectionOfChat).toSet()
+        listOf(SectionTab("", bookWordsNow().everyone, 0)) +
+            bookStateForChats.sections.filter { it.id in used }.map { SectionTab(it.id, it.name, it.icon) } +
+            (if ("" in used && used.size > 1) listOf(SectionTab(COMMON_SECTION, bookWordsNow().commonSection, 0)) else emptyList())
+    }
     val bookState by book.state.collectAsState()
     val newState by new.state.collectAsState()
 
@@ -889,11 +911,28 @@ private fun App(
         return
     }
 
+    if (sectionsScreen) {
+        SectionsScreen(
+            sections = bookState.sections,
+            countOf = bookState::countIn,
+            onAdd = book::addSection,
+            onRename = book::renameSection,
+            onMove = book::moveSection,
+            onRemove = book::removeSection,
+            onBack = { sectionsScreen = false },
+        )
+        return
+    }
+
     if (bookView) {
         BookViewSheet(
             view = bookState.view,
             onChange = book::changedView,
             onClose = { bookView = false },
+            onSections = {
+                bookView = false
+                sectionsScreen = true
+            },
         )
         return
     }
@@ -1076,6 +1115,12 @@ private fun App(
                     onNeighbourWindow = switchWindow,
                     onView = { bookView = true },
                     onToggleSection = book::openedSection,
+                    onChooseSection = book::choseSection,
+                    onSections = { sectionsScreen = true },
+                    sectionOfChat = sectionOfChat,
+                    chatSections = chatSections,
+                    chatSection = chatSection,
+                    onChooseChatSection = { chatSection = it },
                     onAddContact = { newContact = true },
                     onInvite = { inviting = it },
                     onOpenedContacts = book::refresh,
@@ -2186,6 +2231,16 @@ private fun PhoneWindow(
     onOpen: (ChatSummary) -> Unit,
     onOpenPerson: (BookEntry) -> Unit,
     onChooseSection: (String) -> Unit = {},
+    /** Управление разделами — «Добавить» в плитке ярлычков. */
+    onSections: (() -> Unit)? = null,
+    /**
+     * Р4 — разделы у личных переписок. Раздел переписки — это раздел её собеседника в
+     * книге: своего поля у переписки нет и заводить его незачем, человек один.
+     */
+    sectionOfChat: (ChatSummary) -> String = { "" },
+    chatSections: List<SectionTab> = emptyList(),
+    chatSection: String = "",
+    onChooseChatSection: (String) -> Unit = {},
     onNew: () -> Unit,
     onSettings: () -> Unit,
     onSwitchWindows: () -> Unit,
@@ -2225,14 +2280,25 @@ private fun PhoneWindow(
         // Второй ряд: у журнала фильтры, у «Контактов» в виде «меню» — разделы.
         secondRow = when {
             tab == WindowTab.Calls -> { { FilterRow(CALL_FILTERS, calls, { calls = it }) } }
+            // Полоса разделов — исполнения В и Г из `разделы.md`. Полоса — ФИЛЬТР: до
+            // 2026-09-18 выбор на ней ни на что не влиял, потому что `onChooseSection`
+            // сюда не передавался вовсе, и список показывал всех при любом чипе.
             tab == WindowTab.Contacts && !book.view.folders && book.tabs(bookWords).size > 1 ->
-                { { FilterRow(book.tabs(bookWords), book.chosen.ifBlank { bookWords.everyone }, onChooseSection) } }
+                { { SectionsRow(book.tabs(bookWords), book.chosen, book.view.icons, onChooseSection) } }
+            // Р4: те же разделы у личных переписок — раздел переписки это раздел собеседника.
+            tab == WindowTab.Chats && chatSections.size > 1 ->
+                { { SectionsRow(chatSections, chatSection, book.view.icons, onChooseChatSection) } }
             else -> null
         },
     ) {
         when (tab) {
             WindowTab.Chats -> ChatsScreen(
-                state = list,
+                // Р4: переписки сужаются выбранным разделом — тем же, что у контактов.
+                state = if (chatSection.isEmpty()) list else list.copy(
+                    chats = list.chats.filter { chat ->
+                        sectionOfChat(chat) == (if (chatSection == COMMON_SECTION) "" else chatSection)
+                    },
+                ),
                 onOpen = onOpen,
                 onNew = onNew,
                 onSettings = onSettings,
@@ -2248,6 +2314,8 @@ private fun PhoneWindow(
                     onSearch = onSearchInBook,
                     onOpen = onOpenPerson,
                     onToggleSection = onToggleSection,
+                    onChooseSection = onChooseSection,
+                    onSections = onSections,
                     onAdd = onAddContact,
                     onInvite = onInvite,
                     onAllow = onAllowContacts,
@@ -2270,3 +2338,5 @@ private fun PhoneWindow(
     }
 }
 
+/** Слова книги там, где нет композиции: `Tima.words` требует `@Composable`. */
+private fun bookWordsNow() = io.tima.core.words.CurrentWords.value.book

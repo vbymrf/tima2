@@ -227,6 +227,14 @@ fun Chip(
      * пилюли, и остальные чипы в списках трогать незачем.
      */
     horizontalPadding: Dp = 10.dp,
+    /**
+     * Знак перед словом — или вместо него, если [label] пуст. Получает цвет надписи, чтобы
+     * краситься вместе с ней: на салатовом — белым, на сером — тёмным.
+     *
+     * Заведён для полосы разделов ярлычками (`разделы.md`, исполнение В): там чип — это
+     * значок, а слово появляется только в исполнении Г.
+     */
+    leading: (@Composable (Color) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val background = when (kind) {
@@ -247,7 +255,15 @@ fun Chip(
             .padding(horizontal = horizontalPadding, vertical = 3.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Caption(label, fontSize = TimaType.sz6, weight = FontWeight.Bold, color = labelColor)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            leading?.invoke(labelColor)
+            if (label.isNotEmpty()) {
+                Caption(label, fontSize = TimaType.sz6, weight = FontWeight.Bold, color = labelColor)
+            }
+        }
     }
 }
 

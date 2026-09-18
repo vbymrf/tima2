@@ -43,12 +43,18 @@ fun BookViewScreen(
     view: BookView,
     onChange: (BookView) -> Unit,
     modifier: Modifier = Modifier,
+    /** Открыть управление разделами. `null` — пункта в меню не будет. */
+    onSections: (() -> Unit)? = null,
 ) {
     Column(
         modifier.fillMaxWidth().padding(vertical = TimaSpacing.about2),
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
     ) {
         val words = Tima.words.book
+        // ── Меню «Вида» (решение заказчика 2026-09-18) ────────────────────────
+        // Одна кнопка вместо двух тумблеров: здесь и режимы, и управление набором, и
+        // свойства вкладки. Первые два раздела — те самые независимые тумблеры из
+        // `разделы.md`, дающие четыре исполнения; третий ведёт в набор.
         SectionTitle(words.subsections)
         Choice(
             title = words.folders,
@@ -62,6 +68,33 @@ fun BookViewScreen(
             chosen = !view.folders,
             onClick = { onChange(view.copy(folders = false)) },
         )
+
+        SectionTitle(words.labelsTitle)
+        Choice(
+            title = words.labelsIcons,
+            hint = words.labelsIconsAbout,
+            chosen = view.icons,
+            onClick = { onChange(view.copy(icons = true)) },
+        )
+        Choice(
+            title = words.labelsNames,
+            hint = words.labelsNamesAbout,
+            chosen = !view.icons,
+            onClick = { onChange(view.copy(icons = false)) },
+        )
+
+        if (onSections != null) {
+            ListLine(
+                onClick = onSections,
+                middle = {
+                    Column {
+                        Name(words.sectionsItem)
+                        Tertiary(words.sectionsItemAbout, lineOne = true)
+                    }
+                },
+                right = { Tertiary("›", lineOne = true) },
+            )
+        }
 
         SectionTitle(words.showPersonAs)
         Check(words.name, words.nameAbout, view.showName) {
@@ -141,6 +174,7 @@ fun BookViewSheet(
     onChange: (BookView) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    onSections: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     Box(
@@ -178,7 +212,7 @@ fun BookViewSheet(
                 }
                 IconButton(glyph = "✕", onClick = onClose)
             }
-            BookViewScreen(view = view, onChange = onChange)
+            BookViewScreen(view = view, onChange = onChange, onSections = onSections)
         }
     }
 }

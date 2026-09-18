@@ -1,6 +1,7 @@
 package io.tima.feature.chat
 
 import io.tima.core.words.BookWords
+import io.tima.domain.chat.Book
 import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.Section
 import io.tima.domain.chat.ObserveBook
@@ -28,6 +29,12 @@ class BookStore(
     private val settings: Settings,
     private val sync: SyncBook,
     private val scope: CoroutineScope,
+    /**
+     * Правки разделов идут в порт книги напрямую. `null` — управлять разделами нечем
+     * (так собирают store тесты, которым нужен только список): кнопки тогда не работают,
+     * и это лучше, чем заглушка, которая делает вид.
+     */
+    private val edit: Book? = null,
 ) {
     private val _state = MutableStateFlow(BookState())
     val state: StateFlow<BookState> = _state.asStateFlow()
@@ -69,9 +76,47 @@ class BookStore(
         )
     }
 
-    /** Выбранный раздел в виде «меню». Пусто — «Все». */
-    fun choseSection(name: String) {
-        _state.value = _state.value.copy(chosen = name)
+    /** Выбранный раздел на полосе и в плитке — идентификатором. Пусто — «Всё». */
+    fun choseSection(id: String) {
+        _state.value = _state.value.copy(chosen = id)
+    }
+
+    // ── Управление набором (Р2) ─────────────────────────────────────────────
+    //
+    // Через порт книги, без своего кэша: список разделов уже течёт потоком из базы, и
+    // вторая правда здесь разошлась бы с первой на первом же переименовании.
+
+    fun addSection(name: String, icon: Int) {
+        if (name.isBlank()) return
+        scope.launch { edit?.addSection(name.trim(), icon) }
+    }
+
+    fun renameSection(id: String, name: String, icon: Int) {
+        if (name.isBlank()) return
+        scope.launch { edit?.renameSection(id, name.trim(), icon) }
+    }
+
+    /**
+     * Сдвинуть на одну позицию. Стрелками, а не перетаскиванием: перетаскивание в списке,
+     * который сам прокручивается, на телефоне промахивается, а стрелка — нет.
+     */
+    fun moveSection(id: String, up: Boolean) {
+        val list = _state.value.sections
+        val at = list.indexOfFirst { it.id == id }
+        val to = if (up) at - 1 else at + 1
+        if (at < 0 || to !in list.indices) return
+        scope.launch {
+            // Меняем места у двух соседей: порядок остаётся плотным, без дыр и повторов.
+            edit?.placeSection(list[at].id, list[to].place)
+            edit?.placeSection(list[to].id, list[at].place)
+        }
+    }
+
+    fun removeSection(id: String) {
+        scope.launch {
+            edit?.removeSection(id)
+            if (_state.value.chosen == id) _state.value = _state.value.copy(chosen = "")
+        }
     }
 
     fun changedView(view: BookView) {
@@ -82,8 +127,20 @@ class BookStore(
 
 /** Как показывать список — то, что настраивается в подокне «Вид». */
 data class BookView(
-    /** `true` — разделы полосами («папки»), `false` — вторым рядом вкладок («меню»). */
+    /**
+     * `true` — разделы в самом списке («папки»), `false` — полосой над списком.
+     *
+     * Первый из двух НЕЗАВИСИМЫХ тумблеров `разделы.md` («Полоса / Папки»); второй —
+     * [icons]. Вместе дают четыре исполнения одного экрана:
+     *
+     * | | имена | ярлычки |
+     * |---|---|---|
+     * | папки  | **Б** гармошка | **А** плитка ярлычков |
+     * | полоса | **Г** словами | **В** ярлычками |
+     */
     val folders: Boolean = false,
+    /** `true` — разделы значками («ярлычки»), `false` — словами («имена»). */
+    val icons: Boolean = false,
     val showSearch: Boolean = true,
     /** Показывать раздел «Телефон» — тех, кого нет в TIMa. */
     val showOutsiders: Boolean = true,
@@ -98,6 +155,7 @@ data class BookView(
 ) {
     suspend fun save(settings: Settings) {
         settings.put(VIEW, if (folders) FOLDERS else MENU)
+        settings.put(ICONS, icons.toString())
         settings.put(SEARCH, showSearch.toString())
         settings.put(OUTSIDERS, showOutsiders.toString())
         settings.put(NAMES, listOfNotNull(
@@ -110,6 +168,7 @@ data class BookView(
 
     companion object {
         private const val VIEW = "book.view"
+        private const val ICONS = "book.icons"
         private const val SEARCH = "book.search"
         private const val OUTSIDERS = "book.outsiders"
         private const val NAMES = "book.names"
@@ -123,6 +182,7 @@ data class BookView(
         fun from(saved: Map<String, String>): BookView {
             val names = saved[NAMES]?.split(",")?.filter { it.isNotBlank() }
             return BookView(
+                icons = saved[ICONS] == "true",
                 folders = saved[VIEW] == FOLDERS,
                 showSearch = saved[SEARCH]?.toBooleanStrictOrNull() ?: true,
                 showOutsiders = saved[OUTSIDERS]?.toBooleanStrictOrNull() ?: true,
@@ -136,7 +196,15 @@ data class BookView(
 }
 
 /** Раздел книги с его людьми. */
-data class BookGroup(val name: String, val people: List<BookEntry>, val outsiders: Boolean = false)
+data class BookGroup(
+    val name: String,
+    val people: List<BookEntry>,
+    val outsiders: Boolean = false,
+    /** Идентификатор раздела; пусто у «Общего» и у «Телефона». */
+    val id: String = "",
+    /** Индекс значка; 0 — без значка. */
+    val icon: Int = 0,
+)
 
 data class BookState(
     val all: List<BookEntry> = emptyList(),
@@ -144,6 +212,12 @@ data class BookState(
     val search: String = "",
     val view: BookView = BookView(),
     val collapsed: Set<String> = emptySet(),
+    /**
+     * Выбранный раздел в исполнениях с полосой (В, Г) и внутри плитки (А) — идентификатор.
+     * Пусто — «Всё». До 2026-09-18 здесь лежало ИМЯ, и выбор ни на что не влиял: полоса
+     * подсвечивала чип, а список показывал всех. Фильтр, от которого ничего не меняется,
+     * неотличим от сломанного.
+     */
     val chosen: String = "",
     val working: Boolean = false,
     val sync: SyncStep? = null,
@@ -175,10 +249,16 @@ data class BookState(
         val (ours, strangers) = visible.partition { it.inTima }
         // «Общий» — пустой идентификатор и всегда последний из обычных: у него нет своей
         // строки в разделах, это отсутствие раздела.
-        val order = sections.map { it.id to it.name } + listOf("" to words.commonSection)
-        val usual = order.mapNotNull { (id, title) ->
+        val order = sections.map { Triple(it.id, it.name, it.icon) } + listOf(Triple("", words.commonSection, 0))
+        // Полоса — ФИЛЬТР, а не переход (`разделы.md`): выбранный раздел сужает список.
+        // В гармошке выбора нет — там все разделы видны сразу и сворачиваются на месте.
+        // «Всё» и «Общий» — не одно и то же (`разделы.md`): у «Всё» пустой выбор, у
+        // «Общего» — свой ключ на полосе, который здесь переводится в пустой идентификатор.
+        val wanted = if (chosen == COMMON_SECTION) "" else chosen
+        val narrowed = if ((!view.folders || tiles) && chosen.isNotEmpty()) order.filter { it.first == wanted } else order
+        val usual = narrowed.mapNotNull { (id, title, icon) ->
             val people = ours.filter { it.sectionId == id }
-            if (people.isEmpty()) null else BookGroup(title, people)
+            if (people.isEmpty()) null else BookGroup(title, people, id = id, icon = icon)
         }
         val outsiders = if (strangers.isEmpty()) {
             emptyList()
@@ -189,9 +269,42 @@ data class BookState(
     }
 
     /** Вкладки вида «меню»: «Все», разделы, «Телефон» — последним. */
-    fun tabs(words: BookWords): List<String> = listOf(words.everyone) + groups(words).map { it.name }
+    /**
+     * Чипы полосы (В, Г): «Всё» первым, дальше разделы, в которых кто-то есть.
+     *
+     * По разделам с людьми, а не по всем заведённым: пустой раздел на полосе — чип, за
+     * которым пустота. В гармошке и плитке он показывается — там его заводили осознанно
+     * и ждут наполнения (`разделы.md`, «показываются… включая пустые»).
+     */
+    fun tabs(words: BookWords): List<SectionTab> =
+        listOf(SectionTab("", words.everyone, 0)) +
+            allGroups(words).filterNot { it.outsiders }
+                .map { SectionTab(it.id.ifEmpty { COMMON_SECTION }, it.name, it.icon) }
+
+    /**
+     * Плитка (А) и гармошка (Б): «Всё», ВСЕ заведённые разделы — включая пустые, — и
+     * «Общий». Пустой раздел здесь виден: его завели осознанно, и он ждёт наполнения
+     * (`разделы.md`, «показываются те разделы, которые человек добавил, включая пустые»).
+     * На полосе пустых нет — там чип, за которым пустота, не нужен.
+     */
+    fun tiles(words: BookWords): List<SectionTab> =
+        listOf(SectionTab("", words.everyone, 0)) +
+            sections.map { SectionTab(it.id, it.name, it.icon) } +
+            SectionTab(COMMON_SECTION, words.commonSection, 0)
+
+    /** Сколько наших людей в разделе по ключу полосы: «Общий» переводится в пустой идентификатор. */
+    fun countIn(key: String): Int {
+        val id = if (key == COMMON_SECTION) "" else key
+        return all.count { it.inTima && it.sectionId == id }
+    }
+
+    /** Все разделы с людьми, без учёта выбранного: полоса строится по ним. */
+    private fun allGroups(words: BookWords): List<BookGroup> = copy(chosen = "").groups(words)
 
     /** Список пуст потому, что ничего не нашлось, а не потому, что книга пуста. */
+    /** Исполнение А из `разделы.md`: папки ярлычками — плитка, а не гармошка. */
+    val tiles: Boolean get() = view.folders && view.icons
+
     val notFoundNothing: Boolean get() = all.isNotEmpty() && visible.isEmpty()
 
     /** Разрешения нет — вкладка не пуста, ей есть что предложить нажать. */
@@ -200,3 +313,13 @@ data class BookState(
     /** Платформа без outsidersной книги: предлагать «разрешить» нечего. */
     val noBook: Boolean get() = sync == SyncStep.NoBook
 }
+
+/** Чип полосы разделов: что показать и что выбрать. */
+data class SectionTab(val id: String, val name: String, val icon: Int)
+
+/**
+ * Ключ «Общего» на полосе и в плитке. У самого «Общего» идентификатор пустой — это
+ * отсутствие раздела, — но пустой выбор занят «Всё», а они не одно и то же. Ни один
+ * настоящий идентификатор так не выглядит: они случайные.
+ */
+const val COMMON_SECTION = "common"

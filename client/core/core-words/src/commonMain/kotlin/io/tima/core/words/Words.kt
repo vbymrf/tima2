@@ -396,6 +396,30 @@ interface BookWords {
     val foldersAbout: String
     val menu: String
     val menuAbout: String
+
+    // Второй тумблер «Вида»: ярлычки или имена (разделы.md, четыре исполнения).
+    val labelsTitle: String
+    val labelsIcons: String
+    val labelsIconsAbout: String
+    val labelsNames: String
+    val labelsNamesAbout: String
+
+    // Пункт «Разделы» и экран управления набором.
+    val sectionsItem: String
+    val sectionsItemAbout: String
+    val sectionsScreen: String
+    val addSection: String
+    val newSectionName: String
+    val sectionIcon: String
+    val noIcon: String
+    val removeSection: String
+    val removeSectionAbout: String
+    val sectionsEmpty: String
+    val sectionsEmptyAbout: String
+    fun peopleInSection(count: Int): String
+    val moveUp: String
+    val moveDown: String
+    val save: String
     val showPersonAs: String
     val name: String
     val nameAbout: String
@@ -1612,6 +1636,36 @@ object RussianWords : Words {
         override val foldersAbout = "разделы полосами, сворачиваются"
         override val menu = "Меню"
         override val menuAbout = "разделы строкой под вкладками"
+
+        override val labelsTitle = "Подписи разделов"
+        override val labelsIcons = "Ярлычки"
+        override val labelsIconsAbout = "разделы значками"
+        override val labelsNames = "Имена"
+        override val labelsNamesAbout = "разделы словами"
+
+        override val sectionsItem = "Разделы"
+        override val sectionsItemAbout = "создать, переименовать, переставить, убрать"
+        override val sectionsScreen = "Разделы контактов"
+        override val addSection = "Добавить раздел"
+        override val newSectionName = "Название"
+        override val sectionIcon = "Значок"
+        override val noIcon = "без значка"
+        override val removeSection = "Убрать раздел"
+        override val removeSectionAbout = "люди из него вернутся в «Общий»"
+        override val sectionsEmpty = "Разделов пока нет"
+        override val sectionsEmptyAbout = "Раздел — полка для контактов: «Работа», «Дом», «Учёба». Заведите первый"
+        override fun peopleInSection(count: Int): String {
+            val ten = count % 10
+            val hundred = count % 100
+            return when {
+                count == 0 -> "пусто"
+                ten in 2..4 && hundred !in 12..14 -> "$count человека"
+                else -> "$count человек"
+            }
+        }
+        override val moveUp = "Выше"
+        override val moveDown = "Ниже"
+        override val save = "Сохранить"
         override val showPersonAs = "Отображать пользователя как"
         override val name = "Имя"
         override val nameAbout = "своё, иначе из телефонной книги"
