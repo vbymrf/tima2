@@ -19,6 +19,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.Color
+import io.tima.core.ui.authorStrip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
@@ -138,6 +140,8 @@ fun ChatScreen(
     onThread: ((Long) -> Unit)? = null,
     /** Как называть авторов в группе — «Вид» набора сообществ. */
     authorLook: PersonLook = PersonLook.DEFAULT,
+    /** Владелец группы — его полоса салатовая, темы. `null` — неизвестен: все по порядку. */
+    ownerId: String? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -173,6 +177,9 @@ fun ChatScreen(
                 else state.names[line.senderId]?.line(authorLook) ?: words.someone
             },
             authorLetter = { line -> state.names[line.senderId]?.letter() ?: "+" },
+            ownerId = if (state.group) ownerId else null,
+            // Полосы авторов — только в группе: в личной переписке собеседник один.
+            stripes = state.group,
             authorFace = { line -> if (state.group) state.faces[line.senderId] else null },
             modifier = Modifier.weight(1f),
             showCircles = state.showCircles,
@@ -232,6 +239,8 @@ private fun Feed(
     authorName: (ChatLine) -> String?,
     authorLetter: (ChatLine) -> String = { "+" },
     authorFace: (ChatLine) -> ImageBitmap? = { null },
+    ownerId: String? = null,
+    stripes: Boolean = false,
     modifier: Modifier = Modifier,
     /** Показывать ли метку круга у реплик. По умолчанию нет — см. [ChatState.showCircles]. */
     showCircles: Boolean = false,
@@ -251,6 +260,18 @@ private fun Feed(
         ),
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3, Alignment.Bottom),
     ) {
+        // Порядок появления авторов — по первому сообщению в переписке (заказчик 2026-09-19):
+        // список идёт новым сверху, поэтому считается с конца. Свои и владелец в счёт не идут —
+        // у своих полосы нет, у владельца она салатовая. На двух устройствах одного аккаунта
+        // порядок совпадает: сообщения выстроены по времени написания.
+        val order: Map<String, Int> = if (stripes) {
+            lines.asReversed().asSequence()
+                .filter { !it.outgoing && it.senderId != null && it.senderId != ownerId }
+                .map { it.senderId!! }.distinct()
+                .withIndex().associate { (at, who) -> who to at }
+        } else {
+            emptyMap()
+        }
         items(lines, key = { it.dedupKey }) { line ->
             val index = lines.indexOf(line)
             // Предыдущее по времени лежит НИЖЕ в списке: список идёт новым сверху.
@@ -260,6 +281,7 @@ private fun Feed(
                 author = authorName(line),
                 letter = authorLetter(line),
                 face = authorFace(line),
+                strip = if (stripes) authorStrip(order[line.senderId], owner = line.senderId == ownerId) else null,
                 // Смена автора разрывает цепочку, даже когда обе реплики чужие: иначе в
                 // группе два человека подряд слились бы в одного, и имя второго не
                 // показалось бы вовсе.
@@ -312,6 +334,8 @@ private fun Reply(
     continuation: Boolean,
     face: ImageBitmap? = null,
     letter: String = "+",
+    /** Цвет полосы автора; `null` — салатовый темы, как было. */
+    strip: Color? = null,
     showCircle: Boolean = false,
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
     onCarry: ((Long, Int) -> Unit)? = null,
@@ -326,7 +350,7 @@ private fun Reply(
     // Пузырь и строка ветки — один элемент списка, поэтому столбец: два соседа в
     // элементе ленивого списка легли бы друг на друга.
     Column {
-        Bubbled(line, author, letter, face, continuation, showCircle, onNarrow, onCarry)
+        Bubbled(line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry)
         // «Ветка · N ответов» — под сообщением, отдельной строкой, а не внутри пузыря:
         // это не часть сказанного, а вход в разговор о нём (ADR-0024 §7).
         //
@@ -362,6 +386,7 @@ private fun Bubbled(
     author: String?,
     letter: String,
     face: ImageBitmap?,
+    strip: Color?,
     continuation: Boolean,
     showCircle: Boolean,
     onNarrow: ((Long, Int, Int) -> Unit)?,
@@ -372,6 +397,7 @@ private fun Bubbled(
     // Буква — ник, иначе имя, иначе имя пользователя, иначе «+» (заказчик 2026-09-18).
     avatar = if (author != null) letter else null,
     avatarImage = face,
+    strip = strip,
     continuation = continuation,
     bottom = {
         Tertiary(time(line.atMs), lineOne = true)

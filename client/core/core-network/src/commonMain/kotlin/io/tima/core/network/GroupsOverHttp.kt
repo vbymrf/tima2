@@ -34,7 +34,7 @@ class GroupsOverHttp(private val api: GroupsApi) : GroupRegistry {
 
     override suspend fun mine(): GroupsStep = when (val answer = api.mine()) {
         is GroupsResult.Groups -> GroupsStep.Groups(
-            answer.groups.map { GroupInfo(it.groupId, it.title, GroupRole.from(it.myRole)) },
+            answer.groups.map { GroupInfo(it.groupId, it.title, GroupRole.from(it.myRole), ownerId = it.ownerId) },
         )
         is GroupsResult.NoConnection -> GroupsStep.Offline(answer.link.retryDelayMs)
         is GroupsResult.Refused -> GroupsStep.Refused(answer.code)

@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Composable
+import io.tima.core.ui.LocalStripLook
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -295,6 +297,8 @@ fun Root(
         font = appearance.text.font,
         text = appearance.text,
     ) {
+      // Полосы авторов — из тех же «Цветов»: тип темы и выключатель (заказчик 2026-09-19).
+      CompositionLocalProvider(LocalStripLook provides appearance.strips) {
         Inside(
             entry = entry,
             deviceDatabase = deviceDatabase,
@@ -322,6 +326,7 @@ fun Root(
                 }
             },
         )
+      }
     }
 }
 
@@ -1600,6 +1605,9 @@ private fun App(
                         network = network,
                         people = people,
                         authorLook = communityView.look(),
+                        // Владелец — из списка групп; список свежий: он сверяется при входе
+                        // в Социум и при открытии группы ниже.
+                        ownerId = socialState.mine.firstOrNull { it.groupId == current.chatId }?.ownerId?.ifBlank { null },
                         // Личная переписка: раздел — у собеседника в книге (Р4), меню «•••»
                         // переносит его туда же (заказчик 2026-09-18).
                         bookSections = bookStateForChats.sections,
@@ -1721,6 +1729,8 @@ private fun Chat(
     people: People? = null,
     /** Как называть авторов — «Вид» набора сообществ. */
     authorLook: PersonLook = PersonLook.DEFAULT,
+    /** Владелец группы — его полоса салатовая. */
+    ownerId: String? = null,
     /** Разделы книги для «•••» личной переписки: раздел переписки — раздел собеседника. */
     bookSections: List<Section> = emptyList(),
     currentBookSection: String = "",
@@ -1794,6 +1804,7 @@ private fun Chat(
     ChatScreen(
         state = state,
         authorLook = authorLook,
+        ownerId = ownerId,
         peer = name ?: "Без имени",
         onSet = store::draftChanged,
         onSend = { store.sendPressed() },

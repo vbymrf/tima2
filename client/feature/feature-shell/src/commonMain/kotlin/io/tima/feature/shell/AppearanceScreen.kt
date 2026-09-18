@@ -33,6 +33,9 @@ import io.tima.core.ui.ColorSlot
 import io.tima.core.ui.Field
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
+import io.tima.core.ui.ThemeKind
+import io.tima.core.ui.RadioMark
+import io.tima.core.ui.CheckMark
 import io.tima.core.ui.SectionTitle
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Tertiary
@@ -168,6 +171,34 @@ private fun Inside(
                 middle = { Name(words.appearance.theme(choice)) },
             )
         }
+
+        // Тип своей темы — только у своей: у готовых он задан самой темой. От типа зависит
+        // набор полос авторов в группах (заказчик 2026-09-19).
+        if (appearance.choice == ThemeChoice.Custom) {
+            SectionTitle(words.appearance.themeKind)
+            for (kind in ThemeKind.entries) {
+                ListLine(
+                    onClick = { onAppearance(appearance.copy(kind = kind)) },
+                    middle = {
+                        Column {
+                            Name(if (kind == ThemeKind.Dark) words.appearance.themeDark else words.appearance.themeLight)
+                            if (kind == appearance.kind) Tertiary(words.appearance.themeKindAbout, lineOne = true)
+                        }
+                    },
+                    right = { RadioMark(kind == appearance.kind) },
+                )
+            }
+        }
+        ListLine(
+            onClick = { onAppearance(appearance.copy(authorStrips = !appearance.authorStrips)) },
+            middle = {
+                Column {
+                    Name(words.appearance.authorStrips)
+                    Tertiary(words.appearance.authorStripsAbout, lineOne = true)
+                }
+            },
+            right = { CheckMark(appearance.authorStrips) },
+        )
 
         // Сохранённые — ПОД готовыми: сначала то, что есть у всех, потом собранное
         // самим. Раздел виден всегда, даже пустым: пустой он объясняет, откуда берётся,

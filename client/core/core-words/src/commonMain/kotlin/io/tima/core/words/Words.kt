@@ -1037,6 +1037,11 @@ interface AppearanceWords {
     val qrTooLongAbout: String
 
     val theme: String
+    /** Тип своей темы и полосы авторов — «Цвета» (заказчик 2026-09-19). */
+    val themeKind: String
+    val themeKindAbout: String
+    val authorStrips: String
+    val authorStripsAbout: String
     val colors: String
     val palette: String
     val projectColors: String
@@ -1273,6 +1278,10 @@ object RussianWords : Words {
         override val qrTooLongAbout = "Он слишком длинный для QR"
 
         override val theme = "Тема"
+        override val themeKind = "Тип своей темы"
+        override val themeKindAbout = "от него зависят цвета полос авторов в группах"
+        override val authorStrips = "Цветные полосы авторов"
+        override val authorStripsAbout = "в группе у каждого своя; выключено — у всех цвет контура"
         override val colors = "Цвета"
         override val palette = "Палитра"
         override val projectColors = "Цвета проекта"

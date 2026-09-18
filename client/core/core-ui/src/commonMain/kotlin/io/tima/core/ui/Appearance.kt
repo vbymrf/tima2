@@ -18,6 +18,9 @@ import kotlin.math.roundToInt
  * которого не просили, потом объясняют. Система при этом не забыта — она решает, **какая
  * тема стоит при первом запуске**, и на этом её роль заканчивается.
  */
+/** Тип темы: от него зависит, какой набор полос авторов читается на фоне пузыря. */
+enum class ThemeKind { Light, Dark }
+
 enum class ThemeChoice {
     Light,
     Dark,
@@ -239,6 +242,15 @@ data class Appearance(
      */
     val text: TextLook = TextLook(),
     /**
+     * Тип своей темы — тёмная или светлая (заказчик 2026-09-19). От него зависит набор
+     * цветов полос авторов: на белом пузыре читается один, на тёмном — другой. У готовых
+     * тем тип задан самой темой; у своей — этой настройкой, начальное значение — от темы,
+     * с которой своя началась.
+     */
+    val kind: ThemeKind = ThemeKind.Light,
+    /** Красить ли полосы авторов по-своему; выключено — полоса у всех цвета контура. */
+    val authorStrips: Boolean = true,
+    /**
      * Имя сохранённого, из которого взята нынешняя палитра. `null` — ни из какого.
      *
      * Нужно ровно для одного: показать в списке, какое оформление сейчас стоит. Правка
@@ -254,6 +266,17 @@ data class Appearance(
             ThemeChoice.Dark -> TimaColors.dark
             ThemeChoice.Custom -> custom
         }
+
+    /** Тёмная ли тема на деле: у готовых — по выбору, у своей — по типу. */
+    val dark: Boolean
+        get() = when (choice) {
+            ThemeChoice.Light -> false
+            ThemeChoice.Dark -> true
+            ThemeChoice.Custom -> kind == ThemeKind.Dark
+        }
+
+    /** Как красить полосы авторов — то, что уходит в пузыри. */
+    val strips: StripLook get() = StripLook(dark = dark, colored = authorStrips)
 
     /**
      * Сохранить нынешнюю палитру под именем.
@@ -296,6 +319,8 @@ data class Appearance(
      */
     fun write(): String = buildString {
         append(KEY_CHOICE).append('=').append(choice.name).append('\n')
+        append(KEY_KIND).append('=').append(kind.name).append('\n')
+        append(KEY_STRIPS).append('=').append(authorStrips).append('\n')
         from?.let { append(KEY_FROM).append('=').append(it).append('\n') }
         for (slot in ColorSlot.entries) {
             append(slot.name).append('=').append(custom.slot(slot).hex()).append('\n')
@@ -320,6 +345,8 @@ data class Appearance(
 
     companion object {
         private const val KEY_CHOICE = "choice"
+        private const val KEY_KIND = "kind"
+        private const val KEY_STRIPS = "strips"
         private const val KEY_FROM = "from"
         private const val KEY_SAVED = "saved"
         private const val KEY_FONT = "font"
@@ -334,6 +361,7 @@ data class Appearance(
         fun byDefault(systemDark: Boolean): Appearance = Appearance(
             choice = if (systemDark) ThemeChoice.Dark else ThemeChoice.Light,
             custom = if (systemDark) TimaColors.dark else TimaColors.light,
+            kind = if (systemDark) ThemeKind.Dark else ThemeKind.Light,
         )
 
         /**
@@ -385,8 +413,12 @@ data class Appearance(
                 }
             }
             val text = TextLook(font = AppFont.of(pairs[KEY_FONT]), size = sizes)
+            // Тип своей темы, которого в записи нет (запись старше настройки), — от системы,
+            // как и всё остальное по умолчанию.
+            val kind = ThemeKind.entries.firstOrNull { it.name == pairs[KEY_KIND] } ?: byDefault(systemDark).kind
+            val strips = pairs[KEY_STRIPS]?.toBooleanStrictOrNull() ?: true
 
-            return Appearance(choice, custom, saved, text, from)
+            return Appearance(choice, custom, saved, text, kind, strips, from)
         }
     }
 }
