@@ -404,6 +404,12 @@ interface BookWords {
     val labelsNames: String
     val labelsNamesAbout: String
 
+    // Размер ярлычков в плитке.
+    val tileSizeTitle: String
+    val tileSmall: String
+    val tileNormal: String
+    val tileLarge: String
+
     // Пункт «Разделы» и экран управления набором.
     val sectionsItem: String
     val sectionsItemAbout: String
@@ -1642,6 +1648,11 @@ object RussianWords : Words {
         override val labelsIconsAbout = "разделы значками"
         override val labelsNames = "Имена"
         override val labelsNamesAbout = "разделы словами"
+
+        override val tileSizeTitle = "Размер ярлычков"
+        override val tileSmall = "Мелкие"
+        override val tileNormal = "Обычные"
+        override val tileLarge = "Крупные"
 
         override val sectionsItem = "Разделы"
         override val sectionsItemAbout = "создать, переименовать, переставить, убрать"

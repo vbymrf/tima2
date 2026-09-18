@@ -53,7 +53,7 @@ class SectionIconTest {
     @Test
     fun снимок_набора_целиком() {
         // Не проверка, а картинка для глаз: build/снимки/значки-разделов-light.png.
-        capture("значки-разделов", 12 * 40 + 16, 56, dark = false) {
+        capture("значки-разделов", SectionIcon.choices.size * 40 + 16, 56, dark = false) {
             Row(Modifier.padding(8.dp)) {
                 for (icon in SectionIcon.choices) {
                     SectionGlyph(index = icon.index, modifier = Modifier.padding(8.dp))

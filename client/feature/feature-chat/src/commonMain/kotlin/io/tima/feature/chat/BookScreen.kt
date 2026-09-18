@@ -1,5 +1,7 @@
 package io.tima.feature.chat
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,27 +9,32 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Avatar
+import io.tima.core.ui.Caption
 import io.tima.core.ui.ControlRow
 import io.tima.core.ui.Field
 import io.tima.core.ui.IconButton
-import io.tima.core.ui.SectionGlyph
 import io.tima.core.ui.InCenter
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.Secondary
+import io.tima.core.ui.SectionGlyph
 import io.tima.core.ui.SectionTitle
 import io.tima.core.ui.Tertiary
-import io.tima.core.ui.Tima
 import io.tima.core.ui.TextPlace
-import io.tima.core.ui.ProvidePlace
+import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
+import io.tima.core.ui.TimaType
 import io.tima.core.ui.words
 import io.tima.domain.chat.BookEntry
 
@@ -57,6 +64,8 @@ fun BookScreen(
     onChooseSection: (String) -> Unit = {},
     /** Открыть управление разделами — «Добавить» в плитке. `null` — плитка без него. */
     onSections: (() -> Unit)? = null,
+    /** Сколько людей раздела написали новое — янтарная цифра. По ключу полосы. */
+    newIn: (String) -> Int = { 0 },
     /** «＋» у строки поиска: завести контакт или раздел. */
     onAdd: (() -> Unit)? = null,
     /** «Пригласить» у того, кого нет в TIMa. */
@@ -148,6 +157,8 @@ fun BookScreen(
                     countOf = state::countIn,
                     onOpen = onChooseSection,
                     onAdd = onSections,
+                    newIn = newIn,
+                    size = state.view.tileSize,
                 )
             }
 
@@ -170,9 +181,9 @@ fun BookScreen(
                     if (state.view.folders && !state.tiles) {
                         item(key = "section-${group.name}") {
                             SectionHeader(
-                                title = group.name,
-                                icon = group.icon,
+                                tab = SectionTab(group.id.ifEmpty { COMMON_SECTION }, group.name, group.icon),
                                 count = group.people.size,
+                                fresh = newIn(group.id.ifEmpty { COMMON_SECTION }),
                                 open = group.name !in state.collapsed,
                                 onClick = { onToggleSection(group.name) },
                             )
@@ -225,23 +236,36 @@ fun BookScreen(
  * и без числа непонятно, стоит ли его разворачивать.
  */
 @Composable
-private fun SectionHeader(title: String, icon: Int, count: Int, open: Boolean, onClick: () -> Unit) {
-    ListLine(
-        onClick = onClick,
-        middle = {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Значок перед именем — гармошка из `разделы.md` (Б): «раздел строкой,
-                // зелёный кружок после значка». Без значка — только имя.
-                if (icon != 0) SectionGlyph(index = icon, size = 20.dp)
-                SectionTitle(title)
-                Tertiary(count.toString(), lineOne = true)
-            }
-        },
-        right = { Tertiary(if (open) "▾" else "▸", lineOne = true) },
-    )
+private fun SectionHeader(tab: SectionTab, count: Int, fresh: Int, open: Boolean, onClick: () -> Unit) {
+    val colors = Tima.colors
+    // Строка раздела по макету `новости.html` («Каталог»), правило `.разд`: знак, зелёный
+    // кружок «сколько внутри», имя; справа янтарный «сколько нового» и круглый шеврон.
+    // Строка узкая — 7 точек поля сверху и снизу, — поэтому шеврон 28, а не 36, как у
+    // кнопок подокна переходов: 36 раздул бы строку до строки списка, а она заголовок.
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.functional)
+            .clickable(onClick = onClick)
+            .padding(start = TimaSpacing.about4, end = 14.dp, top = 7.dp, bottom = 7.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Mark(tab, size = 16.dp, color = colors.text)
+        Badge(count, amber = false)
+        // Имя обычным регистром, кеглем строки (`.имя-раздела`: щ4, 800), а не капителью
+        // заголовка списка: раздел — полка с именем от человека, а не служебная надпись.
+        Box(Modifier.weight(1f)) { Name(tab.name) }
+        if (fresh > 0) Badge(fresh, amber = true, small = true)
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .background(colors.quiet, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Caption(if (open) "▾" else "▸", fontSize = TimaType.sz5, weight = FontWeight.Black, color = colors.text2)
+        }
+    }
 }
 
 /**

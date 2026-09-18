@@ -83,6 +83,23 @@ fun BookViewScreen(
             onClick = { onChange(view.copy(icons = false)) },
         )
 
+        // Размер — только у плитки: в гармошке и на полосе размер задаёт строка.
+        if (view.icons && view.folders) {
+            SectionTitle(words.tileSizeTitle)
+            for (size in TileSize.entries) {
+                Choice(
+                    title = when (size) {
+                        TileSize.Small -> words.tileSmall
+                        TileSize.Normal -> words.tileNormal
+                        TileSize.Large -> words.tileLarge
+                    },
+                    hint = "",
+                    chosen = view.tileSize == size,
+                    onClick = { onChange(view.copy(tileSize = size)) },
+                )
+            }
+        }
+
         if (onSections != null) {
             ListLine(
                 onClick = onSections,
@@ -132,7 +149,7 @@ private fun Choice(title: String, hint: String, chosen: Boolean, onClick: () -> 
         middle = {
             Column {
                 Name(title)
-                Tertiary(hint, lineOne = true)
+                if (hint.isNotEmpty()) Tertiary(hint, lineOne = true)
             }
         },
         right = { RadioMark(chosen) },

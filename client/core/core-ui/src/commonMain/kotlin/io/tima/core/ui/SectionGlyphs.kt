@@ -54,7 +54,7 @@ fun SectionGlyph(
 fun hasSectionGlyph(index: Int): Boolean = index in 1..LAST_GLYPH
 
 /** Последний индекс, у которого есть рисунок. Дописывается вместе с новым значком. */
-private const val LAST_GLYPH = 12
+private const val LAST_GLYPH = 16
 
 private fun DrawScope.drawSectionGlyph(index: Int, u: Float, color: Color, stroke: Stroke) {
     // Номера — те же, что в `SectionIcon`: 1 дом … 12 звёздочка. Переставлять нельзя:
@@ -72,6 +72,10 @@ private fun DrawScope.drawSectionGlyph(index: Int, u: Float, color: Color, strok
         10 -> sport(u, color, stroke)
         11 -> music(u, color, stroke)
         12 -> star(u, color, stroke)
+        13 -> news(u, color, stroke)
+        14 -> movies(u, color, stroke)
+        15 -> parcels(u, color, stroke)
+        16 -> tools(u, color, stroke)
         else -> Unit
     }
 }
@@ -195,6 +199,39 @@ private fun DrawScope.music(u: Float, c: Color, s: Stroke) {
     ring(u, c, s, 8f, 17f, 3f)
     ring(u, c, s, 17f, 15f, 3f)
     line(u, c, s, 11f, 17f, 11f, 5f, 20f, 3f, 20f, 15f)
+}
+
+/** Новости: газета — лист с заголовком и строками. */
+private fun DrawScope.news(u: Float, c: Color, s: Stroke) {
+    closed(u, c, s, 4f, 5f, 20f, 5f, 20f, 19f, 4f, 19f)
+    closed(u, c, s, 7f, 8f, 12f, 8f, 12f, 12f, 7f, 12f)
+    line(u, c, s, 14f, 8f, 17f, 8f)
+    line(u, c, s, 14f, 12f, 17f, 12f)
+    line(u, c, s, 7f, 15.5f, 17f, 15.5f)
+}
+
+/** Кино: хлопушка. */
+private fun DrawScope.movies(u: Float, c: Color, s: Stroke) {
+    closed(u, c, s, 3f, 10f, 21f, 10f, 21f, 20f, 3f, 20f)
+    line(u, c, s, 3f, 10f, 5f, 4f, 21f, 6f, 21f, 10f)
+    line(u, c, s, 9f, 4.5f, 11f, 9.5f)
+    line(u, c, s, 15f, 5.2f, 17f, 10f)
+}
+
+/** Посылки: коробка с крышкой. */
+private fun DrawScope.parcels(u: Float, c: Color, s: Stroke) {
+    closed(u, c, s, 4f, 9f, 20f, 9f, 20f, 20f, 4f, 20f)
+    line(u, c, s, 4f, 9f, 6f, 4f, 18f, 4f, 20f, 9f)
+    line(u, c, s, 12f, 4f, 12f, 9f)
+    line(u, c, s, 10f, 13f, 14f, 13f)
+}
+
+/** Инструменты: гаечный ключ. */
+private fun DrawScope.tools(u: Float, c: Color, s: Stroke) {
+    ring(u, c, s, 16.5f, 7.5f, 4f)
+    line(u, c, s, 13.5f, 10.5f, 4.5f, 19.5f)
+    line(u, c, s, 3.5f, 18.5f, 5.5f, 20.5f)
+    line(u, c, s, 15f, 5f, 19f, 9f)
 }
 
 /** Звёздочка: пять лучей. */

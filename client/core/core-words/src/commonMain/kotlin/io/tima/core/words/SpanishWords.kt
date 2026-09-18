@@ -567,6 +567,11 @@ object SpanishWords : Words {
         override val labelsNames = "Nombres"
         override val labelsNamesAbout = "secciones con palabras"
 
+        override val tileSizeTitle = "Tamaño de los iconos"
+        override val tileSmall = "Pequeños"
+        override val tileNormal = "Normales"
+        override val tileLarge = "Grandes"
+
         override val sectionsItem = "Secciones"
         override val sectionsItemAbout = "crear, renombrar, ordenar, quitar"
         override val sectionsScreen = "Secciones de contactos"

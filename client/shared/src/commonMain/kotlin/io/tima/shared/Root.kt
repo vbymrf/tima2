@@ -852,6 +852,12 @@ private fun App(
     val sectionOfChat: (ChatSummary) -> String = { chat ->
         bookStateForChats.all.firstOrNull { it.userId != null && it.userId == chat.peerId }?.sectionId ?: ""
     }
+    // Янтарная цифра раздела — сколько людей раздела написали новое. Считается по личным
+    // перепискам: у переписки есть непрочитанное, у собеседника — раздел в книге.
+    val newInSection: (String) -> Int = { key ->
+        val id = if (key == COMMON_SECTION) "" else key
+        listState.personal.count { chat -> chat.unread > 0 && (key.isEmpty() || sectionOfChat(chat) == id) }
+    }
     val chatSections: List<SectionTab> = remember(bookStateForChats.sections, bookStateForChats.all, listState.chats) {
         val used = listState.personal.map(sectionOfChat).toSet()
         listOf(SectionTab("", bookWordsNow().everyone, 0)) +
@@ -1121,6 +1127,7 @@ private fun App(
                     onChooseSection = book::choseSection,
                     onSections = { sectionsScreen = true },
                     sectionOfChat = sectionOfChat,
+                    newInSection = newInSection,
                     chatSections = chatSections,
                     chatSection = chatSection,
                     onChooseChatSection = { chatSection = it },
@@ -2255,6 +2262,8 @@ private fun PhoneWindow(
      * книге: своего поля у переписки нет и заводить его незачем, человек один.
      */
     sectionOfChat: (ChatSummary) -> String = { "" },
+    /** Янтарная цифра раздела: сколько его людей написали новое. По ключу полосы. */
+    newInSection: (String) -> Int = { 0 },
     chatSections: List<SectionTab> = emptyList(),
     chatSection: String = "",
     onChooseChatSection: (String) -> Unit = {},
@@ -2301,10 +2310,10 @@ private fun PhoneWindow(
             // 2026-09-18 выбор на ней ни на что не влиял, потому что `onChooseSection`
             // сюда не передавался вовсе, и список показывал всех при любом чипе.
             tab == WindowTab.Contacts && !book.view.folders && book.tabs(bookWords).size > 1 ->
-                { { SectionsRow(book.tabs(bookWords), book.chosen, book.view.icons, onChooseSection) } }
+                { { SectionsRow(book.tabs(bookWords), book.chosen, book.view.icons, onChooseSection, newIn = newInSection) } }
             // Р4: те же разделы у личных переписок — раздел переписки это раздел собеседника.
             tab == WindowTab.Chats && chatSections.size > 1 ->
-                { { SectionsRow(chatSections, chatSection, book.view.icons, onChooseChatSection) } }
+                { { SectionsRow(chatSections, chatSection, book.view.icons, onChooseChatSection, newIn = newInSection) } }
             else -> null
         },
     ) {
@@ -2333,6 +2342,7 @@ private fun PhoneWindow(
                     onToggleSection = onToggleSection,
                     onChooseSection = onChooseSection,
                     onSections = onSections,
+                    newIn = newInSection,
                     onAdd = onAddContact,
                     onInvite = onInvite,
                     onAllow = onAllowContacts,

@@ -141,6 +141,8 @@ data class BookView(
     val folders: Boolean = false,
     /** `true` — разделы значками («ярлычки»), `false` — словами («имена»). */
     val icons: Boolean = false,
+    /** Размер ярлычков в плитке — пункт «Вида» (решение заказчика 2026-09-18). */
+    val tileSize: TileSize = TileSize.Normal,
     val showSearch: Boolean = true,
     /** Показывать раздел «Телефон» — тех, кого нет в TIMa. */
     val showOutsiders: Boolean = true,
@@ -156,6 +158,7 @@ data class BookView(
     suspend fun save(settings: Settings) {
         settings.put(VIEW, if (folders) FOLDERS else MENU)
         settings.put(ICONS, icons.toString())
+        settings.put(TILE_SIZE, tileSize.wire)
         settings.put(SEARCH, showSearch.toString())
         settings.put(OUTSIDERS, showOutsiders.toString())
         settings.put(NAMES, listOfNotNull(
@@ -169,6 +172,7 @@ data class BookView(
     companion object {
         private const val VIEW = "book.view"
         private const val ICONS = "book.icons"
+        private const val TILE_SIZE = "book.tile_size"
         private const val SEARCH = "book.search"
         private const val OUTSIDERS = "book.outsiders"
         private const val NAMES = "book.names"
@@ -183,6 +187,7 @@ data class BookView(
             val names = saved[NAMES]?.split(",")?.filter { it.isNotBlank() }
             return BookView(
                 icons = saved[ICONS] == "true",
+                tileSize = TileSize.fromWire(saved[TILE_SIZE]),
                 folders = saved[VIEW] == FOLDERS,
                 showSearch = saved[SEARCH]?.toBooleanStrictOrNull() ?: true,
                 showOutsiders = saved[OUTSIDERS]?.toBooleanStrictOrNull() ?: true,
@@ -256,9 +261,14 @@ data class BookState(
         // «Общего» — свой ключ на полосе, который здесь переводится в пустой идентификатор.
         val wanted = if (chosen == COMMON_SECTION) "" else chosen
         val narrowed = if ((!view.folders || tiles) && chosen.isNotEmpty()) order.filter { it.first == wanted } else order
+        // В гармошке (Б) пустой раздел ВИДЕН — заголовком без строк: его завели осознанно,
+        // и он ждёт наполнения (`разделы.md`). На полосе и в плитке внутри раздела пустой
+        // не показывается — там он был бы заголовком над пустотой.
+        val keepEmpty = view.folders && !tiles && search.isBlank()
         val usual = narrowed.mapNotNull { (id, title, icon) ->
             val people = ours.filter { it.sectionId == id }
-            if (people.isEmpty()) null else BookGroup(title, people, id = id, icon = icon)
+            if (people.isEmpty() && !(keepEmpty && id.isNotEmpty())) null
+            else BookGroup(title, people, id = id, icon = icon)
         }
         val outsiders = if (strangers.isEmpty()) {
             emptyList()

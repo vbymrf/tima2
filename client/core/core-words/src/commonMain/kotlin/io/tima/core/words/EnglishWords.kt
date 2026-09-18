@@ -567,6 +567,11 @@ object EnglishWords : Words {
         override val labelsNames = "Names"
         override val labelsNamesAbout = "sections as words"
 
+        override val tileSizeTitle = "Tile size"
+        override val tileSmall = "Small"
+        override val tileNormal = "Normal"
+        override val tileLarge = "Large"
+
         override val sectionsItem = "Sections"
         override val sectionsItemAbout = "create, rename, reorder, remove"
         override val sectionsScreen = "Contact sections"
