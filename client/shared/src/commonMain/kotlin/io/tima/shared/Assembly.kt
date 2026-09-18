@@ -80,6 +80,7 @@ fun assemble(
             deviceDatabase(databaseFor(device.session.userId, firstAccount)),
             device.secret,
             device.session.userId,
+            device.session.deviceId,
         )
         val identity = deviceIdentityFrom(device.secret)
 

@@ -886,6 +886,18 @@ private fun App(
     // Фоновые циклы — в своём файле: это политика времени, а не навигация.
     BackgroundLoops(assembled, platform, changeSign = listState, onPending = onPending)
 
+    // Копия книги между устройствами (Р2а): забрать при запуске, отдавать после правок.
+    // Один раз на сборку — `remember`, иначе каждая перерисовка заводила бы новый цикл.
+    remember(assembled) {
+        BookCopySync(
+            environment = environment,
+            store = network.accountStore,
+            keys = assembled.keyOrchestrator,
+            deviceId = session.deviceId,
+            scope = scope,
+        ).also { it.start() }
+    }
+
     // Свайп по средней зоне ведёт к соседнему окну в порядке переключателя. Края
     // не заворачиваются: с первого окна влево уйти некуда, и это честнее кольца —
     // человек, дойдя до края, видит, что край есть.

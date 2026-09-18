@@ -56,6 +56,7 @@ import io.tima.core.network.ContactsOverHttp
 import io.tima.core.network.FriendsOverHttp
 import io.tima.core.media.Media
 import io.tima.core.network.MediaOverHttp
+import io.tima.core.network.AccountStoreOverHttp
 import io.tima.core.network.ProfileOverHttp
 import io.tima.core.network.TransfersOverHttp
 import io.tima.core.network.VirtualsOverHttp
@@ -298,6 +299,10 @@ class Network(
     override val profile: Profile =
         ProfileOverHttp(link.route, link.client, token = { token() })
 
+    /** Ячейка копии книги у сервера и служебная группа аккаунта (ПЛАН-РАЗДЕЛОВ Р2а). */
+    val accountStore: AccountStoreOverHttp =
+        AccountStoreOverHttp(link.route, link.client, token = { token() })
+
     /** Медиа-хранилище: init → PUT → complete. Пока единственный потребитель — аватар. */
     val media: Media = MediaOverHttp(link.route, link.client, token = { token() })
 
@@ -484,6 +489,8 @@ class Environment private constructor(
     val cipher: FieldCipher,
     /** Кто я: по этому отличается своё сообщение со второго устройства от чужого. */
     private val myUserId: String,
+    /** Какое я устройство: штамп на правках книги для слияния копий (Р2а). */
+    private val myDeviceId: String,
 ) {
 
     /** Очередь исходящих: одна на приложение, потому что одна на базу. */
@@ -525,7 +532,7 @@ class Environment private constructor(
     val contacts: ObserveContacts = ObserveContacts(SqlContacts(db, cipher))
 
     /** Своя книга контактов: телефонная книга плюс заведённое руками (Д2). */
-    val bookStorage: Book = SqlBook(db, cipher)
+    val bookStorage: Book = SqlBook(db, cipher, now = { msNow() }, device = { myDeviceId })
 
     /** Набор разделов сообществ и раздел у переписки (ПЛАН-РАЗДЕЛОВ Р5). */
     val communitySections: SqlCommunitySections = SqlCommunitySections(db)
@@ -571,7 +578,7 @@ class Environment private constructor(
          * @param myUserId кто я. Нужен переписке: входящее от себя же — своё сообщение,
          *   написанное с другого своего устройства.
          */
-        fun open(db: TimaDatabase, deviceSecret: ByteArray, myUserId: String): Environment =
-            Environment(db, LocalStoreFieldCipher(deviceSecret), myUserId)
+        fun open(db: TimaDatabase, deviceSecret: ByteArray, myUserId: String, myDeviceId: String = ""): Environment =
+            Environment(db, LocalStoreFieldCipher(deviceSecret), myUserId, myDeviceId)
     }
 }

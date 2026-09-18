@@ -1,5 +1,8 @@
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
+    // Копия книги (Р2а) едет JSON-ом внутри шифра: кодек живёт здесь, потому что это
+    // шифрование доменного объекта, а не сетевая обвязка.
+    alias(libs.plugins.kotlinSerialization)
 }
 
 // core-encryption — граница слоя Data с криптографией (Plan.md §3.6).
@@ -26,6 +29,7 @@ kotlin {
             // реализует объявленное выше — то же направление, что у core-database с OutboxStore.
             api(projects.domain.domainAccount)
             api(projects.domain.domainChat)
+            implementation(libs.kotlinx.serialization.json)
             // Запечатывание отдаётся насосу очереди, а значит принимает её запись.
             api(projects.core.coreOutbox)
         }
