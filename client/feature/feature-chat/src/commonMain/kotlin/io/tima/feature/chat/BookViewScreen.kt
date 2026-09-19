@@ -277,7 +277,8 @@ fun PersonLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modif
 /** Поля первой строки контакта: телефон стоит второй строкой всегда и в первую не берётся. */
 val PERSON_FIRST_LINE = setOf(PersonField.Name, PersonField.Nick, PersonField.UserName)
 
-private fun io.tima.core.words.BookWords.field(field: PersonField): String = when (field) {
+/** Подпись поля человека. Публично: тем же словом поле зовётся на личной странице. */
+fun io.tima.core.words.BookWords.field(field: PersonField): String = when (field) {
     PersonField.Name -> name
     PersonField.UserName -> userName
     PersonField.Nick -> nickname

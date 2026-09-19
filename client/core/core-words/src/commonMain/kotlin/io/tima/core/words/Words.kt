@@ -480,6 +480,17 @@ interface PageWords {
     val closeDiscussion: String
     val remove: String
 
+    // Личная страница человека — заглушка (заказчик 2026-09-19).
+    val guestPage: String
+    val whatWeKnow: String
+    val subscribe: String
+    val unsubscribe: String
+    /** Почему «Подписаться» не работает: у ленты человека нет читательской подписки. */
+    val subscribeNotYet: String
+    val alreadyInContacts: String
+    val contactMeansFriend: String
+    val nothingKnown: String
+
     // Беды страницы.
     val cannotCarry: String
     val entryGone: String
@@ -1798,6 +1809,14 @@ object RussianWords : Words {
         override val couldNotRemove = "Не удалось убрать запись"
         override val ownerSwitchesPage = "Обсуждения выключает владелец страницы"
         override val pageGone = "Страницы больше нет"
+        override val guestPage = "Страница"
+        override val whatWeKnow = "Что мы о нём знаем"
+        override val subscribe = "Подписаться"
+        override val unsubscribe = "Отписаться"
+        override val subscribeNotYet = "Пока не работает: у ленты человека нет читательской подписки"
+        override val alreadyInContacts = "Уже в контактах"
+        override val contactMeansFriend = "Контакт — это друг: на друзей подписка встаёт сама"
+        override val nothingKnown = "Мы о нём ничего не знаем — ни имени, ни ника, ни номера"
         override val ownerOrModeratorCloses = "Обсуждение закрывает владелец или модератор"
     }
 

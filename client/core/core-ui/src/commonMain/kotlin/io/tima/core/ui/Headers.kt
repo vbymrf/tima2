@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -177,6 +178,8 @@ fun SubwindowHeader(
      * не стоит человек. Аватар там был бы чужой картинкой на месте, где никого нет.
      */
     avatar: String? = null,
+    /** Картинка аватара; `null` — буквы. Та же картинка, что в списке и на странице. */
+    avatarImage: ImageBitmap? = null,
     right: (@Composable () -> Unit)? = null,
     /**
      * «•••» правее названия — меню подокна (решение заказчика 2026-09-18). Круглая
@@ -184,6 +187,14 @@ fun SubwindowHeader(
      * рода. `null` — меню нет, кнопки нет.
      */
     onMore: (() -> Unit)? = null,
+    /**
+     * Нажали на аватар или имя — личная страница собеседника (заказчик 2026-09-19).
+     *
+     * Нажимается **весь блок**, а не один аватар: в макете `страница-гостя.html` шапка так
+     * и устроена — «‹ · аватар · имя» ведут в одно место. Мелкий аватар на телефоне
+     * промахивается, имя рядом — нет. `null` — вести некуда: за подокном нет человека.
+     */
+    onPerson: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     ProvidePlace(TextPlace.HEADERS) {
@@ -218,9 +229,19 @@ fun SubwindowHeader(
         // Аватар стоит СРАЗУ за «назад» и до имени — так в макете
         // `doc/Layout-UI-light/телефон/подокна/чат.html`, зона 1. Мелкий: шапка не должна
         // расти от него, она и так растёт от перенесённого заголовка.
-        avatar?.let { Avatar(letters = it, size = AvatarSize.Small) }
+        avatar?.let {
+            Avatar(
+                letters = it,
+                image = avatarImage,
+                size = AvatarSize.Small,
+                modifier = if (onPerson != null) Modifier.clickable(onClick = onPerson) else Modifier,
+            )
+        }
         androidx.compose.foundation.layout.Column(
-            modifier = Modifier.weight(1f).widthIn(min = TITLE_MIN),
+            modifier = Modifier
+                .weight(1f)
+                .widthIn(min = TITLE_MIN)
+                .then(if (onPerson != null) Modifier.clickable(onClick = onPerson) else Modifier),
         ) {
             // Многословный заголовок переносится, однословный ужимается по ширине:
             // на плашке одно слово перенести некуда, а обрезать его нельзя — от него

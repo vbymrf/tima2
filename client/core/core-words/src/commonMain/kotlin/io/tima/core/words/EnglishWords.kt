@@ -647,6 +647,14 @@ object EnglishWords : Words {
         override val couldNotRemove = "Could not remove the entry"
         override val ownerSwitchesPage = "Discussions are switched off by the page owner"
         override val pageGone = "The page is gone"
+        override val guestPage = "Page"
+        override val whatWeKnow = "What we know about them"
+        override val subscribe = "Subscribe"
+        override val unsubscribe = "Unsubscribe"
+        override val subscribeNotYet = "Not working yet: a person's feed has no reader-side subscription"
+        override val alreadyInContacts = "Already in contacts"
+        override val contactMeansFriend = "A contact is a friend: friends are subscribed automatically"
+        override val nothingKnown = "We know nothing about them — no name, no nickname, no number"
         override val ownerOrModeratorCloses = "A discussion is closed by the owner or a moderator"
     }
 

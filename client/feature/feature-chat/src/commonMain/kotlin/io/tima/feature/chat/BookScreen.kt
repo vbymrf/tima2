@@ -74,6 +74,13 @@ fun BookScreen(
     onAdd: (() -> Unit)? = null,
     /** «Пригласить» у того, кого нет в TIMa. */
     onInvite: ((BookEntry) -> Unit)? = null,
+    /**
+     * Нажали на аватар — личная страница человека (заказчик 2026-09-19).
+     *
+     * У строки две цели, и так в макете: аватар ведёт к человеку, всё остальное — к
+     * действию со строкой. `null` — страницы нет, аватар не нажимается.
+     */
+    onFace: ((BookEntry) -> Unit)? = null,
     onToggleSection: (String) -> Unit = {},
     /** Разрешение на чтение книги телефона просит платформа, а не этот экран. */
     onAllow: (() -> Unit)? = null,
@@ -187,7 +194,17 @@ fun BookScreen(
                         ListLine(
                             onClick = { onOpen(person) },
                             // Картинка, если человек поставил аватар; иначе буква.
-                            left = { Avatar(letters = who.letter(), image = faceOf(person)) },
+                            left = {
+                                Avatar(
+                                    letters = who.letter(),
+                                    image = faceOf(person),
+                                    modifier = if (onFace != null) {
+                                        Modifier.clickable { onFace(person) }
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                            },
                             middle = {
                                 Column {
                                     // Первая строка — имя, ник, имя пользователя по «Виду»

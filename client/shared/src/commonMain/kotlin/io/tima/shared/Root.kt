@@ -115,6 +115,8 @@ import io.tima.core.ui.ControlRow
 import io.tima.core.ui.Field
 import io.tima.core.ui.IconButton
 import io.tima.core.ui.TimaSpacing
+import io.tima.feature.chat.GuestPageScreen
+import io.tima.feature.chat.PERSON_FIRST_LINE
 import io.tima.feature.chat.BookViewSheet
 import io.tima.feature.chat.matches
 import io.tima.feature.chat.orderedSections
@@ -557,6 +559,17 @@ private sealed interface Where {
 
     /** Доступ к закрытым записям: просьбы и выдача. Открывается из состава группы. */
     data class Access(val groupId: String, val name: String?) : Where
+
+    /**
+     * Личная страница человека — **заглушка** (заказчик 2026-09-19).
+     *
+     * Хранится только идентификатор: имя, ник и номер берутся из справочника и книги —
+     * там же, где их берут списки. Второе имя здесь разошлось бы с первым.
+     *
+     * Входа два, и оба — «нажали на человека»: аватар в книге и аватар с именем в шапке
+     * переписки. Так в макете `страница-гостя.html`: «у строки две цели».
+     */
+    data class Person(val userId: String) : Where
 
     /**
      * Страница сообщества: состав, описание, подписка (ПЛАН-СООБЩЕСТВ С6).
@@ -1334,6 +1347,10 @@ private fun App(
                     chatSection = chatSection,
                     onChooseChatSection = { chatSection = it },
                     onAddContact = { newContact = true },
+                    // Аватар в строке книги ведёт на личную страницу; остальная строка —
+                    // в переписку. Того, кого нет в TIMa, открывать нечем: страница
+                    // принадлежит аккаунту, а не номеру.
+                    onFacePerson = { entry -> entry.userId?.let { where = Where.Person(it) } },
                     onInvite = { inviting = it },
                     onOpenedContacts = book::refresh,
                     onAllowContacts = {
@@ -1750,10 +1767,23 @@ private fun App(
                             }
                         },
                         chatId = current.chatId,
-                        // Имя из списка, если строка уже пришла потоком; иначе то, с чем
-                        // переписку открыли. Пустое место читалось бы как поломка.
-                        name = listState.chats.firstOrNull { it.chatId == current.chatId }?.title
+                        // Нажатие на аватар с именем в шапке — личная страница собеседника.
+                        // Только у личной переписки: за шапкой группы не один человек.
+                        onPerson = listState.chats.firstOrNull { it.chatId == current.chatId }
+                            ?.takeIf { it.kind == ChatKind.Personal }
+                            ?.peerId
+                            ?.let { peerId -> { where = Where.Person(peerId) } },
+                        // Имя — тем же механизмом, что в списке (Д14): собеседник по «Виду»,
+                        // иначе название переписки, иначе то, с чем её открыли. Иначе один
+                        // человек звался бы в списке одним, а в шапке другим.
+                        name = listState.chats.firstOrNull { it.chatId == current.chatId }
+                            ?.let { chat ->
+                                personOfChat(chat)?.line(bookStateForChats.view.look(), PERSON_FIRST_LINE)
+                                    ?: chat.title
+                            }
                             ?: current.name,
+                        peerFace = listState.chats.firstOrNull { it.chatId == current.chatId }
+                            ?.let { faceOfChat(it) },
                         scope = scope,
                         onBack = { where = Where.Nothing },
                         onMembers = { where = Where.Members(current.chatId, current.name) },
@@ -1770,6 +1800,39 @@ private fun App(
                             // назван прямо, а не подразумевается умолчанием.
                             page.carry(CarryToPage.CONTAINER_GROUP, current.chatId, messageId, was)
                         },
+                    )
+                }
+            }
+
+            is Where.Person -> {
+                {
+                    // Карточку спрашиваем при открытии: человек мог прийти сюда из шапки
+                    // переписки, где мы знали только идентификатор.
+                    LaunchedEffect(current.userId) {
+                        people.want(listOf(current.userId))
+                        people.wantFace(current.userId)
+                    }
+                    val entry = bookStateForChats.all.firstOrNull {
+                        it.userId == current.userId ||
+                            (peopleCards[current.userId]?.phone != null &&
+                                it.phone == peopleCards[current.userId]?.phone)
+                    }
+                    val who = (peopleCards[current.userId] ?: ChatPerson())
+                        .withBookName(entry?.name, entry?.phone)
+                    GuestPageScreen(
+                        person = who,
+                        face = peopleFaces[current.userId],
+                        inContacts = entry != null,
+                        // Номера не знаем — заводить контакт не из чего: книга держит
+                        // человека по номеру, и пустая строка завела бы пустого.
+                        onAddToContacts = who.phone?.let { phone ->
+                            {
+                                contacts.changedPhone(phone)
+                                newContact = true
+                            }
+                        },
+                        look = bookStateForChats.view.look(),
+                        onBack = { where = Where.Nothing },
                     )
                 }
             }
@@ -1874,6 +1937,10 @@ private fun Chat(
     onOpened: (String) -> Unit = {},
     /** Поставить или сбросить (`null`) мой цвет; `done(беда)` — итог, `null` — вышло. */
     onMyColor: ((chatId: String, hue: Int?, done: (String?) -> Unit) -> Unit)? = null,
+    /** Нажали на аватар с именем в шапке — личная страница собеседника; `null` — группа. */
+    onPerson: (() -> Unit)? = null,
+    /** Картинка аватара собеседника в шапке. */
+    peerFace: ImageBitmap? = null,
     /** Разделы книги для «•••» личной переписки: раздел переписки — раздел собеседника. */
     bookSections: List<Section> = emptyList(),
     currentBookSection: String = "",
@@ -1958,6 +2025,8 @@ private fun Chat(
     var myColorTrouble by remember { mutableStateOf<String?>(null) }
     ChatScreen(
         state = state,
+        onPerson = onPerson,
+        peerFace = peerFace,
         authorLook = authorLook,
         ownerId = ownerId,
         hues = hues,
@@ -2468,6 +2537,9 @@ private fun whereWords(where: Where): String = when (where) {
     Where.NewVirtual -> "новый виртуальный аккаунт"
     is Where.Members -> "состав группы"
     is Where.Chat -> "переписка"
+    // Без идентификатора: журналу нужно знать, что человек открыл чужую страницу, а чью
+    // именно — в отчёте не нужно никому.
+    is Where.Person -> "личная страница"
     is Where.Access -> "доступ к закрытым записям"
     // Ни канала, ни номера записи: в журнале нужно знать, что человек читал разговор, а
     // не под какой записью — идентификатор чужого поста в отчёте не нужен никому.
@@ -2754,6 +2826,8 @@ private fun PhoneWindow(
     onView: () -> Unit,
     onToggleSection: (String) -> Unit,
     onAddContact: () -> Unit,
+    /** Нажали на аватар в книге — личная страница человека. */
+    onFacePerson: (BookEntry) -> Unit = {},
     onInvite: (BookEntry) -> Unit,
     /** Открыли вкладку: прочитать телефонную книгу и сверить. */
     onOpenedContacts: () -> Unit,
@@ -2872,6 +2946,7 @@ private fun PhoneWindow(
                     onSections = onSections,
                     newIn = newInSection,
                     onAdd = onAddContact,
+                    onFace = onFacePerson,
                     onInvite = onInvite,
                     onAllow = onAllowContacts,
                 )
