@@ -132,6 +132,31 @@ class EventStreamProtocol {
             val eventId: Long?,
         ) : Decision
 
+        /**
+         * Нам звонят (`call.incoming`).
+         *
+         * **Звонок — не сообщение, и курсор он не двигает.** Событие живое: через минуту
+         * оно бессмысленно, и складывать его в историю незачем. Поэтому [eventId] здесь
+         * есть только ради подтверждения кадра, а записывать нечего.
+         *
+         * @param kind `audio` или `video` — от этого зависит, что показать на экране.
+         */
+        data class CallIncoming(
+            val callId: String,
+            val room: String,
+            val kind: String,
+            val from: String,
+            val eventId: Long?,
+        ) : Decision
+
+        /**
+         * Со звонком что-то стало (`call.state`): приняли, отклонили, положили трубку.
+         *
+         * Состояние приходит словом сервера, а не перечнем: сервер знает его случаи
+         * лучше, и заводить свой перечень значило бы обещать, что мы их все перечислили.
+         */
+        data class CallState(val callId: String, val state: String, val eventId: Long?) : Decision
+
         /** Кадр не наш или испорчен — пропускаем, но курсор двигаем (правило 3). */
         data class Skip(val reason: String, val eventId: Long?) : Decision
     }
@@ -284,6 +309,35 @@ class EventStreamProtocol {
                     Decision.Skip("message.level_narrowed без обязательных полей", eventId)
                 } else {
                     Decision.LevelNarrowed(groupId, messageId, level, json.string("by") ?: "", eventId)
+                }
+            }
+
+            "call.incoming" -> {
+                val callId = json.string("call_id")
+                val room = json.string("room")
+                if (callId == null || room == null) {
+                    Decision.Skip("call.incoming без call_id или room", eventId)
+                } else {
+                    Decision.CallIncoming(
+                        callId = callId,
+                        room = room,
+                        // Вид по умолчанию — звук: он дешевле и безопаснее ошибки в другую
+                        // сторону. Включить камеру человек успеет, выключить внезапно
+                        // включившуюся — уже нет.
+                        kind = json.string("kind") ?: "audio",
+                        from = json.string("from") ?: "",
+                        eventId = eventId,
+                    )
+                }
+            }
+
+            "call.state" -> {
+                val callId = json.string("call_id")
+                val state = json.string("state")
+                if (callId == null || state == null) {
+                    Decision.Skip("call.state без call_id или state", eventId)
+                } else {
+                    Decision.CallState(callId = callId, state = state, eventId = eventId)
                 }
             }
 

@@ -61,6 +61,14 @@ class EventStream(
          * обязан работать и там, где страницы нет вовсе.
          */
         onComment: suspend (EventStreamProtocol.Decision.CommentArrived) -> Unit = {},
+        /**
+         * Нам звонят или со звонком что-то стало.
+         *
+         * По умолчанию ничего: канал обязан работать и там, где звонков нет вовсе — на
+         * ПК, в харнессе, в проверках. Звонок — событие **живое**: через минуту оно
+         * бессмысленно, и складывать его в историю незачем.
+         */
+        onCall: suspend (EventStreamProtocol.Decision) -> Unit = {},
         persist: suspend (EventStreamProtocol.IncomingEvent) -> Unit,
     ): StreamOutcome {
         var last = cursor
@@ -127,6 +135,25 @@ class EventStream(
                         is EventStreamProtocol.Decision.CommentArrived -> {
                             onComment(decision)
                             decision.eventId?.let {
+                                last = it
+                                send(Frame.Text(protocol.ackFrame(it)))
+                            }
+                        }
+
+                        // Звонок подтверждается так же, как всё живое: доставлено —
+                        // значит обработано. Не подтвердить — значит получить входящий
+                        // заново при каждом переподключении, то есть звонить человеку
+                        // второй раз о том, чего уже нет.
+                        is EventStreamProtocol.Decision.CallIncoming,
+                        is EventStreamProtocol.Decision.CallState,
+                        -> {
+                            onCall(decision)
+                            val id = when (decision) {
+                                is EventStreamProtocol.Decision.CallIncoming -> decision.eventId
+                                is EventStreamProtocol.Decision.CallState -> decision.eventId
+                                else -> null
+                            }
+                            id?.let {
                                 last = it
                                 send(Frame.Text(protocol.ackFrame(it)))
                             }
