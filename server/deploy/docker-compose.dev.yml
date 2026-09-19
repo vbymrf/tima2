@@ -51,7 +51,7 @@ services:
     profiles: ["calls"]
     # Версия закреплена — см. пояснение у minio. Снято со стенда 2026-09-03,
     # digest sha256:483b8b7b5b0654f91f1e8bdc7b46fcd37fd9911612ecf627f97e3185a89825bd
-    image: livekit/livekit-server:v1.13.3
+    image: livekit/livekit-server:v1.13.7
     restart: unless-stopped
     command: ["--dev", "--bind", "0.0.0.0"]
     environment:
