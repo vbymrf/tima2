@@ -141,7 +141,11 @@ fun ChatScreen(
      * показываются: прочитать разговор дважды — в списке и в ветке — значит удвоить его.
      */
     onThread: ((Long) -> Unit)? = null,
-    /** Нажали на неотправленное (крестик): подокно с причиной, повтором и удалением. */
+    /**
+     * Нажали на неотправленное — отказанное (крестик) или ждущее (круговая стрелка):
+     * подокно с причиной. У отказанного там же повтор, у ждущего его нет — очередь
+     * повторяет сама (заказчик 2026-09-19).
+     */
     onFailed: ((ChatLine) -> Unit)? = null,
     /** Как называть авторов в группе — «Вид» набора сообществ. */
     authorLook: PersonLook = PersonLook.DEFAULT,
@@ -368,7 +372,8 @@ private fun Reply(
     // элементе ленивого списка легли бы друг на друга.
     // Неотправленное нажимается целиком — крестик мал для пальца, а вопрос «что с ним
     // делать» относится ко всему сообщению.
-    val failed = line.display == MessageDisplay.FAILED && onFailed != null
+    val failed = (line.display == MessageDisplay.FAILED || line.display == MessageDisplay.PENDING) &&
+        line.outgoing && onFailed != null
     Column(if (failed) Modifier.clickable { onFailed!!(line) } else Modifier) {
         Bubbled(line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry)
         // «Ветка · N ответов» — под сообщением, отдельной строкой, а не внутри пузыря:

@@ -29,26 +29,34 @@ import io.tima.core.ui.words
 /**
  * Подокно неотправленного сообщения — решение заказчика 2026-09-19.
  *
+ * **Два вида, и разница в одной кнопке.** У отказанного (красный крест) есть «Отправить ещё
+ * раз»: без неё сообщение мертво навсегда. У ждущего (серая круговая стрелка) её нет и быть
+ * не должно — очередь повторяет сама, и кнопка обещала бы действие, которое уже идёт
+ * (заказчик 2026-09-19). Обоим остаются «Удалить» и «Сообщить о проблеме»: за любым из
+ * двух может стоять наш баг.
+ *
  * Сверху — **причина словами и кодом**: слова человеку, код тому, кто получит от него снимок
  * или отчёт — по коду находится строка в `group_messages.go`, по словам нет. Незнакомый код —
- * только код: выдуманные слова хуже честного кода. Причины нет (сообщение старше столбца
- * `fail_reason`) — так и сказано.
- *
- * Ниже три действия: **отправить ещё раз** (та же строка, с текущим кругом — человек уже
- * видел причину и мог сменить круг), **удалить**, **сообщить о проблеме** — отчёт тем же
- * механизмом, что в настройках, с подставленным кодом: за крестиком может стоять наш баг.
+ * только код: выдуманные слова хуже честного кода. У ждущего ниже — сколько попыток было и
+ * когда следующая: без этого «ждёт три секунды» и «ждёт третьи сутки» выглядят одинаково.
  */
 @Composable
 fun FailedMessageSheet(
     /** Что не отправилось — для напоминания, о чём речь. */
     text: String?,
-    /** Код отказа сервера; `null` — не сохранён. */
+    /** Код отказа сервера или причина ожидания; `null` — не сохранена. */
     reason: String?,
-    onRetry: () -> Unit,
     onDelete: () -> Unit,
     onReport: (() -> Unit)?,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Ждёт очереди, а не отказано: заголовок другой, повтора нет. */
+    waiting: Boolean = false,
+    /** Сколько попыток было и через сколько секунд следующая — только у ждущего. */
+    attempts: Int = 0,
+    secondsLeft: Int = 0,
+    /** Повтор — только у отказанного; `null` — кнопки нет. */
+    onRetry: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -74,7 +82,9 @@ fun FailedMessageSheet(
                 horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.weight(1f)) { ProvidePlace(TextPlace.HEADERS) { Name(words.notSent) } }
+                Box(Modifier.weight(1f)) {
+                    ProvidePlace(TextPlace.HEADERS) { Name(if (waiting) words.waitingTitle else words.notSent) }
+                }
                 IconButton(glyph = "✕", onClick = onClose)
             }
             Column(
@@ -83,16 +93,24 @@ fun FailedMessageSheet(
             ) {
                 if (!text.isNullOrBlank()) Caption("«$text»", fontSize = TimaType.sz4, color = colors.text2, maxLines = 3)
                 when {
-                    reason == null -> Secondary(words.notSentNoReason)
+                    reason == null -> Secondary(if (waiting) words.waitingNoReason else words.notSentNoReason)
                     else -> {
                         val said = words.failReason(reason)
-                        // Слова — крупно, код — мелко рядом: оба нужны разным людям.
-                        Caption(said ?: reason, fontSize = TimaType.sz5, color = colors.alarm)
+                        // Слова — крупно, код — мелко рядом: оба нужны разным людям. У
+                        // ждущего причина не тревожна — цвет обычный: оно ещё уйдёт.
+                        Caption(
+                            said ?: reason,
+                            fontSize = TimaType.sz5,
+                            color = if (waiting) colors.text2 else colors.alarm,
+                        )
                         if (said != null) Tertiary(reason, lineOne = true)
                     }
                 }
+                if (waiting) Tertiary(words.waitingAbout(attempts, secondsLeft), lineOne = true)
             }
-            ListLine(onClick = onRetry, middle = { Name(words.sendAgain) }, right = { Tertiary("›", lineOne = true) })
+            if (onRetry != null) {
+                ListLine(onClick = onRetry, middle = { Name(words.sendAgain) }, right = { Tertiary("›", lineOne = true) })
+            }
             ListLine(onClick = onDelete, middle = { Name(words.deleteMessage) }, right = { Tertiary("›", lineOne = true) })
             if (onReport != null) {
                 ListLine(onClick = onReport, middle = { Name(words.reportProblem) }, right = { Tertiary("›", lineOne = true) })

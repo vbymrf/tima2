@@ -114,8 +114,8 @@ class SqlOutboxStore(
         q.changes().executeAsOne() > 0
     }
 
-    override fun deleteDead(dedupKey: String): Boolean = db.transactionWithResult {
-        q.deleteDead(dedupKey, OutboxState.DEAD.ordinal.toLong())
+    override fun deleteUnsent(dedupKey: String): Boolean = db.transactionWithResult {
+        q.deleteUnsent(dedupKey, OutboxState.DEAD.ordinal.toLong(), OutboxState.QUEUED.ordinal.toLong())
         q.changes().executeAsOne() > 0
     }
 

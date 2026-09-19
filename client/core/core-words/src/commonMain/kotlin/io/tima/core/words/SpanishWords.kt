@@ -673,6 +673,17 @@ object SpanishWords : Words {
         override val myColorTaken = "ocupado"
         override val myColorReset = "Restablecer — automático"
         override val notSent = "No enviado"
+        override val waitingTitle = "Esperando el envío"
+        override val waitingNoReason = "En la cola: aún no hubo intentos"
+        override fun waitingAbout(attempts: Int, seconds: Int): String {
+            val tries = if (attempts == 0) "aún no hubo intentos" else "intentos: $attempts"
+            val next = when {
+                seconds <= 0 -> "el siguiente, en la próxima pasada"
+                seconds < 60 -> "el siguiente en $seconds s"
+                else -> "el siguiente en ${seconds / 60} min"
+            }
+            return "$tries · $next"
+        }
         override val notSentNoReason = "El motivo no se guardó: el mensaje es anterior a esta versión"
         override val sendAgain = "Enviar de nuevo"
         override val deleteMessage = "Eliminar"

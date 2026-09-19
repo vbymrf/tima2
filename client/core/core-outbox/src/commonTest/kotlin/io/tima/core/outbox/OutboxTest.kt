@@ -418,13 +418,34 @@ class OutboxTest {
     }
 
     @Test
+    fun временный_отказ_оставляет_причину_ожидания() {
+        // Её показывает подокно ждущего: без причины «ждёт три секунды» и «ждёт третьи
+        // сутки» выглядят одинаково (заказчик 2026-09-19).
+        put()
+        deliver()
+        outbox.onOutcome("dedup-1", SendOutcome.Retry(afterMs = 5_000, reason = "нет связи с сервером"))
+
+        val entry = store.byDedupKey("dedup-1")!!
+        assertEquals(OutboxState.QUEUED, entry.state)
+        assertEquals("нет связи с сервером", entry.failReason)
+        assertEquals(1, entry.attempts)
+    }
+
+    @Test
+    fun ждущее_можно_убрать_а_повторять_нечего() {
+        put()
+        assertEquals(false, outbox.retryDead("dedup-1", level = 0), "в очереди — повторять нечего")
+        assertEquals(true, outbox.deleteUnsent("dedup-1"), "ждущее человек вправе убрать")
+        assertEquals(null, store.byDedupKey("dedup-1"))
+    }
+
+    @Test
     fun повторить_и_убрать_можно_только_отказанное() {
         put()
         assertEquals(false, outbox.retryDead("dedup-1", level = 0), "в очереди — повторять нечего")
-        assertEquals(false, outbox.deleteDead("dedup-1"))
         deliver()
         outbox.onOutcome("dedup-1", SendOutcome.Permanent("banned"))
-        assertEquals(true, outbox.deleteDead("dedup-1"))
+        assertEquals(true, outbox.deleteUnsent("dedup-1"))
         assertEquals(null, store.byDedupKey("dedup-1"))
     }
 }

@@ -532,6 +532,10 @@ interface ChatWords {
     val myColorReset: String
     /** Неотправленное: подокно с причиной (заказчик 2026-09-19). */
     val notSent: String
+    /** Ждёт отправки: заголовок подокна и строка про попытки (заказчик 2026-09-19). */
+    val waitingTitle: String
+    val waitingNoReason: String
+    fun waitingAbout(attempts: Int, seconds: Int): String
     val notSentNoReason: String
     val sendAgain: String
     val deleteMessage: String
@@ -1803,6 +1807,17 @@ object RussianWords : Words {
         override val myColorTaken = "занят"
         override val myColorReset = "Сбросить — автоматический"
         override val notSent = "Не отправлено"
+        override val waitingTitle = "Ждёт отправки"
+        override val waitingNoReason = "Ждёт очереди — попыток ещё не было"
+        override fun waitingAbout(attempts: Int, seconds: Int): String {
+            val tries = if (attempts == 0) "попыток ещё не было" else "попыток: $attempts"
+            val next = when {
+                seconds <= 0 -> "следующая — при ближайшем проходе"
+                seconds < 60 -> "следующая через $seconds с"
+                else -> "следующая через ${seconds / 60} мин"
+            }
+            return "$tries · $next"
+        }
         override val notSentNoReason = "Причина не сохранилась — сообщение старше этой сборки"
         override val sendAgain = "Отправить ещё раз"
         override val deleteMessage = "Удалить"

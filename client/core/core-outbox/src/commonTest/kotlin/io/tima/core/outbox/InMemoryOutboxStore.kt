@@ -39,9 +39,10 @@ class InMemoryOutboxStore : OutboxStore {
     }
 
 
-    override fun deleteDead(dedupKey: String): Boolean {
+    override fun deleteUnsent(dedupKey: String): Boolean {
 
-        val entry = byDedupKey(dedupKey)?.takeIf { it.state == OutboxState.DEAD } ?: return false
+        val entry = byDedupKey(dedupKey)
+            ?.takeIf { it.state == OutboxState.DEAD || it.state == OutboxState.QUEUED } ?: return false
 
         rows.remove(dedupKey)
 

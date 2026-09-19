@@ -144,9 +144,10 @@ SET state = :queued, attempts = 0, next_attempt_at = NULL, sealed_epoch = NULL,
     client_ts = :now, level = :level, fail_reason = NULL
 WHERE dedup_key = :dedupKey AND direction = 0 AND state = :dead;
 
--- Убрать отказанное совсем: человек решил не повторять.
-deleteDead:
-DELETE FROM messages WHERE dedup_key = ? AND direction = 0 AND state = ?;
+-- Убрать неотправленное: отказанное или ждущее в очереди. Запечатанное и улетающее не
+-- трогаем — у первого собран конверт, у второго ответ сервера уже в пути.
+deleteUnsent:
+DELETE FROM messages WHERE dedup_key = ? AND direction = 0 AND state IN (?, ?);
 
 -- Возврат зависшего при старте: SENDING и SEALED снова в очередь. Без этого
 -- убитое посреди отправки сообщение остаётся висеть навсегда — дефект v1.

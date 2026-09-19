@@ -312,7 +312,8 @@ class ChatStore(
         scope.launch { withContext(io) { port.retry(dedupKey, _state.value.level) } }
     }
 
-    fun deleteDead(dedupKey: String) {
+    /** Убрать неотправленное — отказанное или ждущее. */
+    fun deleteUnsent(dedupKey: String) {
         val port = dead ?: return
         scope.launch { withContext(io) { port.delete(dedupKey) } }
     }

@@ -192,8 +192,11 @@ interface OutboxStore {
      */
     fun retryDead(dedupKey: String, nowMs: Long, level: Int): Boolean
 
-    /** Убрать отказанное. `false` — записи нет или она не DEAD. */
-    fun deleteDead(dedupKey: String): Boolean
+    /**
+     * Убрать неотправленное: отказанное (DEAD) или ждущее (QUEUED). Запечатанное и
+     * улетающее не трогаем — конверт уже собран, а у SENDING ответ сервера в пути.
+     */
+    fun deleteUnsent(dedupKey: String): Boolean
 
     /**
      * Следующая запись, готовая к запечатыванию: [OutboxState.QUEUED] и срок пришёл.
@@ -416,7 +419,8 @@ class Outbox(
     /** Запись как есть — для журнала и подокна; `null` — нет такой. */
     fun entry(dedupKey: String): OutboxEntry? = store.byDedupKey(dedupKey)
 
-    fun deleteDead(dedupKey: String): Boolean = store.deleteDead(dedupKey)
+    /** Убрать неотправленное — отказанное или ждущее (заказчик 2026-09-19). */
+    fun deleteUnsent(dedupKey: String): Boolean = store.deleteUnsent(dedupKey)
 
     fun onOutcome(dedupKey: String, outcome: SendOutcome) {
         val entry = store.byDedupKey(dedupKey)
@@ -435,6 +439,10 @@ class Outbox(
                 entry.copy(state = OutboxState.SENT, serverMessageId = outcome.serverMessageId)
             }
             is SendOutcome.Retry -> entry.copy(
+                // Причина ожидания ложится рядом с сообщением — её показывает подокно
+                // ждущего (заказчик 2026-09-19). Тот же столбец, что у окончательного
+                // отказа: вопрос один — «почему не ушло», а состояние говорит, насовсем ли.
+                failReason = outcome.reason.ifBlank { null },
                 // В QUEUED, а не в SEALED: пока запись ждёт, эпоха может смениться, и
                 // решать это должен sealNext, а не память о прошлом конверте.
                 //

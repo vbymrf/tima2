@@ -83,8 +83,15 @@ data class ChatLine(
     val atMs: Long,
     /** Порядок появления в базе — развязка при равном времени. */
     val localId: Long,
-    /** Код отказа сервера у неотправленного; `null` — не отказано или причина не сохранена. */
+    /**
+     * Почему не ушло: код отказа сервера у отказанного либо причина ожидания у ждущего.
+     * `null` — причины нет или она не сохранена.
+     */
     val failReason: String? = null,
+    /** Сколько попыток отправки уже было. */
+    val attempts: Int = 0,
+    /** Когда очередь возьмётся снова (мс Unix); `0` — при ближайшем проходе. */
+    val nextAttemptAtMs: Long = 0,
     /**
      * Идентификатор, назначенный сервером. `0` — сообщение ещё не дошло.
      *
@@ -214,6 +221,8 @@ fun interface ChatPeople {
 interface DeadMessages {
     /** Снова в очередь с кругом [level]; `false` — записи нет или она не отказана. */
     suspend fun retry(dedupKey: String, level: Int): Boolean
+
+    /** Убрать неотправленное: отказанное или ждущее. */
     suspend fun delete(dedupKey: String): Boolean
 }
 

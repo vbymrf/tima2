@@ -5,7 +5,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
@@ -28,7 +33,11 @@ import androidx.compose.ui.unit.dp
 
 /** Что стало с моим сообщением. Только для исходящих: у входящих отметок не бывает. */
 enum class MarkKind {
-    /** Ждёт отправки: сеть, срок повтора, очередь. Пустой круг. */
+    /**
+     * Ждёт отправки: сеть, срок повтора, очередь. **Круговая стрелка** — решение заказчика
+     * 2026-09-19: пустой круг читался как «ничего не происходит», а тут именно происходит —
+     * очередь повторяет сама.
+     */
     Waits,
 
     /** Сервер принял. Галочка. */
@@ -58,11 +67,39 @@ fun Mark(kind: MarkKind, modifier: Modifier = Modifier, side: Dp = 12.dp) {
         val thickness = size.minDimension * ТОЛЩИНА_ДОЛЯ
         val outline = Stroke(width = thickness, cap = StrokeCap.Round)
         when (kind) {
-            MarkKind.Waits -> drawCircle(
-                color = color,
-                radius = size.minDimension / 2 - thickness / 2,
-                style = outline,
-            )
+            MarkKind.Waits -> {
+                // Разомкнутая дуга с наконечником: знак «повторяется», а не «пусто». Дуга
+                // идёт от 20° по часовой на 290° и обрывается у 310°; в разрыв смотрит
+                // треугольник — на двенадцати точках экрана он читается, а два тонких
+                // отрезка сливались бы в кляксу.
+                val inset = thickness / 2
+                val radius = size.minDimension / 2 - inset
+                val centre = Offset(size.width / 2, size.height / 2)
+                fun at(degrees: Float, r: Float) = Offset(
+                    centre.x + r * cos(degrees * PI.toFloat() / 180f),
+                    centre.y + r * sin(degrees * PI.toFloat() / 180f),
+                )
+                drawArc(
+                    color = color,
+                    startAngle = 20f,
+                    sweepAngle = 290f,
+                    useCenter = false,
+                    topLeft = Offset(inset, inset),
+                    size = Size(size.width - thickness, size.height - thickness),
+                    style = outline,
+                )
+                drawPath(
+                    Path().apply {
+                        val tip = at(352f, radius)
+                        val wing = thickness * 1.7f
+                        moveTo(tip.x, tip.y)
+                        at(312f, radius + wing).let { lineTo(it.x, it.y) }
+                        at(312f, radius - wing).let { lineTo(it.x, it.y) }
+                        close()
+                    },
+                    color = color,
+                )
+            }
 
             MarkKind.Left -> {
                 // Галочка двумя отрезками: короткий вниз, длинный вверх.

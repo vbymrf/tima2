@@ -28,6 +28,7 @@ import io.tima.core.database.SqlGroupKeys
 import io.tima.core.network.GroupKeyRecoveryOverHttp
 import io.tima.core.network.GroupsOverHttp
 import io.tima.domain.chat.MessageCircle
+import io.tima.domain.chat.MessageDisplay
 import io.tima.domain.chat.NarrowMessageLevel
 import io.tima.domain.chat.ChatKind
 import io.tima.domain.chat.Section
@@ -1684,9 +1685,10 @@ private fun App(
                         onMembers = { where = Where.Members(current.chatId, current.name) },
                         // «Сообщить о проблеме» из подокна неотправленного: отчёт с кодом
                         // причины уже в тексте — человеку не надо ничего пересказывать.
-                        onReportFailed = { reason ->
-                            problemDraft = "Сообщение не отправилось. Причина: ${reason ?: "не сохранена"}. Переписка ${current.chatId.take(8)}."
-                            cameFrom = Origin(window, "не отправилось: ${reason ?: "без причины"}")
+                        onReportFailed = { reason, waiting ->
+                            val what = if (waiting) "Сообщение висит в очереди" else "Сообщение не отправилось"
+                            problemDraft = "$what. Причина: ${reason ?: "не сохранена"}. Переписка ${current.chatId.take(8)}."
+                            cameFrom = Origin(window, (if (waiting) "ждёт: " else "не отправилось: ") + (reason ?: "без причины"))
                             where = Where.Settings(SettingsItem.PROBLEM)
                         },
                         onCarry = { messageId, was ->
@@ -1771,8 +1773,8 @@ private fun Chat(
     scope: kotlinx.coroutines.CoroutineScope,
     onBack: () -> Unit,
     onMembers: () -> Unit,
-    /** Отчёт о проблеме из подокна неотправленного — с кодом причины. */
-    onReportFailed: ((reason: String?) -> Unit)? = null,
+    /** Отчёт о проблеме из подокна неотправленного — с причиной и тем, ждёт оно или отказано. */
+    onReportFailed: ((reason: String?, waiting: Boolean) -> Unit)? = null,
     /** Унести реплику к себе на страницу: `(messageId, круг записи)`. */
     onCarry: (Long, Int) -> Unit = { _, _ -> },
     /** Лечение группы без ключа при открытии; `null` — лечить нечем. */
@@ -1917,13 +1919,24 @@ private fun Chat(
 
     // Подокно неотправленного — ПОСЛЕ экрана переписки: что позже в композиции, то сверху.
     failed?.let { line ->
+        val waiting = line.display == MessageDisplay.PENDING
         FailedMessageSheet(
             text = line.text,
             reason = line.failReason,
-            onRetry = { store.retryDead(line.dedupKey); failed = null },
-            onDelete = { store.deleteDead(line.dedupKey); failed = null },
-            onReport = onReportFailed?.let { report -> { report(line.failReason); failed = null } },
+            onDelete = { store.deleteUnsent(line.dedupKey); failed = null },
+            onReport = onReportFailed?.let { report -> { report(line.failReason, waiting); failed = null } },
             onClose = { failed = null },
+            waiting = waiting,
+            attempts = line.attempts,
+            // Сколько осталось до следующей попытки; срока нет — очередь возьмётся ближайшим
+            // проходом, и это честнее выдуманных секунд.
+            secondsLeft = if (line.nextAttemptAtMs > 0) {
+                ((line.nextAttemptAtMs - msNow()) / 1000).coerceAtLeast(0).toInt()
+            } else {
+                0
+            },
+            // Повтор — только у отказанного: ждущее очередь повторяет сама.
+            onRetry = if (waiting) null else ({ store.retryDead(line.dedupKey); failed = null }),
         )
     }
     if (chatMenu && group && onMoveToShelf != null) {
@@ -2776,10 +2789,11 @@ private fun deadMessages(environment: Environment): DeadMessages = object : Dead
 
     override suspend fun delete(dedupKey: String): Boolean {
         val before = environment.queue.entry(dedupKey)
-        val done = environment.queue.deleteDead(dedupKey)
+        val done = environment.queue.deleteUnsent(dedupKey)
         Journal.note(
-            LogCode.QUEUE_RETRY, "человек убрал отказанное",
-            "действие" to "удалить", "причина" to (before?.failReason ?: "не сохранена"),
+            LogCode.QUEUE_RETRY, "человек убрал неотправленное",
+            "действие" to "удалить", "состояние" to (before?.state?.name ?: "?"),
+            "причина" to (before?.failReason ?: "не сохранена"),
             "переписка" to (before?.chatId ?: "?"), "вышло" to done,
         )
         return done

@@ -191,7 +191,8 @@ class GroupSender(
      */
     private fun wait(entry: OutboxEntry, why: String, afterMs: Long = 0): Boolean {
         lastTrouble = why
-        environment.queue.onOutcome(entry.dedupKey, SendOutcome.Retry(afterMs))
+        // Причина уходит и в очередь: её показывает подокно ждущего сообщения.
+        environment.queue.onOutcome(entry.dedupKey, SendOutcome.Retry(afterMs, why))
         return false
     }
 

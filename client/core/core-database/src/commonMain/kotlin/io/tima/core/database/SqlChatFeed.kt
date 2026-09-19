@@ -67,6 +67,8 @@ class SqlChatFeed(
         // других на момент составления нет.
         atMs = server_ts ?: client_ts,
         failReason = fail_reason,
+        attempts = attempts.toInt(),
+        nextAttemptAtMs = next_attempt_at ?: 0,
         level = level.toInt(),
         localId = local_id,
         // Ноль, а не null: «сервер его ещё не видел» и «идентификатор ноль» — одно и то
