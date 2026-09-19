@@ -37,6 +37,36 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!--
+      Звонок (К7, ПЛАН-СТЕНДА-ЗВОНКОВ С2). Появились вместе с окном 0, ни днём раньше:
+      до него микрофон приложению был не нужен ни для чего.
+
+      RECORD_AUDIO спрашивается у человека и без него звонок МОЛЧИТ: LiveKit
+      публикует пустую дорожку, комната соединяется, собеседник виден — и звука нет.
+      Ищется такая беда долго, потому что похожа она на что угодно, кроме разрешения.
+
+      CAMERA — только для видеозвонка, и спрашивается отдельно от микрофона: звонок
+      голосом камеры не требует, а разрешение, взятое «заодно», объяснить нельзя.
+
+      MODIFY_AUDIO_SETTINGS не спрашивается (install-time) и нужен маршрутизации
+      звука: динамик, ухо, гарнитура. Без него звонок идёт, но всегда в один выход.
+
+      BLUETOOTH_CONNECT — только с Android 12: с него гарнитуру по Bluetooth не видно
+      без разрешения. `audioswitch` внутри LiveKit его и спрашивает.
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!--
+      Камера и микрофон НЕ обязательны для установки: телефон без камеры остаётся
+      телефоном, на котором звонят голосом. Без этих строк Google Play отсеял бы такие
+      устройства сам, а раздаём мы мимо Play — и отсева не заметили бы вовсе.
+    -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!--
       Имя и иконка. До 2026-09-16 `android:icon` здесь не было ВОВСЕ, а каталога ресурсов
       у модуля не существовало: всё это время телефон рисовал системную заглушку, и
       выглядело это как «иконка не обновилась». Подпись при этом читалась «TIMA v2» —

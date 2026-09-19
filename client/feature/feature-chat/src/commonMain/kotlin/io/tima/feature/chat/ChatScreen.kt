@@ -19,8 +19,10 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.Color
+import io.tima.core.ui.IconButton
 import io.tima.core.ui.authorStrip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
@@ -54,6 +56,19 @@ import io.tima.domain.chat.CarryToPage
 import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.MessageDisplay
+
+/**
+ * Метка телефонной кнопки в шапке переписки — для живых сценариев (`maestro/`).
+ *
+ * **Назначена, а не выведена из ключа** — в отличие от `window:`, `tab:` и
+ * `settings:`, которые берутся прямо из перечислений. Перечисления кнопок в шапке
+ * нет, и заводить его ради одной метки значило бы строить лестницу к одной ступеньке.
+ *
+ * **Метка нужна именно здесь, а не вообще везде.** Глиф у этой кнопки тот же, что у
+ * окна «Телефон» в рейке, — отбор по видимому тексту нашёл бы два узла и ушёл бы то в
+ * один, то в другой. Где надпись однозначна, метка не нужна.
+ */
+const val CALL_BUTTON_TAG: String = "chat:call"
 
 /**
  * Окно переписки — К5.2, первый экран.
@@ -160,6 +175,13 @@ fun ChatScreen(
     onPerson: (() -> Unit)? = null,
     /** Картинка аватара собеседника в шапке; `null` — буквы, как было. */
     peerFace: ImageBitmap? = null,
+    /**
+     * Позвонить собеседнику — телефонная кнопка в шапке (макет `03-personal-chat.md`).
+     *
+     * `null` — звонить нечем или некому: у группы, на платформе без движка. Кнопки
+     * тогда нет вовсе, а не погашена: погашенная спрашивает «почему», отсутствующая — нет.
+     */
+    onCall: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -176,6 +198,18 @@ fun ChatScreen(
             // 2026-09-17: это про группу, а не про переписку). Они живут в меню «•••».
             onMore = onMore,
             onPerson = onPerson,
+            right = onCall?.let { call ->
+                {
+                    IconButton(
+                        glyph = "\uD83D\uDCDE",
+                        onClick = call,
+                        // Метка не для красоты: тот же глиф носит окно «Телефон» в
+                        // рейке, и живой сценарий, выбирающий по надписи, попадал бы
+                        // то в кнопку, то в рейку — через раз и молча.
+                        modifier = Modifier.testTag(CALL_BUTTON_TAG),
+                    )
+                }
+            },
         )
 
         // Полоса «ключа нет вовсе» — НАД лентой, а не над вводом: она не про отдельные

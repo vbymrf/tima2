@@ -1,5 +1,6 @@
 package io.tima.shared
 
+import io.tima.core.call.Calls
 import io.tima.core.encryption.DeviceIdentity
 import io.tima.domain.chat.AccessPort
 import io.tima.domain.chat.MessageLevels
@@ -106,6 +107,14 @@ interface ChatPorts {
 
     /** Выключатели обсуждения: канал целиком и одна запись (ADR-0024 §6). */
     val commentSwitches: CommentSwitches
+
+    /**
+     * Сигналинг звонка: начать, ответить, завершить (ПЛАН-ЗВОНКОВ §0).
+     *
+     * Только сигналинг. Медиа приходит другим путём — движком от платформы: у него свой
+     * `Context` и своя библиотека, и общий код их не видит.
+     */
+    val calls: Calls
 
     /** Создание канала — мастер создания (ПЛАН-СООБЩЕСТВ С5). */
     val channels: Channels

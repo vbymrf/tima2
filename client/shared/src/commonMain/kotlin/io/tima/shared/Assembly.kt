@@ -55,6 +55,14 @@ class Assembled(
      * достаточно, чтобы открытая страница перечиталась.
      */
     val commentPings: StateFlow<Long>,
+    /**
+     * Входящий звонок из канала: `callId|fromUserId|kind`, пусто — никто не звонит.
+     *
+     * Строкой, а не своим типом: сборка не должна знать устройства звонка, а тому, кто
+     * его держит, довольно трёх слов сервера. Поток, а не событие: состояние переживает
+     * пересборку экрана, а событие потерялось бы ровно в тот момент, когда звонят.
+     */
+    val callPings: StateFlow<String>,
 )
 
 /**
@@ -116,6 +124,7 @@ fun assemble(
         // потому что живёт столько же, сколько сборка, — а не столько, сколько экран.
         val senderStamps = MutableSharedFlow<SenderStamp>(extraBufferCapacity = 64)
         val commentPings = MutableStateFlow(0L)
+        val callPings = MutableStateFlow("")
 
         Assembled(
             session = device.session,
@@ -142,10 +151,18 @@ fun assemble(
                 identity = identity,
                 keyOrchestrator = keyOrchestrator,
                 onComment = { _, postId -> commentPings.value = postId },
+                onCall = { callId, from, kind -> callPings.value = "$callId|$from|$kind" },
+                // Со звонком что-то стало. Отдельной ручкой не обрабатываем: движок SFU
+                // сам узнает о выходе собеседника из комнаты, а слово сервера нужно лишь
+                // там, где до комнаты не дошло — «отклонили, не входя».
+                onCallState = { callId, state ->
+                    if (state == "declined" || state == "ended") callPings.value = "конец|$callId|$state"
+                },
                 onStamp = { senderStamps.tryEmit(it) },
             ),
             keyOrchestrator = keyOrchestrator,
             commentPings = commentPings,
+            callPings = callPings,
             senderStamps = senderStamps,
         )
     }

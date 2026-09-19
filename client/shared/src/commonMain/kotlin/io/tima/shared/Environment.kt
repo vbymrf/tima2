@@ -1,5 +1,6 @@
 package io.tima.shared
 
+import io.tima.core.network.CallsOverHttp
 import io.tima.core.database.SqlChatJournal
 import io.tima.core.database.SqlChatFeed
 import io.tima.core.database.SqlChatFacts
@@ -357,6 +358,13 @@ class Network(
      */
     override val comments: PostCommentsOverHttp =
         PostCommentsOverHttp(link.route, link.client, token = { token() })
+
+    /**
+     * Звонки: только сигналинг. Ручки на сервере были задолго до клиента, но до
+     * 2026-09-19 их не звал никто — поэтому они и не были проверены ничем.
+     */
+    override val calls: CallsOverHttp =
+        CallsOverHttp(link.route, link.client, token = { token() })
 
     override val commentSwitches: CommentSwitchesOverHttp =
         CommentSwitchesOverHttp(link.route, link.client, token = { token() })

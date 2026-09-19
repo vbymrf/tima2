@@ -52,6 +52,15 @@ class Receiver(
      */
     private val onComment: (String, Long) -> Unit = { _, _ -> },
     /**
+     * Нам звонят: `(callId, fromUserId, kind)`.
+     *
+     * Приёмник только приносит — кто этот человек и что показать, решает тот, кто держит
+     * звонок. По умолчанию ничего: канал обязан работать и там, где звонить нечем (ПК).
+     */
+    private val onCall: (String, String, String) -> Unit = { _, _, _ -> },
+    /** Со звонком что-то стало: `(callId, state)` — словом сервера. */
+    private val onCallState: (String, String) -> Unit = { _, _ -> },
+    /**
      * Штамп отправителя из обёртки события (сервер 0052/0053): кто, счётчик его профиля,
      * группа и цвет. Наружу, а не в базу: это подсказка карточкам людей, а не сообщение.
      */
@@ -87,6 +96,22 @@ class Receiver(
      * Бесконечный цикл здесь на месте: канал — это и есть «пока живо». Пауза между
      * попытками берётся из состояния связи, а не из общего «подождём пять секунд».
      */
+    /**
+     * Кадр звонка из канала.
+     *
+     * Ничего не решает и никуда не ходит: звонок — событие живое, и вся работа по нему у
+     * того, кто им владеет. Приёмник лишь переносит слова сервера наружу.
+     */
+    private fun aboutCall(decision: EventStreamProtocol.Decision) {
+        when (decision) {
+            is EventStreamProtocol.Decision.CallIncoming ->
+                onCall(decision.callId, decision.from, decision.kind)
+            is EventStreamProtocol.Decision.CallState ->
+                onCallState(decision.callId, decision.state)
+            else -> Unit
+        }
+    }
+
     suspend fun hold() {
         while (true) {
             val outcome = runCatching {
@@ -96,6 +121,7 @@ class Receiver(
                         onGroupKeys = { decision -> aboutKeys(decision) },
                         onLevelNarrowed = { decision -> aboutLevel(decision) },
                         onComment = { decision -> aboutComment(decision) },
+                        onCall = { decision -> aboutCall(decision) },
                     ) { event ->
                         accept(event.chatId, event.messageId, event.envelope)
                         stamp(event)

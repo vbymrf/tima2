@@ -65,6 +65,8 @@ fun WindowSwitchingScreen(
      * `GET /users/me`, и до ответа выдумывать строку на его месте нельзя.
      */
     phone: String = "",
+    /** Идёт ли звонок: от этого зависит, есть ли в переключателе окно 0. */
+    inCall: Boolean = false,
     /** Аватар в шапке. `null` — буква, как и было. */
     avatar: ImageBitmap? = null,
     onClose: () -> Unit,
@@ -164,7 +166,7 @@ fun WindowSwitchingScreen(
                 }
             }
 
-            for (window in Window.entries) {
+            for (window in Window.shown(inCall)) {
                 Item(
                     window = window,
                     current = window == current,

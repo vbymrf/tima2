@@ -291,6 +291,11 @@ object SpanishWords : Words {
 
     override val windows = object : WindowWords {
 
+        override val call = WindowName(
+            full = "Llamada",
+            short = "Llamada",
+            about = "hay una llamada en curso",
+        )
         override val phone = WindowName(
             full = "Teléfono",
             short = "Teléfono",
@@ -680,6 +685,7 @@ object SpanishWords : Words {
         override val connecting = "Conectando…"
         override val reconnecting = "Se perdió la conexión, volviendo…"
         override val videoPaused = "Vídeo desactivado: no hay banda suficiente. El audio sigue"
+        override val noMicrophone = "Sin acceso al micrófono: la llamada no funciona sin él. Actívalo en los ajustes del teléfono"
         override fun quality(level: String) = when (level) {
             "Excellent" -> "conexión excelente"
             "Good" -> "conexión buena"

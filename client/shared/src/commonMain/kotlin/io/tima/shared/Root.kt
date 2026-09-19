@@ -118,6 +118,8 @@ import io.tima.core.ui.IconButton
 import io.tima.core.ui.TimaSpacing
 import io.tima.feature.chat.GuestPageScreen
 import io.tima.feature.chat.PERSON_FIRST_LINE
+import io.tima.core.call.CallEngine
+import io.tima.feature.call.CallScreen
 import io.tima.feature.chat.BookViewSheet
 import io.tima.feature.chat.matches
 import io.tima.feature.chat.orderedSections
@@ -297,6 +299,14 @@ fun Root(
     diaryPolicy: AppearanceStore = AppearanceStore.Forgetful,
     /** Номер сборки от платформы: общий код его знать не может и не должен. */
     build: Build = Build(),
+    /**
+     * Чем исполнять звонок. `null` — платформа звонить не умеет (ПК, iOS): окна 0 тогда
+     * нет вовсе, и кнопки «позвонить» тоже.
+     *
+     * Приходит снаружи, а не собирается здесь: движку нужен `Context`, а общий код его не
+     * видит. Собирает его точка входа платформы — там же, где база и установщик.
+     */
+    callEngine: CallEngine? = null,
 ) {
     // Системная тема спрашивается ровно один раз и только затем, чтобы решить, с чего
     // начать при первом запуске. Дальше решает человек.
@@ -325,6 +335,7 @@ fun Root(
       CompositionLocalProvider(LocalStripLook provides appearance.strips) {
         Inside(
             entry = entry,
+            callEngine = callEngine,
             deviceDatabase = deviceDatabase,
             linkCode = linkCode,
             transferCode = transferCode,
@@ -384,6 +395,8 @@ class AppearanceStore(
 private fun Inside(
     entry: Entry,
     deviceDatabase: (String) -> TimaDatabase,
+    /** Чем исполнять звонок; `null` — платформа звонить не умеет. См. [Root]. */
+    callEngine: CallEngine?,
     linkCode: String?,
     transferCode: String?,
     installer: UpdateInstaller?,
@@ -424,6 +437,7 @@ private fun Inside(
     App(
         assembled = assembled,
         platform = entry.platform,
+        callEngine = callEngine,
         deviceSecret = current.secret,
         linkCode = linkCode,
         transferCode = transferCode,
@@ -681,6 +695,8 @@ private fun App(
     onPending: (Int) -> Unit = {},
     /** Принятый по передаче аккаунт: записать в список и войти (Д12). */
     onTransferTaken: (TransferAcceptStep.Taken) -> Unit = {},
+    /** Чем исполнять звонок; `null` — платформа звонить не умеет. См. [Root]. */
+    callEngine: CallEngine? = null,
 ) {
     val environment = assembled.environment
     val network = assembled.network
@@ -866,6 +882,42 @@ private fun App(
     // Окно 5 «Страница»: своя лента — своё и принесённое. Один Store на приложение: одна
     // страница у человека, и второй показывал бы то же самое со своим отставанием.
     val page = remember { PageStore(network.pages, scope, switches = network.commentSwitches) }
+
+    // Звонок: окно 0 живёт, пока идёт разговор (макет 21-call.md, решение заказчика
+    // 2026-09-19). Движок приходит от платформы — общий код Context не видит; `null`
+    // означает «эта платформа звонить не умеет», и тогда окна 0 нет вовсе.
+    val callHost = remember(callEngine) { CallHost(network.calls, callEngine, scope) }
+
+    // Входящий звонок приходит каналом событий. Имя собеседника берём тем же механизмом,
+    // что везде (Д14): карточка справочника поверх книги — иначе человек увидит
+    // идентификатор вместо имени ровно в тот момент, когда решает, брать ли трубку.
+    val callPing by assembled.callPings.collectAsState()
+    LaunchedEffect(callPing) {
+        val parts = callPing.split("|")
+        when {
+            parts.size == 3 && parts[0] == "конец" -> if (callHost.active) callHost.hangUp()
+            parts.size == 3 && parts[0].isNotEmpty() -> {
+                val (callId, fromId, kind) = parts
+                people.want(listOf(fromId))
+                callHost.ring(
+                    callId = callId,
+                    fromId = fromId,
+                    // Словарь «Вида» здесь ещё не собран — он ниже; для входящего
+                    // довольно того, как человек назвал себя сам. Имя из книги подставит
+                    // экран, когда звонок откроется.
+                    fromName = peopleCards[fromId]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE).orEmpty(),
+                    video = kind == "video",
+                )
+                window = Window.Call
+            }
+        }
+    }
+
+    // Звонок кончился и окно закрыли — уходим туда, откуда пришли. Оставить человека в
+    // окне, которого больше нет, нельзя: свайп и переключатель его уже не показывают.
+    LaunchedEffect(callHost.active) {
+        if (!callHost.active && window == Window.Call) window = Window.Phone
+    }
     // Страна, язык письма и два переключателя отбора. Один магазин на приложение: настройка
     // одна, и второй показывал бы то же самое со своим отставанием.
     val locale = remember { LocaleStore(network.locales, environment.settings, scope) }
@@ -1065,7 +1117,9 @@ private fun App(
     // не заворачиваются: с первого окна влево уйти некуда, и это честнее кольца —
     // человек, дойдя до края, видит, что край есть.
     val switchWindow: (InSide) -> Unit = { where_ ->
-        val order = Window.entries
+        // По показанным окнам, а не по перечню: окно 0 есть только во время звонка, и
+        // свайпом в него попадать, когда его нет в переключателе, было бы странно.
+        val order = Window.shown(callHost.active)
         val next = order.indexOf(window) + if (where_ == InSide.Next) 1 else -1
         order.getOrNull(next)?.let {
             window = it
@@ -1284,6 +1338,7 @@ private fun App(
     if (windowSwitcher) {
         WindowSwitchingScreen(
             current = window,
+            inCall = callHost.active,
             // Имя, ник и телефон — из профиля (0050). До этого здесь стояли заглушки:
             // userId вместо имени и «@» с восемью знаками id вместо ника.
             name = profileState.name.ifBlank { Tima.words.chat.nameless },
@@ -1348,10 +1403,30 @@ private fun App(
                 },
                 counters = windowCounters(listState),
                 onSettings = toSettings,
+                inCall = callHost.active,
             )
         },
         column = {
             when (window) {
+                // Окно 0 — звонок. Временное: пока идёт разговор. Экран чистый, всю
+                // работу держит CallHost.
+                Window.Call -> CallScreen(
+                    state = callHost.state,
+                    peer = callHost.peer,
+                    incoming = callHost.incoming,
+                    seconds = callHost.seconds,
+                    onAccept = callHost::accept,
+                    onDecline = callHost::hangUp,
+                    onHangUp = callHost::hangUp,
+                    onMicrophone = callHost::microphone,
+                    onCamera = callHost::camera,
+                    onCallAgain = callHost::again,
+                    onClose = {
+                        callHost.close()
+                        window = Window.Phone
+                    },
+                )
+
                 Window.Phone -> PhoneWindow(
                     tab = phoneTab,
                     onTab = { phoneTab = it },
@@ -1831,6 +1906,20 @@ private fun App(
                             ?: current.name,
                         peerFace = listState.chats.firstOrNull { it.chatId == current.chatId }
                             ?.let { faceOfChat(it) },
+                        // Позвонить можно только человеку и только там, где есть чем:
+                        // у группы собеседника нет, на ПК нет движка. Кнопки тогда нет.
+                        onCall = listState.chats.firstOrNull { it.chatId == current.chatId }
+                            ?.takeIf { it.kind == ChatKind.Personal && callHost.possible }
+                            ?.peerId
+                            ?.let { peerId ->
+                                {
+                                    val name = personOfChat(
+                                        listState.chats.first { it.chatId == current.chatId },
+                                    )?.line(bookStateForChats.view.look(), PERSON_FIRST_LINE).orEmpty()
+                                    callHost.start(peerId, name, video = false)
+                                    window = Window.Call
+                                }
+                            },
                         scope = scope,
                         onBack = { where = Where.Nothing },
                         onMembers = { where = Where.Members(current.chatId, current.name) },
@@ -1996,6 +2085,8 @@ private fun Chat(
     onPerson: (() -> Unit)? = null,
     /** Картинка аватара собеседника в шапке. */
     peerFace: ImageBitmap? = null,
+    /** Позвонить собеседнику; `null` — у группы или там, где звонить нечем. */
+    onCall: (() -> Unit)? = null,
     /** Разделы книги для «•••» личной переписки: раздел переписки — раздел собеседника. */
     bookSections: List<Section> = emptyList(),
     currentBookSection: String = "",
@@ -2081,6 +2172,7 @@ private fun Chat(
     ChatScreen(
         state = state,
         onPerson = onPerson,
+        onCall = onCall,
         peerFace = peerFace,
         authorLook = authorLook,
         ownerId = ownerId,

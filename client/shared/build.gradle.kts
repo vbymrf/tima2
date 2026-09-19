@@ -41,6 +41,14 @@ kotlin {
             implementation(projects.core.coreSecrets)
             implementation(projects.core.coreContacts)
             implementation(projects.core.coreMedia)
+            // Звонок: окно 0 и его экран. core-call приходит транзитивно через
+            // feature-call, и вместе с ним — libwebrtc: именно здесь APK и вырастает
+            // с 16,5 до 64 МБ. Цена принята заказчиком 2026-09-19.
+            implementation(projects.feature.featureCall)
+            // Явно, хотя core-call и приходит транзитивно: `CallHost` держит `CallEngine`
+            // и `Calls` напрямую. Зависимость, работающая только через чужой api,
+            // ломается при первой же чужой уборке — в модуле, который никто не трогал.
+            implementation(projects.core.coreCall)
             implementation(projects.core.coreNetwork)
             // Журнал приложения: из него делается отчёт о проблеме (ПЛАН-ОТЛАДКИ.md).
             implementation(projects.core.coreDiag)

@@ -138,6 +138,8 @@ interface SwitchingWords {
  * одного экрана.
  */
 interface WindowWords {
+    /** Окно 0 — звонок. Временное: его видно, только пока звонок идёт. */
+    val call: WindowName
     val phone: WindowName
     val social: WindowName
     val media: WindowName
@@ -540,6 +542,14 @@ interface CallWords {
 
     /** Видео остановила нехватка полосы. Человеку это надо сказать: иначе — поломка. */
     val videoPaused: String
+
+    /**
+     * Микрофон не разрешён — и звонка поэтому нет вовсе.
+     *
+     * Не «звук выключен»: без разрешения комната соединяется, собеседник виден, а звука
+     * нет ни в одну сторону. Сказать надо и про причину, и про то, где её чинят.
+     */
+    val noMicrophone: String
 
     /** Оценка связи от SFU. Своей не считаем. */
     fun quality(level: String): String
@@ -1492,6 +1502,11 @@ object RussianWords : Words {
 
     override val windows = object : WindowWords {
 
+        override val call = WindowName(
+            full = "Звонок",
+            short = "Звонок",
+            about = "идёт разговор",
+        )
         override val phone = WindowName(
             full = "Телефон",
             short = "Телефон",
@@ -1883,6 +1898,7 @@ object RussianWords : Words {
         override val connecting = "Соединяем…"
         override val reconnecting = "Связь пропала, возвращаемся…"
         override val videoPaused = "Видео выключено: не хватает связи. Звук идёт"
+        override val noMicrophone = "Нет доступа к микрофону — звонок без него не идёт. Разрешение включается в настройках телефона"
         override fun quality(level: String) = when (level) {
             "Excellent" -> "связь отличная"
             "Good" -> "связь хорошая"

@@ -53,6 +53,7 @@ fun SettingsItem.tag(): String = "settings:" + name
 
 /** Три имени окна разом: длинное, короткое и что внутри. */
 fun WindowWords.name(window: Window): WindowName = when (window) {
+    Window.Call -> call
     Window.Phone -> phone
     Window.Social -> social
     Window.Media -> media

@@ -6,6 +6,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import io.tima.core.contacts.AndroidContactsAccess
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import io.tima.core.call.AndroidCallAccess
+import io.tima.core.call.LiveKitCallEngine
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -127,6 +131,7 @@ class MainActivity : ComponentActivity() {
         // новое окно Android умеет создать раньше, чем доломает старое, и без этого
         // уходящее обнуляло бы ссылку на живое.
         AndroidContactsAccess.detach(this)
+        AndroidCallAccess.detach(this)
         super.onDestroy()
     }
 
@@ -138,7 +143,11 @@ class MainActivity : ComponentActivity() {
     ) {
         @Suppress("DEPRECATION")
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        // Оба разбирают ответ по СВОЕМУ коду запроса и чужой пропускают. Поэтому их
+        // здесь два подряд, а не развилка: развилка перестала бы работать молча,
+        // когда появится третье разрешение.
         AndroidContactsAccess.answered(requestCode, grantResults)
+        AndroidCallAccess.answered(requestCode, permissions, grantResults)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -146,6 +155,9 @@ class MainActivity : ComponentActivity() {
         // Разрешение на контакты спрашивает ОКНО, а не приложение: контекст от
         // Application для системного диалога не годится (Д3).
         AndroidContactsAccess.attach(this)
+        // То же и для микрофона со звонком: движок видит только контекст приложения, и
+        // системный диалог через него не показать (К7, `core-call/Access.kt`).
+        AndroidCallAccess.attach(this)
         code.value = linkFrom(intent)
         transfer.value = transferFrom(intent)
         setContent {
@@ -172,8 +184,15 @@ class MainActivity : ComponentActivity() {
             //
             // База телефона: имя файла в песочнице приложения, а не путь. Каталог
             // выбирает Android, и это правильно — он же его и стирает при удалении.
+            // Звонок исполняет livekit-android: ему нужен Context, а общий код его не
+            // видит. Поэтому движок собирается здесь и передаётся вниз — так же, как
+            // база и установщик. На ПК и iOS его нет, и там окна 0 не будет вовсе.
+            val callScope = rememberCoroutineScope()
+            val callEngine = remember { LiveKitCallEngine(applicationContext, callScope) }
+
             Root(
                 entry = entry,
+                callEngine = callEngine,
                 // Имя файла приходит готовым: правило именования общее (Д11).
                 deviceDatabase = { name -> androidDatabase(applicationContext, name) },
                 appearanceStore = appearanceStore(),

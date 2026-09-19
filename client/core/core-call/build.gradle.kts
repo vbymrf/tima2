@@ -23,6 +23,10 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
+            // Журнал: выдано разрешение на микрофон или нет. Половина «не работает» на
+            // Android именно про это, а звонок без RECORD_AUDIO соединяется и молчит —
+            // без записи в журнале такую беду ищут где угодно, только не в разрешении.
+            implementation(projects.core.coreDiag)
         }
         androidMain.dependencies {
             // Самая тяжёлая зависимость клиента: ~21 МБ нативных библиотек на четыре
