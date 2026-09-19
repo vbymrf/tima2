@@ -25,6 +25,11 @@ datetime = "0.6.2"
 # Корутины нужны только тестам транспорта: сам он suspend-функции берёт от Ktor.
 coroutines = "1.10.2"
 serialization = "1.7.3"
+# LiveKit — клиент SFU для звонков (ADR-0006). Версия 2.28.2 от 2026-09-07, в ней
+# libwebrtc 144.7559.14. Тянет за собой ~21 МБ нативных библиотек на четыре
+# архитектуры — это самая тяжёлая зависимость клиента, и она стоит того только
+# потому, что альтернатива — писать свой клиентский стек WebRTC (Plan.md §3.8, B).
+livekit = "2.28.2"
 
 [plugins]
 kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
@@ -37,6 +42,7 @@ composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "k
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
 
 [libraries]
+livekit-android = { module = "io.livekit:livekit-android", version.ref = "livekit" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTest" }
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
