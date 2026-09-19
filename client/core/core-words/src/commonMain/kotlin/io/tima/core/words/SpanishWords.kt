@@ -594,6 +594,15 @@ object SpanishWords : Words {
         override val removeSectionAbout = "sus personas vuelven a «General»"
         override val sectionsEmpty = "Aún no hay secciones"
         override val sectionsEmptyAbout = "Una sección es un estante para contactos: «Trabajo», «Casa», «Estudio». Cree la primera"
+        override val sectionsScreenCommunity = "Secciones de comunidades"
+        override val sectionsEmptyAboutCommunity =
+            "Una sección es un estante para grupos y canales: «Trabajo», «Vecinos», «Estudio». Cree la primera"
+        override val removeSectionAboutCommunity = "sus grupos vuelven a «General»"
+        override fun groupsInSection(count: Int) = when (count) {
+            0 -> "vacía"
+            1 -> "1 grupo"
+            else -> "$count grupos"
+        }
         override fun peopleInSection(count: Int) = when (count) {
             0 -> "vacía"
             1 -> "1 persona"

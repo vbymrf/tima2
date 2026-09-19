@@ -116,18 +116,32 @@ class BookStore(
     }
 
     /**
-     * Сдвинуть на одну позицию. Стрелками, а не перетаскиванием: перетаскивание в списке,
-     * который сам прокручивается, на телефоне промахивается, а стрелка — нет.
+     * Сдвинуть на одну позицию — **включая «Общий»** (заказчик 2026-09-19).
+     *
+     * Стрелками, а не перетаскиванием: перетаскивание в списке, который сам
+     * прокручивается, на телефоне промахивается, а стрелка — нет.
+     *
+     * Места проставляются всему списку заново (0, 1, 2…), а не меняются у двух соседей:
+     * у «Общего» без своей строки место заведомо большое, и обмен отправил бы соседа в
+     * самый конец. Разделов единицы, а порядок после такой простановки всегда плотный.
+     *
+     * @param commonName имя «Общего» на экране. Строка у него заводится здесь и только
+     *   если она понадобилась — когда после перестановки он перестал быть последним.
+     *   Переставить можно лишь то, что записано; заводить её при каждом движении не
+     *   нужно — записанное имя больше не меняется вместе с языком.
      */
-    fun moveSection(id: String, up: Boolean) {
-        val list = _state.value.sections
+    fun moveSection(id: String, up: Boolean, commonName: String = "", commonIcon: Int = 0) {
+        val state = _state.value
+        val list = orderedSections(state.sections, state.common, commonName)
         val at = list.indexOfFirst { it.id == id }
         val to = if (up) at - 1 else at + 1
         if (at < 0 || to !in list.indices) return
+        val moved = list.toMutableList().apply { add(to, removeAt(at)) }
         scope.launch {
-            // Меняем места у двух соседей: порядок остаётся плотным, без дыр и повторов.
-            edit?.placeSection(list[at].id, list[to].place)
-            edit?.placeSection(list[to].id, list[at].place)
+            if (state.common == null && moved.last().id != COMMON_SECTION && commonName.isNotBlank()) {
+                edit?.setCommon(commonName, commonIcon)
+            }
+            moved.forEachIndexed { place, section -> edit?.placeSection(section.id, place) }
         }
     }
 
@@ -338,9 +352,11 @@ data class BookState(
      */
     fun groups(words: BookWords): List<BookGroup> {
         val (ours, strangers) = visible.partition { it.inTima }
-        // «Общий» — пустой идентификатор и всегда последний из обычных: у него нет своей
-        // строки в разделах, это отсутствие раздела.
-        val order = sections.map { Triple(it.id, it.name, it.icon) } + listOf(Triple("", words.commonSection, 0))
+        // Порядок — общий на все разделы, «Общий» стоит в нём наравне (заказчик
+        // 2026-09-19). Принадлежность к нему по-прежнему выражается ПУСТЫМ идентификатором
+        // у записи — это отсутствие раздела, — поэтому здесь его ключ переводится в пустой.
+        val order = orderedSections(sections, common, words.commonSection)
+            .map { Triple(if (it.common) "" else it.id, it.name, it.icon) }
         // Полоса — ФИЛЬТР, а не переход (`разделы.md`): выбранный раздел сужает список.
         // В гармошке выбора нет — там все разделы видны сразу и сворачиваются на месте.
         // «Всё» и «Общий» — не одно и то же (`разделы.md`): у «Всё» пустой выбор, у
@@ -372,7 +388,7 @@ data class BookState(
     }
 
     /**
-     * Чипы полосы (В, Г): «Всё», ВСЕ заведённые разделы, «Общий».
+     * Чипы полосы (В, Г): «Всё» и все заведённые разделы, «Общий» — на своём месте.
      *
      * До 2026-09-19 полоса строилась по разделам **с людьми**, и заведённый пустой раздел
      * на ней не появлялся вовсе: человек заводил «Работу» и видел «Всё · Общий» — заказчик
@@ -446,5 +462,24 @@ fun sectionTabs(
     allKey: String = "",
 ): List<SectionTab> =
     listOf(SectionTab(allKey, words.everyone, 0)) +
-        sections.map { SectionTab(it.id, it.name, it.icon) } +
-        SectionTab(COMMON_SECTION, common?.name ?: words.commonSection, common?.icon ?: 0)
+        orderedSections(sections, common, words.commonSection).map { SectionTab(it.id, it.name, it.icon) }
+
+/**
+ * Разделы набора в порядке, который задал человек, — **вместе с «Общим»**.
+ *
+ * «Общий» участвует в порядке наравне с прочими (решение заказчика 2026-09-19: «добавь
+ * стрелки Общий»). Раньше он приписывался последним всегда, и список собирался в двух
+ * шагах: «сначала обычные, потом он». Теперь шаг один — сортировка по [Section.place], — и
+ * место «Общего» ничем не особеннее любого другого.
+ *
+ * Строки у него может не быть: её заводят только при первой правке или перестановке. Пока
+ * её нет, он зовётся словом [commonName] и стоит последним — [COMMON_PLACE_DEFAULT] больше
+ * любого настоящего места.
+ */
+fun orderedSections(sections: List<Section>, common: Section?, commonName: String): List<Section> {
+    val whole = common ?: Section(COMMON_SECTION, commonName, 0, place = COMMON_PLACE_DEFAULT)
+    return (sections + whole).sortedBy { it.place }
+}
+
+/** Место «Общего», пока его строки нет: заведомо больше любого настоящего — он последний. */
+const val COMMON_PLACE_DEFAULT = 1_000

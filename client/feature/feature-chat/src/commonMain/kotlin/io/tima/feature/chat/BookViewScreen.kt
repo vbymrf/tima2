@@ -75,6 +75,12 @@ fun BookViewScreen(
     forPeople: Boolean = true,
     /** Открыть подокно выбора: вид разделов или как называть человека. */
     onOpen: (ViewPage) -> Unit = {},
+    /**
+     * Есть ли у списка разделы. `false` — у журнала звонков: там их нет, и оба пункта про
+     * разделы убираются целиком. Остаётся «Отображать пользователя как» — оно про то, как
+     * назван человек, а имя у звонившего такое же, как в книге (заказчик 2026-09-19).
+     */
+    withSections: Boolean = true,
 ) {
     Column(
         modifier.fillMaxWidth().padding(vertical = TimaSpacing.about2),
@@ -82,7 +88,7 @@ fun BookViewScreen(
     ) {
         val words = Tima.words.book
         // «Разделы» — в самый верх: это то, зачем чаще всего открывают «Вид».
-        if (onSections != null) {
+        if (onSections != null && withSections) {
             ListLine(
                 onClick = onSections,
                 middle = {
@@ -94,7 +100,7 @@ fun BookViewScreen(
                 right = { Tertiary("›", lineOne = true) },
             )
         }
-        ListLine(
+        if (withSections) ListLine(
             onClick = { onOpen(ViewPage.Sections) },
             middle = {
                 Column {
@@ -385,6 +391,8 @@ fun BookViewSheet(
     modifier: Modifier = Modifier,
     onSections: (() -> Unit)? = null,
     forPeople: Boolean = true,
+    /** Есть ли у списка разделы; `false` — у журнала звонков. */
+    withSections: Boolean = true,
 ) {
     val colors = Tima.colors
     val words = Tima.words.book
@@ -443,6 +451,7 @@ fun BookViewSheet(
                     modifier = scrolling,
                     forPeople = forPeople,
                     onOpen = { page = it },
+                    withSections = withSections,
                 )
                 ViewPage.Sections -> SectionsLookPage(view, onChange, scrolling, forPeople)
                 ViewPage.Person -> PersonLookPage(view, onChange, scrolling, forPeople)

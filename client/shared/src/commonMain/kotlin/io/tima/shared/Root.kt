@@ -107,6 +107,7 @@ import io.tima.domain.chat.AddContact
 import io.tima.domain.chat.SyncBook
 import io.tima.feature.chat.BookStore
 import io.tima.feature.chat.BookViewSheet
+import io.tima.feature.chat.orderedSections
 import io.tima.feature.chat.InviteScreen
 import io.tima.feature.chat.NewContactScreen
 import io.tima.feature.chat.NewContactStore
@@ -997,13 +998,19 @@ private fun App(
         return
     }
 
+    // Имя «Общего» — заранее и вне обработчиков: словарь читается композицией, а
+    // перестановка разделов происходит в обычном обработчике нажатия.
+    val commonName = Tima.words.book.commonSection
+
     if (sectionsScreen) {
         SectionsScreen(
             sections = bookState.sections,
             countOf = bookState::countIn,
             onAdd = book::addSection,
             onRename = book::renameSection,
-            onMove = book::moveSection,
+            // Имя «Общего» уходит в store: если строки у него ещё нет, её заводят
+            // при перестановке — переставить можно только записанное.
+            onMove = { id, up -> book.moveSection(id, up, commonName = commonName) },
             onRemove = book::removeSection,
             onBack = { sectionsScreen = false },
             common = bookState.common,
@@ -1017,17 +1024,27 @@ private fun App(
         val shelves = environment.communitySections
         SectionsScreen(
             sections = communityShelves,
-            countOf = { id -> listState.groups.count { it.sectionId == id } },
+            // «Общий» приходит своим ключом, а у групп он — ПУСТОЙ раздел: переводим.
+            countOf = { key ->
+                val id = if (key == COMMON_SECTION) "" else key
+                listState.groups.count { it.sectionId == id }
+            },
             onAdd = { name, icon -> scope.launch { shelves.add(name.trim(), icon) } },
             onRename = { id, name, icon -> scope.launch { shelves.rename(id, name.trim(), icon) } },
             onMove = { id, up ->
-                // Как у книги: меняем места двух соседей, порядок остаётся плотным.
-                val at = communityShelves.indexOfFirst { it.id == id }
+                // Ровно как у книги (`BookStore.moveSection`): «Общий» стоит в общем
+                // порядке, места проставляются всему списку заново, а его строка заводится
+                // только если после перестановки он перестал быть последним.
+                val list = orderedSections(communityShelves, communityCommon, commonName)
+                val at = list.indexOfFirst { it.id == id }
                 val to = if (up) at - 1 else at + 1
-                if (at >= 0 && to in communityShelves.indices) {
+                if (at >= 0 && to in list.indices) {
+                    val moved = list.toMutableList().apply { add(to, removeAt(at)) }
                     scope.launch {
-                        shelves.place(communityShelves[at].id, communityShelves[to].place)
-                        shelves.place(communityShelves[to].id, communityShelves[at].place)
+                        if (communityCommon == null && moved.last().id != COMMON_SECTION) {
+                            shelves.setCommon(commonName, 0)
+                        }
+                        moved.forEachIndexed { place, section -> shelves.place(section.id, place) }
                     }
                 }
             },
@@ -1037,6 +1054,8 @@ private fun App(
                 if (groupSection == id) groupSection = ""
             },
             onBack = { communitySectionsScreen = false },
+            // Набор про сообщества: на полках группы, а не люди, и слова экрана — их.
+            forPeople = false,
             common = communityCommon,
             onRenameCommon = { name, icon -> scope.launch { shelves.setCommon(name.trim(), icon) } },
         )
@@ -1069,6 +1088,9 @@ private fun App(
                 bookView = false
                 sectionsScreen = true
             },
+            // У журнала звонков разделов нет: предлагать их там значило бы обещать
+            // несуществующее.
+            withSections = phoneTab != WindowTab.Calls,
         )
         return
     }
@@ -2699,16 +2721,15 @@ private fun PhoneWindow(
         onSearch = {},
         onSettings = onSettings,
         onNeighbourWindow = onNeighbourWindow,
-        // «Вид» стоит последней вкладкой и только у «Контактов»: у чатов и журнала
-        // настраивать нечего, и кнопка там означала бы несуществующее.
-        tabsTrailing = if (tab == WindowTab.Contacts) {
-            {
-                // Кнопка, а не вкладка: она открывает подокно, а не переключает
-                // показанное. В макете это `.таб-вид` — залитая таблетка со значком.
-                TabButton(label = Tima.words.tabs.label(WindowTab.View), glyph = "▤", onClick = onView)
-            }
-        } else {
-            null
+        // «Вид» — последней вкладкой на ВСЕХ трёх вкладках окна (заказчик 2026-09-19).
+        // До этого она была только у «Контактов», хотя настройки у вкладок общие: раздел
+        // переписки — это раздел собеседника (Р4), и «как называть человека» одинаково
+        // решает и книгу, и список переписок, и журнал звонков. У «Звонков» своих разделов
+        // нет — там подокно показывается без них.
+        tabsTrailing = {
+            // Кнопка, а не вкладка: она открывает подокно, а не переключает
+            // показанное. В макете это `.таб-вид` — залитая таблетка со значком.
+            TabButton(label = Tima.words.tabs.label(WindowTab.View), glyph = "▤", onClick = onView)
         },
         // Второй ряд: у журнала фильтры, у «Контактов» в виде «меню» — разделы.
         secondRow = when {

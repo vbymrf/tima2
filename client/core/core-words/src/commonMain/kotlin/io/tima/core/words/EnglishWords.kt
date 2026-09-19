@@ -594,6 +594,15 @@ object EnglishWords : Words {
         override val removeSectionAbout = "its people go back to “General”"
         override val sectionsEmpty = "No sections yet"
         override val sectionsEmptyAbout = "A section is a shelf for contacts: “Work”, “Home”, “Study”. Create the first one"
+        override val sectionsScreenCommunity = "Community sections"
+        override val sectionsEmptyAboutCommunity =
+            "A section is a shelf for groups and channels: “Work”, “Neighbours”, “Study”. Create the first one"
+        override val removeSectionAboutCommunity = "its groups go back to “General”"
+        override fun groupsInSection(count: Int) = when (count) {
+            0 -> "empty"
+            1 -> "1 group"
+            else -> "$count groups"
+        }
         override fun peopleInSection(count: Int) = when (count) {
             0 -> "empty"
             1 -> "1 person"

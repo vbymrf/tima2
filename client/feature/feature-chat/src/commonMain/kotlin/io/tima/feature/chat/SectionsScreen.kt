@@ -42,6 +42,7 @@ import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.words
 import io.tima.domain.chat.Section
+import io.tima.domain.chat.common
 import io.tima.domain.chat.SectionIcon
 
 /**
@@ -55,8 +56,9 @@ import io.tima.domain.chat.SectionIcon
  * **Порядок — стрелками, а не перетаскиванием.** Перетаскивание в списке, который сам
  * прокручивается, на телефоне промахивается; стрелка — нет.
  *
- * **«Общий» здесь не показывается.** Он не раздел, а отсутствие раздела: не
- * переименовывается, не убирается, стоит последним всегда (`разделы.md`, «Правила»).
+ * **«Общий» — обычная строка.** Имя и значок правятся, порядок меняется стрелками, а
+ * «убрать» у него нет: в него попадают все, кому раздел не выбран, и убрать его значило бы
+ * убрать их всех (решение заказчика 2026-09-19).
  */
 @Composable
 fun SectionsScreen(
@@ -65,6 +67,7 @@ fun SectionsScreen(
     countOf: (String) -> Int,
     onAdd: (name: String, icon: Int) -> Unit,
     onRename: (id: String, name: String, icon: Int) -> Unit,
+    /** Сдвинуть на позицию: [COMMON_SECTION] приходит сюда таким же ключом, как прочие. */
     onMove: (id: String, up: Boolean) -> Unit,
     onRemove: (id: String) -> Unit,
     onBack: () -> Unit,
@@ -72,6 +75,11 @@ fun SectionsScreen(
     common: Section? = null,
     /** Сменить имя и значок «Общего». Убрать его нельзя — кнопки у него нет. */
     onRenameCommon: (name: String, icon: Int) -> Unit = { _, _ -> },
+    /**
+     * Набор про людей (книга) или про сообщества (каталог). Механизм один, слова разные:
+     * на полке каталога лежат группы, и «7 человек» там — враньё в самом видном месте.
+     */
+    forPeople: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val colors = Tima.colors
@@ -80,89 +88,77 @@ fun SectionsScreen(
     var adding by remember { mutableStateOf(false) }
 
     Column(modifier.fillMaxSize().background(colors.surface)) {
-        SubwindowHeader(title = words.sectionsScreen, onBack = onBack)
+        SubwindowHeader(
+            title = if (forPeople) words.sectionsScreen else words.sectionsScreenCommunity,
+            onBack = onBack,
+        )
 
         // Список пустым не бывает: «Общий» есть всегда. Пояснение «разделов пока нет»
         // стоит НАД ним отдельной строкой, а не вместо списка (заказчик 2026-09-19).
+        //
+        // «Общий» стоит в общем порядке и переставляется стрелками наравне с прочими
+        // (заказчик 2026-09-19). Отличий у него два: «убрать» нет — в него попадают все,
+        // кому раздел не выбран, — и своя строка в базе заводится лишь при первой правке
+        // или перестановке.
+        val rows = orderedSections(sections, common, words.commonSection)
         LazyColumn(Modifier.weight(1f)) {
             if (sections.isEmpty() && !adding) {
                 item(key = "пусто") {
                     Box(Modifier.padding(TimaSpacing.about4)) {
-                        EmptyArea(title = words.sectionsEmpty, explanation = words.sectionsEmptyAbout)
-                    }
-                }
-            }
-            run {
-                items(sections, key = { it.id }) { section ->
-                    if (editing == section.id) {
-                        SectionEditor(
-                            initialName = section.name,
-                            initialIcon = section.icon,
-                            onSave = { name, icon ->
-                                onRename(section.id, name, icon)
-                                editing = null
-                            },
-                            onCancel = { editing = null },
-                            onRemove = {
-                                onRemove(section.id)
-                                editing = null
-                            },
-                        )
-                    } else {
-                        val first = sections.first().id == section.id
-                        val last = sections.last().id == section.id
-                        ListLine(
-                            onClick = {
-                                adding = false
-                                editing = section.id
-                            },
-                            left = { SectionGlyph(index = section.icon, size = 24.dp) },
-                            middle = {
-                                Column {
-                                    Name(section.name)
-                                    Tertiary(words.peopleInSection(countOf(section.id)), lineOne = true)
-                                }
-                            },
-                            right = {
-                                Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
-                                    // Крайние стрелки не рисуются, а не гаснут: погашенная
-                                    // кнопка спрашивает «почему», отсутствующая — нет.
-                                    if (!first) IconButton(glyph = "↑", onClick = { onMove(section.id, true) })
-                                    if (!last) IconButton(glyph = "↓", onClick = { onMove(section.id, false) })
-                                }
-                            },
+                        EmptyArea(
+                            title = words.sectionsEmpty,
+                            explanation = if (forPeople) words.sectionsEmptyAbout else words.sectionsEmptyAboutCommunity,
                         )
                     }
                 }
             }
-            // «Общий» — последней строкой и всегда: имя и значок правятся, убрать нельзя,
-            // переставить некуда (решение заказчика 2026-09-19).
-            item(key = COMMON_SECTION) {
-                if (editing == COMMON_SECTION) {
+            items(rows, key = { it.id }) { section ->
+                if (editing == section.id) {
                     SectionEditor(
-                        initialName = common?.name ?: words.commonSection,
-                        initialIcon = common?.icon ?: 0,
+                        initialName = section.name,
+                        initialIcon = section.icon,
                         onSave = { name, icon ->
-                            onRenameCommon(name, icon)
+                            if (section.common) onRenameCommon(name, icon) else onRename(section.id, name, icon)
                             editing = null
                         },
                         onCancel = { editing = null },
-                        onRemove = null,
+                        onRemove = if (section.common) {
+                            null
+                        } else {
+                            {
+                                onRemove(section.id)
+                                editing = null
+                            }
+                        },
+                        forPeople = forPeople,
                     )
                 } else {
+                    val first = rows.first().id == section.id
+                    val last = rows.last().id == section.id
                     ListLine(
                         onClick = {
                             adding = false
-                            editing = COMMON_SECTION
+                            editing = section.id
                         },
-                        left = { SectionGlyph(index = common?.icon ?: 0, size = 24.dp) },
+                        left = { SectionGlyph(index = section.icon, size = 24.dp) },
                         middle = {
                             Column {
-                                Name(common?.name ?: words.commonSection)
+                                Name(section.name)
                                 Tertiary(
-                                    words.peopleInSection(countOf(COMMON_SECTION)) + " · " + words.commonSectionAbout,
+                                    (
+                                        if (forPeople) words.peopleInSection(countOf(section.id))
+                                        else words.groupsInSection(countOf(section.id))
+                                        ) + if (section.common) " · " + words.commonSectionAbout else "",
                                     lineOne = true,
                                 )
+                            }
+                        },
+                        right = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
+                                // Крайние стрелки не рисуются, а не гаснут: погашенная
+                                // кнопка спрашивает «почему», отсутствующая — нет.
+                                if (!first) IconButton(glyph = "↑", onClick = { onMove(section.id, true) })
+                                if (!last) IconButton(glyph = "↓", onClick = { onMove(section.id, false) })
                             }
                         },
                     )
@@ -180,6 +176,7 @@ fun SectionsScreen(
                 },
                 onCancel = { adding = false },
                 onRemove = null,
+                forPeople = forPeople,
             )
         } else {
             Box(Modifier.fillMaxWidth().padding(TimaSpacing.about4)) {
@@ -210,6 +207,7 @@ private fun SectionEditor(
     onSave: (String, Int) -> Unit,
     onCancel: () -> Unit,
     onRemove: (() -> Unit)?,
+    forPeople: Boolean = true,
 ) {
     val colors = Tima.colors
     val words = Tima.words.book
@@ -254,7 +252,10 @@ private fun SectionEditor(
                 middle = {
                     Column {
                         Name(words.removeSection)
-                        Tertiary(words.removeSectionAbout, lineOne = true)
+                        Tertiary(
+                            if (forPeople) words.removeSectionAbout else words.removeSectionAboutCommunity,
+                            lineOne = true,
+                        )
                     }
                 },
             )

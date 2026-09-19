@@ -125,4 +125,25 @@ class BookStateTest {
         // Обычным разделом он при этом не показывается — иначе стоял бы в списке дважды.
         assertTrue(state.sections.none { it.id == COMMON_SECTION })
     }
+
+    @Test
+    fun общий_стоит_на_своём_месте_в_порядке_а_не_всегда_последним() {
+        // Заказчик 2026-09-19: «добавь стрелки Общий». Раз его можно переставить — место
+        // у него такое же, как у прочих, и берётся из `place`, а не из «допиши в конец».
+        val первый = Section(id = COMMON_SECTION, name = "Общий", place = 0)
+        val state = BookState(
+            all = listOf(борис, анна),
+            sections = listOf(work.copy(place = 1)),
+            common = первый,
+        )
+        assertEquals(listOf("", COMMON_SECTION, "s-work"), state.tabs(RussianWords.book).map { it.id })
+        // И в списке людей он тоже впереди: порядок один на вкладки и на сам список.
+        assertEquals(listOf("Общий", "Работа"), state.groups(RussianWords.book).map { it.name })
+    }
+
+    @Test
+    fun без_своей_строки_общий_остаётся_последним() {
+        val state = BookState(all = listOf(борис, анна), sections = listOf(work.copy(place = 7)))
+        assertEquals(listOf("", "s-work", COMMON_SECTION), state.tabs(RussianWords.book).map { it.id })
+    }
 }

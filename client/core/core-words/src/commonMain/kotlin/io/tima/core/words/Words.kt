@@ -434,6 +434,14 @@ interface BookWords {
     val sectionsEmpty: String
     val sectionsEmptyAbout: String
     fun peopleInSection(count: Int): String
+
+    // Тот же экран управления разделами, но для набора СООБЩЕСТВ: там на полках не люди,
+    // а группы и каналы, и называть их «человеками» — врать в самом видном месте
+    // (заказчик 2026-09-19: механизм один, слова по сущности).
+    val sectionsScreenCommunity: String
+    val sectionsEmptyAboutCommunity: String
+    val removeSectionAboutCommunity: String
+    fun groupsInSection(count: Int): String
     val moveUp: String
     val moveDown: String
     val save: String
@@ -1726,6 +1734,20 @@ object RussianWords : Words {
         override val removeSectionAbout = "люди из него вернутся в «Общий»"
         override val sectionsEmpty = "Разделов пока нет"
         override val sectionsEmptyAbout = "Раздел — полка для контактов: «Работа», «Дом», «Учёба». Заведите первый"
+        override val sectionsScreenCommunity = "Разделы сообществ"
+        override val sectionsEmptyAboutCommunity =
+            "Раздел — полка для групп и каналов: «Работа», «Соседи», «Учёба». Заведите первый"
+        override val removeSectionAboutCommunity = "группы из него вернутся в «Общий»"
+        override fun groupsInSection(count: Int): String {
+            val ten = count % 10
+            val hundred = count % 100
+            return when {
+                count == 0 -> "пусто"
+                ten == 1 && hundred != 11 -> "$count группа"
+                ten in 2..4 && hundred !in 12..14 -> "$count группы"
+                else -> "$count групп"
+            }
+        }
         override fun peopleInSection(count: Int): String {
             val ten = count % 10
             val hundred = count % 100
