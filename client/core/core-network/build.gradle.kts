@@ -33,6 +33,10 @@ kotlin {
             // До 2026-08-25 ребро было теневым: компилировалось через api-экспорт
             // core-outbox, и перевод его в implementation ронял бы core-network.
             api(projects.domain.domainChat)
+            // Сигналинг звонка: порт объявлен в core-call, реализация здесь. Медиа этот
+            // модуль не тянет — core-call отдаёт контракт, а libwebrtc живёт в его
+            // androidMain и в сеть не попадает.
+            api(projects.core.coreCall)
             implementation(libs.ktor.client.core)
             // Живой канал: один сокет на устройство (websocket-events.md).
             implementation(libs.ktor.client.websockets)
