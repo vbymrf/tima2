@@ -380,7 +380,11 @@ interface SocialWords {
  * «ничего нет» вместо ответа, что делать дальше.
  */
 interface BookWords {
+    /** Подсказка поиска по книге. Короткая: строка поиска однострочная (2026-09-19). */
     val search: String
+
+    /** Подсказка поиска по перепискам: ищется имя в шапке и первая строка последнего. */
+    val searchChats: String
     val notRead: String
     val notReadAbout: String
     val addByHand: String
@@ -455,8 +459,6 @@ interface BookWords {
     val phone: String
     val phoneAbout: String
     val whatToShow: String
-    val showSearch: String
-    val showSearchAbout: String
     val showOutsiders: String
     val showOutsidersAbout: String
 }
@@ -1689,7 +1691,8 @@ object RussianWords : Words {
         override val everyone = "Все"
         override val commonSection = "Общий"
         override val phoneSection = "Телефон"
-        override val search = "Поиск по имени, нику или номеру…"
+        override val search = "Имя, ник или номер"
+        override val searchChats = "Имя собеседника или текст"
         override val notRead = "Контакты не прочитаны"
         override val notReadAbout =
             "Приложение возьмёт из телефонной книги имена и номера, чтобы " +
@@ -1770,8 +1773,6 @@ object RussianWords : Words {
         override val phone = "Телефон"
         override val phoneAbout = "номер из книги"
         override val whatToShow = "Что показывать"
-        override val showSearch = "Показывать поиск"
-        override val showSearchAbout = "строкой над списком"
         override val showOutsiders = "Показывать тех, кого нет в TIMa"
         override val showOutsidersAbout = "раздел «Телефон» в конце списка"
     }

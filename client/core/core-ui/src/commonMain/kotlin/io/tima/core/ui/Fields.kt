@@ -8,8 +8,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
@@ -41,8 +45,29 @@ fun Field(
     numeric: Boolean = false,
     byCenter: Boolean = false,
     fontSize: TextUnit = TimaType.sz3,
+    /**
+     * Одна строка: длинный текст и подсказка не переносятся, а уезжают за край.
+     *
+     * Для поиска это обязательно (заказчик 2026-09-19): поле поиска стоит в шапке окна
+     * между вкладками и списком, и второй строкой оно сдвигает вниз весь список — ровно в
+     * тот момент, когда человек набирает и смотрит на результат.
+     */
+    lineOne: Boolean = false,
+    /**
+     * Забрать ввод сразу, как поле появилось, — и поднять клавиатуру.
+     *
+     * Для строки поиска это не украшение: её вызвали кнопкой «🔍», то есть намерение уже
+     * высказано, и требовать второго нажатия по самому полю значит спросить дважды об
+     * одном. Для обычных форм по умолчанию выключено: там полей несколько, и выбирать
+     * за человека, с какого начать, не наше дело.
+     */
+    autoFocus: Boolean = false,
 ) {
     val colors = Tima.colors
+    val focus = remember { FocusRequester() }
+    if (autoFocus) {
+        LaunchedEffect(Unit) { focus.requestFocus() }
+    }
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -51,7 +76,7 @@ fun Field(
         contentAlignment = if (byCenter) Alignment.Center else Alignment.CenterStart,
     ) {
         if (value.isEmpty() && hint.isNotEmpty()) {
-            Caption(hint, fontSize = fontSize, color = colors.text3)
+            Caption(hint, fontSize = fontSize, color = colors.text3, lineOne = lineOne)
         }
         BasicTextField(
             value = value,
@@ -62,10 +87,11 @@ fun Field(
                 textAlign = if (byCenter) TextAlign.Center else TextAlign.Start,
             ),
             cursorBrush = SolidColor(colors.navigation),
+            singleLine = lineOne,
             keyboardOptions = KeyboardOptions(
                 keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text,
             ),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().focusRequester(focus),
         )
     }
 }

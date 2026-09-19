@@ -131,9 +131,9 @@ fun BookViewScreen(
 
         if (forPeople) {
             SectionTitle(words.whatToShow)
-            Check(words.showSearch, words.showSearchAbout, view.showSearch) {
-                onChange(view.copy(showSearch = it))
-            }
+            // Пункта «Показывать поиск» здесь больше нет (заказчик 2026-09-19): поиск
+            // открывается кнопкой «🔍» в шапке окна, и настройка «показывать ли строку»
+            // ничего не решала — строка и так появляется только когда её позвали.
             Check(words.showOutsiders, words.showOutsidersAbout, view.showOutsiders) {
                 onChange(view.copy(showOutsiders = it))
             }

@@ -106,7 +106,17 @@ import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.AddContact
 import io.tima.domain.chat.SyncBook
 import io.tima.feature.chat.BookStore
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import io.tima.core.ui.ControlRow
+import io.tima.core.ui.Field
+import io.tima.core.ui.IconButton
+import io.tima.core.ui.TimaSpacing
 import io.tima.feature.chat.BookViewSheet
+import io.tima.feature.chat.matches
 import io.tima.feature.chat.orderedSections
 import io.tima.feature.chat.InviteScreen
 import io.tima.feature.chat.NewContactScreen
@@ -2712,13 +2722,38 @@ private fun PhoneWindow(
 ) {
     var calls by remember { mutableStateOf(CALL_FILTERS.first()) }
     val bookWords = Tima.words.book
+    // ── ПОИСК ПО ОКНУ ───────────────────────────────────────────────────────
+    //
+    // Решение заказчика 2026-09-19: «для поиска у нас есть кнопка — щас она не
+    // задействована; поиск будет появляться тогда, когда нажмут на кнопку поиск».
+    //
+    // Состояние окна, а не вкладки: набранное переживает переход «Чаты ↔ Контакты», и
+    // это осознанно — ищут человека, а на какой он вкладке, вспоминают уже по дороге.
+    // Закрытие крестиком чистит запрос: оставить его невидимым значило бы оставить
+    // список сужённым без единого признака, почему.
+    var searching by remember { mutableStateOf(false) }
+    var request by remember { mutableStateOf("") }
+    fun searchTo(text: String) {
+        request = text
+        // Книга фильтрует у себя: у неё поиск идёт по имени, нику и номеру сразу.
+        onSearchInBook(text)
+    }
     WindowFrame(
         window = Window.Phone,
         tabs = listOf(WindowTab.Chats, WindowTab.Contacts, WindowTab.Calls),
         selected = tab,
         onTab = onTab,
         onSwitchWindows = onSwitchWindows,
-        onSearch = {},
+        // У «Звонков» кнопки поиска нет: журнала звонков ещё не существует (К7), и
+        // искать там нечего. Кнопка над заглушкой обещала бы больше, чем есть.
+        onSearch = if (tab == WindowTab.Calls) {
+            null
+        } else {
+            {
+                searching = !searching
+                if (!searching) searchTo("")
+            }
+        },
         onSettings = onSettings,
         onNeighbourWindow = onNeighbourWindow,
         // «Вид» — последней вкладкой на ВСЕХ трёх вкладках окна (заказчик 2026-09-19).
@@ -2744,13 +2779,33 @@ private fun PhoneWindow(
                 { { SectionsRow(chatSections, chatSection, book.view.icons, onChooseChatSection, newIn = newInSection) } }
             else -> null
         },
+        // Строка поиска — только пока она открыта, и только там, где есть что искать.
+        searchRow = if (searching && tab != WindowTab.Calls) {
+            {
+                SearchRow(
+                    value = request,
+                    onChange = { searchTo(it) },
+                    hint = if (tab == WindowTab.Chats) bookWords.searchChats else bookWords.search,
+                    onClose = {
+                        searching = false
+                        searchTo("")
+                    },
+                )
+            }
+        } else {
+            null
+        },
     ) {
         when (tab) {
             WindowTab.Chats -> ChatsScreen(
-                // Р4: переписки сужаются выбранным разделом — тем же, что у контактов.
-                state = if (chatSection.isEmpty()) list else list.copy(
+                // Р4: переписки сужаются выбранным разделом — тем же, что у контактов;
+                // поиск сужает дальше, по имени в шапке и первой строке последнего.
+                state = list.copy(
                     chats = list.chats.filter { chat ->
-                        sectionOfChat(chat) == (if (chatSection == COMMON_SECTION) "" else chatSection)
+                        (
+                            chatSection.isEmpty() ||
+                                sectionOfChat(chat) == (if (chatSection == COMMON_SECTION) "" else chatSection)
+                            ) && chat.matches(request)
                     },
                 ),
                 onOpen = onOpen,
@@ -2765,7 +2820,6 @@ private fun PhoneWindow(
                 LaunchedEffect(Unit) { onOpenedContacts() }
                 BookScreen(
                     state = book,
-                    onSearch = onSearchInBook,
                     onOpen = onOpenPerson,
                     personOf = personOf,
                     faceOf = faceOf,
@@ -2824,5 +2878,42 @@ private fun deadMessages(environment: Environment): DeadMessages = object : Dead
             "переписка" to (before?.chatId ?: "?"), "вышло" to done,
         )
         return done
+    }
+}
+
+/**
+ * Строка поиска окна: однострочное поле и крестик.
+ *
+ * Однострочное — решение заказчика 2026-09-19: «сделай его однострочным, щас там
+ * появляется текст на две строки». Вторая строка сдвигала вниз весь список ровно в тот
+ * момент, когда человек набирает и смотрит на результат.
+ *
+ * Крестик, а не только повторное нажатие «🔍» в шапке: закрыть ищут там же, где ищут
+ * набранное, — рядом с полем, а не глазами по шапке.
+ */
+@Composable
+private fun SearchRow(
+    value: String,
+    onChange: (String) -> Unit,
+    hint: String,
+    onClose: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Field(
+            value = value,
+            onChange = onChange,
+            hint = hint,
+            lineOne = true,
+            // Кнопку «🔍» уже нажали — спрашивать второй раз, ткнув в поле, незачем.
+            autoFocus = true,
+            modifier = Modifier.weight(1f),
+        )
+        ControlRow { IconButton(glyph = "✕", onClick = onClose) }
     }
 }

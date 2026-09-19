@@ -22,7 +22,6 @@ import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.Caption
 import io.tima.core.ui.ControlRow
-import io.tima.core.ui.Field
 import io.tima.core.ui.IconButton
 import io.tima.core.ui.InCenter
 import io.tima.core.ui.ListLine
@@ -63,7 +62,6 @@ import io.tima.domain.chat.ChatPerson
 @Composable
 fun BookScreen(
     state: BookState,
-    onSearch: (String) -> Unit,
     onOpen: (BookEntry) -> Unit,
     modifier: Modifier = Modifier,
     /** Выбор раздела на полосе и в плитке; пусто — «Всё» / назад к плитке. */
@@ -72,7 +70,7 @@ fun BookScreen(
     onSections: (() -> Unit)? = null,
     /** Сколько людей раздела написали новое — янтарная цифра. По ключу полосы. */
     newIn: (String) -> Int = { 0 },
-    /** «＋» у строки поиска: завести контакт или раздел. */
+    /** «＋» в правом нижнем углу: завести контакт или раздел. */
     onAdd: (() -> Unit)? = null,
     /** «Пригласить» у того, кого нет в TIMa. */
     onInvite: ((BookEntry) -> Unit)? = null,
@@ -96,26 +94,6 @@ fun BookScreen(
     // нижнем углу — там же, где «написать» в списке чатов.
     Box(modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
-        if (state.view.showSearch) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
-                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Field(
-                    value = state.search,
-                    onChange = onSearch,
-                    hint = words.search,
-                    modifier = Modifier.weight(1f),
-                )
-                if (onAdd != null) {
-                    ControlRow { IconButton(glyph = "＋", onClick = onAdd, live = true) }
-                }
-            }
-        }
-
         when {
             state.needPermission -> InCenter(Modifier.fillMaxSize()) {
                 Column(
@@ -232,11 +210,12 @@ fun BookScreen(
             }
         }
     }
-        // Завести контакт можно всегда. До 2026-09-17 «＋» жил ВНУТРИ строки поиска, и
-        // снятая галочка «Показывать поиск» уносила вместе с ним единственный способ
-        // добавить человека руками. Найдено заказчиком; чинится не возвратом поиска, а
-        // тем, что кнопка перестаёт от него зависеть.
-        if (onAdd != null && !state.view.showSearch) {
+        // Завести контакт можно всегда — «＋» плавающей кнопкой в правом нижнем углу,
+        // там же, где «написать» в списке чатов. До 2026-09-17 он жил ВНУТРИ строки
+        // поиска, и снятая галочка «Показывать поиск» уносила вместе с ним единственный
+        // способ добавить человека руками. Строки поиска в списке больше нет вовсе
+        // (2026-09-19) — кнопка от неё и не зависит.
+        if (onAdd != null) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)

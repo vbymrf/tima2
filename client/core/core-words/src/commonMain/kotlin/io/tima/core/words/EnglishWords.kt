@@ -548,7 +548,8 @@ object EnglishWords : Words {
         override val everyone = "All"
         override val commonSection = "General"
         override val phoneSection = "Phone"
-        override val search = "Search by name, nickname or number…"
+        override val search = "Name, nickname or number"
+        override val searchChats = "Name or message text"
         override val notRead = "Contacts not read"
         override val notReadAbout =
             "The app will take names and numbers from your phone book to show which of them " +
@@ -621,8 +622,6 @@ object EnglishWords : Words {
         override val phone = "Phone"
         override val phoneAbout = "the number from the book"
         override val whatToShow = "What to show"
-        override val showSearch = "Show search"
-        override val showSearchAbout = "as a row above the list"
         override val showOutsiders = "Show people who are not in TIMa"
         override val showOutsidersAbout = "the «Phone» section at the end of the list"
     }

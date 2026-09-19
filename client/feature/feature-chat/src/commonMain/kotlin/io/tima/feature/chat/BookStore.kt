@@ -176,7 +176,6 @@ data class BookView(
     val icons: Boolean = false,
     /** Размер ярлычков в плитке — пункт «Вида» (решение заказчика 2026-09-18). */
     val tileSize: TileSize = TileSize.Normal,
-    val showSearch: Boolean = true,
     /** Показывать раздел «Телефон» — тех, кого нет в TIMa. */
     val showOutsiders: Boolean = true,
     /**
@@ -237,7 +236,6 @@ data class BookView(
         settings.put("$prefix.$VIEW", if (folders) FOLDERS else MENU)
         settings.put("$prefix.$ICONS", icons.toString())
         settings.put("$prefix.$TILE_SIZE", tileSize.wire)
-        settings.put("$prefix.$SEARCH", showSearch.toString())
         settings.put("$prefix.$OUTSIDERS", showOutsiders.toString())
         settings.put("$prefix.$NAMES", listOfNotNull(
             "name".takeIf { showName },
@@ -256,7 +254,6 @@ data class BookView(
         private const val VIEW = "view"
         private const val ICONS = "icons"
         private const val TILE_SIZE = "tile_size"
-        private const val SEARCH = "search"
         private const val OUTSIDERS = "outsiders"
         private const val NAMES = "names"
         private const val ORDER = "names_order"
@@ -286,7 +283,6 @@ data class BookView(
                 icons = saved["$prefix.$ICONS"] == "true",
                 tileSize = TileSize.fromWire(saved["$prefix.$TILE_SIZE"]),
                 folders = saved["$prefix.$VIEW"] == FOLDERS,
-                showSearch = saved["$prefix.$SEARCH"]?.toBooleanStrictOrNull() ?: true,
                 showOutsiders = saved["$prefix.$OUTSIDERS"]?.toBooleanStrictOrNull() ?: true,
                 showName = names?.contains("name") ?: true,
                 showUserName = names?.contains("user") ?: community,

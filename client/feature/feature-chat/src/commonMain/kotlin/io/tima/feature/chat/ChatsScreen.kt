@@ -236,3 +236,21 @@ private fun mark(kind: MessageDisplay): MarkKind? = when (kind) {
     // Служебная строка не отправлялась — отмечать у неё нечего.
     MessageDisplay.RECEIVED, MessageDisplay.UNREADABLE, MessageDisplay.SYSTEM -> null
 }
+
+/**
+ * Подходит ли переписка поиску (заказчик 2026-09-19: «для Телефон реализуй функционал
+ * поиска»).
+ *
+ * Ищется по тому, что человек ВИДИТ в строке: имя в шапке и первая строка последнего
+ * сообщения. Ни по чему другому искать и нечем — остальной текст переписки лежит на
+ * устройстве зашифрованным, и поиск по нему означал бы расшифровку всей истории на
+ * каждую набранную букву.
+ *
+ * Пустой запрос подходит всему: «ничего не набрано» — это не «ничего не найдено».
+ */
+fun ChatSummary.matches(request: String): Boolean {
+    val clean = request.trim()
+    if (clean.isEmpty()) return true
+    return title?.contains(clean, ignoreCase = true) == true ||
+        preview?.contains(clean, ignoreCase = true) == true
+}

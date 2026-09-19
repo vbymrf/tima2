@@ -73,7 +73,6 @@ class BookStateTest {
         // отсутствие — самый частый случай, первый запуск.
         val вид = BookView.from(emptyMap())
         assertTrue(!вид.folders, "по умолчанию встали папки, а решено меню")
-        assertTrue(вид.showSearch)
         assertTrue(вид.showOutsiders)
         assertTrue(вид.showName && вид.showPhone)
         assertTrue(!вид.showNickname && !вид.showUserName)
@@ -82,12 +81,11 @@ class BookStateTest {
     @Test
     fun выбор_вида_переживает_перезапуск() {
         val сохранённое = mutableMapOf<String, String>()
-        val вид = BookView(folders = true, showSearch = false, showOutsiders = false,
+        val вид = BookView(folders = true, showOutsiders = false,
             showName = false, showNickname = true, showPhone = false)
 
         // save() пишет через порт; здесь достаточно собрать те же строки, что он кладёт.
         сохранённое["book.view"] = "folders"
-        сохранённое["book.search"] = "false"
         сохранённое["book.outsiders"] = "false"
         сохранённое["book.names"] = "nick"
 

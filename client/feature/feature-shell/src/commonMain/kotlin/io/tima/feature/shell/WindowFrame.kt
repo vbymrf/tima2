@@ -57,7 +57,11 @@ fun WindowFrame(
     selected: WindowTab,
     onTab: (WindowTab) -> Unit,
     onSwitchWindows: () -> Unit,
-    onSearch: () -> Unit,
+    /**
+     * Нажали «🔍» в шапке. `null` — кнопки нет: на вкладке нечего искать, а кнопка,
+     * которая ничего не делает, обещает больше, чем есть (журнала звонков пока нет).
+     */
+    onSearch: (() -> Unit)?,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
     /**
@@ -70,6 +74,15 @@ fun WindowFrame(
     tabsTrailing: (@Composable () -> Unit)? = null,
     /** Второй ряд: подвкладки, фильтры, режимы вкладки. Есть не у всех окон. */
     secondRow: (@Composable () -> Unit)? = null,
+    /**
+     * Строка поиска — последней в блоке управления, вплотную к списку.
+     *
+     * `null` — поиск закрыт. Он именно появляется по кнопке «🔍», а не стоит всегда
+     * (заказчик 2026-09-19): постоянная строка занимала место у списка каждый день ради
+     * действия, которое делают изредка. Место — под полосой разделов, чтобы фильтр
+     * раздела и поиск читались сверху вниз в том порядке, в каком сужают список.
+     */
+    searchRow: (@Composable () -> Unit)? = null,
     /**
      * Соседние окна: свайп по средней зоне содержимого.
      *
@@ -95,7 +108,7 @@ fun WindowFrame(
                 onSwitchWindows = onSwitchWindows,
                 right = {
                     ControlRow {
-                        IconButton(glyph = "🔍", onClick = onSearch)
+                        if (onSearch != null) IconButton(glyph = "🔍", onClick = onSearch)
                         IconButton(glyph = "⚙", onClick = onSettings)
                     }
                 },
@@ -103,6 +116,7 @@ fun WindowFrame(
 
             TabRow(tabs, selected, onTab, trailing = tabsTrailing)
             secondRow?.invoke()
+            searchRow?.invoke()
         }
 
         Box(

@@ -548,7 +548,8 @@ object SpanishWords : Words {
         override val everyone = "Todos"
         override val commonSection = "General"
         override val phoneSection = "Teléfono"
-        override val search = "Buscar por nombre, apodo o número…"
+        override val search = "Nombre, apodo o número"
+        override val searchChats = "Nombre o texto del mensaje"
         override val notRead = "Contactos no leídos"
         override val notReadAbout =
             "La aplicación tomará nombres y números de su agenda para mostrar cuáles de " +
@@ -621,8 +622,6 @@ object SpanishWords : Words {
         override val phone = "Teléfono"
         override val phoneAbout = "el número de la agenda"
         override val whatToShow = "Qué mostrar"
-        override val showSearch = "Mostrar la búsqueda"
-        override val showSearchAbout = "en una fila sobre la lista"
         override val showOutsiders = "Mostrar a quienes no están en TIMa"
         override val showOutsidersAbout = "la sección «Teléfono» al final de la lista"
     }
