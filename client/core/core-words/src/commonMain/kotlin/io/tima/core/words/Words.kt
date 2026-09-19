@@ -420,6 +420,8 @@ interface BookWords {
     val tileLarge: String
 
     // Пункт «Разделы» и экран управления набором.
+    /** Пояснение к «Общему» в управлении разделами (заказчик 2026-09-19). */
+    val commonSectionAbout: String
     val sectionsItem: String
     val sectionsItemAbout: String
     val sectionsScreen: String
@@ -1712,6 +1714,7 @@ object RussianWords : Words {
         override val tileNormal = "Обычные"
         override val tileLarge = "Крупные"
 
+        override val commonSectionAbout = "сюда попадают все, кому раздел не выбран; убрать нельзя"
         override val sectionsItem = "Разделы"
         override val sectionsItemAbout = "создать, переименовать, переставить, убрать"
         override val sectionsScreen = "Разделы контактов"

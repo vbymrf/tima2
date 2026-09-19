@@ -23,6 +23,9 @@ interface SectionSet {
 
     /** Убрать раздел. Что в нём лежало, возвращается в «Общий». */
     suspend fun remove(id: String)
+
+    /** Имя и значок «Общего»; строка заводится при первой правке. Убрать его нельзя. */
+    suspend fun setCommon(name: String, icon: Int)
 }
 
 /**

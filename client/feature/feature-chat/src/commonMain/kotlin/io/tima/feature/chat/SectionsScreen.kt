@@ -68,6 +68,10 @@ fun SectionsScreen(
     onMove: (id: String, up: Boolean) -> Unit,
     onRemove: (id: String) -> Unit,
     onBack: () -> Unit,
+    /** Имя и значок «Общего», если их меняли; `null` — как в словаре. */
+    common: Section? = null,
+    /** Сменить имя и значок «Общего». Убрать его нельзя — кнопки у него нет. */
+    onRenameCommon: (name: String, icon: Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val colors = Tima.colors
@@ -78,12 +82,17 @@ fun SectionsScreen(
     Column(modifier.fillMaxSize().background(colors.surface)) {
         SubwindowHeader(title = words.sectionsScreen, onBack = onBack)
 
-        if (sections.isEmpty() && !adding) {
-            Box(Modifier.weight(1f)) {
-                EmptyArea(title = words.sectionsEmpty, explanation = words.sectionsEmptyAbout)
+        // Список пустым не бывает: «Общий» есть всегда. Пояснение «разделов пока нет»
+        // стоит НАД ним отдельной строкой, а не вместо списка (заказчик 2026-09-19).
+        LazyColumn(Modifier.weight(1f)) {
+            if (sections.isEmpty() && !adding) {
+                item(key = "пусто") {
+                    Box(Modifier.padding(TimaSpacing.about4)) {
+                        EmptyArea(title = words.sectionsEmpty, explanation = words.sectionsEmptyAbout)
+                    }
+                }
             }
-        } else {
-            LazyColumn(Modifier.weight(1f)) {
+            run {
                 items(sections, key = { it.id }) { section ->
                     if (editing == section.id) {
                         SectionEditor(
@@ -124,6 +133,39 @@ fun SectionsScreen(
                             },
                         )
                     }
+                }
+            }
+            // «Общий» — последней строкой и всегда: имя и значок правятся, убрать нельзя,
+            // переставить некуда (решение заказчика 2026-09-19).
+            item(key = COMMON_SECTION) {
+                if (editing == COMMON_SECTION) {
+                    SectionEditor(
+                        initialName = common?.name ?: words.commonSection,
+                        initialIcon = common?.icon ?: 0,
+                        onSave = { name, icon ->
+                            onRenameCommon(name, icon)
+                            editing = null
+                        },
+                        onCancel = { editing = null },
+                        onRemove = null,
+                    )
+                } else {
+                    ListLine(
+                        onClick = {
+                            adding = false
+                            editing = COMMON_SECTION
+                        },
+                        left = { SectionGlyph(index = common?.icon ?: 0, size = 24.dp) },
+                        middle = {
+                            Column {
+                                Name(common?.name ?: words.commonSection)
+                                Tertiary(
+                                    words.peopleInSection(countOf(COMMON_SECTION)) + " · " + words.commonSectionAbout,
+                                    lineOne = true,
+                                )
+                            }
+                        },
+                    )
                 }
             }
         }

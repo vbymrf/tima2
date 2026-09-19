@@ -39,6 +39,7 @@ class AddContactTest {
         override suspend fun renameSection(id: String, name: String, icon: Int) = Unit
         override suspend fun placeSection(id: String, place: Int) = Unit
         override suspend fun removeSection(id: String) = Unit
+        override suspend fun setCommon(name: String, icon: Int) = Unit
     }
 
     private class ПамятныеДрузья : Friends {

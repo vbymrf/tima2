@@ -582,6 +582,7 @@ object SpanishWords : Words {
         override val tileNormal = "Normales"
         override val tileLarge = "Grandes"
 
+        override val commonSectionAbout = "aquí van todos los que no tienen sección; no se puede quitar"
         override val sectionsItem = "Secciones"
         override val sectionsItemAbout = "crear, renombrar, ordenar, quitar"
         override val sectionsScreen = "Secciones de contactos"

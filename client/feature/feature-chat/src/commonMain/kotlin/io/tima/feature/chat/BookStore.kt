@@ -8,6 +8,7 @@ import io.tima.domain.chat.line
 import io.tima.domain.chat.Book
 import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.Section
+import io.tima.domain.chat.common
 import io.tima.domain.chat.ObserveBook
 import io.tima.domain.chat.Settings
 import io.tima.domain.chat.SyncBook
@@ -48,7 +49,15 @@ class BookStore(
             book.list().collect { people -> _state.value = _state.value.copy(all = people) }
         }
         scope.launch {
-            book.sections().collect { list -> _state.value = _state.value.copy(sections = list) }
+            book.sections().collect { list ->
+                // «Общий» лежит в той же таблице, но обычным разделом не показывается: он
+                // есть всегда, его не заводят и не убирают. Отсюда и разделение — иначе он
+                // встал бы в списке дважды (строкой и собственной вкладкой).
+                _state.value = _state.value.copy(
+                    sections = list.filterNot { it.common },
+                    common = list.firstOrNull { it.common },
+                )
+            }
         }
         scope.launch {
             settings.all().collect { saved -> _state.value = _state.value.copy(view = BookView.from(saved)) }
@@ -93,6 +102,12 @@ class BookStore(
     fun addSection(name: String, icon: Int) {
         if (name.isBlank()) return
         scope.launch { edit?.addSection(name.trim(), icon) }
+    }
+
+    /** Имя и значок «Общего»: строка заводится при первой правке (заказчик 2026-09-19). */
+    fun renameCommon(name: String, icon: Int) {
+        if (name.isBlank()) return
+        scope.launch { edit?.setCommon(name.trim(), icon) }
     }
 
     fun renameSection(id: String, name: String, icon: Int) {
@@ -283,6 +298,8 @@ data class BookGroup(
 data class BookState(
     val all: List<BookEntry> = emptyList(),
     val sections: List<Section> = emptyList(),
+    /** Имя и значок «Общего», если человек их менял; `null` — как в словаре. */
+    val common: Section? = null,
     val search: String = "",
     val view: BookView = BookView(),
     val collapsed: Set<String> = emptySet(),
@@ -354,18 +371,15 @@ data class BookState(
         return usual + outsiders
     }
 
-    /** Вкладки вида «меню»: «Все», разделы, «Телефон» — последним. */
     /**
-     * Чипы полосы (В, Г): «Всё» первым, дальше разделы, в которых кто-то есть.
+     * Чипы полосы (В, Г): «Всё», ВСЕ заведённые разделы, «Общий».
      *
-     * По разделам с людьми, а не по всем заведённым: пустой раздел на полосе — чип, за
-     * которым пустота. В гармошке и плитке он показывается — там его заводили осознанно
-     * и ждут наполнения (`разделы.md`, «показываются… включая пустые»).
+     * До 2026-09-19 полоса строилась по разделам **с людьми**, и заведённый пустой раздел
+     * на ней не появлялся вовсе: человек заводил «Работу» и видел «Всё · Общий» — заказчик
+     * назвал это ошибкой, и он прав. Теперь все четыре исполнения собираются одним
+     * [sectionTabs]: что заведено, то и показано.
      */
-    fun tabs(words: BookWords): List<SectionTab> =
-        listOf(SectionTab("", words.everyone, 0)) +
-            allGroups(words).filterNot { it.outsiders }
-                .map { SectionTab(it.id.ifEmpty { COMMON_SECTION }, it.name, it.icon) }
+    fun tabs(words: BookWords): List<SectionTab> = sectionTabs(sections, common, words, allKey = "")
 
     /**
      * Плитка (А) и гармошка (Б): «Всё», ВСЕ заведённые разделы — включая пустые, — и
@@ -373,10 +387,7 @@ data class BookState(
      * (`разделы.md`, «показываются те разделы, которые человек добавил, включая пустые»).
      * На полосе пустых нет — там чип, за которым пустота, не нужен.
      */
-    fun tiles(words: BookWords): List<SectionTab> =
-        listOf(SectionTab(ALL_SECTION, words.everyone, 0)) +
-            sections.map { SectionTab(it.id, it.name, it.icon) } +
-            SectionTab(COMMON_SECTION, words.commonSection, 0)
+    fun tiles(words: BookWords): List<SectionTab> = sectionTabs(sections, common, words, allKey = ALL_SECTION)
 
     /** Сколько наших людей в разделе по ключу полосы: «Общий» переводится в пустой идентификатор. */
     fun countIn(key: String): Int {
@@ -416,3 +427,24 @@ const val COMMON_SECTION = "common"
  * плитка, и «Всё» с пустым ключом было некуда открыть. Внутри — все люди без сужения.
  */
 const val ALL_SECTION = "*"
+
+/**
+ * Вкладки набора разделов — **один сбор на все наборы и все четыре исполнения**.
+ *
+ * До 2026-09-19 их собирали в четырёх местах по трём разным правилам: полоса книги — по
+ * разделам с людьми, плитка — по всем, «Группы» Страницы — по разделам, где есть чат,
+ * каталог — по всем. Из-за этого заведённый раздел то появлялся, то нет, и объяснить это
+ * человеку было нечем. Правило теперь одно: **«Всё», все заведённые разделы, «Общий»**.
+ *
+ * @param allKey ключ «Всё»: пустой на полосе (пусто = не сужаем) и [ALL_SECTION] в плитке,
+ *   где пустой выбор означает саму плитку.
+ */
+fun sectionTabs(
+    sections: List<Section>,
+    common: Section?,
+    words: BookWords,
+    allKey: String = "",
+): List<SectionTab> =
+    listOf(SectionTab(allKey, words.everyone, 0)) +
+        sections.map { SectionTab(it.id, it.name, it.icon) } +
+        SectionTab(COMMON_SECTION, common?.name ?: words.commonSection, common?.icon ?: 0)

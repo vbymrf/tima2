@@ -19,6 +19,7 @@ import io.tima.feature.chat.COMMON_SECTION
 import io.tima.feature.chat.SectionHeader
 import io.tima.feature.chat.SectionTab
 import io.tima.feature.chat.SectionsTiles
+import io.tima.feature.chat.sectionTabs
 
 /**
  * Разделы в «Каталоге» Социума — набор сообществ, четыре исполнения «Вида».
@@ -52,11 +53,11 @@ fun CatalogSectioned(
     freshIn: (String) -> Int,
     /** Управление набором — «Добавить» в плитке. `null` — без плитки «Добавить». */
     onSections: (() -> Unit)?,
+    /** Имя и значок «Общего» набора сообществ. */
+    common: Section? = null,
 ) {
     val words = Tima.words.book
-    val tabs = listOf(SectionTab(ALL_SECTION, words.everyone, 0)) +
-        sections.map { SectionTab(it.id, it.name, it.icon) } +
-        SectionTab(COMMON_SECTION, words.commonSection, 0)
+    val tabs = sectionTabs(sections, common, words, allKey = ALL_SECTION)
     fun inSection(key: String): List<GroupInfo> = when (key) {
         "", ALL_SECTION -> groups
         COMMON_SECTION -> groups.filter { sectionOf(it.groupId).isEmpty() }

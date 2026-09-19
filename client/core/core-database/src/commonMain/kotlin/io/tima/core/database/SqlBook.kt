@@ -4,6 +4,7 @@ import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import io.tima.core.outbox.FieldCipher
 import io.tima.domain.chat.Book
+import io.tima.domain.chat.COMMON_SECTION_ID
 import io.tima.domain.chat.CopySection
 import io.tima.domain.chat.CopyContact
 import io.tima.domain.chat.BookCopyPort
@@ -116,6 +117,18 @@ class SqlBook(
         }
     }
 
+    override suspend fun setCommon(name: String, icon: Int): Unit = withContext(io) {
+        val clean = name.trim().ifEmpty { return@withContext }
+        db.transaction {
+            // Строки может не быть: «Общий» существует и без неё. Заводим с местом в конце —
+            // он всегда последний, — и правим тем же запросом, что обычные разделы.
+            if (db.bookQueries.sections().executeAsList().none { it.id == COMMON_SECTION_ID }) {
+                db.bookQueries.addSection(COMMON_SECTION_ID, clean, icon.toLong(), COMMON_PLACE, now(), device())
+            }
+            db.bookQueries.renameSection(clean, icon.toLong(), now(), device(), COMMON_SECTION_ID)
+        }
+    }
+
     override suspend fun addSection(name: String, icon: Int): String = withContext(io) {
         val clean = name.trim()
         db.transactionWithResult {
@@ -215,3 +228,6 @@ class SqlBook(
 
     private fun open(blob: ByteArray): String? = cipher.open(blob)?.decodeToString()
 }
+
+/** Место «Общего» в порядке: заведомо больше любого обычного — он всегда последний. */
+private const val COMMON_PLACE = 1_000L

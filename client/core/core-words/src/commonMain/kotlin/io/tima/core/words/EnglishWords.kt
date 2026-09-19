@@ -582,6 +582,7 @@ object EnglishWords : Words {
         override val tileNormal = "Normal"
         override val tileLarge = "Large"
 
+        override val commonSectionAbout = "everyone without a section lands here; cannot be removed"
         override val sectionsItem = "Sections"
         override val sectionsItemAbout = "create, rename, reorder, remove"
         override val sectionsScreen = "Contact sections"

@@ -101,4 +101,28 @@ class BookStateTest {
         // Имя не выдумывается: у строки его нет, и показывать её будет номер.
         assertEquals(null, поликлиника.name)
     }
+
+    // ── один сбор вкладок на все исполнения (заказчик 2026-09-19) ────────────
+
+    @Test
+    fun заведённый_пустой_раздел_виден_и_на_полосе_и_в_плитке() {
+        // Живой случай: человек завёл «Работу», в ней ещё никого, и в виде «Меню» полоса
+        // показывала только «Всё · Общий» — раздел пропадал. Теперь все четыре исполнения
+        // собираются одним `sectionTabs`.
+        val пустой = BookState(all = listOf(анна), sections = listOf(work))
+        assertEquals(listOf("", "s-work", COMMON_SECTION), пустой.tabs(RussianWords.book).map { it.id })
+        assertEquals(listOf(ALL_SECTION, "s-work", COMMON_SECTION), пустой.tiles(RussianWords.book).map { it.id })
+    }
+
+    @Test
+    fun имя_и_значок_общего_берутся_из_его_строки() {
+        val свой = Section(id = COMMON_SECTION, name = "Без раздела", icon = 8)
+        val state = BookState(all = listOf(анна), sections = listOf(work), common = свой)
+        val общий = state.tabs(RussianWords.book).last()
+        assertEquals(COMMON_SECTION, общий.id)
+        assertEquals("Без раздела", общий.name)
+        assertEquals(8, общий.icon)
+        // Обычным разделом он при этом не показывается — иначе стоял бы в списке дважды.
+        assertTrue(state.sections.none { it.id == COMMON_SECTION })
+    }
 }

@@ -87,6 +87,8 @@ import io.tima.feature.chat.MyColorSheet
 import io.tima.core.network.MembersResult
 import io.tima.core.network.MemberResult
 import io.tima.feature.chat.SectionTab
+import io.tima.feature.chat.sectionTabs
+import io.tima.domain.chat.common
 import io.tima.feature.chat.ALL_SECTION
 import io.tima.feature.chat.COMMON_SECTION
 import io.tima.feature.chat.BookView
@@ -680,7 +682,10 @@ private fun App(
     // по кругу не дал бы угадать следующее состояние.
     var bookView by remember { mutableStateOf(false) }
     /** Разделы набора сообществ — поток из базы, читают Страница, меню чата и мастер. */
-    val communityShelves by environment.communitySections.sections().collectAsState(initial = emptyList())
+    val communityRows by environment.communitySections.sections().collectAsState(initial = emptyList())
+    /** Обычные разделы набора сообществ и отдельно «Общий» — как у книги. */
+    val communityShelves = communityRows.filterNot { it.common }
+    val communityCommon = communityRows.firstOrNull { it.common }
     /** Выбранный раздел на вкладке «Группы» Страницы. */
     var groupSection by remember { mutableStateOf("") }
     // ── «Вид» набора сообществ: каталог Социума (решение заказчика 2026-09-18) ──
@@ -918,11 +923,11 @@ private fun App(
         val everyone = key.isEmpty() || key == ALL_SECTION
         listState.personal.count { chat -> chat.unread > 0 && (everyone || sectionOfChat(chat) == id) }
     }
-    val chatSections: List<SectionTab> = remember(bookStateForChats.sections, bookStateForChats.all, listState.chats) {
-        val used = listState.personal.map(sectionOfChat).toSet()
-        listOf(SectionTab("", bookWordsNow().everyone, 0)) +
-            bookStateForChats.sections.filter { it.id in used }.map { SectionTab(it.id, it.name, it.icon) } +
-            (if ("" in used && used.size > 1) listOf(SectionTab(COMMON_SECTION, bookWordsNow().commonSection, 0)) else emptyList())
+    // Полоса разделов у личных переписок (Р4) — тем же сбором, что книга и сообщества:
+    // все заведённые разделы, «Всё» и «Общий». До 2026-09-19 здесь стояло своё правило —
+    // «только разделы, где есть переписка», — и заведённый раздел на полосе не появлялся.
+    val chatSections: List<SectionTab> = remember(bookStateForChats.sections, bookStateForChats.common, listState.chats) {
+        sectionTabs(bookStateForChats.sections, bookStateForChats.common, bookWordsNow())
     }
     val bookState by book.state.collectAsState()
     val newState by new.state.collectAsState()
@@ -1001,6 +1006,8 @@ private fun App(
             onMove = book::moveSection,
             onRemove = book::removeSection,
             onBack = { sectionsScreen = false },
+            common = bookState.common,
+            onRenameCommon = book::renameCommon,
         )
         return
     }
@@ -1030,6 +1037,8 @@ private fun App(
                 if (groupSection == id) groupSection = ""
             },
             onBack = { communitySectionsScreen = false },
+            common = communityCommon,
+            onRenameCommon = { name, icon -> scope.launch { shelves.setCommon(name.trim(), icon) } },
         )
         return
     }
@@ -1278,9 +1287,7 @@ private fun App(
                         val everyone = key.isEmpty() || key == ALL_SECTION
                         listState.groups.count { it.unread > 0 && (everyone || it.sectionId == id) }
                     }
-                    val catalogTabs = listOf(SectionTab("", bookWordsNow().everyone, 0)) +
-                        communityShelves.map { SectionTab(it.id, it.name, it.icon) } +
-                        SectionTab(COMMON_SECTION, bookWordsNow().commonSection, 0)
+                    val catalogTabs = sectionTabs(communityShelves, communityCommon, bookWordsNow())
                     SocialWindow(
                         onSwitchWindows = { windowSwitcher = true },
                         onSearch = {},
@@ -1325,6 +1332,7 @@ private fun App(
                                         },
                                         freshIn = freshInCatalog,
                                         onSections = { communitySectionsScreen = true },
+                                        common = communityCommon,
                                     )
                                 },
                             )
@@ -1362,9 +1370,7 @@ private fun App(
                         Column {
                             // Полоса разделов сообществ — тот же механизм, что у книги
                             // (В/Г по «Виду»), набор свой. Появляется, когда есть что выбирать.
-                            val tabs = listOf(SectionTab("", bookWordsNow().everyone, 0)) +
-                                communityShelves.map { SectionTab(it.id, it.name, it.icon) } +
-                                SectionTab(COMMON_SECTION, bookWordsNow().commonSection, 0)
+                            val tabs = sectionTabs(communityShelves, communityCommon, bookWordsNow())
                             if (communityShelves.isNotEmpty()) {
                                 SectionsRow(
                                     tabs = tabs,
