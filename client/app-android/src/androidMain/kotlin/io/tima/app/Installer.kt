@@ -87,7 +87,29 @@ class AndroidInstaller(private val context: Context) : UpdateInstaller {
             InstallOutcome.Started
         }
 
-    /** Качает через `DownloadManager`, отдавая проценты. `false` — не докачали. */
+    /**
+     * Качает через `DownloadManager`, отдавая проценты. `false` — не докачали.
+     *
+     * ── ЖДЁМ ПРОДВИЖЕНИЯ, А НЕ ЧАСОВ ────────────────────────────────────────
+     *
+     * До 2026-09-19 здесь стоял общий потолок в две минуты — `MAX_STEPS = 170` при шаге
+     * 700 мс. Он был измерен на APK в 16 МБ и для него годился; APK со звонками весит
+     * 64 МБ и в две минуты не укладывается **ни при какой скорости**, доступной телефону
+     * в мобильной сети.
+     *
+     * Так и вышло: отчёт `MBRY` 2026-09-19, две попытки подряд, обе оборваны ровно через
+     * 119 секунд. В журнале это выглядело как `UPD-NO-CONNECTION пакет не докачался` — то
+     * есть обвиняло сеть в том, что сделали мы сами.
+     *
+     * **Потолок, посчитанный от размера, чинил бы только этот случай.** Следующий APK
+     * вырастет опять, и число снова разойдётся с жизнью — молча. Поэтому спрашивается
+     * другое: **идёт ли загрузка вообще.** Байты прибавляются — ждём сколько угодно;
+     * перестали прибавляться на [STALL_MS] — сдаёмся. Это и есть то, что человек называет
+     * «не качается», и от размера файла оно не зависит.
+     *
+     * Общий потолок [LIMIT_MS] остался страховкой от загрузки, которая ухитряется капать
+     * по байту и потому застрявшей не считается, — а не мерой терпения.
+     */
     private suspend fun download(url: String, target: File, onProgress: (Int) -> Unit): Boolean {
         val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val request = DownloadManager.Request(Uri.parse(url))
@@ -98,26 +120,84 @@ class AndroidInstaller(private val context: Context) : UpdateInstaller {
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
         val id = manager.enqueue(request)
 
-        var waited = 0
-        while (waited < MAX_STEPS) {
+        var spent = 0L
+        var idle = 0L
+        var best = -1L
+        var seen = 0L
+        var size = 0L
+        while (spent < LIMIT_MS) {
             delay(STEP_MS)
-            waited++
-            manager.query(DownloadManager.Query().setFilterById(id)).use { cursor ->
+            spent += STEP_MS
+            val done = manager.query(DownloadManager.Query().setFilterById(id)).use { cursor ->
                 if (!cursor.moveToFirst()) return false
                 val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                val done = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                val got = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
                 val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
-                if (total > 0) onProgress((done * 100 / total).toInt())
+                seen = got
+                size = total
+                if (total > 0) onProgress((got * 100 / total).toInt())
+
+                // Счётчик простоя сбрасывается каждым прибавившимся байтом.
+                if (got > best) {
+                    best = got
+                    idle = 0
+                } else {
+                    idle += STEP_MS
+                }
+
                 when (status) {
-                    DownloadManager.STATUS_SUCCESSFUL -> return true
-                    DownloadManager.STATUS_FAILED -> return false
+                    DownloadManager.STATUS_SUCCESSFUL -> true
+                    DownloadManager.STATUS_FAILED -> {
+                        // Отказ системы — не наше нетерпение, и в журнале он обязан
+                        // выглядеть иначе: причина у него своя, и лежит она в `reason`.
+                        note(id, manager, "система отказала", got, total)
+                        manager.remove(id)
+                        return false
+                    }
+                    else -> false
                 }
             }
+            if (done) return true
+            if (idle >= STALL_MS) break
         }
-        // Время вышло. Загрузку снимаем: висящая в фоне, она однажды доедет и положит
-        // рядом файл, которого никто не ждал.
+
+        // Либо перестало качаться, либо упёрлись в общий потолок. Загрузку снимаем:
+        // висящая в фоне, она однажды доедет и положит рядом файл, которого никто не ждал.
+        note(id, manager, if (idle >= STALL_MS) "перестало качаться" else "общий потолок", seen, size)
         manager.remove(id)
         return false
+    }
+
+    /**
+     * Запись о сорвавшейся загрузке — **с числами**.
+     *
+     * Прежняя строка говорила только «пакет не докачался», и по ней нельзя было отличить
+     * «сеть пропала на первом байте» от «скачали 58 МБ из 64 и не дождались». Разбор
+     * отчёта `MBRY` упёрся ровно в это: причину нашли по расстоянию между строками
+     * журнала, а не по самой строке.
+     */
+    private fun note(id: Long, manager: DownloadManager, why: String, done: Long, total: Long) {
+        val reason = manager.query(DownloadManager.Query().setFilterById(id)).use { cursor ->
+            if (cursor.moveToFirst()) {
+                cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+            } else {
+                0
+            }
+        }
+        Journal.trouble(
+            LogCode.UPD_NO_CONNECTION,
+            "загрузка сорвалась: " + why,
+            "скачано" to megabytes(done),
+            "всего" to megabytes(total),
+            "код" to reason,
+        )
+    }
+
+    /** Байты в мегабайты с одной десятой: журнал читают глазами, а не считают в уме. */
+    private fun megabytes(bytes: Long): String {
+        if (bytes <= 0) return "неизвестно"
+        val tenths = bytes * 10 / (1024 * 1024)
+        return (tenths / 10).toString() + "," + (tenths % 10).toString() + " МБ"
     }
 
     /**
@@ -220,9 +300,28 @@ class AndroidInstaller(private val context: Context) : UpdateInstaller {
     private companion object {
         const val BUFFER = 64 * 1024
         const val STEP_MS = 700L
-        // Те же две минуты, что были у v1: `waited > 170` при шаге 700 мс. Число взято
-        // не из головы — оно измерено на живых телефонах в мобильной сети.
-        const val MAX_STEPS = 170
+
+        /**
+         * Сколько ждём, когда байты **перестали** прибавляться.
+         *
+         * Сорок секунд, а не две минуты: столько занимает переключение сети телефона
+         * (Wi-Fi на мобильную и обратно) с запасом. Больше — и человек смотрит в
+         * замерший прогресс, не понимая, ждать ему или нажимать заново.
+         */
+        const val STALL_MS = 40_000L
+
+        /**
+         * Общий потолок — страховка, а не мера терпения.
+         *
+         * Полчаса хватает и на 64 МБ в медленной мобильной сети (это около 300 кбит/с), и
+         * на любой обозримый рост APK. Упереться в него может только загрузка, которая
+         * капает по байту и потому застрявшей не считается.
+         *
+         * **Прежний потолок стоил дня разбора.** Он был в две минуты, измерен на APK в
+         * 16 МБ, и на 64 МБ оборвал загрузку дважды подряд — отчёт `MBRY` 2026-09-19.
+         * Отсюда правило: срок ставится тому, что от размера не зависит.
+         */
+        const val LIMIT_MS = 30 * 60 * 1000L
         const val HEX = "0123456789abcdef"
     }
 }
