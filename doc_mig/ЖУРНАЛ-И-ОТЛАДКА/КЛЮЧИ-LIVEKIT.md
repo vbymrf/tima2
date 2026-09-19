@@ -16,25 +16,29 @@
 | Кто | Зачем ему ключ |
 |---|---|
 | **LiveKit SFU** | проверяет подпись токена, с которым к нему пришли (`livekit.yaml`, секция `keys`) |
-| **Наш бэкенд** | выпускает эти токены (`server/internal/calls/token.go`, переменные окружения) |
+| **Наш бэкенд** | выпускает эти токены (`server/internal/calls/token.go`) **и проверяет подписи вебхуков** тем же секретом (`api/group_calls.go`, `webhookSignatureValid`) |
 
 Разойдутся — бэкенд выдаст токен, который SFU не примет, и звонок не начнётся ни у кого.
 Поэтому в шапке `livekit.yaml` стоит предупреждение, и оно не формальное.
 
 ## Где они лежат на стенде
 
-Два файла, оба **вне git**:
+Оба файла **вне git**.
 
-| Файл | Что в нём |
-|---|---|
-| `/root/tima2/server/deploy/.env` | `LIVEKIT_API_KEY=…` и `LIVEKIT_API_SECRET=…` — отсюда их берёт бэкенд |
-| `/root/tima2/server/deploy/livekit/livekit.yaml` | секция `keys:` — `<ключ>: <секрет>`, отсюда их берёт SFU |
+**Развёрнуто в `/opt/tima`, а не в `/root/tima2`** — проверено 2026-09-19. Мест **три**:
 
-Прочитать на стенде:
+| Файл | Строка | Кто читает |
+|---|---|---|
+| `/opt/tima/server/deploy/.env` | `LIVEKIT_API_KEY=` и `LIVEKIT_API_SECRET=` | бэкенд: **выпускает** токены и **проверяет подписи вебхуков** |
+| `/opt/tima/server/deploy/livekit/livekit.yaml` | `keys:` — `<ключ>: <секрет>` | SFU: проверяет подпись токена |
+| тот же файл | `webhook.api_key:` | SFU: **подписывает вебхуки** этим ключом |
+
+Прочитать на стенде, не печатая секретов:
 
 ```bash
-grep LIVEKIT /root/tima2/server/deploy/.env
-sed -n '/^keys:/,/^$/p' /root/tima2/server/deploy/livekit/livekit.yaml
+cd /opt/tima/server/deploy
+awk -F= '/^LIVEKIT/{print $1" длина="length($2)}' .env
+awk '/^keys:/{f=1;next} f&&/^ *[0-9a-f]/{print "ключ "substr($1,1,6)"…"; exit}' livekit/livekit.yaml
 ```
 
 **В репозитории их нет.** В `livekit.yaml` стоят заглушки `REPLACE_LIVEKIT_API_KEY` и
@@ -48,7 +52,7 @@ sed -n '/^keys:/,/^$/p' /root/tima2/server/deploy/livekit/livekit.yaml
 `livekit-cli` берёт их из переменных окружения или из своего файла проекта.
 
 ```bash
-export LIVEKIT_URL=wss://<домен стенда>/livekit
+export LIVEKIT_URL=wss://lk.<домен стенда>      # проверено: отдельный поддомен lk.
 export LIVEKIT_API_KEY=<ключ>
 export LIVEKIT_API_SECRET=<секрет>
 
@@ -61,9 +65,63 @@ lk room join --publish-demo проба  # войти вторым участни
 дальше команды идут с `--project <имя>`. Файл ложится в профиль пользователя
 (`~/.livekit/`), **не в репозиторий**.
 
-**Адрес.** SFU слушает `7880`, но снаружи он за Caddy: в `Caddyfile` стоит
-`handle /livekit/*`. То есть для CLI адрес — `wss://<домен>/livekit`, а не порт напрямую:
-порт 7880 в файрволе закрыт, открыты только UDP-диапазон медиа и TURN.
+**Адрес — отдельный поддомен, а не путь.** Проверено 2026-09-19 по окружению бэкенда:
+`LIVEKIT_URL=wss://lk.<домен>`. Первая редакция этой памятки называла `wss://<домен>/livekit`
+по строке `handle /livekit/*` в `Caddyfile` — **неверно**: тот путь обслуживает вебхуки, а
+не сигналинг клиента. Сам SFU слушает `7880`, но снаружи порт закрыт.
+
+## Как сменить пару
+
+**Проверено 2026-09-19** — ключи стенда сменены этим порядком. Две минуты; бэкенд при этом
+пересоздаётся, то есть **переписка на телефонах на несколько секунд прерывается**.
+
+```bash
+cd /opt/tima/server/deploy
+S=$(date +%Y-%m-%d-%H%M)
+mkdir -p /root/stand-config
+cp .env                 /root/stand-config/.env.$S-до-смены-ключей
+cp livekit/livekit.yaml /root/stand-config/livekit.yaml.$S-до-смены-ключей
+
+NEW_KEY=$(openssl rand -hex 16)
+NEW_SECRET=$(openssl rand -hex 32)
+
+sed -i "s/^LIVEKIT_API_KEY=.*/LIVEKIT_API_KEY=$NEW_KEY/"         .env
+sed -i "s/^LIVEKIT_API_SECRET=.*/LIVEKIT_API_SECRET=$NEW_SECRET/" .env
+sed -i "s/^\( *\)[0-9a-f]\{32\}: .*/\1$NEW_KEY: $NEW_SECRET/" livekit/livekit.yaml
+sed -i "s/^\( *\)api_key: .*/\1api_key: $NEW_KEY/"                  livekit/livekit.yaml
+
+# LiveKit читает yaml при старте; бэкенд и воркер берут .env при СОЗДАНИИ контейнера,
+# поэтому именно --force-recreate, а не restart.
+docker compose -f docker-compose.prod.yml up -d --force-recreate livekit
+docker compose -f docker-compose.prod.yml up -d --force-recreate backend worker
+```
+
+**Проверять не по логам, а по делу**: подписать токен новым секретом и позвать SFU. Скрипт
+складывает HS256 руками, без библиотек — файл `/root/stand-config/проверка-ключей.py`,
+запускается из `/opt/tima/server/deploy`:
+
+```bash
+cd /opt/tima/server/deploy && python3 /root/stand-config/проверка-ключей.py
+```
+
+`200 {"rooms":[]}` — пара согласована. `401` — разошлись.
+
+**Старый ключ умирает сразу** — проверено: тот же скрипт со старой парой из копии отвечает
+`401`. Уже выданные токены тоже мертвы: их подпись SFU больше не знает.
+
+### Ловушка, из-за которой смену легко испортить
+
+**`git pull` возвращает в `livekit.yaml` заглушки — и не только ключей.** Поймано
+2026-09-19: вместе с `REPLACE_LIVEKIT_API_KEY` вернулся `REPLACE_TURN_DOMAIN`, а TURN без
+домена — это «у части людей звонки не подключаются», и в логах это ничем не отличается от
+исправной работы. После каждого `pull`:
+
+```bash
+grep -c REPLACE livekit/livekit.yaml                      # должно быть 0
+grep -o 'REPLACE_[A-Z_]*' livekit/livekit.yaml | sort -u  # если не 0 — что именно
+```
+
+Домен TURN берётся из той же сохранённой копии, что и ключи.
 
 ## Чего делать нельзя
 
