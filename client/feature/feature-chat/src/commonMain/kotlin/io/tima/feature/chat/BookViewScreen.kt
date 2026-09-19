@@ -237,7 +237,7 @@ fun PersonLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modif
                     left = { Avatar(letters = sample.letter()) },
                     middle = {
                         Column {
-                            Name(sample.line(look, CONTACT_FIRST_LINE) ?: words.nameless)
+                            Name(sample.line(look, PERSON_FIRST_LINE) ?: words.nameless)
                             Tertiary(sample.phone!!, lineOne = true)
                         }
                     },
@@ -275,7 +275,7 @@ fun PersonLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modif
 }
 
 /** Поля первой строки контакта: телефон стоит второй строкой всегда и в первую не берётся. */
-val CONTACT_FIRST_LINE = setOf(PersonField.Name, PersonField.Nick, PersonField.UserName)
+val PERSON_FIRST_LINE = setOf(PersonField.Name, PersonField.Nick, PersonField.UserName)
 
 private fun io.tima.core.words.BookWords.field(field: PersonField): String = when (field) {
     PersonField.Name -> name

@@ -924,8 +924,42 @@ private fun App(
     // и переписки; своего поля у переписки нет и заводить его незачем.
     var chatSection by remember { mutableStateOf("") }
     val bookStateForChats by book.state.collectAsState()
-    val sectionOfChat: (ChatSummary) -> String = { chat ->
-        bookStateForChats.all.firstOrNull { it.userId != null && it.userId == chat.peerId }?.sectionId ?: ""
+    // ── ЕДИНОЕ ОТОБРАЖЕНИЕ ЧЕЛОВЕКА В ОКНЕ «ТЕЛЕФОН» ──────────────────────────
+    //
+    // Решение заказчика 2026-09-19: «поправь отображение во вкладке „Чаты“, чтобы
+    // отображение встало единым для окна „Телефон“; единый механизм сделай».
+    //
+    // Собеседник личной переписки — тот же человек, что строка книги: карточка справочника
+    // плюс имя из книги поверх неё. Отсюда и имя по «Виду», и аватар, и раздел переписки
+    // (Р4). У группы собеседника нет — там остаётся название переписки.
+    //
+    // **Кто это, спрашивается один раз.** До 2026-09-19 раздел искал человека по `userId`, а
+    // имя не искало вовсе — и на одном экране получались два ответа про одного. Ищется
+    // по `userId`, а **если не нашлось — по номеру карточки**: то же правило, что в
+    // `People.whoIs`. Оно нужно не для красоты — на стенде нашлась переписка, чей
+    // `peer_id` не совпал ни с одним `user_id` книги, хотя номер у человека тот же:
+    // аккаунт был заведён заново, а книга держит прежний идентификатор.
+    val entryOfChat: (ChatSummary) -> BookEntry? = { chat ->
+        chat.peerId?.takeIf { chat.kind == ChatKind.Personal }?.let { id ->
+            val card = peopleCards[id]
+            bookStateForChats.all.firstOrNull {
+                it.userId == id || (card?.phone != null && it.phone == card.phone)
+            }
+        }
+    }
+    val sectionOfChat: (ChatSummary) -> String = { chat -> entryOfChat(chat)?.sectionId ?: "" }
+    val personOfChat: (ChatSummary) -> ChatPerson? = { chat ->
+        chat.peerId?.takeIf { chat.kind == ChatKind.Personal }?.let { id ->
+            people.want(listOf(id))
+            val entry = entryOfChat(chat)
+            (peopleCards[id] ?: ChatPerson()).withBookName(entry?.name, entry?.phone)
+        }
+    }
+    val faceOfChat: (ChatSummary) -> ImageBitmap? = { chat ->
+        chat.peerId?.takeIf { chat.kind == ChatKind.Personal }?.let { id ->
+            people.wantFace(id)
+            peopleFaces[id]
+        }
     }
     // Янтарная цифра раздела — сколько людей раздела написали новое. Считается по личным
     // перепискам: у переписки есть непрочитанное, у собеседника — раздел в книге.
@@ -1274,6 +1308,8 @@ private fun App(
                     list = listState.copy(chats = listState.personal),
                     book = bookState,
                     onSearchInBook = book::changedSearch,
+                    personOfChat = personOfChat,
+                    faceOfChat = faceOfChat,
                     onOpen = { where = Where.Chat(it.chatId, it.title) },
                     // Открыть можно только того, кто в TIMa: у остальных переписки нет
                     // и завести её не из чего — им «Пригласить».
@@ -2689,6 +2725,10 @@ private fun PhoneWindow(
     book: BookState,
     /** Человек за строкой книги — имя из книги плюс карточка справочника. */
     personOf: (BookEntry) -> ChatPerson = { ChatPerson(name = it.name, phone = it.phone) },
+    /** Собеседник личной переписки — для строки списка чатов; `null` у групп. */
+    personOfChat: (ChatSummary) -> ChatPerson? = { null },
+    /** Аватар собеседника личной переписки. */
+    faceOfChat: (ChatSummary) -> ImageBitmap? = { null },
     faceOf: (BookEntry) -> ImageBitmap? = { null },
     onSearchInBook: (String) -> Unit,
     onOpen: (ChatSummary) -> Unit,
@@ -2811,6 +2851,10 @@ private fun PhoneWindow(
                 onOpen = onOpen,
                 onNew = onNew,
                 onSettings = onSettings,
+                // Тот же человек и тот же «Вид», что во вкладке «Контакты».
+                personOf = personOfChat,
+                faceOf = faceOfChat,
+                look = book.view.look(),
             )
 
             WindowTab.Contacts -> {
@@ -2910,6 +2954,8 @@ private fun SearchRow(
             onChange = onChange,
             hint = hint,
             lineOne = true,
+            // Толщина — как у крестика рядом (заказчик 2026-09-19).
+            narrow = true,
             // Кнопку «🔍» уже нажали — спрашивать второй раз, ткнув в поле, незачем.
             autoFocus = true,
             modifier = Modifier.weight(1f),

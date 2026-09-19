@@ -4,6 +4,9 @@ import androidx.compose.runtime.Composable
 import io.tima.core.ui.Stage
 import io.tima.core.ui.TimaColors
 import io.tima.domain.chat.ChatKind
+import io.tima.domain.chat.ChatPerson
+import io.tima.domain.chat.PersonField
+import io.tima.domain.chat.PersonLook
 import io.tima.domain.chat.ChatSummary
 import io.tima.domain.chat.MessageDisplay
 import io.tima.testui.Snapshot
@@ -118,6 +121,45 @@ class ChatsScreenTest {
         )
     }
 
+    /**
+     * Имя в списке переписок подчиняется «Виду» — решение заказчика 2026-09-19 («отображение
+     * единое для окна „Телефон“»).
+     *
+     * Ловится подменой одной галки: тот же человек, тот же экран, другой выбор в «Виде» —
+     * и строка обязана нарисоваться иначе. До этой правки строка показывала `title`
+     * переписки и на «Вид» не смотрела вовсе, то есть оба снимка совпали бы.
+     */
+    @Test
+    fun имя_в_списке_переписок_подчиняется_виду() {
+        val who = ChatPerson(name = "Аня Борисова", nick = "anna_p", userName = "anna")
+        val byName = capture("переписки-вид-имя", WIDTH, HEIGHT, dark = false) {
+            screen(one(), who, PersonLook(checked = setOf(PersonField.Name)))
+        }
+        val byNick = capture("переписки-вид-ник", WIDTH, HEIGHT, dark = false) {
+            screen(one(), who, PersonLook(checked = setOf(PersonField.Nick)))
+        }
+        assertTrue(
+            byName.difference(byNick) > 0.0,
+            "«Вид» не влияет на строку переписки: имя и ник нарисовались одинаково",
+        )
+    }
+
+    /**
+     * Человека нет (группа) — остаётся название переписки.
+     *
+     * Иначе правка забрала бы у групп имя: у них собеседника не бывает.
+     */
+    @Test
+    fun у_группы_остаётся_название_переписки() {
+        val withoutPerson = capture("переписки-без-человека", WIDTH, HEIGHT, dark = false) {
+            screen(one(), who = null, look = PersonLook.DEFAULT)
+        }
+        val empty = capture("переписки-ничего-2", WIDTH, HEIGHT, dark = false) {
+            screen(ChatsState(read = true), who = null, look = PersonLook.DEFAULT)
+        }
+        assertTrue(withoutPerson.difference(empty) > 0.0, "строка без человека не нарисовалась вовсе")
+    }
+
     // Два правила шапки — плашка и логотип только на телефоне — переехали в
     // КаркасОкнаTest вместе с самой шапкой: экран стал содержимым вкладки, а шапку
     // рисует общий каркас. Держать их здесь значило бы проверять чужое.
@@ -162,9 +204,19 @@ class ChatsScreenTest {
          * Иначе раскладки нет вовсе, и `LocalРаскладка` отказывает — намеренно: молчаливое
          * «считаем телефоном» однажды дало телефонную кнопку на тысяче точек ширины.
          */
+        fun one() = ChatsState(chats = listOf(line("chat-1", unread = 0)), read = true)
+
         @Composable
         fun screen(state: ChatsState) = Stage(
             column = { ChatsScreen(state = state, onOpen = {}) },
+        )
+
+        /** Тот же экран, но с собеседником и «Видом» — как его зовёт окно «Телефон». */
+        @Composable
+        fun screen(state: ChatsState, who: ChatPerson?, look: PersonLook) = Stage(
+            column = {
+                ChatsScreen(state = state, onOpen = {}, personOf = { who }, look = look)
+            },
         )
     }
 }

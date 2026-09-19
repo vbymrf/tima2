@@ -116,7 +116,7 @@ fun IconButton(
     val colors = Tima.colors
     Box(
         modifier = modifier
-            .size(36.dp)
+            .size(TimaSizes.iconButton)
             .background(background ?: circleFill(live), CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -485,3 +485,15 @@ fun ControlRow(
     horizontalArrangement = Arrangement.spacedBy(gap),
     verticalAlignment = Alignment.CenterVertically,
 ) { content() }
+
+/** Общие меры элементов управления: одна мера — одно место, иначе они расходятся. */
+object TimaSizes {
+    /**
+     * Сторона круглой кнопки-иконки.
+     *
+     * Публичная, а не литерал внутри [IconButton]: по ней равняется поле поиска — заказчик
+     * 2026-09-19 («сделай пузырь поиска поуже — до размера кнопки крестика»). Два литерала
+     * `36.dp` в разных файлах разошлись бы на первой же правке одного из них.
+     */
+    val iconButton = 36.dp
+}

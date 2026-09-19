@@ -193,7 +193,7 @@ fun BookScreen(
                                     // Первая строка — имя, ник, имя пользователя по «Виду»
                                     // (галки через запятую, иначе первое, что есть); вторая
                                     // — всегда телефон (решение заказчика 2026-09-18).
-                                    Name(who.line(state.view.look(), CONTACT_FIRST_LINE) ?: words.nameless)
+                                    Name(who.line(state.view.look(), PERSON_FIRST_LINE) ?: words.nameless)
                                     // Телефон крупнее третьестепенной строки в 1,3 раза — заказчик
                                     // 2026-09-18: номер читают и набирают, ему нужен кегль.
                                     Caption(person.phone, fontSize = TimaType.sz6 * 1.3f, weight = FontWeight.SemiBold, color = colors.text3, lineOne = true)

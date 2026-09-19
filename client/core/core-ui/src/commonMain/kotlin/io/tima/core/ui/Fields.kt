@@ -3,6 +3,7 @@ package io.tima.core.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
@@ -62,6 +63,12 @@ fun Field(
      * за человека, с какого начать, не наше дело.
      */
     autoFocus: Boolean = false,
+    /**
+     * Толщина пилюли — как у круглой кнопки рядом ([TimaSizes.iconButton]), а не как у
+     * формы ввода. Для строки поиска это решение заказчика 2026-09-19: поле стоит в одном
+     * ряду с крестиком, и пилюля вдвое толще кнопки рядом выглядит опечаткой.
+     */
+    narrow: Boolean = false,
 ) {
     val colors = Tima.colors
     val focus = remember { FocusRequester() }
@@ -71,8 +78,12 @@ fun Field(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .then(if (narrow) Modifier.height(TimaSizes.iconButton) else Modifier)
             .background(colors.softAccent, CircleShape)
-            .padding(horizontal = TimaSpacing.about5, vertical = 14.dp),
+            .padding(
+                horizontal = if (narrow) TimaSpacing.about4 else TimaSpacing.about5,
+                vertical = if (narrow) 0.dp else 14.dp,
+            ),
         contentAlignment = if (byCenter) Alignment.Center else Alignment.CenterStart,
     ) {
         if (value.isEmpty() && hint.isNotEmpty()) {

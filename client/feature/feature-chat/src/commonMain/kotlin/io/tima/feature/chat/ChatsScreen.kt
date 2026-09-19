@@ -32,6 +32,11 @@ import io.tima.core.ui.TextPlace
 import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.words
 import io.tima.core.ui.WindowHeader
+import androidx.compose.ui.graphics.ImageBitmap
+import io.tima.domain.chat.ChatPerson
+import io.tima.domain.chat.PersonLook
+import io.tima.domain.chat.letter
+import io.tima.domain.chat.line
 import io.tima.domain.chat.ChatSummary
 import io.tima.domain.chat.MessageDisplay
 
@@ -59,6 +64,20 @@ fun ChatsScreen(
     modifier: Modifier = Modifier,
     onSettings: () -> Unit = {},
     onNew: () -> Unit = {},
+    /**
+     * Собеседник ЛИЧНОЙ переписки; `null` — переписка не личная либо собеседник неизвестен.
+     *
+     * Ради него всё и заведено (заказчик 2026-09-19: «отображение единое для окна
+     * „Телефон“»). До этого строка переписки показывала `title` — имя, записанное в саму
+     * переписку при её заведении, — а строка книги показывала человека по «Виду». Один и
+     * тот же человек назывался на двух вкладках по-разному, и настройки «Вида» на «Чатах»
+     * не действовали вовсе.
+     */
+    personOf: (ChatSummary) -> ChatPerson? = { null },
+    /** Картинка аватара собеседника; `null` — её нет или она ещё не доехала. */
+    faceOf: (ChatSummary) -> ImageBitmap? = { null },
+    /** Как называть человека — тот же «Вид», что у книги. */
+    look: PersonLook = PersonLook.DEFAULT,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -108,7 +127,7 @@ fun ChatsScreen(
                     explanation = words.writeFirst,
                 )
 
-                else -> List(state.chats, onOpen)
+                else -> List(state.chats, onOpen, personOf, faceOf, look)
             }
         }
     }
@@ -154,18 +173,32 @@ fun GroupsScreen(
 }
 
 @Composable
-private fun List(chats: List<ChatSummary>, onOpen: (ChatSummary) -> Unit) = LazyColumn(
+private fun List(
+    chats: List<ChatSummary>,
+    onOpen: (ChatSummary) -> Unit,
+    personOf: (ChatSummary) -> ChatPerson? = { null },
+    faceOf: (ChatSummary) -> ImageBitmap? = { null },
+    look: PersonLook = PersonLook.DEFAULT,
+) = LazyColumn(
     modifier = Modifier.fillMaxSize(),
 ) {
     items(chats, key = { it.chatId }) { chat ->
-        ChatLine(chat) { onOpen(chat) }
+        ChatLine(chat, personOf(chat), faceOf(chat), look) { onOpen(chat) }
     }
 }
 
 @Composable
-private fun ChatLine(chat: ChatSummary, onClick: () -> Unit) = ListLine(
+private fun ChatLine(
+    chat: ChatSummary,
+    who: ChatPerson?,
+    face: ImageBitmap?,
+    look: PersonLook,
+    onClick: () -> Unit,
+) = ListLine(
     onClick = onClick,
-    left = { Avatar(letters(chat)) },
+    // Картинка, если она есть, иначе буква — та же, что в книге. У группы человека нет,
+    // и буквы берутся из её названия.
+    left = { Avatar(letters = who?.letter() ?: letters(chat), image = face) },
     right = {
         Column(
             horizontalAlignment = Alignment.End,
@@ -194,9 +227,12 @@ private fun ChatLine(chat: ChatSummary, onClick: () -> Unit) = ListLine(
         }
     },
     middle = {
-        // Имени может не быть: профиль не приезжал. Строку это не отменяет — сообщение
-        // есть, и человек должен его видеть.
-        Name(chat.title ?: Tima.words.chat.nameless)
+        // Имя — по «Виду», тем же правилом и тем же набором полей, что первая строка
+        // контакта ([PERSON_FIRST_LINE]): телефон туда не идёт, потому что вторую строку
+        // здесь занимает превью. Человека нет (группа) или он пуст — остаётся название
+        // переписки. Имени может не быть и вовсе: профиль не приезжал. Строку это не
+        // отменяет — сообщение есть, и человек должен его видеть.
+        Name(who?.line(look, PERSON_FIRST_LINE) ?: chat.title ?: Tima.words.chat.nameless)
         // Превью обрезается: иначе строка списка растёт от чужого длинного сообщения.
         Secondary(preview(chat, Tima.words.chat), lineOne = true)
     },
