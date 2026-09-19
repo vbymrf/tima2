@@ -82,6 +82,9 @@ class UserPagesOverHttp(
                     // Поля нет — считаем, что обсуждения открыты: так было до появления
                     // выключателя, и молчание не должно закрывать разговор.
                     commentsEnabled = body?.bool("comments_enabled") ?: true,
+                    // Поля нет у своей страницы — там вопрос «дружит ли он со мной» не
+                    // имеет смысла. `null` — «не сказано», а не «не дружит».
+                    friend = body?.bool("friend"),
                 )
             response.status == HttpStatusCode.NotFound -> PageStep.NoPage
             else -> PageStep.Refused(body.codeOf())

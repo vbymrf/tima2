@@ -491,6 +491,12 @@ interface PageWords {
     val contactMeansFriend: String
     val nothingKnown: String
 
+    // Дружба: добавил ли ОН меня к себе (заказчик 2026-09-19).
+    val theyAddedYou: String
+    val theyDidNotAddYou: String
+    val friendshipUnknown: String
+    val subscribeAsks: String
+
     // Беды страницы.
     val cannotCarry: String
     val entryGone: String
@@ -1817,6 +1823,10 @@ object RussianWords : Words {
         override val alreadyInContacts = "Уже в контактах"
         override val contactMeansFriend = "Контакт — это друг: на друзей подписка встаёт сама"
         override val nothingKnown = "Мы о нём ничего не знаем — ни имени, ни ника, ни номера"
+        override val theyAddedYou = "Он добавил вас — его лента «друзьям» вам открыта"
+        override val theyDidNotAddYou = "Он вас не добавил — видно только открытое всем"
+        override val friendshipUnknown = "Дружбу выясняем…"
+        override val subscribeAsks = "Подписка заберёт его историю и попросит добавить вас в контакты"
         override val ownerOrModeratorCloses = "Обсуждение закрывает владелец или модератор"
     }
 

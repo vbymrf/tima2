@@ -103,6 +103,7 @@ import io.tima.core.contacts.platformPhoneBook
 import io.tima.core.ui.Tab
 import io.tima.core.ui.TabButton
 import io.tima.domain.chat.BookEntry
+import io.tima.domain.chat.PageStep
 import io.tima.domain.chat.AddContact
 import io.tima.domain.chat.SyncBook
 import io.tima.feature.chat.BookStore
@@ -961,6 +962,53 @@ private fun App(
         }
     }
     val sectionOfChat: (ChatSummary) -> String = { chat -> entryOfChat(chat)?.sectionId ?: "" }
+
+    // ── СТРОКА ПЕРЕПИСКИ ЗАВОДИТСЯ ПРИ ВХОДЕ, А НЕ ПРИ ПЕРВОМ СООБЩЕНИИ ───────
+    //
+    // Беда 2026-09-19, найдена заказчиком на realme и Samsung: вход в переписку из
+    // «Контактов» строку `chats` НЕ заводил — он только считал `chat_id` из пары и
+    // переходил. Список переписок выводится из сообщений и потому такую переписку
+    // показывал; собеседника у неё при этом не было, и следствий выходило три сразу:
+    //
+    //   1. в списке она звалась «Без имени» — имени неоткуда взять;
+    //   2. личная страница из её шапки не открывалась — некого открывать;
+    //   3. **сообщения молча не уходили**: `Sender.prepare` отказывается, не зная, кому
+    //      адресовать, и человек видел «ждёт» без объяснения.
+    //
+    // Redmi работал потому, что там переписку завели «Новой перепиской» по номеру — а
+    // там строка пишется (`StartPersonalChat`). То есть беда зависела от того, каким
+    // входом человек воспользовался, и потому выглядела как «работает не на всех».
+    val chatBook = remember(environment) { SqlChatBook(environment.db, environment.cipher) }
+    fun openPersonalChat(peerId: String, name: String?, phone: String?): String {
+        val chatId = PersonalChatIdsOverKodium.personalChatId(session.userId, peerId)
+        if (!environment.chatFacts.knows(chatId)) {
+            chatBook.remember(
+                chatId = chatId,
+                kind = ChatKind.Personal,
+                // Имя — то, что знаем сейчас; показывается оно всё равно по «Виду» (Д14),
+                // а эта строка нужна отправке и странице, а не экрану.
+                title = name?.takeIf { it.isNotBlank() } ?: phone,
+                peerId = peerId,
+            )
+            Journal.note(LogCode.CHAT_PEER, "переписке дописан собеседник", "откуда" to "контакты")
+        }
+        return chatId
+    }
+
+    // Починка уже заведённых переписок без собеседника: у кого в книге есть
+    // идентификатор, тому считается тот же `chat_id`, и если строки о переписке нет —
+    // она дописывается. Разовая: после неё `knows` уже правда.
+    LaunchedEffect(listState.chats, bookStateForChats.all) {
+        val broken = listState.personal.filter { it.peerId == null }.map { it.chatId }.toSet()
+        if (broken.isEmpty()) return@LaunchedEffect
+        for (entry in bookStateForChats.all) {
+            val id = entry.userId ?: continue
+            val chatId = PersonalChatIdsOverKodium.personalChatId(session.userId, id)
+            if (chatId !in broken) continue
+            chatBook.remember(chatId, ChatKind.Personal, entry.name ?: entry.phone, id)
+            Journal.note(LogCode.CHAT_PEER, "переписке дописан собеседник", "откуда" to "починка")
+        }
+    }
     val personOfChat: (ChatSummary) -> ChatPerson? = { chat ->
         chat.peerId?.takeIf { chat.kind == ChatKind.Personal }?.let { id ->
             people.want(listOf(id))
@@ -1329,8 +1377,7 @@ private fun App(
                     onOpenPerson = { person ->
                         val id = person.userId
                         if (id != null) {
-                            val chatId = PersonalChatIdsOverKodium.personalChatId(session.userId, id)
-                            where = Where.Chat(chatId, person.name)
+                            where = Where.Chat(openPersonalChat(id, person.name, person.phone), person.name)
                         }
                     },
                     onNew = { where = Where.New },
@@ -1812,6 +1859,13 @@ private fun App(
                         people.want(listOf(current.userId))
                         people.wantFace(current.userId)
                     }
+                    // Дружит ли ОН со мной. Спрашивается чтением его ленты: сервер кладёт
+                    // ответ полем `friend` туда же (Д1б). Отдельной ручки «дружим ли» нет,
+                    // и заводить её ради заглушки рано — сначала решение по §1 плана.
+                    var friend by remember(current.userId) { mutableStateOf<Boolean?>(null) }
+                    LaunchedEffect(current.userId) {
+                        friend = (network.pages.page(current.userId) as? PageStep.Page)?.friend
+                    }
                     val entry = bookStateForChats.all.firstOrNull {
                         it.userId == current.userId ||
                             (peopleCards[current.userId]?.phone != null &&
@@ -1832,6 +1886,7 @@ private fun App(
                             }
                         },
                         look = bookStateForChats.view.look(),
+                        friend = friend,
                         onBack = { where = Where.Nothing },
                     )
                 }

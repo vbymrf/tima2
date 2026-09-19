@@ -78,6 +78,11 @@ fun GuestPageScreen(
     onAddToContacts: (() -> Unit)? = null,
     /** Как называть человека в шапке — тот же «Вид», что в списках окна. */
     look: PersonLook = PersonLook.DEFAULT,
+    /**
+     * Добавил ли **он** меня к себе: от этого зависит, что из его ленты мне видно.
+     * `null` — ещё не спросили или сервер не сказал; «не знаем» и «не дружит» — разное.
+     */
+    friend: Boolean? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.page
@@ -139,10 +144,22 @@ fun GuestPageScreen(
                     onClick = {},
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // Что подписка сделает, когда заработает, — решение заказчика 2026-09-19:
+                // заберёт историю человека и попросит его добавить вас в контакты.
+                Caption(words.subscribeAsks, fontSize = TimaType.sz6, color = colors.text2)
+                Caption(words.subscribeNotYet, fontSize = TimaType.sz6, color = colors.text3)
+
+                // В друзьях мы или нет — заказчик просил показывать это уже в заглушке.
+                // Вопрос про ЕГО список, а не про мой: дружба односторонняя (Д1б).
                 Caption(
-                    words.subscribeNotYet,
+                    when (friend) {
+                        true -> words.theyAddedYou
+                        false -> words.theyDidNotAddYou
+                        null -> words.friendshipUnknown
+                    },
                     fontSize = TimaType.sz6,
-                    color = colors.text3,
+                    weight = FontWeight.SemiBold,
+                    color = if (friend == true) colors.text2 else colors.text3,
                 )
 
                 if (inContacts) {

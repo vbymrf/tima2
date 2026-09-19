@@ -655,6 +655,10 @@ object SpanishWords : Words {
         override val alreadyInContacts = "Ya está en contactos"
         override val contactMeansFriend = "Un contacto es un amigo: a los amigos se les suscribe solo"
         override val nothingKnown = "No sabemos nada de esta persona: ni nombre, ni apodo, ni número"
+        override val theyAddedYou = "Le ha añadido: su muro «para amigos» está abierto para usted"
+        override val theyDidNotAddYou = "No le ha añadido: solo se ve lo público"
+        override val friendshipUnknown = "Comprobando…"
+        override val subscribeAsks = "La suscripción traerá su historial y pedirá que le añada a contactos"
         override val ownerOrModeratorCloses = "Un debate lo cierra el dueño o un moderador"
     }
 

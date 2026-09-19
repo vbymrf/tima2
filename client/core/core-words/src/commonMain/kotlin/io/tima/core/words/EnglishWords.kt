@@ -655,6 +655,10 @@ object EnglishWords : Words {
         override val alreadyInContacts = "Already in contacts"
         override val contactMeansFriend = "A contact is a friend: friends are subscribed automatically"
         override val nothingKnown = "We know nothing about them — no name, no nickname, no number"
+        override val theyAddedYou = "They added you — their “friends” feed is open to you"
+        override val theyDidNotAddYou = "They have not added you — only what is public is visible"
+        override val friendshipUnknown = "Checking…"
+        override val subscribeAsks = "Subscribing fetches their history and asks them to add you to contacts"
         override val ownerOrModeratorCloses = "A discussion is closed by the owner or a moderator"
     }
 
