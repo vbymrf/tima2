@@ -662,6 +662,44 @@ object EnglishWords : Words {
         override val ownerOrModeratorCloses = "A discussion is closed by the owner or a moderator"
     }
 
+    override val call = object : CallWords {
+        override val incoming = "Incoming call"
+        override val outgoing = "Calling"
+        override val calling = "Ringing…"
+        override val accept = "Accept"
+        override val decline = "Decline"
+        override val cancel = "Cancel"
+        override val hangUp = "Hang up"
+        override val microphoneOn = "Microphone on"
+        override val microphoneOff = "Microphone off"
+        override val cameraOn = "Camera on"
+        override val cameraOff = "Camera off"
+        override val ended = "Call ended"
+        override val callAgain = "Call again"
+        override val close = "Close"
+        override val connecting = "Connecting…"
+        override val reconnecting = "Connection lost, coming back…"
+        override val videoPaused = "Video is off: not enough bandwidth. Audio continues"
+        override fun quality(level: String) = when (level) {
+            "Excellent" -> "excellent connection"
+            "Good" -> "good connection"
+            "Poor" -> "poor connection"
+            "Lost" -> "no connection"
+            else -> "checking the connection"
+        }
+        override fun duration(seconds: Int): String {
+            val s = seconds.coerceAtLeast(0)
+            val m = s / 60
+            val rest = s % 60
+            return if (m < 60) {
+                m.toString() + ":" + rest.toString().padStart(2, '0')
+            } else {
+                (m / 60).toString() + ":" + (m % 60).toString().padStart(2, '0') +
+                    ":" + rest.toString().padStart(2, '0')
+            }
+        }
+    }
+
     override val chat = object : ChatWords {
         override val yourNickname = "Your nickname"
 

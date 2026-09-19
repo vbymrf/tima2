@@ -48,6 +48,7 @@ interface Words {
     val wizard: WizardWords
     val auth: AuthWords
     val chat: ChatWords
+    val call: CallWords
     val book: BookWords
     val page: PageWords
     val social: SocialWords
@@ -513,6 +514,40 @@ interface PageWords {
  * каждого языка своё: у русского три формы, у английского две, у испанского две с другой
  * границей. Экран знает число, словарь — слово.
  */
+/**
+ * Звонок — окно 0 (макет `doc/doc_UI/21-call.md`).
+ *
+ * Слов немного и почти все — подписи кнопок. Отдельный словарь, а не раздел переписки:
+ * звонок живёт своим окном, и его надписи не должны разъезжаться с чужими при переводе.
+ */
+interface CallWords {
+    val incoming: String
+    val outgoing: String
+    val calling: String
+    val accept: String
+    val decline: String
+    val cancel: String
+    val hangUp: String
+    val microphoneOn: String
+    val microphoneOff: String
+    val cameraOn: String
+    val cameraOff: String
+    val ended: String
+    val callAgain: String
+    val close: String
+    val connecting: String
+    val reconnecting: String
+
+    /** Видео остановила нехватка полосы. Человеку это надо сказать: иначе — поломка. */
+    val videoPaused: String
+
+    /** Оценка связи от SFU. Своей не считаем. */
+    fun quality(level: String): String
+
+    /** Сколько идёт разговор: `4:32`. Часы появляются только когда они есть. */
+    fun duration(seconds: Int): String
+}
+
 interface ChatWords {
     // Шапка и лента.
     val access: String
@@ -1828,6 +1863,44 @@ object RussianWords : Words {
         override val friendshipUnknown = "Дружбу выясняем…"
         override val subscribeAsks = "Подписка заберёт его историю и попросит добавить вас в контакты"
         override val ownerOrModeratorCloses = "Обсуждение закрывает владелец или модератор"
+    }
+
+    override val call = object : CallWords {
+        override val incoming = "Входящий вызов"
+        override val outgoing = "Вызов"
+        override val calling = "Звоним…"
+        override val accept = "Принять"
+        override val decline = "Отклонить"
+        override val cancel = "Отменить"
+        override val hangUp = "Завершить"
+        override val microphoneOn = "Микрофон включён"
+        override val microphoneOff = "Микрофон выключен"
+        override val cameraOn = "Камера включена"
+        override val cameraOff = "Камера выключена"
+        override val ended = "Звонок завершён"
+        override val callAgain = "Перезвонить"
+        override val close = "Закрыть"
+        override val connecting = "Соединяем…"
+        override val reconnecting = "Связь пропала, возвращаемся…"
+        override val videoPaused = "Видео выключено: не хватает связи. Звук идёт"
+        override fun quality(level: String) = when (level) {
+            "Excellent" -> "связь отличная"
+            "Good" -> "связь хорошая"
+            "Poor" -> "связь плохая"
+            "Lost" -> "связи нет"
+            else -> "связь выясняем"
+        }
+        override fun duration(seconds: Int): String {
+            val s = seconds.coerceAtLeast(0)
+            val m = s / 60
+            val rest = s % 60
+            return if (m < 60) {
+                m.toString() + ":" + rest.toString().padStart(2, '0')
+            } else {
+                (m / 60).toString() + ":" + (m % 60).toString().padStart(2, '0') +
+                    ":" + rest.toString().padStart(2, '0')
+            }
+        }
     }
 
     override val chat = object : ChatWords {

@@ -662,6 +662,44 @@ object SpanishWords : Words {
         override val ownerOrModeratorCloses = "Un debate lo cierra el dueño o un moderador"
     }
 
+    override val call = object : CallWords {
+        override val incoming = "Llamada entrante"
+        override val outgoing = "Llamando"
+        override val calling = "Sonando…"
+        override val accept = "Aceptar"
+        override val decline = "Rechazar"
+        override val cancel = "Cancelar"
+        override val hangUp = "Colgar"
+        override val microphoneOn = "Micrófono activado"
+        override val microphoneOff = "Micrófono apagado"
+        override val cameraOn = "Cámara activada"
+        override val cameraOff = "Cámara apagada"
+        override val ended = "Llamada finalizada"
+        override val callAgain = "Volver a llamar"
+        override val close = "Cerrar"
+        override val connecting = "Conectando…"
+        override val reconnecting = "Se perdió la conexión, volviendo…"
+        override val videoPaused = "Vídeo desactivado: no hay banda suficiente. El audio sigue"
+        override fun quality(level: String) = when (level) {
+            "Excellent" -> "conexión excelente"
+            "Good" -> "conexión buena"
+            "Poor" -> "conexión mala"
+            "Lost" -> "sin conexión"
+            else -> "comprobando la conexión"
+        }
+        override fun duration(seconds: Int): String {
+            val s = seconds.coerceAtLeast(0)
+            val m = s / 60
+            val rest = s % 60
+            return if (m < 60) {
+                m.toString() + ":" + rest.toString().padStart(2, '0')
+            } else {
+                (m / 60).toString() + ":" + (m % 60).toString().padStart(2, '0') +
+                    ":" + rest.toString().padStart(2, '0')
+            }
+        }
+    }
+
     override val chat = object : ChatWords {
         override val yourNickname = "Su apodo"
 
