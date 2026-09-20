@@ -9,6 +9,7 @@ import io.livekit.android.room.track.LocalVideoTrackOptions
 import io.livekit.android.room.track.RemoteTrackPublication
 import io.livekit.android.room.track.VideoTrack
 import io.livekit.android.room.track.VideoCaptureParameter
+import io.livekit.android.room.track.VideoEncoding
 import io.livekit.android.room.track.VideoCodec as LkVideoCodec
 import io.livekit.android.util.flow
 import livekit.org.webrtc.RtpParameters.DegradationPreference
@@ -73,6 +74,9 @@ class LiveKitCallEngine(
             dynacast = publish?.video?.dynacast ?: true,
             videoTrackPublishDefaults = publish?.video?.let { video ->
                 VideoTrackPublishDefaults(
+                    // Битрейт задаём сами: без него он принадлежал умолчанию SDK, и цена
+                    // за `MaintainResolution` ложилась на чёткость молча.
+                    videoEncoding = VideoEncoding(maxBitrate = video.bitrate, maxFps = video.fps),
                     videoCodec = video.codec.toLiveKit().codecName,
                     // ЯВНО, а не умолчанием SDK: у SVC-кодека он молча ставит запасным
                     // VP8 с simulcast, и прогон «VP9 SVC» тогда мерит не VP9
@@ -267,36 +271,60 @@ class LiveKitCallEngine(
      * `qualityLimitationReason` — слово самого WebRTC о том, кто ужал картинку:
      * `bandwidth` (полоса), `cpu` (телефон не тянет), `none`. Без него «стало 320×240»
      * не отличить от «мы сами так попросили».
+     *
+     * ── И КТО ИМЕННО КОДИРУЕТ ───────────────────────────────────────────────
+     *
+     * `encoderImplementation` — имя работающего кодера. Оно решает спор, который иначе
+     * решался бы рассуждением: аппаратный `OMX.sprd.h264.encoder` у realme или
+     * программный запасной.
+     *
+     * Вопрос не праздный. В upstream WebRTC аппаратный H.264 разрешён только для
+     * Qualcomm и Exynos; Unisoc в список не входит, и если он всё-таки работает —
+     * работает без чьей-либо проверки качества. На нём и строится объяснение стартовых
+     * полос. Пока имени нет в журнале, объяснение остаётся догадкой.
+     *
+     * Битрейт считается разницей `bytesSent` между опросами: мгновенного числа в
+     * статистике нет, а среднее за звонок ничего не говорит о провале на старте.
      */
     private fun watchOutgoing(room: Room) {
         scope.launch {
             var said = ""
+            var sent = -1L
             while (isActive) {
                 delay(STATS_EVERY_MS)
                 val track = room.localParticipant.videoTrackPublications
                     .firstNotNullOfOrNull { it.second as? VideoTrack } ?: continue
-                val now = runCatching {
+                val outgoing = runCatching {
                     // Отчёт приходит пустым, пока дорожка не поднялась, — это не беда, а
                     // «ещё рано»: просто ждём следующего опроса.
-                    val outgoing = track.getRTCStats()?.statsMap?.values
+                    track.getRTCStats()?.statsMap?.values
                         ?.firstOrNull { it.type == "outbound-rtp" && it.members["kind"] == "video" }
-                    val w = outgoing?.members?.get("frameWidth")
-                    val h = outgoing?.members?.get("frameHeight")
-                    if (w == null || h == null) {
-                        null
-                    } else {
-                        val why = outgoing.members["qualityLimitationReason"]?.toString() ?: "—"
-                        ("" + w + "×" + h) to why
-                    }
                 }.getOrNull() ?: continue
-                val line = now.first + " (" + now.second + ")"
+
+                val w = outgoing.members["frameWidth"] ?: continue
+                val h = outgoing.members["frameHeight"] ?: continue
+                val why = outgoing.members["qualityLimitationReason"]?.toString() ?: "—"
+                val coder = outgoing.members["encoderImplementation"]?.toString() ?: "—"
+
+                val bytes = (outgoing.members["bytesSent"] as? Number)?.toLong() ?: 0L
+                // Первый опрос сравнивать не с чем: считать от нуля значило бы объявить
+                // весь накопленный трафик мгновенным битрейтом.
+                val kbit = if (sent < 0) -1L else (bytes - sent) * 8 / (STATS_EVERY_MS / 1000) / 1000
+                sent = bytes
+
+                // Битрейт округляется до сотни: он дышит постоянно, и без округления
+                // строка менялась бы каждые три секунды, ничего не объясняя.
+                val size = "" + w + "×" + h
+                val line = size + "|" + why + "|" + coder + "|" + (kbit / 100)
                 if (line == said) continue
                 said = line
                 Journal.note(
                     LogCode.CALL,
-                    "размер уходящего кадра",
-                    "стал" to now.first,
-                    "ужато" to now.second,
+                    "уходящее видео",
+                    "кадр" to size,
+                    "ужато" to why,
+                    "кодер" to coder,
+                    "кбит/с" to if (kbit < 0) "считаем" else kbit.toString(),
                 )
             }
         }
