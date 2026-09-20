@@ -21,6 +21,7 @@ import io.tima.core.words.CurrentWords
 import io.tima.core.words.Words
 import io.tima.core.diag.LogCode
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -95,6 +96,9 @@ class CallHost(
     /** Начат ли звонок как видео: принявший тогда показывает себя сразу (ЗВ9). */
     private var video: Boolean = false
 
+    /** Сторож набора: гасит звонок, на который никто не ответил. */
+    private var watchdog: Job? = null
+
     /** Умеет ли эта платформа звонить вообще. `false` — кнопок «позвонить» нет. */
     val possible: Boolean get() = engine != null
 
@@ -132,6 +136,44 @@ class CallHost(
         }
     }
 
+    /**
+     * Ждать ли ответа дальше.
+     *
+     * ── ПОЧЕМУ СРОК ВООБЩЕ НУЖЕН ────────────────────────────────────────────
+     *
+     * До 2026-09-20 звонок, на который не ответили, **висел вечно**: сервер таймаута не
+     * ставит, собеседник мог просто не взять телефон в руки — и «Звоним…» шло до тех пор,
+     * пока звонящий не отменял сам. Для него это выглядело как поломка: телефон делает
+     * вид, что дозванивается, а дозвониться уже не к кому.
+     *
+     * ── ПОЧЕМУ НА КЛИЕНТЕ, А НЕ НА СЕРВЕРЕ ──────────────────────────────────
+     *
+     * Правильное место — сервер: он переживёт убитое приложение и скажет обоим разом.
+     * Но там нужен отложенный обход звонков, которого нет, а API менять сейчас нельзя
+     * (`Plan.md §0.0`, решение 5: формат и ручки стоят, пока v2 не заработает). Здесь же
+     * это один `delay` и уже существующий `/end`, который сервер понимает как `missed` и
+     * рассылает второму.
+     *
+     * **Сторож стоит у обеих сторон.** У звонящего он кончает набор, у принимающего —
+     * снимает вызов, который некому больше показывать. Второму хватило бы и слова
+     * сервера, но слово это приходит от первого, и если первый умер, ждать его нечего.
+     */
+    private fun watch() {
+        watchdog?.cancel()
+        watchdog = scope.launch {
+            delay(RINGING_LIMIT_MS)
+            if (!active || state.stage == CallStage.Connected || state.stage == CallStage.Ended) return@launch
+            Journal.note(
+                LogCode.CALL,
+                "никто не ответил — кладу трубку",
+                "звонок" to callId.take(8),
+                "ждали" to RINGING_LIMIT_MS / 1000,
+            )
+            note(if (incoming) words().call.missedCall else words().call.noAnswer)
+            hangUp()
+        }
+    }
+
     /** Позвонить. Дверь открывает сервер; движок в неё входит. */
     fun start(peerId: String, peerName: String, video: Boolean) {
         val live = engine ?: return
@@ -156,6 +198,7 @@ class CallHost(
         seconds = 0
         events.clear()
         state = CallState(stage = CallStage.Connecting)
+        watch()
         // Разрешение спрашивается ДО похода на сервер: отказавший человек не должен
         // оставить за собой начатый звонок, на который собеседнику покажут вызов.
         withAccess(video) {
@@ -196,6 +239,7 @@ class CallHost(
         seconds = 0
         events.clear()
         state = CallState(stage = CallStage.Connecting, callId = callId)
+        watch()
         Journal.note(LogCode.CALL, "входящий звонок", "от" to fromId.take(8), "видео" to video)
     }
 
@@ -229,6 +273,7 @@ class CallHost(
         // Сервер такое переживает, а вот отчёт становится вдвое длиннее и вдвое менее
         // понятным — по нему кажется, что звонков было два.
         if (!active || state.stage == CallStage.Ended) return
+        watchdog?.cancel()
         scope.launch {
             engine?.disconnect()
             if (id.isNotEmpty()) calls.end(id)
@@ -253,7 +298,11 @@ class CallHost(
     }
 
     /** Закрыть окно 0: звонка больше нет. */
+    /** Тот ли это человек, с кем мы говорим. Нужен, чтобы понять, чей уход нас касается. */
+    fun peerIs(userId: String): Boolean = userId.isNotEmpty() && userId == peerId
+
     fun close() {
+        watchdog?.cancel()
         active = false
         callId = ""
         peerId = ""
@@ -329,6 +378,8 @@ class CallHost(
         // строками; второй раз такого везения может не случиться.
         if (now.stage != was.stage) {
             Journal.note(LogCode.CALL, "стадия звонка", "стала" to now.stage.name, "была" to was.stage.name)
+            // Ответили или кончилось — ждать больше нечего.
+            if (now.stage == CallStage.Connected || now.stage == CallStage.Ended) watchdog?.cancel()
         }
         if (now.microphoneOn != was.microphoneOn) {
             Journal.note(LogCode.CALL, "микрофон", "включён" to now.microphoneOn)
@@ -438,6 +489,20 @@ class CallHost(
 
     private fun stopTicking() {
         ticking = false
+    }
+
+    private companion object {
+        /**
+         * Сколько ждём ответа.
+         *
+         * Сорок пять секунд — столько же, сколько звонит обычный телефон, и на это у
+         * человека есть привычка. Меньше — не успеть дойти до телефона; больше — звонящий
+         * перестаёт верить, что дозвон вообще кончится.
+         *
+         * Число одно и на обе стороны: разойдись они, одна сторона гасила бы звонок,
+         * который у другой ещё идёт.
+         */
+        const val RINGING_LIMIT_MS = 45_000L
     }
 }
 

@@ -60,6 +60,8 @@ class Receiver(
     private val onCall: (String, String, String) -> Unit = { _, _, _ -> },
     /** Со звонком что-то стало: `(callId, state)` — словом сервера. */
     private val onCallState: (String, String) -> Unit = { _, _ -> },
+    /** Кто-то вышел из комнаты звонка: идентификатор звонка и ушедшего. */
+    private val onCallLeft: (String, String) -> Unit = { _, _ -> },
     /**
      * Штамп отправителя из обёртки события (сервер 0052/0053): кто, счётчик его профиля,
      * группа и цвет. Наружу, а не в базу: это подсказка карточкам людей, а не сообщение.
@@ -108,6 +110,8 @@ class Receiver(
                 onCall(decision.callId, decision.from, decision.kind)
             is EventStreamProtocol.Decision.CallState ->
                 onCallState(decision.callId, decision.state)
+            is EventStreamProtocol.Decision.CallLeft ->
+                onCallLeft(decision.callId, decision.userId)
             else -> Unit
         }
     }

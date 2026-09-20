@@ -60,6 +60,29 @@ class EventStreamProtocolCallTest {
     }
 
     @Test
+    fun уход_участника_разбирается() {
+        // До 2026-09-20 кадр не разбирался вовсе и уходил в «незнакомый». Так кончается
+        // звонок, у которого вторую сторону убили: нажимать «Завершить» там некому, и
+        // `call.state ended` не приходит — сервер шлёт именно этот кадр.
+        val decision = protocol.decide(
+            """{"event":"call.participant_left","event_id":21,"call_id":"c-1","user_id":"u-7"}""",
+        )
+        val left = assertIs<EventStreamProtocol.Decision.CallLeft>(decision)
+        assertEquals("c-1", left.callId)
+        assertEquals("u-7", left.userId)
+        assertEquals(21L, left.eventId)
+    }
+
+    @Test
+    fun уход_без_участника_пропускается() {
+        // Без идентификатора неизвестно, чей уход: в группе он не кончает разговор, и
+        // принять его за конец значило бы обрывать звонок на чужом выходе.
+        val decision = protocol.decide("""{"event":"call.participant_left","event_id":22,"call_id":"c-1"}""")
+        val skip = assertIs<EventStreamProtocol.Decision.Skip>(decision)
+        assertEquals(22L, skip.eventId, "курсор обязан двинуться даже на пропущенном кадре")
+    }
+
+    @Test
     fun состояние_без_поля_state_пропускается() {
         val decision = protocol.decide("""{"event":"call.state","event_id":15,"call_id":"c-1"}""")
         assertIs<EventStreamProtocol.Decision.Skip>(decision)

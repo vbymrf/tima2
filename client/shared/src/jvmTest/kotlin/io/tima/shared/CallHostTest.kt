@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -98,6 +99,45 @@ class CallHostTest {
      * завершиться: `runTest` ждёт всех своих детей. Для такого у него и заведён
      * `backgroundScope` — он гасится, когда тест закончился.
      */
+    @Test
+    fun звонок_без_ответа_кончается_сам() = runTest {
+        // Сервер таймаута не ставит, и до 2026-09-20 «Звоним…» шло вечно: собеседник мог
+        // просто не взять телефон в руки. Для звонящего это выглядело поломкой — телефон
+        // делает вид, что дозванивается, а дозваниваться уже не к кому.
+        val calls = FakeCalls()
+        val host = host(calls)
+
+        host.ring(callId = "первый", fromId = "u-1", fromName = "Аня", video = false)
+        assertEquals(CallStage.Connecting, host.state.stage)
+
+        advanceTimeBy(46_000)
+
+        assertEquals(CallStage.Ended, host.state.stage, "звонок без ответа не кончился сам")
+        assertEquals(listOf("первый"), calls.ended, "серверу не сказали, что не дозвонились")
+    }
+
+    @Test
+    fun отвеченный_звонок_сторож_не_трогает() = runTest {
+        // Обратная сторона: сторож обязан сниматься, как только ответили. Иначе разговор
+        // обрывался бы на сорок пятой секунде — ровно тогда, когда он уже идёт.
+        val engine = FakeEngine()
+        val calls = FakeCalls()
+        val host = CallHost(
+            calls,
+            engine,
+            CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
+            words = { io.tima.core.words.RussianWords },
+        )
+
+        host.ring(callId = "первый", fromId = "u-1", fromName = "Аня", video = false)
+        engine.say(CallState(stage = CallStage.Connected))
+
+        advanceTimeBy(90_000)
+
+        assertEquals(CallStage.Connected, host.state.stage, "сторож оборвал идущий разговор")
+        assertTrue(calls.ended.isEmpty(), "сторож положил трубку в разговоре: ${calls.ended}")
+    }
+
     private fun TestScope.host(calls: Calls = FakeCalls()) = CallHost(
         calls,
         FakeEngine(),
@@ -138,5 +178,10 @@ class CallHostTest {
         override suspend fun disconnect() = Unit
         override suspend fun setMicrophone(on: Boolean) = Unit
         override suspend fun setCamera(on: Boolean) = Unit
+
+        /** Сказать за движок: «комната ответила вот этим». */
+        fun say(state: CallState) {
+            _state.value = state
+        }
     }
 }

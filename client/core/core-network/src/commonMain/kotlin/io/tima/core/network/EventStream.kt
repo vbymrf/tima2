@@ -146,11 +146,13 @@ class EventStream(
                         // второй раз о том, чего уже нет.
                         is EventStreamProtocol.Decision.CallIncoming,
                         is EventStreamProtocol.Decision.CallState,
+                        is EventStreamProtocol.Decision.CallLeft,
                         -> {
                             onCall(decision)
                             val id = when (decision) {
                                 is EventStreamProtocol.Decision.CallIncoming -> decision.eventId
                                 is EventStreamProtocol.Decision.CallState -> decision.eventId
+                                is EventStreamProtocol.Decision.CallLeft -> decision.eventId
                                 else -> null
                             }
                             id?.let {

@@ -899,6 +899,15 @@ private fun App(
         val parts = callPing.split("|")
         when {
             parts.size == 3 && parts[0] == "конец" -> if (callHost.active) callHost.hangUp()
+            // Собеседник вышел из комнаты — по вебхуку SFU, а не нажатием. Так кончается
+            // звонок, у которого вторую сторону убили или она потеряла сеть насовсем:
+            // нажимать «Завершить» там было некому.
+            //
+            // **Проверяем, чей уход.** Сегодня звонок один на один, и уход собеседника
+            // его кончает; в группе уход одного из пятерых разговора не кончит, и менять
+            // придётся здесь.
+            parts.size == 3 && parts[0] == "ушёл" ->
+                if (callHost.active && callHost.peerIs(parts[2])) callHost.hangUp()
             parts.size == 3 && parts[0].isNotEmpty() -> {
                 val (callId, fromId, kind) = parts
                 people.want(listOf(fromId))

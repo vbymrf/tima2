@@ -157,6 +157,20 @@ class EventStreamProtocol {
          */
         data class CallState(val callId: String, val state: String, val eventId: Long?) : Decision
 
+        /**
+         * Участник вышел из комнаты — по вебхуку LiveKit.
+         *
+         * **Второе слово о конце, и оно приходит раньше первого.** `call.state ended`
+         * сервер шлёт, когда звонок завершил человек нажатием; `call.participant_left` —
+         * когда сторона просто исчезла: приложение убили, телефон уснул, сеть пропала
+         * насовсем. Нажатия в этих случаях не было и не будет.
+         *
+         * До 2026-09-20 кадр не разбирался вовсе и уходил в «незнакомый». Это было второе
+         * место, где сервер говорит, а клиент не слушает; первое такое стоило дня разбора
+         * (`missed` в `Assembly`).
+         */
+        data class CallLeft(val callId: String, val userId: String, val eventId: Long?) : Decision
+
         /** Кадр не наш или испорчен — пропускаем, но курсор двигаем (правило 3). */
         data class Skip(val reason: String, val eventId: Long?) : Decision
     }
@@ -328,6 +342,16 @@ class EventStreamProtocol {
                         from = json.string("from") ?: "",
                         eventId = eventId,
                     )
+                }
+            }
+
+            "call.participant_left" -> {
+                val callId = json.string("call_id")
+                val userId = json.string("user_id")
+                if (callId == null || userId == null) {
+                    Decision.Skip("call.participant_left без call_id или user_id", eventId)
+                } else {
+                    Decision.CallLeft(callId = callId, userId = userId, eventId = eventId)
                 }
             }
 
