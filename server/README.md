@@ -43,7 +43,7 @@ go run ./cmd/tima                                       # serve: миграци�
 
 Client → server: `sync.pull {cursor?, limit?}` — события с `event_id > cursor` (без cursor — серверная копия), в конце `sync.done {count, next_cursor, more}`; `ack {event_id}` — сдвиг серверного cursor (только вперёд). События идемпотентны — пересечение догона и live безопасно; клиентский cursor первичен, серверный — резерв на потерю локальной БД.
 
-Шина — Redis Pub/Sub (`REDIS_URL`, dev: `redis://:tima-dev-only@localhost:6379`); без него `/ws` отвечает 503. Если cursor старше ретеншена (GC уже удалил события после него) — `sync.gap {next_cursor}`: полный re-bootstrap REST-историей, дальше live. Офлайн-очередь push (Redis Stream → FCM/APNs) — когда появится push-провайдер.
+Шина — Redis Pub/Sub (`REDIS_URL`, dev: `redis://:tima-dev-only@localhost:6379`); без него `/ws` отвечает 503. Если cursor старше ретеншена (GC уже удалил события после него) — `sync.gap {next_cursor}`: полный re-bootstrap REST-историей, дальше live. **Гарантию даёт не шина, а журнал:** соединение помнит, что отдало, и раз в пять секунд досылает из `device_events` то, что Pub/Sub потерял (`ws.go`, `wsCatchupInterval`); клиент отбирает повторы по `event_id`. Офлайн-очередь push (Redis Stream → FCM/APNs) — когда появится push-провайдер.
 
 ## Каналы (вещание)
 
