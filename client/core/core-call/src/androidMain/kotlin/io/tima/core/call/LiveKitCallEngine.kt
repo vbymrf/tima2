@@ -14,9 +14,11 @@ import io.livekit.android.util.flow
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
@@ -142,7 +144,9 @@ class LiveKitCallEngine(
             }
         }
         _state.value = _state.value.copy(remoteVideoTaken = on)
-        if (!on) _remoteVideo.value = null else watchRemoteVideo(live)
+        // Наблюдатель один и уже стоит — второй означал бы вторую подписку на каждую
+        // дорожку и удвоение при каждом нажатии «скрыть · показать».
+        pickRemote(live)
     }
 
     override suspend fun setMicrophone(on: Boolean) {
@@ -259,18 +263,41 @@ class LiveKitCallEngine(
      */
     private fun watchRemoteVideo(room: Room) {
         scope.launch {
-            room::remoteParticipants.flow.collect { participants ->
-                if (!takeRemote) {
-                    _remoteVideo.value = null
-                    return@collect
+            room::remoteParticipants.flow.collectLatest { participants ->
+                // Сперва посмотреть на то, что есть сейчас: участник мог войти уже с
+                // видео, а мог и уйти — тогда картинку надо снять.
+                pickRemote(room)
+                // ── А ДАЛЬШЕ СЛЕДИТЬ ЗА КАЖДЫМ ──────────────────────────────
+                //
+                // **Участник приходит в комнату БЕЗ видео и включает его потом.**
+                // `remoteParticipants` меняется, когда меняется состав, а не когда кто-то
+                // из них опубликовал дорожку. Раньше смотрели только на состав — и
+                // включённая посреди разговора камера не появлялась у собеседника вовсе
+                // (заказчик 2026-09-20).
+                //
+                // `collectLatest` снаружи гасит эти подписки, когда состав сменился, и
+                // заводит новые: следить за ушедшим незачем.
+                coroutineScope {
+                    for (who in participants.values) {
+                        launch { who::videoTrackPublications.flow.collect { pickRemote(room) } }
+                    }
                 }
-                val track = participants.values
-                    .flatMap { it.videoTrackPublications }
-                    .firstNotNullOfOrNull { it.second as? VideoTrack }
-                _remoteVideo.value = track?.let { LiveKitVideoHandle(room, it) }
-                _state.value = _state.value.copy(remoteVideoShown = track != null)
             }
         }
+    }
+
+    /** Какую чужую дорожку показывать. Одна: звонок один на один, в комнате двое. */
+    private fun pickRemote(room: Room) {
+        if (!takeRemote) {
+            _remoteVideo.value = null
+            _state.value = _state.value.copy(remoteVideoShown = false)
+            return
+        }
+        val track = room.remoteParticipants.values
+            .flatMap { it.videoTrackPublications }
+            .firstNotNullOfOrNull { it.second as? VideoTrack }
+        _remoteVideo.value = track?.let { LiveKitVideoHandle(room, it) }
+        _state.value = _state.value.copy(remoteVideoShown = track != null)
     }
 }
 

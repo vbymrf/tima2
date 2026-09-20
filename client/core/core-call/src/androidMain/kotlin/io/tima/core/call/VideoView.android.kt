@@ -21,6 +21,16 @@ class LiveKitVideoHandle internal constructor(
     /** Создать поверхность и начать в неё рисовать. */
     fun open(context: Context): View {
         val view = SurfaceViewRenderer(context)
+        // ── ПОВЕРХНОСТЬ НЕ ДОЛЖНА ЛЕЗТЬ ПОВЕРХ ОКНА ─────────────────────────
+        //
+        // `SurfaceViewRenderer` — это `SurfaceView`, то есть отдельный слой композитора, а
+        // не часть отрисовки Compose. По умолчанию он складывается с окном так, что
+        // накрывает нарисованное поверх него: кнопки и полоса событий уходили под
+        // картинку (заказчик 2026-09-20, «затеняет задний фон с оповещениями и кнопками»).
+        //
+        // `setZOrderMediaOverlay(true)` кладёт слой **выше других поверхностей, но ниже
+        // окна приложения** — ровно то, что нужно: видео под кнопками, кнопки видны.
+        view.setZOrderMediaOverlay(true)
         room.initVideoRenderer(view)
         track.addRenderer(view)
         return view
