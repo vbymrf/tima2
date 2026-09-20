@@ -15,6 +15,8 @@ import io.tima.core.call.Calls
 import io.tima.core.call.PublishPreset
 import io.tima.core.call.VideoHandle
 import io.tima.core.call.askCallAccess
+import io.tima.core.call.callOngoing
+import io.tima.core.call.callOngoingOff
 import io.tima.core.call.openCallSettings
 import io.tima.core.diag.Journal
 import io.tima.core.words.CurrentWords
@@ -208,6 +210,7 @@ class CallHost(
                         callId = step.door.callId
                         Journal.note(LogCode.CALL, "звонок начат", "кому" to peerId.take(8), "видео" to video)
                         live.connect(step.door, preset)
+                        told()
                         // Видеозвонок показывает себя сразу, не дожидаясь нажатия (ЗВ9):
                         // разрешение уже спрошено выше — `withAccess(video)`.
                         if (video) live.setCamera(true)
@@ -253,6 +256,7 @@ class CallHost(
                 when (val step = calls.answer(callId)) {
                     is CallStep.Door -> {
                         live.connect(step.door, preset)
+                        told()
                         // **Принял видеозвонок — показываешь себя.** Так решил заказчик
                         // 2026-09-20: отдельного согласия на камеру не спрашиваем, его
                         // дал сам ответ на видеовызов. Разрешение системы при этом
@@ -274,6 +278,7 @@ class CallHost(
         // понятным — по нему кажется, что звонков было два.
         if (!active || state.stage == CallStage.Ended) return
         watchdog?.cancel()
+        callOngoingOff()
         scope.launch {
             engine?.disconnect()
             if (id.isNotEmpty()) calls.end(id)
@@ -298,11 +303,24 @@ class CallHost(
     }
 
     /** Закрыть окно 0: звонка больше нет. */
+    /**
+     * Сказать системе, что идёт звонок, — служба переднего плана (ЗВ14).
+     *
+     * Зовётся **после входа в комнату**, а не при нажатии: служба нужна ровно тогда,
+     * когда пошло медиа. И только оттуда, где человек только что нажал кнопку — с
+     * Android 12 из фона её не поднять, и законное окно для этого даст лишь
+     * высокоприоритетный push, которого у нас пока нет.
+     */
+    private fun told() {
+        callOngoing(words().call.activeCall, peer.ifBlank { words().chat.nameless })
+    }
+
     /** Тот ли это человек, с кем мы говорим. Нужен, чтобы понять, чей уход нас касается. */
     fun peerIs(userId: String): Boolean = userId.isNotEmpty() && userId == peerId
 
     fun close() {
         watchdog?.cancel()
+        callOngoingOff()
         active = false
         callId = ""
         peerId = ""
@@ -384,6 +402,9 @@ class CallHost(
             Journal.note(LogCode.CALL, "стадия звонка", "стала" to now.stage.name, "была" to was.stage.name)
             // Ответили или кончилось — ждать больше нечего.
             if (now.stage == CallStage.Connected || now.stage == CallStage.Ended) watchdog?.cancel()
+            // Звонка нет — и следа его в шторке быть не должно: висящее уведомление
+            // «идёт звонок» хуже отсутствующего, потому что ему верят.
+            if (now.stage == CallStage.Ended) callOngoingOff()
         }
         if (now.microphoneOn != was.microphoneOn) {
             Journal.note(LogCode.CALL, "микрофон", "включён" to now.microphoneOn)
