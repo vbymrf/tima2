@@ -182,6 +182,26 @@ func answerCall(deps callsDeps) http.HandlerFunc {
 			return
 		}
 		_ = deps.store.SetCallState(r.Context(), callID, "answered")
+		// ── ОСТАЛЬНЫЕ УСТРОЙСТВА ОТВЕТИВШЕГО ───────────────────────────────
+		//
+		// `call.incoming` уходит ВСЕМ устройствам человека, и звонят они все. Пока
+		// устройство одно, это незаметно; со вторым — беда, и тихая: ответил телефон, а
+		// десктоп продолжает звонить, и через сорок пять секунд его сторож кладёт трубку
+		// запросом `/end`. Сервер закрывает звонок — **живой разговор обрывается**, и
+		// выглядит это как беда связи.
+		//
+		// Слово `taken` отдельное, не `ended`: соседу надо **закрыть у себя окно**, а не
+		// закончить звонок. Спутать эти два действия — значит получить то же самое
+		// лекарством.
+		if devices, err := deps.store.ListDevices(r.Context(), id.UserID); err == nil {
+			for _, d := range devices {
+				if d.DeviceID == id.DeviceID {
+					continue // сам ответивший знает и так
+				}
+				deps.notifier.Device(r.Context(), d.DeviceID, "call.state",
+					map[string]any{"call_id": callID, "state": "taken"})
+			}
+		}
 		if devices, err := deps.store.ListDevices(r.Context(), call.InitiatorID); err == nil {
 			for _, d := range devices {
 				deps.notifier.Device(r.Context(), d.DeviceID, "call.state", map[string]any{"call_id": callID, "state": "answered"})

@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -71,12 +72,74 @@ func (c *RoomClient) DeleteRoom(ctx context.Context, room string) error {
 	return c.call(ctx, "DeleteRoom", map[string]any{"room": room})
 }
 
+// RoomExists — жива ли комната в LiveKit.
+//
+// ── ЗАЧЕМ СПРАШИВАТЬ, А НЕ СЧИТАТЬ ПО ТАЙМЕРУ ──────────────────────────────
+//
+// Состояние звонка в базе закрывает тот, кто его закончил: клиент запросом `/end` или
+// вебхук LiveKit. Оба могут не доехать — приложение убили, телефон уснул, вебхук
+// потерялся, — и строка остаётся открытой навсегда. Это не догадка: 2026-09-20 таких
+// строк накопилось восемь, и одна из них на пять часов сделала двоих недоступными.
+//
+// Закрывать их по возрасту можно, но срок придётся брать с большим запасом: разговор
+// вправе длиться часами, и короткий срок оборвал бы живой. Комната же знает правду
+// сразу — её нет, значит и звонку неоткуда идти.
+//
+// **Ошибка здесь обязана быть в сторону «жива».** Не ответил LiveKit, сеть моргнула —
+// возвращаем ошибку, и уборщик строку не трогает. Закрытый по недоразумению живой звонок
+// хуже, чем призрак, проживший лишний час.
+func (c *RoomClient) RoomExists(ctx context.Context, room string) (bool, error) {
+	if c == nil {
+		return false, errNoLiveKit
+	}
+	var answer struct {
+		Rooms []struct {
+			Name string `json:"name"`
+		} `json:"rooms"`
+	}
+	if err := c.callJSON(ctx, "ListRooms", map[string]any{"room": room, "names": []string{room}}, &answer); err != nil {
+		return false, err
+	}
+	return len(answer.Rooms) > 0, nil
+}
+
+var errNoLiveKit = errors.New("LiveKit не настроен")
+
 // RemoveParticipant выкидывает одного участника, не трогая остальных.
 func (c *RoomClient) RemoveParticipant(ctx context.Context, room, identity string) error {
 	if c == nil {
 		return nil
 	}
 	return c.call(ctx, "RemoveParticipant", map[string]any{"room": room, "identity": identity})
+}
+
+// callJSON — то же, что call, но с разбором ответа. Нужен там, где ответ и есть смысл
+// вызова: DeleteRoom довольно знать, что не упало, а ListRooms — нет.
+func (c *RoomClient) callJSON(ctx context.Context, method string, payload map[string]any, into any) error {
+	token, err := c.Issuer.RoomAdminToken(payload["room"].(string), roomAdminTTL, time.Now())
+	if err != nil {
+		return err
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.URL+"/twirp/livekit.RoomService/"+method, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("LiveKit %s: %s", method, resp.Status)
+	}
+	return json.NewDecoder(resp.Body).Decode(into)
 }
 
 // call — twirp-вызов с JSON-телом. Токен админский: roomAdmin на конкретную комнату,

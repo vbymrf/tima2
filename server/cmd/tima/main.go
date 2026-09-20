@@ -118,8 +118,25 @@ func runWorker() {
 		Store:        st,
 		Retention:    envDays("TIMA_RETENTION_DAYS", 90),
 		AppealWindow: envDays("TIMA_APPEAL_WINDOW_DAYS", 30),
+		// Спросить LiveKit, жива ли комната брошенного звонка. Ключей нет — уборщик
+		// такие строки не трогает вовсе: закрывать их по одному возрасту значило бы
+		// однажды оборвать живой разговор.
+		Rooms: livekitRooms(),
 	}
 	w.Run(ctx, interval)
+}
+
+// livekitRooms — клиент управления комнатами для уборщика. `nil`, если LiveKit не
+// настроен: половина ключей — это не настроенный LiveKit, а недонастроенный, и молчать
+// об этом нельзя, иначе брошенные звонки копятся без объяснения.
+func livekitRooms() *calls.RoomClient {
+	key, secret := os.Getenv("LIVEKIT_API_KEY"), os.Getenv("LIVEKIT_API_SECRET")
+	url := os.Getenv("LIVEKIT_URL")
+	if key == "" || secret == "" || url == "" {
+		log.Print("LIVEKIT_* не заданы — брошенные звонки не закрываются: спросить о комнате некого")
+		return nil
+	}
+	return calls.NewRoomClient(url, calls.NewIssuer(key, secret))
 }
 
 // atoiOr — целое из env или def, если не задано/не число.

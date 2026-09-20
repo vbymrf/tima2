@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"tima/server/internal/calls"
 	"time"
 
 	"tima/server/internal/store"
@@ -15,6 +16,10 @@ import (
 
 type Worker struct {
 	Store *store.Store
+	// Rooms — спросить LiveKit, жива ли комната. `nil` — LiveKit не настроен, и
+	// брошенные звонки тогда не закрываются: закрывать их по одному лишь возрасту
+	// значило бы однажды оборвать живой разговор.
+	Rooms *calls.RoomClient
 	// Retention и AppealWindow — ЗАПАС, а не источник истины. С миграции 0030
 	// сроки берутся из retention_policy: смена требования должна быть правкой
 	// строки в базе, а не перевыкаткой. Эти поля работают только когда строки
@@ -58,6 +63,10 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		{"group_wrapped_keys", func() (int64, error) { return w.Store.GCGroupWrappedKeys(ctx, retention) }},
 		{"excluded_group_keys", func() (int64, error) { return w.Store.GCExcludedGroupKeys(ctx, window) }},
 		{"sms_codes", func() (int64, error) { return w.Store.GCExpiredSmsCodes(ctx) }},
+		// Брошенные звонки: строка открыта, а комнаты уже нет. См. closeAbandonedCalls.
+		{"abandoned_calls", func() (int64, error) { return w.closeAbandonedCalls(ctx) }},
+		// И уборка законченных по возрасту: таблицы calls в списке не было вовсе.
+		{"calls", func() (int64, error) { return w.Store.GCCalls(ctx, retention) }},
 		{"device_link_sessions", func() (int64, error) { return w.Store.GCExpiredLinkSessions(ctx) }},
 		// Стирание содержимого сообщений, чьи ключи эпох уже уничтожены анклавом.
 		// Метаданные строки остаются: у них отдельный срок — они не удаляются
@@ -142,4 +151,43 @@ func (w *Worker) archiveInactive(ctx context.Context) (int64, error) {
 		n++
 	}
 	return n, nil
+}
+
+// Сколько звонок должен числиться идущим, прежде чем мы им заинтересуемся.
+//
+// Пять минут: настоящий вызов звонит сорок пять секунд, а настоящий разговор в эти пять
+// минут уже держит живую комнату — и по ней же будет опознан как живой.
+const abandonedAfter = int64(5 * 60)
+
+// closeAbandonedCalls — закрыть звонки, которые числятся идущими, а комнаты у них нет.
+//
+// ── ПОЧЕМУ СПРАШИВАЕМ, А НЕ СЧИТАЕМ ПО ВОЗРАСТУ ────────────────────────────
+//
+// Возраст здесь только отбирает кандидатов. Закрывать по нему — значит назначить
+// разговору предельную длину, а он вправе длиться часами. Комната знает правду: её нет,
+// значит звонку неоткуда идти.
+//
+// **Ошибка обязана быть в сторону «жив».** LiveKit не ответил, сеть моргнула — строку не
+// трогаем. Призрак, проживший лишний час, дешевле оборванного разговора.
+func (w *Worker) closeAbandonedCalls(ctx context.Context) (int64, error) {
+	if w.Rooms == nil {
+		return 0, nil
+	}
+	open, err := w.Store.OpenCalls(ctx, abandonedAfter, 200)
+	if err != nil {
+		return 0, err
+	}
+	var closed int64
+	for _, c := range open {
+		alive, err := w.Rooms.RoomExists(ctx, c.Room)
+		if err != nil || alive {
+			continue
+		}
+		if err := w.Store.SetCallState(ctx, c.CallID, "ended"); err != nil {
+			log.Printf("closeAbandonedCalls %s: %v", c.CallID, err)
+			continue
+		}
+		closed++
+	}
+	return closed, nil
 }

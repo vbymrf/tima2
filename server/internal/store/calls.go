@@ -64,6 +64,54 @@ func (s *Store) HasLiveCall(ctx context.Context, userID string) (bool, error) {
 	return busy, err
 }
 
+// OpenCalls — звонки, которые числятся идущими дольше указанного срока.
+//
+// Их закрывать некому: состояние в базе меняет тот, кто звонок закончил, а он мог
+// исчезнуть — приложение убили, телефон уснул, вебхук LiveKit потерялся. Строка тогда
+// остаётся открытой навсегда, и у неё нет ни конца, ни длительности: это данные, которые
+// лгут. Журнал звонков прочитает такую как «идёт с позавчера».
+//
+// Возраст здесь — только отбор кандидатов. **Решает не он, а живая комната**: уборщик
+// спрашивает LiveKit и закрывает лишь то, чего там уже нет.
+func (s *Store) OpenCalls(ctx context.Context, olderThanSec int64, limit int) ([]Call, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT call_id, room, kind, initiator_id, peer_id, state
+		FROM calls
+		WHERE ended_at IS NULL
+		  AND state IN ('ringing','answered')
+		  AND created_at < now() - make_interval(secs => $1)
+		ORDER BY created_at
+		LIMIT $2`, olderThanSec, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Call
+	for rows.Next() {
+		var c Call
+		if err := rows.Scan(&c.CallID, &c.Room, &c.Kind, &c.InitiatorID, &c.PeerID, &c.State); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// GCCalls — удалить давно законченные звонки.
+//
+// Таблица не чистилась вовсе: в списке уборщика её не было. Строка звонка мелкая, но
+// растёт навсегда, а хранить, чем кто с кем говорил год назад, мы не обещали никому.
+func (s *Store) GCCalls(ctx context.Context, olderThanSec int64) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `
+		DELETE FROM calls
+		WHERE ended_at IS NOT NULL
+		  AND ended_at < now() - make_interval(secs => $1)`, olderThanSec)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
 func (s *Store) GetCall(ctx context.Context, callID string) (Call, error) {
 	var c Call
 	err := s.pool.QueryRow(ctx, `
