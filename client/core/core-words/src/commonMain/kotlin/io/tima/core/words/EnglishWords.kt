@@ -632,6 +632,11 @@ object EnglishWords : Words {
     }
 
     override val page = object : PageWords {
+        override val call = "Call"
+        override val videoCall = "Video call"
+        override val groupCall = "Group call"
+        override val write = "Message"
+        override val groupCallLater = "Group calls are coming later. For now you can call one person at a time"
         override val commentsOn = "Entries can be discussed"
         override val commentsOff = "Discussions are off"
         override val turnCommentsOff = "Turn discussions off"
@@ -687,6 +692,7 @@ object EnglishWords : Words {
         override val videoPaused = "Video is off: not enough bandwidth. Audio continues"
         override val noMicrophone = "No microphone access — a call cannot work without it. Turn the permission on in phone settings"
         override val noCamera = "Camera not allowed — the call continues with audio. Turn the permission on in phone settings"
+        override val activeCall = "Active call"
         override fun quality(level: String) = when (level) {
             "Excellent" -> "excellent connection"
             "Good" -> "good connection"
@@ -708,6 +714,7 @@ object EnglishWords : Words {
     }
 
     override val chat = object : ChatWords {
+        override val videoCall = "Video call"
         override val yourNickname = "Your nickname"
 
         override val onlyNarrow = "The audience can only be narrowed, never widened"

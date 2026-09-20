@@ -468,6 +468,21 @@ interface BookWords {
 
 /** Страница человека: принесённые записи и обсуждения под ними. */
 interface PageWords {
+    /**
+     * Четыре действия на личной странице — ЗВ7.
+     *
+     * [groupCall] ведёт к **объяснению, а не к звонку**: групповых звонков в проекте нет.
+     * Надпись поэтому обычная, а не «скоро»: обещание живёт в тексте, который она
+     * открывает, а не в самой кнопке.
+     */
+    val call: String
+    val videoCall: String
+    val groupCall: String
+    val write: String
+
+    /** Почему групповой звонок не начинается. Открывается нажатием на [groupCall]. */
+    val groupCallLater: String
+
     val commentsOn: String
     val commentsOff: String
     val turnCommentsOff: String
@@ -544,6 +559,14 @@ interface CallWords {
     val videoPaused: String
 
     /**
+     * Надпись на плашке идущего звонка, видной из любого окна.
+     *
+     * Рядом с ней на плашке стоит время разговора, поэтому слово короткое: строка целиком
+     * читается как «Активный звонок — 4:32».
+     */
+    val activeCall: String
+
+    /**
      * Камеру не разрешили — но звонок продолжается голосом.
      *
      * Не «не удалось включить камеру»: человек только что нажал кнопку, и ему нужно
@@ -567,6 +590,9 @@ interface CallWords {
 }
 
 interface ChatWords {
+    /** «Видеозвонок» — пункт меню «•••» личной переписки (ЗВ6). */
+    val videoCall: String
+
     // Шапка и лента.
     val access: String
     val members: String
@@ -1853,6 +1879,11 @@ object RussianWords : Words {
     }
 
     override val page = object : PageWords {
+        override val call = "Позвонить"
+        override val videoCall = "Видеозвонок"
+        override val groupCall = "Групповой звонок"
+        override val write = "Написать"
+        override val groupCallLater = "Групповые звонки будут позже. Сейчас можно позвать только одного собеседника"
         override val commentsOn = "Записи можно обсуждать"
         override val commentsOff = "Обсуждения выключены"
         override val turnCommentsOff = "Выключить обсуждения"
@@ -1908,6 +1939,7 @@ object RussianWords : Words {
         override val videoPaused = "Видео выключено: не хватает связи. Звук идёт"
         override val noMicrophone = "Нет доступа к микрофону — звонок без него не идёт. Разрешение включается в настройках телефона"
         override val noCamera = "Камера не разрешена — разговор идёт голосом. Разрешение включается в настройках телефона"
+        override val activeCall = "Активный звонок"
         override fun quality(level: String) = when (level) {
             "Excellent" -> "связь отличная"
             "Good" -> "связь хорошая"
@@ -1929,6 +1961,7 @@ object RussianWords : Words {
     }
 
     override val chat = object : ChatWords {
+        override val videoCall = "Видеозвонок"
         override val yourNickname = "Ваш ник"
 
         override val onlyNarrow = "Круг можно только сузить — расширить нельзя"

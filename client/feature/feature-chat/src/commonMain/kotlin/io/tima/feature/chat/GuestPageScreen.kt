@@ -1,6 +1,7 @@
 package io.tima.feature.chat
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,6 +10,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -83,6 +88,24 @@ fun GuestPageScreen(
      * `null` — ещё не спросили или сервер не сказал; «не знаем» и «не дружит» — разное.
      */
     friend: Boolean? = null,
+    /**
+     * Четыре действия под аватаром — ЗВ7, решение заказчика 2026-09-20: позвонить,
+     * видеозвонок, групповой звонок, написать.
+     *
+     * Каждое `null` — кнопки нет вовсе, а не погашена: погашенная спрашивает «почему»,
+     * отсутствующая не спрашивает ничего.
+     *
+     * [groupCall] — **заглушка, и обратного вызова у неё нет намеренно.** Групповых
+     * звонков в проекте нет ни в одном плане, звать снаружи нечего, а лямбда, ничего не
+     * делающая у вызывающего, через месяц читается как забытая. Поэтому объяснение
+     * показывает сам экран, а снаружи приходит только «есть ли чем звонить вообще».
+     *
+     * Кнопка при этом **говорит**: немая читается как поломка, и в неё жмут повторно.
+     */
+    onCall: (() -> Unit)? = null,
+    onVideoCall: (() -> Unit)? = null,
+    groupCall: Boolean = false,
+    onWrite: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.page
@@ -108,6 +131,38 @@ fun GuestPageScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Avatar(letters = person.letter(), image = face, size = AvatarSize.Big)
+            }
+
+            // Ряд действий — сразу под аватаром: страница отвечает на вопрос «кто это»,
+            // а действия с человеком — первое, зачем её открывают.
+            var groupCallAsked by remember { mutableStateOf(false) }
+            if (onCall != null || onVideoCall != null || groupCall || onWrite != null) {
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+                    horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                ) {
+                    onCall?.let { Button(label = words.call, onClick = it) }
+                    onVideoCall?.let { Button(label = words.videoCall, kind = ButtonKind.Quiet, onClick = it) }
+                    if (groupCall) {
+                        Button(
+                            label = words.groupCall,
+                            kind = ButtonKind.Quiet,
+                            onClick = { groupCallAsked = !groupCallAsked },
+                        )
+                    }
+                    onWrite?.let { Button(label = words.write, kind = ButtonKind.Quiet, onClick = it) }
+                }
+            }
+
+            // Сказано только тому, кто спросил: строка появляется по нажатию и уходит
+            // по второму. Висеть всегда ей незачем — это ответ, а не свойство человека.
+            if (groupCallAsked) {
+                Box(Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)) {
+                    Tertiary(words.groupCallLater)
+                }
             }
 
             val known = PersonField.entries.mapNotNull { field -> person.field(field)?.let { field to it } }

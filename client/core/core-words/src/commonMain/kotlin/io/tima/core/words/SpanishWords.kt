@@ -632,6 +632,11 @@ object SpanishWords : Words {
     }
 
     override val page = object : PageWords {
+        override val call = "Llamar"
+        override val videoCall = "Videollamada"
+        override val groupCall = "Llamada en grupo"
+        override val write = "Escribir"
+        override val groupCallLater = "Las llamadas en grupo llegarán más adelante. Por ahora se puede llamar a una sola persona"
         override val commentsOn = "Las entradas se pueden debatir"
         override val commentsOff = "Los debates están desactivados"
         override val turnCommentsOff = "Desactivar los debates"
@@ -687,6 +692,7 @@ object SpanishWords : Words {
         override val videoPaused = "Vídeo desactivado: no hay banda suficiente. El audio sigue"
         override val noMicrophone = "Sin acceso al micrófono: la llamada no funciona sin él. Actívalo en los ajustes del teléfono"
         override val noCamera = "Cámara no permitida: la llamada sigue con audio. Actívala en los ajustes del teléfono"
+        override val activeCall = "Llamada activa"
         override fun quality(level: String) = when (level) {
             "Excellent" -> "conexión excelente"
             "Good" -> "conexión buena"
@@ -708,6 +714,7 @@ object SpanishWords : Words {
     }
 
     override val chat = object : ChatWords {
+        override val videoCall = "Videollamada"
         override val yourNickname = "Su apodo"
 
         override val onlyNarrow = "La audiencia solo se puede restringir, nunca ampliar"

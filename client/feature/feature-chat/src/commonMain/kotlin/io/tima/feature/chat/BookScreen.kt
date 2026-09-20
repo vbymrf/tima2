@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Avatar
@@ -74,6 +75,21 @@ fun BookScreen(
     onAdd: (() -> Unit)? = null,
     /** «Пригласить» у того, кого нет в TIMa. */
     onInvite: ((BookEntry) -> Unit)? = null,
+    /**
+     * Позвонить прямо из строки книги (ЗВ13, решение заказчика 2026-09-20).
+     *
+     * **Только у тех, кто в TIMa.** В разделе «Телефон» стоят те, у кого аккаунта нет, и
+     * там уже есть своя «Позвонить» — она открывает системный набиратель (`onInvite` →
+     * подокно «Пригласить»). Два одинаковых значка с разным поведением в одном списке
+     * перепутались бы в первый же день, поэтому наш звонок к ним не приходит.
+     *
+     * **Видеозвонка здесь нет** — он живёт в «трёх точках» переписки и на личной
+     * странице. Решение того же дня: в списках одна кнопка, иначе строка книги
+     * превращается в панель.
+     *
+     * `null` — звонить нечем: нет движка (ПК) или его ещё не собрали.
+     */
+    onCall: ((BookEntry) -> Unit)? = null,
     /**
      * Нажали на аватар — личная страница человека (заказчик 2026-09-19).
      *
@@ -216,10 +232,17 @@ fun BookScreen(
                                     Caption(person.phone, fontSize = TimaType.sz6 * 1.3f, weight = FontWeight.SemiBold, color = colors.text3, lineOne = true)
                                 }
                             },
-                            right = if (group.outsiders && onInvite != null) {
-                                { InviteButton(onClick = { onInvite(person) }) }
-                            } else {
-                                null
+                            right = when {
+                                // Тот, кого нет в TIMa: «Пригласить». Наш звонок ему
+                                // некуда вести — у него нет аккаунта.
+                                group.outsiders && onInvite != null ->
+                                    { { InviteButton(onClick = { onInvite(person) }) } }
+                                // Тот, кто в TIMa: позвонить. Проверяем `userId`, а не
+                                // раздел: разделы человек перекладывает руками, а
+                                // «есть ли аккаунт» — ответ сервера.
+                                onCall != null && person.userId != null ->
+                                    { { CallButton(onClick = { onCall(person) }) } }
+                                else -> null
                             },
                         )
                     }
@@ -295,5 +318,26 @@ fun SectionHeader(tab: SectionTab, count: Int, fresh: Int, open: Boolean, onClic
 private fun InviteButton(onClick: () -> Unit) {
     ControlRow { IconButton(glyph = "↗", onClick = onClick) }
 }
+
+/**
+ * «Позвонить» в строке книги — ЗВ13.
+ *
+ * Метка здесь не для красоты: тот же глиф носит окно «Телефон» в рейке и кнопка в шапке
+ * переписки, а в списке таких кнопок столько же, сколько строк. Отбор по видимому тексту
+ * в живом сценарии попадал бы в случайную.
+ */
+@Composable
+private fun CallButton(onClick: () -> Unit) {
+    ControlRow {
+        IconButton(
+            glyph = "\uD83D\uDCDE",
+            onClick = onClick,
+            modifier = Modifier.testTag(BOOK_CALL_TAG),
+        )
+    }
+}
+
+/** Метка кнопки «позвонить» в строке книги. */
+const val BOOK_CALL_TAG: String = "book:call"
 
 

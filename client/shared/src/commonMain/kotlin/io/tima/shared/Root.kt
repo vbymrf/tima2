@@ -151,6 +151,8 @@ import io.tima.feature.shell.ActivityWindow
 import io.tima.feature.shell.SocialWindow
 import io.tima.feature.shell.PageWindow
 import io.tima.feature.shell.InSide
+import io.tima.feature.shell.ActiveCall
+import io.tima.feature.shell.LocalActiveCall
 import io.tima.feature.shell.windowSwipe
 import io.tima.feature.shell.WindowFrame
 import io.tima.feature.shell.Rail
@@ -1062,6 +1064,19 @@ private fun App(
             Journal.note(LogCode.CHAT_PEER, "переписке дописан собеседник", "откуда" to "починка")
         }
     }
+    /**
+     * Человек за строкой книги: имя пользователя и ник — со справочника, имя — из книги
+     * поверх них.
+     *
+     * Вынесено из места вызова, когда у книги появилась кнопка «позвонить» (ЗВ13): она
+     * тоже должна звать человека так же, как зовёт его строка. Второй способ назвать
+     * человека — ровно та беда, которую заказчик нашёл 2026-09-19 у «Чатов».
+     */
+    val personOfBook: (BookEntry) -> ChatPerson = { entry ->
+        entry.userId?.let { people.want(listOf(it)) }
+        (entry.userId?.let { peopleCards[it] } ?: ChatPerson()).withBookName(entry.name, entry.phone)
+    }
+
     val personOfChat: (ChatSummary) -> ChatPerson? = { chat ->
         chat.peerId?.takeIf { chat.kind == ChatKind.Personal }?.let { id ->
             people.want(listOf(id))
@@ -1112,6 +1127,20 @@ private fun App(
             deviceId = session.deviceId,
             scope = scope,
         ).also { it.start() }
+    }
+
+    /**
+     * Начать звонок откуда угодно — из шапки переписки, из книги, с личной страницы.
+     *
+     * **Одно место, а не три копии.** Звонок — это три шага подряд: позвать `CallHost`,
+     * перейти в окно 0 и **закрыть подокно**. Забытый третий шаг и был бедой первого
+     * живого звонка (ЗВ1): звонок шёл под открытой перепиской, и его не было видно.
+     * Три копии этой тройки разошлись бы на первой же правке.
+     */
+    val callPerson: (String, String, Boolean) -> Unit = { peerId, name, video ->
+        callHost.start(peerId, name, video)
+        window = Window.Call
+        where = Where.Nothing
     }
 
     // Свайп по средней зоне ведёт к соседнему окну в порядке переключателя. Края
@@ -1389,6 +1418,15 @@ private fun App(
         return
     }
 
+    // Плашка идущего звонка — во всех окнах, кроме самого звонка: предлагать «перейти в
+    // звонок» тому, кто в нём стоит, незачем. Окно 0 временное, и без плашки оно
+    // теряется: ушёл свайпом в «Чаты» — и не знаешь, разговор идёт или уже кончился.
+    CompositionLocalProvider(
+        LocalActiveCall provides ActiveCall(
+            seconds = callHost.seconds,
+            onOpen = { window = Window.Call; where = Where.Nothing },
+        ).takeIf { callHost.active && window != Window.Call },
+    ) {
     Stage(
         modifier = Modifier.fillMaxSize(),
         // Рейка есть только на широких форматах: на телефоне окна меняют подокном.
@@ -1441,10 +1479,7 @@ private fun App(
                     tab = phoneTab,
                     onTab = { phoneTab = it },
                     // Имя пользователя и ник у контактов — со справочника, пачкой по разу.
-                    personOf = { entry ->
-                        entry.userId?.let { people.want(listOf(it)) }
-                        (entry.userId?.let { peopleCards[it] } ?: ChatPerson()).withBookName(entry.name, entry.phone)
-                    },
+                    personOf = personOfBook,
                     // Картинка аватара — по карточке справочника, приезжает потоком.
                     faceOf = { entry -> entry.userId?.let { people.wantFace(it); peopleFaces[it] } },
                     // ТОЛЬКО личные. Группы ушли на свою вкладку окна 5 — решение
@@ -1483,6 +1518,18 @@ private fun App(
                     // в переписку. Того, кого нет в TIMa, открывать нечем: страница
                     // принадлежит аккаунту, а не номеру.
                     onFacePerson = { entry -> entry.userId?.let { where = Where.Person(it) } },
+                    // Звонок из строки книги. Только тому, у кого есть аккаунт: остальным
+                    // звонит системный набиратель из подокна «Пригласить», и это другой
+                    // звонок (ЗВ13).
+                    onCallPerson = if (callHost.possible) {
+                        { entry ->
+                            entry.userId?.let { peerId ->
+                                callPerson(peerId, personOfBook(entry).line(bookState.view.look(), PERSON_FIRST_LINE).orEmpty(), false)
+                            }
+                        }
+                    } else {
+                        null
+                    },
                     onInvite = { inviting = it },
                     onOpenedContacts = book::refresh,
                     onAllowContacts = {
@@ -1918,6 +1965,20 @@ private fun App(
                             ?.let { faceOfChat(it) },
                         // Позвонить можно только человеку и только там, где есть чем:
                         // у группы собеседника нет, на ПК нет движка. Кнопки тогда нет.
+                        // Видеозвонок — «три точки», а не шапка (решение заказчика
+                        // 2026-09-20). Условие то же, что у голосового: личная переписка
+                        // и есть чем звонить.
+                        onVideoCall = listState.chats.firstOrNull { it.chatId == current.chatId }
+                            ?.takeIf { it.kind == ChatKind.Personal && callHost.possible }
+                            ?.peerId
+                            ?.let { peerId ->
+                                {
+                                    val name = personOfChat(
+                                        listState.chats.first { it.chatId == current.chatId },
+                                    )?.line(bookStateForChats.view.look(), PERSON_FIRST_LINE).orEmpty()
+                                    callPerson(peerId, name, true)
+                                }
+                            },
                         onCall = listState.chats.firstOrNull { it.chatId == current.chatId }
                             ?.takeIf { it.kind == ChatKind.Personal && callHost.possible }
                             ?.peerId
@@ -1926,15 +1987,7 @@ private fun App(
                                     val name = personOfChat(
                                         listState.chats.first { it.chatId == current.chatId },
                                     )?.line(bookStateForChats.view.look(), PERSON_FIRST_LINE).orEmpty()
-                                    callHost.start(peerId, name, video = false)
-                                    window = Window.Call
-                                    // **И закрыть подокно.** Переписка лежит ПОВЕРХ
-                                    // окна: сменив окно под ней, мы получаем звонок,
-                                    // спрятанный за чатом. Ровно это и вышло на первом
-                                    // живом звонке 2026-09-20 — человек видел, что
-                                    // ничего не произошло, жал ещё, и сервер завёл три
-                                    // звонка подряд (ПЛАН-ДОРАБОТКИ-ЗВОНКОВ ЗВ1).
-                                    where = Where.Nothing
+                                    callPerson(peerId, name, false)
                                 }
                             },
                         scope = scope,
@@ -1994,6 +2047,43 @@ private fun App(
                         look = bookStateForChats.view.look(),
                         friend = friend,
                         onBack = { where = Where.Nothing },
+                        // Четыре действия (ЗВ7). Звонков нет на платформе без движка —
+                        // тогда и кнопок нет, а не «есть, но отвергаются».
+                        onCall = if (callHost.possible) {
+                            {
+                                callPerson(
+                                    current.userId,
+                                    who.line(bookStateForChats.view.look(), PERSON_FIRST_LINE).orEmpty(),
+                                    false,
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                        onVideoCall = if (callHost.possible) {
+                            {
+                                callPerson(
+                                    current.userId,
+                                    who.line(bookStateForChats.view.look(), PERSON_FIRST_LINE).orEmpty(),
+                                    true,
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                        // Заглушка, и объяснение показывает сам экран: звать снаружи
+                        // нечего, групповых звонков нет ни в одном плане (решение
+                        // заказчика 2026-09-20).
+                        groupCall = callHost.possible,
+                        // «Написать» — переход в переписку с этим человеком. Тот же
+                        // путь, что из книги: идентификатор переписки считается из пары.
+                        onWrite = {
+                            val chatId = PersonalChatIdsOverKodium.personalChatId(session.userId, current.userId)
+                            where = Where.Chat(
+                                chatId,
+                                who.line(bookStateForChats.view.look(), PERSON_FIRST_LINE).orEmpty(),
+                            )
+                        },
                     )
                 }
             }
@@ -2060,6 +2150,7 @@ private fun App(
             }
         },
     )
+    }
 }
 
 @Composable
@@ -2104,6 +2195,8 @@ private fun Chat(
     peerFace: ImageBitmap? = null,
     /** Позвонить собеседнику; `null` — у группы или там, где звонить нечем. */
     onCall: (() -> Unit)? = null,
+    /** Видеозвонок — пункт «•••» личной переписки (ЗВ6). */
+    onVideoCall: (() -> Unit)? = null,
     /** Разделы книги для «•••» личной переписки: раздел переписки — раздел собеседника. */
     bookSections: List<Section> = emptyList(),
     currentBookSection: String = "",
@@ -2281,6 +2374,7 @@ private fun Chat(
             currentSection = currentBookSection,
             onMoveTo = { sectionId -> onMoveToBookSection(chatId, sectionId) },
             onClose = { chatMenu = false },
+            onVideoCall = onVideoCall,
             group = false,
         )
     }
@@ -2992,6 +3086,8 @@ private fun PhoneWindow(
     onAddContact: () -> Unit,
     /** Нажали на аватар в книге — личная страница человека. */
     onFacePerson: (BookEntry) -> Unit = {},
+    /** Позвонить из строки книги — ЗВ13. `null` — звонить нечем (ПК). */
+    onCallPerson: ((BookEntry) -> Unit)? = null,
     onInvite: (BookEntry) -> Unit,
     /** Открыли вкладку: прочитать телефонную книгу и сверить. */
     onOpenedContacts: () -> Unit,
@@ -3111,6 +3207,7 @@ private fun PhoneWindow(
                     newIn = newInSection,
                     onAdd = onAddContact,
                     onFace = onFacePerson,
+                    onCall = onCallPerson,
                     onInvite = onInvite,
                     onAllow = onAllowContacts,
                 )
