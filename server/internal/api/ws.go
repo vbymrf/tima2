@@ -183,7 +183,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			// Это число — прямая мера потерь шины, а не косвенная. Молчит журнал —
 			// Pub/Sub ничего не терял; говорит — знаем, сколько и кому.
-			log.Printf("ws %s: шина потеряла %d событий после %d — досылаю", deviceID, len(missed), sent)
+			log.Printf("ws %s: шина потеряла событий: %d (после %d) — досылаю", deviceID, len(missed), sent)
 			if err := sendStored(ctx, conn, deviceID, missed, &sent); err != nil {
 				return
 			}
