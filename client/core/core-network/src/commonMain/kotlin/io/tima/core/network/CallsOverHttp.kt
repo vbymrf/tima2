@@ -64,8 +64,12 @@ class CallsOverHttp(
         return doorOf(response, needCallId = false, knownCallId = callId)
     }
 
-    override suspend fun end(callId: String): Boolean = try {
-        val response = client.post(route.api("/api/v1/calls/$callId/end")) {
+    override suspend fun end(callId: String, busy: Boolean): Boolean = try {
+        // Причина уходит в запросе, а не в теле: ручка старая, тело у неё пустое, и
+        // заводить его ради одного слова значило бы менять формат там, где хватает
+        // параметра. Сервер принимает только `busy` и только на звонящем звонке.
+        val where = "/api/v1/calls/$callId/end" + if (busy) "?reason=busy" else ""
+        val response = client.post(route.api(where)) {
             header("Authorization", "Bearer ${token()}")
         }
         response.status == HttpStatusCode.OK || response.status == HttpStatusCode.NoContent

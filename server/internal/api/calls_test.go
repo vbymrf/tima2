@@ -136,6 +136,76 @@ func TestRingAgainStopsWhenAnswered(t *testing.T) {
 	}
 }
 
+// TestAnsweredCallDoesNotBlock — разговор НЕ делает человека недоступным.
+//
+// Сначала «занят» считалось и по состоянию answered. 2026-09-20 это обернулось тем, что
+// один незакрытый звонок пятичасовой давности сделал обоих участников недоступными:
+// позвонить не мог никто. Строка осталась открытой потому, что закрыть её было некому —
+// приложения переустанавливались посреди разговора, и ни клиент, ни вебхук LiveKit до
+// сервера не дошли.
+//
+// Состояние answered закрывается снаружи и само не истекает. Любая проверка по нему
+// превращает утечку в запрет, и запрет тем длиннее, чем шире окно. Эта проверка и стоит
+// затем, чтобы оно не вернулось.
+func TestAnsweredCallDoesNotBlock(t *testing.T) {
+	ts, _ := setupWithCalls(t)
+	first := registerDevice(t, ts, "+79990000060")
+	busy := registerDevice(t, ts, "+79990000061")
+	second := registerDevice(t, ts, "+79990000062")
+
+	var start struct {
+		CallID string `json:"call_id"`
+	}
+	if code := postAuthed(t, ts, first.token, "POST", "/api/v1/calls",
+		map[string]string{"peer_id": busy.userID, "kind": "audio"}, &start); code != 201 {
+		t.Fatalf("первый звонок: %d", code)
+	}
+	if code := postAuthed(t, ts, busy.token, "POST", "/api/v1/calls/"+start.CallID+"/answer", nil, nil); code != 200 {
+		t.Fatalf("answer: %d", code)
+	}
+
+	// Разговор идёт. Третий звонит — и звонок ЗАВОДИТСЯ: сказать «занят» вправе только
+	// телефон собеседника, и скажет он это сам, закончив вызов с причиной busy.
+	if code := postAuthed(t, ts, second.token, "POST", "/api/v1/calls",
+		map[string]string{"peer_id": busy.userID, "kind": "audio"}, nil); code != 201 {
+		t.Fatalf("разговор запер человека: звонок отклонён с %d", code)
+	}
+}
+
+// TestBusyReasonTravels — «занят» доезжает до звонящего словом, а не молчанием.
+func TestBusyReasonTravels(t *testing.T) {
+	ts, srv := setupWithCalls(t)
+	caller := registerDevice(t, ts, "+79990000063")
+	callee := registerDevice(t, ts, "+79990000064")
+
+	var start struct {
+		CallID string `json:"call_id"`
+	}
+	if code := postAuthed(t, ts, caller.token, "POST", "/api/v1/calls",
+		map[string]string{"peer_id": callee.userID, "kind": "audio"}, &start); code != 201 {
+		t.Fatalf("startCall: %d", code)
+	}
+	// Телефон занятого заканчивает вызов и называет причину.
+	if code := postAuthed(t, ts, callee.token, "POST",
+		"/api/v1/calls/"+start.CallID+"/end?reason=busy", nil, nil); code != 200 {
+		t.Fatalf("end?reason=busy: %d", code)
+	}
+
+	events, err := srv.Store.ListDeviceEvents(context.Background(), caller.id, 0, 100)
+	if err != nil {
+		t.Fatalf("журнал событий: %v", err)
+	}
+	found := false
+	for _, e := range events {
+		if e.EventType == "call.state" && strings.Contains(string(e.Payload), `"state": "busy"`) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("звонящему не сказали «занят»: %d событий, ни одного со state busy", len(events))
+	}
+}
+
 func TestCallFlow(t *testing.T) {
 	ts, _ := setupWithCalls(t)
 	caller := registerDevice(t, ts, "+79990000030")

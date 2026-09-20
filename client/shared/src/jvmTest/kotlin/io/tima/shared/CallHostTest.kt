@@ -139,6 +139,24 @@ class CallHostTest {
     }
 
     @Test
+    fun занятость_приходит_словом_сервера_а_не_отказом() = runTest {
+        // Слово «занят» знает телефон собеседника, а не база. Проверка по состоянию в
+        // базе была и однажды заперла всех на пять часов: незакрытая строка делала
+        // человека занятым, пока не истечёт окно (2026-09-20).
+        val host = host()
+        host.start(peerId = "u-9", peerName = "Вера", video = false)
+        // Сервер закрыл звонок словом busy — так сказал телефон Веры.
+        host.ended("busy")
+
+        assertEquals(CallStage.Ended, host.state.stage, "звонок занятому не кончился")
+        assertEquals(
+            io.tima.core.words.RussianWords.call.peerBusy,
+            host.events.lastOrNull()?.text,
+            "про занятость не сказано словами: ${host.events.map { it.text }}",
+        )
+    }
+
+    @Test
     fun занятый_собеседник_назван_своим_словом() = runTest {
         // «Занят» и «не ответил» человек различает и поступает по-разному: не ответившему
         // перезванивают сразу, занятого ждут. Раньше сервер заводил звонок занятому как
@@ -230,7 +248,7 @@ class CallHostTest {
     private class RefusingCalls(private val code: String) : Calls {
         override suspend fun start(peerId: String, video: Boolean): CallStep = CallStep.Refused(code)
         override suspend fun answer(callId: String): CallStep = CallStep.Refused(code)
-        override suspend fun end(callId: String): Boolean = true
+        override suspend fun end(callId: String, busy: Boolean): Boolean = true
     }
 
     /** Сигналинг, который всегда открывает дверь и помнит, что закрывал. */
@@ -242,7 +260,7 @@ class CallHostTest {
         override suspend fun answer(callId: String): CallStep =
             CallStep.Door(CallDoor(callId = callId, room = "комната", url = "wss://х", token = "жетон"))
 
-        override suspend fun end(callId: String): Boolean {
+        override suspend fun end(callId: String, busy: Boolean): Boolean {
             ended += callId
             return true
         }
