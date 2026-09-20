@@ -3,6 +3,9 @@ package io.tima.core.call
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.content.pm.PackageManager
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
@@ -106,6 +109,26 @@ object AndroidCallAccess {
         waiting = null
     }
 
+    /**
+     * Страница приложения в настройках телефона — **по нажатию человека**.
+     *
+     * Окна может уже не быть (звонок кончился, экран сменился) — тогда молча ничего, но
+     * с записью: «кнопка ничего не сделала» без следа в журнале ищется вслепую.
+     */
+    fun openSettings() {
+        val current = activity
+        if (current == null) {
+            Journal.trouble(LogCode.CALL, "в настройки не уйти — окна нет")
+            return
+        }
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", current.packageName, null),
+        )
+        Journal.note(LogCode.CALL, "ухожу в настройки телефона по просьбе человека")
+        runCatching { current.startActivity(intent) }
+    }
+
     internal fun ask(video: Boolean, onResult: (Boolean) -> Unit) {
         val current = activity
         if (current == null) {
@@ -159,3 +182,5 @@ object AndroidCallAccess {
 
 actual fun askCallAccess(video: Boolean, onResult: (Boolean) -> Unit) =
     AndroidCallAccess.ask(video, onResult)
+
+actual fun openCallSettings() = AndroidCallAccess.openSettings()

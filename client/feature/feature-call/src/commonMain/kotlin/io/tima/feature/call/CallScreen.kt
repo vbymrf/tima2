@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.tima.core.call.CallAction
 import io.tima.core.call.CallEvent
 import io.tima.core.call.CallQuality
 import io.tima.core.call.CallStage
@@ -85,6 +86,8 @@ fun CallScreen(
     localVideo: VideoHandle? = null,
     /** Принимать ли чужое видео (ЗВ11). `null` — кнопки нет: показывать нечего. */
     onRemoteVideo: ((Boolean) -> Unit)? = null,
+    /** Сделать то, что предлагает событие: уйти в настройки телефона. */
+    onEventAction: ((CallAction) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.call
@@ -94,7 +97,7 @@ fun CallScreen(
     ) {
         // Полоса событий — в самом верху, над всем остальным: это то, что случилось, и
         // читается оно первым (ЗВ10).
-        CallEvents(events)
+        CallEvents(events, onAction = onEventAction)
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             // Картинка собеседника во весь кадр, если он себя показывает. Аватар и имя

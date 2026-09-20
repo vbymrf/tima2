@@ -1461,6 +1461,7 @@ private fun App(
                     remoteVideo = callHost.remoteVideo.collectAsState().value,
                     localVideo = callHost.localVideo.collectAsState().value,
                     onRemoteVideo = callHost::remoteVideo,
+                    onEventAction = callHost::act,
                     // Жест берётся тот же, что у остальных окон, и вешается ЗДЕСЬ:
                     // у пяти настоящих окон он живёт в их оправе, а окно 0 рисуется
                     // голым — оправы с шапкой и вкладками у звонка нет. Без этой

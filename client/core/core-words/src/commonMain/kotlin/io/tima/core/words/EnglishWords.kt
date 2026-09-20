@@ -701,6 +701,7 @@ object EnglishWords : Words {
         override val showRemote = "Show video"
         override val expand = "Expand"
         override val collapse = "Collapse"
+        override val openSettings = "Open settings"
         override val nextEvent = "Next"
         override val previousEvent = "Back"
         override fun ofTotal(one: Int, total: Int) = "$one of $total"

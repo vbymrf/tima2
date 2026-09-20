@@ -701,6 +701,7 @@ object SpanishWords : Words {
         override val showRemote = "Mostrar vídeo"
         override val expand = "Desplegar"
         override val collapse = "Plegar"
+        override val openSettings = "Abrir ajustes"
         override val nextEvent = "Siguiente"
         override val previousEvent = "Atrás"
         override fun ofTotal(one: Int, total: Int) = "$one de $total"

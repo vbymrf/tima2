@@ -612,6 +612,14 @@ interface CallWords {
     val expand: String
     val collapse: String
 
+    /**
+     * Кнопка события «Открыть настройки».
+     *
+     * Нужна там, где сказать мало: Android после второго отказа диалог о разрешении
+     * больше не показывает, и включить микрофон можно **только** в настройках телефона.
+     */
+    val openSettings: String
+
     /** Листание событий в развёрнутом виде. */
     val nextEvent: String
     val previousEvent: String
@@ -1982,6 +1990,7 @@ object RussianWords : Words {
         override val showRemote = "Показать видео"
         override val expand = "Развернуть"
         override val collapse = "Свернуть"
+        override val openSettings = "Открыть настройки"
         override val nextEvent = "Далее"
         override val previousEvent = "Назад"
         override fun ofTotal(one: Int, total: Int) = "$one из $total"

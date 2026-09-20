@@ -17,8 +17,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import io.tima.core.call.CallAction
 import io.tima.core.call.CallEvent
+import io.tima.core.ui.Button
 import io.tima.core.ui.Caption
+import io.tima.core.ui.IconButton
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
@@ -49,7 +52,12 @@ import io.tima.core.ui.words
  * событий это и есть работа — пережить своё время.
  */
 @Composable
-internal fun CallEvents(events: List<CallEvent>, modifier: Modifier = Modifier) {
+internal fun CallEvents(
+    events: List<CallEvent>,
+    modifier: Modifier = Modifier,
+    /** Сделать то, что предлагает событие. `null` — делать нечем, кнопки нет. */
+    onAction: ((CallAction) -> Unit)? = null,
+) {
     if (events.isEmpty()) return
     val colors = Tima.colors
     val words = Tima.words.call
@@ -83,15 +91,26 @@ internal fun CallEvents(events: List<CallEvent>, modifier: Modifier = Modifier) 
                 // «развернуть» и заведено: длинное событие иначе обрезается на полуслове.
                 lineOne = !expanded,
             )
-            Caption(
-                text = if (expanded) "⌃" else "⌄",
-                modifier = Modifier
-                    .clickable { expanded = !expanded }
-                    .padding(horizontal = TimaSpacing.about2),
-                fontSize = TimaType.sz4,
-                weight = FontWeight.Bold,
-                color = colors.text3,
+            // Стрелка — обычной круглой кнопкой, как все прочие значки приложения, и
+            // крупная: голый символ размером с текст читался как часть надписи, и в него
+            // не попадали пальцем (заказчик 2026-09-20).
+            IconButton(
+                glyph = if (expanded) "▲" else "▼",
+                onClick = { expanded = !expanded },
             )
+        }
+
+        // Что можно сделать по событию. Кнопка нужна там, где сказать мало: отказ в
+        // микрофоне чинится только в настройках телефона, и другого пути у человека нет
+        // вовсе — Android после второго отказа диалог больше не покажет.
+        val action = event.action
+        if (action != null && onAction != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = TimaSpacing.about2),
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            ) {
+                Button(label = words.openSettings, onClick = { onAction(action) })
+            }
         }
 
         // Листание — только в развёрнутом виде: свёрнутая полоса показывает последнее, и

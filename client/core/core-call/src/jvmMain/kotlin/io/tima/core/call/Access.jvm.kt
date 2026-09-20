@@ -9,3 +9,6 @@ package io.tima.core.call
  * отказ в разрешении, которого никто не просил.
  */
 actual fun askCallAccess(video: Boolean, onResult: (Boolean) -> Unit) = onResult(true)
+
+/** Звонков здесь нет — и разрешения на микрофон, которое можно было бы включить, тоже. */
+actual fun openCallSettings() = Unit

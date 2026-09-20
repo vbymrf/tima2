@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.tima.core.call.CallAction
 import io.tima.core.call.CallDoor
 import io.tima.core.call.CallEngine
 import io.tima.core.call.CallEvent
@@ -14,6 +15,7 @@ import io.tima.core.call.Calls
 import io.tima.core.call.PublishPreset
 import io.tima.core.call.VideoHandle
 import io.tima.core.call.askCallAccess
+import io.tima.core.call.openCallSettings
 import io.tima.core.diag.Journal
 import io.tima.core.words.CurrentWords
 import io.tima.core.words.Words
@@ -354,9 +356,16 @@ class CallHost(
     }
 
     /** Дописать событие. Повтор последнего не дописывается: лента не должна заикаться. */
-    private fun note(text: String) {
+    private fun note(text: String, action: CallAction? = null) {
         if (events.lastOrNull()?.text == text) return
-        events.add(CallEvent(seconds = seconds, text = text))
+        events.add(CallEvent(seconds = seconds, text = text, action = action))
+    }
+
+    /** Сделать то, что предлагает событие. */
+    fun act(action: CallAction) {
+        when (action) {
+            CallAction.OpenSettings -> openCallSettings()
+        }
     }
 
     /**
@@ -387,10 +396,13 @@ class CallHost(
                 // нечего.
                 val id = callId
                 if (id.isNotEmpty()) scope.launch { calls.end(id) }
-                state = state.copy(
-                    stage = CallStage.Ended,
-                    trouble = words().call.noMicrophone,
-                )
+                // **Событием, а не строкой под именем.** У события есть кнопка, и здесь
+                // она обязательна: Android после второго отказа диалог больше не
+                // показывает, и включить микрофон можно только в настройках телефона.
+                // Сказать «разрешение включается в настройках» и не дать туда пути —
+                // то же самое, что не сказать ничего.
+                note(words().call.noMicrophone, CallAction.OpenSettings)
+                state = state.copy(stage = CallStage.Ended)
             }
         }
     }
