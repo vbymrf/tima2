@@ -1,6 +1,9 @@
 package api
 
 import (
+	"strings"
+	"context"
+	"time"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -50,6 +53,86 @@ func TestBusyPeer(t *testing.T) {
 	if code := postAuthed(t, ts, busy.token, "POST", "/api/v1/calls",
 		map[string]string{"peer_id": second.userID, "kind": "audio"}, nil); code != 409 {
 		t.Fatalf("занятый начал второй звонок: %d", code)
+	}
+}
+
+// TestRingAgainRepeats — вызов повторяется, пока звонит, и замолкает, когда ответили.
+//
+// Живая доставка идёт через Redis Pub/Sub, то есть «не более одного раза». Потерянный
+// кадр означал, что человеку просто не позвонили (2026-09-20, отчёты C6DF и DW78).
+// countEvents — сколько кадров такого вида про такой звонок легло устройству.
+//
+// Считаем по долговечному журналу device_events, а не по шине: шина — «не более одного
+// раза», и проверять повтор по ней значило бы проверять то самое, что чинится.
+func countEvents(t *testing.T, srv *Server, deviceID, kind, callID string) int {
+	t.Helper()
+	events, err := srv.Store.ListDeviceEvents(context.Background(), deviceID, 0, 100)
+	if err != nil {
+		t.Fatalf("журнал событий: %v", err)
+	}
+	n := 0
+	for _, e := range events {
+		if e.EventType == kind && strings.Contains(string(e.Payload), callID) {
+			n++
+		}
+	}
+	return n
+}
+
+func TestRingAgainRepeats(t *testing.T) {
+	ts, srv := setupWithCalls(t)
+	caller := registerDevice(t, ts, "+79990000050")
+	callee := registerDevice(t, ts, "+79990000051")
+
+	// Сроки повтора укорачиваем: проверка не должна ждать восемь секунд.
+	was := ringAgainAfter
+	ringAgainAfter = []time.Duration{50 * time.Millisecond, 100 * time.Millisecond}
+	defer func() { ringAgainAfter = was }()
+
+	var start struct {
+		CallID string `json:"call_id"`
+	}
+	if code := postAuthed(t, ts, caller.token, "POST", "/api/v1/calls",
+		map[string]string{"peer_id": callee.userID, "kind": "audio"}, &start); code != 201 {
+		t.Fatalf("startCall: %d", code)
+	}
+
+	time.Sleep(400 * time.Millisecond)
+
+	// Три кадра: первый сразу и два повтора. Меньше — повтор не работает, и потеря
+	// первого кадра снова оставит человека без звонка.
+	if n := countEvents(t, srv, callee.id, "call.incoming", start.CallID); n != 3 {
+		t.Fatalf("вызовов call.incoming %d, ожидалось 3", n)
+	}
+}
+
+// TestRingAgainStopsWhenAnswered — ответили, и повторы замолкают.
+func TestRingAgainStopsWhenAnswered(t *testing.T) {
+	ts, srv := setupWithCalls(t)
+	caller := registerDevice(t, ts, "+79990000052")
+	callee := registerDevice(t, ts, "+79990000053")
+
+	was := ringAgainAfter
+	ringAgainAfter = []time.Duration{200 * time.Millisecond, 400 * time.Millisecond}
+	defer func() { ringAgainAfter = was }()
+
+	var start struct {
+		CallID string `json:"call_id"`
+	}
+	if code := postAuthed(t, ts, caller.token, "POST", "/api/v1/calls",
+		map[string]string{"peer_id": callee.userID, "kind": "audio"}, &start); code != 201 {
+		t.Fatalf("startCall: %d", code)
+	}
+	// Отвечаем раньше первого повтора.
+	if code := postAuthed(t, ts, callee.token, "POST", "/api/v1/calls/"+start.CallID+"/answer", nil, nil); code != 200 {
+		t.Fatalf("answer: %d", code)
+	}
+
+	time.Sleep(700 * time.Millisecond)
+
+	// Только первый кадр: звать к разговору, который уже идёт, незачем.
+	if n := countEvents(t, srv, callee.id, "call.incoming", start.CallID); n != 1 {
+		t.Fatalf("вызовов call.incoming %d, ожидался 1: повтор не замолк после ответа", n)
 	}
 }
 

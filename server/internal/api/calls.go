@@ -5,6 +5,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -81,18 +82,76 @@ func startCall(deps callsDeps) http.HandlerFunc {
 			return
 		}
 		// call.incoming устройствам собеседника (VoIP push — с провайдером позже)
-		if devices, err := deps.store.ListDevices(r.Context(), req.PeerID); err == nil {
-			for _, d := range devices {
-				deps.notifier.Device(r.Context(), d.DeviceID, "call.incoming", map[string]any{
-					"call_id": callID, "room": room, "kind": req.Kind, "from": id.UserID,
-				})
-			}
-		}
+		payload := map[string]any{"call_id": callID, "room": room, "kind": req.Kind, "from": id.UserID}
+		ringPeer(deps, r.Context(), req.PeerID, payload)
+		// И ещё дважды, пока звонок звонит, — см. ringAgain.
+		go ringAgain(deps, callID, req.PeerID, payload)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"call_id": callID, "room": room, "url": deps.livekitURL(), "token": token,
 		})
+	}
+}
+
+// ringPeer — разослать кадр всем устройствам собеседника.
+func ringPeer(deps callsDeps, ctx context.Context, peerID string, payload map[string]any) {
+	devices, err := deps.store.ListDevices(ctx, peerID)
+	if err != nil {
+		log.Printf("ringPeer %s: %v", peerID, err)
+		return
+	}
+	for _, d := range devices {
+		deps.notifier.Device(ctx, d.DeviceID, "call.incoming", payload)
+	}
+}
+
+// Когда повторять вызов и сколько раз.
+//
+// Две попытки с разбегом: почти всякая потеря — одиночная, и второй попытки хватает.
+// Третья пришлась бы уже на середину сорокапятисекундного ожидания и разбудила бы
+// человека, который к тому времени трубку взял.
+var ringAgainAfter = []time.Duration{2 * time.Second, 6 * time.Second}
+
+// ringAgain — повторить call.incoming, пока звонок всё ещё звонит.
+//
+// ── ЗАЧЕМ ЭТО НУЖНО ─────────────────────────────────────────────────────────
+//
+// Живая доставка идёт через Redis Pub/Sub — это «не более одного раза». Кадр, потерянный
+// по дороге, теряется насовсем: долговечный журнал событий у нас есть, но клиент читает
+// его только при переподключении, а соединение при этом не рвётся.
+//
+// Для сообщений дыра почти не видна — они подождут следующего подключения. Для звонка
+// она смертельна: он живёт сорок пять секунд, и потерянный кадр означает, что человеку
+// просто не позвонили. Ровно это и случилось 2026-09-20: сервер записал событие 326,
+// отчёты обоих телефонов показывают, что до второго оно не дошло, а соседние события того
+// же устройства дошли.
+//
+// **Это заплатка, а не лечение.** Лечение — доставка «хотя бы один раз», то есть Redis
+// Streams вместо Pub/Sub: [ПЛАН-ДОСТАВКИ-СОБЫТИЙ.md](../../../doc_mig/ПЛАН-ДОСТАВКИ-СОБЫТИЙ.md).
+// Здесь же цена повтора — два лишних кадра на звонок, и она заведомо меньше цены
+// несостоявшегося звонка.
+//
+// **Клиент обязан уметь повтор.** Дубликат, пришедший на показанный звонок, отсеивается
+// по идентификатору (`CallHost.ring`); клиент без этой защиты положил бы трубку
+// собственному вызову, приняв повтор за второй звонок.
+func ringAgain(deps callsDeps, callID, peerID string, payload map[string]any) {
+	// Свой контекст: запрос к этому времени давно закрыт, а его отмена унесла бы повтор.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	for _, after := range ringAgainAfter {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(after):
+		}
+		// Звонок мог быть отвечен, отклонён или отменён. Повторять его тогда — звать
+		// человека к разговору, который уже идёт или уже кончился.
+		call, err := deps.store.GetCall(ctx, callID)
+		if err != nil || call.State != "ringing" {
+			return
+		}
+		ringPeer(deps, ctx, peerID, payload)
 	}
 }
 
