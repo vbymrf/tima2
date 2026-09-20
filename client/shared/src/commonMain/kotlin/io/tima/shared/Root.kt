@@ -898,7 +898,11 @@ private fun App(
     LaunchedEffect(callPing) {
         val parts = callPing.split("|")
         when {
-            parts.size == 3 && parts[0] == "конец" -> if (callHost.active) callHost.hangUp()
+            // **Сверяем, о каком звонке речь.** Раньше любой кадр `call.state` клал нашу
+            // трубку: у человека может идти один звонок и висеть отказ по другому, и
+            // чужой конец обрывал живой разговор.
+            parts.size == 3 && parts[0] == "конец" ->
+                if (callHost.active && callHost.callIs(parts[1])) callHost.hangUp()
             // Собеседник вышел из комнаты — по вебхуку SFU, а не нажатием. Так кончается
             // звонок, у которого вторую сторону убили или она потеряла сеть насовсем:
             // нажимать «Завершить» там было некому.

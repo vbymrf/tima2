@@ -138,6 +138,29 @@ class CallHostTest {
         assertTrue(calls.ended.isEmpty(), "сторож положил трубку в разговоре: ${calls.ended}")
     }
 
+    @Test
+    fun занятый_собеседник_назван_своим_словом() = runTest {
+        // «Занят» и «не ответил» человек различает и поступает по-разному: не ответившему
+        // перезванивают сразу, занятого ждут. Раньше сервер заводил звонок занятому как
+        // обычный, тот его не видел (один сеанс за раз), а звонящий слушал гудки до
+        // своего срока и узнавал неправду — «никто не ответил».
+        val host = CallHost(
+            RefusingCalls("busy"),
+            FakeEngine(),
+            CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
+            words = { io.tima.core.words.RussianWords },
+        )
+
+        host.start(peerId = "u-9", peerName = "Вера", video = false)
+
+        assertEquals(CallStage.Ended, host.state.stage, "звонок занятому не кончился сразу")
+        assertEquals(
+            io.tima.core.words.RussianWords.call.peerBusy,
+            host.events.lastOrNull()?.text,
+            "про занятость не сказано словами: ${host.events.map { it.text }}",
+        )
+    }
+
     private fun TestScope.host(calls: Calls = FakeCalls()) = CallHost(
         calls,
         FakeEngine(),
@@ -151,6 +174,13 @@ class CallHostTest {
         CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
         words = { io.tima.core.words.RussianWords },
     )
+
+    /** Сигналинг, который всегда отказывает одним и тем же кодом. */
+    private class RefusingCalls(private val code: String) : Calls {
+        override suspend fun start(peerId: String, video: Boolean): CallStep = CallStep.Refused(code)
+        override suspend fun answer(callId: String): CallStep = CallStep.Refused(code)
+        override suspend fun end(callId: String): Boolean = true
+    }
 
     /** Сигналинг, который всегда открывает дверь и помнит, что закрывал. */
     private class FakeCalls : Calls {

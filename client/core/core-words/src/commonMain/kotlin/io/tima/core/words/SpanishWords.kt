@@ -697,6 +697,7 @@ object SpanishWords : Words {
         override val peerStoppedVideo = "La otra persona dejó de mostrar vídeo"
         override val peerLeft = "La otra persona colgó"
         override val noAnswer = "Sin respuesta"
+        override val peerBusy = "La otra persona está en otra llamada"
         override val missedCall = "Llamada perdida"
         override val remoteHidden = "Vídeo oculto: no se recibe y no consume datos"
         override val hideRemote = "Ocultar vídeo"

@@ -17,6 +17,42 @@ func setupWithCalls(t *testing.T) (*httptest.Server, *Server) {
 }
 
 // TestCallFlow — звонок 1:1: создание (токен + call.incoming), ответ (токен), завершение.
+// TestBusyPeer — звонок занятому отклоняется кодом busy, а не заводится вхолостую.
+//
+// Без этого звонящий слушал гудки до своего срока и узнавал «никто не ответил» — неправду:
+// ответить было некому, а не некогда. Занятый при этом вызова не видел вовсе, потому что
+// у клиента один сеанс за раз.
+func TestBusyPeer(t *testing.T) {
+	ts, _ := setupWithCalls(t)
+	first := registerDevice(t, ts, "+79990000040")
+	busy := registerDevice(t, ts, "+79990000041")
+	second := registerDevice(t, ts, "+79990000042")
+
+	// Первый звонит — звонок заводится и висит в ringing.
+	if code := postAuthed(t, ts, first.token, "POST", "/api/v1/calls",
+		map[string]string{"peer_id": busy.userID, "kind": "audio"}, nil); code != 201 {
+		t.Fatalf("первый звонок не завёлся: %d", code)
+	}
+
+	// Второй звонит тому же — отказ, и отказ именно «занят».
+	var refusal struct {
+		Code string `json:"code"`
+	}
+	if code := postAuthed(t, ts, second.token, "POST", "/api/v1/calls",
+		map[string]string{"peer_id": busy.userID, "kind": "audio"}, &refusal); code != 409 {
+		t.Fatalf("звонок занятому прошёл: %d", code)
+	}
+	if refusal.Code != "busy" {
+		t.Fatalf("отказ без кода busy: %q", refusal.Code)
+	}
+
+	// А вот сам занятый позвонить третьему тоже не может — он занят с обеих сторон.
+	if code := postAuthed(t, ts, busy.token, "POST", "/api/v1/calls",
+		map[string]string{"peer_id": second.userID, "kind": "audio"}, nil); code != 409 {
+		t.Fatalf("занятый начал второй звонок: %d", code)
+	}
+}
+
 func TestCallFlow(t *testing.T) {
 	ts, _ := setupWithCalls(t)
 	caller := registerDevice(t, ts, "+79990000030")

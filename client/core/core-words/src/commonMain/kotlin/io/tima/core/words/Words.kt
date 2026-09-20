@@ -596,6 +596,14 @@ interface CallWords {
     /** Никто не ответил: звонили и не дозвонились. */
     val noAnswer: String
 
+    /**
+     * Собеседник разговаривает с кем-то другим.
+     *
+     * Отдельно от «не ответил»: человек различает эти случаи и поступает по-разному —
+     * не ответившему перезванивают сразу, занятого ждут.
+     */
+    val peerBusy: String
+
     /** Нам звонили и не дождались. */
     val missedCall: String
 
@@ -1992,6 +2000,7 @@ object RussianWords : Words {
         override val peerStoppedVideo = "Собеседник перестал показывать себя"
         override val peerLeft = "Собеседник положил трубку"
         override val noAnswer = "Не дозвонились: никто не ответил"
+        override val peerBusy = "Собеседник занят другим звонком"
         override val missedCall = "Пропущенный звонок"
         override val remoteHidden = "Видео собеседника скрыто — оно не принимается и трафик на него не идёт"
         override val hideRemote = "Скрыть видео"

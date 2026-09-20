@@ -697,6 +697,7 @@ object EnglishWords : Words {
         override val peerStoppedVideo = "The other side stopped showing video"
         override val peerLeft = "The other side hung up"
         override val noAnswer = "No answer"
+        override val peerBusy = "The other side is on another call"
         override val missedCall = "Missed call"
         override val remoteHidden = "Their video is hidden — it is not received and uses no traffic"
         override val hideRemote = "Hide video"

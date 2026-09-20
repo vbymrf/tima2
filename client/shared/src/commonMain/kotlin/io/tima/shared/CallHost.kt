@@ -231,6 +231,10 @@ class CallHost(
             // в журнал он попадает, иначе «мне звонили, а телефон молчал» не разобрать.
             // Ровно эта запись и назвала беду 2026-09-20, когда условием было `active`.
             Journal.note(LogCode.CALL, "второй входящий во время звонка — не показан", "звонок" to callId.take(8))
+            // **И сказать серверу, чтобы звонящий не слушал гудки впустую.** Сервер
+            // теперь отказывает занятому ещё на входе, но гонку это не снимает: два
+            // вызова могут прийти в одну секунду, и второй проскочит проверку.
+            scope.launch { calls.end(callId) }
             return
         }
         this.callId = callId
@@ -314,6 +318,9 @@ class CallHost(
     private fun told() {
         callOngoing(words().call.activeCall, peer.ifBlank { words().chat.nameless })
     }
+
+    /** Тот ли это звонок, который у нас идёт. Чужой конец нашего разговора не касается. */
+    fun callIs(id: String): Boolean = id.isNotEmpty() && id == callId
 
     /** Тот ли это человек, с кем мы говорим. Нужен, чтобы понять, чей уход нас касается. */
     fun peerIs(userId: String): Boolean = userId.isNotEmpty() && userId == peerId
@@ -484,6 +491,16 @@ class CallHost(
     }
 
     private fun refuse(step: CallStep) {
+        // «Занят» — не беда, а ответ, и человеку он нужен словами. Остальные отказы
+        // остаются кодом: код находит строку в обработчике, слова — нет.
+        if (step is CallStep.Refused && step.code == BUSY) {
+            Journal.note(LogCode.CALL, "собеседник занят", "кому" to peerId.take(8))
+            note(words().call.peerBusy)
+            stopTicking()
+            watchdog?.cancel()
+            state = state.copy(stage = CallStage.Ended)
+            return
+        }
         val why = when (step) {
             CallStep.NotConfigured -> "звонки не настроены на сервере"
             is CallStep.Offline -> "нет связи с сервером"
@@ -528,6 +545,9 @@ class CallHost(
          * который у другой ещё идёт.
          */
         const val RINGING_LIMIT_MS = 45_000L
+
+        /** Код отказа сервера, когда собеседник уже разговаривает (`calls.go`). */
+        const val BUSY = "busy"
     }
 }
 

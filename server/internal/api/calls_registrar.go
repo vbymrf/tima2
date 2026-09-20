@@ -20,6 +20,7 @@ type CallStore interface {
 	CreateCall(ctx context.Context, c store.Call) (string, error)
 	CreateGroupCall(ctx context.Context, room, kind, groupID, initiatorID string, members []string) (string, error)
 	GetCall(ctx context.Context, callID string) (store.Call, error)
+	HasLiveCall(ctx context.Context, userID string) (bool, error)
 	CallForJoinByID(ctx context.Context, callID, userID string) (store.CallForJoin, error)
 	CallIDByRoom(ctx context.Context, room string) (string, string, error)
 	CallParticipants(ctx context.Context, callID string) (map[string]store.ParticipantState, error)

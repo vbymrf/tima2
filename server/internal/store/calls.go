@@ -28,6 +28,37 @@ func (s *Store) CreateCall(ctx context.Context, c Call) (string, error) {
 	return id, err
 }
 
+// HasLiveCall — занят ли человек: есть ли у него звонок, который ещё идёт.
+//
+// ── ПОЧЕМУ СО СРОКАМИ, А НЕ ПРОСТО ПО СОСТОЯНИЮ ────────────────────────────
+//
+// Состояние в базе меняет тот, кто звонок закончил. Если приложение убили, телефон
+// уснул насовсем или вебхук LiveKit не доехал, строка остаётся в ringing или answered
+// навсегда — и человек становится «занят» до конца времён, ни разу об этом не узнав.
+//
+// Поэтому смотрим не только на слово, но и на время:
+//
+//	ringing  — дольше двух минут не звонит никто: у клиента срок ответа сорок пять секунд;
+//	answered — дольше четырёх часов не говорит никто, а вот ошибка длиной в четыре часа
+//	           уже заметна и чинится сама.
+//
+// Ошибаться этот запрос обязан в сторону «свободен»: ложное «занято» отнимает звонок,
+// которого человек ждал, а ложное «свободен» даёт лишний вызов — и тот виден.
+func (s *Store) HasLiveCall(ctx context.Context, userID string) (bool, error) {
+	var busy bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM calls
+			WHERE (initiator_id = $1 OR peer_id = $1)
+			  AND ended_at IS NULL
+			  AND (
+			        (state = 'ringing'  AND created_at  > now() - interval '2 minutes')
+			     OR (state = 'answered' AND answered_at > now() - interval '4 hours')
+			  )
+		)`, userID).Scan(&busy)
+	return busy, err
+}
+
 func (s *Store) GetCall(ctx context.Context, callID string) (Call, error) {
 	var c Call
 	err := s.pool.QueryRow(ctx, `
