@@ -714,6 +714,28 @@ private fun App(
     // Какое окно открыто. Приложение начинается с окна 1: личная связь — то, ради
     // чего его открывают чаще всего, а остальные окна пока пусты по существу.
     var window by remember { mutableStateOf(Window.Phone) }
+
+    /**
+     * Показать окно 0 — **и убрать то, что его закрывает**.
+     *
+     * ── ДВА ШАГА, И ВТОРОЙ ЗАБЫВАЕТСЯ ───────────────────────────────────────
+     *
+     * Переписка, книга, личная страница, настройки — всё это подокна, и лежат они ПОВЕРХ
+     * окна. Сменить окно под подокном значит открыть звонок невидимым: он идёт, а человек
+     * видит прежний экран.
+     *
+     * Так уже было с исходящим (ЗВ1) — там второй шаг дописали. **На входящем он остался
+     * забытым**, и это оказалось хуже: звонящий волен нажать «позвонить» откуда угодно, а
+     * принимающий чаще всего сидит именно в переписке. Вызов приходил, журнал честно
+     * писал «входящий звонок», экран не менялся, и через сорок пять секунд сторож клал
+     * трубку. Со стороны выглядело как «позвонить нельзя в принципе» (2026-09-20).
+     *
+     * Поэтому вход в окно 0 теперь один на всех: и набор, и входящий, и плашка.
+     */
+    fun showCall() {
+        window = Window.Call
+        where = Where.Nothing
+    }
     // Смена окна — тоже «что человек делал»: половина жалоб про конкретное окно.
     // В журнал — ключ, а не надпись: журнал читает чинящий, и запись не должна менять
     // вид от языка приложения.
@@ -930,7 +952,7 @@ private fun App(
                     fromName = peopleCards[fromId]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE).orEmpty(),
                     video = kind == "video",
                 )
-                window = Window.Call
+                showCall()
             }
         }
     }
@@ -1158,8 +1180,7 @@ private fun App(
      */
     val callPerson: (String, String, Boolean) -> Unit = { peerId, name, video ->
         callHost.start(peerId, name, video)
-        window = Window.Call
-        where = Where.Nothing
+        showCall()
     }
 
     // Свайп по средней зоне ведёт к соседнему окну в порядке переключателя. Края
@@ -1443,7 +1464,7 @@ private fun App(
     CompositionLocalProvider(
         LocalActiveCall provides ActiveCall(
             seconds = callHost.seconds,
-            onOpen = { window = Window.Call; where = Where.Nothing },
+            onOpen = { showCall() },
         ).takeIf { callHost.active && window != Window.Call },
     ) {
     Stage(
