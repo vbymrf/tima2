@@ -134,7 +134,11 @@ services:
       # (`download/README.md`), и вкладка обновления молчала, будто сломан клиент.
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
-      LIVEKIT_URL: ${LIVEKIT_URL}
+      # Адрес собирается из домена ровно так же, как у backend выше, и это не копия по
+      # небрежности: в `.env` переменной LIVEKIT_URL нет вовсе. Написанное здесь
+      # `${LIVEKIT_URL}` подставилось бы пустотой — и уборщик молча перестал бы работать,
+      # что и случилось при первой выкатке.
+      LIVEKIT_URL: wss://lk.${DOMAIN}
     volumes:
       - pii-data:/data/pii
     depends_on:
