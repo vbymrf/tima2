@@ -11,6 +11,7 @@ import io.livekit.android.room.track.VideoTrack
 import io.livekit.android.room.track.VideoCaptureParameter
 import io.livekit.android.room.track.VideoCodec as LkVideoCodec
 import io.livekit.android.util.flow
+import livekit.org.webrtc.RtpParameters.DegradationPreference
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
 import kotlinx.coroutines.CoroutineScope
@@ -76,6 +77,11 @@ class LiveKitCallEngine(
                     // (ПЛАН-СТЕНДА §5а, «ловушка»).
                     simulcast = video.layers == LayerMode.Simulcast,
                     scalabilityMode = video.scalability.takeIf { video.layers == LayerMode.Svc },
+                    degradationPreference = when (video.degradation) {
+                        Degradation.MaintainResolution -> DegradationPreference.MAINTAIN_RESOLUTION
+                        Degradation.MaintainFramerate -> DegradationPreference.MAINTAIN_FRAMERATE
+                        Degradation.Balanced -> DegradationPreference.BALANCED
+                    },
                 )
             },
             videoTrackCaptureDefaults = publish?.video?.let { video ->

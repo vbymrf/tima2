@@ -381,7 +381,6 @@ class CallHost(
      */
     fun remoteVideo(take: Boolean) {
         scope.launch { engine?.setRemoteVideo(take) }
-        if (!take) note(words().call.remoteHidden)
     }
 
     /**
@@ -393,10 +392,24 @@ class CallHost(
      */
     private fun noticed(was: CallState, now: CallState) {
         val words = words().call
-        if (now.remoteVideoShown && !was.remoteVideoShown && !now.cameraOn) note(words.peerShowsSelf)
+
+        // ── ДЛЯЩИЕСЯ: появляются и СНИМАЮТСЯ ────────────────────────────────
+        //
+        // «Собеседник показывает себя, ваша камера выключена» — правда ровно до того
+        // мгновения, когда человек включил камеру. Раньше строка висела и после, то есть
+        // продолжала утверждать неверное (заказчик 2026-09-20).
+        val peerAlone = now.remoteVideoShown && !now.cameraOn
+        if (peerAlone) note(words.peerShowsSelf, whileTrue = PEER_ALONE) else forget(PEER_ALONE)
+
+        if (now.videoPaused) note(words.videoPaused, whileTrue = PAUSED) else forget(PAUSED)
+
+        val backing = now.stage == CallStage.Reconnecting
+        if (backing) note(words.reconnecting, whileTrue = BACKING) else forget(BACKING)
+
+        if (!now.remoteVideoTaken) note(words.remoteHidden, whileTrue = HIDDEN) else forget(HIDDEN)
+
+        // ── СЛУЧИВШИЕСЯ: остаются ──────────────────────────────────────────
         if (!now.remoteVideoShown && was.remoteVideoShown && now.remoteVideoTaken) note(words.peerStoppedVideo)
-        if (now.videoPaused && !was.videoPaused) note(words.videoPaused)
-        if (now.stage == CallStage.Reconnecting && was.stage != CallStage.Reconnecting) note(words.reconnecting)
 
         // ── ТО ЖЕ САМОЕ В ЖУРНАЛ ────────────────────────────────────────────
         //
@@ -411,7 +424,21 @@ class CallHost(
             if (now.stage == CallStage.Connected || now.stage == CallStage.Ended) watchdog?.cancel()
             // Звонка нет — и следа его в шторке быть не должно: висящее уведомление
             // «идёт звонок» хуже отсутствующего, потому что ему верят.
-            if (now.stage == CallStage.Ended) callOngoingOff()
+            if (now.stage == CallStage.Ended) {
+                callOngoingOff()
+                // ── И ОТПУСТИТЬ МЕДИА ───────────────────────────────────────
+                //
+                // **Трубку мог положить собеседник, и тогда наш движок никто не
+                // останавливал.** Чужая дорожка при этом снимается сама (её больше нет в
+                // комнате), а своя остаётся — вместе с картинкой на экране и включённой
+                // камерой. В журнале это видно по отсутствию строки «своя камера
+                // включена=false» там, где «видео собеседника идёт=false» есть: отчёт
+                // `K89R` 2026-09-20, и заказчик увидел на экране кадр прошлого звонка.
+                //
+                // Повторный `disconnect` безвреден: комнаты уже нет, и состояние не
+                // меняется — поток одинаковые значения не повторяет.
+                scope.launch { engine?.disconnect() }
+            }
         }
         if (now.microphoneOn != was.microphoneOn) {
             Journal.note(LogCode.CALL, "микрофон", "включён" to now.microphoneOn)
@@ -438,10 +465,22 @@ class CallHost(
         }
     }
 
-    /** Дописать событие. Повтор последнего не дописывается: лента не должна заикаться. */
-    private fun note(text: String, action: CallAction? = null) {
-        if (events.lastOrNull()?.text == text) return
-        events.add(CallEvent(seconds = seconds, text = text, action = action))
+    /**
+     * Дописать событие.
+     *
+     * Повтор не дописывается: длящееся событие проверяется на каждом обновлении
+     * состояния, а их за звонок десятки — лента иначе состояла бы из одной строки,
+     * повторённой сорок раз.
+     */
+    private fun note(text: String, action: CallAction? = null, whileTrue: String? = null) {
+        if (whileTrue != null && events.any { it.whileTrue == whileTrue }) return
+        if (whileTrue == null && events.lastOrNull()?.text == text) return
+        events.add(CallEvent(seconds = seconds, text = text, action = action, whileTrue = whileTrue))
+    }
+
+    /** Снять длящееся событие: то, о чём оно говорило, кончилось. */
+    private fun forget(whileTrue: String) {
+        events.removeAll { it.whileTrue == whileTrue }
     }
 
     /** Сделать то, что предлагает событие. */
@@ -548,6 +587,13 @@ class CallHost(
 
         /** Код отказа сервера, когда собеседник уже разговаривает (`calls.go`). */
         const val BUSY = "busy"
+
+        // Ключи длящихся событий. Строками, а не перечнем: их читает только этот файл,
+        // и перечень на четыре значения был бы лестницей к одной ступеньке.
+        const val PEER_ALONE = "чужое видео при нашей выключенной камере"
+        const val PAUSED = "видео погашено полосой"
+        const val BACKING = "связь возвращается"
+        const val HIDDEN = "чужое видео скрыто нами"
     }
 }
 

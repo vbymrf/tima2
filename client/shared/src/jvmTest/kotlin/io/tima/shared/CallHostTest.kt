@@ -161,6 +161,57 @@ class CallHostTest {
         )
     }
 
+    @Test
+    fun длящееся_событие_снимается_когда_кончилось() = runTest {
+        // «Собеседник показывает себя, ваша камера выключена» — правда ровно до того
+        // мгновения, когда камеру включили. Строка, висящая после, утверждает неверное
+        // (заказчик 2026-09-20).
+        val engine = FakeEngine()
+        val host = CallHost(
+            FakeCalls(),
+            engine,
+            CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
+            words = { io.tima.core.words.RussianWords },
+        )
+        host.ring(callId = "первый", fromId = "u-1", fromName = "Аня", video = false)
+
+        engine.say(CallState(stage = CallStage.Connected, remoteVideoShown = true, cameraOn = false))
+        assertTrue(
+            host.events.any { it.text == io.tima.core.words.RussianWords.call.peerShowsSelf },
+            "не сказано, что собеседник показывает себя при нашей выключенной камере",
+        )
+
+        engine.say(CallState(stage = CallStage.Connected, remoteVideoShown = true, cameraOn = true))
+        assertTrue(
+            host.events.none { it.text == io.tima.core.words.RussianWords.call.peerShowsSelf },
+            "строка осталась после включения камеры: ${host.events.map { it.text }}",
+        )
+    }
+
+    @Test
+    fun длящееся_событие_не_повторяется() = runTest {
+        // Состояние обновляется десятки раз за звонок. Без защиты лента состояла бы из
+        // одной строки, повторённой сорок раз, и листать её было бы незачем.
+        val engine = FakeEngine()
+        val host = CallHost(
+            FakeCalls(),
+            engine,
+            CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
+            words = { io.tima.core.words.RussianWords },
+        )
+        host.ring(callId = "первый", fromId = "u-1", fromName = "Аня", video = false)
+
+        repeat(5) { at ->
+            engine.say(CallState(stage = CallStage.Connected, remoteVideoShown = true, others = listOf("u-$at")))
+        }
+
+        assertEquals(
+            1,
+            host.events.count { it.text == io.tima.core.words.RussianWords.call.peerShowsSelf },
+            "событие повторилось: ${host.events.map { it.text }}",
+        )
+    }
+
     private fun TestScope.host(calls: Calls = FakeCalls()) = CallHost(
         calls,
         FakeEngine(),
