@@ -83,9 +83,11 @@ func startCall(deps callsDeps) http.HandlerFunc {
 		}
 		// call.incoming устройствам собеседника (VoIP push — с провайдером позже)
 		payload := map[string]any{"call_id": callID, "room": room, "kind": req.Kind, "from": id.UserID}
-		ringPeer(deps, r.Context(), req.PeerID, payload)
+		rung := ringPeer(deps, r.Context(), req.PeerID, payload)
 		// И ещё дважды, пока звонок звонит, — см. ringAgain.
 		go ringAgain(deps, callID, req.PeerID, payload)
+		// А если вызов не забрало ни одно устройство — сказать об этом звонящему.
+		go noticeIfUnreachable(deps, callID, id.DeviceID, rung)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -95,15 +97,73 @@ func startCall(deps callsDeps) http.HandlerFunc {
 }
 
 // ringPeer — разослать кадр всем устройствам собеседника.
-func ringPeer(deps callsDeps, ctx context.Context, peerID string, payload map[string]any) {
+//
+// Возвращает номера событий по устройствам: по ним потом видно, кто вызов забрал.
+func ringPeer(deps callsDeps, ctx context.Context, peerID string, payload map[string]any) map[string]int64 {
 	devices, err := deps.store.ListDevices(ctx, peerID)
 	if err != nil {
 		log.Printf("ringPeer %s: %v", peerID, err)
+		return nil
+	}
+	rung := make(map[string]int64, len(devices))
+	for _, d := range devices {
+		if id := deps.notifier.Device(ctx, d.DeviceID, "call.incoming", payload); id > 0 {
+			rung[d.DeviceID] = id
+		}
+	}
+	return rung
+}
+
+// Через сколько сказать звонящему, что вызов никто не забрал.
+//
+// Пять секунд — оборот сверки соединения с журналом (wsCatchupInterval) плюс запас на
+// подтверждение. Меньше — и слово говорилось бы на каждом переподключении, которых в
+// мобильной сети много.
+var unreachableAfter = 5 * time.Second
+
+// noticeIfUnreachable — сказать звонящему, что вызов не забрало ни одно устройство.
+//
+// ── ЧТО ЭТО ЗНАЧИТ И ЧЕГО НЕ ЗНАЧИТ ─────────────────────────────────────────
+//
+// Подтверждение кадра (ack) двигает sync_cursors. Курсор ниже номера вызова через
+// пять секунд означает ровно одно: **устройство сейчас не на связи**. Не «человек
+// занят», не «человек отказался» и даже не «человек не узнает» — вернувшись, оно
+// заберёт вызов из журнала сам, и если сорок пять секунд ещё не вышли, телефон
+// зазвонит.
+//
+// Поэтому звонок **не прекращается**: уходит слово звонящему, и только. Прекратить
+// его здесь значило бы решить за вернувшееся устройство, что оно опоздало.
+//
+// Это прямое следствие ADR-0025 §1а: устройство говорит только о своём состоянии и
+// только когда доступно. Молчание — не сведения, и сказано оно должно быть как
+// молчание.
+func noticeIfUnreachable(deps callsDeps, callID, callerDevice string, rung map[string]int64) {
+	if len(rung) == 0 || callerDevice == "" {
+		// Устройств у собеседника нет вовсе — это другое, и говорится оно не здесь.
 		return
 	}
-	for _, d := range devices {
-		deps.notifier.Device(ctx, d.DeviceID, "call.incoming", payload)
+	// Свой контекст: запрос давно закрыт, его отмена унесла бы и это слово.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(unreachableAfter):
 	}
+	if call, err := deps.store.GetCall(ctx, callID); err != nil || call.State != "ringing" {
+		return // ответили, отклонили, отменили — говорить нечего
+	}
+	for deviceID, eventID := range rung {
+		cursor, err := deps.store.SyncCursor(ctx, deviceID)
+		if err != nil {
+			log.Printf("noticeIfUnreachable %s: курсор %s: %v", callID, deviceID, err)
+			return // не знаем — молчим: догадка хуже молчания
+		}
+		if cursor >= eventID {
+			return // хотя бы одно устройство вызов забрало
+		}
+	}
+	deps.notifier.Device(ctx, callerDevice, "call.unreachable", map[string]any{"call_id": callID})
 }
 
 // Когда повторять вызов и сколько раз.
@@ -127,10 +187,12 @@ var ringAgainAfter = []time.Duration{2 * time.Second, 6 * time.Second}
 // отчёты обоих телефонов показывают, что до второго оно не дошло, а соседние события того
 // же устройства дошли.
 //
-// **Это заплатка, а не лечение.** Лечение — доставка «хотя бы один раз», то есть Redis
-// Streams вместо Pub/Sub: [ПЛАН-ДОСТАВКИ-СОБЫТИЙ.md](../../../doc_mig/ПЛАН-ДОСТАВКИ-СОБЫТИЙ.md).
-// Здесь же цена повтора — два лишних кадра на звонок, и она заведомо меньше цены
-// несостоявшегося звонка.
+// **Дыру закрыл дожим по журналу** (`ws.go`, wsCatchupInterval): соединение само
+// сверяется с device_events и досылает потерянное шиной. Повтор при этом остаётся вторым
+// поясом — дожим замечает потерю за пять секунд, а у звонка их сорок пять, и держаться
+// одной цепочки в такой срок незачем. Цена повтора — два лишних кадра на звонок, и она
+// заведомо меньше цены несостоявшегося звонка.
+// Подробности: [ПЛАН-ДОСТАВКИ-СОБЫТИЙ.md](../../../doc_mig/ПЛАН-ДОСТАВКИ-СОБЫТИЙ.md).
 //
 // **Клиент обязан уметь повтор.** Дубликат, пришедший на показанный звонок, отсеивается
 // по идентификатору (`CallHost.ring`); клиент без этой защиты положил бы трубку

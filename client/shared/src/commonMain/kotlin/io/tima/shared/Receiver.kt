@@ -63,6 +63,12 @@ class Receiver(
     /** Кто-то вышел из комнаты звонка: идентификатор звонка и ушедшего. */
     private val onCallLeft: (String, String) -> Unit = { _, _ -> },
     /**
+     * Вызов не забрало ни одно устройство собеседника: `(callId)`.
+     *
+     * Не конец звонка — слово о том, что сейчас никого нет на связи.
+     */
+    private val onCallUnreachable: (String) -> Unit = { _ -> },
+    /**
      * Штамп отправителя из обёртки события (сервер 0052/0053): кто, счётчик его профиля,
      * группа и цвет. Наружу, а не в базу: это подсказка карточкам людей, а не сообщение.
      */
@@ -112,6 +118,8 @@ class Receiver(
                 onCallState(decision.callId, decision.state)
             is EventStreamProtocol.Decision.CallLeft ->
                 onCallLeft(decision.callId, decision.userId)
+            is EventStreamProtocol.Decision.CallUnreachable ->
+                onCallUnreachable(decision.callId)
             else -> Unit
         }
     }

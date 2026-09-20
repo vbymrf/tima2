@@ -6,6 +6,17 @@
 // сдвигает серверный cursor → live. Кадры — JSON (debug-транспорт по контракту;
 // protobuf — вместе с клиентом). События идемпотентны: пересечение догона и
 // live безопасно. sync.gap (cursor старше ретеншена) — вместе с GC worker-а.
+//
+// **Гарантию доставки даёт не шина, а журнал.** Redis Pub/Sub — «не более одного
+// раза»: нет подписчика, переполнился буфер, дёрнулось соединение — кадр исчез, и
+// никто не узнал. Так 2026-09-20 потерялся call.incoming, и человек остался без
+// звонка при живом соединении: событие лежало в device_events, а перечитать его
+// было некому — клиент читает журнал только при переподключении.
+//
+// Поэтому соединение помнит, что оно уже отдало (sent), и раз в wsCatchupInterval
+// смотрит в журнал после этого места. Нашлось — это ровно те кадры, которые шина
+// потеряла: они уходят той же дорогой и с тем же event_id. Повтор безвреден —
+// клиент отбирает по event_id (EventStreamProtocol.Decision.Seen).
 package api
 
 import (
@@ -18,6 +29,7 @@ import (
 	"github.com/coder/websocket"
 
 	"tima/server/internal/auth"
+	"tima/server/internal/store"
 )
 
 // Сроки рассчитаны на мобильную сеть. Прежние значения (5 с на pong, 10 с на запись)
@@ -29,6 +41,12 @@ const (
 	wsPingInterval = 30 * time.Second // websocket-events.md: ping/pong каждые 30 с
 	wsPongTimeout  = 20 * time.Second // ответ на ping; меньше интервала, иначе очередь ping-ов
 	wsWriteTimeout = 30 * time.Second // отдача кадра клиенту
+
+	// Как часто соединение сверяется с журналом. Пять секунд — не про нагрузку (один
+	// запрос по индексу на устройство), а про звонок: дольше — и досланный вызов
+	// придёт, когда звонящий уже положил трубку.
+	wsCatchupInterval = 5 * time.Second
+	wsCatchupLimit    = 100
 )
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
@@ -99,6 +117,15 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 	ping := time.NewTicker(wsPingInterval)
 	defer ping.Stop()
+	catchup := time.NewTicker(wsCatchupInterval)
+	defer catchup.Stop()
+
+	// Докуда это соединение отдало журнал. Двигают оба пути — и sync.pull, и live;
+	// гонки нет: пишет в сокет только этот цикл.
+	sent := int64(0)
+	// До первого sync.pull дожимать нечего: откуда клиент читает, ещё не сказано, и
+	// «после нуля» означало бы вывалить ему всю историю.
+	pulled := false
 	for {
 		select {
 		case <-ctx.Done():
@@ -106,7 +133,10 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		case <-readErr:
 			return // клиент закрылся
 		case f := <-frames:
-			if err := s.handleWSFrame(ctx, conn, deviceID, f); err != nil {
+			if f.Event == "sync.pull" {
+				pulled = true
+			}
+			if err := s.handleWSFrame(ctx, conn, deviceID, f, &sent); err != nil {
 				return
 			}
 		case <-ping.C:
@@ -121,10 +151,40 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 				conn.Close(websocket.StatusGoingAway, "шина событий закрылась")
 				return
 			}
+			// Кадр мог обогнать шину: догон или дожим уже отдал его. Второй раз
+			// клиент его отбросит, но платить за это трафиком незачем.
+			var live struct {
+				EventID int64 `json:"event_id"`
+			}
+			if json.Unmarshal([]byte(msg.Payload), &live) == nil && live.EventID > 0 {
+				if live.EventID <= sent {
+					continue
+				}
+				sent = live.EventID
+			}
 			wctx, cancel := context.WithTimeout(ctx, wsWriteTimeout)
 			err := conn.Write(wctx, websocket.MessageText, []byte(msg.Payload))
 			cancel()
 			if err != nil {
+				return
+			}
+
+		case <-catchup.C:
+			if !pulled {
+				continue
+			}
+			missed, err := s.Store.ListDeviceEvents(ctx, deviceID, sent, wsCatchupLimit)
+			if err != nil {
+				log.Printf("ws %s: сверка с журналом: %v", deviceID, err)
+				continue
+			}
+			if len(missed) == 0 {
+				continue
+			}
+			// Это число — прямая мера потерь шины, а не косвенная. Молчит журнал —
+			// Pub/Sub ничего не терял; говорит — знаем, сколько и кому.
+			log.Printf("ws %s: шина потеряла %d событий после %d — досылаю", deviceID, len(missed), sent)
+			if err := sendStored(ctx, conn, deviceID, missed, &sent); err != nil {
 				return
 			}
 		}
@@ -140,7 +200,8 @@ type wsClientFrame struct {
 }
 
 // handleWSFrame — sync.pull и ack; typing/receipt/presence — следующие итерации.
-func (s *Server) handleWSFrame(ctx context.Context, conn *websocket.Conn, deviceID string, f wsClientFrame) error {
+// sent — докуда соединение отдало журнал; sync.pull его двигает.
+func (s *Server) handleWSFrame(ctx context.Context, conn *websocket.Conn, deviceID string, f wsClientFrame, sent *int64) error {
 	switch f.Event {
 	case "sync.pull":
 		var cursor int64
@@ -171,6 +232,11 @@ func (s *Server) handleWSFrame(ctx context.Context, conn *websocket.Conn, device
 				if next < watermark {
 					next = watermark
 				}
+				// Дожим обязан начинаться оттуда же: до next_cursor журнал пуст,
+				// и сверка иначе нашла бы там «потери», которых нет.
+				if next > *sent {
+					*sent = next
+				}
 				return writeJSON(ctx, conn, map[string]any{"event": "sync.gap", "next_cursor": next})
 			}
 		}
@@ -180,18 +246,11 @@ func (s *Server) handleWSFrame(ctx context.Context, conn *websocket.Conn, device
 			return writeJSON(ctx, conn, map[string]any{"event": "error", "code": "internal"})
 		}
 		next := cursor
-		for _, e := range events {
-			frame := map[string]any{}
-			if err := json.Unmarshal(e.Payload, &frame); err != nil {
-				log.Printf("ws %s: событие %d повреждено: %v", deviceID, e.EventID, err)
-				continue
-			}
-			frame["event"] = e.EventType
-			frame["event_id"] = e.EventID
-			if err := writeJSON(ctx, conn, frame); err != nil {
-				return err
-			}
-			next = e.EventID
+		if err := sendStored(ctx, conn, deviceID, events, &next); err != nil {
+			return err
+		}
+		if next > *sent {
+			*sent = next
 		}
 		limit := f.Limit
 		if limit <= 0 || limit > 500 {
@@ -210,6 +269,33 @@ func (s *Server) handleWSFrame(ctx context.Context, conn *websocket.Conn, device
 	default:
 		return nil // неизвестные кадры молча пропускаем (typing и пр. — позже)
 	}
+}
+
+// sendStored отдаёт события журнала кадрами и двигает last на последнее отданное.
+// Одна дорога и для догона (sync.pull), и для дожима: разойдись они — кадр одного и
+// того же события приходил бы клиенту в двух видах.
+//
+// Обычной функцией, а не методом *Server: полей сервера ей не нужно ни одного, а
+// каждый метод общего типа — это ещё один handler, который видит всё
+// (architecture_test.go, бюджет методов *Server).
+func sendStored(ctx context.Context, conn *websocket.Conn, deviceID string, events []store.DeviceEvent, last *int64) error {
+	for _, e := range events {
+		frame := map[string]any{}
+		if err := json.Unmarshal(e.Payload, &frame); err != nil {
+			// Отдать нечего, но отметку двигаем: иначе испорченное событие
+			// перечитывается вечно — и дожимом теперь каждые пять секунд.
+			log.Printf("ws %s: событие %d повреждено: %v", deviceID, e.EventID, err)
+			*last = e.EventID
+			continue
+		}
+		frame["event"] = e.EventType
+		frame["event_id"] = e.EventID
+		if err := writeJSON(ctx, conn, frame); err != nil {
+			return err
+		}
+		*last = e.EventID
+	}
+	return nil
 }
 
 func writeJSON(ctx context.Context, conn *websocket.Conn, v any) error {

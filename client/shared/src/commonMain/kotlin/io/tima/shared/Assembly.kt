@@ -190,6 +190,7 @@ fun assemble(
                 // только тот, кто ведёт звонок, — в группе уход одного из пятерых
                 // разговора не кончает. Сюда едет идентификатор, а выводы делает `Root`.
                 onCallLeft = { callId, userId -> callPings.value = "ушёл|$callId|$userId" },
+                onCallUnreachable = { callId -> callPings.value = "недоступен|$callId|-" },
                 onStamp = { senderStamps.tryEmit(it) },
             ),
             keyOrchestrator = keyOrchestrator,

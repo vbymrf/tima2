@@ -64,25 +64,31 @@ type Notifier struct {
 }
 
 // Device — событие одному устройству.
-func (n *Notifier) Device(ctx context.Context, deviceID, event string, payload map[string]any) {
+//
+// Возвращает номер события в журнале; 0 — записать не удалось. Номер нужен тому, кто
+// потом спросит «забрало ли устройство этот кадр»: подтверждение приходит именно по
+// нему (sync_cursors). Почти никто из вызывающих его не смотрит, и это правильно —
+// знать про доставку поимённо нужно одному звонку.
+func (n *Notifier) Device(ctx context.Context, deviceID, event string, payload map[string]any) int64 {
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		log.Printf("notify %s %s: marshal: %v", deviceID, event, err)
-		return
+		return 0
 	}
 	eventID, err := n.store.AppendDeviceEvent(ctx, deviceID, event, raw)
 	if err != nil {
 		log.Printf("notify %s %s: append: %v", deviceID, event, err)
-		return
+		return 0
 	}
 	bus := n.bus()
 	if bus == nil {
-		return
+		return eventID
 	}
 	if err := bus.Publish(ctx, deviceID, event, eventID, payload); err != nil {
 		// Живая доставка не фатальна: событие уже в логе.
 		log.Printf("notify %s %s: publish: %v", deviceID, event, err)
 	}
+	return eventID
 }
 
 // Users — то же событие всем устройствам перечисленных людей.

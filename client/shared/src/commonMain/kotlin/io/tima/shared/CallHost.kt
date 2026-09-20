@@ -457,6 +457,10 @@ class CallHost(
 
         if (now.videoPaused) note(words.videoPaused, whileTrue = PAUSED) else forget(PAUSED)
 
+        // Собеседник взял трубку — значит его устройство нашлось, и слово о том, что
+        // его нет на связи, стало неправдой.
+        if (now.stage == CallStage.Connected) forget(OFFLINE)
+
         val backing = now.stage == CallStage.Reconnecting
         if (backing) note(words.reconnecting, whileTrue = BACKING) else forget(BACKING)
 
@@ -530,6 +534,24 @@ class CallHost(
         if (whileTrue != null && events.any { it.whileTrue == whileTrue }) return
         if (whileTrue == null && events.lastOrNull()?.text == text) return
         events.add(CallEvent(seconds = seconds, text = text, action = action, whileTrue = whileTrue))
+    }
+
+    /**
+     * Вызов не забрало ни одно устройство собеседника (`call.unreachable`).
+     *
+     * **Звонок при этом продолжается.** Сервер сказал не «человека нет», а «сейчас никто
+     * не подтвердил кадр»: устройство вернётся — возьмёт вызов из журнала само, и до
+     * конца сорока пяти секунд телефон ещё зазвонит. Поэтому это строка в ленте, а не
+     * причина класть трубку, — решать за вернувшееся устройство мы не вправе.
+     *
+     * Событие длящееся: собеседник появился и ответил — оно снимается, как и всякое
+     * отражение уже случившегося (заказчик 2026-09-20).
+     */
+    fun peerOffline(callId: String) {
+        if (!active || !callIs(callId)) return
+        if (state.stage != CallStage.Connecting) return // уже соединились — слово ложно
+        note(words().call.peerOffline, whileTrue = OFFLINE)
+        Journal.note(LogCode.CALL, "вызов не забрало ни одно устройство собеседника")
     }
 
     /** Снять длящееся событие: то, о чём оно говорило, кончилось. */
@@ -649,6 +671,7 @@ class CallHost(
         const val BACKING = "связь возвращается"
         const val HIDDEN = "чужое видео скрыто нами"
         const val NO_CAMERA = "камера не разрешена"
+        const val OFFLINE = "устройство собеседника не на связи"
     }
 }
 

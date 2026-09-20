@@ -34,6 +34,9 @@ type CallStore interface {
 	IsSpeaker(ctx context.Context, roomID, ownerID, userID string) (bool, error)
 	ListGroupMembers(ctx context.Context, groupID string) ([]store.Member, error)
 	ListDevices(ctx context.Context, userID string) ([]store.Device, error)
+	// Докуда устройство подтвердило события. Звонку нужен единственный ответ:
+	// забрало ли оно вызов — см. noticeIfUnreachable.
+	SyncCursor(ctx context.Context, deviceID string) (int64, error)
 }
 
 var _ CallStore = (*store.Store)(nil)

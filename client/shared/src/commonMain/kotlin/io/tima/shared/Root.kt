@@ -940,6 +940,9 @@ private fun App(
             // придётся здесь.
             parts.size == 3 && parts[0] == "ушёл" ->
                 if (callHost.active && callHost.peerIs(parts[2])) callHost.hangUp()
+            // Вызов не забрало ни одно устройство собеседника. Трубку не кладём: это
+            // слово о связи, а не о человеке (ADR-0025 §1а).
+            parts.size == 3 && parts[0] == "недоступен" -> callHost.peerOffline(parts[1])
             parts.size == 3 && parts[0].isNotEmpty() -> {
                 val (callId, fromId, kind) = parts
                 people.want(listOf(fromId))

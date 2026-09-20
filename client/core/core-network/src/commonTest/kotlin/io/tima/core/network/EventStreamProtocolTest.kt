@@ -143,6 +143,50 @@ class EventStreamProtocolTest {
     }
 
     @Test
+    fun уже_подтверждённый_кадр_не_выходит_наружу() {
+        // Доставка «хотя бы один раз» означает, что повторы будут: сервер досылает то,
+        // что потеряла шина, и то, чьё подтверждение не доехало. Отличить одно от
+        // другого на кадре нельзя — и не нужно, важно лишь не отдать дважды.
+        val кадр = """{"event":"message.new","event_id":10,"chat_id":"c","message_id":7,"envelope":"AAAA"}"""
+
+        val первый = protocol.decide(кадр, last = 9)
+        assertIs<EventStreamProtocol.Decision.Deliver>(первый, "кадр новее курсора обязан дойти")
+
+        val повтор = protocol.decide(кадр, last = 10)
+        assertIs<EventStreamProtocol.Decision.Seen>(повтор)
+        assertEquals(10, повтор.eventId)
+    }
+
+    @Test
+    fun повтор_отбирается_у_любого_кадра_а_не_только_у_сообщения() {
+        // Отбор стоит до разбора вида намеренно: кадры разбирают шесть разных мест, и
+        // требовать идемпотентности от каждого значит однажды её где-то не потребовать.
+        val кадры = listOf(
+            """{"event":"call.incoming","event_id":5,"call_id":"c","room":"r","kind":"audio","from":"u"}""",
+            """{"event":"key.rotated","event_id":5,"group_id":"g"}""",
+            """{"event":"typing","event_id":5,"chat_id":"c"}""",
+        )
+        for (кадр in кадры) {
+            assertIs<EventStreamProtocol.Decision.Seen>(protocol.decide(кадр, last = 5), "кадр «$кадр»")
+        }
+    }
+
+    @Test
+    fun кадры_без_номера_курсором_не_отбираются() {
+        // sync.done, sync.gap и ok — не события, а слова о ходе разговора. Отбери их по
+        // курсору — и догон встал бы: его окончание просто не дошло бы до вызывающего.
+        assertIs<EventStreamProtocol.Decision.SyncDone>(
+            protocol.decide("""{"event":"sync.done","count":0,"next_cursor":100,"more":false}""", last = 100),
+        )
+        assertIs<EventStreamProtocol.Decision.NeedHistory>(
+            protocol.decide("""{"event":"sync.gap","next_cursor":100}""", last = 100),
+        )
+        assertIs<EventStreamProtocol.Decision.Ready>(
+            protocol.decide("""{"event":"ok","device_id":"d"}""", last = 100),
+        )
+    }
+
+    @Test
     fun мусор_не_роняет_канал() {
         for (garbage in listOf("", "{}", "[]", "не json", """{"event":123}""")) {
             val decision = protocol.decide(garbage)

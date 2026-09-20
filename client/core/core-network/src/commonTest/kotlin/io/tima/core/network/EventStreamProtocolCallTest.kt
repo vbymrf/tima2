@@ -83,6 +83,26 @@ class EventStreamProtocolCallTest {
     }
 
     @Test
+    fun вызов_никем_не_забранный_приходит_отдельным_кадром() {
+        // Отдельным, а не словом в call.state: тот по правилу «от обратного» кончил бы
+        // звонок (ADR-0025, решение 2), а устройство собеседника может вернуться и взять
+        // вызов из журнала — сорок пять секунд ещё не вышли.
+        val decision = protocol.decide("""{"event":"call.unreachable","event_id":31,"call_id":"c-1"}""")
+        val слово = assertIs<EventStreamProtocol.Decision.CallUnreachable>(decision)
+        assertEquals("c-1", слово.callId)
+        assertEquals(31L, слово.eventId)
+    }
+
+    @Test
+    fun вызов_без_идентификатора_пропускается() {
+        // Неизвестно, о каком звонке речь: у человека может идти один разговор и звонить
+        // другой номер, и слово не о том звонке хуже молчания.
+        val decision = protocol.decide("""{"event":"call.unreachable","event_id":32}""")
+        val skip = assertIs<EventStreamProtocol.Decision.Skip>(decision)
+        assertEquals(32L, skip.eventId, "курсор обязан двинуться даже на пропущенном кадре")
+    }
+
+    @Test
     fun состояние_без_поля_state_пропускается() {
         val decision = protocol.decide("""{"event":"call.state","event_id":15,"call_id":"c-1"}""")
         assertIs<EventStreamProtocol.Decision.Skip>(decision)

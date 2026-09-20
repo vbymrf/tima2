@@ -230,6 +230,54 @@ class CallHostTest {
         )
     }
 
+    @Test
+    fun незабранный_вызов_говорится_словами_и_не_кладёт_трубку() = runTest {
+        // Сервер сказал: ни одно устройство собеседника вызов не подтвердило. Это слово о
+        // связи, а не о человеке (ADR-0025 §1а): устройство вернётся — возьмёт вызов из
+        // журнала само. Положить трубку здесь значило бы решить за него, что оно
+        // опоздало, а сорок пять секунд ещё идут.
+        val calls = FakeCalls()
+        val engine = FakeEngine()
+        val host = CallHost(
+            calls,
+            engine,
+            CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
+            words = { io.tima.core.words.RussianWords },
+        )
+
+        host.start(peerId = "u-9", peerName = "Вера", video = false)
+        host.peerOffline("дверь")
+
+        assertEquals(CallStage.Connecting, host.state.stage, "слово о связи положило трубку")
+        assertTrue(calls.ended.isEmpty(), "серверу сказали, что звонок кончен: ${calls.ended}")
+        assertTrue(
+            host.events.any { it.text == io.tima.core.words.RussianWords.call.peerOffline },
+            "про отсутствие связи не сказано словами: ${host.events.map { it.text }}",
+        )
+
+        // Устройство нашлось и ответило — строка стала неправдой и снимается.
+        engine.say(CallState(stage = CallStage.Connected))
+        assertTrue(
+            host.events.none { it.text == io.tima.core.words.RussianWords.call.peerOffline },
+            "строка осталась после ответа: ${host.events.map { it.text }}",
+        )
+    }
+
+    @Test
+    fun слово_о_чужом_звонке_не_принимается() = runTest {
+        // У человека может идти один разговор и висеть незабранный вызов по другому.
+        // Раньше на этом месте — на кадрах call.state — клалась трубка живого звонка.
+        val host = host()
+        host.start(peerId = "u-9", peerName = "Вера", video = false)
+
+        host.peerOffline("чужая дверь")
+
+        assertTrue(
+            host.events.none { it.text == io.tima.core.words.RussianWords.call.peerOffline },
+            "приняли слово о чужом звонке: ${host.events.map { it.text }}",
+        )
+    }
+
     private fun TestScope.host(calls: Calls = FakeCalls()) = CallHost(
         calls,
         FakeEngine(),

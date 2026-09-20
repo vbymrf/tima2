@@ -171,8 +171,36 @@ class EventStreamProtocol {
          */
         data class CallLeft(val callId: String, val userId: String, val eventId: Long?) : Decision
 
+        /**
+         * Вызов не забрало ни одно устройство собеседника (`call.unreachable`).
+         *
+         * **Это не конец звонка и не состояние человека.** Сервер говорит ровно то, что
+         * видит: через пять секунд ни одно устройство не подтвердило кадр вызова, то
+         * есть ни одно сейчас не на связи. Вернётся — заберёт вызов из журнала само, и
+         * телефон зазвонит, если сорок пять секунд ещё не вышли.
+         *
+         * Поэтому кадр отдельный, а не слово в `call.state`: тот по правилу «от
+         * обратного» кончил бы звонок (ADR-0025, решение 2), и вернувшееся устройство
+         * звонило бы в пустоту.
+         */
+        data class CallUnreachable(val callId: String, val eventId: Long?) : Decision
+
         /** Кадр не наш или испорчен — пропускаем, но курсор двигаем (правило 3). */
         data class Skip(val reason: String, val eventId: Long?) : Decision
+
+        /**
+         * Кадр уже проходил: его `event_id` не больше подтверждённого.
+         *
+         * **Доставка «хотя бы один раз» означает, что повторы будут** — не как сбой, а
+         * как устройство работы. Сервер дошлёт кадр, который шина потеряла; потерялось
+         * при этом не событие, а наше подтверждение — и тогда придёт то, что мы уже
+         * записали. Различить эти два случая на кадре нельзя, и не нужно: отбросить
+         * повтор дешевле, чем каждому получателю быть идемпотентным по-своему.
+         *
+         * Подтверждать его всё равно надо: повтор мог прийти именно потому, что
+         * прошлый `ack` не доехал, и промолчать — значит получать его вечно.
+         */
+        data class Seen(val eventId: Long) : Decision
     }
 
     /** Событие, которое надо записать. */
@@ -229,12 +257,25 @@ class EventStreamProtocol {
         return """{"event":"ack","event_id":$eventId}"""
     }
 
-    /** Разбирает кадр сервера. Исключений не бросает: вход недоверенный. */
-    fun decide(frame: String): Decision {
+    /**
+     * Разбирает кадр сервера. Исключений не бросает: вход недоверенный.
+     *
+     * @param last последний подтверждённый `event_id`. Кадр не новее него — повтор, и
+     *   наружу он не выходит ([Decision.Seen]). `null` — отбирать не по чему: так на
+     *   первом кадре соединения, пока курсор не известен.
+     *
+     * Отбор стоит **здесь, а не у получателей**. Кадры разбирают шесть разных мест —
+     * переписка, ключи, комментарии, звонки, — и требовать идемпотентности от каждого
+     * значит однажды её где-то не потребовать. Звонок это уже показал: повтор
+     * `call.incoming` мы удержали в `CallHost`, а что будет с повтором `key.rotated`,
+     * не знал никто.
+     */
+    fun decide(frame: String, last: Long? = null): Decision {
         val json = runCatching { Json.parseToJsonElement(frame) as JsonObject }.getOrNull()
             ?: return Decision.Skip("кадр не разобран", null)
 
         val eventId = json["event_id"]?.jsonPrimitive?.longOrNull
+        if (last != null && eventId != null && eventId <= last) return Decision.Seen(eventId)
         return when (val event = json.string("event")) {
             "ok" -> Decision.Ready(json.string("device_id") ?: "")
 
@@ -362,6 +403,15 @@ class EventStreamProtocol {
                     Decision.Skip("call.state без call_id или state", eventId)
                 } else {
                     Decision.CallState(callId = callId, state = state, eventId = eventId)
+                }
+            }
+
+            "call.unreachable" -> {
+                val callId = json.string("call_id")
+                if (callId == null) {
+                    Decision.Skip("call.unreachable без call_id", eventId)
+                } else {
+                    Decision.CallUnreachable(callId = callId, eventId = eventId)
                 }
             }
 

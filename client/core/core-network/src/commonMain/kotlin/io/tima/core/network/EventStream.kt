@@ -82,13 +82,19 @@ class EventStream(
 
                 for (frame in incoming) {
                     val text = (frame as? Frame.Text)?.readText() ?: continue
-                    when (val decision = protocol.decide(text)) {
+                    when (val decision = protocol.decide(text, last)) {
                         is EventStreamProtocol.Decision.Deliver -> {
                             // Порядок обязателен: сначала запись, потом подтверждение.
                             persist(decision.event)
                             last = decision.event.eventId
                             send(Frame.Text(protocol.ackFrame(decision.event.eventId)))
                         }
+
+                        // Кадр уже проходил (сервер дослал потерянное шиной, либо
+                        // не доехал наш ack). Наружу не отдаём — только подтверждаем
+                        // заново, иначе он будет приходить бесконечно.
+                        is EventStreamProtocol.Decision.Seen ->
+                            send(Frame.Text(protocol.ackFrame(decision.eventId)))
 
                         is EventStreamProtocol.Decision.Skip -> decision.eventId?.let {
                             last = it
@@ -147,12 +153,14 @@ class EventStream(
                         is EventStreamProtocol.Decision.CallIncoming,
                         is EventStreamProtocol.Decision.CallState,
                         is EventStreamProtocol.Decision.CallLeft,
+                        is EventStreamProtocol.Decision.CallUnreachable,
                         -> {
                             onCall(decision)
                             val id = when (decision) {
                                 is EventStreamProtocol.Decision.CallIncoming -> decision.eventId
                                 is EventStreamProtocol.Decision.CallState -> decision.eventId
                                 is EventStreamProtocol.Decision.CallLeft -> decision.eventId
+                                is EventStreamProtocol.Decision.CallUnreachable -> decision.eventId
                                 else -> null
                             }
                             id?.let {
