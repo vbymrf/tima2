@@ -245,7 +245,7 @@ class LiveKitCallEngine(
         scope.launch {
             room.localParticipant::videoTrackPublications.flow.collect { published ->
                 val track = published.firstOrNull()?.second as? VideoTrack
-                _localVideo.value = track?.let { LiveKitVideoHandle(room, it) }
+                show(_localVideo, room, track)
                 _state.value = _state.value.copy(cameraOn = track != null)
             }
         }
@@ -289,15 +289,30 @@ class LiveKitCallEngine(
     /** Какую чужую дорожку показывать. Одна: звонок один на один, в комнате двое. */
     private fun pickRemote(room: Room) {
         if (!takeRemote) {
-            _remoteVideo.value = null
+            show(_remoteVideo, room, null)
             _state.value = _state.value.copy(remoteVideoShown = false)
             return
         }
         val track = room.remoteParticipants.values
             .flatMap { it.videoTrackPublications }
             .firstNotNullOfOrNull { it.second as? VideoTrack }
-        _remoteVideo.value = track?.let { LiveKitVideoHandle(room, it) }
+        show(_remoteVideo, room, track)
         _state.value = _state.value.copy(remoteVideoShown = track != null)
+    }
+
+    /**
+     * Показать дорожку — **и не трогать ничего, если она та же самая**.
+     *
+     * Состояние комнаты обновляется десятки раз за звонок: кто-то включил микрофон,
+     * сменилось качество, подъехала подписка. Раньше на каждое такое обновление
+     * заводилась новая ручка, поток считал её новым значением, а экран перебирал под ней
+     * поверхность. Картинка при этом замирала, хотя дорожка шла: в журнале «видео
+     * собеседника идёт=true» держалось до конца звонка (отчёт `RX9A` 2026-09-20).
+     */
+    private fun show(where: MutableStateFlow<VideoHandle?>, room: Room, track: VideoTrack?) {
+        val shown = (where.value as? LiveKitVideoHandle)?.track
+        if (shown === track) return
+        where.value = track?.let { LiveKitVideoHandle(room, it) }
     }
 }
 

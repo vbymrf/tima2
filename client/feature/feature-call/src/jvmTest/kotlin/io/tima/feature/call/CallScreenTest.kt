@@ -141,9 +141,11 @@ class CallScreenTest {
     }
 
     @Test
-    fun скрыть_видео_появляется_только_когда_есть_что_скрывать() {
-        // Кнопка «скрыть» в звонке без чужого видео обещала бы то, чего нет, и сообщала
-        // бы о видео собеседника раньше, чем оно появилось.
+    fun управление_не_зависит_от_того_идёт_ли_чужое_видео() {
+        // **Главное правило ряда кнопок** (заказчик 2026-09-20): «должны быть все на
+        // месте и единый вид». Раньше «скрыть видео» появлялась вместе с картинкой, ряд
+        // от этого перестраивался, а с видео «Завершить» уезжала за нижний край — и
+        // положить трубку было нечем.
         val silent = capture("звонок-без-чужого-видео", WIDTH, HEIGHT, dark = false) {
             screen(CallState(stage = CallStage.Connected), incoming = false, onRemoteVideo = {})
         }
@@ -154,23 +156,27 @@ class CallScreenTest {
                 onRemoteVideo = {},
             )
         }
-        assertTrue(silent.difference(showing) > 0.0, "кнопка «скрыть видео» не появилась")
+        assertTrue(
+            silent.difference(showing) < 0.001,
+            "ряд кнопок перестроился от чужого видео: кнопки переехали с места на место",
+        )
     }
 
     @Test
-    fun скрытое_видео_оставляет_кнопку_вернуть() {
-        // Пропавшая вместе с картинкой кнопка означала бы, что вернуть её нечем.
+    fun отказ_принимать_чужое_видео_виден_на_кнопке() {
+        // Состояние несёт значок и цвет: словами про него говорит полоса событий, а
+        // кнопка обязана отличаться, иначе нажатие выглядит как ничего не сделавшее.
+        val taken = capture("звонок-чужое-видео-принимаем", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connected), incoming = false, onRemoteVideo = {})
+        }
         val hidden = capture("звонок-чужое-видео-скрыто", WIDTH, HEIGHT, dark = false) {
             screen(
-                CallState(stage = CallStage.Connected, remoteVideoShown = false, remoteVideoTaken = false),
+                CallState(stage = CallStage.Connected, remoteVideoTaken = false),
                 incoming = false,
                 onRemoteVideo = {},
             )
         }
-        val plain = capture("звонок-разговор-простой", WIDTH, HEIGHT, dark = false) {
-            screen(CallState(stage = CallStage.Connected), incoming = false, onRemoteVideo = {})
-        }
-        assertTrue(hidden.difference(plain) > 0.0, "скрытое видео не оставило кнопки «показать»")
+        assertTrue(taken.difference(hidden) > 0.0, "отказ принимать чужое видео не виден на кнопке")
     }
 
     @Test

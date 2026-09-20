@@ -1,6 +1,7 @@
 package io.tima.feature.call
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import io.tima.core.call.LiveKitVideoHandle
@@ -19,9 +20,14 @@ actual fun CallVideo(handle: VideoHandle, modifier: Modifier) {
     // Чужая реализация ручки сюда прийти не может — их одна на платформу, — но проверка
     // стоит ноль и превращает невозможное падение в пустое место.
     val live = handle as? LiveKitVideoHandle ?: return
-    AndroidView(
-        modifier = modifier,
-        factory = { context -> live.open(context) },
-        onRelease = { view -> live.close(view) },
-    )
+    // `key` по самой ручке: сменилась дорожка — нужна новая поверхность, та же дорожка —
+    // трогать нечего. Без ключа Compose оставлял бы старую поверхность на новой дорожке и
+    // показывал застывший кадр.
+    key(live) {
+        AndroidView(
+            modifier = modifier,
+            factory = { context -> live.open(context) },
+            onRelease = { view -> live.close(view) },
+        )
+    }
 }

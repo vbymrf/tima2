@@ -26,6 +26,7 @@ import io.tima.core.ui.AvatarSize
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Caption
+import io.tima.core.ui.IconButton
 import io.tima.core.ui.InCenter
 import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
@@ -199,30 +200,69 @@ fun CallScreen(
                 }
 
                 else -> {
-                    Button(
-                        label = if (state.microphoneOn) words.microphoneOn else words.microphoneOff,
-                        kind = if (state.microphoneOn) ButtonKind.Action else ButtonKind.Quiet,
+                    // ── РАЗГОВОР: ЗНАЧКИ, А НЕ ПОДПИСИ ──────────────────────
+                    //
+                    // **Управление обязано выглядеть одинаково с видео и без.** С
+                    // подписями оно так не могло: «Микрофон включён», «Камера включена»,
+                    // «Скрыть видео» и «Завершить» в одну строку не влезают, ряд
+                    // переносился, и кнопки переезжали с места на место — а с видео
+                    // «Завершить» уходила за нижний край и положить трубку было нечем
+                    // (заказчик 2026-09-20).
+                    //
+                    // Четыре круглых значка влезают всегда и стоят на одних и тех же
+                    // местах при любом состоянии. Состояние несёт цвет: салатовый —
+                    // включено, серый — выключено. Что именно случилось, словами говорит
+                    // полоса событий сверху, и там на это есть место.
+                    CallButton(
+                        glyph = if (state.microphoneOn) "🎤" else "🔇",
+                        on = state.microphoneOn,
                         onClick = { onMicrophone(!state.microphoneOn) },
                     )
-                    Button(
-                        label = if (state.cameraOn) words.cameraOn else words.cameraOff,
-                        kind = if (state.cameraOn) ButtonKind.Action else ButtonKind.Quiet,
+                    CallButton(
+                        glyph = "📹",
+                        on = state.cameraOn,
                         onClick = { onCamera(!state.cameraOn) },
                     )
-                    // «Скрыть видео» появляется, только когда есть что скрывать, — и
-                    // остаётся, пока скрыто: иначе вернуть картинку было бы нечем.
-                    if (onRemoteVideo != null && (state.remoteVideoShown || !state.remoteVideoTaken)) {
-                        Button(
-                            label = if (state.remoteVideoTaken) words.hideRemote else words.showRemote,
-                            kind = ButtonKind.Quiet,
+                    // Принимать ли чужое видео — **решение, а не действие**, и потому
+                    // кнопка стоит всегда, а не появляется вместе с картинкой. Нажали
+                    // заранее — чужая камера, включённая потом, к нам не приедет и
+                    // трафика не съест.
+                    if (onRemoteVideo != null) {
+                        CallButton(
+                            glyph = if (state.remoteVideoTaken) "👁" else "🙈",
+                            on = state.remoteVideoTaken,
                             onClick = { onRemoteVideo(!state.remoteVideoTaken) },
                         )
                     }
-                    Button(label = words.hangUp, kind = ButtonKind.Dangerous, onClick = onHangUp)
+                    CallButton(
+                        glyph = "📞",
+                        on = false,
+                        danger = true,
+                        onClick = onHangUp,
+                    )
                 }
             }
         }
     }
+}
+
+/**
+ * Круглая кнопка управления разговором.
+ *
+ * Своя, а не [io.tima.core.ui.IconButton] напрямую: у той два цвета задаются по
+ * отдельности, и четыре вызова подряд с одинаковыми хвостами разошлись бы при первой же
+ * правке. Здесь состояние — одно слово: включено или нет.
+ */
+@Composable
+private fun CallButton(glyph: String, on: Boolean, onClick: () -> Unit, danger: Boolean = false) {
+    val colors = Tima.colors
+    IconButton(
+        glyph = glyph,
+        onClick = onClick,
+        live = on,
+        background = if (danger) colors.alarm else null,
+        colorGlyph = if (danger) colors.onAccent else null,
+    )
 }
 
 /**
