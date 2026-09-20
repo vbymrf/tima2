@@ -1454,6 +1454,13 @@ private fun App(
                     peer = callHost.peer,
                     incoming = callHost.incoming,
                     seconds = callHost.seconds,
+                    // Лента событий и обе картинки. Дорожки приходят потоками, а не
+                    // полем состояния: состояние сравнивается на равенство при каждой
+                    // перерисовке, а у живой дорожки равенства нет.
+                    events = callHost.events,
+                    remoteVideo = callHost.remoteVideo.collectAsState().value,
+                    localVideo = callHost.localVideo.collectAsState().value,
+                    onRemoteVideo = callHost::remoteVideo,
                     // Жест берётся тот же, что у остальных окон, и вешается ЗДЕСЬ:
                     // у пяти настоящих окон он живёт в их оправе, а окно 0 рисуется
                     // голым — оправы с шапкой и вкладками у звонка нет. Без этой

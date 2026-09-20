@@ -585,6 +585,32 @@ interface CallWords {
     /** Оценка связи от SFU. Своей не считаем. */
     fun quality(level: String): String
 
+    // ── Лента событий звонка (ЗВ10) ─────────────────────────────────────────
+
+    /** Собеседник включил камеру, а наша выключена — зовём показаться. */
+    val peerShowsSelf: String
+
+    /** Собеседник перестал показывать себя: пропавшая картинка иначе читается как обрыв. */
+    val peerStoppedVideo: String
+
+    /** Чужое видео мы не принимаем — по своей кнопке. */
+    val remoteHidden: String
+
+    /** Кнопки «скрыть чужое видео» и «показать обратно». */
+    val hideRemote: String
+    val showRemote: String
+
+    /** Развернуть и свернуть строку событий. */
+    val expand: String
+    val collapse: String
+
+    /** Листание событий в развёрнутом виде. */
+    val nextEvent: String
+    val previousEvent: String
+
+    /** Которое из скольких: «2 из 5». */
+    fun ofTotal(one: Int, total: Int): String
+
     /** Сколько идёт разговор: `4:32`. Часы появляются только когда они есть. */
     fun duration(seconds: Int): String
 }
@@ -1940,6 +1966,16 @@ object RussianWords : Words {
         override val noMicrophone = "Нет доступа к микрофону — звонок без него не идёт. Разрешение включается в настройках телефона"
         override val noCamera = "Камера не разрешена — разговор идёт голосом. Разрешение включается в настройках телефона"
         override val activeCall = "Активный звонок"
+        override val peerShowsSelf = "Собеседник показывает себя, наша камера выключена — нажмите камеру, чтобы показать себя"
+        override val peerStoppedVideo = "Собеседник перестал показывать себя"
+        override val remoteHidden = "Видео собеседника скрыто — оно не принимается и трафик на него не идёт"
+        override val hideRemote = "Скрыть видео"
+        override val showRemote = "Показать видео"
+        override val expand = "Развернуть"
+        override val collapse = "Свернуть"
+        override val nextEvent = "Далее"
+        override val previousEvent = "Назад"
+        override fun ofTotal(one: Int, total: Int) = "$one из $total"
         override fun quality(level: String) = when (level) {
             "Excellent" -> "связь отличная"
             "Good" -> "связь хорошая"

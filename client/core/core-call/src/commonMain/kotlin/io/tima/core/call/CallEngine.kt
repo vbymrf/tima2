@@ -20,6 +20,26 @@ interface CallEngine {
     val state: StateFlow<CallState>
 
     /**
+     * Своя картинка — то, что видит собеседник. `null` — камера выключена.
+     *
+     * Отдельным потоком, а не полем [CallState]: состояние сравнивается на равенство при
+     * каждой перерисовке, а дорожка — живой объект, у которого равенства нет.
+     */
+    val localVideo: StateFlow<VideoHandle?>
+
+    /** Картинка собеседника. `null` — он себя не показывает или мы отписались. */
+    val remoteVideo: StateFlow<VideoHandle?>
+
+    /**
+     * Принимать ли чужое видео (ЗВ11).
+     *
+     * **Отписка, а не занавеска.** Собеседник включает камеру, не спрашивая нас
+     * (решение заказчика 2026-09-20), и за приём платит наш трафик. Спрятать картинку,
+     * продолжая её качать, значило бы не оставить выхода вовсе.
+     */
+    suspend fun setRemoteVideo(on: Boolean) = Unit
+
+    /**
      * Подключиться к комнате и начать говорить.
      *
      * @param door куда идти: адрес SFU, комната, токен — всё от нашего сервера.
@@ -119,6 +139,10 @@ data class CallState(
     val microphoneOn: Boolean = false,
     val cameraOn: Boolean = false,
     val videoPaused: Boolean = false,
+    /** Собеседник показывает себя. Событие, а не наша настройка: решает он. */
+    val remoteVideoShown: Boolean = false,
+    /** Принимаем ли мы его видео. Выключается кнопкой «скрыть» (ЗВ11). */
+    val remoteVideoTaken: Boolean = true,
     val quality: CallQuality = CallQuality.Unknown,
     val trouble: String? = null,
     val notice: String? = null,

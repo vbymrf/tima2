@@ -1,15 +1,18 @@
 package io.tima.shared
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.tima.core.call.CallDoor
 import io.tima.core.call.CallEngine
+import io.tima.core.call.CallEvent
 import io.tima.core.call.CallStage
 import io.tima.core.call.CallState
 import io.tima.core.call.CallStep
 import io.tima.core.call.Calls
 import io.tima.core.call.PublishPreset
+import io.tima.core.call.VideoHandle
 import io.tima.core.call.askCallAccess
 import io.tima.core.diag.Journal
 import io.tima.core.words.CurrentWords
@@ -17,6 +20,8 @@ import io.tima.core.words.Words
 import io.tima.core.diag.LogCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -64,9 +69,29 @@ class CallHost(
     var seconds by mutableStateOf(0)
         private set
 
+    /**
+     * Что случилось за звонок — лента событий (ЗВ10).
+     *
+     * Копится здесь, а не на экране: экран пересоздаётся при каждом повороте и уходе в
+     * соседнее окно, а события обязаны пережить и то и другое. Свайпнул в «Чаты» и
+     * вернулся — лента на месте.
+     */
+    val events = mutableStateListOf<CallEvent>()
+
+    /** Своя картинка — то, что видит собеседник. `null` — камера выключена. */
+    val localVideo: StateFlow<VideoHandle?> get() = engine?.localVideo ?: noVideo
+
+    /** Картинка собеседника. `null` — он себя не показывает или мы отписались. */
+    val remoteVideo: StateFlow<VideoHandle?> get() = engine?.remoteVideo ?: noVideo
+
+    private val noVideo = MutableStateFlow<VideoHandle?>(null)
+
     private var peerId: String = ""
     private var callId: String = ""
     private var ticking: Boolean = false
+
+    /** Начат ли звонок как видео: принявший тогда показывает себя сразу (ЗВ9). */
+    private var video: Boolean = false
 
     /** Умеет ли эта платформа звонить вообще. `false` — кнопок «позвонить» нет. */
     val possible: Boolean get() = engine != null
@@ -75,9 +100,11 @@ class CallHost(
         engine?.let { live ->
             scope.launch {
                 live.state.collectLatest { fresh ->
+                    val was = state
                     state = fresh
                     if (fresh.stage == CallStage.Connected) startTicking()
                     if (fresh.stage == CallStage.Ended) stopTicking()
+                    noticed(was, fresh)
                 }
             }
         }
@@ -97,10 +124,12 @@ class CallHost(
             return
         }
         this.peerId = peerId
+        this.video = video
         peer = peerName
         incoming = false
         active = true
         seconds = 0
+        events.clear()
         state = CallState(stage = CallStage.Connecting)
         // Разрешение спрашивается ДО похода на сервер: отказавший человек не должен
         // оставить за собой начатый звонок, на который собеседнику покажут вызов.
@@ -111,6 +140,9 @@ class CallHost(
                         callId = step.door.callId
                         Journal.note(LogCode.CALL, "звонок начат", "кому" to peerId.take(8), "видео" to video)
                         live.connect(step.door, preset)
+                        // Видеозвонок показывает себя сразу, не дожидаясь нажатия (ЗВ9):
+                        // разрешение уже спрошено выше — `withAccess(video)`.
+                        if (video) live.setCamera(true)
                     }
                     else -> refuse(step)
                 }
@@ -130,11 +162,13 @@ class CallHost(
             return
         }
         this.callId = callId
+        this.video = video
         peerId = fromId
         peer = fromName
         incoming = true
         active = true
         seconds = 0
+        events.clear()
         state = CallState(stage = CallStage.Connecting, callId = callId)
         Journal.note(LogCode.CALL, "входящий звонок", "от" to fromId.take(8), "видео" to video)
     }
@@ -144,10 +178,17 @@ class CallHost(
         val live = engine ?: return
         // Тот же вопрос, что и при исходящем, и по той же причине: без микрофона комната
         // соединится, а звука не будет ни в одну сторону.
-        withAccess(video = false) {
+        withAccess(video) {
             scope.launch {
                 when (val step = calls.answer(callId)) {
-                    is CallStep.Door -> live.connect(step.door, preset)
+                    is CallStep.Door -> {
+                        live.connect(step.door, preset)
+                        // **Принял видеозвонок — показываешь себя.** Так решил заказчик
+                        // 2026-09-20: отдельного согласия на камеру не спрашиваем, его
+                        // дал сам ответ на видеовызов. Разрешение системы при этом
+                        // спрошено — `withAccess(video)` выше.
+                        if (video) live.setCamera(true)
+                    }
                     else -> refuse(step)
                 }
             }
@@ -211,16 +252,48 @@ class CallHost(
         }
         askCallAccess(video = true) { allowed ->
             if (allowed) {
-                state = state.copy(notice = null)
                 scope.launch { engine?.setCamera(true) }
             } else {
                 // Звонок продолжается — это не беда звонка, а отказ в камере. Молчать
                 // нельзя: нажатая кнопка, после которой ничего не произошло, читается
                 // как поломка, и в неё жмут повторно.
                 Journal.trouble(LogCode.CALL, "камеру не разрешили", "звонок" to callId.take(8))
-                state = state.copy(notice = words().call.noCamera)
+                note(words().call.noCamera)
             }
         }
+    }
+
+    /**
+     * Принимать ли чужое видео — ЗВ11.
+     *
+     * Отписка, а не занавеска: собеседник включает камеру, не спрашивая нас, и за приём
+     * платит наш трафик. Спрятать картинку, продолжая её качать, значило бы не оставить
+     * выхода вовсе.
+     */
+    fun remoteVideo(take: Boolean) {
+        scope.launch { engine?.setRemoteVideo(take) }
+        if (!take) note(words().call.remoteHidden)
+    }
+
+    /**
+     * Из смены состояния — событие.
+     *
+     * **Только то, чего человек не увидит сам.** Включённый микрофон виден по кнопке, а
+     * вот «собеседник показывает себя, а вы нет» по экрану не читается: картинка просто
+     * появляется, и почему своя не появилась — непонятно.
+     */
+    private fun noticed(was: CallState, now: CallState) {
+        val words = words().call
+        if (now.remoteVideoShown && !was.remoteVideoShown && !now.cameraOn) note(words.peerShowsSelf)
+        if (!now.remoteVideoShown && was.remoteVideoShown && now.remoteVideoTaken) note(words.peerStoppedVideo)
+        if (now.videoPaused && !was.videoPaused) note(words.videoPaused)
+        if (now.stage == CallStage.Reconnecting && was.stage != CallStage.Reconnecting) note(words.reconnecting)
+    }
+
+    /** Дописать событие. Повтор последнего не дописывается: лента не должна заикаться. */
+    private fun note(text: String) {
+        if (events.lastOrNull()?.text == text) return
+        events.add(CallEvent(seconds = seconds, text = text))
     }
 
     /**

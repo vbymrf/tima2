@@ -8,13 +8,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import io.tima.core.call.CallEvent
 import io.tima.core.call.CallQuality
 import io.tima.core.call.CallStage
 import io.tima.core.call.CallState
+import io.tima.core.call.VideoHandle
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.AvatarSize
 import io.tima.core.ui.Button
@@ -72,6 +76,14 @@ fun CallScreen(
     seconds: Int = 0,
     onCallAgain: (() -> Unit)? = null,
     onClose: (() -> Unit)? = null,
+    /** Что случилось за звонок — полоса в самом верху (ЗВ10). Пусто — полосы нет. */
+    events: List<CallEvent> = emptyList(),
+    /** Картинка собеседника. `null` — он себя не показывает или мы отписались. */
+    remoteVideo: VideoHandle? = null,
+    /** Своя картинка — плашкой в углу. `null` — камера выключена. */
+    localVideo: VideoHandle? = null,
+    /** Принимать ли чужое видео (ЗВ11). `null` — кнопки нет: показывать нечего. */
+    onRemoteVideo: ((Boolean) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.call
@@ -79,7 +91,19 @@ fun CallScreen(
         modifier = modifier.fillMaxSize().background(colors.surface),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // Полоса событий — в самом верху, над всем остальным: это то, что случилось, и
+        // читается оно первым (ЗВ10).
+        CallEvents(events)
+
         Box(Modifier.weight(1f).fillMaxWidth()) {
+            // Картинка собеседника во весь кадр, если он себя показывает. Аватар и имя
+            // под ней не рисуются: они отвечают на тот же вопрос «с кем говорю», и
+            // повторять его поверх лица незачем.
+            if (remoteVideo != null) {
+                CallVideo(remoteVideo, Modifier.fillMaxSize())
+            }
+
+            if (remoteVideo == null) {
             InCenter(Modifier.fillMaxSize()) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -122,6 +146,20 @@ fun CallScreen(
                     }
                 }
             }
+            }
+
+            // Своё изображение — плашкой в углу, как в макете (`[[ Вы (PIP) ]]`).
+            // Маленькое и сверху справа: человек проверяет им, что он в кадре, а не
+            // смотрит на себя.
+            if (localVideo != null) {
+                CallVideo(
+                    localVideo,
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(TimaSpacing.about3)
+                        .size(width = PIP_WIDTH, height = PIP_HEIGHT),
+                )
+            }
         }
 
         Row(
@@ -156,6 +194,15 @@ fun CallScreen(
                         kind = if (state.cameraOn) ButtonKind.Action else ButtonKind.Quiet,
                         onClick = { onCamera(!state.cameraOn) },
                     )
+                    // «Скрыть видео» появляется, только когда есть что скрывать, — и
+                    // остаётся, пока скрыто: иначе вернуть картинку было бы нечем.
+                    if (onRemoteVideo != null && (state.remoteVideoShown || !state.remoteVideoTaken)) {
+                        Button(
+                            label = if (state.remoteVideoTaken) words.hideRemote else words.showRemote,
+                            kind = ButtonKind.Quiet,
+                            onClick = { onRemoteVideo(!state.remoteVideoTaken) },
+                        )
+                    }
                     Button(label = words.hangUp, kind = ButtonKind.Dangerous, onClick = onHangUp)
                 }
             }
@@ -188,3 +235,13 @@ private fun letters(peer: String): String = peer.trim()
     .mapNotNull { it.firstOrNull()?.uppercase() }
     .joinToString("")
     .ifEmpty { "+" }
+
+/**
+ * Размер своего изображения в углу.
+ *
+ * Пропорция 3:4 — портретная, как держат телефон. Ширина выбрана так, чтобы плашка
+ * читалась («я в кадре, свет есть»), но не спорила с лицом собеседника: смотреть человек
+ * должен на него, а не на себя.
+ */
+private val PIP_WIDTH = 96.dp
+private val PIP_HEIGHT = 128.dp

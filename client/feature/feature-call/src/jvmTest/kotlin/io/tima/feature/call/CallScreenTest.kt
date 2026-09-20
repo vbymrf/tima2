@@ -1,6 +1,7 @@
 package io.tima.feature.call
 
 import androidx.compose.runtime.Composable
+import io.tima.core.call.CallEvent
 import io.tima.core.call.CallQuality
 import io.tima.core.call.CallStage
 import io.tima.core.call.CallState
@@ -96,6 +97,82 @@ class CallScreenTest {
         assertTrue(ended.difference(talking) > 0.0, "завершённый звонок выглядит как разговор")
     }
 
+    @Test
+    fun события_показываются_последним_а_не_списком() {
+        // Решение заказчика 2026-09-20: копятся списком, показываются по одному. Если
+        // лента однажды развернётся целиком, она отъест экран у видео — а оно здесь во
+        // весь кадр.
+        val one = capture("звонок-событие-одно", WIDTH, HEIGHT, dark = false) {
+            screen(
+                CallState(stage = CallStage.Connected),
+                incoming = false,
+                events = listOf(CallEvent(4, "Собеседник показывает себя")),
+            )
+        }
+        val many = capture("звонок-событий-пять", WIDTH, HEIGHT, dark = false) {
+            screen(
+                CallState(stage = CallStage.Connected),
+                incoming = false,
+                events = (1..5).map { CallEvent(it, "Событие номер $it") },
+            )
+        }
+        // Пять событий занимают ровно столько же места, сколько одно: видно последнее.
+        assertTrue(
+            one.difference(many) < 0.05,
+            "лента развернулась списком: пять событий заняли не столько же места, сколько одно",
+        )
+    }
+
+    @Test
+    fun пустая_лента_не_занимает_места() {
+        // Полоса, висящая пустой, отнимает строку у видео каждый звонок ради случая,
+        // которого может и не быть.
+        val without = capture("звонок-без-событий", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connected), incoming = false)
+        }
+        val with = capture("звонок-с-событием", WIDTH, HEIGHT, dark = false) {
+            screen(
+                CallState(stage = CallStage.Connected),
+                incoming = false,
+                events = listOf(CallEvent(4, "Камера не разрешена")),
+            )
+        }
+        assertTrue(without.difference(with) > 0.0, "событие не показано вовсе")
+    }
+
+    @Test
+    fun скрыть_видео_появляется_только_когда_есть_что_скрывать() {
+        // Кнопка «скрыть» в звонке без чужого видео обещала бы то, чего нет, и сообщала
+        // бы о видео собеседника раньше, чем оно появилось.
+        val silent = capture("звонок-без-чужого-видео", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connected), incoming = false, onRemoteVideo = {})
+        }
+        val showing = capture("звонок-чужое-видео-идёт", WIDTH, HEIGHT, dark = false) {
+            screen(
+                CallState(stage = CallStage.Connected, remoteVideoShown = true),
+                incoming = false,
+                onRemoteVideo = {},
+            )
+        }
+        assertTrue(silent.difference(showing) > 0.0, "кнопка «скрыть видео» не появилась")
+    }
+
+    @Test
+    fun скрытое_видео_оставляет_кнопку_вернуть() {
+        // Пропавшая вместе с картинкой кнопка означала бы, что вернуть её нечем.
+        val hidden = capture("звонок-чужое-видео-скрыто", WIDTH, HEIGHT, dark = false) {
+            screen(
+                CallState(stage = CallStage.Connected, remoteVideoShown = false, remoteVideoTaken = false),
+                incoming = false,
+                onRemoteVideo = {},
+            )
+        }
+        val plain = capture("звонок-разговор-простой", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connected), incoming = false, onRemoteVideo = {})
+        }
+        assertTrue(hidden.difference(plain) > 0.0, "скрытое видео не оставило кнопки «показать»")
+    }
+
     private companion object {
         const val WIDTH = 380
         const val HEIGHT = 800
@@ -107,6 +184,8 @@ class CallScreenTest {
             seconds: Int = 0,
             onCallAgain: (() -> Unit)? = null,
             onClose: (() -> Unit)? = null,
+            events: List<CallEvent> = emptyList(),
+            onRemoteVideo: ((Boolean) -> Unit)? = null,
         ) = Stage(
             column = {
                 CallScreen(
@@ -121,6 +200,8 @@ class CallScreenTest {
                     onCamera = {},
                     onCallAgain = onCallAgain,
                     onClose = onClose,
+                    events = events,
+                    onRemoteVideo = onRemoteVideo,
                 )
             },
         )

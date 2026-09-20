@@ -6,6 +6,8 @@ import io.livekit.android.RoomOptions
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.VideoTrackPublishDefaults
 import io.livekit.android.room.track.LocalVideoTrackOptions
+import io.livekit.android.room.track.RemoteTrackPublication
+import io.livekit.android.room.track.VideoTrack
 import io.livekit.android.room.track.VideoCaptureParameter
 import io.livekit.android.room.track.VideoCodec as LkVideoCodec
 import io.livekit.android.util.flow
@@ -43,7 +45,16 @@ class LiveKitCallEngine(
     private val _state = MutableStateFlow(CallState())
     override val state: StateFlow<CallState> = _state.asStateFlow()
 
+    private val _localVideo = MutableStateFlow<VideoHandle?>(null)
+    override val localVideo: StateFlow<VideoHandle?> = _localVideo.asStateFlow()
+
+    private val _remoteVideo = MutableStateFlow<VideoHandle?>(null)
+    override val remoteVideo: StateFlow<VideoHandle?> = _remoteVideo.asStateFlow()
+
     private var room: Room? = null
+
+    /** Принимаем ли чужое видео. Выключается кнопкой «скрыть» (ЗВ11). */
+    private var takeRemote: Boolean = true
 
     override suspend fun connect(door: CallDoor, publish: PublishPreset?) {
         // Пресет применяется ПРИ СОЗДАНИИ комнаты, а не при публикации: кодек и слои
@@ -100,7 +111,27 @@ class LiveKitCallEngine(
     override suspend fun disconnect() {
         room?.disconnect()
         room = null
+        // Дорожки гасим сами: после disconnect их некому отдать, а оставленные они
+        // держали бы поверхность, которой больше некуда рисовать.
+        _localVideo.value = null
+        _remoteVideo.value = null
         _state.value = _state.value.copy(stage = CallStage.Ended)
+    }
+
+    override suspend fun setRemoteVideo(on: Boolean) {
+        takeRemote = on
+        val live = room ?: return
+        attempt {
+            for (who in live.remoteParticipants.values) {
+                for (publication in who.videoTrackPublications) {
+                    // Отписка бывает только у чужой дорожки — своя публикуется, а не
+                    // принимается. Приведение и есть эта проверка.
+                    (publication.first as? RemoteTrackPublication)?.setSubscribed(on)
+                }
+            }
+        }
+        _state.value = _state.value.copy(remoteVideoTaken = on)
+        if (!on) _remoteVideo.value = null else watchRemoteVideo(live)
     }
 
     override suspend fun setMicrophone(on: Boolean) {
@@ -156,6 +187,51 @@ class LiveKitCallEngine(
         scope.launch {
             room::remoteParticipants.flow.collect { participants ->
                 _state.value = _state.value.copy(others = participants.keys.map { it.value })
+            }
+        }
+        watchLocalVideo(room)
+        watchRemoteVideo(room)
+    }
+
+    /**
+     * Своя дорожка — та, что видит собеседник.
+     *
+     * Следим потоком, а не берём один раз после `setCameraEnabled`: дорожка поднимается
+     * не мгновенно, и взятая сразу оказалась бы `null` ровно в тот момент, когда человек
+     * ждёт своё изображение.
+     */
+    private fun watchLocalVideo(room: Room) {
+        scope.launch {
+            room.localParticipant::videoTrackPublications.flow.collect { published ->
+                val track = published.firstOrNull()?.second as? VideoTrack
+                _localVideo.value = track?.let { LiveKitVideoHandle(room, it) }
+                _state.value = _state.value.copy(cameraOn = track != null)
+            }
+        }
+    }
+
+    /**
+     * Дорожка собеседника.
+     *
+     * **Берём первую попавшуюся, и этого сегодня достаточно:** звонок один на один, в
+     * комнате двое. Групповой звонок потребует отдельного решения о том, кого показывать
+     * крупно, — и это будет не здесь, а на экране.
+     *
+     * Подписка автоматическая: принимать чужое видео разрешения не требует ни у системы,
+     * ни у человека. Отписка — по кнопке «скрыть» (ЗВ11).
+     */
+    private fun watchRemoteVideo(room: Room) {
+        scope.launch {
+            room::remoteParticipants.flow.collect { participants ->
+                if (!takeRemote) {
+                    _remoteVideo.value = null
+                    return@collect
+                }
+                val track = participants.values
+                    .flatMap { it.videoTrackPublications }
+                    .firstNotNullOfOrNull { it.second as? VideoTrack }
+                _remoteVideo.value = track?.let { LiveKitVideoHandle(room, it) }
+                _state.value = _state.value.copy(remoteVideoShown = track != null)
             }
         }
     }
