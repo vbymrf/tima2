@@ -106,6 +106,17 @@ fun CallScreen(
                         )
                     }
 
+                    // Что происходит прямо сейчас: камеру не разрешили, собеседник
+                    // показывает себя. Звонок при этом идёт — потому и не `trouble`.
+                    state.notice?.let {
+                        Caption(
+                            it,
+                            fontSize = TimaType.sz5,
+                            weight = FontWeight.SemiBold,
+                            color = colors.alarm,
+                        )
+                    }
+
                     state.trouble?.takeIf { state.stage == CallStage.Ended }?.let {
                         Tertiary(it, lineOne = true)
                     }

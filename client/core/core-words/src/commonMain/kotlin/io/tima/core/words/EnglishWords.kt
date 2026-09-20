@@ -686,6 +686,7 @@ object EnglishWords : Words {
         override val reconnecting = "Connection lost, coming back…"
         override val videoPaused = "Video is off: not enough bandwidth. Audio continues"
         override val noMicrophone = "No microphone access — a call cannot work without it. Turn the permission on in phone settings"
+        override val noCamera = "Camera not allowed — the call continues with audio. Turn the permission on in phone settings"
         override fun quality(level: String) = when (level) {
             "Excellent" -> "excellent connection"
             "Good" -> "good connection"

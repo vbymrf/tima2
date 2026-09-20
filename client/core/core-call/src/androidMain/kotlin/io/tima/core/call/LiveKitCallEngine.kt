@@ -9,6 +9,8 @@ import io.livekit.android.room.track.LocalVideoTrackOptions
 import io.livekit.android.room.track.VideoCaptureParameter
 import io.livekit.android.room.track.VideoCodec as LkVideoCodec
 import io.livekit.android.util.flow
+import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -76,6 +78,15 @@ class LiveKitCallEngine(
         _state.value = CallState(stage = CallStage.Connecting, callId = door.callId)
         try {
             created.connect(url = door.url, token = door.token)
+            // ── МИКРОФОН ВКЛЮЧАЕТСЯ ЗДЕСЬ, И БЕЗ ЭТОГО ЗВОНОК НЕМОЙ ─────────
+            //
+            // `connect` заводит комнату, но не публикует ничего: что отдавать наверх —
+            // решает приложение. Пока этой строки не было, звонок соединялся, таймер
+            // шёл, участники видели друг друга — и молчали оба (живой прогон
+            // 2026-09-20). Камера не включается: голосовой звонок её не просит, и
+            // разрешения на неё в этот момент ещё нет.
+            created.localParticipant.setMicrophoneEnabled(true)
+            _state.value = _state.value.copy(microphoneOn = true)
         } catch (e: Throwable) {
             // Причина словами и в состоянии: звонок, который «просто не начался», —
             // худшее из состояний, потому что человек видит пустоту и не знает, чего ждать.
@@ -93,13 +104,35 @@ class LiveKitCallEngine(
     }
 
     override suspend fun setMicrophone(on: Boolean) {
-        room?.localParticipant?.setMicrophoneEnabled(on)
-        _state.value = _state.value.copy(microphoneOn = on)
+        val done = attempt { room?.localParticipant?.setMicrophoneEnabled(on) }
+        // Состояние меняется, только если дорожка действительно поднялась. Иначе экран
+        // опять начал бы показывать то, чего нет, — беда, с которой это всё началось.
+        if (done) _state.value = _state.value.copy(microphoneOn = on)
     }
 
     override suspend fun setCamera(on: Boolean) {
-        room?.localParticipant?.setCameraEnabled(on)
-        _state.value = _state.value.copy(cameraOn = on)
+        val done = attempt { room?.localParticipant?.setCameraEnabled(on) }
+        if (done) _state.value = _state.value.copy(cameraOn = on)
+    }
+
+    /**
+     * Позвать SDK и **пережить отказ**.
+     *
+     * 2026-09-20: нажатие на камеру в голосовом звонке роняло приложение целиком —
+     * `Camera permissions are required to create a camera video track` летело из
+     * корутины, где его никто не ждал (отчёт `RVUU`). Разрешение с тех пор спрашивается
+     * заранее, но ловушка нужна независимо от этой причины: у медиа отказов много —
+     * камеру занял другой процесс, кодер не поднялся, дорожку отверг SFU, — и ни один
+     * из них не повод закрывать приложение посреди разговора.
+     */
+    private suspend fun attempt(what: suspend () -> Unit): Boolean = try {
+        what()
+        true
+    } catch (e: Throwable) {
+        val why = e.message ?: e::class.simpleName ?: "движок отказал"
+        Journal.trouble(LogCode.CALL, "движок не принял команду", "причина" to why)
+        _state.value = _state.value.copy(notice = why)
+        false
     }
 
     /**

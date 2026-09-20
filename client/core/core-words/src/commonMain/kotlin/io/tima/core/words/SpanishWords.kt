@@ -686,6 +686,7 @@ object SpanishWords : Words {
         override val reconnecting = "Se perdió la conexión, volviendo…"
         override val videoPaused = "Vídeo desactivado: no hay banda suficiente. El audio sigue"
         override val noMicrophone = "Sin acceso al micrófono: la llamada no funciona sin él. Actívalo en los ajustes del teléfono"
+        override val noCamera = "Cámara no permitida: la llamada sigue con audio. Actívala en los ajustes del teléfono"
         override fun quality(level: String) = when (level) {
             "Excellent" -> "conexión excelente"
             "Good" -> "conexión buena"

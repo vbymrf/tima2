@@ -151,6 +151,7 @@ import io.tima.feature.shell.ActivityWindow
 import io.tima.feature.shell.SocialWindow
 import io.tima.feature.shell.PageWindow
 import io.tima.feature.shell.InSide
+import io.tima.feature.shell.windowSwipe
 import io.tima.feature.shell.WindowFrame
 import io.tima.feature.shell.Rail
 import io.tima.feature.shell.TabStub
@@ -1415,6 +1416,15 @@ private fun App(
                     peer = callHost.peer,
                     incoming = callHost.incoming,
                     seconds = callHost.seconds,
+                    // Жест берётся тот же, что у остальных окон, и вешается ЗДЕСЬ:
+                    // у пяти настоящих окон он живёт в их оправе, а окно 0 рисуется
+                    // голым — оправы с шапкой и вкладками у звонка нет. Без этой
+                    // строки окно 0 было окном, из которого нельзя выйти пальцем
+                    // (живой прогон 2026-09-20, ЗВ2).
+                    modifier = Modifier.windowSwipe(
+                        onLeft = { switchWindow(InSide.Next) },
+                        onRight = { switchWindow(InSide.Previous) },
+                    ),
                     onAccept = callHost::accept,
                     onDecline = callHost::hangUp,
                     onHangUp = callHost::hangUp,
@@ -1918,6 +1928,13 @@ private fun App(
                                     )?.line(bookStateForChats.view.look(), PERSON_FIRST_LINE).orEmpty()
                                     callHost.start(peerId, name, video = false)
                                     window = Window.Call
+                                    // **И закрыть подокно.** Переписка лежит ПОВЕРХ
+                                    // окна: сменив окно под ней, мы получаем звонок,
+                                    // спрятанный за чатом. Ровно это и вышло на первом
+                                    // живом звонке 2026-09-20 — человек видел, что
+                                    // ничего не произошло, жал ещё, и сервер завёл три
+                                    // звонка подряд (ПЛАН-ДОРАБОТКИ-ЗВОНКОВ ЗВ1).
+                                    where = Where.Nothing
                                 }
                             },
                         scope = scope,
