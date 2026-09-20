@@ -288,6 +288,40 @@ class CallHost(
         if (!now.remoteVideoShown && was.remoteVideoShown && now.remoteVideoTaken) note(words.peerStoppedVideo)
         if (now.videoPaused && !was.videoPaused) note(words.videoPaused)
         if (now.stage == CallStage.Reconnecting && was.stage != CallStage.Reconnecting) note(words.reconnecting)
+
+        // ── ТО ЖЕ САМОЕ В ЖУРНАЛ ────────────────────────────────────────────
+        //
+        // **Отчёт о проблеме обязан отвечать на вопрос «а что вообще происходило».** До
+        // 2026-09-20 журнал знал ровно две вещи: «звонок начат» и «звонок закончен». Между
+        // ними могло не быть ни звука, ни соединения, ни картинки — и в отчёте это
+        // выглядело одинаково. Немой звонок нашёлся не по журналу, а по расстоянию между
+        // строками; второй раз такого везения может не случиться.
+        if (now.stage != was.stage) {
+            Journal.note(LogCode.CALL, "стадия звонка", "стала" to now.stage.name, "была" to was.stage.name)
+        }
+        if (now.microphoneOn != was.microphoneOn) {
+            Journal.note(LogCode.CALL, "микрофон", "включён" to now.microphoneOn)
+        }
+        if (now.cameraOn != was.cameraOn) {
+            Journal.note(LogCode.CALL, "своя камера", "включена" to now.cameraOn)
+        }
+        if (now.remoteVideoShown != was.remoteVideoShown) {
+            Journal.note(LogCode.CALL, "видео собеседника", "идёт" to now.remoteVideoShown)
+        }
+        if (now.remoteVideoTaken != was.remoteVideoTaken) {
+            Journal.note(LogCode.CALL, "приём чужого видео", "включён" to now.remoteVideoTaken)
+        }
+        if (now.videoPaused != was.videoPaused) {
+            Journal.note(LogCode.CALL, "видео погашено нехваткой полосы", "погашено" to now.videoPaused)
+        }
+        if (now.quality != was.quality) {
+            Journal.note(LogCode.CALL, "оценка связи", "стала" to now.quality.name)
+        }
+        // Завершение чужой стороной идёт мимо `hangUp`, и записи о конце не было вовсе:
+        // звонок в журнале просто обрывался.
+        if (now.stage == CallStage.Ended && was.stage != CallStage.Ended) {
+            Journal.note(LogCode.CALL, "звонок кончился", "длился" to seconds, "причина" to (now.trouble ?: "положили трубку"))
+        }
     }
 
     /** Дописать событие. Повтор последнего не дописывается: лента не должна заикаться. */
@@ -317,6 +351,13 @@ class CallHost(
                 then()
             } else {
                 Journal.trouble(LogCode.CALL, "звонок не начался", "причина" to "нет доступа к микрофону")
+                // **Сказать серверу, если звонок уже существует.** У входящего звонок
+                // заведён до нашего отказа, и молчание оставило бы звонящего слушать
+                // «Звоним…» до бесконечности: он не узнал бы ни что ему отказали, ни
+                // почему. Исходящий до сервера ещё не дошёл — `callId` пуст, и заканчивать
+                // нечего.
+                val id = callId
+                if (id.isNotEmpty()) scope.launch { calls.end(id) }
                 state = state.copy(
                     stage = CallStage.Ended,
                     trouble = words().call.noMicrophone,

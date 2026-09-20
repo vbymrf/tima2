@@ -593,6 +593,14 @@ interface CallWords {
     /** Собеседник перестал показывать себя: пропавшая картинка иначе читается как обрыв. */
     val peerStoppedVideo: String
 
+    /**
+     * Разговор кончился тем, что собеседник положил трубку.
+     *
+     * Отдельно от «Звонок завершён»: то говорит, что кончилось, это — **кто кончил**. Без
+     * различия человек не знает, оборвалось ли у него самого.
+     */
+    val peerLeft: String
+
     /** Чужое видео мы не принимаем — по своей кнопке. */
     val remoteHidden: String
 
@@ -1968,6 +1976,7 @@ object RussianWords : Words {
         override val activeCall = "Активный звонок"
         override val peerShowsSelf = "Собеседник показывает себя, наша камера выключена — нажмите камеру, чтобы показать себя"
         override val peerStoppedVideo = "Собеседник перестал показывать себя"
+        override val peerLeft = "Собеседник положил трубку"
         override val remoteHidden = "Видео собеседника скрыто — оно не принимается и трафик на него не идёт"
         override val hideRemote = "Скрыть видео"
         override val showRemote = "Показать видео"

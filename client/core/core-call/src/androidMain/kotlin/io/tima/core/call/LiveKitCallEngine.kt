@@ -56,6 +56,9 @@ class LiveKitCallEngine(
     /** Принимаем ли чужое видео. Выключается кнопкой «скрыть» (ЗВ11). */
     private var takeRemote: Boolean = true
 
+    /** Отвечал ли кто-нибудь. Отличает «ещё не ответили» от «собеседник ушёл». */
+    private var everAnswered: Boolean = false
+
     override suspend fun connect(door: CallDoor, publish: PublishPreset?) {
         // Пресет применяется ПРИ СОЗДАНИИ комнаты, а не при публикации: кодек и слои
         // участвуют в согласовании, и менять их потом — пересогласование, а иногда разрыв
@@ -85,6 +88,7 @@ class LiveKitCallEngine(
         )
         val created = LiveKit.create(appContext = context, options = options)
         room = created
+        everAnswered = false
         watch(created, door.callId)
         _state.value = CallState(stage = CallStage.Connecting, callId = door.callId)
         try {
@@ -96,14 +100,21 @@ class LiveKitCallEngine(
             // шёл, участники видели друг друга — и молчали оба (живой прогон
             // 2026-09-20). Камера не включается: голосовой звонок её не просит, и
             // разрешения на неё в этот момент ещё нет.
+            Journal.note(LogCode.CALL, "вошли в комнату", "комната" to door.room)
             created.localParticipant.setMicrophoneEnabled(true)
             _state.value = _state.value.copy(microphoneOn = true)
+            // **Запись именно об этом шаге, а не о звонке вообще.** Немой звонок
+            // 2026-09-20 был невидим в отчёте ровно потому, что журнал знал «звонок
+            // начат» и «звонок закончен», а поднялась ли дорожка — не знал никто.
+            Journal.note(LogCode.CALL, "микрофон опубликован")
         } catch (e: Throwable) {
             // Причина словами и в состоянии: звонок, который «просто не начался», —
             // худшее из состояний, потому что человек видит пустоту и не знает, чего ждать.
+            val why = e.message ?: e::class.simpleName ?: "не подключились"
+            Journal.trouble(LogCode.CALL, "в комнату не вошли", "причина" to why)
             _state.value = _state.value.copy(
                 stage = CallStage.Ended,
-                trouble = e.message ?: e::class.simpleName ?: "не подключились",
+                trouble = why,
             )
         }
     }
@@ -172,25 +183,51 @@ class LiveKitCallEngine(
      */
     private fun watch(room: Room, callId: String) {
         scope.launch {
-            room::state.flow.collect { roomState ->
-                _state.value = _state.value.copy(
-                    callId = callId,
-                    stage = when (roomState) {
-                        Room.State.CONNECTING -> CallStage.Connecting
-                        Room.State.CONNECTED -> CallStage.Connected
-                        Room.State.RECONNECTING -> CallStage.Reconnecting
-                        Room.State.DISCONNECTED -> CallStage.Ended
-                    },
-                )
-            }
+            room::state.flow.collect { settle(room, callId) }
         }
         scope.launch {
-            room::remoteParticipants.flow.collect { participants ->
-                _state.value = _state.value.copy(others = participants.keys.map { it.value })
-            }
+            room::remoteParticipants.flow.collect { settle(room, callId) }
         }
         watchLocalVideo(room)
         watchRemoteVideo(room)
+    }
+
+    /**
+     * Стадия звонка — **из состояния комнаты и числа участников вместе**.
+     *
+     * ── ПОЧЕМУ НЕ ХВАТАЕТ ОДНОГО `Room.State` ───────────────────────────────
+     *
+     * `CONNECTED` у комнаты значит «мы вошли», а не «нас соединили». Войти можно одному
+     * и ждать; собеседник в этот момент ещё слушает гудки. Раньше стадия бралась прямо
+     * отсюда, и разговор «начинался» в момент набора — таймер шёл с первой секунды
+     * (живой прогон 2026-09-20).
+     *
+     * ── И ПОЧЕМУ НЕ ХВАТАЕТ ОДНИХ УЧАСТНИКОВ ────────────────────────────────
+     *
+     * Пустая комната значит разное до и после разговора: сперва «ещё не ответили», потом
+     * «собеседник отключился». Отличает их [everAnswered] — был ли кто-нибудь тут хоть
+     * раз. Без него положенная собеседником трубка выглядела бы как продолжение набора.
+     */
+    private fun settle(room: Room, callId: String) {
+        val others = room.remoteParticipants.keys.map { it.value }
+        if (others.isNotEmpty()) everAnswered = true
+        val roomState = room.state
+        val stage = when {
+            roomState == Room.State.DISCONNECTED -> CallStage.Ended
+            roomState == Room.State.RECONNECTING -> CallStage.Reconnecting
+            roomState != Room.State.CONNECTED -> CallStage.Connecting
+            others.isNotEmpty() -> CallStage.Connected
+            // В комнате одни. До ответа это набор, после — разговор кончился.
+            everAnswered -> CallStage.Ended
+            else -> CallStage.Connecting
+        }
+        _state.value = _state.value.copy(
+            callId = callId,
+            others = others,
+            inRoom = roomState == Room.State.CONNECTED,
+            stage = stage,
+            peerLeft = stage == CallStage.Ended && everAnswered && roomState == Room.State.CONNECTED,
+        )
     }
 
     /**

@@ -173,6 +173,56 @@ class CallScreenTest {
         assertTrue(hidden.difference(plain) > 0.0, "скрытое видео не оставило кнопки «показать»")
     }
 
+    @Test
+    fun набор_и_разговор_различаются_а_соединение_отдельно() {
+        // Три разных состояния, которые раньше были одним. Время идёт ТОЛЬКО в разговоре:
+        // «Connected» у комнаты значит «мы вошли», а не «нам ответили», и таймер шёл с
+        // момента нажатия «позвонить» (живой прогон 2026-09-20).
+        val going = capture("звонок-соединяем", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connecting, inRoom = false), incoming = false)
+        }
+        val ringing = capture("звонок-звоним", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connecting, inRoom = true), incoming = false)
+        }
+        val talking = capture("звонок-говорим", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connected, inRoom = true), incoming = false, seconds = 12)
+        }
+        assertTrue(going.difference(ringing) > 0.0, "«соединяем» и «звоним» выглядят одинаково")
+        assertTrue(ringing.difference(talking) > 0.0, "набор и разговор выглядят одинаково")
+    }
+
+    @Test
+    fun положенная_собеседником_трубка_названа_своими_словами() {
+        // «Звонок завершён» не отвечает на вопрос, кто его завершил, — а человеку важно
+        // знать, оборвалось ли у него самого.
+        val byPeer = capture("звонок-собеседник-положил", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Ended, peerLeft = true), incoming = false, onClose = {})
+        }
+        val byUs = capture("звонок-кончили-сами", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Ended), incoming = false, onClose = {})
+        }
+        assertTrue(byPeer.difference(byUs) > 0.0, "ушедший собеседник неотличим от нашей трубки")
+    }
+
+    @Test
+    fun завершить_не_уезжает_за_край_экрана() {
+        // Ряд кнопок раньше не переносился и резал последнюю — «Завершить». Положить
+        // трубку в разговоре с видео было нечем (живой прогон 2026-09-20).
+        val full = capture("звонок-все-кнопки", WIDTH, HEIGHT, dark = false) {
+            screen(
+                CallState(stage = CallStage.Connected, microphoneOn = true, cameraOn = true, remoteVideoShown = true),
+                incoming = false,
+                onRemoteVideo = {},
+            )
+        }
+        val plain = capture("звонок-две-кнопки", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connected), incoming = false)
+        }
+        // Четыре кнопки занимают БОЛЬШЕ места, чем две: значит они перенеслись на вторую
+        // строку, а не срезались по краю. Срезанные дали бы ту же высоту.
+        assertTrue(full.difference(plain) > 0.0, "ряд кнопок не перестроился под четыре")
+    }
+
     private companion object {
         const val WIDTH = 380
         const val HEIGHT = 800

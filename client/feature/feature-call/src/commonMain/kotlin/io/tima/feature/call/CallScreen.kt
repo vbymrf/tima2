@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -162,9 +163,20 @@ fun CallScreen(
             }
         }
 
-        Row(
+        // ── РЯД, КОТОРЫЙ ПЕРЕНОСИТСЯ ────────────────────────────────────────
+        //
+        // Был `Row`, и в разговоре он **терял «Завершить»**: четыре кнопки с полными
+        // подписями («Микрофон включён», «Камера выключена», «Скрыть видео»,
+        // «Завершить») в 380 точек ширины не влезают, а `Row` не переносит — он режет по
+        // краю. Последняя кнопка и уезжала за экран; положить трубку было нечем
+        // (живой прогон 2026-09-20).
+        //
+        // Подписи при этом оставлены полными: включён микрофон или выключен, человек
+        // читает словами, а не угадывает по цвету. Перенос дешевле краткости.
+        FlowRow(
             modifier = Modifier.fillMaxWidth().padding(TimaSpacing.about4),
             horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
         ) {
             when {
                 state.stage == CallStage.Ended -> {
@@ -220,11 +232,19 @@ fun CallScreen(
 private fun under(state: CallState, incoming: Boolean, seconds: Int): String {
     val words = Tima.words.call
     return when (state.stage) {
-        CallStage.Idle -> if (incoming) words.incoming else words.calling
-        CallStage.Connecting -> if (incoming) words.incoming else words.calling
+        // До комнаты и в комнате — разные вещи, и человеку они разные. «Соединяем…» —
+        // мы ещё идём; «Звоним…» — мы на месте и ждём ответа. Раньше обе назывались
+        // одинаково, и ждать было непонятно чего.
+        CallStage.Idle, CallStage.Connecting -> when {
+            incoming -> words.incoming
+            state.inRoom -> words.calling
+            else -> words.connecting
+        }
+        // Время идёт только в разговоре: до ответа считать нечего, и показанные там
+        // секунды были бы выдумкой. Ровно это и случилось на первом живом звонке.
         CallStage.Connected -> words.duration(seconds)
         CallStage.Reconnecting -> words.reconnecting
-        CallStage.Ended -> words.ended
+        CallStage.Ended -> if (state.peerLeft) words.peerLeft else words.ended
     }
 }
 
