@@ -49,6 +49,7 @@ interface Words {
     val auth: AuthWords
     val chat: ChatWords
     val call: CallWords
+    val bench: BenchWords
     val book: BookWords
     val page: PageWords
     val social: SocialWords
@@ -145,6 +146,10 @@ interface WindowWords {
     val media: WindowName
     val activity: WindowName
     val page: WindowName
+
+    /** Окно стенда. Временное: его видно, только пока включён испытательный режим. */
+    val bench: WindowName
+
     /** Пометка у окна, в котором человек сейчас: цвет здесь занят навигацией. */
     fun youAreHere(about: String): String
     fun cameFrom(window: String): String
@@ -185,6 +190,9 @@ interface SettingsListWords {
     val itemLanguage: String
     val itemPrivacy: String
     val itemStorage: String
+
+    /** Испытательный режим звонков — временный пункт, уйдёт вместе со стендом. */
+    val itemCallBench: String
     val itemBlogger: String
     val itemQuestions: String
     val itemProblem: String
@@ -537,6 +545,98 @@ interface PageWords {
  * Слов немного и почти все — подписи кнопок. Отдельный словарь, а не раздел переписки:
  * звонок живёт своим окном, и его надписи не должны разъезжаться с чужими при переводе.
  */
+/**
+ * Испытательный стенд звонков — ПЛАН-СТЕНДА-ЗВОНКОВ §3.
+ *
+ * **Переводится наравне со всем остальным, хотя вещь временная.** Соблазн оставить его
+ * по-русски понятен — стенд уйдёт вместе с флагом. Но словарь проверяется полнотой: один
+ * непереведённый раздел означает, что проверка полноты выключена для всего словаря, а
+ * включить её обратно однажды забудут.
+ *
+ * Слова здесь **не бытовые**: «дожатие слоёв», «запасной кодек», «деградация» — это
+ * термины WebRTC, и читает их тот, кто ведёт испытания. Переводить их описательно нельзя:
+ * человек сверяет надпись с документацией LiveKit, а не с обиходом.
+ */
+interface BenchWords {
+    val title: String
+    val about: String
+
+    /** Пункт настроек: сам флаг и что он значит. */
+    val flag: String
+    val flagAbout: String
+    fun presetNow(name: String): String
+
+    val sectionHow: String
+    val sectionPresets: String
+    val sectionRun: String
+    val sectionTraffic: String
+    val sectionLoad: String
+    val sectionRuns: String
+
+    val codec: String
+    val backup: String
+    val noBackup: String
+    val layers: String
+    val single: String
+    val simulcast: String
+    val svc: String
+    val scalability: String
+    val size: String
+    val fps: String
+    val bitrate: String
+    val degradation: String
+    val keepSize: String
+    val keepFrames: String
+    val asWebrtc: String
+    val dynacast: String
+    val adaptiveStream: String
+
+    val sound: String
+    val red: String
+    val dtx: String
+    val stereo: String
+    val audioBitrate: String
+
+    val presetName: String
+    val remember: String
+    val forget: String
+    val noPresets: String
+
+    val start: String
+    val stop: String
+    fun going(seconds: Int, samples: Int): String
+    val startWhenSettled: String
+    val appliesToNextCall: String
+
+    val up: String
+    val down: String
+    val rtt: String
+    val lost: String
+    val codecNow: String
+    val encoder: String
+    val hardware: String
+    val software: String
+    val phoneSent: String
+    val phoneReceived: String
+
+    val cpu: String
+    val memory: String
+    val heat: String
+    val battery: String
+
+    val seconds: String
+    val upAverage: String
+    val upPeak: String
+    val cpuAverage: String
+    val cpuPeak: String
+    val heatPeak: String
+    val batterySpent: String
+
+    val on: String
+    val off: String
+}
+
+
 interface CallWords {
     val incoming: String
     val outgoing: String
@@ -1599,6 +1699,88 @@ object RussianWords : Words {
         override val leaveNow = "Уйти сейчас"
     }
 
+    override val bench = object : BenchWords {
+        override val title = "Испытательный стенд звонков"
+        override val about = "настройки публикации и числа замеров"
+
+        override val flag = "Испытательный режим звонков"
+        override val flagAbout =
+            "Открывает окно стенда: выбор кодека и слоёв, числа трафика и нагрузки. " +
+                "Выключение НЕ сбрасывает выбранный набор — он остаётся обычным поведением приложения."
+        override fun presetNow(name: String) = "Звонки идут набором «$name»"
+
+        override val sectionHow = "Как звоним"
+        override val sectionPresets = "Наборы"
+        override val sectionRun = "Прогон"
+        override val sectionTraffic = "Что передаётся"
+        override val sectionLoad = "Чем платит телефон"
+        override val sectionRuns = "Прошлые прогоны"
+
+        override val codec = "Кодек видео"
+        override val backup = "Запасной кодек"
+        override val noBackup = "нет"
+        override val layers = "Слои"
+        override val single = "один слой"
+        override val simulcast = "simulcast"
+        override val svc = "SVC"
+        override val scalability = "Режим SVC"
+        override val size = "Размер кадра"
+        override val fps = "Кадров в секунду"
+        override val bitrate = "Верхний битрейт"
+        override val degradation = "Чем жертвовать при нехватке полосы"
+        override val keepSize = "держать размер"
+        override val keepFrames = "держать частоту"
+        override val asWebrtc = "как решит WebRTC"
+        override val dynacast = "Dynacast"
+        override val adaptiveStream = "Adaptive Stream"
+
+        override val sound = "Звук"
+        override val red = "RED — избыточность"
+        override val dtx = "DTX — не кодировать тишину"
+        override val stereo = "Стерео"
+        override val audioBitrate = "Битрейт звука"
+
+        override val presetName = "Имя набора"
+        override val remember = "Запомнить"
+        override val forget = "Забыть"
+        override val noPresets = "Наборов пока нет. Настройте и запомните под именем — иначе прогоны не с чем сравнивать"
+
+        override val start = "Начать прогон"
+        override val stop = "Остановить"
+        override fun going(seconds: Int, samples: Int) = "Идёт: $seconds с, отсчётов $samples"
+        override val startWhenSettled =
+            "Начинать через несколько секунд после соединения: первые секунды занимает разгон полосы, и они портят среднее"
+        override val appliesToNextCall =
+            "Набор применяется к следующему звонку: кодек и слои участвуют в согласовании, и менять их посреди разговора — пересогласование, а иногда разрыв"
+
+        override val up = "Вверх, по дорожкам"
+        override val down = "Вниз, по дорожкам"
+        override val rtt = "Оборот пакета"
+        override val lost = "Потеряно пакетов"
+        override val codecNow = "Кодек на самом деле"
+        override val encoder = "Кодер"
+        override val hardware = "аппаратный"
+        override val software = "программный"
+        override val phoneSent = "Телефон отдал"
+        override val phoneReceived = "Телефон принял"
+
+        override val cpu = "Процессор"
+        override val memory = "Память"
+        override val heat = "Нагрев"
+        override val battery = "Заряд"
+
+        override val seconds = "Секунд"
+        override val upAverage = "Вверх, среднее"
+        override val upPeak = "Вверх, потолок"
+        override val cpuAverage = "Процессор, среднее"
+        override val cpuPeak = "Процессор, потолок"
+        override val heatPeak = "Нагрев, потолок"
+        override val batterySpent = "Ушло заряда"
+
+        override val on = "вкл"
+        override val off = "выкл"
+    }
+
     override val windows = object : WindowWords {
 
         override val call = WindowName(
@@ -1631,6 +1813,11 @@ object RussianWords : Words {
             short = "Страница",
             about = "профиль, коллекции, роли",
         )
+        override val bench = WindowName(
+            full = "Стенд звонков",
+            short = "Стенд",
+            about = "настройки и числа замеров",
+        )
 
         override fun youAreHere(about: String) = "$about · вы здесь"
         override fun cameFrom(window: String) = "Вы пришли из окна «$window»"
@@ -1655,6 +1842,7 @@ object RussianWords : Words {
         override val itemLanguage = "Язык"
         override val itemPrivacy = "Приватность и блокировки"
         override val itemStorage = "Память и трафик"
+        override val itemCallBench = "Испытательный режим звонков"
         override val itemBlogger = "Окна блогера"
         override val itemQuestions = "Частые вопросы"
         override val itemProblem = "Сообщить о проблеме"

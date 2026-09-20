@@ -119,6 +119,8 @@ import io.tima.core.ui.TimaSpacing
 import io.tima.feature.chat.GuestPageScreen
 import io.tima.feature.chat.PERSON_FIRST_LINE
 import io.tima.core.call.CallEngine
+import io.tima.feature.call.BenchScreen
+import io.tima.feature.call.CallBenchSwitch
 import io.tima.feature.call.CallScreen
 import io.tima.feature.chat.BookViewSheet
 import io.tima.feature.chat.matches
@@ -911,7 +913,20 @@ private fun App(
     // Звонок: окно 0 живёт, пока идёт разговор (макет 21-call.md, решение заказчика
     // 2026-09-19). Движок приходит от платформы — общий код Context не видит; `null`
     // означает «эта платформа звонить не умеет», и тогда окна 0 нет вовсе.
-    val callHost = remember(callEngine) { CallHost(network.calls, callEngine, scope) }
+    // Стенд звонков — испытательный режим за флагом (ПЛАН-СТЕНДА-ЗВОНКОВ §4).
+    //
+    // **Заводится всегда, даже когда флаг выключен**, и это не расточительство: он
+    // хранит выбранный набор публикации, а набор работает и без стенда — выключение
+    // флага уносит обвязку, но не выбор. Замеров при выключенном флаге он не делает.
+    val bench = remember(callEngine) { BenchStore(environment.settings, callEngine, scope) }
+    val benchState by bench.state.collectAsState()
+
+    // Набор — ЛЯМБДОЙ, а не значением: `CallHost` живёт от запуска до запуска, а набор
+    // меняют на экране стенда посреди его жизни. Снятый значением, он застыл бы на том,
+    // что было выбрано при старте.
+    val callHost = remember(callEngine) {
+        CallHost(network.calls, callEngine, scope, preset = { bench.state.value.preset })
+    }
 
     // Входящий звонок приходит каналом событий. Имя собеседника берём тем же механизмом,
     // что везде (Д14): карточка справочника поверх книги — иначе человек увидит
@@ -1192,7 +1207,7 @@ private fun App(
     val switchWindow: (InSide) -> Unit = { where_ ->
         // По показанным окнам, а не по перечню: окно 0 есть только во время звонка, и
         // свайпом в него попадать, когда его нет в переключателе, было бы странно.
-        val order = Window.shown(callHost.active)
+        val order = Window.shown(callHost.active, benchState.on)
         val next = order.indexOf(window) + if (where_ == InSide.Next) 1 else -1
         order.getOrNull(next)?.let {
             window = it
@@ -1412,6 +1427,7 @@ private fun App(
         WindowSwitchingScreen(
             current = window,
             inCall = callHost.active,
+            bench = benchState.on,
             // Имя, ник и телефон — из профиля (0050). До этого здесь стояли заглушки:
             // userId вместо имени и «@» с восемью знаками id вместо ника.
             name = profileState.name.ifBlank { Tima.words.chat.nameless },
@@ -1486,6 +1502,7 @@ private fun App(
                 counters = windowCounters(listState),
                 onSettings = toSettings,
                 inCall = callHost.active,
+                bench = benchState.on,
             )
         },
         column = {
@@ -1668,6 +1685,31 @@ private fun App(
                     onSearch = {},
                     onSettings = toSettings,
                     onNeighbourWindow = switchWindow,
+                )
+
+                // Окно стенда — временное, как и окно 0: его видно, только пока
+                // включён испытательный режим. Экран чистый, всю работу держит
+                // BenchStore.
+                Window.Bench -> BenchScreen(
+                    preset = benchState.preset,
+                    presets = benchState.presets,
+                    running = benchState.running,
+                    samples = benchState.samples,
+                    runs = benchState.runs,
+                    // Изменённый набор становится текущим сразу, без «Запомнить»: прогон
+                    // начинают, покрутив ручки, а не сохранив их. Имя нужно только тем
+                    // наборам, к которым вернутся.
+                    onChange = bench::choose,
+                    onSave = bench::save,
+                    onForget = bench::forget,
+                    onStart = bench::start,
+                    onStop = bench::stop,
+                    // Жест тот же, что у окна 0, и по той же причине: у стенда нет оправы
+                    // с шапкой, а окно, из которого нельзя выйти пальцем, — не окно.
+                    modifier = Modifier.windowSwipe(
+                        onLeft = { switchWindow(InSide.Next) },
+                        onRight = { switchWindow(InSide.Previous) },
+                    ),
                 )
 
                 Window.Page -> PageWindow(
@@ -1892,6 +1934,8 @@ private fun App(
                         onTransfer = { userId -> where = Where.Transfer(userId) },
                         update = update,
                         updateState = updateState,
+                        bench = bench,
+                        benchState = benchState,
                         problemFacts = facts.copy(
                             build = build.name,
                             stream = build.stream,
@@ -2509,6 +2553,14 @@ private fun Settings(
     /** Обновление: один магазин на приложение, здесь только его вкладка (О3, О5). */
     update: UpdateStore,
     updateState: UpdateState,
+    /**
+     * Испытательный стенд звонков: здесь только выключатель и имя выбранного набора.
+     *
+     * Передаётся целиком, а не двумя значениями: выключатель обязан **двигать** флаг, и
+     * отдельная лямбда рядом с отдельным полем однажды разъехалась бы с ним.
+     */
+    bench: BenchStore,
+    benchState: BenchState,
     /** Что уйдёт в отчёте о проблеме, кроме текста и журнала (ПЛАН-ОТЛАДКИ.md, Б3). */
     problemFacts: ProblemFacts,
     /** Черновик отчёта о проблеме — из подокна неотправленного сообщения. */
@@ -2626,6 +2678,14 @@ private fun Settings(
             SettingsItem.PROBLEM -> Problem(problemFacts, origin, reporting, scope, platform, snapshot, draft = problemDraft)
 
             SettingsItem.STORAGE -> Storage(diaryPolicy)
+
+            // Испытательный режим звонков. Пункт временный и уйдёт вместе со стендом —
+            // держать его «на всякий случай» после испытаний незачем (С-В1).
+            SettingsItem.CALLBENCH -> CallBenchSwitch(
+                on = benchState.on,
+                preset = benchState.preset.name,
+                onSwitch = bench::flag,
+            )
 
             else -> TabStub(
                 willWhat = Tima.words.settings2.item(item),

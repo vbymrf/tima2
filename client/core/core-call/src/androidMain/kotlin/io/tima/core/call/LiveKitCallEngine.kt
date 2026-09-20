@@ -4,6 +4,9 @@ import android.content.Context
 import io.livekit.android.LiveKit
 import io.livekit.android.RoomOptions
 import io.livekit.android.room.Room
+import io.livekit.android.room.participant.AudioTrackPublishDefaults
+import io.livekit.android.room.participant.BackupVideoCodec
+import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.room.participant.VideoTrackPublishDefaults
 import io.livekit.android.room.track.LocalVideoTrackOptions
 import io.livekit.android.room.track.RemoteTrackPublication
@@ -65,6 +68,12 @@ class LiveKitCallEngine(
     /** Отвечал ли кто-нибудь. Отличает «ещё не ответили» от «собеседник ушёл». */
     private var everAnswered: Boolean = false
 
+    // Прошлый отсчёт байтов и его время: мгновенного битрейта в WebRTC нет, он считается
+    // разницей. -1 означает «ещё не считали», и это не то же самое, что ноль.
+    private var lastSent: Long = -1
+    private var lastReceived: Long = -1
+    private var statsAt: Long = 0
+
     override suspend fun connect(door: CallDoor, publish: PublishPreset?) {
         // Пресет применяется ПРИ СОЗДАНИИ комнаты, а не при публикации: кодек и слои
         // участвуют в согласовании, и менять их потом — пересогласование, а иногда разрыв
@@ -83,11 +92,40 @@ class LiveKitCallEngine(
                     // (ПЛАН-СТЕНДА §5а, «ловушка»).
                     simulcast = video.layers == LayerMode.Simulcast,
                     scalabilityMode = video.scalability.takeIf { video.layers == LayerMode.Svc },
+                    // ── ЗАПАСНОЙ КОДЕК: НАШ, И БЕЗ SIMULCAST ────────────────
+                    //
+                    // Умолчание SDK — `BackupVideoCodec(codec = "vp8", simulcast = true)`,
+                    // и ставится оно молча при публикации SVC-кодека. То есть прогон
+                    // «VP9 SVC» кодировал бы ещё и три слоя VP8, как только второй
+                    // телефон попросит запасной, — и померил бы не VP9.
+                    //
+                    // `simulcast = false` здесь не забывчивость, а вторая половина того
+                    // же решения: запасной обязан быть дешевле основного, иначе он не
+                    // запасной, а вторая публикация.
+                    backupCodec = video.backup?.let {
+                        BackupVideoCodec(codec = it.toLiveKit().codecName, simulcast = false)
+                    },
                     degradationPreference = when (video.degradation) {
                         Degradation.MaintainResolution -> DegradationPreference.MAINTAIN_RESOLUTION
                         Degradation.MaintainFramerate -> DegradationPreference.MAINTAIN_FRAMERATE
                         Degradation.Balanced -> DegradationPreference.BALANCED
                     },
+                )
+            },
+            // ── ЗВУК ────────────────────────────────────────────────────────────
+            //
+            // RED — не «улучшение качества», а избыточность: вдвое больше трафика на
+            // голос, зато потери до ~20 % не слышны. Включено решением заказчика
+            // 2026-09-19; на фоне видео в сотни кбит/с лишние 24 кбит/с незаметны.
+            //
+            // Отдельной ручки inband FEC у SDK нет — проверено по
+            // `AudioTrackPublishDefaults(audioBitrate, dtx, red, preconnect)`. Это ответ
+            // на С-В6: RED и DTX задаются, FEC живёт внутри Opus и снаружи не виден.
+            audioTrackPublishDefaults = publish?.audio?.let { audio ->
+                AudioTrackPublishDefaults(
+                    audioBitrate = audio.bitrate,
+                    dtx = audio.dtx,
+                    red = audio.red,
                 )
             },
             videoTrackCaptureDefaults = publish?.video?.let { video ->
@@ -174,6 +212,89 @@ class LiveKitCallEngine(
     }
 
     /**
+     * Числа для стенда — С4 в ПЛАН-СТЕНДА-ЗВОНКОВ §3.2.
+     *
+     * ── ПОЧЕМУ БИТРЕЙТ СЧИТАЕТСЯ ЗДЕСЬ, А НЕ БЕРЁТСЯ ГОТОВЫМ ────────────────
+     *
+     * Мгновенного битрейта в WebRTC нет: отчёт отдаёт **накопленные** байты. Среднее за
+     * звонок при этом бесполезно — оно размазывает разгон полосы по всей минуте и прячет
+     * провал ровно там, где он интересен. Поэтому держим прошлый отсчёт и делим разницу
+     * на прошедшее время; первый вызов честно отдаёт нули — сравнивать не с чем.
+     *
+     * ── И ПОЧЕМУ КОДЕР НАЗВАН ИМЕНЕМ ────────────────────────────────────────
+     *
+     * `encoderImplementation` решает спор, который иначе решается рассуждением:
+     * аппаратный `OMX.sprd.h264.encoder` у realme или программный `libvpx`. Без этой
+     * строки числа прогонов нечитаемы — разница между H.264 на Samsung и на Redmi может
+     * оказаться разницей двух реализаций, а не настроек (ПЛАН-СТЕНДА §5а).
+     */
+    override suspend fun stats(): CallStats? {
+        val live = room ?: return null
+        val now = nowMs()
+        val seconds = if (statsAt == 0L) 0.0 else (now - statsAt) / 1000.0
+        statsAt = now
+
+        var sent = 0L
+        var received = 0L
+        var lost = 0L
+        var rtt: Int? = null
+        var codec: String? = null
+        var encoder: String? = null
+
+        val ours = live.localParticipant.trackPublications.values
+            .mapNotNull { it.track as? io.livekit.android.room.track.Track }
+        val theirs = live.remoteParticipants.values
+            .flatMap { who -> who.trackPublications.values }
+            .mapNotNull { it.track as? io.livekit.android.room.track.Track }
+
+        for (track in ours + theirs) {
+            val report = runCatching { track.getRTCStats() }.getOrNull() ?: continue
+            for (entry in report.statsMap.values) {
+                when (entry.type) {
+                    "outbound-rtp" -> {
+                        sent += (entry.members["bytesSent"] as? Number)?.toLong() ?: 0L
+                        if (entry.members["kind"] == "video") {
+                            encoder = entry.members["encoderImplementation"]?.toString() ?: encoder
+                        }
+                    }
+
+                    "inbound-rtp" -> {
+                        received += (entry.members["bytesReceived"] as? Number)?.toLong() ?: 0L
+                        lost += (entry.members["packetsLost"] as? Number)?.toLong() ?: 0L
+                    }
+
+                    "codec" -> {
+                        val mime = entry.members["mimeType"]?.toString()
+                        if (mime != null && mime.startsWith("video/")) codec = mime.removePrefix("video/")
+                    }
+
+                    // Пара кандидатов — единственное место, где WebRTC говорит про RTT
+                    // всего соединения, а не отдельной дорожки.
+                    "candidate-pair" -> {
+                        val chosen = entry.members["nominated"] == true
+                        val trip = (entry.members["currentRoundTripTime"] as? Number)?.toDouble()
+                        if (chosen && trip != null) rtt = (trip * 1000).toInt()
+                    }
+                }
+            }
+        }
+
+        val up = if (seconds > 0 && lastSent >= 0) ((sent - lastSent) * 8 / seconds).toLong() else 0L
+        val down = if (seconds > 0 && lastReceived >= 0) ((received - lastReceived) * 8 / seconds).toLong() else 0L
+        lastSent = sent
+        lastReceived = received
+
+        return CallStats(
+            upBitrate = up.coerceAtLeast(0),
+            downBitrate = down.coerceAtLeast(0),
+            rttMs = rtt,
+            packetsLost = lost,
+            videoCodec = codec,
+            hardwareEncoder = encoder?.let { hardware(it) },
+        )
+    }
+
+    /**
      * Позвать SDK и **пережить отказ**.
      *
      * 2026-09-20: нажатие на камеру в голосовом звонке роняло приложение целиком —
@@ -207,6 +328,114 @@ class LiveKitCallEngine(
         watchLocalVideo(room)
         watchRemoteVideo(room)
         watchOutgoing(room)
+        watchIncoming(room)
+        watchQuality(room)
+        watchBreaks(room)
+    }
+
+    /**
+     * Оценка связи — словом SFU, а не нашим счётом (§3.4).
+     *
+     * **До 2026-09-20 поле `quality` не заполнялось ничем.** Экран его рисовал, значение
+     * всегда было `Unknown`, и выглядело это как «связь неизвестна» на идеальном канале.
+     * Своей оценки мы не считаем принципиально: у SFU есть пороги (`scorer.go`: 80 / 40 /
+     * 20) и вся статистика обеих сторон, а у нас — половина.
+     */
+    private fun watchQuality(room: Room) {
+        scope.launch {
+            room.localParticipant::connectionQuality.flow.collect { quality ->
+                val ours = when (quality) {
+                    ConnectionQuality.EXCELLENT -> CallQuality.Excellent
+                    ConnectionQuality.GOOD -> CallQuality.Good
+                    ConnectionQuality.POOR -> CallQuality.Poor
+                    ConnectionQuality.LOST -> CallQuality.Lost
+                    else -> CallQuality.Unknown
+                }
+                if (ours == _state.value.quality) return@collect
+                _state.value = _state.value.copy(quality = ours)
+                Journal.note(LogCode.CALL, "оценка связи от SFU", "стала" to ours.name)
+            }
+        }
+    }
+
+    /**
+     * Обрывы: сколько заняло возвращение (§3.4).
+     *
+     * ── ПОЧЕМУ ВАЖНА ИМЕННО ДЛИТЕЛЬНОСТЬ ────────────────────────────────────
+     *
+     * «Связь пропадала» — не сведения: она пропадает у всех и всегда. Сведения — сколько
+     * её не было. Полсекунды человек не заметит, пятнадцать секунд он положит трубку, а
+     * в журнале оба случая до сих пор выглядели одинаково: две строки о смене стадии.
+     *
+     * Предел возврата — тридцать секунд (`departure_timeout` в нашей конфигурации SFU):
+     * дольше — и участника считают ушедшим насовсем.
+     */
+    private fun watchBreaks(room: Room) {
+        scope.launch {
+            var broke = 0L
+            room::state.flow.collect { state ->
+                when (state) {
+                    Room.State.RECONNECTING -> if (broke == 0L) {
+                        broke = nowMs()
+                        Journal.trouble(LogCode.CALL, "связь потеряна, возвращаемся")
+                    }
+
+                    Room.State.CONNECTED -> if (broke != 0L) {
+                        val took = (nowMs() - broke) / 1000.0
+                        broke = 0L
+                        Journal.note(LogCode.CALL, "связь вернулась", "заняло с" to took.toString())
+                    }
+
+                    else -> Unit
+                }
+            }
+        }
+    }
+
+    /**
+     * Что приходит сверху: размер чужого кадра и **смена слоя** (§3.4).
+     *
+     * ── ПОЧЕМУ СЛОЙ УЗНАЁТСЯ ПО РАЗМЕРУ КАДРА ───────────────────────────────
+     *
+     * Номера слоя в статистике приёмника нет: подписчик получает поток, а какой из
+     * трёх ему отдал SFU — знает SFU. Зато видно разрешение, а слои тем и отличаются.
+     * Это **признак, а не номер**, и в отчёте его надо называть именно так; зато он не
+     * требует ни доработки SDK, ни доверия к чужому полю.
+     *
+     * Пишем только смену: размер за звонок меняется единицы раз, а опрос идёт каждые три
+     * секунды.
+     */
+    private fun watchIncoming(room: Room) {
+        scope.launch {
+            var said = ""
+            var got = -1L
+            while (isActive) {
+                delay(STATS_EVERY_MS)
+                val track = room.remoteParticipants.values
+                    .flatMap { it.videoTrackPublications }
+                    .firstNotNullOfOrNull { it.second as? VideoTrack } ?: continue
+                val incoming = runCatching {
+                    track.getRTCStats()?.statsMap?.values
+                        ?.firstOrNull { it.type == "inbound-rtp" && it.members["kind"] == "video" }
+                }.getOrNull() ?: continue
+
+                val w = incoming.members["frameWidth"] ?: continue
+                val h = incoming.members["frameHeight"] ?: continue
+                val bytes = (incoming.members["bytesReceived"] as? Number)?.toLong() ?: 0L
+                val kbit = if (got < 0) -1L else (bytes - got) * 8 / (STATS_EVERY_MS / 1000) / 1000
+                got = bytes
+
+                val line = "" + w + "×" + h + "|" + (kbit / 100)
+                if (line == said) continue
+                said = line
+                Journal.note(
+                    LogCode.CALL,
+                    "приходящее видео",
+                    "кадр" to ("" + w + "×" + h),
+                    "кбит/с" to if (kbit < 0) "считаем" else kbit.toString(),
+                )
+            }
+        }
     }
 
     /**
@@ -413,4 +642,25 @@ private fun VideoCodec.toLiveKit(): LkVideoCodec = when (this) {
     VideoCodec.H264 -> LkVideoCodec.H264
     VideoCodec.VP9 -> LkVideoCodec.VP9
     VideoCodec.H265 -> LkVideoCodec.H265
+}
+
+/** Сейчас, миллисекунды монотонных часов. Для разниц, а не для отметок времени. */
+private fun nowMs(): Long = android.os.SystemClock.elapsedRealtime()
+
+/**
+ * Аппаратный ли кодер — по его собственному имени.
+ *
+ * Вендорский кодек зовётся `OMX.<вендор>.*` или `c2.<вендор>.*`; программные кодеки
+ * Google — `OMX.google.*` и `c2.android.*`, а libwebrtc свои зовёт `libvpx`, `OpenH264`
+ * и через обёртку `SimulcastEncoderAdapter`.
+ *
+ * `null` там, где имя ни на что не похоже: соврать «программный» хуже, чем сказать
+ * «не знаем», — на этом числе решается судьба VP9 (С-В8).
+ */
+private fun hardware(name: String): Boolean? {
+    val lower = name.lowercase()
+    if (lower.contains("libvpx") || lower.contains("openh264") || lower.contains("ffmpeg")) return false
+    if (lower.contains("omx.google") || lower.contains("c2.android")) return false
+    if (lower.startsWith("omx.") || lower.startsWith("c2.") || lower.contains("mediacodec")) return true
+    return null
 }

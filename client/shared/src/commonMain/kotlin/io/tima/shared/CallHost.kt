@@ -54,6 +54,18 @@ class CallHost(
      * язык, а беда звонка продолжает говорить по-русски. Ссылка читается в момент беды.
      */
     private val words: () -> Words = { CurrentWords.value },
+    /**
+     * Чем публиковать — **ссылкой по той же причине, что словарь**.
+     *
+     * Пресет меняют на экране стенда посреди жизни приложения, а `CallHost` живёт от
+     * запуска до запуска. Прочитанный один раз при создании, он застыл бы на том наборе,
+     * который был выбран при старте, — и человек, сменивший кодек, звонил бы прежним, не
+     * понимая почему.
+     *
+     * **Читается он и при выключенном флаге** (ПЛАН-СТЕНДА §4): выбранный набор
+     * становится обычным поведением приложения, уходит только испытательная обвязка.
+     */
+    private val preset: () -> PublishPreset = { PublishPreset(name = "умолчание") },
 ) {
     /** Идёт ли звонок. По этому признаку окно 0 есть или его нет (`Window.shown`). */
     var active by mutableStateOf(false)
@@ -209,7 +221,7 @@ class CallHost(
                     is CallStep.Door -> {
                         callId = step.door.callId
                         Journal.note(LogCode.CALL, "звонок начат", "кому" to peerId.take(8), "видео" to video)
-                        live.connect(step.door, preset)
+                        live.connect(step.door, preset())
                         told()
                         // Видеозвонок показывает себя сразу, не дожидаясь нажатия (ЗВ9):
                         // разрешение уже спрошено выше — `withAccess(video)`.
@@ -274,7 +286,7 @@ class CallHost(
             scope.launch {
                 when (val step = calls.answer(callId)) {
                     is CallStep.Door -> {
-                        live.connect(step.door, preset)
+                        live.connect(step.door, preset())
                         told()
                         // **Принял видеозвонок — показываешь себя.** Так решил заказчик
                         // 2026-09-20: отдельного согласия на камеру не спрашиваем, его
@@ -565,14 +577,6 @@ class CallHost(
             CallAction.OpenSettings -> openCallSettings()
         }
     }
-
-    /**
-     * Пресет публикации. Пока один и по умолчанию — H.264 одним слоем, звук с RED.
-     *
-     * Выбор пресета — испытательный режим за флагом (ADR-0006 Поправка-2), и он придёт
-     * сюда же, когда появится его экран (С3, С7).
-     */
-    private val preset = PublishPreset(name = "умолчание")
 
     /**
      * Спросить разрешение и, если дали, продолжить.

@@ -53,6 +53,7 @@ fun Rail(
      * переключатель и свайп обязаны показывать одно и то же.
      */
     inCall: Boolean = false,
+    bench: Boolean = false,
 ) {
     val colors = Tima.colors
     val withCaptions = layout.railCaption
@@ -63,7 +64,7 @@ fun Rail(
             .padding(vertical = TimaSpacing.about3, horizontal = TimaSpacing.about2),
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
     ) {
-        for (window in Window.shown(inCall)) {
+        for (window in Window.shown(inCall, bench)) {
             Item(
                 window = window,
                 selected = window == current,

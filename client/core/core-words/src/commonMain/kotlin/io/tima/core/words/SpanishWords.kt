@@ -289,6 +289,88 @@ object SpanishWords : Words {
         override val leaveNow = "Salir ahora"
     }
 
+    override val bench = object : BenchWords {
+        override val title = "Banco de pruebas de llamadas"
+        override val about = "ajustes de publicación y números medidos"
+
+        override val flag = "Modo de pruebas de llamadas"
+        override val flagAbout =
+            "Abre la ventana del banco: elección de códec y capas, números de tráfico y carga. " +
+                "Apagarlo NO borra el conjunto elegido: sigue siendo el comportamiento normal de la aplicación."
+        override fun presetNow(name: String) = "Las llamadas usan el conjunto «$name»"
+
+        override val sectionHow = "Cómo llamamos"
+        override val sectionPresets = "Conjuntos"
+        override val sectionRun = "Prueba"
+        override val sectionTraffic = "Qué se transmite"
+        override val sectionLoad = "Qué paga el teléfono"
+        override val sectionRuns = "Pruebas anteriores"
+
+        override val codec = "Códec de vídeo"
+        override val backup = "Códec de reserva"
+        override val noBackup = "ninguno"
+        override val layers = "Capas"
+        override val single = "una capa"
+        override val simulcast = "simulcast"
+        override val svc = "SVC"
+        override val scalability = "Modo SVC"
+        override val size = "Tamaño del cuadro"
+        override val fps = "Cuadros por segundo"
+        override val bitrate = "Bitrate máximo"
+        override val degradation = "Qué sacrificar cuando falta ancho de banda"
+        override val keepSize = "mantener resolución"
+        override val keepFrames = "mantener cuadros"
+        override val asWebrtc = "que decida WebRTC"
+        override val dynacast = "Dynacast"
+        override val adaptiveStream = "Adaptive Stream"
+
+        override val sound = "Audio"
+        override val red = "RED — redundancia"
+        override val dtx = "DTX — no codificar el silencio"
+        override val stereo = "Estéreo"
+        override val audioBitrate = "Bitrate de audio"
+
+        override val presetName = "Nombre del conjunto"
+        override val remember = "Guardar"
+        override val forget = "Olvidar"
+        override val noPresets = "Aún no hay conjuntos. Configura uno y guárdalo con nombre: si no, las pruebas no se pueden comparar"
+
+        override val start = "Iniciar prueba"
+        override val stop = "Detener"
+        override fun going(seconds: Int, samples: Int) = "En curso: $seconds s, $samples muestras"
+        override val startWhenSettled =
+            "Empieza unos segundos después de conectar: los primeros segundos son la subida del ancho de banda y estropean la media"
+        override val appliesToNextCall =
+            "El conjunto se aplica a la próxima llamada: el códec y las capas se negocian, y cambiarlos a mitad significa renegociar y a veces cortar"
+
+        override val up = "Subida, por pista"
+        override val down = "Bajada, por pista"
+        override val rtt = "Ida y vuelta"
+        override val lost = "Paquetes perdidos"
+        override val codecNow = "Códec real"
+        override val encoder = "Codificador"
+        override val hardware = "por hardware"
+        override val software = "por software"
+        override val phoneSent = "El teléfono envió"
+        override val phoneReceived = "El teléfono recibió"
+
+        override val cpu = "Procesador"
+        override val memory = "Memoria"
+        override val heat = "Temperatura"
+        override val battery = "Batería"
+
+        override val seconds = "Segundos"
+        override val upAverage = "Subida, media"
+        override val upPeak = "Subida, pico"
+        override val cpuAverage = "Procesador, media"
+        override val cpuPeak = "Procesador, pico"
+        override val heatPeak = "Temperatura, pico"
+        override val batterySpent = "Batería gastada"
+
+        override val on = "sí"
+        override val off = "no"
+    }
+
     override val windows = object : WindowWords {
 
         override val call = WindowName(
@@ -321,6 +403,11 @@ object SpanishWords : Words {
             short = "Página",
             about = "perfil, colecciones, roles",
         )
+        override val bench = WindowName(
+            full = "Banco de llamadas",
+            short = "Banco",
+            about = "ajustes y números medidos",
+        )
 
         override fun youAreHere(about: String) = "$about · está aquí"
         override fun cameFrom(window: String) = "Viene de la ventana «$window»"
@@ -345,6 +432,7 @@ object SpanishWords : Words {
         override val itemLanguage = "Idioma"
         override val itemPrivacy = "Privacidad y bloqueos"
         override val itemStorage = "Memoria y datos"
+        override val itemCallBench = "Modo de pruebas de llamadas"
         override val itemBlogger = "Ventanas de blogger"
         override val itemQuestions = "Preguntas frecuentes"
         override val itemProblem = "Informar de un problema"

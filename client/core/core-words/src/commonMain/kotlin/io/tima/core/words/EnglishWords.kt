@@ -291,6 +291,88 @@ object EnglishWords : Words {
         override val leaveNow = "Leave now"
     }
 
+    override val bench = object : BenchWords {
+        override val title = "Call bench"
+        override val about = "publish settings and measured numbers"
+
+        override val flag = "Call test mode"
+        override val flagAbout =
+            "Opens the bench window: codec and layer choice, traffic and load numbers. " +
+                "Turning it off does NOT reset the chosen preset — it stays as the app's normal behaviour."
+        override fun presetNow(name: String) = "Calls use the preset \"$name\""
+
+        override val sectionHow = "How we call"
+        override val sectionPresets = "Presets"
+        override val sectionRun = "Run"
+        override val sectionTraffic = "What goes over the wire"
+        override val sectionLoad = "What the phone pays"
+        override val sectionRuns = "Earlier runs"
+
+        override val codec = "Video codec"
+        override val backup = "Backup codec"
+        override val noBackup = "none"
+        override val layers = "Layers"
+        override val single = "single layer"
+        override val simulcast = "simulcast"
+        override val svc = "SVC"
+        override val scalability = "SVC mode"
+        override val size = "Frame size"
+        override val fps = "Frames per second"
+        override val bitrate = "Max bitrate"
+        override val degradation = "What to give up when bandwidth runs short"
+        override val keepSize = "keep resolution"
+        override val keepFrames = "keep framerate"
+        override val asWebrtc = "let WebRTC decide"
+        override val dynacast = "Dynacast"
+        override val adaptiveStream = "Adaptive Stream"
+
+        override val sound = "Audio"
+        override val red = "RED — redundancy"
+        override val dtx = "DTX — do not encode silence"
+        override val stereo = "Stereo"
+        override val audioBitrate = "Audio bitrate"
+
+        override val presetName = "Preset name"
+        override val remember = "Save"
+        override val forget = "Forget"
+        override val noPresets = "No presets yet. Set one up and save it under a name — otherwise runs cannot be compared"
+
+        override val start = "Start run"
+        override val stop = "Stop"
+        override fun going(seconds: Int, samples: Int) = "Running: ${seconds}s, $samples samples"
+        override val startWhenSettled =
+            "Start a few seconds after connecting: the first seconds are bandwidth ramp-up and they spoil the average"
+        override val appliesToNextCall =
+            "The preset applies to the next call: codec and layers are negotiated, and changing them mid-call means renegotiation and sometimes a drop"
+
+        override val up = "Up, by track"
+        override val down = "Down, by track"
+        override val rtt = "Round trip"
+        override val lost = "Packets lost"
+        override val codecNow = "Codec in use"
+        override val encoder = "Encoder"
+        override val hardware = "hardware"
+        override val software = "software"
+        override val phoneSent = "Phone sent"
+        override val phoneReceived = "Phone received"
+
+        override val cpu = "CPU"
+        override val memory = "Memory"
+        override val heat = "Temperature"
+        override val battery = "Battery"
+
+        override val seconds = "Seconds"
+        override val upAverage = "Up, average"
+        override val upPeak = "Up, peak"
+        override val cpuAverage = "CPU, average"
+        override val cpuPeak = "CPU, peak"
+        override val heatPeak = "Temperature, peak"
+        override val batterySpent = "Battery spent"
+
+        override val on = "on"
+        override val off = "off"
+    }
+
     override val windows = object : WindowWords {
 
         override val call = WindowName(
@@ -323,6 +405,11 @@ object EnglishWords : Words {
             short = "Page",
             about = "profile, collections, roles",
         )
+        override val bench = WindowName(
+            full = "Call bench",
+            short = "Bench",
+            about = "settings and measured numbers",
+        )
 
         override fun youAreHere(about: String) = "$about · you are here"
         override fun cameFrom(window: String) = "You came from the «$window» window"
@@ -347,6 +434,7 @@ object EnglishWords : Words {
         override val itemLanguage = "Language"
         override val itemPrivacy = "Privacy and blocking"
         override val itemStorage = "Storage and traffic"
+        override val itemCallBench = "Call test mode"
         override val itemBlogger = "Blogger windows"
         override val itemQuestions = "Frequent questions"
         override val itemProblem = "Report a problem"

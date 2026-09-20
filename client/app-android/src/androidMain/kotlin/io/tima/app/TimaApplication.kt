@@ -7,6 +7,7 @@ import io.tima.core.diag.Diary
 import io.tima.core.diag.DiaryFiles
 import io.tima.core.diag.DiaryPolicy
 import io.tima.core.call.AndroidCallNotice
+import io.tima.core.call.AndroidPhoneMeter
 import io.tima.core.diag.Journal
 import io.tima.core.secrets.AndroidSecrets
 import io.tima.shared.ReportsStore
@@ -32,6 +33,10 @@ class TimaApplication : Application() {
         // человек сворачивает приложение, окно умирает, а разговор продолжается. Ради
         // этого она и заводилась.
         AndroidCallNotice.attach(this)
+        // Стенду звонков контекст нужен ровно для одного — заряда батареи; процессор,
+        // нагрев и трафик он читает из файлов. Представляемся здесь же: замеры снимаются
+        // из общего кода, которому Context недоступен.
+        AndroidPhoneMeter.attach(this)
         // Журнал — раньше всего прочего: то, что случится при установке хранилищ, тоже
         // должно быть видно, а прошлые запуски обязаны приехать с диска. На телефоне это
         // важнее, чем на ПК: систему никто не спрашивает, когда она убивает процесс в

@@ -59,6 +59,7 @@ fun WindowWords.name(window: Window): WindowName = when (window) {
     Window.Media -> media
     Window.Activity -> activity
     Window.Page -> page
+    Window.Bench -> bench
 }
 
 /** Длинное имя: переключатель окон и рейка. */
@@ -124,6 +125,7 @@ fun SettingsListWords.item(item: SettingsItem): String = when (item) {
     SettingsItem.LANGUAGE -> itemLanguage
     SettingsItem.PRIVACY -> itemPrivacy
     SettingsItem.STORAGE -> itemStorage
+    SettingsItem.CALLBENCH -> itemCallBench
     SettingsItem.BLOGGER -> itemBlogger
     SettingsItem.QUESTIONS -> itemQuestions
     SettingsItem.PROBLEM -> itemProblem

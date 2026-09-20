@@ -60,6 +60,15 @@ enum class SettingsItem(val group: SettingsGroup, val glyph: String) {
     PRIVACY(SettingsGroup.APPLICATION, "🔒"),
     STORAGE(SettingsGroup.APPLICATION, "💾"),
 
+    /**
+     * Испытательный режим звонков — **временный пункт**.
+     *
+     * Он уйдёт вместе со стендом, когда забег кончится (ПЛАН-СТЕНДА-ЗВОНКОВ С-В1: «окно
+     * уходит вместе с флагом, а не остаётся „на всякий случай“»). Названо здесь, чтобы
+     * через полгода его не приняли за часть приложения и не начали чинить.
+     */
+    CALLBENCH(SettingsGroup.APPLICATION, "🧪"),
+
     BLOGGER(SettingsGroup.BLOGGER, "📈"),
 
     QUESTIONS(SettingsGroup.HELP, "❓"),

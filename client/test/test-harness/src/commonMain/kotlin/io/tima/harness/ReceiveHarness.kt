@@ -35,6 +35,9 @@ class ReceiveHarness(private val inbox: Inbox) {
     val aboutKeys = mutableListOf<String>()
     val comments = mutableListOf<String>()
 
+    /** Кадры звонка: что пришло. Звонить стенду нечем, а подтверждать — обязан. */
+    val aboutCalls = mutableListOf<String>()
+
     /**
      * Обрабатывает кадр сервера так, как это делает живой канал.
      *
@@ -91,6 +94,35 @@ class ReceiveHarness(private val inbox: Inbox) {
             // записи и строка в переписку, а предмет этой проверки другой.
             is EventStreamProtocol.Decision.LevelNarrowed -> {
                 aboutKeys += "narrow:${decision.groupId}:${decision.messageId}:${decision.level}"
+                decision.eventId?.let { sent += protocol.ackFrame(it) }
+            }
+
+            // Повтор: кадр уже проходил. Наружу не отдаём — только подтверждаем заново,
+            // как это делает живой канал: не подтвердить значит получать его вечно.
+            is EventStreamProtocol.Decision.Seen -> {
+                skipped += "повтор ${decision.eventId}"
+                sent += protocol.ackFrame(decision.eventId)
+            }
+
+            // Кадры звонка стенд подтверждает и запоминает: звонить ему нечем, а курсор
+            // обязан двигаться — иначе следующие сообщения не приедут.
+            is EventStreamProtocol.Decision.CallIncoming -> {
+                aboutCalls += "incoming:${decision.callId}:${decision.kind}"
+                decision.eventId?.let { sent += protocol.ackFrame(it) }
+            }
+
+            is EventStreamProtocol.Decision.CallState -> {
+                aboutCalls += "state:${decision.callId}:${decision.state}"
+                decision.eventId?.let { sent += protocol.ackFrame(it) }
+            }
+
+            is EventStreamProtocol.Decision.CallLeft -> {
+                aboutCalls += "left:${decision.callId}:${decision.userId}"
+                decision.eventId?.let { sent += protocol.ackFrame(it) }
+            }
+
+            is EventStreamProtocol.Decision.CallUnreachable -> {
+                aboutCalls += "unreachable:${decision.callId}"
                 decision.eventId?.let { sent += protocol.ackFrame(it) }
             }
 
