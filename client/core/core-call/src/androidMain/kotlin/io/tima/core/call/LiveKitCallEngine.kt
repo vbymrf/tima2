@@ -16,6 +16,8 @@ import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -200,6 +202,7 @@ class LiveKitCallEngine(
         }
         watchLocalVideo(room)
         watchRemoteVideo(room)
+        watchOutgoing(room)
     }
 
     /**
@@ -247,6 +250,58 @@ class LiveKitCallEngine(
      * не мгновенно, и взятая сразу оказалась бы `null` ровно в тот момент, когда человек
      * ждёт своё изображение.
      */
+    /**
+     * Что на самом деле уходит наверх: размер кадра и **почему** он такой.
+     *
+     * ── ЗАЧЕМ ЭТО В ЖУРНАЛЕ ─────────────────────────────────────────────────
+     *
+     * Полосы у realme 2026-09-20 шли ступенями — пару секунд в начале, потом ещё
+     * немного, дальше чисто. Объяснение («WebRTC роняет разрешение ступенями, и на одной
+     * из них кодер ломается») оказалось верным, но **вывели его из рассказа человека, а
+     * не из журнала**: журнал про размер кадра не знал ничего.
+     *
+     * Теперь знает. Пишем **только смену** — размер за звонок меняется единицы раз, а
+     * опрос идёт каждые три секунды, и лента из сорока одинаковых строк не объясняет
+     * ничего.
+     *
+     * `qualityLimitationReason` — слово самого WebRTC о том, кто ужал картинку:
+     * `bandwidth` (полоса), `cpu` (телефон не тянет), `none`. Без него «стало 320×240»
+     * не отличить от «мы сами так попросили».
+     */
+    private fun watchOutgoing(room: Room) {
+        scope.launch {
+            var said = ""
+            while (isActive) {
+                delay(STATS_EVERY_MS)
+                val track = room.localParticipant.videoTrackPublications
+                    .firstNotNullOfOrNull { it.second as? VideoTrack } ?: continue
+                val now = runCatching {
+                    // Отчёт приходит пустым, пока дорожка не поднялась, — это не беда, а
+                    // «ещё рано»: просто ждём следующего опроса.
+                    val outgoing = track.getRTCStats()?.statsMap?.values
+                        ?.firstOrNull { it.type == "outbound-rtp" && it.members["kind"] == "video" }
+                    val w = outgoing?.members?.get("frameWidth")
+                    val h = outgoing?.members?.get("frameHeight")
+                    if (w == null || h == null) {
+                        null
+                    } else {
+                        val why = outgoing.members["qualityLimitationReason"]?.toString() ?: "—"
+                        ("" + w + "×" + h) to why
+                    }
+                }.getOrNull() ?: continue
+                val line = now.first + " (" + now.second + ")"
+                if (line == said) continue
+                said = line
+                Journal.note(
+                    LogCode.CALL,
+                    "размер уходящего кадра",
+                    "стал" to now.first,
+                    "ужато" to now.second,
+                )
+            }
+        }
+    }
+
     private fun watchLocalVideo(room: Room) {
         scope.launch {
             room.localParticipant::videoTrackPublications.flow.collect { published ->
@@ -321,6 +376,9 @@ class LiveKitCallEngine(
         where.value = track?.let { LiveKitVideoHandle(room, it) }
     }
 }
+
+/** Как часто спрашиваем числа у WebRTC. Три секунды: ступень размера длится дольше. */
+private const val STATS_EVERY_MS = 3_000L
 
 /** Наш кодек в кодек SDK. AV1 в нашем перечне нет — решение заказчика, а не SDK. */
 private fun VideoCodec.toLiveKit(): LkVideoCodec = when (this) {

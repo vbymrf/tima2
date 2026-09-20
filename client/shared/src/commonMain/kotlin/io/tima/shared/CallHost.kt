@@ -357,6 +357,8 @@ class CallHost(
         }
         askCallAccess(video = true) { allowed ->
             if (allowed) {
+                // Разрешили — просьба выполнена, и висеть ей больше незачем.
+                forget(NO_CAMERA)
                 scope.launch { engine?.setCamera(true) }
             } else {
                 // Звонок продолжается — это не беда звонка, а отказ в камере. Молчать
@@ -367,7 +369,7 @@ class CallHost(
                 // второго отказа диалог больше не показывает, и включить камеру можно
                 // только в настройках телефона. Забыть её тут было тем же самым, что
                 // сказать «включается в настройках» и не дать туда пути.
-                note(words().call.noCamera, CallAction.OpenSettings)
+                note(words().call.noCamera, CallAction.OpenSettings, whileTrue = NO_CAMERA)
             }
         }
     }
@@ -398,6 +400,12 @@ class CallHost(
         // «Собеседник показывает себя, ваша камера выключена» — правда ровно до того
         // мгновения, когда человек включил камеру. Раньше строка висела и после, то есть
         // продолжала утверждать неверное (заказчик 2026-09-20).
+        // Камера заработала — значит её разрешили, и просьба выполнена. Это общее
+        // правило ленты: **событие, которое чего-то просит, снимается, когда просьбу
+        // исполнили** (заказчик 2026-09-20). Второй такой случай — «собеседник
+        // показывает себя, ваша камера выключена» ниже.
+        if (now.cameraOn) forget(NO_CAMERA)
+
         val peerAlone = now.remoteVideoShown && !now.cameraOn
         if (peerAlone) note(words.peerShowsSelf, whileTrue = PEER_ALONE) else forget(PEER_ALONE)
 
@@ -594,6 +602,7 @@ class CallHost(
         const val PAUSED = "видео погашено полосой"
         const val BACKING = "связь возвращается"
         const val HIDDEN = "чужое видео скрыто нами"
+        const val NO_CAMERA = "камера не разрешена"
     }
 }
 
