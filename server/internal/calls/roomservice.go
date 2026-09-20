@@ -65,11 +65,24 @@ func NewRoomClient(livekitURL string, issuer *Issuer) *RoomClient {
 
 // DeleteRoom закрывает комнату и отключает всех, кто в ней есть.
 // Идемпотентна: несуществующая комната — не ошибка, звонок и так завершён.
+//
+// Право — `roomCreate`, а не `roomAdmin`: так у LiveKit, и это измерено, а не выведено
+// (см. `ServiceToken`). Пока слался `roomAdmin`, ручка отвечала 401, и комнаты не
+// закрывались вовсе.
 func (c *RoomClient) DeleteRoom(ctx context.Context, room string) error {
 	if c == nil {
 		return nil // LiveKit не сконфигурирован — молча пропускаем
 	}
-	return c.call(ctx, "DeleteRoom", map[string]any{"room": room})
+	token, err := c.Issuer.ServiceToken(VideoGrant{RoomCreate: true}, roomAdminTTL, time.Now())
+	if err != nil {
+		return err
+	}
+	err = c.post(ctx, token, "DeleteRoom", map[string]any{"room": room}, nil)
+	// Комнаты нет — значит звонок и так кончился. Это ответ, а не беда.
+	if errors.Is(err, errNoRoom) {
+		return nil
+	}
+	return err
 }
 
 // RoomExists — жива ли комната в LiveKit.
@@ -97,7 +110,11 @@ func (c *RoomClient) RoomExists(ctx context.Context, room string) (bool, error) 
 			Name string `json:"name"`
 		} `json:"rooms"`
 	}
-	if err := c.callJSON(ctx, "ListRooms", map[string]any{"room": room, "names": []string{room}}, &answer); err != nil {
+	token, err := c.Issuer.ServiceToken(VideoGrant{RoomList: true}, roomAdminTTL, time.Now())
+	if err != nil {
+		return false, err
+	}
+	if err := c.post(ctx, token, "ListRooms", map[string]any{"names": []string{room}}, &answer); err != nil {
 		return false, err
 	}
 	return len(answer.Rooms) > 0, nil
@@ -106,20 +123,24 @@ func (c *RoomClient) RoomExists(ctx context.Context, room string) (bool, error) 
 var errNoLiveKit = errors.New("LiveKit не настроен")
 
 // RemoveParticipant выкидывает одного участника, не трогая остальных.
+// Право — `roomAdmin` на КОНКРЕТНУЮ комнату: участники чужой комнаты таким токеном
+// недосягаемы. В отличие от DeleteRoom, здесь это верное право, и оно же самое узкое.
 func (c *RoomClient) RemoveParticipant(ctx context.Context, room, identity string) error {
 	if c == nil {
 		return nil
 	}
-	return c.call(ctx, "RemoveParticipant", map[string]any{"room": room, "identity": identity})
-}
-
-// callJSON — то же, что call, но с разбором ответа. Нужен там, где ответ и есть смысл
-// вызова: DeleteRoom довольно знать, что не упало, а ListRooms — нет.
-func (c *RoomClient) callJSON(ctx context.Context, method string, payload map[string]any, into any) error {
-	token, err := c.Issuer.RoomAdminToken(payload["room"].(string), roomAdminTTL, time.Now())
+	token, err := c.Issuer.RoomAdminToken(room, roomAdminTTL, time.Now())
 	if err != nil {
 		return err
 	}
+	return c.post(ctx, token, "RemoveParticipant", map[string]any{"room": room, "identity": identity}, nil)
+}
+
+// post — twirp-вызов RoomService. Токен приходит снаружи: право у каждой ручки своё,
+// и выбирать его обязан тот, кто знает, что зовёт.
+//
+// `into` необязателен: DeleteRoom довольно знать, что не упало, а ListRooms — нет.
+func (c *RoomClient) post(ctx context.Context, token, method string, payload map[string]any, into any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -136,44 +157,18 @@ func (c *RoomClient) callJSON(ctx context.Context, method string, payload map[st
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return errNoRoom
+	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("LiveKit %s: %s", method, resp.Status)
+		answer, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("LiveKit %s: статус %d: %s", method, resp.StatusCode, answer)
+	}
+	if into == nil {
+		return nil
 	}
 	return json.NewDecoder(resp.Body).Decode(into)
 }
 
-// call — twirp-вызов с JSON-телом. Токен админский: roomAdmin на конкретную комнату,
-// а не roomJoin. Разница существенная — этим токеном нельзя подключиться к медиа.
-func (c *RoomClient) call(ctx context.Context, method string, payload map[string]any) error {
-	token, err := c.Issuer.RoomAdminToken(payload["room"].(string), roomAdminTTL, time.Now())
-	if err != nil {
-		return err
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.URL+"/twirp/livekit.RoomService/"+method, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return fmt.Errorf("LiveKit %s: %w", method, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusOK {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		return nil
-	}
-	detail, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-	// «Комнаты нет» — штатный исход: она уже закрылась сама по empty_timeout.
-	if bytes.Contains(detail, []byte("not_found")) || bytes.Contains(detail, []byte("requested room does not exist")) {
-		return nil
-	}
-	return fmt.Errorf("LiveKit %s: статус %d: %s", method, resp.StatusCode, strings.TrimSpace(string(detail)))
-}
+// errNoRoom — LiveKit ответил «такой комнаты нет». Для закрытия это успех, а не беда.
+var errNoRoom = errors.New("комнаты в LiveKit нет")

@@ -1,6 +1,9 @@
 package calls
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,5 +65,47 @@ func TestIssuerNilWithoutConfig(t *testing.T) {
 	}
 	if _, err := (*Issuer)(nil).Token("r", "i", true, time.Minute, time.Now()); err != ErrNotConfigured {
 		t.Fatalf("nil issuer должен вернуть ErrNotConfigured, получено %v", err)
+	}
+}
+
+// TestServiceGrants — у каждой ручки RoomService своё право, и подменять их нельзя.
+//
+// Спрошено у живого LiveKit 2026-09-20: DeleteRoom с roomAdmin отвечает 401, с roomCreate
+// — 404 (право есть, комнаты нет); ListRooms требует roomList. Пока слался roomAdmin,
+// комнаты не закрывались вовсе всё время, что существовали звонки.
+//
+// Проверка стережёт не код, а ЗНАНИЕ: оно добыто опытом и в самом токене не видно.
+func TestServiceGrants(t *testing.T) {
+	i := NewIssuer("ключ", "секрет-подлиннее-тридцати-двух-символов")
+
+	отдать := func(grant VideoGrant) map[string]any {
+		tok, err := i.ServiceToken(grant, time.Minute, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		parts := strings.Split(tok, ".")
+		raw, err := base64.RawURLEncoding.DecodeString(parts[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		var body struct {
+			Video map[string]any `json:"video"`
+		}
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatal(err)
+		}
+		return body.Video
+	}
+
+	if g := отдать(VideoGrant{RoomCreate: true}); g["roomCreate"] != true {
+		t.Fatalf("у DeleteRoom нет roomCreate — комнаты перестанут закрываться: %v", g)
+	}
+	if g := отдать(VideoGrant{RoomList: true}); g["roomList"] != true {
+		t.Fatalf("у ListRooms нет roomList — уборка брошенных звонков ослепнет: %v", g)
+	}
+	// И обратное: служебный токен НЕ должен нести roomJoin — им нельзя подключаться
+	// к медиа, в этом весь смысл отдельного права.
+	if g := отдать(VideoGrant{RoomCreate: true}); g["roomJoin"] == true {
+		t.Fatalf("служебный токен пускает в медиа: %v", g)
 	}
 }

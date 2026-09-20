@@ -15,7 +15,9 @@ import (
 type VideoGrant struct {
 	Room         string `json:"room,omitempty"`
 	RoomJoin     bool   `json:"roomJoin,omitempty"`
-	RoomAdmin    bool   `json:"roomAdmin,omitempty"` // управление комнатой, НЕ подключение к медиа
+	RoomAdmin    bool   `json:"roomAdmin,omitempty"`  // участники КОНКРЕТНОЙ комнаты
+	RoomCreate   bool   `json:"roomCreate,omitempty"` // создать и УДАЛИТЬ комнату — право служебное, не на комнату
+	RoomList     bool   `json:"roomList,omitempty"`   // спросить список комнат
 	CanPublish   *bool  `json:"canPublish,omitempty"`
 	CanSubscribe *bool  `json:"canSubscribe,omitempty"`
 }
@@ -53,6 +55,39 @@ func (i *Issuer) Token(room, identity string, canPublish bool, ttl time.Duration
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    i.APIKey, // LiveKit: iss = API key
 			Subject:   identity, // identity = user_id:device_id
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+			NotBefore: jwt.NewNumericDate(now.Add(-10 * time.Second)),
+			IssuedAt:  jwt.NewNumericDate(now),
+		},
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, c).SignedString([]byte(i.APISecret))
+}
+
+// ServiceToken — токен для служебных ручек RoomService.
+//
+// ── ПРАВА У КАЖДОЙ РУЧКИ СВОИ, И ЭТО ИЗМЕРЕНО ──────────────────────────────
+//
+// Здесь на все случаи слался `roomAdmin`, и `DeleteRoom` отвечал 401 — комнаты не
+// закрывались всё время, пока звонки существовали. В логе это лежало строкой
+// «комната не закрылась», и нашлось только потому, что строку читали глазами.
+//
+// Спрошено у живого LiveKit 2026-09-20, ответы такие:
+//
+//	ListRooms   roomAdmin+room → 401 · roomCreate → 401 · roomCreate+roomList → 200
+//	DeleteRoom  roomAdmin+room → 401 · roomCreate → 404 (то есть право есть, комнаты нет)
+//
+// Отсюда: `DeleteRoom` требует `roomCreate`, `ListRooms` — `roomList`, и оба права
+// **служебные**: они не привязаны к комнате. Поэтому даются по одному и на минуту, а не
+// пачкой: утёкший `roomCreate` закрывает ЛЮБУЮ комнату, а не ту, ради которой выдан.
+func (i *Issuer) ServiceToken(grant VideoGrant, ttl time.Duration, now time.Time) (string, error) {
+	if i == nil {
+		return "", ErrNotConfigured
+	}
+	c := claims{
+		Video: grant,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    i.APIKey,
+			Subject:   "tima-backend",
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 			NotBefore: jwt.NewNumericDate(now.Add(-10 * time.Second)),
 			IssuedAt:  jwt.NewNumericDate(now),
