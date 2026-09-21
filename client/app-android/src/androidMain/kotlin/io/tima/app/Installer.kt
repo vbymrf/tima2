@@ -109,6 +109,10 @@ class AndroidInstaller(private val context: Context) : UpdateInstaller {
      *
      * Общий потолок [LIMIT_MS] остался страховкой от загрузки, которая ухитряется капать
      * по байту и потому застрявшей не считается, — а не мерой терпения.
+     *
+     * Решение целиком: [ADR-0022 Поправка-1](../../../../../../../../doc/adr/0022-self-distributed-updates.md).
+     * Там же правило, которое после этого случая остаётся: **срок, посчитанный от
+     * величины, которая растёт, — это отложенная поломка.**
      */
     private suspend fun download(url: String, target: File, onProgress: (Int) -> Unit): Boolean {
         val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
