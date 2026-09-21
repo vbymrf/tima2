@@ -119,6 +119,7 @@ import io.tima.core.ui.TimaSpacing
 import io.tima.feature.chat.GuestPageScreen
 import io.tima.feature.chat.PERSON_FIRST_LINE
 import io.tima.core.call.CallEngine
+import io.tima.core.call.CallStage
 import io.tima.feature.call.BenchScreen
 import io.tima.feature.call.CallBenchSwitch
 import io.tima.feature.call.CallScreen
@@ -1201,16 +1202,28 @@ private fun App(
         showCall()
     }
 
-    // Свайп по средней зоне ведёт к соседнему окну в порядке переключателя. Края
-    // не заворачиваются: с первого окна влево уйти некуда, и это честнее кольца —
-    // человек, дойдя до края, видит, что край есть.
+    // Свайп по средней зоне ведёт к соседнему окну в порядке переключателя, и ряд
+    // **замкнут в кольцо**: с последнего окна свайп ведёт на первое и обратно.
+    //
+    // ── ЭТО ОБРАТНОЕ ПРЕЖНЕМУ РЕШЕНИЮ, И ВОТ ПОЧЕМУ ─────────────────────────
+    //
+    // Здесь стояло «края не заворачиваются: человек, дойдя до края, видит, что край
+    // есть». Довод был не пустой, но его перевесило то, что временные окна стоят по
+    // разным концам ряда: звонок первым, стенд последним. Без кольца из окна звонка до
+    // стенда пять свайпов — ровно в тот момент, когда нужен один (заказчик 2026-09-21).
+    //
+    // Кольцо при этом ничего не прячет: переключатель окон показывает весь ряд целиком,
+    // и где он кончается, видно там.
     val switchWindow: (InSide) -> Unit = { where_ ->
         // По показанным окнам, а не по перечню: окно 0 есть только во время звонка, и
         // свайпом в него попадать, когда его нет в переключателе, было бы странно.
         val order = Window.shown(callHost.active, benchState.on)
-        val next = order.indexOf(window) + if (where_ == InSide.Next) 1 else -1
-        order.getOrNull(next)?.let {
-            window = it
+        val at = order.indexOf(window)
+        if (at >= 0) {
+            // Прибавляем размер до остатка: у отрицательного числа остаток в Kotlin
+            // отрицателен, и свайп с первого окна ушёл бы в -1, то есть никуда.
+            val step = if (where_ == InSide.Next) 1 else -1
+            window = order[(at + step + order.size) % order.size]
             where = Where.Nothing
         }
     }
@@ -1699,10 +1712,19 @@ private fun App(
                     // Изменённый набор становится текущим сразу, без «Запомнить»: прогон
                     // начинают, покрутив ручки, а не сохранив их. Имя нужно только тем
                     // наборам, к которым вернутся.
+                    inCall = callHost.state.stage == CallStage.Connected,
+                    lastFile = benchState.lastFile,
                     onChange = bench::choose,
                     onSave = bench::save,
                     onForget = bench::forget,
-                    onStart = bench::start,
+                    // Порядок обязателен: прогон закрывается ДО перезахода в комнату.
+                    // Внутри одного прогона не бывает двух наборов, иначе в отчёт
+                    // попадёт одно число про минуту, где было два разных кодека.
+                    onApply = {
+                        bench.stop()
+                        callHost.applyPreset()
+                    },
+                    onAgain = bench::again,
                     onStop = bench::stop,
                     // Жест тот же, что у окна 0, и по той же причине: у стенда нет оправы
                     // с шапкой, а окно, из которого нельзя выйти пальцем, — не окно.

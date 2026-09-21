@@ -19,6 +19,7 @@ import livekit.org.webrtc.RtpParameters.DegradationPreference
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -61,6 +62,21 @@ class LiveKitCallEngine(
     override val remoteVideo: StateFlow<VideoHandle?> = _remoteVideo.asStateFlow()
 
     private var room: Room? = null
+
+    /**
+     * Наблюдатели за комнатой — **чтобы их было чем погасить**.
+     *
+     * Раньше `watch` запускал шесть корутин в область приложения и забывал о них. Область
+     * живёт от запуска до запуска, значит наблюдатели прошлых звонков **оставались
+     * работать**: два из них опрашивают статистику в вечном цикле, а остальные держат
+     * ссылку на давно закрытую комнату. За день разговоров это десятки лишних опросов в
+     * секунду — и, что хуже, наблюдатель мёртвой комнаты умеет объявить стадию.
+     *
+     * Нашлось при работе над перезаходом (С-В5): там комната меняется посреди звонка, и
+     * старый наблюдатель объявил бы звонок конченым ровно в тот момент, когда он
+     * продолжается.
+     */
+    private val watchers = mutableListOf<Job>()
 
     /** Принимаем ли чужое видео. Выключается кнопкой «скрыть» (ЗВ11). */
     private var takeRemote: Boolean = true
@@ -138,6 +154,9 @@ class LiveKitCallEngine(
                 )
             },
         )
+        // Наблюдатели прошлой комнаты гасятся ДО создания новой: работающие поверх новой
+        // они удвоили бы каждый опрос и объявили бы стадию по мёртвой комнате.
+        stopWatching()
         val created = LiveKit.create(appContext = context, options = options)
         room = created
         everAnswered = false
@@ -171,7 +190,31 @@ class LiveKitCallEngine(
         }
     }
 
+    override suspend fun reenter(door: CallDoor, publish: PublishPreset?) {
+        // Не через `disconnect()`: он объявляет звонок конченым, а звонок продолжается.
+        // Здесь кончается только комната, и человек об этом знает — он сам нажал.
+        stopWatching()
+        room?.disconnect()
+        room = null
+        _localVideo.value = null
+        _remoteVideo.value = null
+        // Камеру возвращаем такой же, какой она была: набор меняют, чтобы сравнить
+        // картинку, и вернуться в комнату с выключенной камерой значило бы сравнивать
+        // не то.
+        val camera = _state.value.cameraOn
+        _state.value = _state.value.copy(stage = CallStage.Connecting)
+        connect(door, publish)
+        if (camera) setCamera(true)
+    }
+
+    /** Погасить наблюдателей. Идемпотентно: гасить нечего — значит ничего. */
+    private fun stopWatching() {
+        for (job in watchers) job.cancel()
+        watchers.clear()
+    }
+
     override suspend fun disconnect() {
+        stopWatching()
         room?.disconnect()
         room = null
         // Дорожки гасим сами: после disconnect их некому отдать, а оставленные они
@@ -319,10 +362,10 @@ class LiveKitCallEngine(
      * живёт столько, сколько живёт [scope] — то есть столько, сколько открыт звонок.
      */
     private fun watch(room: Room, callId: String) {
-        scope.launch {
+        watchers += scope.launch {
             room::state.flow.collect { settle(room, callId) }
         }
-        scope.launch {
+        watchers += scope.launch {
             room::remoteParticipants.flow.collect { settle(room, callId) }
         }
         watchLocalVideo(room)
@@ -342,7 +385,7 @@ class LiveKitCallEngine(
      * 20) и вся статистика обеих сторон, а у нас — половина.
      */
     private fun watchQuality(room: Room) {
-        scope.launch {
+        watchers += scope.launch {
             room.localParticipant::connectionQuality.flow.collect { quality ->
                 val ours = when (quality) {
                     ConnectionQuality.EXCELLENT -> CallQuality.Excellent
@@ -371,7 +414,7 @@ class LiveKitCallEngine(
      * дольше — и участника считают ушедшим насовсем.
      */
     private fun watchBreaks(room: Room) {
-        scope.launch {
+        watchers += scope.launch {
             var broke = 0L
             room::state.flow.collect { state ->
                 when (state) {
@@ -406,7 +449,7 @@ class LiveKitCallEngine(
      * секунды.
      */
     private fun watchIncoming(room: Room) {
-        scope.launch {
+        watchers += scope.launch {
             var said = ""
             var got = -1L
             while (isActive) {
@@ -516,7 +559,7 @@ class LiveKitCallEngine(
      * статистике нет, а среднее за звонок ничего не говорит о провале на старте.
      */
     private fun watchOutgoing(room: Room) {
-        scope.launch {
+        watchers += scope.launch {
             var said = ""
             var sent = -1L
             while (isActive) {
@@ -560,7 +603,7 @@ class LiveKitCallEngine(
     }
 
     private fun watchLocalVideo(room: Room) {
-        scope.launch {
+        watchers += scope.launch {
             room.localParticipant::videoTrackPublications.flow.collect { published ->
                 val track = published.firstOrNull()?.second as? VideoTrack
                 show(_localVideo, room, track)
@@ -580,7 +623,7 @@ class LiveKitCallEngine(
      * ни у человека. Отписка — по кнопке «скрыть» (ЗВ11).
      */
     private fun watchRemoteVideo(room: Room) {
-        scope.launch {
+        watchers += scope.launch {
             room::remoteParticipants.flow.collectLatest { participants ->
                 // Сперва посмотреть на то, что есть сейчас: участник мог войти уже с
                 // видео, а мог и уйти — тогда картинку надо снять.

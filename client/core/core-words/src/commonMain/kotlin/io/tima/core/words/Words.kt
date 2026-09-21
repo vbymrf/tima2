@@ -602,8 +602,14 @@ interface BenchWords {
     val forget: String
     val noPresets: String
 
-    val start: String
+    /** Применить набор к идущему звонку. Стоит двух-трёх секунд разговора (С-В5). */
+    val apply: String
+    val applyAbout: String
+    val again: String
     val stop: String
+    val runsBySelf: String
+    fun savedTo(path: String): String
+    val notSaved: String
     fun going(seconds: Int, samples: Int): String
     val startWhenSettled: String
     val appliesToNextCall: String
@@ -701,6 +707,9 @@ interface CallWords {
      * обязана говорить это как есть, иначе человек положит трубку раньше времени.
      */
     val peerOffline: String
+
+    /** Набор публикации сменили посреди разговора: связь прервалась не сама. */
+    fun presetApplied(name: String): String
 
     /** Никто не ответил: звонили и не дозвонились. */
     val noAnswer: String
@@ -1745,8 +1754,17 @@ object RussianWords : Words {
         override val forget = "Забыть"
         override val noPresets = "Наборов пока нет. Настройте и запомните под именем — иначе прогоны не с чем сравнивать"
 
-        override val start = "Начать прогон"
+        override val apply = "Применить сейчас"
+        override val applyAbout =
+            "Набор применится к идущему разговору: комната откроется заново, и связь прервётся на две-три секунды. " +
+                "Прогон при этом закрывается — внутри одного прогона не бывает двух наборов"
+        override val again = "Начать заново"
         override val stop = "Остановить"
+        override val runsBySelf =
+            "Прогон идёт сам, пока идёт разговор, и файл пишется, когда он кончится. " +
+                "«Начать заново» сбрасывает набранное — им отсекают разгон полосы в первые секунды"
+        override fun savedTo(path: String) = "Отчёт записан: $path"
+        override val notSaved = "Отчёт записать не удалось — смотрите журнал"
         override fun going(seconds: Int, samples: Int) = "Идёт: $seconds с, отсчётов $samples"
         override val startWhenSettled =
             "Начинать через несколько секунд после соединения: первые секунды занимает разгон полосы, и они портят среднее"
@@ -2196,6 +2214,8 @@ object RussianWords : Words {
         override val peerShowsSelf = "Собеседник показывает себя, наша камера выключена — нажмите камеру, чтобы показать себя"
         override val peerStoppedVideo = "Собеседник перестал показывать себя"
         override val peerLeft = "Собеседник положил трубку"
+        override fun presetApplied(name: String) =
+            "Набор «$name» применён — связь прервалась на пару секунд не сама"
         override val peerOffline = "Телефон собеседника не на связи — звонок придёт, когда он появится"
         override val noAnswer = "Не дозвонились: никто не ответил"
         override val peerBusy = "Собеседник занят другим звонком"

@@ -67,10 +67,15 @@ fun BenchScreen(
     running: Boolean,
     samples: List<BenchSample>,
     runs: List<BenchSummary>,
+    /** Идёт ли разговор. От этого зависит, можно ли применить набор прямо сейчас. */
+    inCall: Boolean,
+    /** Куда лёг отчёт прошлого прогона. `null` — не записался или писать некуда. */
+    lastFile: String?,
     onChange: (PublishPreset) -> Unit,
     onSave: (PublishPreset) -> Unit,
     onForget: (String) -> Unit,
-    onStart: () -> Unit,
+    onApply: () -> Unit,
+    onAgain: () -> Unit,
     onStop: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -87,7 +92,8 @@ fun BenchScreen(
     ) {
         Publishing(preset, onChange)
         Saving(preset, presets, onChange, onSave, onForget)
-        Running(running, samples, onStart, onStop)
+        Applying(inCall, onApply)
+        Running(running, samples, lastFile, onAgain, onStop)
         Numbers(samples.lastOrNull())
         Runs(runs)
         Tertiary(words.appliesToNextCall)
@@ -231,26 +237,56 @@ private fun Saving(
 
 // ── ПРОГОН ──────────────────────────────────────────────────────────────────
 
+/**
+ * Применить набор к идущему разговору — С-В5, вариант «б».
+ *
+ * **Кнопка есть только во время разговора**, и это не украшение: вне его применять
+ * нечего — набор и так возьмётся при следующем входе в комнату. Кнопка, которая в
+ * половине случаев ничего не делает, читается как поломка.
+ */
+@Composable
+private fun Applying(inCall: Boolean, onApply: () -> Unit) {
+    if (!inCall) return
+    val words = Tima.words.bench
+    Section(words.apply) {
+        Button(label = words.apply, onClick = onApply, kind = ButtonKind.Action)
+        Tertiary(words.applyAbout)
+    }
+}
+
 @Composable
 private fun Running(
     running: Boolean,
     samples: List<BenchSample>,
-    onStart: () -> Unit,
+    lastFile: String?,
+    onAgain: () -> Unit,
     onStop: () -> Unit,
 ) {
     val words = Tima.words.bench
     Section(words.sectionRun) {
         Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
             Button(
-                label = if (running) words.stop else words.start,
-                onClick = if (running) onStop else onStart,
-                kind = if (running) ButtonKind.Dangerous else ButtonKind.Action,
+                label = words.again,
+                onClick = onAgain,
+                kind = ButtonKind.Action,
+                enabled = running,
+            )
+            Button(
+                label = words.stop,
+                onClick = onStop,
+                kind = ButtonKind.Dangerous,
+                enabled = running,
             )
         }
         if (running) {
             Secondary(words.going(samples.lastOrNull()?.atSecond ?: 0, samples.size))
         } else {
-            Tertiary(words.startWhenSettled)
+            Tertiary(words.runsBySelf)
+        }
+        // Путь к файлу — не для красоты: по нему его забирают с телефона, и гадать,
+        // куда он лёг, не должен никто.
+        if (!running) {
+            if (lastFile != null) Secondary(words.savedTo(lastFile)) else Tertiary(words.notSaved)
         }
     }
 }

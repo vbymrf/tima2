@@ -4,6 +4,10 @@ import io.tima.core.call.BenchSample
 import io.tima.core.call.BenchSummary
 import io.tima.core.call.CallEngine
 import io.tima.core.call.CallStage
+import io.tima.core.call.benchFileName
+import io.tima.core.call.benchReport
+import io.tima.core.call.phoneModel
+import io.tima.core.call.saveBenchReport
 import io.tima.core.call.PublishPreset
 import io.tima.core.call.phoneLoad
 import io.tima.core.call.phoneTraffic
@@ -69,6 +73,22 @@ class BenchStore(
                 )
             }
             .launchIn(scope)
+
+        // ── ПРОГОН ИДЁТ САМ, ПОКА ИДЁТ РАЗГОВОР ─────────────────────────────
+        //
+        // Решение заказчика 2026-09-21: «каждый отдельный звонок — отдельный файл».
+        // Прогон, который надо не забыть начать, однажды забудут начать — и звонок, ради
+        // которого всё делалось, останется без чисел. Поэтому он начинается с ответом и
+        // кончается с трубкой, а кнопки остаются для тех, кто ведёт замер осознанно.
+        engine?.state
+            ?.onEach { live ->
+                when (live.stage) {
+                    CallStage.Connected -> if (_state.value.on && !_state.value.running) begin()
+                    CallStage.Ended, CallStage.Idle -> if (_state.value.running) stop()
+                    else -> Unit
+                }
+            }
+            ?.launchIn(scope)
     }
 
     /** Включить или выключить испытательный режим. Пресет при этом остаётся. */
@@ -110,13 +130,27 @@ class BenchStore(
     }
 
     /**
+     * Забыть набранное и считать заново, **не закрывая прогон**.
+     *
+     * Ради разгона полосы: первые секунды разговора она растёт, и включённые в среднее
+     * они портят его тем сильнее, чем короче прогон (ПЛАН-СТЕНДА §6). Нажал через
+     * несколько секунд после соединения — и среднее стало про разговор, а не про разгон.
+     *
+     * Файла при этом не пишется: прогон не кончился, а начался заново.
+     */
+    fun again() {
+        if (!_state.value.running) return
+        _state.value = _state.value.copy(samples = emptyList())
+        Journal.note(LogCode.CALL, "отсчёты прогона сброшены")
+    }
+
+    /**
      * Начать прогон.
      *
-     * **Не с начала звонка, а по кнопке.** Первые секунды занимает разгон полосы, и
-     * включённые в среднее они портят его тем сильнее, чем короче прогон (ПЛАН-СТЕНДА §6).
-     * Когда начинать — решает тот, кто ведёт испытания.
+     * Зовётся сам, когда разговор соединился; руками его не начинают — см. слежку за
+     * состоянием движка выше.
      */
-    fun start() {
+    private fun begin() {
         if (!_state.value.on) return // флаг выключен — замер не стоит ничего
         if (sampling?.isActive == true) return
         val preset = _state.value.preset
@@ -145,16 +179,32 @@ class BenchStore(
         }
     }
 
-    /** Остановить прогон и свернуть его. Остановленный дважды — не беда, а ничего. */
+    /**
+     * Остановить прогон, свернуть его и **положить файл на телефон**.
+     *
+     * Зовётся и сам — когда кончился звонок, — и руками: кнопкой «Остановить» или сменой
+     * набора на ходу. Смена набора обязана оборвать прогон: иначе в отчёт попало бы одно
+     * число про минуту, внутри которой было два разных кодека, и сравнивать его было бы
+     * не с чем.
+     *
+     * Остановленный дважды — не беда, а ничего.
+     */
     fun stop() {
         sampling?.cancel()
         sampling = null
         val now = _state.value
         if (!now.running) return
         val summary = summarize(now.preset, now.samples)
+        // Файл пишется ДО обновления состояния: путь к нему показывает экран, и появиться
+        // он должен вместе со свёрткой, а не через мгновение после неё.
+        val saved = saveBenchReport(
+            fileName = benchFileName(phoneModel()),
+            text = benchReport(summary, now.samples, now.preset, phoneModel()),
+        )
         _state.value = now.copy(
             running = false,
             last = summary,
+            lastFile = saved,
             // Новые прогоны сверху: смотрят последний, а не первый.
             runs = listOf(summary) + now.runs,
         )
@@ -165,6 +215,7 @@ class BenchStore(
             "секунд" to summary.seconds,
             "отсчётов" to summary.samples,
             "кодер" to (summary.codec ?: "—"),
+            "файл" to (saved ?: "не записан"),
         )
     }
 
@@ -199,6 +250,8 @@ class BenchStore(
  * @param samples отсчёты идущего прогона. Целиком, а не средним: среднее прячет провал.
  * @param last свёртка последнего законченного прогона.
  * @param runs все свёртки за запуск приложения, новые сверху.
+ * @param lastFile куда лёг отчёт последнего прогона. `null` — записать не удалось или
+ *   платформа этого не умеет; экран тогда говорит об этом, а не молчит.
  */
 data class BenchState(
     val on: Boolean = false,
@@ -208,4 +261,5 @@ data class BenchState(
     val samples: List<BenchSample> = emptyList(),
     val last: BenchSummary? = null,
     val runs: List<BenchSummary> = emptyList(),
+    val lastFile: String? = null,
 )

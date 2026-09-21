@@ -335,8 +335,17 @@ object SpanishWords : Words {
         override val forget = "Olvidar"
         override val noPresets = "Aún no hay conjuntos. Configura uno y guárdalo con nombre: si no, las pruebas no se pueden comparar"
 
-        override val start = "Iniciar prueba"
+        override val apply = "Aplicar ahora"
+        override val applyAbout =
+            "El conjunto se aplicará a la llamada en curso: la sala se reabre y la conexión se corta dos o tres segundos. " +
+                "La prueba también se cierra: una prueba nunca contiene dos conjuntos"
+        override val again = "Reiniciar el conteo"
         override val stop = "Detener"
+        override val runsBySelf =
+            "La prueba corre sola mientras dura la llamada, y el archivo se escribe cuando termina. " +
+                "«Reiniciar el conteo» descarta lo acumulado: así se cortan los primeros segundos de arranque"
+        override fun savedTo(path: String) = "Informe escrito: $path"
+        override val notSaved = "No se pudo escribir el informe: mira el diario"
         override fun going(seconds: Int, samples: Int) = "En curso: $seconds s, $samples muestras"
         override val startWhenSettled =
             "Empieza unos segundos después de conectar: los primeros segundos son la subida del ancho de banda y estropean la media"
@@ -784,6 +793,8 @@ object SpanishWords : Words {
         override val peerShowsSelf = "La otra persona muestra vídeo y tu cámara está apagada: toca la cámara para mostrarte"
         override val peerStoppedVideo = "La otra persona dejó de mostrar vídeo"
         override val peerLeft = "La otra persona colgó"
+        override fun presetApplied(name: String) =
+            "Conjunto «$name» aplicado: el corte de dos segundos no fue un fallo"
         override val peerOffline = "El teléfono de la otra persona está sin conexión: la llamada llegará cuando vuelva"
         override val noAnswer = "Sin respuesta"
         override val peerBusy = "La otra persona está en otra llamada"

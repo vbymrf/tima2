@@ -74,6 +74,26 @@ class BenchScreenTest {
     }
 
     @Test
+    fun применить_предлагается_только_в_разговоре() {
+        // Вне разговора применять нечего: набор и так возьмётся при следующем входе в
+        // комнату. Кнопка, которая в половине случаев ничего не делает, читается как
+        // поломка — и по ней жмут второй раз.
+        val idle = capture("стенд-вне-звонка", WIDTH, HEIGHT, dark = false) { screen(inCall = false) }
+        val talking = capture("стенд-в-звонке", WIDTH, HEIGHT, dark = false) { screen(inCall = true) }
+        assertTrue(idle.difference(talking) > 0.0, "кнопка «Применить» показана вне разговора или не показана в нём")
+    }
+
+    @Test
+    fun путь_к_файлу_показывается_после_прогона() {
+        // По нему отчёт забирают с телефона. Не показать его — значит заставить искать.
+        val without = capture("стенд-без-файла", WIDTH, HEIGHT, dark = false) { screen(lastFile = null) }
+        val with = capture("стенд-с-файлом", WIDTH, HEIGHT, dark = false) {
+            screen(lastFile = "/data/data/io.tima.app.v2/files/test/2026-09-21-1530-RMX3269.md")
+        }
+        assertTrue(without.difference(with) > 0.0, "путь к отчёту не показан")
+    }
+
+    @Test
     fun прошлые_прогоны_показываются_под_числами() {
         val none = capture("стенд-без-прогонов", WIDTH, HEIGHT, dark = false) { screen(runs = emptyList()) }
         val some = capture("стенд-с-прогонами", WIDTH, HEIGHT, dark = false) {
@@ -120,6 +140,8 @@ class BenchScreenTest {
             running: Boolean = false,
             samples: List<BenchSample> = emptyList(),
             runs: List<BenchSummary> = emptyList(),
+            inCall: Boolean = false,
+            lastFile: String? = null,
         ) = Stage(
             column = {
                 BenchScreen(
@@ -128,10 +150,13 @@ class BenchScreenTest {
                     running = running,
                     samples = samples,
                     runs = runs,
+                    inCall = inCall,
+                    lastFile = lastFile,
                     onChange = {},
                     onSave = {},
                     onForget = {},
-                    onStart = {},
+                    onApply = {},
+                    onAgain = {},
                     onStop = {},
                 )
             },

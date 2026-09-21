@@ -25,6 +25,9 @@ object AndroidPhoneMeter {
         app = context.applicationContext
     }
 
+    /** Контекст приложения — нужен заряду батареи и записи отчёта о прогоне. */
+    internal fun context(): Context? = app
+
     internal fun battery(): Int? {
         val context = app ?: return null
         val manager = runCatching {

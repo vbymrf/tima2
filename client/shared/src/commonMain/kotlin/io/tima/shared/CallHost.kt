@@ -105,6 +105,15 @@ class CallHost(
 
     private var peerId: String = ""
     private var callId: String = ""
+
+    /**
+     * Дверь идущего звонка — чтобы в ту же комнату можно было **вернуться**.
+     *
+     * Нужна одному: смене набора публикации на ходу (С-В5). Токен там же, и он живёт
+     * дольше разговора, так что второй раз к серверу идти не надо — а значит перезаход не
+     * трогает сигналинг вовсе: звонок на сервере тот же, собеседник никуда не выходит.
+     */
+    private var door: CallDoor? = null
     private var ticking: Boolean = false
 
     /** Начат ли звонок как видео: принявший тогда показывает себя сразу (ЗВ9). */
@@ -220,6 +229,7 @@ class CallHost(
                 when (val step = calls.start(peerId, video)) {
                     is CallStep.Door -> {
                         callId = step.door.callId
+                        door = step.door
                         Journal.note(LogCode.CALL, "звонок начат", "кому" to peerId.take(8), "видео" to video)
                         live.connect(step.door, preset())
                         told()
@@ -286,6 +296,7 @@ class CallHost(
             scope.launch {
                 when (val step = calls.answer(callId)) {
                     is CallStep.Door -> {
+                        door = step.door
                         live.connect(step.door, preset())
                         told()
                         // **Принял видеозвонок — показываешь себя.** Так решил заказчик
@@ -569,6 +580,30 @@ class CallHost(
     /** Снять длящееся событие: то, о чём оно говорило, кончилось. */
     private fun forget(whileTrue: String) {
         events.removeAll { it.whileTrue == whileTrue }
+    }
+
+    /**
+     * Применить выбранный набор к **идущему** звонку — С-В5, решение заказчика 2026-09-21.
+     *
+     * ── ЧЕГО ЭТО СТОИТ И ПОЧЕМУ ЦЕНА ПРИНЯТА ────────────────────────────────
+     *
+     * Разговор прерывается на две-три секунды: комната закрывается и открывается заново.
+     * Дешевле было бы перепубликовать одну дорожку, но `dynacast` и `adaptiveStream` —
+     * свойства комнаты, и перепубликацией они не меняются. Набор, применённый наполовину,
+     * хуже непримененного: прогон назывался бы одним, а мерил другое.
+     *
+     * **Говорим об этом строкой в ленте.** Пропавшая на три секунды картинка без
+     * объяснения читается как поломка — ровно та беда, из-за которой заведена лента.
+     */
+    fun applyPreset() {
+        val live = engine ?: return
+        val where = door ?: return
+        // Пока не соединились, применять нечего: набор и так возьмётся при входе.
+        if (state.stage != CallStage.Connected && state.stage != CallStage.Reconnecting) return
+        val name = preset().name
+        Journal.note(LogCode.CALL, "набор применён на ходу", "набор" to name)
+        note(words().call.presetApplied(name))
+        scope.launch { live.reenter(where, preset()) }
     }
 
     /** Сделать то, что предлагает событие. */
