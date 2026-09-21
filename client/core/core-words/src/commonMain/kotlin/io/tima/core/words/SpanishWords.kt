@@ -339,11 +339,14 @@ object SpanishWords : Words {
         override val applyAbout =
             "El conjunto se aplicará a la llamada en curso: la sala se reabre y la conexión se corta dos o tres segundos. " +
                 "La prueba también se cierra: una prueba nunca contiene dos conjuntos"
-        override val again = "Reiniciar el conteo"
-        override val stop = "Detener"
+        override val stop = "Detener la grabación"
         override val runsBySelf =
-            "La prueba corre sola mientras dura la llamada, y el archivo se escribe cuando termina. " +
-                "«Reiniciar el conteo» descarta lo acumulado: así se cortan los primeros segundos de arranque"
+            "La grabación corre sola mientras dura la llamada, y el archivo se escribe cuando termina"
+        override val skip = "No contar los primeros segundos"
+        override fun runAt(at: Int, total: Int) = "Prueba $at de $total"
+        override val ringAbout =
+            "Cada llamada nueva toma el siguiente conjunto, en círculo. Ambos teléfonos solo cuentan llamadas: " +
+                "con listas iguales van al paso; si se desvían, el número aquí y en la ventana de llamada lo muestra"
         override fun savedTo(path: String) = "Informe escrito: $path"
         override val notSaved = "No se pudo escribir el informe: mira el diario"
         override fun going(seconds: Int, samples: Int) = "En curso: $seconds s, $samples muestras"
@@ -795,6 +798,8 @@ object SpanishWords : Words {
         override val peerLeft = "La otra persona colgó"
         override fun presetApplied(name: String) =
             "Conjunto «$name» aplicado: el corte de dos segundos no fue un fallo"
+        override val presetRefused =
+            "Conjunto no aplicado: el servidor no permitió volver a entrar. La llamada sigue con el anterior"
         override val peerOffline = "El teléfono de la otra persona está sin conexión: la llamada llegará cuando vuelva"
         override val noAnswer = "Sin respuesta"
         override val peerBusy = "La otra persona está en otra llamada"

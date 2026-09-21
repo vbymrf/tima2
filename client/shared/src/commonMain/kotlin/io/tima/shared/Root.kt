@@ -120,6 +120,7 @@ import io.tima.feature.chat.GuestPageScreen
 import io.tima.feature.chat.PERSON_FIRST_LINE
 import io.tima.core.call.CallEngine
 import io.tima.core.call.CallStage
+import io.tima.feature.call.BenchLine
 import io.tima.feature.call.BenchScreen
 import io.tima.feature.call.CallBenchSwitch
 import io.tima.feature.call.CallScreen
@@ -1531,6 +1532,19 @@ private fun App(
                     // полем состояния: состояние сравнивается на равенство при каждой
                     // перерисовке, а у живой дорожки равенства нет.
                     events = callHost.events,
+                    // Номер набора в забеге — им два телефона сверяются между собой.
+                    // Показываем только при включённом стенде: обычному звонку это
+                    // ничего не говорит.
+                    bench = if (benchState.on && benchState.total > 1) {
+                        BenchLine(
+                            at = benchState.at,
+                            total = benchState.total,
+                            preset = benchState.preset.name,
+                            last = benchState.samples.lastOrNull(),
+                        )
+                    } else {
+                        null
+                    },
                     remoteVideo = callHost.remoteVideo.collectAsState().value,
                     localVideo = callHost.localVideo.collectAsState().value,
                     onRemoteVideo = callHost::remoteVideo,
@@ -1714,6 +1728,7 @@ private fun App(
                     // наборам, к которым вернутся.
                     inCall = callHost.state.stage == CallStage.Connected,
                     lastFile = benchState.lastFile,
+                    skip = benchState.skip,
                     onChange = bench::choose,
                     onSave = bench::save,
                     onForget = bench::forget,
@@ -1724,7 +1739,7 @@ private fun App(
                         bench.stop()
                         callHost.applyPreset()
                     },
-                    onAgain = bench::again,
+                    onSkip = bench::skipSeconds,
                     onStop = bench::stop,
                     // Жест тот же, что у окна 0, и по той же причине: у стенда нет оправы
                     // с шапкой, а окно, из которого нельзя выйти пальцем, — не окно.

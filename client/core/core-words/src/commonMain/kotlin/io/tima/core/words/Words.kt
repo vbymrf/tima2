@@ -605,9 +605,17 @@ interface BenchWords {
     /** Применить набор к идущему звонку. Стоит двух-трёх секунд разговора (С-В5). */
     val apply: String
     val applyAbout: String
-    val again: String
     val stop: String
     val runsBySelf: String
+
+    /** Сколько первых секунд разговора не учитывать — разгон полосы. */
+    val skip: String
+
+    /** Какой набор идёт сейчас: «Прогон 3 из 7». */
+    fun runAt(at: Int, total: Int): String
+
+    /** Забег кольцом: каждый новый звонок берёт следующий набор. */
+    val ringAbout: String
     fun savedTo(path: String): String
     val notSaved: String
     fun going(seconds: Int, samples: Int): String
@@ -710,6 +718,9 @@ interface CallWords {
 
     /** Набор публикации сменили посреди разговора: связь прервалась не сама. */
     fun presetApplied(name: String): String
+
+    /** Сервер не дал войти в комнату заново — набор остался прежним, звонок цел. */
+    val presetRefused: String
 
     /** Никто не ответил: звонили и не дозвонились. */
     val noAnswer: String
@@ -1758,11 +1769,14 @@ object RussianWords : Words {
         override val applyAbout =
             "Набор применится к идущему разговору: комната откроется заново, и связь прервётся на две-три секунды. " +
                 "Прогон при этом закрывается — внутри одного прогона не бывает двух наборов"
-        override val again = "Начать заново"
-        override val stop = "Остановить"
+        override val stop = "Прекратить запись"
         override val runsBySelf =
-            "Прогон идёт сам, пока идёт разговор, и файл пишется, когда он кончится. " +
-                "«Начать заново» сбрасывает набранное — им отсекают разгон полосы в первые секунды"
+            "Запись идёт сама, пока идёт разговор, и файл пишется, когда он кончится"
+        override val skip = "Не учитывать первых секунд"
+        override fun runAt(at: Int, total: Int) = "Прогон $at из $total"
+        override val ringAbout =
+            "Каждый новый звонок берёт следующий набор, по кругу. Оба телефона просто считают звонки — " +
+                "списки одинаковы, значит идут в ногу; разошлись — видно по номеру здесь и в окне звонка"
         override fun savedTo(path: String) = "Отчёт записан: $path"
         override val notSaved = "Отчёт записать не удалось — смотрите журнал"
         override fun going(seconds: Int, samples: Int) = "Идёт: $seconds с, отсчётов $samples"
@@ -2216,6 +2230,8 @@ object RussianWords : Words {
         override val peerLeft = "Собеседник положил трубку"
         override fun presetApplied(name: String) =
             "Набор «$name» применён — связь прервалась на пару секунд не сама"
+        override val presetRefused =
+            "Набор не применён: сервер не дал войти заново. Разговор продолжается прежним набором"
         override val peerOffline = "Телефон собеседника не на связи — звонок придёт, когда он появится"
         override val noAnswer = "Не дозвонились: никто не ответил"
         override val peerBusy = "Собеседник занят другим звонком"

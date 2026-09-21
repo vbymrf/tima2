@@ -172,12 +172,7 @@ class LiveKitCallEngine(
             // 2026-09-20). Камера не включается: голосовой звонок её не просит, и
             // разрешения на неё в этот момент ещё нет.
             Journal.note(LogCode.CALL, "вошли в комнату", "комната" to door.room)
-            created.localParticipant.setMicrophoneEnabled(true)
-            _state.value = _state.value.copy(microphoneOn = true)
-            // **Запись именно об этом шаге, а не о звонке вообще.** Немой звонок
-            // 2026-09-20 был невидим в отчёте ровно потому, что журнал знал «звонок
-            // начат» и «звонок закончен», а поднялась ли дорожка — не знал никто.
-            Journal.note(LogCode.CALL, "микрофон опубликован")
+            publishMicrophone(created)
         } catch (e: Throwable) {
             // Причина словами и в состоянии: звонок, который «просто не начался», —
             // худшее из состояний, потому что человек видит пустоту и не знает, чего ждать.
@@ -204,7 +199,49 @@ class LiveKitCallEngine(
         val camera = _state.value.cameraOn
         _state.value = _state.value.copy(stage = CallStage.Connecting)
         connect(door, publish)
-        if (camera) setCamera(true)
+        if (camera) {
+            // Та же гонка, что у микрофона: публикующее соединение собирается не
+            // мгновенно, а камера — вторая дорожка подряд.
+            delay(PUBLISH_RETRY_MS)
+            setCamera(true)
+        }
+    }
+
+    /**
+     * Поднять микрофон — **отдельно от входа в комнату и с повтором**.
+     *
+     * ── ПОЧЕМУ ОТДЕЛЬНО ────────────────────────────────────────────────────
+     *
+     * Раньше это стояло внутри той же `try`, что и вход, и отказ микрофона печатался как
+     * «в комнату не вошли» — хотя вошли. Разбор при этом уходил в сеть и в токены, а
+     * беда была в дорожке.
+     *
+     * ── ПОЧЕМУ С ПОВТОРОМ ──────────────────────────────────────────────────
+     *
+     * `publisher is not configured yet!` — SDK ещё не собрал публикующее соединение.
+     * Ловится на перезаходе (живой прогон 2026-09-21): комната открывается второй раз
+     * подряд, и дорожка просится раньше, чем есть куда. Через полсекунды всё готово.
+     *
+     * **Запись в журнал именно об этом шаге.** Немой звонок 2026-09-20 был невидим в
+     * отчёте ровно потому, что журнал знал «звонок начат» и «звонок закончен», а
+     * поднялась ли дорожка — не знал никто.
+     */
+    private suspend fun publishMicrophone(room: Room) {
+        var last: Throwable? = null
+        repeat(PUBLISH_TRIES) { attemptNo ->
+            try {
+                room.localParticipant.setMicrophoneEnabled(true)
+                _state.value = _state.value.copy(microphoneOn = true)
+                Journal.note(LogCode.CALL, "микрофон опубликован", "попытка" to attemptNo + 1)
+                return
+            } catch (e: Throwable) {
+                last = e
+                delay(PUBLISH_RETRY_MS)
+            }
+        }
+        val why = last?.message ?: last?.let { it::class.simpleName } ?: "дорожка не поднялась"
+        Journal.trouble(LogCode.CALL, "микрофон не опубликован", "причина" to why)
+        _state.value = _state.value.copy(notice = why)
     }
 
     /** Погасить наблюдателей. Идемпотентно: гасить нечего — значит ничего. */
@@ -281,8 +318,18 @@ class LiveKitCallEngine(
         var received = 0L
         var lost = 0L
         var rtt: Int? = null
-        var codec: String? = null
         var encoder: String? = null
+        // ── КОДЕК БЕРЁТСЯ ПО ССЫЛКЕ, А НЕ ПОСЛЕДНИЙ ПОПАВШИЙСЯ ──────────────
+        //
+        // Записей типа `codec` в отчёте столько, сколько кодеков согласовано, — все
+        // пять, а не один используемый. Раньше брался последний по перебору, и один и
+        // тот же набор H.264 давал в отчётах то H264, то VP9, то H265 (живой прогон
+        // 2026-09-21). Числа с такой строкой нечитаемы: сравнивать их не с чем.
+        //
+        // Верный путь один: у исходящей дорожки есть `codecId`, и он указывает ровно на
+        // ту запись, которая описывает работающий кодек.
+        val codecs = HashMap<String, String>()
+        var videoCodecId: String? = null
 
         val ours = live.localParticipant.trackPublications.values
             .mapNotNull { it.track as? io.livekit.android.room.track.Track }
@@ -298,6 +345,7 @@ class LiveKitCallEngine(
                         sent += (entry.members["bytesSent"] as? Number)?.toLong() ?: 0L
                         if (entry.members["kind"] == "video") {
                             encoder = entry.members["encoderImplementation"]?.toString() ?: encoder
+                            videoCodecId = entry.members["codecId"]?.toString() ?: videoCodecId
                         }
                     }
 
@@ -306,9 +354,10 @@ class LiveKitCallEngine(
                         lost += (entry.members["packetsLost"] as? Number)?.toLong() ?: 0L
                     }
 
+                    // Складываем все — какая из них наша, скажет codecId выше.
                     "codec" -> {
                         val mime = entry.members["mimeType"]?.toString()
-                        if (mime != null && mime.startsWith("video/")) codec = mime.removePrefix("video/")
+                        if (mime != null) codecs[entry.id] = mime
                     }
 
                     // Пара кандидатов — единственное место, где WebRTC говорит про RTT
@@ -332,7 +381,7 @@ class LiveKitCallEngine(
             downBitrate = down.coerceAtLeast(0),
             rttMs = rtt,
             packetsLost = lost,
-            videoCodec = codec,
+            videoCodec = videoCodecId?.let { codecs[it] }?.removePrefix("video/"),
             hardwareEncoder = encoder?.let { hardware(it) },
         )
     }
@@ -679,6 +728,10 @@ class LiveKitCallEngine(
 
 /** Как часто спрашиваем числа у WebRTC. Три секунды: ступень размера длится дольше. */
 private const val STATS_EVERY_MS = 3_000L
+
+/** Сколько раз просим дорожку подняться и сколько ждём между попытками. */
+private const val PUBLISH_TRIES = 3
+private const val PUBLISH_RETRY_MS = 500L
 
 /** Наш кодек в кодек SDK. AV1 в нашем перечне нет — решение заказчика, а не SDK. */
 private fun VideoCodec.toLiveKit(): LkVideoCodec = when (this) {

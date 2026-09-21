@@ -341,11 +341,14 @@ object EnglishWords : Words {
         override val applyAbout =
             "The preset will apply to the ongoing call: the room reopens and the connection drops for two or three seconds. " +
                 "The run is closed too — one run never holds two presets"
-        override val again = "Restart counting"
-        override val stop = "Stop"
+        override val stop = "Stop recording"
         override val runsBySelf =
-            "The run goes by itself while the call is on, and the file is written when it ends. " +
-                "\"Restart counting\" drops what has been collected — that is how the first seconds of ramp-up are cut off"
+            "Recording goes by itself while the call is on, and the file is written when it ends"
+        override val skip = "Skip the first seconds"
+        override fun runAt(at: Int, total: Int) = "Run $at of $total"
+        override val ringAbout =
+            "Every new call takes the next preset, in a ring. Both phones simply count calls — " +
+                "equal lists keep them in step; if they drift apart, the number here and in the call window shows it"
         override fun savedTo(path: String) = "Report written: $path"
         override val notSaved = "Could not write the report — see the diary"
         override fun going(seconds: Int, samples: Int) = "Running: ${seconds}s, $samples samples"
@@ -795,6 +798,8 @@ object EnglishWords : Words {
         override val peerLeft = "The other side hung up"
         override fun presetApplied(name: String) =
             "Preset \"$name\" applied — the two-second drop was not an accident"
+        override val presetRefused =
+            "Preset not applied: the server refused a re-entry. The call goes on with the previous preset"
         override val peerOffline = "The other phone is offline — the call will arrive when it comes back"
         override val noAnswer = "No answer"
         override val peerBusy = "The other side is on another call"

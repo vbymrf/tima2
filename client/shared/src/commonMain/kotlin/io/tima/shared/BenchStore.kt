@@ -70,6 +70,7 @@ class BenchStore(
                     // Пресет читается отдельным ключом от флага — см. заголовок.
                     preset = all[KEY_PRESET]?.let { presetFromWire(it) } ?: DEFAULT,
                     presets = all[KEY_PRESETS]?.let { presetsFromWire(it) }.orEmpty(),
+                    skip = all[KEY_SKIP]?.toIntOrNull()?.coerceIn(0, 60) ?: SKIP_DEFAULT,
                 )
             }
             .launchIn(scope)
@@ -130,18 +131,16 @@ class BenchStore(
     }
 
     /**
-     * Забыть набранное и считать заново, **не закрывая прогон**.
+     * Сколько первых секунд разговора **не учитывать**.
      *
-     * Ради разгона полосы: первые секунды разговора она растёт, и включённые в среднее
-     * они портят его тем сильнее, чем короче прогон (ПЛАН-СТЕНДА §6). Нажал через
-     * несколько секунд после соединения — и среднее стало про разговор, а не про разгон.
-     *
-     * Файла при этом не пишется: прогон не кончился, а начался заново.
+     * Ради разгона полосы: в первые секунды она растёт, и включённые в среднее они портят
+     * его тем сильнее, чем короче прогон (ПЛАН-СТЕНДА §6). Раньше это делала кнопка
+     * «Начать заново» — её убрали решением заказчика 2026-09-21: настройка делает то же
+     * самое и не требует помнить про неё в каждом звонке.
      */
-    fun again() {
-        if (!_state.value.running) return
-        _state.value = _state.value.copy(samples = emptyList())
-        Journal.note(LogCode.CALL, "отсчёты прогона сброшены")
+    fun skipSeconds(seconds: Int) {
+        val clean = seconds.coerceIn(0, 60)
+        scope.launch { settings.put(KEY_SKIP, clean.toString()) }
     }
 
     /**
@@ -168,13 +167,18 @@ class BenchStore(
                     stop()
                     return@launch
                 }
+                // Числа спрашиваем и в разгоне: счётчики битрейта и процессора считаются
+                // разницей, и пропущенный опрос сделал бы первый учтённый отсчёт втрое
+                // больше настоящего.
                 val sample = BenchSample(
                     atSecond = second,
                     stats = engine?.stats(),
                     load = phoneLoad(),
                     traffic = phoneTraffic(),
                 )
-                _state.value = _state.value.copy(samples = _state.value.samples + sample)
+                if (second > _state.value.skip) {
+                    _state.value = _state.value.copy(samples = _state.value.samples + sample)
+                }
             }
         }
     }
@@ -217,6 +221,41 @@ class BenchStore(
             "кодер" to (summary.codec ?: "—"),
             "файл" to (saved ?: "не записан"),
         )
+        next()
+    }
+
+    /**
+     * Перейти к следующему набору — **кольцом, по концу звонка**.
+     *
+     * ── ПОЧЕМУ ТАК, А НЕ КОМАНДОЙ ВТОРОМУ ТЕЛЕФОНУ ──────────────────────────
+     *
+     * Решение заказчика 2026-09-21. Сперва предполагался канал данных: ведущий телефон
+     * говорит ведомому, когда переключаться. Заказчик отверг это как менее надёжное — и
+     * был прав: канал данных живёт в комнате, комната пересоздаётся на каждом переходе,
+     * и сговор двух телефонов посреди разговора добавляет третью неизвестную к двум
+     * имеющимся.
+     *
+     * Здесь сговора нет вовсе. **Оба телефона просто считают звонки**: кончился звонок —
+     * сдвинулись на следующий набор. Списки одинаковы — значит идут в ногу, и никто
+     * никому ничего не сообщает. Разошлись — это видно на экране, потому что номер
+     * набора показан и в окне звонка, и в окне стенда.
+     *
+     * Кольцом: после последнего снова первый. Забег можно крутить сколько угодно, не
+     * трогая настройки между кругами.
+     */
+    private fun next() {
+        val all = _state.value.presets
+        if (all.size < 2) return // крутить нечего
+        val at = all.indexOfFirst { it.name == _state.value.preset.name }
+        val following = all[(at + 1 + all.size) % all.size]
+        Journal.note(
+            LogCode.CALL,
+            "следующий набор забега",
+            "стал" to following.name,
+            "номер" to (all.indexOf(following) + 1),
+            "всего" to all.size,
+        )
+        choose(following)
     }
 
     companion object {
@@ -236,6 +275,15 @@ class BenchStore(
         const val KEY_FLAG = "call.bench.on"
         const val KEY_PRESET = "call.bench.preset"
         const val KEY_PRESETS = "call.bench.presets"
+        const val KEY_SKIP = "call.bench.skip"
+
+        /**
+         * Сколько секунд разгона не учитывать по умолчанию.
+         *
+         * Пять — столько занимает подъём полосы у WebRTC на приличной связи. Не
+         * измерено, а выбрано; мерить его — работа того же стенда.
+         */
+        const val SKIP_DEFAULT = 5
 
         private const val YES = "yes"
         private const val NO = "no"
@@ -252,6 +300,7 @@ class BenchStore(
  * @param runs все свёртки за запуск приложения, новые сверху.
  * @param lastFile куда лёг отчёт последнего прогона. `null` — записать не удалось или
  *   платформа этого не умеет; экран тогда говорит об этом, а не молчит.
+ * @param skip сколько первых секунд разговора не учитывать.
  */
 data class BenchState(
     val on: Boolean = false,
@@ -262,4 +311,11 @@ data class BenchState(
     val last: BenchSummary? = null,
     val runs: List<BenchSummary> = emptyList(),
     val lastFile: String? = null,
-)
+    val skip: Int = BenchStore.SKIP_DEFAULT,
+) {
+    /** Номер текущего набора в забеге, с единицы. `0` — набора нет в списке. */
+    val at: Int get() = presets.indexOfFirst { it.name == preset.name } + 1
+
+    /** Сколько наборов в забеге. */
+    val total: Int get() = presets.size
+}

@@ -64,6 +64,19 @@ class CallsOverHttp(
         return doorOf(response, needCallId = false, knownCallId = callId)
     }
 
+    /** Свежий токен той же комнаты — для перезахода (стенд, смена набора на ходу). */
+    override suspend fun join(callId: String): CallStep {
+        val response = try {
+            client.post(route.api("/api/v1/calls/$callId/join")) {
+                header("Authorization", "Bearer ${token()}")
+            }
+        } catch (e: Throwable) {
+            return CallStep.Offline(classifyFailure(e).retryDelayMs)
+        }
+        // Как и `/answer`, ответ идентификатора звонка не повторяет — он известен.
+        return doorOf(response, needCallId = false, knownCallId = callId)
+    }
+
     override suspend fun end(callId: String, busy: Boolean): Boolean = try {
         // Причина уходит в запросе, а не в теле: ручка старая, тело у неё пустое, и
         // заводить его ради одного слова значило бы менять формат там, где хватает

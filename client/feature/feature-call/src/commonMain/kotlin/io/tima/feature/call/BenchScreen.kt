@@ -71,11 +71,13 @@ fun BenchScreen(
     inCall: Boolean,
     /** Куда лёг отчёт прошлого прогона. `null` — не записался или писать некуда. */
     lastFile: String?,
+    /** Сколько первых секунд разговора не учитывать. */
+    skip: Int,
     onChange: (PublishPreset) -> Unit,
     onSave: (PublishPreset) -> Unit,
     onForget: (String) -> Unit,
     onApply: () -> Unit,
-    onAgain: () -> Unit,
+    onSkip: (Int) -> Unit,
     onStop: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -93,7 +95,7 @@ fun BenchScreen(
         Publishing(preset, onChange)
         Saving(preset, presets, onChange, onSave, onForget)
         Applying(inCall, onApply)
-        Running(running, samples, lastFile, onAgain, onStop)
+        Running(running, samples, lastFile, skip, onSkip, onStop)
         Numbers(samples.lastOrNull())
         Runs(runs)
         Tertiary(words.appliesToNextCall)
@@ -213,6 +215,9 @@ private fun Saving(
         if (presets.isEmpty()) {
             Tertiary(words.noPresets)
         } else {
+            // Номер набора — то, чем два телефона сверяются между собой. Забег идёт
+            // кольцом и без сговора: разошлись — видно здесь.
+            Secondary(words.runAt(presets.indexOfFirst { it.name == preset.name } + 1, presets.size))
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
@@ -231,6 +236,7 @@ private fun Saving(
                 kind = ButtonKind.Dangerous,
                 enabled = presets.any { it.name == preset.name },
             )
+            Tertiary(words.ringAbout)
         }
     }
 }
@@ -259,25 +265,21 @@ private fun Running(
     running: Boolean,
     samples: List<BenchSample>,
     lastFile: String?,
-    onAgain: () -> Unit,
+    skip: Int,
+    onSkip: (Int) -> Unit,
     onStop: () -> Unit,
 ) {
     val words = Tima.words.bench
     Section(words.sectionRun) {
-        Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-            Button(
-                label = words.again,
-                onClick = onAgain,
-                kind = ButtonKind.Action,
-                enabled = running,
-            )
-            Button(
-                label = words.stop,
-                onClick = onStop,
-                kind = ButtonKind.Dangerous,
-                enabled = running,
-            )
-        }
+        // Разгон полосы отсекается настройкой, а не кнопкой: кнопку надо помнить в
+        // каждом звонке, а настройку — один раз (заказчик 2026-09-21).
+        Pick(words.skip, SKIPS.map { it to it.toString() }, skip, onSkip)
+        Button(
+            label = words.stop,
+            onClick = onStop,
+            kind = ButtonKind.Dangerous,
+            enabled = running,
+        )
         if (running) {
             Secondary(words.going(samples.lastOrNull()?.atSecond ?: 0, samples.size))
         } else {
@@ -443,6 +445,9 @@ private val FRAMES = listOf(7, 15, 24, 30)
 private val BITRATES = listOf(300_000, 500_000, 800_000, 1_500_000, 2_500_000)
 
 private val AUDIO_BITRATES = listOf(16_000, 24_000, 32_000, 64_000)
+
+/** Сколько секунд разгона не учитывать. Ноль — учитывать всё, и это тоже выбор. */
+private val SKIPS = listOf(0, 3, 5, 10, 15)
 
 // Свои, а не платформенные: `String.format` в общем коде нет, а округление тут нужно
 // грубое — числа дышат, и лишние знаки после запятой только мешают их читать.

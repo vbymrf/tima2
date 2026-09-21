@@ -121,18 +121,37 @@ func joinCall(deps callsDeps) http.HandlerFunc {
 		id, _ := auth.FromContext(r.Context())
 		c, err := deps.store.CallForJoinByID(r.Context(), callID, id.UserID)
 		if errors.Is(err, store.ErrNotInvited) {
-			writeErr(w, http.StatusForbidden, "not_invited", "вас не приглашали в этот звонок")
-			return
+			// ── ЗВОНОК ОДИН НА ОДИН: УЧАСТНИКОВ В ТАБЛИЦЕ НЕТ ──────────────
+			//
+			// `call_participants` заводится только групповым звонком, а у звонка
+			// один на один стороны записаны прямо в `calls`. Поэтому «не
+			// приглашён» здесь означает не «чужой», а «таблица не про него», и
+			// право проверяется по самому звонку.
+			direct, own := deps.store.GetCall(r.Context(), callID)
+			if own != nil || (direct.InitiatorID != id.UserID && direct.PeerID != id.UserID) {
+				writeErr(w, http.StatusForbidden, "not_invited", "вас не приглашали в этот звонок")
+				return
+			}
+			c = store.CallForJoin{Room: direct.Room, Kind: direct.Kind, Type: "direct", State: direct.State}
 		} else if err != nil {
 			log.Printf("joinCall: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		if c.Type != "group" {
-			writeErr(w, http.StatusConflict, "no_rejoin",
-				"в звонок один на один повторный вход не предусмотрен — позвоните заново")
-			return
-		}
+		// ── ПОВТОРНЫЙ ВХОД РАЗРЕШЁН И ЗВОНКУ ОДИН НА ОДИН ──────────────────
+		//
+		// Здесь стоял отказ `no_rejoin`: «в звонок один на один повторный вход не
+		// предусмотрен — позвоните заново». Он был верен, пока входить было незачем.
+		//
+		// Теперь есть зачем: испытательный стенд меняет набор публикации на ходу, а
+		// смена набора — это перезаход в комнату (ПЛАН-СТЕНДА-ЗВОНКОВ, С-В5). Токен
+		// живёт две минуты, разговор дольше, и без свежего токена перезаход падает с
+		// «token is expired» — **и роняет звонок**, потому что старая комната уже
+		// закрыта (живой прогон 2026-09-21).
+		//
+		// Право при этом не расширяется ни на шаг: токен получает только участник
+		// (`CallForJoinByID` спрашивает `call_participants`) и только пока звонок жив —
+		// проверка состояния ниже. Чужой в комнату не войдёт ни по какому типу звонка.
 		if c.State == "ended" || c.State == "missed" {
 			writeErr(w, http.StatusGone, "call_ended", "звонок уже завершён")
 			return

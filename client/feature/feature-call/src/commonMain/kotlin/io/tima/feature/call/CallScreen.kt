@@ -81,6 +81,11 @@ fun CallScreen(
     onClose: (() -> Unit)? = null,
     /** Что случилось за звонок — полоса в самом верху (ЗВ10). Пусто — полосы нет. */
     events: List<CallEvent> = emptyList(),
+    /**
+     * Идущий забег стенда: номер набора и последние числа. `null` — забега нет, и
+     * полосы тоже (обычный звонок при выключенном испытательном режиме).
+     */
+    bench: BenchLine? = null,
     /** Картинка собеседника. `null` — он себя не показывает или мы отписались. */
     remoteVideo: VideoHandle? = null,
     /** Своя картинка — плашкой в углу. `null` — камера выключена. */
@@ -96,6 +101,10 @@ fun CallScreen(
         modifier = modifier.fillMaxSize().background(colors.surface),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // Полоса забега выше ленты событий: номер прогона — это про то, ЧТО сейчас
+        // меряется, и без него лента про камеру и микрофон читается не о том.
+        bench?.let { BenchStrip(it) }
+
         // Полоса событий — в самом верху, над всем остальным: это то, что случилось, и
         // читается оно первым (ЗВ10).
         CallEvents(events, onAction = onEventAction)

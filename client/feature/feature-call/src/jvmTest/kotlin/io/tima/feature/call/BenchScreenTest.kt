@@ -142,6 +142,7 @@ class BenchScreenTest {
             runs: List<BenchSummary> = emptyList(),
             inCall: Boolean = false,
             lastFile: String? = null,
+            skip: Int = 5,
         ) = Stage(
             column = {
                 BenchScreen(
@@ -152,11 +153,12 @@ class BenchScreenTest {
                     runs = runs,
                     inCall = inCall,
                     lastFile = lastFile,
+                    skip = skip,
                     onChange = {},
                     onSave = {},
                     onForget = {},
                     onApply = {},
-                    onAgain = {},
+                    onSkip = {},
                     onStop = {},
                 )
             },

@@ -597,13 +597,32 @@ class CallHost(
      */
     fun applyPreset() {
         val live = engine ?: return
-        val where = door ?: return
+        if (callId.isEmpty()) return
         // Пока не соединились, применять нечего: набор и так возьмётся при входе.
         if (state.stage != CallStage.Connected && state.stage != CallStage.Reconnecting) return
         val name = preset().name
-        Journal.note(LogCode.CALL, "набор применён на ходу", "набор" to name)
-        note(words().call.presetApplied(name))
-        scope.launch { live.reenter(where, preset()) }
+        scope.launch {
+            // ── СНАЧАЛА ДВЕРЬ, ПОТОМ ЛОМАТЬ КОМНАТУ ─────────────────────────
+            //
+            // Токен живёт две минуты, разговор дольше. Перезаход старым токеном падает с
+            // «token is expired» — и **кончает звонок**, потому что прежней комнаты уже
+            // нет (живой прогон 2026-09-21). Порядок здесь и есть починка: не получили
+            // свежую дверь — говорим словами и ничего не трогаем, разговор продолжается.
+            val step = calls.join(callId)
+            if (step !is CallStep.Door) {
+                Journal.trouble(
+                    LogCode.CALL,
+                    "набор не применён — сервер не дал войти заново",
+                    "ответ" to step::class.simpleName.orEmpty(),
+                )
+                note(words().call.presetRefused)
+                return@launch
+            }
+            door = step.door
+            Journal.note(LogCode.CALL, "набор применён на ходу", "набор" to name)
+            note(words().call.presetApplied(name))
+            live.reenter(step.door, preset())
+        }
     }
 
     /** Сделать то, что предлагает событие. */

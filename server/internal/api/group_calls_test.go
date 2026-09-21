@@ -147,7 +147,13 @@ func TestGroupCallJoinAndRejoin(t *testing.T) {
 }
 
 // В звонке один на один повторного входа нет: обрыв завершает его для обоих.
-func TestDirectCallHasNoRejoin(t *testing.T) {
+// Повторный вход в звонок один на один — РАЗРЕШЁН участнику и закрыт чужому.
+//
+// Так с 2026-09-21. До этого он был закрыт всем: «повторный вход не предусмотрен —
+// позвоните заново». Отказ был верен, пока входить было незачем; теперь есть зачем —
+// стенд меняет набор публикации на ходу, а это перезаход в комнату, и токену на него
+// нужен свежий срок (ПЛАН-СТЕНДА-ЗВОНКОВ, С-В5).
+func TestDirectCallRejoinOnlyForSides(t *testing.T) {
 	ts, srv := setup(t)
 	withCalls(srv)
 	a := registerDevice(t, ts, "+79990062001")
@@ -160,11 +166,29 @@ func TestDirectCallHasNoRejoin(t *testing.T) {
 		map[string]any{"peer_id": b.userID, "kind": "audio"}, &call); code != 201 {
 		t.Fatalf("звонок 1:1: %d", code)
 	}
-	// Участников у звонка 1:1 в новой таблице нет — вход отклоняется как «не приглашён».
-	// Это тоже верный ответ: повторного входа нет ни при каком раскладе.
-	code := jsonAuth(t, ts, "POST", "/api/v1/calls/"+call.CallID+"/join", b.token, nil, nil)
-	if code != http.StatusConflict && code != http.StatusForbidden {
-		t.Fatalf("повторный вход в звонок 1:1 разрешён: %d", code)
+	// Вызываемый входит заново и получает свежий токен: `call_participants` про звонок
+	// один на один не знает вовсе, и право берётся из самой строки звонка.
+	var again struct {
+		Token string `json:"token"`
+	}
+	if code := jsonAuth(t, ts, "POST", "/api/v1/calls/"+call.CallID+"/join", b.token, nil, &again); code != 200 {
+		t.Fatalf("сторона звонка не смогла войти заново: %d", code)
+	}
+	if again.Token == "" {
+		t.Fatal("вход заново прошёл, а токена нет — перезаходить не с чем")
+	}
+	// И звонящий тоже: набор меняют обе стороны, а `/answer` звонящему отказывает.
+	if code := jsonAuth(t, ts, "POST", "/api/v1/calls/"+call.CallID+"/join", a.token, nil, nil); code != 200 {
+		t.Fatalf("звонящий не смог войти заново: %d", code)
+	}
+
+	// ── А ПОСТОРОННИЙ — НЕТ ────────────────────────────────────────────────
+	//
+	// Это и есть цена решения, и она обязана быть проверена: токен пускает в комнату
+	// любого, у кого он есть, и здесь единственное место, где решается, кому его дать.
+	c := registerDevice(t, ts, "+79990062003")
+	if code := jsonAuth(t, ts, "POST", "/api/v1/calls/"+call.CallID+"/join", c.token, nil, nil); code != http.StatusForbidden {
+		t.Fatalf("посторонний получил токен чужого звонка: %d", code)
 	}
 	_ = srv
 }
