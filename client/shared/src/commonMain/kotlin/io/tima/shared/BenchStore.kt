@@ -12,7 +12,11 @@ import io.tima.core.call.PublishPreset
 import io.tima.core.call.phoneLoad
 import io.tima.core.call.phoneTraffic
 import io.tima.core.call.presetFromWire
+import io.tima.core.call.presetsFromJson
 import io.tima.core.call.presetsFromWire
+import io.tima.core.call.presetsToJson
+import io.tima.core.call.readPresetsFile
+import io.tima.core.call.writePresetsFile
 import io.tima.core.call.summarize
 import io.tima.core.call.toWire
 import io.tima.core.diag.Journal
@@ -24,6 +28,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
@@ -69,11 +74,12 @@ class BenchStore(
                     on = all[KEY_FLAG] == YES,
                     // Пресет читается отдельным ключом от флага — см. заголовок.
                     preset = all[KEY_PRESET]?.let { presetFromWire(it) } ?: DEFAULT,
-                    presets = all[KEY_PRESETS]?.let { presetsFromWire(it) }.orEmpty(),
                     skip = all[KEY_SKIP]?.toIntOrNull()?.coerceIn(0, 60) ?: SKIP_DEFAULT,
                 )
             }
             .launchIn(scope)
+
+        reload()
 
         // ── ПРОГОН ИДЁТ САМ, ПОКА ИДЁТ РАЗГОВОР ─────────────────────────────
         //
@@ -90,6 +96,34 @@ class BenchStore(
                 }
             }
             ?.launchIn(scope)
+    }
+
+    /**
+     * Перечитать наборы **из файла** — он и есть их источник.
+     *
+     * Зовётся при открытии окна стенда: файл могли заменить с ПК (`push-bench-presets`),
+     * и список обязан стать тем, что задали там. Держать вместо этого копию в настройках
+     * значило бы завести второй источник и первый же вопрос «почему не тот набор»
+     * решать сверкой двух хранилищ.
+     */
+    fun reload() {
+        val text = readPresetsFile()
+        if (text != null) {
+            _state.value = _state.value.copy(presets = presetsFromJson(text))
+            return
+        }
+        // ── ФАЙЛА НЕТ: ПЕРЕВОЗИМ ТО, ЧТО КОПИЛОСЬ В НАСТРОЙКАХ ──────────────
+        //
+        // До 2026-09-21 наборы лежали в настройках. Потерять их при переходе было бы
+        // мелкой, но обидной потерей: их набирают пальцем на телефоне по одному.
+        scope.launch {
+            val kept = settings.all().firstOrNull()?.get(KEY_PRESETS)
+                ?.let { presetsFromWire(it) }.orEmpty()
+            if (kept.isEmpty()) return@launch
+            _state.value = _state.value.copy(presets = kept)
+            writePresetsFile(presetsToJson(kept))
+            Journal.note(LogCode.CALL, "наборы перенесены в файл", "штук" to kept.size)
+        }
     }
 
     /** Включить или выключить испытательный режим. Пресет при этом остаётся. */
@@ -119,15 +153,24 @@ class BenchStore(
      */
     fun save(preset: PublishPreset) {
         val kept = _state.value.presets.filterNot { it.name == preset.name } + preset
-        scope.launch {
-            settings.put(KEY_PRESETS, kept.toWire())
-            settings.put(KEY_PRESET, preset.toWire())
-        }
+        keep(kept)
+        scope.launch { settings.put(KEY_PRESET, preset.toWire()) }
     }
 
     fun forget(name: String) {
-        val kept = _state.value.presets.filterNot { it.name == name }
-        scope.launch { settings.put(KEY_PRESETS, kept.toWire()) }
+        keep(_state.value.presets.filterNot { it.name == name })
+    }
+
+    /**
+     * Сложить список в файл — **и показать его сразу**.
+     *
+     * Показываем до записи, а не после: файл пишется на диск телефона, и ждать его, чтобы
+     * нарисовать чип с именем набора, незачем. Не записался — скажет журнал, а список на
+     * экране всё равно верен: при следующем открытии окна он перечитается из файла.
+     */
+    private fun keep(presets: List<PublishPreset>) {
+        _state.value = _state.value.copy(presets = presets)
+        writePresetsFile(presetsToJson(presets))
     }
 
     /**
@@ -274,6 +317,7 @@ class BenchStore(
         // Ключи раздельные, и это то самое решение из заголовка.
         const val KEY_FLAG = "call.bench.on"
         const val KEY_PRESET = "call.bench.preset"
+        /** Наборы жили здесь до 2026-09-21; ключ остался ради переноса в файл. */
         const val KEY_PRESETS = "call.bench.presets"
         const val KEY_SKIP = "call.bench.skip"
 

@@ -4,3 +4,7 @@ package io.tima.core.call
 actual fun saveBenchReport(fileName: String, text: String): String? = null
 
 actual fun phoneModel(): String = "ПК"
+
+actual fun readPresetsFile(): String? = null
+
+actual fun writePresetsFile(text: String): String? = null

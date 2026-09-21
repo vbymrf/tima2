@@ -1,6 +1,10 @@
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
+    // Наборы прогонов задаются файлом JSON на ПК и разбираются здесь. Скрипт переноса
+    // про формат не знает вовсе — иначе формат оказался бы описан в двух местах, на
+    // Kotlin и на PowerShell, и однажды они разошлись бы молча.
+    alias(libs.plugins.kotlinSerialization)
 }
 
 // core-call — звонок: контракт и его исполнение платформой (ПЛАН-ЗВОНКОВ.md, Plan.md §3.8).
@@ -30,6 +34,7 @@ kotlin {
             // Время в отчёте о прогоне. `java.time` в общем коде запрещён архитектурным
             // правилом, и тут он был бы вдвойне неуместен: отчёт пишут и iOS-таргеты.
             implementation(libs.kotlinx.datetime)
+            implementation(libs.kotlinx.serialization.json)
         }
         androidMain.dependencies {
             // Самая тяжёлая зависимость клиента: ~21 МБ нативных библиотек на четыре

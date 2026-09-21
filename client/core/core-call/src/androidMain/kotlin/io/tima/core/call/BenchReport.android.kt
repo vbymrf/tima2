@@ -45,3 +45,32 @@ actual fun saveBenchReport(fileName: String, text: String): String? {
 }
 
 actual fun phoneModel(): String = Build.MODEL ?: "android"
+
+/** Имя файла наборов — одно на все телефоны, чтобы скрипт с ПК не спрашивал, куда класть. */
+private const val PRESETS = "presets.json"
+
+actual fun readPresetsFile(): String? {
+    val context = AndroidPhoneMeter.context() ?: return null
+    return runCatching {
+        val file = File(File(context.filesDir, "test"), PRESETS)
+        if (file.exists()) file.readText() else null
+    }.getOrNull()
+}
+
+actual fun writePresetsFile(text: String): String? {
+    val context = AndroidPhoneMeter.context() ?: return null
+    return runCatching {
+        val folder = File(context.filesDir, "test")
+        folder.mkdirs()
+        val file = File(folder, PRESETS)
+        file.writeText(text)
+        file.absolutePath
+    }.getOrElse { e ->
+        Journal.trouble(
+            LogCode.CALL,
+            "наборы не записались",
+            "причина" to (e.message ?: e::class.simpleName ?: "—"),
+        )
+        null
+    }
+}

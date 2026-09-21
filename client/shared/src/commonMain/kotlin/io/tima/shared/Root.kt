@@ -1717,7 +1717,11 @@ private fun App(
                 // Окно стенда — временное, как и окно 0: его видно, только пока
                 // включён испытательный режим. Экран чистый, всю работу держит
                 // BenchStore.
-                Window.Bench -> BenchScreen(
+                Window.Bench -> {
+                    // Наборы перечитываются при каждом открытии окна: файл могли
+                    // заменить с ПК, и список обязан стать тем, что задали там.
+                    LaunchedEffect(Unit) { bench.reload() }
+                    BenchScreen(
                     preset = benchState.preset,
                     presets = benchState.presets,
                     running = benchState.running,
@@ -1747,7 +1751,8 @@ private fun App(
                         onLeft = { switchWindow(InSide.Next) },
                         onRight = { switchWindow(InSide.Previous) },
                     ),
-                )
+                    )
+                }
 
                 Window.Page -> PageWindow(
                     onSwitchWindows = { windowSwitcher = true },
