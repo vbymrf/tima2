@@ -3,6 +3,7 @@ package io.tima.feature.chat
 import io.tima.domain.chat.CallHistory
 import io.tima.domain.chat.CallLog
 import io.tima.domain.chat.CallRecord
+import io.tima.domain.chat.Settings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,10 +39,14 @@ class CallsStore(
     private val scope: CoroutineScope,
     /** Кто я: от этого зависит каждое слово строки и счётчик пропущенных. */
     private val me: String,
-    /** Сколько строк держим на устройстве — настройка «Память и трафик». */
-    private val keepRows: () -> Int = { KEEP_ROWS_DEFAULT },
-    /** Сколько суток держим. Ноль — не ограничивать сроком. */
-    private val keepDays: () -> Int = { KEEP_DAYS_DEFAULT },
+    /**
+     * Где лежит настройка «Память и трафик» для журнала.
+     *
+     * Настройку держит сам магазин, а не экран настроек: её читают в двух местах —
+     * уборка при обновлении и строка на экране, — и второе представление одного числа
+     * однажды разошлось бы с первым.
+     */
+    private val settings: Settings,
     private val now: () -> Long,
 ) {
     private val _state = MutableStateFlow(CallsState())
@@ -49,10 +54,39 @@ class CallsStore(
 
     init {
         scope.launch {
-            log.page(keepRows()).collect { rows -> _state.value = _state.value.copy(records = rows) }
+            log.page(KEEP_ROWS_MAX).collect { rows -> _state.value = _state.value.copy(records = rows) }
         }
         scope.launch {
             log.missed(me).collect { count -> _state.value = _state.value.copy(missed = count) }
+        }
+        scope.launch {
+            settings.all().collect { all ->
+                _state.value = _state.value.copy(
+                    keepDays = all[KEEP_DAYS]?.toIntOrNull() ?: KEEP_DAYS_DEFAULT,
+                    keepRows = all[KEEP_ROWS]?.toIntOrNull() ?: KEEP_ROWS_DEFAULT,
+                )
+            }
+        }
+        scope.launch {
+            log.count().collect { rows -> _state.value = _state.value.copy(rows = rows) }
+        }
+    }
+
+    /**
+     * Сколько журнала держит телефон. Оба предела разом: срабатывает тот, что раньше.
+     *
+     * Уборка зовётся сразу, а не при следующем обновлении: человек, поставивший меньше
+     * ради места, обязан увидеть освободившееся место — иначе он решит, что настройка
+     * не работает. То же правило, что у срока дневника.
+     */
+    fun keep(days: Int, rows: Int) {
+        scope.launch {
+            settings.put(KEEP_DAYS, days.toString())
+            settings.put(KEEP_ROWS, rows.toString())
+            log.prune(
+                olderThanMs = if (days > 0) now() - days * DAY_MS else 0,
+                keepRows = rows,
+            )
         }
     }
 
@@ -64,6 +98,10 @@ class CallsStore(
 
     /** Разговор кончился — строка о нём должна появиться сейчас, а не при следующем заходе. */
     fun callEnded() = refresh()
+
+    private fun keepRows(): Int = _state.value.keepRows
+
+    private fun keepDays(): Int = _state.value.keepDays
 
     private fun refresh() {
         scope.launch {
@@ -101,9 +139,19 @@ class CallsStore(
         }
     }
 
-    private companion object {
-        const val PAGE = 30
-        const val DAY_MS = 24L * 60 * 60 * 1000
+    companion object {
+        private const val PAGE = 30
+        private const val DAY_MS = 24L * 60 * 60 * 1000
+        private const val KEEP_DAYS = "call.log.days"
+        private const val KEEP_ROWS = "call.log.rows"
+
+        /**
+         * Сколько строк экран берёт из базы за раз.
+         *
+         * Ровно столько же, сколько человеку разрешено держать: держать больше, чем
+         * показываешь, значило бы занимать место под то, чего никто не увидит.
+         */
+        const val KEEP_ROWS_MAX = 1000
 
         /**
          * Сколько журнала держит телефон по умолчанию.
@@ -128,4 +176,9 @@ data class CallsState(
     val records: List<CallRecord> = emptyList(),
     val missed: Int = 0,
     val offline: Boolean = false,
+    /** Сколько строк журнала лежит на устройстве — строка «Занимает» в настройках. */
+    val rows: Int = 0,
+    /** Настройка «Память и трафик»: сколько суток и сколько строк держим. */
+    val keepDays: Int = CallsStore.KEEP_DAYS_DEFAULT,
+    val keepRows: Int = CallsStore.KEEP_ROWS_DEFAULT,
 )

@@ -52,6 +52,21 @@ data class KeepFor(val unit: KeepUnit = KeepUnit.Months, val count: Int = 1) {
         words.keepFor(count, unit == KeepUnit.Weeks)
 }
 
+/**
+ * Сколько журнала звонков держит **телефон** — Ж5, решение заказчика 2026-09-23.
+ *
+ * **Это не повторение серверного срока: на сервере его больше нет.** Строка звонка —
+ * одни метаданные, а метаданные у нас не удаляются никогда. Здесь решается другое:
+ * сколько места отдать копии того, что всегда можно доспросить заново.
+ *
+ * Два предела, как у дневника, и срабатывает тот, что наступит раньше. Срок защищает от
+ * давности, число — от месяца, в котором звонили каждый час.
+ */
+data class CallLogLimits(
+    val keep: KeepFor = KeepFor(KeepUnit.Months, 12),
+    val rows: Int = 1000,
+)
+
 /** Пределы журнала: срок и объём. Срабатывает тот, что наступит раньше. */
 data class DiaryLimits(
     val keep: KeepFor = KeepFor(),
@@ -78,6 +93,11 @@ fun StorageScreen(
     onLimits: (DiaryLimits) -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Сколько журнала звонков держит телефон (Ж5). */
+    callLog: CallLogLimits = CallLogLimits(),
+    /** Сколько строк журнала лежит сейчас. */
+    callLogRows: Int = 0,
+    onCallLog: (CallLogLimits) -> Unit = {},
 ) = Column(
     modifier.fillMaxSize().padding(TimaSpacing.about4).verticalScroll(rememberScrollState()),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
@@ -92,6 +112,56 @@ fun StorageScreen(
     Tertiary(
         words.messagesAbout,
     )
+
+    // ── ЖУРНАЛ ЗВОНКОВ ──────────────────────────────────────────────────────
+    //
+    // Стоит выше дневника и ниже сообщений: порядок по частоте вопроса, а журнал
+    // звонков — то, что человек и правда открывает, в отличие от дневника работы.
+    val calls = Tima.words.callLog
+    Caption(calls.journal, fontSize = TimaType.sz4, weight = FontWeight.Bold)
+    Secondary(calls.journalAbout)
+    ListLine(
+        middle = { Name(words.occupies) },
+        right = { Secondary(calls.rows(callLogRows)) },
+    )
+    Caption(words.keep, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+    Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+        KeepUnit.entries.forEach { unit ->
+            Button(
+                label = if (unit == KeepUnit.Weeks) words.weeks else words.months,
+                onClick = { onCallLog(callLog.copy(keep = callLog.keep.copy(unit = unit))) },
+                kind = if (callLog.keep.unit == unit) ButtonKind.Action else ButtonKind.Quiet,
+            )
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+        Button(
+            label = "\u2212",
+            onClick = { onCallLog(callLog.copy(keep = callLog.keep.copy(count = callLog.keep.count - 1))) },
+            kind = ButtonKind.Quiet,
+            enabled = callLog.keep.count > 1,
+        )
+        Button(label = callLog.keep.words(words), onClick = {}, enabled = false)
+        Button(
+            label = "+",
+            onClick = { onCallLog(callLog.copy(keep = callLog.keep.copy(count = callLog.keep.count + 1))) },
+            kind = ButtonKind.Quiet,
+            // Тот же предел, что у дневника: больше года телефону держать незачем —
+            // журнал на сервере всё равно глубже и никуда не денется.
+            enabled = callLog.keep.count < MAX_COUNT,
+        )
+    }
+    Caption(words.butNoMore, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+    Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+        CALL_LOG_ROWS.forEach { rows ->
+            Button(
+                label = calls.rows(rows),
+                onClick = { onCallLog(callLog.copy(rows = rows)) },
+                kind = if (callLog.rows == rows) ButtonKind.Action else ButtonKind.Quiet,
+            )
+        }
+    }
+    Tertiary(words.whicheverFirst)
 
     Caption(words.diary, fontSize = TimaType.sz4, weight = FontWeight.Bold)
     Secondary(
@@ -156,6 +226,14 @@ private const val MAX_COUNT = 12
 
 /** Значения объёма — решение заказчика 2026-09-06. */
 private val SIZES = listOf(20, 50, 100)
+
+/**
+ * Сколько строк журнала звонков держим на выбор.
+ *
+ * Строками, а не мегабайтами: строка звонка это сотня байт, и «20 МБ» здесь означало бы
+ * двести тысяч звонков — число, которое ничего не говорит. Строки человек считает.
+ */
+private val CALL_LOG_ROWS = listOf(200, 1000, 5000)
 
 /** Мегабайты с одним знаком: точные байты человеку не говорят ничего. */
 private fun megabytes(bytes: Long, words: StorageWords = RussianWords.storage): String {

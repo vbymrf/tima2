@@ -30,6 +30,9 @@ class SqlCallLog(
     override fun missed(me: String): Flow<Int> =
         db.callLogQueries.missedUnseen(me).asFlow().mapToOne(io).map { it.toInt() }
 
+    override fun count(): Flow<Int> =
+        db.callLogQueries.count().asFlow().mapToOne(io).map { it.toInt() }
+
     override suspend fun remember(records: List<CallRecord>): Unit = withContext(io) {
         if (records.isEmpty()) return@withContext
         db.transaction {

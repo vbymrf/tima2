@@ -194,6 +194,7 @@ import io.tima.feature.shell.ProblemStore
 import io.tima.feature.shell.Snapshot
 import io.tima.feature.shell.SendOutcome
 import io.tima.feature.shell.Began
+import io.tima.feature.shell.CallLogLimits
 import io.tima.feature.shell.DiaryLimits
 import io.tima.feature.shell.KeepFor
 import io.tima.feature.shell.KeepUnit
@@ -920,6 +921,7 @@ private fun App(
             history = network.callHistory,
             scope = scope,
             me = session.userId,
+            settings = environment.settings,
             now = { msNow() },
         )
     }
@@ -2066,6 +2068,8 @@ private fun App(
                         problemDraft = problemDraft,
                         reporting = reporting,
                         diaryPolicy = diaryPolicy,
+                        callsLog = callsLog,
+                        callsState = callsState,
                         // Снимок считается ЗДЕСЬ и в момент открытия экрана: человек
                         // жалуется тогда, когда у него не работает, — это и есть нужный
                         // момент. Собрать его может только сборка: у неё есть и токен, и
@@ -2691,6 +2695,9 @@ private fun Settings(
     snapshot: () -> Snapshot,
     /** Где платформа держит выбранный срок хранения журнала. */
     diaryPolicy: AppearanceStore,
+    /** Журнал звонков: сколько его держит телефон и сколько сейчас лежит (Ж5). */
+    callsLog: CallsStore,
+    callsState: CallsState,
 ) {
     // Название темы считается в составе, а не в лямбде списка: лямбда не composable.
     val themeName = Tima.words.appearance.theme(appearance.choice)
@@ -2795,7 +2802,7 @@ private fun Settings(
             // текст — к тому времени начало поломки успело бы вытесниться.
             SettingsItem.PROBLEM -> Problem(problemFacts, origin, reporting, scope, platform, snapshot, draft = problemDraft)
 
-            SettingsItem.STORAGE -> Storage(diaryPolicy)
+            SettingsItem.STORAGE -> Storage(diaryPolicy, callsLog, callsState)
 
             // Испытательный режим звонков. Пункт временный и уйдёт вместе со стендом —
             // держать его «на всякий случай» после испытаний незачем (С-В1).
@@ -2855,7 +2862,11 @@ private fun Update(store: UpdateStore, state: UpdateState) {
  * только от `core-ui`. Экран получает готовые значения и отдаёт обратно выбор.
  */
 @Composable
-private fun Storage(policyStore: AppearanceStore) {
+private fun Storage(
+    policyStore: AppearanceStore,
+    callsLog: CallsStore,
+    callsState: CallsState,
+) {
     var limits by remember { mutableStateOf(limitsOf(Journal.diary.policy)) }
     // Занятое пересчитывается после каждого действия, а не раз при открытии: человек
     // нажал «очистить» и обязан увидеть, что стало пусто, — иначе он нажмёт ещё раз.
@@ -2881,7 +2892,33 @@ private fun Storage(policyStore: AppearanceStore) {
             Journal.diary.clear()
             occupied = Journal.diary.occupied()
         },
+        // Журнал звонков: своя пара пределов, своё место хранения.
+        //
+        // Настройка лежит в `setting` местной базы, а не там, где срок дневника
+        // (`AppearanceStore`, файл платформы). Причина в том, что дневник обязан
+        // чиститься **до** открытия базы — он пишется с первой строки запуска, — а
+        // журнал звонков живёт в самой базе, и держать его настройку снаружи значило бы
+        // разнести по двум местам то, что убирается одним запросом.
+        callLog = CallLogLimits(
+            keep = keepForDays(callsState.keepDays),
+            rows = callsState.keepRows,
+        ),
+        callLogRows = callsState.rows,
+        onCallLog = { chosen -> callsLog.keep(days = chosen.keep.days, rows = chosen.rows) },
     )
+}
+
+/**
+ * Дни обратно в «месяцы» или «недели» — то же правило, что у [limitsOf].
+ *
+ * Единица не хранится отдельно и восстанавливается из числа: второе представление одного
+ * числа пришлось бы держать в согласии, а оно однажды разъедется.
+ */
+private fun keepForDays(days: Int): KeepFor = when {
+    days <= 0 -> KeepFor(KeepUnit.Months, 12)
+    days % KeepUnit.Months.days == 0 -> KeepFor(KeepUnit.Months, days / KeepUnit.Months.days)
+    days % KeepUnit.Weeks.days == 0 -> KeepFor(KeepUnit.Weeks, days / KeepUnit.Weeks.days)
+    else -> KeepFor(KeepUnit.Months, 12)
 }
 
 /**

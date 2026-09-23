@@ -179,10 +179,16 @@ fun TabRow(
     selected: WindowTab,
     onTab: (WindowTab) -> Unit,
     modifier: Modifier = Modifier,
-    /** Хвост ряда: переключатель режима окна. */
-    trailing: (@Composable () -> Unit)? = null,
     /** Счётчик на вкладке; `0` — числа нет, и ряд не шевелится. */
     countOf: (WindowTab) -> Int = { 0 },
+    /**
+     * Хвост ряда: переключатель режима окна.
+     *
+     * **Последним доводом намеренно** — его передают завершающей лямбдой (`TabRow(…) {
+     * ModeSwitch(…) }`). Поставь после него что угодно, и лямбда привяжется к новому
+     * доводу: `RowFitTest` поймал это сразу, но на экране такое стоило бы разбора.
+     */
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val colors = Tima.colors
     FlowRow(
