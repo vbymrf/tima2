@@ -49,6 +49,7 @@ interface Words {
     val auth: AuthWords
     val chat: ChatWords
     val call: CallWords
+    val callLog: CallLogWords
     val bench: BenchWords
     val book: BookWords
     val page: PageWords
@@ -656,6 +657,89 @@ interface BenchWords {
     val off: String
 }
 
+
+/**
+ * Журнал звонков — вкладка «Звонки» окна «Телефон» (Ж2).
+ *
+ * **Отдельно от [CallWords], хотя слова похожи.** Тот — про звонок, который идёт прямо
+ * сейчас: «Ответить», «Положить трубку». Этот — про прошлое, и слова в нём другого
+ * времени: «не дозвонился», «отклонён». Сложи их вместе — и однажды кнопка живого
+ * звонка возьмёт слово из журнала.
+ */
+interface CallLogWords {
+
+    // ── Исход строки ────────────────────────────────────────────────────────
+    //
+    // Слов девять, а состояний на сервере шесть: `missed` и `busy` читаются
+    // по-разному у звонившего и у вызываемого, потому что запись в базе одна на обоих.
+
+    /** Состоялся, звонил я. */
+    val outgoing: String
+
+    /** Состоялся, звонили мне. */
+    val incoming: String
+
+    /** Я звонил — трубку не взяли. Не «пропущенный»: пропустил не я. */
+    val notAnswered: String
+
+    /** Звонили мне — я не ответил. */
+    val missed: String
+
+    /** Звонивший положил трубку раньше, чем взяли. */
+    val cancelled: String
+
+    /** Отбой нажал вызываемый, не ответив. */
+    val declined: String
+
+    /** Собеседник говорил с кем-то другим. */
+    val busy: String
+
+    /**
+     * Звонок оборвался, конец неизвестен.
+     *
+     * Длительности у такой строки нет и быть не может: время конца поставил уборщик
+     * сервера, а ходит он раз в час. «Оборвался» — это и есть весь ответ.
+     */
+    val lost: String
+
+    /** Строка свежая, звонок ещё идёт. */
+    val ringing: String
+
+    // ── Вид звонка ──────────────────────────────────────────────────────────
+
+    val video: String
+    val voice: String
+
+    // ── Время ───────────────────────────────────────────────────────────────
+
+    val today: String
+    val yesterday: String
+
+    // ── Пустой журнал ───────────────────────────────────────────────────────
+
+    val nothingYet: String
+    val nothingYetAbout: String
+
+    /**
+     * Журнала нет **и сети нет** — это другое, и сказать надо другое.
+     *
+     * Пустой журнал у того, кто не звонил, и пустой экран у того, кто в метро, выглядят
+     * одинаково. Первому говорить не о чем, второму надо сказать, что дело в связи, —
+     * иначе он решит, что журнал потерялся.
+     */
+    val noConnection: String
+
+    // ── Настройка «Память и трафик» ─────────────────────────────────────────
+
+    val journal: String
+    val journalAbout: String
+
+    /** «500 строк» — с падежом по числу. */
+    fun rows(count: Int): String
+
+    /** Сколько строк лежит сейчас. */
+    fun occupied(rows: String): String
+}
 
 interface CallWords {
     val incoming: String
@@ -1958,6 +2042,47 @@ object RussianWords : Words {
         override val tryAgain = "Попробовать ещё раз"
         override val installerDidNotStart = "установщик не запустился"
         override val cannotAskServer = "Не удалось спросить сервер — проверьте связь"
+    }
+
+    override val callLog = object : CallLogWords {
+        override val outgoing = "исходящий"
+        override val incoming = "входящий"
+        // «Не дозвонился», а не «пропущенный»: пропустил не я, и поступают тут иначе —
+        // перезванивают сразу, а не извиняясь.
+        override val notAnswered = "не дозвонился"
+        override val missed = "пропущенный"
+        override val cancelled = "отменён"
+        override val declined = "отклонён"
+        override val busy = "занято"
+        override val lost = "оборвался"
+        override val ringing = "звонит"
+        override val video = "видео"
+        override val voice = "голос"
+        override val today = "сегодня"
+        override val yesterday = "вчера"
+        override val nothingYet = "Звонков пока нет"
+        override val nothingYetAbout =
+            "Здесь будут входящие, исходящие и пропущенные — направление стрелкой, вид " +
+                "значком. Повтор звонит тем же видом, каким звонили тогда."
+        override val noConnection =
+            "Журнал живёт на сервере — связи сейчас нет, и показать нечего. Что уже " +
+                "приходило, осталось бы здесь; значит, до этого телефона журнал ещё не доезжал."
+        override val journal = "Журнал звонков"
+        override val journalAbout =
+            "Журнал хранится на сервере и не удаляется. Здесь — копия, чтобы вкладка " +
+                "открывалась без сети; убранное отсюда всегда доспрашивается заново."
+        override fun rows(count: Int): String {
+            val hundred = count % 100
+            val ten = count % 10
+            val form = when {
+                hundred in 11..14 -> "строк"
+                ten == 1 -> "строка"
+                ten in 2..4 -> "строки"
+                else -> "строк"
+            }
+            return "$count $form"
+        }
+        override fun occupied(rows: String) = "Занимает $rows"
     }
 
     override val storage = object : StorageWords {

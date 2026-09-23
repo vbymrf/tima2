@@ -529,6 +529,35 @@ object SpanishWords : Words {
         override val cannotAskServer = "No se pudo preguntar al servidor — compruebe la conexión"
     }
 
+    override val callLog = object : CallLogWords {
+        override val outgoing = "saliente"
+        override val incoming = "entrante"
+        override val notAnswered = "sin respuesta"
+        override val missed = "perdida"
+        override val cancelled = "cancelada"
+        override val declined = "rechazada"
+        override val busy = "ocupado"
+        override val lost = "interrumpida"
+        override val ringing = "llamando"
+        override val video = "v\u00eddeo"
+        override val voice = "voz"
+        override val today = "hoy"
+        override val yesterday = "ayer"
+        override val nothingYet = "A\u00fan no hay llamadas"
+        override val nothingYetAbout =
+            "Aqu\u00ed aparecer\u00e1n las llamadas entrantes, salientes y perdidas: la direcci\u00f3n con " +
+                "una flecha y el tipo con un icono. Volver a llamar usa el mismo tipo de entonces."
+        override val noConnection =
+            "El registro vive en el servidor y ahora no hay conexi\u00f3n. Lo ya recibido seguir\u00eda " +
+                "aqu\u00ed, as\u00ed que este tel\u00e9fono todav\u00eda no lo ha descargado."
+        override val journal = "Registro de llamadas"
+        override val journalAbout =
+            "El registro se guarda en el servidor y no se borra. Esto es una copia, para que la " +
+                "pesta\u00f1a abra sin conexi\u00f3n; lo que se quite aqu\u00ed siempre puede volver a pedirse."
+        override fun rows(count: Int) = if (count == 1) "1 fila" else "$count filas"
+        override fun occupied(rows: String) = "Ocupa $rows"
+    }
+
     override val storage = object : StorageWords {
         override val weeks = "Semanas"
         override val months = "Meses"

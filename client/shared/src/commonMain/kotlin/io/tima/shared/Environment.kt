@@ -1,5 +1,6 @@
 package io.tima.shared
 
+import io.tima.core.network.CallHistoryOverHttp
 import io.tima.core.network.CallsOverHttp
 import io.tima.core.database.SqlCallLog
 import io.tima.core.database.SqlChatJournal
@@ -367,6 +368,10 @@ class Network(
      */
     override val calls: CallsOverHttp =
         CallsOverHttp(link.route, link.client, token = { token() })
+
+    /** Журнал звонков: страница прошлого. Копия его живёт в базе — [Environment.callLog]. */
+    override val callHistory: CallHistoryOverHttp =
+        CallHistoryOverHttp(link.route, link.client, token = { token() })
 
     override val commentSwitches: CommentSwitchesOverHttp =
         CommentSwitchesOverHttp(link.route, link.client, token = { token() })

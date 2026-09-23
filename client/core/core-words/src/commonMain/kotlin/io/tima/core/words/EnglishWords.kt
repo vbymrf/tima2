@@ -531,6 +531,35 @@ object EnglishWords : Words {
         override val cannotAskServer = "Could not ask the server — check your connection"
     }
 
+    override val callLog = object : CallLogWords {
+        override val outgoing = "outgoing"
+        override val incoming = "incoming"
+        override val notAnswered = "no answer"
+        override val missed = "missed"
+        override val cancelled = "cancelled"
+        override val declined = "declined"
+        override val busy = "busy"
+        override val lost = "dropped"
+        override val ringing = "ringing"
+        override val video = "video"
+        override val voice = "voice"
+        override val today = "today"
+        override val yesterday = "yesterday"
+        override val nothingYet = "No calls yet"
+        override val nothingYetAbout =
+            "Incoming, outgoing and missed calls will appear here \u2014 direction as an arrow, " +
+                "kind as an icon. Calling back uses the same kind you used then."
+        override val noConnection =
+            "The call log lives on the server, and there is no connection right now. Anything " +
+                "already received would still be here, so this phone has not seen the log yet."
+        override val journal = "Call log"
+        override val journalAbout =
+            "The log is kept on the server and never deleted. This is a copy, so the tab opens " +
+                "without a connection; anything removed here can always be fetched again."
+        override fun rows(count: Int) = if (count == 1) "1 row" else "$count rows"
+        override fun occupied(rows: String) = "Takes $rows"
+    }
+
     override val storage = object : StorageWords {
         override val weeks = "Weeks"
         override val months = "Months"

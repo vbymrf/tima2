@@ -1,6 +1,7 @@
 package io.tima.shared
 
 import io.tima.core.call.Calls
+import io.tima.domain.chat.CallHistory
 import io.tima.core.encryption.DeviceIdentity
 import io.tima.domain.chat.AccessPort
 import io.tima.domain.chat.MessageLevels
@@ -115,6 +116,14 @@ interface ChatPorts {
      * `Context` и своя библиотека, и общий код их не видит.
      */
     val calls: Calls
+
+    /**
+     * Журнал звонков с сервера (Ж1) — **источник правды**, в отличие от местной копии.
+     *
+     * Отдельным портом от [calls], хотя ручка соседняя. Тот — про звонок, который идёт;
+     * этот — про прошлое, и нужен он экрану, а не разговору.
+     */
+    val callHistory: CallHistory
 
     /** Создание канала — мастер создания (ПЛАН-СООБЩЕСТВ С5). */
     val channels: Channels

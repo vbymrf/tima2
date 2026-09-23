@@ -72,6 +72,13 @@ fun WindowFrame(
      * вкладками, а не под ними среди фильтров вкладки.
      */
     tabsTrailing: (@Composable () -> Unit)? = null,
+    /**
+     * Счётчик на вкладке: сколько там непросмотренного. `0` — вкладка без числа.
+     *
+     * Лямбдой по вкладке, а не полем на каждую: вкладок в окне четыре, а счётчик пока у
+     * одной, и заводить три пустых поля ради симметрии незачем.
+     */
+    countOf: (WindowTab) -> Int = { 0 },
     /** Второй ряд: подвкладки, фильтры, режимы вкладки. Есть не у всех окон. */
     secondRow: (@Composable () -> Unit)? = null,
     /**
@@ -114,7 +121,7 @@ fun WindowFrame(
                 },
             )
 
-            TabRow(tabs, selected, onTab, trailing = tabsTrailing)
+            TabRow(tabs, selected, onTab, trailing = tabsTrailing, countOf = countOf)
             secondRow?.invoke()
             searchRow?.invoke()
         }
@@ -174,6 +181,8 @@ fun TabRow(
     modifier: Modifier = Modifier,
     /** Хвост ряда: переключатель режима окна. */
     trailing: (@Composable () -> Unit)? = null,
+    /** Счётчик на вкладке; `0` — числа нет, и ряд не шевелится. */
+    countOf: (WindowTab) -> Int = { 0 },
 ) {
     val colors = Tima.colors
     FlowRow(
@@ -193,6 +202,7 @@ fun TabRow(
                 current = tab == selected,
                 onClick = { onTab(tab) },
                 modifier = Modifier.testTag(tab.tag()),
+                count = countOf(tab),
             )
         }
         trailing?.invoke()

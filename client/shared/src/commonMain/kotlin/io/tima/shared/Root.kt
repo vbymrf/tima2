@@ -42,6 +42,8 @@ import io.tima.domain.chat.ChatFaces
 import io.tima.feature.group.InviteCandidate
 import io.tima.domain.chat.PersonLook
 import io.tima.domain.chat.line
+import io.tima.domain.chat.CallOutcome
+import io.tima.domain.chat.CallRecord
 import io.tima.domain.chat.ChatPerson
 import io.tima.domain.chat.ChatPeople
 import io.tima.domain.chat.CreateGroupChat
@@ -106,6 +108,9 @@ import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.PageStep
 import io.tima.domain.chat.AddContact
 import io.tima.domain.chat.SyncBook
+import io.tima.feature.chat.CallsScreen
+import io.tima.feature.chat.CallsState
+import io.tima.feature.chat.CallsStore
 import io.tima.feature.chat.BookStore
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -905,6 +910,21 @@ private fun App(
             edit = environment.bookStorage,
         )
     }
+    // Журнал звонков (Ж2): поток из базы плюс поход на сервер при открытии вкладки.
+    //
+    // Читается как переписка, наполняется иначе: переписка приезжает кадрами событий и
+    // расшифровывается, а журнал сервер знает сам — сходили, записали, показали.
+    val callsLog = remember {
+        CallsStore(
+            log = environment.callLog,
+            history = network.callHistory,
+            scope = scope,
+            me = session.userId,
+            now = { msNow() },
+        )
+    }
+    val callsState by callsLog.state.collectAsState()
+
     // Окно 2 «Социум»: свои группы и карточки, которые открыли контакты. Списки живут
     // здесь, а не в оболочке: рама знает раму, работа с сервером — дело feature-group.
     val social = remember { SocialStore(GroupsOverHttp(network.groups), scope, network.communities) }
@@ -981,6 +1001,13 @@ private fun App(
     // окне, которого больше нет, нельзя: свайп и переключатель его уже не показывают.
     LaunchedEffect(callHost.active) {
         if (!callHost.active && window == Window.Call) window = Window.Phone
+        // Разговор кончился — за строкой о нём идём сейчас, а не при следующем заходе
+        // во вкладку. На журнал смотрят СРАЗУ после звонка, и строка, появляющаяся
+        // через минуту, читается как потеря.
+        //
+        // Срабатывает и при запуске, когда звонка нет вовсе, — и это не лишнее: счётчик
+        // пропущенных обязан быть верным до того, как во вкладку заглянут, а не после.
+        if (!callHost.active) callsLog.callEnded()
     }
     // Страна, язык письма и два переключателя отбора. Один магазин на приложение: настройка
     // одна, и второй показывал бы то же самое со своим отставанием.
@@ -1576,6 +1603,36 @@ private fun App(
                 Window.Phone -> PhoneWindow(
                     tab = phoneTab,
                     onTab = { phoneTab = it },
+                    myUserId = session.userId,
+                    callsState = callsState,
+                    // Имя и лицо в журнале — тем же механизмом, что везде (Д14): сервер
+                    // знает только `user_id`, а «Аня Борисова» живёт в книге.
+                    personOfCall = { record ->
+                        val id = record.other(session.userId)
+                        bookState.all.firstOrNull { it.userId == id }
+                            ?.let { personOfBook(it) }
+                            ?: ChatPerson()
+                    },
+                    faceOfCall = { record ->
+                        val id = record.other(session.userId)
+                        people.wantFace(id)
+                        peopleFaces[id]
+                    },
+                    // Повтор звонит ТЕМ ЖЕ видом, каким звонили тогда (Ж6). Кнопка,
+                    // молча звонящая голосом вместо видео, выглядит поломкой ровно один
+                    // раз — а потом ей перестают верить.
+                    onCallAgain = if (callHost.possible) {
+                        { record ->
+                            val id = record.other(session.userId)
+                            val name = bookState.all.firstOrNull { it.userId == id }
+                                ?.let { personOfBook(it).line(bookState.view.look(), PERSON_FIRST_LINE) }
+                                .orEmpty()
+                            callPerson(id, name, record.video)
+                        }
+                    } else {
+                        null
+                    },
+                    onOpenedCalls = callsLog::opened,
                     // Имя пользователя и ник у контактов — со справочника, пачкой по разу.
                     personOf = personOfBook,
                     // Картинка аватара — по карточке справочника, приезжает потоком.
@@ -3263,6 +3320,17 @@ private fun PhoneWindow(
     /** Видеозвонок из строки книги — Ж3. `null` — звонить нечем. */
     onVideoCallPerson: ((BookEntry) -> Unit)? = null,
     onInvite: (BookEntry) -> Unit,
+    /** Кто я: строка журнала у двоих читается по-разному, и без этого её не прочесть. */
+    myUserId: String = "",
+    /** Журнал звонков — вкладка «Звонки» (Ж2). */
+    callsState: CallsState = CallsState(),
+    /** Человек за строкой журнала: сервер знает только `user_id`, имя живёт в книге. */
+    personOfCall: (CallRecord) -> ChatPerson = { ChatPerson() },
+    faceOfCall: (CallRecord) -> ImageBitmap? = { null },
+    /** Перезвонить из журнала — **тем же видом**, каким звонили тогда (Ж6). */
+    onCallAgain: ((CallRecord) -> Unit)? = null,
+    /** Открыли вкладку «Звонки»: сходить за свежим журналом и погасить счётчик. */
+    onOpenedCalls: () -> Unit = {},
     /** Открыли вкладку: прочитать телефонную книгу и сверить. */
     onOpenedContacts: () -> Unit,
     /** «Разрешить»: системный диалог, и после согласия — чтение. */
@@ -3291,9 +3359,18 @@ private fun PhoneWindow(
         tabs = listOf(WindowTab.Chats, WindowTab.Contacts, WindowTab.Calls),
         selected = tab,
         onTab = onTab,
+        // Счётчик пропущенных — только у «Звонков» и только мне непросмотренных (Ж7).
+        //
+        // **Отдельный от непрочитанных сообщений, а не общий** (решение заказчика
+        // 2026-09-23): «три непрочитанных» и «три пропущенных звонка» — разные срочности
+        // и разные поступки. Сложенные в одно число, они означают «что-то есть», то есть
+        // не означают ничего.
+        countOf = { which -> if (which == WindowTab.Calls) callsState.missed else 0 },
         onSwitchWindows = onSwitchWindows,
-        // У «Звонков» кнопки поиска нет: журнала звонков ещё не существует (К7), и
-        // искать там нечего. Кнопка над заглушкой обещала бы больше, чем есть.
+        // У «Звонков» кнопки поиска нет, и это уже не «журнала нет» (прежний довод,
+        // К7): журнал есть. Искать в нём нечем — строка журнала не содержит текста
+        // вовсе, а имя приезжает из книги в момент показа. Поиск по журналу — это поиск
+        // по книге, и он живёт во вкладке «Контакты».
         onSearch = if (tab == WindowTab.Calls) {
             null
         } else {
@@ -3388,17 +3465,41 @@ private fun PhoneWindow(
                 )
             }
 
-            // Заглушка называет выбранный фильтр. Фильтр, от которого на экране ничего
-            // не меняется, неотличим от сломанного — в него тыкают повторно.
+            WindowTab.Calls -> {
+                // Журнал читается при открытии вкладки, а не при запуске: смотреть в него
+                // приходят редко, а сходить за ним стоит запроса.
+                LaunchedEffect(Unit) { onOpenedCalls() }
+                CallsScreen(
+                    // ── ФИЛЬТРЫ ВТОРОГО РЯДА ────────────────────────────────
+                    //
+                    // «Из книги» и «Неизвестные» отбираются **по книге, а не по
+                    // серверу**: знает ли телефон этого человека — вопрос к телефону.
+                    // «Неизвестные» у нас поэтому означает «звонил тот, кого нет в
+                    // книге», а не «звонок с чужого номера»: чужих номеров в нашем
+                    // журнале не бывает вовсе — звонить может только аккаунт.
+                    records = callsState.records.filter { record ->
+                        val known = book.all.any { it.userId != null && it.userId == record.other(myUserId) }
+                        when (calls) {
+                            WindowTab.FromBook -> known
+                            WindowTab.Unknown -> !known
+                            WindowTab.Missed -> record.outcome(myUserId) == CallOutcome.Missed
+                            else -> true
+                        }
+                    },
+                    me = myUserId,
+                    personOf = personOfCall,
+                    faceOf = faceOfCall,
+                    look = book.view.look(),
+                    onCallAgain = onCallAgain,
+                    offline = callsState.offline,
+                )
+            }
+
+            // Остаётся «Вид» — он не вкладка с содержимым, а кнопка, открывающая
+            // подокно настроек списка. Сюда попасть можно только мимо неё.
             else -> TabStub(
-                willWhat = when (calls) {
-                    WindowTab.FromBook -> "Здесь будет журнал звонков от людей из книги"
-                    WindowTab.Unknown -> "Здесь будет журнал звонков с чужих номеров"
-                    WindowTab.Missed -> "Здесь будет журнал пропущенных"
-                    else -> "Здесь будет журнал звонков"
-                },
-                thanHolds = "Входящие, исходящие и пропущенные — направление стрелкой, " +
-                    "длительность словами. Звонков нет: клиент LiveKit — задача К7.",
+                willWhat = "Здесь ничего не показывается",
+                thanHolds = "«Вид» — кнопка, а не вкладка: она открывает настройки списка.",
             )
         }
     }

@@ -408,14 +408,23 @@ fun Tab(
     current: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Счётчик рядом со словом. `0` — ничего не рисуется, и ряд не шевелится.
+     *
+     * **Тем же янтарём, что у непрочитанных сообщений** ([Counter]). Своего цвета для
+     * пропущенных звонков не заводим: он значил бы ровно то же — «сюда надо
+     * посмотреть», — а два цвета с одним смыслом человек читает как два разных.
+     */
+    count: Int = 0,
 ) {
     val colors = Tima.colors
-    Box(
+    Row(
         modifier = modifier
             .background(if (current) colors.navigation else Color.Transparent, CircleShape)
             .clickable(onClick = onClick)
             .padding(horizontal = TAB_SIDE, vertical = 6.dp),
-        contentAlignment = Alignment.Center,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Caption(
             text = label,
@@ -423,6 +432,7 @@ fun Tab(
             weight = FontWeight.Bold,
             color = if (current) colors.onAccent else colors.text2,
         )
+        Counter(count)
     }
 }
 
