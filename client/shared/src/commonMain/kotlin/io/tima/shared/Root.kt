@@ -1535,7 +1535,10 @@ private fun App(
                     // Номер набора в забеге — им два телефона сверяются между собой.
                     // Показываем только при включённом стенде: обычному звонку это
                     // ничего не говорит.
-                    bench = if (benchState.on && benchState.total > 1) {
+                    // Полоса появляется только при нажатой «Начать прогон»: не нажата —
+                    // звонок обычный, и номер прогона над лентой событий говорил бы о
+                    // замере, которого нет.
+                    bench = if (benchState.armed && benchState.total > 0) {
                         BenchLine(
                             at = benchState.at,
                             total = benchState.total,
@@ -1733,6 +1736,7 @@ private fun App(
                     inCall = callHost.state.stage == CallStage.Connected,
                     lastFile = benchState.lastFile,
                     skip = benchState.skip,
+                    armed = benchState.armed,
                     onChange = bench::choose,
                     onSave = bench::save,
                     onForget = bench::forget,
@@ -1743,6 +1747,8 @@ private fun App(
                         bench.stop()
                         callHost.applyPreset()
                     },
+                    onArm = bench::arm,
+                    onStep = bench::step,
                     onSkip = bench::skipSeconds,
                     onStop = bench::stop,
                     // Жест тот же, что у окна 0, и по той же причине: у стенда нет оправы

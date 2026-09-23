@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,6 +33,7 @@ import io.tima.core.ui.Caption
 import io.tima.core.ui.Chip
 import io.tima.core.ui.ChipKind
 import io.tima.core.ui.Field
+import io.tima.core.ui.IconButton
 import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Tertiary
@@ -73,10 +75,15 @@ fun BenchScreen(
     lastFile: String?,
     /** Сколько первых секунд разговора не учитывать. */
     skip: Int,
+    /** Нажата ли «Начать прогон». Не нажата — звонок идёт как обычный. */
+    armed: Boolean,
     onChange: (PublishPreset) -> Unit,
     onSave: (PublishPreset) -> Unit,
     onForget: (String) -> Unit,
     onApply: () -> Unit,
+    onArm: (Boolean) -> Unit,
+    /** Шаг по кольцу наборов руками: `-1` вверх, `+1` вниз. */
+    onStep: (Int) -> Unit,
     onSkip: (Int) -> Unit,
     onStop: () -> Unit,
     modifier: Modifier = Modifier,
@@ -92,8 +99,9 @@ fun BenchScreen(
             .padding(TimaSpacing.about3),
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
     ) {
+        Arming(armed, onArm)
         Publishing(preset, onChange)
-        Saving(preset, presets, onChange, onSave, onForget)
+        Saving(preset, presets, onChange, onSave, onForget, onStep)
         Applying(inCall, onApply)
         Running(running, samples, lastFile, skip, onSkip, onStop)
         Numbers(samples.lastOrNull())
@@ -180,6 +188,27 @@ private fun Sound(audio: AudioPreset, onChange: (AudioPreset) -> Unit) {
 
 // ── НАБОРЫ С ИМЕНАМИ ────────────────────────────────────────────────────────
 
+/**
+ * «Начать прогон» — вооружение забега, решение заказчика 2026-09-23.
+ *
+ * **Стоит первой на экране, и это не вкусовщина.** Она отвечает на вопрос «вмешивается ли
+ * стенд в мои звонки прямо сейчас», а он важнее всех настроек ниже: до неё стенд
+ * вмешивался в каждый звонок, пока включён режим в настройках, и сказать «этот звонок
+ * обычный» было нечем.
+ */
+@Composable
+private fun Arming(armed: Boolean, onArm: (Boolean) -> Unit) {
+    val words = Tima.words.bench
+    Section(if (armed) words.disarm else words.arm) {
+        Button(
+            label = if (armed) words.disarm else words.arm,
+            onClick = { onArm(!armed) },
+            kind = if (armed) ButtonKind.Dangerous else ButtonKind.Action,
+        )
+        Tertiary(if (armed) words.armAbout else words.idleAbout)
+    }
+}
+
 @Composable
 private fun Saving(
     preset: PublishPreset,
@@ -187,6 +216,7 @@ private fun Saving(
     onChange: (PublishPreset) -> Unit,
     onSave: (PublishPreset) -> Unit,
     onForget: (String) -> Unit,
+    onStep: (Int) -> Unit,
 ) {
     val words = Tima.words.bench
     // Имя живёт на экране, а не в пресете: человек набирает его по буквам, и каждая
@@ -215,9 +245,19 @@ private fun Saving(
         if (presets.isEmpty()) {
             Tertiary(words.noPresets)
         } else {
-            // Номер набора — то, чем два телефона сверяются между собой. Забег идёт
-            // кольцом и без сговора: разошлись — видно здесь.
-            Secondary(words.runAt(presets.indexOfFirst { it.name == preset.name } + 1, presets.size))
+            // ── НОМЕР И СТРЕЛКИ ────────────────────────────────────────────
+            //
+            // Номер — то, чем два телефона сверяются между собой: забег идёт кольцом и
+            // без сговора, разошлись — видно здесь. Стрелки тем и нужны: свести обратно
+            // «Прогон 3» и «Прогон 4», пока они не померили разное, называя одинаково.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            ) {
+                Secondary(words.runAt(presets.indexOfFirst { it.name == preset.name } + 1, presets.size))
+                IconButton(glyph = "\u25B2", onClick = { onStep(-1) })
+                IconButton(glyph = "\u25BC", onClick = { onStep(1) })
+            }
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),

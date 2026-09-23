@@ -72,6 +72,9 @@ class BenchStore(
             .onEach { all ->
                 _state.value = _state.value.copy(
                     on = all[KEY_FLAG] == YES,
+                    // Вооружён ли забег. Отдельно от флага: флаг заводит окно, кнопка —
+                    // поведение. Не нажата — звонок идёт как обычный.
+                    armed = all[KEY_FLAG] == YES && all[KEY_ARMED] == YES,
                     // Пресет читается отдельным ключом от флага — см. заголовок.
                     preset = all[KEY_PRESET]?.let { presetFromWire(it) } ?: DEFAULT,
                     skip = all[KEY_SKIP]?.toIntOrNull()?.coerceIn(0, 60) ?: SKIP_DEFAULT,
@@ -90,7 +93,7 @@ class BenchStore(
         engine?.state
             ?.onEach { live ->
                 when (live.stage) {
-                    CallStage.Connected -> if (_state.value.on && !_state.value.running) begin()
+                    CallStage.Connected -> if (_state.value.armed && !_state.value.running) begin()
                     CallStage.Ended, CallStage.Idle -> if (_state.value.running) stop()
                     else -> Unit
                 }
@@ -126,11 +129,57 @@ class BenchStore(
         }
     }
 
-    /** Включить или выключить испытательный режим. Пресет при этом остаётся. */
+    /** Включить или выключить испытательный режим. Набор при этом остаётся. */
     fun flag(on: Boolean) {
         if (!on) stop()
-        scope.launch { settings.put(KEY_FLAG, if (on) YES else NO) }
+        scope.launch {
+            settings.put(KEY_FLAG, if (on) YES else NO)
+            // Выключили режим — кнопка отжимается сама. Иначе она осталась бы нажатой
+            // невидимой: окна стенда нет, а звонки идут по-испытательному.
+            if (!on) settings.put(KEY_ARMED, NO)
+        }
         Journal.note(LogCode.CALL, "испытательный режим звонков", "включён" to on)
+    }
+
+    /**
+     * Вооружить забег — решение заказчика 2026-09-23.
+     *
+     * ── ЧТО ЗНАЧИТ «НЕ НАЖАТА» ──────────────────────────────────────────────
+     *
+     * Звонок идёт **как обычный**: наборы не переключаются, числа не снимаются, файл не
+     * пишется, полосы в окне 0 нет. Публикуется при этом **выбранный набор** — решение С7
+     * стоит в силе: выключение обвязки не отменяет выбор, он и есть обычное поведение
+     * приложения.
+     *
+     * До этой кнопки стенд вмешивался в каждый звонок, пока включён режим в настройках, —
+     * и сказать «этот звонок обычный» было нечем.
+     *
+     * Отжали посреди разговора — запись закрывается и файл пишется: числа за измеренный
+     * отрезок настоящие, терять их не за что.
+     */
+    fun arm(on: Boolean) {
+        if (!on) stop()
+        scope.launch { settings.put(KEY_ARMED, if (on) YES else NO) }
+        Journal.note(
+            LogCode.CALL,
+            "забег стенда",
+            "вооружён" to on,
+            "набор" to _state.value.preset.name,
+        )
+    }
+
+    /**
+     * Шагнуть по кольцу наборов руками — стрелками в окне 6.
+     *
+     * Кольцо двигается само после каждого звонка; стрелки нужны, **когда телефоны
+     * разошлись**: у одного «Прогон 3», у другого «Прогон 4». Свести их обратно иначе
+     * нечем, а разошедшиеся они мерят разное, называя это одинаково.
+     */
+    fun step(by: Int) {
+        val all = _state.value.presets
+        if (all.isEmpty()) return
+        val at = all.indexOfFirst { it.name == _state.value.preset.name }
+        choose(all[(at + by + all.size) % all.size])
     }
 
     /**
@@ -287,6 +336,7 @@ class BenchStore(
      * трогая настройки между кругами.
      */
     private fun next() {
+        if (!_state.value.armed) return // забег не вооружён — кольцо стоит
         val all = _state.value.presets
         if (all.size < 2) return // крутить нечего
         val at = all.indexOfFirst { it.name == _state.value.preset.name }
@@ -322,6 +372,13 @@ class BenchStore(
         const val KEY_SKIP = "call.bench.skip"
 
         /**
+         * Вооружён ли забег. Переживает перезапуск (решение заказчика 2026-09-23):
+         * забег на шесть наборов — это шесть звонков, между ними приложение успеет
+         * умереть, и незаметно прекратившийся замер хуже отсутствующего.
+         */
+        const val KEY_ARMED = "call.bench.armed"
+
+        /**
          * Сколько секунд разгона не учитывать по умолчанию.
          *
          * Пять — столько занимает подъём полосы у WebRTC на приличной связи. Не
@@ -345,6 +402,7 @@ class BenchStore(
  * @param lastFile куда лёг отчёт последнего прогона. `null` — записать не удалось или
  *   платформа этого не умеет; экран тогда говорит об этом, а не молчит.
  * @param skip сколько первых секунд разговора не учитывать.
+ * @param armed нажата ли «Начать прогон». Не нажата — звонок идёт как обычный.
  */
 data class BenchState(
     val on: Boolean = false,
@@ -356,6 +414,7 @@ data class BenchState(
     val runs: List<BenchSummary> = emptyList(),
     val lastFile: String? = null,
     val skip: Int = BenchStore.SKIP_DEFAULT,
+    val armed: Boolean = false,
 ) {
     /** Номер текущего набора в забеге, с единицы. `0` — набора нет в списке. */
     val at: Int get() = presets.indexOfFirst { it.name == preset.name } + 1

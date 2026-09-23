@@ -2,6 +2,8 @@ package io.tima.shared
 
 import io.tima.core.database.SqlChatBook
 import io.tima.core.encryption.GroupMessages
+import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
 import io.tima.core.network.EventStreamProtocol
 import io.tima.core.network.GroupFrame
 import io.tima.core.network.GroupsOverHttp
@@ -142,6 +144,17 @@ class Receiver(
             lastOutcome = outcome.fold(
                 onSuccess = { it.toString() },
                 onFailure = { "канал упал: ${it::class.simpleName}: ${it.message}" },
+            )
+            // ── ПАДЕНИЕ КАНАЛА ПИШЕТСЯ В ЖУРНАЛ ─────────────────────────────
+            //
+            // Раньше исход оставался только в `lastOutcome` — поле, которое читает
+            // отладчик в руках. На realme 2026-09-23 это стоило двух суток: телефон не
+            // получал событий вовсе, и в журнале не было ни строки об этом. Отличить
+            // «канал молча не поднимается» от «по каналу просто нечего слать» было нечем.
+            Journal.note(
+                LogCode.NET_CHANNEL,
+                "живой канал оборвался, поднимаю заново",
+                "исход" to (lastOutcome ?: "—"),
             )
             delay(ПАУЗА_ПЕРЕД_ПОВТОРОМ_МС)
         }

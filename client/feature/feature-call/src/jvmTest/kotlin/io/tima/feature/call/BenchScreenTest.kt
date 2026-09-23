@@ -94,6 +94,27 @@ class BenchScreenTest {
     }
 
     @Test
+    fun вооружённый_забег_виден_на_экране() {
+        // До кнопки стенд вмешивался в каждый звонок, пока включён режим в настройках, и
+        // сказать «этот звонок обычный» было нечем. Кнопка и есть этот ответ — значит по
+        // экрану должно быть видно, нажата она или нет.
+        val покой = capture("стенд-не-вооружён", WIDTH, HEIGHT, dark = false) { screen(armed = false) }
+        val забег = capture("стенд-вооружён", WIDTH, HEIGHT, dark = false) { screen(armed = true) }
+        assertTrue(покой.difference(забег) > 0.0, "нажатая и отжатая кнопка выглядят одинаково")
+    }
+
+    @Test
+    fun стрелки_есть_рядом_с_номером_прогона() {
+        // Ими сводят разошедшиеся телефоны: у одного «Прогон 3», у другого «Прогон 4».
+        // Без них свести их обратно нечем.
+        val без = capture("стенд-без-наборов", WIDTH, HEIGHT, dark = false) { screen(presets = emptyList()) }
+        val с = capture("стенд-с-наборами", WIDTH, HEIGHT, dark = false) {
+            screen(presets = listOf(preset(VideoCodec.H264, LayerMode.Single), preset(VideoCodec.VP9, LayerMode.Single)))
+        }
+        assertTrue(без.difference(с) > 0.0, "ряд наборов со стрелками не показан")
+    }
+
+    @Test
     fun прошлые_прогоны_показываются_под_числами() {
         val none = capture("стенд-без-прогонов", WIDTH, HEIGHT, dark = false) { screen(runs = emptyList()) }
         val some = capture("стенд-с-прогонами", WIDTH, HEIGHT, dark = false) {
@@ -143,6 +164,7 @@ class BenchScreenTest {
             inCall: Boolean = false,
             lastFile: String? = null,
             skip: Int = 5,
+            armed: Boolean = false,
         ) = Stage(
             column = {
                 BenchScreen(
@@ -154,10 +176,13 @@ class BenchScreenTest {
                     inCall = inCall,
                     lastFile = lastFile,
                     skip = skip,
+                    armed = armed,
                     onChange = {},
                     onSave = {},
                     onForget = {},
                     onApply = {},
+                    onArm = {},
+                    onStep = {},
                     onSkip = {},
                     onStop = {},
                 )

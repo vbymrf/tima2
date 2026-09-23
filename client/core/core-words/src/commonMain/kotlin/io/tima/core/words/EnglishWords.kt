@@ -341,6 +341,14 @@ object EnglishWords : Words {
         override val applyAbout =
             "The preset will apply to the ongoing call: the room reopens and the connection drops for two or three seconds. " +
                 "The run is closed too — one run never holds two presets"
+        override val arm = "Start the series"
+        override val disarm = "Stop the series"
+        override val armAbout =
+            "The series is on: every call takes the next preset, numbers are recorded, a file lands on the phone, " +
+                "and the call window shows the run number"
+        override val idleAbout =
+            "Until this is pressed a call goes as usual: presets do not rotate, numbers are not recorded. " +
+                "The chosen preset is still published — it is the app's normal behaviour"
         override val stop = "Stop recording"
         override val runsBySelf =
             "Recording goes by itself while the call is on, and the file is written when it ends"

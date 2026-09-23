@@ -339,6 +339,14 @@ object SpanishWords : Words {
         override val applyAbout =
             "El conjunto se aplicará a la llamada en curso: la sala se reabre y la conexión se corta dos o tres segundos. " +
                 "La prueba también se cierra: una prueba nunca contiene dos conjuntos"
+        override val arm = "Iniciar la serie"
+        override val disarm = "Detener la serie"
+        override val armAbout =
+            "La serie está en marcha: cada llamada toma el siguiente conjunto, se registran los números, " +
+                "el archivo queda en el teléfono y la ventana de llamada muestra el número de prueba"
+        override val idleAbout =
+            "Mientras no se pulse, la llamada va como siempre: los conjuntos no rotan, los números no se registran. " +
+                "El conjunto elegido se publica igualmente: es el comportamiento normal de la aplicación"
         override val stop = "Detener la grabación"
         override val runsBySelf =
             "La grabación corre sola mientras dura la llamada, y el archivo se escribe cuando termina"
