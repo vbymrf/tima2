@@ -7,6 +7,7 @@ import io.tima.core.diag.LogCode
 import io.tima.core.network.EventStreamProtocol
 import io.tima.core.network.GroupFrame
 import io.tima.core.network.GroupsOverHttp
+import io.tima.core.network.StreamOutcome
 import io.tima.core.encryption.DeviceIdentity
 import io.tima.core.encryption.PersonalMessages
 import io.tima.core.network.DeviceKeysResult
@@ -75,6 +76,13 @@ class Receiver(
      * группа и цвет. Наружу, а не в базу: это подсказка карточкам людей, а не сообщение.
      */
     private val onStamp: (SenderStamp) -> Unit = {},
+    /**
+     * Сервер отказался работать с этой сборкой: она ниже порога совместимости.
+     *
+     * Наружу, а не решение здесь: приёмник экранов не знает. Тот, кто знает, поднимет
+     * порог обновления — он и так умеет это показывать.
+     */
+    private val onOutdated: () -> Unit = {},
 ) {
 
     /** Что случилось с каналом в последний раз. Для диагностики, не для решений. */
@@ -112,10 +120,33 @@ class Receiver(
      * Ничего не решает и никуда не ходит: звонок — событие живое, и вся работа по нему у
      * того, кто им владеет. Приёмник лишь переносит слова сервера наружу.
      */
-    private fun aboutCall(decision: EventStreamProtocol.Decision) {
+    private suspend fun aboutCall(decision: EventStreamProtocol.Decision) {
         when (decision) {
             is EventStreamProtocol.Decision.CallIncoming ->
                 onCall(decision.callId, decision.from, decision.kind)
+            // ── ПОДСКАЗКА РАЗРЕШАЕТСЯ РУЧКОЙ ────────────────────────────────
+            //
+            // Кадр вызова больше не несёт состояния — несёт идентификатор. Спросить
+            // обязан клиент, и это единственное место, где он это делает: ответ ручки
+            // верен на момент вопроса, а тело было верным на момент записи.
+            //
+            // Три исхода, и все три названы:
+            //   `null`       — до сервера не дошли. Молчим: сказать «кончился» значило
+            //                  бы не позвонить человеку из-за моргнувшей сети.
+            //   не `ringing` — звонок уже кончился, пока подсказка ехала. Ровно тот
+            //                  класс бед, ради которого подсказка и заведена.
+            //   `ringing`    — звоним, и теми же словами, что раньше слал сервер.
+            is EventStreamProtocol.Decision.CallPoke -> {
+                val call = network.calls.snapshot(decision.callId)
+                when {
+                    call == null ->
+                        Journal.note(LogCode.NET_CHANNEL, "подсказка о звонке: сервер не ответил", "звонок" to decision.callId)
+                    !call.ringing ->
+                        Journal.note(LogCode.NET_CHANNEL, "подсказка о звонке опоздала", "состояние" to call.state)
+                    else ->
+                        onCall(decision.callId, call.initiatorId, if (call.video) "video" else "audio")
+                }
+            }
             is EventStreamProtocol.Decision.CallState ->
                 onCallState(decision.callId, decision.state)
             is EventStreamProtocol.Decision.CallLeft ->
@@ -136,6 +167,17 @@ class Receiver(
                         onLevelNarrowed = { decision -> aboutLevel(decision) },
                         onComment = { decision -> aboutComment(decision) },
                         onCall = { decision -> aboutCall(decision) },
+                        // Разрыв называется полосой, а не «что-то потерялось». Строка
+                        // в дневнике — единственное место, где это видно человеку,
+                        // который разбирает отчёт о проблеме.
+                        onLaneGap = { полоса, сколько ->
+                            Journal.note(
+                                LogCode.SYNC_LANE_GAP,
+                                "в полосе пропущено — догоняю",
+                                "полоса" to полоса,
+                                "сколько" to сколько,
+                            )
+                        },
                     ) { event ->
                         accept(event.chatId, event.messageId, event.envelope)
                         stamp(event)
@@ -145,6 +187,22 @@ class Receiver(
                 onSuccess = { it.toString() },
                 onFailure = { "канал упал: ${it::class.simpleName}: ${it.message}" },
             )
+            // ── СБОРКА НИЖЕ ПОРОГА: ПЕРЕПОДКЛЮЧАТЬСЯ НЕЧЕГО ─────────────────
+            //
+            // Ответ будет тот же, а телефон тем временем выглядит работающим — это и
+            // есть та беда, ради которой кадр заведён. Цикл прерывается: дальше дело
+            // экрана, а не канала.
+            val устарело = outcome.getOrNull() as? StreamOutcome.AppOutdated
+            if (устарело != null) {
+                Journal.note(
+                    LogCode.NET_CHANNEL,
+                    "сервер не работает с этой сборкой — нужно обновиться",
+                    "порог" to устарело.minClient,
+                    "на сервере" to устарело.versionName,
+                )
+                onOutdated()
+                return
+            }
             // ── ПАДЕНИЕ КАНАЛА ПИШЕТСЯ В ЖУРНАЛ ─────────────────────────────
             //
             // Раньше исход оставался только в `lastOutcome` — поле, которое читает

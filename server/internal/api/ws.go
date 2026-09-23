@@ -101,10 +101,14 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.CloseNow()
 
-	// Первый кадр — auth {token}
+	// Первый кадр — auth {token, app?, stream?}
 	authCtx, cancel := context.WithTimeout(r.Context(), wsAuthTimeout)
 	var authFrame struct {
 		Token string `json:"token"`
+		// Своя версия и ряд сборок. Необязательны: сборка постарше их не шлёт, и
+		// пускать её мы обязаны как прежде — API только расширяется.
+		App    int    `json:"app"`
+		Stream string `json:"stream"`
 	}
 	_, raw, err := conn.Read(authCtx)
 	cancel()
@@ -118,6 +122,32 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	deviceID := claims.DeviceID
+
+	// ── «ВАШЕ ПРИЛОЖЕНИЕ УСТАРЕЛО» ──────────────────────────────────────────
+	//
+	// Сказать это обязан канал, а не только ручка версии. Ручку спрашивают при запуске
+	// и по кнопке, а соединение живёт сутками: сборка, переставшая понимать кадры,
+	// сегодня просто перестаёт получать события — и отличить её от телефона в плохой
+	// сети нечем. Ровно так realme двое суток был глух, и в журнале не было ни строки
+	// о причине.
+	//
+	// **Три условия, и каждое обязательно.** Порог объявлен; ряд сборок наш; номер
+	// ниже порога. Ряд здесь важен так же, как в предложении обновиться: у v1 сейчас
+	// version_code 24, у v2 — 2, и порог чужого ряда выключил бы приложение по числу
+	// из соседней вселенной.
+	//
+	// **Молчащая сборка проходит.** Та, что версию не назвала, старше этого правила, и
+	// выключать её здесь значило бы менять решение о совместимости обрывом связи.
+	if v := s.AppVer; v != nil && v.MinClient > 0 && authFrame.App > 0 &&
+		authFrame.Stream != "" && authFrame.Stream == v.Stream && authFrame.App < v.MinClient {
+		_ = writeJSON(r.Context(), conn, map[string]any{
+			"event":        "app.outdated",
+			"min_client":   v.MinClient,
+			"version_name": v.VersionName,
+		})
+		conn.Close(websocket.StatusPolicyViolation, "сборка ниже порога совместимости")
+		return
+	}
 
 	// Подписка ДО ok: после ok клиент вправе считать, что live-события не теряются
 	sub, err := s.Events.Subscribe(r.Context(), deviceID)
@@ -340,31 +370,45 @@ func (s *Server) handleWSFrame(ctx context.Context, conn *websocket.Conn, device
 // (architecture_test.go, бюджет методов *Server).
 func sendStored(ctx context.Context, conn *websocket.Conn, deviceID string, events []store.DeviceEvent, last *int64) error {
 	for _, e := range events {
-		// ── КАДР ЗВОНКА: ПОДСКАЗКА И СРОК ───────────────────────────────────
+		// ── КАДР ЗВОНКА: СРОК ДЛЯ ОБОИХ, ПОДСКАЗКА ТОЛЬКО ДЛЯ ВЫЗОВА ────────
 		//
-		// Состояние звонка живёт в ручке, а не в кадре (П2). Отсюда и срок: тело
-		// двухдневной давности рассказало бы про звонок, которого давно нет, и
-		// телефон, пролежавший офлайн сутки, зазвонил бы по всем накопленным
-		// вызовам разом — ровно это и было записано в клиенте как беда.
+		// Тело двухдневной давности рассказало бы про звонок, которого давно нет:
+		// телефон, пролежавший офлайн сутки, зазвонил бы по всем накопленным вызовам
+		// разом — ровно это и было записано в клиенте как беда.
 		//
 		// **Отметка шагает через просроченное.** Не шагала бы — клиент просил с того
 		// же места вечно, сервер вечно пропускал, и очередь встала бы на пустом
-		// месте. Ту же ловушку уже ловили на испорченных событиях, тремя строками
-		// ниже.
+		// месте. Ту же ловушку уже ловили на испорченных событиях, ниже.
+		//
+		// Подсказкой становится только `call.incoming`. `call.state` адресный: одному
+		// звонку он уходит с разными словами разным устройствам, и слова `taken` в
+		// строке звонка нет — см. `pokeFor`.
 		if e.EventType == "call.incoming" || e.EventType == "call.state" {
 			*last = e.EventID
 			if time.Since(e.CreatedAt) > wsCallFrameTTL {
 				continue
 			}
-			var body struct {
-				CallID string `json:"call_id"`
-			}
-			if json.Unmarshal(e.Payload, &body) != nil || body.CallID == "" {
+			if e.EventType == "call.incoming" {
+				var body struct {
+					CallID string `json:"call_id"`
+				}
+				if json.Unmarshal(e.Payload, &body) != nil || body.CallID == "" {
+					continue
+				}
+				if err := writeJSON(ctx, conn, map[string]any{
+					"event": "call.poke", "call_id": body.CallID,
+				}); err != nil {
+					return err
+				}
 				continue
 			}
-			if err := writeJSON(ctx, conn, map[string]any{
-				"event": "call.poke", "call_id": body.CallID,
-			}); err != nil {
+			frame := map[string]any{}
+			if json.Unmarshal(e.Payload, &frame) != nil {
+				continue
+			}
+			frame["event"] = e.EventType
+			frame["event_id"] = e.EventID
+			if err := writeJSON(ctx, conn, frame); err != nil {
 				return err
 			}
 			continue

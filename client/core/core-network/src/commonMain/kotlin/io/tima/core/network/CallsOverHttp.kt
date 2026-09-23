@@ -1,6 +1,7 @@
 package io.tima.core.network
 
 import io.ktor.client.HttpClient
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -8,6 +9,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.tima.core.call.CallDoor
+import io.tima.core.call.CallSnapshot
 import io.tima.core.call.CallStep
 import io.tima.core.call.Calls
 import kotlinx.serialization.json.JsonPrimitive
@@ -90,6 +92,36 @@ class CallsOverHttp(
         // Молча: итог звонка запишет сервер по вебхуку от SFU, а наша трубка уже положена.
         // Возвращать «не вышло» человеку здесь незачем — звонок для него кончился.
         false
+    }
+
+    /**
+     * Снимок звонка — `GET /calls/{id}` (П1).
+     *
+     * **`404` означает «кончился», и это не натяжка.** Строку убрал сборщик мусора либо
+     * её не было вовсе; для того, кто спрашивает «звонить ли телефону», оба ответа
+     * одинаковы. А вот отказ сети — другое: там мы **не знаем**, и `null` говорит
+     * именно это.
+     */
+    override suspend fun snapshot(callId: String): CallSnapshot? {
+        val response = try {
+            client.get(route.api("/api/v1/calls/$callId")) {
+                header("Authorization", "Bearer ${token()}")
+            }
+        } catch (_: Throwable) {
+            return null
+        }
+        if (response.status == HttpStatusCode.NotFound) {
+            return CallSnapshot(callId, state = "ended", video = false, initiatorId = "", peerId = "")
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        val body = response.jsonBody() ?: return null
+        return CallSnapshot(
+            callId = body.str("call_id") ?: callId,
+            state = body.str("state").orEmpty(),
+            video = body.str("kind") == "video",
+            initiatorId = body.str("initiator_id").orEmpty(),
+            peerId = body.str("peer_id").orEmpty(),
+        )
     }
 
     private suspend fun doorOf(

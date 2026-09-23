@@ -65,6 +65,14 @@ class Assembled(
      * пересборку экрана, а событие потерялось бы ровно в тот момент, когда звонят.
      */
     val callPings: StateFlow<String>,
+    /**
+     * Сервер отказался работать с этой сборкой: она ниже порога совместимости (О5).
+     *
+     * Поток, а не событие: ответ не меняется до обновления, и экран, пересобравшись,
+     * обязан снова его увидеть. Разбудит он проверку версии — порог показывает она, и
+     * два места, решающих «пора обновиться», разошлись бы на первой же правке.
+     */
+    val outdated: StateFlow<Boolean>,
 )
 
 /**
@@ -77,6 +85,8 @@ class Assembled(
 fun assemble(
     entry: Entry,
     device: Entry.Device,
+    /** Чем сборка называет себя серверу: без этого «устарело» сказать нечем. */
+    build: Build = Build(),
     /**
      * Открыть базу по **имени файла**. Имя считает общий код (`databaseFor`), а не
      * приложение: правило именования одно на все платформы, и два одинаковых правила в
@@ -135,6 +145,7 @@ fun assemble(
             // Новый токен переживает перезапуск: иначе каждый запуск начинался бы с
             // обновления, а первый запрос до него — с 401.
             remember = { session -> entry.rememberSession(session) },
+            build = build,
         )
 
         // Оркестр ключей собирается ЗДЕСЬ, а не внутри приёмника: ему нужны escrow,
@@ -151,6 +162,7 @@ fun assemble(
         val senderStamps = MutableSharedFlow<SenderStamp>(extraBufferCapacity = 64)
         val commentPings = MutableStateFlow(0L)
         val callPings = MutableStateFlow("")
+        val outdated = MutableStateFlow(false)
 
         Assembled(
             session = device.session,
@@ -218,10 +230,12 @@ fun assemble(
                 onCallLeft = { callId, userId -> callPings.value = "ушёл|$callId|$userId" },
                 onCallUnreachable = { callId -> callPings.value = "недоступен|$callId|-" },
                 onStamp = { senderStamps.tryEmit(it) },
+                onOutdated = { outdated.value = true },
             ),
             keyOrchestrator = keyOrchestrator,
             commentPings = commentPings,
             callPings = callPings,
+            outdated = outdated,
             senderStamps = senderStamps,
         )
     }

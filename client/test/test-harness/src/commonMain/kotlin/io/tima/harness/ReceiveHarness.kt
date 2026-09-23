@@ -126,8 +126,22 @@ class ReceiveHarness(private val inbox: Inbox) {
                 decision.eventId?.let { sent += protocol.ackFrame(it) }
             }
 
+            // Подсказка про звонок — не кадр журнала: `event_id` у неё нет, и
+            // подтверждать нечего. Состояние стенд не спрашивает: ходить в сеть он не
+            // умеет, а предмет проверки — порядок записи и подтверждения.
+            is EventStreamProtocol.Decision.CallPoke -> {
+                aboutCalls += "poke:${decision.callId}"
+            }
+
+            // «Приходи и забери»: живой канал попросил бы догон, стенд лишь запоминает —
+            // сети у него нет. Подтверждать тоже нечего: номер в подсказке серверный.
+            is EventStreamProtocol.Decision.Poke -> {
+                sent += protocol.pullFrame(null)
+            }
+
             is EventStreamProtocol.Decision.NeedHistory,
             is EventStreamProtocol.Decision.ServerTrouble,
+            is EventStreamProtocol.Decision.AppOutdated,
             is EventStreamProtocol.Decision.Ready,
             -> Unit
         }

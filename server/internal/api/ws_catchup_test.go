@@ -96,8 +96,10 @@ func TestДожимНеШлётОдноСобытиеДважды(t *testing.T) 
 	pull(t, conn, 0)
 
 	const callID = "11111111-0000-0000-0000-000000000052"
-	payload, _ := json.Marshal(map[string]any{"call_id": callID, "state": "ended"})
-	if _, _, err := srv.Store.AppendDeviceEvent(context.Background(), dev.id, "call.state", payload); err != nil {
+	payload, _ := json.Marshal(map[string]any{
+		"call_id": callID, "room": "call-проба", "kind": "audio", "from": "кто-то",
+	})
+	if _, _, err := srv.Store.AppendDeviceEvent(context.Background(), dev.id, "call.incoming", payload); err != nil {
 		t.Fatal(err)
 	}
 

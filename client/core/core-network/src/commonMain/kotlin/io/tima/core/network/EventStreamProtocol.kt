@@ -23,9 +23,19 @@ import kotlinx.serialization.json.longOrNull
  * → {"event":"sync.pull","cursor":N|null,"limit":N}
  * ← {"event":"message.new","event_id":N,"chat_id":"…","message_id":N,"envelope":"…"}
  * ← {"event":"sync.done","count":N,"next_cursor":N,"more":bool}
- * ← {"event":"sync.gap","next_cursor":N}
+ * ← {"event":"sync.gap","next_cursor":N,"pts":N,"qts":N,"seq":N}
  * → {"event":"ack","event_id":N}
+ * ← {"event":"sync.poke","event_id":N,"pts":N,"qts":N,"seq":N}
+ * ← {"event":"call.poke","call_id":"…"}
  * ```
+ *
+ * **По шине едет подсказка, а не тело** (П4). `sync.poke` означает «приходи и забери»:
+ * номер больше нашего курсора — значит есть что тянуть, и клиент сам зовёт `sync.pull`.
+ * Вершины трёх полос при этом говорят, **что именно** потерялось и где: «в `qts`
+ * пропущено одно» — это сразу «жди нечитаемых сообщений», а не «что-то потерялось».
+ *
+ * `call.poke` — «посмотри этот звонок ручкой». Тела у него нет и быть не может: вход в
+ * комнату адресный, а состояние протухает за минуты.
  *
  * **Три правила, каждое закрывает свой способ потерять сообщение.**
  *
@@ -58,14 +68,58 @@ class EventStreamProtocol {
          */
         data class SyncDone(val count: Int, val nextCursor: Long, val more: Boolean) : Decision
 
-        /** Промежуток невосстановим по каналу: нужен догон историей через REST. */
-        data class NeedHistory(val fromCursor: Long) : Decision
+        /**
+         * Промежуток невосстановим по каналу: нужен догон историей через REST.
+         *
+         * Полосы тоже обязаны сброситься на присланные: их номера остались от журнала,
+         * которого больше нет. Не сбросить — и клиент навсегда считает, что у него
+         * разрыв, то есть зовёт `sync.pull` на каждую подсказку.
+         */
+        data class NeedHistory(val fromCursor: Long, val lanes: LaneTops = LaneTops()) : Decision
 
-        /** Соединение установлено: сервер подтвердил токен. */
-        data class Ready(val deviceId: String) : Decision
+        /**
+         * Соединение установлено: сервер подтвердил токен.
+         *
+         * Вершины полос приходят **этим же кадром**, а не отдельным. Клиент обязан
+         * узнать, где сейчас каждая полоса, до первой подсказки: устройство, молчавшее
+         * неделю, иначе сверяло бы свой давний номер с новым и объявляло разрыв там,
+         * где его нет.
+         */
+        data class Ready(val deviceId: String, val lanes: LaneTops = LaneTops()) : Decision
+
+        /**
+         * «Приходи и забери» — сервер записал событие и говорит об этом, не пересылая
+         * тела (П4, П5).
+         *
+         * [eventId] — **спусковой крючок**: больше нашего курсора, значит есть что
+         * тянуть. Он один обеспечивает правильность: потеряйся подсказка, следующая
+         * всё равно будет с бóльшим номером.
+         *
+         * [lanes] — **диагноз**: по ним видно, что именно потерялось и в какой полосе.
+         */
+        data class Poke(val eventId: Long, val lanes: LaneTops) : Decision
+
+        /**
+         * «Посмотри этот звонок» — состояние берётся ручкой `GET /calls/{id}`.
+         *
+         * Подтверждать нечего: подсказка не кадр журнала, у неё нет `event_id`. Тем она
+         * и хороша — **протухнуть не может**. Вызов недельной давности, доехавший до
+         * телефона, приводит не к звонку, а к запросу, который честно отвечает
+         * «кончился».
+         */
+        data class CallPoke(val callId: String) : Decision
 
         /** Сервер сообщил о своей беде. Не наша: повторить позже. */
         data class ServerTrouble(val code: String) : Decision
+
+        /**
+         * Сервер отказался работать с этой сборкой: она ниже порога совместимости.
+         *
+         * **Не ошибка связи и не наша беда — конец разговора.** Повторять
+         * подключение бессмысленно: ответ будет тот же, а телефон тем временем
+         * выглядит работающим.
+         */
+        data class AppOutdated(val minClient: Int, val versionName: String) : Decision
 
         /**
          * Ключи группы изменились или приехали: `key.rotated`, `recovery.gk_ready`.
@@ -232,9 +286,32 @@ class EventStreamProtocol {
     }
 
     /** Первый кадр: токен устройства. */
-    fun authFrame(token: String): String {
+    /**
+     * Первый кадр соединения.
+     *
+     * ── ЗАЧЕМ СЮДА ПОЛОЖЕНА ВЕРСИЯ ──────────────────────────────────────────
+     *
+     * Чтобы сервер мог сказать «это приложение устарело и работать не будет», а не
+     * оставить телефон молча глухим.
+     *
+     * Такой телефон сегодня ничем не отличим от телефона в плохой сети: соединение
+     * поднимается, `auth` проходит, события не приходят. Ровно это и случилось на
+     * realme — двое суток глухоты при живом соединении, и ни строки о причине.
+     *
+     * Ручка `GET /app/version` про устаревание знает, но спрашивают её при запуске и
+     * по кнопке; соединение живёт сутками. Сказать об этом обязан тот канал, по
+     * которому беда и проявляется.
+     *
+     * **Поток обязателен вместе с номером.** Номера версий сравнимы только внутри
+     * одного ряда сборок: у v1 сейчас 24, у v2 — 2, и порог чужого ряда выключил бы
+     * приложение по числу из соседней вселенной.
+     *
+     * Сервер постарше лишние поля просто не заметит — API только расширяется.
+     */
+    fun authFrame(token: String, appCode: Int = 0, stream: String = ""): String {
         require(token.isNotBlank()) { "токен пустой" }
-        return """{"token":"$token"}"""
+        if (appCode <= 0 || stream.isBlank()) return """{"token":"$token"}"""
+        return """{"token":"$token","app":$appCode,"stream":"$stream"}"""
     }
 
     /**
@@ -275,9 +352,40 @@ class EventStreamProtocol {
             ?: return Decision.Skip("кадр не разобран", null)
 
         val eventId = json["event_id"]?.jsonPrimitive?.longOrNull
-        if (last != null && eventId != null && eventId <= last) return Decision.Seen(eventId)
-        return when (val event = json.string("event")) {
-            "ok" -> Decision.Ready(json.string("device_id") ?: "")
+        val event = json.string("event")
+        // ── ПОДСКАЗКА ПОД ОТБОР НЕ ПОПАДАЕТ, И ЭТО НЕ МЕЛОЧЬ ────────────────
+        //
+        // `event_id` в подсказке — номер события **на сервере**, а не номер кадра,
+        // который нам отдали. Пройди она общий отбор «уже видели», случилось бы худшее
+        // из возможного: клиент отправил бы `ack` на событие, которого не получал, —
+        // то есть сам сдвинул бы серверный курсор через непрочитанное.
+        //
+        // Поймано проверкой `подсказка_не_подтверждается_и_не_отбирается_по_курсору`
+        // при первом же прогоне.
+        if (event != "sync.poke" &&
+            last != null && eventId != null && eventId <= last
+        ) {
+            return Decision.Seen(eventId)
+        }
+        return when (event) {
+            "ok" -> Decision.Ready(json.string("device_id") ?: "", json.laneTops())
+
+            "app.outdated" -> Decision.AppOutdated(
+                minClient = json["min_client"]?.jsonPrimitive?.intOrNull ?: 0,
+                versionName = json.string("version_name").orEmpty(),
+            )
+
+            // Подсказка не кадр журнала: `event_id` в ней — чужой номер, номер события
+            // на сервере, а не нашего. Поэтому она НЕ проходит отбор по `last` выше и
+            // не подтверждается — подтверждать будет то, что мы по ней заберём.
+            "sync.poke" -> Decision.Poke(
+                eventId = json["event_id"]?.jsonPrimitive?.longOrNull ?: 0,
+                lanes = json.laneTops(),
+            )
+
+            "call.poke" -> json.string("call_id")
+                ?.let { Decision.CallPoke(it) }
+                ?: Decision.Skip("call.poke без call_id", null)
 
             "message.new" -> {
                 val chatId = json.string("chat_id")
@@ -305,6 +413,7 @@ class EventStreamProtocol {
 
             "sync.gap" -> Decision.NeedHistory(
                 fromCursor = json["next_cursor"]?.jsonPrimitive?.longOrNull ?: 0,
+                lanes = json.laneTops(),
             )
 
             // Сообщение группы кладётся тем же путём, что личное: хранилище принимает
@@ -446,5 +555,82 @@ class EventStreamProtocol {
 
         /** Предел сервера. Больше он всё равно урежет до 100 — молча. */
         const val MAX_LIMIT: Int = 500
+
+        /**
+         * Полоса и номер в ней из сырого кадра — `null`, если номера нет.
+         *
+         * Отдельной функцией, а не полем каждого решения. Решений полтора десятка, и
+         * дописать полосу в каждое значило бы протащить её через все места, которым
+         * она не нужна вовсе, — а забыть в одном месте значило бы тихо получить
+         * «пропущено» на полосе, которая на самом деле цела.
+         *
+         * **Ноль означает «номера нет»**: кадр звонка, живое «печатает» либо запись,
+         * сделанная до перехода на полосы. Такой кадр клиент просто применяет.
+         */
+        fun laneMark(frame: String): LaneMark? {
+            val json = runCatching { Json.parseToJsonElement(frame) as JsonObject }.getOrNull() ?: return null
+            val lane = json["lane"]?.jsonPrimitive?.intOrNull ?: return null
+            val seq = json["lane_seq"]?.jsonPrimitive?.longOrNull ?: return null
+            if (lane <= 0 || seq <= 0) return null
+            return LaneMark(lane, seq)
+        }
     }
 }
+
+/**
+ * Вершины трёх полос: докуда доехал каждый счётчик у сервера.
+ *
+ * Критерий разделения — **не объём, а опасность разрыва**:
+ *
+ * | Полоса | Что в ней | Чем опасен пропуск |
+ * |---|---|---|
+ * | [pts] | переписка | потерянное сообщение |
+ * | [qts] | ключи | **нечитаемая история**: это не «сообщение опоздало», а «не откроется никогда» |
+ * | [seq] | фон | важен факт, не порядок: досада, а не беда |
+ *
+ * Полос сегодня хватило бы и одной. Но номер полосы живёт на устройстве, в его курсоре:
+ * завести третий курсор на девятнадцати устройствах — правка, на тысяче — переход с
+ * окном совместимости. Решение заказчика 2026-09-23: платить сейчас.
+ */
+data class LaneTops(val pts: Long = 0, val qts: Long = 0, val seq: Long = 0) {
+
+    /** Номер полосы по её ключу, как их нумерует сервер (`store.Lane*`). */
+    fun of(lane: Int): Long = when (lane) {
+        LANE_PTS -> pts
+        LANE_QTS -> qts
+        LANE_SEQ -> seq
+        else -> 0
+    }
+
+    /** Поднять номер одной полосы до применённого кадра. */
+    fun with(lane: Int, seq: Long): LaneTops = when (lane) {
+        LANE_PTS -> copy(pts = maxOf(pts, seq))
+        LANE_QTS -> copy(qts = maxOf(qts, seq))
+        LANE_SEQ -> copy(seq = maxOf(this.seq, seq))
+        else -> this
+    }
+
+    companion object {
+        const val LANE_PTS = 1
+        const val LANE_QTS = 2
+        const val LANE_SEQ = 3
+
+        /** Имя полосы для журнала. Число в отчёте о проблеме ничего не объясняет. */
+        fun name(lane: Int): String = when (lane) {
+            LANE_PTS -> "переписка"
+            LANE_QTS -> "ключи"
+            LANE_SEQ -> "фон"
+            else -> "вне полос"
+        }
+    }
+}
+
+/** Полоса кадра и его номер в ней. */
+data class LaneMark(val lane: Int, val seq: Long)
+
+/** Вершины полос из кадра: их шлёт `ok`, `sync.gap` и каждая подсказка. */
+private fun JsonObject.laneTops(): LaneTops = LaneTops(
+    pts = this["pts"]?.jsonPrimitive?.longOrNull ?: 0,
+    qts = this["qts"]?.jsonPrimitive?.longOrNull ?: 0,
+    seq = this["seq"]?.jsonPrimitive?.longOrNull ?: 0,
+)

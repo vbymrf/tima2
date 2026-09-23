@@ -280,6 +280,14 @@ class Network(
      * (проверки), и берётся то, что было в сессии.
      */
     private val tokens: DeviceTokens? = null,
+    /**
+     * Чем себя называет эта сборка: номер и ряд.
+     *
+     * Нужно ровно одному — живому каналу, чтобы сервер мог сказать «приложение
+     * устарело» вместо молчаливой глухоты. Умолчание пустое: проверкам версия не нужна,
+     * а выдуманная однажды доедет до экрана.
+     */
+    private val build: Build = Build(),
 ) : ChatPorts, GroupPorts, DevicePorts {
 
     /** Тот токен, которым подписывается ЭТОТ вызов. */
@@ -447,7 +455,19 @@ class Network(
      * было целью — Ktor не поднимается выше core-network. Приёмник получает готовый
      * поток и про транспорт не знает.
      */
-    fun eventChannel(): EventStream = EventStream(link.route, link.client, token = { token() })
+    /**
+     * Живой канал, который **называет себя**: версию сборки и ряд.
+     *
+     * Иначе сервер не может сказать «это приложение устарело», и сборка, переставшая
+     * понимать кадры, просто перестаёт получать события — неотличимо от плохой сети.
+     */
+    fun eventChannel(): EventStream = EventStream(
+        link.route,
+        link.client,
+        token = { token() },
+        appCode = build.code,
+        appStream = build.stream,
+    )
 
     /** Держатель токена: он же обновляет его по сроку и по `401`. */
     val tokenKeeper: DeviceTokens? get() = tokens
@@ -468,6 +488,8 @@ class Network(
             /** Куда сохранить обновлённую сессию, чтобы она пережила перезапуск. */
             remember: (Session) -> Unit = {},
             now: () -> Long = { nowMillis() },
+            /** Чем сборка называет себя серверу — см. поле `build`. */
+            build: Build = Build(),
         ): Network {
             // Обновление ставится на КЛИЕНТ, а не на каждый вызов: `401` ловится в одном
             // месте, там же запрос и повторяется с новым токеном.
@@ -483,7 +505,7 @@ class Network(
                 )
             }
             renewal.renew = { if (tokens?.renew() == true) tokens.access else null }
-            return Network(link = link, session = session, tokens = tokens)
+            return Network(link = link, session = session, tokens = tokens, build = build)
         }
     }
 }
