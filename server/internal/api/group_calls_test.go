@@ -138,7 +138,7 @@ func TestGroupCallJoinAndRejoin(t *testing.T) {
 	}
 
 	// Завершённый звонок больше не пускает.
-	if err := srv.Store.SetCallState(t.Context(), call.CallID, "ended"); err != nil {
+	if err := srv.Store.SetCallState(t.Context(), call.CallID, "ended", ""); err != nil {
 		t.Fatal(err)
 	}
 	if code := jsonAuth(t, ts, "POST", "/api/v1/calls/"+call.CallID+"/join", member.token, nil, nil); code != http.StatusGone {

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -101,6 +102,10 @@ func (s *Store) OpenCalls(ctx context.Context, olderThanSec int64, limit int) ([
 //
 // Таблица не чистилась вовсе: в списке уборщика её не было. Строка звонка мелкая, но
 // растёт навсегда, а хранить, чем кто с кем говорил год назад, мы не обещали никому.
+//
+// Срок берётся из `calls_journal_days` (0054), а не из `delivery_retention_days`, как
+// было. Прежний отвечал на другой вопрос — «сколько сервер ещё способен доставить», — и
+// сцепка была тихой: опусти его до недели ради места, и журнал звонков стал бы недельным.
 func (s *Store) GCCalls(ctx context.Context, olderThanSec int64) (int64, error) {
 	tag, err := s.pool.Exec(ctx, `
 		DELETE FROM calls
@@ -124,7 +129,15 @@ func (s *Store) GetCall(ctx context.Context, callID string) (Call, error) {
 }
 
 // SetCallState переводит звонок в новое состояние (answered/ended/missed) с отметкой времени.
-func (s *Store) SetCallState(ctx context.Context, callID, state string) error {
+//
+// `endedBy` — кто положил трубку; пусто, когда этого не знает никто: звонок закрыл
+// уборщик или вебхук LiveKit. Пустое здесь — не «неважно», а сведение: строка журнала
+// без `ended_by` означает, что звонок бросили, а не закончили.
+//
+// **Записывается только первый.** `POST /end` зовут обе стороны, и вторая приходит
+// через секунды после первой; перезапись стёрла бы ровно то, ради чего поле заведено, —
+// кто нажал раньше. Отсюда COALESCE(ended_by, $3), а не наоборот.
+func (s *Store) SetCallState(ctx context.Context, callID, state, endedBy string) error {
 	col := ""
 	switch state {
 	case "answered":
@@ -132,8 +145,93 @@ func (s *Store) SetCallState(ctx context.Context, callID, state string) error {
 	case "ended", "missed", "busy":
 		col = ", ended_at = now()"
 	}
-	_, err := s.pool.Exec(ctx, `UPDATE calls SET state = $2`+col+` WHERE call_id = $1`, callID, state)
+	var by any
+	if endedBy != "" {
+		by = endedBy
+	}
+	_, err := s.pool.Exec(ctx,
+		`UPDATE calls SET state = $2`+col+`, ended_by = COALESCE(ended_by, $3::uuid) WHERE call_id = $1`,
+		callID, state, by)
 	return err
+}
+
+// CallRow — строка журнала звонков: всё, что нужно показать, и ничего сверх.
+//
+// Отдельным типом от Call намеренно. `Call` — звонок, каким его ведёт сигналинг: имя
+// комнаты, состояние прямо сейчас, то, по чему выдаётся токен. `CallRow` — про прошлое,
+// и ей нужны времена, которых `Call` не носит. Сложить их в один тип значило бы таскать
+// имя комнаты LiveKit в список, где оно не нужно никому и выдаёт наружу внутреннее.
+type CallRow struct {
+	CallID      string
+	Kind        string // audio|video — та самая кнопка, которой звонили
+	State       string // ringing|answered|ended|missed|busy
+	InitiatorID string
+	PeerID      string
+	EndedBy     string    // кто положил трубку; пусто — некому было, звонок бросили
+	CreatedAt   time.Time
+	AnsweredAt  time.Time // нулевое — трубку не брали
+	EndedAt     time.Time // нулевое — звонок ещё числится идущим
+}
+
+// ListCalls — страница журнала звонков человека, новые → старые.
+//
+// **Только личные (`type = direct`).** Групповой звонок в клиенте не существует вовсе:
+// кнопка у него есть, а обратного вызова у кнопки нет намеренно. Строка о звонке,
+// которого нельзя совершить, — обещание, а не история. Групповые придут в журнал вместе
+// с самим групповым звонком (ПЛАН-ЖУРНАЛА-ЗВОНКОВ.md, решение Ж-В2).
+//
+// **Отбор по обоим концам.** Человек — сторона звонка, неважно, звонил он или ему;
+// журнал у него один. Индексы есть на оба (0014 на peer_id, 0054 на initiator_id).
+//
+// `before` нулевое — первая страница. Дальше передаётся `created_at` последней отданной
+// строки, и отбор строгий: та же строка второй раз не придёт.
+func (s *Store) ListCalls(ctx context.Context, userID string, before time.Time, limit int) ([]CallRow, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	var upto any
+	if !before.IsZero() {
+		upto = before
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT call_id, kind, state, initiator_id, peer_id, ended_by,
+		       created_at, answered_at, ended_at
+		FROM calls
+		WHERE type = 'direct'
+		  AND (initiator_id = $1 OR peer_id = $1)
+		  AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)
+		ORDER BY created_at DESC
+		LIMIT $3`, userID, upto, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]CallRow, 0, limit)
+	for rows.Next() {
+		var c CallRow
+		// peer_id стал nullable в 0023 ради групповых; здесь их нет по отбору, но
+		// сканировать в строку значило бы падать на данных, которые база допускает.
+		var peer, endedBy *string
+		var answered, ended *time.Time
+		if err := rows.Scan(&c.CallID, &c.Kind, &c.State, &c.InitiatorID, &peer, &endedBy,
+			&c.CreatedAt, &answered, &ended); err != nil {
+			return nil, err
+		}
+		if peer != nil {
+			c.PeerID = *peer
+		}
+		if endedBy != nil {
+			c.EndedBy = *endedBy
+		}
+		if answered != nil {
+			c.AnsweredAt = *answered
+		}
+		if ended != nil {
+			c.EndedAt = *ended
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 // ── Аудио-чаты (постоянные голосовые комнаты) ──

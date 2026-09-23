@@ -1628,6 +1628,19 @@ private fun App(
                     } else {
                         null
                     },
+                    // Видеозвонок оттуда же и тем же путём — разница в одном доводе
+                    // `video` (Ж3, решение заказчика 2026-09-23). Своего пути у него
+                    // нет и быть не должно: два способа завести звонок разошлись бы
+                    // на первой же правке одного из них.
+                    onVideoCallPerson = if (callHost.possible) {
+                        { entry ->
+                            entry.userId?.let { peerId ->
+                                callPerson(peerId, personOfBook(entry).line(bookState.view.look(), PERSON_FIRST_LINE).orEmpty(), true)
+                            }
+                        }
+                    } else {
+                        null
+                    },
                     onInvite = { inviting = it },
                     onOpenedContacts = book::refresh,
                     onAllowContacts = {
@@ -3247,6 +3260,8 @@ private fun PhoneWindow(
     onFacePerson: (BookEntry) -> Unit = {},
     /** Позвонить из строки книги — ЗВ13. `null` — звонить нечем (ПК). */
     onCallPerson: ((BookEntry) -> Unit)? = null,
+    /** Видеозвонок из строки книги — Ж3. `null` — звонить нечем. */
+    onVideoCallPerson: ((BookEntry) -> Unit)? = null,
     onInvite: (BookEntry) -> Unit,
     /** Открыли вкладку: прочитать телефонную книгу и сверить. */
     onOpenedContacts: () -> Unit,
@@ -3367,6 +3382,7 @@ private fun PhoneWindow(
                     onAdd = onAddContact,
                     onFace = onFacePerson,
                     onCall = onCallPerson,
+                    onVideoCall = onVideoCallPerson,
                     onInvite = onInvite,
                     onAllow = onAllowContacts,
                 )

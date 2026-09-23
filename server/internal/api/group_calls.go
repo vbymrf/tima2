@@ -219,7 +219,7 @@ func livekitWebhook(deps callsDeps) http.HandlerFunc {
 		case "participant_joined":
 			if userID != "" {
 				_ = deps.store.SetParticipantState(r.Context(), callID, userID, store.PartJoined, at)
-				_ = deps.store.SetCallState(r.Context(), callID, "answered")
+				_ = deps.store.SetCallState(r.Context(), callID, "answered", "")
 			}
 		case "participant_left":
 			if userID != "" {
@@ -228,13 +228,17 @@ func livekitWebhook(deps callsDeps) http.HandlerFunc {
 			// Один на один: уход любой стороны завершает звонок для обоих — держать
 			// второго в пустой комнате незачем. В группе остальные продолжают.
 			if callType == "direct" {
-				_ = deps.store.SetCallState(r.Context(), callID, "ended")
+				// Ушедший и есть тот, кто положил трубку, — лучшего сведения об этом
+				// у нас нет. Запишется он только если `/end` не успел раньше: поле
+				// хранит первого (Ж4).
+				_ = deps.store.SetCallState(r.Context(), callID, "ended", userID)
 			}
 			notifyParticipants(deps, r, callID, "call.participant_left", map[string]any{
 				"call_id": callID, "user_id": userID,
 			})
 		case "room_finished":
-			_ = deps.store.SetCallState(r.Context(), callID, "ended")
+			// Комната кончилась сама — человека за этим нет.
+			_ = deps.store.SetCallState(r.Context(), callID, "ended", "")
 			notifyParticipants(deps, r, callID, "call.state", map[string]any{
 				"call_id": callID, "state": "ended",
 			})

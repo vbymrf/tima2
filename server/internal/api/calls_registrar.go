@@ -15,7 +15,7 @@ import (
 // клиент управления комнатами и адрес SFU. На *Server они были видны всем 89
 // handler-ам; теперь их видят двенадцать, и ровно те, кому они нужны по делу.
 
-// CallStore — что звонкам нужно от хранилища: шестнадцать методов из ста тридцати двух.
+// CallStore — что звонкам нужно от хранилища: семнадцать методов из ста тридцати двух.
 type CallStore interface {
 	CreateCall(ctx context.Context, c store.Call) (string, error)
 	CreateGroupCall(ctx context.Context, room, kind, groupID, initiatorID string, members []string) (string, error)
@@ -24,7 +24,9 @@ type CallStore interface {
 	CallForJoinByID(ctx context.Context, callID, userID string) (store.CallForJoin, error)
 	CallIDByRoom(ctx context.Context, room string) (string, string, error)
 	CallParticipants(ctx context.Context, callID string) (map[string]store.ParticipantState, error)
-	SetCallState(ctx context.Context, callID, state string) error
+	SetCallState(ctx context.Context, callID, state, endedBy string) error
+	// Журнал звонков: страница прошлого, новые → старые. Ж1.
+	ListCalls(ctx context.Context, userID string, before time.Time, limit int) ([]store.CallRow, error)
 	SetParticipantState(ctx context.Context, callID, userID string, state store.ParticipantState, at time.Time) error
 	CreateVoiceRoom(ctx context.Context, title, ownerID string) (string, error)
 	GetVoiceRoom(ctx context.Context, roomID string) (store.VoiceRoom, error)
@@ -82,6 +84,7 @@ func RegisterCalls(
 	deps := callsDeps{store: st, livekit: livekit, notifier: n}
 
 	mux.HandleFunc("POST /api/v1/calls", requireDevice(startCall(deps)))
+	mux.HandleFunc("GET /api/v1/calls", requireDevice(listCalls(deps)))
 	mux.HandleFunc("POST /api/v1/calls/{callID}/answer", requireDevice(answerCall(deps)))
 	mux.HandleFunc("POST /api/v1/calls/{callID}/end", requireDevice(endCall(deps)))
 	mux.HandleFunc("POST /api/v1/calls/group", requireDevice(startGroupCall(deps)))

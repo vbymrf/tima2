@@ -243,7 +243,7 @@ func answerCall(deps callsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
 			return
 		}
-		_ = deps.store.SetCallState(r.Context(), callID, "answered")
+		_ = deps.store.SetCallState(r.Context(), callID, "answered", "")
 		// ── ОСТАЛЬНЫЕ УСТРОЙСТВА ОТВЕТИВШЕГО ───────────────────────────────
 		//
 		// `call.incoming` уходит ВСЕМ устройствам человека, и звонят они все. Пока
@@ -475,7 +475,9 @@ func endCall(deps callsDeps) http.HandlerFunc {
 		if err := deps.rooms().DeleteRoom(r.Context(), call.Room); err != nil {
 			log.Printf("endCall: комната %s не закрылась: %v", call.Room, err)
 		}
-		_ = deps.store.SetCallState(r.Context(), callID, state)
+		// Кто положил трубку — сведение, которого в базе не было: `/end` зовут обе
+		// стороны, и без имени первого «отменил» и «отклонил» неразличимы. Ж4.
+		_ = deps.store.SetCallState(r.Context(), callID, state, id.UserID)
 		other := call.PeerID
 		if id.UserID == call.PeerID {
 			other = call.InitiatorID

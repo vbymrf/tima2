@@ -33,22 +33,32 @@ type Worker struct {
 func wholeDays(d time.Duration) int { return int(d / (24 * time.Hour)) }
 
 // retentionSeconds — сроки уборки в секундах, из таблицы политик.
-func (w *Worker) retentionSeconds(ctx context.Context) (retention, window int64, err error) {
+//
+// Журнал звонков идёт отдельным сроком, а не общим (Ж5, 0054). Прежде он убирался по
+// `delivery_retention_days` — сроку, отвечающему на другой вопрос: «сколько сервер ещё
+// способен доставить». Сцепка была тихая: опусти срок доставки ради места, и журнал
+// звонков молча станет короче. Запасное значение — тот же срок доставки, чтобы база без
+// 0054 вела себя как прежде, а не потеряла звонки разом.
+func (w *Worker) retentionSeconds(ctx context.Context) (retention, window, journal int64, err error) {
 	rd, err := w.Store.RetentionDaysOr(ctx, "delivery_retention_days", wholeDays(w.Retention))
 	if err != nil {
-		return 0, 0, fmt.Errorf("политика delivery_retention_days: %w", err)
+		return 0, 0, 0, fmt.Errorf("политика delivery_retention_days: %w", err)
 	}
 	wd, err := w.Store.RetentionDaysOr(ctx, "appeal_window_days", wholeDays(w.AppealWindow))
 	if err != nil {
-		return 0, 0, fmt.Errorf("политика appeal_window_days: %w", err)
+		return 0, 0, 0, fmt.Errorf("политика appeal_window_days: %w", err)
+	}
+	jd, err := w.Store.RetentionDaysOr(ctx, "calls_journal_days", rd)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("политика calls_journal_days: %w", err)
 	}
 	const day = int64(24 * 60 * 60)
-	return int64(rd) * day, int64(wd) * day, nil
+	return int64(rd) * day, int64(wd) * day, int64(jd) * day, nil
 }
 
 // RunOnce прогоняет все GC-задачи один раз; ошибки задач не прерывают остальные.
 func (w *Worker) RunOnce(ctx context.Context) error {
-	retention, window, err := w.retentionSeconds(ctx)
+	retention, window, journal, err := w.retentionSeconds(ctx)
 	if err != nil {
 		return err
 	}
@@ -66,7 +76,8 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		// Брошенные звонки: строка открыта, а комнаты уже нет. См. closeAbandonedCalls.
 		{"abandoned_calls", func() (int64, error) { return w.closeAbandonedCalls(ctx) }},
 		// И уборка законченных по возрасту: таблицы calls в списке не было вовсе.
-		{"calls", func() (int64, error) { return w.Store.GCCalls(ctx, retention) }},
+		// Свой срок, а не общий: журнал звонков — история, а не способность доставить.
+		{"calls", func() (int64, error) { return w.Store.GCCalls(ctx, journal) }},
 		{"device_link_sessions", func() (int64, error) { return w.Store.GCExpiredLinkSessions(ctx) }},
 		// Стирание содержимого сообщений, чьи ключи эпох уже уничтожены анклавом.
 		// Метаданные строки остаются: у них отдельный срок — они не удаляются
@@ -99,9 +110,9 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 func (w *Worker) Run(ctx context.Context, interval time.Duration) {
 	// Печатаем то, что будет применено, а не поля структуры: с 0030 сроки берутся
 	// из базы, и поля могут с ними расходиться.
-	if rs, ws, err := w.retentionSeconds(ctx); err == nil {
-		log.Printf("worker: GC каждые %s (ретеншен %d дн., окно апелляции %d дн.)",
-			interval, rs/86400, ws/86400)
+	if rs, ws, js, err := w.retentionSeconds(ctx); err == nil {
+		log.Printf("worker: GC каждые %s (ретеншен %d дн., окно апелляции %d дн., журнал звонков %d дн.)",
+			interval, rs/86400, ws/86400, js/86400)
 	} else {
 		log.Printf("worker: GC каждые %s (сроки прочитать не удалось: %v)", interval, err)
 	}
@@ -183,7 +194,9 @@ func (w *Worker) closeAbandonedCalls(ctx context.Context) (int64, error) {
 		if err != nil || alive {
 			continue
 		}
-		if err := w.Store.SetCallState(ctx, c.CallID, "ended"); err != nil {
+		// Кто закончил — никто: звонок бросили, и закрывает его уборщик. Пустое
+		// `ended_by` это и означает, и подставлять сюда участника было бы неправдой.
+		if err := w.Store.SetCallState(ctx, c.CallID, "ended", ""); err != nil {
 			log.Printf("closeAbandonedCalls %s: %v", c.CallID, err)
 			continue
 		}
