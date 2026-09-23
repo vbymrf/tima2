@@ -1,5 +1,6 @@
 package io.tima.shared
 
+import io.tima.domain.chat.ChatKind
 import io.tima.core.encryption.DeviceIdentity
 import io.tima.core.encryption.EscrowKeyVerifier
 import io.tima.core.encryption.EscrowTrust
@@ -61,6 +62,16 @@ class Sender(
             .filter { it.state == OutboxState.QUEUED }
             .map { it.chatId }
             .distinct()
+            // ── ТОЛЬКО ЛИЧНЫЕ, ЗЕРКАЛЬНО ГРУППОВОМУ ОТПРАВИТЕЛЮ ─────────────
+            //
+            // Раньше сюда попадали и группы. У группы собеседника нет по устройству, и
+            // `prepare` честно писал «у переписки неизвестен собеседник — некому
+            // адресовать», то есть **объявлял бедой то, что бедой не является**.
+            //
+            // Стоило это дня разбора: на realme 2026-09-23 одно сообщение стояло в
+            // очереди пять суток, и в журнале стояла именно эта причина — не своя, а
+            // чужая. Настоящую (у группового отправителя) она закрывала собой.
+            .filter { environment.chatFacts.kindOf(it) != ChatKind.Group }
         if (waiting.isEmpty()) return 0
 
         val epoch = HashMap<String, Long>()

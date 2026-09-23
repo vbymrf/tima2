@@ -117,9 +117,12 @@ fun BackgroundLoops(
             // означает, что повторы не помогают, и это надо видеть в отчёте.
             if (before > 0) {
                 if (before == after) {
-                    val why = assembled.sender.lastTrouble
-                        ?: assembled.groupSender.lastTrouble
-                        ?: "причина не названа"
+                    // Причины у отправителей свои, и закрывать одну другой нельзя:
+                    // ровно этим личный отправитель пять суток прятал групповую беду.
+                    val why = listOfNotNull(
+                        assembled.sender.lastTrouble?.let { "личные: $it" },
+                        assembled.groupSender.lastTrouble?.let { "группы: $it" },
+                    ).joinToString(" · ").ifBlank { "причина не названа" }
                     val now = msNow()
                     // Повторяем строку, только если что-то изменилось либо прошло пять
                     // минут: иначе одна застрявшая запись выдавливает из дневника всё

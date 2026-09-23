@@ -71,6 +71,8 @@ class GroupSender(
      *   связи, медленный режим) в счёт не идут: они остались ждать, и это не результат.
      */
     suspend fun pass(): Int {
+        // Как и у личного: причина прошлого отказа не должна пережить удачный проход.
+        lastTrouble = null
         val groups = environment.queue.pending()
             .filter { it.state == OutboxState.QUEUED }
             .map { it.chatId }
