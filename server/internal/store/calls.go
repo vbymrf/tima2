@@ -17,6 +17,37 @@ type Call struct {
 	InitiatorID string
 	PeerID      string
 	State       string
+
+	// ── ВРЕМЕНА И «КТО ПОЛОЖИЛ ТРУБКУ» ──────────────────────────────────────
+	//
+	// Нужны снимку звонка (`GET /calls/{id}`, П1) и строке журнала. Лежат здесь, а
+	// не в отдельном типе с отдельным запросом: два вида одного и того же однажды
+	// разойдутся, и разойдутся молча.
+	//
+	// Заполняются только `GetCall`. `OpenCalls` их не читает — уборщику они не
+	// нужны, а лишние столбцы в его выборке ничего не объясняют.
+	EndedBy    string
+	CreatedAt  time.Time
+	AnsweredAt time.Time
+	EndedAt    time.Time
+}
+
+// Row — строка звонка на проводе: то, что видит клиент и в списке, и в снимке.
+//
+// Метод, а не ещё один запрос: `GET /calls/{id}` обязан отдавать ту же строку, что
+// `GET /calls`, и собирать её вторым куском кода нельзя.
+func (c Call) Row() CallRow {
+	return CallRow{
+		CallID:      c.CallID,
+		Kind:        c.Kind,
+		State:       c.State,
+		InitiatorID: c.InitiatorID,
+		PeerID:      c.PeerID,
+		EndedBy:     c.EndedBy,
+		CreatedAt:   c.CreatedAt,
+		AnsweredAt:  c.AnsweredAt,
+		EndedAt:     c.EndedAt,
+	}
 }
 
 // CreateCall — новый звонок 1:1 в состоянии ringing.
@@ -120,11 +151,30 @@ func (s *Store) GCCalls(ctx context.Context, olderThanSec int64) (int64, error) 
 
 func (s *Store) GetCall(ctx context.Context, callID string) (Call, error) {
 	var c Call
+	// peer_id стал nullable в 0023 ради групповых, ended_by — в 0054. Сканировать
+	// их прямо в строку значило бы падать на данных, которые база допускает.
+	var peer, endedBy *string
+	var answered, ended *time.Time
 	err := s.pool.QueryRow(ctx, `
-		SELECT call_id, room, kind, initiator_id, peer_id, state FROM calls WHERE call_id = $1`, callID).
-		Scan(&c.CallID, &c.Room, &c.Kind, &c.InitiatorID, &c.PeerID, &c.State)
+		SELECT call_id, room, kind, initiator_id, peer_id, state,
+		       ended_by, created_at, answered_at, ended_at
+		FROM calls WHERE call_id = $1`, callID).
+		Scan(&c.CallID, &c.Room, &c.Kind, &c.InitiatorID, &peer, &c.State,
+			&endedBy, &c.CreatedAt, &answered, &ended)
 	if errors.Is(err, pgx.ErrNoRows) || isBadUUID(err) {
 		return c, ErrCallNotFound
+	}
+	if peer != nil {
+		c.PeerID = *peer
+	}
+	if endedBy != nil {
+		c.EndedBy = *endedBy
+	}
+	if answered != nil {
+		c.AnsweredAt = *answered
+	}
+	if ended != nil {
+		c.EndedAt = *ended
 	}
 	return c, err
 }

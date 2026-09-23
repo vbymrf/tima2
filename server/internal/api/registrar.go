@@ -32,7 +32,7 @@ type Middleware func(http.HandlerFunc) http.HandlerFunc
 
 // NotifyStore — то, что нужно уведомителю от хранилища, и ничего больше.
 type NotifyStore interface {
-	AppendDeviceEvent(ctx context.Context, deviceID, eventType string, payload []byte) (int64, error)
+	AppendDeviceEvent(ctx context.Context, deviceID, eventType string, payload []byte) (int64, store.Lanes, error)
 	// Возвращает store.Device: сужается НАБОР МЕТОДОВ, а не словарь. Заводить свой
 	// тип устройства значило бы писать преобразование, которое однажды разойдётся
 	// с оригиналом, — ровно то, от чего уходим.
@@ -42,7 +42,7 @@ type NotifyStore interface {
 // Publisher — живая шина. nil означает «шины нет»: событие уже записано, и
 // устройство заберёт его следующим sync.pull.
 type Publisher interface {
-	Publish(ctx context.Context, deviceID, event string, eventID int64, payload map[string]any) error
+	Publish(ctx context.Context, deviceID string, frame map[string]any) error
 }
 
 // Notifier — доставка события устройству: сначала персистентная запись, потом live.
@@ -75,7 +75,7 @@ func (n *Notifier) Device(ctx context.Context, deviceID, event string, payload m
 		log.Printf("notify %s %s: marshal: %v", deviceID, event, err)
 		return 0
 	}
-	eventID, err := n.store.AppendDeviceEvent(ctx, deviceID, event, raw)
+	eventID, lanes, err := n.store.AppendDeviceEvent(ctx, deviceID, event, raw)
 	if err != nil {
 		log.Printf("notify %s %s: append: %v", deviceID, event, err)
 		return 0
@@ -84,11 +84,49 @@ func (n *Notifier) Device(ctx context.Context, deviceID, event string, payload m
 	if bus == nil {
 		return eventID
 	}
-	if err := bus.Publish(ctx, deviceID, event, eventID, payload); err != nil {
+	if err := bus.Publish(ctx, deviceID, pokeFor(event, eventID, lanes, payload)); err != nil {
 		// Живая доставка не фатальна: событие уже в логе.
 		log.Printf("notify %s %s: publish: %v", deviceID, event, err)
 	}
 	return eventID
+}
+
+// pokeFor — какую подсказку слать про это событие.
+//
+// ── ТЕЛО ПО ШИНЕ БОЛЬШЕ НЕ ЕДЕТ ─────────────────────────────────────────────
+//
+// Едет «приходи и забери». Подсказка не несёт состояния — значит **протухнуть не
+// может**: вызов недельной давности, доехавший до телефона, приводит не к звонку, а к
+// запросу, который честно отвечает «кончился». Целый класс бед исчезает не починкой, а
+// устройством.
+//
+// ── ДВЕ ПОДСКАЗКИ, И ГРАНИЦА МЕЖДУ НИМИ — НЕ ПРЕФИКС ────────────────────────
+//
+// `call.poke` уходит только про **состояние звонка**, потому что у состояния есть своя
+// ручка (`GET /calls/{id}`), которая отвечает правду на момент вопроса. `call.unreachable`
+// состоянием звонка не является — это наблюдение соединения, и забирается оно обычным
+// путём, вместе со всем прочим.
+//
+// Всё остальное — `sync.poke`. Он несёт два разных сведения, и оба нужны:
+//
+//   - `event_id` — **спусковой крючок**: больше моего курсора, значит есть что забрать.
+//     Он один обеспечивает правильность: потеряйся подсказка, следующая всё равно будет
+//     с бóльшим номером.
+//   - вершины полос — **диагноз**: по ним видно, что именно потерялось и где. «В `qts`
+//     пропущено одно» — это сразу «жди нечитаемых сообщений», а не «что-то потерялось».
+func pokeFor(event string, eventID int64, lanes store.Lanes, payload map[string]any) map[string]any {
+	if event == "call.incoming" || event == "call.state" {
+		if callID, ok := payload["call_id"].(string); ok && callID != "" {
+			return map[string]any{"event": "call.poke", "call_id": callID}
+		}
+	}
+	return map[string]any{
+		"event":    "sync.poke",
+		"event_id": eventID,
+		"pts":      lanes.Pts,
+		"qts":      lanes.Qts,
+		"seq":      lanes.Seq,
+	}
 }
 
 // Users — то же событие всем устройствам перечисленных людей.

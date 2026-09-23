@@ -85,6 +85,7 @@ func RegisterCalls(
 
 	mux.HandleFunc("POST /api/v1/calls", requireDevice(startCall(deps)))
 	mux.HandleFunc("GET /api/v1/calls", requireDevice(listCalls(deps)))
+	mux.HandleFunc("GET /api/v1/calls/{callID}", requireDevice(callSnapshot(deps)))
 	mux.HandleFunc("POST /api/v1/calls/{callID}/answer", requireDevice(answerCall(deps)))
 	mux.HandleFunc("POST /api/v1/calls/{callID}/end", requireDevice(endCall(deps)))
 	mux.HandleFunc("POST /api/v1/calls/group", requireDevice(startGroupCall(deps)))

@@ -33,18 +33,19 @@ func (b *Bus) Close() error { return b.rdb.Close() }
 
 func channel(deviceID string) string { return "tima:dev:" + deviceID }
 
-// Publish шлёт событие устройству. payload сериализуется в JSON-кадр
-// (debug-транспорт по websocket-events.md; protobuf-кадры — вместе с клиентом).
-// eventID — из персистентного event log (device_events): live-кадр и кадр
-// sync.pull одного события несут один и тот же event_id.
-func (b *Bus) Publish(ctx context.Context, deviceID, event string, eventID int64, payload map[string]any) error {
-	frame := map[string]any{
-		"event":    event,
-		"event_id": eventID,
-	}
-	for k, v := range payload {
-		frame[k] = v
-	}
+// Publish шлёт устройству **готовый кадр**, а не собирает его из события и payload.
+//
+// ── ПОЧЕМУ ШИНА БОЛЬШЕ НЕ ЗНАЕТ, ЧТО ВНУТРИ ─────────────────────────────────
+//
+// Раньше она складывала кадр сама: `event`, `event_id` и поля payload. С переходом на
+// подсказки (П4) тело по шине не едет вовсе — едет «приходи и забери»: `sync.poke` с
+// вершинами полос либо `call.poke` с идентификатором звонка. Что именно послать,
+// решает уведомитель, потому что решение зависит от вида события; шине остаётся
+// доставка.
+//
+// Побочно это убрало из шины знание о формате кадра — то самое место, где два кода
+// однажды разошлись бы: кадр собирался и здесь, и в `sendStored`.
+func (b *Bus) Publish(ctx context.Context, deviceID string, frame map[string]any) error {
 	raw, err := json.Marshal(frame)
 	if err != nil {
 		return err

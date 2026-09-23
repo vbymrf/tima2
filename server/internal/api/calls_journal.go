@@ -1,9 +1,11 @@
 // Журнал звонков: GET /api/v1/calls — что было, а не что идёт.
-// План: doc_mig/ПЛАН-ЖУРНАЛА-ЗВОНКОВ.md, задача Ж1.
+// И снимок одного звонка: GET /api/v1/calls/{id} — что с ним прямо сейчас.
+// Планы: doc_mig/ПЛАН-ЖУРНАЛА-ЗВОНКОВ.md Ж1, doc_mig/ПЛАН-ДОСТАВКИ-ПОЛОСАМИ.md П1.
 package api
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -101,4 +103,57 @@ func callJSON(c store.CallRow) map[string]any {
 		m["ended_at"] = c.EndedAt.UTC().Format(time.RFC3339Nano)
 	}
 	return m
+}
+
+// callSnapshot — GET /api/v1/calls/{callID}: что со звонком прямо сейчас.
+//
+// ── РАДИ ЧЕГО ЭТА РУЧКА ЗАВЕДЕНА ────────────────────────────────────────────
+//
+// Кадр звонка перестаёт нести состояние и становится подсказкой «посмотри звонок N»
+// (П2). Подсказка **протухнуть не может**: вызов недельной давности, доехавший до
+// телефона, приводит не к звонку, а к этому запросу, который честно отвечает
+// «кончился». Целый класс бед — звонки по мёртвым вызовам — исчезает не починкой, а
+// устройством.
+//
+// ── ТРИ ОТВЕТА, И ТРЕТИЙ ОБЯЗАТЕЛЕН ─────────────────────────────────────────
+//
+// `403` спрашивающему не-участнику — не формальность. Без него ручка становится
+// способом узнать, разговаривает ли человек прямо сейчас: перебирай идентификаторы и
+// смотри на `state`. Право проверяется как в `/join`.
+//
+// `404` — строку убрал сборщик мусора. Для клиента это то же, что «кончился».
+func callSnapshot(deps callsDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		callID := r.PathValue("callID")
+		call, err := deps.store.GetCall(r.Context(), callID)
+		if errors.Is(err, store.ErrCallNotFound) {
+			writeErr(w, http.StatusNotFound, "not_found", "звонок не найден")
+			return
+		} else if err != nil {
+			log.Printf("callSnapshot %s: %v", callID, err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		id, _ := auth.FromContext(r.Context())
+		if !maySeeCall(deps, r, call, id.UserID) {
+			writeErr(w, http.StatusForbidden, "not_participant", "звонок не ваш")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(callJSON(call.Row()))
+	}
+}
+
+// maySeeCall — сторона личного звонка или участник группового.
+//
+// Та же проверка, что в `/join`, и намеренно тем же способом: разойдись они — и
+// «кому выдаём токен» перестанет совпадать с «кому показываем состояние».
+func maySeeCall(deps callsDeps, r *http.Request, call store.Call, userID string) bool {
+	if call.InitiatorID == userID || call.PeerID == userID {
+		return true
+	}
+	if _, err := deps.store.CallForJoinByID(r.Context(), call.CallID, userID); err == nil {
+		return true
+	}
+	return false
 }

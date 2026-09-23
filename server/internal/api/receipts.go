@@ -61,8 +61,17 @@ func chatTyping(deps messagesDeps) http.HandlerFunc {
 			if p.Own {
 				continue
 			}
-			// event_id=0 → живой кадр без персистенции и без ack (websocket-events.md)
-			_ = deps.bus().Publish(r.Context(), p.DeviceID, "typing", 0, map[string]any{
+			// ── ЕДИНСТВЕННЫЙ КАДР, КОТОРЫЙ ЕДЕТ ТЕЛОМ ────────────────────
+			//
+			// «Печатает» не пишется в журнал вовсе: он живёт секунды и через
+			// минуту бессмыслен, подтверждать его нечем и незачем. Значит и
+			// забирать его неоткуда — подсказка «приходи и забери» привела бы
+			// клиента к пустому месту.
+			//
+			// Остальные кадры с переходом на подсказки (П4) тело потеряли: по
+			// шине едет «приходи и забери», а тело лежит в журнале.
+			_ = deps.bus().Publish(r.Context(), p.DeviceID, map[string]any{
+				"event": "typing", "event_id": 0,
 				"chat_id": chatID, "user_id": id.UserID,
 			})
 		}

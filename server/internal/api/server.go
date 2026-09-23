@@ -6,7 +6,6 @@
 package api
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -185,27 +184,13 @@ func (s *Server) notifier() *Notifier {
 	}}
 }
 
-// notify — доставка события устройству (sync-offline.md §2): сначала в
-// персистентный device_events (источник догона sync.pull), затем — live через
-// Redis Pub/Sub, если шина есть. Ошибка live-доставки не фатальна: событие уже
-// в логе, устройство заберёт его при следующем sync.pull.
-func (s *Server) notify(ctx context.Context, deviceID, event string, payload map[string]any) {
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		log.Printf("notify %s %s: marshal: %v", deviceID, event, err)
-		return
-	}
-	eventID, err := s.Store.AppendDeviceEvent(ctx, deviceID, event, raw)
-	if err != nil {
-		log.Printf("notify %s %s: append: %v", deviceID, event, err)
-		return
-	}
-	if s.Events != nil {
-		if err := s.Events.Publish(ctx, deviceID, event, eventID, payload); err != nil {
-			log.Printf("notify %s %s: publish: %v", deviceID, event, err)
-		}
-	}
-}
+// Доставку события устройству делает Notifier (`registrar.go`), а не метод сервера.
+//
+// Метод `notify` здесь был и не звался **ни разу**: все ручки давно ходят через
+// уведомитель, а он остался копией — с тем же порядком «сначала журнал, потом шина» и
+// теми же ошибками. Переход на подсказки (П4) это и обнаружил: править пришлось бы оба.
+// Копия доставки — худшее место для расхождения, и убрана она поэтому насовсем, а не
+// «пока не понадобится».
 
 func writeErr(w http.ResponseWriter, status int, code, msg string) {
 	w.Header().Set("Content-Type", "application/json")

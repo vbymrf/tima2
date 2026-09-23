@@ -17,6 +17,19 @@
 // смотрит в журнал после этого места. Нашлось — это ровно те кадры, которые шина
 // потеряла: они уходят той же дорогой и с тем же event_id. Повтор безвреден —
 // клиент отбирает по event_id (EventStreamProtocol.Decision.Seen).
+//
+// ── ПО ШИНЕ ЕДЕТ ПОДСКАЗКА, А НЕ ТЕЛО (П4) ──────────────────────────────────
+//
+// `sync.poke {event_id, pts, qts, seq}` — «есть что забрать». Клиент сверяет номер со
+// своим курсором и сам зовёт sync.pull; вершины трёх полос при этом говорят, что
+// именно потерялось и где. `call.poke {call_id}` — «посмотри этот звонок ручкой».
+//
+// Подсказка **протухнуть не может**, потому что не несёт состояния. Вызов недельной
+// давности, доехавший до телефона, приводит не к звонку, а к запросу, который честно
+// отвечает «кончился».
+//
+// Дожим при этом остаётся страховкой на потерянную подсказку и потому стал реже:
+// разрыв теперь ловит номер, а не таймер.
 package api
 
 import (
@@ -42,11 +55,39 @@ const (
 	wsPongTimeout  = 20 * time.Second // ответ на ping; меньше интервала, иначе очередь ping-ов
 	wsWriteTimeout = 30 * time.Second // отдача кадра клиенту
 
-	// Как часто соединение сверяется с журналом. Пять секунд — не про нагрузку (один
-	// запрос по индексу на устройство), а про звонок: дольше — и досланный вызов
-	// придёт, когда звонящий уже положил трубку.
-	wsCatchupInterval = 5 * time.Second
-	wsCatchupLimit    = 100
+	// Как часто соединение сверяется с журналом.
+	//
+	// **Было пять секунд, стало тридцать — и это не экономия** (П6). Пять секунд
+	// стояли потому, что сверка была ЕДИНСТВЕННЫМ способом заметить потерю: кадр,
+	// потерянный шиной, не замечал никто, и таймер отвечал за звонок.
+	//
+	// Теперь разрыв ловит клиент по номеру в своей полосе и зовёт `sync.pull` сам —
+	// то есть замечает за один оборот сети, а не за пять секунд. Сверка осталась
+	// страховкой на случай, когда потерялась сама подсказка, и на этой работе
+	// тридцати секунд хватает с запасом.
+	//
+	// Заодно это снимает счёт, который иначе пришлось бы платить всегда: запрос на
+	// соединение раз в пять секунд — это N/5 запросов в секунду при любом числе
+	// живых устройств, даже когда им нечего доставлять.
+	wsCatchupLimit = 100
+
+)
+
+// Переменные, а не константы: проверкам иначе пришлось бы ждать по полторы минуты на
+// каждую, а протухший вызов не дождаться вовсе. Тот же приём, что у `unreachableAfter`
+// и `ringAgainAfter` в calls.go, и по той же причине — сроки здесь выбраны решением, а
+// не измерены.
+var (
+	wsCatchupInterval = 30 * time.Second
+
+	// Сколько живёт подсказка о звонке.
+	//
+	// Две минуты — предел, после которого разговор невозможен ни при каком раскладе:
+	// вызов звонит сорок пять секунд, токен LiveKit живёт две минуты. Кадр старше
+	// этого не отдаётся вовсе — но **отметка через него шагает**, иначе клиент
+	// просит с того же места вечно, сервер вечно пропускает, и очередь встаёт на
+	// пустом месте.
+	wsCallFrameTTL = 2 * time.Minute
 )
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +129,22 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer sub.Close()
 
 	ctx := r.Context()
-	if err := writeJSON(ctx, conn, map[string]any{"event": "ok", "device_id": deviceID}); err != nil {
+	// ── ВЕРШИНЫ ПОЛОС ЕДУТ В САМОМ `ok` ─────────────────────────────────────
+	//
+	// Клиент обязан узнать, где сейчас каждая полоса, **до** первой подсказки. Иначе
+	// устройство, молчавшее неделю, сверяло бы свой давний номер с новым и объявляло
+	// разрыв там, где его нет, — либо, наоборот, не замечало бы настоящего.
+	//
+	// Отдельным кадром это было бы вторым способом сказать то же самое; ошибка
+	// хранилища здесь не повод рвать соединение — полосы тогда придут с первой
+	// подсказкой, и клиент до тех пор просто не проверяет разрыв.
+	hello := map[string]any{"event": "ok", "device_id": deviceID}
+	if lanes, err := s.Store.DeviceLanes(ctx, deviceID); err == nil {
+		hello["pts"], hello["qts"], hello["seq"] = lanes.Pts, lanes.Qts, lanes.Seq
+	} else {
+		log.Printf("ws %s: вершины полос: %v", deviceID, err)
+	}
+	if err := writeJSON(ctx, conn, hello); err != nil {
 		return
 	}
 
@@ -151,17 +207,14 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 				conn.Close(websocket.StatusGoingAway, "шина событий закрылась")
 				return
 			}
-			// Кадр мог обогнать шину: догон или дожим уже отдал его. Второй раз
-			// клиент его отбросит, но платить за это трафиком незачем.
-			var live struct {
-				EventID int64 `json:"event_id"`
-			}
-			if json.Unmarshal([]byte(msg.Payload), &live) == nil && live.EventID > 0 {
-				if live.EventID <= sent {
-					continue
-				}
-				sent = live.EventID
-			}
+			// ── ПОДСКАЗКА ПРОХОДИТ КАК ЕСТЬ, И `sent` НЕ ДВИГАЕТ ────────
+			//
+			// Раньше здесь ехало тело, и соединение отмечало его отданным. Теперь
+			// едет «приходи и забери»: тела клиент не получил, и сдвинуть отметку
+			// значило бы соврать самим себе — дожим перестал бы досылать ровно то,
+			// ради чего заведён.
+			//
+			// Отметку двигает `sync.pull`, то есть настоящая отдача тел.
 			wctx, cancel := context.WithTimeout(ctx, wsWriteTimeout)
 			err := conn.Write(wctx, websocket.MessageText, []byte(msg.Payload))
 			cancel()
@@ -237,7 +290,14 @@ func (s *Server) handleWSFrame(ctx context.Context, conn *websocket.Conn, device
 				if next > *sent {
 					*sent = next
 				}
-				return writeJSON(ctx, conn, map[string]any{"event": "sync.gap", "next_cursor": next})
+				// Полосы тоже обязаны сброситься: их номера остались от журнала,
+				// которого больше нет. Не сбросишь — клиент навсегда считает, что у
+				// него разрыв, и зовёт `sync.pull` на каждую подсказку.
+				gap := map[string]any{"event": "sync.gap", "next_cursor": next}
+				if lanes, err := s.Store.DeviceLanes(ctx, deviceID); err == nil {
+					gap["pts"], gap["qts"], gap["seq"] = lanes.Pts, lanes.Qts, lanes.Seq
+				}
+				return writeJSON(ctx, conn, gap)
 			}
 		}
 		events, err := s.Store.ListDeviceEvents(ctx, deviceID, cursor, f.Limit)
@@ -280,16 +340,52 @@ func (s *Server) handleWSFrame(ctx context.Context, conn *websocket.Conn, device
 // (architecture_test.go, бюджет методов *Server).
 func sendStored(ctx context.Context, conn *websocket.Conn, deviceID string, events []store.DeviceEvent, last *int64) error {
 	for _, e := range events {
+		// ── КАДР ЗВОНКА: ПОДСКАЗКА И СРОК ───────────────────────────────────
+		//
+		// Состояние звонка живёт в ручке, а не в кадре (П2). Отсюда и срок: тело
+		// двухдневной давности рассказало бы про звонок, которого давно нет, и
+		// телефон, пролежавший офлайн сутки, зазвонил бы по всем накопленным
+		// вызовам разом — ровно это и было записано в клиенте как беда.
+		//
+		// **Отметка шагает через просроченное.** Не шагала бы — клиент просил с того
+		// же места вечно, сервер вечно пропускал, и очередь встала бы на пустом
+		// месте. Ту же ловушку уже ловили на испорченных событиях, тремя строками
+		// ниже.
+		if e.EventType == "call.incoming" || e.EventType == "call.state" {
+			*last = e.EventID
+			if time.Since(e.CreatedAt) > wsCallFrameTTL {
+				continue
+			}
+			var body struct {
+				CallID string `json:"call_id"`
+			}
+			if json.Unmarshal(e.Payload, &body) != nil || body.CallID == "" {
+				continue
+			}
+			if err := writeJSON(ctx, conn, map[string]any{
+				"event": "call.poke", "call_id": body.CallID,
+			}); err != nil {
+				return err
+			}
+			continue
+		}
 		frame := map[string]any{}
 		if err := json.Unmarshal(e.Payload, &frame); err != nil {
 			// Отдать нечего, но отметку двигаем: иначе испорченное событие
-			// перечитывается вечно — и дожимом теперь каждые пять секунд.
+			// перечитывается вечно.
 			log.Printf("ws %s: событие %d повреждено: %v", deviceID, e.EventID, err)
 			*last = e.EventID
 			continue
 		}
 		frame["event"] = e.EventType
 		frame["event_id"] = e.EventID
+		// Полоса и номер в ней едут вместе с кадром: по ним клиент и ловит разрыв.
+		// Ноль означает «номера нет» — кадр вне полос либо записанный до 0055, и
+		// такой клиент просто применяет, не проверяя.
+		if e.Lane != store.LaneNone {
+			frame["lane"] = e.Lane
+			frame["lane_seq"] = e.LaneSeq
+		}
 		if err := writeJSON(ctx, conn, frame); err != nil {
 			return err
 		}
