@@ -2,13 +2,13 @@ package io.tima.feature.chat
 
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Canvas
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import io.tima.core.media.decodeImage
 import io.tima.core.media.encodeJpeg
+import io.tima.testui.FOREIGN_BACKGROUND
 import io.tima.testui.capture
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -25,7 +25,11 @@ class ProfileScreenTest {
     @Test
     fun аватар_из_байтов_рисуется_картинкой_а_не_буквами() {
         // Ярко-пурпурный квадрат: такого цвета в палитре нет, спутать с подложкой нельзя.
-        val purple = Color(0xFFFF00FF)
+        //
+        // Берём его из `testui`, а не числом в коде: зашитый цвет ловится правилом
+        // архитектуры, и оно право даже здесь — цвет, которого «нет в палитре», обязан
+        // быть назван в одном месте, иначе однажды он в палитре появится.
+        val purple = FOREIGN_BACKGROUND
         val square = ImageBitmap(64, 64)
         CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, Canvas(square), Size(64f, 64f)) {
             drawRect(purple)
@@ -56,6 +60,6 @@ class ProfileScreenTest {
                 onName = {}, onNickname = {}, onSave = {}, onBack = {},
             )
         }
-        assertTrue(!shot.has(Color(0xFFFF00FF), tolerance = 0.12), "пурпурного быть не должно: картинки нет")
+        assertTrue(!shot.has(FOREIGN_BACKGROUND, tolerance = 0.12), "пурпурного быть не должно: картинки нет")
     }
 }

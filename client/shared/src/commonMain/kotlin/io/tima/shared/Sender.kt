@@ -54,6 +54,9 @@ class Sender(
      *   «не удалось подготовиться» — второе видно по [последняяБеда].
      */
     suspend fun pass(): Int {
+        // Причина прошлого отказа сбрасывается на входе: показанная после удачного
+        // прохода, она назвала бы беду, которой уже нет.
+        lastTrouble = null
         val waiting = environment.queue.pending()
             .filter { it.state == OutboxState.QUEUED }
             .map { it.chatId }

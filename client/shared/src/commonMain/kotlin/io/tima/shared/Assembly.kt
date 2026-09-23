@@ -5,6 +5,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.runtime.remember
+import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
 import io.tima.core.database.TimaDatabase
 import io.tima.domain.account.Session
 import io.tima.core.encryption.DeviceTokenSignerOverKodium
@@ -96,6 +98,30 @@ fun assemble(
             device.session.userId,
             device.session.deviceId,
         )
+        // ── ВЕРНУТЬ В ОЧЕРЕДЬ ТО, ЧТО ЗАСТРЯЛО В ПРОШЛЫЙ РАЗ ────────────────
+        //
+        // Android убивает приложение когда захочет, в том числе посреди отправки. Запись
+        // остаётся в `SENDING` или `SEALED`, а отправитель берёт только `QUEUED` — и она
+        // не уходит **никогда**. Очередь при этом не пуста, и человек видит «ждёт».
+        //
+        // Машина для этого была написана, покрыта проверками и **никем не вызвана**:
+        // `recoverOnStart` звал только тестовый стенд. Цена — realme 2026-09-23: одно
+        // сообщение стояло пять суток, а журнал каждые пять секунд писал «повтор не
+        // помог», не называя причины. В `Outbox` при этом прямо записано, что в v1 такое
+        // сообщение «пропадало без следа для человека», — и v2 повторила это в точности,
+        // потому что строки вызова не было.
+        //
+        // Место выбрано так, чтобы забыть было нельзя: сборка одна на аккаунт, и
+        // `Assembled` без восстановленной очереди теперь не собирается.
+        val вернулось = environment.queue.recoverOnStart()
+        if (вернулось > 0) {
+            Journal.note(
+                LogCode.QUEUE_RECOVERED,
+                "очередь восстановлена после обрыва",
+                "вернулось" to вернулось,
+            )
+        }
+
         val identity = deviceIdentityFrom(device.secret)
 
         // Подпись ключом ЭТОГО устройства — то, чем обновляется просроченный токен
