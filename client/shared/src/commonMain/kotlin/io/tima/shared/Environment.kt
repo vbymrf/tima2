@@ -1,6 +1,7 @@
 package io.tima.shared
 
 import io.tima.core.network.CallsOverHttp
+import io.tima.core.database.SqlCallLog
 import io.tima.core.database.SqlChatJournal
 import io.tima.core.database.SqlChatFeed
 import io.tima.core.database.SqlChatFacts
@@ -8,6 +9,7 @@ import io.tima.core.database.SqlBook
 import io.tima.core.database.SqlCommunitySections
 import io.tima.core.database.SqlContacts
 import io.tima.core.database.SqlSettings
+import io.tima.domain.chat.CallLog
 import io.tima.domain.chat.ChatFacts
 import io.tima.domain.chat.Book
 import io.tima.domain.chat.ContactDiscovery
@@ -549,6 +551,16 @@ class Environment private constructor(
 
     /** Настройки экранов: вид списка и что показывать (Д5). */
     val settings: Settings = SqlSettings(db)
+
+    /**
+     * Журнал звонков — копия серверного (Ж2).
+     *
+     * **Копия, а не источник.** Строку звонка заводит сервер, здесь она лежит, чтобы
+     * вкладка открывалась без сети и без ожидания. Этим журнал и отличается от
+     * переписки, хотя читается экраном так же: потерянная переписка — потеря навсегда,
+     * потерянный журнал — один запрос.
+     */
+    val callLog: CallLog = SqlCallLog(db)
 
 
     val chat: ObserveChat = ObserveChat(SqlChatFeed(db, TextBodyCodec, cipher, myUserId))
