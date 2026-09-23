@@ -34,11 +34,13 @@ func wholeDays(d time.Duration) int { return int(d / (24 * time.Hour)) }
 
 // retentionSeconds — сроки уборки в секундах, из таблицы политик.
 //
-// Журнал звонков идёт отдельным сроком, а не общим (Ж5, 0054). Прежде он убирался по
-// `delivery_retention_days` — сроку, отвечающему на другой вопрос: «сколько сервер ещё
-// способен доставить». Сцепка была тихая: опусти срок доставки ради места, и журнал
-// звонков молча станет короче. Запасное значение — тот же срок доставки, чтобы база без
-// 0054 вела себя как прежде, а не потеряла звонки разом.
+// Журнал звонков идёт отдельным сроком, а не общим (Ж5, 0054), и по умолчанию этот
+// срок — **ноль, то есть «не убирать»**: строка звонка это одни метаданные, а они не
+// удаляются никогда (`store.PurgeMessageContent`).
+//
+// Запасное значение — срок доставки, а не ноль. База без 0054 ведёт себя как прежде;
+// подставить туда ноль значило бы сменить поведение старой базы правкой кода, а не
+// миграцией.
 func (w *Worker) retentionSeconds(ctx context.Context) (retention, window, journal int64, err error) {
 	rd, err := w.Store.RetentionDaysOr(ctx, "delivery_retention_days", wholeDays(w.Retention))
 	if err != nil {
@@ -75,9 +77,15 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		{"sms_codes", func() (int64, error) { return w.Store.GCExpiredSmsCodes(ctx) }},
 		// Брошенные звонки: строка открыта, а комнаты уже нет. См. closeAbandonedCalls.
 		{"abandoned_calls", func() (int64, error) { return w.closeAbandonedCalls(ctx) }},
-		// И уборка законченных по возрасту: таблицы calls в списке не было вовсе.
-		// Свой срок, а не общий: журнал звонков — история, а не способность доставить.
-		{"calls", func() (int64, error) { return w.Store.GCCalls(ctx, journal) }},
+		// Уборка законченных звонков — только если срок задан. Ноль означает «не
+		// удалять», и передать его дальше нельзя: GCCalls(0) снёс бы всё, что
+		// кончилось больше нуля секунд назад, то есть весь журнал разом.
+		{"calls", func() (int64, error) {
+			if journal <= 0 {
+				return 0, nil
+			}
+			return w.Store.GCCalls(ctx, journal)
+		}},
 		{"device_link_sessions", func() (int64, error) { return w.Store.GCExpiredLinkSessions(ctx) }},
 		// Стирание содержимого сообщений, чьи ключи эпох уже уничтожены анклавом.
 		// Метаданные строки остаются: у них отдельный срок — они не удаляются
@@ -194,9 +202,25 @@ func (w *Worker) closeAbandonedCalls(ctx context.Context) (int64, error) {
 		if err != nil || alive {
 			continue
 		}
-		// Кто закончил — никто: звонок бросили, и закрывает его уборщик. Пустое
-		// `ended_by` это и означает, и подставлять сюда участника было бы неправдой.
-		if err := w.Store.SetCallState(ctx, c.CallID, "ended", ""); err != nil {
+		// ── ДВА РАЗНЫХ СЛУЧАЯ, И РАНЬШЕ ОНИ БЫЛИ ОДНИМ ──────────────────────
+		//
+		// Оба закрывались как `ended`, и для журнала это оказалось ложью — крупной.
+		// `ended_at` ставится **в момент уборки**, а уборщик ходит раз в час
+		// (TIMA_GC_INTERVAL) по звонкам старше пяти минут. Разговор на минуту, чей
+		// `/end` не доехал, читался в журнале как час с лишним.
+		//
+		// `ringing` → `missed`: трубку не брали, `answered_at` пуст, длительности
+		// нет вовсе — врать нечем. Это обычный пропущенный.
+		//
+		// `answered` → `lost`: разговор шёл, а конец неизвестен. Журнал такую
+		// строку показывает как «оборвался» и длительность не рисует.
+		//
+		// Кто закончил — никто, поэтому `ended_by` пуст: звонок бросили.
+		state := "lost"
+		if c.State == "ringing" {
+			state = "missed"
+		}
+		if err := w.Store.SetCallState(ctx, c.CallID, state, ""); err != nil {
 			log.Printf("closeAbandonedCalls %s: %v", c.CallID, err)
 			continue
 		}

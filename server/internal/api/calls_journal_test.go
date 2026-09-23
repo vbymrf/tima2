@@ -189,3 +189,78 @@ func TestЖурналНеПоказываетЧужое(t *testing.T) {
 		t.Fatalf("посторонний видит чужие звонки: %+v", чужой.Calls)
 	}
 }
+
+// TestВходЗакрытВсякимНеживымСостоянием — перечисляем живые, а не хоронить по списку.
+//
+// Проверка входа была списком похороненных: `ended` и `missed`. Он протекал уже тогда —
+// `busy` в нём не значился, — и протёк бы снова с появлением `lost`. Теперь пускают
+// только `ringing` и `answered`, и всякое новое состояние по умолчанию закрыто.
+func TestВходЗакрытВсякимНеживымСостоянием(t *testing.T) {
+	ts, srv := setupWithCalls(t)
+	каллер := registerDevice(t, ts, "+79990000070")
+	собеседник := registerDevice(t, ts, "+79990000071")
+
+	for _, состояние := range []string{"ended", "missed", "busy", "lost"} {
+		var начало struct {
+			CallID string `json:"call_id"`
+		}
+		if code := postAuthed(t, ts, каллер.token, "POST", "/api/v1/calls",
+			map[string]string{"peer_id": собеседник.userID, "kind": "audio"}, &начало); code != 201 {
+			t.Fatalf("%s: звонок не завёлся: %d", состояние, code)
+		}
+		if err := srv.Store.SetCallState(t.Context(), начало.CallID, состояние, ""); err != nil {
+			t.Fatal(err)
+		}
+		if code := postAuthed(t, ts, собеседник.token, "POST",
+			"/api/v1/calls/"+начало.CallID+"/join", map[string]string{}, nil); code != 410 {
+			t.Fatalf("вход в звонок в состоянии %q: %d, ожидали 410", состояние, code)
+		}
+	}
+}
+
+// TestЖурналНеПоказываетДлительностьУОборванного — `lost` не врёт про минуты.
+//
+// `ended_at` у брошенного звонка ставит уборщик в момент уборки, а ходит он раз в час.
+// Разговор на минуту читался как час с лишним. Состояние `lost` говорит «конец
+// неизвестен», и клиент по нему длительность не считает.
+func TestЖурналНеПоказываетДлительностьУОборванного(t *testing.T) {
+	ts, srv := setupWithCalls(t)
+	каллер := registerDevice(t, ts, "+79990000072")
+	собеседник := registerDevice(t, ts, "+79990000073")
+
+	var начало struct {
+		CallID string `json:"call_id"`
+	}
+	if code := postAuthed(t, ts, каллер.token, "POST", "/api/v1/calls",
+		map[string]string{"peer_id": собеседник.userID, "kind": "audio"}, &начало); code != 201 {
+		t.Fatalf("звонок не завёлся: %d", code)
+	}
+	// Разговор состоялся, а конец потерялся — и его закрыл уборщик.
+	if err := srv.Store.SetCallState(t.Context(), начало.CallID, "answered", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.Store.SetCallState(t.Context(), начало.CallID, "lost", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	var журнал callJournal
+	if code := getAuthed(t, ts, каллер.token, "/api/v1/calls", &журнал); code != 200 {
+		t.Fatalf("журнал: %d", code)
+	}
+	if len(журнал.Calls) != 1 {
+		t.Fatalf("строк в журнале: %d", len(журнал.Calls))
+	}
+	row := журнал.Calls[0]
+	if row.State != "lost" {
+		t.Fatalf("состояние: %q, ждали lost", row.State)
+	}
+	// Трубку не клал никто — иначе бы состояние было не lost, а ended.
+	if row.EndedBy != "" {
+		t.Fatalf("у оборванного звонка назван тот, кто положил трубку: %q", row.EndedBy)
+	}
+	// Времена при этом есть оба — и именно поэтому по ним нельзя считать: `ended_at`
+	// здесь момент уборки, а не момент конца.
+	if row.AnsweredAt == "" || row.EndedAt == "" {
+		t.Fatalf("времена не проставлены: %+v", row)
+	}
+}

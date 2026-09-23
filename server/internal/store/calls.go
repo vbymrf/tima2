@@ -100,12 +100,13 @@ func (s *Store) OpenCalls(ctx context.Context, olderThanSec int64, limit int) ([
 
 // GCCalls — удалить давно законченные звонки.
 //
-// Таблица не чистилась вовсе: в списке уборщика её не было. Строка звонка мелкая, но
-// растёт навсегда, а хранить, чем кто с кем говорил год назад, мы не обещали никому.
+// **Сегодня не зовётся: `calls_journal_days` равен нулю, и уборщик задачу пропускает.**
+// Строка звонка это одни метаданные, а они не удаляются никогда — то же правило, что у
+// сообщений (`PurgeMessageContent`: стирается содержимое, строка живёт).
 //
-// Срок берётся из `calls_journal_days` (0054), а не из `delivery_retention_days`, как
-// было. Прежний отвечал на другой вопрос — «сколько сервер ещё способен доставить», — и
-// сцепка была тихой: опусти его до недели ради места, и журнал звонков стал бы недельным.
+// Метод оставлен, а не выброшен: срок живёт строкой в `retention_policy`, и поставить
+// его больше нуля — правка строки, а не пересборка. Выбросить уборку совсем значило бы
+// сделать это решение невозвратным.
 func (s *Store) GCCalls(ctx context.Context, olderThanSec int64) (int64, error) {
 	tag, err := s.pool.Exec(ctx, `
 		DELETE FROM calls
@@ -142,7 +143,7 @@ func (s *Store) SetCallState(ctx context.Context, callID, state, endedBy string)
 	switch state {
 	case "answered":
 		col = ", answered_at = now()"
-	case "ended", "missed", "busy":
+	case "ended", "missed", "busy", "lost":
 		col = ", ended_at = now()"
 	}
 	var by any
@@ -164,7 +165,7 @@ func (s *Store) SetCallState(ctx context.Context, callID, state, endedBy string)
 type CallRow struct {
 	CallID      string
 	Kind        string // audio|video — та самая кнопка, которой звонили
-	State       string // ringing|answered|ended|missed|busy
+	State       string // ringing|answered|ended|missed|busy|lost
 	InitiatorID string
 	PeerID      string
 	EndedBy     string    // кто положил трубку; пусто — некому было, звонок бросили
