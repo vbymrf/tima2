@@ -9,6 +9,7 @@ import io.tima.domain.chat.SyncGroupChats
 import io.tima.domain.chat.SyncGroupsStep
 import io.tima.core.network.GroupsOverHttp
 import io.tima.core.network.PlatformResult
+import io.tima.core.outbox.OutboxEntry
 import kotlinx.coroutines.delay
 
 /**
@@ -126,7 +127,8 @@ fun BackgroundLoops(
     // это его изменение, и по нему же идёт первая отправка.
     LaunchedEffect(assembled, changeSign) {
         while (true) {
-            val ждать = ближайшийСрок(assembled) ?: return@LaunchedEffect
+            val ждать = ближайшийСрок(assembled.environment.queue.pending(), msNow())
+                ?: return@LaunchedEffect
             delay(ждать)
             val before = assembled.environment.queue.pending().size
             assembled.sender.pass()
@@ -177,10 +179,8 @@ fun BackgroundLoops(
  * Пол секунды снизу — не «на всякий случай»: срок мог пройти, пока мы считали, и без
  * нижней границы цикл крутился бы без пауз, пока отправка не начнёт удаваться.
  */
-internal fun ближайшийСрок(assembled: Assembled): Long? {
-    val pending = assembled.environment.queue.pending()
+internal fun ближайшийСрок(pending: List<OutboxEntry>, сейчас: Long): Long? {
     if (pending.isEmpty()) return null
-    val сейчас = msNow()
     val срок = pending.minOf { if (it.nextAttemptAtMs > 0) it.nextAttemptAtMs else сейчас }
     return maxOf(срок - сейчас, НЕ_ЧАЩЕ_МС)
 }
