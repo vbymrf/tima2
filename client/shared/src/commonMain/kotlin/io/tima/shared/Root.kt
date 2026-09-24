@@ -97,7 +97,9 @@ import io.tima.feature.chat.BookView
 import io.tima.feature.chat.SectionsRow
 import io.tima.feature.chat.SectionsScreen
 import io.tima.feature.chat.BookState
+import io.tima.core.contacts.ContactsAccessWay
 import io.tima.core.contacts.askContactsAccess
+import io.tima.core.contacts.contactsAccessWay
 import io.tima.core.contacts.platformInvite
 import io.tima.core.media.decodeImage
 import io.tima.core.secrets.Account
@@ -1712,8 +1714,22 @@ private fun App(
                     },
                     onInvite = { inviting = it },
                     onOpenedContacts = book::refresh,
-                    onAllowContacts = {
-                        askContactsAccess { дали -> if (дали) book.refresh() }
+                    // ── КНОПКА РАЗРЕШЕНИЯ НАЗЫВАЕТ СЕБЯ (Л1) ────────────────
+                    //
+                    // Путь спрашивается у платформы при составе, а не в момент
+                    // нажатия: надпись обязана быть верной ДО того, как нажали.
+                    // `None` — телефонной книги нет вовсе, и кнопки тогда нет.
+                    onAllowContacts = if (contactsAccessWay() == ContactsAccessWay.None) {
+                        null
+                    } else {
+                        { askContactsAccess { дали -> if (дали) book.refresh() } }
+                    },
+                    allowInSettings = contactsAccessWay() == ContactsAccessWay.Settings,
+                    // Сверка по требованию (Л2). На ПК сверять неоткуда — кнопки нет.
+                    onRefreshContacts = if (contactsAccessWay() == ContactsAccessWay.None) {
+                        null
+                    } else {
+                        book::refresh
                     },
                 )
 
@@ -3380,8 +3396,17 @@ private fun PhoneWindow(
     onOpenedCalls: () -> Unit = {},
     /** Открыли вкладку: прочитать телефонную книгу и сверить. */
     onOpenedContacts: () -> Unit,
-    /** «Разрешить»: системный диалог, и после согласия — чтение. */
-    onAllowContacts: () -> Unit,
+    /**
+     * «Разрешить»: системный диалог, и после согласия — чтение.
+     *
+     * `null` — спрашивать нечего: телефонной книги у системы нет (ПК). Кнопки тогда нет
+     * совсем, а не «неактивная».
+     */
+    onAllowContacts: (() -> Unit)?,
+    /** Нажатие уведёт в настройки, а не поднимет диалог: система больше не спросит (Л1). */
+    allowInSettings: Boolean = false,
+    /** «Обновить» — сверка с телефонной книгой по требованию (Л2). */
+    onRefreshContacts: (() -> Unit)? = null,
 ) {
     var calls by remember { mutableStateOf(CALL_FILTERS.first()) }
     val bookWords = Tima.words.book
@@ -3509,6 +3534,8 @@ private fun PhoneWindow(
                     onVideoCall = onVideoCallPerson,
                     onInvite = onInvite,
                     onAllow = onAllowContacts,
+                    allowInSettings = allowInSettings,
+                    onRefresh = onRefreshContacts,
                 )
             }
 

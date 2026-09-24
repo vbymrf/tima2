@@ -692,6 +692,8 @@ object SpanishWords : Words {
         override val phoneSection = "Teléfono"
         override val search = "Nombre, apodo o número"
         override val searchChats = "Nombre o texto del mensaje"
+        override val allow = "Permitir"
+        override val openSettings = "Abrir ajustes"
         override val notRead = "Contactos no leídos"
         override val notReadAbout =
             "La aplicación tomará nombres y números de su agenda para mostrar cuáles de " +

@@ -73,6 +73,22 @@ object AndroidContactsAccess {
         waiting = null
     }
 
+    internal fun way(): ContactsAccessWay {
+        val current = activity ?: return ContactsAccessWay.None
+        if (current.checkSelfPermission(Manifest.permission.READ_CONTACTS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return ContactsAccessWay.Ask // экран разрешения при этом не показывается
+        }
+        val спрашивали = current.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(ASKED, false)
+        return if (спрашивали && !current.shouldShowRequestPermissionRationale(Manifest.permission.READ_CONTACTS)) {
+            ContactsAccessWay.Settings
+        } else {
+            ContactsAccessWay.Ask
+        }
+    }
+
     internal fun ask(onResult: (Boolean) -> Unit) {
         val current = activity ?: return onResult(false)
         if (current.checkSelfPermission(Manifest.permission.READ_CONTACTS) ==
@@ -112,3 +128,15 @@ object AndroidContactsAccess {
 }
 
 actual fun askContactsAccess(onResult: (Boolean) -> Unit) = AndroidContactsAccess.ask(onResult)
+
+/**
+ * Android: то же условие, по которому [AndroidContactsAccess.ask] выбирает между диалогом
+ * и настройками, — **вынесенное наружу, чтобы кнопка себя назвала** (Л1).
+ *
+ * Условие не дублируется, а читается из того же места: наша отметка «спрашивали» плюс
+ * `shouldShowRequestPermissionRationale`. Две копии одного правила разошлись бы, и тогда
+ * надпись обещала бы одно, а нажатие делало другое, — хуже, чем нынешний молчаливый глиф.
+ *
+ * Активности нет — значит спросить не через кого, и кнопки быть не должно.
+ */
+actual fun contactsAccessWay(): ContactsAccessWay = AndroidContactsAccess.way()

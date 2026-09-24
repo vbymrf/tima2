@@ -398,6 +398,23 @@ interface BookWords {
     /** Подсказка поиска по перепискам: ищется имя в шапке и первая строка последнего. */
     val searchChats: String
     val notRead: String
+
+    /**
+     * Надпись кнопки разрешения, когда система ещё спросит (Л1).
+     *
+     * Когда спрашивать уже нечего, там стоит «Открыть настройки» из `problem` — и это
+     * **другая надпись**, потому что действие другое: человек уйдёт из приложения.
+     */
+    val allow: String
+
+    /**
+     * Надпись той же кнопки, когда система спрашивать больше не станет.
+     *
+     * Своя, а не взятая у звонка: `CallWords.openSettings` про микрофон, и правка там
+     * молча меняла бы надпись здесь. Один и тот же текст в двух словарях — не
+     * дублирование, а независимость экранов.
+     */
+    val openSettings: String
     val notReadAbout: String
     val addByHand: String
     val noBookHere: String
@@ -2219,6 +2236,8 @@ object RussianWords : Words {
         override val search = "Имя, ник или номер"
         override val searchChats = "Имя собеседника или текст"
         override val notRead = "Контакты не прочитаны"
+        override val allow = "Разрешить"
+        override val openSettings = "Открыть настройки"
         override val notReadAbout =
             "Приложение возьмёт из телефонной книги имена и номера, чтобы " +
                 "показать, кто из них уже в TIMa. Номера уходят на сервер " +

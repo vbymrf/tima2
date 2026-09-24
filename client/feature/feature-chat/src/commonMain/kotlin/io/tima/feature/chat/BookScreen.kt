@@ -21,6 +21,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Avatar
+import io.tima.core.ui.Button
+import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Caption
 import io.tima.core.ui.ControlRow
 import io.tima.core.ui.IconButton
@@ -73,6 +75,13 @@ fun BookScreen(
     newIn: (String) -> Int = { 0 },
     /** «＋» в правом нижнем углу: завести контакт или раздел. */
     onAdd: (() -> Unit)? = null,
+    /**
+     * «Обновить» — сверка с телефонной книгой по требованию (Л2).
+     *
+     * `null` — сверять неоткуда: на ПК телефонной книги нет, и кнопка там была бы
+     * обещанием, которое некому исполнить.
+     */
+    onRefresh: (() -> Unit)? = null,
     /** «Пригласить» у того, кого нет в TIMa. */
     onInvite: ((BookEntry) -> Unit)? = null,
     /**
@@ -113,6 +122,16 @@ fun BookScreen(
     /** Разрешение на чтение книги телефона просит платформа, а не этот экран. */
     onAllow: (() -> Unit)? = null,
     /**
+     * Нажатие уведёт в настройки, а не поднимет диалог (Л1).
+     *
+     * Признаком, а не платформенным типом: экран про платформы не знает и знать не
+     * должен — `feature-chat` зависит от `core-ui`, а не от `core-contacts`. Слова при
+     * этом выбирает он сам, из своего словаря.
+     *
+     * «Спрашивать нечего» (ПК) приходит иначе — пустым `onAllow`.
+     */
+    allowInSettings: Boolean = false,
+    /**
      * Человек за строкой книги: имя — из книги, имя пользователя и ник — со справочника.
      * По умолчанию — только то, что есть в книге: так собирают проверки без сети.
      */
@@ -140,8 +159,24 @@ fun BookScreen(
                     // Сказано, что будет и чего не будет: разрешение, о котором не
                     // объяснили, отклоняют — и правильно делают.
                     Secondary(words.notReadAbout)
+                    // ── КНОПКА НАЗЫВАЕТ СЕБЯ, А НЕ МОЛЧИТ ГЛИФОМ ────────
+                    //
+                    // Здесь стоял «✓», и за ним пряталось **два разных действия**: в
+                    // первый раз системный диалог, а после отказа, когда система
+                    // спрашивать больше не станет, — уход в настройки приложения.
+                    //
+                    // То есть кнопка «перейти в настройки» была и раньше, просто она
+                    // была той же самой и молчала о себе. Глиф «✓» означает «согласен»,
+                    // а второй раз означает «выйдешь из приложения».
+                    //
+                    // Кнопки нет вовсе там, где спрашивать нечего (ПК): `onAllow`
+                    // приходит пустым. Не «неактивная» — неактивная тоже зовёт нажать.
                     if (onAllow != null) {
-                        ControlRow { IconButton(glyph = "✓", onClick = onAllow, live = true) }
+                        Button(
+                            label = if (allowInSettings) words.openSettings else words.allow,
+                            onClick = onAllow,
+                            kind = ButtonKind.Action,
+                        )
                     }
                 }
             }
@@ -278,13 +313,28 @@ fun BookScreen(
         // поиска, и снятая галочка «Показывать поиск» уносила вместе с ним единственный
         // способ добавить человека руками. Строки поиска в списке больше нет вовсе
         // (2026-09-19) — кнопка от неё и не зависит.
-        if (onAdd != null) {
-            Box(
+        // «Обновить» стоит ЛЕВЕЕ «＋» и рядом с ним, а не в шапке (Л2, решение
+        // заказчика 2026-09-24). Довод тот же, по которому «＋» уехал из строки поиска:
+        // действие над списком живёт у списка, а не в раме окна, которая у всех вкладок
+        // общая.
+        //
+        // Сверка с телефонной книгой идёт и сама — при открытии вкладки. Кнопка нужна
+        // для другого случая: человек только что завёл контакт в телефоне и хочет
+        // увидеть его сейчас, а не при следующем заходе.
+        if (onAdd != null || onRefresh != null) {
+            ControlRow(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(TimaSpacing.about5),
             ) {
-                IconButton(glyph = "＋", onClick = onAdd, live = true)
+                if (onRefresh != null) {
+                    IconButton(
+                        glyph = "⟳",
+                        onClick = onRefresh,
+                        modifier = Modifier.testTag(BOOK_REFRESH_TAG),
+                    )
+                }
+                if (onAdd != null) IconButton(glyph = "＋", onClick = onAdd, live = true)
             }
         }
     }
@@ -370,6 +420,9 @@ private fun CallButtons(onVoice: () -> Unit, onVideo: (() -> Unit)?) {
         }
     }
 }
+
+/** Метка кнопки «обновить» — сверка с телефонной книгой. */
+const val BOOK_REFRESH_TAG: String = "book:refresh"
 
 /** Метка кнопки «позвонить» в строке книги. */
 const val BOOK_CALL_TAG: String = "book:call"

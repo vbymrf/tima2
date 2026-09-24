@@ -8,3 +8,6 @@ package io.tima.core.contacts
  * «контакты добавляют вручную», а не «разрешите доступ».
  */
 actual fun askContactsAccess(onResult: (Boolean) -> Unit) = onResult(false)
+
+/** ПК: телефонной книги нет, спрашивать нечего — кнопки на экране тоже нет. */
+actual fun contactsAccessWay(): ContactsAccessWay = ContactsAccessWay.None
