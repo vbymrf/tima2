@@ -40,7 +40,11 @@ import io.tima.core.ui.TimaShapes
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaZones
 import io.tima.core.ui.words
+import io.tima.core.words.BookWords
+import io.tima.domain.chat.BookEntry
+import io.tima.domain.chat.BookList
 import io.tima.domain.chat.ChatPerson
+import io.tima.domain.chat.PersonLook
 import io.tima.domain.chat.PersonField
 import io.tima.domain.chat.letter
 import io.tima.domain.chat.line
@@ -81,6 +85,10 @@ fun BookViewScreen(
      * назван человек, а имя у звонившего такое же, как в книге (заказчик 2026-09-19).
      */
     withSections: Boolean = true,
+    /** Открыть подокно списка (Л5). `null` — списков в «Виде» не будет. */
+    onOpenList: ((BookRoster) -> Unit)? = null,
+    /** Сколько человек в списке — числом справа от его имени. */
+    countIn: (BookRoster) -> Int = { 0 },
 ) {
     Column(
         modifier.fillMaxWidth().padding(vertical = TimaSpacing.about2),
@@ -137,12 +145,118 @@ fun BookViewScreen(
             Check(words.showOutsiders, words.showOutsidersAbout, view.showOutsiders) {
                 onChange(view.copy(showOutsiders = it))
             }
+
+            // ── ЧЕТЫРЕ СПИСКА — ВНИЗУ «ВИДА», А НЕ РАЗДЕЛАМИ (Л5) ───────────
+            //
+            // Раздел **группирует показ**, список **меняет поведение**: убирает из
+            // контактов, рвёт подписку на ленту, прячет переписки. Показать их
+            // одинаково значило бы предложить перепутать.
+            //
+            // Внизу, потому что открывают «Вид» не ради них: «Разделы» стоят первыми
+            // по той же причине — по тому, как часто за чем приходят.
+            if (onOpenList != null) {
+                SectionTitle(words.listsTitle)
+                for (roster in BookRoster.entries) {
+                    ListLine(
+                        onClick = { onOpenList(roster) },
+                        middle = {
+                            Column {
+                                Name(words.roster(roster))
+                                Tertiary(words.rosterAbout(roster), lineOne = true)
+                            }
+                        },
+                        right = {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Tertiary(words.peopleInList(countIn(roster)), lineOne = true)
+                                Tertiary("›", lineOne = true)
+                            }
+                        },
+                    )
+                }
+            }
         }
     }
 }
 
 /** Подокна «Вида» с образцом. */
 enum class ViewPage { Sections, Person }
+
+/** Имя списка в подокне «Вида». */
+fun BookWords.roster(roster: BookRoster): String = when (roster) {
+    BookRoster.Book -> listBook
+    BookRoster.Tima -> listTima
+    BookRoster.Removed -> listRemoved
+    BookRoster.Blocked -> listBlocked
+}
+
+fun BookWords.rosterAbout(roster: BookRoster): String = when (roster) {
+    BookRoster.Book -> listBookAbout
+    BookRoster.Tima -> listTimaAbout
+    BookRoster.Removed -> listRemovedAbout
+    BookRoster.Blocked -> listBlockedAbout
+}
+
+/**
+ * Подокно одного списка — Л5, Л6.
+ *
+ * «Книга» и «TIMa» только показывают: попасть туда — значит быть прочитанным с телефона
+ * или заведённым руками, и галочка этого не делает.
+ *
+ * «Убранные» и «Заблокированные» правятся **галочками, и правка парная**: в подокне
+ * видна вся книга, галка стоит у тех, кто в списке. Снятая возвращает в контакты,
+ * поставленная кладёт в список — и, если человек лежал в соседнем, забирает его оттуда:
+ * поле одно, и в двух списках сразу он быть не может.
+ *
+ * Показывается **вся книга**, а не только содержимое списка. Иначе «добавить» пришлось
+ * бы делать вторым входом — а именно за добавлением сюда и приходят.
+ */
+@Composable
+fun BookListPage(
+    roster: BookRoster,
+    people: List<BookEntry>,
+    modifier: Modifier = Modifier,
+    /** Кто сейчас в списке — по ключу книги. */
+    inList: Set<String> = emptySet(),
+    /** Переложить: `null` — список только показывается. */
+    onPick: ((String, Boolean) -> Unit)? = null,
+    personOf: (BookEntry) -> ChatPerson = { ChatPerson(name = it.name, phone = it.phone) },
+) {
+    val words = Tima.words.book
+    Column(
+        modifier.fillMaxWidth().padding(vertical = TimaSpacing.about2),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
+    ) {
+        val editable = roster.editable != null && onPick != null
+        if (editable) SectionTitle(words.listPick)
+        if (people.isEmpty()) {
+            Box(Modifier.fillMaxWidth().padding(TimaSpacing.about5), contentAlignment = Alignment.Center) {
+                Tertiary(words.listEmpty, lineOne = true)
+            }
+            return@Column
+        }
+        for (person in people) {
+            val who = personOf(person)
+            val on = person.id in inList
+            ListLine(
+                onClick = if (editable) ({ onPick!!(person.id, !on) }) else null,
+                left = { Avatar(letters = who.letter()) },
+                middle = {
+                    Column {
+                        Name(who.line(PersonLook(), PERSON_FIRST_LINE) ?: words.nameless)
+                        Tertiary(
+                            person.phone.ifBlank { who.nick?.let { "@$it" }.orEmpty() },
+                            lineOne = true,
+                        )
+                    }
+                },
+                right = if (editable) ({ CheckMark(on) }) else null,
+            )
+        }
+    }
+}
 
 /**
  * Подокно «Вид разделов»: образец сверху, ниже — папки/меню, ярлычки/имена, размер.
@@ -394,10 +508,19 @@ fun BookViewSheet(
     forPeople: Boolean = true,
     /** Есть ли у списка разделы; `false` — у журнала звонков. */
     withSections: Boolean = true,
+    /**
+     * Вся книга, включая убранных и заблокированных — для подокон списков (Л5). Пусто —
+     * списков в «Виде» не будет вовсе: пустые входы хуже отсутствующих.
+     */
+    everyone: List<BookEntry> = emptyList(),
+    /** Переложить человека в список (Л6). `null` — списки только показываются. */
+    onPickList: ((String, BookList) -> Unit)? = null,
+    personOf: (BookEntry) -> ChatPerson = { ChatPerson(name = it.name, phone = it.phone) },
 ) {
     val colors = Tima.colors
     val words = Tima.words.book
     var page by remember { mutableStateOf<ViewPage?>(null) }
+    var roster by remember { mutableStateOf<BookRoster?>(null) }
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -427,14 +550,18 @@ fun BookViewSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val current = page
-                if (current != null) IconButton(glyph = "‹", onClick = { page = null }, live = true)
+                val list = roster
+                if (current != null || list != null) {
+                    IconButton(glyph = "‹", onClick = { page = null; roster = null }, live = true)
+                }
                 Box(Modifier.weight(1f)) {
                     ProvidePlace(TextPlace.HEADERS) {
                         Name(
-                            when (current) {
-                                null -> words.view
-                                ViewPage.Sections -> words.sectionsLook
-                                ViewPage.Person -> words.showPersonAs
+                            when {
+                                list != null -> words.roster(list)
+                                current == ViewPage.Sections -> words.sectionsLook
+                                current == ViewPage.Person -> words.showPersonAs
+                                else -> words.view
                             },
                         )
                     }
@@ -444,8 +571,33 @@ fun BookViewSheet(
             // `weight(fill = false)`: короткое содержимое — панель по содержимому, длинное —
             // не выше экрана, а дальше едет.
             val scrolling = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())
-            when (page) {
-                null -> BookViewScreen(
+            val open = roster
+            when {
+                open != null -> {
+                    // Правится — показываем всю книгу: за добавлением сюда и приходят.
+                    // Только показывается — лишь содержимое списка.
+                    val editable = open.editable
+                    BookListPage(
+                        roster = open,
+                        people = if (editable != null && onPickList != null) {
+                            everyone.sortedWith(compareBy({ it.name == null }, { it.name ?: it.phone }))
+                        } else {
+                            everyone.filter { open.holds(it) }
+                                .sortedWith(compareBy({ it.name == null }, { it.name ?: it.phone }))
+                        },
+                        modifier = scrolling,
+                        inList = everyone.filter { open.holds(it) }.map { it.id }.toSet(),
+                        onPick = if (editable != null && onPickList != null) {
+                            { id, on -> onPickList(id, if (on) editable else BookList.Usual) }
+                        } else {
+                            null
+                        },
+                        personOf = personOf,
+                    )
+                }
+                page == ViewPage.Sections -> SectionsLookPage(view, onChange, scrolling, forPeople)
+                page == ViewPage.Person -> PersonLookPage(view, onChange, scrolling, forPeople)
+                else -> BookViewScreen(
                     view = view,
                     onChange = onChange,
                     onSections = onSections,
@@ -453,9 +605,9 @@ fun BookViewSheet(
                     forPeople = forPeople,
                     onOpen = { page = it },
                     withSections = withSections,
+                    onOpenList = if (everyone.isEmpty()) null else ({ roster = it }),
+                    countIn = { r -> everyone.count { r.holds(it) } },
                 )
-                ViewPage.Sections -> SectionsLookPage(view, onChange, scrolling, forPeople)
-                ViewPage.Person -> PersonLookPage(view, onChange, scrolling, forPeople)
             }
         }
     }

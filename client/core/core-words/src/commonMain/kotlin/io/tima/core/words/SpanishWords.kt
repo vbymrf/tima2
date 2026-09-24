@@ -768,6 +768,19 @@ object SpanishWords : Words {
         override val whatToShow = "Qué mostrar"
         override val showOutsiders = "Mostrar a quienes no están en TIMa"
         override val showOutsidersAbout = "la sección «Teléfono» al final de la lista"
+
+        override val listsTitle = "Listas"
+        override val listBook = "Agenda"
+        override val listBookAbout = "leídos de la agenda del teléfono"
+        override val listTima = "TIMa"
+        override val listTimaAbout = "añadidos por ti — por número o por apodo"
+        override val listRemoved = "Retirados"
+        override val listRemovedAbout = "fuera de contactos; los chats y llamadas siguen igual"
+        override val listBlocked = "Bloqueados"
+        override val listBlockedAbout = "fuera de contactos; chats ocultos, la llamada no suena"
+        override val listEmpty = "Aquí no hay nadie"
+        override val listPick = "La marca significa que la persona está en la lista"
+        override fun peopleInList(count: Int) = "$count " + if (count == 1) "persona" else "personas"
     }
 
     override val page = object : PageWords {

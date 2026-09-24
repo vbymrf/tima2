@@ -3,6 +3,7 @@ package io.tima.feature.chat
 import io.tima.core.words.RussianWords
 import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.BookKey
+import io.tima.domain.chat.BookList
 import io.tima.domain.chat.Section
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -37,6 +38,39 @@ class BookStateTest {
 
     private fun состояние(vararg люди: BookEntry, view: BookView = BookView()) =
         BookState(all = люди.toList(), sections = listOf(work), view = view)
+
+    @Test
+    fun четыре_списка_складываются_из_двух_признаков() {
+        val свой = поНомеру("+79991110000", nameOwn = "Свой").copy(manual = true)
+        val убран = поНомеру("+79992220000", nameOwn = "Убран").copy(list = BookList.Removed)
+        val заблокирован = поНомеру("+79993330000", nameOwn = "Блок")
+            .copy(manual = true, list = BookList.Blocked)
+        val state = BookState(everyone = listOf(борис, свой, убран, заблокирован))
+
+        // Списки не пересекаются: у строки одно поле `list` и один признак `manual`.
+        assertEquals(listOf(борис), state.inList(BookRoster.Book))
+        assertEquals(listOf(свой), state.inList(BookRoster.Tima))
+        assertEquals(listOf(убран), state.inList(BookRoster.Removed))
+        assertEquals(listOf(заблокирован), state.inList(BookRoster.Blocked))
+    }
+
+    @Test
+    fun книга_и_tima_галочкой_не_набираются() {
+        // Попасть в них — значит быть прочитанным с телефона или заведённым руками.
+        // Галочка этого не делает, и предлагать её значило бы обещать несуществующее.
+        assertEquals(null, BookRoster.Book.editable)
+        assertEquals(null, BookRoster.Tima.editable)
+        assertEquals(BookList.Removed, BookRoster.Removed.editable)
+        assertEquals(BookList.Blocked, BookRoster.Blocked.editable)
+    }
+
+    @Test
+    fun убранный_и_заблокированный_в_контакты_не_попадают() {
+        val убран = поНомеру("+79992220000", nameOwn = "Убран").copy(list = BookList.Removed)
+        assertTrue(!убран.inContacts, "убранный остался в контактах")
+        assertTrue(!убран.copy(list = BookList.Blocked).inContacts, "заблокированный остался в контактах")
+        assertTrue(борис.inContacts)
+    }
 
     @Test
     fun телефон_идёт_последним_разделом() {

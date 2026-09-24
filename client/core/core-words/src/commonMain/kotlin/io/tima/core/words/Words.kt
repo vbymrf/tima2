@@ -490,6 +490,31 @@ interface BookWords {
     val whatToShow: String
     val showOutsiders: String
     val showOutsidersAbout: String
+
+    // ── Четыре списка книги (Л5) ────────────────────────────────────────────
+    //
+    // Внизу «Вида», а не разделами в самом списке: разделы **группируют показ**, а
+    // списки **меняют поведение** — убирают из контактов, рвут дружбу, прячут переписки.
+    // Одинаковый вид у двух разных вещей и есть самый дорогой способ их перепутать.
+
+    val listsTitle: String
+    val listBook: String
+    val listBookAbout: String
+    val listTima: String
+    val listTimaAbout: String
+    val listRemoved: String
+    val listRemovedAbout: String
+    val listBlocked: String
+    val listBlockedAbout: String
+
+    /** Пусто в подокне списка. Не ошибка: «Заблокированных» у большинства нет вовсе. */
+    val listEmpty: String
+
+    /** Подсказка над галками в подокнах «Убранных» и «Заблокированных» (Л6). */
+    val listPick: String
+
+    /** Сколько человек в списке — строкой под его именем. */
+    fun peopleInList(count: Int): String
 }
 
 /** Страница человека: принесённые записи и обсуждения под ними. */
@@ -2319,6 +2344,20 @@ object RussianWords : Words {
         override val whatToShow = "Что показывать"
         override val showOutsiders = "Показывать тех, кого нет в TIMa"
         override val showOutsidersAbout = "раздел «Телефон» в конце списка"
+
+        override val listsTitle = "Списки"
+        override val listBook = "Книга"
+        override val listBookAbout = "прочитаны из книги телефона"
+        override val listTima = "TIMa"
+        override val listTimaAbout = "добавлены вами — по номеру или по нику"
+        override val listRemoved = "Убранные"
+        override val listRemovedAbout = "не в контактах; переписка и звонки как обычно"
+        override val listBlocked = "Заблокированные"
+        override val listBlockedAbout = "не в контактах; переписки скрыты, звонок молчит"
+        override val listEmpty = "Здесь пусто"
+        override val listPick = "Галочка — человек в списке"
+        // Счёт людей тот же, что у разделов: правило склонения одно на словарь.
+        override fun peopleInList(count: Int) = peopleInSection(count)
     }
 
     override val page = object : PageWords {

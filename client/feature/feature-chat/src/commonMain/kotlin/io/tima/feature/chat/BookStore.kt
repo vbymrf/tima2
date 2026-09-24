@@ -7,6 +7,8 @@ import io.tima.domain.chat.letter
 import io.tima.domain.chat.line
 import io.tima.domain.chat.Book
 import io.tima.domain.chat.BookEntry
+import io.tima.domain.chat.BookList
+import io.tima.domain.chat.RemoveContact
 import io.tima.domain.chat.Section
 import io.tima.domain.chat.common
 import io.tima.domain.chat.ObserveBook
@@ -40,6 +42,14 @@ class BookStore(
      * и это лучше, чем заглушка, которая делает вид.
      */
     private val edit: Book? = null,
+    /**
+     * Перекладывание между списками — Л5, Л6. `null` — подокно списков только показывает.
+     *
+     * Через [RemoveContact], а не через порт книги: перекладывание обязано снимать и
+     * ставить подписку на ленту (Л7), и разводить эти два действия по разным местам
+     * значит однажды сделать одно без другого.
+     */
+    private val lists: RemoveContact? = null,
 ) {
     private val _state = MutableStateFlow(BookState())
     val state: StateFlow<BookState> = _state.asStateFlow()
@@ -47,6 +57,9 @@ class BookStore(
     init {
         scope.launch {
             book.list().collect { people -> _state.value = _state.value.copy(all = people) }
+        }
+        scope.launch {
+            book.everyone().collect { people -> _state.value = _state.value.copy(everyone = people) }
         }
         scope.launch {
             book.sections().collect { list ->
@@ -152,10 +165,71 @@ class BookStore(
         }
     }
 
+    /**
+     * Переложить человека в список — Л6.
+     *
+     * Берётся строка из `everyone`, а не из `all`: в подокне «Убранных» показаны и те,
+     * кого в контактах уже нет, и именно их чаще всего возвращают обратно.
+     */
+    fun movedTo(id: String, list: BookList) {
+        val entry = _state.value.everyone.firstOrNull { it.id == id } ?: return
+        scope.launch {
+            when (list) {
+                BookList.Usual -> lists?.restore(entry)
+                BookList.Removed -> lists?.remove(entry)
+                BookList.Blocked -> lists?.block(entry)
+            }
+        }
+    }
+
     fun changedView(view: BookView) {
         _state.value = _state.value.copy(view = view)
         scope.launch { view.save(settings) }
     }
+}
+
+/**
+ * Четыре списка книги — Л3, Л5.
+ *
+ * Не четыре поля и не четыре таблицы: два признака строки дают все четыре сочетания.
+ * «Книга» и «TIMa» — откуда человек взялся, «Убранные» и «Заблокированные» — что с ним
+ * сделали.
+ *
+ * **Разделами они не показываются.** Раздел группирует показ, список меняет поведение;
+ * одинаковый вид у этих двух вещей и есть самый дорогой способ их перепутать.
+ */
+enum class BookRoster {
+    /** Прочитан из телефонной книги и остаётся в контактах. */
+    Book,
+
+    /** Заведён человеком — по номеру или по нику — и остаётся в контактах. */
+    Tima,
+
+    Removed,
+    Blocked,
+    ;
+
+    /** В этом ли списке строка. */
+    fun holds(entry: BookEntry): Boolean = when (this) {
+        Book -> entry.inContacts && !entry.manual
+        Tima -> entry.inContacts && entry.manual
+        Removed -> entry.list == BookList.Removed
+        Blocked -> entry.list == BookList.Blocked
+    }
+
+    /**
+     * Список, в который кладёт галочка; `null` — список правкой не набирается.
+     *
+     * «Книга» и «TIMa» не набираются: попасть в них — значит быть прочитанным с телефона
+     * или заведённым руками, и галочка этого не делает. Поставить её там означало бы
+     * обещать действие, которого нет.
+     */
+    val editable: BookList?
+        get() = when (this) {
+            Book, Tima -> null
+            Removed -> BookList.Removed
+            Blocked -> BookList.Blocked
+        }
 }
 
 /** Как показывать список — то, что настраивается в подокне «Вид». */
@@ -307,6 +381,14 @@ data class BookGroup(
 
 data class BookState(
     val all: List<BookEntry> = emptyList(),
+    /**
+     * Вся книга, включая убранных и заблокированных — её показывают подокна списков (Л5).
+     *
+     * Рядом с [all], а не вместо него: список контактов собирается **вычитанием** и
+     * отбирается в базе (Л4). Фильтровать здесь значило бы завести второе правило рядом
+     * с первым — и однажды они разойдутся.
+     */
+    val everyone: List<BookEntry> = emptyList(),
     val sections: List<Section> = emptyList(),
     /** Имя и значок «Общего», если человек их менял; `null` — как в словаре. */
     val common: Section? = null,
@@ -416,6 +498,16 @@ data class BookState(
     val tiles: Boolean get() = view.folders && view.icons
 
     val notFoundNothing: Boolean get() = all.isNotEmpty() && visible.isEmpty()
+
+    /**
+     * Кто в списке — Л5.
+     *
+     * Складывается из двух признаков, а не хранится: `manual` говорит, откуда человек
+     * взялся, `list` — что с ним сделали.
+     */
+    fun inList(list: BookRoster): List<BookEntry> = everyone.filter { list.holds(it) }.sortedWith(
+        compareBy({ it.name == null }, { it.name ?: it.phone }),
+    )
 
     /** Разрешения нет — вкладка не пуста, ей есть что предложить нажать. */
     val needPermission: Boolean get() = sync == SyncStep.NeedPermission

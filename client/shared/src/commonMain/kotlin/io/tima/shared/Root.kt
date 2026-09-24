@@ -109,6 +109,7 @@ import io.tima.core.ui.TabButton
 import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.PageStep
 import io.tima.domain.chat.AddContact
+import io.tima.domain.chat.RemoveContact
 import io.tima.domain.chat.SyncBook
 import io.tima.feature.chat.CallsScreen
 import io.tima.feature.chat.CallsState
@@ -911,6 +912,7 @@ private fun App(
             sync = SyncBook(platformPhoneBook(), environment.bookStorage, network.discovery),
             scope = scope,
             edit = environment.bookStorage,
+            lists = RemoveContact(environment.bookStorage, network.friends),
         )
     }
     // Журнал звонков (Ж2): поток из базы плюс поход на сервер при открытии вкладки.
@@ -1383,6 +1385,11 @@ private fun App(
             // У журнала звонков разделов нет: предлагать их там значило бы обещать
             // несуществующее.
             withSections = phoneTab != WindowTab.Calls,
+            // Списки — только у контактов: в журнале звонков книги нет, и вход в неё
+            // оттуда вёл бы в чужое окно.
+            everyone = if (phoneTab == WindowTab.Calls) emptyList() else bookState.everyone,
+            onPickList = book::movedTo,
+            personOf = personOfBook,
         )
         return
     }
