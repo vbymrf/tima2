@@ -60,16 +60,50 @@ class InboxTest {
         assertEquals(null, store.body("chat-1", 5), "разбирать до записи нельзя")
     }
 
+    // ── придержанные переписки (Л9) ─────────────────────────────────────────
+
+    @Test
+    fun придержанная_переписка_не_разбирается_и_не_держит_очередь() {
+        // Конверт от заблокированного пришёл ПЕРВЫМ. Очередь разбирается с головы, и
+        // без отбора он останавливал бы разбор всего, что пришло после него.
+        inbox.receive("chat-блок", 1, envelope)
+        inbox.receive("chat-1", 2, envelope)
+
+        val after = inbox.openNext(held = listOf("chat-блок"), open = { OpenOutcome.Opened(body, "u-автор") })
+        assertEquals(2L, after?.messageId, "разобрался не тот: придержанный обошли неверно")
+
+        // Придержанный остаётся в очереди: он не «нечитаемый» и не потерян — он ждёт.
+        val блок = store.byKey("chat-блок", 1)
+        assertEquals(IncomingState.RECEIVED, блок?.state)
+        assertNull(store.body("chat-блок", 1), "конверт заблокированного открыли")
+        assertNull(
+            inbox.openNext(held = listOf("chat-блок"), open = { OpenOutcome.Opened(body, "u-автор") }),
+            "пока держим — разбирать нечего",
+        )
+    }
+
+    @Test
+    fun разблокировали_и_придержанное_разобралось_само() {
+        inbox.receive("chat-блок", 1, envelope)
+        inbox.openNext(held = listOf("chat-блок"), open = { OpenOutcome.Opened(body, "u-автор") })
+
+        // Никакого особого состояния и никакого «повтора нечитаемого»: обычная очередь,
+        // из которой убрали отбор.
+        val after = inbox.openNext(open = { OpenOutcome.Opened(body, "u-автор") })
+        assertEquals(IncomingState.STORED, after?.state)
+        assertTrue(body.contentEquals(store.body("chat-блок", 1) ?: ByteArray(0)))
+    }
+
     // ── разбор ──────────────────────────────────────────────────────────────
 
     @Test
     fun разобранное_становится_сохранённым() {
         accept()
-        val after = inbox.openNext({ OpenOutcome.Opened(body, "u-автор") })
+        val after = inbox.openNext(open = { OpenOutcome.Opened(body, "u-автор") })
 
         assertEquals(IncomingState.STORED, after?.state)
         assertTrue(body.contentEquals(store.body("chat-1", 5) ?: ByteArray(0)))
-        assertNull(inbox.openNext({ OpenOutcome.Opened(body, "u-автор") }), "разбирать больше нечего")
+        assertNull(inbox.openNext(open = { OpenOutcome.Opened(body, "u-автор") }), "разбирать больше нечего")
     }
 
     @Test
@@ -78,7 +112,7 @@ class InboxTest {
         // обёртка для этого устройства ещё не пришла, групповой ключ ротировался,
         // история опередила ключи.
         accept()
-        val after = inbox.openNext({ OpenOutcome.NoKey("обёртки для устройства нет") })
+        val after = inbox.openNext(open = { OpenOutcome.NoKey("обёртки для устройства нет") })
 
         assertEquals(IncomingState.UNDECRYPTABLE, after?.state)
         assertEquals(1, after?.attempts)
@@ -90,12 +124,12 @@ class InboxTest {
     @Test
     fun появился_ключ_и_нечитаемое_разбирается_снова() {
         accept()
-        inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
+        inbox.openNext(open = { OpenOutcome.NoKey("нет ключа") })
 
         assertEquals(1, inbox.retryUndecryptable(), "вернуться должно одно")
         assertEquals(IncomingState.RECEIVED, store.byKey("chat-1", 5)?.state)
 
-        val after = inbox.openNext({ OpenOutcome.Opened(body, "u-автор") })
+        val after = inbox.openNext(open = { OpenOutcome.Opened(body, "u-автор") })
         assertEquals(IncomingState.STORED, after?.state)
         assertTrue(body.contentEquals(store.body("chat-1", 5)!!))
     }
@@ -105,7 +139,7 @@ class InboxTest {
         // Молчаливое исчезновение — худший вариант: подмена становится незаметной.
         // Человек должен видеть, что сообщение было и что оно не прошло проверку.
         accept()
-        val after = inbox.openNext({ OpenOutcome.Rejected("подпись не сошлась") })
+        val after = inbox.openNext(open = { OpenOutcome.Rejected("подпись не сошлась") })
 
         assertEquals(IncomingState.UNDECRYPTABLE, after?.state)
         assertEquals("подпись не сошлась", after?.undecryptableReason)
@@ -127,7 +161,7 @@ class InboxTest {
             }
         }
         assertEquals(IncomingState.RECEIVED, store.byKey("chat-1", 5)?.state)
-        assertNotNull(inbox.openNext({ OpenOutcome.Opened(body, "u-автор") }), "разбирается снова")
+        assertNotNull(inbox.openNext(open = { OpenOutcome.Opened(body, "u-автор") }), "разбирается снова")
     }
 
     @Test
@@ -136,10 +170,10 @@ class InboxTest {
         // как «не удаётся прочитать», а не молчание.
         accept()
         repeat(3) {
-            inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
+            inbox.openNext(open = { OpenOutcome.NoKey("нет ключа") })
             inbox.retryUndecryptable()
         }
-        inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
+        inbox.openNext(open = { OpenOutcome.NoKey("нет ключа") })
         assertEquals(4, store.byKey("chat-1", 5)?.attempts)
     }
 
@@ -151,7 +185,7 @@ class InboxTest {
         // Пока не разобрано — читать нечего, и это ошибка вызывающего.
         assertFailsWith<IllegalArgumentException> { inbox.markRead("chat-1", 5) }
 
-        inbox.openNext({ OpenOutcome.Opened(body, "u-автор") })
+        inbox.openNext(open = { OpenOutcome.Opened(body, "u-автор") })
         inbox.markRead("chat-1", 5)
 
         assertEquals(IncomingState.READ, store.byKey("chat-1", 5)?.state)

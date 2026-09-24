@@ -65,7 +65,7 @@ class SqlInboxStoreTest {
         // Она пишется отдельным столбцом, а не подмешивается в тело: тело шифртекст, и
         // текстовая пометка внутри стала бы байтами, которых никто не расшифрует.
         inbox.receive("chat-1", 42, envelope)
-        inbox.openNext({ OpenOutcome.NoKey("обёртки для устройства нет") })
+        inbox.openNext(open = { OpenOutcome.NoKey("обёртки для устройства нет") })
 
         val e = inboxStore.byKey("chat-1", 42)!!
         assertEquals(IncomingState.UNDECRYPTABLE, e.state)
@@ -76,12 +76,12 @@ class SqlInboxStoreTest {
     @Test
     fun появился_ключ_и_разбор_повторяется() {
         inbox.receive("chat-1", 42, envelope)
-        inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
+        inbox.openNext(open = { OpenOutcome.NoKey("нет ключа") })
 
         assertEquals(1, inbox.retryUndecryptable())
         assertEquals(IncomingState.RECEIVED, inboxStore.byKey("chat-1", 42)?.state)
 
-        inbox.openNext({ OpenOutcome.Opened(body, "u-автор") })
+        inbox.openNext(open = { OpenOutcome.Opened(body, "u-автор") })
         assertEquals(IncomingState.STORED, inboxStore.byKey("chat-1", 42)?.state)
         // Тело проверяется В БАЗЕ, а не в тестовой переменной: раньше запись содержимого
         // была лямбдой, и все вызывающие передавали пустую — состояние STORED означало
@@ -104,7 +104,7 @@ class SqlInboxStoreTest {
         // Входящее в состоянии UNDECRYPTABLE имеет state = 1 — то же число, что SEALED
         // у исходящего. Без direction очередь забрала бы его на отправку.
         inbox.receive("chat-1", 42, envelope)
-        inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
+        inbox.openNext(open = { OpenOutcome.NoKey("нет ключа") })
         assertEquals(1L, IncomingState.UNDECRYPTABLE.ordinal.toLong(), "предпосылка теста")
         assertEquals(1L, OutboxState.SEALED.ordinal.toLong(), "предпосылка теста")
 
@@ -137,7 +137,7 @@ class SqlInboxStoreTest {
         outbox.sealNext("chat-1", 1L) { byteArrayOf(1) }
         outbox.claimForSend()
         outbox.onOutcome("d-1", SendOutcome.Accepted(serverMessageId = 100))
-        inbox.openNext({ OpenOutcome.Opened(body, "u-автор") })
+        inbox.openNext(open = { OpenOutcome.Opened(body, "u-автор") })
 
         assertEquals(OutboxState.SENT, outboxStore.byDedupKey("d-1")?.state)
         assertEquals(IncomingState.STORED, inboxStore.byKey("chat-1", 42)?.state)

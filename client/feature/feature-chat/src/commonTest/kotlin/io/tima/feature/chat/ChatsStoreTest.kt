@@ -19,12 +19,14 @@ import kotlin.test.assertTrue
 class ChatsStoreTest {
 
     private val stream = MutableStateFlow(emptyList<ChatSummary>())
+    private val blocked = MutableStateFlow(emptySet<String>())
     private var ordered: Int = -1
 
     private fun store(scope: kotlinx.coroutines.CoroutineScope, pageSize: Int = 50) = ChatsStore(
         observe = ObserveChats(ChatsFeed { limit -> ordered = limit; stream }),
         scope = scope,
         pageSize = pageSize,
+        blocked = blocked,
     )
 
     /**
@@ -66,11 +68,40 @@ class ChatsStoreTest {
         assertEquals(7, ordered, "страницу просит Store, а не запрос сам по себе")
     }
 
-    private fun line(chatId: String) = ChatSummary(
+    // ── блокировка прячет переписку, а не отменяет её (Л8) ──────────────────
+
+    @Test
+    fun переписка_заблокированного_не_видна_в_окне_телефон() = runTest {
+        val store = store(backgroundScope)
+        stream.value = listOf(line("chat-1", peer = "u-1"), line("chat-2", peer = "u-2"))
+        store.state.first { it.chats.size == 2 }
+
+        blocked.value = setOf("u-2")
+        val after = store.state.first { it.blocked.isNotEmpty() }
+
+        assertEquals(listOf("chat-1"), after.personal.map { it.chatId }, "заблокированный виден в окне")
+        // Строка не пропала — она скрыта. Переписка живёт, и через «Социум» её откроют.
+        assertEquals(2, after.chats.size, "переписка удалена вместо того, чтобы быть скрытой")
+    }
+
+    @Test
+    fun разблокировали_и_переписка_вернулась_сама() = runTest {
+        val store = store(backgroundScope)
+        blocked.value = setOf("u-2")
+        stream.value = listOf(line("chat-2", peer = "u-2"))
+        store.state.first { it.chats.size == 1 && it.blocked.isNotEmpty() }
+        assertTrue(store.state.value.personal.isEmpty())
+
+        // Потоком, а не разовым списком: без перезахода в окно.
+        blocked.value = emptySet()
+        assertEquals(1, store.state.first { it.blocked.isEmpty() }.personal.size)
+    }
+
+    private fun line(chatId: String, peer: String = "u-1") = ChatSummary(
         chatId = chatId,
         title = "Аня",
         kind = ChatKind.Personal,
-        peerId = "u-1",
+        peerId = peer,
         preview = "привет",
         lastOutgoing = false,
         lastDisplay = MessageDisplay.RECEIVED,

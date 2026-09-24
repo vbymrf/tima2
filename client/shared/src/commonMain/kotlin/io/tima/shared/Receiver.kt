@@ -9,6 +9,7 @@ import io.tima.core.network.GroupFrame
 import io.tima.core.network.GroupsOverHttp
 import io.tima.core.network.StreamOutcome
 import io.tima.core.encryption.DeviceIdentity
+import io.tima.core.encryption.PersonalChatIdsOverKodium
 import io.tima.core.encryption.PersonalMessages
 import io.tima.core.network.DeviceKeysResult
 import io.tima.core.network.EventStream
@@ -19,6 +20,7 @@ import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.ChatKind
 import io.tima.domain.chat.SyncGroupChats
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 
 /**
  * Приём по живому каналу.
@@ -85,6 +87,21 @@ class Receiver(
     private val onOutdated: () -> Unit = {},
 ) {
 
+    /**
+     * Кого человек заблокировал — по `user_id` (Л8, Л9, Л17).
+     *
+     * Спрашивается у книги на каждом событии, а не держится в поле: блокировка меняется
+     * человеком, и устаревший список означал бы, что разблокированный молчит до
+     * перезапуска. Запрос местный, к маленькой таблице, а события приходят со скоростью
+     * человека, а не сети.
+     */
+    private suspend fun blocked(): Set<String> =
+        runCatching { environment.book.blocked().first() }.getOrDefault(emptySet())
+
+    /** Переписки заблокированных: их конверты записываются, но не открываются (Л9). */
+    private suspend fun heldChats(): List<String> = blocked()
+        .map { PersonalChatIdsOverKodium.personalChatId(session.userId, it) }
+
     /** Что случилось с каналом в последний раз. Для диагностики, не для решений. */
     var lastOutcome: String? = null
         private set
@@ -122,8 +139,22 @@ class Receiver(
      */
     private suspend fun aboutCall(decision: EventStreamProtocol.Decision) {
         when (decision) {
+            // ── ЗВОНОК ОТ ЗАБЛОКИРОВАННОГО МОЛЧИТ (Л17) ─────────────────────
+            //
+            // Молчит **телефон**, а не сервер: вызов доходит, строка в журнале звонков
+            // остаётся. Блокировка прячет, а не отменяет — то же правило, по которому
+            // сохраняется переписка. Не ответив, мы оставляем звонок в пропущенных, и
+            // разблокировав, человек увидит, что ему звонили.
+            //
+            // Отдельного слова «вас заблокировали» звонящему нет и заводить его не надо:
+            // автоответ в переписке (Л14) уже делает это, а второе такое место было бы
+            // вторым оракулом для рассыльщика.
             is EventStreamProtocol.Decision.CallIncoming ->
-                onCall(decision.callId, decision.from, decision.kind)
+                if (decision.from in blocked()) {
+                    Journal.note(LogCode.NET_CHANNEL, "звонок от заблокированного — не звоним", "звонок" to decision.callId)
+                } else {
+                    onCall(decision.callId, decision.from, decision.kind)
+                }
             // ── ПОДСКАЗКА РАЗРЕШАЕТСЯ РУЧКОЙ ────────────────────────────────
             //
             // Кадр вызова больше не несёт состояния — несёт идентификатор. Спросить
@@ -143,6 +174,8 @@ class Receiver(
                         Journal.note(LogCode.NET_CHANNEL, "подсказка о звонке: сервер не ответил", "звонок" to decision.callId)
                     !call.ringing ->
                         Journal.note(LogCode.NET_CHANNEL, "подсказка о звонке опоздала", "состояние" to call.state)
+                    call.initiatorId in blocked() ->
+                        Journal.note(LogCode.NET_CHANNEL, "звонок от заблокированного — не звоним", "звонок" to decision.callId)
                     else ->
                         onCall(decision.callId, call.initiatorId, if (call.video) "video" else "audio")
                 }
@@ -378,10 +411,27 @@ class Receiver(
 
         environment.incoming.receive(chatId, messageId, envelope, sentAtMs = sender?.createdAtMs ?: 0)
 
+        // ── ОТ ЗАБЛОКИРОВАННОГО: ЗАПИСАТЬ, НО НЕ ОТКРЫВАТЬ (Л9) ─────────────
+        //
+        // Кто прислал, известно БЕЗ расшифровки — из открытой части конверта. Этого
+        // довольно, чтобы решить, разбирать ли сейчас.
+        //
+        // А вот **не записать нельзя**: курсор уже шагнул, подтверждение уйдёт сразу
+        // после нас, и через срок хранения сервер событие сотрёт. Человек зашёл бы в чат
+        // через «Социум» — и там пусто, и вернуть неоткуда.
+        //
+        // Конверт ждёт в очереди и разберётся сам, как только блокировку снимут: это
+        // обычное `RECEIVED`, а не особое состояние.
+        val held = heldChats()
+        if (chatId in held) {
+            lastOutcome = "конверт от заблокированного записан и придержан"
+            return
+        }
+
         // Разбор — уже после записи. Упадёт — сообщение останется на повтор.
         val key = sender?.let { captionKey(it.userId, it.deviceId) }
 
-        environment.incoming.openNext { entry ->
+        environment.incoming.openNext(held) { entry ->
             when {
                 sender == null -> OpenOutcome.Rejected("конверт не разбирается")
                 key == null -> OpenOutcome.NoKey("ключ подписи отправителя не получен")

@@ -33,8 +33,8 @@ class InMemoryInboxStore : InboxStore {
 
     override fun byKey(chatId: String, messageId: Long): IncomingEntry? = rows[key(chatId, messageId)]
 
-    override fun nextReceived(): IncomingEntry? =
-        rows.values.firstOrNull { it.state == IncomingState.RECEIVED }
+    override fun nextReceived(held: Collection<String>): IncomingEntry? =
+        rows.values.firstOrNull { it.state == IncomingState.RECEIVED && it.chatId !in held }
 
     override fun undecryptable(): List<IncomingEntry> =
         rows.values.filter { it.state == IncomingState.UNDECRYPTABLE }

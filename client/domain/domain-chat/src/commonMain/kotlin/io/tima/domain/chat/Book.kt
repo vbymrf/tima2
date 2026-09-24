@@ -2,6 +2,7 @@ package io.tima.domain.chat
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 /**
  * Книга контактов — ПЛАН-КОНТАКТОВ.md, Д2.
@@ -28,6 +29,20 @@ class ObserveBook(private val book: Book) {
      * в нём нет вовсе. Подокну списков нужны именно они.
      */
     fun everyone(): Flow<List<BookEntry>> = book.everyone()
+
+    /**
+     * Кого человек заблокировал — по `user_id` (Л8, Л9, Л17).
+     *
+     * Одним местом на всё приложение: скрывает переписки, не даёт открывать конверты и
+     * глушит звонок. Три раза вывести «кто заблокирован» из книги значит однажды вывести
+     * это по-разному.
+     *
+     * Строки без `user_id` отбрасываются: блокировка — про человека в TIMa, а у
+     * непроверенного номера ни переписки, ни звонка внутри приложения нет.
+     */
+    fun blocked(): Flow<Set<String>> = book.everyone().map { rows ->
+        rows.filter { it.list == BookList.Blocked }.mapNotNull { it.userId }.toSet()
+    }
 
     /** Разделы, включая пустые: раздел существует до того, как в него кого-то положили. */
     fun sections(): Flow<List<Section>> = book.sections()

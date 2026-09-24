@@ -4,7 +4,9 @@ import io.tima.domain.chat.ChatKind
 import io.tima.domain.chat.ChatSummary
 import io.tima.domain.chat.ObserveChats
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
@@ -22,6 +24,13 @@ class ChatsStore(
     observe: ObserveChats,
     scope: CoroutineScope,
     pageSize: Int = ObserveChats.DEFAULT_PAGE,
+    /**
+     * Кого человек заблокировал — их переписки в окне «Телефон» не показываются (Л8).
+     *
+     * Потоком, а не разовым списком: разблокировали — переписка обязана вернуться сама,
+     * без перезахода в окно.
+     */
+    blocked: Flow<Set<String>> = flowOf(emptySet()),
 ) {
 
     private val _state = MutableStateFlow(ChatsState())
@@ -29,7 +38,10 @@ class ChatsStore(
 
     init {
         observe.list(pageSize)
-            .onEach { list -> _state.value = ChatsState(chats = list, read = true) }
+            .onEach { list -> _state.value = _state.value.copy(chats = list, read = true) }
+            .launchIn(scope)
+        blocked
+            .onEach { ids -> _state.value = _state.value.copy(blocked = ids) }
             .launchIn(scope)
     }
 }
@@ -45,6 +57,14 @@ data class ChatsState(
      * список в этом состоянии не означает «переписок нет».
      */
     val read: Boolean = false,
+    /**
+     * Заблокированные — по `user_id` собеседника (Л8).
+     *
+     * Отбор здесь, а не в запросе: блокировка живёт в книге контактов, а не в таблице
+     * переписок, и join между ними означал бы, что список переписок знает про книгу.
+     * Скрытых переписок единицы, а список и так уже в памяти.
+     */
+    val blocked: Set<String> = emptySet(),
 ) {
     /**
      * Личные переписки — то, что показывает окно 1 «Телефон».
@@ -55,7 +75,8 @@ data class ChatsState(
      * этого ряда существуют одни группы, но условие написано по роду, чтобы следующий
      * род не пришлось разыскивать по окнам заново.
      */
-    val personal: List<ChatSummary> get() = chats.filter { it.kind == ChatKind.Personal }
+    val personal: List<ChatSummary>
+        get() = chats.filter { it.kind == ChatKind.Personal && it.peerId?.let(blocked::contains) != true }
 
     /** Групповые переписки — вкладка «Группы» окна 5. */
     val groups: List<ChatSummary> get() = chats.filter { it.kind == ChatKind.Group }

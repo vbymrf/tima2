@@ -36,7 +36,7 @@ class InboxRestartTest {
         Inbox(store, nowMs = { 1_000 }).receive("chat-1", 5, envelope)
 
         val after = afterRestart()
-        val parsed = after.openNext({ OpenOutcome.Opened(body, "u-автор") })
+        val parsed = after.openNext(open = { OpenOutcome.Opened(body, "u-автор") })
 
         assertNotNull(parsed)
         assertEquals(IncomingState.STORED, parsed.state)
@@ -59,7 +59,7 @@ class InboxRestartTest {
         // И после перезапуска разбирается заново, без потерь.
         assertEquals(
             IncomingState.STORED,
-            afterRestart().openNext({ OpenOutcome.Opened(body, "u-автор") })?.state,
+            afterRestart().openNext(open = { OpenOutcome.Opened(body, "u-автор") })?.state,
         )
     }
 
@@ -69,11 +69,11 @@ class InboxRestartTest {
         // разбор при каждом запуске значит жечь батарею впустую.
         val inbox = Inbox(store, nowMs = { 1_000 })
         inbox.receive("chat-1", 5, envelope)
-        inbox.openNext({ OpenOutcome.NoKey("ключ эпохи не пришёл") })
+        inbox.openNext(open = { OpenOutcome.NoKey("ключ эпохи не пришёл") })
 
         val after = afterRestart()
 
-        assertNull(after.openNext({ OpenOutcome.Opened(body, "u-автор") }), "разбирать нечего")
+        assertNull(after.openNext(open = { OpenOutcome.Opened(body, "u-автор") }), "разбирать нечего")
         val entry = store.byKey("chat-1", 5)
         assertEquals(IncomingState.UNDECRYPTABLE, entry?.state)
         assertEquals("ключ эпохи не пришёл", entry?.undecryptableReason, "причина не теряется")
@@ -83,7 +83,7 @@ class InboxRestartTest {
         assertEquals(1, after.retryUndecryptable())
         assertEquals(
             IncomingState.STORED,
-            after.openNext({ OpenOutcome.Opened(body, "u-автор") })?.state,
+            after.openNext(open = { OpenOutcome.Opened(body, "u-автор") })?.state,
         )
     }
 
@@ -92,13 +92,13 @@ class InboxRestartTest {
         val inbox = Inbox(store, nowMs = { 1_000 })
         inbox.receive("chat-1", 5, envelope)
         inbox.receive("chat-1", 6, envelope)
-        inbox.openNext({ OpenOutcome.Opened(body, "u-автор") })
-        inbox.openNext({ OpenOutcome.Opened(body, "u-автор") })
+        inbox.openNext(open = { OpenOutcome.Opened(body, "u-автор") })
+        inbox.openNext(open = { OpenOutcome.Opened(body, "u-автор") })
         inbox.markRead("chat-1", 5)
 
         val after = afterRestart()
 
-        assertNull(after.openNext({ OpenOutcome.Opened(body, "u-автор") }), "заново разбирать нечего")
+        assertNull(after.openNext(open = { OpenOutcome.Opened(body, "u-автор") }), "заново разбирать нечего")
         assertEquals(IncomingState.READ, store.byKey("chat-1", 5)?.state)
         assertEquals(IncomingState.STORED, store.byKey("chat-1", 6)?.state)
     }
@@ -130,7 +130,7 @@ class InboxRestartTest {
         val inbox = Inbox(store, nowMs = { 1_000 })
         inbox.receive("chat-1", 5, envelope)
         inbox.receive("chat-1", 6, envelope)
-        inbox.openNext({ OpenOutcome.NoKey("нет ключа") })
+        inbox.openNext(open = { OpenOutcome.NoKey("нет ключа") })
 
         // Всё незавершённое остаётся видимым человеку и после перезапуска.
         assertEquals(2, afterRestart().pending().size)

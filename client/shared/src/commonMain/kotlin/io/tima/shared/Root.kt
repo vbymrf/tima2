@@ -718,7 +718,9 @@ private fun App(
     val network = assembled.network
     val session = assembled.session
     val scope = rememberCoroutineScope()
-    val list = remember { ChatsStore(environment.chats, scope) }
+    // Заблокированные не показываются в окне «Телефон» и не считаются (Л8). Потоком,
+    // а не разовым списком: разблокировали — переписка возвращается сама.
+    val list = remember { ChatsStore(environment.chats, scope, blocked = environment.book.blocked()) }
     var where by remember { mutableStateOf<Where>(Where.Nothing) }
     // Куда человек ходил — второй вопрос правила журнала («что он делал»). Пишется смена,
     // а не каждая перерисовка: журнал должен читаться, а не разбухать.

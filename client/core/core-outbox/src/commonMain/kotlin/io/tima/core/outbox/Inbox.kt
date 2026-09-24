@@ -134,8 +134,13 @@ interface InboxStore {
 
     fun byKey(chatId: String, messageId: Long): IncomingEntry?
 
-    /** Следующее, что нужно разобрать: [IncomingState.RECEIVED]. */
-    fun nextReceived(): IncomingEntry?
+    /**
+     * Следующее, что нужно разобрать: [IncomingState.RECEIVED].
+     *
+     * @param held переписки, которые сейчас разбирать не надо — заблокированные (Л9).
+     *   Их конверты остаются в очереди и разберутся, как только блокировку снимут.
+     */
+    fun nextReceived(held: Collection<String> = emptyList()): IncomingEntry?
 
     /** Всё, что не расшифровалось: для повтора, когда появился ключ. */
     fun undecryptable(): List<IncomingEntry>
@@ -224,8 +229,8 @@ class Inbox(
      * Содержимое записывается через [InboxStore.storeBody] и **до** смены состояния: если
      * запись упала, сообщение останется `RECEIVED` и будет разобрано снова.
      */
-    fun openNext(open: (IncomingEntry) -> OpenOutcome): IncomingEntry? {
-        val entry = store.nextReceived() ?: return null
+    fun openNext(held: Collection<String> = emptyList(), open: (IncomingEntry) -> OpenOutcome): IncomingEntry? {
+        val entry = store.nextReceived(held) ?: return null
         val updated = when (val outcome = open(entry)) {
             is OpenOutcome.Opened -> {
                 store.storeParsed(

@@ -207,6 +207,18 @@ VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?);
 nextReceived:
 SELECT * FROM messages WHERE direction = 1 AND state = ? ORDER BY local_id LIMIT 1;
 
+-- То же, но мимо придержанных переписок — заблокированных (Л9).
+--
+-- Отбор в запросе, а не пропуск в коде: очередь разбирается с головы, и придержанный
+-- конверт, оставшийся в голове, не давал бы разобрать всё, что пришло после него.
+--
+-- Список никогда не пуст: вызывающий кладёт в него хотя бы пустую строку. `NOT IN ()` —
+-- не выражение, а синтаксическая ошибка SQLite, и пустой список уронил бы приём целиком.
+nextReceivedExcept:
+SELECT * FROM messages
+WHERE direction = 1 AND state = :state AND chat_id NOT IN :held
+ORDER BY local_id LIMIT 1;
+
 undecryptable:
 SELECT * FROM messages WHERE direction = 1 AND state = ? ORDER BY local_id;
 

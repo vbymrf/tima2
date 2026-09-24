@@ -54,8 +54,11 @@ class SqlInboxStore(
     override fun byKey(chatId: String, messageId: Long): IncomingEntry? =
         q.byDedupKey(keyOf(chatId, messageId)).executeAsOneOrNull()?.toIncoming()
 
-    override fun nextReceived(): IncomingEntry? =
-        q.nextReceived(IncomingState.RECEIVED.ordinal.toLong()).executeAsOneOrNull()?.toIncoming()
+    override fun nextReceived(held: Collection<String>): IncomingEntry? {
+        val state = IncomingState.RECEIVED.ordinal.toLong()
+        if (held.isEmpty()) return q.nextReceived(state).executeAsOneOrNull()?.toIncoming()
+        return q.nextReceivedExcept(state, held).executeAsOneOrNull()?.toIncoming()
+    }
 
     override fun undecryptable(): List<IncomingEntry> =
         q.undecryptable(IncomingState.UNDECRYPTABLE.ordinal.toLong())

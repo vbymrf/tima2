@@ -156,7 +156,7 @@ class ReceiveHarness(private val inbox: Inbox) {
      */
     fun openAll(open: (IncomingEntry) -> OpenOutcome): Int {
         var n = 0
-        while (inbox.openNext(open) != null) n++
+        while (inbox.openNext(open = open) != null) n++
         return n
     }
 
