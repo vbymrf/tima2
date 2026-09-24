@@ -423,7 +423,7 @@ object QrCode {
      * пустым полем, и сканер не отличил бы его от мусора.
      */
     private fun formatBCH(mask: Int): Int {
-        val data = (УРОВЕНЬ_M shl 3) or mask
+        val data = (LEVEL_M shl 3) or mask
         var value = data shl 10
         while (bitness(value) >= 11) {
             value = value xor (0x537 shl (bitness(value) - 11))
@@ -452,7 +452,7 @@ object QrCode {
 
     // ── таблицы стандарта ───────────────────────────────────────────────────
 
-    private const val УРОВЕНЬ_M = 0b00
+    private const val LEVEL_M = 0b00
 
     private class Group(val blocks: Int, val words: Int)
 

@@ -38,12 +38,12 @@ class FormatTest {
      */
     @Test
     fun на_пороге_полос_главной_области_хватает_места() {
-        val layout = layoutFor(FormatTima.ПОРОГ_ПОЛОС)
+        val layout = layoutFor(FormatTima.PANES_THRESHOLD)
         val taken = layout.rail!! + layout.column!!
-        val main = FormatTima.ПОРОГ_ПОЛОС - taken
+        val main = FormatTima.PANES_THRESHOLD - taken
         assertTrue(
-            main >= FormatTima.МИНИМУМ_ГЛАВНОЙ,
-            "на пороге 840 главной области остаётся $main при минимуме ${FormatTima.МИНИМУМ_ГЛАВНОЙ}",
+            main >= FormatTima.MAIN_MIN_WIDTH,
+            "на пороге 840 главной области остаётся $main при минимуме ${FormatTima.MAIN_MIN_WIDTH}",
         )
     }
 
@@ -87,7 +87,7 @@ class FormatTest {
     @Test
     fun подписи_в_рейке_появляются_только_на_пк() {
         assertEquals(false, layoutFor(1024.dp).railCaption)
-        assertEquals(FormatTima.РЕЙКА_ЗНАЧКИ, layoutFor(1024.dp).rail)
+        assertEquals(FormatTima.ICON_RAIL_WIDTH, layoutFor(1024.dp).rail)
         assertEquals(true, layoutFor(1440.dp).railCaption)
         assertEquals(FormatTima.CAPTION_RAIL, layoutFor(1440.dp).rail)
     }
@@ -101,13 +101,13 @@ class FormatTest {
      */
     @Test
     fun главной_области_всегда_остаётся_минимум() {
-        var width = FormatTima.ПОРОГ_ПОЛОС
+        var width = FormatTima.PANES_THRESHOLD
         while (width <= 3000.dp) {
             val layout = layoutFor(width)
             val taken = (layout.rail ?: 0.dp) + (layout.column ?: 0.dp) + (layout.panel ?: 0.dp)
             val main = width - taken
             assertTrue(
-                main >= FormatTima.МИНИМУМ_ГЛАВНОЙ,
+                main >= FormatTima.MAIN_MIN_WIDTH,
                 "на ширине $width главной области досталось $main",
             )
             width += 1.dp

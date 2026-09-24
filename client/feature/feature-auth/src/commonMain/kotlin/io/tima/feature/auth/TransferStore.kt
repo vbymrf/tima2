@@ -86,8 +86,8 @@ class TransferStore(
         val virtualUserId = _state.value.virtualUserId ?: return
         scope.launch {
             _state.value = _state.value.copy(working = true, trouble = null)
-            val ушло = transfer.cancel(virtualUserId)
-            _state.value = if (ушло) {
+            val reached = transfer.cancel(virtualUserId)
+            _state.value = if (reached) {
                 _state.value.copy(working = false, code = null, payload = null, cancelled = true)
             } else {
                 // Не сказать об этом нельзя: человек, уверенный, что отменил, не станет
@@ -97,7 +97,7 @@ class TransferStore(
                     trouble = words().auth.cancelDidNotReach,
                 )
             }
-            if (ушло) onCancelled()
+            if (reached) onCancelled()
         }
     }
 

@@ -67,7 +67,7 @@ class LinkNewDevice(
      */
     suspend fun await(sessionId: String, claimToken: String): LinkAwaitStep {
         var elapsed = 0L
-        while (elapsed < СРОК_СЕССИИ_МС) {
+        while (elapsed < SESSION_TTL_MS) {
             when (val answer = api.claim(sessionId, claimToken)) {
                 is LinkClaimStep.Claimed -> {
                     // Токен — после успеха, как при регистрации: его наличие и есть
@@ -81,16 +81,16 @@ class LinkNewDevice(
                 is LinkClaimStep.Offline -> Unit
                 is LinkClaimStep.Refused -> return LinkAwaitStep.Refused(answer.reason)
             }
-            delay(МЕЖДУ_ОПРОСАМИ_МС)
-            elapsed += МЕЖДУ_ОПРОСАМИ_МС
+            delay(POLL_INTERVAL_MS)
+            elapsed += POLL_INTERVAL_MS
         }
         return LinkAwaitStep.Expired
     }
 
     private companion object {
         /** Сервер держит сессию привязки пять минут (`linkSessionTTL`). */
-        const val СРОК_СЕССИИ_МС = 5 * 60 * 1000L
-        const val МЕЖДУ_ОПРОСАМИ_МС = 2_000L
+        const val SESSION_TTL_MS = 5 * 60 * 1000L
+        const val POLL_INTERVAL_MS = 2_000L
     }
 }
 

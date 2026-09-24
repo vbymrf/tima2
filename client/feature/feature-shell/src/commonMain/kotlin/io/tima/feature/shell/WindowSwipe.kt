@@ -46,8 +46,8 @@ fun Modifier.windowSwipe(
     if (!enabled) return@composed this
 
     val density = LocalDensity.current
-    val top = with(density) { ЗОНА_ИСТОРИЙ.toPx() }
-    val bottom = with(density) { ЗОНА_ПЕРЕМОТКИ.toPx() }
+    val top = with(density) { STORIES_ZONE.toPx() }
+    val bottom = with(density) { SEEK_ZONE.toPx() }
     val threshold = with(density) { THRESHOLD.toPx() }
 
     pointerInput(onLeft, onRight) {
@@ -85,7 +85,7 @@ fun Modifier.windowSwipe(
  * именем. Округлено вверх до 96: лучше отдать историям лишние точки, чем отнять у
  * них жест на границе.
  */
-private val ЗОНА_ИСТОРИЙ: Dp = 96.dp
+private val STORIES_ZONE: Dp = 96.dp
 
 /**
  * Высота нижней полосы — перемотка и вложения слайда.
@@ -94,7 +94,7 @@ private val ЗОНА_ИСТОРИЙ: Dp = 96.dp
  * высота, на которую в слайдах поднимается столбик действий, чтобы не соседствовать
  * с полосой прокрутки. Значит и полоса занимает её.
  */
-private val ЗОНА_ПЕРЕМОТКИ: Dp = 46.dp
+private val SEEK_ZONE: Dp = 46.dp
 
 /**
  * Сколько надо провести, чтобы окно сменилось.

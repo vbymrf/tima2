@@ -1759,7 +1759,7 @@ private fun App(
                     onAllowContacts = if (contactsAccessWay() == ContactsAccessWay.None) {
                         null
                     } else {
-                        { askContactsAccess { дали -> if (дали) book.refresh() } }
+                        { askContactsAccess { granted -> if (granted) book.refresh() } }
                     },
                     allowInSettings = contactsAccessWay() == ContactsAccessWay.Settings,
                     // Сверка по требованию (Л2). На ПК сверять неоткуда — кнопки нет.
@@ -1965,8 +1965,8 @@ private fun App(
                         // Сторона задаётся тем, откуда пришли, а не переключателем на
                         // экране: «передаю» и «принимаю» — разные намерения, и путать их
                         // здесь дороже всего.
-                        val кого = current.virtualUserId
-                        if (кого != null) transfer.giveCode(кого) else transfer.takingSide(current.brought)
+                        val virtualId = current.virtualUserId
+                        if (virtualId != null) transfer.giveCode(virtualId) else transfer.takingSide(current.brought)
                     }
                     TransferScreen(
                         state = transferState,

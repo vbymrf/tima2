@@ -117,7 +117,7 @@ fun InCenter(modifier: Modifier = Modifier, content: @Composable () -> Unit) = B
     modifier = modifier.fillMaxWidth(),
     contentAlignment = Alignment.TopCenter,
 ) {
-    Box(Modifier.widthIn(max = FormatTima.ПРЕДЕЛ_СОДЕРЖИМОГО)) { content() }
+    Box(Modifier.widthIn(max = FormatTima.CONTENT_MAX_WIDTH)) { content() }
 }
 
 /**

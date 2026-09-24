@@ -172,16 +172,16 @@ fun buildAssembled(
         //
         // Набор по устройству, а не один флаг: смена аккаунта — другое устройство и
         // другая очередь, и её восстановить надо.
-        val вернулось = if (восстановленные.add(device.session.deviceId)) {
+        val recovered = if (recoveredDevices.add(device.session.deviceId)) {
             environment.queue.recoverOnStart()
         } else {
             0
         }
-        if (вернулось > 0) {
+        if (recovered > 0) {
             Journal.note(
                 LogCode.QUEUE_RECOVERED,
                 "очередь восстановлена после обрыва",
-                "вернулось" to вернулось,
+                "вернулось" to recovered,
             )
         }
 
@@ -320,4 +320,4 @@ fun buildAssembled(
  * Вне состава экрана намеренно: `remember` переживает пересборку, но не переживает смену
  * ключа, а нужно «один раз, пока жив процесс».
  */
-private val восстановленные = mutableSetOf<String>()
+private val recoveredDevices = mutableSetOf<String>()

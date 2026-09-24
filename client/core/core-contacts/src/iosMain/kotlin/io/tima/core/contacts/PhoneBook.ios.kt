@@ -43,16 +43,16 @@ private class ContactStoreBook : PhoneBookSource {
         )
         val byPhone = LinkedHashMap<String, PhoneBookEntry>()
         store.enumerateContactsWithFetchRequest(request, null) { contact: CNContact?, _ ->
-            val карточка = contact ?: return@enumerateContactsWithFetchRequest
-            val имя = listOfNotNull(
-                карточка.givenName.ifBlank { null },
-                карточка.familyName.ifBlank { null },
+            val card = contact ?: return@enumerateContactsWithFetchRequest
+            val fullName = listOfNotNull(
+                card.givenName.ifBlank { null },
+                card.familyName.ifBlank { null },
             ).joinToString(" ").ifBlank { null }
-            карточка.phoneNumbers.forEach { value ->
+            card.phoneNumbers.forEach { value ->
                 val labeled = value as? CNLabeledValue ?: return@forEach
                 val number = (labeled.value as? CNPhoneNumber)?.stringValue ?: return@forEach
                 val phone = normalizePhone(number) ?: return@forEach
-                byPhone.getOrPut(phone) { PhoneBookEntry(phone, имя) }
+                byPhone.getOrPut(phone) { PhoneBookEntry(phone, fullName) }
             }
         }
         return PhoneBookRead.Entries(byPhone.values.toList())

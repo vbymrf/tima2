@@ -100,7 +100,7 @@ class TokensTest {
         // это же цвет навигации» упирался в проверку, а не в чью-то память.
         val ratio = TimaContrast.ratio(TimaColors.light.navigation, TimaColors.light.functional)
         close(1.95, ratio)
-        assertTrue(ratio < TimaContrast.ПОРОГ_КРУПНОГО)
+        assertTrue(ratio < TimaContrast.LARGE_TEXT_THRESHOLD)
     }
 
     @Test

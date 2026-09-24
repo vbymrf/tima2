@@ -66,13 +66,13 @@ func (s *Store) CreateVirtual(ctx context.Context, ownerUserID, nickname string,
 
 	// Предел считается здесь же, в транзакции: два одновременных создания иначе
 	// пройдут оба и дадут шестой.
-	var сколько int
+	var active int
 	if err := tx.QueryRow(ctx, `
 		SELECT count(*) FROM persons
-		WHERE owner_person_id = $1 AND state <> 'archived'`, ownerPerson).Scan(&сколько); err != nil {
+		WHERE owner_person_id = $1 AND state <> 'archived'`, ownerPerson).Scan(&active); err != nil {
 		return "", err
 	}
-	if сколько >= VirtualLimit {
+	if active >= VirtualLimit {
 		return "", ErrTooManyVirtuals
 	}
 
@@ -153,11 +153,11 @@ func (s *Store) HasPhone(ctx context.Context, ids []string) (map[string]bool, er
 	defer rows.Close()
 	for rows.Next() {
 		var id string
-		var есть bool
-		if err := rows.Scan(&id, &есть); err != nil {
+		var has bool
+		if err := rows.Scan(&id, &has); err != nil {
 			return nil, err
 		}
-		out[id] = есть
+		out[id] = has
 	}
 	return out, rows.Err()
 }

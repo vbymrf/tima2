@@ -46,8 +46,8 @@ class Accounts(private val vault: SecretVault) {
      * токена).
      */
     fun remember(account: Account, session: Session, deviceSecret: ByteArray) {
-        val было = all().filterNot { it.userId == account.userId }
-        write(было + account)
+        val others = all().filterNot { it.userId == account.userId }
+        write(others + account)
         store(account.userId).saveSession(session)
         store(account.userId).saveDeviceSecret(deviceSecret)
         switchTo(account.userId)
@@ -97,10 +97,10 @@ class Accounts(private val vault: SecretVault) {
     fun forget(userId: String) {
         store(userId).clear()
         vault.remove(pendingAlias(userId))
-        val осталось = all().filterNot { it.userId == userId }
-        write(осталось)
+        val remaining = all().filterNot { it.userId == userId }
+        write(remaining)
         if (current() == userId) {
-            осталось.firstOrNull()?.let { switchTo(it.userId) } ?: vault.remove(CURRENT)
+            remaining.firstOrNull()?.let { switchTo(it.userId) } ?: vault.remove(CURRENT)
         }
     }
 

@@ -66,12 +66,12 @@ private class ContactsContractBook : PhoneBookSource {
         ) ?: return@withContext PhoneBookRead.Entries(emptyList())
 
         cursor.use {
-            val номер = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-            val имя = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY)
+            val numberColumn = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+            val nameColumn = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY)
             while (it.moveToNext()) {
-                val raw = if (номер >= 0) it.getString(номер) else null
+                val raw = if (numberColumn >= 0) it.getString(numberColumn) else null
                 val phone = raw?.let(::normalizePhone) ?: continue
-                val name = if (имя >= 0) it.getString(имя)?.trim()?.ifBlank { null } else null
+                val name = if (nameColumn >= 0) it.getString(nameColumn)?.trim()?.ifBlank { null } else null
                 byPhone.getOrPut(phone) { PhoneBookEntry(phone, name) }
             }
         }

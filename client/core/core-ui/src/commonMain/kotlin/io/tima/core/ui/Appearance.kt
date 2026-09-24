@@ -408,8 +408,8 @@ data class Appearance(
             // не то, ради чего стоит не пускать человека в переписку.
             val sizes = buildMap {
                 for (place in TextPlace.entries) {
-                    val точек = pairs["$KEY_SIZE.${place.name}"]?.toIntOrNull() ?: continue
-                    if (точек in place.steps.first()..place.steps.last()) put(place, точек)
+                    val points = pairs["$KEY_SIZE.${place.name}"]?.toIntOrNull() ?: continue
+                    if (points in place.steps.first()..place.steps.last()) put(place, points)
                 }
             }
             val text = TextLook(font = AppFont.of(pairs[KEY_FONT]), size = sizes)

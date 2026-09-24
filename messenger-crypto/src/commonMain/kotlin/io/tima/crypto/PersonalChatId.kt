@@ -32,10 +32,10 @@ object PersonalChatId {
     fun of(userA: String, userB: String): String {
         require(userA.isNotBlank() && userB.isNotBlank()) { "идентификатор пользователя пустой" }
 
-        val меньший = if (userA <= userB) userA else userB
-        val больший = if (userA <= userB) userB else userA
+        val lower = if (userA <= userB) userA else userB
+        val higher = if (userA <= userB) userB else userA
 
-        val h = SHA256().digest("$LABEL$меньший|$больший".encodeToByteArray())
+        val h = SHA256().digest("$LABEL$lower|$higher".encodeToByteArray())
 
         // Биты версии (4) и варианта (RFC 4122) — чтобы получился валидный UUID, а не
         // просто шестнадцатеричная строка: он ложится в столбцы типа uuid на сервере.

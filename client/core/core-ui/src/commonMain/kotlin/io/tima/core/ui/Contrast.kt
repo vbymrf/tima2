@@ -22,7 +22,7 @@ object TimaContrast {
     const val TEXT_THRESHOLD: Double = 4.5
 
     /** Порог для крупного (18 pt, либо 14 pt полужирного) текста. */
-    const val ПОРОГ_КРУПНОГО: Double = 3.0
+    const val LARGE_TEXT_THRESHOLD: Double = 3.0
 
     /**
      * Отношение контраста двух **непрозрачных** цветов: от 1 : 1 до 21 : 1.

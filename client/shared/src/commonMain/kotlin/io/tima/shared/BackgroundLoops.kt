@@ -148,7 +148,7 @@ fun BackgroundLoops(
                     // Повторяем строку, только если что-то изменилось либо прошло пять
                     // минут: иначе одна застрявшая запись выдавливает из дневника всё
                     // остальное, а именно в нём потом ищут причину.
-                    if (why != saidTrouble || after != saidLeft || now - saidAt >= ПРО_ЗАСТРЯВШУЮ_НЕ_ЧАЩЕ_МС) {
+                    if (why != saidTrouble || after != saidLeft || now - saidAt >= STUCK_NOTE_MIN_GAP_MS) {
                         Journal.trouble(
                             LogCode.QUEUE_STUCK,
                             "повтор не помог",
@@ -201,18 +201,18 @@ internal const val MIN_PASS_GAP_MS = 500L
  * ещё нет. Отказ сервера повторять нечего: он не изменится.
  */
 internal suspend fun declarePlatform(network: DevicePorts, platform: Platform) {
-    repeat(ПОПЫТОК_ОБЪЯВЛЕНИЯ) { attempt ->
+    repeat(DECLARE_ATTEMPTS) { attempt ->
         when (network.devices.declarePlatform(platform.server)) {
             is PlatformResult.Declared -> return
             is PlatformResult.Refused -> return
-            is PlatformResult.NoConnection -> delay(МЕЖДУ_ОБЪЯВЛЕНИЯМИ_МС * (attempt + 1))
+            is PlatformResult.NoConnection -> delay(DECLARE_GAP_MS * (attempt + 1))
         }
     }
 }
 
 /** Три попытки с растущей паузой: 2 с, 4 с, 6 с. Дальше объявит следующий запуск. */
-private const val ПОПЫТОК_ОБЪЯВЛЕНИЯ = 3
-private const val МЕЖДУ_ОБЪЯВЛЕНИЯМИ_МС = 2_000L
+private const val DECLARE_ATTEMPTS = 3
+private const val DECLARE_GAP_MS = 2_000L
 
 /**
  * Как часто повторять строку о застрявшей очереди, если ничего не изменилось.
@@ -221,4 +221,4 @@ private const val МЕЖДУ_ОБЪЯВЛЕНИЯМИ_МС = 2_000L
  * она вытеснит из дневника то, ради чего дневник и ведётся. Прежнее «каждые пять секунд»
  * давало семнадцать тысяч строк в сутки об одном и том же.
  */
-private const val ПРО_ЗАСТРЯВШУЮ_НЕ_ЧАЩЕ_МС = 5 * 60 * 1000L
+private const val STUCK_NOTE_MIN_GAP_MS = 5 * 60 * 1000L

@@ -72,10 +72,10 @@ func (s *Store) NicknameFree(ctx context.Context, nick string) (bool, error) {
 	if !ValidNickname(nick) {
 		return false, ErrNicknameBad
 	}
-	var занят bool
+	var taken bool
 	err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM persons WHERE lower(nickname) = lower($1))`, nick).Scan(&занят)
-	return !занят, err
+		`SELECT EXISTS(SELECT 1 FROM persons WHERE lower(nickname) = lower($1))`, nick).Scan(&taken)
+	return !taken, err
 }
 
 // FindUserByNickname — чей это ник. Возвращает текущую личность аккаунта, как и

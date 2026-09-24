@@ -100,13 +100,13 @@ class OutgoingSealer(
                 value = value or (byte.toULong() shl (8 * i))
             }
             // Старший бит долой: серверный bigint знаковый.
-            value = value and МАКСИМУМ_ЗНАКОВОГО
+            value = value and SIGNED_MAX
             // Ноль отдавать нельзя: в протоколе он значит «нет идентификатора»
             // (replyTo = 0 именно так и читается).
             return if (value == 0uL) 1uL else value
         }
 
         /** `Long.MAX_VALUE` в беззнаковом виде: предел серверного `bigint`. */
-        private const val МАКСИМУМ_ЗНАКОВОГО: ULong = 0x7FFF_FFFF_FFFF_FFFFuL
+        private const val SIGNED_MAX: ULong = 0x7FFF_FFFF_FFFF_FFFFuL
     }
 }

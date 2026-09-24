@@ -80,9 +80,9 @@ object AndroidContactsAccess {
         ) {
             return ContactsAccessWay.Ask // экран разрешения при этом не показывается
         }
-        val спрашивали = current.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val askedBefore = current.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(ASKED, false)
-        return if (спрашивали && !current.shouldShowRequestPermissionRationale(Manifest.permission.READ_CONTACTS)) {
+        return if (askedBefore && !current.shouldShowRequestPermissionRationale(Manifest.permission.READ_CONTACTS)) {
             ContactsAccessWay.Settings
         } else {
             ContactsAccessWay.Ask
@@ -101,8 +101,8 @@ object AndroidContactsAccess {
         // Система больше не спросит, если человек уже отказывал и «объяснять» ей нечего.
         // Тогда единственный оставшийся путь — настройки приложения.
         val prefs = current.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val спрашивали = prefs.getBoolean(ASKED, false)
-        if (спрашивали && !current.shouldShowRequestPermissionRationale(Manifest.permission.READ_CONTACTS)) {
+        val askedBefore = prefs.getBoolean(ASKED, false)
+        if (askedBefore && !current.shouldShowRequestPermissionRationale(Manifest.permission.READ_CONTACTS)) {
             openSettings(current)
             return onResult(false)
         }

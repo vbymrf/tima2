@@ -100,7 +100,7 @@ fun Bubble(
                 modifier = Modifier
                     // Предел ширины считается вместе с рамкой и полем: справа от пузыря
                     // должно остаться место кнопке.
-                    .widthIn(max = ПРЕДЕЛ_ШИРИНЫ)
+                    .widthIn(max = BUBBLE_MAX_WIDTH)
                     .background(
                         color = if (my) colors.my else colors.author,
                         shape = RoundedCornerShape(TimaShapes.radius),
@@ -273,4 +273,4 @@ private val BUBBLE_TOP = 11.dp
 private val AVATAR_LEFT = TimaShapes.radius + 3.dp
 
 /** `max-width: 290px` из макета. */
-private val ПРЕДЕЛ_ШИРИНЫ = 290.dp
+private val BUBBLE_MAX_WIDTH = 290.dp

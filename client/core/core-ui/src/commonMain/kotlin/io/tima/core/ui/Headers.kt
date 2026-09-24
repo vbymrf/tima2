@@ -134,7 +134,7 @@ fun WindowHeader(
 private fun HeaderTitle(title: String) {
     val colors = Tima.colors
     val scale = LocalTextScale.current
-    val крупный = TimaType.sz3 * scale
+    val largest = TimaType.sz3 * scale
     if (title.trim().contains(' ')) {
         Caption(title, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold, maxLines = 2)
     } else {
@@ -148,7 +148,7 @@ private fun HeaderTitle(title: String) {
             maxLines = 1,
             autoSize = TextAutoSize.StepBased(
                 minFontSize = TimaType.sz5,
-                maxFontSize = крупный,
+                maxFontSize = largest,
                 stepSize = STEP,
             ),
         )

@@ -64,7 +64,7 @@ fun Mark(kind: MarkKind, modifier: Modifier = Modifier, side: Dp = 12.dp) {
         MarkKind.NotLeft -> colors.alarm
     }
     Canvas(modifier.size(side)) {
-        val thickness = size.minDimension * ТОЛЩИНА_ДОЛЯ
+        val thickness = size.minDimension * STROKE_FRACTION
         val outline = Stroke(width = thickness, cap = StrokeCap.Round)
         when (kind) {
             MarkKind.Waits -> {
@@ -135,7 +135,7 @@ fun Arrow(
 ) {
     val drawing = color ?: Tima.colors.text
     Canvas(modifier.size(sizeDp)) {
-        val thickness = size.minDimension * ТОЛЩИНА_ДОЛЯ
+        val thickness = size.minDimension * STROKE_FRACTION
         // Стрелка — три отрезка: древко и два пера. Так она читается и в 12 точек.
         when (side) {
             Side.Left -> {
@@ -160,7 +160,7 @@ fun Arrow(
 }
 
 /** Толщина линии знака — доля от стороны: знак остаётся собой и в 12 точек, и в 24. */
-private const val ТОЛЩИНА_ДОЛЯ = 0.14f
+private const val STROKE_FRACTION = 0.14f
 
 /** Отрезок в долях стороны: координаты знака описываются один раз и не зависят от размера. */
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.line(

@@ -58,10 +58,10 @@ object FormatTima {
      * Число внешнее, но проверяемое: рейка 76 плюс колонка 296 плюс минимум главной 400
      * дают 772, то есть на 840 три полосы действительно живут, а не притёрты.
      */
-    val ПОРОГ_ПОЛОС: Dp = 840.dp
+    val PANES_THRESHOLD: Dp = 840.dp
 
     /** Рейка значками (планшет) и рейка с подписями (ПК). */
-    val РЕЙКА_ЗНАЧКИ: Dp = 76.dp
+    val ICON_RAIL_WIDTH: Dp = 76.dp
 
     /**
      * Рейка с подписями — **число под самый длинный текст**, а не круглое.
@@ -96,10 +96,10 @@ object FormatTima {
      *
      * Ровно из этого числа и берётся ответ на «хватило ли места» третьей полосе.
      */
-    val МИНИМУМ_ГЛАВНОЙ: Dp = 400.dp
+    val MAIN_MIN_WIDTH: Dp = 400.dp
 
     /** Читаемый предел содержимого: строка длиной в метр не читается. */
-    val ПРЕДЕЛ_СОДЕРЖИМОГО: Dp = 720.dp
+    val CONTENT_MAX_WIDTH: Dp = 720.dp
 
     /**
      * Порог ПК — **сумма полос, а не выбранное число**: рейка с подписями, колонка,
@@ -112,7 +112,7 @@ object FormatTima {
      * осталось прежним. Ровно то, от чего эта конструкция и защищает: **складываем, а не
      * переписываем**. Число здесь для чтения, и его приходится держать глазами.
      */
-    val DESKTOP_THRESHOLD: Dp = CAPTION_RAIL + DESKTOP_COLUMN + МИНИМУМ_ГЛАВНОЙ + PANEL
+    val DESKTOP_THRESHOLD: Dp = CAPTION_RAIL + DESKTOP_COLUMN + MAIN_MIN_WIDTH + PANEL
 }
 
 /**
@@ -123,7 +123,7 @@ object FormatTima {
  * им достаточно [LocalРаскладка].
  */
 fun layoutFor(width: Dp): Layout = when {
-    width < FormatTima.ПОРОГ_ПОЛОС -> Layout(
+    width < FormatTima.PANES_THRESHOLD -> Layout(
         format = Format.Phone,
         rail = null,
         railCaption = false,
@@ -134,7 +134,7 @@ fun layoutFor(width: Dp): Layout = when {
 
     width < FormatTima.DESKTOP_THRESHOLD -> Layout(
         format = Format.Tablet,
-        rail = FormatTima.РЕЙКА_ЗНАЧКИ,
+        rail = FormatTima.ICON_RAIL_WIDTH,
         railCaption = false,
         column = FormatTima.TABLET_COLUMN,
         // Панели нет вовсе: страница объекта открывается перерисовкой главной области —

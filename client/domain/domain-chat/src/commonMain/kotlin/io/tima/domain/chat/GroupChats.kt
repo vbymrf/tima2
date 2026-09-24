@@ -54,13 +54,13 @@ class CreateGroupChat(
     ): CreateGroupStep {
         val name = title.trim()
         if (name.isEmpty()) return CreateGroupStep.BadTitle("Без названия группу не найти в списке")
-        if (name.encodeToByteArray().size > ПРЕДЕЛ_НАЗВАНИЯ) {
-            return CreateGroupStep.BadTitle("Название длиннее $ПРЕДЕЛ_НАЗВАНИЯ байт сервер не примет")
+        if (name.encodeToByteArray().size > MAX_TITLE_LENGTH) {
+            return CreateGroupStep.BadTitle("Название длиннее $MAX_TITLE_LENGTH байт сервер не примет")
         }
         // Предел описания — общий предел сообщения (ADR-0019 §3): описание и есть
         // сообщение уровня 0, и особых правил у него нет.
-        if (description.length > ПРЕДЕЛ_ОПИСАНИЯ) {
-            return CreateGroupStep.BadTitle("Описание длиннее $ПРЕДЕЛ_ОПИСАНИЯ знаков")
+        if (description.length > MAX_DESCRIPTION_LENGTH) {
+            return CreateGroupStep.BadTitle("Описание длиннее $MAX_DESCRIPTION_LENGTH знаков")
         }
 
         val creation = groups.create(name, kind, description.trim())
@@ -101,10 +101,10 @@ class CreateGroupChat(
 
     private companion object {
         /** Предел сервера на название — в БАЙТАХ, а не знаках: кириллица занимает по два. */
-        const val ПРЕДЕЛ_НАЗВАНИЯ = 200
+        const val MAX_TITLE_LENGTH = 200
 
         /** Предел описания — в ЗНАКАХ UTF-16, как у любого сообщения (ADR-0019 §3). */
-        const val ПРЕДЕЛ_ОПИСАНИЯ = 4096
+        const val MAX_DESCRIPTION_LENGTH = 4096
     }
 }
 

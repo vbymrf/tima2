@@ -159,20 +159,20 @@ func userFeed(st FeedStore) http.HandlerFunc {
 		}
 		// Свой — тот, кого владелец подписал на свою ленту. Ошибка чтения не должна
 		// закрывать страницу: показываем открытое, как постороннему.
-		друг := false
-		if подписан, err := st.IsSubscribed(r.Context(), channelID, id.UserID); err != nil {
+		isFriend := false
+		if subscribed, err := st.IsSubscribed(r.Context(), channelID, id.UserID); err != nil {
 			log.Printf("userFeed: подписка %s: %v", owner, err)
 		} else {
-			друг = подписан
+			isFriend = subscribed
 		}
-		граница := levelEveryone
-		if друг {
-			граница = levelMembers
+		upTo := levelEveryone
+		if isFriend {
+			upTo = levelMembers
 		}
 		// Признак уходит клиенту: внизу чужой ленты он пишет «имя не дружит с вами».
 		// Молчаливая пустота неотличима от «он ничего не писал», а про уровень 3
 		// поимённо не говорится ничего — о разрешении не уведомляют.
-		writeFeedWithFriend(w, st, r, channelID, граница, друг)
+		writeFeedWithFriend(w, st, r, channelID, upTo, isFriend)
 	}
 }
 
@@ -427,19 +427,19 @@ func writeFeedLevels(
 			"kind":          it.Kind,
 		})
 	}
-	ответ := map[string]any{"channel_id": channelID, "items": out}
+	payload := map[string]any{"channel_id": channelID, "items": out}
 	// Выключатель канала целиком. Спрашивается здесь, а не в каждой строке: он один на
 	// страницу, и повторять его двадцать раз значит двадцать раз сказать одно и то же.
 	if ch, err := st.GetChannel(r.Context(), channelID); err == nil {
-		ответ["comments_enabled"] = ch.CommentsEnabled
+		payload["comments_enabled"] = ch.CommentsEnabled
 	}
 	// Признак дружбы — только у чужой ленты: на своей он бессмыслен, и молчание тут
 	// честнее, чем «вы дружите с собой».
 	if friend != nil {
-		ответ["friend"] = *friend
+		payload["friend"] = *friend
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(ответ)
+	_ = json.NewEncoder(w).Encode(payload)
 }
 
 // carryToFeed — POST /users/me/feed/items: принести чужую запись к себе.
