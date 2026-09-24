@@ -100,11 +100,11 @@ private fun window(store: ReportsStore) = application {
     // `ChannelHost`, а не композиция (У2), — и то, что окно при закрытии разбирается
     // целиком, не беда, а проверка: собранное отдаётся из процесса, и повторное открытие
     // берёт то же самое.
-    var видно by remember { mutableStateOf(true) }
-    var трейЕсть by remember { mutableStateOf(false) }
+    var windowShown by remember { mutableStateOf(true) }
+    var hasTray by remember { mutableStateOf(false) }
     DisposableEffect(Unit) {
-        трейЕсть = Tray.install(
-            onOpen = { видно = true },
+        hasTray = Tray.install(
+            onOpen = { windowShown = true },
             onExit = { Journal.diary.flush(); exitApplication() },
         )
         onDispose { Tray.remove() }
@@ -113,15 +113,15 @@ private fun window(store: ReportsStore) = application {
     // Убранное окно ничего не показывает глазами — значит открытая в нём переписка
     // снова обязана уведомлять (У10). Без этого человек, закрывший окно на переписке,
     // перестал бы получать из неё уведомления до следующего открытия.
-    LaunchedEffect(видно) { ChannelHost.notices()?.windowVisible(видно) }
+    LaunchedEffect(windowShown) { ChannelHost.notices()?.windowVisible(windowShown) }
 
     Window(
         // Окно ПРЯЧЕТСЯ, а не разбирается: composition-у `application` без единого окна
         // доверять нельзя — он вправе счесть, что показывать больше нечего.
-        visible = видно,
+        visible = windowShown,
         onCloseRequest = {
-            if (трейЕсть) {
-                видно = false
+            if (hasTray) {
+                windowShown = false
             } else {
                 // Сброс журнала — последний надёжный повод: дальше процесса не будет, а
                 // записи, не дожившие до сброса пачкой, пропали бы вместе с ним.

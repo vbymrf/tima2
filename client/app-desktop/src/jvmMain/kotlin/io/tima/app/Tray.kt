@@ -54,8 +54,8 @@ object Tray {
             add(
                 MenuItem(autostartLabel()).apply {
                     addActionListener {
-                        val было = Autostart.enabled()
-                        Autostart.set(!было)
+                        val wasOn = Autostart.enabled()
+                        Autostart.set(!wasOn)
                         label = autostartLabel()
                     }
                 },

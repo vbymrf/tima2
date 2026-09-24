@@ -53,11 +53,11 @@ object ChannelHost {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** Сборки по устройству. Ключ — `deviceId`: смена аккаунта это другое устройство. */
-    private val сборки = mutableMapOf<String, Assembled>()
+    private val assemblies = mutableMapOf<String, Assembled>()
 
     /** Кто сейчас держит канал и каким заданием. */
-    private var держим: String? = null
-    private var задание: Job? = null
+    private var heldDevice: String? = null
+    private var job: Job? = null
 
     /**
      * Готовая сборка для устройства — та же самая при каждом обращении.
@@ -67,7 +67,7 @@ object ChannelHost {
      */
     @Synchronized
     fun assembled(deviceId: String, build: () -> Assembled): Assembled =
-        сборки.getOrPut(deviceId, build)
+        assemblies.getOrPut(deviceId, build)
 
     /**
      * Держать канал этой сборки, пока жив процесс.
@@ -79,11 +79,11 @@ object ChannelHost {
     @Synchronized
     fun hold(assembled: Assembled) {
         val deviceId = assembled.session.deviceId
-        if (держим == deviceId && задание?.isActive == true) return
-        задание?.cancel()
-        держим = deviceId
+        if (heldDevice == deviceId && job?.isActive == true) return
+        job?.cancel()
+        heldDevice = deviceId
         Journal.note(LogCode.NET_CHANNEL, "канал взят процессом, а не окном")
-        задание = scope.launch { assembled.receiver.hold() }
+        job = scope.launch { assembled.receiver.hold() }
     }
 
     /**
@@ -93,14 +93,14 @@ object ChannelHost {
      */
     @Synchronized
     fun release() {
-        задание?.cancel()
-        задание = null
-        держим = null
+        job?.cancel()
+        job = null
+        heldDevice = null
     }
 
     /** Держится ли канал прямо сейчас. Нужно службе: без сборки ей держать нечего. */
     @Synchronized
-    fun holding(): Boolean = задание?.isActive == true
+    fun holding(): Boolean = job?.isActive == true
 
     /**
      * Уведомления той сборки, чей канал держим; `null` — не держим ничей.
@@ -109,5 +109,5 @@ object ChannelHost {
      * на ПК это трей, на Android `onStart`/`onStop`.
      */
     @Synchronized
-    fun notices(): Notices? = держим?.let { сборки[it]?.notices }
+    fun notices(): Notices? = heldDevice?.let { assemblies[it]?.notices }
 }

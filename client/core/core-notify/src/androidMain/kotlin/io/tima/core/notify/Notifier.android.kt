@@ -177,8 +177,8 @@ object AndroidNotifyAccess {
         if (current.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED) {
             return NotifyAccessWay.Given
         }
-        val спрашивали = current.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(ASKED, false)
-        return if (спрашивали && !current.shouldShowRequestPermissionRationale(PERMISSION)) {
+        val askedBefore = current.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(ASKED, false)
+        return if (askedBefore && !current.shouldShowRequestPermissionRationale(PERMISSION)) {
             NotifyAccessWay.Settings
         } else {
             NotifyAccessWay.Ask
@@ -192,8 +192,8 @@ object AndroidNotifyAccess {
             return onResult(true)
         }
         val prefs = current.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val спрашивали = prefs.getBoolean(ASKED, false)
-        if (спрашивали && !current.shouldShowRequestPermissionRationale(PERMISSION)) {
+        val askedBefore = prefs.getBoolean(ASKED, false)
+        if (askedBefore && !current.shouldShowRequestPermissionRationale(PERMISSION)) {
             // Система спрашивать больше не станет, и `requestPermissions` молча ничего
             // не сделает. Кнопка при этом выглядит сломанной, и в неё жмут повторно.
             openSettings(current)

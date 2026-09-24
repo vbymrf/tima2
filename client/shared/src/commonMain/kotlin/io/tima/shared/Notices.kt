@@ -67,7 +67,7 @@ class Notices(
      * приходит в чужую минуту, и спрашивать у экрана ему не у кого.
      */
     @Volatile
-    private var открыта: String? = null
+    private var openChat: String? = null
 
     /**
      * Видно ли окно приложения.
@@ -78,7 +78,7 @@ class Notices(
      * замечают не сразу и объясняют «у меня не приходят сообщения».
      */
     @Volatile
-    private var окноВидно: Boolean = true
+    private var windowShown: Boolean = true
 
 
     /**
@@ -87,7 +87,7 @@ class Notices(
      * @return `true`, если строка показана. Ложь — уведомлять было не о чем.
      */
     suspend fun arrived(chatId: String, senderId: String?): Boolean {
-        if (молчим(chatId) || !уведомлять(senderId)) return false
+        if (isWatched(chatId) || !shouldNotify(senderId)) return false
         notifier.show(
             Notice(
                 key = chatId,
@@ -107,35 +107,35 @@ class Notices(
      * сообщения.
      */
     suspend fun opened(chatId: String, senderId: String) {
-        if (молчим(chatId) || !уведомлять(senderId)) return
-        val имя = имяЧеловека(senderId)
+        if (isWatched(chatId) || !shouldNotify(senderId)) return
+        val name = nameOf(senderId)
         notifier.show(
             Notice(
                 key = chatId,
                 kind = NoticeKind.Message,
-                who = имя,
+                who = name,
                 // Назвать нечем — остаётся то же, что было: «Новое сообщение». Строка
                 // «Написал вам» без имени не значила бы ничего.
-                what = if (имя == null) words().notices.newMessage else words().notices.wroteToYou,
+                what = if (name == null) words().notices.newMessage else words().notices.wroteToYou,
             ),
         )
     }
 
     /** Нам звонят — У7. Имя сразу: его утверждает сервер, а не звонящий. */
     suspend fun calling(callId: String, fromUserId: String) {
-        if (!уведомлять(fromUserId)) return
+        if (!shouldNotify(fromUserId)) return
         notifier.show(
             Notice(
-                key = ЗВОНОК + callId,
+                key = CALL_KEY_PREFIX + callId,
                 kind = NoticeKind.Call,
-                who = имяЧеловека(fromUserId),
+                who = nameOf(fromUserId),
                 what = words().notices.incomingCall,
             ),
         )
     }
 
     /** Звонок кончился — чем бы ни кончился. Строка звонка не переживает звонок. */
-    fun callOver(callId: String) = notifier.hide(ЗВОНОК + callId)
+    fun callOver(callId: String) = notifier.hide(CALL_KEY_PREFIX + callId)
 
     /**
      * Человек открыл переписку или ушёл из неё — У10.
@@ -145,13 +145,13 @@ class Notices(
      * уведомлением о том, что он читает.
      */
     fun watching(chatId: String?) {
-        открыта = chatId
+        openChat = chatId
         chatId?.let(notifier::hide)
     }
 
     /** Окно показалось или ушло — У4. Убранное окно ничего не показывает глазами. */
     fun windowVisible(visible: Boolean) {
-        окноВидно = visible
+        windowShown = visible
     }
 
     /** Выход из аккаунта: чужих строк в шторке остаться не должно. */
@@ -169,9 +169,9 @@ class Notices(
      * довольно: худшее, чего добьётся подделка, — не покажет своего же уведомления.
      */
     /** Человек смотрит на эту переписку прямо сейчас. */
-    private fun молчим(chatId: String): Boolean = окноВидно && chatId == открыта
+    private fun isWatched(chatId: String): Boolean = windowShown && chatId == openChat
 
-    private suspend fun уведомлять(userId: String?): Boolean {
+    private suspend fun shouldNotify(userId: String?): Boolean {
         if (userId.isNullOrBlank() || userId == me) return false
         return entryOf(userId)?.list != BookList.Blocked
     }
@@ -186,17 +186,17 @@ class Notices(
      * Его в книге нет — остаётся `@ник`. Ника нет — **строка без имени вовсе** (решение
      * заказчика 2026-09-24): выдуманное имя хуже отсутствующего.
      */
-    private suspend fun имяЧеловека(userId: String): String? {
+    private suspend fun nameOf(userId: String): String? {
         val card = cardOf(userId)
         val entry = entryOf(userId)
         if (entry != null) {
-            val свой = ChatPerson(
+            val person = ChatPerson(
                 name = entry.name,
                 userName = card?.userName,
                 nick = card?.nick,
                 phone = entry.phone.ifBlank { card?.phone },
             )
-            свой.line(look(), PERSON_FIRST_LINE)?.let { return it }
+            person.line(look(), PERSON_FIRST_LINE)?.let { return it }
         }
         return card?.nick?.let { "@$it" }
     }
@@ -208,6 +208,6 @@ class Notices(
          * Идентификаторы у них разной природы, и совпадение маловероятно — но «маловероятно»
          * здесь означало бы, что звонок однажды снимет уведомление о сообщении.
          */
-        const val ЗВОНОК = "call:"
+        const val CALL_KEY_PREFIX = "call:"
     }
 }

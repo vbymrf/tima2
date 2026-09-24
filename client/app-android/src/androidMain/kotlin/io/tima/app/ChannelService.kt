@@ -56,9 +56,9 @@ class ChannelService : Service() {
         // Строка переднего плана ставится ПЕРВОЙ и немедленно: Android даёт на это
         // несколько секунд, и опоздание — не «служба без строки», а падение.
         raise()
-        val взяли = hold()
+        val holding = hold()
         // Нет аккаунта — держать нечего, и висеть строкой в шторке не за что.
-        if (!взяли) {
+        if (!holding) {
             stopSelf()
             return START_NOT_STICKY
         }

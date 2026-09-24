@@ -127,9 +127,9 @@ fun BackgroundLoops(
     // это его изменение, и по нему же идёт первая отправка.
     LaunchedEffect(assembled, changeSign) {
         while (true) {
-            val ждать = ближайшийСрок(assembled.environment.queue.pending(), msNow())
+            val sleepMs = nextRetryIn(assembled.environment.queue.pending(), msNow())
                 ?: return@LaunchedEffect
-            delay(ждать)
+            delay(sleepMs)
             val before = assembled.environment.queue.pending().size
             assembled.sender.pass()
             assembled.groupSender.pass()
@@ -179,14 +179,14 @@ fun BackgroundLoops(
  * Пол секунды снизу — не «на всякий случай»: срок мог пройти, пока мы считали, и без
  * нижней границы цикл крутился бы без пауз, пока отправка не начнёт удаваться.
  */
-internal fun ближайшийСрок(pending: List<OutboxEntry>, сейчас: Long): Long? {
+internal fun nextRetryIn(pending: List<OutboxEntry>, nowMs: Long): Long? {
     if (pending.isEmpty()) return null
-    val срок = pending.minOf { if (it.nextAttemptAtMs > 0) it.nextAttemptAtMs else сейчас }
-    return maxOf(срок - сейчас, НЕ_ЧАЩЕ_МС)
+    val due = pending.minOf { if (it.nextAttemptAtMs > 0) it.nextAttemptAtMs else nowMs }
+    return maxOf(due - nowMs, MIN_PASS_GAP_MS)
 }
 
 /** Нижняя граница паузы между проходами очереди. */
-internal const val НЕ_ЧАЩЕ_МС = 500L
+internal const val MIN_PASS_GAP_MS = 500L
 
 /**
  * Объявить платформу серверу.

@@ -124,8 +124,8 @@ class SqlBook(
                 // Строка про этого человека уже может быть — заведённая по номеру из
                 // телефонной книги. Второй её не заводим: это был бы один человек двумя
                 // строками, и слить их потом было бы нечем.
-                val было = db.bookQueries.byUserId(userId).executeAsOneOrNull()
-                val id = было ?: BookKey.ofUser(userId)
+                val existing = db.bookQueries.byUserId(userId).executeAsOneOrNull()
+                val id = existing ?: BookKey.ofUser(userId)
                 db.bookQueries.addManuallyInsert(id, null, userId)
                 db.bookQueries.addManuallyFields(name?.let(::seal), sectionId, now(), device(), id)
             }

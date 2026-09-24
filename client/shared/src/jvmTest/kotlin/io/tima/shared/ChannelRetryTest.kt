@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
 class ChannelRetryTest {
 
     private fun пауза(состояние: LinkState, подряд: Int) =
-        Receiver.паузаПовтора(состояние, подряд)
+        Receiver.retryPause(состояние, подряд)
 
     @Test
     fun первая_попытка_идёт_по_состоянию_связи() {
@@ -43,7 +43,7 @@ class ChannelRetryTest {
         // заметить, а не дождаться.
         for (подряд in 1..40) {
             assertTrue(
-                пауза(LinkState.NO_NETWORK, подряд) <= Receiver.ПОТОЛОК_ПАУЗЫ_МС,
+                пауза(LinkState.NO_NETWORK, подряд) <= Receiver.RETRY_CEILING_MS,
                 "на $подряд-й попытке пауза выше потолка",
             )
         }
@@ -53,7 +53,7 @@ class ChannelRetryTest {
     fun потолок_не_опускает_того_что_сказало_состояние() {
         // У `BLOCKED` своя пауза БОЛЬШЕ потолка, и урезать её значило бы вернуться к
         // долблению в стену, которая стоит часами. Потолок здесь не применяется.
-        assertTrue(LinkState.BLOCKED.retryDelayMs > Receiver.ПОТОЛОК_ПАУЗЫ_МС, "проверка потеряла смысл")
+        assertTrue(LinkState.BLOCKED.retryDelayMs > Receiver.RETRY_CEILING_MS, "проверка потеряла смысл")
         assertEquals(LinkState.BLOCKED.retryDelayMs, пауза(LinkState.BLOCKED, 10))
     }
 }

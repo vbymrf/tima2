@@ -8,6 +8,8 @@ import io.tima.core.network.EventStreamProtocol
 import io.tima.core.network.GroupFrame
 import io.tima.core.network.GroupsOverHttp
 import io.tima.core.network.LinkState
+import io.tima.core.network.NetworkState
+import io.tima.core.network.NetworkWatches
 import io.tima.core.network.StreamOutcome
 import io.tima.core.network.classifyFailure
 import io.tima.core.encryption.DeviceIdentity
@@ -23,7 +25,10 @@ import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.ChatKind
 import io.tima.domain.chat.SyncGroupChats
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 
 /**
@@ -230,34 +235,79 @@ class Receiver(
      * Потолок не опускает того, что сказало состояние: у `BLOCKED` своя пауза больше
      * потолка, и урезать её значило бы вернуться к долблению в стену.
      */
+    /**
+     * Один подъём живого канала — до его конца.
+     *
+     * Вынесен из [hold], чтобы тот читался как политика: когда поднимать, когда рвать,
+     * сколько ждать. Здесь — только что делать с тем, что канал принёс.
+     */
+    private suspend fun runChannel(): StreamOutcome =
+        network.eventChannel()
+            .run(
+                cursor = null,
+                onGroupKeys = { decision -> aboutKeys(decision) },
+                onLevelNarrowed = { decision -> aboutLevel(decision) },
+                onComment = { decision -> aboutComment(decision) },
+                onCall = { decision -> aboutCall(decision) },
+                // Разрыв называется полосой, а не «что-то потерялось». Строка
+                // в дневнике — единственное место, где это видно человеку,
+                // который разбирает отчёт о проблеме.
+                onLaneGap = { lane, missed ->
+                    Journal.note(
+                        LogCode.SYNC_LANE_GAP,
+                        "в полосе пропущено — догоняю",
+                        "полоса" to lane,
+                        "сколько" to missed,
+                    )
+                },
+            ) { event ->
+                accept(event.chatId, event.messageId, event.envelope)
+                stamp(event)
+            }
+
     suspend fun hold() {
         /** Сколько подъёмов подряд кончились ничем. Сбрасывается, когда канал пожил. */
-        var подряд = 0
+        var streak = 0
         while (true) {
-            val поднят = msNow()
+            // ── СЕТИ НЕТ — НЕ ПРОБУЕМ ВОВСЕ (У17) ───────────────────────────
+            //
+            // Система сказала, что сети нет: попытка кончится `UnknownHost`, разбудит
+            // радио и ничего не даст. Ждём, пока появится, — но не дольше потолка:
+            // прошивка, однажды не приславшая `onAvailable`, иначе оставила бы канал
+            // мёртвым навсегда.
+            val watch = NetworkWatches.current
+            if (watch.state.value == NetworkState.LOST) {
+                if (waitBeforeRetry(watch, pauseMs = RETRY_CEILING_MS, ceilingMs = RETRY_CEILING_MS)) streak = 0
+            }
+            val startedAt = msNow()
             val outcome = runCatching {
-                network.eventChannel()
-                    .run(
-                        cursor = null,
-                        onGroupKeys = { decision -> aboutKeys(decision) },
-                        onLevelNarrowed = { decision -> aboutLevel(decision) },
-                        onComment = { decision -> aboutComment(decision) },
-                        onCall = { decision -> aboutCall(decision) },
-                        // Разрыв называется полосой, а не «что-то потерялось». Строка
-                        // в дневнике — единственное место, где это видно человеку,
-                        // который разбирает отчёт о проблеме.
-                        onLaneGap = { полоса, сколько ->
-                            Journal.note(
-                                LogCode.SYNC_LANE_GAP,
-                                "в полосе пропущено — догоняю",
-                                "полоса" to полоса,
-                                "сколько" to сколько,
-                            )
-                        },
-                    ) { event ->
-                        accept(event.chatId, event.messageId, event.envelope)
-                        stamp(event)
+                // ── СЕТЬ СМЕНИЛАСЬ — КАНАЛ РВЁТСЯ САМ (У17) ─────────────────
+                //
+                // После смены сети сокет остаётся привязан к прежней и полуоткрыт, и
+                // закрывать его некому. До У17 это замечал только пинг — до 36 секунд,
+                // а звонок живёт сорок пять. Теперь система говорит о смене сама, и
+                // канал рвётся в ту же секунду.
+                coroutineScope {
+                    val breaker = launch {
+                        networkBrokeChannel(watch)
+                        throw NetworkSwitched()
                     }
+                    try {
+                        runChannel()
+                    } finally {
+                        breaker.cancel()
+                    }
+                }
+            }
+            // Отмена всего приёмника (выход из аккаунта) не должна проглатываться
+            // `runCatching` и крутить цикл дальше.
+            currentCoroutineContext().ensureActive()
+            if (outcome.exceptionOrNull() is NetworkSwitched) {
+                // Прежние неудачи были про прежнюю сеть: считать их против новой нечестно.
+                streak = 0
+                lastOutcome = "сеть сменилась"
+                Journal.note(LogCode.NET_CHANNEL, "сеть сменилась — поднимаю канал заново")
+                continue
             }
             lastOutcome = outcome.fold(
                 onSuccess = { it.toString() },
@@ -266,19 +316,19 @@ class Receiver(
             // Канал пожил — значит подняться получилось, и счёт неудач начинается
             // заново. Без этого одна долгая ночь без сети навсегда оставила бы паузу
             // на потолке, и утром сообщения ждали бы минуту вместо секунды.
-            подряд = if (msNow() - поднят >= ПОЖИЛ_ДОСТАТОЧНО_МС) 0 else подряд + 1
+            streak = if (msNow() - startedAt >= LIVED_LONG_ENOUGH_MS) 0 else streak + 1
             // ── СБОРКА НИЖЕ ПОРОГА: ПЕРЕПОДКЛЮЧАТЬСЯ НЕЧЕГО ─────────────────
             //
             // Ответ будет тот же, а телефон тем временем выглядит работающим — это и
             // есть та беда, ради которой кадр заведён. Цикл прерывается: дальше дело
             // экрана, а не канала.
-            val устарело = outcome.getOrNull() as? StreamOutcome.AppOutdated
-            if (устарело != null) {
+            val outdated = outcome.getOrNull() as? StreamOutcome.AppOutdated
+            if (outdated != null) {
                 Journal.note(
                     LogCode.NET_CHANNEL,
                     "сервер не работает с этой сборкой — нужно обновиться",
-                    "порог" to устарело.minClient,
-                    "на сервере" to устарело.versionName,
+                    "порог" to outdated.minClient,
+                    "на сервере" to outdated.versionName,
                 )
                 onOutdated()
                 return
@@ -299,17 +349,19 @@ class Receiver(
             // Политика при этом давно написана и выведена из настоящих журналов
             // испытаний — `LinkState.retryDelayMs`: сеть мигает и возвращается быстро
             // (5 с), а стена у оператора стоит часами (120 с). Её просто никто не звал.
-            val состояние = classifyFailure(outcome.exceptionOrNull())
-            val пауза = паузаПовтора(состояние, подряд)
+            val link = classifyFailure(outcome.exceptionOrNull())
+            val pause = retryPause(link, streak)
             Journal.note(
                 LogCode.NET_CHANNEL,
                 "живой канал оборвался, поднимаю заново",
                 "исход" to (lastOutcome ?: "—"),
-                "связь" to состояние.name,
-                "подряд" to подряд,
-                "пауза" to пауза,
+                "связь" to link.name,
+                "подряд" to streak,
+                "пауза" to pause,
             )
-            delay(пауза)
+            // Ждём паузу ИЛИ событие сети — что раньше (У17). Сеть появилась или
+            // сменилась — пробуем сразу: прежние неудачи были про прежнюю сеть.
+            if (waitBeforeRetry(watch, pauseMs = pause, ceilingMs = RETRY_CEILING_MS)) streak = 0
         }
     }
 
@@ -511,21 +563,21 @@ class Receiver(
 
         // Разобралась может не та запись, которую мы сейчас записали: очередь берётся
         // с головы. Поэтому переписка и автор берутся у РАЗОБРАННОЙ, а не отсюда.
-        var разобрано: Pair<String, String>? = null
+        var opened: Pair<String, String>? = null
         environment.incoming.openNext(held) { entry ->
             val outcome = when {
                 sender == null -> OpenOutcome.Rejected("конверт не разбирается")
                 key == null -> OpenOutcome.NoKey("ключ подписи отправителя не получен")
                 else -> open(entry, key)
             }
-            if (outcome is OpenOutcome.Opened) разобрано = entry.chatId to outcome.senderId
+            if (outcome is OpenOutcome.Opened) opened = entry.chatId to outcome.senderId
             outcome
         }
         // ── ВТОРАЯ СТАДИЯ: ПОДПИСЬ СОШЛАСЬ, ИМЯ МОЖНО НАЗВАТЬ (У6) ──────────
         //
         // Та же строка по тому же ключу, а не вторая: два уведомления об одном
         // сообщении человек читает как два сообщения.
-        разобрано?.let { (чат, автор) -> notices?.opened(чат, автор) }
+        opened?.let { (chat, author) -> notices?.opened(chat, author) }
 
         // Переписка от незнакомого — со своим именем: иначе в списке появится строка без
         // имени, и человек не узнает, кто написал.
@@ -597,10 +649,10 @@ class Receiver(
          * Потолок не опускает того, что сказало состояние: у `BLOCKED` своя пауза
          * больше потолка, и урезать её значило бы вернуться к долблению в стену.
          */
-        internal fun паузаПовтора(состояние: LinkState, подряд: Int): Long {
-            val основание = состояние.retryDelayMs
-            val рост = основание shl (подряд - 1).coerceIn(0, 6)
-            return maxOf(основание, minOf(рост, ПОТОЛОК_ПАУЗЫ_МС))
+        internal fun retryPause(link: LinkState, streak: Int): Long {
+            val base = link.retryDelayMs
+            val grown = base shl (streak - 1).coerceIn(0, 6)
+            return maxOf(base, minOf(grown, RETRY_CEILING_MS))
         }
 
         /**
@@ -609,7 +661,7 @@ class Receiver(
          * Минута: дольше означало бы, что вернувшаяся сеть ждёт до минуты, а человек
          * за это время успевает решить, что приложение сломано.
          */
-        const val ПОТОЛОК_ПАУЗЫ_МС = 60_000L
+        const val RETRY_CEILING_MS = 60_000L
 
         /**
          * Сколько канал должен прожить, чтобы счёт неудач обнулился.
@@ -617,7 +669,7 @@ class Receiver(
          * Полминуты: короче — и обнуление сработает на канале, который поднялся и сразу
          * упал, то есть счёт неудач перестанет считать неудачи.
          */
-        const val ПОЖИЛ_ДОСТАТОЧНО_МС = 30_000L
+        const val LIVED_LONG_ENOUGH_MS = 30_000L
     }
 }
 

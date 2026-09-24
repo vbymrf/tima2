@@ -27,6 +27,10 @@ kotlin {
             implementation(project(":core:core-contacts"))
             // Уведомления: разрешение спрашивает ОКНО, а показывает служба (У1, У3).
             implementation(project(":core:core-notify"))
+            // Слежение за сетью (У17): порт в core-network, исполнение — здесь, потому
+            // что у core-network нет своей Android-цели, а `ConnectivityManager` — есть
+            // только у Android.
+            implementation(project(":core:core-network"))
             // Движок звонка собирается здесь: ему нужен Context, а общий код его
             // не видит. Вместе с ним приезжает libwebrtc — те самые 48 МБ.
             implementation(project(":core:core-call"))

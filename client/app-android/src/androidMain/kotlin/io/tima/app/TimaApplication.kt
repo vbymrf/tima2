@@ -9,6 +9,7 @@ import io.tima.core.diag.DiaryPolicy
 import io.tima.core.call.AndroidCallNotice
 import io.tima.core.call.AndroidPhoneMeter
 import io.tima.core.diag.Journal
+import io.tima.core.network.NetworkWatches
 import io.tima.core.secrets.AndroidSecrets
 import io.tima.shared.ReportsStore
 import io.tima.shared.rememberCrash
@@ -33,6 +34,10 @@ class TimaApplication : Application() {
         // человек сворачивает приложение, окно умирает, а разговор продолжается. Ради
         // этого она и заводилась.
         AndroidCallNotice.attach(this)
+        // Сеть по словам системы (У17) — раньше всего, что держит канал: служба и окно
+        // берут наблюдателя отсюда. Без него канал узнаёт о смене сети только пингом,
+        // до 36 секунд, а о возвращении — через паузу отступления, до минуты.
+        NetworkWatches.current = AndroidNetworkWatch(this)
         // Стенду звонков контекст нужен ровно для одного — заряда батареи; процессор,
         // нагрев и трафик он читает из файлов. Представляемся здесь же: замеры снимаются
         // из общего кода, которому Context недоступен.
