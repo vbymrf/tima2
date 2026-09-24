@@ -1,5 +1,6 @@
 package io.tima.core.database
 
+import app.cash.sqldelight.Query
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import io.tima.core.outbox.FieldCipher
@@ -10,6 +11,8 @@ import io.tima.domain.chat.CopyContact
 import io.tima.domain.chat.BookCopyPort
 import io.tima.domain.chat.BookCopy
 import io.tima.domain.chat.BookEntry
+import io.tima.domain.chat.BookKey
+import io.tima.domain.chat.BookList
 import kotlin.uuid.Uuid
 import kotlin.uuid.ExperimentalUuidApi
 import io.tima.domain.chat.Section
@@ -45,30 +48,53 @@ class SqlBook(
     private val device: () -> String = { "" },
 ) : Book, BookCopyPort {
 
-    override fun list(): Flow<List<BookEntry>> =
-        db.bookQueries.all()
-            .asFlow()
-            .mapToList(io)
-            .map { rows ->
-                rows.map { row ->
-                    BookEntry(
-                        phone = row.phone,
-                        namePhone = row.name_phone_enc?.let(::open),
-                        nameOwn = row.name_own_enc?.let(::open),
-                        sectionId = row.section_id,
-                        userId = row.user_id,
-                        manual = row.manual != 0L,
-                    )
-                }.sortedWith(
-                    // Безымянные — в конец: у них нечего читать глазами, и держать их
-                    // среди названных значит мешать поиску взглядом.
-                    compareBy({ it.name == null }, { it.name ?: it.phone }),
-                )
-            }
+    override fun list(): Flow<List<BookEntry>> = db.bookQueries.all(::entryOf).stream()
+
+    override fun everyone(): Flow<List<BookEntry>> = db.bookQueries.everyone(::entryOf).stream()
 
     override fun sections(): Flow<List<Section>> =
         db.bookQueries.sections().asFlow().mapToList(io).map { rows ->
             rows.map { Section(id = it.id, name = it.name, icon = it.icon.toInt(), place = it.place.toInt()) }
+        }
+
+    /**
+     * Строка книги из колонок запроса.
+     *
+     * Передаётся сгенерированным запросам вместо их собственного типа: `all` и `everyone`
+     * отличаются одним условием в SQL, а строку собирают одинаково — и типы у них разные,
+     * без общего предка. Так сборка одна, и новая колонка ломает компиляцию в одном месте.
+     */
+    @Suppress("LongParameterList")
+    private fun entryOf(
+        id: String,
+        phone: String?,
+        namePhoneEnc: ByteArray?,
+        nameOwnEnc: ByteArray?,
+        sectionId: String,
+        userId: String?,
+        manual: Long,
+        list: Long,
+        known: Long,
+    ): BookEntry = BookEntry(
+        id = id,
+        phone = phone.orEmpty(),
+        namePhone = namePhoneEnc?.let(::open),
+        nameOwn = nameOwnEnc?.let(::open),
+        sectionId = sectionId,
+        userId = userId,
+        manual = manual != 0L,
+        list = BookList.of(list.toInt()),
+        known = known != 0L,
+    )
+
+    /** Порядок задаётся здесь — см. заметку у класса. */
+    private fun Query<BookEntry>.stream(): Flow<List<BookEntry>> =
+        asFlow().mapToList(io).map { rows ->
+            rows.sortedWith(
+                // Безымянные — в конец: у них нечего читать глазами, и держать их
+                // среди названных значит мешать поиску взглядом.
+                compareBy({ it.name == null }, { it.name ?: it.phone }),
+            )
         }
 
     override suspend fun fromPhoneBook(entries: List<PhoneBookEntry>) = withContext(io) {
@@ -76,30 +102,51 @@ class SqlBook(
         // означало бы сотни коммитов и видимый список, меняющийся на глазах.
         db.transaction {
             entries.forEach { entry ->
-                db.bookQueries.fromPhoneBookInsert(entry.phone)
-                db.bookQueries.fromPhoneBookName(entry.name?.let(::seal), entry.phone)
+                val id = BookKey.ofPhone(entry.phone)
+                db.bookQueries.fromPhoneBookInsert(id, entry.phone)
+                db.bookQueries.fromPhoneBookName(entry.name?.let(::seal), id)
             }
         }
     }
 
     override suspend fun addManually(phone: String, name: String?, sectionId: String) =
         withContext(io) {
+            val id = BookKey.ofPhone(phone)
             db.transaction {
-                db.bookQueries.addManuallyInsert(phone)
-                db.bookQueries.addManuallyFields(name?.let(::seal), sectionId, now(), device(), phone)
+                db.bookQueries.addManuallyInsert(id, phone, null)
+                db.bookQueries.addManuallyFields(name?.let(::seal), sectionId, now(), device(), id)
             }
         }
 
-    override suspend fun rename(phone: String, name: String?): Unit = withContext(io) {
-        db.bookQueries.setOwnName(name?.let(::seal), now(), device(), phone)
+    override suspend fun addByUser(userId: String, name: String?, sectionId: String) =
+        withContext(io) {
+            db.transaction {
+                // Строка про этого человека уже может быть — заведённая по номеру из
+                // телефонной книги. Второй её не заводим: это был бы один человек двумя
+                // строками, и слить их потом было бы нечем.
+                val было = db.bookQueries.byUserId(userId).executeAsOneOrNull()
+                val id = было ?: BookKey.ofUser(userId)
+                db.bookQueries.addManuallyInsert(id, null, userId)
+                db.bookQueries.addManuallyFields(name?.let(::seal), sectionId, now(), device(), id)
+            }
+        }
+
+    override suspend fun rename(id: String, name: String?): Unit = withContext(io) {
+        db.bookQueries.setOwnName(name?.let(::seal), now(), device(), id)
     }
 
-    override suspend fun moveTo(phone: String, sectionId: String): Unit = withContext(io) {
-        db.bookQueries.setSection(sectionId, now(), device(), phone)
+    override suspend fun moveTo(id: String, sectionId: String): Unit = withContext(io) {
+        db.bookQueries.setSection(sectionId, now(), device(), id)
     }
 
-    override suspend fun hide(phone: String): Unit = withContext(io) {
-        db.bookQueries.hide(now(), device(), phone)
+    override suspend fun setList(id: String, list: BookList, known: Boolean): Unit = withContext(io) {
+        db.bookQueries.setList(
+            list = list.wire.toLong(),
+            known = if (known) 1L else 0L,
+            updatedAt = now(),
+            device = device(),
+            id = id,
+        )
     }
 
     override suspend fun matched(found: Map<String, String?>) = withContext(io) {
@@ -170,11 +217,14 @@ class SqlBook(
             device = device(),
             contacts = db.bookQueries.copyContacts().executeAsList().map {
                 CopyContact(
-                    phone = it.phone,
+                    id = it.id,
+                    phone = it.phone.orEmpty(),
+                    userId = it.user_id,
                     nameOwn = it.name_own_enc?.let(::open),
                     sectionId = it.section_id,
                     manual = it.manual != 0L,
-                    hidden = it.hidden != 0L,
+                    list = it.list.toInt(),
+                    known = it.known != 0L,
                     updatedAt = it.updated_at,
                     device = it.device,
                 )
@@ -201,14 +251,17 @@ class SqlBook(
     override suspend fun apply(theirs: BookCopy): Unit = withContext(io) {
         db.transaction {
             for (c in theirs.contacts) {
-                val ours = db.bookQueries.contactStamp(c.phone).executeAsOneOrNull()
+                val ours = db.bookQueries.contactStamp(c.id).executeAsOneOrNull()
                 if (ours != null && ours >= c.updatedAt) continue
                 db.bookQueries.copyPutContact(
-                    phone = c.phone,
+                    id = c.id,
+                    phone = c.phone.ifBlank { null },
                     nameOwnEnc = c.nameOwn?.let(::seal),
                     sectionId = c.sectionId,
+                    userId = c.userId,
                     manual = if (c.manual) 1L else 0L,
-                    hidden = if (c.hidden) 1L else 0L,
+                    list = c.list.toLong(),
+                    known = if (c.known) 1L else 0L,
                     updatedAt = c.updatedAt,
                     device = c.device,
                 )

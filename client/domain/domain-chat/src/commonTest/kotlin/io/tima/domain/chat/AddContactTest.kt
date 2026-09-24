@@ -1,6 +1,7 @@
 package io.tima.domain.chat
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -18,17 +19,27 @@ class AddContactTest {
 
     private class ПамятнаяКнига : Book {
         val строки = MutableStateFlow<List<BookEntry>>(emptyList())
-        override fun list(): Flow<List<BookEntry>> = строки
+        override fun list(): Flow<List<BookEntry>> =
+            MutableStateFlow(строки.value.filter { it.inContacts })
+        override fun everyone(): Flow<List<BookEntry>> = строки
         override fun sections(): Flow<List<Section>> = MutableStateFlow(emptyList())
         override suspend fun fromPhoneBook(entries: List<PhoneBookEntry>) = Unit
         override suspend fun addManually(phone: String, name: String?, sectionId: String) {
-            строки.value = строки.value.filterNot { it.phone == phone } +
-                BookEntry(phone, nameOwn = name, sectionId = sectionId, manual = true)
+            val id = BookKey.ofPhone(phone)
+            строки.value = строки.value.filterNot { it.id == id } +
+                BookEntry(id, phone, nameOwn = name, sectionId = sectionId, manual = true)
         }
-        override suspend fun rename(phone: String, name: String?) = Unit
-        override suspend fun moveTo(phone: String, sectionId: String) = Unit
-        override suspend fun hide(phone: String) {
-            строки.value = строки.value.filterNot { it.phone == phone }
+        override suspend fun addByUser(userId: String, name: String?, sectionId: String) {
+            val id = BookKey.ofUser(userId)
+            строки.value = строки.value.filterNot { it.id == id } +
+                BookEntry(id, userId = userId, nameOwn = name, sectionId = sectionId, manual = true)
+        }
+        override suspend fun rename(id: String, name: String?) = Unit
+        override suspend fun moveTo(id: String, sectionId: String) = Unit
+        override suspend fun setList(id: String, list: BookList, known: Boolean) {
+            строки.value = строки.value.map {
+                if (it.id == id) it.copy(list = list, known = it.known || known) else it
+            }
         }
         override suspend fun matched(found: Map<String, String?>) {
             строки.value = строки.value.map { row ->
@@ -104,9 +115,42 @@ class AddContactTest {
 
         RemoveContact(книга, друзья).remove(книга.строки.value.single())
 
-        assertTrue(книга.строки.value.isEmpty())
+        // Строка остаётся — она надгробие, иначе сверка с телефоном вернула бы убранного.
+        // Из контактов он при этом пропал: они собираются вычитанием (Л4).
+        assertEquals(BookList.Removed, книга.строки.value.single().list)
+        assertTrue(книга.list().first().isEmpty(), "убранный остался в контактах")
         // «Есть в контактах — друг» читается в обе стороны: иначе лента копит тех,
         // кого человек уже убрал.
         assertTrue(друзья.добавлены.isEmpty(), "подписка осталась после удаления контакта")
+    }
+
+    @Test
+    fun блокировка_запоминает_знакомого_и_тоже_снимает_подписку() = runTest {
+        val книга = ПамятнаяКнига()
+        val друзья = ПамятныеДрузья()
+        AddContact(книга, друзья, { phones -> phones.associateWith { "u-1" } })
+            .add("+79160001122", "Борис", "")
+
+        RemoveContact(книга, друзья).block(книга.строки.value.single())
+
+        val строка = книга.строки.value.single()
+        assertEquals(BookList.Blocked, строка.list)
+        // Признак вычисляется В МОМЕНТ блокировки: потом он неотличим от «строка есть».
+        // По нему и только по нему уходит автоответ (Л13, Л14).
+        assertTrue(строка.known, "знакомый не помечен знакомым")
+        assertTrue(друзья.добавлены.isEmpty(), "подписка осталась после блокировки")
+    }
+
+    @Test
+    fun незнакомец_заблокирован_без_пометки_знакомого() = runTest {
+        val книга = ПамятнаяКнига()
+        val друзья = ПамятныеДрузья()
+        книга.addByUser("u-9", null, "")
+        книга.setList(BookKey.ofUser("u-9"), BookList.Removed)
+
+        // Убранный — уже не в контактах, и блокировка знакомым его не делает.
+        RemoveContact(книга, друзья).block(книга.строки.value.single())
+
+        assertTrue(!книга.строки.value.single().known, "незнакомец помечен знакомым")
     }
 }

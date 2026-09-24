@@ -98,7 +98,10 @@ class BookCopySync(
         }
         // После правки — отдать. Первая пара значений потоков — это чтение при запуске, а
         // не правка: пропускается.
-        combine(environment.bookStorage.list(), environment.bookStorage.sections()) { _, _ -> Unit }
+        // `everyone`, а не `list`: копия везёт и убранных с заблокированными. По
+        // `list` перекладывание в «Убранные» выглядело бы как исчезновение строки — и
+        // на другом устройстве она осталась бы в контактах.
+        combine(environment.bookStorage.everyone(), environment.bookStorage.sections()) { _, _ -> Unit }
             .drop(1)
             .debounce(2_000)
             .onEach { note("отдать после правки", sync.push()) }

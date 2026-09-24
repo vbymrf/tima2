@@ -1,6 +1,8 @@
 package io.tima.core.database
 
 import io.tima.domain.chat.ObserveBook
+import io.tima.domain.chat.BookKey
+import io.tima.domain.chat.BookList
 import io.tima.domain.chat.PhoneBookEntry
 import io.tima.domain.chat.normalizePhone
 import kotlinx.coroutines.flow.first
@@ -51,7 +53,7 @@ class SqlBookTest {
     @Test
     fun убранный_не_возвращается_синхронизацией() = runTest {
         book.fromPhoneBook(listOf(PhoneBookEntry("+79160001122", "Борис")))
-        book.hide("+79160001122")
+        book.setList(BookKey.ofPhone("+79160001122"), BookList.Removed)
         assertTrue(строки().isEmpty())
 
         // Ровно тот случай, ради которого книга своя: в телефоне он остался.
@@ -75,7 +77,7 @@ class SqlBookTest {
     @Test
     fun своё_имя_переживает_синхронизацию() = runTest {
         book.fromPhoneBook(listOf(PhoneBookEntry("+79160001122", "Борис Мельник")))
-        book.rename("+79160001122", "Боря с работы")
+        book.rename(BookKey.ofPhone("+79160001122"), "Боря с работы")
 
         // В телефоне имя сменилось — и это видно, но своё остаётся своим.
         book.fromPhoneBook(listOf(PhoneBookEntry("+79160001122", "Мельник Б. А.")))

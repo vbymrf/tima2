@@ -41,7 +41,15 @@ class ObserveBook(private val book: Book) {
  * @param manual заведён вручную: такой не пропадает, когда его нет в телефоне.
  */
 data class BookEntry(
-    val phone: String,
+    /**
+     * Ключ строки: `tel:<номер>` либо `tima:<user_id>` — см. [BookKey].
+     *
+     * Вычислимый, а не случайный: книга сливается между устройствами, и случайный
+     * идентификатор телефон и планшет выдумали бы разный — получились бы **две Ани**.
+     */
+    val id: String,
+    /** Пусто у контакта по нику: номера у него нет и не будет. */
+    val phone: String = "",
     val namePhone: String? = null,
     val nameOwn: String? = null,
     /**
@@ -52,6 +60,10 @@ data class BookEntry(
     val sectionId: String = "",
     val userId: String? = null,
     val manual: Boolean = false,
+    /** В каком из четырёх списков — [BookList]. */
+    val list: BookList = BookList.Usual,
+    /** Был в контактах до блокировки: только ему уходит автоответ (Л13). */
+    val known: Boolean = false,
 ) {
     /**
      * Имя для показа: своё перебивает книжное.
@@ -64,6 +76,67 @@ data class BookEntry(
 
     /** Есть в TIMa: можно написать и позвонить внутри приложения. */
     val inTima: Boolean get() = !userId.isNullOrBlank()
+
+    /** В контактах: «Книга ∪ TIMa», то есть не убран и не заблокирован. */
+    val inContacts: Boolean get() = list == BookList.Usual
+
+    /** Номера нет — контакт заведён по нику. Вторая строка тогда показывает ник. */
+    val byNickname: Boolean get() = phone.isBlank()
+}
+
+/**
+ * В каком из четырёх списков человек — Л3.
+ *
+ * Списков четыре, а признаков два, и один уже был: `manual` говорит, **откуда** контакт
+ * взялся, а это — **что с ним сделали**.
+ *
+ *     Книга           = manual 0, Usual        Убранные        = Removed
+ *     TIMa            = manual 1, Usual        Заблокированные = Blocked
+ *
+ * `manual` не заменён этим полем и не станет лишним: у него своя работа, старше этой —
+ * заведённый руками не исчезает оттого, что в телефонной книге его нет. Он же отвечает,
+ * куда возвращать вынутого из «Убранных».
+ */
+enum class BookList(val wire: Int) {
+    Usual(0),
+
+    /**
+     * Убран человеком.
+     *
+     * Заменило `hidden`, и это не переименование: «убрать из контактов» и «занести в
+     * Убранные» оказались одним действием. Совпадало всё, включая надгробие — убранный
+     * не воскресает при сверке с телефоном.
+     */
+    Removed(1),
+
+    /** Заблокирован: убран из контактов, и переписка с ним скрыта в окне «Телефон». */
+    Blocked(2),
+    ;
+
+    companion object {
+        fun of(wire: Int): BookList = entries.firstOrNull { it.wire == wire } ?: Usual
+    }
+}
+
+/**
+ * Как из номера или `user_id` получается ключ книги.
+ *
+ * **Одно место на всё приложение.** «Номер, если есть, иначе `user_id`» — правило,
+ * которое можно исполнить по-разному в трёх местах, и тогда одна и та же Аня окажется
+ * двумя строками.
+ */
+object BookKey {
+    private const val TEL = "tel:"
+    private const val TIMA = "tima:"
+
+    /** Контакт из телефонной книги. */
+    fun ofPhone(phone: String): String = TEL + phone
+
+    /** Контакт, заведённый по нику: номера у него нет. */
+    fun ofUser(userId: String): String = TIMA + userId
+
+    /** Номер из ключа; пусто — ключ не телефонный. */
+    fun phoneOf(id: String): String = if (id.startsWith(TEL)) id.removePrefix(TEL) else ""
 }
 
 /** Порт книги. Реализуется `core-database`. */
@@ -80,12 +153,34 @@ interface Book {
      */
     suspend fun fromPhoneBook(entries: List<PhoneBookEntry>)
 
-    /** Завести руками. Номер обязателен, остальное — нет. Раздел — идентификатором. */
+    /** Вся книга, включая убранных и заблокированных: её показывает «Вид» (Л5). */
+    fun everyone(): Flow<List<BookEntry>>
+
+    /** Завести руками по номеру. Раздел — идентификатором. */
     suspend fun addManually(phone: String, name: String?, sectionId: String)
 
-    suspend fun rename(phone: String, name: String?)
-    suspend fun moveTo(phone: String, sectionId: String)
-    suspend fun hide(phone: String)
+    /**
+     * Завести руками **по нику** — человека, у которого номера нет вовсе (Л0, Л11).
+     *
+     * Второй строкой у него показывается ник: довод «номер читают и набирают, ему нужен
+     * кегль» переносится на ник целиком — его тоже читают и называют вслух.
+     *
+     * Ничего не делает, если строка про этого человека уже есть: иначе одного и того же
+     * заведут дважды — раз по номеру из телефонной книги, раз по нику.
+     */
+    suspend fun addByUser(userId: String, name: String?, sectionId: String)
+
+    suspend fun rename(id: String, name: String?)
+    suspend fun moveTo(id: String, sectionId: String)
+
+    /**
+     * Переложить в список — Л3, Л13.
+     *
+     * @param known был ли человек в контактах **до** этого. Ставится только вверх и
+     *   только здесь: проверять потом поздно — строка книги к тому времени есть в любом
+     *   случае, блокировка её и заводит.
+     */
+    suspend fun setList(id: String, list: BookList, known: Boolean = false)
 
     /** Итог сверки: чей номер нашёлся в TIMa. Не найденные приходят с `null`. */
     suspend fun matched(found: Map<String, String?>)

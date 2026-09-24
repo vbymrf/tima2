@@ -78,9 +78,33 @@ class RemoveContact(
     private val friends: Friends,
 ) {
 
-    suspend fun remove(entry: BookEntry) {
-        book.hide(entry.phone)
-        entry.userId?.let { friends.set(it, friend = false) }
+    suspend fun remove(entry: BookEntry) = moveTo(entry, BookList.Removed)
+
+    /**
+     * Заблокировать — Л3, Л7, Л13.
+     *
+     * `known` ставится **здесь и один раз**: «был ли он в контактах до блокировки».
+     * Проверять это потом поздно — строка книги к тому времени есть в любом случае,
+     * блокировка её и заводит. Признак нужен автоответу (Л14): знакомому мы говорим,
+     * что он заблокирован, незнакомец остаётся в неведении.
+     */
+    suspend fun block(entry: BookEntry) =
+        moveTo(entry, BookList.Blocked, known = entry.inContacts)
+
+    /** Вернуть в контакты: из «Убранных» или из «Заблокированных». */
+    suspend fun restore(entry: BookEntry) = moveTo(entry, BookList.Usual)
+
+    /**
+     * Переложить в список — и привести подписку в соответствие (Л7).
+     *
+     * «Есть в контактах — друг» читается в обе стороны, поэтому лента открывается и
+     * закрывается **тем же движением**, что перекладывание. Двумя отдельными вызовами
+     * это рано или поздно разошлось бы: убрали в одном месте, а ленту закрыли только в
+     * одном из трёх.
+     */
+    private suspend fun moveTo(entry: BookEntry, list: BookList, known: Boolean = false) {
+        book.setList(entry.id, list, known)
+        entry.userId?.let { friends.set(it, friend = list == BookList.Usual) }
     }
 }
 

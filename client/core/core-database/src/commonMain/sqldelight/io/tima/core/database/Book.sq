@@ -6,12 +6,27 @@
 -- выполняются два обещания: удалённый из книги не должен возвращаться при следующей
 -- синхронизации, а заведённый вручную — исчезать оттого, что в телефоне его нет.
 --
--- ── КЛЮЧ — НОМЕР ────────────────────────────────────────────────────────────
+-- ── КЛЮЧ ВЫЧИСЛИМЫЙ, А НЕ НОМЕР (Л0, миграция 13 → 14) ──────────────────────
 --
--- Имя меняется, `user_id` появляется позже (после сверки), а номер и есть то, чем
--- человек назван: по нему сверяются с сервером и находят человека. Номер здесь в
--- открытом виде, как и `chats.peer_id`: по нему ищут и по нему сверяют, а искать по
--- зашифрованному нечем.
+--     id = 'tel:'  || номер      — контакт из телефонной книги
+--     id = 'tima:' || user_id    — контакт, добавленный по нику
+--
+-- Ключом был номер. Это делало **невозможным** контакт без номера, а такие есть и они
+-- полноправны: у виртуальных аккаунтов номера нет вовсе, только ник.
+--
+-- Почему вычислимый, а не случайный: книга сливается между устройствами человека.
+-- Случайный идентификатор телефон и планшет выдумали бы разный — и слияние дало бы
+-- **двух Ань**, а разобрать эту пару было бы нечем. Вычислимый оба посчитают одинаково.
+--
+-- Почему префикс, а не два поля: «номер, если есть, иначе `user_id`» — правило, которое
+-- можно исполнить по-разному в трёх местах. Одна строка ошибиться не даёт.
+--
+-- **Ключ не меняется после сверки.** Контакт из телефонной книги, оказавшийся в TIMa,
+-- остаётся `tel:`, а `user_id` дописывается рядом. Иначе после сверки он на одном
+-- устройстве был бы одним человеком, а на другом — другим.
+--
+-- Номер и ник в открытом виде, как и `chats.peer_id`: по ним ищут и сверяют, а искать
+-- по зашифрованному нечем.
 --
 -- ── ДВА ИМЕНИ, А НЕ ОДНО ────────────────────────────────────────────────────
 --
@@ -23,7 +38,9 @@
 -- метаданные. Порядок и поиск делаются в памяти после расшифровки; `ORDER BY` по
 -- шифртексту дал бы случайный порядок, меняющийся при каждой перезаписи.
 CREATE TABLE book (
-    phone          TEXT    NOT NULL PRIMARY KEY,
+    id             TEXT    NOT NULL PRIMARY KEY,
+    -- NULL у контакта по нику: номера у него нет и не будет.
+    phone          TEXT,
     -- Что прочитано из телефонной книги. Перезаписывается синхронизацией свободно.
     name_phone_enc BLOB,
     -- Что человек записал сам. Не затирается никем и никогда.
@@ -37,9 +54,26 @@ CREATE TABLE book (
     user_id        TEXT,
     -- 1 — заведён вручную. Такой не исчезает оттого, что в телефонной книге его нет.
     manual         INTEGER NOT NULL DEFAULT 0,
-    -- 1 — убран человеком. Строка остаётся именно ради этого: без неё синхронизация
-    -- вернула бы убранного обратно, и удаление выглядело бы неработающим.
-    hidden         INTEGER NOT NULL DEFAULT 0,
+    -- В каком списке человек: 0 — обычный, 1 — убран, 2 — заблокирован (Л3).
+    --
+    -- Заменило `hidden`, и это не переименование: «убрать из контактов» и «занести в
+    -- Убранные» оказались одним действием. Совпадало всё, включая надгробие — строка
+    -- остаётся, чтобы синхронизация не вернула убранного, иначе удаление выглядело бы
+    -- неработающим.
+    --
+    -- Четыре списка складываются отсюда и из `manual`:
+    --     Книга           = manual 0, list 0
+    --     TIMa            = manual 1, list 0
+    --     Убранные        = list 1
+    --     Заблокированные = list 2
+    list           INTEGER NOT NULL DEFAULT 0,
+    -- Был ли человек в контактах ДО блокировки (Л13): ему и только ему уходит автоответ
+    -- «Пользователь вас заблокировал». Незнакомец остаётся в неведении — иначе автоответ
+    -- становится оракулом «этот меня заблокировал» и чистит список рассыльщику.
+    --
+    -- Ставится ОДИН РАЗ, в момент блокировки. Проверять потом поздно: строка книги к
+    -- тому времени есть в любом случае — блокировка её и заводит.
+    known          INTEGER NOT NULL DEFAULT 0,
     -- Штамп правки человеком (миграция 10 → 11): когда и каким устройством. Для слияния
     -- копий с разных устройств — побеждает поздняя запись. 0 — не правилась с этой сборки.
     -- В конце, потому что ALTER TABLE ADD COLUMN дописывает столбцы в конец, а порядок
@@ -47,6 +81,11 @@ CREATE TABLE book (
     updated_at     INTEGER NOT NULL DEFAULT 0,
     device         TEXT    NOT NULL DEFAULT ''
 );
+
+-- По номеру ищут при каждой сверке с телефонной книгой, пачками по 500.
+CREATE INDEX IF NOT EXISTS book_phone ON book(phone);
+-- По `user_id` ищут, чтобы не завести одного человека дважды — по номеру и по нику.
+CREATE INDEX IF NOT EXISTS book_user ON book(user_id);
 
 CREATE INDEX book_by_section ON book (section_id);
 CREATE INDEX book_by_user ON book (user_id);
@@ -68,51 +107,69 @@ CREATE TABLE book_section (
     deleted    INTEGER NOT NULL DEFAULT 0
 );
 
+-- Контакты — это вычитание, а не хранение: «Книга ∪ TIMa» минус два списка.
+-- Второе хранилище «кто сейчас в контактах» разошлось бы с признаками при первой правке.
 all:
-SELECT phone, name_phone_enc, name_own_enc, section_id, user_id, manual
+SELECT id, phone, name_phone_enc, name_own_enc, section_id, user_id, manual, list, known
 FROM book
-WHERE hidden = 0;
+WHERE list = 0;
 
-byPhone:
-SELECT phone, name_phone_enc, name_own_enc, section_id, user_id, manual
+-- Список целиком, включая убранных и заблокированных: его показывает «Вид» (Л5).
+everyone:
+SELECT id, phone, name_phone_enc, name_own_enc, section_id, user_id, manual, list, known
+FROM book;
+
+byId:
+SELECT id, phone, name_phone_enc, name_own_enc, section_id, user_id, manual, list, known
 FROM book
-WHERE phone = ?;
+WHERE id = ?;
+
+-- Есть ли уже строка про этого человека. Нужно, чтобы не завести его дважды: один раз
+-- по номеру из телефонной книги, второй раз по нику.
+byUserId:
+SELECT id FROM book WHERE user_id = ? LIMIT 1;
 
 -- Из телефонной книги — двумя запросами, а не UPSERT: диалект здесь SQLite 3.18,
 -- `ON CONFLICT DO UPDATE` появился в 3.24. Порядок «вставить, если нет» → «обновить»
--- даёт ровно то же: своё имя, раздел и `hidden` остаются нетронутыми, и скрытый не
+-- даёт ровно то же: своё имя, раздел и список остаются нетронутыми, и убранный не
 -- воскресает — без этого удаление выглядело бы неработающим.
 fromPhoneBookInsert:
-INSERT OR IGNORE INTO book (phone) VALUES (?);
+INSERT OR IGNORE INTO book (id, phone) VALUES (?, ?);
 
 fromPhoneBookName:
-UPDATE book SET name_phone_enc = ? WHERE phone = ?;
+UPDATE book SET name_phone_enc = ? WHERE id = ?;
 
 -- Заведён человеком. `manual` не даёт синхронизации посчитать его пропавшим, а
--- `hidden = 0` возвращает того, кого убирали раньше: добавление руками — это и есть
+-- `list = 0` возвращает того, кого убирали раньше: добавление руками — это и есть
 -- прямое «верни».
 addManuallyInsert:
-INSERT OR IGNORE INTO book (phone) VALUES (?);
+INSERT OR IGNORE INTO book (id, phone, user_id) VALUES (?, ?, ?);
 
 addManuallyFields:
-UPDATE book SET name_own_enc = ?, section_id = ?, manual = 1, hidden = 0, updated_at = ?, device = ? WHERE phone = ?;
+UPDATE book SET name_own_enc = ?, section_id = ?, manual = 1, list = 0, updated_at = ?, device = ? WHERE id = ?;
 
 setOwnName:
-UPDATE book SET name_own_enc = ?, updated_at = ?, device = ? WHERE phone = ?;
+UPDATE book SET name_own_enc = ?, updated_at = ?, device = ? WHERE id = ?;
 
 setSection:
-UPDATE book SET section_id = ?, updated_at = ?, device = ? WHERE phone = ?;
+UPDATE book SET section_id = ?, updated_at = ?, device = ? WHERE id = ?;
 
--- Сверка с сервером: кто из них в TIMa.
+-- Сверка с сервером: кто из них в TIMa. По номеру, а не по ключу: сверяются именно
+-- номера, а у контакта по нику `user_id` известен с самого начала.
 setUserId:
 UPDATE book SET user_id = ? WHERE phone = ?;
 
 clearUserId:
 UPDATE book SET user_id = NULL WHERE phone = ?;
 
--- Убрать из книги. Не DELETE: строка нужна, чтобы синхронизация не вернула убранного.
-hide:
-UPDATE book SET hidden = 1, updated_at = ?, device = ? WHERE phone = ?;
+-- Переложить в другой список. Не DELETE: строка нужна, чтобы синхронизация не вернула
+-- убранного — без неё удаление выглядело бы неработающим.
+--
+-- `known` ставится ТЕМ ЖЕ запросом и только вверх (`MAX`): признак «был в контактах»
+-- вычисляется один раз, в момент блокировки, и потом не пересчитывается. Пересчёт
+-- задним числом дал бы «знакомого» всякому, про кого строка уже есть.
+setList:
+UPDATE book SET list = :list, known = MAX(known, :known), updated_at = :updatedAt, device = :device WHERE id = :id;
 
 sections:
 SELECT id, name, icon, place FROM book_section WHERE deleted = 0 ORDER BY place, name;
@@ -145,7 +202,7 @@ UPDATE book SET section_id = '' WHERE section_id = ?;
 -- второго устройства — иначе убранный там вернётся. Имя из телефонной книги не едет: на
 -- втором устройстве своя телефонная книга, и оно прочтёт его само.
 copyContacts:
-SELECT phone, name_own_enc, section_id, user_id, manual, hidden, updated_at, device FROM book;
+SELECT id, phone, name_own_enc, section_id, user_id, manual, list, known, updated_at, device FROM book;
 
 copySections:
 SELECT id, name, icon, place, deleted, updated_at, device FROM book_section;
@@ -153,13 +210,15 @@ SELECT id, name, icon, place, deleted, updated_at, device FROM book_section;
 -- Применить запись, пришедшую с другого устройства: целиком, штамп — чужой. Условие
 -- «моложе нашей» проверяет вызывающий: SQLite 3.18 не умеет UPSERT с условием.
 copyPutContact:
-INSERT OR REPLACE INTO book (phone, name_phone_enc, name_own_enc, section_id, user_id, manual, hidden, updated_at, device)
+INSERT OR REPLACE INTO book (id, phone, name_phone_enc, name_own_enc, section_id, user_id, manual, list, known, updated_at, device)
 VALUES (
-    :phone,
-    (SELECT name_phone_enc FROM book WHERE phone = :phone),
+    :id, :phone,
+    (SELECT name_phone_enc FROM book WHERE id = :id),
     :nameOwnEnc, :sectionId,
-    (SELECT user_id FROM book WHERE phone = :phone),
-    :manual, :hidden, :updatedAt, :device
+    -- `user_id` берётся свой, если он уже известен: чужая копия могла быть снята до
+    -- сверки, и принять её `NULL` значило бы забыть, что человек в TIMa.
+    COALESCE((SELECT user_id FROM book WHERE id = :id), :userId),
+    :manual, :list, :known, :updatedAt, :device
 );
 
 copyPutSection:
@@ -168,7 +227,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?);
 
 -- Штамп записи — чтобы решить, чья моложе, не читая всю строку.
 contactStamp:
-SELECT updated_at FROM book WHERE phone = ?;
+SELECT updated_at FROM book WHERE id = ?;
 
 sectionStamp:
 SELECT updated_at FROM book_section WHERE id = ?;

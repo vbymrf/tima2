@@ -22,25 +22,29 @@ class SyncBookTest {
         var сверок = 0
 
         override fun list(): Flow<List<BookEntry>> = строки
+        override fun everyone(): Flow<List<BookEntry>> = строки
         override fun sections(): Flow<List<Section>> = MutableStateFlow(emptyList())
 
         override suspend fun fromPhoneBook(entries: List<PhoneBookEntry>) {
-            val было = строки.value.associateBy { it.phone }
+            val было = строки.value.associateBy { it.id }
             val стало = LinkedHashMap(было)
             entries.forEach { e ->
-                val прежний = было[e.phone]
-                стало[e.phone] = (прежний ?: BookEntry(e.phone)).copy(namePhone = e.name)
+                val id = BookKey.ofPhone(e.phone)
+                val прежний = было[id]
+                стало[id] = (прежний ?: BookEntry(id, e.phone)).copy(namePhone = e.name)
             }
             строки.value = стало.values.toList()
         }
 
         override suspend fun addManually(phone: String, name: String?, sectionId: String) {
-            строки.value = строки.value + BookEntry(phone, nameOwn = name, sectionId = sectionId, manual = true)
+            строки.value = строки.value +
+                BookEntry(BookKey.ofPhone(phone), phone, nameOwn = name, sectionId = sectionId, manual = true)
         }
 
-        override suspend fun rename(phone: String, name: String?) = Unit
-        override suspend fun moveTo(phone: String, sectionId: String) = Unit
-        override suspend fun hide(phone: String) = Unit
+        override suspend fun addByUser(userId: String, name: String?, sectionId: String) = Unit
+        override suspend fun rename(id: String, name: String?) = Unit
+        override suspend fun moveTo(id: String, sectionId: String) = Unit
+        override suspend fun setList(id: String, list: BookList, known: Boolean) = Unit
 
         override suspend fun matched(found: Map<String, String?>) {
             сверок++

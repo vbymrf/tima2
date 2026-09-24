@@ -2178,7 +2178,7 @@ private fun App(
                             val entry = bookStateForChats.all.firstOrNull { it.userId != null && it.userId == peer }
                             scope.launch {
                                 if (entry != null) {
-                                    environment.bookStorage.moveTo(entry.phone, sectionId)
+                                    environment.bookStorage.moveTo(entry.id, sectionId)
                                 } else {
                                     // Собеседника в книге нет — раздел положить некуда. Номер
                                     // собеседника сервер отдаёт: заводим его в книге вручную,

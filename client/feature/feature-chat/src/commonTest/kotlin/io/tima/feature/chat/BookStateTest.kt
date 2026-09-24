@@ -2,6 +2,7 @@ package io.tima.feature.chat
 
 import io.tima.core.words.RussianWords
 import io.tima.domain.chat.BookEntry
+import io.tima.domain.chat.BookKey
 import io.tima.domain.chat.Section
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -17,10 +18,22 @@ import kotlin.test.assertTrue
 class BookStateTest {
 
     private val work = Section(id = "s-work", name = "Работа")
-    private val борис = BookEntry("+79160001122", namePhone = "Борис", sectionId = work.id, userId = "u-1")
-    private val анна = BookEntry("+79035554433", namePhone = "Анна", userId = "u-2")
-    private val виктор = BookEntry("+79267778899", nameOwn = "Виктор, сосед")
-    private val поликлиника = BookEntry("+74951002030")
+    /** Строка книги по номеру: ключ считается так же, как его считает база (Л0). */
+    private fun поНомеру(
+        phone: String,
+        namePhone: String? = null,
+        nameOwn: String? = null,
+        sectionId: String = "",
+        userId: String? = null,
+    ) = BookEntry(
+        id = BookKey.ofPhone(phone), phone = phone, namePhone = namePhone,
+        nameOwn = nameOwn, sectionId = sectionId, userId = userId,
+    )
+
+    private val борис = поНомеру("+79160001122", namePhone = "Борис", sectionId = work.id, userId = "u-1")
+    private val анна = поНомеру("+79035554433", namePhone = "Анна", userId = "u-2")
+    private val виктор = поНомеру("+79267778899", nameOwn = "Виктор, сосед")
+    private val поликлиника = поНомеру("+74951002030")
 
     private fun состояние(vararg люди: BookEntry, view: BookView = BookView()) =
         BookState(all = люди.toList(), sections = listOf(work), view = view)

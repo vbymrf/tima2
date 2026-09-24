@@ -13,7 +13,20 @@ class BookCopyCodecTest {
     private val copy = BookCopy(
         revision = 7,
         device = "T1",
-        contacts = listOf(CopyContact("+79160001122", "Витя, сосед", "s-1", manual = true, hidden = false, updatedAt = 1000, device = "T1")),
+        contacts = listOf(
+            CopyContact(
+                id = "tel:+79160001122", phone = "+79160001122",
+                nameOwn = "Витя, сосед", sectionId = "s-1", manual = true,
+                updatedAt = 1000, device = "T1",
+            ),
+            // Человек без номера — заведённый по нику. Едет он тем же блобом, и ключ у
+            // него свой: до Л0 такой строки в копии не могло быть вовсе.
+            CopyContact(
+                id = "tima:u-9", userId = "u-9",
+                nameOwn = "Аня", sectionId = "s-1", manual = true,
+                list = 2, known = true, updatedAt = 1100, device = "T1",
+            ),
+        ),
         sections = listOf(CopySection("s-1", "Работа", icon = 2, place = 0, deleted = false, updatedAt = 900, device = "T1")),
     )
 

@@ -18,7 +18,7 @@ package io.tima.domain.chat
  * поздняя. Одна ревизия на весь блоб этого не умела бы: два пишущих устройства затирали
  * бы друг друга целиком.
  *
- * Надгробия (`hidden` у контакта, `deleted` у раздела) — записи, а не отсутствие: без них
+ * Надгробия (`list` у контакта, `deleted` у раздела) — записи, а не отсутствие: без них
  * убранное вернулось бы с устройства, которое об удалении не знало.
  */
 data class BookCopy(
@@ -40,14 +40,16 @@ data class BookCopy(
          * условии, что он всегда зовёт `merge(ours, theirs)`; так и есть.
          */
         fun merge(ours: BookCopy, theirs: BookCopy): BookCopy {
-            val contacts = (ours.contacts.associateBy { it.phone } to theirs.contacts.associateBy { it.phone })
+            // Слияние по КЛЮЧУ, а не по номеру: у контакта по нику номера нет, и по
+            // пустой строке все безномерные схлопнулись бы в одного.
+            val contacts = (ours.contacts.associateBy { it.id } to theirs.contacts.associateBy { it.id })
                 .let { (a, b) -> (a.keys + b.keys).map { key -> newer(a[key], b[key]) { it.updatedAt } } }
             val sections = (ours.sections.associateBy { it.id } to theirs.sections.associateBy { it.id })
                 .let { (a, b) -> (a.keys + b.keys).map { key -> newer(a[key], b[key]) { it.updatedAt } } }
             return BookCopy(
                 revision = maxOf(ours.revision, theirs.revision),
                 device = ours.device,
-                contacts = contacts.sortedBy { it.phone },
+                contacts = contacts.sortedBy { it.id },
                 sections = sections.sortedWith(compareBy({ it.place }, { it.name })),
             )
         }
@@ -62,12 +64,18 @@ data class BookCopy(
 }
 
 data class CopyContact(
-    val phone: String,
+    /** Ключ строки — `tel:` либо `tima:`; см. `BookKey`. По нему и сливается. */
+    val id: String,
+    /** Пусто у контакта по нику. */
+    val phone: String = "",
+    val userId: String? = null,
     val nameOwn: String?,
     val sectionId: String,
     val manual: Boolean,
-    /** Надгробие: человек убрал контакт. */
-    val hidden: Boolean,
+    /** Список: 0 обычный, 1 убран, 2 заблокирован. Числом — так же, как оно едет. */
+    val list: Int = 0,
+    /** Был в контактах до блокировки (Л13). */
+    val known: Boolean = false,
     val updatedAt: Long,
     val device: String,
 )

@@ -16,7 +16,12 @@ import kotlin.test.assertTrue
 class SyncBookCopyTest {
 
     private fun contact(phone: String, name: String?, section: String = "", at: Long, device: String, hidden: Boolean = false) =
-        CopyContact(phone, name, section, manual = true, hidden = hidden, updatedAt = at, device = device)
+        CopyContact(
+            id = BookKey.ofPhone(phone), phone = phone,
+            nameOwn = name, sectionId = section, manual = true,
+            list = if (hidden) BookList.Removed.wire else BookList.Usual.wire,
+            updatedAt = at, device = device,
+        )
 
     private fun section(id: String, name: String, at: Long, device: String, deleted: Boolean = false) =
         CopySection(id, name, icon = 0, place = 0, deleted = deleted, updatedAt = at, device = device)
@@ -43,7 +48,7 @@ class SyncBookCopyTest {
         val phone = BookCopy(1, "T1", listOf(contact("+1", "Витя", at = 90, device = "T1", hidden = true)), listOf(section("s", "Дача", at = 90, device = "T1", deleted = true)))
         val pc = BookCopy(1, "P2", listOf(contact("+1", "Витя", at = 10, device = "P2")), listOf(section("s", "Дача", at = 10, device = "P2")))
         val merged = BookCopy.merge(pc, phone)
-        assertTrue(merged.contacts.single().hidden, "убранный на телефоне контакт не должен вернуться с ПК")
+        assertEquals(BookList.Removed.wire, merged.contacts.single().list, "убранный на телефоне контакт не должен вернуться с ПК")
         assertTrue(merged.sections.single().deleted, "убранный раздел не должен вернуться")
     }
 

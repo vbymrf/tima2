@@ -252,7 +252,10 @@ fun BookScreen(
                         }
                     }
                     if (state.view.folders && !state.tiles && group.name in state.collapsed) return@forEach
-                    items(group.people, key = { it.phone }) { person ->
+                    // Ключ — ключ книги, а не номер: у контакта, заведённого по нику,
+                    // номера нет, и все такие строки получили бы один и тот же ключ.
+                    // Compose на одинаковых ключах начинает путать строки местами (Л0).
+                    items(group.people, key = { it.id }) { person ->
                         val who = personOf(person)
                         ListLine(
                             onClick = { onOpen(person) },
@@ -274,9 +277,17 @@ fun BookScreen(
                                     // (галки через запятую, иначе первое, что есть); вторая
                                     // — всегда телефон (решение заказчика 2026-09-18).
                                     Name(who.line(state.view.look(), PERSON_FIRST_LINE) ?: words.nameless)
-                                    // Телефон крупнее третьестепенной строки в 1,3 раза — заказчик
-                                    // 2026-09-18: номер читают и набирают, ему нужен кегль.
-                                    Caption(person.phone, fontSize = TimaType.sz6 * 1.3f, weight = FontWeight.SemiBold, color = colors.text3, lineOne = true)
+                                    // Вторая строка — номер, а у кого его нет — ник (Л0).
+                                    // Довод про кегль переносится на ник целиком: его так же
+                                    // читают и так же называют вслух. Пустая строка на этом
+                                    // месте была бы хуже всего — она выглядит как потеря.
+                                    Caption(
+                                        person.phone.ifBlank { who.nick?.let { "@$it" }.orEmpty() },
+                                        fontSize = TimaType.sz6 * 1.3f,
+                                        weight = FontWeight.SemiBold,
+                                        color = colors.text3,
+                                        lineOne = true,
+                                    )
                                 }
                             },
                             right = when {
