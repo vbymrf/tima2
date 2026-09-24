@@ -98,6 +98,81 @@ func (s *Store) FindUserByNickname(ctx context.Context, nick string) (string, er
 	return userID, err
 }
 
+// NicknameHit — одна строка выдачи поиска: кто и под каким ником.
+type NicknameHit struct {
+	UserID   string
+	Nickname string
+}
+
+// MinNicknameQuery — короче не ищем (Л10, §6 плана).
+//
+// Три знака — не аккуратность, а часть барьера от спама: по одной-двум буквам выдачи
+// не бывает, бывает выгрузка справочника по алфавиту.
+const MinNicknameQuery = 3
+
+// SearchNicknames — точное совпадение либо похожие (Л10).
+//
+// ── ПРАВИЛО ИСПОЛНЯЕТ СЕРВЕР, А НЕ ДВА ПОХОДА КЛИЕНТА ───────────────────────
+//
+// Решение заказчика 2026-09-24: точное совпадение первым; нашлось как есть — дальше
+// не ищем; не нашлось — похожие. Один запрос, потому что круг экономится, а правило
+// лежит в одном месте: два похода клиента разошлись бы порядком у разных клиентов.
+//
+// Похожие — по вхождению подстроки, а не по началу строки: человек помнит середину
+// ника не реже, чем начало. Цена названа в плане прямо: это перебор пространства
+// имён, и держат его пределы — минимум знаков, предел выдачи и частота.
+//
+// Порядок: сначала те, у кого ник НАЧИНАЕТСЯ с запроса, потом остальные. Внутри —
+// по длине и по алфавиту: короткий ближе к запросу, чем длинный с тем же куском.
+func (s *Store) SearchNicknames(ctx context.Context, q string, limit int) ([]NicknameHit, error) {
+	q = strings.TrimSpace(q)
+	if len([]rune(q)) < MinNicknameQuery {
+		return nil, ErrNicknameBad
+	}
+	// Запрос — часть ника, а не ник: границы длины к нему не применимы, но набор
+	// знаков тот же. Иначе «%» и «_» из запроса стали бы шаблоном LIKE.
+	if !nicknamePartRe.MatchString(q) {
+		return nil, ErrNicknameBad
+	}
+	if limit <= 0 || limit > MaxNicknameHits {
+		limit = MaxNicknameHits
+	}
+	// Точное — первым и в одиночку: нашлось как есть, значит искали именно его.
+	if ValidNickname(q) {
+		if id, err := s.FindUserByNickname(ctx, q); err == nil {
+			return []NicknameHit{{UserID: id, Nickname: q}}, nil
+		} else if !errors.Is(err, ErrUserUnknown) {
+			return nil, err
+		}
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT u.user_id, p.nickname FROM persons p
+		JOIN users u ON u.person_id = p.person_id AND u.valid_to IS NULL
+		WHERE p.nickname IS NOT NULL AND lower(p.nickname) LIKE '%' || lower($1) || '%'
+		ORDER BY (lower(p.nickname) LIKE lower($1) || '%') DESC, length(p.nickname), lower(p.nickname)
+		LIMIT $2`, q, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]NicknameHit, 0, limit)
+	for rows.Next() {
+		var hit NicknameHit
+		if err := rows.Scan(&hit.UserID, &hit.Nickname); err != nil {
+			return nil, err
+		}
+		out = append(out, hit)
+	}
+	return out, rows.Err()
+}
+
+// MaxNicknameHits — предел выдачи (Л10, §6). «Нашлось много» — не список, а повод
+// дописать ещё букву.
+const MaxNicknameHits = 10
+
+// Часть ника: тот же набор знаков, но без границ длины — запрос короче ника.
+var nicknamePartRe = regexp.MustCompile(`^[A-Za-z0-9_]{1,20}$`)
+
 // Nicknames — ники перечисленных людей. Пустых в ответе нет: у кого ника нет,
 // того нет и в карте — иначе клиент не отличит «ника нет» от «сервер не ответил».
 func (s *Store) Nicknames(ctx context.Context, ids []string) (map[string]string, error) {

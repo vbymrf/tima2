@@ -115,7 +115,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	RegisterChats(mux, s.Store, s.notifier(), s.requireActiveDevice)
 	mux.HandleFunc("GET /api/v1/keys/devices", s.requireActiveDevice(s.listDeviceKeys))
 	// Люди и аккаунт (шаг 4): справочник, имена, личности, удаление.
-	RegisterUsers(mux, s.Store, func() IdentityTokens { return s.Auth }, s.requireActiveDevice)
+	RegisterUsers(mux, s.Store, func() IdentityTokens { return s.Auth },
+		func() *ratelimit.Limiter { return s.Limit }, s.requireActiveDevice)
 	// Устройства и привязка по QR (шаг 4). link/start и link/claim идут без
 	// requireDevice: их зовёт устройство, у которого токена ещё нет.
 	RegisterDevices(mux, s.Store, func() *ratelimit.Limiter { return s.Limit },

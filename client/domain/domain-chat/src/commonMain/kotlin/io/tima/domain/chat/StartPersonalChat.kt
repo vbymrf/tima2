@@ -83,9 +83,27 @@ fun interface UserDirectory {
  * Кто скрывается за ником (`GET /nicknames/{nick}`). Отдельный порт, а не второй метод
  * [UserDirectory]: тот — функциональный интерфейс, и в проверках его собирают лямбдой.
  */
-fun interface NicknameDirectory {
+interface NicknameDirectory {
     suspend fun byNickname(nick: String): UserLookup
+
+    /**
+     * Поиск по ЧАСТИ ника — Л10. Единственный способ найти того, у кого номера нет.
+     *
+     * Правило «точное совпадение, иначе похожие» исполняет сервер, а не два похода
+     * отсюда: круг экономится, а правило лежит в одном месте — два клиента исполнили бы
+     * его по-разному в порядке выдачи.
+     *
+     * @return `null` — сервер не ответил. Пустой список — ответил и не нашёл: это разные
+     *   вещи, и экран говорит о них разное.
+     */
+    suspend fun searchNicknames(query: String): List<NicknameHit>? = null
 }
+
+/** Строка выдачи поиска по нику. */
+data class NicknameHit(val userId: String, val nickname: String)
+
+/** Короче не ищем: по одной букве выдачи не бывает, бывает выгрузка каталога (Л10). */
+const val MIN_NICKNAME_QUERY = 3
 
 /** Что вернул справочник. */
 sealed interface UserLookup {

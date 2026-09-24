@@ -853,6 +853,8 @@ private fun App(
             book = environment.bookStorage,
             discovery = network.discovery,
             scope = scope,
+            // Поиск по нику: единственный способ завести того, у кого номера нет вовсе.
+            nicknames = network.directory,
         )
     }
     val contactsState by contacts.state.collectAsState()
@@ -1290,6 +1292,9 @@ private fun App(
             // Завести раздел прямо из подокна контакта: человек уже набрал его имя, и
             // отсылать его за тем же именем в другое место значит набрать дважды.
             onCreateSection = contacts::createTypedSection,
+            onNick = contacts::changedNick,
+            onFindNick = contacts::searchNick,
+            onPickNick = contacts::pickNick,
         )
         return
     }
@@ -1665,7 +1670,11 @@ private fun App(
                     // личными, и это было временным размещением, записанным в
                     // `ИНТЕРФЕЙС/04-социум/ФУНКЦИОНАЛ.md`.
                     list = listState.copy(chats = listState.personal),
-                    book = bookState,
+                    // Ники — со справочника: в книге их нет, а искать по ним надо
+                    // (Л19). У человека без номера ник — единственное, чем его найти.
+                    book = bookState.copy(
+                        nicks = peopleCards.mapNotNull { (id, card) -> card.nick?.let { id to it } }.toMap(),
+                    ),
                     onSearchInBook = book::changedSearch,
                     personOfChat = personOfChat,
                     faceOfChat = faceOfChat,

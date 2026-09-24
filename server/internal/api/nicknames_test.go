@@ -41,6 +41,66 @@ func поНику(t *testing.T, ts *httptest.Server, token, nick string) (int, s
 	return code, resp.UserID
 }
 
+// поискНиков — GET /nicknames?q=: точное совпадение либо похожие (Л10).
+func поискНиков(t *testing.T, ts *httptest.Server, token, q string) (int, []string) {
+	t.Helper()
+	var resp struct {
+		Found []struct {
+			UserID   string `json:"user_id"`
+			Nickname string `json:"nickname"`
+		} `json:"found"`
+	}
+	code := authedJSON(t, ts, "GET", "/api/v1/nicknames?q="+q, token, nil, &resp)
+	nicks := make([]string, 0, len(resp.Found))
+	for _, hit := range resp.Found {
+		nicks = append(nicks, hit.Nickname)
+	}
+	return code, nicks
+}
+
+// Поиск по части ника — Л10.
+//
+// Проверяются три обещания, а не ответ ручки: точное совпадение приходит ОДНО (нашлось
+// как есть — дальше не ищем), похожие приходят списком, а по одной-двум буквам поиска
+// нет вовсе. Последнее — часть барьера от спама, а не аккуратность: по букве выдачи не
+// бывает, бывает выгрузка каталога по алфавиту.
+func TestПоискПоЧастиНика(t *testing.T) {
+	ts, _ := setup(t)
+	пётр := registerDevice(t, ts, "+79990000101")
+	анна := registerDevice(t, ts, "+79990000102")
+	гость := registerDevice(t, ts, "+79990000103")
+
+	if code := занятьНик(t, ts, пётр.token, "kovalev_petr"); code != http.StatusOK {
+		t.Fatalf("занять первый: %d", code)
+	}
+	if code := занятьНик(t, ts, анна.token, "kovaleva_anna"); code != http.StatusOK {
+		t.Fatalf("занять второй: %d", code)
+	}
+
+	// Точное — и только оно: искали именно его, и список похожих здесь был бы шумом.
+	code, найдено := поискНиков(t, ts, гость.token, "kovalev_petr")
+	if code != http.StatusOK {
+		t.Fatalf("точный поиск: %d", code)
+	}
+	if len(найдено) != 1 || найдено[0] != "kovalev_petr" {
+		t.Fatalf("точное совпадение не одно: %v", найдено)
+	}
+
+	// Похожие: общий кусок находит обоих.
+	code, найдено = поискНиков(t, ts, гость.token, "kovalev")
+	if code != http.StatusOK {
+		t.Fatalf("поиск похожих: %d", code)
+	}
+	if len(найдено) != 2 {
+		t.Fatalf("похожих должно быть двое: %v", найдено)
+	}
+
+	// Две буквы — отказ, а не пустая выдача: пустая выглядела бы как «никого нет».
+	if code, _ = поискНиков(t, ts, гость.token, "ko"); code != http.StatusBadRequest {
+		t.Fatalf("по двум буквам ответили %d вместо отказа", code)
+	}
+}
+
 func TestНикЗанимаетсяИНаходится(t *testing.T) {
 	ts, _ := setup(t)
 	пётр := registerDevice(t, ts, "+79990000001")

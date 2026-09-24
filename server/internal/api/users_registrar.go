@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"tima/server/internal/auth"
+	"tima/server/internal/ratelimit"
 	"tima/server/internal/store"
 )
 
@@ -29,6 +30,7 @@ type UserStore interface {
 	SetNickname(ctx context.Context, userID, nick string) error
 	NicknameFree(ctx context.Context, nick string) (bool, error)
 	FindUserByNickname(ctx context.Context, nick string) (string, error)
+	SearchNicknames(ctx context.Context, q string, limit int) ([]store.NicknameHit, error)
 	Nicknames(ctx context.Context, ids []string) (map[string]string, error)
 	AvatarsOf(ctx context.Context, ids []string) (map[string]string, error)
 	ProfileRevs(ctx context.Context, ids []string) (map[string]int32, error)
@@ -65,13 +67,17 @@ type IdentityTokens interface {
 }
 
 type usersDeps struct {
-	store  UserStore
-	tokens func() IdentityTokens
+	store   UserStore
+	tokens  func() IdentityTokens
+	limiter func() *ratelimit.Limiter
 }
 
 // RegisterUsers — одиннадцать маршрутов: справочник, имена, ник, личности, удаление.
-func RegisterUsers(mux *http.ServeMux, st UserStore, tokens func() IdentityTokens, requireDevice Middleware) {
-	deps := usersDeps{store: st, tokens: tokens}
+func RegisterUsers(
+	mux *http.ServeMux, st UserStore, tokens func() IdentityTokens,
+	limiter func() *ratelimit.Limiter, requireDevice Middleware,
+) {
+	deps := usersDeps{store: st, tokens: tokens, limiter: limiter}
 
 	mux.HandleFunc("GET /api/v1/users/lookup", requireDevice(lookupUser(deps)))
 	mux.HandleFunc("POST /api/v1/users/discover", requireDevice(discoverContacts(deps)))
@@ -82,6 +88,9 @@ func RegisterUsers(mux *http.ServeMux, st UserStore, tokens func() IdentityToken
 	// Ники — своя ветка, а не «/users/...»: там уже стоит «/users/{userID}/feed»,
 	// и любой двухсегментный маршрут под /users сталкивается с ним неразрешимо
 	// («/users/nickname/feed» подходит обоим).
+	// Поиск по части ника (Л10). Без «{nick}» в пути: это не «чей этот ник», а
+	// перебор каталога — и предел частоты у него свой, вдвое строже точного поиска.
+	mux.HandleFunc("GET /api/v1/nicknames", requireDevice(searchNicknames(deps)))
 	mux.HandleFunc("GET /api/v1/nicknames/{nick}/free", requireDevice(nicknameFree(deps)))
 	mux.HandleFunc("GET /api/v1/nicknames/{nick}", requireDevice(lookupByNickname(deps)))
 	mux.HandleFunc("DELETE /api/v1/users/me", requireDevice(deleteAccount(deps)))

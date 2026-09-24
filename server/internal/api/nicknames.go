@@ -77,6 +77,56 @@ func nicknameFree(deps usersDeps) http.HandlerFunc {
 	}
 }
 
+// searchNicknames — GET /nicknames?q=: точное совпадение либо похожие (Л10).
+//
+// Единственный способ найти человека, у которого номера нет вовсе, — а такие есть и
+// они полноправны: у виртуального аккаунта только ник.
+//
+// ── ЦЕНА НАЗВАНА ЗАРАНЕЕ ────────────────────────────────────────────────────
+//
+// Это перебор пространства имён: кто угодно может вытягивать чужие ники по буквам.
+// Поэтому три предела — не аккуратность, а часть барьера от спама, который ник и
+// открывает (§5, §6 плана):
+//
+//	минимум три знака   — по одной букве выдачи не бывает, бывает выгрузка каталога
+//	предел выдачи       — десяток; «нашлось много» это повод дописать, а не список
+//	предел частоты      — по устройству, вдвое строже точного поиска
+//
+// Предел частоты по УСТРОЙСТВУ, а не по адресу: за одним адресом сидит подъезд, а
+// перебирают каталог с одного аккаунта.
+func searchNicknames(deps usersDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		if deps.limiter != nil &&
+			!rateLimit(deps.limiter(), w, r, "nicksearch:"+id.DeviceID, rlNickSearch) {
+			return
+		}
+		hits, err := deps.store.SearchNicknames(r.Context(), r.URL.Query().Get("q"), store.MaxNicknameHits)
+		if errors.Is(err, store.ErrNicknameBad) {
+			writeErr(w, http.StatusBadRequest, "bad_query",
+				"запрос — от трёх знаков: латиница, цифры, подчёркивание")
+			return
+		} else if err != nil {
+			log.Printf("searchNicknames: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		out := make([]map[string]string, 0, len(hits))
+		for _, hit := range hits {
+			out = append(out, map[string]string{"user_id": hit.UserID, "nickname": hit.Nickname})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		// Выдача ПОЛНАЯ, без отбора по спискам спрашивающего: кого он убрал или
+		// заблокировал, знает только его устройство, и сервер об этом не узнаёт
+		// (решение заказчика 2026-09-24). Пометку рисует клиент — Л18.
+		_ = json.NewEncoder(w).Encode(map[string]any{"found": out})
+	}
+}
+
+// rlNickSearch — поисков по части ника с устройства за окно. Вдвое строже точного
+// поиска: тот отвечает про один ник, этот перебирает каталог.
+const rlNickSearch = 30
+
 // lookupByNickname — GET /nicknames/{nick}: чей это ник.
 //
 // Отдельным маршрутом, а не параметром к /users/lookup: тот отвечает по номеру,

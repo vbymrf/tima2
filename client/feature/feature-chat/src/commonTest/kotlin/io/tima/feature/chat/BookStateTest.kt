@@ -107,6 +107,19 @@ class BookStateTest {
     }
 
     @Test
+    fun поиск_идёт_и_по_нику() {
+        // У человека без номера ник — единственное, чем его найти: имени в нашей книге
+        // может не быть вовсе, а номера у него нет и не будет (Л19).
+        val аня = BookEntry(id = BookKey.ofUser("u-9"), userId = "u-9")
+        val state = BookState(all = listOf(борис, аня), nicks = mapOf("u-9" to "anna_kovaleva"))
+
+        assertEquals(listOf(аня), state.copy(search = "kovaleva").visible)
+        assertEquals(listOf(аня), state.copy(search = "ANNA").visible, "регистр не должен мешать")
+        // Ник чужой строки в выдачу не тянет.
+        assertEquals(listOf(борис), state.copy(search = "борис").visible)
+    }
+
+    @Test
     fun ничего_не_нашлось_отличается_от_пустой_книги() {
         val пустая = BookState()
         val ненайдено = состояние(борис).copy(search = "кого-то другого")

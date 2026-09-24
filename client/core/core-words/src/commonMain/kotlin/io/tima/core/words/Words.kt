@@ -944,6 +944,22 @@ interface ChatWords {
     val foundInTima: String
     val notInTima: String
 
+    // ── Поиск по нику в подокне «Новый контакт» (Л10, Л11, Л18) ─────────────
+    //
+    // Второй вход, равноправный номеру: у виртуальных аккаунтов номера нет вовсе.
+
+    val byNickname: String
+    /** Подсказка поля: сколько знаков нужно, сказано до нажатия, а не после отказа. */
+    val nicknameHint: String
+    val findByNickname: String
+    /** Ответили и не нашли — это не «сервер молчит». */
+    val nobodyWithNickname: String
+    /** Сервер не ответил: выдачи нет, и врать о её пустоте нельзя. */
+    val searchFailed: String
+    /** Пометки в выдаче: этот человек у нас в списке (Л18). */
+    val hitRemoved: String
+    val hitBlocked: String
+
     // Меню «•••» переписки (ПЛАН-РАЗДЕЛОВ Р5, ПЛАН-ЧАТА Ч2). Заголовок — «Настройка
     // группы» / «Настройка переписки» (заказчик 2026-09-18), а не «Переписка».
     val chatMenu: String
@@ -2486,6 +2502,13 @@ object RussianWords : Words {
         override val addToContacts = "Добавить в контакты"
         override val foundInTima = "Найден в TIMa — подписка на его ленту оформится сама"
         override val notInTima = "В TIMa его нет. Контакт сохранится — позвонить можно телефоном"
+        override val byNickname = "По нику"
+        override val nicknameHint = "часть ника, от трёх знаков"
+        override val findByNickname = "Найти"
+        override val nobodyWithNickname = "С таким ником никого нет"
+        override val searchFailed = "Не удалось спросить сервер"
+        override val hitRemoved = "у вас в «Убранных»"
+        override val hitBlocked = "у вас в «Заблокированных»"
         override val chatMenu = "Переписка"
         override val groupSettings = "Настройка группы"
         override val chatSettings = "Настройка переписки"

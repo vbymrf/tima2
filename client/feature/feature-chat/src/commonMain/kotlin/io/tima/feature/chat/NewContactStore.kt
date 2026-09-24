@@ -8,7 +8,11 @@ import io.tima.core.words.ChatWords
 import io.tima.domain.chat.AddContact
 import io.tima.domain.chat.AddStep
 import io.tima.domain.chat.Book
+import io.tima.domain.chat.BookList
 import io.tima.domain.chat.ContactDiscovery
+import io.tima.domain.chat.MIN_NICKNAME_QUERY
+import io.tima.domain.chat.NicknameDirectory
+import io.tima.domain.chat.NicknameHit
 import io.tima.domain.chat.Section
 import io.tima.domain.chat.normalizePhone
 import kotlinx.coroutines.CoroutineScope
@@ -34,6 +38,11 @@ class NewContactStore(
     private val discovery: ContactDiscovery,
     private val scope: CoroutineScope,
     /**
+     * Поиск по нику — Л10, Л11. `null` — искать нечем (так собирают проверки без сети):
+     * поле ника тогда не показывается вовсе, а не стоит неработающим.
+     */
+    private val nicknames: NicknameDirectory? = null,
+    /**
      * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
      *
      * Store не `@Composable`, и `Tima.words` ему недоступен. Лямбда зовётся в момент
@@ -50,6 +59,17 @@ class NewContactStore(
         // можно только отсюда, и этот случай дописывает список сам.
         scope.launch {
             _state.value = _state.value.copy(sections = book.sections().first())
+        }
+        // Кто у нас в списках — для пометок в выдаче поиска (Л18). Снимком, а не
+        // потоком: подокно живёт минуту, и за эту минуту книга не меняется ничем, кроме
+        // того, что делают прямо здесь.
+        scope.launch {
+            _state.value = _state.value.copy(
+                inLists = book.everyone().first()
+                    .filter { !it.inContacts }
+                    .mapNotNull { row -> row.userId?.let { it to row.list } }
+                    .toMap(),
+            )
         }
     }
 
@@ -84,6 +104,47 @@ class NewContactStore(
         _state.value = s.copy(normalized = phone)
         // Сверяем, только когда номер сложился целиком: до этого спрашивать не о ком.
         if (phone != null) check(phone)
+    }
+
+    // ── Поиск по нику (Л10, Л11) ────────────────────────────────────────────
+    //
+    // Второй вход в подокно, равноправный номеру: у виртуальных аккаунтов номера нет
+    // вовсе, и добавить их сейчас было бы нечем.
+
+    fun changedNick(line: String) {
+        // Набрали заново — прежняя выдача и прежний выбор недействительны: оставить их
+        // значило бы показать ответ на другой вопрос.
+        _state.value = _state.value.copy(nick = line, found = null, picked = null, trouble = null)
+    }
+
+    /**
+     * Найти.
+     *
+     * По нажатию, а не на каждую букву: это перебор каталога, и три знака с пределом
+     * частоты на сервере заведены ровно против того, чтобы он шёл сам собой.
+     */
+    fun searchNick() {
+        val q = _state.value.nick.trim()
+        if (q.length < MIN_NICKNAME_QUERY || nicknames == null) return
+        scope.launch {
+            _state.value = _state.value.copy(searching = true, found = null, trouble = null)
+            val hits = nicknames.searchNicknames(q)
+            // Ответ мог опоздать: пока ходили, человек набрал другое.
+            if (_state.value.nick.trim() != q) return@launch
+            _state.value = _state.value.copy(
+                searching = false,
+                found = hits.orEmpty(),
+                // `null` — сервер не ответил. Это не «никого нет», и говорить об этом
+                // надо разное: пустая выдача значит «такого ника ни у кого».
+                trouble = if (hits == null) words().chat.searchFailed else null,
+            )
+        }
+    }
+
+    /** Выбрать из найденного. Второе нажатие по той же строке снимает выбор. */
+    fun pickNick(userId: String) {
+        val was = _state.value.picked
+        _state.value = _state.value.copy(picked = if (was == userId) null else userId, trouble = null)
     }
 
     fun changedName(line: String) {
@@ -130,6 +191,22 @@ class NewContactStore(
 
     fun save(onDone: (AddStep) -> Unit) {
         val state = _state.value
+        // Выбранный из поиска идёт своим путём: номера у него может не быть вовсе, и
+        // требовать его значило бы отказать полноправному человеку (Л11).
+        val picked = state.pickedHit
+        if (picked != null) {
+            if (state.sectionMissing) {
+                _state.value = state.copy(trouble = words().chat.noSuchSection(state.section.trim()))
+                return
+            }
+            scope.launch {
+                _state.value = state.copy(working = true, trouble = null)
+                val step = add.addByUser(picked.userId, state.name.ifBlank { null }, state.sectionId)
+                _state.value = _state.value.copy(working = false)
+                onDone(step)
+            }
+            return
+        }
         if (state.normalized == null) {
             _state.value = state.copy(trouble = words().chat.notAPhone)
             return
@@ -158,6 +235,26 @@ class NewContactStore(
 data class NewContactState(
     /** Код страны отдельным полем: на цифровой клавиатуре нет плюса (2026-09-15). */
     val countryCode: String = "7",
+    /** Набранная часть ника — Л11. */
+    val nick: String = "",
+    val searching: Boolean = false,
+    /**
+     * Выдача поиска; `null` — ещё не искали.
+     *
+     * Пустой список и `null` — разные вещи: первое значит «ответил и не нашёл», второе —
+     * «не спрашивали». Экран говорит о них разное.
+     */
+    val found: List<NicknameHit>? = null,
+    /** `user_id` выбранного из выдачи. */
+    val picked: String? = null,
+    /**
+     * Кто у нас в «Убранных» и «Заблокированных» — Л18.
+     *
+     * Пометка рисуется НА КЛИЕНТЕ: сервер о списках не знает и отбирать по ним не может
+     * (решение заказчика 2026-09-24). Спрятать заблокированного из выдачи всё равно не
+     * вышло бы — значит, честнее показать и сказать, что он в списке.
+     */
+    val inLists: Map<String, BookList> = emptyMap(),
     val phone: String = "",
     /** Номер в E.164 либо `null` — тогда сохранять нечего. */
     val normalized: String? = null,
@@ -189,7 +286,16 @@ data class NewContactState(
     /** Что уходит в книгу: идентификатор раздела, пустой — «Общий». */
     val sectionId: String get() = chosenSection?.id ?: ""
 
-    val canSave: Boolean get() = normalized != null && !working && !sectionMissing
+    /** Выбранная строка выдачи. */
+    val pickedHit: NicknameHit? get() = found?.firstOrNull { it.userId == picked }
+
+    /** Искать пока не о чем: по одной-двум буквам выдачи не бывает (Л10). */
+    val canSearch: Boolean get() = nick.trim().length >= MIN_NICKNAME_QUERY && !searching
+
+    /** Ответили и не нашли — это не то же, что «ещё не искали». */
+    val nobodyFound: Boolean get() = found?.isEmpty() == true
+
+    val canSave: Boolean get() = (normalized != null || picked != null) && !working && !sectionMissing
 
     /**
      * Слово на кнопке.

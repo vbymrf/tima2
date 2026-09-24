@@ -404,6 +404,14 @@ data class BookState(
     val chosen: String = "",
     val working: Boolean = false,
     val sync: SyncStep? = null,
+    /**
+     * Ники людей книги по `user_id` — для поиска (Л19).
+     *
+     * Приходят со справочника, а не из книги: ник человек задаёт себе сам, и в нашей
+     * книге его нет. Кладутся сюда, а не спрашиваются при каждом нажатии: поиск идёт по
+     * букве, а справочник — сеть.
+     */
+    val nicks: Map<String, String> = emptyMap(),
 ) {
     /**
      * Что показать.
@@ -420,6 +428,9 @@ data class BookState(
             val digits = request.filter { it.isDigit() }
             return listed.filter { person ->
                 person.name?.contains(request, ignoreCase = true) == true ||
+                    // По нику тоже (Л19): у человека без номера он единственное, чем
+                    // его можно найти, — а «Аня» в книге может быть не записана вовсе.
+                    person.userId?.let { nicks[it] }?.contains(request, ignoreCase = true) == true ||
                     (digits.isNotEmpty() && person.phone.contains(digits))
             }
         }

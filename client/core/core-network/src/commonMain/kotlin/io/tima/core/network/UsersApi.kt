@@ -12,9 +12,12 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.tima.domain.chat.ChatPerson
 import io.tima.domain.chat.NicknameDirectory
+import io.tima.domain.chat.NicknameHit
+import io.tima.domain.chat.MIN_NICKNAME_QUERY
 import io.tima.domain.chat.UserDirectory
 import io.tima.domain.chat.UserLookup
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -59,6 +62,34 @@ class UsersApi(
             HttpStatusCode.NotFound -> UserLookup.NotFound
             HttpStatusCode.BadRequest -> UserLookup.Refused(code ?: "ник не по правилам")
             else -> UserLookup.Refused(code ?: "сервер отказал: ${response.status.value}")
+        }
+    }
+
+    /**
+     * Похожие ники — `GET /nicknames?q=` (Л10).
+     *
+     * Правило «точное, иначе похожие» на сервере: здесь только запрос и разбор. Три
+     * знака — предел сервера, и здесь он повторён, чтобы не ходить заведомо зря: за
+     * короткий запрос сервер ответит отказом, а круг уже сделан.
+     */
+    override suspend fun searchNicknames(query: String): List<NicknameHit>? {
+        val q = query.trim()
+        if (q.length < MIN_NICKNAME_QUERY) return emptyList()
+        val response = try {
+            client.get(route.api("/api/v1/nicknames")) {
+                header("Authorization", "Bearer ${token()}")
+                parameter("q", q)
+            }
+        } catch (_: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        val body = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull() ?: return null
+        val found = body["found"] as? JsonArray ?: return emptyList()
+        return found.mapNotNull { row ->
+            val obj = row as? JsonObject ?: return@mapNotNull null
+            val id = obj["user_id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            NicknameHit(id, obj["nickname"]?.jsonPrimitive?.content.orEmpty())
         }
     }
 

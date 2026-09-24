@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Caption
+import io.tima.core.ui.CheckMark
 import io.tima.core.ui.Field
 import io.tima.core.ui.TextPlace
 import io.tima.core.ui.ProvidePlace
@@ -39,7 +40,9 @@ import io.tima.core.ui.words
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaShapes
 import io.tima.core.ui.TimaType
+import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Trouble
+import io.tima.domain.chat.BookList
 
 /**
  * Новый контакт — подокно (ПЛАН-КОНТАКТОВ.md, Д6).
@@ -70,6 +73,10 @@ fun NewContactScreen(
     modifier: Modifier = Modifier,
     /** Завести набранный раздел. `null` — заводить нечем, кнопки не будет. */
     onCreateSection: (() -> Unit)? = null,
+    /** Набрана часть ника (Л11). `null` — искать нечем, поля не будет вовсе. */
+    onNick: ((String) -> Unit)? = null,
+    onFindNick: () -> Unit = {},
+    onPickNick: (String) -> Unit = {},
 ) {
     var picking by remember { mutableStateOf(false) }
     val colors = Tima.colors
@@ -111,6 +118,57 @@ fun NewContactScreen(
                         }
                     } else {
                         Secondary(said)
+                    }
+                }
+
+                // ── ПО НИКУ — ПЕРВЫМ ВХОДОМ, НАРАВНЕ С НОМЕРОМ (Л11) ────────
+                //
+                // У виртуальных аккаунтов номера нет ВОВСЕ, только ник, и добавить их
+                // было бы нечем. Поэтому не «дополнительно», а второй равноправный путь.
+                //
+                // Ищем по нажатию, а не на каждую букву: это перебор каталога имён, и
+                // пределы на сервере заведены ровно против того, чтобы он шёл сам собой.
+                if (onNick != null) {
+                    Caption(words.byNickname, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.weight(1f)) {
+                            Field(value = state.nick, onChange = onNick, hint = words.nicknameHint)
+                        }
+                        Button(
+                            label = words.findByNickname,
+                            kind = if (state.canSearch) ButtonKind.Action else ButtonKind.Quiet,
+                            onClick = { if (state.canSearch) onFindNick() },
+                        )
+                    }
+                    // Ответили и не нашли — своё слово. «Ничего» на этом месте неотличимо
+                    // от «сервер молчит», а это разные беды.
+                    if (state.nobodyFound) Secondary(words.nobodyWithNickname)
+                    state.found.orEmpty().forEach { hit ->
+                        val chosen = hit.userId == state.picked
+                        ListLine(
+                            onClick = { onPickNick(hit.userId) },
+                            middle = {
+                                Column {
+                                    Name("@${hit.nickname}")
+                                    // ── ПОМЕТКА, А НЕ СОКРЫТИЕ (Л18) ────────
+                                    //
+                                    // Спрятать заблокированного из выдачи нельзя:
+                                    // сервер о наших списках не знает и отбирать по ним
+                                    // не может. Значит честнее показать и сказать, где
+                                    // он у нас, — иначе человек заведёт второй раз того,
+                                    // кого сам же и убрал.
+                                    when (state.inLists[hit.userId]) {
+                                        BookList.Removed -> Tertiary(words.hitRemoved, lineOne = true)
+                                        BookList.Blocked -> Tertiary(words.hitBlocked, lineOne = true)
+                                        else -> Unit
+                                    }
+                                }
+                            },
+                            right = if (chosen) ({ CheckMark(true) }) else null,
+                        )
                     }
                 }
 

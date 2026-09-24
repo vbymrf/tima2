@@ -64,6 +64,18 @@ class AddContact(
         }
         return AddStep.OnlyPhone(phone)
     }
+
+    /**
+     * Завести по нику — того, у кого номера нет вовсе (Л11).
+     *
+     * Сверять нечего: человек уже найден поиском, его `user_id` пришёл с сервера. Поэтому
+     * здесь только книга и лента — те же два действия одним нажатием.
+     */
+    suspend fun addByUser(userId: String, name: String?, sectionId: String = ""): AddStep {
+        book.addByUser(userId, name, sectionId)
+        val subscribed = friends.set(userId, friend = true)
+        return AddStep.InTima(phone = "", userId = userId, subscribed = subscribed)
+    }
 }
 
 /**
@@ -111,7 +123,11 @@ class RemoveContact(
 /** Чем кончилось добавление. */
 sealed interface AddStep {
 
-    /** Номер найден в TIMa: заведён контакт, и ему открыта своя лента. */
+    /**
+     * Человек найден в TIMa: заведён контакт, и ему открыта своя лента.
+     *
+     * @param phone пусто у заведённого по нику — номера у него нет и не будет (Л11).
+     */
     data class InTima(val phone: String, val userId: String, val subscribed: Boolean) : AddStep
 
     /** В TIMa его нет. Контакт сохранён — позвонить можно телефоном. */
