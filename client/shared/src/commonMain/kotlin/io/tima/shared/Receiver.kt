@@ -16,6 +16,8 @@ import io.tima.core.network.EventStream
 import io.tima.core.outbox.IncomingEntry
 import io.tima.core.outbox.OpenOutcome
 import io.tima.domain.account.Session
+import io.tima.domain.chat.AutoReplyBlocked
+import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.ChatKind
 import io.tima.domain.chat.SyncGroupChats
@@ -97,6 +99,18 @@ class Receiver(
      */
     private suspend fun blocked(): Set<String> =
         runCatching { environment.book.blocked().first() }.getOrDefault(emptySet())
+
+    /** Строка книги про человека; `null` — его в книге нет вовсе. */
+    private suspend fun bookRow(userId: String): BookEntry? = runCatching {
+        environment.book.everyone().first().firstOrNull { it.userId == userId }
+    }.getOrNull()
+
+    /** Автоответ заблокированному — Л14. Правила целиком живут в [AutoReplyBlocked]. */
+    private val autoReply = AutoReplyBlocked(
+        facts = environment.chatFacts,
+        send = environment.send,
+        nowMs = { msNow() },
+    )
 
     /** Переписки заблокированных: их конверты записываются, но не открываются (Л9). */
     private suspend fun heldChats(): List<String> = blocked()
@@ -425,6 +439,12 @@ class Receiver(
         val held = heldChats()
         if (chatId in held) {
             lastOutcome = "конверт от заблокированного записан и придержан"
+            // Знакомого — предупредить, не чаще раза в неделю. Незнакомец остаётся в
+            // неведении: иначе автоответ становится оракулом «этот меня заблокировал»
+            // и чистит список рассыльщику (Л14).
+            if (sender != null && autoReply.replyTo(chatId, bookRow(sender.userId))) {
+                Journal.note(LogCode.NET_CHANNEL, "заблокированному ушёл автоответ")
+            }
             return
         }
 
@@ -461,7 +481,10 @@ class Receiver(
             // Записываются БАЙТЫ ТЕЛА, как пришли, а не текст: столбец читается кодеком,
             // и запись текстом означала бы «расшифровано и не читается» — состояние, в
             // котором это и нашлось на живом прогоне.
-            onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId) },
+            // Вид берётся отсюда и только отсюда: подпись сошлась, значит метаданным
+            // можно верить. Метку внутри тела отправитель волен сочинить сам, и
+            // «системное сообщение от TIMa» рисовал бы кто угодно (Л14).
+            onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId, kind = it.meta.kind) },
             // Подпись не сошлась или обёртки для нас нет — разные беды, и причина
             // доносится дословно: человеку видно «не читается», нам — почему.
             onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },

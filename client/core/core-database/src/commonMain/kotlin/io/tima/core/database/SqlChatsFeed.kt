@@ -6,6 +6,7 @@ import io.tima.core.outbox.FieldCipher
 import io.tima.core.outbox.Inbox
 import io.tima.core.outbox.IncomingState
 import io.tima.domain.chat.ChatKind
+import io.tima.domain.chat.KIND_SYSTEM
 import io.tima.domain.chat.ChatBook
 import io.tima.domain.chat.ChatFacts
 import io.tima.domain.chat.ChatSummary
@@ -161,6 +162,7 @@ class SqlReadMarks(private val inbox: Inbox) : ReadMarks {
  */
 class SqlChatFacts(private val db: TimaDatabase) : ChatFacts {
 
+
     override fun kindOf(chatId: String): ChatKind? = line(chatId)?.let {
         if (it.kind.toInt() == ChatKind.Group.ordinal) ChatKind.Group else ChatKind.Personal
     }
@@ -168,6 +170,9 @@ class SqlChatFacts(private val db: TimaDatabase) : ChatFacts {
     override fun peerOf(chatId: String): String? = line(chatId)?.peer_id
 
     override fun knows(chatId: String): Boolean = line(chatId) != null
+
+    override fun lastSystemOutMs(chatId: String): Long =
+        db.messagesQueries.lastSystemOut(chatId, KIND_SYSTEM.toLong()).executeAsOne()
 
     private fun line(chatId: String) = db.chatsQueries.chatById(chatId).executeAsOneOrNull()
 }

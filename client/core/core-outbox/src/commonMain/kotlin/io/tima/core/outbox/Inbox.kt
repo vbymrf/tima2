@@ -1,5 +1,7 @@
 package io.tima.core.outbox
 
+import io.tima.domain.chat.KIND_TEXT
+
 /**
  * Состояние входящего сообщения — [Plan.md §3.4](../../../../../../../../doc_mig/Plan.md).
  *
@@ -62,6 +64,14 @@ data class IncomingEntry(
      * время приёма у каждого своё, а время написания одно.
      */
     val sentAtMs: Long = 0,
+    /**
+     * Вид содержимого из ПОДПИСАННЫХ метаданных конверта (Л14, Л15).
+     *
+     * До разбора неизвестен и равен `CK_TEXT`: метаданным конверта до проверки подписи
+     * верить нельзя, а вид — как раз то, по чему экран решает, рисовать ли строку
+     * собственными словами.
+     */
+    val kind: Int = KIND_TEXT,
     /** Почему не расшифровалось — для диагностики и для показа человеку. */
     val undecryptableReason: String? = null,
 ) {
@@ -111,6 +121,12 @@ sealed interface OpenOutcome {
          * нему строится выдача. В подписи его нет — как и уровня.
          */
         val threadRoot: Long = 0,
+        /**
+         * Вид содержимого из подписанных метаданных конверта (Л14, Л15).
+         *
+         * Отсюда — и только отсюда: подпись сошлась, значит виду можно верить.
+         */
+        val kind: Int = KIND_TEXT,
     ) : OpenOutcome
 
     /**
@@ -164,7 +180,15 @@ interface InboxStore {
      * означало «разобрано и потеряно». Обязанность, которую можно передать пустой
      * лямбдой, однажды передадут пустой лямбдой везде.
      */
-    fun storeParsed(chatId: String, messageId: Long, body: ByteArray, senderId: String, level: Int, threadRoot: Long)
+    fun storeParsed(
+        chatId: String,
+        messageId: Long,
+        body: ByteArray,
+        senderId: String,
+        level: Int,
+        threadRoot: Long,
+        kind: Int = KIND_TEXT,
+    )
 
     /**
      * Перевести всё разобранное этой переписки в «прочитано».
@@ -240,8 +264,9 @@ class Inbox(
                     outcome.senderId,
                     outcome.level,
                     outcome.threadRoot,
+                    outcome.kind,
                 )
-                entry.copy(state = IncomingState.STORED, undecryptableReason = null)
+                entry.copy(state = IncomingState.STORED, kind = outcome.kind, undecryptableReason = null)
             }
             is OpenOutcome.NoKey -> entry.copy(
                 state = IncomingState.UNDECRYPTABLE,

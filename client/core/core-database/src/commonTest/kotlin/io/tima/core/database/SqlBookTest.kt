@@ -28,6 +28,9 @@ class SqlBookTest {
 
     private suspend fun строки() = наблюдение.list().first()
 
+    /** Вся книга, включая убранных и заблокированных: контакты — это вычитание (Л4). */
+    private suspend fun строкиВсе() = наблюдение.everyone().first()
+
     @Test
     fun чтение_книги_телефона_наполняет_список() = runTest {
         book.fromPhoneBook(
@@ -59,6 +62,67 @@ class SqlBookTest {
         // Ровно тот случай, ради которого книга своя: в телефоне он остался.
         book.fromPhoneBook(listOf(PhoneBookEntry("+79160001122", "Борис")))
         assertTrue(строки().isEmpty(), "убранный вернулся из телефонной книги")
+    }
+
+    @Test
+    fun вынутый_из_убранных_возвращается_туда_откуда_пришёл() = runTest {
+        // Куда возвращать — отвечает `manual`, и поэтому его не заменили одним полем
+        // списка: прочитанный с телефона возвращается в «Книгу», заведённый руками — в
+        // «TIMa». Помнить об этом отдельно не нужно.
+        book.fromPhoneBook(listOf(PhoneBookEntry("+79160001122", "Борис")))
+        val дом = book.addSection("Дом")
+        book.addManually("+79267778899", "Виктор", дом)
+
+        val борис = BookKey.ofPhone("+79160001122")
+        val виктор = BookKey.ofPhone("+79267778899")
+        book.setList(борис, BookList.Removed)
+        book.setList(виктор, BookList.Blocked, known = true)
+        assertTrue(строки().isEmpty(), "оба остались в контактах")
+
+        book.setList(борис, BookList.Usual)
+        book.setList(виктор, BookList.Usual)
+        val вернулись = строки().associateBy { it.id }
+        assertEquals(false, вернулись[борис]?.manual, "прочитанный с телефона стал заведённым руками")
+        assertEquals(true, вернулись[виктор]?.manual, "заведённый руками потерял признак")
+        // Своё имя и раздел переживают поход в список: перекладывание — не заведение
+        // заново, и терять на нём правки человека не за что.
+        assertEquals("Виктор", вернулись[виктор]?.name)
+        assertEquals(дом, вернулись[виктор]?.sectionId)
+    }
+
+    @Test
+    fun знакомый_помечается_один_раз_и_не_забывается() = runTest {
+        // Признак ставится только вверх: пересчёт задним числом дал бы «знакомого»
+        // всякому, про кого строка уже есть, — а блокировка строку и заводит.
+        book.fromPhoneBook(listOf(PhoneBookEntry("+79160001122", "Борис")))
+        val борис = BookKey.ofPhone("+79160001122")
+
+        book.setList(борис, BookList.Blocked, known = true)
+        book.setList(борис, BookList.Usual, known = false)
+        book.setList(борис, BookList.Blocked, known = false)
+
+        assertTrue(строкиВсе().single { it.id == борис }.known, "знакомый забыт")
+    }
+
+    @Test
+    fun контакт_по_нику_заводится_и_не_дублируется() = runTest {
+        // Человек без номера — полноправный, и книга обязана его вмещать (Л0).
+        book.addByUser("u-9", "Аня", "")
+        val аня = строки().single()
+        assertEquals(BookKey.ofUser("u-9"), аня.id)
+        assertEquals("", аня.phone, "у заведённого по нику взялся номер")
+        assertTrue(аня.byNickname)
+        // Тихое следствие, которое легко однажды «починить»: его нет в разделе «Телефон»,
+        // потому что он в TIMa по определению, — значит SMS-приглашение ему не уйдёт.
+        assertTrue(аня.inTima)
+
+        // Тот же человек, пришедший вторым путём — по номеру из телефонной книги, — не
+        // должен стать второй строкой: слить их потом было бы нечем.
+        book.fromPhoneBook(listOf(PhoneBookEntry("+79160001122", "Аня")))
+        book.matched(mapOf("+79160001122" to "u-9"))
+        book.addByUser("u-9", "Аня", "")
+        assertEquals(2, строки().size, "заведён третьей строкой вместо двух известных путей")
+        assertEquals(1, строки().count { it.id == BookKey.ofUser("u-9") })
     }
 
     @Test

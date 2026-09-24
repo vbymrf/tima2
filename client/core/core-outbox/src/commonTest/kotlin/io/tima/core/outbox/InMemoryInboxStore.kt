@@ -50,12 +50,17 @@ class InMemoryInboxStore : InboxStore {
         senderId: String,
         level: Int,
         threadRoot: Long,
+        kind: Int,
     ) {
         if (failOnEntryBody) error("диск отказал")
         bodies[key(chatId, messageId)] = body
         authors[key(chatId, messageId)] = senderId
         levels[key(chatId, messageId)] = level
+        kinds[key(chatId, messageId)] = kind
     }
+
+    /** Вид содержимого разобранного — по нему видно, что системное доехало системным. */
+    val kinds = mutableMapOf<String, Int>()
 
     /** Записанный круг сообщения — по нему проверяется, что уровень доехал до хранилища. */
     val levels = mutableMapOf<String, Int>()

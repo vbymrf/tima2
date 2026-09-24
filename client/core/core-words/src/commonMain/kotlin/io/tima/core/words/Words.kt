@@ -960,6 +960,14 @@ interface ChatWords {
     val hitRemoved: String
     val hitBlocked: String
 
+    /**
+     * Автоответ заблокированному — Л14, Л15.
+     *
+     * Едет `CK_SYSTEM`, а не текстом, и рисуется отсюда, словарём **читающего**: иначе
+     * фраза уехала бы на языке блокирующего.
+     */
+    val blockedYou: String
+
     // Меню «•••» переписки (ПЛАН-РАЗДЕЛОВ Р5, ПЛАН-ЧАТА Ч2). Заголовок — «Настройка
     // группы» / «Настройка переписки» (заказчик 2026-09-18), а не «Переписка».
     val chatMenu: String
@@ -2509,6 +2517,7 @@ object RussianWords : Words {
         override val searchFailed = "Не удалось спросить сервер"
         override val hitRemoved = "у вас в «Убранных»"
         override val hitBlocked = "у вас в «Заблокированных»"
+        override val blockedYou = "Пользователь вас заблокировал"
         override val chatMenu = "Переписка"
         override val groupSettings = "Настройка группы"
         override val chatSettings = "Настройка переписки"

@@ -87,6 +87,7 @@ class SqlInboxStore(
         senderId: String,
         level: Int,
         threadRoot: Long,
+        kind: Int,
     ) {
         q.updateParsed(
             body_enc = cipher.seal(body),
@@ -97,6 +98,9 @@ class SqlInboxStore(
             // Корень ветки — оттуда же и по той же причине: собрать ветку из кадра,
             // который уже разобран и выброшен, будет нечем.
             thread_root = threadRoot,
+            // Вид — там же и по той же причине: он лежит в метаданных конверта, а
+            // конверт после разбора заменён телом, и достать его будет неоткуда.
+            kind = kind.toLong(),
             dedup_key = keyOf(chatId, messageId),
         )
     }
@@ -145,6 +149,7 @@ class SqlInboxStore(
         attempts = attempts.toInt(),
         receivedAtMs = client_ts,
         sentAtMs = server_ts ?: 0,
+        kind = kind.toInt(),
         undecryptableReason = undecryptable_reason,
     )
 

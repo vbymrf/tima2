@@ -47,7 +47,7 @@ class OutgoingSealer(
                 chatId = entry.chatId,
                 senderId = senderId,
                 senderDevice = senderDeviceId,
-                kind = KIND_TEXT,
+                kind = entry.kind,
                 createdAtUnixMs = entry.createdAtMs,
             )
             // Тело в записи очереди уже упаковано (zstd(protobuf)) — один кодек на

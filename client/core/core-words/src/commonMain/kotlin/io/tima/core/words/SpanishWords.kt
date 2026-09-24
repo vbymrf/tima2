@@ -916,6 +916,7 @@ object SpanishWords : Words {
         override val searchFailed = "No se pudo preguntar al servidor"
         override val hitRemoved = "en tus «Retirados»"
         override val hitBlocked = "en tus «Bloqueados»"
+        override val blockedYou = "El usuario te ha bloqueado"
         override val chatMenu = "Conversación"
         override val groupSettings = "Ajustes del grupo"
         override val chatSettings = "Ajustes de la conversación"

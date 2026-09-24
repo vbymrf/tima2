@@ -14,13 +14,18 @@ class SendMessageTest {
 
     private class Queue(val taken: Set<String> = emptySet()) : OutgoingQueue {
         val put = mutableListOf<Triple<String, String, ByteArray>>()
+        var lastKind: Int = KIND_TEXT
+            private set
+
         override fun enqueue(
             dedupKey: String,
             chatId: String,
             body: ByteArray,
             level: Int,
             threadRoot: Long,
+            kind: Int,
         ): Boolean {
+            lastKind = kind
             put += Triple(dedupKey, chatId, body)
             return dedupKey !in taken
         }

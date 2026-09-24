@@ -77,7 +77,18 @@ CREATE TABLE messages (
     thread_root     INTEGER NOT NULL DEFAULT 0,
     -- Код отказа сервера у исходящего, которое не отправилось. NULL — не отказано либо
     -- причина не сохранена. Дописан миграцией 11.sqm, отсюда и место в конце.
-    fail_reason     TEXT
+    fail_reason     TEXT,
+    -- Вид содержимого — `ContentKind` из `envelope.proto`: 1 — текст, 6 — системное
+    -- (Л14, Л15). Дописан миграцией 14.sqm, отсюда и место в конце.
+    --
+    -- Вид едет в ПОДПИСАННЫХ метаданных конверта, и потому ему можно верить: метку
+    -- внутри тела отправитель волен сочинить сам, и «системное сообщение от TIMa»
+    -- рисовал бы кто угодно. Здесь он сохраняется, чтобы пережить перезапуск: из
+    -- конверта его после разбора уже не достать — конверт заменён телом.
+    --
+    -- Не то же, что `system`: та строка написана самим устройством и по сети не ехала,
+    -- у неё нет ни автора, ни подписи. У системного сообщения есть и то и другое.
+    kind            INTEGER NOT NULL DEFAULT 1
 );
 
 -- Порядок в чате. Индекс повторяет правило сортировки, иначе список чата на
@@ -98,8 +109,8 @@ CREATE INDEX idx_messages_thread ON messages(chat_id, thread_root, local_id);
 -- ── Очередь исходящих ───────────────────────────────────────────────────────
 
 insertQueued:
-INSERT OR IGNORE INTO messages(dedup_key, chat_id, sender_id, client_ts, direction, state, attempts, next_attempt_at, reply_to, level, body_enc, thread_root)
-VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?);
+INSERT OR IGNORE INTO messages(dedup_key, chat_id, sender_id, client_ts, direction, state, attempts, next_attempt_at, reply_to, level, body_enc, thread_root, kind)
+VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- Сколько строк затронула последняя вставка: 0 означает, что dedup_key уже был.
 -- Отличать «поставили» от «уже было» обязательно — иначе повторная постановка
@@ -235,8 +246,19 @@ SELECT * FROM messages WHERE direction = 1 AND state IN (?, ?) ORDER BY local_id
 --
 -- sender_id до разбора пуст намеренно: автор известен только после сошедшейся подписи, а
 -- выдуманное значение потом пришлось бы отличать от настоящего.
+-- Вид пишется здесь, вместе с телом и автором: до разбора он неизвестен — он лежит в
+-- метаданных конверта, а им до проверки подписи верить нельзя.
 updateParsed:
-UPDATE messages SET body_enc = ?, sender_id = ?, level = ?, thread_root = ? WHERE dedup_key = ?;
+UPDATE messages SET body_enc = ?, sender_id = ?, level = ?, thread_root = ?, kind = ? WHERE dedup_key = ?;
+
+-- Когда мы в последний раз отвечали в этой переписке системным сообщением (Л14).
+--
+-- Отдельного хранилища «когда отвечали» нет намеренно: устройств у человека несколько,
+-- и каждое завело бы своё. Отметка выводится из самой переписки — она приедет на все
+-- устройства эхом. То же правило, по которому список переписок выводится из сообщений.
+lastSystemOut:
+SELECT COALESCE(MAX(COALESCE(server_ts, client_ts)), 0) FROM messages
+WHERE chat_id = :chatId AND direction = 0 AND kind = :kind;
 
 -- Круг сообщения изменили после отправки: админ или сам автор сузил его (ADR-0019 §6).
 -- Меняется ТОЛЬКО уровень: тело и автор остаются теми, что были проверены подписью.

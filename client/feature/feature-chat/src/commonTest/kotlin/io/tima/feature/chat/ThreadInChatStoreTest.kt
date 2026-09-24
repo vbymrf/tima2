@@ -46,7 +46,7 @@ class ThreadInChatStoreTest {
             },
         ),
         send = SendMessage(
-            queue = OutgoingQueue { _, chatId, _, level, threadRoot ->
+            queue = OutgoingQueue { _, chatId, _, level, threadRoot, _ ->
                 sent += Enqueued(chatId, level, threadRoot)
                 true
             },

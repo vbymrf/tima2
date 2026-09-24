@@ -916,6 +916,7 @@ object EnglishWords : Words {
         override val searchFailed = "Could not ask the server"
         override val hitRemoved = "in your «Removed»"
         override val hitBlocked = "in your «Blocked»"
+        override val blockedYou = "The user has blocked you"
         override val chatMenu = "Chat"
         override val groupSettings = "Group settings"
         override val chatSettings = "Chat settings"

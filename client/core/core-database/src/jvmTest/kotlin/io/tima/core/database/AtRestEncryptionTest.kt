@@ -52,6 +52,7 @@ class AtRestEncryptionTest {
                 level = -1,
                 body_enc = marker.encodeToByteArray(),
                 thread_root = 0,
+                kind = 1,
             )
         }
         assertTrue(

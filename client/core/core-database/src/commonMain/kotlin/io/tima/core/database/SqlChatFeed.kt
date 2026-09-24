@@ -79,6 +79,7 @@ class SqlChatFeed(
         // там пусто, и это честнее выдуманного имени: пустое место видно, подделка нет.
         senderId = sender_id.ifBlank { null },
         threadRoot = thread_root,
+        kind = kind.toInt(),
     )
 
     /**

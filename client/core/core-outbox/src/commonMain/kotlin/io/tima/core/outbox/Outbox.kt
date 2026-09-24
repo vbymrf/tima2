@@ -1,5 +1,6 @@
 package io.tima.core.outbox
 
+import io.tima.domain.chat.KIND_TEXT
 import io.tima.domain.chat.LEVEL_SECRET
 import io.tima.domain.chat.OutgoingQueue
 
@@ -88,6 +89,13 @@ data class OutboxEntry(
      * отправка может случиться после перезапуска, и к этому времени экрана уже нет.
      */
     val threadRoot: Long = 0,
+    /**
+     * Вид содержимого — `ContentKind` из `envelope.proto`: 1 текст, 6 системное (Л14).
+     *
+     * Лежит в очереди, а не подставляется при отправке, по той же причине, что круг и
+     * ветка: отправка бывает после перезапуска, и решать тогда уже нечем.
+     */
+    val kind: Int = KIND_TEXT,
     val state: OutboxState = OutboxState.QUEUED,
     val attempts: Int = 0,
     val nextAttemptAtMs: Long = 0,
@@ -282,12 +290,18 @@ class Outbox(
      */
     private val cachedEpochs = HashMap<String, Long>()
 
-    override fun enqueue(dedupKey: String, chatId: String, body: ByteArray, level: Int, threadRoot: Long): Boolean =
-        enqueue(dedupKey, chatId, body, level, threadRoot, now = nowMs())
+    override fun enqueue(
+        dedupKey: String,
+        chatId: String,
+        body: ByteArray,
+        level: Int,
+        threadRoot: Long,
+        kind: Int,
+    ): Boolean = enqueue(dedupKey, chatId, body, level, threadRoot, kind, now = nowMs())
 
     /** Тот же вызов с умолчанием: круг по умолчанию — шифр. */
     fun enqueue(dedupKey: String, chatId: String, body: ByteArray): Boolean =
-        enqueue(dedupKey, chatId, body, LEVEL_SECRET, threadRoot = 0)
+        enqueue(dedupKey, chatId, body, LEVEL_SECRET, threadRoot = 0, kind = KIND_TEXT)
 
     private fun enqueue(
         dedupKey: String,
@@ -295,6 +309,7 @@ class Outbox(
         body: ByteArray,
         level: Int,
         threadRoot: Long,
+        kind: Int,
         now: Long,
     ): Boolean {
         require(dedupKey.isNotBlank()) { "dedupKey пустой: по нему опознаётся повтор" }
@@ -306,6 +321,7 @@ class Outbox(
                 body = body,
                 level = level,
                 threadRoot = threadRoot,
+                kind = kind,
                 state = OutboxState.QUEUED,
                 nextAttemptAtMs = now,
                 createdAtMs = now,

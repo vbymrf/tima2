@@ -44,6 +44,7 @@ class SendMessage(
         text: String,
         level: Int = LEVEL_SECRET,
         threadRoot: Long = 0,
+        kind: Int = KIND_TEXT,
     ): SendMessageResult {
         require(chatId.isNotBlank()) { "chatId пустой" }
 
@@ -62,7 +63,7 @@ class SendMessage(
         val dedupKey = keys.newKey()
         require(dedupKey.isNotBlank()) { "ключ идемпотентности пустой" }
 
-        return if (queue.enqueue(dedupKey, chatId, body, level, threadRoot)) {
+        return if (queue.enqueue(dedupKey, chatId, body, level, threadRoot, kind)) {
             SendMessageResult.Queued(dedupKey)
         } else {
             // Такой ключ уже в очереди. Не ошибка: так выглядит повторное нажатие,
@@ -97,12 +98,38 @@ fun interface OutgoingQueue {
      * @param level круг сообщения (ADR-0019). −1 — шифр, 0…3 — открытое. Хранится в
      *   очереди, потому что решение «нужен ли ключ» принимается при отправке, а она
      *   может случиться после перезапуска.
+     * @param kind вид содержимого — `ContentKind` из `envelope.proto` (Л14). Там же и по
+     *   той же причине: вид уезжает в подписанные метаданные конверта, а запечатывание
+     *   бывает после перезапуска.
      */
-    fun enqueue(dedupKey: String, chatId: String, body: ByteArray, level: Int, threadRoot: Long): Boolean
+    fun enqueue(
+        dedupKey: String,
+        chatId: String,
+        body: ByteArray,
+        level: Int,
+        threadRoot: Long,
+        // Без умолчания: у функционального интерфейса его быть не может, и это к лучшему.
+        // Умолчание здесь значило бы, что новый вид содержимого легко не передать.
+        kind: Int,
+    ): Boolean
 }
 
 /** Круг по умолчанию: шифр. Всё, что было в очереди до появления кругов, — именно он. */
 const val LEVEL_SECRET: Int = -1
+
+/** `CK_TEXT` из `envelope.proto` — написал человек. */
+const val KIND_TEXT: Int = 1
+
+/**
+ * `CK_SYSTEM` из `envelope.proto` — автоответ заблокированному (Л14).
+ *
+ * Вид, а не текст: фраза иначе уехала бы на языке блокирующего — русский заблокировал
+ * испанца, и тот получил бы русский текст. Системный вид рисуется словарём **читающего**.
+ *
+ * Вид лежит в подписанных метаданных, и потому ему можно верить: метку внутри тела
+ * отправитель волен сочинить, и «системное сообщение от TIMa» рисовал бы кто угодно.
+ */
+const val KIND_SYSTEM: Int = 6
 
 /**
  * Порт к упаковке тела. Реализуется `core-encryption`: `zstd(protobuf(MessageBody))`.

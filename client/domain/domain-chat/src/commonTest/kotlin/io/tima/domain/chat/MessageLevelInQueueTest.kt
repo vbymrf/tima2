@@ -38,6 +38,8 @@ class MessageLevelInQueueTest {
     private class RememberingQueue : OutgoingQueue {
         var lastLevel: Int = Int.MIN_VALUE
             private set
+        var lastKind: Int = Int.MIN_VALUE
+            private set
 
         override fun enqueue(
             dedupKey: String,
@@ -45,8 +47,10 @@ class MessageLevelInQueueTest {
             body: ByteArray,
             level: Int,
             threadRoot: Long,
+            kind: Int,
         ): Boolean {
             lastLevel = level
+            lastKind = kind
             return true
         }
     }

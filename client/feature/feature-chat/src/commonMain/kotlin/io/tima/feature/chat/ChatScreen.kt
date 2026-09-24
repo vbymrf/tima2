@@ -55,6 +55,7 @@ import io.tima.domain.chat.line
 import io.tima.domain.chat.CarryToPage
 import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.ChatLine
+import io.tima.domain.chat.KIND_SYSTEM
 import io.tima.domain.chat.MessageDisplay
 
 /**
@@ -409,6 +410,18 @@ private fun Reply(
     // приписал бы ей всё это разом, поэтому она идёт полосой по центру.
     if (line.display == MessageDisplay.SYSTEM) {
         SystemLine(line.text.orEmpty())
+        return
+    }
+    // ── СИСТЕМНОЕ РИСУЕТСЯ СЛОВАМИ ЧИТАЮЩЕГО (Л15) ──────────────────────────
+    //
+    // Присланный текст не показывается **вовсе**, и это не бережливость: иначе фраза
+    // уехала бы на языке отправителя — русский заблокировал испанца, и тот получил бы
+    // русский текст. Вид едет в подписанных метаданных, подделать его нельзя.
+    //
+    // Полосой по центру, как служебная: автор у неё есть, но писал её не человек, и
+    // пузырь приписал бы ей разговор, которого не было.
+    if (line.kind == KIND_SYSTEM) {
+        SystemLine(Tima.words.chat.blockedYou)
         return
     }
     // Пузырь и строка ветки — один элемент списка, поэтому столбец: два соседа в

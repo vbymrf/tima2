@@ -47,6 +47,9 @@ class SqlOutboxStore(
             // отправка бывает после перезапуска, когда экрана с веткой уже нет.
             thread_root = entry.threadRoot,
             body_enc = cipher.seal(entry.body),
+            // Вид едет в подписанные метаданные конверта, а запечатывание бывает после
+            // перезапуска: решать тогда будет нечем.
+            kind = entry.kind.toLong(),
         )
         // INSERT OR IGNORE молчит при конфликте, поэтому «поставили» отличается от
         // «уже было» только числом затронутых строк. Без этой проверки повторная
@@ -138,6 +141,7 @@ class SqlOutboxStore(
         level = level.toInt(),
         threadRoot = thread_root,
         failReason = fail_reason,
+        kind = kind.toInt(),
     )
 
     private companion object {
