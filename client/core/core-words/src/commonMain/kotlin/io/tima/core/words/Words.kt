@@ -61,6 +61,26 @@ interface Words {
     val problem: ProblemWords
     val switching: SwitchingWords
     val trouble: TroubleWords
+    val notices: NoticeWords
+}
+
+/**
+ * Слова уведомлений — ПЛАН-УВЕДОМЛЕНИЙ.md, У5.
+ *
+ * Их всего три, и они **никогда не содержат сообщения**: решение заказчика 2026-09-24 —
+ * показываем «кто и что», а зашифрованное человек увидит, открыв переписку.
+ *
+ * Свой набор, а не строки из `chat`: там слова для экрана, где уже видно, кто написал.
+ * В шторке видно только эту строку, и она обязана быть понятной сама по себе.
+ */
+interface NoticeWords {
+    /** Когда имя ещё не проверено подписью либо назвать человека нечем (У6). */
+    val newMessage: String
+
+    /** То же, но имя есть: оно идёт заголовком, а это — второй строкой. */
+    val wroteToYou: String
+
+    val incomingCall: String
 }
 
 /**
@@ -184,6 +204,22 @@ interface SettingsListWords {
     val itemProfile: String
     val itemDevices: String
     val itemNotifications: String
+
+    // ── Экран уведомлений (У1, У14) ─────────────────────────────────────────
+    val noticesShow: String
+    val noticesWhat: String
+    /** Сказано до нажатия: текста сообщения в уведомлении не бывает. */
+    val noticesNoText: String
+    val noticesAllowed: String
+    val noticesAllow: String
+    val noticesRefused: String
+    val noticesOpenSettings: String
+    val noticesAwake: String
+    val noticesAwakeAbout: String
+    val noticesAwakeAsk: String
+    val noticesAwakeDone: String
+    /** Честно про оболочки: системного белого списка на realme и Xiaomi не хватает. */
+    val noticesVendors: String
     val itemVirtuals: String
     val itemAppearance: String
     /** «Шрифты и размеры» — второй пункт вида (ПЛАН-ШРИФТОВ Ш4, 2026-09-16). */
@@ -1857,6 +1893,12 @@ object RussianWords : Words {
         override val writeWhatHappened = "Напишите, что случилось — без этого отчёт не отправить."
     }
 
+    override val notices = object : NoticeWords {
+        override val newMessage = "Новое сообщение"
+        override val wroteToYou = "Написал вам"
+        override val incomingCall = "Входящий звонок"
+    }
+
     override val switching = object : SwitchingWords {
         override val accounts = "Аккаунты"
         override val notSent = "не отправлено"
@@ -2032,6 +2074,23 @@ object RussianWords : Words {
         override val itemProfile = "Профиль"
         override val itemDevices = "Секретная фраза и устройства"
         override val itemNotifications = "Уведомления"
+        override val noticesShow = "Показывать уведомления"
+        override val noticesWhat = "В уведомлении видно, кто написал или звонит, — и больше ничего."
+        override val noticesNoText =
+            "Текст сообщения не показывается: оно зашифровано, и вы увидите его, открыв переписку."
+        override val noticesAllowed = "Разрешено"
+        override val noticesAllow = "Разрешить"
+        override val noticesRefused =
+            "Система больше не спросит. Разрешение включается на странице приложения в настройках."
+        override val noticesOpenSettings = "Открыть настройки"
+        override val noticesAwake = "Не усыплять приложение"
+        override val noticesAwakeAbout =
+            "Чтобы сообщения и звонки приходили, когда приложение закрыто, система не должна его останавливать."
+        override val noticesAwakeAsk = "Разрешить работу в фоне"
+        override val noticesAwakeDone = "Разрешено"
+        override val noticesVendors =
+            "На телефонах realme, Xiaomi, Huawei и подобных этого мало: у них свои списки " +
+                "автозапуска в настройках батареи, и добавить приложение туда можно только руками."
         override val itemVirtuals = "Виртуальные аккаунты"
         override val itemAppearance = "Цвета"
         override val itemText = "Шрифты и размеры"

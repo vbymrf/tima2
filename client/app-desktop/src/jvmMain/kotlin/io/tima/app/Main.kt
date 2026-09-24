@@ -1,6 +1,11 @@
 package io.tima.app
 
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -16,6 +21,7 @@ import io.tima.core.diag.Journal
 import io.tima.feature.shell.ProblemFacts
 import io.tima.feature.shell.UpdateMemory
 import io.tima.shared.Build
+import io.tima.shared.ChannelHost
 import io.tima.shared.ReportsStore
 import io.tima.shared.rememberCrash
 import io.tima.shared.Entry
@@ -85,10 +91,44 @@ private fun window(store: ReportsStore) = application {
         position = WindowPosition.Aligned(Alignment.Center),
     )
 
+    // ── ОКНО — ВИД НА ПРОЦЕСС, А НЕ САМ ПРОЦЕСС (У4) ────────────────────────
+    //
+    // Раньше закрытие окна звало `exitApplication()`: процесса больше нет, канала нет,
+    // уведомлений нет. Пока уведомлений не было вовсе, это было честно.
+    //
+    // Теперь закрытие ПРЯЧЕТ окно, а выход живёт в меню значка. Канал при этом держит
+    // `ChannelHost`, а не композиция (У2), — и то, что окно при закрытии разбирается
+    // целиком, не беда, а проверка: собранное отдаётся из процесса, и повторное открытие
+    // берёт то же самое.
+    var видно by remember { mutableStateOf(true) }
+    var трейЕсть by remember { mutableStateOf(false) }
+    DisposableEffect(Unit) {
+        трейЕсть = Tray.install(
+            onOpen = { видно = true },
+            onExit = { Journal.diary.flush(); exitApplication() },
+        )
+        onDispose { Tray.remove() }
+    }
+
+    // Убранное окно ничего не показывает глазами — значит открытая в нём переписка
+    // снова обязана уведомлять (У10). Без этого человек, закрывший окно на переписке,
+    // перестал бы получать из неё уведомления до следующего открытия.
+    LaunchedEffect(видно) { ChannelHost.notices()?.windowVisible(видно) }
+
     Window(
-        // Закрытие — последний надёжный повод сбросить журнал: дальше процесса не будет,
-        // а записи, не дожившие до сброса пачкой, пропали бы вместе с ним.
-        onCloseRequest = { Journal.diary.flush(); exitApplication() },
+        // Окно ПРЯЧЕТСЯ, а не разбирается: composition-у `application` без единого окна
+        // доверять нельзя — он вправе счесть, что показывать больше нечего.
+        visible = видно,
+        onCloseRequest = {
+            if (трейЕсть) {
+                видно = false
+            } else {
+                // Сброс журнала — последний надёжный повод: дальше процесса не будет, а
+                // записи, не дожившие до сброса пачкой, пропали бы вместе с ним.
+                Journal.diary.flush()
+                exitApplication()
+            }
+        },
         state = windowState,
         title = "TIMA",
     ) {

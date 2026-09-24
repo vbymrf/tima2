@@ -40,6 +40,9 @@ kotlin {
             implementation(projects.core.coreEncryption)
             implementation(projects.core.coreSecrets)
             implementation(projects.core.coreContacts)
+            // Показ уведомлений (У5). Правило «что уведомляет» — здесь, в `shared`:
+            // оно знает про блокировку, про свои устройства и про проверку подписи.
+            api(projects.core.coreNotify)
             implementation(projects.core.coreMedia)
             // Звонок: окно 0 и его экран. core-call приходит транзитивно через
             // feature-call, и вместе с ним — libwebrtc: именно здесь APK и вырастает

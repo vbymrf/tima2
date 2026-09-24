@@ -25,6 +25,8 @@ kotlin {
             // окно.
             implementation(project(":shared"))
             implementation(project(":core:core-database"))
+            // Уведомления: значок в трее отдаётся показу отсюда (У4).
+            implementation(project(":core:core-notify"))
             implementation(project(":core:core-ui"))
             // Оболочка объявляет порт установщика обновлений, а реализация платформенная
             // и живёт здесь (О3). Ребро явное: приложение поставляет оболочке то, чего

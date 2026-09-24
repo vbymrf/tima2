@@ -79,6 +79,44 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <!--
+      Служба живого канала (У3). Тип `specialUse`, а НЕ `dataSync`, и это не вкус:
+      `dataSync` при targetSdk 35 нельзя поднять из BOOT_COMPLETED и он живёт шесть часов
+      в сутки. Первое убивает то, ради чего служба заводится, второе оставляет канал
+      мёртвым три четверти времени.
+
+      Проверку Google Play `specialUse` требует, но нас она не связывает: раздаём мимо
+      Play своим APK (ADR-0022).
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!--
+      Поднять канал после включения телефона (У3). Без этого «уведомления работают»
+      означало бы «работают у того, кто после перезагрузки открыл приложение», то есть у
+      того, кому они и не нужны.
+    -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!--
+      Попросить не усыплять нас (У14). Play это разрешение ограничивает — нас опять не
+      связывает. И само по себе оно НЕ ДОСТАТОЧНО: у realme и Xiaomi поверх стоят свои
+      списки автозапуска, которых системный белый список не касается.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!--
+      ПОКАЗЫВАТЬ УВЕДОМЛЕНИЯ (У1). Разрешения здесь не было вовсе, при targetSdk 34.
+
+      С Android 13 без него не показывается НИ ОДНА строка — включая постоянную строку
+      службы переднего плана. Служба при этом работает, канал держится, сообщения
+      приходят: человек просто не видит ничего. То есть уведомление о входящем звонке
+      (`CallService`) на всех телефонах с Android 13 и новее не показывалось, а искать
+      это стали бы где угодно, только не в манифесте.
+
+      Спрашивается у человека — см. `core-notify/AndroidNotifyAccess`.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
       Камера и микрофон НЕ обязательны для установки: телефон без камеры остаётся
       телефоном, на котором звонят голосом. Без этих строк Google Play отсеял бы такие
       устройства сам, а раздаём мы мимо Play — и отсева не заметили бы вовсе.
@@ -175,6 +213,29 @@
             android:name=".InstallResultReceiver"
             android:exported="false" />
 
+
+        <!--
+          Живой канал без окна. `stopWithTask="false"`: смахнули приложение из недавних —
+          служба остаётся, в том и смысл.
+        -->
+        <service
+            android:name="io.tima.app.ChannelService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Мессенджер держит соединение с сервером, чтобы доставлять сообщения и звонки" />
+        </service>
+
+        <receiver
+            android:name="io.tima.app.BootReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <service
             android:name="io.tima.core.call.CallService"

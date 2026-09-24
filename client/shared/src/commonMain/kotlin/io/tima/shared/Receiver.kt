@@ -89,6 +89,11 @@ class Receiver(
      * порог обновления — он и так умеет это показывать.
      */
     private val onOutdated: () -> Unit = {},
+    /**
+     * Уведомления — У5…У8. По умолчанию не показывает ничего: канал обязан работать и
+     * там, где показывать нечем (проверки, платформы без уведомлений).
+     */
+    private val notices: Notices? = null,
 ) {
 
     /**
@@ -169,6 +174,8 @@ class Receiver(
                 if (decision.from in blocked()) {
                     Journal.note(LogCode.NET_CHANNEL, "звонок от заблокированного — не звоним", "звонок" to decision.callId)
                 } else {
+                    // Имя сразу: его утверждает сервер, а не звонящий (У7).
+                    notices?.calling(decision.callId, decision.from)
                     onCall(decision.callId, decision.from, decision.kind)
                 }
             // ── ПОДСКАЗКА РАЗРЕШАЕТСЯ РУЧКОЙ ────────────────────────────────
@@ -192,12 +199,19 @@ class Receiver(
                         Journal.note(LogCode.NET_CHANNEL, "подсказка о звонке опоздала", "состояние" to call.state)
                     call.initiatorId in blocked() ->
                         Journal.note(LogCode.NET_CHANNEL, "звонок от заблокированного — не звоним", "звонок" to decision.callId)
-                    else ->
+                    else -> {
+                        notices?.calling(decision.callId, call.initiatorId)
                         onCall(decision.callId, call.initiatorId, if (call.video) "video" else "audio")
+                    }
                 }
             }
-            is EventStreamProtocol.Decision.CallState ->
+            is EventStreamProtocol.Decision.CallState -> {
+                // Строка звонка не переживает звонок — чем бы он ни кончился (У7).
+                // «answered» тоже конец для уведомления: трубку взяли, звать больше
+                // некуда, а висящая строка выглядит как второй звонок.
+                notices?.callOver(decision.callId)
                 onCallState(decision.callId, decision.state)
+            }
             is EventStreamProtocol.Decision.CallLeft ->
                 onCallLeft(decision.callId, decision.userId)
             is EventStreamProtocol.Decision.CallUnreachable ->
@@ -459,6 +473,16 @@ class Receiver(
 
         environment.incoming.receive(chatId, messageId, envelope, sentAtMs = sender?.createdAtMs ?: 0)
 
+        // ── ПЕРВАЯ СТАДИЯ СТРОКИ: БЕЗ ИМЕНИ (У6) ────────────────────────────
+        //
+        // Здесь, а не после разбора: при недоехавшем ключе человек иначе не узнал бы
+        // ничего, а это как раз тот случай, когда узнать надо. Имя при этом не
+        // называется — открытая часть конверта подписью не покрыта.
+        //
+        // Кого не уведомлять (заблокированный, своё с другого устройства), решает
+        // `Notices`: правило живёт в одном месте, а не расходится по вызовам.
+        notices?.arrived(chatId, sender?.userId)
+
         // ── ОТ ЗАБЛОКИРОВАННОГО: ЗАПИСАТЬ, НО НЕ ОТКРЫВАТЬ (Л9) ─────────────
         //
         // Кто прислал, известно БЕЗ расшифровки — из открытой части конверта. Этого
@@ -485,13 +509,23 @@ class Receiver(
         // Разбор — уже после записи. Упадёт — сообщение останется на повтор.
         val key = sender?.let { captionKey(it.userId, it.deviceId) }
 
+        // Разобралась может не та запись, которую мы сейчас записали: очередь берётся
+        // с головы. Поэтому переписка и автор берутся у РАЗОБРАННОЙ, а не отсюда.
+        var разобрано: Pair<String, String>? = null
         environment.incoming.openNext(held) { entry ->
-            when {
+            val outcome = when {
                 sender == null -> OpenOutcome.Rejected("конверт не разбирается")
                 key == null -> OpenOutcome.NoKey("ключ подписи отправителя не получен")
                 else -> open(entry, key)
             }
+            if (outcome is OpenOutcome.Opened) разобрано = entry.chatId to outcome.senderId
+            outcome
         }
+        // ── ВТОРАЯ СТАДИЯ: ПОДПИСЬ СОШЛАСЬ, ИМЯ МОЖНО НАЗВАТЬ (У6) ──────────
+        //
+        // Та же строка по тому же ключу, а не вторая: два уведомления об одном
+        // сообщении человек читает как два сообщения.
+        разобрано?.let { (чат, автор) -> notices?.opened(чат, автор) }
 
         // Переписка от незнакомого — со своим именем: иначе в списке появится строка без
         // имени, и человек не узнает, кто написал.

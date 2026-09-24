@@ -1,11 +1,14 @@
 package io.tima.shared
 
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.runtime.remember
 import io.tima.core.diag.Journal
+import io.tima.core.notify.platformNotifier
+import io.tima.feature.chat.BookView
 import io.tima.core.diag.LogCode
 import io.tima.core.database.TimaDatabase
 import io.tima.domain.account.Session
@@ -40,6 +43,13 @@ class Assembled(
      */
     val groupSender: GroupSender,
     val receiver: Receiver,
+    /**
+     * Уведомления — У5.
+     *
+     * Здесь, а не в композиции: строку снимает и тот, кто открыл переписку (окно), и тот,
+     * кто получил конец звонка (канал). Общее место у них одно — сборка.
+     */
+    val notices: Notices,
     val keyOrchestrator: GroupKeyOrchestrator,
     /**
      * Штампы отправителей из событий о сообщениях — потоком, по той же причине, что и
@@ -76,13 +86,33 @@ class Assembled(
 )
 
 /**
- * Собрать всё для заведённого устройства.
+ * Готовая сборка для устройства — та же самая, что у процесса (У2).
  *
- * `remember` по устройству, а не по составу окна: другое устройство — другая база и
- * другой ключ покоя, и переиспользовать собранное между ними нельзя.
+ * Сама сборка живёт в [ChannelHost], а не в композиции: канал обязан держаться и когда
+ * окна нет вовсе, иначе уведомление приходит ровно тогда, когда оно не нужно.
+ * `remember` здесь остаётся только затем, чтобы не спрашивать её на каждую перерисовку.
  */
 @Composable
 fun assemble(
+    entry: Entry,
+    device: Entry.Device,
+    build: Build = Build(),
+    deviceDatabase: (String) -> TimaDatabase,
+    firstAccount: String? = null,
+): Assembled = remember(device) {
+    ChannelHost.assembled(device.session.deviceId) {
+        buildAssembled(entry, device, build, deviceDatabase, firstAccount)
+    }
+}
+
+/**
+ * Собрать всё для заведённого устройства.
+ *
+ * **Не `@Composable` и не `remember`** — У2. Зовёт это [ChannelHost] ровно один раз на
+ * устройство, и зовёт не только окно: службе, поднятой после перезагрузки телефона,
+ * собирать всё это надо самой, а композиции у неё нет и не будет.
+ */
+fun buildAssembled(
     entry: Entry,
     device: Entry.Device,
     /** Чем сборка называет себя серверу: без этого «устарело» сказать нечем. */
@@ -101,7 +131,7 @@ fun assemble(
      */
     firstAccount: String? = null,
 ): Assembled =
-    remember(device) {
+    run {
         val environment = Environment.open(
             deviceDatabase(databaseFor(device.session.userId, firstAccount)),
             device.secret,
@@ -125,9 +155,10 @@ fun assemble(
         // `Assembled` без восстановленной очереди теперь не собирается.
         // ── И РОВНО ОДИН РАЗ НА ПРОЦЕСС ─────────────────────────────────────
         //
-        // `assemble` — это `remember(device)`, а не `remember` навсегда: состав окна
-        // может пересобраться, и тогда всё здесь выполнится второй раз. Для остального
-        // это безвредно, для восстановления — нет.
+        // С У2 сборка кэшируется в `ChannelHost` и строится один раз на устройство за
+        // жизнь процесса — то есть набор ниже стал почти избыточен. Почти: службу и окно
+        // ничто не мешает поднять «одновременно», и тогда в кэш заглянут двое. Набор
+        // держит обещание «ровно один раз» независимо от того, кто спросил первым.
         //
         // Восстановление отвечает на вопрос «что застряло, пока нас убили». Позови его
         // посреди жизни процесса — и оно выдернет из `SENDING` запись, которую прямо
@@ -185,6 +216,25 @@ fun assemble(
         val commentPings = MutableStateFlow(0L)
         val callPings = MutableStateFlow("")
         val outdated = MutableStateFlow(false)
+
+        // ── УВЕДОМЛЕНИЯ СОБИРАЮТСЯ ЗДЕСЬ, А НЕ В ОКНЕ (У5) ──────────────────
+        //
+        // Показ платформенный (`platformNotifier`), правила общие, а зовёт их приёмник —
+        // тот, кто первым узнаёт о событии. Собери это в композиции, и уведомление
+        // приходило бы только при открытом окне, то есть тогда, когда оно не нужно.
+        val notices = Notices(
+            notifier = platformNotifier(),
+            me = device.session.userId,
+            // Строка книги — из местной базы, без сети: уведомление не должно ждать
+            // сервера, чтобы назвать знакомого.
+            entryOf = { id -> environment.book.everyone().first().firstOrNull { it.userId == id } },
+            // Карточка нужна ради НИКА незнакомца, и только. Не нашлась — строка
+            // остаётся безымянной, и это правильнее выдуманного имени.
+            cardOf = { id -> runCatching { network.directory.cards(listOf(id))?.get(id) }.getOrNull() },
+            // Тот же порядок полей, что в списках: заказчик уже распространил
+            // «Отображать пользователя как» на журнал звонков 2026-09-19.
+            look = { BookView.from(environment.settings.all().first()).look() },
+        )
 
         Assembled(
             session = device.session,
@@ -253,7 +303,9 @@ fun assemble(
                 onCallUnreachable = { callId -> callPings.value = "недоступен|$callId|-" },
                 onStamp = { senderStamps.tryEmit(it) },
                 onOutdated = { outdated.value = true },
+                notices = notices,
             ),
+            notices = notices,
             keyOrchestrator = keyOrchestrator,
             commentPings = commentPings,
             callPings = callPings,

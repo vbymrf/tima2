@@ -269,6 +269,12 @@ object SpanishWords : Words {
         override val writeWhatHappened = "Cuente qué ha pasado — sin eso el informe no sale."
     }
 
+    override val notices = object : NoticeWords {
+        override val newMessage = "Mensaje nuevo"
+        override val wroteToYou = "Te ha escrito"
+        override val incomingCall = "Llamada entrante"
+    }
+
     override val switching = object : SwitchingWords {
         override val accounts = "Cuentas"
         override val notSent = "sin enviar"
@@ -446,6 +452,23 @@ object SpanishWords : Words {
         override val itemProfile = "Perfil"
         override val itemDevices = "Frase de recuperación y dispositivos"
         override val itemNotifications = "Notificaciones"
+        override val noticesShow = "Mostrar notificaciones"
+        override val noticesWhat = "La notificación muestra quién escribió o llama — y nada más."
+        override val noticesNoText =
+            "El texto del mensaje no se muestra: está cifrado, y lo verá al abrir la conversación."
+        override val noticesAllowed = "Permitido"
+        override val noticesAllow = "Permitir"
+        override val noticesRefused =
+            "El sistema no volverá a preguntar. Actívelo en la página de la aplicación en los ajustes."
+        override val noticesOpenSettings = "Abrir ajustes"
+        override val noticesAwake = "No suspender la aplicación"
+        override val noticesAwakeAbout =
+            "Para que lleguen mensajes y llamadas con la aplicación cerrada, el sistema no debe detenerla."
+        override val noticesAwakeAsk = "Permitir el trabajo en segundo plano"
+        override val noticesAwakeDone = "Permitido"
+        override val noticesVendors =
+            "En teléfonos realme, Xiaomi, Huawei y similares esto no basta: tienen sus propias listas " +
+                "de inicio automático en los ajustes de batería, y allí la aplicación solo se añade a mano."
         override val itemVirtuals = "Cuentas virtuales"
         override val itemAppearance = "Colores"
         override val itemText = "Fuentes y tamaños"

@@ -271,6 +271,12 @@ object EnglishWords : Words {
         override val writeWhatHappened = "Tell us what happened — the report will not go without it."
     }
 
+    override val notices = object : NoticeWords {
+        override val newMessage = "New message"
+        override val wroteToYou = "Wrote to you"
+        override val incomingCall = "Incoming call"
+    }
+
     override val switching = object : SwitchingWords {
         override val accounts = "Accounts"
         override val notSent = "not sent"
@@ -448,6 +454,23 @@ object EnglishWords : Words {
         override val itemProfile = "Profile"
         override val itemDevices = "Recovery phrase and devices"
         override val itemNotifications = "Notifications"
+        override val noticesShow = "Show notifications"
+        override val noticesWhat = "A notification shows who wrote or is calling — and nothing else."
+        override val noticesNoText =
+            "The message text is not shown: it is encrypted, and you will see it when you open the chat."
+        override val noticesAllowed = "Allowed"
+        override val noticesAllow = "Allow"
+        override val noticesRefused =
+            "The system will not ask again. Turn it on from the app page in settings."
+        override val noticesOpenSettings = "Open settings"
+        override val noticesAwake = "Do not put the app to sleep"
+        override val noticesAwakeAbout =
+            "For messages and calls to arrive while the app is closed, the system must not stop it."
+        override val noticesAwakeAsk = "Allow background work"
+        override val noticesAwakeDone = "Allowed"
+        override val noticesVendors =
+            "On realme, Xiaomi, Huawei and similar phones this is not enough: they keep their own " +
+                "autostart lists in the battery settings, and the app can only be added there by hand."
         override val itemVirtuals = "Virtual accounts"
         override val itemAppearance = "Colours"
         override val itemText = "Fonts and sizes"

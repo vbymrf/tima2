@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import io.tima.core.ui.LocalStripLook
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -104,6 +105,13 @@ import io.tima.core.contacts.platformInvite
 import io.tima.core.media.decodeImage
 import io.tima.core.secrets.Account
 import io.tima.core.contacts.platformPhoneBook
+import io.tima.core.notify.NotifyAccessWay
+import io.tima.core.notify.askAwake
+import io.tima.core.notify.askNotifyAccess
+import io.tima.core.notify.awakeAllowed
+import io.tima.core.notify.notifyAccessWay
+import io.tima.feature.shell.NotifyAccess
+import io.tima.feature.shell.NotificationsScreen
 import io.tima.core.ui.Tab
 import io.tima.core.ui.TabButton
 import io.tima.domain.chat.BookEntry
@@ -1198,8 +1206,19 @@ private fun App(
     // Полоса разделов у личных переписок (Р4) — тем же сбором, что книга и сообщества:
     // все заведённые разделы, «Всё» и «Общий». До 2026-09-19 здесь стояло своё правило —
     // «только разделы, где есть переписка», — и заведённый раздел на полосе не появлялся.
-    val chatSections: List<SectionTab> = remember(bookStateForChats.sections, bookStateForChats.common, listState.chats) {
-        sectionTabs(bookStateForChats.sections, bookStateForChats.common, bookWordsNow())
+    // Слова читаются ДО `remember`, а не внутри: внутри композиции нет, и `Tima.words`
+    // там недоступен. Раньше вместо этого звался глобал `CurrentWords` — и, кроме
+    // нарушения правила «глобал читается только в умолчании ссылки», это молча ломало
+    // смену языка: словарь не был ключом, и полоса разделов оставалась на прежнем языке
+    // до следующей пересборки по другой причине.
+    val bookWords = Tima.words.book
+    val chatSections: List<SectionTab> = remember(
+        bookStateForChats.sections,
+        bookStateForChats.common,
+        listState.chats,
+        bookWords,
+    ) {
+        sectionTabs(bookStateForChats.sections, bookStateForChats.common, bookWords)
     }
     val bookState by book.state.collectAsState()
     val newState by new.state.collectAsState()
@@ -1765,7 +1784,7 @@ private fun App(
                         val everyone = key.isEmpty() || key == ALL_SECTION
                         listState.groups.count { it.unread > 0 && (everyone || it.sectionId == id) }
                     }
-                    val catalogTabs = sectionTabs(communityShelves, communityCommon, bookWordsNow())
+                    val catalogTabs = sectionTabs(communityShelves, communityCommon, Tima.words.book)
                     SocialWindow(
                         onSwitchWindows = { windowSwitcher = true },
                         onSearch = {},
@@ -1891,7 +1910,7 @@ private fun App(
                         Column {
                             // Полоса разделов сообществ — тот же механизм, что у книги
                             // (В/Г по «Виду»), набор свой. Появляется, когда есть что выбирать.
-                            val tabs = sectionTabs(communityShelves, communityCommon, bookWordsNow())
+                            val tabs = sectionTabs(communityShelves, communityCommon, Tima.words.book)
                             if (communityShelves.isNotEmpty()) {
                                 SectionsRow(
                                     tabs = tabs,
@@ -2144,6 +2163,7 @@ private fun App(
             is Where.Chat -> {
                 {
                     Chat(
+                        notices = assembled.notices,
                         shelves = communityShelves,
                         currentShelf = listState.chats.firstOrNull { it.chatId == current.chatId }?.sectionId ?: "",
                         onMoveToShelf = { chatId, sectionId ->
@@ -2433,6 +2453,12 @@ private fun Chat(
     shelves: List<Section> = emptyList(),
     onMoveToShelf: ((chatId: String, sectionId: String) -> Unit)? = null,
     currentShelf: String = "",
+    /**
+     * Уведомления — чтобы пока переписка на экране, о ней не уведомляли (У10).
+     *
+     * `null` — уведомлять нечем: так собирают экран в проверках.
+     */
+    notices: Notices? = null,
     /** Люди за идентификаторами авторов; `null` — только идентификаторы. */
     people: People? = null,
     /** Как называть авторов — «Вид» набора сообществ. */
@@ -2469,6 +2495,14 @@ private fun Chat(
     // вход в состав.
     val group = remember(chatId) {
         environment.chatFacts.kindOf(chatId) == ChatKind.Group
+    }
+    // Пока переписка на экране — уведомлений о ней нет (У10): человек читает её глазами,
+    // и строка в шторке была бы уведомлением о том, что он уже видит. `DisposableEffect`,
+    // а не `LaunchedEffect`: уход с экрана обязан снять отметку, иначе закрытая переписка
+    // останется «открытой» навсегда и замолчит насовсем.
+    DisposableEffect(chatId, notices) {
+        notices?.watching(chatId)
+        onDispose { notices?.watching(null) }
     }
     // Store живёт столько, сколько открыта переписка: ключ по chatId, чтобы при переходе в
     // другую он пересоздался, а не показал реплики предыдущей.
@@ -2811,6 +2845,32 @@ private fun Settings(
             }
 
             SettingsItem.DEVICES -> Devices(fleet, devices, build.name)
+
+            // Уведомления (У1, У14). Пункт стоял в списке с самого начала и не
+            // открывал ничего; теперь здесь два действия, без которых уведомления на
+            // Android не работают: право показывать и «не усыплять».
+            SettingsItem.NOTIFICATIONS -> {
+                // Состояние читается при каждом заходе, а не запоминается: человек мог
+                // сменить разрешение в системных настройках, пока нас не было.
+                var awake by remember { mutableStateOf(awakeAllowed()) }
+                var access by remember { mutableStateOf(notifyAccessWay()) }
+                NotificationsScreen(
+                    access = when (access) {
+                        NotifyAccessWay.Given -> NotifyAccess.Given
+                        NotifyAccessWay.Ask -> NotifyAccess.Ask
+                        NotifyAccessWay.Settings -> NotifyAccess.Settings
+                    },
+                    onAsk = { askNotifyAccess { access = notifyAccessWay() } },
+                    // Строки нет вовсе там, где усыплять некому (ПК): неактивная кнопка
+                    // тоже зовёт нажать, а нажимать здесь не на что.
+                    onBattery = if (platform == Platform.DESKTOP) {
+                        null
+                    } else {
+                        { askAwake(); awake = awakeAllowed() }
+                    },
+                    batteryFree = awake,
+                )
+            }
 
             SettingsItem.APPEARANCE -> AppearanceScreen(appearance, onAppearance)
 
@@ -3597,8 +3657,6 @@ private fun PhoneWindow(
     }
 }
 
-/** Слова книги там, где нет композиции: `Tima.words` требует `@Composable`. */
-private fun bookWordsNow() = io.tima.core.words.CurrentWords.value.book
 
 /**
  * Повтор и удаление отказанного — поверх очереди. Журнал получает пару к `QUEUE-REFUSED`:

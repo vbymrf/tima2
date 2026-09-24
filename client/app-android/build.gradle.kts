@@ -25,6 +25,8 @@ kotlin {
             // Хранилищу секретов нужен контекст: AndroidKeyStore вместо DPAPI.
             implementation(project(":core:core-secrets"))
             implementation(project(":core:core-contacts"))
+            // Уведомления: разрешение спрашивает ОКНО, а показывает служба (У1, У3).
+            implementation(project(":core:core-notify"))
             // Движок звонка собирается здесь: ему нужен Context, а общий код его
             // не видит. Вместе с ним приезжает libwebrtc — те самые 48 МБ.
             implementation(project(":core:core-call"))

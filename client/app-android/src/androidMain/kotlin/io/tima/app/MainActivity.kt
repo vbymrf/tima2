@@ -5,6 +5,8 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import io.tima.core.contacts.AndroidContactsAccess
+import io.tima.core.notify.AndroidNotifyAccess
+import io.tima.shared.ChannelHost
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -111,6 +113,10 @@ class MainActivity : ComponentActivity() {
      */
     override fun onStop() {
         wasBackground = true
+        // Окно ничего не показывает глазами — значит переписка, оставшаяся «открытой»,
+        // обязана снова уведомлять (У10). Без этого человек, свернувший приложение на
+        // переписке, перестал бы получать из неё уведомления до следующего захода.
+        ChannelHost.notices()?.windowVisible(false)
         Journal.note(LogCode.APP_BACKGROUND, "ушли в фон")
         Journal.diary.flush()
         super.onStop()
@@ -121,6 +127,7 @@ class MainActivity : ComponentActivity() {
         // Только после настоящего ухода в фон: первый `onStart` идёт сразу за запуском, и
         // «вернулись» рядом с `APP-START` было бы неправдой и лишней строкой.
         if (wasBackground) Journal.note(LogCode.APP_FOREGROUND, "вернулись из фона")
+        ChannelHost.notices()?.windowVisible(true)
     }
 
     /** Был ли уже уход в фон — см. [onStart]. */
@@ -132,6 +139,7 @@ class MainActivity : ComponentActivity() {
         // уходящее обнуляло бы ссылку на живое.
         AndroidContactsAccess.detach(this)
         AndroidCallAccess.detach(this)
+        AndroidNotifyAccess.detach(this)
         super.onDestroy()
     }
 
@@ -148,6 +156,7 @@ class MainActivity : ComponentActivity() {
         // когда появится третье разрешение.
         AndroidContactsAccess.answered(requestCode, grantResults)
         AndroidCallAccess.answered(requestCode, permissions, grantResults)
+        AndroidNotifyAccess.answered(requestCode, grantResults)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -158,6 +167,13 @@ class MainActivity : ComponentActivity() {
         // То же и для микрофона со звонком: движок видит только контекст приложения, и
         // системный диалог через него не показать (К7, `core-call/Access.kt`).
         AndroidCallAccess.attach(this)
+        // И для уведомлений: с Android 13 право на показ спрашивается так же, как
+        // контакты, и без него не видно ни одной строки — включая строку службы (У1).
+        AndroidNotifyAccess.attach(this)
+        // Служба поднимается при первом же открытии окна и остаётся жить после него
+        // (У3). Дважды поднятая — это одна служба: второй `onStartCommand` увидит, что
+        // канал уже взят.
+        ChannelService.start(this)
         code.value = linkFrom(intent)
         transfer.value = transferFrom(intent)
         setContent {
