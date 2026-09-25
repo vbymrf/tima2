@@ -855,7 +855,7 @@ object SpanishWords : Words {
 
         override val myPage = "Mi página"
         override val account = "Cuenta"
-        override val accountTemporary = "Cuenta temporal: se eliminará si no hay actividad"
+        override val accountTemporary = "Cuenta temporal: se eliminará 3 meses después de su creación"
         override val editProfile = "Editar perfil"
     }
 

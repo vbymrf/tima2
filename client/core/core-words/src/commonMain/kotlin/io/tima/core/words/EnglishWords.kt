@@ -855,7 +855,7 @@ object EnglishWords : Words {
 
         override val myPage = "My page"
         override val account = "Account"
-        override val accountTemporary = "Temporary account: it will be deleted if inactive"
+        override val accountTemporary = "Temporary account: it will be deleted 3 months after it was created"
         override val editProfile = "Edit profile"
     }
 

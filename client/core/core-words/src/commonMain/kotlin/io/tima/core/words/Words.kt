@@ -614,8 +614,9 @@ interface PageWords {
     val myPage: String
     val account: String
     /**
-     * Что аккаунт временный и удаляется при неактивности. Одна фраза, без срока и даты:
-     * решение заказчика 2026-09-25 — сервер об этом не спрашиваем.
+     * Что аккаунт временный и удаляется через срок после создания — так реализовано на
+     * сервере (заказчик 2026-09-25: «так и написать»). Срок — 3 месяца, строка
+     * `account_inactive_days` на сервере; сервер об этом клиент не спрашивает.
      */
     val accountTemporary: String
     val editProfile: String
@@ -2515,7 +2516,7 @@ object RussianWords : Words {
 
         override val myPage = "Моя страница"
         override val account = "Аккаунт"
-        override val accountTemporary = "Аккаунт временный: он будет удалён при неактивности"
+        override val accountTemporary = "Аккаунт временный: он будет удалён через 3 месяца после создания"
         override val editProfile = "Редактировать профиль"
     }
 
