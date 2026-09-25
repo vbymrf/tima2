@@ -965,7 +965,14 @@ private fun App(
     // меняют на экране стенда посреди его жизни. Снятый значением, он застыл бы на том,
     // что было выбрано при старте.
     val callHost = remember(callEngine) {
-        CallHost(network.calls, callEngine, scope, preset = { bench.state.value.preset })
+        // В испытательном режиме каждый звонок — прогон, и кодек пресета в нём не
+        // заменяется (заказчик 2026-09-25). Вне его — обычный звонок, кодек по умению.
+        CallHost(
+            network.calls,
+            callEngine,
+            scope,
+            preset = { bench.state.value.let { it.preset.copy(exact = it.on) } },
+        )
     }
 
     // Входящий звонок приходит каналом событий. Имя собеседника берём тем же механизмом,

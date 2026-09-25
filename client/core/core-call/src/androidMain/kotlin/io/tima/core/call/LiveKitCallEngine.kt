@@ -132,7 +132,7 @@ class LiveKitCallEngine(
         // они удвоили бы каждый опрос и объявили бы стадию по мёртвой комнате.
         stopWatching()
         val created = LiveKit.create(appContext = context, options = options)
-        publish?.video?.let { publishVideoAs(created, it) }
+        publish?.let { publishVideoAs(created, it.video, exact = it.exact) }
         room = created
         everAnswered = false
         watch(created, door.callId)
@@ -170,11 +170,19 @@ class LiveKitCallEngine(
      * Пресет пишется в журнал всегда, а не только при замене: «какой кодек ушёл в сеть»
      * — первый вопрос к любому отчёту о пропавшем видео.
      */
-    private fun publishVideoAs(room: Room, video: VideoPreset) {
+    private fun publishVideoAs(room: Room, video: VideoPreset, exact: Boolean) {
         val encodable = encodableCodecs()
-        val choice = CodecChoice.pick(video.codec, video.backup, encodable)
+        val choice = CodecChoice.pick(video.codec, video.backup, encodable, exact)
         val can = encodable.joinToString(", ") { it.name }.ifEmpty { "не узнали" }
-        if (choice.substituted) {
+        if (exact && encodable.isNotEmpty() && video.codec !in encodable) {
+            // Прогон кодек не меняет, но молчать нельзя: телефон пошлёт VP8 под именем
+            // пресета, и сервер видео выбросит. Без этой строки прогон выглядел бы
+            // поломкой звонка, а это ответ «телефон этот кодек не умеет».
+            Journal.trouble(
+                LogCode.CALL, "прогон: кодек пресета телефону не по силам, не меняем",
+                "кодек" to video.codec.name, "умеет" to can,
+            )
+        } else if (choice.substituted) {
             Journal.trouble(
                 LogCode.CALL, "кодек пресета телефону не по силам, публикуем другой",
                 "просили" to video.codec.name, "умеет" to can, "шлём" to choice.chosen.name,

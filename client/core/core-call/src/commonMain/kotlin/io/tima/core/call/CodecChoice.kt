@@ -36,11 +36,20 @@ data class CodecChoice(
         private val FALLBACK = listOf(VideoCodec.H264, VideoCodec.VP9, VideoCodec.H265)
 
         /**
+         * [exact] — прогон стенда: ничего не менять, даже если телефон не умеет.
+         *
          * [encodable] — что умеет кодер телефона. Пустое множество значит «узнать не
          * удалось», и тогда пресет остаётся как есть: гадать хуже, чем не трогать.
          */
-        fun pick(wanted: VideoCodec, backup: VideoCodec?, encodable: Set<VideoCodec>): CodecChoice {
-            if (encodable.isEmpty()) return CodecChoice(wanted, wanted, backup)
+        fun pick(
+            wanted: VideoCodec,
+            backup: VideoCodec?,
+            encodable: Set<VideoCodec>,
+            exact: Boolean = false,
+        ): CodecChoice {
+            // Прогон стенда и «не узнали» — пресет как есть. Прогон: кодек задан, и
+            // мерить надо его (PublishPreset.exact).
+            if (exact || encodable.isEmpty()) return CodecChoice(wanted, wanted, backup)
             val chosen = (listOf(wanted) + FALLBACK).firstOrNull { it in encodable } ?: wanted
             val spare = backup?.takeIf { it in encodable && it != chosen }
             return CodecChoice(wanted, chosen, spare)

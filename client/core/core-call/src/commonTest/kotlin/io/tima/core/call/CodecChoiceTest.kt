@@ -48,6 +48,14 @@ class CodecChoiceTest {
     }
 
     @Test
+    fun прогон_стенда_кодек_не_меняет_даже_неумеемый() {
+        val choice = CodecChoice.pick(VideoCodec.H264, VideoCodec.H264, honor, exact = true)
+        assertEquals(VideoCodec.H264, choice.chosen, "прогон «H.264» померил бы не H.264")
+        assertEquals(VideoCodec.H264, choice.backup)
+        assertFalse(choice.substituted)
+    }
+
+    @Test
     fun имена_webrtc_переводятся_в_набор() {
         assertEquals(VideoCodec.H264, CodecChoice.fromWebRtcName("H264"))
         assertEquals(VideoCodec.VP9, CodecChoice.fromWebRtcName("VP9"))
