@@ -159,6 +159,7 @@ import io.tima.feature.auth.TransferScreen
 import io.tima.feature.auth.NewVirtualStep
 import io.tima.feature.auth.NewVirtualStore
 import io.tima.feature.chat.ProfileScreen
+import io.tima.feature.chat.SelfPageScreen
 import io.tima.feature.chat.ProfileState
 import io.tima.feature.chat.ProfileStore
 import io.tima.feature.chat.BookScreen
@@ -572,6 +573,12 @@ private sealed interface Where {
      * сюда: «Изменить» в переключении окон и «Профиль» в настройках.
      */
     data object Profile : Where
+
+    /**
+     * Своя страница «Я» (заказчик 2026-09-25): что известно о своём аккаунте, в том
+     * числе что он временный. Правка профиля — кнопкой на ней, то есть [Profile].
+     */
+    data object SelfPage : Where
 
     /**
      * Подокно «новая группа».
@@ -1554,9 +1561,9 @@ private fun App(
                 where = Where.Settings()
                 windowSwitcher = false
             },
-            // «Изменить» в шапке: первый из двух входов в профиль.
+            // Значок и своё имя в шапке — на свою страницу «Я»; правка профиля — с неё.
             onProfile = {
-                where = Where.Profile
+                where = Where.SelfPage
                 windowSwitcher = false
             },
             // Аккаунты — здесь же: это единственное место, где человек видит, от чьего
@@ -2085,6 +2092,17 @@ private fun App(
                             where = Where.Nothing
                             newVirtualState.created?.let(onVirtualCreated)
                         },
+                    )
+                }
+            }
+
+            Where.SelfPage -> {
+                {
+                    SelfPageScreen(
+                        state = profileState,
+                        onBack = { where = Where.Nothing },
+                        onEdit = { where = Where.Profile },
+                        face = remember(profileState.avatarBytes) { profileState.avatarBytes?.let(::decodeImage) },
                     )
                 }
             }
@@ -3185,6 +3203,7 @@ private fun whereWords(where: Where): String = when (where) {
     Where.Nothing -> "список"
     Where.New -> "новая переписка"
     Where.Profile -> "профиль"
+    Where.SelfPage -> "моя страница"
     Where.NewGroup -> "новая группа"
     Where.NewVirtual -> "новый виртуальный аккаунт"
     is Where.Members -> "состав группы"

@@ -852,6 +852,11 @@ object EnglishWords : Words {
         override val friendshipUnknown = "Checking…"
         override val subscribeAsks = "Subscribing fetches their history and asks them to add you to contacts"
         override val ownerOrModeratorCloses = "A discussion is closed by the owner or a moderator"
+
+        override val myPage = "My page"
+        override val account = "Account"
+        override val accountTemporary = "Temporary account: it will be deleted if inactive"
+        override val editProfile = "Edit profile"
     }
 
     override val call = object : CallWords {

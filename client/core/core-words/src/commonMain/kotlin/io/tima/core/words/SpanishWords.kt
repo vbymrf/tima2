@@ -852,6 +852,11 @@ object SpanishWords : Words {
         override val friendshipUnknown = "Comprobando…"
         override val subscribeAsks = "La suscripción traerá su historial y pedirá que le añada a contactos"
         override val ownerOrModeratorCloses = "Un debate lo cierra el dueño o un moderador"
+
+        override val myPage = "Mi página"
+        override val account = "Cuenta"
+        override val accountTemporary = "Cuenta temporal: se eliminará si no hay actividad"
+        override val editProfile = "Editar perfil"
     }
 
     override val call = object : CallWords {

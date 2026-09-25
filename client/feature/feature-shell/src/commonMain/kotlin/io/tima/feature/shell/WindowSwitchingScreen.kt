@@ -89,11 +89,12 @@ fun WindowSwitchingScreen(
     counters: Map<Window, Int> = emptyMap(),
     onSettings: (() -> Unit)? = null,
     /**
-     * «Изменить» в шапке — вход в профиль (ПЛАН-КОНТАКТОВ.md, Д8).
+     * Своя страница — «Я» (заказчик 2026-09-25): значок в шапке, а также нажатие на
+     * аватар, имя или телефон.
      *
-     * Здесь, потому что своего экрана учётной записи у нас нет, а окно 5 — про
-     * содержимое, а не про запись о человеке. Это подокно открывается логотипом с
-     * любого экрана и потому ближе всего к «шапке приложения».
+     * Было «Изменить» — прямо в правку профиля. Но сначала человеку нужно видеть, что
+     * о его аккаунте известно (временный ли он, когда может быть удалён), а правка —
+     * кнопка уже на той странице.
      */
     onProfile: (() -> Unit)? = null,
     /**
@@ -258,9 +259,12 @@ private fun Header(
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Аватар, имя и телефон — один вход на свою страницу вместе со значком справа:
+        // по себе нажимают, чтобы открыть себя, и промах мимо значка не должен теряться.
+        val toSelf = if (onProfile != null) Modifier.clickable(onClick = onProfile) else Modifier
         // Картинка, если есть; иначе первая буква имени — тот же аватар, что в списках.
-        Avatar(letters = name.take(1).ifBlank { "Т" }.uppercase(), image = avatar)
-        Column(modifier = Modifier.weight(1f)) {
+        Box(toSelf) { Avatar(letters = name.take(1).ifBlank { "Т" }.uppercase(), image = avatar) }
+        Column(modifier = Modifier.weight(1f).then(toSelf)) {
             // Кто я — здесь, а не в шапке окна: имя нужно тому, кто выбирает, от чьего
             // лица он сейчас в приложении, а не тому, кто читает переписку.
             Name(name)
@@ -269,8 +273,9 @@ private fun Header(
             if (phone.isNotBlank()) Tertiary(phone, lineOne = true)
             if (alias.isNotBlank()) Tertiary(alias, lineOne = true)
         }
-        // «Изменить» — первый из двух входов в профиль; второй в настройках.
-        if (onProfile != null) IconButton(glyph = "✎", onClick = onProfile)
+        // Значок своей страницы. Правка профиля — кнопкой уже на ней; второй вход в
+        // правку остаётся в настройках.
+        if (onProfile != null) IconButton(glyph = "👤", onClick = onProfile)
         IconButton(glyph = "✕", onClick = onClose)
     }
 }
