@@ -125,7 +125,7 @@ private fun Publishing(preset: PublishPreset, onChange: (PublishPreset) -> Unit)
                 // SVC умеет только VP9. Оставить режим при смене кодека значило бы
                 // показывать набор, которого не бывает, — и получить в отчёте прогон
                 // «H.264 SVC», которого SDK не сделает.
-                copy(codec = chosen, layers = if (chosen.svcCapable) layers else notSvc(layers))
+                copy(codec = chosen, layers = layersFor(chosen, layers))
             }
         }
         // Тип назван явно: список запасных кодеков включает «нет», то есть null, и
@@ -144,10 +144,10 @@ private fun Publishing(preset: PublishPreset, onChange: (PublishPreset) -> Unit)
                 LayerMode.Single to words.single,
                 LayerMode.Simulcast to words.simulcast,
                 LayerMode.Svc to words.svc,
-            ).filter { it.first != LayerMode.Svc || video.codec.svcCapable },
-            video.layers,
+            ).filter { it.first in layersOf(video.codec) },
+            layersFor(video.codec, video.layers),
         ) { chosen -> video { copy(layers = chosen) } }
-        if (video.layers == LayerMode.Svc) {
+        if (layersFor(video.codec, video.layers) == LayerMode.Svc) {
             Pick(words.scalability, SCALABILITY.map { it to it }, video.scalability) { chosen ->
                 video { copy(scalability = chosen) }
             }
@@ -470,8 +470,26 @@ private fun VideoCodec.label(): String = when (this) {
 }
 
 /** Какой режим слоёв оставить, когда кодек разучился в SVC. */
-private fun notSvc(layers: LayerMode): LayerMode =
-    if (layers == LayerMode.Svc) LayerMode.Simulcast else layers
+/**
+ * Какие слои у кодека бывают на самом деле.
+ *
+ * SVC — только у VP9. **Simulcast у VP9 не бывает**: SDK для VP9 собирает одну
+ * SVC-кодировку и `simulcast` не смотрит, так что «VP9 simulcast» мерил SVC под чужим
+ * именем (убран из выбора решением заказчика 2026-09-25).
+ */
+private fun layersOf(codec: VideoCodec): Set<LayerMode> =
+    if (codec.svcCapable) setOf(LayerMode.Single, LayerMode.Svc) else setOf(LayerMode.Single, LayerMode.Simulcast)
+
+/**
+ * Слои, приведённые к кодеку: при смене кодека и для пресетов, сохранённых раньше.
+ * Недоступное становится ближайшим честным: SVC ↔ simulcast — оба «несколько качеств».
+ * Сохранённый «VP9 simulcast» так и показывается тем, чем он в сети и был, — SVC.
+ */
+private fun layersFor(codec: VideoCodec, layers: LayerMode): LayerMode = when {
+    layers in layersOf(codec) -> layers
+    layers == LayerMode.Svc -> LayerMode.Simulcast
+    else -> LayerMode.Svc
+}
 
 private val SCALABILITY = listOf("L3T3_KEY", "L3T3", "L1T3")
 
