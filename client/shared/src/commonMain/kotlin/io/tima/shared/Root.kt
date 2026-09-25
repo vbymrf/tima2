@@ -1515,6 +1515,20 @@ private fun App(
         WindowSwitchingScreen(
             current = window,
             inCall = callHost.active,
+            // Звонок первой строкой панели: окно 0 её не замещает, и без этой строки
+            // входящий, пришедший при открытой панели, было нечем принять.
+            onCall = if (callHost.active) {
+                {
+                    window = Window.Call
+                    where = Where.Nothing
+                    windowSwitcher = false
+                }
+            } else {
+                null
+            },
+            callRinging = callHost.incoming && callHost.state.stage != CallStage.Connected &&
+                callHost.state.stage != CallStage.Ended,
+            callPeer = callHost.peer,
             bench = benchState.on,
             // Имя, ник и телефон — из профиля (0050). До этого здесь стояли заглушки:
             // userId вместо имени и «@» с восемью знаками id вместо ника.
@@ -1641,6 +1655,8 @@ private fun App(
                     onMicrophone = callHost::microphone,
                     onCamera = callHost::camera,
                     onCallAgain = callHost::again,
+                    redialVideo = callHost.video,
+                    onRedialKind = callHost::redialAs,
                     onClose = {
                         callHost.close()
                         window = Window.Phone

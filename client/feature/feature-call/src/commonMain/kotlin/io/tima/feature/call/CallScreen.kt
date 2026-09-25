@@ -78,6 +78,13 @@ fun CallScreen(
     /** Сколько идёт разговор, секунды. Считает не экран: время — не его дело. */
     seconds: Int = 0,
     onCallAgain: (() -> Unit)? = null,
+    /**
+     * Чем перезвонить: `true` — видео. Переменная окна 0, а не настройка: её ставит то,
+     * как окно открыли, и ведёт камера в разговоре (заказчик 2026-09-25).
+     */
+    redialVideo: Boolean = false,
+    /** Переключатель «голос · видео» справа от «Перезвонить». `null` — его нет. */
+    onRedialKind: ((Boolean) -> Unit)? = null,
     onClose: (() -> Unit)? = null,
     /** Что случилось за звонок — полоса в самом верху (ЗВ10). Пусто — полосы нет. */
     events: List<CallEvent> = emptyList(),
@@ -194,6 +201,9 @@ fun CallScreen(
             when {
                 state.stage == CallStage.Ended -> {
                     onCallAgain?.let { Button(label = words.callAgain, onClick = it) }
+                    if (onCallAgain != null && onRedialKind != null) {
+                        KindSwitch(video = redialVideo, onPick = onRedialKind)
+                    }
                     onClose?.let { Button(label = words.close, kind = ButtonKind.Quiet, onClick = it) }
                 }
 
@@ -272,6 +282,21 @@ private fun CallButton(glyph: String, on: Boolean, onClick: () -> Unit, danger: 
         background = if (danger) colors.alarm else null,
         colorGlyph = if (danger) colors.onAccent else null,
     )
+}
+
+/**
+ * Переключатель «голос · видео» — два значка, горит выбранный.
+ *
+ * Одним `Row`, а не двумя кнопками в общем ряду: `FlowRow` при переносе разнёс бы их по
+ * строкам, и переключатель перестал бы читаться как один. Значки те же, что у микрофона и
+ * камеры в разговоре, — человек их уже знает, и подписи не нужны.
+ */
+@Composable
+private fun KindSwitch(video: Boolean, onPick: (Boolean) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
+        CallButton(glyph = "🎤", on = !video, onClick = { onPick(false) })
+        CallButton(glyph = "📹", on = video, onClick = { onPick(true) })
+    }
 }
 
 /**

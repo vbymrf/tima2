@@ -67,6 +67,19 @@ fun WindowSwitchingScreen(
     phone: String = "",
     /** Идёт ли звонок: от этого зависит, есть ли в переключателе окно 0. */
     inCall: Boolean = false,
+    /**
+     * Строка «Активный звонок» над окнами — вернуться в окно 0. `null` — звонка нет.
+     *
+     * **Окно 0 эту панель не замещает**: пришёл вызов, пока она открыта, — и человек
+     * видит список окон, а принять нечем (заказчик 2026-09-25). Пункт «0» в списке есть,
+     * но он один из восьми и ничем не выделен; звонок — единственное, что ждать не может,
+     * поэтому у него своя строка первой и цветом.
+     */
+    onCall: (() -> Unit)? = null,
+    /** Звонят нам и ещё не ответили: строка тогда говорит «Входящий вызов». */
+    callRinging: Boolean = false,
+    /** С кем звонок — второй строкой. Пусто — строки нет. */
+    callPeer: String = "",
     bench: Boolean = false,
     /** Аватар в шапке. `null` — буква, как и было. */
     avatar: ImageBitmap? = null,
@@ -141,6 +154,21 @@ fun WindowSwitchingScreen(
                 .verticalScroll(rememberScrollState()),
         ) {
             Header(name, alias, phone, avatar, onClose, onProfile)
+
+            onCall?.let { goToCall ->
+                val callWords = Tima.words.call
+                ListLine(
+                    modifier = Modifier.background(colors.softAccent),
+                    onClick = goToCall,
+                    left = { Glyph("📞") },
+                    middle = {
+                        Column {
+                            Name(if (callRinging) callWords.incoming else callWords.activeCall)
+                            if (callPeer.isNotBlank()) Secondary(callPeer, lineOne = true)
+                        }
+                    },
+                )
+            }
 
             if (accounts.size > 1) {
                 SectionTitle(words.accounts)

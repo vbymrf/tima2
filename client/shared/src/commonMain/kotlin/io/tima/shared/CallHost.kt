@@ -116,8 +116,22 @@ class CallHost(
     private var door: CallDoor? = null
     private var ticking: Boolean = false
 
-    /** Начат ли звонок как видео: принявший тогда показывает себя сразу (ЗВ9). */
-    private var video: Boolean = false
+    /**
+     * Видео это звонок или голос — **переменная окна 0**, её показывает переключатель
+     * справа от «Перезвонить».
+     *
+     * Ставится тем, как окно открыли: исходящий или входящий видеовызов — видео, иначе
+     * голос. Дальше её ведёт камера: включил посреди разговора — звонок стал видео,
+     * выключил — голосом. «Перезвонить» звонит тем, что здесь, а человек может
+     * переключить до нажатия.
+     *
+     * **В настройки не пишется** — решение заказчика 2026-09-25: это свойство звонка, а
+     * не привычка человека, и живёт оно, пока живёт окно 0.
+     *
+     * Принявший видеовызов показывает себя сразу (ЗВ9) — тоже по ней.
+     */
+    var video by mutableStateOf(false)
+        private set
 
     /** Сторож набора: гасит звонок, на который никто не ответил. */
     private var watchdog: Job? = null
@@ -371,8 +385,14 @@ class CallHost(
         val id = peerId
         val name = peer
         if (id.isEmpty()) return
+        val kind = video
         close()
-        start(id, name, video = false)
+        start(id, name, video = kind)
+    }
+
+    /** Переключатель «голос · видео» на окне 0: чем перезвонить. */
+    fun redialAs(video: Boolean) {
+        this.video = video
     }
 
     /** Закрыть окно 0: звонка больше нет. */
@@ -421,6 +441,8 @@ class CallHost(
      */
     fun camera(on: Boolean) {
         if (!on) {
+            // Выключил камеру — звонок стал голосовым, и перезвонит окно тоже голосом.
+            video = false
             scope.launch { engine?.setCamera(false) }
             return
         }
@@ -428,6 +450,7 @@ class CallHost(
             if (allowed) {
                 // Разрешили — просьба выполнена, и висеть ей больше незачем.
                 forget(NO_CAMERA)
+                video = true
                 scope.launch { engine?.setCamera(true) }
             } else {
                 // Звонок продолжается — это не беда звонка, а отказ в камере. Молчать

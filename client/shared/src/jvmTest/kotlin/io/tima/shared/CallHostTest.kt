@@ -278,6 +278,40 @@ class CallHostTest {
         )
     }
 
+    @Test
+    fun перезвонить_звонит_тем_видом_который_стал_камерой() = runTest {
+        // Переключатель у «Перезвонить» — переменная окна 0 (заказчик 2026-09-25): вид
+        // ставит то, как окно открыли, а дальше его ведёт камера.
+        val calls = FakeCalls()
+        val host = host(calls)
+
+        host.start(peerId = "u-9", peerName = "Вера", video = false)
+        assertFalse(host.video, "голосовой звонок открыл окно видео")
+        host.camera(true)
+        assertTrue(host.video, "камеру включили — звонок не стал видео")
+        host.hangUp()
+
+        host.again()
+        assertEquals(listOf(false, true), calls.startedVideo, "перезвонили не тем видом")
+
+        host.camera(false)
+        assertFalse(host.video, "камеру выключили — звонок не стал голосовым")
+    }
+
+    @Test
+    fun переключатель_решает_вид_повтора() = runTest {
+        val calls = FakeCalls()
+        val host = host(calls)
+
+        host.ring(callId = "первый", fromId = "u-1", fromName = "Аня", video = true)
+        assertTrue(host.video, "окно входящего видеовызова открылось голосом")
+        host.hangUp()
+
+        host.redialAs(video = false)
+        host.again()
+        assertEquals(listOf(false), calls.startedVideo, "переключатель не решил вид повтора")
+    }
+
     private fun TestScope.host(calls: Calls = FakeCalls()) = CallHost(
         calls,
         FakeEngine(),
@@ -302,8 +336,12 @@ class CallHostTest {
     /** Сигналинг, который всегда открывает дверь и помнит, что закрывал. */
     private class FakeCalls : Calls {
         val ended = mutableListOf<String>()
-        override suspend fun start(peerId: String, video: Boolean): CallStep =
-            CallStep.Door(CallDoor(callId = "дверь", room = "комната", url = "wss://х", token = "жетон"))
+        /** Каким видом звонили: `true` — видео. По одному на каждый исходящий. */
+        val startedVideo = mutableListOf<Boolean>()
+        override suspend fun start(peerId: String, video: Boolean): CallStep {
+            startedVideo += video
+            return CallStep.Door(CallDoor(callId = "дверь", room = "комната", url = "wss://х", token = "жетон"))
+        }
 
         override suspend fun answer(callId: String): CallStep =
             CallStep.Door(CallDoor(callId = callId, room = "комната", url = "wss://х", token = "жетон"))
