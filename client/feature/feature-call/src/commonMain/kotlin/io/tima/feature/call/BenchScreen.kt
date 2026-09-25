@@ -130,9 +130,12 @@ private fun Publishing(preset: PublishPreset, onChange: (PublishPreset) -> Unit)
         }
         // Тип назван явно: список запасных кодеков включает «нет», то есть null, и
         // вывести из него общий тип компилятору не из чего.
+        //
+        // Только H.264 и VP8: другие SDK запасными не посылает (VideoCodec.backupCapable),
+        // и выбор VP9 здесь обещал бы то, чего в сети не бывает.
         Pick<VideoCodec?>(
             words.backup,
-            VideoCodec.entries.map { it to it.label() } + (null to words.noBackup),
+            VideoCodec.entries.filter { it.backupCapable }.map { it to it.label() } + (null to words.noBackup),
             video.backup,
         ) { chosen -> video { copy(backup = chosen) } }
         Pick(
@@ -463,6 +466,7 @@ private fun VideoCodec.label(): String = when (this) {
     VideoCodec.H264 -> "H.264"
     VideoCodec.VP9 -> "VP9"
     VideoCodec.H265 -> "H.265"
+    VideoCodec.VP8 -> "VP8"
 }
 
 /** Какой режим слоёв оставить, когда кодек разучился в SVC. */

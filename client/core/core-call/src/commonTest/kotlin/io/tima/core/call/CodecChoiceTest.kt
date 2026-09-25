@@ -13,9 +13,9 @@ class CodecChoiceTest {
 
     @Test
     fun умеемый_кодек_пресета_остаётся() {
-        val choice = CodecChoice.pick(VideoCodec.H264, VideoCodec.VP9, setOf(VideoCodec.H264, VideoCodec.VP9))
+        val choice = CodecChoice.pick(VideoCodec.H264, VideoCodec.VP8, setOf(VideoCodec.H264, VideoCodec.VP8))
         assertEquals(VideoCodec.H264, choice.chosen)
-        assertEquals(VideoCodec.VP9, choice.backup)
+        assertEquals(VideoCodec.VP8, choice.backup)
         assertFalse(choice.substituted)
     }
 
@@ -42,16 +42,34 @@ class CodecChoiceTest {
 
     @Test
     fun не_узнали_что_умеет_телефон_пресет_не_трогаем() {
-        val choice = CodecChoice.pick(VideoCodec.H264, VideoCodec.H264, emptySet())
+        val choice = CodecChoice.pick(VideoCodec.H264, VideoCodec.VP8, emptySet())
         assertEquals(VideoCodec.H264, choice.chosen)
-        assertEquals(VideoCodec.H264, choice.backup)
+        assertEquals(VideoCodec.VP8, choice.backup)
+    }
+
+    @Test
+    fun запасной_только_из_тех_что_sdk_посылает() {
+        val all = setOf(VideoCodec.H264, VideoCodec.VP9, VideoCodec.H265, VideoCodec.VP8)
+        assertNull(CodecChoice.pick(VideoCodec.H264, VideoCodec.VP9, all).backup)
+        assertNull(CodecChoice.pick(VideoCodec.H264, VideoCodec.H265, all).backup)
+        assertEquals(VideoCodec.VP8, CodecChoice.pick(VideoCodec.VP9, VideoCodec.VP8, all).backup)
+        assertNull(CodecChoice.pick(VideoCodec.H264, VideoCodec.VP9, all, exact = true).backup)
+    }
+
+    @Test
+    fun vp8_последняя_страховка() {
+        assertEquals(VideoCodec.VP8, CodecChoice.pick(VideoCodec.H264, null, setOf(VideoCodec.VP8)).chosen)
+        assertEquals(
+            VideoCodec.VP9,
+            CodecChoice.pick(VideoCodec.H264, null, setOf(VideoCodec.VP8, VideoCodec.VP9)).chosen,
+        )
     }
 
     @Test
     fun прогон_стенда_кодек_не_меняет_даже_неумеемый() {
-        val choice = CodecChoice.pick(VideoCodec.H264, VideoCodec.H264, honor, exact = true)
+        val choice = CodecChoice.pick(VideoCodec.H264, VideoCodec.VP8, honor, exact = true)
         assertEquals(VideoCodec.H264, choice.chosen, "прогон «H.264» померил бы не H.264")
-        assertEquals(VideoCodec.H264, choice.backup)
+        assertEquals(VideoCodec.VP8, choice.backup, "прогон запасной пресета не трогает")
         assertFalse(choice.substituted)
     }
 
@@ -60,7 +78,7 @@ class CodecChoiceTest {
         assertEquals(VideoCodec.H264, CodecChoice.fromWebRtcName("H264"))
         assertEquals(VideoCodec.VP9, CodecChoice.fromWebRtcName("VP9"))
         assertEquals(VideoCodec.H265, CodecChoice.fromWebRtcName("H265"))
-        assertNull(CodecChoice.fromWebRtcName("VP8"))
+        assertEquals(VideoCodec.VP8, CodecChoice.fromWebRtcName("VP8"))
         assertNull(CodecChoice.fromWebRtcName("AV1"))
     }
 }

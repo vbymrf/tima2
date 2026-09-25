@@ -174,6 +174,12 @@ class LiveKitCallEngine(
         val encodable = encodableCodecs()
         val choice = CodecChoice.pick(video.codec, video.backup, encodable, exact)
         val can = encodable.joinToString(", ") { it.name }.ifEmpty { "не узнали" }
+        val backup = video.backup
+        if (backup != null && !backup.backupCapable) {
+            // SDK такой запасной не посылает (VideoCodec.backupCapable) — говорим, что его
+            // нет, чтобы прогон не числил запасным то, чего в сети не бывает.
+            Journal.note(LogCode.CALL, "запасной не годится SDK, его нет", "запасной" to backup.name)
+        }
         if (exact && encodable.isNotEmpty() && video.codec !in encodable) {
             // Прогон кодек не меняет, но молчать нельзя: телефон пошлёт VP8 под именем
             // пресета, и сервер видео выбросит. Без этой строки прогон выглядел бы
@@ -200,11 +206,21 @@ class LiveKitCallEngine(
             videoCodec = choice.chosen.toLiveKit().codecName,
             // ЯВНО, а не умолчанием SDK: у SVC-кодека он молча ставит запасным
             // VP8 с simulcast, и прогон «VP9 SVC» тогда мерит не VP9
-            // (ПЛАН-СТЕНДА §5а, «ловушка»). SVC — только у кодека, который его умеет:
-            // замена H.264 на VP9 слоёв не добавляет.
+            // (ПЛАН-СТЕНДА §5а, «ловушка»).
             simulcast = video.layers == LayerMode.Simulcast,
-            scalabilityMode = video.scalability.takeIf {
-                video.layers == LayerMode.Svc && choice.chosen.svcCapable
+            // ── РЕЖИМ СЛОЁВ ЗАДАЁМ ВСЕГДА, КОГДА КОДЕК VP9 ─────────────────
+            //
+            // Для VP9 SDK подставляет `L3T3_KEY`, если режим не задан, — **при любых
+            // слоях**. Прогон «VP9 один слой» до 2026-09-25 поэтому шёл тремя слоями и
+            // мерил почти то же, что «VP9 SVC». Один слой — это `L1T1`, и сказано явно.
+            //
+            // Simulcast у VP9 в SDK не бывает вовсе: при заданном режиме он собирает одну
+            // SVC-кодировку и `simulcast` не смотрит. Поэтому «VP9 simulcast» — это SVC с
+            // режимом из пресета, и режим этот наш, а не умолчание SDK.
+            scalabilityMode = when {
+                !choice.chosen.svcCapable -> null
+                video.layers == LayerMode.Single -> "L1T1"
+                else -> video.scalability
             },
             // ── ЗАПАСНОЙ КОДЕК: НАШ, И БЕЗ SIMULCAST ────────────────
             //
@@ -216,9 +232,15 @@ class LiveKitCallEngine(
             // `simulcast = false` здесь не забывчивость, а вторая половина того
             // же решения: запасной обязан быть дешевле основного, иначе он не
             // запасной, а вторая публикация.
-            backupCodec = choice.backup?.let {
-                BackupVideoCodec(codec = it.toLiveKit().codecName, simulcast = false)
-            },
+            //
+            // **«Нет запасного» передаётся основным кодеком, а не `null`.** На `null` SDK
+            // при VP9 сам ставит запасным VP8 с simulcast. Запасной, равный основному, SDK
+            // считает отключённым (`hasBackupCodec` — ложь): серверу он не объявляется, а
+            // просьбы сервера отклоняются с «backup codec has been disabled».
+            backupCodec = BackupVideoCodec(
+                codec = (choice.backup ?: choice.chosen).toLiveKit().codecName,
+                simulcast = false,
+            ),
             degradationPreference = when (video.degradation) {
                 Degradation.MaintainResolution -> DegradationPreference.MAINTAIN_RESOLUTION
                 Degradation.MaintainFramerate -> DegradationPreference.MAINTAIN_FRAMERATE
@@ -797,6 +819,7 @@ private fun VideoCodec.toLiveKit(): LkVideoCodec = when (this) {
     VideoCodec.H264 -> LkVideoCodec.H264
     VideoCodec.VP9 -> LkVideoCodec.VP9
     VideoCodec.H265 -> LkVideoCodec.H265
+    VideoCodec.VP8 -> LkVideoCodec.VP8
 }
 
 /** Сейчас, миллисекунды монотонных часов. Для разниц, а не для отметок времени. */

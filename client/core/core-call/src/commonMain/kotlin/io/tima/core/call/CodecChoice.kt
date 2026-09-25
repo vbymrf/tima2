@@ -16,13 +16,14 @@ package io.tima.core.call
  *
  * ── ПОРЯДОК ─────────────────────────────────────────────────────────────
  *
- * Сначала просимый, потом H.264, потом VP9, потом H.265. VP9 кодирует libvpx внутри
- * WebRTC на любом телефоне, так что на нём перебор и кончается; H.265 последним — он
- * самый редкий у кодеров. Кодека, которого нет в наборе ([VideoCodec]), выбор не
- * предлагает: VP8 в набор не входит.
+ * Сначала просимый, потом H.264, потом VP9, потом H.265, потом VP8. VP9 кодирует libvpx
+ * внутри WebRTC на любом телефоне, так что на нём перебор обычно и кончается; H.265 — самый
+ * редкий у кодеров; VP8 — последняя страховка: он слабее VP9 при том же битрейте.
  *
  * Запасной кодек проходит тот же фильтр: неумеемый запасной сломал бы вторую дорожку
  * тем же способом, что и основной. Совпавший с основным — не запасной, он снимается.
+ * Не годный в запасные по SDK ([VideoCodec.backupCapable]) снимается всегда, и в прогоне
+ * тоже: он и раньше не посылался, а только числился.
  */
 data class CodecChoice(
     val wanted: VideoCodec,
@@ -33,7 +34,7 @@ data class CodecChoice(
     val substituted: Boolean get() = chosen != wanted
 
     companion object {
-        private val FALLBACK = listOf(VideoCodec.H264, VideoCodec.VP9, VideoCodec.H265)
+        private val FALLBACK = listOf(VideoCodec.H264, VideoCodec.VP9, VideoCodec.H265, VideoCodec.VP8)
 
         /**
          * [exact] — прогон стенда: ничего не менять, даже если телефон не умеет.
@@ -49,16 +50,19 @@ data class CodecChoice(
         ): CodecChoice {
             // Прогон стенда и «не узнали» — пресет как есть. Прогон: кодек задан, и
             // мерить надо его (PublishPreset.exact).
-            if (exact || encodable.isEmpty()) return CodecChoice(wanted, wanted, backup)
+            if (exact || encodable.isEmpty()) {
+                return CodecChoice(wanted, wanted, backup?.takeIf { it.backupCapable && it != wanted })
+            }
             val chosen = (listOf(wanted) + FALLBACK).firstOrNull { it in encodable } ?: wanted
-            val spare = backup?.takeIf { it in encodable && it != chosen }
+            val spare = backup?.takeIf { it.backupCapable && it in encodable && it != chosen }
             return CodecChoice(wanted, chosen, spare)
         }
 
-        /** Имя кодека у WebRTC (`H264`, `VP9`, `H265`) в наш набор; чужое — `null`. */
+        /** Имя кодека у WebRTC (`H264`, `VP8`, `VP9`, `H265`) в наш набор; чужое — `null`. */
         fun fromWebRtcName(name: String): VideoCodec? = when (name.uppercase()) {
             "H264" -> VideoCodec.H264
             "VP9" -> VideoCodec.VP9
+            "VP8" -> VideoCodec.VP8
             "H265", "HEVC" -> VideoCodec.H265
             else -> null
         }

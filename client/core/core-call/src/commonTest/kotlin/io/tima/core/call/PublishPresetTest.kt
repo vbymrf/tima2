@@ -19,7 +19,14 @@ class PublishPresetTest {
         // «AV1 убираем совсем, так как нет поддержки — значит не для мессенджера».
         // Подтверждено замером телефонов стенда: аппаратного кодера AV1 нет ни на одном.
         // В SDK он есть — убираем мы, и эта проверка о нашем решении, а не о SDK.
-        assertEquals(listOf("h264", "vp9", "h265"), VideoCodec.entries.map { it.wire })
+        // VP8 возвращён в набор решением заказчика 2026-09-25 — мерить его наравне.
+        assertEquals(listOf("h264", "vp9", "h265", "vp8"), VideoCodec.entries.map { it.wire })
+    }
+
+    @Test
+    fun запасными_бывают_только_h264_и_vp8() {
+        // Список зашит в SDK (`backupCodecs = [vp8, h264]`): другой запасной он не пошлёт.
+        assertEquals(listOf(VideoCodec.H264, VideoCodec.VP8), VideoCodec.entries.filter { it.backupCapable })
     }
 
     @Test
@@ -30,6 +37,7 @@ class PublishPresetTest {
         assertTrue(VideoCodec.VP9.svcCapable)
         assertFalse(VideoCodec.H264.svcCapable)
         assertFalse(VideoCodec.H265.svcCapable)
+        assertFalse(VideoCodec.VP8.svcCapable)
     }
 
     @Test
