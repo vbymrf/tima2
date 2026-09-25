@@ -52,6 +52,15 @@ data class BenchSummary(
     val temperaturePeak: Double? = null,
     /** Сколько процентов заряда ушло за прогон. */
     val batterySpent: Int? = null,
+    /** Сколько мА·ч ушло за прогон — по счётчику батареи. `null` — на зарядке или нечем. */
+    val mahSpent: Int? = null,
+    /** Средний ток за прогон, мА. `null` — на зарядке или нечем. */
+    val currentAverageMa: Int? = null,
+    /**
+     * Был ли телефон на зарядке **хоть в одном отсчёте**. Тогда расход не считается вовсе:
+     * числа такого прогона нельзя сравнивать с остальными, и отчёт говорит это прямо.
+     */
+    val onCharger: Boolean = false,
     val memoryPeakMb: Int? = null,
     /** Чем кодировалось на самом деле и железом ли. Без этого числа нечитаемы (§5а). */
     val codec: String? = null,
@@ -73,6 +82,9 @@ fun summarize(preset: PublishPreset, samples: List<BenchSample>): BenchSummary {
     val cpus = samples.mapNotNull { it.load?.cpuPercent }
     val temperatures = samples.mapNotNull { it.load?.temperatureC }
     val batteries = samples.mapNotNull { it.load?.batteryPercent }
+    val charges = samples.mapNotNull { it.load?.chargeUah }
+    val currents = samples.mapNotNull { it.load?.currentMa }
+    val onCharger = samples.any { it.load?.charging == true }
     val traffics = samples.mapNotNull { it.traffic }
     val rtts = samples.mapNotNull { it.stats?.rttMs }
 
@@ -91,11 +103,18 @@ fun summarize(preset: PublishPreset, samples: List<BenchSample>): BenchSummary {
         temperaturePeak = temperatures.maxOrNull(),
         // Заряд только падает, поэтому первый минус последний. Отрицательное значит, что
         // телефон стоял на зарядке, — и тогда числу цена ноль, о чём и говорит null.
-        batterySpent = if (batteries.size >= 2) {
+        batterySpent = if (batteries.size >= 2 && !onCharger) {
             (batteries.first() - batteries.last()).takeIf { it >= 0 }
         } else {
             null
         },
+        mahSpent = if (charges.size >= 2 && !onCharger) {
+            ((charges.first() - charges.last()) / 1000).toInt().takeIf { it >= 0 }
+        } else {
+            null
+        },
+        currentAverageMa = if (currents.isNotEmpty() && !onCharger) currents.average().toInt() else null,
+        onCharger = onCharger,
         memoryPeakMb = samples.mapNotNull { it.load?.memoryMb }.maxOrNull(),
         // Кодек и кодер берутся последними известными: в начале прогона дорожка ещё не
         // поднялась, и первые отсчёты про них не знают ничего.

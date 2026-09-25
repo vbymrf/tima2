@@ -716,6 +716,15 @@ interface BenchWords {
     val framesUp: String
     /** Размер входящего кадра. */
     val frameDown: String
+    /** Ток батареи сейчас. */
+    val current: String
+    /** Приписка к заряду, когда подключено питание. */
+    val onCharger: String
+    /** Итог прогона: мА·ч и средний ток. */
+    val mahSpent: String
+    val currentAverage: String
+    /** Единица тока. */
+    val milliAmps: String
     val encoder: String
     val hardware: String
     val software: String
@@ -2002,6 +2011,11 @@ object RussianWords : Words {
         override val codecNow = "Кодек на самом деле"
         override val framesUp = "Кадр вверх, по копиям"
         override val frameDown = "Кадр вниз"
+        override val current = "Ток"
+        override val onCharger = "на зарядке"
+        override val mahSpent = "Ушло, мА·ч"
+        override val currentAverage = "Ток, среднее"
+        override val milliAmps = "мА"
         override val encoder = "Кодер"
         override val hardware = "аппаратный"
         override val software = "программный"

@@ -126,7 +126,8 @@ private fun Numbers(last: BenchSample?) {
         words.phoneSent to traffic?.sentBytes?.let { megabytes(it) },
         words.cpu to load?.cpuPercent?.let { percent(it) },
         words.heat to load?.temperatureC?.let { degrees(it) },
-        words.battery to load?.batteryPercent?.let { "$it %" },
+        words.battery to battery(load?.batteryPercent, load?.charging),
+        words.current to load?.currentMa?.let { milliAmps(it) },
     )
     for (pair in cells.chunked(2)) {
         Row(

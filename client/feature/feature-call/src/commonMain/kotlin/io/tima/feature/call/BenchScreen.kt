@@ -376,7 +376,8 @@ private fun Numbers(last: BenchSample?) {
         Line(words.cpu, load?.cpuPercent?.let { percent(it) })
         Line(words.memory, load?.memoryMb?.let { "$it МБ" })
         Line(words.heat, load?.temperatureC?.let { degrees(it) })
-        Line(words.battery, load?.batteryPercent?.let { "$it %" })
+        Line(words.battery, battery(load?.batteryPercent, load?.charging))
+        Line(words.current, load?.currentMa?.let { milliAmps(it) })
     }
 }
 
@@ -395,6 +396,9 @@ private fun Runs(runs: List<BenchSummary>) {
             Line(words.cpuPeak, run.cpuPeak?.let { percent(it) })
             Line(words.heatPeak, run.temperaturePeak?.let { degrees(it) })
             Line(words.batterySpent, run.batterySpent?.let { "$it %" })
+            Line(words.mahSpent, run.mahSpent?.toString())
+            Line(words.currentAverage, run.currentAverageMa?.let { milliAmps(it) })
+            if (run.onCharger) Secondary(words.onCharger)
             Line(words.codecNow, run.codec)
             Line(
                 words.encoder,
@@ -526,6 +530,20 @@ internal fun megabytes(bytes: Long): String = "${bytes / 100_000 / 10.0} МБ"
 internal fun percent(value: Double): String = "${(value * 10).toInt() / 10.0} %"
 
 internal fun degrees(value: Double): String = "${(value * 10).toInt() / 10.0} °C"
+
+/** Ток с единицей; единица — из словаря, как и остальные надписи. */
+@Composable
+internal fun milliAmps(value: Int): String = "$value " + Tima.words.bench.milliAmps
+
+/**
+ * Заряд с припиской «на зарядке» — одним значением, а не отдельной строкой: приписка
+ * говорит, чего стоит само число, и оторванная от него она теряет смысл.
+ */
+@Composable
+internal fun battery(percent: Int?, charging: Boolean?): String? {
+    val value = percent?.let { "$it %" } ?: return null
+    return if (charging == true) value + " · " + Tima.words.bench.onCharger else value
+}
 
 /**
  * Пункт настроек «Испытательный режим звонков» — С7.

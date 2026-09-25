@@ -78,12 +78,17 @@ fun benchReport(
     row("Нагрев в начале, °C", summary.temperatureStart?.let { round(it) })
     row("Нагрев, потолок °C", summary.temperaturePeak?.let { round(it) })
     row("Ушло заряда, %", summary.batterySpent?.toString())
+    row("Ушло заряда, мА·ч", summary.mahSpent?.toString())
+    row("Ток, среднее мА", summary.currentAverageMa?.toString())
+    // Отдельной строкой и словами: прогон на зарядке расхода не имеет, и прочерки выше
+    // без этой строки читались бы как «датчика нет».
+    row("На зарядке", yesNo(summary.onCharger))
     appendLine()
 
     appendLine("## Отсчёты")
     appendLine()
-    appendLine("| с | вверх | вниз | ЦП % | °C | заряд | отдано | принято |")
-    appendLine("|---|---|---|---|---|---|---|---|")
+    appendLine("| с | вверх | вниз | ЦП % | °C | заряд | мА | питание | отдано | принято |")
+    appendLine("|---|---|---|---|---|---|---|---|---|---|")
     for (sample in samples) {
         appendLine(
             "| " + sample.atSecond +
@@ -92,6 +97,12 @@ fun benchReport(
                 " | " + (sample.load?.cpuPercent?.let { round(it) } ?: "—") +
                 " | " + (sample.load?.temperatureC?.let { round(it) } ?: "—") +
                 " | " + (sample.load?.batteryPercent?.toString() ?: "—") +
+                " | " + (sample.load?.currentMa?.toString() ?: "—") +
+                " | " + when (sample.load?.charging) {
+                    true -> "зарядка"
+                    false -> "батарея"
+                    null -> "—"
+                } +
                 " | " + (sample.traffic?.sentBytes?.toString() ?: "—") +
                 " | " + (sample.traffic?.receivedBytes?.toString() ?: "—") +
                 " |",

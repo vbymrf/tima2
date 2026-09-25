@@ -2,6 +2,7 @@ package io.tima.core.call
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -70,6 +71,44 @@ class BenchRunTest {
         )
 
         assertNull(summarize(preset, прогон).batterySpent)
+    }
+
+    @Test
+    fun мач_и_ток_считаются_по_счётчику() {
+        val прогон = listOf(
+            BenchSample(0, load = PhoneLoad(chargeUah = 3_000_000, currentMa = 400, charging = false)),
+            BenchSample(60, load = PhoneLoad(chargeUah = 2_992_000, currentMa = 500, charging = false)),
+        )
+        val свёртка = summarize(preset, прогон)
+        assertEquals(8, свёртка.mahSpent)
+        assertEquals(450, свёртка.currentAverageMa)
+        assertFalse(свёртка.onCharger)
+    }
+
+    @Test
+    fun на_зарядке_расход_не_считается_а_прогон_помечен() {
+        // Хоть один отсчёт на проводе — и весь расход прогона недостоверен.
+        val прогон = listOf(
+            BenchSample(0, load = PhoneLoad(batteryPercent = 70, chargeUah = 3_000_000, currentMa = 400, charging = false)),
+            BenchSample(60, load = PhoneLoad(batteryPercent = 69, chargeUah = 2_990_000, currentMa = 900, charging = true)),
+        )
+        val свёртка = summarize(preset, прогон)
+        assertTrue(свёртка.onCharger)
+        assertNull(свёртка.mahSpent)
+        assertNull(свёртка.currentAverageMa)
+        assertNull(свёртка.batterySpent)
+    }
+
+    @Test
+    fun единицы_тока_и_счётчика_угадываются_по_величине() {
+        assertEquals(350, currentToMilliAmps(-350_000), "мкА со знаком разряда")
+        assertEquals(350, currentToMilliAmps(350_000), "мкА с обратным знаком")
+        assertEquals(350, currentToMilliAmps(-350), "прошивка отдаёт мА")
+        assertNull(currentToMilliAmps(Int.MIN_VALUE))
+        assertNull(currentToMilliAmps(0))
+        assertEquals(3_000_000L, chargeToMicroAmpHours(3_000_000))
+        assertEquals(3_000_000L, chargeToMicroAmpHours(3_000), "прошивка отдаёт мА·ч")
+        assertNull(chargeToMicroAmpHours(Int.MIN_VALUE))
     }
 
     @Test

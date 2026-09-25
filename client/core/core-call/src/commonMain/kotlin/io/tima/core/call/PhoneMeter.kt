@@ -37,6 +37,21 @@ data class PhoneLoad(
     val temperatureC: Double? = null,
     /** Заряд, %. Расход за прогон считает стенд — по разнице начала и конца. */
     val batteryPercent: Int? = null,
+    /**
+     * Оставшийся заряд, мкА·ч — счётчик батареи (`CHARGE_COUNTER`).
+     *
+     * Процент для замера слишком груб: 1 % — десятки мА·ч, и минутный звонок в него не
+     * попадает. Разница счётчика за прогон даёт мА·ч, которые наборы различают
+     * (заказчик 2026-09-25). Уже приведён к мкА·ч — см. [chargeToMicroAmpHours].
+     */
+    val chargeUah: Long? = null,
+    /** Ток батареи сейчас, мА, по модулю — см. [currentToMilliAmps]. */
+    val currentMa: Int? = null,
+    /**
+     * Подключено ли питание. **На зарядке расход не меряется:** процент и счётчик растут
+     * или стоят, ток идёт в батарею. Такой прогон помечается, а не сравнивается.
+     */
+    val charging: Boolean? = null,
     /** Сколько прошло с начала отсчёта. Единственное, что есть всегда. */
     val uptimeMs: Long = 0,
 )
@@ -73,3 +88,34 @@ expect fun phoneLoad(): PhoneLoad?
 
 /** Трафик процесса. `null` — платформа не считает. */
 expect fun phoneTraffic(): PhoneTraffic?
+
+/**
+ * Ток батареи в мА по модулю — **из того, что отдала прошивка**.
+ *
+ * Android велит отдавать `CURRENT_NOW` в мкА со знаком (минус — разряд), но вендоры
+ * отдают и мА, и с обратным знаком. Поэтому знак отбрасывается (что это — разряд или
+ * зарядка, говорит [PhoneLoad.charging]), а единица угадывается по величине: телефон в
+ * звонке тянет сотни мА, то есть сотни тысяч мкА, и число меньше 20 000 может быть только
+ * миллиамперами.
+ *
+ * `null` — прошивка не отдаёт: `Int.MIN_VALUE` или ноль.
+ */
+fun currentToMilliAmps(raw: Int): Int? {
+    if (raw == Int.MIN_VALUE || raw == 0) return null
+    val value = if (raw < 0) -raw.toLong() else raw.toLong()
+    return if (value < MILLI_GUESS) value.toInt() else (value / 1000).toInt()
+}
+
+/**
+ * Счётчик заряда в мкА·ч. Та же беда с единицами: часть прошивок отдаёт мА·ч. Батарея
+ * телефона — тысячи мА·ч, то есть миллионы мкА·ч; число меньше 20 000 — это мА·ч.
+ *
+ * `null` — прошивка не отдаёт: `Int.MIN_VALUE`, ноль или отрицательное.
+ */
+fun chargeToMicroAmpHours(raw: Int): Long? {
+    if (raw <= 0) return null
+    return if (raw < MILLI_GUESS) raw.toLong() * 1000 else raw.toLong()
+}
+
+/** Граница, ниже которой число — уже милли-, а не микро-. Пояснение у [currentToMilliAmps]. */
+private const val MILLI_GUESS = 20_000

@@ -39,6 +39,47 @@ object AndroidPhoneMeter {
         // Свойства батареи бывают неизвестны — тогда Android отдаёт Integer.MIN_VALUE.
         return level.takeIf { it in 0..100 }
     }
+
+    private fun manager(): android.os.BatteryManager? {
+        val context = app ?: return null
+        return runCatching {
+            context.getSystemService(Context.BATTERY_SERVICE) as? android.os.BatteryManager
+        }.getOrNull()
+    }
+
+    /** Счётчик заряда, мкА·ч; единицы приводит [chargeToMicroAmpHours]. */
+    internal fun charge(): Long? {
+        val raw = runCatching {
+            manager()?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+        }.getOrNull() ?: return null
+        return chargeToMicroAmpHours(raw)
+    }
+
+    /** Ток сейчас, мА по модулю; единицы и знак приводит [currentToMilliAmps]. */
+    internal fun current(): Int? {
+        val raw = runCatching {
+            manager()?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
+        }.getOrNull() ?: return null
+        return currentToMilliAmps(raw)
+    }
+
+    /**
+     * Подключено ли питание — по «липкому» сообщению о батарее, без приёмника.
+     *
+     * `EXTRA_PLUGGED`, а не «заряжается»: полная батарея на проводе не заряжается, но и не
+     * разряжается, и расход по ней мерить так же нельзя.
+     */
+    internal fun charging(): Boolean? {
+        val context = app ?: return null
+        val status = runCatching {
+            context.registerReceiver(
+                null,
+                android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED),
+            )
+        }.getOrNull() ?: return null
+        val plugged = status.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, -1)
+        return if (plugged < 0) null else plugged != 0
+    }
 }
 
 /**
@@ -79,6 +120,9 @@ actual fun phoneLoad(): PhoneLoad? {
         memoryMb = memory,
         temperatureC = hottest(),
         batteryPercent = AndroidPhoneMeter.battery(),
+        chargeUah = AndroidPhoneMeter.charge(),
+        currentMa = AndroidPhoneMeter.current(),
+        charging = AndroidPhoneMeter.charging(),
         uptimeMs = now,
     )
 }
