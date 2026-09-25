@@ -92,9 +92,15 @@ internal fun BenchStrip(line: BenchLine, modifier: Modifier = Modifier) {
 /**
  * Числа последнего отсчёта: что передаётся и чем платит телефон.
  *
- * Те же две группы, что на экране стенда, и в том же порядке — человек, привыкший к
- * одному, не должен заново искать их в другом. `—` означает «мерить было нечем», и это
- * не то же самое, что ноль.
+ * Те же числа, что на экране стенда, и в том же порядке — человек, привыкший к одному, не
+ * должен заново искать их в другом. `—` означает «мерить было нечем», и это не то же
+ * самое, что ноль.
+ *
+ * ── ДВА ЧИСЛА В СТРОКЕ ─────────────────────────────────────────────────────
+ *
+ * Решение заказчика 2026-09-25: по одному в строке десять чисел закрывали пол-экрана
+ * собеседника. Теперь по два, и **значение показывается целиком, а описание — сколько
+ * влезло**: число и есть то, ради чего смотрят, а описание узнаётся по началу.
  */
 @Composable
 private fun Numbers(last: BenchSample?) {
@@ -106,35 +112,55 @@ private fun Numbers(last: BenchSample?) {
     val stats = last.stats
     val load = last.load
     val traffic = last.traffic
-    Line(words.up, stats?.upBitrate?.let { kbit(it) })
-    Line(words.down, stats?.downBitrate?.let { kbit(it) })
-    Line(words.codecNow, stats?.videoCodec)
-    Line(
-        words.encoder,
-        when (stats?.hardwareEncoder) {
+    val cells = listOf(
+        words.up to stats?.upBitrate?.let { kbit(it) },
+        words.down to stats?.downBitrate?.let { kbit(it) },
+        words.codecNow to stats?.videoCodec,
+        words.encoder to when (stats?.hardwareEncoder) {
             true -> words.hardware
             false -> words.software
             null -> null
         },
+        words.framesUp to stats?.upFrames?.takeIf { it.isNotEmpty() }?.joinToString(", "),
+        words.frameDown to stats?.downFrame,
+        words.phoneSent to traffic?.sentBytes?.let { megabytes(it) },
+        words.cpu to load?.cpuPercent?.let { percent(it) },
+        words.heat to load?.temperatureC?.let { degrees(it) },
+        words.battery to load?.batteryPercent?.let { "$it %" },
     )
-    Line(words.phoneSent, traffic?.sentBytes?.let { megabytes(it) })
-    Line(words.cpu, load?.cpuPercent?.let { percent(it) })
-    Line(words.heat, load?.temperatureC?.let { degrees(it) })
-    Line(words.battery, load?.batteryPercent?.let { "$it %" })
+    for (pair in cells.chunked(2)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+        ) {
+            for ((label, value) in pair) Cell(label, value, Modifier.weight(1f))
+            // Нечётное число — пустая половина, иначе последнее число растянулось бы на
+            // всю строку и встало не под своим столбцом.
+            if (pair.size == 1) Row(Modifier.weight(1f)) {}
+        }
+    }
 }
 
+/**
+ * Половина строки: описание слева, значение справа.
+ *
+ * Значение меряется первым и не режется; описание получает остаток и обрезается
+ * многоточием — это и есть «что вместилось».
+ */
 @Composable
-private fun Line(label: String, value: String?) {
+private fun Cell(label: String, value: String?, modifier: Modifier) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Secondary(label)
+        Secondary(label, modifier = Modifier.weight(1f), lineOne = true)
         Caption(
             text = value ?: "—",
             fontSize = TimaType.sz6,
             weight = FontWeight.Bold,
             color = if (value == null) Tima.colors.text3 else Tima.colors.text,
+            lineOne = true,
         )
     }
 }
