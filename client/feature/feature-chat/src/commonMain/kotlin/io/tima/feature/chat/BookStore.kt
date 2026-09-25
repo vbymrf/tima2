@@ -369,6 +369,52 @@ data class BookView(
 }
 
 /** Раздел книги с его людьми. */
+/**
+ * Строка вкладки «Контакты»: один контакт или **карточка** (заказчик 2026-09-25).
+ *
+ * Карточка — упаковка, и только: контакты с одинаковым показываемым именем (наше, а если
+ * его нет — из книги телефона) складываются в одну строку, чтобы человек выбрал нужного
+ * «Сашу», а не угадывал среди одинаковых строк. Нигде не хранится и не синхронизируется —
+ * вычисляется при показе, поэтому ничего за пределами вкладки не меняет: ни имена, ни
+ * разделы, ни чаты, ни звонки, ни «Позвать».
+ */
+sealed interface BookRow {
+    val key: String
+
+    data class One(val entry: BookEntry) : BookRow {
+        override val key: String get() = entry.id
+    }
+
+    data class Card(val name: String, val members: List<BookEntry>) : BookRow {
+        override val key: String get() = "card:$name"
+    }
+}
+
+/**
+ * Сложить одинаковые имена в карточки.
+ *
+ * Имя сравнивается **точно, с учётом регистра**: «Саша» и «саша» — разные люди. Пробелы
+ * по краям обрезаются — это мусор импорта, а не решение человека. Без имени (строку
+ * называет номер) не складывается ничего.
+ *
+ * Порядок сохраняется: карточка встаёт туда, где стоял первый её контакт.
+ */
+fun packCards(people: List<BookEntry>): List<BookRow> {
+    val byName = people.groupBy { it.name?.trim()?.ifEmpty { null } }
+    val placed = HashSet<String>()
+    val out = ArrayList<BookRow>(people.size)
+    for (entry in people) {
+        val name = entry.name?.trim()?.ifEmpty { null }
+        val same = name?.let { byName[it] }
+        if (name == null || same == null || same.size < 2) {
+            out += BookRow.One(entry)
+        } else if (placed.add(name)) {
+            out += BookRow.Card(name, same)
+        }
+    }
+    return out
+}
+
 data class BookGroup(
     val name: String,
     val people: List<BookEntry>,

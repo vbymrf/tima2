@@ -717,6 +717,7 @@ object SpanishWords : Words {
     }
 
     override val book = object : BookWords {
+        override fun inCard(count: Int) = "en la tarjeta: $count"
         override val everyone = "Todos"
         override val commonSection = "General"
         override val phoneSection = "Teléfono"

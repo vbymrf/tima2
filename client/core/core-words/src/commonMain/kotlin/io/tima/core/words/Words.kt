@@ -428,6 +428,8 @@ interface SocialWords {
  * «ничего нет» вместо ответа, что делать дальше.
  */
 interface BookWords {
+    /** Под именем карточки: сколько в ней контактов (заказчик 2026-09-25). */
+    fun inCard(count: Int): String
     /** Подсказка поиска по книге. Короткая: строка поиска однострочная (2026-09-19). */
     val search: String
 
@@ -2369,6 +2371,7 @@ object RussianWords : Words {
     }
 
     override val book = object : BookWords {
+        override fun inCard(count: Int) = "в карточке: $count"
         override val everyone = "Все"
         override val commonSection = "Общий"
         override val phoneSection = "Телефон"

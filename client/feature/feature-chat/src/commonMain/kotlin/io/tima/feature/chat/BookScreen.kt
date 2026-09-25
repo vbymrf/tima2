@@ -15,6 +15,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -141,6 +146,84 @@ fun BookScreen(
 ) {
     val words = Tima.words.book
     val colors = Tima.colors
+    // ── КАРТОЧКА ОТКРЫВАЕТСЯ ЗДЕСЬ ЖЕ, КАК РАЗДЕЛ ПЛИТКИ ────────────────────
+    //
+    // Заказчик 2026-09-25: карточка живёт только во вкладке «Контакты» и открывается
+    // «по сути как раздел» — строкой «назад» и списком внутри. Отдельного подокна у
+    // приложения поэтому нет: всё, что умеют строки, у вкладки уже есть.
+    //
+    // Ключ — группа и имя: одна и та же «Саша» может быть карточкой в двух разделах.
+    var openCard by rememberSaveable { mutableStateOf<String?>(null) }
+    val cardOpened = openCard?.let { key ->
+        state.groups(words).firstNotNullOfOrNull { group ->
+            packCards(group.people).filterIsInstance<BookRow.Card>()
+                .firstOrNull { cardKey(group, it.name) == key }?.let { group to it }
+        }
+    }
+    // Карточка распалась (переименовали, убрали) — возвращаемся к списку, а не к пустоте.
+    if (openCard != null && cardOpened == null) LaunchedEffect(openCard) { openCard = null }
+    // Строка контакта — одна на вкладку и карточку: в карточке человек обязан видеть
+    // ровно то же, что видел в списке, иначе он не узнает «своего» Сашу.
+    val personRow: @Composable (BookEntry, Boolean) -> Unit = { person, outsider ->
+                        val who = personOf(person)
+                        ListLine(
+                            onClick = { onOpen(person) },
+                            // Картинка, если человек поставил аватар; иначе буква.
+                            left = {
+                                Avatar(
+                                    letters = who.letter(),
+                                    image = faceOf(person),
+                                    modifier = if (onFace != null) {
+                                        Modifier.clickable { onFace(person) }
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                            },
+                            middle = {
+                                Column {
+                                    // Первая строка — имя, ник, имя пользователя по «Виду»
+                                    // (галки через запятую, иначе первое, что есть); вторая
+                                    // — всегда телефон (решение заказчика 2026-09-18).
+                                    Name(who.line(state.view.look(), PERSON_FIRST_LINE) ?: words.nameless)
+                                    // Вторая строка — номер, а у кого его нет — ник (Л0).
+                                    // Довод про кегль переносится на ник целиком: его так же
+                                    // читают и так же называют вслух. Пустая строка на этом
+                                    // месте была бы хуже всего — она выглядит как потеря.
+                                    Caption(
+                                        person.phone.ifBlank { who.nick?.let { "@$it" }.orEmpty() },
+                                        fontSize = TimaType.sz6 * 1.3f,
+                                        weight = FontWeight.SemiBold,
+                                        color = colors.text3,
+                                        lineOne = true,
+                                    )
+                                }
+                            },
+                            right = when {
+                                // Тот, кого нет в TIMa: «Пригласить». Наш звонок ему
+                                // некуда вести — у него нет аккаунта.
+                                outsider && onInvite != null ->
+                                    { { InviteButton(onClick = { onInvite(person) }) } }
+                                // Тот, кто в TIMa: позвонить. Проверяем `userId`, а не
+                                // раздел: разделы человек перекладывает руками, а
+                                // «есть ли аккаунт» — ответ сервера.
+                                // Тот, кто в TIMa: позвонить голосом или видео — две
+                                // кнопки рядом (Ж3). Видео показывается только если
+                                // звонить им есть чем; иначе остаётся одна, а не
+                                // пустое место рядом с живой.
+                                onCall != null && person.userId != null ->
+                                    {
+                                        {
+                                            CallButtons(
+                                                onVoice = { onCall(person) },
+                                                onVideo = onVideoCall?.let { { it(person) } },
+                                            )
+                                        }
+                                    }
+                                else -> null
+                            },
+                        )
+    }
     // Книга — та же группа «списки», что и чаты: строка обрезается и обязана быть
     // одной высоты.
     ProvidePlace(TextPlace.LISTS) {
@@ -224,6 +307,25 @@ fun BookScreen(
                 )
             }
 
+            cardOpened != null -> LazyColumn(Modifier.fillMaxSize()) {
+                val (group, card) = cardOpened
+                item(key = "card-back") {
+                    ListLine(
+                        onClick = { openCard = null },
+                        left = { IconButton(glyph = "‹", onClick = { openCard = null }, live = true) },
+                        middle = {
+                            Column {
+                                Name(card.name)
+                                Tertiary(words.inCard(card.members.size), lineOne = true)
+                            }
+                        },
+                    )
+                }
+                // Внутри — те же строки, что во вкладке: номер, звонок, «Пригласить» у
+                // тех, кого нет в TIMa. Карточка ничего в них не меняет.
+                items(card.members, key = { it.id }) { person -> personRow(person, group.outsiders) }
+            }
+
             else -> LazyColumn(Modifier.fillMaxSize()) {
                 if (state.tiles && state.chosen.isNotEmpty()) {
                     // Внутри раздела плитки: «назад» к плитке и название — вместо ряда
@@ -255,65 +357,11 @@ fun BookScreen(
                     // Ключ — ключ книги, а не номер: у контакта, заведённого по нику,
                     // номера нет, и все такие строки получили бы один и тот же ключ.
                     // Compose на одинаковых ключах начинает путать строки местами (Л0).
-                    items(group.people, key = { it.id }) { person ->
-                        val who = personOf(person)
-                        ListLine(
-                            onClick = { onOpen(person) },
-                            // Картинка, если человек поставил аватар; иначе буква.
-                            left = {
-                                Avatar(
-                                    letters = who.letter(),
-                                    image = faceOf(person),
-                                    modifier = if (onFace != null) {
-                                        Modifier.clickable { onFace(person) }
-                                    } else {
-                                        Modifier
-                                    },
-                                )
-                            },
-                            middle = {
-                                Column {
-                                    // Первая строка — имя, ник, имя пользователя по «Виду»
-                                    // (галки через запятую, иначе первое, что есть); вторая
-                                    // — всегда телефон (решение заказчика 2026-09-18).
-                                    Name(who.line(state.view.look(), PERSON_FIRST_LINE) ?: words.nameless)
-                                    // Вторая строка — номер, а у кого его нет — ник (Л0).
-                                    // Довод про кегль переносится на ник целиком: его так же
-                                    // читают и так же называют вслух. Пустая строка на этом
-                                    // месте была бы хуже всего — она выглядит как потеря.
-                                    Caption(
-                                        person.phone.ifBlank { who.nick?.let { "@$it" }.orEmpty() },
-                                        fontSize = TimaType.sz6 * 1.3f,
-                                        weight = FontWeight.SemiBold,
-                                        color = colors.text3,
-                                        lineOne = true,
-                                    )
-                                }
-                            },
-                            right = when {
-                                // Тот, кого нет в TIMa: «Пригласить». Наш звонок ему
-                                // некуда вести — у него нет аккаунта.
-                                group.outsiders && onInvite != null ->
-                                    { { InviteButton(onClick = { onInvite(person) }) } }
-                                // Тот, кто в TIMa: позвонить. Проверяем `userId`, а не
-                                // раздел: разделы человек перекладывает руками, а
-                                // «есть ли аккаунт» — ответ сервера.
-                                // Тот, кто в TIMa: позвонить голосом или видео — две
-                                // кнопки рядом (Ж3). Видео показывается только если
-                                // звонить им есть чем; иначе остаётся одна, а не
-                                // пустое место рядом с живой.
-                                onCall != null && person.userId != null ->
-                                    {
-                                        {
-                                            CallButtons(
-                                                onVoice = { onCall(person) },
-                                                onVideo = onVideoCall?.let { { it(person) } },
-                                            )
-                                        }
-                                    }
-                                else -> null
-                            },
-                        )
+                    items(packCards(group.people), key = { it.key }) { row ->
+                        when (row) {
+                            is BookRow.One -> personRow(row.entry, group.outsiders)
+                            is BookRow.Card -> CardLine(row, onClick = { openCard = cardKey(group, row.name) })
+                        }
                     }
                 }
             }
@@ -442,3 +490,29 @@ const val BOOK_CALL_TAG: String = "book:call"
 const val BOOK_VIDEO_CALL_TAG: String = "book:video-call"
 
 
+
+/** Ключ открытой карточки: раздел (или «Телефон») и имя. */
+private fun cardKey(group: BookGroup, name: String): String =
+    (if (group.outsiders) "phone" else group.id) + "|" + name
+
+/**
+ * Строка-карточка: имя, сколько в ней контактов, стрелка внутрь.
+ *
+ * Звонка в строке нет намеренно: карточка и появляется потому, что звонить «Саше» из
+ * одной строки нельзя — непонятно, которому.
+ */
+@Composable
+private fun CardLine(card: BookRow.Card, onClick: () -> Unit) {
+    val words = Tima.words.book
+    ListLine(
+        onClick = onClick,
+        left = { Avatar(letters = card.name.take(1).uppercase()) },
+        middle = {
+            Column {
+                Name(card.name)
+                Tertiary(words.inCard(card.members.size), lineOne = true)
+            }
+        },
+        right = { IconButton(glyph = "›", onClick = onClick) },
+    )
+}
