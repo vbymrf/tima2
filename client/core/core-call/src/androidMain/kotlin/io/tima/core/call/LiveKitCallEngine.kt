@@ -15,7 +15,9 @@ import io.livekit.android.room.track.VideoCaptureParameter
 import io.livekit.android.room.track.VideoEncoding
 import io.livekit.android.room.track.VideoCodec as LkVideoCodec
 import io.livekit.android.util.flow
+import livekit.org.webrtc.HardwareVideoEncoderFactory
 import livekit.org.webrtc.RtpParameters.DegradationPreference
+import livekit.org.webrtc.SoftwareVideoEncoderFactory
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
 import kotlinx.coroutines.CoroutineScope
@@ -97,37 +99,9 @@ class LiveKitCallEngine(
         val options = RoomOptions(
             adaptiveStream = publish?.video?.adaptiveStream ?: true,
             dynacast = publish?.video?.dynacast ?: true,
-            videoTrackPublishDefaults = publish?.video?.let { video ->
-                VideoTrackPublishDefaults(
-                    // Битрейт задаём сами: без него он принадлежал умолчанию SDK, и цена
-                    // за `MaintainResolution` ложилась на чёткость молча.
-                    videoEncoding = VideoEncoding(maxBitrate = video.bitrate, maxFps = video.fps),
-                    videoCodec = video.codec.toLiveKit().codecName,
-                    // ЯВНО, а не умолчанием SDK: у SVC-кодека он молча ставит запасным
-                    // VP8 с simulcast, и прогон «VP9 SVC» тогда мерит не VP9
-                    // (ПЛАН-СТЕНДА §5а, «ловушка»).
-                    simulcast = video.layers == LayerMode.Simulcast,
-                    scalabilityMode = video.scalability.takeIf { video.layers == LayerMode.Svc },
-                    // ── ЗАПАСНОЙ КОДЕК: НАШ, И БЕЗ SIMULCAST ────────────────
-                    //
-                    // Умолчание SDK — `BackupVideoCodec(codec = "vp8", simulcast = true)`,
-                    // и ставится оно молча при публикации SVC-кодека. То есть прогон
-                    // «VP9 SVC» кодировал бы ещё и три слоя VP8, как только второй
-                    // телефон попросит запасной, — и померил бы не VP9.
-                    //
-                    // `simulcast = false` здесь не забывчивость, а вторая половина того
-                    // же решения: запасной обязан быть дешевле основного, иначе он не
-                    // запасной, а вторая публикация.
-                    backupCodec = video.backup?.let {
-                        BackupVideoCodec(codec = it.toLiveKit().codecName, simulcast = false)
-                    },
-                    degradationPreference = when (video.degradation) {
-                        Degradation.MaintainResolution -> DegradationPreference.MAINTAIN_RESOLUTION
-                        Degradation.MaintainFramerate -> DegradationPreference.MAINTAIN_FRAMERATE
-                        Degradation.Balanced -> DegradationPreference.BALANCED
-                    },
-                )
-            },
+            // Видео — не здесь, а после создания комнаты: кодек выбирается по тому, что
+            // умеет кодер телефона, а спросить программную часть WebRTC можно только
+            // после того, как её загрузил SDK. Смотри [publishVideoAs].
             // ── ЗВУК ────────────────────────────────────────────────────────────
             //
             // RED — не «улучшение качества», а избыточность: вдвое больше трафика на
@@ -158,6 +132,7 @@ class LiveKitCallEngine(
         // они удвоили бы каждый опрос и объявили бы стадию по мёртвой комнате.
         stopWatching()
         val created = LiveKit.create(appContext = context, options = options)
+        publish?.video?.let { publishVideoAs(created, it) }
         room = created
         everAnswered = false
         watch(created, door.callId)
@@ -183,6 +158,82 @@ class LiveKitCallEngine(
                 trouble = why,
             )
         }
+    }
+
+    /**
+     * Поставить комнате видео пресета — **с кодеком, который телефон действительно умеет.**
+     *
+     * Без этого шага пресет «H.264» на Honor 8S публиковал молчаливый VP8, а сервер его
+     * выбрасывал: видео не было у собеседника, и никто не знал почему. Выбор и его
+     * причины — [CodecChoice]; здесь только спросить WebRTC и записать итог в журнал.
+     *
+     * Пресет пишется в журнал всегда, а не только при замене: «какой кодек ушёл в сеть»
+     * — первый вопрос к любому отчёту о пропавшем видео.
+     */
+    private fun publishVideoAs(room: Room, video: VideoPreset) {
+        val encodable = encodableCodecs()
+        val choice = CodecChoice.pick(video.codec, video.backup, encodable)
+        val can = encodable.joinToString(", ") { it.name }.ifEmpty { "не узнали" }
+        if (choice.substituted) {
+            Journal.trouble(
+                LogCode.CALL, "кодек пресета телефону не по силам, публикуем другой",
+                "просили" to video.codec.name, "умеет" to can, "шлём" to choice.chosen.name,
+            )
+        } else {
+            Journal.note(
+                LogCode.CALL, "кодек публикации",
+                "шлём" to choice.chosen.name, "запасной" to (choice.backup?.name ?: "нет"), "умеет" to can,
+            )
+        }
+        room.videoTrackPublishDefaults = VideoTrackPublishDefaults(
+            // Битрейт задаём сами: без него он принадлежал умолчанию SDK, и цена
+            // за `MaintainResolution` ложилась на чёткость молча.
+            videoEncoding = VideoEncoding(maxBitrate = video.bitrate, maxFps = video.fps),
+            videoCodec = choice.chosen.toLiveKit().codecName,
+            // ЯВНО, а не умолчанием SDK: у SVC-кодека он молча ставит запасным
+            // VP8 с simulcast, и прогон «VP9 SVC» тогда мерит не VP9
+            // (ПЛАН-СТЕНДА §5а, «ловушка»). SVC — только у кодека, который его умеет:
+            // замена H.264 на VP9 слоёв не добавляет.
+            simulcast = video.layers == LayerMode.Simulcast,
+            scalabilityMode = video.scalability.takeIf {
+                video.layers == LayerMode.Svc && choice.chosen.svcCapable
+            },
+            // ── ЗАПАСНОЙ КОДЕК: НАШ, И БЕЗ SIMULCAST ────────────────
+            //
+            // Умолчание SDK — `BackupVideoCodec(codec = "vp8", simulcast = true)`,
+            // и ставится оно молча при публикации SVC-кодека. То есть прогон
+            // «VP9 SVC» кодировал бы ещё и три слоя VP8, как только второй
+            // телефон попросит запасной, — и померил бы не VP9.
+            //
+            // `simulcast = false` здесь не забывчивость, а вторая половина того
+            // же решения: запасной обязан быть дешевле основного, иначе он не
+            // запасной, а вторая публикация.
+            backupCodec = choice.backup?.let {
+                BackupVideoCodec(codec = it.toLiveKit().codecName, simulcast = false)
+            },
+            degradationPreference = when (video.degradation) {
+                Degradation.MaintainResolution -> DegradationPreference.MAINTAIN_RESOLUTION
+                Degradation.MaintainFramerate -> DegradationPreference.MAINTAIN_FRAMERATE
+                Degradation.Balanced -> DegradationPreference.BALANCED
+            },
+        )
+    }
+
+    /**
+     * Что умеет кодер телефона — **тем же набором фабрик, что берёт SDK**: аппаратная
+     * WebRTC плюс программная (так устроена его `SimulcastVideoEncoderFactoryWrapper`).
+     * Аппаратная отбрасывает то, чем WebRTC на этой версии Android не пользуется, —
+     * ровно то, что нам и нужно знать.
+     *
+     * Не удалось спросить — пустое множество, и [CodecChoice] оставит пресет как есть.
+     */
+    private fun encodableCodecs(): Set<VideoCodec> = try {
+        val infos = HardwareVideoEncoderFactory(null, true, true).supportedCodecs.toList() +
+            SoftwareVideoEncoderFactory().supportedCodecs.toList()
+        infos.mapNotNull { CodecChoice.fromWebRtcName(it.name) }.toSet()
+    } catch (e: Throwable) {
+        Journal.trouble(LogCode.CALL, "не узнали кодеки телефона", "причина" to (e.message ?: e::class.simpleName))
+        emptySet()
     }
 
     override suspend fun reenter(door: CallDoor, publish: PublishPreset?) {
