@@ -712,6 +712,10 @@ interface BenchWords {
     val rtt: String
     val lost: String
     val codecNow: String
+    /** Размеры исходящих копий видео одной строкой. */
+    val framesUp: String
+    /** Размер входящего кадра. */
+    val frameDown: String
     val encoder: String
     val hardware: String
     val software: String
@@ -1996,6 +2000,8 @@ object RussianWords : Words {
         override val rtt = "Оборот пакета"
         override val lost = "Потеряно пакетов"
         override val codecNow = "Кодек на самом деле"
+        override val framesUp = "Кадр вверх, по копиям"
+        override val frameDown = "Кадр вниз"
         override val encoder = "Кодер"
         override val hardware = "аппаратный"
         override val software = "программный"

@@ -363,6 +363,10 @@ private fun Numbers(last: BenchSample?) {
                 null -> null
             },
         )
+        // Все копии одной строкой через запятую (заказчик 2026-09-25): сколько их и каких —
+        // видно сразу, и simulcast от одного слоя отличается без пояснений.
+        Line(words.framesUp, stats?.upFrames?.takeIf { it.isNotEmpty() }?.joinToString(", "))
+        Line(words.frameDown, stats?.downFrame)
         val traffic = last?.traffic
         Line(words.phoneSent, traffic?.sentBytes?.let { megabytes(it) })
         Line(words.phoneReceived, traffic?.receivedBytes?.let { megabytes(it) })

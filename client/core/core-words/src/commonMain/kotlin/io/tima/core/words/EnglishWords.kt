@@ -376,6 +376,8 @@ object EnglishWords : Words {
         override val rtt = "Round trip"
         override val lost = "Packets lost"
         override val codecNow = "Codec in use"
+        override val framesUp = "Frame up, per copy"
+        override val frameDown = "Frame down"
         override val encoder = "Encoder"
         override val hardware = "hardware"
         override val software = "software"

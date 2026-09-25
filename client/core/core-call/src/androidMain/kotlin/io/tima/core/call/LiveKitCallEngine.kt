@@ -411,6 +411,9 @@ class LiveKitCallEngine(
         // ту запись, которая описывает работающий кодек.
         val codecs = HashMap<String, String>()
         var videoCodecId: String? = null
+        // Ширина — чтобы сложить копии от меньшей к большей; строка — то, что покажем.
+        val upFrames = mutableListOf<Pair<Int, String>>()
+        var downFrame: Pair<Int, String>? = null
 
         val ours = live.localParticipant.trackPublications.values
             .mapNotNull { it.track as? io.livekit.android.room.track.Track }
@@ -427,12 +430,26 @@ class LiveKitCallEngine(
                         if (entry.members["kind"] == "video") {
                             encoder = entry.members["encoderImplementation"]?.toString() ?: encoder
                             videoCodecId = entry.members["codecId"]?.toString() ?: videoCodecId
+                            // Копия, погашенная Dynacast (`active = false`), не кодируется —
+                            // её размер был бы прошлым, а не нынешним.
+                            val w = (entry.members["frameWidth"] as? Number)?.toInt()
+                            val h = (entry.members["frameHeight"] as? Number)?.toInt()
+                            if (w != null && h != null && entry.members["active"] != false) {
+                                val mode = entry.members["scalabilityMode"]?.toString()
+                                    ?.takeIf { it.isNotBlank() && it != "L1T1" }
+                                upFrames += w to ("" + w + "×" + h + (mode?.let { " $it" } ?: ""))
+                            }
                         }
                     }
 
                     "inbound-rtp" -> {
                         received += (entry.members["bytesReceived"] as? Number)?.toLong() ?: 0L
                         lost += (entry.members["packetsLost"] as? Number)?.toLong() ?: 0L
+                        val w = (entry.members["frameWidth"] as? Number)?.toInt()
+                        val h = (entry.members["frameHeight"] as? Number)?.toInt()
+                        if (entry.members["kind"] == "video" && w != null && h != null) {
+                            if (downFrame == null || w > downFrame!!.first) downFrame = w to ("" + w + "×" + h)
+                        }
                     }
 
                     // Складываем все — какая из них наша, скажет codecId выше.
@@ -464,6 +481,8 @@ class LiveKitCallEngine(
             packetsLost = lost,
             videoCodec = videoCodecId?.let { codecs[it] }?.removePrefix("video/"),
             hardwareEncoder = encoder?.let { hardware(it) },
+            upFrames = upFrames.sortedBy { it.first }.map { it.second },
+            downFrame = downFrame?.second,
         )
     }
 

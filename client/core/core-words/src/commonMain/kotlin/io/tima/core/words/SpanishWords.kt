@@ -374,6 +374,8 @@ object SpanishWords : Words {
         override val rtt = "Ida y vuelta"
         override val lost = "Paquetes perdidos"
         override val codecNow = "Códec real"
+        override val framesUp = "Cuadro saliente, por copia"
+        override val frameDown = "Cuadro entrante"
         override val encoder = "Codificador"
         override val hardware = "por hardware"
         override val software = "por software"
