@@ -1,6 +1,7 @@
 package io.tima.app
 
 import android.app.Application
+import android.content.Intent
 import android.os.Build
 import io.tima.core.contacts.AndroidContacts
 import io.tima.core.diag.Diary
@@ -10,6 +11,7 @@ import io.tima.core.call.AndroidCallNotice
 import io.tima.core.call.AndroidPhoneMeter
 import io.tima.core.diag.Journal
 import io.tima.core.network.NetworkWatches
+import io.tima.core.notify.AndroidNotices
 import io.tima.core.secrets.AndroidSecrets
 import io.tima.shared.ReportsStore
 import io.tima.shared.rememberCrash
@@ -59,6 +61,16 @@ class TimaApplication : Application() {
         // До первого открытия вкладки «Контакты». Разрешение при этом не спрашивается:
         // контекст нужен, чтобы было чем спросить, когда человек туда дойдёт.
         AndroidContacts.install(this)
+        // Уведомления и белый список энергосбережения — им тоже нужен контекст
+        // приложения: показывает их служба канала, у которой окна нет. Без этой строки
+        // `platformNotifier()` отдавал заглушку, и на Android не показывалось НИЧЕГО — ни
+        // входящий звонок в фоне, ни сообщение; а «не спать» не спрашивалось вовсе.
+        // Найдено 2026-09-26: realme звонок принял, а человек о нём не узнал — канала
+        // «Звонки» на телефоне не было ни разу.
+        AndroidNotices.install(this) {
+            Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
 
         // Падения ловятся здесь, а не в Activity: упасть можно и до её создания, и такой
         // отчёт ценнее прочих — человек в этот момент видит только «приложение

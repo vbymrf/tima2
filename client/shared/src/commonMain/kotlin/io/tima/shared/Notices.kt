@@ -1,5 +1,7 @@
 package io.tima.shared
 
+import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
 import io.tima.core.notify.Notice
 import io.tima.core.notify.NoticeKind
 import io.tima.core.notify.Notifier
@@ -124,6 +126,9 @@ class Notices(
     /** Нам звонят — У7. Имя сразу: его утверждает сервер, а не звонящий. */
     suspend fun calling(callId: String, fromUserId: String) {
         if (!shouldNotify(fromUserId)) return
+        // В журнал — что строку поставили: «звонок пришёл, а телефон молчал» иначе не
+        // отличить от «строку не ставили вовсе» (так и было до 2026-09-26).
+        Journal.note(LogCode.CALL, "уведомление о входящем поставлено", "звонок" to callId.take(8))
         notifier.show(
             Notice(
                 key = CALL_KEY_PREFIX + callId,

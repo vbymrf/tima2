@@ -4,12 +4,13 @@
 # запускалки не ходить — набор шагов разойдётся, и «забрал» перестанет значить одно
 # и то же.
 #
-# ── ПОЧЕМУ ТРИ ШАГА, А НЕ ОДИН `adb pull` ────────────────────────────────────
+# ── ПОЧЕМУ НЕ `adb pull` ─────────────────────────────────────────────────────
 #
 # Отчёт лежит во ВНУТРЕННЕЙ памяти приложения (`/data/data/<пакет>/files/test`), и
 # снаружи она не видна никому. Отладочная сборка позволяет прочитать её через
-# `run-as`, но `adb pull` через него не ходит. Поэтому: вынуть файл на общую память,
-# забрать обычным `pull`, убрать за собой.
+# `run-as`, но `adb pull` через него не ходит. Поэтому `exec-out run-as … cat` прямо в
+# файл на этой машине. Перевалка через общую память (/sdcard) отдавала пустые файлы и
+# убрана 2026-09-26.
 #
 # С телефона файлы НЕ стираются. Стирает человек, когда убедился, что забрал: отчёт
 # прогона стоит минуты разговора, и потерять его из-за чужой ошибки нельзя.
@@ -23,8 +24,15 @@ param(
     [string[]]$Serial,
 
     # Куда складывать. По умолчанию — вне git, см. doc_mig/ТЕСТЫ-НА-ТЕЛЕФОНАХ/README.md.
-    [string]$Into = (Join-Path $PSScriptRoot 'doc_add/тесты-звонков')
+    [string]$Into
 )
+
+# Путь по умолчанию — здесь, а не в param(): Windows PowerShell 5.1, запущенный из pwsh
+# через .bat, отдавал в значении по умолчанию пустой $PSScriptRoot, и скрипт падал на
+# Join-Path, не дойдя до телефонов (2026-09-26).
+if (-not $Into) {
+    $Into = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) 'doc_add/тесты-звонков'
+}
 
 # Не 'Stop' по той же причине, что в update-and-install-phone.ps1: строка adb в потоке
 # ошибок рвала бы скрипт на первом же телефоне, не дойдя до остальных.
@@ -75,11 +83,13 @@ foreach ($device in $devices) {
     if (-not (Test-Path $where)) { New-Item -ItemType Directory -Force $where | Out-Null }
 
     foreach ($name in $names) {
-        $stage = "/sdcard/Download/$name"
-        & adb @a shell "run-as $package cat $folder/$name > $stage" | Out-Null
-        & adb @a pull $stage (Join-Path $where $name) | Out-Null
-        & adb @a shell "rm -f $stage" | Out-Null
-        if (Test-Path (Join-Path $where $name)) {
+        $target = Join-Path $where $name
+        # exec-out прямо в файл, через cmd: его перенаправление байты не трогает, а
+        # PowerShell 5.1 перекодировал бы вывод в UTF-16. Прежняя перевалка через
+        # /sdcard давала ПУСТЫЕ файлы (2026-09-26, Android 11): `cat` под run-as пишет от
+        # имени приложения в файл, открытый оболочкой, и получает отказ молча.
+        cmd /c "adb $($a -join ' ') exec-out run-as $package cat $folder/$name > `"$target`"" | Out-Null
+        if ((Test-Path $target) -and (Get-Item $target).Length -gt 0) {
             Write-Host "   $name"
             $total++
         } else {
