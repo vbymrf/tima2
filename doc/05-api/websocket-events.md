@@ -26,8 +26,9 @@ ping/pong каждые 30 с; reconnect с экспоненциальным back
 | `group.rotation_needed` | group_id, reason | Просьба админу сменить GK (`reason=device_revoked` — отозвано устройство участника). Сервер GK не видит и ротировать не может, поэтому просит того, у кого ключ есть. Уходит всем админским устройствам: первое успевает, остальные получают `version_conflict` — это штатная гонка |
 | `key.changed` | user_id, device_id | Смена identity собеседника → UI-предупреждение |
 | `chat.updated` | chat/group метаданные, роли | |
-| `call.incoming` | call_id, from, kind, room_token | Параллельно push |
-| `call.state` | call_id, ringing\|answered\|ended\|declined | |
+| `call.poke` | `cts` | **Личные звонки** (с 2026-09-26, ADR-0025 Поправка-2): «в ленте звонков есть до №cts». Забрать `GET /api/v1/calls/updates?after=N`, подтвердить `call.ack {cts}`. Вершина `cts` едет и в приветствии `ok` |
+| `call.incoming` | call_id, from, kind, room_token | **Только групповые звонки** — личные ушли в ленту `cts` |
+| `call.state` | call_id, ringing\|answered\|ended\|declined | **Только групповые звонки** |
 | `voice-room.update` | group_id, участники | Голосовые чаты |
 | `feed.new` | счётчик новых постов | Бейдж «новые посты», не сами посты |
 | `inbox.thread` | thread_id, identity_id, status, assignee | Окно 4: новое обращение / смена статуса (командное) |
@@ -39,6 +40,7 @@ ping/pong каждые 30 с; reconnect с экспоненциальным back
 
 | Событие | Payload | Примечание |
 |---------|---------|-----------|
+| `call.ack` | `cts` | Лента личных звонков применена до №cts. Двигает только курсор звонков; номер выше вершины отвергается |
 | `ack` | event_id | Сдвиг cursor |
 | `typing` | chat_id, kind | Троттлинг 3 с на клиенте |
 | `receipt` | message_id, status | Пачками (батч до 100) |
