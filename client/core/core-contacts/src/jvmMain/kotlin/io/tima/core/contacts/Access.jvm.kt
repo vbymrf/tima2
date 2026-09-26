@@ -11,3 +11,5 @@ actual fun askContactsAccess(onResult: (Boolean) -> Unit) = onResult(false)
 
 /** ПК: телефонной книги нет, спрашивать нечего — кнопки на экране тоже нет. */
 actual fun contactsAccessWay(): ContactsAccessWay = ContactsAccessWay.None
+
+actual fun contactsAllowed(): Boolean? = null

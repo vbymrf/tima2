@@ -41,27 +41,7 @@ import io.tima.core.ui.words
  */
 @Composable
 fun NotificationsScreen(
-    /** Право показывать: дано ли, и если нет — что случится по нажатию. */
-    access: NotifyAccess,
-    onAsk: () -> Unit,
     modifier: Modifier = Modifier,
-    /**
-     * Просить не усыплять. `null` — платформе это не нужно (ПК): строки не будет вовсе,
-     * а не «неактивная» — неактивная тоже зовёт нажать.
-     */
-    onBattery: (() -> Unit)? = null,
-    /** Уже не усыпляют. */
-    batteryFree: Boolean = false,
-    /**
-     * Канал «Звонки» включён (ВЗ0г). `null` — канала ещё нет или платформе он не нужен:
-     * строки не будет, пока ей нечего сказать.
-     */
-    callsChannelOn: Boolean? = null,
-    /** Открыть страницу канала «Звонки» в настройках телефона. */
-    onCallsChannel: (() -> Unit)? = null,
-    /** Входящему можно во весь экран (Android 14+). `null` — вопроса нет. */
-    fullScreenOn: Boolean? = null,
-    onFullScreen: (() -> Unit)? = null,
     /** Мелодия звонка (ВЗ4). `null` — раздела нет (проверки). */
     ring: SoundRow? = null,
     /** Звук уведомления о сообщении (ВЗ4). */
@@ -82,6 +62,63 @@ fun NotificationsScreen(
             // человек вправе знать это, не выясняя опытом.
             Tertiary(words.noticesNoText)
         }
+
+        // ── ЗВУКИ (ВЗ4) ─────────────────────────────────────────────────────
+        //
+        // Общие мелодия звонка и звук сообщения. Своя мелодия у контакта — в журнале
+        // контактов (ВЗ8), и она важнее общей.
+        if (ring != null || message != null) {
+            SectionTitle(words.soundsTitle)
+            ring?.let { SoundSetting(words.soundRing, it) }
+            message?.let { SoundSetting(words.soundMessage, it) }
+            Column(Modifier.padding(horizontal = TimaSpacing.about4)) { Tertiary(words.soundsNotSynced) }
+        }
+    }
+}
+
+/**
+ * Разрешения — одно место для всех (заказчик 2026-09-26).
+ *
+ * Сюда переехали право показывать уведомления, канал «Звонки», «во весь экран» и работа в
+ * фоне — из «Уведомлений», — и добавились микрофон, камера и контакты, которые до того
+ * спрашивались только по месту. Событие «звонки могут не дойти» ведёт сюда.
+ *
+ * Каждое разрешение — строкой «разрешено» или кнопкой. `null` у состояния — платформе
+ * спрашивать нечего (ПК): раздела нет вовсе, а не «неактивный».
+ */
+@Composable
+fun PermissionsScreen(
+    /** Право показывать уведомления. */
+    access: NotifyAccess,
+    onAsk: () -> Unit,
+    modifier: Modifier = Modifier,
+    onBattery: (() -> Unit)? = null,
+    batteryFree: Boolean = false,
+    callsChannelOn: Boolean? = null,
+    onCallsChannel: (() -> Unit)? = null,
+    fullScreenOn: Boolean? = null,
+    onFullScreen: (() -> Unit)? = null,
+    microphone: Boolean? = null,
+    camera: Boolean? = null,
+    /** Спросить микрофон (`false`) или камеру с микрофоном (`true`). */
+    onAskCall: (Boolean) -> Unit = {},
+    /** Страница приложения в настройках телефона — когда система больше не спрашивает. */
+    onCallSettings: () -> Unit = {},
+    contacts: Boolean? = null,
+    /** Система больше не спросит про контакты — кнопка ведёт в настройки. */
+    contactsInSettings: Boolean = false,
+    onAskContacts: () -> Unit = {},
+) {
+    val colors = Tima.colors
+    val words = Tima.words.settings2
+
+    Column(
+        modifier.fillMaxSize().background(colors.surface).verticalScroll(rememberScrollState())
+            .padding(bottom = TimaSpacing.about5),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+    ) {
+        // ── УВЕДОМЛЕНИЯ ─────────────────────────────────────────────────────
+        SectionTitle(words.itemNotifications)
         when (access) {
             NotifyAccess.Given -> Column(Modifier.padding(horizontal = TimaSpacing.about4)) {
                 Name(words.noticesAllowed)
@@ -101,8 +138,10 @@ fun NotificationsScreen(
             }
         }
 
-        // Канал «Звонки» — отдельно: его выключают одного, при разрешённых остальных
-        // уведомлениях, и тогда молчит именно входящий (ВЗ0г).
+        // ── ЗВОНКИ: КАНАЛ И ВО ВЕСЬ ЭКРАН ────────────────────────────────────
+        //
+        // Канал выключают одного, при разрешённых остальных уведомлениях, и тогда молчит
+        // именно входящий (ВЗ0г).
         if (callsChannelOn != null && onCallsChannel != null) {
             SectionTitle(words.noticesCalls)
             Column(
@@ -116,7 +155,6 @@ fun NotificationsScreen(
                     Secondary(words.noticesCallsOff)
                     Button(label = words.noticesOpenSettings, onClick = onCallsChannel, kind = ButtonKind.Action)
                 }
-                // Во весь экран — строкой рядом: это тоже про то, как звонит входящий.
                 if (fullScreenOn == true) Name(words.noticesFullScreenOn)
                 if (fullScreenOn == false && onFullScreen != null) {
                     Secondary(words.noticesFullScreenOff)
@@ -125,19 +163,28 @@ fun NotificationsScreen(
             }
         }
 
-        // ── ЗВУКИ (ВЗ4) ─────────────────────────────────────────────────────
-        //
-        // Общие мелодия звонка и звук сообщения. Своя мелодия у контакта — в журнале
-        // контактов (ВЗ8), и она важнее общей.
-        if (ring != null || message != null) {
-            SectionTitle(words.soundsTitle)
-            ring?.let { SoundSetting(words.soundRing, it) }
-            message?.let { SoundSetting(words.soundMessage, it) }
-            Column(Modifier.padding(horizontal = TimaSpacing.about4)) { Tertiary(words.soundsNotSynced) }
+        // ── МИКРОФОН И КАМЕРА ────────────────────────────────────────────────
+        if (microphone != null) {
+            PermissionRow(words.permMicrophone, words.permMicrophoneAbout, microphone,
+                onAsk = { onAskCall(false) }, onSettings = onCallSettings)
+        }
+        if (camera != null) {
+            PermissionRow(words.permCamera, words.permCameraAbout, camera,
+                onAsk = { onAskCall(true) }, onSettings = onCallSettings)
         }
 
+        // ── КОНТАКТЫ ─────────────────────────────────────────────────────────
+        if (contacts != null) {
+            PermissionRow(
+                words.permContacts, words.permContactsAbout, contacts,
+                onAsk = onAskContacts, onSettings = onAskContacts,
+                askLabel = if (contactsInSettings) words.noticesOpenSettings else words.noticesAllow,
+            )
+        }
+
+        // ── РАБОТА В ФОНЕ ────────────────────────────────────────────────────
         if (onBattery != null) {
-            SectionTitle(words.noticesAwake)
+            SectionTitle(words.permBackground)
             Column(
                 Modifier.padding(horizontal = TimaSpacing.about4),
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
@@ -152,9 +199,45 @@ fun NotificationsScreen(
                 //
                 // Системного белого списка на realme и Xiaomi НЕ ХВАТАЕТ: у них свои
                 // списки автозапуска, и открыть их программно документированного способа
-                // нет. Сказать это прямо дешевле, чем оставить человека гадать, почему
-                // уведомления приходят через раз.
+                // нет. Сказать это прямо дешевле, чем оставить человека гадать.
                 Tertiary(words.noticesVendors)
+            }
+        }
+    }
+}
+
+/**
+ * Одно разрешение: название, зачем оно, и «Разрешено» либо кнопки.
+ *
+ * Кнопок две, когда не выдано: «Разрешить» поднимает системный вопрос, а если система
+ * больше не спрашивает — вопрос молчит, и тогда нужна «Открыть настройки».
+ */
+@Composable
+private fun PermissionRow(
+    title: String,
+    about: String,
+    granted: Boolean,
+    onAsk: () -> Unit,
+    onSettings: () -> Unit,
+    askLabel: String = Tima.words.settings2.noticesAllow,
+) {
+    val words = Tima.words.settings2
+    SectionTitle(title)
+    Column(
+        Modifier.padding(horizontal = TimaSpacing.about4),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+    ) {
+        Secondary(about)
+        if (granted) {
+            Name(words.noticesAllowed)
+        } else {
+            androidx.compose.foundation.layout.Row(
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            ) {
+                Button(label = askLabel, onClick = onAsk, kind = ButtonKind.Action)
+                if (askLabel != words.noticesOpenSettings) {
+                    Button(label = words.noticesOpenSettings, onClick = onSettings, kind = ButtonKind.Quiet)
+                }
             }
         }
     }

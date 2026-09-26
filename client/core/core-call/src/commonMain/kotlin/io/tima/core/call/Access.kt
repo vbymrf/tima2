@@ -46,3 +46,11 @@ expect fun askCallAccess(video: Boolean, onResult: (Boolean) -> Unit)
  * корень настроек — он там ищет наугад.
  */
 expect fun openCallSettings()
+
+/**
+ * Выданы ли микрофон и камера — для «Настройки → Разрешения» (заказчик 2026-09-26).
+ * `null` — узнать нечем (ПК, нет окна): строки о разрешении тогда нет.
+ */
+data class CallAccessState(val microphone: Boolean?, val camera: Boolean?)
+
+expect fun callAccessState(): CallAccessState

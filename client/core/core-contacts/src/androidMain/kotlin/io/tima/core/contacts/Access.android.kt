@@ -73,6 +73,11 @@ object AndroidContactsAccess {
         waiting = null
     }
 
+    internal fun allowed(): Boolean? {
+        val current = activity ?: return null
+        return current.checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+    }
+
     internal fun way(): ContactsAccessWay {
         val current = activity ?: return ContactsAccessWay.None
         if (current.checkSelfPermission(Manifest.permission.READ_CONTACTS) ==
@@ -140,3 +145,5 @@ actual fun askContactsAccess(onResult: (Boolean) -> Unit) = AndroidContactsAcces
  * Активности нет — значит спросить не через кого, и кнопки быть не должно.
  */
 actual fun contactsAccessWay(): ContactsAccessWay = AndroidContactsAccess.way()
+
+actual fun contactsAllowed(): Boolean? = AndroidContactsAccess.allowed()

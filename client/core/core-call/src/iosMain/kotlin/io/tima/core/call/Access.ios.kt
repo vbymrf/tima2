@@ -27,3 +27,5 @@ actual fun askCallAccess(video: Boolean, onResult: (Boolean) -> Unit) {
 
 /** Звонков здесь нет — и разрешения на микрофон, которое можно было бы включить, тоже. */
 actual fun openCallSettings() = Unit
+
+actual fun callAccessState(): CallAccessState = CallAccessState(null, null)

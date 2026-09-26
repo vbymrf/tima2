@@ -41,3 +41,6 @@ enum class ContactsAccessWay {
 
 /** Каким будет следующий шаг — см. [ContactsAccessWay]. */
 expect fun contactsAccessWay(): ContactsAccessWay
+
+/** Выдан ли доступ к книге — для «Разрешений». `null` — книги нет или узнать нечем. */
+expect fun contactsAllowed(): Boolean?

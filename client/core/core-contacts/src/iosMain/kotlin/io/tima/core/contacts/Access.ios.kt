@@ -32,3 +32,8 @@ actual fun contactsAccessWay(): ContactsAccessWay =
         -> ContactsAccessWay.Settings
         else -> ContactsAccessWay.Ask
     }
+
+actual fun contactsAllowed(): Boolean? = when (contactsAccessWay()) {
+    ContactsAccessWay.Settings -> false
+    else -> null
+}

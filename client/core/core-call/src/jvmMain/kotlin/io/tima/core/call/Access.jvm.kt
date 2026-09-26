@@ -12,3 +12,6 @@ actual fun askCallAccess(video: Boolean, onResult: (Boolean) -> Unit) = onResult
 
 /** Звонков здесь нет — и разрешения на микрофон, которое можно было бы включить, тоже. */
 actual fun openCallSettings() = Unit
+
+/** На ПК разрешений на микрофон и камеру у приложения нет — спрашивает система сама. */
+actual fun callAccessState(): CallAccessState = CallAccessState(null, null)

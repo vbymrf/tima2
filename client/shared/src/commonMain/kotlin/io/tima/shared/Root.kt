@@ -115,6 +115,11 @@ import io.tima.core.contacts.platformPhoneBook
 import io.tima.core.notify.NotifyAccessWay
 import io.tima.core.notify.askAwake
 import io.tima.core.notify.askNotifyAccess
+import io.tima.feature.shell.PermissionsScreen
+import io.tima.core.contacts.contactsAllowed
+import io.tima.core.call.openCallSettings
+import io.tima.core.call.askCallAccess
+import io.tima.core.call.callAccessState
 import io.tima.feature.shell.SoundRow
 import io.tima.core.media.systemSoundsAvailable
 import io.tima.core.media.rememberSoundFilePicker
@@ -126,8 +131,6 @@ import io.tima.core.notify.soundChoiceOf
 import io.tima.core.notify.SoundKeys
 import io.tima.core.notify.SoundChoice
 import kotlinx.coroutines.flow.first
-import io.tima.feature.shell.LocalBackgroundWarning
-import io.tima.feature.shell.BackgroundWarning
 import io.tima.feature.shell.BackgroundTrouble
 import io.tima.core.notify.openCallsChannelSettings
 import io.tima.core.notify.openFullScreenSettings
@@ -1580,6 +1583,57 @@ private fun App(
     // Подокно при запуске: чем кончилась прошлая установка и не пора ли обновиться
     // (решение заказчика 2026-09-06). После порога, а не до: там работать нельзя вовсе,
     // и новость об успешной установке поверх этого была бы издевательством.
+    // ── ЗВОНКИ НЕ ДОЙДУТ — СОСТОЯНИЕ (ВЗ0г) ──────────────────────────────────
+    //
+    // Три беды по важности: уведомления запрещены → канал «Звонки» выключен → экономия
+    // батареи душит. Показывается одна, самая важная. Сверка идёт событийно: запуск
+    // процесса, возврат окна, входящий (`BackgroundWatch`), — и каждая сверка обновляет
+    // полосу. «Позже» прячет беду на неделю; исправили — отметка снимается, и беда,
+    // вернувшаяся потом, показывается сразу.
+    var bgFacts by remember { mutableStateOf(backgroundFacts()) }
+    DisposableEffect(Unit) {
+        BackgroundWatch.onCheck = { bgFacts = it }
+        onDispose { BackgroundWatch.onCheck = null }
+    }
+    var bgLater by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    LaunchedEffect(Unit) { environment.settings.all().collect { bgLater = it } }
+    val bgTrouble = when {
+        bgFacts.notices == false -> BackgroundTrouble.Notices
+        bgFacts.calls == false -> BackgroundTrouble.Calls
+        bgFacts.awake == false -> BackgroundTrouble.Battery
+        else -> null
+    }
+    // Исправленная беда забывает своё «Позже»: иначе, вернувшись, она молчала бы неделю.
+    LaunchedEffect(bgFacts) {
+        val fixed = buildList {
+            if (bgFacts.notices == true) add(BackgroundTrouble.Notices)
+            if (bgFacts.calls == true) add(BackgroundTrouble.Calls)
+            if (bgFacts.awake == true) add(BackgroundTrouble.Battery)
+        }
+        for (t in fixed) {
+            if (!bgLater[bgLaterKey(t)].isNullOrEmpty()) environment.settings.put(bgLaterKey(t), "")
+        }
+    }
+    // «Назад» у события закрывает его до следующего запуска — не на неделю, как «Позже».
+    var bgClosed by remember { mutableStateOf(false) }
+    val bgShown = bgTrouble?.takeIf { t ->
+        (bgLater[bgLaterKey(t)]?.toLongOrNull() ?: 0L) <= msNow()
+    }
+    LaunchedEffect(bgShown) {
+        bgShown?.let { Journal.note(bgCode(it), "показали событие «звонки могут не дойти»", "беда" to it.name) }
+    }
+    // ВЗ0б: разрешение на уведомления спрашивается само — один раз на установку. Дальше
+    // только полосой и кнопкой в «Настройки → Уведомления»: спрашивать на каждом запуске
+    // значило бы надоесть, а после второго отказа система и не покажет вопроса.
+    LaunchedEffect(Unit) {
+        val asked = environment.settings.all().first()[NOTICES_AUTO_ASKED]
+        if (asked.isNullOrEmpty() && notifyAccessWay() == NotifyAccessWay.Ask) {
+            environment.settings.put(NOTICES_AUTO_ASKED, "1")
+            Journal.note(LogCode.BG_NOTICES, "спрашиваем разрешение на уведомления — первый запуск")
+            askNotifyAccess { BackgroundWatch.check("ответ на разрешение уведомлений") }
+        }
+    }
+
     val news = updateState.news
     // Факт установки пишется ЗДЕСЬ, а не в UpdateStore: оболочка про журнал не знает и
     // знать не должна — она зависит только от core-ui. Здесь же сходятся оба.
@@ -1598,6 +1652,43 @@ private fun App(
             )
             else -> Unit
         }
+    }
+    // ── «ЗВОНКИ МОГУТ НЕ ДОЙТИ» — ПОДОКНОМ-СОБЫТИЕМ (заказчик 2026-09-26) ──────
+    //
+    // Было красной полосой под шапкой. Теперь — тем же подокном, что «Приложение
+    // обновилось»: шапка с «назад», текст, «Включить» ведёт в «Разрешения», «Позже» прячет
+    // на неделю. «Назад» закрывает до следующего запуска. Во время звонка не показывается:
+    // окно поверх разговора его бы закрыло.
+    val bgNow = bgShown
+    if (bgNow != null && !bgClosed && news == null && !callHost.active && where == Where.Nothing) {
+        val warnWords = Tima.words.settings2
+        NoticeScreen(
+            notice = io.tima.feature.shell.Notice(
+                title = warnWords.warnTitle,
+                text = when (bgNow) {
+                    BackgroundTrouble.Notices -> warnWords.warnNotices
+                    BackgroundTrouble.Calls -> warnWords.warnCalls
+                    BackgroundTrouble.Battery -> warnWords.warnBattery
+                },
+                details = listOf(warnWords.warnWhere),
+            ),
+            actions = listOf(
+                NoticeAction(warnWords.warnFix) {
+                    Journal.note(bgCode(bgNow), "нажали «Включить» в событии", "беда" to bgNow.name)
+                    bgClosed = true
+                    where = Where.Settings(SettingsItem.PERMISSIONS)
+                },
+                NoticeAction(warnWords.warnLater, ButtonKind.Quiet) {
+                    Journal.note(bgCode(bgNow), "«Позже» — событие спрятано на неделю", "беда" to bgNow.name)
+                    bgClosed = true
+                    scope.launch {
+                        environment.settings.put(bgLaterKey(bgNow), (msNow() + BG_LATER_MS).toString())
+                    }
+                },
+            ),
+            onClose = { bgClosed = true },
+        )
+        return
     }
     if (news != null) {
         NoticeScreen(
@@ -1692,55 +1783,6 @@ private fun App(
         return
     }
 
-    // ── ЗВОНКИ НЕ ДОЙДУТ — ПОЛОСА (ВЗ0г) ──────────────────────────────────
-    //
-    // Три беды по важности: уведомления запрещены → канал «Звонки» выключен → экономия
-    // батареи душит. Показывается одна, самая важная. Сверка идёт событийно: запуск
-    // процесса, возврат окна, входящий (`BackgroundWatch`), — и каждая сверка обновляет
-    // полосу. «Позже» прячет беду на неделю; исправили — отметка снимается, и беда,
-    // вернувшаяся потом, показывается сразу.
-    var bgFacts by remember { mutableStateOf(backgroundFacts()) }
-    DisposableEffect(Unit) {
-        BackgroundWatch.onCheck = { bgFacts = it }
-        onDispose { BackgroundWatch.onCheck = null }
-    }
-    var bgLater by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    LaunchedEffect(Unit) { environment.settings.all().collect { bgLater = it } }
-    val bgTrouble = when {
-        bgFacts.notices == false -> BackgroundTrouble.Notices
-        bgFacts.calls == false -> BackgroundTrouble.Calls
-        bgFacts.awake == false -> BackgroundTrouble.Battery
-        else -> null
-    }
-    // Исправленная беда забывает своё «Позже»: иначе, вернувшись, она молчала бы неделю.
-    LaunchedEffect(bgFacts) {
-        val fixed = buildList {
-            if (bgFacts.notices == true) add(BackgroundTrouble.Notices)
-            if (bgFacts.calls == true) add(BackgroundTrouble.Calls)
-            if (bgFacts.awake == true) add(BackgroundTrouble.Battery)
-        }
-        for (t in fixed) {
-            if (!bgLater[bgLaterKey(t)].isNullOrEmpty()) environment.settings.put(bgLaterKey(t), "")
-        }
-    }
-    val bgShown = bgTrouble?.takeIf { t ->
-        (bgLater[bgLaterKey(t)]?.toLongOrNull() ?: 0L) <= msNow()
-    }
-    LaunchedEffect(bgShown) {
-        bgShown?.let { Journal.note(bgCode(it), "показали полосу «звонки не дойдут»", "беда" to it.name) }
-    }
-    // ВЗ0б: разрешение на уведомления спрашивается само — один раз на установку. Дальше
-    // только полосой и кнопкой в «Настройки → Уведомления»: спрашивать на каждом запуске
-    // значило бы надоесть, а после второго отказа система и не покажет вопроса.
-    LaunchedEffect(Unit) {
-        val asked = environment.settings.all().first()[NOTICES_AUTO_ASKED]
-        if (asked.isNullOrEmpty() && notifyAccessWay() == NotifyAccessWay.Ask) {
-            environment.settings.put(NOTICES_AUTO_ASKED, "1")
-            Journal.note(LogCode.BG_NOTICES, "спрашиваем разрешение на уведомления — первый запуск")
-            askNotifyAccess { BackgroundWatch.check("ответ на разрешение уведомлений") }
-        }
-    }
-
     // Плашка идущего звонка — во всех окнах, кроме самого звонка: предлагать «перейти в
     // звонок» тому, кто в нём стоит, незачем. Окно 0 временное, и без плашки оно
     // теряется: ушёл свайпом в «Чаты» — и не знаешь, разговор идёт или уже кончился.
@@ -1749,21 +1791,6 @@ private fun App(
             seconds = callHost.seconds,
             onOpen = { showCall() },
         ).takeIf { callHost.active && window != Window.Call },
-        LocalBackgroundWarning provides bgShown?.let { trouble ->
-            BackgroundWarning(
-                trouble = trouble,
-                onFix = {
-                    Journal.note(bgCode(trouble), "нажали «Включить» на полосе", "беда" to trouble.name)
-                    where = Where.Settings(SettingsItem.NOTIFICATIONS)
-                },
-                onLater = {
-                    Journal.note(bgCode(trouble), "«Позже» — полоса спрятана на неделю", "беда" to trouble.name)
-                    scope.launch {
-                        environment.settings.put(bgLaterKey(trouble), (msNow() + BG_LATER_MS).toString())
-                    }
-                },
-            )
-        },
     ) {
     Stage(
         modifier = Modifier.fillMaxSize(),
@@ -3075,35 +3102,49 @@ private fun Settings(
             // Уведомления (У1, У14). Пункт стоял в списке с самого начала и не
             // открывал ничего; теперь здесь два действия, без которых уведомления на
             // Android не работают: право показывать и «не усыплять».
-            SettingsItem.NOTIFICATIONS -> {
+            // Уведомления — что показывается и звуки (ВЗ4). Разрешения переехали в свой пункт.
+            SettingsItem.NOTIFICATIONS -> NotificationsScreen(
+                // Звуки: общий выбор — в настройках устройства, не синхронизируется.
+                ring = soundRow(deviceSettings, SoundKeys.RING, SoundUse.Ring, "ring"),
+                message = soundRow(deviceSettings, SoundKeys.MESSAGE, SoundUse.Message, "message"),
+            )
+
+            // Разрешения — одно место для всех (заказчик 2026-09-26).
+            SettingsItem.PERMISSIONS -> {
                 // Состояние читается при каждом заходе, а не запоминается: человек мог
                 // сменить разрешение в системных настройках, пока нас не было.
                 var awake by remember { mutableStateOf(awakeAllowed()) }
                 var access by remember { mutableStateOf(notifyAccessWay()) }
-                NotificationsScreen(
+                var callNow by remember { mutableStateOf(callAccessState()) }
+                var contactsNow by remember { mutableStateOf(contactsAllowed()) }
+                val desktop = platform == Platform.DESKTOP
+                PermissionsScreen(
                     access = when (access) {
                         NotifyAccessWay.Given -> NotifyAccess.Given
                         NotifyAccessWay.Ask -> NotifyAccess.Ask
                         NotifyAccessWay.Settings -> NotifyAccess.Settings
                     },
-                    onAsk = { askNotifyAccess { access = notifyAccessWay() } },
+                    onAsk = {
+                        askNotifyAccess {
+                            access = notifyAccessWay()
+                            BackgroundWatch.check("разрешения: уведомления")
+                        }
+                    },
                     // Строки нет вовсе там, где усыплять некому (ПК): неактивная кнопка
                     // тоже зовёт нажать, а нажимать здесь не на что.
-                    onBattery = if (platform == Platform.DESKTOP) {
-                        null
-                    } else {
-                        { askAwake(); awake = awakeAllowed() }
-                    },
+                    onBattery = if (desktop) null else ({ askAwake(); awake = awakeAllowed() }),
                     batteryFree = awake,
-                    // Канал «Звонки» (ВЗ0г): состояние читается при каждом заходе — его
-                    // меняют в настройках телефона, пока нас нет.
-                    callsChannelOn = if (platform == Platform.DESKTOP) null else backgroundFacts().calls,
-                    onCallsChannel = if (platform == Platform.DESKTOP) null else ::openCallsChannelSettings,
-                    fullScreenOn = if (platform == Platform.DESKTOP) null else backgroundFacts().fullScreen,
-                    onFullScreen = if (platform == Platform.DESKTOP) null else ::openFullScreenSettings,
-                    // Звуки (ВЗ4): общий выбор — в настройках устройства, не синхронизируется.
-                    ring = soundRow(deviceSettings, SoundKeys.RING, SoundUse.Ring, "ring"),
-                    message = soundRow(deviceSettings, SoundKeys.MESSAGE, SoundUse.Message, "message"),
+                    callsChannelOn = if (desktop) null else backgroundFacts().calls,
+                    onCallsChannel = if (desktop) null else ::openCallsChannelSettings,
+                    fullScreenOn = if (desktop) null else backgroundFacts().fullScreen,
+                    onFullScreen = if (desktop) null else ::openFullScreenSettings,
+                    microphone = callNow.microphone,
+                    camera = callNow.camera,
+                    onAskCall = { video -> askCallAccess(video) { callNow = callAccessState() } },
+                    onCallSettings = ::openCallSettings,
+                    contacts = contactsNow,
+                    contactsInSettings = contactsAccessWay() == ContactsAccessWay.Settings,
+                    onAskContacts = { askContactsAccess { contactsNow = contactsAllowed() } },
                 )
             }
 

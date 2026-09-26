@@ -204,6 +204,16 @@ interface SettingsListWords {
     val itemProfile: String
     val itemDevices: String
     val itemNotifications: String
+    val itemPermissions: String
+    val permMicrophone: String
+    val permMicrophoneAbout: String
+    val permCamera: String
+    val permCameraAbout: String
+    val permContacts: String
+    val permContactsAbout: String
+    val permBackground: String
+    val warnTitle: String
+    val warnWhere: String
 
     // ── Экран уведомлений (У1, У14) ─────────────────────────────────────────
     val noticesShow: String
@@ -2179,6 +2189,16 @@ object RussianWords : Words {
         override val itemProfile = "Профиль"
         override val itemDevices = "Секретная фраза и устройства"
         override val itemNotifications = "Уведомления"
+        override val itemPermissions = "Разрешения"
+        override val permMicrophone = "Микрофон"
+        override val permMicrophoneAbout = "Без микрофона звонка нет: собеседник вас не услышит."
+        override val permCamera = "Камера"
+        override val permCameraAbout = "Нужна для видеозвонка."
+        override val permContacts = "Контакты"
+        override val permContactsAbout = "Чтобы найти знакомых в TIMa по книге телефона."
+        override val permBackground = "Работа в фоне"
+        override val warnTitle = "Звонки могут не дойти"
+        override val warnWhere = "Исправить — в «Настройки → Разрешения»."
         override val noticesShow = "Показывать уведомления"
         override val noticesWhat = "В уведомлении видно, кто написал или звонит, — и больше ничего."
         override val noticesNoText =

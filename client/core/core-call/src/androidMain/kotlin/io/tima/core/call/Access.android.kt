@@ -49,6 +49,15 @@ object AndroidCallAccess {
     private var waiting: ((Boolean) -> Unit)? = null
 
     /** Вызывается из `onCreate`. */
+    /** Что выдано сейчас — для «Разрешений». Окна нет — не знаем. */
+    fun state(): CallAccessState {
+        val current = activity ?: return CallAccessState(null, null)
+        return CallAccessState(
+            microphone = current.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED,
+            camera = current.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
+
     fun attach(activity: Activity) {
         this.activity = activity
     }
@@ -184,3 +193,5 @@ actual fun askCallAccess(video: Boolean, onResult: (Boolean) -> Unit) =
     AndroidCallAccess.ask(video, onResult)
 
 actual fun openCallSettings() = AndroidCallAccess.openSettings()
+
+actual fun callAccessState(): CallAccessState = AndroidCallAccess.state()
