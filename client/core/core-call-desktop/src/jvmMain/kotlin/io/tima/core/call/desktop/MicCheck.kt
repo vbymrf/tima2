@@ -22,7 +22,14 @@ import kotlin.math.log10
  *
  * Устройства находятся по имени: Windows называет их одинаково для ADM и для Java Sound.
  */
-internal class MicCheck(microphoneName: String?, private val speakerName: String?) {
+internal class MicCheck(
+    microphoneName: String?,
+    private val speakerName: String?,
+    /** Обработка звонка — чтобы проверка слышала то, что получит собеседник. `null` — сырой звук. */
+    private val apm: CheckApm? = null,
+    /** Колонки не открылись — словами для экрана. */
+    private val onTrouble: (String) -> Unit = {},
+) {
 
     private val format = AudioFormat(RATE.toFloat(), 16, 1, true, false)
     private val input: TargetDataLine = openInput(microphoneName)
@@ -51,6 +58,8 @@ internal class MicCheck(microphoneName: String?, private val speakerName: String
         while (running) {
             val read = input.read(chunk, 0, chunk.size)
             if (read <= 0) continue
+            // Уровень и «слушать себя» — уже после обработки: это и услышит собеседник.
+            apm?.capture(chunk, read)
             var peak = 0
             var i = 0
             while (i + 1 < read) {
@@ -60,8 +69,18 @@ internal class MicCheck(microphoneName: String?, private val speakerName: String
             }
             onLevel(level(peak))
             if (listen) {
-                val out = output ?: openOutput().also { output = it }
-                out.write(chunk, 0, read)
+                val out = output ?: runCatching { openOutput() }
+                    .onFailure {
+                        // Колонки не открылись — проверка микрофона продолжается, а человеку
+                        // говорим, почему себя не слышно. Иначе падала вся проверка разом.
+                        listen = false
+                        onTrouble("колонки не открылись: " + (it.message ?: it::class.simpleName))
+                    }
+                    .getOrNull()?.also { output = it }
+                if (out != null) {
+                    apm?.render(chunk, read)
+                    out.write(chunk, 0, read)
+                }
             }
         }
     }

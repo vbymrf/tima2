@@ -717,6 +717,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     private var checkSource = 0L
     private var checkTrack = 0L
     private var micCheck: MicCheck? = null
+    private var checkApm: CheckApm? = null
 
     /** Слушать себя в колонках во время проверки. */
     private var listenSelf = false
@@ -787,7 +788,13 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         // Имена выбранных устройств: Java Sound знает их по имени, не по идентификатору.
         val micName = setup.microphone?.let { id -> microphones().firstOrNull { it.id == id }?.name }
         val speakerName = setup.speaker?.let { id -> speakers().firstOrNull { it.id == id }?.name }
-        val check = runCatching { MicCheck(micName, speakerName) }
+        Ffi.start()
+        // Обработка — как в звонке: с выбранными эхо-, шумоподавлением и усилением.
+        val apm = runCatching { CheckApm(setup, 48_000) }
+            .onFailure { Journal.trouble(LogCode.CALL_DEVICE, "проверка: обработка звука не создалась", "причина" to (it.message ?: "?")) }
+            .getOrNull()
+        checkApm = apm
+        val check = runCatching { MicCheck(micName, speakerName, apm) { why -> _checkTrouble.value = why } }
             .onFailure {
                 _checkTrouble.value = "микрофон не открылся: " + (it.message ?: it::class.simpleName)
                 Journal.trouble(LogCode.CALL_DEVICE, "проверка: микрофон не открылся", "причина" to (it.message ?: "?"))
@@ -836,6 +843,11 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     private fun closeCheck() {
         micCheck?.close()
         micCheck = null
+        // Обработку закрываем после того, как поток проверки её отпустил.
+        val apm = checkApm
+        checkApm = null
+        checkJobs.forEach { it.cancel() }
+        if (apm != null) scope.launch(Dispatchers.IO) { delay(APM_GRACE_MS); apm.close() }
         checkJobs.forEach { it.cancel() }
         checkJobs = emptyList()
         _preview.value = null
@@ -966,6 +978,8 @@ private fun CallSetup.audioOptions() = AudioSourceOptions(
     auto_gain_control = autoGain,
 )
 
+/** Сколько ждать, пока поток проверки отпустит обработку, прежде чем её закрыть. */
+private const val APM_GRACE_MS = 200L
 private const val CONNECT_TIMEOUT_MS = 20_000L
 private const val DISCONNECT_TIMEOUT_MS = 5_000L
 private const val PUBLISH_TIMEOUT_MS = 10_000L

@@ -112,11 +112,25 @@ fun MediaScreen(
             }
         }
 
+        // ── ОБРАБОТКА ЗВУКА — сразу под микрофоном (заказчик 2026-09-26) ────────
+        //
+        // Выключатели касаются микрофона, и их работу слышно в «Слушать себя» здесь же:
+        // проверка идёт через ту же обработку WebRTC, что звонок.
+        SectionTitle(words.mediaProcessing)
+        Toggle(words.mediaEcho, choice.echo) { onChoice(choice.copy(echo = it)) }
+        Toggle(words.mediaNoise, choice.noise) { onChoice(choice.copy(noise = it)) }
+        Toggle(words.mediaGain, choice.gain) { onChoice(choice.copy(gain = it)) }
+        Column(Modifier.padding(horizontal = TimaSpacing.about4)) {
+            // Слышно сразу — проверка идёт через ту же обработку, что звонок.
+            Tertiary(words.mediaProcessingAbout)
+        }
+
         // ── КОЛОНКИ ──────────────────────────────────────────────────────────
         SectionTitle(words.mediaSpeaker)
         Picker(speakers, choice.speaker) { onChoice(choice.copy(speaker = it)) }
         Column(Modifier.padding(horizontal = TimaSpacing.about4)) {
             Button(label = words.mediaTestSound, onClick = onTestSound, kind = ButtonKind.Action)
+            Tertiary(words.mediaNextCall)
         }
 
         // ── КАМЕРА ───────────────────────────────────────────────────────────
@@ -130,15 +144,6 @@ fun MediaScreen(
             if (preview != null) preview(Modifier.fillMaxSize()) else Tertiary(words.mediaNoCamera)
         }
 
-        // ── ОБРАБОТКА ЗВУКА ──────────────────────────────────────────────────
-        SectionTitle(words.mediaProcessing)
-        Toggle(words.mediaEcho, choice.echo) { onChoice(choice.copy(echo = it)) }
-        Toggle(words.mediaNoise, choice.noise) { onChoice(choice.copy(noise = it)) }
-        Toggle(words.mediaGain, choice.gain) { onChoice(choice.copy(gain = it)) }
-        Column(Modifier.padding(horizontal = TimaSpacing.about4)) {
-            Tertiary(words.mediaProcessingAbout)
-            Tertiary(words.mediaNextCall)
-        }
     }
 }
 
