@@ -485,6 +485,8 @@ object EnglishWords : Words {
         override val mediaProcessingAbout = "Turn off only if it gets in the way: a headset with its own noise filter, music."
         override val mediaNextCall = "Changes apply from the next call."
         override val mediaListen = "Hear yourself — better with headphones, or it will howl"
+        override val exitApp = "Quit"
+        override val exitAbout = "Calls and messages won't arrive until TIMA is opened again"
         override val permBackground = "Working in the background"
         override val warnTitle = "Calls may not arrive"
         override val warnWhere = "Fix it in Settings → Permissions."

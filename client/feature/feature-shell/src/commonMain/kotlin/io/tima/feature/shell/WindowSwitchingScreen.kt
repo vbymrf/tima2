@@ -122,6 +122,12 @@ fun WindowSwitchingScreen(
      * второй было бы неоткуда.
      */
     onNewAccount: (() -> Unit)? = null,
+    /**
+     * Выйти из приложения совсем — последним пунктом (заказчик 2026-09-26). Фоновый канал
+     * останавливается, и звонки не придут, пока приложение снова не открыто, — это
+     * сказано под кнопкой. `null` — пункта нет.
+     */
+    onExit: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.switching
@@ -223,6 +229,17 @@ fun WindowSwitchingScreen(
                     onClick = it,
                     left = { Glyph("＋") },
                     middle = { Name(words.virtualAccount) },
+                )
+            }
+
+            onExit?.let {
+                ListLine(
+                    onClick = it,
+                    left = { Glyph("🚪") },
+                    middle = {
+                        Name(Tima.words.settings2.exitApp)
+                        Secondary(Tima.words.settings2.exitAbout)
+                    },
                 )
             }
 

@@ -228,6 +228,8 @@ interface SettingsListWords {
     val mediaProcessingAbout: String
     val mediaNextCall: String
     val mediaListen: String
+    val exitApp: String
+    val exitAbout: String
     val permBackground: String
     val warnTitle: String
     val warnWhere: String
@@ -2236,6 +2238,8 @@ object RussianWords : Words {
         override val mediaProcessingAbout = "Выключайте, только если мешает: гарнитура со своим шумодавом, музыка."
         override val mediaNextCall = "Выбор действует со следующего звонка."
         override val mediaListen = "Слушать себя — лучше в наушниках, иначе засвистит"
+        override val exitApp = "Выйти"
+        override val exitAbout = "Звонки и сообщения не придут, пока TIMA снова не открыта"
         override val permBackground = "Работа в фоне"
         override val warnTitle = "Звонки могут не дойти"
         override val warnWhere = "Исправить — в «Настройки → Разрешения»."

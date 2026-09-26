@@ -27,6 +27,7 @@ import io.tima.core.diag.Diary
 import io.tima.core.diag.DiaryFiles
 import io.tima.core.diag.DiaryPolicy
 import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
 import io.tima.feature.shell.ProblemFacts
 import io.tima.feature.shell.UpdateMemory
 import io.tima.shared.Build
@@ -183,6 +184,13 @@ private fun window(store: ReportsStore) = application {
                 // программы, и Windows вместо установки предложила бы перезагрузку.
                 installer = DesktopInstaller(),
                 onLeaving = { Journal.diary.flush(); exitApplication() },
+                // «Выйти» в рейке (заказчик 2026-09-26): крестик окна прячет в трей, а
+                // закрыть совсем раньше можно было только из меню значка.
+                onExit = {
+                    Journal.note(LogCode.APP_BACKGROUND, "выход по кнопке «Выйти»")
+                    Journal.diary.flush()
+                    exitApplication()
+                },
                 // Версия порождается сборкой из gradle.properties — одна на Android и ПК.
                 // До 2026-08-26 десктоп её не знал и показывал «Установлена —»: вопрос
                 // «какая версия стоит» задают, когда что-то пошло не так, и остаться без

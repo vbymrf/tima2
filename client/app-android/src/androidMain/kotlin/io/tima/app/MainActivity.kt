@@ -217,6 +217,10 @@ class MainActivity : ComponentActivity() {
             Root(
                 entry = entry,
                 callEngine = callEngine,
+                // «Выйти» в подокне переходов (заказчик 2026-09-26): служба канала
+                // останавливается ДО конца процесса — иначе START_STICKY подняла бы её
+                // обратно, и «вышедшее» приложение продолжало бы жить в шторке.
+                onExit = { quit() },
                 // Имя файла приходит готовым: правило именования общее (Д11).
                 deviceDatabase = { name -> androidDatabase(applicationContext, name) },
                 appearanceStore = appearanceStore(),
@@ -295,5 +299,14 @@ class MainActivity : ComponentActivity() {
 
         /** Ключ памяти о начатой установке. */
         const val KEY_UPDATE = "started"
+    }
+
+    /** Выйти совсем: журнал — на диск, служба канала — стоп, задача и процесс — закрыть. */
+    private fun quit() {
+        Journal.note(LogCode.APP_BACKGROUND, "выход по кнопке «Выйти»")
+        Journal.diary.flush()
+        stopService(Intent(this, ChannelService::class.java))
+        finishAndRemoveTask()
+        android.os.Process.killProcess(android.os.Process.myPid())
     }
 }

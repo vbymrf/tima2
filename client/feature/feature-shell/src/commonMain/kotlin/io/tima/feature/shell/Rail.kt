@@ -54,6 +54,12 @@ fun Rail(
      */
     inCall: Boolean = false,
     bench: Boolean = false,
+    /**
+     * Выйти из приложения совсем — ниже настроек (заказчик 2026-09-26). Крестик окна на ПК
+     * прячет в трей, а не закрывает: без этой кнопки закрыть можно было только из трея.
+     * `null` — кнопки нет.
+     */
+    onExit: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val withCaptions = layout.railCaption
@@ -85,6 +91,16 @@ fun Rail(
                 howMany = 0,
                 withCaption = withCaptions,
                 onClick = onSettings,
+            )
+        }
+        if (onExit != null) {
+            Item(
+                glyph = "🚪",
+                caption = Tima.words.settings2.exitApp,
+                selected = false,
+                howMany = 0,
+                withCaption = withCaptions,
+                onClick = onExit,
             )
         }
     }

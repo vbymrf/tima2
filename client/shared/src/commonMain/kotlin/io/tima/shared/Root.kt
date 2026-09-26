@@ -339,6 +339,8 @@ fun Root(
     installer: UpdateInstaller? = null,
     /** Установщик запущен — платформе пора закрыть приложение. */
     onLeaving: () -> Unit = {},
+    /** Выйти из приложения совсем — кнопка в рейке ПК и в подокне переходов. `null` — кнопки нет. */
+    onExit: (() -> Unit)? = null,
     /**
      * Что платформа знает о себе для отчёта о проблеме (ПЛАН-ОТЛАДКИ.md, Б3).
      *
@@ -396,6 +398,7 @@ fun Root(
             transferCode = transferCode,
             installer = installer,
             onLeaving = onLeaving,
+            onExit = onExit,
             facts = facts,
             reportsStore = reportsStore,
             updateMemory = updateMemory,
@@ -456,6 +459,7 @@ private fun Inside(
     transferCode: String?,
     installer: UpdateInstaller?,
     onLeaving: () -> Unit,
+    onExit: (() -> Unit)?,
     facts: ProblemFacts,
     reportsStore: ReportsStore,
     updateMemory: UpdateMemory,
@@ -498,6 +502,7 @@ private fun Inside(
         transferCode = transferCode,
         installer = installer,
         onLeaving = onLeaving,
+        onExit = onExit,
         facts = facts,
         reportsStore = reportsStore,
         updateMemory = updateMemory,
@@ -725,6 +730,8 @@ private fun App(
     installer: UpdateInstaller? = null,
     /** Установщик запущен — пора закрыть приложение. */
     onLeaving: () -> Unit = {},
+    /** Выйти из приложения совсем — кнопка в рейке ПК и в подокне переходов. `null` — кнопки нет. */
+    onExit: (() -> Unit)? = null,
     /** Что платформа знает о себе для отчёта о проблеме (Б3). */
     facts: ProblemFacts = ProblemFacts(),
     /** Где платформа держит неотправленные отчёты. */
@@ -1774,6 +1781,7 @@ private fun App(
             },
             // Виртуальный не заводит виртуальных — сервер это отвергает (Д10), и
             // предлагать здесь то, что не сработает, нельзя.
+            onExit = onExit,
             onNewAccount = if (accounts.none { it.userId == session.userId && it.virtual }) {
                 {
                     windowSwitcher = false
@@ -1813,6 +1821,7 @@ private fun App(
                 onSettings = toSettings,
                 inCall = callHost.active,
                 bench = benchState.on,
+                onExit = onExit,
             )
         },
         column = {
