@@ -105,6 +105,8 @@ Apple нет, и падает с «no matching variant» — до нашего k
 | `reference/mobile-mcp` | [mobile-next/mobile-mcp](https://github.com/mobile-next/mobile-mcp) `63a5974d9bfa` | модель 3 прогонов на телефонах |
 | `reference/mobilecli` | [mobile-next/mobilecli](https://github.com/mobile-next/mobilecli) `f7148582b01a` | **им модель 3 говорит с устройствами**: здесь ответы про adb и iOS |
 | `reference/Maestro` | [mobile-dev-inc/Maestro](https://github.com/mobile-dev-inc/Maestro) `01a3e442afba` | **сценарии на YAML без агента** — модель 4, выбрана основной |
+| `reference/LocalVQE` | [localai-org/LocalVQE](https://github.com/localai-org/LocalVQE) `f53063c9eb2a` | нейросетевое эхо + шум, C API — разбор в `doc_mig/ПЛАН-ЗВОНКОВ-ПК.md` §2а |
+| `reference/livekit-plugins-dtln` | [aloware/livekit-plugins-dtln](https://github.com/aloware/livekit-plugins-dtln) `d12ed111d169` | нейросетевой шумодав для LiveKit (Python) — там же. **`CLAUDE.md` → `CLAUDE.upstream.md`**, sha256 `57837cca…` |
 
 Каталог **не отслеживается git** (`.gitignore`) — это чужой код, он не наш и на вторую
 машину не едет.
@@ -113,6 +115,10 @@ Apple нет, и падает с «no matching variant» — до нашего k
 прогоны на телефонах (`doc_mig/ТЕСТЫ-НА-ТЕЛЕФОНАХ/МОДЕЛИ.md`). Сразу пригодились: вопросы, на
 которые сайты отвечали уклончиво, закрылись чтением исходников за минуту — как `mobilecli`
 зовёт `adb`, на какой адрес зашит сервер MobAI, и чем занимается тёзка.
+
+**`LocalVQE` и `livekit-plugins-dtln` взяты 2026-09-26** по решению заказчика — под
+обработку звука в звонках на ПК. Копии неглубокие (`--depth 1`), подмодуль `ggml` у
+LocalVQE не скачан: для чтения он не нужен.
 
 **Копии MobAI удалены** вместе с самой моделью: решение заказчика 2026-09-14 — не
 используем. **Удалены и копии, к тестам не относившиеся** — их брали, чтобы ответить на
