@@ -144,6 +144,28 @@ class CallsStoreTest {
     }
 
     @Test
+    fun открыли_вкладку_просмотр_уходит_и_за_отменённый_звонящим() = runTest {
+        // Звонящий положил трубку своим сторожем раньше сервера: запись «отменён», а в
+        // шторке вызываемого — «пропущенный». Её тоже надо снять на всех устройствах.
+        val log = ЖурналВПамяти()
+        log.rows.value = listOf(
+            запись("отменён", 3_000, state = CallStates.ENDED).copy(endedBy = "peer"),
+            запись("пропущен", 2_000),
+            запись("я-звонил", 1_000, state = CallStates.ENDED, from = я).copy(endedBy = я),
+        )
+        val ушло = MutableStateFlow<List<String>?>(null)
+        val store = CallsStore(
+            log, CallHistory { _, _ -> null }, backgroundScope, я, НастройкиВПамяти(),
+            now = { 10_000_000 }, seenRemote = { ушло.value = it },
+        )
+        store.state.first { it.records.size == 3 }
+
+        store.opened()
+
+        assertEquals(setOf("отменён", "пропущен"), ушло.first { it != null }!!.toSet())
+    }
+
+    @Test
     fun настройка_памяти_читается_и_записывается() = runTest {
         val log = ЖурналВПамяти()
         log.rows.value = listOf(запись("давний", 1_000), запись("свежий", 99_999_999))

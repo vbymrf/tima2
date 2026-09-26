@@ -102,13 +102,26 @@ class CallsStore(
         refresh()
         // Непросмотренные пропущенные — до того, как местная отметка их погасит.
         val missed = _state.value.records
-            .filter { !it.seen && it.outcome(me) == CallOutcome.Missed }
+            .filter { !it.seen && it.missedNotice() }
             .map { it.callId }
         scope.launch {
             log.markSeen()
             if (missed.isNotEmpty()) seenRemote(missed)
         }
     }
+
+    /**
+     * Висит ли по этому звонку строка «пропущенный» в шторке — та же мерка, что у
+     * `CallLedger.MISSED_FOR_CALLEE`: мне звонили, и кончилось `missed` или `cancelled`.
+     *
+     * **`cancelled` здесь обязателен.** Звонящий кладёт трубку своим сторожем на той же
+     * 50-й секунде, что и сервер, и чаще успевает первым: запись становится «отменён», а
+     * шторка вызываемого всё равно говорит «пропущенный». Мерка по одному `Missed`
+     * оставляла такую строку висеть на всех прочих устройствах (живая проверка ПК + Redmi
+     * 2026-09-26).
+     */
+    private fun CallRecord.missedNotice(): Boolean =
+        !outgoing(me) && outcome(me).let { it == CallOutcome.Missed || it == CallOutcome.Cancelled }
 
     /** Разговор кончился — строка о нём должна появиться сейчас, а не при следующем заходе. */
     fun callEnded() = refresh()
