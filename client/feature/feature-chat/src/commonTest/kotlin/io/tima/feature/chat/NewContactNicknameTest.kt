@@ -35,7 +35,7 @@ class NewContactNicknameTest {
     @Test
     fun выбранный_по_нику_сохраняется_без_номера() {
         // Главное этой задачи: номера у него нет и не будет, а сохранить его надо.
-        val state = NewContactState(found = listOf(аня), picked = "u-9")
+        val state = NewContactState(by = AddBy.Nick, found = listOf(аня), picked = "u-9")
         assertEquals(аня, state.pickedHit)
         assertTrue(state.canSave, "человек без номера не сохраняется")
         assertTrue(NewContactState(found = listOf(аня)).canSave.not(), "сохраняется никто")

@@ -32,16 +32,26 @@ class NewContactAlreadyTest {
 
     @Test
     fun выбранный_по_нику_сверяется_по_user_id() {
-        val state = NewContactState(picked = "u1", contacts = listOf(саша))
+        val state = NewContactState(by = AddBy.Nick, picked = "u1", contacts = listOf(саша))
         assertEquals("p1", state.already?.id)
         assertFalse(state.canSave)
     }
 
     @Test
-    fun выбранный_по_нику_перекрывает_набранный_номер() {
-        // Сохраняется выбранный из поиска, а не номер: и сверять надо его.
-        val state = NewContactState(picked = "u9", normalized = "+79990000101", contacts = listOf(саша))
-        assertNull(state.already)
+    fun сверяется_только_то_чем_ищут() {
+        // Поиск по нику: номер, даже совпавший, не считается — добавляется выбранный.
+        val nick = NewContactState(by = AddBy.Nick, picked = "u9", normalized = "+79990000101", contacts = listOf(саша))
+        assertNull(nick.already)
+        // Поиск телефоном: выбранный когда-то ник не считается.
+        val phone = NewContactState(by = AddBy.Phone, picked = "u1", normalized = "+79990000199", contacts = listOf(саша))
+        assertNull(phone.already)
+        assertTrue(phone.canSave)
+    }
+
+    @Test
+    fun по_нику_без_выбора_сохранять_некого() {
+        val state = NewContactState(by = AddBy.Nick, normalized = "+79990000199")
+        assertFalse(state.canSave)
     }
 
     @Test

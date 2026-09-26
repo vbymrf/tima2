@@ -43,6 +43,12 @@ import io.tima.core.ui.TimaType
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Trouble
 import io.tima.domain.chat.BookList
+import io.tima.domain.chat.PersonField
+import io.tima.domain.chat.field
+import io.tima.domain.chat.letter
+import io.tima.core.ui.Avatar
+import io.tima.core.ui.AvatarSize
+import androidx.compose.ui.graphics.ImageBitmap
 
 /**
  * Новый контакт — подокно (ПЛАН-КОНТАКТОВ.md, Д6).
@@ -55,8 +61,10 @@ import io.tima.domain.chat.BookList
  * потом узнавал, с кем имеет дело. Ответ на «кого я добавляю» обязан быть там, где его
  * увидят, а не там, где до него дочитают.
  *
- * Слово на кнопке от исхода зависит: «Написать» обещает переписку, а обещать её тому, кого
- * в TIMa нет, нельзя — писать ещё некому.
+ * **Ищут одним из двух — телефоном или ником** (заказчик 2026-09-26). Переключатель
+ * показывает одно поле; при двух сразу выбранный по нику молча побеждал номер. Найденного
+ * показываем карточкой — аватар и что о нём известно, — чтобы человек видел, кого
+ * добавляет.
  *
  * **Имя здесь местное.** Оно живёт в нашей книге и обратно в телефон не пишется:
  * «Витя-сосед» — то, как его зовёте вы, а не то, как он назвался.
@@ -82,6 +90,10 @@ fun NewContactScreen(
      * некуда; строка «уже в контактах» остаётся, кнопки нет.
      */
     onOpenPerson: ((String) -> Unit)? = null,
+    /** Переключатель «Телефон / Ник». */
+    onBy: (AddBy) -> Unit = {},
+    /** Аватар найденного; `null` — буквы. */
+    face: ImageBitmap? = null,
 ) {
     var picking by remember { mutableStateOf(false) }
     val colors = Tima.colors
@@ -104,6 +116,21 @@ fun NewContactScreen(
                 modifier = Modifier.widthIn(max = 420.dp),
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about4),
             ) {
+                // Переключатель — самым первым: от него зависит, какое поле ниже. Без
+                // поиска по нику (проверки без сети) переключать не на что — его нет.
+                if (onNick != null) {
+                    val bookWords = Tima.words.book
+                    Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                        for ((by, label) in listOf(AddBy.Phone to bookWords.phone, AddBy.Nick to bookWords.nickname)) {
+                            Button(
+                                label = label,
+                                kind = if (state.by == by) ButtonKind.Action else ButtonKind.Quiet,
+                                onClick = { onBy(by) },
+                            )
+                        }
+                    }
+                }
+
                 // Исход сверки — ПЕРВЫМ, до полей. Найденный обведён салатовым: это
                 // хорошая новость, и она должна читаться за мгновение, а не вычитываться.
                 state.about(words)?.let { said ->
@@ -126,6 +153,25 @@ fun NewContactScreen(
                     }
                 }
 
+                // Кого нашли — карточкой, сразу под «Найден в TIMa» (заказчик 2026-09-26):
+                // «кого я добавляю» решается здесь, а не после нажатия. Те же строки и
+                // подписи, что на его странице. По нику плашки нет — карточка стоит там же.
+                state.foundPerson?.let { person ->
+                    val known = PersonField.entries.mapNotNull { f -> person.field(f)?.let { f to it } }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Avatar(letters = person.letter(), image = face, size = AvatarSize.Big)
+                        Column {
+                            for ((f, value) in known) {
+                                Name(value)
+                                Tertiary(personFieldLabel(f), lineOne = true)
+                            }
+                        }
+                    }
+                }
+
                 // ── ПО НИКУ — ПЕРВЫМ ВХОДОМ, НАРАВНЕ С НОМЕРОМ (Л11) ────────
                 //
                 // У виртуальных аккаунтов номера нет ВОВСЕ, только ник, и добавить их
@@ -133,7 +179,7 @@ fun NewContactScreen(
                 //
                 // Ищем по нажатию, а не на каждую букву: это перебор каталога имён, и
                 // пределы на сервере заведены ровно против того, чтобы он шёл сам собой.
-                if (onNick != null) {
+                if (onNick != null && state.by == AddBy.Nick) {
                     Caption(words.byNickname, fontSize = TimaType.sz5, weight = FontWeight.Bold)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
@@ -177,15 +223,17 @@ fun NewContactScreen(
                     }
                 }
 
-                Caption(words.phoneNumber, fontSize = TimaType.sz5, weight = FontWeight.Bold)
-                // Два поля, плюс нарисован: на цифровой клавиатуре его нет (2026-09-15).
-                PhoneFields(
-                    countryCode = state.countryCode,
-                    number = state.phone,
-                    onCountryCode = onCountryCode,
-                    onNumber = onPhone,
-                    hint = "916 000-11-22",
-                )
+                if (onNick == null || state.by == AddBy.Phone) {
+                    Caption(words.phoneNumber, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+                    // Два поля, плюс нарисован: на цифровой клавиатуре его нет (2026-09-15).
+                    PhoneFields(
+                        countryCode = state.countryCode,
+                        number = state.phone,
+                        onCountryCode = onCountryCode,
+                        onNumber = onPhone,
+                        hint = "916 000-11-22",
+                    )
+                }
 
                 Caption(words.nameYouCall, fontSize = TimaType.sz5, weight = FontWeight.Bold)
                 Field(value = state.name, onChange = onName, hint = words.optional)

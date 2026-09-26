@@ -10,6 +10,7 @@ import io.tima.domain.chat.AddStep
 import io.tima.domain.chat.Book
 import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.BookList
+import io.tima.domain.chat.ChatPerson
 import io.tima.domain.chat.ContactDiscovery
 import io.tima.domain.chat.MIN_NICKNAME_QUERY
 import io.tima.domain.chat.NicknameDirectory
@@ -43,6 +44,11 @@ class NewContactStore(
      * поле ника тогда не показывается вовсе, а не стоит неработающим.
      */
     private val nicknames: NicknameDirectory? = null,
+    /**
+     * Карточка найденного — что показать о нём до нажатия (заказчик 2026-09-26: «если
+     * найдено — информацию об этом пользователе»). `null` — спрашивать некого.
+     */
+    private val people: (suspend (String) -> ChatPerson?)? = null,
     /**
      * Словарь надписей — **ссылкой, а не значением** (ПЛАН-ЯЗЫКА, Я2-беды).
      *
@@ -90,14 +96,43 @@ class NewContactStore(
         _state.value = NewContactState(sections = was.sections, inLists = was.inLists, contacts = was.contacts)
     }
 
+    /**
+     * Чем ищем — телефоном или ником (заказчик 2026-09-26).
+     *
+     * Раньше оба поля стояли вместе, и при заполненных обоих выбранный по нику молча
+     * побеждал номер. Теперь поле одно, и набранное в другом стирается при переключении:
+     * добавляется ровно то, что видно.
+     */
+    fun chooseBy(by: AddBy) {
+        val s = _state.value
+        if (s.by == by) return
+        _state.value = when (by) {
+            AddBy.Phone -> s.copy(by = by, nick = "", found = null, picked = null)
+            AddBy.Nick -> s.copy(by = by, phone = "", normalized = null, checked = null)
+        }.copy(foundUserId = null, foundPerson = null, trouble = null)
+    }
+
     fun changedCountryCode(text: String) {
-        _state.value = _state.value.copy(countryCode = text, checked = null)
+        _state.value = _state.value.copy(countryCode = text, checked = null, foundUserId = null, foundPerson = null)
         recompose()
     }
 
     fun changedPhone(line: String) {
-        _state.value = _state.value.copy(phone = line, checked = null)
+        // Номер приходит и снаружи — «Добавить в контакты» со страницы человека: значит,
+        // ищем телефоном, даже если подокно в последний раз было на нике.
+        _state.value = _state.value.copy(
+            by = AddBy.Phone, phone = line, checked = null, foundUserId = null, foundPerson = null,
+        )
         recompose()
+    }
+
+    /** Спросить карточку найденного; ответ, опоздавший к другому человеку, не ставится. */
+    private fun loadPerson(userId: String) {
+        val ask = people ?: return
+        scope.launch {
+            val person = try { ask(userId) } catch (_: Exception) { null }
+            if (_state.value.foundUserId == userId) _state.value = _state.value.copy(foundPerson = person)
+        }
     }
 
     /**
@@ -131,7 +166,9 @@ class NewContactStore(
     fun changedNick(line: String) {
         // Набрали заново — прежняя выдача и прежний выбор недействительны: оставить их
         // значило бы показать ответ на другой вопрос.
-        _state.value = _state.value.copy(nick = line, found = null, picked = null, trouble = null)
+        _state.value = _state.value.copy(
+            nick = line, found = null, picked = null, trouble = null, foundUserId = null, foundPerson = null,
+        )
     }
 
     /**
@@ -161,7 +198,9 @@ class NewContactStore(
     /** Выбрать из найденного. Второе нажатие по той же строке снимает выбор. */
     fun pickNick(userId: String) {
         val was = _state.value.picked
-        _state.value = _state.value.copy(picked = if (was == userId) null else userId, trouble = null)
+        val now = if (was == userId) null else userId
+        _state.value = _state.value.copy(picked = now, trouble = null, foundUserId = now, foundPerson = null)
+        now?.let(::loadPerson)
     }
 
     fun changedName(line: String) {
@@ -201,7 +240,9 @@ class NewContactStore(
             }
             // Ответ мог опоздать: пока ходили, человек дописал номер.
             if (_state.value.normalized == phone) {
-                _state.value = _state.value.copy(checked = !found.isNullOrBlank())
+                val userId = found?.takeIf { it.isNotBlank() }
+                _state.value = _state.value.copy(checked = userId != null, foundUserId = userId, foundPerson = null)
+                userId?.let(::loadPerson)
             }
         }
     }
@@ -212,10 +253,10 @@ class NewContactStore(
         // есть «добавить» молча стало бы «изменить». Экран в этом случае показывает, кто
         // это, и ведёт на его страницу.
         if (state.already != null) return
-        // Выбранный из поиска идёт своим путём: номера у него может не быть вовсе, и
-        // требовать его значило бы отказать полноправному человеку (Л11).
-        val picked = state.pickedHit
-        if (picked != null) {
+        // По нику — своим путём: номера у него может не быть вовсе, и требовать его значило
+        // бы отказать полноправному человеку (Л11). Не выбран никто — добавлять некого.
+        if (state.by == AddBy.Nick) {
+            val picked = state.pickedHit ?: return
             if (state.sectionMissing) {
                 _state.value = state.copy(trouble = words().chat.noSuchSection(state.section.trim()))
                 return
@@ -253,7 +294,15 @@ class NewContactStore(
     }
 }
 
+/** Чем ищут в подокне «Новый контакт» — одно из двух, не оба сразу. */
+enum class AddBy { Phone, Nick }
+
 data class NewContactState(
+    val by: AddBy = AddBy.Phone,
+    /** Найденный в TIMa — по номеру или выбранный по нику. `null` — никого. */
+    val foundUserId: String? = null,
+    /** Его карточка для показа; `null` — ещё не пришла или спросить не у кого. */
+    val foundPerson: ChatPerson? = null,
     /** Код страны отдельным полем: на цифровой клавиатуре нет плюса (2026-09-15). */
     val countryCode: String = "7",
     /** Набранная часть ника — Л11. */
@@ -319,7 +368,8 @@ data class NewContactState(
     val nobodyFound: Boolean get() = found?.isEmpty() == true
 
     val canSave: Boolean get() =
-        (normalized != null || picked != null) && !working && !sectionMissing && already == null
+        (if (by == AddBy.Nick) picked != null else normalized != null) &&
+            !working && !sectionMissing && already == null
 
     /**
      * Набранный номер или выбранный по нику уже в контактах. `null` — новый.
@@ -327,9 +377,9 @@ data class NewContactState(
      * По номеру — точное совпадение E.164; по нику — `user_id`. Убранных и
      * заблокированных здесь нет: их показывает пометка в выдаче (Л18).
      */
-    val already: BookEntry? get() {
-        if (picked != null) return contacts.firstOrNull { it.userId == picked }
-        return normalized?.let { phone -> contacts.firstOrNull { it.phone == phone } }
+    val already: BookEntry? get() = when (by) {
+        AddBy.Nick -> picked?.let { id -> contacts.firstOrNull { it.userId == id } }
+        AddBy.Phone -> normalized?.let { phone -> contacts.firstOrNull { it.phone == phone } }
     }
 
     /**

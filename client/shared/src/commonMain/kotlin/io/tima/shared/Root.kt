@@ -870,6 +870,8 @@ private fun App(
             scope = scope,
             // Поиск по нику: единственный способ завести того, у кого номера нет вовсе.
             nicknames = network.directory,
+            // Карточка найденного — показать, кого добавляют (заказчик 2026-09-26).
+            people = { userId -> people.person(userId) },
         )
     }
     val contactsState by contacts.state.collectAsState()
@@ -1315,6 +1317,8 @@ private fun App(
     }
 
     if (newContact) {
+        // Лицо найденного качается по требованию, как у страницы человека.
+        LaunchedEffect(contactsState.foundUserId) { contactsState.foundUserId?.let(people::wantFace) }
         NewContactScreen(
             state = contactsState,
             onPhone = contacts::changedPhone,
@@ -1330,6 +1334,8 @@ private fun App(
                 newContact = false
                 where = Where.Person(userId)
             },
+            onBy = contacts::chooseBy,
+            face = contactsState.foundUserId?.let { peopleFaces[it] },
             // Завести раздел прямо из подокна контакта: человек уже набрал его имя, и
             // отсылать его за тем же именем в другое место значит набрать дважды.
             onCreateSection = contacts::createTypedSection,
