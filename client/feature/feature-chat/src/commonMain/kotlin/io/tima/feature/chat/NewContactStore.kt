@@ -17,6 +17,7 @@ import io.tima.domain.chat.NicknameDirectory
 import io.tima.domain.chat.NicknameHit
 import io.tima.domain.chat.Section
 import io.tima.domain.chat.normalizePhone
+import io.tima.domain.chat.phoneComplete
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -154,8 +155,38 @@ class NewContactStore(
             else -> normalizePhone(fullPhone(s.countryCode, typed))
         }
         _state.value = s.copy(normalized = phone)
-        // Сверяем, только когда номер сложился целиком: до этого спрашивать не о ком.
-        if (phone != null) check(phone)
+        if (phone == null) return
+        // Уже спрашивали — ответ тот же, и сети он не стоит.
+        answers[phone]?.let { found -> return apply(phone, found) }
+        // Сверяем, только когда номер набран ЦЕЛИКОМ (заказчик 2026-09-26). До этого
+        // «+7 916 00» — уже номер для нормализации, но ещё ничей, и каждая следующая
+        // цифра была бы запросом про несуществующего человека. Длины страны не знаем —
+        // ждём ухода из поля ([leftPhone]).
+        if (phoneComplete(phone) == true) check(phone)
+    }
+
+    /**
+     * Ушли из поля номера — сверить набранное, если о нём ещё не спрашивали (заказчик
+     * 2026-09-26). Для стран, где длину мы не знаем, это единственный повод спросить.
+     */
+    fun leftPhone() {
+        val phone = _state.value.normalized ?: return
+        if (phone in answers) return
+        check(phone)
+    }
+
+    /**
+     * Ответы сервера по номерам: `user_id` или пустая строка — «нет в TIMa». Не дошедший
+     * ответ сюда не кладётся — спросим снова.
+     */
+    private val answers = HashMap<String, String>()
+
+    /** Поставить известный исход сверки на экран — если номер на экране всё тот же. */
+    private fun apply(phone: String, found: String) {
+        if (_state.value.normalized != phone) return
+        val userId = found.takeIf { it.isNotBlank() }
+        _state.value = _state.value.copy(checked = userId != null, foundUserId = userId, foundPerson = null)
+        userId?.let(::loadPerson)
     }
 
     // ── Поиск по нику (Л10, Л11) ────────────────────────────────────────────
@@ -232,18 +263,15 @@ class NewContactStore(
     private fun check(phone: String) {
         scope.launch {
             val found = try {
-                discovery.discover(listOf(phone))[phone]
+                discovery.discover(listOf(phone))[phone].orEmpty()
             } catch (_: Exception) {
                 // Без сети исход неизвестен, и врать о нём нельзя: кнопка останется
-                // нейтральной «Добавить в контакты».
-                null
+                // нейтральной, а ответ не запоминается — уход из поля спросит снова.
+                return@launch
             }
-            // Ответ мог опоздать: пока ходили, человек дописал номер.
-            if (_state.value.normalized == phone) {
-                val userId = found?.takeIf { it.isNotBlank() }
-                _state.value = _state.value.copy(checked = userId != null, foundUserId = userId, foundPerson = null)
-                userId?.let(::loadPerson)
-            }
+            answers[phone] = found
+            // Ответ мог опоздать: пока ходили, человек дописал номер — apply это видит.
+            apply(phone, found)
         }
     }
 

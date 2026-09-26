@@ -6,6 +6,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -40,9 +45,18 @@ fun PhoneFields(
     onNumber: (String) -> Unit,
     modifier: Modifier = Modifier,
     hint: String = "999 000 00 00",
+    /**
+     * Фокус ушёл из обоих полей — код и номер одно целое, и переход между ними уходом не
+     * считается. Нужен сверке номера: спросить, когда человек закончил набирать.
+     */
+    onLeave: () -> Unit = {},
 ) {
+    var inside by remember { mutableStateOf(false) }
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().onFocusChanged { focus ->
+            if (inside && !focus.hasFocus) onLeave()
+            inside = focus.hasFocus
+        },
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
         verticalAlignment = Alignment.CenterVertically,
     ) {

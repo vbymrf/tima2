@@ -1322,6 +1322,7 @@ private fun App(
         NewContactScreen(
             state = contactsState,
             onPhone = contacts::changedPhone,
+            onPhoneLeft = contacts::leftPhone,
             onCountryCode = contacts::changedCountryCode,
             onName = contacts::changedName,
             onSection = contacts::changedSection,

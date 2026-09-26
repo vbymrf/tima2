@@ -73,6 +73,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 fun NewContactScreen(
     state: NewContactState,
     onPhone: (String) -> Unit,
+    /** Ушли из поля номера — сверить, если ещё не сверяли. */
+    onPhoneLeft: () -> Unit = {},
     onCountryCode: (String) -> Unit = {},
     onName: (String) -> Unit,
     onSection: (String) -> Unit,
@@ -232,6 +234,7 @@ fun NewContactScreen(
                         onCountryCode = onCountryCode,
                         onNumber = onPhone,
                         hint = "916 000-11-22",
+                        onLeave = onPhoneLeft,
                     )
                 }
 

@@ -387,3 +387,31 @@ fun normalizePhone(raw: String, defaultCode: String = "+7"): String? {
         else -> null
     }
 }
+
+/**
+ * Длина номера после кода страны — там, где она одна на всю страну.
+ *
+ * Нужна, чтобы не спрашивать сервер о недонабранном (заказчик 2026-09-26): «+7 916 00» —
+ * уже номер для [normalizePhone] (8 цифр с плюсом), но ещё не чей-то. Страны с плавающей
+ * длиной (Германия, Австрия…) сюда не входят намеренно: для них ответ «не знаем», и
+ * сверка ждёт ухода из поля.
+ */
+private val NATIONAL_LENGTH = mapOf(
+    "7" to 10, "1" to 10, "44" to 10, "380" to 9, "375" to 9, "998" to 9, "992" to 9,
+    "994" to 9, "995" to 9, "996" to 9, "993" to 8, "374" to 8, "373" to 8, "371" to 8,
+    "370" to 8, "372" to 8, "86" to 11, "90" to 10, "972" to 9,
+)
+
+/**
+ * Набран ли номер целиком.
+ *
+ * @param e164 номер вида `+79160001122`, как его вернул [normalizePhone].
+ * @return `true` — длина совпала с принятой для страны; `false` — короче или длиннее;
+ *   `null` — длину для этой страны мы не знаем, решать по ней нельзя.
+ */
+fun phoneComplete(e164: String): Boolean? {
+    val digits = e164.removePrefix("+")
+    // Самый длинный подходящий код: «1» не должен съесть «380», а «7» — ничего чужого.
+    val code = NATIONAL_LENGTH.keys.filter { digits.startsWith(it) }.maxByOrNull { it.length } ?: return null
+    return digits.length - code.length == NATIONAL_LENGTH.getValue(code)
+}
