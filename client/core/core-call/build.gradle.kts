@@ -45,6 +45,12 @@ kotlin {
             // добавлен в settings.gradle.kts, и там же сказано зачем.
             implementation(libs.livekit.android)
         }
+        jvmMain.dependencies {
+            // Доступ к микрофону и камере на ПК решает Windows переключателями в реестре
+            // (ПЛАН-ЗВОНКОВ-ПК, ПК3); читать его — Advapi32Util из jna-platform, который
+            // проект уже держит ради DPAPI.
+            implementation(libs.jna.platform)
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
         }

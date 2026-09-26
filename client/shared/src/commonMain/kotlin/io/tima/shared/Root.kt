@@ -3148,6 +3148,8 @@ private fun Settings(
                     camera = callNow.camera,
                     onAskCall = { video -> askCallAccess(video) { callNow = callAccessState() } },
                     onCallSettings = ::openCallSettings,
+                    // ПК: микрофон и камеру разрешает Windows, спросить её нечем (ПК3).
+                    callInSettings = desktop,
                     contacts = contactsNow,
                     contactsInSettings = contactsAccessWay() == ContactsAccessWay.Settings,
                     onAskContacts = { askContactsAccess { contactsNow = contactsAllowed() } },

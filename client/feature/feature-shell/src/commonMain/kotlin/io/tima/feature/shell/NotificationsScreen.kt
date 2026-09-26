@@ -112,6 +112,11 @@ fun PermissionsScreen(
     onAskCall: (Boolean) -> Unit = {},
     /** Страница приложения в настройках телефона — когда система больше не спрашивает. */
     onCallSettings: () -> Unit = {},
+    /**
+     * Микрофон и камеру не спросить — только открыть настройки. Так на ПК: доступ там дают
+     * переключатели Windows, диалога «разрешить» для классических программ у неё нет.
+     */
+    callInSettings: Boolean = false,
     contacts: Boolean? = null,
     /** Система больше не спросит про контакты — кнопка ведёт в настройки. */
     contactsInSettings: Boolean = false,
@@ -177,11 +182,13 @@ fun PermissionsScreen(
         // ── МИКРОФОН И КАМЕРА ────────────────────────────────────────────────
         if (microphone != null) {
             PermissionRow(words.permMicrophone, words.permMicrophoneAbout, microphone,
-                onAsk = { onAskCall(false) }, onSettings = onCallSettings)
+                onAsk = if (callInSettings) onCallSettings else ({ onAskCall(false) }), onSettings = onCallSettings,
+                askLabel = if (callInSettings) words.noticesOpenSettings else words.noticesAllow)
         }
         if (camera != null) {
             PermissionRow(words.permCamera, words.permCameraAbout, camera,
-                onAsk = { onAskCall(true) }, onSettings = onCallSettings)
+                onAsk = if (callInSettings) onCallSettings else ({ onAskCall(true) }), onSettings = onCallSettings,
+                askLabel = if (callInSettings) words.noticesOpenSettings else words.noticesAllow)
         }
 
         // ── КОНТАКТЫ ─────────────────────────────────────────────────────────
