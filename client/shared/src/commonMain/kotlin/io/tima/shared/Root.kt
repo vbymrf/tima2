@@ -1321,8 +1321,15 @@ private fun App(
             onCountryCode = contacts::changedCountryCode,
             onName = contacts::changedName,
             onSection = contacts::changedSection,
-            onSave = { contacts.save { newContact = false } },
-            onBack = { newContact = false },
+            // Закрытие — сохранили или ушли — чистит форму: иначе следующее открытие
+            // показывало прошлого человека и работало как правка (заказчик 2026-09-26).
+            onSave = { contacts.save { contacts.reset(); newContact = false } },
+            onBack = { contacts.reset(); newContact = false },
+            onOpenPerson = { userId ->
+                contacts.reset()
+                newContact = false
+                where = Where.Person(userId)
+            },
             // Завести раздел прямо из подокна контакта: человек уже набрал его имя, и
             // отсылать его за тем же именем в другое место значит набрать дважды.
             onCreateSection = contacts::createTypedSection,

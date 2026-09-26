@@ -945,6 +945,8 @@ object EnglishWords : Words {
 
         override val addToContacts = "Add to contacts"
         override val foundInTima = "Found in TIMa — you will be subscribed to their feed automatically"
+        override fun alreadyInBook(name: String) = "Already in your contacts: $name"
+        override val openPersonPage = "Open their page"
         override val notInTima = "Not in TIMa. The contact will be saved — you can call by phone"
         override val byNickname = "By nickname"
         override val nicknameHint = "part of a nickname, three characters or more"

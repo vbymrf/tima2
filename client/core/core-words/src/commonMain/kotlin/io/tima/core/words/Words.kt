@@ -1011,6 +1011,12 @@ interface ChatWords {
     // Книга контактов и новый контакт.
     val addToContacts: String
     val foundInTima: String
+    /**
+     * Добавляют того, кто уже в контактах (заказчик 2026-09-26): сказать, а не
+     * перезаписать молча. [name] — как он записан у нас.
+     */
+    fun alreadyInBook(name: String): String
+    val openPersonPage: String
     val notInTima: String
 
     // ── Поиск по нику в подокне «Новый контакт» (Л10, Л11, Л18) ─────────────
@@ -2621,6 +2627,8 @@ object RussianWords : Words {
 
         override val addToContacts = "Добавить в контакты"
         override val foundInTima = "Найден в TIMa — подписка на его ленту оформится сама"
+        override fun alreadyInBook(name: String) = "Уже в ваших контактах: $name"
+        override val openPersonPage = "Открыть его страницу"
         override val notInTima = "В TIMa его нет. Контакт сохранится — позвонить можно телефоном"
         override val byNickname = "По нику"
         override val nicknameHint = "часть ника, от трёх знаков"

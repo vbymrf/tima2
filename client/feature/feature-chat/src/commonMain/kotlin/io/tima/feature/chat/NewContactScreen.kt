@@ -77,6 +77,11 @@ fun NewContactScreen(
     onNick: ((String) -> Unit)? = null,
     onFindNick: () -> Unit = {},
     onPickNick: (String) -> Unit = {},
+    /**
+     * Открыть страницу того, кто уже в контактах (заказчик 2026-09-26). `null` — вести
+     * некуда; строка «уже в контактах» остаётся, кнопки нет.
+     */
+    onOpenPerson: ((String) -> Unit)? = null,
 ) {
     var picking by remember { mutableStateOf(false) }
     val colors = Tima.colors
@@ -209,6 +214,17 @@ fun NewContactScreen(
                 }
 
                 state.trouble?.let { Trouble(it) }
+
+                // Уже в контактах — сказать, кто это, и дать перейти к нему. Добавлять
+                // нечего: «Добавить» переписало бы его запись.
+                state.already?.let { entry ->
+                    Trouble(words.alreadyInBook(entry.name ?: entry.phone))
+                    // Страница — по user_id. Нет его (человека нет в TIMa) — и страницы нет.
+                    val userId = entry.userId
+                    if (userId != null && onOpenPerson != null) {
+                        Button(label = words.openPersonPage, onClick = { onOpenPerson(userId) })
+                    }
+                }
 
                 // Кнопка не гаснет, а отвечает словами: погашенная кнопка не
                 // объясняет, чего ей не хватает, и в неё жмут повторно.

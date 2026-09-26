@@ -945,6 +945,8 @@ object SpanishWords : Words {
 
         override val addToContacts = "Añadir a contactos"
         override val foundInTima = "Encontrado en TIMa — se suscribirá a sus novedades automáticamente"
+        override fun alreadyInBook(name: String) = "Ya está en sus contactos: $name"
+        override val openPersonPage = "Abrir su página"
         override val notInTima = "No está en TIMa. El contacto se guardará — puede llamar por teléfono"
         override val byNickname = "Por apodo"
         override val nicknameHint = "parte de un apodo, tres caracteres o más"

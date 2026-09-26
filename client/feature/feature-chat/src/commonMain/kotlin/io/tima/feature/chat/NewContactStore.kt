@@ -8,6 +8,7 @@ import io.tima.core.words.ChatWords
 import io.tima.domain.chat.AddContact
 import io.tima.domain.chat.AddStep
 import io.tima.domain.chat.Book
+import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.BookList
 import io.tima.domain.chat.ContactDiscovery
 import io.tima.domain.chat.MIN_NICKNAME_QUERY
@@ -60,17 +61,33 @@ class NewContactStore(
         scope.launch {
             _state.value = _state.value.copy(sections = book.sections().first())
         }
-        // Кто у нас в списках — для пометок в выдаче поиска (Л18). Снимком, а не
-        // потоком: подокно живёт минуту, и за эту минуту книга не меняется ничем, кроме
-        // того, что делают прямо здесь.
+        // Кто у нас в списках — для пометок в выдаче поиска (Л18), и кто уже в контактах —
+        // чтобы не завести его второй раз. Потоком: store живёт всё время приложения, а не
+        // минуту подокна, и снимок при запуске не знал бы о добавленных после.
         scope.launch {
-            _state.value = _state.value.copy(
-                inLists = book.everyone().first()
-                    .filter { !it.inContacts }
-                    .mapNotNull { row -> row.userId?.let { it to row.list } }
-                    .toMap(),
-            )
+            book.everyone().collect { rows ->
+                _state.value = _state.value.copy(
+                    inLists = rows
+                        .filter { !it.inContacts }
+                        .mapNotNull { row -> row.userId?.let { it to row.list } }
+                        .toMap(),
+                    contacts = rows.filter { it.inContacts },
+                )
+            }
         }
+    }
+
+    /**
+     * Чистая форма — заказчик 2026-09-26: «щас она работает как изменить».
+     *
+     * Store один на приложение, и после «Добавить» в полях оставался прошлый человек:
+     * следующее открытие подокна показывало его, и новое нажатие переписывало его строку.
+     * Зовётся при закрытии подокна — сохранили или ушли назад. Разделы и книга остаются:
+     * это не ввод, а то, что уже есть.
+     */
+    fun reset() {
+        val was = _state.value
+        _state.value = NewContactState(sections = was.sections, inLists = was.inLists, contacts = was.contacts)
     }
 
     fun changedCountryCode(text: String) {
@@ -191,6 +208,10 @@ class NewContactStore(
 
     fun save(onDone: (AddStep) -> Unit) {
         val state = _state.value
+        // Уже в контактах — не сохраняем: AddContact.add переписал бы его имя и раздел, то
+        // есть «добавить» молча стало бы «изменить». Экран в этом случае показывает, кто
+        // это, и ведёт на его страницу.
+        if (state.already != null) return
         // Выбранный из поиска идёт своим путём: номера у него может не быть вовсе, и
         // требовать его значило бы отказать полноправному человеку (Л11).
         val picked = state.pickedHit
@@ -268,6 +289,8 @@ data class NewContactState(
     val sections: List<Section> = emptyList(),
     /** `null` — не сверяли или не смогли; иначе — нашёлся ли номер в TIMa. */
     val checked: Boolean? = null,
+    /** Кто сейчас в контактах — для проверки «уже есть». */
+    val contacts: List<BookEntry> = emptyList(),
     val working: Boolean = false,
     val trouble: String? = null,
 ) {
@@ -295,7 +318,19 @@ data class NewContactState(
     /** Ответили и не нашли — это не то же, что «ещё не искали». */
     val nobodyFound: Boolean get() = found?.isEmpty() == true
 
-    val canSave: Boolean get() = (normalized != null || picked != null) && !working && !sectionMissing
+    val canSave: Boolean get() =
+        (normalized != null || picked != null) && !working && !sectionMissing && already == null
+
+    /**
+     * Набранный номер или выбранный по нику уже в контактах. `null` — новый.
+     *
+     * По номеру — точное совпадение E.164; по нику — `user_id`. Убранных и
+     * заблокированных здесь нет: их показывает пометка в выдаче (Л18).
+     */
+    val already: BookEntry? get() {
+        if (picked != null) return contacts.firstOrNull { it.userId == picked }
+        return normalized?.let { phone -> contacts.firstOrNull { it.phone == phone } }
+    }
 
     /**
      * Слово на кнопке — всегда «Добавить в контакты».
