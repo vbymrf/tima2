@@ -114,6 +114,9 @@ class CallHost(
     private val noVideo = MutableStateFlow<VideoHandle?>(null)
 
     private var peerId: String = ""
+
+    /** Кто на другом конце — чтобы окно подтянуло его имя, когда приедет карточка. */
+    val peerUserId: String get() = peerId
     private var callId: String = ""
 
     /**

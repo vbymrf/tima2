@@ -322,6 +322,7 @@ class Receiver(
                     notices?.calling(action.callId, action.fromId, action.video)
                     onCall(action.callId, action.fromId, if (action.video) "video" else "audio")
                 }
+            is CallLedger.Action.AnsweredHere -> notices?.callOver(action.callId)
             is CallLedger.Action.Taken -> {
                 notices?.callOver(action.callId)
                 onCallState(action.callId, "taken")

@@ -50,8 +50,12 @@ class CallLedgerTest {
     }
 
     @Test
-    fun ответили_здесь_ничего() {
-        assertEquals(emptyList(), CallLedger.actions(я, listOf(изм(5, "answered", вызов("answered"), here = true))))
+    fun ответили_здесь_строка_снимается() {
+        // Раньше здесь не было ничего — и мелодия звенела всё время разговора.
+        assertEquals(
+            listOf(Action.AnsweredHere("c1")),
+            CallLedger.actions(я, listOf(изм(5, "answered", вызов("answered"), here = true))),
+        )
     }
 
     @Test

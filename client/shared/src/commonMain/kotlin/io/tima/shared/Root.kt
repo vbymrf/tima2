@@ -1076,7 +1076,9 @@ private fun App(
         if (!callHost.active || !callHost.callIs(order.callId)) return@LaunchedEffect
         CallRequests.done(order.callId)
         showCall()
+        people.want(listOf(callHost.peerUserId))
         if (order.accept && callHost.incoming && callHost.state.stage != CallStage.Connected) {
+            assembled.notices.callOver(order.callId)
             Journal.note(LogCode.CALL, "приняли из строки уведомления", "звонок" to order.callId.take(8))
             callHost.accept()
         }
@@ -1788,7 +1790,11 @@ private fun App(
                 // работу держит CallHost.
                 Window.Call -> CallScreen(
                     state = callHost.state,
-                    peer = callHost.peer,
+                    // Окно, поднятое строкой звонка, открывается раньше, чем приезжают
+                    // карточки людей, — имя подтягивается, как только карточка есть.
+                    peer = callHost.peer.ifBlank {
+                        peopleCards[callHost.peerUserId]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE).orEmpty()
+                    },
                     incoming = callHost.incoming,
                     peerRinging = callHost.delivered,
                     seconds = callHost.seconds,
@@ -1825,7 +1831,11 @@ private fun App(
                         onLeft = { switchWindow(InSide.Next) },
                         onRight = { switchWindow(InSide.Previous) },
                     ),
-                    onAccept = callHost::accept,
+                    // «Принять» гасит строку звонка и мелодию сразу, не дожидаясь ленты.
+                    onAccept = {
+                        callHost.state.callId.takeIf { it.isNotEmpty() }?.let { assembled.notices.callOver(it) }
+                        callHost.accept()
+                    },
                     onDecline = callHost::hangUp,
                     onHangUp = callHost::hangUp,
                     onMicrophone = callHost::microphone,

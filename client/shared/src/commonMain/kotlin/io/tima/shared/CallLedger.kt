@@ -27,6 +27,12 @@ object CallLedger {
         /** Трубку взяли на другом устройстве этого человека — замолчать, звонок не трогать. */
         data class Taken(override val callId: String) : Action
 
+        /**
+         * Трубку взяли **здесь** — строка звонка снимается, мелодия молчит. Без этого она
+         * звенела всё время разговора (Redmi, 2026-09-26).
+         */
+        data class AnsweredHere(override val callId: String) : Action
+
         /** Звонок кончился; [why] — слово ленты: declined, cancelled, busy, ended, missed. */
         data class End(override val callId: String, val why: String) : Action
 
@@ -67,7 +73,7 @@ object CallLedger {
                         out += Action.Ring(u.callId, u.call.initiatorId, u.call.video)
                     }
                 callee && u.change == "answered" ->
-                    if (!u.here) out += Action.Taken(u.callId)
+                    out += if (u.here) Action.AnsweredHere(u.callId) else Action.Taken(u.callId)
                 callee && u.change in ENDS -> {
                     out += Action.End(u.callId, u.change)
                     if (u.change in MISSED_FOR_CALLEE && missedTold.add(u.callId)) {

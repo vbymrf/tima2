@@ -45,6 +45,32 @@ internal object AndroidRinger {
     @Volatile
     private var vibrating: Vibrator? = null
 
+    /**
+     * Включить экран на входящий — на [WAKE_MS]: дальше экран держит окно звонка, а не мы.
+     *
+     * `ACQUIRE_CAUSES_WAKEUP` устарел на бумаге, но это единственный путь включить экран
+     * из службы без окна; им и пользуются звонилки. Тишина «Не беспокоить» экран не
+     * будит — звонок, которого человек просил не показывать, не должен зажигать экран.
+     */
+    @Suppress("DEPRECATION")
+    fun wake(context: Context) {
+        if (mode(context) == Mode.Quiet) return
+        val power = context.getSystemService(android.os.PowerManager::class.java) ?: return
+        if (power.isInteractive) return
+        runCatching {
+            power.newWakeLock(
+                android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
+                    android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                    android.os.PowerManager.ON_AFTER_RELEASE,
+                "tima:incoming",
+            ).acquire(WAKE_MS)
+        }.onSuccess {
+            Journal.note(LogCode.CALL, "экран включён на входящий")
+        }.onFailure {
+            Journal.trouble(LogCode.CALL, "экран не включился на входящий", "почему" to it.message.orEmpty())
+        }
+    }
+
     /** Звонок: мелодия по кругу и вибрация рисунком, пока не [stop]. */
     @Synchronized
     fun ring(context: Context, choice: SoundChoice) {
@@ -137,4 +163,5 @@ internal object AndroidRinger {
     /** Рисунок звонка: пауза, гудок, пауза, гудок — по кругу. */
     private val RING_PATTERN = longArrayOf(0, 800, 400, 800, 1600)
     private const val ONCE_MS = 150L
+    private const val WAKE_MS = 10_000L
 }
