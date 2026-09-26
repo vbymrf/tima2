@@ -2,6 +2,7 @@ package io.tima.shared
 
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
+import io.tima.core.notify.BackgroundWatch
 import io.tima.core.notify.Notice
 import io.tima.core.notify.NoticeKind
 import io.tima.core.notify.Notifier
@@ -126,9 +127,18 @@ class Notices(
     /** Нам звонят — У7. Имя сразу: его утверждает сервер, а не звонящий. */
     suspend fun calling(callId: String, fromUserId: String) {
         if (!shouldNotify(fromUserId)) return
-        // В журнал — что строку поставили: «звонок пришёл, а телефон молчал» иначе не
-        // отличить от «строку не ставили вовсе» (так и было до 2026-09-26).
-        Journal.note(LogCode.CALL, "уведомление о входящем поставлено", "звонок" to callId.take(8))
+        // В журнал — что строку поставили и УВИДЯТ ли её: «звонок пришёл, а телефон молчал»
+        // иначе не отличить от «строку не ставили» и от «система её не показала» (ВЗ0в).
+        // Сверка фона здесь же: ответ нужен ровно сейчас, и изменение попадёт в журнал.
+        val facts = BackgroundWatch.check("входящий звонок")
+        if (facts.notices == false || facts.calls == false) {
+            Journal.trouble(
+                LogCode.CALL, "уведомление о входящем не покажется — уведомления или канал «Звонки» выключены",
+                "звонок" to callId.take(8),
+            )
+        } else {
+            Journal.note(LogCode.CALL, "уведомление о входящем поставлено", "звонок" to callId.take(8))
+        }
         notifier.show(
             Notice(
                 key = CALL_KEY_PREFIX + callId,

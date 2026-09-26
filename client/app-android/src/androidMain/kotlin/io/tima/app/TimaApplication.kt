@@ -12,6 +12,7 @@ import io.tima.core.call.AndroidPhoneMeter
 import io.tima.core.diag.Journal
 import io.tima.core.network.NetworkWatches
 import io.tima.core.notify.AndroidNotices
+import io.tima.core.notify.BackgroundWatch
 import io.tima.core.secrets.AndroidSecrets
 import io.tima.shared.ReportsStore
 import io.tima.shared.rememberCrash
@@ -71,6 +72,9 @@ class TimaApplication : Application() {
             Intent(this, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
+        // Первое значение фона за жизнь процесса (ВЗ0в): процесс мог подняться ради службы,
+        // без окна, — и тогда это единственная строка о том, что система ему позволяет.
+        BackgroundWatch.check("запуск процесса")
 
         // Падения ловятся здесь, а не в Activity: упасть можно и до её создания, и такой
         // отчёт ценнее прочих — человек в этот момент видит только «приложение

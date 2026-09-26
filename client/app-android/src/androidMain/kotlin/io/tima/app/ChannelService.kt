@@ -13,6 +13,7 @@ import android.os.IBinder
 import io.tima.core.database.androidDatabase
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
+import io.tima.core.notify.BackgroundWatch
 import io.tima.shared.ChannelHost
 import io.tima.shared.Entry
 import io.tima.shared.Platform
@@ -52,10 +53,18 @@ class ChannelService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onDestroy() {
+        BackgroundWatch.serviceStopped()
+        super.onDestroy()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Строка переднего плана ставится ПЕРВОЙ и немедленно: Android даёт на это
         // несколько секунд, и опоздание — не «служба без строки», а падение.
         raise()
+        // Без намерения служба приходит только в одном случае: система убила процесс и
+        // подняла её заново (`START_STICKY`). Это и отличает смерть от тишины (ВЗ0в).
+        BackgroundWatch.serviceStarted(bySystem = intent == null)
         val holding = hold()
         // Нет аккаунта — держать нечего, и висеть строкой в шторке не за что.
         if (!holding) {

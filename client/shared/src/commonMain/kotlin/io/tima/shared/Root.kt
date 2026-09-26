@@ -2197,6 +2197,9 @@ private fun App(
                             Snapshot(
                                 auth = network.tokenKeeper?.words() ?: "неизвестно",
                                 queued = unsent[session.userId] ?: 0,
+                                // Фон как есть сейчас (ВЗ0в): уведомления, канал «Звонки»,
+                                // экономия батареи, сколько живёт служба канала.
+                                permissions = io.tima.core.notify.BackgroundWatch.describe(),
                                 sessionFor = startedWords(),
                             )
                         },

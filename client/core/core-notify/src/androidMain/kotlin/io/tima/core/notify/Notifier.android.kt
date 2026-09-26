@@ -93,7 +93,7 @@ class AndroidNotifier(
         manager.createNotificationChannel(NotificationChannel(id, nameOf(kind), importance))
     }
 
-    private companion object {
+    internal companion object {
         const val APP = "TIMA"
         const val CHANNEL_MESSAGE = "tima.messages"
         const val CHANNEL_CALL = "tima.calls"

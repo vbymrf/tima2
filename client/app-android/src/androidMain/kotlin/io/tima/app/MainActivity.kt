@@ -1,5 +1,6 @@
 package io.tima.app
 
+import io.tima.core.notify.BackgroundWatch
 import android.content.Intent
 import android.content.Context
 import android.os.Bundle
@@ -128,6 +129,9 @@ class MainActivity : ComponentActivity() {
         // «вернулись» рядом с `APP-START` было бы неправдой и лишней строкой.
         if (wasBackground) Journal.note(LogCode.APP_FOREGROUND, "вернулись из фона")
         ChannelHost.notices()?.windowVisible(true)
+        // Человек мог сходить в настройки и включить уведомления или белый список — сверяем.
+        // Не изменилось — строки нет.
+        BackgroundWatch.check(if (wasBackground) "вернулись из фона" else "окно открыто")
     }
 
     /** Был ли уже уход в фон — см. [onStart]. */
