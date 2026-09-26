@@ -18,6 +18,11 @@ data class BackgroundFacts(
     val calls: Boolean? = null,
     /** Приложение в белом списке энергосбережения: система не душит его в фоне. */
     val awake: Boolean? = null,
+    /**
+     * Входящему можно во весь экран на замке (Android 14+, `canUseFullScreenIntent`, ВЗ1).
+     * Нельзя — звонок всплывает строкой, а не окном.
+     */
+    val fullScreen: Boolean? = null,
 )
 
 /** Спросить систему сейчас. */
@@ -28,6 +33,9 @@ expect fun backgroundFacts(): BackgroundFacts
  * (ПК, Android до 8), — страница приложения или ничего.
  */
 expect fun openCallsChannelSettings()
+
+/** Открыть страницу права «во весь экран» (Android 14+); где его нет — ничего. */
+expect fun openFullScreenSettings()
 
 /**
  * Фон глазами журнала — ПЛАН-ВХОДЯЩЕГО-ЗВОНКА.md, ВЗ0в.
@@ -113,6 +121,7 @@ object BackgroundWatch {
         facts.notices?.let { add("уведомления " + if (it) "разрешены" else "ЗАПРЕЩЕНЫ") }
         facts.calls?.let { add("канал «Звонки» " + if (it) "включён" else "ВЫКЛЮЧЕН") }
         facts.awake?.let { add("экономия батареи " + if (it) "не ограничивает" else "ОГРАНИЧИВАЕТ") }
+        facts.fullScreen?.let { add("звонок во весь экран " + if (it) "разрешён" else "ЗАПРЕЩЁН") }
         // Службы на ПК и iOS нет вовсе — про неё молчим там, где о ней нечего сказать.
         if (facts != BackgroundFacts() || serviceFor != null) {
             add("служба канала " + (serviceFor?.let { "жива " + lasted(it) } ?: "не поднята"))
@@ -138,6 +147,15 @@ object BackgroundWatch {
                     Line(LogCode.BG_NOTICES, false, "канал «Звонки» включён")
                 } else {
                     Line(LogCode.BG_NOTICES, true, "канал «Звонки» выключен в настройках телефона — входящий не покажется")
+                },
+            )
+        }
+        if (now.fullScreen != null && now.fullScreen != before?.fullScreen) {
+            add(
+                if (now.fullScreen) {
+                    Line(LogCode.BG_NOTICES, false, "звонок во весь экран разрешён")
+                } else {
+                    Line(LogCode.BG_NOTICES, true, "звонок во весь экран запрещён — на замке входящий покажется строкой, а не окном")
                 },
             )
         }

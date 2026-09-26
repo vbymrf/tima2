@@ -487,6 +487,8 @@ object EnglishWords : Words {
         override val warnBattery = "Calls may not arrive: battery saving restricts the app"
         override val warnFix = "Turn on"
         override val warnLater = "Later"
+        override val noticesFullScreenOn = "Incoming call on the lock screen — full screen"
+        override val noticesFullScreenOff = "An incoming call on the lock screen will show as a line: full screen is not allowed"
         override val itemVirtuals = "Virtual accounts"
         override val itemAppearance = "Colours"
         override val itemText = "Fonts and sizes"

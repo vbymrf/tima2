@@ -231,6 +231,9 @@ interface SettingsListWords {
     val warnBattery: String
     val warnFix: String
     val warnLater: String
+    /** Право «во весь экран» (Android 14+, ВЗ1). */
+    val noticesFullScreenOn: String
+    val noticesFullScreenOff: String
     val itemVirtuals: String
     val itemAppearance: String
     /** «Шрифты и размеры» — второй пункт вида (ПЛАН-ШРИФТОВ Ш4, 2026-09-16). */
@@ -2170,6 +2173,8 @@ object RussianWords : Words {
         override val warnBattery = "Звонки могут не дойти: экономия батареи ограничивает приложение"
         override val warnFix = "Включить"
         override val warnLater = "Позже"
+        override val noticesFullScreenOn = "Входящий на замке — во весь экран"
+        override val noticesFullScreenOff = "Входящий на замке покажется строкой: во весь экран запрещено"
         override val itemVirtuals = "Виртуальные аккаунты"
         override val itemAppearance = "Цвета"
         override val itemText = "Шрифты и размеры"

@@ -113,6 +113,7 @@ import io.tima.feature.shell.LocalBackgroundWarning
 import io.tima.feature.shell.BackgroundWarning
 import io.tima.feature.shell.BackgroundTrouble
 import io.tima.core.notify.openCallsChannelSettings
+import io.tima.core.notify.openFullScreenSettings
 import io.tima.core.notify.backgroundFacts
 import io.tima.core.notify.BackgroundWatch
 import io.tima.core.notify.awakeAllowed
@@ -1044,6 +1045,23 @@ private fun App(
                 )
                 showCall()
             }
+        }
+    }
+
+    // ── ПОРУЧЕНИЕ ИЗ СТРОКИ ЗВОНКА (ВЗ1, ВЗ2) ──────────────────────────────
+    //
+    // «Принять» на замке или нажатие на полноэкранный вызов поднимает окно; звонок к этому
+    // времени мог ещё не дойти до `CallHost` (окно новое, лента применится через миг).
+    // Поэтому ждём, пока звонок станет нашим, и только тогда исполняем.
+    val callOrder by CallRequests.order.collectAsState()
+    LaunchedEffect(callOrder, callHost.active, callPing) {
+        val order = callOrder ?: return@LaunchedEffect
+        if (!callHost.active || !callHost.callIs(order.callId)) return@LaunchedEffect
+        CallRequests.done(order.callId)
+        showCall()
+        if (order.accept && callHost.incoming && callHost.state.stage != CallStage.Connected) {
+            Journal.note(LogCode.CALL, "приняли из строки уведомления", "звонок" to order.callId.take(8))
+            callHost.accept()
         }
     }
 
@@ -3019,6 +3037,8 @@ private fun Settings(
                     // меняют в настройках телефона, пока нас нет.
                     callsChannelOn = if (platform == Platform.DESKTOP) null else backgroundFacts().calls,
                     onCallsChannel = if (platform == Platform.DESKTOP) null else ::openCallsChannelSettings,
+                    fullScreenOn = if (platform == Platform.DESKTOP) null else backgroundFacts().fullScreen,
+                    onFullScreen = if (platform == Platform.DESKTOP) null else ::openFullScreenSettings,
                 )
             }
 

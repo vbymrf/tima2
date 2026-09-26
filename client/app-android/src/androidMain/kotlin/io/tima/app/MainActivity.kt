@@ -1,6 +1,9 @@
 package io.tima.app
 
 import io.tima.core.notify.BackgroundWatch
+import io.tima.shared.CallRequests
+import io.tima.shared.CallOrder
+import io.tima.core.notify.callRequestOf
 import android.content.Intent
 import android.content.Context
 import android.os.Bundle
@@ -180,6 +183,7 @@ class MainActivity : ComponentActivity() {
         ChannelService.start(this)
         code.value = linkFrom(intent)
         transfer.value = transferFrom(intent)
+        takeCallOrder(intent)
         setContent {
             val entry = remember { Entry.create(Platform.Android) }
             // ── МЕТКИ СЦЕНАРИЕВ ПОПАДАЮТ В ДЕРЕВО ДОСТУПНОСТИ ────────────────
@@ -254,6 +258,22 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         linkFrom(intent)?.let { code.value = it }
         transferFrom(intent)?.let { transfer.value = it }
+        takeCallOrder(intent)
+    }
+
+    /**
+     * Окно подняла строка звонка — полноэкранный вызов или «Принять» (ВЗ1, ВЗ2).
+     *
+     * Поверх замка и с включением экрана — только ради звонка: обычное открытие окна замок
+     * не обходит.
+     */
+    private fun takeCallOrder(intent: Intent?) {
+        val request = callRequestOf(intent) ?: return
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        }
+        CallRequests.post(CallOrder(request.callId, request.accept))
     }
 
     /** Наш ли это переход. Чужие ссылки нас не касаются, даже если система их принесла. */

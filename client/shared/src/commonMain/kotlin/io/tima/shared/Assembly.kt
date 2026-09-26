@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.runtime.remember
 import io.tima.core.diag.Journal
 import io.tima.core.notify.platformNotifier
+import io.tima.core.notify.soundChoiceOf
+import io.tima.core.notify.SoundKeys
 import io.tima.feature.chat.BookView
 import io.tima.core.diag.LogCode
 import io.tima.core.database.TimaDatabase
@@ -234,6 +236,13 @@ fun buildAssembled(
             // Тот же порядок полей, что в списках: заказчик уже распространил
             // «Отображать пользователя как» на журнал звонков 2026-09-19.
             look = { BookView.from(environment.settings.all().first()).look() },
+            // Выбор звуков — в настройках устройства, не синхронизируется (§4 плана).
+            ringFor = { userId ->
+                val all = environment.settings.all().first()
+                all[SoundKeys.ringOf(userId)]?.takeIf { it.isNotBlank() }?.let(::soundChoiceOf)
+                    ?: soundChoiceOf(all[SoundKeys.RING])
+            },
+            messageSound = { soundChoiceOf(environment.settings.all().first()[SoundKeys.MESSAGE]) },
         )
 
         Assembled(

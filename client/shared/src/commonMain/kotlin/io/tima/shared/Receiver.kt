@@ -319,7 +319,7 @@ class Receiver(
                 if (action.fromId in blocked()) {
                     Journal.note(LogCode.NET_CHANNEL, "звонок от заблокированного — не звоним", "звонок" to action.callId)
                 } else {
-                    notices?.calling(action.callId, action.fromId)
+                    notices?.calling(action.callId, action.fromId, action.video)
                     onCall(action.callId, action.fromId, if (action.video) "video" else "audio")
                 }
             is CallLedger.Action.Taken -> {

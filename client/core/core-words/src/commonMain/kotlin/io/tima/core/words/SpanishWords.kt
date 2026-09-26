@@ -485,6 +485,8 @@ object SpanishWords : Words {
         override val warnBattery = "Las llamadas pueden no llegar: el ahorro de batería limita la aplicación"
         override val warnFix = "Activar"
         override val warnLater = "Más tarde"
+        override val noticesFullScreenOn = "Llamada entrante en la pantalla de bloqueo — a pantalla completa"
+        override val noticesFullScreenOff = "La llamada entrante en la pantalla de bloqueo se mostrará como línea: pantalla completa no permitida"
         override val itemVirtuals = "Cuentas virtuales"
         override val itemAppearance = "Colores"
         override val itemText = "Fuentes y tamaños"

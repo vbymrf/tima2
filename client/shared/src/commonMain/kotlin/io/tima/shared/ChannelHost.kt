@@ -110,4 +110,15 @@ object ChannelHost {
      */
     @Synchronized
     fun notices(): Notices? = heldDevice?.let { assemblies[it]?.notices }
+
+    /**
+     * Отклонить звонок **без окна** — «Отклонить» в строке уведомления (ВЗ2).
+     *
+     * Кладёт трубку серверу тем, кто держит канал; окно, если оно открыто, узнает об этом
+     * лентой звонков (`declined`) и закроется само.
+     */
+    fun decline(callId: String) {
+        val network = synchronized(this) { heldDevice?.let { assemblies[it]?.network } } ?: return
+        scope.launch { network.calls.end(callId) }
+    }
 }

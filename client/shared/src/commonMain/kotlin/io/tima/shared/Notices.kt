@@ -3,6 +3,8 @@ package io.tima.shared
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
 import io.tima.core.notify.BackgroundWatch
+import io.tima.core.notify.CallAlert
+import io.tima.core.notify.SoundChoice
 import io.tima.core.notify.Notice
 import io.tima.core.notify.NoticeKind
 import io.tima.core.notify.Notifier
@@ -60,6 +62,13 @@ class Notices(
     /** Чем звать человека: тот же порядок полей, что в списках (`Вид`). */
     private val look: suspend () -> PersonLook,
     private val words: () -> Words = { CurrentWords.value },
+    /**
+     * Мелодия звонка от человека: своя у контакта, иначе общая (ВЗ4, ВЗ8). По умолчанию —
+     * системная: проверкам и платформам без настроек выбирать не из чего.
+     */
+    private val ringFor: suspend (String) -> SoundChoice = { SoundChoice.Default },
+    /** Общий звук уведомления о сообщении (ВЗ4). */
+    private val messageSound: suspend () -> SoundChoice = { SoundChoice.Default },
 ) {
 
     /**
@@ -95,6 +104,7 @@ class Notices(
             Notice(
                 key = chatId,
                 kind = NoticeKind.Message,
+                sound = messageSound(),
                 // Имени нет намеренно: до проверки подписи называть человека нельзя.
                 who = null,
                 what = words().notices.newMessage,
@@ -116,6 +126,7 @@ class Notices(
             Notice(
                 key = chatId,
                 kind = NoticeKind.Message,
+                sound = messageSound(),
                 who = name,
                 // Назвать нечем — остаётся то же, что было: «Новое сообщение». Строка
                 // «Написал вам» без имени не значила бы ничего.
@@ -125,7 +136,7 @@ class Notices(
     }
 
     /** Нам звонят — У7. Имя сразу: его утверждает сервер, а не звонящий. */
-    suspend fun calling(callId: String, fromUserId: String) {
+    suspend fun calling(callId: String, fromUserId: String, video: Boolean = false) {
         if (!shouldNotify(fromUserId)) return
         // В журнал — что строку поставили и УВИДЯТ ли её: «звонок пришёл, а телефон молчал»
         // иначе не отличить от «строку не ставили» и от «система её не показала» (ВЗ0в).
@@ -145,6 +156,8 @@ class Notices(
                 kind = NoticeKind.Call,
                 who = nameOf(fromUserId),
                 what = words().notices.incomingCall,
+                // Строка звонит — во весь экран, с кнопками, мелодией по кругу (ВЗ1–ВЗ3).
+                call = CallAlert(callId = callId, video = video, ring = ringFor(fromUserId)),
             ),
         )
     }
@@ -163,6 +176,7 @@ class Notices(
             Notice(
                 key = MISSED_KEY_PREFIX + callId,
                 kind = NoticeKind.Message,
+                sound = messageSound(),
                 who = nameOf(fromUserId),
                 what = words().call.missedCall,
             ),

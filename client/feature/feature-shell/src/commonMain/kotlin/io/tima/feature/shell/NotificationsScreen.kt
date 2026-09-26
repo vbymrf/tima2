@@ -59,6 +59,9 @@ fun NotificationsScreen(
     callsChannelOn: Boolean? = null,
     /** Открыть страницу канала «Звонки» в настройках телефона. */
     onCallsChannel: (() -> Unit)? = null,
+    /** Входящему можно во весь экран (Android 14+). `null` — вопроса нет. */
+    fullScreenOn: Boolean? = null,
+    onFullScreen: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.settings2
@@ -108,6 +111,12 @@ fun NotificationsScreen(
                 } else {
                     Secondary(words.noticesCallsOff)
                     Button(label = words.noticesOpenSettings, onClick = onCallsChannel, kind = ButtonKind.Action)
+                }
+                // Во весь экран — строкой рядом: это тоже про то, как звонит входящий.
+                if (fullScreenOn == true) Name(words.noticesFullScreenOn)
+                if (fullScreenOn == false && onFullScreen != null) {
+                    Secondary(words.noticesFullScreenOff)
+                    Button(label = words.noticesOpenSettings, onClick = onFullScreen, kind = ButtonKind.Action)
                 }
             }
         }

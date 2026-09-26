@@ -5,3 +5,6 @@ actual fun backgroundFacts(): BackgroundFacts = BackgroundFacts()
 
 /** Канала «Звонки» здесь нет — открывать нечего. */
 actual fun openCallsChannelSettings() = Unit
+
+/** Полноэкранного вызова здесь нет — открывать нечего. */
+actual fun openFullScreenSettings() = Unit

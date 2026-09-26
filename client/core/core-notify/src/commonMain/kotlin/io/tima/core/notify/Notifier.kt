@@ -64,6 +64,13 @@ data class Notice(
     val kind: NoticeKind,
     val who: String?,
     val what: String,
+    /**
+     * Входящий звонок — строка звонит: мелодия по кругу, во весь экран на замке, кнопки
+     * «Принять» и «Отклонить» (ВЗ1–ВЗ3). `null` — обычная строка.
+     */
+    val call: CallAlert? = null,
+    /** Звук сообщения — один раз. У звонка звучит [CallAlert.ring]. */
+    val sound: SoundChoice = SoundChoice.Default,
 )
 
 /** Чем строка звенит. Важность задаётся здесь, а не у платформы: правило одно на всех. */

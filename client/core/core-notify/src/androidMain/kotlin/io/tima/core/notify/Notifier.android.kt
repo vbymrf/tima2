@@ -67,14 +67,80 @@ class AndroidNotifier(
                 ),
             )
         }
+        notice.call?.let { call -> dressAsCall(builder, notice, call) }
         // Тот же `key` — та же строка: второе сообщение из переписки заменяет первое, а
         // проверенное имя заменяет безымянную строку (У6). Идентификатор выводится из
         // ключа, а не раздаётся счётчиком: счётчик не переживает перезапуск службы.
         runCatching { manager.notify(notice.key, idOf(notice.key), builder.build()) }
-            .onFailure { Journal.trouble(LogCode.PERM_DENIED, "уведомление не показано", "почему" to it.message.orEmpty()) }
+            .onFailure {
+                Journal.trouble(LogCode.PERM_DENIED, "уведомление не показано", "почему" to it.message.orEmpty())
+                return
+            }
+        // Звук — после показа: строки нет, звенеть незачем. Каналы беззвучные — звучит
+        // приложение само (см. AndroidRinger).
+        val call = notice.call
+        if (call != null) {
+            ringingKey = notice.key
+            AndroidRinger.ring(context, call.ring)
+        } else {
+            AndroidRinger.once(context, notice.sound)
+        }
+    }
+
+    /**
+     * Строка звонит — ВЗ1, ВЗ2.
+     *
+     * **Во весь экран на замке и при погашенном экране** (`fullScreenIntent`): система
+     * включает экран и показывает окно входящего. При открытом другом приложении та же
+     * строка всплывает поверх — с кнопками, чтобы ответить, не переходя в TIMA.
+     *
+     * «Принять» открывает окно (разговору нужен экран), «Отклонить» кладёт трубку без
+     * окна — приёмником [CallActionReceiver].
+     */
+    private fun dressAsCall(builder: Notification.Builder, notice: Notice, call: CallAlert) {
+        builder.setCategory(Notification.CATEGORY_CALL)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            // На замке звонок виден целиком: кто звонит — ровно то, что нужно решить, не
+            // отпирая телефон.
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+        val show = callIntent(ACTION_SHOW, call.callId)
+        val accept = callIntent(ACTION_ACCEPT, call.callId)
+        if (show != null) builder.setFullScreenIntent(show, true)
+        val decline = PendingIntent.getBroadcast(
+            context,
+            idOf("decline:" + call.callId),
+            Intent(context, CallActionReceiver::class.java)
+                .setAction(ACTION_DECLINE)
+                .putExtra(EXTRA_CALL_ID, call.callId),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && accept != null) {
+            val person = android.app.Person.Builder().setName(notice.who ?: APP).setImportant(true).build()
+            builder.setStyle(Notification.CallStyle.forIncomingCall(person, decline, accept))
+        } else {
+            builder.addAction(Notification.Action.Builder(null, CALL_DECLINE, decline).build())
+            if (accept != null) builder.addAction(Notification.Action.Builder(null, CALL_ACCEPT, accept).build())
+        }
+    }
+
+    /** Окно приложения с поручением про звонок: показать или принять. */
+    private fun callIntent(action: String, callId: String): PendingIntent? {
+        val base = open?.invoke() ?: return null
+        return PendingIntent.getActivity(
+            context,
+            idOf(action + callId),
+            base.setAction(action).putExtra(EXTRA_CALL_ID, callId),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 
     override fun hide(key: String) {
+        // Строка звонка снята — звонок кончился чем бы то ни было: мелодия молчит.
+        if (key == ringingKey) {
+            AndroidRinger.stop()
+            ringingKey = null
+        }
         runCatching { manager?.cancel(key, idOf(key)) }
     }
 
@@ -94,19 +160,45 @@ class AndroidNotifier(
 
     private fun ensureChannel(manager: NotificationManager, kind: NoticeKind) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        // Прежние каналы звучали сами; звук канала не меняется, поэтому они заменены
+        // беззвучными с новыми именами, а старые убираются (ВЗ5).
+        OLD_CHANNELS.forEach { old -> if (manager.getNotificationChannel(old) != null) manager.deleteNotificationChannel(old) }
         val id = channelOf(kind)
         if (manager.getNotificationChannel(id) != null) return
         val importance = when (kind) {
             NoticeKind.Call -> NotificationManager.IMPORTANCE_HIGH
             NoticeKind.Message -> NotificationManager.IMPORTANCE_DEFAULT
         }
-        manager.createNotificationChannel(NotificationChannel(id, nameOf(kind), importance))
+        val channel = NotificationChannel(id, nameOf(kind), importance).apply {
+            // Звучит приложение (AndroidRinger): своя мелодия, по кругу, свой файл.
+            setSound(null, null)
+            enableVibration(false)
+            if (kind == NoticeKind.Call) lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
+        manager.createNotificationChannel(channel)
     }
 
     internal companion object {
         const val APP = "TIMA"
-        const val CHANNEL_MESSAGE = "tima.messages"
-        const val CHANNEL_CALL = "tima.calls"
+        const val CHANNEL_MESSAGE = "tima.messages.2"
+        const val CHANNEL_CALL = "tima.calls.2"
+
+        /** Прежние, звучавшие сами, — убираются при запуске (ВЗ5). */
+        val OLD_CHANNELS = listOf("tima.messages", "tima.calls")
+
+        /** Какой ключ сейчас звонит: снятие его строки глушит мелодию. */
+        @Volatile
+        var ringingKey: String? = null
+
+        /** Поручения окну и приёмнику про звонок (ВЗ1, ВЗ2). */
+        const val ACTION_SHOW = "io.tima.call.SHOW"
+        const val ACTION_ACCEPT = "io.tima.call.ACCEPT"
+        const val ACTION_DECLINE = "io.tima.call.DECLINE"
+        const val EXTRA_CALL_ID = "io.tima.call.ID"
+
+        // Кнопки старых Android (до 12): своего словаря у модуля нет — как у имён каналов.
+        const val CALL_ACCEPT = "Принять"
+        const val CALL_DECLINE = "Отклонить"
 
         fun channelOf(kind: NoticeKind) = when (kind) {
             NoticeKind.Call -> CHANNEL_CALL
@@ -235,7 +327,51 @@ actual fun askNotifyAccess(onResult: (Boolean) -> Unit) = AndroidNotifyAccess.as
  * уведомления ставит **служба**, у которой окна нет и не будет, — контекст окна тут не
  * подошёл бы даже при желании.
  */
+/**
+ * «Отклонить» из строки звонка — без окна (ВЗ2).
+ *
+ * Кладёт трубку тем, кто держит канал ([AndroidNotices.onDecline]), и глушит мелодию
+ * сразу, не дожидаясь, пока сервер разошлёт конец звонка.
+ */
+class CallActionReceiver : android.content.BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != AndroidNotifier.ACTION_DECLINE) return
+        val callId = intent.getStringExtra(AndroidNotifier.EXTRA_CALL_ID) ?: return
+        Journal.note(LogCode.CALL, "отклонили из строки уведомления", "звонок" to callId.take(8))
+        AndroidRinger.stop()
+        context.getSystemService(NotificationManager::class.java)
+            ?.cancel(CALL_KEY_PREFIX + callId, AndroidNotifier.idOf(CALL_KEY_PREFIX + callId))
+        AndroidNotices.onDecline?.invoke(callId)
+    }
+
+    private companion object {
+        /** Тот же ключ, что у `Notices.calling`: строку снимаем ту самую. */
+        const val CALL_KEY_PREFIX = "call:"
+    }
+}
+
+/**
+ * Что окно получило из строки звонка: показать его или принять (ВЗ1).
+ *
+ * `null` — поручения нет. Окно разбирает намерение и кладёт сюда; общий код забирает.
+ */
+data class CallRequest(val callId: String, val accept: Boolean)
+
+/** Разобрать намерение окна; не наше — `null`. */
+fun callRequestOf(intent: Intent?): CallRequest? {
+    val callId = intent?.getStringExtra(AndroidNotifier.EXTRA_CALL_ID) ?: return null
+    return when (intent.action) {
+        AndroidNotifier.ACTION_ACCEPT -> CallRequest(callId, accept = true)
+        AndroidNotifier.ACTION_SHOW -> CallRequest(callId, accept = false)
+        else -> null
+    }
+}
+
 object AndroidNotices {
+
+    /** Положить трубку по «Отклонить» из строки; ставит тот, кто держит канал. */
+    @Volatile
+    var onDecline: ((String) -> Unit)? = null
 
     @Volatile
     private var appContext: Context? = null

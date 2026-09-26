@@ -27,7 +27,12 @@ actual fun backgroundFacts(): BackgroundFacts {
     }
     val awake = context.getSystemService(PowerManager::class.java)
         ?.let { runCatching { it.isIgnoringBatteryOptimizations(context.packageName) }.getOrNull() }
-    return BackgroundFacts(notices = notices, calls = calls, awake = awake)
+    val fullScreen = if (Build.VERSION.SDK_INT >= 34) {
+        manager?.let { runCatching { it.canUseFullScreenIntent() }.getOrNull() }
+    } else {
+        null
+    }
+    return BackgroundFacts(notices = notices, calls = calls, awake = awake, fullScreen = fullScreen)
 }
 
 actual fun openCallsChannelSettings() {
@@ -39,5 +44,13 @@ actual fun openCallsChannelSettings() {
     } else {
         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
     }.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
+}
+
+actual fun openFullScreenSettings() {
+    if (Build.VERSION.SDK_INT < 34) return
+    val context = AndroidNotices.contextOrNull() ?: return
+    val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.fromParts("package", context.packageName, null))
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(intent) }
 }

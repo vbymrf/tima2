@@ -124,6 +124,16 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!--
+      Входящий звонок во весь экран на замке и при погашенном экране (ВЗ1). С Android 14
+      право у приложений, которые не звонилки, система может снять; проверка —
+      `canUseFullScreenIntent`, и без него звонок всплывает строкой, а не окном.
+    -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <!-- Вибрация звонка и сообщения: каналы беззвучные, звучит и дрожит приложение (ВЗ3). -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!--
       Камера и микрофон НЕ обязательны для установки: телефон без камеры остаётся
       телефоном, на котором звонят голосом. Без этих строк Google Play отсеял бы такие
       устройства сам, а раздаём мы мимо Play — и отсева не заметили бы вовсе.
@@ -234,6 +244,12 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Мессенджер держит соединение с сервером, чтобы доставлять сообщения и звонки" />
         </service>
+
+        <!-- «Отклонить» из строки звонка — без окна (ВЗ2). Не экспортирован: зовёт только
+             наша строка уведомления. -->
+        <receiver
+            android:name="io.tima.core.notify.CallActionReceiver"
+            android:exported="false" />
 
         <receiver
             android:name="io.tima.app.BootReceiver"
