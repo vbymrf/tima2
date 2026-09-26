@@ -22,7 +22,8 @@
 //
 // `sync.poke {event_id, pts, qts, seq}` — «есть что забрать». Клиент сверяет номер со
 // своим курсором и сам зовёт sync.pull; вершины трёх полос при этом говорят, что
-// именно потерялось и где. `call.poke {call_id}` — «посмотри этот звонок ручкой».
+// именно потерялось и где. `call.poke {cts}` — «в ленте звонков есть до №cts» (ВЗ0а);
+// `call.poke {call_id}` остался только у групповых звонков, которые идут журналом.
 //
 // Подсказка **протухнуть не может**, потому что не несёт состояния. Вызов недельной
 // давности, доехавший до телефона, приводит не к звонку, а к запросу, который честно
@@ -70,12 +71,11 @@ const (
 	// соединение раз в пять секунд — это N/5 запросов в секунду при любом числе
 	// живых устройств, даже когда им нечего доставлять.
 	wsCatchupLimit = 100
-
 )
 
 // Переменные, а не константы: проверкам иначе пришлось бы ждать по полторы минуты на
-// каждую, а протухший вызов не дождаться вовсе. Тот же приём, что у `unreachableAfter`
-// и `ringAgainAfter` в calls.go, и по той же причине — сроки здесь выбраны решением, а
+// каждую, а протухший вызов не дождаться вовсе. Тот же приём, что у `deliveryNoticeAfter`
+// и `ringRepokeAfter` в call_updates.go, и по той же причине — сроки здесь выбраны решением, а
 // не измерены.
 var (
 	wsCatchupInterval = 30 * time.Second
@@ -174,6 +174,14 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	} else {
 		log.Printf("ws %s: вершины полос: %v", deviceID, err)
 	}
+	// Вершина ленты звонков (ВЗ0а) — тем же приветствием и по той же причине: телефон,
+	// вернувшийся в сеть, сверяет свой `cts` сразу и забирает пропущенное, не дожидаясь
+	// подсказки, которой может и не быть.
+	if cts, err := s.Store.CallTop(ctx, claims.Subject); err == nil {
+		hello["cts"] = cts
+	} else {
+		log.Printf("ws %s: вершина ленты звонков: %v", deviceID, err)
+	}
 	if err := writeJSON(ctx, conn, hello); err != nil {
 		return
 	}
@@ -222,7 +230,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			if f.Event == "sync.pull" {
 				pulled = true
 			}
-			if err := s.handleWSFrame(ctx, conn, deviceID, f, &sent); err != nil {
+			if err := s.handleWSFrame(ctx, conn, deviceID, claims.Subject, f, &sent); err != nil {
 				return
 			}
 		case <-ping.C:
@@ -280,11 +288,12 @@ type wsClientFrame struct {
 	Cursor  *int64 `json:"cursor"`   // sync.pull; nil → серверная копия cursor
 	Limit   int    `json:"limit"`    // sync.pull; 0 → 100, максимум 500
 	EventID int64  `json:"event_id"` // ack
+	Cts     int64  `json:"cts"`      // call.ack — лента звонков, ВЗ0а
 }
 
 // handleWSFrame — sync.pull и ack; typing/receipt/presence — следующие итерации.
 // sent — докуда соединение отдало журнал; sync.pull его двигает.
-func (s *Server) handleWSFrame(ctx context.Context, conn *websocket.Conn, deviceID string, f wsClientFrame, sent *int64) error {
+func (s *Server) handleWSFrame(ctx context.Context, conn *websocket.Conn, deviceID, userID string, f wsClientFrame, sent *int64) error {
 	switch f.Event {
 	case "sync.pull":
 		var cursor int64
@@ -355,6 +364,10 @@ func (s *Server) handleWSFrame(ctx context.Context, conn *websocket.Conn, device
 				log.Printf("ws %s: ack: %v", deviceID, err)
 			}
 		}
+		return nil
+	case "call.ack":
+		// Лента звонков — свой курсор, журнал сообщений не трогается (ВЗ0а).
+		ackCalls(ctx, s.Store, s.notifier(), userID, deviceID, f.Cts)
 		return nil
 	default:
 		return nil // неизвестные кадры молча пропускаем (typing и пр. — позже)

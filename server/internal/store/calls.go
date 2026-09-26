@@ -30,6 +30,9 @@ type Call struct {
 	CreatedAt  time.Time
 	AnsweredAt time.Time
 	EndedAt    time.Time
+	// Когда вызов впервые подтвердило устройство собеседника (0056). Нулевое — не
+	// подтвердило: звонящему «не в сети», а не «Звонит».
+	DeliveredAt time.Time
 }
 
 // Row — строка звонка на проводе: то, что видит клиент и в списке, и в снимке.
@@ -154,13 +157,13 @@ func (s *Store) GetCall(ctx context.Context, callID string) (Call, error) {
 	// peer_id стал nullable в 0023 ради групповых, ended_by — в 0054. Сканировать
 	// их прямо в строку значило бы падать на данных, которые база допускает.
 	var peer, endedBy *string
-	var answered, ended *time.Time
+	var answered, ended, delivered *time.Time
 	err := s.pool.QueryRow(ctx, `
 		SELECT call_id, room, kind, initiator_id, peer_id, state,
-		       ended_by, created_at, answered_at, ended_at
+		       ended_by, created_at, answered_at, ended_at, delivered_at
 		FROM calls WHERE call_id = $1`, callID).
 		Scan(&c.CallID, &c.Room, &c.Kind, &c.InitiatorID, &peer, &c.State,
-			&endedBy, &c.CreatedAt, &answered, &ended)
+			&endedBy, &c.CreatedAt, &answered, &ended, &delivered)
 	if errors.Is(err, pgx.ErrNoRows) || isBadUUID(err) {
 		return c, ErrCallNotFound
 	}
@@ -175,6 +178,9 @@ func (s *Store) GetCall(ctx context.Context, callID string) (Call, error) {
 	}
 	if ended != nil {
 		c.EndedAt = *ended
+	}
+	if delivered != nil {
+		c.DeliveredAt = *delivered
 	}
 	return c, err
 }
@@ -218,7 +224,7 @@ type CallRow struct {
 	State       string // ringing|answered|ended|missed|busy|lost
 	InitiatorID string
 	PeerID      string
-	EndedBy     string    // кто положил трубку; пусто — некому было, звонок бросили
+	EndedBy     string // кто положил трубку; пусто — некому было, звонок бросили
 	CreatedAt   time.Time
 	AnsweredAt  time.Time // нулевое — трубку не брали
 	EndedAt     time.Time // нулевое — звонок ещё числится идущим

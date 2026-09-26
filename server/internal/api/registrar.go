@@ -37,6 +37,8 @@ type NotifyStore interface {
 	// тип устройства значило бы писать преобразование, которое однажды разойдётся
 	// с оригиналом, — ровно то, от чего уходим.
 	ListDevices(ctx context.Context, userID string) ([]store.Device, error)
+	// Лента звонков (0056): изменение звонка — строка с номером `cts` в ленте человека.
+	AppendCallUpdate(ctx context.Context, userID, callID, change, deviceID string) (int64, error)
 }
 
 // Publisher — живая шина. nil означает «шины нет»: событие уже записано, и
@@ -89,6 +91,50 @@ func (n *Notifier) Device(ctx context.Context, deviceID, event string, payload m
 		log.Printf("notify %s %s: publish: %v", deviceID, event, err)
 	}
 	return eventID
+}
+
+// CallChange — изменение звонка в ленту человека и подсказка всем его устройствам
+// (ПЛАН-ВХОДЯЩЕГО-ЗВОНКА.md, ВЗ0а).
+//
+// ── ЖУРНАЛ УСТРОЙСТВА НЕ ТРОГАЕТСЯ ──────────────────────────────────────────
+//
+// Звонок живёт своей лентой: номер `cts` на человека, подсказка `call.poke {cts}`,
+// подтверждение `call.ack {cts}` двигает только курсор звонков. Раньше вызов лежал в
+// журнале рядом с сообщениями, и подтвердить его подсказку было нечем, не перескочив
+// через незабранные сообщения, — отсюда было ложное «не в сети».
+//
+// Возвращает номер изменения; 0 — записать не удалось, и подсказки не будет: подсказка
+// без строки звала бы за тем, чего нет.
+func (n *Notifier) CallChange(ctx context.Context, userID, callID, change, deviceID string) int64 {
+	cts, err := n.store.AppendCallUpdate(ctx, userID, callID, change, deviceID)
+	if err != nil {
+		log.Printf("call change %s %s %s: %v", userID, callID, change, err)
+		return 0
+	}
+	n.CallPoke(ctx, userID, cts)
+	return cts
+}
+
+// CallPoke — подсказка «в ленте звонков есть до №cts» всем устройствам человека.
+//
+// Отдельно от CallChange, потому что повтор вызова (`repokeRinging`) шлёт подсказку ещё
+// раз, не заводя новой строки: изменение одно, а подсказка по шине — «не более одного
+// раза».
+func (n *Notifier) CallPoke(ctx context.Context, userID string, cts int64) {
+	bus := n.bus()
+	if bus == nil || cts <= 0 {
+		return
+	}
+	devices, err := n.store.ListDevices(ctx, userID)
+	if err != nil {
+		log.Printf("call poke %s: devices: %v", userID, err)
+		return
+	}
+	for _, d := range devices {
+		if err := bus.Publish(ctx, d.DeviceID, map[string]any{"event": "call.poke", "cts": cts}); err != nil {
+			log.Printf("call poke %s: publish: %v", d.DeviceID, err)
+		}
+	}
 }
 
 // pokeFor — какую подсказку слать про это событие.

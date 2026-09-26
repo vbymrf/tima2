@@ -36,9 +36,9 @@ type CallStore interface {
 	IsSpeaker(ctx context.Context, roomID, ownerID, userID string) (bool, error)
 	ListGroupMembers(ctx context.Context, groupID string) ([]store.Member, error)
 	ListDevices(ctx context.Context, userID string) ([]store.Device, error)
-	// Докуда устройство подтвердило события. Звонку нужен единственный ответ:
-	// забрало ли оно вызов — см. noticeIfUnreachable.
-	SyncCursor(ctx context.Context, deviceID string) (int64, error)
+	// Лента звонков (0056, ВЗ0а): вершина и изменения после номера.
+	CallTop(ctx context.Context, userID string) (int64, error)
+	ListCallUpdates(ctx context.Context, userID string, after int64, limit int) ([]store.CallUpdate, error)
 }
 
 var _ CallStore = (*store.Store)(nil)
@@ -85,6 +85,9 @@ func RegisterCalls(
 
 	mux.HandleFunc("POST /api/v1/calls", requireDevice(startCall(deps)))
 	mux.HandleFunc("GET /api/v1/calls", requireDevice(listCalls(deps)))
+	// Лента звонков — раньше `{callID}`, иначе «updates» разобрался бы как идентификатор.
+	mux.HandleFunc("GET /api/v1/calls/updates", requireDevice(listCallUpdates(deps)))
+	mux.HandleFunc("POST /api/v1/calls/seen", requireDevice(markCallsSeen(deps)))
 	mux.HandleFunc("GET /api/v1/calls/{callID}", requireDevice(callSnapshot(deps)))
 	mux.HandleFunc("POST /api/v1/calls/{callID}/answer", requireDevice(answerCall(deps)))
 	mux.HandleFunc("POST /api/v1/calls/{callID}/end", requireDevice(endCall(deps)))

@@ -30,6 +30,10 @@ type Worker struct {
 
 // wholeDays — длительность в целых сутках. Сроки задаются днями и в переменных
 // окружения, и в retention_policy; дробных суток здесь не бывает.
+// Сколько живёт лента звонков (0056). Не настройка: срок решён заказчиком, и довод за
+// него — вторая дорога через журнал звонков работает каждый понедельник, а не раз в год.
+const callUpdatesKept = 24 * time.Hour
+
 func wholeDays(d time.Duration) int { return int(d / (24 * time.Hour)) }
 
 // retentionSeconds — сроки уборки в секундах, из таблицы политик.
@@ -77,6 +81,9 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		{"sms_codes", func() (int64, error) { return w.Store.GCExpiredSmsCodes(ctx) }},
 		// Брошенные звонки: строка открыта, а комнаты уже нет. См. closeAbandonedCalls.
 		{"abandoned_calls", func() (int64, error) { return w.closeAbandonedCalls(ctx) }},
+		// Лента звонков живёт сутки (решение заказчика 2026-09-26, ВЗ0а): телефон,
+		// пропадавший дольше, получит «разрыв» и возьмёт пропущенные из журнала звонков.
+		{"call_updates", func() (int64, error) { return w.Store.GCCallUpdates(ctx, callUpdatesKept) }},
 		// Уборка законченных звонков — только если срок задан. Ноль означает «не
 		// удалять», и передать его дальше нельзя: GCCalls(0) снёс бы всё, что
 		// кончилось больше нуля секунд назад, то есть весь журнал разом.

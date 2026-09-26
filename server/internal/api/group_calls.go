@@ -4,6 +4,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
@@ -229,7 +230,18 @@ func livekitWebhook(deps callsDeps) http.HandlerFunc {
 		case "participant_joined":
 			if userID != "" {
 				_ = deps.store.SetParticipantState(r.Context(), callID, userID, store.PartJoined, at)
-				_ = deps.store.SetCallState(r.Context(), callID, "answered", "")
+				// ── ЗВОНЯЩИЙ ВХОДИТ В КОМНАТУ СРАЗУ ───────────────────────────
+				//
+				// У личного звонка комнату первым занимает звонящий — в момент вызова.
+				// Ставить от этого `answered` значило бы объявить звонок отвеченным до
+				// первого гудка (найдено 2026-09-26 при переделке ленты звонков). Отвечает
+				// только собеседник, и `answered` для личного ставит `/answer`.
+				if callType != "direct" {
+					_ = deps.store.SetCallState(r.Context(), callID, "answered", "")
+				} else if call, err := deps.store.GetCall(r.Context(), callID); err == nil &&
+					userID == call.PeerID && call.State == "ringing" {
+					_ = deps.store.SetCallState(r.Context(), callID, "answered", "")
+				}
 			}
 		case "participant_left":
 			if userID != "" {
@@ -241,23 +253,50 @@ func livekitWebhook(deps callsDeps) http.HandlerFunc {
 				// Ушедший и есть тот, кто положил трубку, — лучшего сведения об этом
 				// у нас нет. Запишется он только если `/end` не успел раньше: поле
 				// хранит первого (Ж4).
-				_ = deps.store.SetCallState(r.Context(), callID, "ended", userID)
+				endDirectByRoom(deps, r.Context(), callID, userID)
+			} else {
+				notifyParticipants(deps, r, callID, "call.participant_left", map[string]any{
+					"call_id": callID, "user_id": userID,
+				})
 			}
-			notifyParticipants(deps, r, callID, "call.participant_left", map[string]any{
-				"call_id": callID, "user_id": userID,
-			})
 		case "room_finished":
 			// Комната кончилась сама — человека за этим нет.
-			_ = deps.store.SetCallState(r.Context(), callID, "ended", "")
-			notifyParticipants(deps, r, callID, "call.state", map[string]any{
-				"call_id": callID, "state": "ended",
-			})
+			if callType == "direct" {
+				endDirectByRoom(deps, r.Context(), callID, "")
+			} else {
+				_ = deps.store.SetCallState(r.Context(), callID, "ended", "")
+				notifyParticipants(deps, r, callID, "call.state", map[string]any{
+					"call_id": callID, "state": "ended",
+				})
+			}
 		}
 		w.WriteHeader(http.StatusOK)
 	}
 }
 
 // notifyCallParticipants рассылает событие устройствам всех приглашённых.
+// endDirectByRoom — личный звонок закончился со стороны комнаты (вебхук LiveKit).
+//
+// В ленту — только если звонок ещё открыт: обычно его уже закрыл `/end`, и второе
+// «кончился» обеим сторонам было бы шумом. Звонивший, так и не дождавшийся ответа, —
+// `cancelled`, а не `ended`: у собеседника это пропущенный.
+func endDirectByRoom(deps callsDeps, ctx context.Context, callID, userID string) {
+	call, err := deps.store.GetCall(ctx, callID)
+	if err != nil || (call.State != "ringing" && call.State != "answered") {
+		return
+	}
+	state := "ended"
+	if call.State == "ringing" {
+		state = "missed"
+	}
+	_ = deps.store.SetCallState(ctx, callID, state, userID)
+	change := endChange(call, userID, state)
+	deps.notifier.CallChange(ctx, call.InitiatorID, callID, change, "")
+	if call.PeerID != "" {
+		deps.notifier.CallChange(ctx, call.PeerID, callID, change, "")
+	}
+}
+
 func notifyParticipants(deps callsDeps, r *http.Request, callID, event string, payload map[string]any) {
 	parts, err := deps.store.CallParticipants(r.Context(), callID)
 	if err != nil {

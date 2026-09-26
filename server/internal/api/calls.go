@@ -5,7 +5,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -81,139 +80,16 @@ func startCall(deps callsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
 			return
 		}
-		// call.incoming устройствам собеседника (VoIP push — с провайдером позже)
-		payload := map[string]any{"call_id": callID, "room": room, "kind": req.Kind, "from": id.UserID}
-		rung := ringPeer(deps, r.Context(), req.PeerID, payload)
-		// И ещё дважды, пока звонок звонит, — см. ringAgain.
-		go ringAgain(deps, callID, req.PeerID, payload)
-		// А если вызов не забрало ни одно устройство — сказать об этом звонящему.
-		go noticeIfUnreachable(deps, callID, id.DeviceID, rung)
+		// Вызов — изменение `ringing` в ленте собеседника и подсказка всем его устройствам
+		// (ВЗ0а). Кто звонит и каким звонком, телефон узнает из снимка звонка в ленте.
+		cts := deps.notifier.CallChange(r.Context(), req.PeerID, callID, "ringing", "")
+		// Повтор подсказки, «не в сети» через 5 с и срок звонка — см. call_updates.go.
+		afterRing(deps, callID, id.UserID, req.PeerID, cts)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"call_id": callID, "room": room, "url": deps.livekitURL(), "token": token,
 		})
-	}
-}
-
-// ringPeer — разослать кадр всем устройствам собеседника.
-//
-// Возвращает номера событий по устройствам: по ним потом видно, кто вызов забрал.
-func ringPeer(deps callsDeps, ctx context.Context, peerID string, payload map[string]any) map[string]int64 {
-	devices, err := deps.store.ListDevices(ctx, peerID)
-	if err != nil {
-		log.Printf("ringPeer %s: %v", peerID, err)
-		return nil
-	}
-	rung := make(map[string]int64, len(devices))
-	for _, d := range devices {
-		if id := deps.notifier.Device(ctx, d.DeviceID, "call.incoming", payload); id > 0 {
-			rung[d.DeviceID] = id
-		}
-	}
-	return rung
-}
-
-// Через сколько сказать звонящему, что вызов никто не забрал.
-//
-// Пять секунд — оборот сверки соединения с журналом (wsCatchupInterval) плюс запас на
-// подтверждение. Меньше — и слово говорилось бы на каждом переподключении, которых в
-// мобильной сети много.
-var unreachableAfter = 5 * time.Second
-
-// noticeIfUnreachable — сказать звонящему, что вызов не забрало ни одно устройство.
-//
-// ── ЧТО ЭТО ЗНАЧИТ И ЧЕГО НЕ ЗНАЧИТ ─────────────────────────────────────────
-//
-// Подтверждение кадра (ack) двигает sync_cursors. Курсор ниже номера вызова через
-// пять секунд означает ровно одно: **устройство сейчас не на связи**. Не «человек
-// занят», не «человек отказался» и даже не «человек не узнает» — вернувшись, оно
-// заберёт вызов из журнала сам, и если сорок пять секунд ещё не вышли, телефон
-// зазвонит.
-//
-// Поэтому звонок **не прекращается**: уходит слово звонящему, и только. Прекратить
-// его здесь значило бы решить за вернувшееся устройство, что оно опоздало.
-//
-// Это прямое следствие ADR-0025 §1а: устройство говорит только о своём состоянии и
-// только когда доступно. Молчание — не сведения, и сказано оно должно быть как
-// молчание.
-func noticeIfUnreachable(deps callsDeps, callID, callerDevice string, rung map[string]int64) {
-	if len(rung) == 0 || callerDevice == "" {
-		// Устройств у собеседника нет вовсе — это другое, и говорится оно не здесь.
-		return
-	}
-	// Свой контекст: запрос давно закрыт, его отмена унесла бы и это слово.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	select {
-	case <-ctx.Done():
-		return
-	case <-time.After(unreachableAfter):
-	}
-	if call, err := deps.store.GetCall(ctx, callID); err != nil || call.State != "ringing" {
-		return // ответили, отклонили, отменили — говорить нечего
-	}
-	for deviceID, eventID := range rung {
-		cursor, err := deps.store.SyncCursor(ctx, deviceID)
-		if err != nil {
-			log.Printf("noticeIfUnreachable %s: курсор %s: %v", callID, deviceID, err)
-			return // не знаем — молчим: догадка хуже молчания
-		}
-		if cursor >= eventID {
-			return // хотя бы одно устройство вызов забрало
-		}
-	}
-	deps.notifier.Device(ctx, callerDevice, "call.unreachable", map[string]any{"call_id": callID})
-}
-
-// Когда повторять вызов и сколько раз.
-//
-// Две попытки с разбегом: почти всякая потеря — одиночная, и второй попытки хватает.
-// Третья пришлась бы уже на середину сорокапятисекундного ожидания и разбудила бы
-// человека, который к тому времени трубку взял.
-var ringAgainAfter = []time.Duration{2 * time.Second, 6 * time.Second}
-
-// ringAgain — повторить call.incoming, пока звонок всё ещё звонит.
-//
-// ── ЗАЧЕМ ЭТО НУЖНО ─────────────────────────────────────────────────────────
-//
-// Живая доставка идёт через Redis Pub/Sub — это «не более одного раза». Кадр, потерянный
-// по дороге, теряется насовсем: долговечный журнал событий у нас есть, но клиент читает
-// его только при переподключении, а соединение при этом не рвётся.
-//
-// Для сообщений дыра почти не видна — они подождут следующего подключения. Для звонка
-// она смертельна: он живёт сорок пять секунд, и потерянный кадр означает, что человеку
-// просто не позвонили. Ровно это и случилось 2026-09-20: сервер записал событие 326,
-// отчёты обоих телефонов показывают, что до второго оно не дошло, а соседние события того
-// же устройства дошли.
-//
-// **Дыру закрыл дожим по журналу** (`ws.go`, wsCatchupInterval): соединение само
-// сверяется с device_events и досылает потерянное шиной. Повтор при этом остаётся вторым
-// поясом — дожим замечает потерю за пять секунд, а у звонка их сорок пять, и держаться
-// одной цепочки в такой срок незачем. Цена повтора — два лишних кадра на звонок, и она
-// заведомо меньше цены несостоявшегося звонка.
-// Подробности: [ADR-0027](../../../doc/adr/0027-event-delivery.md).
-//
-// **Клиент обязан уметь повтор.** Дубликат, пришедший на показанный звонок, отсеивается
-// по идентификатору (`CallHost.ring`); клиент без этой защиты положил бы трубку
-// собственному вызову, приняв повтор за второй звонок.
-func ringAgain(deps callsDeps, callID, peerID string, payload map[string]any) {
-	// Свой контекст: запрос к этому времени давно закрыт, а его отмена унесла бы повтор.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	for _, after := range ringAgainAfter {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(after):
-		}
-		// Звонок мог быть отвечен, отклонён или отменён. Повторять его тогда — звать
-		// человека к разговору, который уже идёт или уже кончился.
-		call, err := deps.store.GetCall(ctx, callID)
-		if err != nil || call.State != "ringing" {
-			return
-		}
-		ringPeer(deps, ctx, peerID, payload)
 	}
 }
 
@@ -246,29 +122,14 @@ func answerCall(deps callsDeps) http.HandlerFunc {
 		_ = deps.store.SetCallState(r.Context(), callID, "answered", "")
 		// ── ОСТАЛЬНЫЕ УСТРОЙСТВА ОТВЕТИВШЕГО ───────────────────────────────
 		//
-		// `call.incoming` уходит ВСЕМ устройствам человека, и звонят они все. Пока
-		// устройство одно, это незаметно; со вторым — беда, и тихая: ответил телефон, а
-		// десктоп продолжает звонить, и через сорок пять секунд его сторож кладёт трубку
-		// запросом `/end`. Сервер закрывает звонок — **живой разговор обрывается**, и
-		// выглядит это как беда связи.
+		// Вызов звонит на ВСЕХ устройствах человека. Ответил телефон — десктоп обязан
+		// замолчать, а не звонить сорок пять секунд и класть трубку живому разговору.
 		//
-		// Слово `taken` отдельное, не `ended`: соседу надо **закрыть у себя окно**, а не
-		// закончить звонок. Спутать эти два действия — значит получить то же самое
-		// лекарством.
-		if devices, err := deps.store.ListDevices(r.Context(), id.UserID); err == nil {
-			for _, d := range devices {
-				if d.DeviceID == id.DeviceID {
-					continue // сам ответивший знает и так
-				}
-				deps.notifier.Device(r.Context(), d.DeviceID, "call.state",
-					map[string]any{"call_id": callID, "state": "taken"})
-			}
-		}
-		if devices, err := deps.store.ListDevices(r.Context(), call.InitiatorID); err == nil {
-			for _, d := range devices {
-				deps.notifier.Device(r.Context(), d.DeviceID, "call.state", map[string]any{"call_id": callID, "state": "answered"})
-			}
-		}
+		// Раньше для этого было отдельное слово `taken` адресно соседям. Теперь изменение
+		// одно — `answered` с ответившим устройством, — а «взяли здесь или на другом»
+		// ответ ленты говорит каждому спрашивающему сам (`here`).
+		deps.notifier.CallChange(r.Context(), id.UserID, callID, "answered", id.DeviceID)
+		deps.notifier.CallChange(r.Context(), call.InitiatorID, callID, "answered", "")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"room": call.Room, "url": deps.livekitURL(), "token": token})
 	}
@@ -478,13 +339,14 @@ func endCall(deps callsDeps) http.HandlerFunc {
 		// Кто положил трубку — сведение, которого в базе не было: `/end` зовут обе
 		// стороны, и без имени первого «отменил» и «отклонил» неразличимы. Ж4.
 		_ = deps.store.SetCallState(r.Context(), callID, state, id.UserID)
-		other := call.PeerID
-		if id.UserID == call.PeerID {
-			other = call.InitiatorID
-		}
-		if devices, err := deps.store.ListDevices(r.Context(), other); err == nil {
-			for _, d := range devices {
-				deps.notifier.Device(r.Context(), d.DeviceID, "call.state", map[string]any{"call_id": callID, "state": state})
+		// Обеим сторонам, а не только «другой»: у кладущего трубку могут быть ещё
+		// устройства, и звонящий десктоп должен узнать, что звонок кончился на телефоне.
+		// Уже закрытый звонок второй раз не объявляется: `/end` зовут обе стороны.
+		if call.State == "ringing" || call.State == "answered" {
+			change := endChange(call, id.UserID, state)
+			deps.notifier.CallChange(r.Context(), call.InitiatorID, callID, change, "")
+			if call.PeerID != "" {
+				deps.notifier.CallChange(r.Context(), call.PeerID, callID, change, "")
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
