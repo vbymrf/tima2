@@ -52,8 +52,15 @@ data class BenchSummary(
     val temperaturePeak: Double? = null,
     /** Сколько процентов заряда ушло за прогон. */
     val batterySpent: Int? = null,
-    /** Сколько мА·ч ушло за прогон — по счётчику батареи. `null` — на зарядке или нечем. */
-    val mahSpent: Int? = null,
+    /**
+     * Сколько мА·ч ушло за прогон — **из тока**, сложенного по времени между отсчётами
+     * (заказчик 2026-09-26). `null` — на зарядке или нечем.
+     *
+     * Не по счётчику батареи: на realme он шагает по 4–5 мА·ч, и минутный прогон
+     * показывал 0, 4 или 9 при том же токе (отчёты 2026-09-26: 607 мА × 58 с — это
+     * ≈ 10 мА·ч, записано 4). Одна десятая — потому что прогоны короткие.
+     */
+    val mahSpent: Double? = null,
     /** Средний ток за прогон, мА. `null` — на зарядке или нечем. */
     val currentAverageMa: Int? = null,
     /**
@@ -76,13 +83,34 @@ data class BenchSummary(
  * не успели снять ни одного отсчёта» — обычный исход короткого звонка, и он должен быть
  * виден как прогон без чисел, а не пропасть.
  */
+/**
+ * мА·ч из тока: трапеции между соседними отсчётами, где ток известен у обоих.
+ *
+ * Трапеции, а не «средний ток × длительность»: отсчёт мог выпасть (прошивка не ответила),
+ * и тогда средний по оставшимся приписал бы их току чужие секунды. `null` — не нашлось ни
+ * одной пары, то есть посчитать не из чего.
+ */
+internal fun milliAmpHours(samples: List<BenchSample>): Double? {
+    var mas = 0.0
+    var pairs = 0
+    for ((a, b) in samples.zipWithNext()) {
+        val ia = a.load?.currentMa ?: continue
+        val ib = b.load?.currentMa ?: continue
+        val dt = b.atSecond - a.atSecond
+        if (dt <= 0) continue
+        mas += (ia + ib) / 2.0 * dt
+        pairs++
+    }
+    if (pairs == 0) return null
+    return (mas / 3600.0 * 10).toLong() / 10.0
+}
+
 fun summarize(preset: PublishPreset, samples: List<BenchSample>): BenchSummary {
     val ups = samples.mapNotNull { it.stats?.upBitrate }.filter { it > 0 }
     val downs = samples.mapNotNull { it.stats?.downBitrate }.filter { it > 0 }
     val cpus = samples.mapNotNull { it.load?.cpuPercent }
     val temperatures = samples.mapNotNull { it.load?.temperatureC }
     val batteries = samples.mapNotNull { it.load?.batteryPercent }
-    val charges = samples.mapNotNull { it.load?.chargeUah }
     val currents = samples.mapNotNull { it.load?.currentMa }
     val onCharger = samples.any { it.load?.charging == true }
     val traffics = samples.mapNotNull { it.traffic }
@@ -108,11 +136,7 @@ fun summarize(preset: PublishPreset, samples: List<BenchSample>): BenchSummary {
         } else {
             null
         },
-        mahSpent = if (charges.size >= 2 && !onCharger) {
-            ((charges.first() - charges.last()) / 1000).toInt().takeIf { it >= 0 }
-        } else {
-            null
-        },
+        mahSpent = if (!onCharger) milliAmpHours(samples) else null,
         currentAverageMa = if (currents.isNotEmpty() && !onCharger) currents.average().toInt() else null,
         onCharger = onCharger,
         memoryPeakMb = samples.mapNotNull { it.load?.memoryMb }.maxOrNull(),

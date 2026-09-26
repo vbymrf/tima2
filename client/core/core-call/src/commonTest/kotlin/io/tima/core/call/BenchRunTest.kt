@@ -74,15 +74,35 @@ class BenchRunTest {
     }
 
     @Test
-    fun мач_и_ток_считаются_по_счётчику() {
+    fun мач_считаются_из_тока_а_не_по_счётчику() {
+        // Счётчик батареи здесь нарочно врёт (шаг realme — 4–5 мА·ч): верить надо току.
+        // 400 и 500 мА за 60 с — трапеция 450 мА × 60 с = 7,5 мА·ч.
         val прогон = listOf(
             BenchSample(0, load = PhoneLoad(chargeUah = 3_000_000, currentMa = 400, charging = false)),
-            BenchSample(60, load = PhoneLoad(chargeUah = 2_992_000, currentMa = 500, charging = false)),
+            BenchSample(60, load = PhoneLoad(chargeUah = 3_000_000, currentMa = 500, charging = false)),
         )
         val свёртка = summarize(preset, прогон)
-        assertEquals(8, свёртка.mahSpent)
+        assertEquals(7.5, свёртка.mahSpent)
         assertEquals(450, свёртка.currentAverageMa)
         assertFalse(свёртка.onCharger)
+    }
+
+    @Test
+    fun выпавший_отсчёт_тока_не_приписывает_чужие_секунды() {
+        // Ток есть на 0-й и 10-й секунде, на 20-й его нет: считается только первый
+        // отрезок — 600 мА × 10 с ≈ 1,6 мА·ч, а не 600 мА × 20 с.
+        val прогон = listOf(
+            BenchSample(0, load = PhoneLoad(currentMa = 600)),
+            BenchSample(10, load = PhoneLoad(currentMa = 600)),
+            BenchSample(20, load = PhoneLoad()),
+        )
+        assertEquals(1.6, summarize(preset, прогон).mahSpent)
+    }
+
+    @Test
+    fun без_тока_мач_нет() {
+        val прогон = listOf(BenchSample(0, load = PhoneLoad()), BenchSample(60, load = PhoneLoad()))
+        assertNull(summarize(preset, прогон).mahSpent)
     }
 
     @Test
