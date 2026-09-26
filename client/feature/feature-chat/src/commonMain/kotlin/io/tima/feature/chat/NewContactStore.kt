@@ -298,13 +298,13 @@ data class NewContactState(
     val canSave: Boolean get() = (normalized != null || picked != null) && !working && !sectionMissing
 
     /**
-     * Слово на кнопке.
+     * Слово на кнопке — всегда «Добавить в контакты».
      *
-     * «Написать» обещает переписку, и обещать её тому, кого в TIMa нет, нельзя — писать
-     * ещё некому. Пока исход неизвестен, слово нейтральное.
+     * Было «Добавить и написать» у найденного в TIMa, но после нажатия переписка не
+     * открывается: подокно просто закрывается. Кнопка обещала то, чего не делает, —
+     * слово убрано (заказчик 2026-09-26).
      */
-    fun saveWord(words: ChatWords): String =
-        if (checked == true) words.addAndWrite else words.addToContacts
+    fun saveWord(words: ChatWords): String = words.addToContacts
 
     /**
      * Что сказать об исходе сверки до нажатия.

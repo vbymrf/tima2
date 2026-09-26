@@ -1009,7 +1009,6 @@ interface ChatWords {
     fun badPhone(reason: String): String
 
     // Книга контактов и новый контакт.
-    val addAndWrite: String
     val addToContacts: String
     val foundInTima: String
     val notInTima: String
@@ -2620,7 +2619,6 @@ object RussianWords : Words {
         override val ownNumber = "Это ваш собственный номер"
         override fun badPhone(reason: String) = "Номер не тот: $reason"
 
-        override val addAndWrite = "Добавить и написать"
         override val addToContacts = "Добавить в контакты"
         override val foundInTima = "Найден в TIMa — подписка на его ленту оформится сама"
         override val notInTima = "В TIMa его нет. Контакт сохранится — позвонить можно телефоном"

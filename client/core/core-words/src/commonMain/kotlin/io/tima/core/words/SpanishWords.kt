@@ -943,7 +943,6 @@ object SpanishWords : Words {
         override val ownNumber = "Ese es su propio número"
         override fun badPhone(reason: String) = "Número incorrecto: $reason"
 
-        override val addAndWrite = "Añadir y escribir"
         override val addToContacts = "Añadir a contactos"
         override val foundInTima = "Encontrado en TIMa — se suscribirá a sus novedades automáticamente"
         override val notInTima = "No está en TIMa. El contacto se guardará — puede llamar por teléfono"
