@@ -18,6 +18,10 @@ plugins {
     alias(libs.plugins.androidLibrary) apply false
     alias(libs.plugins.composeMultiplatform) apply false
     alias(libs.plugins.composeCompiler) apply false
+    // Wire объявлен здесь, а не только в core-call-desktop: плагин тянет свой
+    // kotlin-gradle-plugin, и в отдельном загрузчике классов модуля это был бы второй
+    // Kotlin рядом с нашим. Отсюда он делит загрузчик со всеми, и версия Kotlin одна.
+    alias(libs.plugins.wire) apply false
 }
 
 // Упавший тест обязан НАЗВАТЬ ПРИЧИНУ в логе.

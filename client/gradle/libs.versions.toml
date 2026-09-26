@@ -19,6 +19,9 @@ ktor = "3.5.1"
 # jna-platform несёт готовый Crypt32Util (DPAPI): в JDK такого API нет, а JNI-обвязка
 # ради двух вызовов означала бы свой двоичный артефакт в сборке.
 jna = "5.14.0"
+# Wire — кодоген протокола livekit-ffi для звонков на ПК. Версия та же, что у
+# messenger-crypto: два Wire разных версий в одной сборке — два рантайма в classpath.
+wire = "5.2.1"
 # Время в общем коде — kotlinx-datetime, java.time запрещён архитектурным правилом:
 # он компилируется на JVM и падает на iOS, то есть ошибка находится позже всего.
 datetime = "0.6.2"
@@ -40,6 +43,7 @@ androidLibrary = { id = "com.android.library", version.ref = "agp" }
 composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose" }
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
+wire = { id = "com.squareup.wire", version.ref = "wire" }
 
 [libraries]
 livekit-android = { module = "io.livekit:livekit-android", version.ref = "livekit" }
@@ -58,6 +62,7 @@ ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "kto
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 # MockEngine: проверка транспорта без сети и без сервера.
 jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
