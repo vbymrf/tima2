@@ -71,7 +71,7 @@ fun SelfPageScreen(
             // Те же подписи, что у чужой страницы: человек сравнивает, как видит себя и
             // других, и одинаковые поля обязаны называться одинаково.
             val known = listOfNotNull(
-                state.loadedName.takeIf { it.isNotBlank() }?.let { it to bookWords.field(PersonField.UserName) },
+                state.loadedName.takeIf { it.isNotBlank() }?.let { it to personFieldLabel(PersonField.UserName) },
                 state.phone.takeIf { it.isNotBlank() }?.let { it to bookWords.field(PersonField.Phone) },
                 state.savedNickname.takeIf { it.isNotBlank() }?.let { "@$it" to bookWords.field(PersonField.Nick) },
             )

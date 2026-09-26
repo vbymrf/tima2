@@ -2370,6 +2370,13 @@ private fun App(
                         look = bookStateForChats.view.look(),
                         friend = friend,
                         onBack = { where = Where.Nothing },
+                        // Наше имя человека — ✎ напротив «Имя» (заказчик 2026-09-26). Только у
+                        // того, кто в книге: имя пишется в его строку, и синхронизируется
+                        // вместе с ней.
+                        ownName = entry?.nameOwn,
+                        onRename = entry?.let { e ->
+                            { name: String? -> scope.launch { environment.bookStorage.rename(e.id, name) } }
+                        },
                         // Четыре действия (ЗВ7). Звонков нет на платформе без движка —
                         // тогда и кнопок нет, а не «есть, но отвергаются».
                         onCall = if (callHost.possible) {

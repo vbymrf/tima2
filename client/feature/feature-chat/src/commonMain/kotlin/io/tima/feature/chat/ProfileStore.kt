@@ -211,6 +211,18 @@ data class ProfileState(
 
     val canSave: Boolean get() = !working && nickFits && free != false
 
+    /**
+     * Почему «Сохранить» не нажимается — заказчик 2026-09-26: погашенная кнопка без
+     * объяснения читается поломкой. `null` — нажимается, или идёт запись (тогда кнопка
+     * погашена не из-за человека, и винить его нечем).
+     */
+    fun whyNoSave(words: Words): String? = when {
+        working -> null
+        !nickFits -> words.chat.saveNeedsNick(words.auth.nicknameRulesShort)
+        free == false -> words.chat.saveNickTaken
+        else -> null
+    }
+
     /** Ник ещё можно задать: не заперт. */
     val nickEditable: Boolean get() = !nickLocked
 }

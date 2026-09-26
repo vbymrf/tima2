@@ -622,6 +622,14 @@ interface PageWords {
      */
     val accountTemporary: String
     val editProfile: String
+
+    /**
+     * Пояснения в скобках к двум именам на странице человека (заказчик 2026-09-26):
+     * «Имя (мной задано)» и «Имя пользователя (как себя назвал)» — чтобы было понятно,
+     * какое из двух чьё.
+     */
+    val nameSetByMe: String
+    val nameSelfChosen: String
 }
 
 /**
@@ -1128,6 +1136,12 @@ interface ChatWords {
     val nicknameFound: String
     val saved: String
     val save: String
+    /**
+     * Почему «Сохранить» не нажимается — красной строкой у кнопки (заказчик 2026-09-26:
+     * «щас не видно, почему не активна кнопка»). [rules] — правила ника коротко.
+     */
+    fun saveNeedsNick(rules: String): String
+    val saveNickTaken: String
     val nicknameNeverFreed: String
 
     /**
@@ -2521,6 +2535,8 @@ object RussianWords : Words {
         override val account = "Аккаунт"
         override val accountTemporary = "Аккаунт временный: он будет удалён через 3 месяца после создания"
         override val editProfile = "Редактировать профиль"
+        override val nameSetByMe = "мной задано"
+        override val nameSelfChosen = "как себя назвал"
     }
 
     override val call = object : CallWords {
@@ -2745,6 +2761,8 @@ object RussianWords : Words {
         override val nicknameFound = "Ник — по нему вас найдут"
         override val saved = "Сохранено"
         override val save = "Сохранить"
+        override fun saveNeedsNick(rules: String) = "Запись невозможна — заполните ник: $rules"
+        override val saveNickTaken = "Запись невозможна — ник занят, придумайте другой"
         override val nicknameNeverFreed =
             "Занятый ник не освобождается: сменив его, вы не отдадите прежний."
         override val nicknameOnce =

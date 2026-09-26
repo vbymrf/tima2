@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
@@ -107,6 +109,24 @@ fun ProfileScreen(
     Column(modifier.fillMaxSize().background(colors.surface)) {
         if (withHeader) SubwindowHeader(title = words.profile, onBack = onBack)
 
+        // «СОХРАНЕНО» — сразу под шапкой, в плашке её цвета и заглавными (заказчик
+        // 2026-09-26). Внизу, у кнопки, его не видели: после нажатия взгляд уходит вверх,
+        // к шапке, а не остаётся на кнопке. Вне прокрутки — чтобы не уехало за край.
+        if (state.saved) {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .background(colors.functional, RoundedCornerShape(TimaSpacing.about4))
+                        .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+                ) {
+                    Caption(words.saved.uppercase(), fontSize = TimaType.sz5, weight = FontWeight.Bold)
+                }
+            }
+        }
+
         // Прокрутка обязательна: аватар, три поля, две подсказки и кнопка на телефоне
         // в 640 точек не помещаются — а без прокрутки низ просто нет (урок экрана языка).
         Box(
@@ -121,8 +141,10 @@ fun ProfileScreen(
                     horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    // Без имени — пусто, а не «+»: плюс читается «добавить» (заказчик 2026-09-26),
+                    // а аватар здесь ничего не добавляет.
                     Avatar(
-                        letters = state.name.take(1).ifBlank { "＋" }.uppercase(),
+                        letters = state.name.take(1).uppercase(),
                         size = AvatarSize.Big,
                         image = shown,
                     )
@@ -175,7 +197,13 @@ fun ProfileScreen(
                     Tertiary(words.nicknameLocked)
                 }
                 state.trouble?.let { Trouble(it) }
-                if (state.saved) Secondary(words.saved)
+
+                // Почему кнопка погашена — красным, прямо над ней (заказчик 2026-09-26).
+                // Красный здесь по прямой просьбе: серая строка про ник уже стояла у поля, и
+                // её не связывали с кнопкой.
+                state.whyNoSave(Tima.words)?.let {
+                    Caption(it, fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colors.alarm)
+                }
 
                 Button(
                     label = words.save,

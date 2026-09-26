@@ -23,6 +23,8 @@ import io.tima.core.ui.AvatarSize
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Caption
+import io.tima.core.ui.Field
+import io.tima.core.ui.IconButton
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
 import io.tima.core.ui.SectionTitle
@@ -38,6 +40,22 @@ import io.tima.domain.chat.PersonLook
 import io.tima.domain.chat.field
 import io.tima.domain.chat.letter
 import io.tima.domain.chat.line
+
+/**
+ * Подпись поля на странице человека. У двух имён — пояснение в скобках (заказчик
+ * 2026-09-26): «Имя (мной задано)» и «Имя пользователя (как себя назвал)». Без него два
+ * «имени» подряд не различить.
+ */
+@Composable
+internal fun personFieldLabel(field: PersonField): String {
+    val bookWords = Tima.words.book
+    val pageWords = Tima.words.page
+    return when (field) {
+        PersonField.Name -> bookWords.field(field) + " (" + pageWords.nameSetByMe + ")"
+        PersonField.UserName -> bookWords.field(field) + " (" + pageWords.nameSelfChosen + ")"
+        else -> bookWords.field(field)
+    }
+}
 
 /**
  * Личная страница человека — **заглушка** (решение заказчика 2026-09-19).
@@ -106,6 +124,14 @@ fun GuestPageScreen(
     onVideoCall: (() -> Unit)? = null,
     groupCall: Boolean = false,
     onWrite: (() -> Unit)? = null,
+    /**
+     * Поменять **наше** имя этого человека — ✎ напротив «Имя» (заказчик 2026-09-26: «а где
+     * изменить имя?»). Пустое снимает наше имя, и снова показывается имя из телефонной
+     * книги. `null` — править нечего: человека нет в книге, и нашего имени у него нет.
+     */
+    onRename: ((String?) -> Unit)? = null,
+    /** Наше имя как есть — с него начинается правка. `null` — не задавали. */
+    ownName: String? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.page
@@ -165,7 +191,14 @@ fun GuestPageScreen(
                 }
             }
 
-            val known = PersonField.entries.mapNotNull { field -> person.field(field)?.let { field to it } }
+            // «Имя» при возможности правки показывается и пустым: иначе ✎ негде поставить,
+            // а задать имя тому, у кого его нет, — ровно тот случай, когда правка нужна.
+            val known = PersonField.entries.mapNotNull { field ->
+                (person.field(field) ?: "".takeIf { field == PersonField.Name && onRename != null })
+                    ?.let { field to it }
+            }
+            var renaming by remember(person) { mutableStateOf(false) }
+            var draft by remember(person) { mutableStateOf(ownName ?: person.name.orEmpty()) }
             if (known.isEmpty()) {
                 Box(Modifier.fillMaxWidth().padding(TimaSpacing.about4)) {
                     Tertiary(words.nothingKnown)
@@ -173,14 +206,44 @@ fun GuestPageScreen(
             } else {
                 SectionTitle(words.whatWeKnow)
                 for ((field, value) in known) {
+                    if (field == PersonField.Name && renaming && onRename != null) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
+                                .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+                            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                        ) {
+                            Tertiary(personFieldLabel(field), lineOne = true)
+                            Field(value = draft, onChange = { draft = it }, hint = bookWords.name)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                                Button(label = bookWords.save, onClick = {
+                                    onRename(draft.trim().ifEmpty { null })
+                                    renaming = false
+                                })
+                                Button(
+                                    label = Tima.words.common.cancel,
+                                    kind = ButtonKind.Quiet,
+                                    onClick = {
+                                        draft = ownName ?: person.name.orEmpty()
+                                        renaming = false
+                                    },
+                                )
+                            }
+                        }
+                        continue
+                    }
                     ListLine(
                         middle = {
                             Column {
                                 // Значение крупнее подписи: спрашивают значение, подпись
                                 // объясняет, что это такое.
-                                Name(value)
-                                Tertiary(bookWords.field(field), lineOne = true)
+                                Name(value.ifEmpty { "—" })
+                                Tertiary(personFieldLabel(field), lineOne = true)
                             }
+                        },
+                        right = if (field == PersonField.Name && onRename != null) {
+                            { IconButton(glyph = "✎", onClick = { renaming = true }) }
+                        } else {
+                            null
                         },
                     )
                 }

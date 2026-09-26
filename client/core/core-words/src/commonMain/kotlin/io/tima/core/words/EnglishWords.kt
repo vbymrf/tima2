@@ -858,6 +858,8 @@ object EnglishWords : Words {
         override val account = "Account"
         override val accountTemporary = "Temporary account: it will be deleted 3 months after it was created"
         override val editProfile = "Edit profile"
+        override val nameSetByMe = "set by me"
+        override val nameSelfChosen = "what they call themselves"
     }
 
     override val call = object : CallWords {
@@ -1077,6 +1079,8 @@ object EnglishWords : Words {
         override val nicknameFound = "Nickname — people find you by it"
         override val saved = "Saved"
         override val save = "Save"
+        override fun saveNeedsNick(rules: String) = "Cannot save — fill in the nickname: $rules"
+        override val saveNickTaken = "Cannot save — the nickname is taken, think of another"
         override val nicknameNeverFreed =
             "A taken nickname is never released: changing it does not give the old one away."
         override val nicknameOnce =
