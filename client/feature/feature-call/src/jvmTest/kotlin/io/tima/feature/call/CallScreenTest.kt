@@ -48,6 +48,19 @@ class CallScreenTest {
     }
 
     @Test
+    fun без_движка_входящий_не_обещает_принять() {
+        // ПК0: на ПК без движка «Принять» не делало ничего, а звонящий слушал гудки до
+        // 50-й секунды. Нечем говорить — вместо кнопки строка «ответьте на телефоне».
+        val able = capture("звонок-входящий-с-движком", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connecting), incoming = true)
+        }
+        val unable = capture("звонок-входящий-без-движка", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connecting), incoming = true, canAccept = false)
+        }
+        assertTrue(unable.difference(able) > 0.0, "без движка входящий нарисовался так же, как с ним")
+    }
+
+    @Test
     fun разговор_показывает_время_а_не_слова() {
         val short = capture("звонок-разговор-5с", WIDTH, HEIGHT, dark = false) {
             screen(CallState(stage = CallStage.Connected), incoming = false, seconds = 5)
@@ -242,6 +255,7 @@ class CallScreenTest {
             onClose: (() -> Unit)? = null,
             events: List<CallEvent> = emptyList(),
             onRemoteVideo: ((Boolean) -> Unit)? = null,
+            canAccept: Boolean = true,
         ) = Stage(
             column = {
                 CallScreen(
@@ -249,7 +263,7 @@ class CallScreenTest {
                     peer = "Аня Борисова",
                     incoming = incoming,
                     seconds = seconds,
-                    onAccept = {},
+                    onAccept = if (canAccept) ({}) else null,
                     onDecline = {},
                     onHangUp = {},
                     onMicrophone = {},

@@ -915,6 +915,12 @@ interface CallWords {
     val outgoing: String
     val calling: String
     val accept: String
+
+    /**
+     * Вместо «Принять», когда на этом устройстве нечем говорить (ПК0): движка звонка нет
+     * или его библиотека не загрузилась. Звонок при этом видно — кто звонит, человек знает.
+     */
+    val noEngineHere: String
     val decline: String
     val cancel: String
     val hangUp: String
@@ -2662,6 +2668,7 @@ object RussianWords : Words {
         override val outgoing = "Вызов"
         override val calling = "Вызов…"
         override val accept = "Принять"
+        override val noEngineHere = "На этом устройстве звонки пока не работают — ответьте на телефоне"
         override val decline = "Отклонить"
         override val cancel = "Отменить"
         override val hangUp = "Завершить"

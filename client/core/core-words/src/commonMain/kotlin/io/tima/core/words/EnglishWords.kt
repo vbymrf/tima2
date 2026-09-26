@@ -916,6 +916,7 @@ object EnglishWords : Words {
         override val outgoing = "Calling"
         override val calling = "Ringing…"
         override val accept = "Accept"
+        override val noEngineHere = "Calls don't work on this device yet — answer on your phone"
         override val decline = "Decline"
         override val cancel = "Cancel"
         override val hangUp = "Hang up"

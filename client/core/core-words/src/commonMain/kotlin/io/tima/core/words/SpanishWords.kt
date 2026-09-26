@@ -916,6 +916,7 @@ object SpanishWords : Words {
         override val outgoing = "Llamando"
         override val calling = "Sonando…"
         override val accept = "Aceptar"
+        override val noEngineHere = "Las llamadas aún no funcionan en este dispositivo: contesta en el teléfono"
         override val decline = "Rechazar"
         override val cancel = "Cancelar"
         override val hangUp = "Colgar"

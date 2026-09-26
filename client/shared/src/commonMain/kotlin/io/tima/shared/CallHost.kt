@@ -314,6 +314,8 @@ class CallHost(
         state = CallState(stage = CallStage.Connecting, callId = callId)
         watch()
         Journal.note(LogCode.CALL, "входящий звонок", "от" to fromId.take(8), "видео" to video)
+        // Нечем говорить (ПК0): окно покажет «ответьте на телефоне» вместо «Принять».
+        if (engine == null) Journal.note(LogCode.CALL, "на этом устройстве звонков нет — показан без «Принять»")
     }
 
     /** Принять входящий: сервер выдаёт токен той же комнаты. */

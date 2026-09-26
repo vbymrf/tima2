@@ -1859,15 +1859,21 @@ private fun App(
                         onRight = { switchWindow(InSide.Previous) },
                     ),
                     // «Принять» гасит строку звонка и мелодию сразу, не дожидаясь ленты.
-                    onAccept = {
-                        callHost.state.callId.takeIf { it.isNotEmpty() }?.let { assembled.notices.callOver(it) }
-                        callHost.accept()
+                    // Нет движка (ПК без `livekit_ffi.dll`) — нет и кнопки: принять нечем,
+                    // и обещать это нельзя (ПК0).
+                    onAccept = if (callHost.possible) {
+                        {
+                            callHost.state.callId.takeIf { it.isNotEmpty() }?.let { assembled.notices.callOver(it) }
+                            callHost.accept()
+                        }
+                    } else {
+                        null
                     },
                     onDecline = callHost::hangUp,
                     onHangUp = callHost::hangUp,
                     onMicrophone = callHost::microphone,
                     onCamera = callHost::camera,
-                    onCallAgain = callHost::again,
+                    onCallAgain = if (callHost.possible) callHost::again else null,
                     redialVideo = callHost.video,
                     onRedialKind = callHost::redialAs,
                     onClose = {

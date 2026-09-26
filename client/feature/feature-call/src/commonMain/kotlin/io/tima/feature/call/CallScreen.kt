@@ -69,7 +69,12 @@ fun CallScreen(
     peer: String,
     /** Нам звонят (а не мы). Решает сигналинг, не SFU: у того оба случая одинаковы. */
     incoming: Boolean,
-    onAccept: () -> Unit,
+    /**
+     * Принять входящий. `null` — **на этом устройстве нечем говорить** (ПК0): движка звонка
+     * нет. Тогда вместо кнопки — строка «ответьте на телефоне». До 2026-09-26 кнопка
+     * стояла всегда и на ПК не делала ничего: звонящий слушал гудки до 50-й секунды.
+     */
+    onAccept: (() -> Unit)?,
     onDecline: () -> Unit,
     onHangUp: () -> Unit,
     onMicrophone: (Boolean) -> Unit,
@@ -210,7 +215,11 @@ fun CallScreen(
                 }
 
                 incoming && state.stage != CallStage.Connected -> {
-                    Button(label = words.accept, onClick = onAccept)
+                    if (onAccept != null) {
+                        Button(label = words.accept, onClick = onAccept)
+                    } else {
+                        Secondary(words.noEngineHere)
+                    }
                     Button(label = words.decline, kind = ButtonKind.Dangerous, onClick = onDecline)
                 }
 
