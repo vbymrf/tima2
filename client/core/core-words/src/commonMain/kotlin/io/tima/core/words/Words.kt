@@ -211,6 +211,22 @@ interface SettingsListWords {
     val permCameraAbout: String
     val permContacts: String
     val permContactsAbout: String
+    val itemMedia: String
+    val mediaMicrophone: String
+    val mediaMicrophoneAbout: String
+    val mediaSpeaker: String
+    val mediaCamera: String
+    val mediaDefault: String
+    val mediaVolume: String
+    val mediaLevelHint: String
+    val mediaTestSound: String
+    val mediaNoCamera: String
+    val mediaProcessing: String
+    val mediaEcho: String
+    val mediaNoise: String
+    val mediaGain: String
+    val mediaProcessingAbout: String
+    val mediaNextCall: String
     val permBackground: String
     val warnTitle: String
     val warnWhere: String
@@ -2202,6 +2218,22 @@ object RussianWords : Words {
         override val permCameraAbout = "Нужна для видеозвонка."
         override val permContacts = "Контакты"
         override val permContactsAbout = "Чтобы найти знакомых в TIMa по книге телефона."
+        override val itemMedia = "Микрофон и камера"
+        override val mediaMicrophone = "Микрофон"
+        override val mediaMicrophoneAbout = "Скажите что-нибудь — полоса должна двигаться. Тихо у собеседника — прибавьте громкость."
+        override val mediaSpeaker = "Колонки"
+        override val mediaCamera = "Камера"
+        override val mediaDefault = "Как в системе"
+        override val mediaVolume = "Громкость микрофона"
+        override val mediaLevelHint = "Уровень"
+        override val mediaTestSound = "Проверить звук"
+        override val mediaNoCamera = "Камера не показывает"
+        override val mediaProcessing = "Обработка звука"
+        override val mediaEcho = "Эхоподавление"
+        override val mediaNoise = "Шумоподавление"
+        override val mediaGain = "Автоусиление"
+        override val mediaProcessingAbout = "Выключайте, только если мешает: гарнитура со своим шумодавом, музыка."
+        override val mediaNextCall = "Выбор действует со следующего звонка."
         override val permBackground = "Работа в фоне"
         override val warnTitle = "Звонки могут не дойти"
         override val warnWhere = "Исправить — в «Настройки → Разрешения»."

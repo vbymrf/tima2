@@ -5,6 +5,8 @@ import io.tima.core.call.CallDoor
 import io.tima.core.call.CallEngine
 import io.tima.core.call.CallQuality
 import io.tima.core.call.CallStage
+import io.tima.core.call.CallDevices
+import io.tima.core.call.CallSetup
 import io.tima.core.call.CallState
 import io.tima.core.call.Degradation
 import io.tima.core.call.LayerMode
@@ -35,6 +37,8 @@ import livekit.proto.ConnectionState
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import livekit.proto.CaptureVideoFrameRequest
+import livekit.proto.SetPlayoutDeviceRequest
+import livekit.proto.SetRecordingDeviceRequest
 import livekit.proto.CreateAudioTrackRequest
 import livekit.proto.CreateVideoTrackRequest
 import livekit.proto.DegradationPreference
@@ -88,7 +92,7 @@ import livekit.proto.VideoStreamType
  * одно — кадры видео: они разбираются прямо в потоке библиотеки, потому что их тридцать в
  * секунду и очередь им только мешает.
  */
-class DesktopCallEngine private constructor(private val scope: CoroutineScope) : CallEngine {
+class DesktopCallEngine private constructor(private val scope: CoroutineScope) : CallEngine, CallDevices {
 
     companion object {
         /**
@@ -257,11 +261,15 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                 FfiRequest(get_audio_devices = GetAudioDevicesRequest(platform_audio_handle = platformAudio)),
             ).get_audio_devices
         }.getOrNull()
+        // Выбор человека (настройка «Микрофон и камера») — до создания дорожки: ADM
+        // пишет с того устройства, что выбрано в момент публикации.
+        pickDevices(platformAudio)
         Journal.note(
             LogCode.CALL_DEVICE, "звук ПК открыт",
             "микрофонов" to audio.info.recording_device_count,
             "колонок" to audio.info.playout_device_count,
             "микрофоны" to devices?.recording_devices?.joinToString(" | ") { it.name }.orEmpty(),
+            "выбран" to (setup.microphone?.let { id -> devices?.recording_devices?.firstOrNull { it.guid == id }?.name } ?: "по умолчанию"),
         )
         if (audio.info.recording_device_count == 0) {
             // Звонок идёт и без микрофона — собеседника слышно. Но сказать надо сразу, а
@@ -283,11 +291,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                     new_audio_source = NewAudioSourceRequest(
                         type = AudioSourceType.AUDIO_SOURCE_PLATFORM,
                         // Эхо, шум и усиление — APM WebRTC. Нейросеть поверх — срез ПК7.
-                        options = AudioSourceOptions(
-                            echo_cancellation = true,
-                            noise_suppression = true,
-                            auto_gain_control = true,
-                        ),
+                        options = setup.audioOptions(),
                         platform_audio_handle = platformAudio,
                     ),
                 ),
@@ -574,7 +578,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         }
         if (room == 0L || camera != null) return@withContext
         val video = preset?.video ?: VideoPreset()
-        val opened = when (val result = Camera.open(video.width, video.height, video.fps)) {
+        val opened = when (val result = Camera.open(video.width, video.height, video.fps, setup.camera)) {
             is Camera.Companion.Opened.Failed -> {
                 Journal.trouble(LogCode.CALL_DEVICE, "камера не открылась", "причина" to result.why)
                 _state.value = _state.value.copy(notice = result.why)
@@ -696,6 +700,190 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         }
     }
 
+    // ── Устройства и проверка (настройка «Микрофон и камера») ──────────────
+
+    override var setup: CallSetup = CallSetup()
+
+    private val _micLevel = MutableStateFlow(0f)
+    override val micLevel: StateFlow<Float> = _micLevel.asStateFlow()
+
+    private val _preview = MutableStateFlow<VideoHandle?>(null)
+    override val preview: StateFlow<VideoHandle?> = _preview.asStateFlow()
+
+    private val _checkTrouble = MutableStateFlow<String?>(null)
+    override val checkTrouble: StateFlow<String?> = _checkTrouble.asStateFlow()
+
+    private var checkAudio = 0L
+    private var checkSource = 0L
+    private var checkTrack = 0L
+    private var checkCamera: Camera? = null
+    private var checkJobs = listOf<Job>()
+
+    /** Устройства звука. ADM их перечисляет только открытым — открываем на миг. */
+    private fun audioDevices(): livekit.proto.GetAudioDevicesResponse? {
+        if (Ffi.start() != null) return null
+        val own = platformAudio.takeIf { it != 0L } ?: checkAudio.takeIf { it != 0L }
+        val handle = own ?: runCatching {
+            Ffi.request(FfiRequest(new_platform_audio = NewPlatformAudioRequest())).new_platform_audio?.platform_audio?.handle?.id
+        }.getOrNull() ?: return null
+        try {
+            return runCatching {
+                Ffi.request(FfiRequest(get_audio_devices = GetAudioDevicesRequest(platform_audio_handle = handle))).get_audio_devices
+            }.getOrNull()
+        } finally {
+            if (own == null) Ffi.drop(handle)
+        }
+    }
+
+    override fun microphones(): List<CallDevices.Device> =
+        audioDevices()?.recording_devices.orEmpty().map { CallDevices.Device(it.guid ?: it.name, it.name) }
+
+    override fun speakers(): List<CallDevices.Device> =
+        audioDevices()?.playout_devices.orEmpty().map { CallDevices.Device(it.guid ?: it.name, it.name) }
+
+    override fun cameras(): List<CallDevices.Device> =
+        Camera.devices().map { (id, name) -> CallDevices.Device(id, name) }
+
+    /** Поставить ADM выбранные микрофон и колонки. Пропавшее устройство — «по умолчанию». */
+    private fun pickDevices(handle: Long) {
+        setup.microphone?.let { id ->
+            val answer = runCatching {
+                Ffi.request(FfiRequest(set_recording_device = SetRecordingDeviceRequest(platform_audio_handle = handle, device_id = id)))
+            }.getOrNull()?.set_recording_device
+            answer?.error?.let { Journal.trouble(LogCode.CALL_DEVICE, "выбранный микрофон не встал", "причина" to it) }
+        }
+        setup.speaker?.let { id ->
+            val answer = runCatching {
+                Ffi.request(FfiRequest(set_playout_device = SetPlayoutDeviceRequest(platform_audio_handle = handle, device_id = id)))
+            }.getOrNull()?.set_playout_device
+            answer?.error?.let { Journal.trouble(LogCode.CALL_DEVICE, "выбранные колонки не встали", "причина" to it) }
+        }
+    }
+
+    /**
+     * Проверка без звонка: микрофон открывается так же, как в звонке (ADM с выбранным
+     * устройством и дорожкой), уровень меряет Windows, камера показывает себя.
+     *
+     * Во время звонка проверки нет: микрофон и камера уже заняты звонком, и второе
+     * открытие только помешало бы разговору.
+     */
+    override suspend fun startCheck() = withContext(worker) {
+        closeCheck()
+        _checkTrouble.value = null
+        if (room != 0L) {
+            _checkTrouble.value = "идёт звонок — проверка после него"
+            return@withContext
+        }
+        Ffi.start()?.let { why ->
+            _checkTrouble.value = why
+            return@withContext
+        }
+        val audio = runCatching {
+            Ffi.request(FfiRequest(new_platform_audio = NewPlatformAudioRequest())).new_platform_audio
+        }.getOrNull()
+        checkAudio = audio?.platform_audio?.handle?.id ?: 0L
+        if (checkAudio == 0L) {
+            _checkTrouble.value = audio?.error ?: "звук ПК не открылся"
+        } else {
+            pickDevices(checkAudio)
+            // Дорожка — чтобы ADM действительно писал: уровень Windows меряет только у
+            // микрофона, который кто-то слушает.
+            checkSource = runCatching {
+                Ffi.request(
+                    FfiRequest(
+                        new_audio_source = NewAudioSourceRequest(
+                            type = AudioSourceType.AUDIO_SOURCE_PLATFORM,
+                            options = setup.audioOptions(),
+                            platform_audio_handle = checkAudio,
+                        ),
+                    ),
+                ).new_audio_source?.source?.handle?.id
+            }.getOrNull() ?: 0L
+            checkTrack = runCatching {
+                Ffi.request(FfiRequest(create_audio_track = CreateAudioTrackRequest(name = "check", source_handle = checkSource)))
+                    .create_audio_track?.track?.handle?.id
+            }.getOrNull() ?: 0L
+        }
+        val meter = CoreAudio.microphone(setup.microphone)
+        val jobs = mutableListOf<Job>()
+        if (meter != null) {
+            jobs += scope.launch(Dispatchers.IO) {
+                try {
+                    while (currentCoroutineContext().isActive) {
+                        // Пик с прошлого опроса; плавное падение — чтобы полоса не мигала.
+                        val peak = meter.peak()
+                        _micLevel.value = maxOf(peak, _micLevel.value * 0.8f)
+                        delay(METER_EVERY_MS)
+                    }
+                } finally {
+                    meter.close()
+                    _micLevel.value = 0f
+                }
+            }
+        }
+        when (val opened = Camera.open(640, 480, 15, setup.camera)) {
+            is Camera.Companion.Opened.Ready -> {
+                val camera = opened.camera
+                checkCamera = camera
+                val frames = Frames()
+                _preview.value = frames
+                jobs += scope.launch(Dispatchers.IO) {
+                    val wait = (500L / camera.fps).coerceIn(5L, 50L)
+                    while (currentCoroutineContext().isActive) {
+                        if (camera.grab()) frames.pictures.value = rgbToPicture(camera) else delay(wait)
+                    }
+                }
+            }
+            is Camera.Companion.Opened.Failed -> {
+                _preview.value = null
+                if (_checkTrouble.value == null) _checkTrouble.value = opened.why
+            }
+        }
+        checkJobs = jobs
+        Journal.note(LogCode.CALL_DEVICE, "проверка устройств начата", "микрофон" to (setup.microphone ?: "по умолчанию"))
+    }
+
+    override suspend fun stopCheck() = withContext(worker) { closeCheck() }
+
+    private fun closeCheck() {
+        checkJobs.forEach { it.cancel() }
+        checkJobs = emptyList()
+        checkCamera?.close()
+        checkCamera = null
+        _preview.value = null
+        _micLevel.value = 0f
+        Ffi.drop(checkTrack)
+        Ffi.drop(checkSource)
+        Ffi.drop(checkAudio)
+        checkTrack = 0L
+        checkSource = 0L
+        checkAudio = 0L
+    }
+
+    override fun micVolume(): Float? = CoreAudio.microphone(setup.microphone)?.let { audio ->
+        try {
+            audio.volume()
+        } finally {
+            audio.close()
+        }
+    }
+
+    override fun setMicVolume(value: Float) {
+        CoreAudio.microphone(setup.microphone)?.let { audio ->
+            try {
+                audio.setVolume(value)
+            } finally {
+                audio.close()
+            }
+        }
+        Journal.note(LogCode.CALL_DEVICE, "громкость микрофона", "стала" to (value * 100).toInt())
+    }
+
+    override fun playTest() {
+        val name = setup.speaker?.let { id -> speakers().firstOrNull { it.id == id }?.name }
+        SoundTest.play(name)
+    }
+
     private fun stopCamera() {
         cameraJob?.cancel()
         cameraJob = null
@@ -783,6 +971,14 @@ internal fun rgbToPicture(width: Int, height: Int, rgb: ByteArray): VideoPicture
     return VideoPicture(width, height, out)
 }
 
+/** Обработка звука по выбору человека — для звонка и для проверки одна и та же. */
+private fun CallSetup.audioOptions() = AudioSourceOptions(
+    echo_cancellation = echoCancellation,
+    noise_suppression = noiseSuppression,
+    auto_gain_control = autoGain,
+)
+
+private const val METER_EVERY_MS = 80L
 private const val CONNECT_TIMEOUT_MS = 20_000L
 private const val DISCONNECT_TIMEOUT_MS = 5_000L
 private const val PUBLISH_TIMEOUT_MS = 10_000L

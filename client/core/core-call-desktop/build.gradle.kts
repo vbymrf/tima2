@@ -29,6 +29,7 @@ kotlin {
             implementation(projects.core.coreDiag)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.jna)
+            implementation(libs.jna.platform)
         }
         jvmTest.dependencies {
             implementation(kotlin("test"))

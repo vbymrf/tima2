@@ -19,6 +19,7 @@ internal interface CaptureNative : Library {
     fun Cap_releaseContext(ctx: Pointer): Int
     fun Cap_getDeviceCount(ctx: Pointer): Int
     fun Cap_getDeviceName(ctx: Pointer, index: Int): String?
+    fun Cap_getDeviceUniqueID(ctx: Pointer, index: Int): String?
     fun Cap_getNumFormats(ctx: Pointer, index: Int): Int
     fun Cap_getFormatInfo(ctx: Pointer, index: Int, id: Int, info: CapFormatInfo): Int
     fun Cap_openStream(ctx: Pointer, index: Int, formatId: Int): Int
@@ -88,12 +89,29 @@ internal class Camera private constructor(
         }
 
         /**
-         * Открыть первую камеру в формате, ближайшем к просимому.
-         *
-         * Первую — потому что их почти всегда одна; выбор камеры из нескольких — в
-         * «Разрешениях» ПК (ПК3), когда появится.
+         * Камеры ПК: постоянный идентификатор системы и имя. Номер камеры меняется, когда
+         * втыкают вторую, поэтому выбор человека хранится идентификатором.
          */
-        fun open(wantWidth: Int, wantHeight: Int, wantFps: Int): Opened {
+        fun devices(): List<Pair<String, String>> {
+            val lib = load() ?: return emptyList()
+            val ctx = lib.Cap_createContext() ?: return emptyList()
+            try {
+                return (0 until lib.Cap_getDeviceCount(ctx)).map { i ->
+                    val name = lib.Cap_getDeviceName(ctx, i).orEmpty()
+                    (lib.Cap_getDeviceUniqueID(ctx, i)?.takeIf { it.isNotBlank() } ?: name) to name
+                }
+            } finally {
+                lib.Cap_releaseContext(ctx)
+            }
+        }
+
+        /**
+         * Открыть камеру в формате, ближайшем к просимому.
+         *
+         * @param id выбор человека (настройка «Микрофон и камера»); `null` или пропавшая
+         *   камера — первая по списку: звонок с другой камерой лучше звонка без картинки.
+         */
+        fun open(wantWidth: Int, wantHeight: Int, wantFps: Int, id: String? = null): Opened {
             val lib = load() ?: return Opened.Failed("нет $LIBRARY в каталоге ресурсов приложения")
             val ctx = lib.Cap_createContext() ?: return Opened.Failed("камера: контекст не создался")
             val count = lib.Cap_getDeviceCount(ctx)
@@ -101,10 +119,15 @@ internal class Camera private constructor(
                 lib.Cap_releaseContext(ctx)
                 return Opened.Failed("на ПК нет камеры")
             }
-            val name = lib.Cap_getDeviceName(ctx, 0).orEmpty()
-            val formats = (0 until lib.Cap_getNumFormats(ctx, 0)).mapNotNull { id ->
+            val index = id?.let { wanted ->
+                (0 until count).firstOrNull { i ->
+                    lib.Cap_getDeviceUniqueID(ctx, i) == wanted || lib.Cap_getDeviceName(ctx, i) == wanted
+                }
+            } ?: 0
+            val name = lib.Cap_getDeviceName(ctx, index).orEmpty()
+            val formats = (0 until lib.Cap_getNumFormats(ctx, index)).mapNotNull { format ->
                 val info = CapFormatInfo()
-                if (lib.Cap_getFormatInfo(ctx, 0, id, info) == CAP_OK) id to info else null
+                if (lib.Cap_getFormatInfo(ctx, index, format, info) == CAP_OK) format to info else null
             }
             // Ближайший по площади к просимому, при равенстве — с кадрами почаще. Больше
             // просимого не берём без нужды: кадр крупнее съест процессор на кодировании,
@@ -117,7 +140,7 @@ internal class Camera private constructor(
                 lib.Cap_releaseContext(ctx)
                 return Opened.Failed("камера «$name» не назвала ни одного формата")
             }
-            val stream = lib.Cap_openStream(ctx, 0, chosen.first)
+            val stream = lib.Cap_openStream(ctx, index, chosen.first)
             if (stream < 0) {
                 lib.Cap_releaseContext(ctx)
                 // Чаще всего — камеру держит другая программа или Windows не дала доступа

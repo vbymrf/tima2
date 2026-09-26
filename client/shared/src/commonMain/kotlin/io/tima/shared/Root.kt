@@ -1004,6 +1004,8 @@ private fun App(
     // хранит выбранный набор публикации, а набор работает и без стенда — выключение
     // флага уносит обвязку, но не выбор. Замеров при выключенном флаге он не делает.
     val bench = remember(callEngine) { BenchStore(environment.settings, callEngine, scope) }
+    // Выбор микрофона, колонок и камеры — в движок с запуска (ПЛАН-ЗВОНКОВ-ПК).
+    followCallSetup(callEngine as? io.tima.core.call.CallDevices, environment.settings)
     val benchState by bench.state.collectAsState()
 
     // Набор — ЛЯМБДОЙ, а не значением: `CallHost` живёт от запуска до запуска, а набор
@@ -2389,6 +2391,7 @@ private fun App(
                         callsLog = callsLog,
                         callsState = callsState,
                         deviceSettings = environment.settings,
+                        callDevices = callEngine as? io.tima.core.call.CallDevices,
                         // Снимок считается ЗДЕСЬ и в момент открытия экрана: человек
                         // жалуется тогда, когда у него не работает, — это и есть нужный
                         // момент. Собрать его может только сборка: у неё есть и токен, и
@@ -3044,6 +3047,8 @@ private fun Settings(
     callsState: CallsState,
     /** Настройки устройства — выбор звуков (ВЗ4) живёт здесь и не синхронизируется. */
     deviceSettings: io.tima.domain.chat.Settings,
+    /** Микрофон, колонки, камера — есть только у ПК; `null` — пункта нет. */
+    callDevices: io.tima.core.call.CallDevices? = null,
 ) {
     // Название темы считается в составе, а не в лямбде списка: лямбда не composable.
     val themeName = Tima.words.appearance.theme(appearance.choice)
@@ -3053,6 +3058,8 @@ private fun Settings(
     SettingsScreen(
         opened = opened,
         onOpen = { onOpen(it) },
+        // Выбирать устройства есть смысл только там, где их выбирает человек, — на ПК.
+        hidden = if (callDevices == null) setOf(SettingsItem.MEDIA) else emptySet(),
         // Из пункта — к списку, из списка — из настроек. Одно «назад» на оба шага
         // выкидывало бы наружу из глубины, то есть теряло бы место, куда человек шёл.
         //
@@ -3125,6 +3132,9 @@ private fun Settings(
             )
 
             // Разрешения — одно место для всех (заказчик 2026-09-26).
+            // Микрофон и камера — выбор и проверка без звонка (заказчик 2026-09-26).
+            SettingsItem.MEDIA -> callDevices?.let { MediaSettings(it, deviceSettings) }
+
             SettingsItem.PERMISSIONS -> {
                 // Состояние читается при каждом заходе, а не запоминается: человек мог
                 // сменить разрешение в системных настройках, пока нас не было.

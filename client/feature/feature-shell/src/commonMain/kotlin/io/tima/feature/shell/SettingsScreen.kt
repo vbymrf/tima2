@@ -51,6 +51,8 @@ fun SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     value: (SettingsItem) -> String = { "" },
+    /** Пункты, которых на этой платформе нет: «Микрофон и камера» на телефоне. */
+    hidden: Set<SettingsItem> = emptySet(),
     content: @Composable (SettingsItem) -> Unit,
 ) {
     val colors = Tima.colors
@@ -78,7 +80,7 @@ fun SettingsScreen(
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             for (group in SettingsGroup.entries) {
                 SectionTitle(words.group(group))
-                for (item in SettingsItem.entries.filter { it.group == group }) {
+                for (item in SettingsItem.entries.filter { it.group == group && it !in hidden }) {
                     ListLine(
                         modifier = Modifier.testTag(item.tag()),
                         onClick = { onOpen(item) },
