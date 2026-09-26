@@ -127,6 +127,7 @@ class CallHostTest {
             engine,
             CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
             words = { io.tima.core.words.RussianWords },
+            access = allowed,
         )
 
         host.ring(callId = "первый", fromId = "u-1", fromName = "Аня", video = false)
@@ -167,6 +168,7 @@ class CallHostTest {
             FakeEngine(),
             CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
             words = { io.tima.core.words.RussianWords },
+            access = allowed,
         )
 
         host.start(peerId = "u-9", peerName = "Вера", video = false)
@@ -190,6 +192,7 @@ class CallHostTest {
             engine,
             CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
             words = { io.tima.core.words.RussianWords },
+            access = allowed,
         )
         host.ring(callId = "первый", fromId = "u-1", fromName = "Аня", video = false)
 
@@ -216,6 +219,7 @@ class CallHostTest {
             engine,
             CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
             words = { io.tima.core.words.RussianWords },
+            access = allowed,
         )
         host.ring(callId = "первый", fromId = "u-1", fromName = "Аня", video = false)
 
@@ -243,6 +247,7 @@ class CallHostTest {
             engine,
             CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
             words = { io.tima.core.words.RussianWords },
+            access = allowed,
         )
 
         host.start(peerId = "u-9", peerName = "Вера", video = false)
@@ -324,7 +329,15 @@ class CallHostTest {
         // никогда, и в области самого теста она не дала бы ему завершиться.
         CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
         words = { io.tima.core.words.RussianWords },
+        access = allowed,
     )
+
+    /**
+     * Доступ к микрофону и камере — **всегда дан**. Проверки идут на JVM, а там вопрос
+     * задаётся Windows (ПК3): на машине с запретом «Конфиденциальности» они падали бы от
+     * настроек машины, а не от кода.
+     */
+    private val allowed: (Boolean, (Boolean) -> Unit) -> Unit = { _, done -> done(true) }
 
     /** Сигналинг, который всегда отказывает одним и тем же кодом. */
     private class RefusingCalls(private val code: String) : Calls {

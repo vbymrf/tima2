@@ -66,6 +66,12 @@ class CallHost(
      * становится обычным поведением приложения, уходит только испытательная обвязка.
      */
     private val preset: () -> PublishPreset = { PublishPreset(name = "умолчание") },
+    /**
+     * Спросить доступ к микрофону (и камере — `true`). Платформенный вопрос по умолчанию;
+     * параметром — ради проверок: на ПК ответ даёт Windows, и проверка не должна зависеть
+     * от переключателей машины, на которой идёт.
+     */
+    private val access: (video: Boolean, onResult: (Boolean) -> Unit) -> Unit = ::askCallAccess,
 ) {
     /** Идёт ли звонок. По этому признаку окно 0 есть или его нет (`Window.shown`). */
     var active by mutableStateOf(false)
@@ -469,7 +475,7 @@ class CallHost(
             scope.launch { engine?.setCamera(false) }
             return
         }
-        askCallAccess(video = true) { allowed ->
+        access(true) { allowed ->
             if (allowed) {
                 // Разрешили — просьба выполнена, и висеть ей больше незачем.
                 forget(NO_CAMERA)
@@ -695,7 +701,7 @@ class CallHost(
      * ищут такую беду где угодно, кроме разрешения.
      */
     private fun withAccess(video: Boolean, then: () -> Unit) {
-        askCallAccess(video) { allowed ->
+        access(video) { allowed ->
             if (allowed) {
                 then()
             } else {
