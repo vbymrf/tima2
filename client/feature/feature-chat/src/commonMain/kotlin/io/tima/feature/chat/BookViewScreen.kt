@@ -43,6 +43,7 @@ import io.tima.core.ui.words
 import io.tima.core.words.BookWords
 import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.BookList
+import io.tima.domain.chat.Section
 import io.tima.domain.chat.ChatPerson
 import io.tima.domain.chat.PersonLook
 import io.tima.domain.chat.PersonField
@@ -89,13 +90,32 @@ fun BookViewScreen(
     onOpenList: ((BookRoster) -> Unit)? = null,
     /** Сколько человек в списке — числом справа от его имени. */
     countIn: (BookRoster) -> Int = { 0 },
+    /**
+     * Открыть журнал контактов (ВЗ8). Есть — он стоит **самым верхним** пунктом, а
+     * четырёх пунктов «Списков» нет: они стали его фильтром.
+     */
+    onOpenLedger: (() -> Unit)? = null,
 ) {
     Column(
         modifier.fillMaxWidth().padding(vertical = TimaSpacing.about2),
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
     ) {
         val words = Tima.words.book
-        // «Разделы» — в самый верх: это то, зачем чаще всего открывают «Вид».
+        // Журнал контактов — выше «Разделов» (заказчик 2026-09-26): в нём раздел, список и
+        // своя мелодия назначаются нескольким сразу.
+        if (onOpenLedger != null && forPeople) {
+            ListLine(
+                onClick = onOpenLedger,
+                middle = {
+                    Column {
+                        Name(words.ledgerTitle)
+                        Tertiary(words.ledgerAbout, lineOne = true)
+                    }
+                },
+                right = { Tertiary("›", lineOne = true) },
+            )
+        }
+        // «Разделы» — следом: это то, зачем чаще всего открывают «Вид».
         if (onSections != null && withSections) {
             ListLine(
                 onClick = onSections,
@@ -154,7 +174,7 @@ fun BookViewScreen(
             //
             // Внизу, потому что открывают «Вид» не ради них: «Разделы» стоят первыми
             // по той же причине — по тому, как часто за чем приходят.
-            if (onOpenList != null) {
+            if (onOpenList != null && onOpenLedger == null) {
                 SectionTitle(words.listsTitle)
                 for (roster in BookRoster.entries) {
                     ListLine(
@@ -516,11 +536,21 @@ fun BookViewSheet(
     /** Переложить человека в список (Л6). `null` — списки только показываются. */
     onPickList: ((String, BookList) -> Unit)? = null,
     personOf: (BookEntry) -> ChatPerson = { ChatPerson(name = it.name, phone = it.phone) },
+    /** Разделы книги — для журнала контактов (ВЗ8). */
+    sections: List<Section> = emptyList(),
+    /** Переложить выделенных в раздел (ВЗ8). `null` — журнала нет. */
+    onPickSection: ((List<String>, String) -> Unit)? = null,
+    /** Своя мелодия человека — имя; `null` — своей нет. */
+    soundTitleOf: (BookEntry) -> String? = { null },
+    onOpenPerson: ((BookEntry) -> Unit)? = null,
+    /** Выбрать мелодию выделенным — панель рисует тот, у кого выбор звука. */
+    onSound: (List<BookEntry>) -> Unit = {},
 ) {
     val colors = Tima.colors
     val words = Tima.words.book
     var page by remember { mutableStateOf<ViewPage?>(null) }
     var roster by remember { mutableStateOf<BookRoster?>(null) }
+    var ledger by remember { mutableStateOf(false) }
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -551,13 +581,14 @@ fun BookViewSheet(
             ) {
                 val current = page
                 val list = roster
-                if (current != null || list != null) {
-                    IconButton(glyph = "‹", onClick = { page = null; roster = null }, live = true)
+                if (current != null || list != null || ledger) {
+                    IconButton(glyph = "‹", onClick = { page = null; roster = null; ledger = false }, live = true)
                 }
                 Box(Modifier.weight(1f)) {
                     ProvidePlace(TextPlace.HEADERS) {
                         Name(
                             when {
+                                ledger -> words.ledgerTitle
                                 list != null -> words.roster(list)
                                 current == ViewPage.Sections -> words.sectionsLook
                                 current == ViewPage.Person -> words.showPersonAs
@@ -573,6 +604,19 @@ fun BookViewSheet(
             val scrolling = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())
             val open = roster
             when {
+                // Журнал со своим списком и полосой внизу — не в общей прокрутке: список в
+                // прокрутке прокручиваться не может.
+                ledger && onPickList != null && onPickSection != null -> ContactLedgerPage(
+                    people = everyone,
+                    sections = sections,
+                    modifier = Modifier.weight(1f, fill = false),
+                    personOf = personOf,
+                    soundTitleOf = soundTitleOf,
+                    onOpenPerson = onOpenPerson,
+                    onList = { ids, to -> ids.forEach { onPickList(it, to) } },
+                    onSection = onPickSection,
+                    onSound = onSound,
+                )
                 open != null -> {
                     // Правится — показываем всю книгу: за добавлением сюда и приходят.
                     // Только показывается — лишь содержимое списка.
@@ -607,6 +651,11 @@ fun BookViewSheet(
                     withSections = withSections,
                     onOpenList = if (everyone.isEmpty()) null else ({ roster = it }),
                     countIn = { r -> everyone.count { r.holds(it) } },
+                    onOpenLedger = if (everyone.isEmpty() || onPickList == null || onPickSection == null) {
+                        null
+                    } else {
+                        { ledger = true }
+                    },
                 )
             }
         }

@@ -574,6 +574,27 @@ interface BookWords {
     /** Пусто в подокне списка. Не ошибка: «Заблокированных» у большинства нет вовсе. */
     val listEmpty: String
 
+    // Журнал контактов — ВЗ8 (заказчик 2026-09-26).
+    val ledgerTitle: String
+    val ledgerAbout: String
+    val ledgerAll: String
+    val ledgerOwnSound: String
+    val ledgerAllSections: String
+    val ledgerSelectAll: String
+    val ledgerSelectNone: String
+    val ledgerSearch: String
+    val ledgerToSection: String
+    val ledgerRemove: String
+    val ledgerBlock: String
+    val ledgerRestore: String
+    val ledgerSound: String
+    val ledgerPickSection: String
+    val ledgerSoundTitle: String
+    val ledgerSoundAsSettings: String
+    val ledgerSoundOnlyTima: String
+    /** Сколько выделено — над полосой действий. */
+    fun ledgerSelected(count: Int): String
+
     /** Подсказка над галками в подокнах «Убранных» и «Заблокированных» (Л6). */
     val listPick: String
 
@@ -2545,6 +2566,24 @@ object RussianWords : Words {
         override val listBlocked = "Заблокированные"
         override val listBlockedAbout = "не в контактах; переписки скрыты, звонок молчит"
         override val listEmpty = "Здесь пусто"
+        override val ledgerTitle = "Журнал контактов"
+        override val ledgerAbout = "раздел, список и своя мелодия — для нескольких сразу"
+        override val ledgerAll = "Все"
+        override val ledgerOwnSound = "Со своей мелодией"
+        override val ledgerAllSections = "Все разделы"
+        override val ledgerSelectAll = "Выделить все"
+        override val ledgerSelectNone = "Сбросить выделение"
+        override val ledgerSearch = "Имя или номер"
+        override val ledgerToSection = "В раздел"
+        override val ledgerRemove = "Убрать"
+        override val ledgerBlock = "Заблокировать"
+        override val ledgerRestore = "Вернуть"
+        override val ledgerSound = "Звук"
+        override val ledgerPickSection = "Куда положить выбранных"
+        override val ledgerSoundTitle = "Мелодия звонка для выбранных"
+        override val ledgerSoundAsSettings = "Как в настройках"
+        override val ledgerSoundOnlyTima = "Мелодия — только тем, кто в TIMa: остальные вам не звонят через приложение"
+        override fun ledgerSelected(count: Int) = "Выделено: $count"
         override val listPick = "Галочка — человек в списке"
         // Счёт людей тот же, что у разделов: правило склонения одно на словарь.
         override fun peopleInList(count: Int) = peopleInSection(count)

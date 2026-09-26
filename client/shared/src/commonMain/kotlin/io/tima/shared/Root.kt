@@ -1,5 +1,12 @@
 package io.tima.shared
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import io.tima.core.ui.Name
+import io.tima.core.ui.Tertiary
+import io.tima.core.ui.Button
+import io.tima.core.ui.Secondary
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.SideEffect
@@ -1471,7 +1478,14 @@ private fun App(
         return
     }
 
+    // Выбор мелодии для выделенных в журнале контактов (ВЗ8) и выбранное сейчас — для
+    // строки «♪ мелодия» у каждого.
+    var ledgerSound by remember { mutableStateOf<List<BookEntry>?>(null) }
+    var soundsNow by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    val silentWord = Tima.words.settings2.soundSilent
+    LaunchedEffect(Unit) { environment.settings.all().collect { soundsNow = it } }
     if (bookView) {
+        Box(Modifier.fillMaxSize()) {
         BookViewSheet(
             view = bookState.view,
             onChange = book::changedView,
@@ -1488,7 +1502,32 @@ private fun App(
             everyone = if (phoneTab == WindowTab.Calls) emptyList() else bookState.everyone,
             onPickList = book::movedTo,
             personOf = personOfBook,
+            // Журнал контактов (ВЗ8): раздел, список и своя мелодия — нескольким сразу.
+            sections = bookState.sections,
+            onPickSection = { ids, sectionId ->
+                scope.launch { ids.forEach { environment.bookStorage.moveTo(it, sectionId) } }
+            },
+            soundTitleOf = { entry ->
+                entry.userId?.let { uid -> soundsNow[SoundKeys.ringOf(uid)] }
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { soundTitle(soundChoiceOf(it), silentWord) }
+            },
+            onOpenPerson = { entry ->
+                entry.userId?.let {
+                    bookView = false
+                    where = Where.Person(it)
+                }
+            },
+            onSound = { chosen -> ledgerSound = chosen },
         )
+        ledgerSound?.let { targets ->
+            ContactSoundSheet(
+                settings = environment.settings,
+                targets = targets,
+                onClose = { ledgerSound = null },
+            )
+        }
+        }
         return
     }
 
@@ -3977,4 +4016,70 @@ internal fun soundRow(
         onDefault = { save(SoundChoice.Default) },
         trouble = trouble,
     )
+}
+
+/** Как назвать выбранный звук в строке: имя мелодии или файла, «Без звука». */
+private fun soundTitle(choice: SoundChoice, silent: String): String? = when (choice) {
+    SoundChoice.Default -> null
+    SoundChoice.Silent -> silent
+    is SoundChoice.System -> choice.title
+    is SoundChoice.File -> choice.title
+}
+
+/**
+ * Мелодия звонка для выделенных в журнале контактов — ВЗ8.
+ *
+ * Своя мелодия есть только у тех, кто в TIMa: остальные не звонят через приложение, и
+ * назначать им нечего. Выбор ложится каждому своим ключом; «Как в настройках» снимает
+ * свою — звучит общая.
+ */
+@Composable
+private fun ContactSoundSheet(
+    settings: io.tima.domain.chat.Settings,
+    targets: List<BookEntry>,
+    onClose: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val words = Tima.words
+    val users = targets.mapNotNull { it.userId }
+    var trouble by remember { mutableStateOf<String?>(null) }
+    val put: (String) -> Unit = { value ->
+        scope.launch { users.forEach { settings.put(SoundKeys.ringOf(it), value) } }
+        onClose()
+    }
+    val onPick: (SoundPick?) -> Unit = { pick ->
+        when (pick) {
+            null -> Unit
+            SoundPick.Default -> put(SoundChoice.Default.wire())
+            is SoundPick.System -> put(SoundChoice.System(pick.uri, pick.title).wire())
+            is SoundPick.File -> put(SoundChoice.File(pick.path, pick.title).wire())
+            SoundPick.TooBig -> trouble = words.settings2.soundTooBig
+            SoundPick.BadType -> trouble = words.settings2.soundBadType
+        }
+    }
+    val system = rememberSystemSoundPicker(SoundUse.Ring, onPick)
+    // Имя файла у себя — своё на каждый выбор: общий файл нескольких людей не затирается
+    // выбором одного из них.
+    val file = rememberSoundFilePicker("ring_c" + msNow(), onPick)
+    Box(
+        Modifier.fillMaxSize().background(Tima.colors.text.copy(alpha = 0.45f)).clickable(onClick = onClose),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Column(
+            Modifier.fillMaxWidth().background(Tima.colors.surface).clickable(enabled = false) {}
+                .padding(TimaSpacing.about4),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        ) {
+            Name(words.book.ledgerSoundTitle + " · " + users.size)
+            if (users.size < targets.size) Tertiary(words.book.ledgerSoundOnlyTima)
+            if (users.isNotEmpty()) {
+                if (systemSoundsAvailable) Button(label = words.settings2.soundFromSystem, onClick = system, kind = ButtonKind.Quiet)
+                Button(label = words.settings2.soundFromFile, onClick = file, kind = ButtonKind.Quiet)
+                Button(label = words.settings2.soundSilent, onClick = { put(SoundChoice.Silent.wire()) }, kind = ButtonKind.Quiet)
+                // «Как в настройках» — снять свою: звучит общая мелодия.
+                Button(label = words.book.ledgerSoundAsSettings, onClick = { put("") }, kind = ButtonKind.Quiet)
+            }
+            trouble?.let { Secondary(it) }
+        }
+    }
 }
