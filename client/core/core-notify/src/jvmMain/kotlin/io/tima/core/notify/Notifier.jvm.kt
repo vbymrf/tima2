@@ -4,6 +4,7 @@ import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
 import java.awt.SystemTray
 import java.awt.TrayIcon
+import java.io.File
 
 /**
  * ПК: всплывающая подсказка у значка в трее.
@@ -36,10 +37,18 @@ class DesktopNotifier(private val icon: TrayIcon?) : Notifier {
         }
         runCatching { tray.displayMessage(title, notice.what, kind) }
             .onFailure { Journal.trouble(LogCode.PERM_DENIED, "уведомление не показано", "почему" to it.message.orEmpty()) }
+        // Звук — тем же выбором, что на телефоне (ВЗ6): мелодия по кругу до снятия
+        // строки звонка, звук сообщения — один раз.
+        val call = notice.call
+        if (call != null) {
+            DesktopRinger.ring(notice.key, call.ring)
+        } else {
+            DesktopRinger.once(notice.sound)
+        }
     }
 
-    /** Подсказка гаснет сама; снимать нечего. */
-    override fun hide(key: String) = Unit
+    /** Подсказка гаснет сама; снимать нечего — но мелодия звонка обязана замолчать. */
+    override fun hide(key: String) = DesktopRinger.stop(key)
 
     override fun hideAll() = Unit
 
@@ -81,3 +90,78 @@ actual fun platformNotifier(): Notifier = DesktopNotices.notifier()
 actual fun awakeAllowed(): Boolean = true
 
 actual fun askAwake() = Unit
+
+/**
+ * Звук на ПК — ВЗ6.
+ *
+ * ── ЧТО ЗВУЧИТ ──────────────────────────────────────────────────────────────
+ *
+ * Свой файл `wav` играется как есть. mp3, ogg и m4a Java без сторонних библиотек не
+ * проигрывает, а своего списка стандартных мелодий у Windows для приложений нет — для них
+ * и для «как в системе» звучит системный сигнал. Молчать нельзя: звонок, который не
+ * слышно, — пропущенный.
+ */
+internal object DesktopRinger {
+
+    @Volatile
+    private var ringingKey: String? = null
+
+    @Volatile
+    private var clip: javax.sound.sampled.Clip? = null
+
+    @Volatile
+    private var beeper: Thread? = null
+
+    @Synchronized
+    fun ring(key: String, choice: SoundChoice) {
+        stopAll()
+        if (choice == SoundChoice.Silent) return
+        ringingKey = key
+        val file = (choice as? SoundChoice.File)?.path?.let(::File)
+        clip = file?.takeIf { it.extension.equals("wav", ignoreCase = true) }?.let { openClip(it) }
+        val c = clip
+        if (c != null) {
+            c.loop(javax.sound.sampled.Clip.LOOP_CONTINUOUSLY)
+            return
+        }
+        beeper = Thread {
+            try {
+                while (!Thread.currentThread().isInterrupted) {
+                    java.awt.Toolkit.getDefaultToolkit().beep()
+                    Thread.sleep(BEEP_EVERY_MS)
+                }
+            } catch (_: InterruptedException) {
+            }
+        }.apply { isDaemon = true; start() }
+    }
+
+    @Synchronized
+    fun once(choice: SoundChoice) {
+        if (choice == SoundChoice.Silent || ringingKey != null) return
+        val file = (choice as? SoundChoice.File)?.path?.let(::File)
+        val c = file?.takeIf { it.extension.equals("wav", ignoreCase = true) }?.let { openClip(it) }
+        if (c != null) c.start() else java.awt.Toolkit.getDefaultToolkit().beep()
+    }
+
+    @Synchronized
+    fun stop(key: String) {
+        if (key == ringingKey) stopAll()
+    }
+
+    private fun stopAll() {
+        clip?.let { runCatching { it.stop() }; runCatching { it.close() } }
+        clip = null
+        beeper?.interrupt()
+        beeper = null
+        ringingKey = null
+    }
+
+    private fun openClip(file: File): javax.sound.sampled.Clip? = runCatching {
+        val stream = javax.sound.sampled.AudioSystem.getAudioInputStream(file)
+        javax.sound.sampled.AudioSystem.getClip().apply { open(stream) }
+    }.onFailure {
+        Journal.trouble(LogCode.CALL, "звук не проигрался — системный сигнал", "почему" to it.message.orEmpty())
+    }.getOrNull()
+
+    private const val BEEP_EVERY_MS = 1500L
+}

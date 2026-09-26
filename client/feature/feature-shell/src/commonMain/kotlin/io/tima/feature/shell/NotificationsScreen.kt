@@ -62,6 +62,10 @@ fun NotificationsScreen(
     /** Входящему можно во весь экран (Android 14+). `null` — вопроса нет. */
     fullScreenOn: Boolean? = null,
     onFullScreen: (() -> Unit)? = null,
+    /** Мелодия звонка (ВЗ4). `null` — раздела нет (проверки). */
+    ring: SoundRow? = null,
+    /** Звук уведомления о сообщении (ВЗ4). */
+    message: SoundRow? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.settings2
@@ -121,6 +125,17 @@ fun NotificationsScreen(
             }
         }
 
+        // ── ЗВУКИ (ВЗ4) ─────────────────────────────────────────────────────
+        //
+        // Общие мелодия звонка и звук сообщения. Своя мелодия у контакта — в журнале
+        // контактов (ВЗ8), и она важнее общей.
+        if (ring != null || message != null) {
+            SectionTitle(words.soundsTitle)
+            ring?.let { SoundSetting(words.soundRing, it) }
+            message?.let { SoundSetting(words.soundMessage, it) }
+            Column(Modifier.padding(horizontal = TimaSpacing.about4)) { Tertiary(words.soundsNotSynced) }
+        }
+
         if (onBattery != null) {
             SectionTitle(words.noticesAwake)
             Column(
@@ -152,3 +167,42 @@ fun NotificationsScreen(
  * зависимость экрана от платформенного модуля была бы зависимостью не по делу.
  */
 enum class NotifyAccess { Given, Ask, Settings }
+
+/**
+ * Одна настройка звука: что выбрано сейчас и четыре пути — ВЗ4.
+ *
+ * @param current как назвать выбранное: имя мелодии или файла, «Как в системе», «Без звука».
+ * @param onSystem выбор из стандартных; `null` — у платформы их нет (ПК).
+ * @param trouble почему последний файл не взят; `null` — всё хорошо.
+ */
+data class SoundRow(
+    val current: String,
+    val onSystem: (() -> Unit)?,
+    val onFile: () -> Unit,
+    val onSilent: () -> Unit,
+    val onDefault: () -> Unit,
+    val trouble: String? = null,
+)
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun SoundSetting(title: String, row: SoundRow) {
+    val words = Tima.words.settings2
+    Column(
+        Modifier.padding(horizontal = TimaSpacing.about4),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+    ) {
+        Secondary(title)
+        Name(row.current)
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        ) {
+            row.onSystem?.let { Button(label = words.soundFromSystem, onClick = it, kind = ButtonKind.Quiet) }
+            Button(label = words.soundFromFile, onClick = row.onFile, kind = ButtonKind.Quiet)
+            Button(label = words.soundSilent, onClick = row.onSilent, kind = ButtonKind.Quiet)
+            Button(label = words.soundDefault, onClick = row.onDefault, kind = ButtonKind.Quiet)
+        }
+        row.trouble?.let { Secondary(it) }
+    }
+}

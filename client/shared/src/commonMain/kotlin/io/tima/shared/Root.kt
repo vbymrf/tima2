@@ -108,6 +108,16 @@ import io.tima.core.contacts.platformPhoneBook
 import io.tima.core.notify.NotifyAccessWay
 import io.tima.core.notify.askAwake
 import io.tima.core.notify.askNotifyAccess
+import io.tima.feature.shell.SoundRow
+import io.tima.core.media.systemSoundsAvailable
+import io.tima.core.media.rememberSoundFilePicker
+import io.tima.core.media.rememberSystemSoundPicker
+import io.tima.core.media.SoundUse
+import io.tima.core.media.SoundPick
+import io.tima.core.notify.wire
+import io.tima.core.notify.soundChoiceOf
+import io.tima.core.notify.SoundKeys
+import io.tima.core.notify.SoundChoice
 import kotlinx.coroutines.flow.first
 import io.tima.feature.shell.LocalBackgroundWarning
 import io.tima.feature.shell.BackgroundWarning
@@ -2287,6 +2297,7 @@ private fun App(
                         diaryPolicy = diaryPolicy,
                         callsLog = callsLog,
                         callsState = callsState,
+                        deviceSettings = environment.settings,
                         // Снимок считается ЗДЕСЬ и в момент открытия экрана: человек
                         // жалуется тогда, когда у него не работает, — это и есть нужный
                         // момент. Собрать его может только сборка: у неё есть и токен, и
@@ -2940,6 +2951,8 @@ private fun Settings(
     /** Журнал звонков: сколько его держит телефон и сколько сейчас лежит (Ж5). */
     callsLog: CallsStore,
     callsState: CallsState,
+    /** Настройки устройства — выбор звуков (ВЗ4) живёт здесь и не синхронизируется. */
+    deviceSettings: io.tima.domain.chat.Settings,
 ) {
     // Название темы считается в составе, а не в лямбде списка: лямбда не composable.
     val themeName = Tima.words.appearance.theme(appearance.choice)
@@ -3039,6 +3052,9 @@ private fun Settings(
                     onCallsChannel = if (platform == Platform.DESKTOP) null else ::openCallsChannelSettings,
                     fullScreenOn = if (platform == Platform.DESKTOP) null else backgroundFacts().fullScreen,
                     onFullScreen = if (platform == Platform.DESKTOP) null else ::openFullScreenSettings,
+                    // Звуки (ВЗ4): общий выбор — в настройках устройства, не синхронизируется.
+                    ring = soundRow(deviceSettings, SoundKeys.RING, SoundUse.Ring, "ring"),
+                    message = soundRow(deviceSettings, SoundKeys.MESSAGE, SoundUse.Message, "message"),
                 )
             }
 
@@ -3911,3 +3927,54 @@ private const val BG_LATER_MS = 7L * 24 * 60 * 60 * 1000
 
 /** Разрешение на уведомления спрошено само — один раз на установку (ВЗ0б). */
 private const val NOTICES_AUTO_ASKED = "notices.autoAsked"
+
+/**
+ * Строка выбора звука — ВЗ4: общая мелодия или звук сообщения, а в журнале контактов —
+ * своя мелодия человека (ВЗ8). Выбор ложится строкой в настройки устройства.
+ *
+ * @param fileName имя своего файла у себя без расширения: у общей мелодии «ring», у
+ *   мелодии контакта — своё, чтобы выбор одного не затёр другой.
+ */
+@Composable
+internal fun soundRow(
+    settings: io.tima.domain.chat.Settings,
+    key: String,
+    use: SoundUse,
+    fileName: String,
+): SoundRow {
+    val scope = rememberCoroutineScope()
+    var all by remember(settings) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    LaunchedEffect(settings) { settings.all().collect { all = it } }
+    var trouble by remember(key) { mutableStateOf<String?>(null) }
+    val words = Tima.words.settings2
+    val choice = soundChoiceOf(all[key])
+    val save: (SoundChoice) -> Unit = { picked ->
+        trouble = null
+        scope.launch { settings.put(key, picked.wire()) }
+    }
+    val onPick: (SoundPick?) -> Unit = { pick ->
+        when (pick) {
+            null -> Unit
+            SoundPick.Default -> save(SoundChoice.Default)
+            is SoundPick.System -> save(SoundChoice.System(pick.uri, pick.title))
+            is SoundPick.File -> save(SoundChoice.File(pick.path, pick.title))
+            SoundPick.TooBig -> trouble = words.soundTooBig
+            SoundPick.BadType -> trouble = words.soundBadType
+        }
+    }
+    val system = rememberSystemSoundPicker(use, onPick)
+    val file = rememberSoundFilePicker(fileName, onPick)
+    return SoundRow(
+        current = when (choice) {
+            SoundChoice.Default -> words.soundDefault
+            SoundChoice.Silent -> words.soundSilent
+            is SoundChoice.System -> choice.title.ifBlank { words.soundDefault }
+            is SoundChoice.File -> choice.title
+        },
+        onSystem = if (systemSoundsAvailable) system else null,
+        onFile = file,
+        onSilent = { save(SoundChoice.Silent) },
+        onDefault = { save(SoundChoice.Default) },
+        trouble = trouble,
+    )
+}

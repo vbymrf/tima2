@@ -234,6 +234,18 @@ interface SettingsListWords {
     /** Право «во весь экран» (Android 14+, ВЗ1). */
     val noticesFullScreenOn: String
     val noticesFullScreenOff: String
+
+    // Звуки — ВЗ4 (заказчик 2026-09-26).
+    val soundsTitle: String
+    val soundRing: String
+    val soundMessage: String
+    val soundDefault: String
+    val soundSilent: String
+    val soundFromSystem: String
+    val soundFromFile: String
+    val soundTooBig: String
+    val soundBadType: String
+    val soundsNotSynced: String
     val itemVirtuals: String
     val itemAppearance: String
     /** «Шрифты и размеры» — второй пункт вида (ПЛАН-ШРИФТОВ Ш4, 2026-09-16). */
@@ -2175,6 +2187,16 @@ object RussianWords : Words {
         override val warnLater = "Позже"
         override val noticesFullScreenOn = "Входящий на замке — во весь экран"
         override val noticesFullScreenOff = "Входящий на замке покажется строкой: во весь экран запрещено"
+        override val soundsTitle = "Звуки"
+        override val soundRing = "Мелодия звонка"
+        override val soundMessage = "Звук уведомления"
+        override val soundDefault = "Как в системе"
+        override val soundSilent = "Без звука"
+        override val soundFromSystem = "Из стандартных"
+        override val soundFromFile = "Загрузить файл"
+        override val soundTooBig = "Файл больше 5 МБ — не взят"
+        override val soundBadType = "Нужен звук: mp3, ogg, m4a или wav"
+        override val soundsNotSynced = "Выбор у каждого устройства свой и между ними не переносится."
         override val itemVirtuals = "Виртуальные аккаунты"
         override val itemAppearance = "Цвета"
         override val itemText = "Шрифты и размеры"
