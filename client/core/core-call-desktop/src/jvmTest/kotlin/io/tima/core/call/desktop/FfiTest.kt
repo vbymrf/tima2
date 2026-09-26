@@ -18,7 +18,7 @@ class FfiTest {
 
     @Test
     fun библиотека_грузится_и_отвечает_на_запрос() {
-        assertNotNull(Ffi.libraryFile(), "нет livekit_ffi.dll — задача livekitFfi не отработала")
+        assertNotNull(Ffi.libraryFile(), "нет livekit_ffi.dll — задача callNatives не отработала")
         assertNull(Ffi.start(), "библиотека не загрузилась")
 
         val answer = Ffi.request(FfiRequest(new_apm = NewApmRequest(

@@ -61,7 +61,7 @@ internal fun interface EventCallback : Callback {
  */
 internal object Ffi {
 
-    /** Имя библиотеки в каталоге ресурсов приложения (`build.gradle.kts`, `livekitFfi`). */
+    /** Имя библиотеки в каталоге ресурсов приложения (`build.gradle.kts`, `callNatives`). */
     private const val LIBRARY = "livekit_ffi.dll"
 
     @Volatile

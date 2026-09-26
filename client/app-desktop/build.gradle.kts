@@ -104,7 +104,7 @@ compose.desktop {
 
         // ── livekit_ffi.dll — ресурсом приложения ───────────────────────────────
         //
-        // Каталог раскладки по ОС (`windows/`) собирает задача `livekitFfi` модуля
+        // Каталог раскладки по ОС (`windows/`) собирает задача `callNatives` модуля
         // core-call-desktop: скачивает библиотеку и сверяет sha256. Compose кладёт её и
         // в MSI, и в запуск `run`, а путь сообщает свойством
         // `compose.application.resources.dir` — его и читает движок.
@@ -195,5 +195,5 @@ compose.desktop {
 // Ресурсы приложения готовятся из каталога, который наполняет чужая задача: без явной
 // связи Gradle собрал бы MSI без библиотеки звонков, и ПК молча остался бы без них.
 tasks.matching { it.name == "prepareAppResources" }.configureEach {
-    dependsOn(":core:core-call-desktop:livekitFfi")
+    dependsOn(":core:core-call-desktop:callNatives")
 }

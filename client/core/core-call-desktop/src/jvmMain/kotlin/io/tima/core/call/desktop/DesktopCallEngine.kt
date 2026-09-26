@@ -6,6 +6,10 @@ import io.tima.core.call.CallEngine
 import io.tima.core.call.CallQuality
 import io.tima.core.call.CallStage
 import io.tima.core.call.CallState
+import io.tima.core.call.Degradation
+import io.tima.core.call.LayerMode
+import io.tima.core.call.VideoCodec
+import io.tima.core.call.VideoPreset
 import io.tima.core.call.PictureVideo
 import io.tima.core.call.PublishPreset
 import io.tima.core.call.VideoHandle
@@ -28,7 +32,18 @@ import livekit.proto.AudioSourceType
 import livekit.proto.ConnectRequest
 import livekit.proto.ConnectionQuality
 import livekit.proto.ConnectionState
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
+import livekit.proto.CaptureVideoFrameRequest
 import livekit.proto.CreateAudioTrackRequest
+import livekit.proto.CreateVideoTrackRequest
+import livekit.proto.DegradationPreference
+import livekit.proto.NewVideoSourceRequest
+import livekit.proto.VideoBufferInfo
+import livekit.proto.VideoEncoding
+import livekit.proto.VideoSourceResolution
+import livekit.proto.VideoSourceType
+import livekit.proto.VideoCodec as LkVideoCodec
 import livekit.proto.DisconnectRequest
 import livekit.proto.FfiEvent
 import livekit.proto.FfiRequest
@@ -127,6 +142,15 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     private var micSource = 0L
     private var micTrack = 0L
 
+    // ── Камера (ПК4) ────────────────────────────────────────────────────────
+    private var camera: Camera? = null
+    private var cameraSource = 0L
+    private var cameraTrack = 0L
+    private var cameraJob: Job? = null
+
+    /** Пресет публикации звонка: кодек и полоса камеры берутся из него. */
+    private var preset: PublishPreset? = null
+
     // ── Видео собеседника ───────────────────────────────────────────────────
     private class Remote(val sid: String, val track: Long, val stream: Long, val handle: Frames)
 
@@ -157,6 +181,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             return@withContext
         }
         closeRoom()
+        preset = publish
         everAnswered = false
         takeRemote = true
         _state.value = CallState(stage = CallStage.Connecting, callId = door.callId)
@@ -499,6 +524,11 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         pump = null
         while (events.tryReceive().isSuccess) Unit
         stopRemote()
+        stopCamera()
+        Ffi.drop(cameraTrack)
+        Ffi.drop(cameraSource)
+        cameraTrack = 0L
+        cameraSource = 0L
         publications.values.forEach { Ffi.drop(it.handle) }
         publications.clear()
         owned.asReversed().forEach { Ffi.drop(it) }
@@ -527,11 +557,151 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         if (done) _state.value = _state.value.copy(microphoneOn = on)
     }
 
+    /**
+     * Камера ПК (ПК4). Включение — открыть устройство, при первом разе опубликовать
+     * дорожку; выключение — **приглушить дорожку и закрыть устройство**.
+     *
+     * Приглушение, а не снятие дорожки — по контракту: возврат стоит одного RTT, а не
+     * нового обмена SDP. Устройство же закрывается целиком: пока оно открыто, горит
+     * лампочка камеры, и человек, выключивший камеру, ей верит больше, чем экрану.
+     */
     override suspend fun setCamera(on: Boolean) = withContext(worker) {
-        if (!on) return@withContext
-        // Камера на ПК — срез ПК4. До него честно: сказать, а не молча не включить.
-        Journal.note(LogCode.CALL, "камера на ПК ещё не подключена")
-        _state.value = _state.value.copy(notice = "камера на ПК ещё не подключена")
+        if (!on) {
+            stopCamera()
+            if (cameraTrack != 0L) mute(cameraTrack, true)
+            _state.value = _state.value.copy(cameraOn = false)
+            return@withContext
+        }
+        if (room == 0L || camera != null) return@withContext
+        val video = preset?.video ?: VideoPreset()
+        val opened = when (val result = Camera.open(video.width, video.height, video.fps)) {
+            is Camera.Companion.Opened.Failed -> {
+                Journal.trouble(LogCode.CALL_DEVICE, "камера не открылась", "причина" to result.why)
+                _state.value = _state.value.copy(notice = result.why)
+                return@withContext
+            }
+            is Camera.Companion.Opened.Ready -> result.camera
+        }
+        Journal.note(
+            LogCode.CALL_DEVICE, "камера открыта",
+            "камера" to opened.name, "кадр" to "${opened.width}×${opened.height}", "к/с" to opened.fps,
+        )
+        if (cameraTrack == 0L && !publishCamera(opened, video)) {
+            opened.close()
+            return@withContext
+        }
+        mute(cameraTrack, false)
+        camera = opened
+        val preview = Frames()
+        _localVideo.value = preview
+        val source = cameraSource
+        cameraJob = scope.launch(Dispatchers.IO) { pumpCamera(opened, source, preview) }
+        _state.value = _state.value.copy(cameraOn = true)
+    }
+
+    private fun mute(track: Long, muted: Boolean) {
+        runCatching { Ffi.request(FfiRequest(local_track_mute = LocalTrackMuteRequest(track_handle = track, mute = muted))) }
+    }
+
+    /**
+     * Опубликовать дорожку камеры — источник, дорожка, публикация. Кодек и полоса — из
+     * пресета, как на Android; без пресета — VP8: его кодирует любой ПК программно, а
+     * H.264 в сборке libwebrtc под Windows может и не оказаться.
+     */
+    private suspend fun publishCamera(opened: Camera, video: VideoPreset): Boolean {
+        cameraSource = Ffi.request(
+            FfiRequest(
+                new_video_source = NewVideoSourceRequest(
+                    type = VideoSourceType.VIDEO_SOURCE_NATIVE,
+                    resolution = VideoSourceResolution(width = opened.width, height = opened.height),
+                ),
+            ),
+        ).new_video_source?.source?.handle?.id ?: 0L
+        cameraTrack = Ffi.request(
+            FfiRequest(create_video_track = CreateVideoTrackRequest(name = "camera", source_handle = cameraSource)),
+        ).create_video_track?.track?.handle?.id ?: 0L
+        val codec = if (preset == null) LkVideoCodec.VP8 else video.codec.toFfi()
+        val answer = Ffi.call(PUBLISH_TIMEOUT_MS) { id ->
+            FfiRequest(
+                publish_track = PublishTrackRequest(
+                    local_participant_handle = localParticipant,
+                    track_handle = cameraTrack,
+                    options = TrackPublishOptions(
+                        source = TrackSource.SOURCE_CAMERA,
+                        video_codec = codec,
+                        video_encoding = VideoEncoding(
+                            max_bitrate = video.bitrate.toLong(),
+                            max_framerate = video.fps.toDouble(),
+                        ),
+                        simulcast = video.layers == LayerMode.Simulcast,
+                        degradation_preference = when (video.degradation) {
+                            Degradation.MaintainResolution -> DegradationPreference.DEGRADATION_PREFERENCE_MAINTAIN_RESOLUTION
+                            Degradation.MaintainFramerate -> DegradationPreference.DEGRADATION_PREFERENCE_MAINTAIN_FRAMERATE
+                            Degradation.Balanced -> DegradationPreference.DEGRADATION_PREFERENCE_BALANCED
+                        },
+                    ),
+                    request_async_id = id,
+                ),
+            )
+        }?.publish_track
+        val publication = answer?.publication
+        if (publication == null) {
+            val why = answer?.error ?: "нет ответа"
+            Journal.trouble(LogCode.CALL, "камера не опубликована", "причина" to why)
+            _state.value = _state.value.copy(notice = why)
+            Ffi.drop(cameraTrack)
+            Ffi.drop(cameraSource)
+            cameraTrack = 0L
+            cameraSource = 0L
+            return false
+        }
+        owned += publication.handle.id
+        Journal.note(LogCode.CALL, "камера опубликована", "кодек" to codec.name)
+        return true
+    }
+
+    /**
+     * Кадры камеры — в движок и себе в угол. Опрос, а не обратный вызов: openpnp-capture
+     * отдаёт «новый кадр есть» флагом. Ждём полкадра — задержка незаметная, а процессора
+     * такой опрос не ест.
+     */
+    private suspend fun pumpCamera(opened: Camera, source: Long, preview: Frames) {
+        val wait = (500L / opened.fps).coerceIn(5L, 50L)
+        var shown = 0
+        while (currentCoroutineContext().isActive) {
+            if (!opened.grab()) {
+                delay(wait)
+                continue
+            }
+            runCatching {
+                Ffi.request(
+                    FfiRequest(
+                        capture_video_frame = CaptureVideoFrameRequest(
+                            source_handle = source,
+                            buffer = VideoBufferInfo(
+                                type = VideoBufferType.RGB24,
+                                width = opened.width,
+                                height = opened.height,
+                                data_ptr = Pointer.nativeValue(opened.frame),
+                                stride = opened.width * 3,
+                            ),
+                            timestamp_us = System.nanoTime() / 1000,
+                            rotation = VideoRotation.VIDEO_ROTATION_0,
+                        ),
+                    ),
+                )
+            }
+            // Себе — через кадр: это проверка «я в кадре», а не второй видеопоток.
+            if (shown++ % 2 == 0) preview.pictures.value = rgbToPicture(opened)
+        }
+    }
+
+    private fun stopCamera() {
+        cameraJob?.cancel()
+        cameraJob = null
+        camera?.close()
+        camera = null
+        _localVideo.value = null
     }
 
     override suspend fun setRemoteVideo(on: Boolean) = withContext(worker) {
@@ -584,6 +754,33 @@ internal fun turn(picture: VideoPicture, rotation: VideoRotation): VideoPicture 
         }
     }
     return VideoPicture(outW, if (turned) w else h, out)
+}
+
+/** Наш кодек в кодек протокола. AV1 в нашем перечне нет — решение заказчика. */
+private fun VideoCodec.toFfi(): LkVideoCodec = when (this) {
+    VideoCodec.H264 -> LkVideoCodec.H264
+    VideoCodec.VP9 -> LkVideoCodec.VP9
+    VideoCodec.H265 -> LkVideoCodec.H265
+    VideoCodec.VP8 -> LkVideoCodec.VP8
+}
+
+/** Кадр камеры R,G,B → BGRA для своего окошка. */
+internal fun rgbToPicture(camera: Camera): VideoPicture =
+    rgbToPicture(camera.width, camera.height, camera.frame.getByteArray(0, camera.width * camera.height * 3))
+
+internal fun rgbToPicture(width: Int, height: Int, rgb: ByteArray): VideoPicture {
+    val out = ByteArray(width * height * 4)
+    var i = 0
+    var o = 0
+    while (i < rgb.size) {
+        out[o] = rgb[i + 2]
+        out[o + 1] = rgb[i + 1]
+        out[o + 2] = rgb[i]
+        out[o + 3] = -1
+        i += 3
+        o += 4
+    }
+    return VideoPicture(width, height, out)
 }
 
 private const val CONNECT_TIMEOUT_MS = 20_000L

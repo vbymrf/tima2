@@ -50,53 +50,72 @@ wire {
     kotlin {}
 }
 
-// ── Нативная библиотека: скачивается, а не лежит в git ────────────────────────
+// ── Нативные библиотеки: скачиваются, а не лежат в git ────────────────────────
 //
 // 25 МБ двоичного файла в истории git остались бы там навсегда, при каждом обновлении
-// ещё по 25. Поэтому сборка берёт библиотеку из релиза LiveKit по закреплённой версии и
-// **сверяет sha256**: подменённый архив сборку роняет, а не попадает в установщик.
+// ещё по 25. Поэтому сборка берёт библиотеки из релизов по закреплённой версии и
+// **сверяет sha256**: подменённый файл сборку роняет, а не попадает в установщик.
 //
-// Пока только Windows x86_64 — это все ПК заказчика. macOS и Linux — тот же релиз,
-// другой архив, когда понадобятся.
-val ffiVersion = "0.12.80"
-val ffiArchive = "ffi-windows-x86_64.zip"
-val ffiSha256 = "7118d627701e6eb9d15b4abbfbab91c8ef72ca87c94483e1774c863a57a7c552"
+// Пока только Windows x86_64 — это все ПК заказчика. macOS и Linux — те же релизы,
+// другие файлы, когда понадобятся. Обе библиотеки зовут только системные DLL Windows
+// (C-рантайм вшит), доставлять рядом ничего не надо — проверено по таблице импорта.
+class NativeLib(val url: String, val sha256: String, val zipEntry: String?, val saveAs: String)
+
+val nativeLibs = listOf(
+    // Движок звонка: libwebrtc целиком, звук, APM. Тег содержит «/» — в адресе `%2F`.
+    NativeLib(
+        url = "https://github.com/livekit/rust-sdks/releases/download/livekit-ffi%2Fv0.12.80/ffi-windows-x86_64.zip",
+        sha256 = "7118d627701e6eb9d15b4abbfbab91c8ef72ca87c94483e1774c863a57a7c552",
+        zipEntry = "livekit_ffi.dll",
+        saveAs = "livekit_ffi.dll",
+    ),
+    // Камера (ПК4): openpnp-capture v0.0.30, MIT, 200 КБ. Своего захвата камеры у
+    // livekit-ffi нет — `capture.proto` умеет только тестовые картинки.
+    NativeLib(
+        url = "https://github.com/openpnp/openpnp-capture/releases/download/v0.0.30/libopenpnp-capture-windows-latest-x86_64.dll",
+        sha256 = "3280266977f6ee70687d997455cd7463507ed5077d5de1235c4ef5d8f8e77b21",
+        zipEntry = null,
+        saveAs = "openpnp-capture.dll",
+    ),
+)
 
 // Раскладка — та, что ждёт `appResourcesRootDir` у Compose Desktop: подкаталог по ОС.
 // При запуске Compose кладёт его содержимое в `compose.application.resources.dir`.
 val ffiRoot = layout.buildDirectory.dir("livekit-ffi")
 
-val livekitFfi by tasks.registering {
+val callNatives by tasks.registering {
     group = "build"
-    description = "Скачивает livekit_ffi.dll из релиза LiveKit и сверяет sha256"
+    description = "Скачивает нативные библиотеки звонка ПК и сверяет sha256"
     val into = ffiRoot
-    val version = ffiVersion
-    val archive = ffiArchive
-    val sha = ffiSha256
-    inputs.property("version", version)
-    inputs.property("sha256", sha)
+    val libs = nativeLibs
+    inputs.property("libs", libs.joinToString { it.url + "#" + it.sha256 })
     outputs.dir(into)
     doLast {
-        val dll = into.get().file("windows/livekit_ffi.dll").asFile
-        dll.parentFile.mkdirs()
-        // Тег содержит «/», и в адресе он кодируется: `livekit-ffi%2Fv0.12.80`.
-        val url = "https://github.com/livekit/rust-sdks/releases/download/livekit-ffi%2Fv$version/$archive"
-        val bytes = URI(url).toURL().openStream().use { it.readBytes() }
-        val got = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-        check(got == sha) {
-            "$archive: sha256 $got, ждали $sha. Архив подменён или версия сменилась без правки хэша"
-        }
-        ZipInputStream(bytes.inputStream()).use { zip ->
-            generateSequence { zip.nextEntry }.forEach { entry ->
-                if (entry.name.endsWith("livekit_ffi.dll")) dll.writeBytes(zip.readBytes())
+        val dir = into.get().dir("windows").asFile
+        dir.mkdirs()
+        for (lib in libs) {
+            val bytes = URI(lib.url).toURL().openStream().use { it.readBytes() }
+            val got = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+            check(got == lib.sha256) {
+                "${lib.url}: sha256 $got, ждали ${lib.sha256}. Файл подменён или версия сменилась без правки хэша"
             }
+            val target = File(dir, lib.saveAs)
+            if (lib.zipEntry == null) {
+                target.writeBytes(bytes)
+            } else {
+                ZipInputStream(bytes.inputStream()).use { zip ->
+                    generateSequence { zip.nextEntry }.forEach { entry ->
+                        if (entry.name.endsWith(lib.zipEntry)) target.writeBytes(zip.readBytes())
+                    }
+                }
+            }
+            check(target.length() > 0) { "в ${lib.url} нет ${lib.zipEntry ?: lib.saveAs}" }
         }
-        check(dll.length() > 0) { "в $archive нет livekit_ffi.dll" }
     }
 }
 
 // Проверки с настоящей библиотекой: путь к ней — свойством, как его даст и Compose.
 tasks.named<Test>("jvmTest") {
-    dependsOn(livekitFfi)
+    dependsOn(callNatives)
     systemProperty("compose.application.resources.dir", ffiRoot.get().dir("windows").asFile.absolutePath)
 }
