@@ -935,6 +935,12 @@ interface CallWords {
      */
     val peerBusy: String
 
+    /** Вызов дошёл до телефона собеседника — у него звонит (ВЗ0а). */
+    val ringing: String
+
+    /** Собеседник отклонил вызов — отдельно от «не ответил» (ВЗ0а). */
+    val peerDeclined: String
+
     /** Нам звонили и не дождались. */
     val missedCall: String
 
@@ -2547,7 +2553,7 @@ object RussianWords : Words {
     override val call = object : CallWords {
         override val incoming = "Входящий вызов"
         override val outgoing = "Вызов"
-        override val calling = "Звоним…"
+        override val calling = "Вызов…"
         override val accept = "Принять"
         override val decline = "Отклонить"
         override val cancel = "Отменить"
@@ -2575,6 +2581,8 @@ object RussianWords : Words {
         override val peerOffline = "Телефон собеседника не на связи — звонок придёт, когда он появится"
         override val noAnswer = "Не дозвонились: никто не ответил"
         override val peerBusy = "Собеседник занят другим звонком"
+        override val ringing = "Звонит…"
+        override val peerDeclined = "Собеседник отклонил вызов"
         override val missedCall = "Пропущенный звонок"
         override val remoteHidden = "Видео собеседника скрыто — оно не принимается и трафик на него не идёт"
         override val hideRemote = "Скрыть видео"

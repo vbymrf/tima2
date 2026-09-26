@@ -301,6 +301,8 @@ fun buildAssembled(
                 // разговора не кончает. Сюда едет идентификатор, а выводы делает `Root`.
                 onCallLeft = { callId, userId -> callPings.value = "ушёл|$callId|$userId" },
                 onCallUnreachable = { callId -> callPings.value = "недоступен|$callId|-" },
+                // Вызов дошёл до телефона собеседника — у звонящего «Звонит» (ВЗ0а).
+                onCallDelivered = { callId -> callPings.value = "доставлен|$callId|-" },
                 onStamp = { senderStamps.tryEmit(it) },
                 onOutdated = { outdated.value = true },
                 notices = notices,

@@ -75,6 +75,8 @@ fun CallScreen(
     onMicrophone: (Boolean) -> Unit,
     onCamera: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    /** Вызов дошёл до телефона собеседника — «Звонит» вместо «Вызов…» (ВЗ0а). */
+    peerRinging: Boolean = false,
     /** Сколько идёт разговор, секунды. Считает не экран: время — не его дело. */
     seconds: Int = 0,
     onCallAgain: (() -> Unit)? = null,
@@ -132,7 +134,7 @@ fun CallScreen(
                 ) {
                     Avatar(letters = letters(peer), size = AvatarSize.Big)
                     Name(peer.ifBlank { Tima.words.chat.nameless })
-                    Secondary(under(state, incoming, seconds))
+                    Secondary(under(state, incoming, seconds, peerRinging))
 
                     // Оценка связи — от SFU, своей не считаем. Пока не сказали — молчим:
                     // «связь выясняем» на каждом звонке было бы шумом.
@@ -306,7 +308,7 @@ private fun KindSwitch(video: Boolean, onPick: (Boolean) -> Unit) {
  * было бы враньём: считать ещё нечего.
  */
 @Composable
-private fun under(state: CallState, incoming: Boolean, seconds: Int): String {
+private fun under(state: CallState, incoming: Boolean, seconds: Int, peerRinging: Boolean): String {
     val words = Tima.words.call
     return when (state.stage) {
         // До комнаты и в комнате — разные вещи, и человеку они разные. «Соединяем…» —
@@ -314,7 +316,7 @@ private fun under(state: CallState, incoming: Boolean, seconds: Int): String {
         // одинаково, и ждать было непонятно чего.
         CallStage.Idle, CallStage.Connecting -> when {
             incoming -> words.incoming
-            state.inRoom -> words.calling
+            state.inRoom -> if (peerRinging) words.ringing else words.calling
             else -> words.connecting
         }
         // Время идёт только в разговоре: до ответа считать нечего, и показанные там

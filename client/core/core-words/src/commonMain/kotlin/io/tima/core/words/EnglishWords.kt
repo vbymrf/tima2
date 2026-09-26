@@ -893,6 +893,8 @@ object EnglishWords : Words {
         override val peerOffline = "The other phone is offline — the call will arrive when it comes back"
         override val noAnswer = "No answer"
         override val peerBusy = "The other side is on another call"
+        override val ringing = "Ringing…"
+        override val peerDeclined = "The other person declined the call"
         override val missedCall = "Missed call"
         override val remoteHidden = "Their video is hidden — it is not received and uses no traffic"
         override val hideRemote = "Hide video"

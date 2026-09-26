@@ -2,6 +2,7 @@ package io.tima.feature.chat
 
 import io.tima.domain.chat.CallHistory
 import io.tima.domain.chat.CallLog
+import io.tima.domain.chat.CallOutcome
 import io.tima.domain.chat.CallRecord
 import io.tima.domain.chat.Settings
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +49,12 @@ class CallsStore(
      */
     private val settings: Settings,
     private val now: () -> Long,
+    /**
+     * Пропущенные просмотрены — сказать серверу, чтобы строка «пропущенный» в шторке
+     * снялась на всех устройствах человека (ВЗ0а, решение заказчика 2026-09-26).
+     * По умолчанию ничего: проверкам и ПК без сети это не нужно.
+     */
+    private val seenRemote: suspend (List<String>) -> Unit = {},
 ) {
     private val _state = MutableStateFlow(CallsState())
     val state: StateFlow<CallsState> = _state.asStateFlow()
@@ -93,7 +100,14 @@ class CallsStore(
     /** Открыли вкладку: сходить за свежим и погасить счётчик. */
     fun opened() {
         refresh()
-        scope.launch { log.markSeen() }
+        // Непросмотренные пропущенные — до того, как местная отметка их погасит.
+        val missed = _state.value.records
+            .filter { !it.seen && it.outcome(me) == CallOutcome.Missed }
+            .map { it.callId }
+        scope.launch {
+            log.markSeen()
+            if (missed.isNotEmpty()) seenRemote(missed)
+        }
     }
 
     /** Разговор кончился — строка о нём должна появиться сейчас, а не при следующем заходе. */

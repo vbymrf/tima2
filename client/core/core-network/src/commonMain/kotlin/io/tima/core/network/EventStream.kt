@@ -85,6 +85,15 @@ class EventStream(
          * нечитаемых сообщений», а не «что-то потерялось». Разбор начинается с ответа.
          */
         onLaneGap: suspend (String, Long) -> Unit = { _, _ -> },
+        /**
+         * Вершина ленты звонков (ВЗ0а): из приветствия и из подсказки `call.poke {cts}`.
+         *
+         * Возвращает номер, до которого лента **применена**, — его канал и подтверждает;
+         * `null` — подтверждать нечего (не дошли до сервера, ничего нового). Зовётся прямо
+         * в цикле канала, а не отдельно: догрузки ленты идут строго по одной, и изменения
+         * применяются по номеру (ПЛАН-ВХОДЯЩЕГО-ЗВОНКА §6.7, п. 6).
+         */
+        onCallsTop: suspend (Long) -> Long? = { null },
         persist: suspend (EventStreamProtocol.IncomingEvent) -> Unit,
     ): StreamOutcome {
         var last = cursor
@@ -241,7 +250,15 @@ class EventStream(
                         // Вершины полос приходят приветствием: до них сверять нечего,
                         // и устройство, молчавшее неделю, иначе объявило бы разрыв там,
                         // где его нет.
-                        is EventStreamProtocol.Decision.Ready -> lanes = decision.lanes
+                        is EventStreamProtocol.Decision.Ready -> {
+                            lanes = decision.lanes
+                            decision.cts?.let { top ->
+                                onCallsTop(top)?.let { send(Frame.Text(protocol.callAckFrame(it))) }
+                            }
+                        }
+
+                        is EventStreamProtocol.Decision.CallsPoke ->
+                            onCallsTop(decision.cts)?.let { send(Frame.Text(protocol.callAckFrame(it))) }
                     }
                 }
             }

@@ -85,7 +85,12 @@ class EventStreamProtocol {
          * неделю, иначе сверяло бы свой давний номер с новым и объявляло разрыв там,
          * где его нет.
          */
-        data class Ready(val deviceId: String, val lanes: LaneTops = LaneTops()) : Decision
+        data class Ready(
+            val deviceId: String,
+            val lanes: LaneTops = LaneTops(),
+            /** Вершина ленты звонков (ВЗ0а). `null` — сервер старше ленты. */
+            val cts: Long? = null,
+        ) : Decision
 
         /**
          * «Приходи и забери» — сервер записал событие и говорит об этом, не пересылая
@@ -108,6 +113,15 @@ class EventStreamProtocol {
          * «кончился».
          */
         data class CallPoke(val callId: String) : Decision
+
+        /**
+         * «В ленте звонков есть до №[cts]» — ВЗ0а.
+         *
+         * Своя переменная, не журнал сообщений: забирается `GET /calls/updates`, а
+         * подтверждается `call.ack {cts}` — тот двигает только курсор звонков, и
+         * незабранные сообщения перескочить не может.
+         */
+        data class CallsPoke(val cts: Long) : Decision
 
         /** Сервер сообщил о своей беде. Не наша: повторить позже. */
         data class ServerTrouble(val code: String) : Decision
@@ -328,6 +342,15 @@ class EventStreamProtocol {
         return """{"event":"sync.pull","cursor":$cursor,"limit":$limit}"""
     }
 
+    /**
+     * Подтверждение ленты звонков — после того, как изменения до №[cts] **применены**, а не
+     * получены: подтверждённое сервер считает доставленным и звонящему скажет «Звонит».
+     */
+    fun callAckFrame(cts: Long): String {
+        require(cts > 0) { "cts обязан быть положительным: $cts" }
+        return """{"event":"call.ack","cts":$cts}"""
+    }
+
     /** Подтверждение. Вызывать **после** записи. */
     fun ackFrame(eventId: Long): String {
         require(eventId > 0) { "event_id обязан быть положительным: $eventId" }
@@ -368,7 +391,11 @@ class EventStreamProtocol {
             return Decision.Seen(eventId)
         }
         return when (event) {
-            "ok" -> Decision.Ready(json.string("device_id") ?: "", json.laneTops())
+            "ok" -> Decision.Ready(
+                json.string("device_id") ?: "",
+                json.laneTops(),
+                json["cts"]?.jsonPrimitive?.longOrNull,
+            )
 
             "app.outdated" -> Decision.AppOutdated(
                 minClient = json["min_client"]?.jsonPrimitive?.intOrNull ?: 0,
@@ -383,9 +410,12 @@ class EventStreamProtocol {
                 lanes = json.laneTops(),
             )
 
-            "call.poke" -> json.string("call_id")
-                ?.let { Decision.CallPoke(it) }
-                ?: Decision.Skip("call.poke без call_id", null)
+            // Две подсказки под одним именем: с `cts` — лента личных звонков (ВЗ0а), с
+            // `call_id` — групповой звонок, который по-прежнему идёт журналом.
+            "call.poke" -> json["cts"]?.jsonPrimitive?.longOrNull
+                ?.let { Decision.CallsPoke(it) }
+                ?: json.string("call_id")?.let { Decision.CallPoke(it) }
+                ?: Decision.Skip("call.poke без cts и call_id", null)
 
             "message.new" -> {
                 val chatId = json.string("chat_id")

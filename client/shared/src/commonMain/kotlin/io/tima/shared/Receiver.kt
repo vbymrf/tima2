@@ -82,6 +82,8 @@ class Receiver(
      * Не конец звонка — слово о том, что сейчас никого нет на связи.
      */
     private val onCallUnreachable: (String) -> Unit = { _ -> },
+    /** Вызов дошёл до телефона собеседника — у звонящего «Звонит» (ВЗ0а). */
+    private val onCallDelivered: (String) -> Unit = { _ -> },
     /**
      * Штамп отправителя из обёртки события (сервер 0052/0053): кто, счётчик его профиля,
      * группа и цвет. Наружу, а не в базу: это подсказка карточкам людей, а не сообщение.
@@ -241,6 +243,101 @@ class Receiver(
      * Вынесен из [hold], чтобы тот читался как политика: когда поднимать, когда рвать,
      * сколько ждать. Здесь — только что делать с тем, что канал принёс.
      */
+    /**
+     * Лента звонков — ВЗ0а. Сервер сказал вершину (приветствием или подсказкой); забираем
+     * всё после своего номера, применяем по порядку и возвращаем, до чего применили, —
+     * это канал и подтвердит.
+     *
+     * `null` — подтверждать нечего: нового нет или до сервера не дошли. Номер при неудаче
+     * не двигается: следующая подсказка или переподключение спросят с того же места.
+     */
+    internal suspend fun callsTop(top: Long): Long? {
+        val saved = runCatching { environment.settings.all().first() }.getOrDefault(emptyMap())
+        var mine = saved[CALLS_CTS]?.toLongOrNull() ?: 0
+        // Номер выше вершины бывает, только если сервер начал ленту заново (данные стёрты,
+        // Plan §0.0 решение 2). Ждать своего номера тогда пришлось бы вечно.
+        if (top < mine) {
+            Journal.note(LogCode.CALL, "лента звонков начата заново сервером", "мой" to mine, "вершина" to top)
+            mine = 0
+        }
+        if (top <= mine) return null
+        var mark = saved[CALLS_MISSED_MARK]?.toLongOrNull() ?: 0
+        var applied: Long? = null
+        while (true) {
+            val page = network.calls.updates(mine)
+            if (page == null) {
+                Journal.trouble(LogCode.CALL, "ленту звонков не забрали — сервер не ответил", "после" to mine)
+                return applied
+            }
+            if (page.gap) {
+                // Начало ленты вычищено (живёт сутки): пропущенные — из журнала звонков.
+                Journal.note(LogCode.CALL, "разрыв ленты звонков — пропущенные из журнала", "после" to mine)
+                mark = missedFromHistory(mark)
+            }
+            for (action in CallLedger.actions(session.userId, page.updates)) apply(action)
+            page.updates.maxOfOrNull { it.atMs }?.let { if (it > mark) mark = it }
+            val reached = page.updates.lastOrNull()?.cts ?: page.top
+            if (reached > mine) mine = reached
+            applied = mine
+            runCatching {
+                environment.settings.put(CALLS_CTS, mine.toString())
+                environment.settings.put(CALLS_MISSED_MARK, mark.toString())
+            }
+            if (!page.more || page.updates.isEmpty()) break
+        }
+        Journal.note(LogCode.CALL, "лента звонков применена", "до" to mine)
+        return applied
+    }
+
+    /**
+     * Пропущенные из журнала звонков — когда лента не помнит так далеко (разрыв).
+     *
+     * **Только уведомление, звонить нельзя**: из журнала приходят законченные, а идущий
+     * звонок придёт свежей подсказкой. Отметка [mark] не даёт показать один пропущенный
+     * дважды: в журнале номера нет, и без неё после каждого разрыва человек получал бы
+     * все пропущенные заново.
+     */
+    private suspend fun missedFromHistory(mark: Long): Long {
+        val page = network.callHistory.page(limit = MISSED_PAGE) ?: return mark
+        var newest = mark
+        val me = session.userId
+        for (record in page.records) {
+            if (record.createdAt <= mark || record.outcome(me) != io.tima.domain.chat.CallOutcome.Missed) continue
+            if (record.initiatorId in blocked()) continue
+            notices?.missed(record.callId, record.initiatorId)
+            if (record.createdAt > newest) newest = record.createdAt
+        }
+        return newest
+    }
+
+    /** Одно действие ленты — туда же, куда раньше шли кадры звонка. */
+    private suspend fun apply(action: CallLedger.Action) {
+        when (action) {
+            is CallLedger.Action.Ring ->
+                // Звонок от заблокированного молчит (Л17): строка в журнале звонков
+                // остаётся, телефон не звонит.
+                if (action.fromId in blocked()) {
+                    Journal.note(LogCode.NET_CHANNEL, "звонок от заблокированного — не звоним", "звонок" to action.callId)
+                } else {
+                    notices?.calling(action.callId, action.fromId)
+                    onCall(action.callId, action.fromId, if (action.video) "video" else "audio")
+                }
+            is CallLedger.Action.Taken -> {
+                notices?.callOver(action.callId)
+                onCallState(action.callId, "taken")
+            }
+            is CallLedger.Action.End -> {
+                notices?.callOver(action.callId)
+                onCallState(action.callId, action.why)
+            }
+            is CallLedger.Action.Missed ->
+                if (action.fromId !in blocked()) notices?.missed(action.callId, action.fromId)
+            is CallLedger.Action.MissedSeen -> notices?.missedSeen(action.callId)
+            is CallLedger.Action.Delivered -> onCallDelivered(action.callId)
+            is CallLedger.Action.Unreachable -> onCallUnreachable(action.callId)
+        }
+    }
+
     private suspend fun runChannel(): StreamOutcome =
         network.eventChannel()
             .run(
@@ -249,6 +346,7 @@ class Receiver(
                 onLevelNarrowed = { decision -> aboutLevel(decision) },
                 onComment = { decision -> aboutComment(decision) },
                 onCall = { decision -> aboutCall(decision) },
+                onCallsTop = { top -> callsTop(top) },
                 // Разрыв называется полосой, а не «что-то потерялось». Строка
                 // в дневнике — единственное место, где это видно человеку,
                 // который разбирает отчёт о проблеме.
@@ -675,3 +773,12 @@ class Receiver(
 
 /** Что сервер приложил к сообщению об отправителе: счётчик профиля и цвет в группе. */
 data class SenderStamp(val userId: String, val profileRev: Int?, val groupId: String?, val hue: Int?)
+
+/** Где лежит свой номер ленты звонков (ВЗ0а). У каждого устройства свой. */
+private const val CALLS_CTS = "calls.cts"
+
+/** «О пропущенных уведомил до…» — время сервера, мс. Для дороги через журнал звонков. */
+private const val CALLS_MISSED_MARK = "calls.missedMark"
+
+/** Сколько строк журнала смотреть при разрыве: за сутки больше не пропускают. */
+private const val MISSED_PAGE = 50

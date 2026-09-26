@@ -948,6 +948,12 @@ private fun App(
             me = session.userId,
             settings = environment.settings,
             now = { msNow() },
+            // Просмотрено — на все устройства человека: сервер разошлёт «seen» лентой,
+            // а здесь строки снимаются сразу, не дожидаясь её.
+            seenRemote = { ids ->
+                ids.forEach { assembled.notices.missedSeen(it) }
+                network.calls.seen(ids)
+            },
         )
     }
     val callsState by callsLog.state.collectAsState()
@@ -1015,6 +1021,8 @@ private fun App(
             // Вызов не забрало ни одно устройство собеседника. Трубку не кладём: это
             // слово о связи, а не о человеке (ADR-0025 §1а).
             parts.size == 3 && parts[0] == "недоступен" -> callHost.peerOffline(parts[1])
+            // Вызов дошёл до телефона собеседника (ВЗ0а): «Вызов…» становится «Звонит».
+            parts.size == 3 && parts[0] == "доставлен" -> callHost.peerRinging(parts[1])
             parts.size == 3 && parts[0].isNotEmpty() -> {
                 val (callId, fromId, kind) = parts
                 people.want(listOf(fromId))
@@ -1644,6 +1652,7 @@ private fun App(
                     state = callHost.state,
                     peer = callHost.peer,
                     incoming = callHost.incoming,
+                    peerRinging = callHost.delivered,
                     seconds = callHost.seconds,
                     // Лента событий и обе картинки. Дорожки приходят потоками, а не
                     // полем состояния: состояние сравнивается на равенство при каждой

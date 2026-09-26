@@ -149,6 +149,29 @@ class Notices(
         )
     }
 
+    /**
+     * Пропущенный звонок — уведомлением (решение заказчика 2026-09-26, ВЗ0а).
+     *
+     * Своим ключом, не ключом звонка: строка «звонит» снимается концом звонка, а
+     * пропущенный обязан остаться — до тех пор, пока человек не откроет журнал звонков на
+     * любом своём устройстве (тогда придёт «seen», см. [missedSeen]).
+     */
+    suspend fun missed(callId: String, fromUserId: String) {
+        if (!shouldNotify(fromUserId)) return
+        Journal.note(LogCode.CALL, "уведомление о пропущенном", "звонок" to callId.take(8))
+        notifier.show(
+            Notice(
+                key = MISSED_KEY_PREFIX + callId,
+                kind = NoticeKind.Message,
+                who = nameOf(fromUserId),
+                what = words().call.missedCall,
+            ),
+        )
+    }
+
+    /** Пропущенный просмотрен — на этом или другом устройстве человека. */
+    fun missedSeen(callId: String) = notifier.hide(MISSED_KEY_PREFIX + callId)
+
     /** Звонок кончился — чем бы ни кончился. Строка звонка не переживает звонок. */
     fun callOver(callId: String) = notifier.hide(CALL_KEY_PREFIX + callId)
 
@@ -224,5 +247,8 @@ class Notices(
          * здесь означало бы, что звонок однажды снимет уведомление о сообщении.
          */
         const val CALL_KEY_PREFIX = "call:"
+
+        /** Ключ строки «пропущенный»: отдельный от звонка — она переживает звонок. */
+        const val MISSED_KEY_PREFIX = "missed:"
     }
 }

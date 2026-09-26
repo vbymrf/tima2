@@ -61,7 +61,54 @@ interface Calls {
      * эти два случая значит не позвонить человеку из-за моргнувшей сети.
      */
     suspend fun snapshot(callId: String): CallSnapshot? = null
+
+    /**
+     * Лента звонков после моего номера — `GET /calls/updates?after=N` (ВЗ0а).
+     *
+     * `null` — до сервера не дошли: номер не двигаем и не подтверждаем, следующая
+     * подсказка или переподключение спросят снова.
+     */
+    suspend fun updates(after: Long): CallUpdates? = null
+
+    /**
+     * Пропущенные просмотрены — `POST /calls/seen`: строка в шторке снимается на всех
+     * устройствах человека (решение заказчика 2026-09-26).
+     */
+    suspend fun seen(callIds: List<String>): Boolean = false
 }
+
+/**
+ * Страница ленты звонков.
+ *
+ * @param gap начало ленты уже вычищено (живёт сутки): пропущенные брать из журнала
+ *   звонков. Изменения ниже всё равно применяются — среди них может быть идущий звонок.
+ */
+data class CallUpdates(
+    val top: Long,
+    val gap: Boolean,
+    val more: Boolean,
+    val updates: List<CallUpdate>,
+)
+
+/**
+ * Одно изменение звонка: номер, слово и снимок звонка **на момент чтения**.
+ *
+ * @param change `ringing` · `delivered` · `unreachable` · `answered` · `declined` ·
+ *   `cancelled` · `busy` · `ended` · `missed` · `seen`.
+ * @param here у `answered` — трубку взяли на ЭТОМ устройстве.
+ */
+data class CallUpdate(
+    val cts: Long,
+    val callId: String,
+    val change: String,
+    val here: Boolean,
+    val call: CallSnapshot,
+    /**
+     * Когда изменение записал сервер, мс. По нему телефон ставит отметку «о пропущенных
+     * уведомил до…» — часами сервера, а не своими: часы телефона врут на минуты.
+     */
+    val atMs: Long = 0,
+)
 
 /**
  * Снимок звонка: та же строка, что в журнале, только про один.

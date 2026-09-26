@@ -893,6 +893,8 @@ object SpanishWords : Words {
         override val peerOffline = "El teléfono de la otra persona está sin conexión: la llamada llegará cuando vuelva"
         override val noAnswer = "Sin respuesta"
         override val peerBusy = "La otra persona está en otra llamada"
+        override val ringing = "Sonando…"
+        override val peerDeclined = "La otra persona rechazó la llamada"
         override val missedCall = "Llamada perdida"
         override val remoteHidden = "Vídeo oculto: no se recibe y no consume datos"
         override val hideRemote = "Ocultar vídeo"

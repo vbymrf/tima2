@@ -143,6 +143,8 @@ class ReceiveHarness(private val inbox: Inbox) {
             is EventStreamProtocol.Decision.ServerTrouble,
             is EventStreamProtocol.Decision.AppOutdated,
             is EventStreamProtocol.Decision.Ready,
+            // Лента звонков харнессу не нужна: он проверяет доставку сообщений.
+            is EventStreamProtocol.Decision.CallsPoke,
             -> Unit
         }
     }

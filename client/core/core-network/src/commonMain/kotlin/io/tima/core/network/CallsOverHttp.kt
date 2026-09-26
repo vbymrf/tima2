@@ -11,6 +11,8 @@ import io.ktor.http.contentType
 import io.tima.core.call.CallDoor
 import io.tima.core.call.CallSnapshot
 import io.tima.core.call.CallStep
+import io.tima.core.call.CallUpdate
+import io.tima.core.call.CallUpdates
 import io.tima.core.call.Calls
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -122,6 +124,62 @@ class CallsOverHttp(
             initiatorId = body.str("initiator_id").orEmpty(),
             peerId = body.str("peer_id").orEmpty(),
         )
+    }
+
+    override suspend fun updates(after: Long): CallUpdates? {
+        val response = try {
+            client.get(route.api("/api/v1/calls/updates?after=$after")) {
+                header("Authorization", "Bearer ${token()}")
+            }
+        } catch (_: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        val body = response.jsonBody() ?: return null
+        val rows = body["updates"]?.jsonArrayOrNull() ?: return null
+        val updates = rows.mapNotNull { element ->
+            val o = element.jsonObjectOrNull() ?: return@mapNotNull null
+            val cts = o.str("cts")?.toLongOrNull() ?: return@mapNotNull null
+            val callId = o.str("call_id").orEmpty()
+            val call = o["call"]?.jsonObjectOrNull()
+            if (callId.isEmpty() || call == null) return@mapNotNull null
+            CallUpdate(
+                cts = cts,
+                callId = callId,
+                change = o.str("change").orEmpty(),
+                here = o.bool("here") == true,
+                call = CallSnapshot(
+                    callId = callId,
+                    state = call.str("state").orEmpty(),
+                    video = call.str("kind") == "video",
+                    initiatorId = call.str("initiator_id").orEmpty(),
+                    peerId = call.str("peer_id").orEmpty(),
+                ),
+                atMs = o.str("at")
+                    ?.let { runCatching { kotlinx.datetime.Instant.parse(it).toEpochMilliseconds() }.getOrNull() }
+                    ?: 0,
+            )
+        }
+        return CallUpdates(
+            top = body.str("top")?.toLongOrNull() ?: 0,
+            gap = body.bool("gap") == true,
+            more = body.bool("more") == true,
+            updates = updates,
+        )
+    }
+
+    override suspend fun seen(callIds: List<String>): Boolean = try {
+        client.post(route.api("/api/v1/calls/seen")) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put("call_ids", kotlinx.serialization.json.JsonArray(callIds.map { JsonPrimitive(it) }))
+                }.toString(),
+            )
+        }.status == HttpStatusCode.OK
+    } catch (_: Throwable) {
+        false
     }
 
     private suspend fun doorOf(

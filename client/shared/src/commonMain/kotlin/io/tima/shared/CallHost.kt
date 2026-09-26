@@ -82,6 +82,16 @@ class CallHost(
     var incoming by mutableStateOf(false)
         private set
 
+    /**
+     * Вызов дошёл до телефона собеседника — у звонящего «Звонит» вместо «Вызов…»
+     * (ВЗ0а, решение заказчика 2026-09-26: «делаем сразу»).
+     *
+     * Своё поле, а не поле состояния движка: состояние приходит от SFU и перезаписывается
+     * им целиком, а о доставке SFU не знает ничего — это слово нашего сервера.
+     */
+    var delivered by mutableStateOf(false)
+        private set
+
     /** Сколько идёт разговор. Считает здесь: ни экран, ни движок времени не владеют. */
     var seconds by mutableStateOf(0)
         private set
@@ -234,6 +244,7 @@ class CallHost(
         active = true
         seconds = 0
         events.clear()
+        delivered = false
         state = CallState(stage = CallStage.Connecting)
         watch()
         // Разрешение спрашивается ДО похода на сервер: отказавший человек не должен
@@ -296,6 +307,7 @@ class CallHost(
         active = true
         seconds = 0
         events.clear()
+        delivered = false
         state = CallState(stage = CallStage.Connecting, callId = callId)
         watch()
         Journal.note(LogCode.CALL, "входящий звонок", "от" to fromId.take(8), "видео" to video)
@@ -349,9 +361,15 @@ class CallHost(
      * пока не истечёт окно (2026-09-20).
      */
     fun ended(why: String) {
-        if (why == BUSY) {
-            Journal.note(LogCode.CALL, "собеседник занят", "кому" to peerId.take(8))
-            note(words().call.peerBusy)
+        when {
+            why == BUSY -> {
+                Journal.note(LogCode.CALL, "собеседник занят", "кому" to peerId.take(8))
+                note(words().call.peerBusy)
+            }
+            // Исходы звонящего словами (ВЗ0а): отклонил — не то же, что не ответил, и
+            // человек поступает по-разному — второму перезванивают, первому нет.
+            !incoming && why == DECLINED -> note(words().call.peerDeclined)
+            !incoming && why == MISSED -> note(words().call.noAnswer)
         }
         hangUp()
     }
@@ -593,6 +611,15 @@ class CallHost(
      * Событие длящееся: собеседник появился и ответил — оно снимается, как и всякое
      * отражение уже случившегося (заказчик 2026-09-20).
      */
+    /** Вызов дошёл до телефона собеседника (ВЗ0а): «Звонит», и «не в сети» снимается. */
+    fun peerRinging(callId: String) {
+        if (!active || !callIs(callId) || incoming) return
+        if (state.stage != CallStage.Connecting && state.stage != CallStage.Idle) return
+        delivered = true
+        forget(OFFLINE)
+        Journal.note(LogCode.CALL, "вызов доставлен — у собеседника звонит", "звонок" to callId.take(8))
+    }
+
     fun peerOffline(callId: String) {
         if (!active || !callIs(callId)) return
         if (state.stage != CallStage.Connecting) return // уже соединились — слово ложно
@@ -744,6 +771,10 @@ class CallHost(
 
         /** Код отказа сервера, когда собеседник уже разговаривает (`calls.go`). */
         const val BUSY = "busy"
+
+        /** Слова ленты звонков (ВЗ0а): собеседник отклонил; никто не ответил за срок. */
+        const val DECLINED = "declined"
+        const val MISSED = "missed"
 
         // Ключи длящихся событий. Строками, а не перечнем: их читает только этот файл,
         // и перечень на четыре значения был бы лестницей к одной ступеньке.
