@@ -8,6 +8,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import io.tima.core.ui.TimaType
+import io.tima.core.ui.Caption
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Modifier
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
@@ -121,7 +129,7 @@ fun PermissionsScreen(
         SectionTitle(words.itemNotifications)
         when (access) {
             NotifyAccess.Given -> Column(Modifier.padding(horizontal = TimaSpacing.about4)) {
-                Name(words.noticesAllowed)
+                Granted(words.noticesAllowed)
             }
             // Кнопка называет себя: в первый раз она поднимет системный диалог, а после
             // отказа уведёт из приложения в настройки. Это разные действия, и молчать о
@@ -138,6 +146,8 @@ fun PermissionsScreen(
             }
         }
 
+        Rule()
+
         // ── ЗВОНКИ: КАНАЛ И ВО ВЕСЬ ЭКРАН ────────────────────────────────────
         //
         // Канал выключают одного, при разрешённых остальных уведомлениях, и тогда молчит
@@ -150,17 +160,18 @@ fun PermissionsScreen(
             ) {
                 Secondary(words.noticesCallsAbout)
                 if (callsChannelOn) {
-                    Name(words.noticesCallsOn)
+                    Granted(words.noticesCallsOn)
                 } else {
                     Secondary(words.noticesCallsOff)
                     Button(label = words.noticesOpenSettings, onClick = onCallsChannel, kind = ButtonKind.Action)
                 }
-                if (fullScreenOn == true) Name(words.noticesFullScreenOn)
+                if (fullScreenOn == true) Granted(words.noticesFullScreenOn)
                 if (fullScreenOn == false && onFullScreen != null) {
                     Secondary(words.noticesFullScreenOff)
                     Button(label = words.noticesOpenSettings, onClick = onFullScreen, kind = ButtonKind.Action)
                 }
             }
+            Rule()
         }
 
         // ── МИКРОФОН И КАМЕРА ────────────────────────────────────────────────
@@ -191,7 +202,7 @@ fun PermissionsScreen(
             ) {
                 Secondary(words.noticesAwakeAbout)
                 if (batteryFree) {
-                    Name(words.noticesAwakeDone)
+                    Granted(words.noticesAwakeDone)
                 } else {
                     Button(label = words.noticesAwakeAsk, onClick = onBattery, kind = ButtonKind.Action)
                 }
@@ -229,7 +240,7 @@ private fun PermissionRow(
     ) {
         Secondary(about)
         if (granted) {
-            Name(words.noticesAllowed)
+            Granted(words.noticesAllowed)
         } else {
             androidx.compose.foundation.layout.Row(
                 horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
@@ -240,6 +251,34 @@ private fun PermissionRow(
                 }
             }
         }
+    }
+    Rule()
+}
+
+/**
+ * Полоса между пунктами «Разрешений» (заказчик 2026-09-26): пунктов семь, и без полос
+ * текст одного сливался с заголовком следующего.
+ */
+@Composable
+private fun Rule() {
+    Box(
+        Modifier.fillMaxWidth().padding(top = TimaSpacing.about2)
+            .height(1.dp).background(Tima.colors.line),
+    )
+}
+
+/**
+ * «Разрешено» — пузырём цвета шапки, зелёным (заказчик 2026-09-26): выданное видно с
+ * первого взгляда, а не читается среди строк пояснений.
+ */
+@Composable
+private fun Granted(text: String) {
+    val colors = Tima.colors
+    Box(
+        Modifier.background(colors.navigation, RoundedCornerShape(TimaSpacing.about4))
+            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+    ) {
+        Caption(text, fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colors.onAccent)
     }
 }
 
