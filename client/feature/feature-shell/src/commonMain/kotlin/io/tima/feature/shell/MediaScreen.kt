@@ -67,6 +67,9 @@ fun MediaScreen(
     volume: Float?,
     onVolume: (Float) -> Unit,
     onTestSound: () -> Unit,
+    /** Слушать себя: микрофон — в выбранные колонки, пока открыт экран. */
+    listen: Boolean,
+    onListen: (Boolean) -> Unit,
     /** Своя картинка. `null` — камеры нет или она не открылась. */
     preview: (@Composable (Modifier) -> Unit)?,
     /** Что не получилось при проверке. */
@@ -91,6 +94,12 @@ fun MediaScreen(
         ) {
             Secondary(words.mediaMicrophoneAbout)
             LevelBar(level)
+        }
+        Toggle(words.mediaListen, listen, onListen)
+        Column(
+            Modifier.padding(horizontal = TimaSpacing.about4),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        ) {
             if (volume != null) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

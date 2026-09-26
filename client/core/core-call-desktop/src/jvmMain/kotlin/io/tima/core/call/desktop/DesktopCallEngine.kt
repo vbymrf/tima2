@@ -716,7 +716,16 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     private var checkAudio = 0L
     private var checkSource = 0L
     private var checkTrack = 0L
-    private var checkCamera: Camera? = null
+    private var micCheck: MicCheck? = null
+
+    /** Слушать себя в колонках во время проверки. */
+    private var listenSelf = false
+
+    override fun listen(on: Boolean) {
+        listenSelf = on
+        micCheck?.listen = on
+        Journal.note(LogCode.CALL_DEVICE, "проверка: слушать себя", "включено" to on)
+    }
     private var checkJobs = listOf<Job>()
 
     /** Устройства звука. ADM их перечисляет только открытым — открываем на миг. */
@@ -761,8 +770,8 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     }
 
     /**
-     * Проверка без звонка: микрофон открывается так же, как в звонке (ADM с выбранным
-     * устройством и дорожкой), уровень меряет Windows, камера показывает себя.
+     * Проверка без звонка: микрофон пишет [MicCheck] (ADM без звонка микрофон не пишет),
+     * уровень — по самому звуку, по желанию — в колонки; камера показывает себя.
      *
      * Во время звонка проверки нет: микрофон и камера уже заняты звонком, и второе
      * открытие только помешало бы разговору.
@@ -774,69 +783,48 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             _checkTrouble.value = "идёт звонок — проверка после него"
             return@withContext
         }
-        Ffi.start()?.let { why ->
-            _checkTrouble.value = why
-            return@withContext
-        }
-        val audio = runCatching {
-            Ffi.request(FfiRequest(new_platform_audio = NewPlatformAudioRequest())).new_platform_audio
-        }.getOrNull()
-        checkAudio = audio?.platform_audio?.handle?.id ?: 0L
-        if (checkAudio == 0L) {
-            _checkTrouble.value = audio?.error ?: "звук ПК не открылся"
-        } else {
-            pickDevices(checkAudio)
-            // Дорожка — чтобы ADM действительно писал: уровень Windows меряет только у
-            // микрофона, который кто-то слушает.
-            checkSource = runCatching {
-                Ffi.request(
-                    FfiRequest(
-                        new_audio_source = NewAudioSourceRequest(
-                            type = AudioSourceType.AUDIO_SOURCE_PLATFORM,
-                            options = setup.audioOptions(),
-                            platform_audio_handle = checkAudio,
-                        ),
-                    ),
-                ).new_audio_source?.source?.handle?.id
-            }.getOrNull() ?: 0L
-            checkTrack = runCatching {
-                Ffi.request(FfiRequest(create_audio_track = CreateAudioTrackRequest(name = "check", source_handle = checkSource)))
-                    .create_audio_track?.track?.handle?.id
-            }.getOrNull() ?: 0L
-        }
-        val meter = CoreAudio.microphone(setup.microphone)
         val jobs = mutableListOf<Job>()
-        if (meter != null) {
+        // Имена выбранных устройств: Java Sound знает их по имени, не по идентификатору.
+        val micName = setup.microphone?.let { id -> microphones().firstOrNull { it.id == id }?.name }
+        val speakerName = setup.speaker?.let { id -> speakers().firstOrNull { it.id == id }?.name }
+        val check = runCatching { MicCheck(micName, speakerName) }
+            .onFailure {
+                _checkTrouble.value = "микрофон не открылся: " + (it.message ?: it::class.simpleName)
+                Journal.trouble(LogCode.CALL_DEVICE, "проверка: микрофон не открылся", "причина" to (it.message ?: "?"))
+            }
+            .getOrNull()
+        if (check != null) {
+            check.listen = listenSelf
+            micCheck = check
             jobs += scope.launch(Dispatchers.IO) {
-                try {
-                    while (currentCoroutineContext().isActive) {
-                        // Пик с прошлого опроса; плавное падение — чтобы полоса не мигала.
-                        val peak = meter.peak()
-                        _micLevel.value = maxOf(peak, _micLevel.value * 0.8f)
-                        delay(METER_EVERY_MS)
-                    }
-                } finally {
-                    meter.close()
-                    _micLevel.value = 0f
-                }
+                // Плавное падение — чтобы полоса не мигала между слогами.
+                runCatching { check.run { level -> _micLevel.value = maxOf(level, _micLevel.value * 0.85f) } }
+                _micLevel.value = 0f
             }
         }
-        when (val opened = Camera.open(640, 480, 15, setup.camera)) {
-            is Camera.Companion.Opened.Ready -> {
-                val camera = opened.camera
-                checkCamera = camera
-                val frames = Frames()
-                _preview.value = frames
-                jobs += scope.launch(Dispatchers.IO) {
-                    val wait = (500L / camera.fps).coerceIn(5L, 50L)
-                    while (currentCoroutineContext().isActive) {
-                        if (camera.grab()) frames.pictures.value = rgbToPicture(camera) else delay(wait)
+        // Камера — отдельной задачей: открывается она секундами, и ждать её, чтобы
+        // показать полосу микрофона и громкость, незачем.
+        val cameraId = setup.camera
+        jobs += scope.launch(Dispatchers.IO) {
+            when (val opened = Camera.open(640, 480, 15, cameraId)) {
+                is Camera.Companion.Opened.Ready -> {
+                    val camera = opened.camera
+                    try {
+                        val frames = Frames()
+                        _preview.value = frames
+                        val wait = (500L / camera.fps).coerceIn(5L, 50L)
+                        while (currentCoroutineContext().isActive) {
+                            if (camera.grab()) frames.pictures.value = rgbToPicture(camera) else delay(wait)
+                        }
+                    } finally {
+                        camera.close()
+                        _preview.value = null
                     }
                 }
-            }
-            is Camera.Companion.Opened.Failed -> {
-                _preview.value = null
-                if (_checkTrouble.value == null) _checkTrouble.value = opened.why
+                is Camera.Companion.Opened.Failed -> {
+                    _preview.value = null
+                    if (_checkTrouble.value == null) _checkTrouble.value = opened.why
+                }
             }
         }
         checkJobs = jobs
@@ -846,10 +834,10 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     override suspend fun stopCheck() = withContext(worker) { closeCheck() }
 
     private fun closeCheck() {
+        micCheck?.close()
+        micCheck = null
         checkJobs.forEach { it.cancel() }
         checkJobs = emptyList()
-        checkCamera?.close()
-        checkCamera = null
         _preview.value = null
         _micLevel.value = 0f
         Ffi.drop(checkTrack)
@@ -978,7 +966,6 @@ private fun CallSetup.audioOptions() = AudioSourceOptions(
     auto_gain_control = autoGain,
 )
 
-private const val METER_EVERY_MS = 80L
 private const val CONNECT_TIMEOUT_MS = 20_000L
 private const val DISCONNECT_TIMEOUT_MS = 5_000L
 private const val PUBLISH_TIMEOUT_MS = 10_000L

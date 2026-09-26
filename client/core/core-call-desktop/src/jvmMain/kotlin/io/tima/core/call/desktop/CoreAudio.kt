@@ -10,14 +10,15 @@ import com.sun.jna.ptr.FloatByReference
 import com.sun.jna.ptr.PointerByReference
 
 /**
- * Микрофон Windows через Core Audio: громкость и уровень (ПЛАН-ЗВОНКОВ-ПК, настройка
+ * Микрофон Windows через Core Audio: громкость (ПЛАН-ЗВОНКОВ-ПК, настройка
  * «Микрофон и камера»).
  *
  * ── ПОЧЕМУ НЕ ЧЕРЕЗ LIVEKIT ─────────────────────────────────────────────────
  *
- * Звук звонка ведёт ADM WebRTC, и ни громкости, ни уровня наружу он не отдаёт: своя
- * дорожка микрофона без комнаты кадров не даёт (проверено 2026-09-26). Громкость же — это
- * ручка самой Windows («Параметры → Звук → Микрофон»), и уровень Windows меряет сама.
+ * Звук звонка ведёт ADM WebRTC, и громкости наружу он не отдаёт. Громкость же — это
+ * ручка самой Windows («Параметры → Звук → Микрофон»). Уровень Windows тоже меряет, но
+ * только у микрофона, который кто-то пишет, — а ADM без звонка не пишет; уровень поэтому
+ * считает [MicCheck] по самому звуку.
  * Идентификатор устройства у ADM и у Core Audio **один и тот же** (`{0.0.1.00000000}.{…}`),
  * поэтому выбор человека находит нужный микрофон без сопоставления по имени.
  *
@@ -30,7 +31,6 @@ import com.sun.jna.ptr.PointerByReference
 internal class CoreAudio private constructor(private val device: Pointer) {
 
     private val volume: Pointer? = activate(IID_ENDPOINT_VOLUME)
-    private val meter: Pointer? = activate(IID_METER)
 
     /** Громкость 0…1 или `null`, если Windows не ответила. */
     fun volume(): Float? {
@@ -44,16 +44,8 @@ internal class CoreAudio private constructor(private val device: Pointer) {
         call(v, VOLUME_SET_SCALAR, value.coerceIn(0f, 1f), null)
     }
 
-    /** Пик сигнала 0…1 с прошлого опроса. Ненулевой только пока микрофон кто-то пишет. */
-    fun peak(): Float {
-        val m = meter ?: return 0f
-        val out = FloatByReference()
-        return if (call(m, METER_GET_PEAK, out) == S_OK) out.value else 0f
-    }
-
     fun close() {
         volume?.let { call(it, RELEASE) }
-        meter?.let { call(it, RELEASE) }
         call(device, RELEASE)
     }
 
@@ -104,7 +96,6 @@ internal class CoreAudio private constructor(private val device: Pointer) {
         private const val CLSID_ENUMERATOR = "{BCDE0395-E52F-467C-8E3D-C4579291692E}"
         private const val IID_ENUMERATOR = "{A95664D2-9614-4F35-A746-DE8DB63617E6}"
         private const val IID_ENDPOINT_VOLUME = "{5CDF2C82-841E-4546-9722-0CF74078229A}"
-        private const val IID_METER = "{C02216F6-8C67-4B5B-9D00-D008E73E0064}"
 
         // Места функций в таблицах: 0–2 — IUnknown у всех.
         private const val RELEASE = 2
@@ -113,6 +104,5 @@ internal class CoreAudio private constructor(private val device: Pointer) {
         private const val DEVICE_ACTIVATE = 3
         private const val VOLUME_SET_SCALAR = 7
         private const val VOLUME_GET_SCALAR = 9
-        private const val METER_GET_PEAK = 3
     }
 }

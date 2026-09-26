@@ -482,6 +482,7 @@ object SpanishWords : Words {
         override val mediaGain = "Ganancia automática"
         override val mediaProcessingAbout = "Desactívalo solo si molesta: auriculares con su propio filtro, música."
         override val mediaNextCall = "Los cambios se aplican desde la próxima llamada."
+        override val mediaListen = "Escucharte — mejor con auriculares, o se acoplará"
         override val permBackground = "Funcionamiento en segundo plano"
         override val warnTitle = "Las llamadas pueden no llegar"
         override val warnWhere = "Se corrige en Ajustes → Permisos."

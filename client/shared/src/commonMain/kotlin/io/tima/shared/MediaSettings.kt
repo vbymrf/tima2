@@ -44,6 +44,9 @@ internal fun MediaSettings(devices: CallDevices, settings: Settings) {
     var speakers by remember { mutableStateOf(emptyList<MediaDevice>()) }
     var cameras by remember { mutableStateOf(emptyList<MediaDevice>()) }
     var volume by remember { mutableStateOf<Float?>(null) }
+    // Слушать себя — только пока открыт экран: вернулся — снова тихо, и засвистевшие
+    // колонки не остаются свистеть за спиной.
+    var listen by remember { mutableStateOf(false) }
     LaunchedEffect(devices) {
         withContext(Dispatchers.IO) {
             microphones = devices.microphones().map { MediaDevice(it.id, it.name) }
@@ -55,11 +58,15 @@ internal fun MediaSettings(devices: CallDevices, settings: Settings) {
     // Проверка — с выбранными микрофоном и камерой; смена любого из них перезапускает её.
     LaunchedEffect(setup.microphone, setup.camera, setup.echoCancellation, setup.noiseSuppression, setup.autoGain) {
         devices.setup = setup
-        devices.startCheck()
+        // Громкость — первой: она читается мгновенно, а проверка открывает устройства.
         volume = withContext(Dispatchers.IO) { devices.micVolume() }
+        devices.startCheck()
     }
     DisposableEffect(devices) {
-        onDispose { scope.launch { devices.stopCheck() } }
+        onDispose {
+            devices.listen(false)
+            scope.launch { devices.stopCheck() }
+        }
     }
 
     val level by devices.micLevel.collectAsState()
@@ -95,6 +102,11 @@ internal fun MediaSettings(devices: CallDevices, settings: Settings) {
             scope.launch(Dispatchers.IO) { devices.setMicVolume(value) }
         },
         onTestSound = { devices.setup = setup; devices.playTest() },
+        listen = listen,
+        onListen = { on ->
+            listen = on
+            devices.listen(on)
+        },
         preview = preview?.let { handle -> { modifier -> CallVideo(handle, modifier) } },
         trouble = trouble,
     )
