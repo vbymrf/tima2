@@ -102,6 +102,11 @@ fun CallScreen(
     bench: BenchLine? = null,
     /** Картинка собеседника. `null` — он себя не показывает или мы отписались. */
     remoteVideo: VideoHandle? = null,
+    /**
+     * Рисовать картинку собеседника здесь. `false` — на широком формате она уходит в
+     * область 3 (заказчик 2026-09-26), а здесь остаются кнопки, аватар и своё окошко.
+     */
+    remoteHere: Boolean = true,
     /** Своя картинка — плашкой в углу. `null` — камера выключена. */
     localVideo: VideoHandle? = null,
     /** Принимать ли чужое видео (ЗВ11). `null` — кнопки нет: показывать нечего. */
@@ -127,11 +132,12 @@ fun CallScreen(
             // Картинка собеседника во весь кадр, если он себя показывает. Аватар и имя
             // под ней не рисуются: они отвечают на тот же вопрос «с кем говорю», и
             // повторять его поверх лица незачем.
-            if (remoteVideo != null) {
-                CallVideo(remoteVideo, Modifier.fillMaxSize())
+            val remoteShown = remoteVideo?.takeIf { remoteHere }
+            if (remoteShown != null) {
+                CallVideo(remoteShown, Modifier.fillMaxSize())
             }
 
-            if (remoteVideo == null) {
+            if (remoteShown == null) {
             InCenter(Modifier.fillMaxSize()) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,

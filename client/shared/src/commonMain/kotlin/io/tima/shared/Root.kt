@@ -167,7 +167,9 @@ import io.tima.core.call.CallStage
 import io.tima.feature.call.BenchLine
 import io.tima.feature.call.BenchScreen
 import io.tima.feature.call.CallBenchSwitch
+import io.tima.core.ui.LayoutLocal
 import io.tima.feature.call.CallScreen
+import io.tima.feature.call.CallVideo
 import io.tima.feature.chat.BookViewSheet
 import io.tima.feature.chat.matches
 import io.tima.feature.chat.orderedSections
@@ -1846,6 +1848,9 @@ private fun App(
                         null
                     },
                     remoteVideo = callHost.remoteVideo.collectAsState().value,
+                    // Широкий формат: видео собеседника — в области 3, здесь кнопки и своё
+                    // окошко (заказчик 2026-09-26). На телефоне области 3 нет — всё здесь.
+                    remoteHere = LayoutLocal.current.phone,
                     localVideo = callHost.localVideo.collectAsState().value,
                     onRemoteVideo = callHost::remoteVideo,
                     onEventAction = callHost::act,
@@ -2191,6 +2196,10 @@ private fun App(
                 )
             }
         },
+        // Видео собеседника на широком формате — в области 3, пока открыто окно звонка.
+        wideMain = callHost.remoteVideo.collectAsState().value
+            ?.takeIf { window == Window.Call }
+            ?.let { remote -> { CallVideo(remote, Modifier.fillMaxSize()) } },
         main = when (val current = where) {
             Where.Nothing -> null
 

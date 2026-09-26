@@ -52,6 +52,13 @@ fun Stage(
     panel: (@Composable () -> Unit)? = null,
     /** Что показать в главной области, пока ничего не выбрано. */
     empty: @Composable () -> Unit = { EmptyArea() },
+    /**
+     * Область 3 **только на широком формате** — поверх [main]. На телефоне её нет, и там
+     * этот слот не зовётся вовсе: [main] на телефоне заменяет колонку, а это содержимое
+     * колонку заменять не должно. Так на ПК показывается видео собеседника во время
+     * звонка, пока кнопки и своё окошко остаются в колонке (заказчик 2026-09-26).
+     */
+    wideMain: (@Composable () -> Unit)? = null,
 ) {
     BoxWithConstraints(modifier) {
         val available = maxWidth
@@ -88,7 +95,7 @@ fun Stage(
                         .weight(1f)
                         .fillMaxHeight()
                         .background(colors.surface),
-                ) { main?.invoke() ?: empty() }
+                ) { (wideMain ?: main)?.invoke() ?: empty() }
 
                 if (panel != null) {
                     layout.panel?.let { width ->
