@@ -448,16 +448,28 @@ class Receiver(
             // Политика при этом давно написана и выведена из настоящих журналов
             // испытаний — `LinkState.retryDelayMs`: сеть мигает и возвращается быстро
             // (5 с), а стена у оператора стоит часами (120 с). Её просто никто не звал.
-            val link = classifyFailure(outcome.exceptionOrNull())
+            // Связь — из исхода канала, если он её назвал: исключения здесь нет, канал
+            // ловит его сам и отдаёт `Disconnected` с уже определённой связью.
+            val link = (outcome.getOrNull() as? StreamOutcome.Disconnected)?.link
+                ?: classifyFailure(outcome.exceptionOrNull())
             val pause = retryPause(link, streak)
-            Journal.note(
-                LogCode.NET_CHANNEL,
-                "живой канал оборвался, поднимаю заново",
+            // ── ВТОРОЙ ОБРЫВ ПОДРЯД — БЕДА, И ОНА ЛОЖИТСЯ НА ДИСК СРАЗУ ──────
+            //
+            // Одиночный обрыв — жизнь сети, запись о нём ждёт своей пачки. Второй подряд
+            // уже значит «канал не поднимается», и такая строка обязана пережить процесс:
+            // 2026-09-26 на ПК после включения VPN канал не вставал минутами, а все строки
+            // о попытках остались в несброшенной пачке и пропали с перезапуском.
+            val fields = arrayOf<Pair<String, Any?>>(
                 "исход" to (lastOutcome ?: "—"),
                 "связь" to link.name,
                 "подряд" to streak,
                 "пауза" to pause,
             )
+            if (streak >= 1) {
+                Journal.trouble(LogCode.NET_CHANNEL, "живой канал оборвался, поднимаю заново", *fields)
+            } else {
+                Journal.note(LogCode.NET_CHANNEL, "живой канал оборвался, поднимаю заново", *fields)
+            }
             // Ждём паузу ИЛИ событие сети — что раньше (У17). Сеть появилась или
             // сменилась — пробуем сразу: прежние неудачи были про прежнюю сеть.
             if (waitBeforeRetry(watch, pauseMs = pause, ceilingMs = RETRY_CEILING_MS)) streak = 0

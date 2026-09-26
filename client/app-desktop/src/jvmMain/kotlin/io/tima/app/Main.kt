@@ -1,5 +1,6 @@
 package io.tima.app
 
+import io.tima.core.network.NetworkWatches
 import io.tima.core.call.desktop.DesktopCallEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -61,6 +62,9 @@ fun main() {
     // такой отчёт ценнее прочих — человек в этот момент видит только исчезнувшее окно
     // (ПЛАН-ОТЛАДКИ.md, Б7).
     val store = reportsStore()
+    // Наблюдатель сети — до первого канала: канал читает его при каждом подъёме. Без
+    // него смена сети (включили VPN) на ПК не замечалась вовсе (ПЛАН-ЗВОНКОВ-ПК, 2026-09-26).
+    NetworkWatches.current = DesktopNetworkWatch()
     Thread.setDefaultUncaughtExceptionHandler { _, error ->
         runCatching {
             rememberCrash(

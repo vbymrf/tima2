@@ -40,6 +40,8 @@ kotlin {
             // Движок отдаётся в Root типом контракта — контракт объявлен явно, а не
             // получен переэкспортом (architecture-tests, DependenciesTest).
             implementation(project(":core:core-call"))
+            // Наблюдатель сети ПК отдаётся каналу через `NetworkWatches` (core-network).
+            implementation(project(":core:core-network"))
         }
 
     }

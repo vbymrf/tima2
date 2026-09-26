@@ -265,7 +265,11 @@ class EventStream(
             decided ?: StreamOutcome.Closed(last)
         } catch (e: Throwable) {
             // Обрыв, TLS, разорванный сокет, отказ авторизации при рукопожатии.
-            StreamOutcome.Disconnected(classifyFailure(e), last)
+            // Причина — словами исключения. Без неё в журнале оставалось одно «NO_NETWORK»,
+            // а под ним живут и «имя не разбирается», и «сокет сброшен», и отказ TLS: после
+            // включения VPN на ПК 2026-09-26 канал не поднимался минутами, и разобрать, чем
+            // кончалась каждая попытка, было не по чему.
+            StreamOutcome.Disconnected(classifyFailure(e), last, cause = "${e::class.simpleName}: ${e.message.orEmpty()}".take(200))
         }
     }
 }
@@ -290,7 +294,7 @@ sealed interface StreamOutcome {
     data class Closed(val lastCursor: Long?) : StreamOutcome
 
     /** Обрыв связи. Пауза берётся из состояния связи, снятого в живой сети v1. */
-    data class Disconnected(val link: LinkState, val lastCursor: Long?) : StreamOutcome
+    data class Disconnected(val link: LinkState, val lastCursor: Long?, val cause: String = "") : StreamOutcome
 
     /** Беда на сервере: повторить позже. */
     data class ServerTrouble(val code: String) : StreamOutcome
