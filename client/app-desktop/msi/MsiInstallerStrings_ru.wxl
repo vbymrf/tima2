@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Строки установщика по-русски (заказчик 2026-09-26: установщик ставил молча, и это
+  выглядело сбоем).
+
+  Сам файл нужен ради культуры ru-ru: по ней jpackage передаёт WiX `-cultures:ru-ru;en-us`,
+  и окна WiX (приветствие, ход, конец) берут русские строки из своего WixUIExtension.
+  Строк jpackage здесь НЕТ намеренно: WiX 3 считает одинаковые идентификаторы в разных
+  файлах конфликтом (LGHT0100) — их редкие сообщения («уже стоит версия новее») остаются
+  английскими.
+
+  Codepage 1251: кириллица в базе MSI живёт только в ней — с 1252 WiX падает с
+  «light.exe exited with 311».
+-->
+<WixLocalization Culture="ru-ru" xmlns="http://schemas.microsoft.com/wix/2006/localization" Codepage="1251">
+  <String Id="TimaLaunchText">Запустить TIMA</String>
+</WixLocalization>

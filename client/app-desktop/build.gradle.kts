@@ -201,3 +201,77 @@ compose.desktop {
 tasks.matching { it.name == "prepareAppResources" }.configureEach {
     dependsOn(":core:core-call-desktop:callNatives")
 }
+
+// ── Установщик с окнами (заказчик 2026-09-26) ─────────────────────────────────
+//
+// Без выбора папки и без лицензии jpackage собирает MSI без единого окна: он ставит молча
+// за секунду и ничего не запускает, и человек видит в этом сбой. Свой интерфейс лежит в
+// `msi/main.wxs` (приветствие, ход, «Установка завершена» с «Запустить TIMA») и
+// `msi/MsiInstallerStrings_ru.wxl`.
+//
+// Подсунуть их плагину нельзя: перед вызовом jpackage он очищает свой каталог ресурсов, а
+// после — рабочий каталог. Поэтому после `packageMsi` MSI собирается ещё раз, **из готового
+// образа приложения** (`createDistributable`, `--app-image`) и со своим каталогом ресурсов:
+// ресурсы плагина плюс наш шаблон. Настройки установщика (папка, ярлыки, UUID обновления,
+// версия) берутся из аргументов, которые записал плагин, — они так и остаются в одном
+// месте, в `nativeDistributions` выше.
+val msiTemplates = layout.projectDirectory.dir("msi")
+tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask>()
+    .matching { it.name == "packageMsi" }
+    .configureEach {
+        dependsOn("createDistributable")
+        val templates = msiTemplates.asFile
+        val tmp = layout.buildDirectory.dir("compose/tmp").get().asFile
+        val image = layout.buildDirectory.dir("compose/binaries/main/app/TIMA").get().asFile
+        val wix = wixToolsetDir
+        inputs.dir(templates)
+        doLast {
+            // Аргументы плагина: по строке на слово, значения в кавычках с удвоенной косой.
+            val words = File(tmp, "packageMsi.args.txt").readLines()
+                .filter { it.isNotBlank() }
+                .map { it.trim().removeSurrounding("\"").replace("\\\\", "\\") }
+            // Из них — только то, что описывает установщик, а не приложение: приложение уже
+            // собрано в образе.
+            val keep = setOf(
+                "--install-dir", "--win-per-user-install", "--win-shortcut", "--win-menu",
+                "--win-menu-group", "--win-upgrade-uuid", "--dest", "--name", "--description",
+                "--app-version", "--vendor",
+            )
+            val installer = mutableListOf<String>()
+            var i = 0
+            while (i < words.size) {
+                val word = words[i]
+                val value = words.getOrNull(i + 1)?.takeIf { !it.startsWith("--") }
+                if (word in keep) {
+                    installer += word
+                    if (value != null) installer += value
+                }
+                i += if (value != null) 2 else 1
+            }
+            val resources = File(tmp, "msi-ui-resources")
+            resources.deleteRecursively()
+            File(tmp, "resources").takeIf { it.isDirectory }?.copyRecursively(resources)
+            templates.copyRecursively(resources, overwrite = true)
+            val dest = File(installer[installer.indexOf("--dest") + 1])
+            // Прежний MSI — долой: jpackage не пишет поверх существующего файла.
+            dest.listFiles { f -> f.extension == "msi" }?.forEach { it.delete() }
+            val jpackage = File(System.getProperty("java.home"), "bin/jpackage.exe")
+            val command = listOf(jpackage.absolutePath, "--type", "msi", "--app-image", image.absolutePath,
+                "--resource-dir", resources.absolutePath,
+                // Ради одного: с ним jpackage подключает к WiX библиотеку окон
+                // (WixUIExtension), без которой нашим окнам не на чем стоять. Само окно
+                // выбора ярлыков не появится — наш main.wxs на него не ссылается.
+                "--win-shortcut-prompt") + installer
+            val process = ProcessBuilder(command)
+                .redirectErrorStream(true)
+                .apply {
+                    wix.orNull?.asFile?.let { dir ->
+                        environment()["PATH"] = dir.absolutePath + File.pathSeparator + environment()["PATH"].orEmpty()
+                    }
+                }
+                .start()
+            val output = process.inputStream.bufferedReader().readText()
+            check(process.waitFor() == 0) { "jpackage с окнами установщика не собрал MSI:\n$output" }
+            logger.lifecycle("MSI с окнами установщика: $dest")
+        }
+    }
