@@ -1,5 +1,9 @@
 package io.tima.app
 
+import io.tima.core.call.desktop.DesktopCallEngine
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -102,6 +106,15 @@ private fun window(store: ReportsStore) = application {
     // берёт то же самое.
     var windowShown by remember { mutableStateOf(true) }
     var hasTray by remember { mutableStateOf(false) }
+
+    // ── ЗВОНКИ (ПЛАН-ЗВОНКОВ-ПК, маршрут A) ─────────────────────────────────
+    //
+    // Движок один на процесс, как и сервер FFI внутри библиотеки: создаётся здесь, у
+    // окна, а не в `Root`, чтобы пережить закрытие окна вместе с каналом. Библиотеки
+    // нет — `null`, и ПК остаётся без звонков честно: «Принять» не показывается (ПК0).
+    val callEngine = remember {
+        DesktopCallEngine.createOrNull(CoroutineScope(SupervisorJob() + Dispatchers.Default))
+    }
     DisposableEffect(Unit) {
         hasTray = Tray.install(
             onOpen = { windowShown = true },
@@ -162,6 +175,7 @@ private fun window(store: ReportsStore) = application {
             // «какая версия стоит» задают, когда что-то пошло не так, и остаться без
             // ответа именно в этот момент — худшее время.
             build = Build(name = BUILD_NAME, code = BUILD_CODE, stream = BUILD_STREAM),
+            callEngine = callEngine,
         )
     }
 }

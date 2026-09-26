@@ -35,6 +35,11 @@ kotlin {
             // Журнал: точка входа ловит падения и кладёт их в очередь отчётов вместе с
             // тем, что человек успел сделать (ПЛАН-ОТЛАДКИ.md, Б7).
             implementation(project(":core:core-diag"))
+            // Звонки на ПК: движок на livekit-ffi (ПЛАН-ЗВОНКОВ-ПК, маршрут A).
+            implementation(project(":core:core-call-desktop"))
+            // Движок отдаётся в Root типом контракта — контракт объявлен явно, а не
+            // получен переэкспортом (architecture-tests, DependenciesTest).
+            implementation(project(":core:core-call"))
         }
 
     }
@@ -97,7 +102,14 @@ compose.desktop {
     application {
         mainClass = "io.tima.app.MainKt"
 
+        // ── livekit_ffi.dll — ресурсом приложения ───────────────────────────────
+        //
+        // Каталог раскладки по ОС (`windows/`) собирает задача `livekitFfi` модуля
+        // core-call-desktop: скачивает библиотеку и сверяет sha256. Compose кладёт её и
+        // в MSI, и в запуск `run`, а путь сообщает свойством
+        // `compose.application.resources.dir` — его и читает движок.
         nativeDistributions {
+            appResourcesRootDir.set(project(":core:core-call-desktop").layout.buildDirectory.dir("livekit-ffi"))
             // Только MSI. `Exe` от jpackage — это не самораспаковывающийся установщик, а
             // тот же WiX-пакет в обёртке; двух форматов у нас нет смысла раздавать —
             // раздавать надо один и знать его хэш.
@@ -178,4 +190,10 @@ compose.desktop {
             }
         }
     }
+}
+
+// Ресурсы приложения готовятся из каталога, который наполняет чужая задача: без явной
+// связи Gradle собрал бы MSI без библиотеки звонков, и ПК молча остался бы без них.
+tasks.matching { it.name == "prepareAppResources" }.configureEach {
+    dependsOn(":core:core-call-desktop:livekitFfi")
 }
