@@ -65,15 +65,23 @@ class ChannelService : Service() {
         // Без намерения служба приходит только в одном случае: система убила процесс и
         // подняла её заново (`START_STICKY`). Это и отличает смерть от тишины (ВЗ0в).
         BackgroundWatch.serviceStarted(bySystem = intent == null)
-        val holding = hold()
-        // Нет аккаунта — держать нечего, и висеть строкой в шторке не за что.
-        if (!holding) {
-            stopSelf()
-            return START_NOT_STICKY
-        }
+        // ── СБОРКА — НЕ НА ГЛАВНОМ ПОТОКЕ ────────────────────────────────────
+        //
+        // `onStartCommand` идёт на главном потоке, а сборка — база, ключи, сеть — занимает
+        // на Redmi около двух секунд: всё это время окно не рисовалось («Skipped 181
+        // frames», кадр 4,3 с; разбор 2026-09-26). На медленном телефоне под нагрузкой это
+        // растягивалось так, что вызов успевал стать пропущенным. Строка службы уже стоит
+        // (выше), поэтому держать поток незачем.
+        Thread({
+            val holding = runCatching { hold() }.getOrElse {
+                Journal.trouble(LogCode.NET_CHANNEL, "служба не взяла канал", "почему" to it.message.orEmpty())
+                false
+            }
+            // Нет аккаунта — держать нечего, и висеть строкой в шторке не за что.
+            if (!holding) stopSelf()
+        }, "tima-channel-start").start()
         // `START_STICKY`: система убила процесс под нехватку памяти — пусть поднимет
-        // службу заново. Намерения при этом не будет, и это правильно: всё, что нужно,
-        // служба берёт у `Entry` сама.
+        // службу заново. Нет аккаунта — поток выше сам остановит службу.
         return START_STICKY
     }
 
@@ -82,6 +90,7 @@ class ChannelService : Service() {
      *
      * @return `false` — аккаунта на устройстве нет, держать нечего.
      */
+    @Synchronized
     private fun hold(): Boolean {
         if (ChannelHost.holding()) return true
         val entry = Entry.create(Platform.Android)
