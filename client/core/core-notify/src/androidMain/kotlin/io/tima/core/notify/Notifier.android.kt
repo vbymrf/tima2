@@ -82,6 +82,16 @@ class AndroidNotifier(
         runCatching { manager?.cancelAll() }
     }
 
+    /**
+     * Завести каналы сразу, при запуске (ВЗ0г). Иначе канал «Звонки» появлялся только с
+     * первым входящим: до него в настройках телефона выключать было нечего, а приложение не
+     * знало, включён ли он, — и полоса «звонки не дойдут» молчала о канале вовсе.
+     */
+    internal fun prepareChannels() {
+        val manager = manager ?: return
+        NoticeKind.entries.forEach { ensureChannel(manager, it) }
+    }
+
     private fun ensureChannel(manager: NotificationManager, kind: NoticeKind) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val id = channelOf(kind)
@@ -237,6 +247,7 @@ object AndroidNotices {
     fun install(context: Context, open: (() -> Intent)? = null) {
         this.appContext = context.applicationContext
         this.open = open
+        runCatching { AndroidNotifier(context.applicationContext, open).prepareChannels() }
     }
 
     internal fun notifier(): Notifier =

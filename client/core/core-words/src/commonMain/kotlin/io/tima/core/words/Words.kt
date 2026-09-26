@@ -220,6 +220,17 @@ interface SettingsListWords {
     val noticesAwakeDone: String
     /** Честно про оболочки: системного белого списка на realme и Xiaomi не хватает. */
     val noticesVendors: String
+
+    // Канал «Звонки» и полоса «звонки не дойдут» — ВЗ0г (заказчик 2026-09-26).
+    val noticesCalls: String
+    val noticesCallsAbout: String
+    val noticesCallsOn: String
+    val noticesCallsOff: String
+    val warnNotices: String
+    val warnCalls: String
+    val warnBattery: String
+    val warnFix: String
+    val warnLater: String
     val itemVirtuals: String
     val itemAppearance: String
     /** «Шрифты и размеры» — второй пункт вида (ПЛАН-ШРИФТОВ Ш4, 2026-09-16). */
@@ -2149,6 +2160,16 @@ object RussianWords : Words {
         override val noticesVendors =
             "На телефонах realme, Xiaomi, Huawei и подобных этого мало: у них свои списки " +
                 "автозапуска в настройках батареи, и добавить приложение туда можно только руками."
+        override val noticesCalls = "Звонки"
+        override val noticesCallsAbout =
+            "Канал «Звонки» можно выключить отдельно от остальных уведомлений — тогда входящий не покажется."
+        override val noticesCallsOn = "Канал «Звонки» включён"
+        override val noticesCallsOff = "Канал «Звонки» выключен"
+        override val warnNotices = "Звонки не будут слышны: уведомления выключены"
+        override val warnCalls = "Звонки не будут слышны: канал «Звонки» выключен"
+        override val warnBattery = "Звонки могут не дойти: экономия батареи ограничивает приложение"
+        override val warnFix = "Включить"
+        override val warnLater = "Позже"
         override val itemVirtuals = "Виртуальные аккаунты"
         override val itemAppearance = "Цвета"
         override val itemText = "Шрифты и размеры"

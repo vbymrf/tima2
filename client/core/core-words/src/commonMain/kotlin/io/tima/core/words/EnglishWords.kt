@@ -478,6 +478,15 @@ object EnglishWords : Words {
         override val noticesVendors =
             "On realme, Xiaomi, Huawei and similar phones this is not enough: they keep their own " +
                 "autostart lists in the battery settings, and the app can only be added there by hand."
+        override val noticesCalls = "Calls"
+        override val noticesCallsAbout = "The Calls channel can be turned off separately from other notifications — then an incoming call will not show."
+        override val noticesCallsOn = "The Calls channel is on"
+        override val noticesCallsOff = "The Calls channel is off"
+        override val warnNotices = "Calls will not be heard: notifications are off"
+        override val warnCalls = "Calls will not be heard: the Calls channel is off"
+        override val warnBattery = "Calls may not arrive: battery saving restricts the app"
+        override val warnFix = "Turn on"
+        override val warnLater = "Later"
         override val itemVirtuals = "Virtual accounts"
         override val itemAppearance = "Colours"
         override val itemText = "Fonts and sizes"

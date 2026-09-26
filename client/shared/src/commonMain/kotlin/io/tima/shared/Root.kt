@@ -108,6 +108,13 @@ import io.tima.core.contacts.platformPhoneBook
 import io.tima.core.notify.NotifyAccessWay
 import io.tima.core.notify.askAwake
 import io.tima.core.notify.askNotifyAccess
+import kotlinx.coroutines.flow.first
+import io.tima.feature.shell.LocalBackgroundWarning
+import io.tima.feature.shell.BackgroundWarning
+import io.tima.feature.shell.BackgroundTrouble
+import io.tima.core.notify.openCallsChannelSettings
+import io.tima.core.notify.backgroundFacts
+import io.tima.core.notify.BackgroundWatch
 import io.tima.core.notify.awakeAllowed
 import io.tima.core.notify.notifyAccessWay
 import io.tima.feature.shell.NotifyAccess
@@ -1616,6 +1623,55 @@ private fun App(
         return
     }
 
+    // ── ЗВОНКИ НЕ ДОЙДУТ — ПОЛОСА (ВЗ0г) ──────────────────────────────────
+    //
+    // Три беды по важности: уведомления запрещены → канал «Звонки» выключен → экономия
+    // батареи душит. Показывается одна, самая важная. Сверка идёт событийно: запуск
+    // процесса, возврат окна, входящий (`BackgroundWatch`), — и каждая сверка обновляет
+    // полосу. «Позже» прячет беду на неделю; исправили — отметка снимается, и беда,
+    // вернувшаяся потом, показывается сразу.
+    var bgFacts by remember { mutableStateOf(backgroundFacts()) }
+    DisposableEffect(Unit) {
+        BackgroundWatch.onCheck = { bgFacts = it }
+        onDispose { BackgroundWatch.onCheck = null }
+    }
+    var bgLater by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    LaunchedEffect(Unit) { environment.settings.all().collect { bgLater = it } }
+    val bgTrouble = when {
+        bgFacts.notices == false -> BackgroundTrouble.Notices
+        bgFacts.calls == false -> BackgroundTrouble.Calls
+        bgFacts.awake == false -> BackgroundTrouble.Battery
+        else -> null
+    }
+    // Исправленная беда забывает своё «Позже»: иначе, вернувшись, она молчала бы неделю.
+    LaunchedEffect(bgFacts) {
+        val fixed = buildList {
+            if (bgFacts.notices == true) add(BackgroundTrouble.Notices)
+            if (bgFacts.calls == true) add(BackgroundTrouble.Calls)
+            if (bgFacts.awake == true) add(BackgroundTrouble.Battery)
+        }
+        for (t in fixed) {
+            if (!bgLater[bgLaterKey(t)].isNullOrEmpty()) environment.settings.put(bgLaterKey(t), "")
+        }
+    }
+    val bgShown = bgTrouble?.takeIf { t ->
+        (bgLater[bgLaterKey(t)]?.toLongOrNull() ?: 0L) <= msNow()
+    }
+    LaunchedEffect(bgShown) {
+        bgShown?.let { Journal.note(bgCode(it), "показали полосу «звонки не дойдут»", "беда" to it.name) }
+    }
+    // ВЗ0б: разрешение на уведомления спрашивается само — один раз на установку. Дальше
+    // только полосой и кнопкой в «Настройки → Уведомления»: спрашивать на каждом запуске
+    // значило бы надоесть, а после второго отказа система и не покажет вопроса.
+    LaunchedEffect(Unit) {
+        val asked = environment.settings.all().first()[NOTICES_AUTO_ASKED]
+        if (asked.isNullOrEmpty() && notifyAccessWay() == NotifyAccessWay.Ask) {
+            environment.settings.put(NOTICES_AUTO_ASKED, "1")
+            Journal.note(LogCode.BG_NOTICES, "спрашиваем разрешение на уведомления — первый запуск")
+            askNotifyAccess { BackgroundWatch.check("ответ на разрешение уведомлений") }
+        }
+    }
+
     // Плашка идущего звонка — во всех окнах, кроме самого звонка: предлагать «перейти в
     // звонок» тому, кто в нём стоит, незачем. Окно 0 временное, и без плашки оно
     // теряется: ушёл свайпом в «Чаты» — и не знаешь, разговор идёт или уже кончился.
@@ -1624,6 +1680,21 @@ private fun App(
             seconds = callHost.seconds,
             onOpen = { showCall() },
         ).takeIf { callHost.active && window != Window.Call },
+        LocalBackgroundWarning provides bgShown?.let { trouble ->
+            BackgroundWarning(
+                trouble = trouble,
+                onFix = {
+                    Journal.note(bgCode(trouble), "нажали «Включить» на полосе", "беда" to trouble.name)
+                    where = Where.Settings(SettingsItem.NOTIFICATIONS)
+                },
+                onLater = {
+                    Journal.note(bgCode(trouble), "«Позже» — полоса спрятана на неделю", "беда" to trouble.name)
+                    scope.launch {
+                        environment.settings.put(bgLaterKey(trouble), (msNow() + BG_LATER_MS).toString())
+                    }
+                },
+            )
+        },
     ) {
     Stage(
         modifier = Modifier.fillMaxSize(),
@@ -2944,6 +3015,10 @@ private fun Settings(
                         { askAwake(); awake = awakeAllowed() }
                     },
                     batteryFree = awake,
+                    // Канал «Звонки» (ВЗ0г): состояние читается при каждом заходе — его
+                    // меняют в настройках телефона, пока нас нет.
+                    callsChannelOn = if (platform == Platform.DESKTOP) null else backgroundFacts().calls,
+                    onCallsChannel = if (platform == Platform.DESKTOP) null else ::openCallsChannelSettings,
                 )
             }
 
@@ -3801,3 +3876,18 @@ private fun SearchRow(
         ControlRow { IconButton(glyph = "✕", onClick = onClose) }
     }
 }
+
+// ── Полоса «звонки не дойдут» (ВЗ0г) ────────────────────────────────────────
+
+/** Где лежит «Позже» беды: время, до которого полоса молчит, мс. Пусто — не откладывали. */
+private fun bgLaterKey(trouble: BackgroundTrouble): String = "bg.later." + trouble.name.lowercase()
+
+/** Код журнала беды: уведомления и канал — `BG-NOTICES`, батарея — `BG-POWER`. */
+private fun bgCode(trouble: BackgroundTrouble): String =
+    if (trouble == BackgroundTrouble.Battery) LogCode.BG_POWER else LogCode.BG_NOTICES
+
+/** «Позже» — неделя (решение заказчика 2026-09-26). */
+private const val BG_LATER_MS = 7L * 24 * 60 * 60 * 1000
+
+/** Разрешение на уведомления спрошено само — один раз на установку (ВЗ0б). */
+private const val NOTICES_AUTO_ASKED = "notices.autoAsked"

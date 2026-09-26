@@ -476,6 +476,15 @@ object SpanishWords : Words {
         override val noticesVendors =
             "En teléfonos realme, Xiaomi, Huawei y similares esto no basta: tienen sus propias listas " +
                 "de inicio automático en los ajustes de batería, y allí la aplicación solo se añade a mano."
+        override val noticesCalls = "Llamadas"
+        override val noticesCallsAbout = "El canal Llamadas se puede apagar aparte de las demás notificaciones — entonces la llamada entrante no se mostrará."
+        override val noticesCallsOn = "El canal Llamadas está activado"
+        override val noticesCallsOff = "El canal Llamadas está desactivado"
+        override val warnNotices = "Las llamadas no se oirán: las notificaciones están desactivadas"
+        override val warnCalls = "Las llamadas no se oirán: el canal Llamadas está desactivado"
+        override val warnBattery = "Las llamadas pueden no llegar: el ahorro de batería limita la aplicación"
+        override val warnFix = "Activar"
+        override val warnLater = "Más tarde"
         override val itemVirtuals = "Cuentas virtuales"
         override val itemAppearance = "Colores"
         override val itemText = "Fuentes y tamaños"

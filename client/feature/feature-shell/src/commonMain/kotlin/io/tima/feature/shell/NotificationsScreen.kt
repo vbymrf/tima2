@@ -52,6 +52,13 @@ fun NotificationsScreen(
     onBattery: (() -> Unit)? = null,
     /** Уже не усыпляют. */
     batteryFree: Boolean = false,
+    /**
+     * Канал «Звонки» включён (ВЗ0г). `null` — канала ещё нет или платформе он не нужен:
+     * строки не будет, пока ей нечего сказать.
+     */
+    callsChannelOn: Boolean? = null,
+    /** Открыть страницу канала «Звонки» в настройках телефона. */
+    onCallsChannel: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.settings2
@@ -84,6 +91,24 @@ fun NotificationsScreen(
             ) {
                 Secondary(words.noticesRefused)
                 Button(label = words.noticesOpenSettings, onClick = onAsk, kind = ButtonKind.Action)
+            }
+        }
+
+        // Канал «Звонки» — отдельно: его выключают одного, при разрешённых остальных
+        // уведомлениях, и тогда молчит именно входящий (ВЗ0г).
+        if (callsChannelOn != null && onCallsChannel != null) {
+            SectionTitle(words.noticesCalls)
+            Column(
+                Modifier.padding(horizontal = TimaSpacing.about4),
+                verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            ) {
+                Secondary(words.noticesCallsAbout)
+                if (callsChannelOn) {
+                    Name(words.noticesCallsOn)
+                } else {
+                    Secondary(words.noticesCallsOff)
+                    Button(label = words.noticesOpenSettings, onClick = onCallsChannel, kind = ButtonKind.Action)
+                }
             }
         }
 

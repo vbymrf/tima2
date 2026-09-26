@@ -131,6 +131,8 @@ fun WindowFrame(
         // Приходит композиционным местным, а не параметром: окон пять, и один и тот же
         // аргумент в пяти обёртках однажды забыли бы в шестой.
         LocalActiveCall.current?.let { ActiveCallBadge(it) }
+        // Звонки не дойдут — тем же способом и в том же месте: видно из любого окна (ВЗ0г).
+        LocalBackgroundWarning.current?.let { BackgroundWarningStrip(it) }
 
         Box(
             modifier = Modifier
