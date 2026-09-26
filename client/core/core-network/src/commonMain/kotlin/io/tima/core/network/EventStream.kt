@@ -94,6 +94,12 @@ class EventStream(
          * применяются по номеру (ПЛАН-ВХОДЯЩЕГО-ЗВОНКА §6.7, п. 6).
          */
         onCallsTop: suspend (Long) -> Long? = { null },
+        /**
+         * Соединение открылось и представилось серверу — канал **жив**. По этому признаку
+         * сторож приёмника отличает «канал работает и молчит» от «попытка висит»
+         * (заказчик 2026-09-26: после включения VPN ПК минутами не держал ни соединения).
+         */
+        onOpen: suspend () -> Unit = {},
         persist: suspend (EventStreamProtocol.IncomingEvent) -> Unit,
     ): StreamOutcome {
         var last = cursor
@@ -108,6 +114,7 @@ class EventStream(
             client.webSocket(route.wsUrl) {
                 send(Frame.Text(protocol.authFrame(token(), appCode, appStream)))
                 send(Frame.Text(protocol.pullFrame(last)))
+                onOpen()
 
                 for (frame in incoming) {
                     val text = (frame as? Frame.Text)?.readText() ?: continue

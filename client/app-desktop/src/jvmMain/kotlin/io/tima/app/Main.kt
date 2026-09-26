@@ -1,5 +1,9 @@
 package io.tima.app
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.window.LocalWindowExceptionHandlerFactory
+import androidx.compose.ui.window.WindowExceptionHandler
+import androidx.compose.ui.window.WindowExceptionHandlerFactory
 import io.tima.core.network.NetworkWatches
 import io.tima.core.call.desktop.DesktopCallEngine
 import kotlinx.coroutines.CoroutineScope
@@ -64,32 +68,22 @@ fun main() {
     val store = reportsStore()
     // Наблюдатель сети — до первого канала: канал читает его при каждом подъёме. Без
     // него смена сети (включили VPN) на ПК не замечалась вовсе (ПЛАН-ЗВОНКОВ-ПК, 2026-09-26).
-    NetworkWatches.current = DesktopNetworkWatch()
+    // Следит за маршрутом именно до сервера — адрес тот же, что у входа ниже.
+    NetworkWatches.current = DesktopNetworkWatch(standHost())
     Thread.setDefaultUncaughtExceptionHandler { _, error ->
-        runCatching {
-            rememberCrash(
-                store = store,
-                platform = "windows",
-                model = System.getProperty("os.name").orEmpty(),
-                os = System.getProperty("os.name").orEmpty() + " " + System.getProperty("os.version").orEmpty(),
-                build = BUILD_NAME,
-                stream = BUILD_STREAM,
-                log = Journal.diary.dump(),
-                error = error,
-            )
-        }
-        error.printStackTrace()
+        recordCrash(store, error)
     }
     window(store)
 }
 
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 private fun window(store: ReportsStore) = application {
     // Переменная окружения читается ЗДЕСЬ: на ПК она есть, в общем коде её нет вовсе —
     // `System.getenv` отсутствует на iOS. Адрес по умолчанию — стенд.
     val entry = remember {
         Entry.create(
             platform = Platform.DESKTOP,
-            host = System.getenv("TIMA_STAND_HOST")?.takeIf { it.isNotBlank() } ?: Entry.STAND,
+            host = standHost(),
         )
     }
     val windowState = rememberWindowState(
@@ -132,55 +126,71 @@ private fun window(store: ReportsStore) = application {
     // перестал бы получать из неё уведомления до следующего открытия.
     LaunchedEffect(windowShown) { ChannelHost.notices()?.windowVisible(windowShown) }
 
-    Window(
-        // Окно ПРЯЧЕТСЯ, а не разбирается: composition-у `application` без единого окна
-        // доверять нельзя — он вправе счесть, что показывать больше нечего.
-        visible = windowShown,
-        onCloseRequest = {
-            if (hasTray) {
-                windowShown = false
-            } else {
-                // Сброс журнала — последний надёжный повод: дальше процесса не будет, а
-                // записи, не дожившие до сброса пачкой, пропали бы вместе с ним.
+    // ── ПАДЕНИЕ ВНУТРИ ОКНА ─────────────────────────────────────────────────
+    //
+    // Исключение в окне Compose забирает сам: окно исчезает, процесс остаётся без окна, в
+    // журнале — ни строки, отчёта нет (2026-09-26: так «упала» проверка звука). Теперь оно
+    // ложится туда же, куда любое падение, и приложение закрывается честно — висящий
+    // процесс без окна к тому же держал замок запускалки, и второй запуск отказывал.
+    CompositionLocalProvider(
+        LocalWindowExceptionHandlerFactory provides WindowExceptionHandlerFactory {
+            WindowExceptionHandler { error ->
+                recordCrash(store, error)
                 Journal.diary.flush()
                 exitApplication()
             }
         },
-        state = windowState,
-        title = "TIMA",
     ) {
-        // Тема здесь больше не решается: её выбирает человек в настройках, и держит
-        // выбор `Root`. Платформе осталось только место для хранения строки.
-        Root(
-            entry = entry,
-            // Имя файла приходит готовым: правило именования — общее (Д11), каталог —
-            // платформенный, и это единственное, что здесь платформенного.
-            deviceDatabase = { name -> desktopDatabase(File(dataCatalog(), name)) },
-            appearanceStore = appearanceStore(),
-            // Что ПК знает о себе для отчёта о проблеме. Модель здесь — имя системы:
-            // «производителя» у ПК нет, а различать сборки Windows иногда приходится.
-            facts = ProblemFacts(
-                platform = "windows",
-                model = System.getProperty("os.name").orEmpty(),
-                os = System.getProperty("os.name").orEmpty() + " " + System.getProperty("os.version").orEmpty(),
-            ),
-            reportsStore = store,
-            diaryPolicy = diaryPolicyStore(),
-            // Начатая установка помнится файлом рядом с базой: MSI закрывает приложение,
-            // и спросить у самих себя, чем всё кончилось, потом будет некого.
-            updateMemory = updateMemory(),
-            // Обновление ставит платформа: скачать, сверить хэш, позвать msiexec.
-            // Приложение при этом закрывается — MSI не заменит файлы работающей
-            // программы, и Windows вместо установки предложила бы перезагрузку.
-            installer = DesktopInstaller(),
-            onLeaving = { Journal.diary.flush(); exitApplication() },
-            // Версия порождается сборкой из gradle.properties — одна на Android и ПК.
-            // До 2026-08-26 десктоп её не знал и показывал «Установлена —»: вопрос
-            // «какая версия стоит» задают, когда что-то пошло не так, и остаться без
-            // ответа именно в этот момент — худшее время.
-            build = Build(name = BUILD_NAME, code = BUILD_CODE, stream = BUILD_STREAM),
-            callEngine = callEngine,
-        )
+        Window(
+            // Окно ПРЯЧЕТСЯ, а не разбирается: composition-у `application` без единого окна
+            // доверять нельзя — он вправе счесть, что показывать больше нечего.
+            visible = windowShown,
+            onCloseRequest = {
+                if (hasTray) {
+                    windowShown = false
+                } else {
+                    // Сброс журнала — последний надёжный повод: дальше процесса не будет, а
+                    // записи, не дожившие до сброса пачкой, пропали бы вместе с ним.
+                    Journal.diary.flush()
+                    exitApplication()
+                }
+            },
+            state = windowState,
+            title = "TIMA",
+        ) {
+            // Тема здесь больше не решается: её выбирает человек в настройках, и держит
+            // выбор `Root`. Платформе осталось только место для хранения строки.
+            Root(
+                entry = entry,
+                // Имя файла приходит готовым: правило именования — общее (Д11), каталог —
+                // платформенный, и это единственное, что здесь платформенного.
+                deviceDatabase = { name -> desktopDatabase(File(dataCatalog(), name)) },
+                appearanceStore = appearanceStore(),
+                // Что ПК знает о себе для отчёта о проблеме. Модель здесь — имя системы:
+                // «производителя» у ПК нет, а различать сборки Windows иногда приходится.
+                facts = ProblemFacts(
+                    platform = "windows",
+                    model = System.getProperty("os.name").orEmpty(),
+                    os = System.getProperty("os.name").orEmpty() + " " + System.getProperty("os.version").orEmpty(),
+                ),
+                reportsStore = store,
+                diaryPolicy = diaryPolicyStore(),
+                // Начатая установка помнится файлом рядом с базой: MSI закрывает приложение,
+                // и спросить у самих себя, чем всё кончилось, потом будет некого.
+                updateMemory = updateMemory(),
+                // Обновление ставит платформа: скачать, сверить хэш, позвать msiexec.
+                // Приложение при этом закрывается — MSI не заменит файлы работающей
+                // программы, и Windows вместо установки предложила бы перезагрузку.
+                installer = DesktopInstaller(),
+                onLeaving = { Journal.diary.flush(); exitApplication() },
+                // Версия порождается сборкой из gradle.properties — одна на Android и ПК.
+                // До 2026-08-26 десктоп её не знал и показывал «Установлена —»: вопрос
+                // «какая версия стоит» задают, когда что-то пошло не так, и остаться без
+                // ответа именно в этот момент — худшее время.
+                build = Build(name = BUILD_NAME, code = BUILD_CODE, stream = BUILD_STREAM),
+                callEngine = callEngine,
+            )
+        }
     }
 }
 
@@ -315,3 +325,29 @@ private const val REPORTS_NAME = "reports.json"
 private const val DIARY_CATALOG = "logs"
 private const val DIARY_POLICY = "logs-policy.txt"
 private const val UPDATE_NAME = "update.txt"
+
+/**
+ * Адрес стенда: из переменной окружения или по умолчанию. Одним местом — его читают и
+ * вход, и наблюдатель сети, и разойтись они не должны.
+ */
+private fun standHost(): String = System.getenv("TIMA_STAND_HOST")?.takeIf { it.isNotBlank() } ?: Entry.STAND
+
+/**
+ * Падение — в журнал и в очередь отчётов, а стек — в консоль запускалки. Одно место для
+ * падений процесса и падений внутри окна: разойдясь, они записывали бы разное.
+ */
+private fun recordCrash(store: ReportsStore, error: Throwable) {
+    runCatching {
+        rememberCrash(
+            store = store,
+            platform = "windows",
+            model = System.getProperty("os.name").orEmpty(),
+            os = System.getProperty("os.name").orEmpty() + " " + System.getProperty("os.version").orEmpty(),
+            build = BUILD_NAME,
+            stream = BUILD_STREAM,
+            log = Journal.diary.dump(),
+            error = error,
+        )
+    }
+    error.printStackTrace()
+}

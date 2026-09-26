@@ -56,4 +56,13 @@ class ChannelRetryTest {
         assertTrue(LinkState.BLOCKED.retryDelayMs > Receiver.RETRY_CEILING_MS, "проверка потеряла смысл")
         assertEquals(LinkState.BLOCKED.retryDelayMs, пауза(LinkState.BLOCKED, 10))
     }
+
+    @Test
+    fun сторож_не_рвёт_честную_попытку() {
+        // Попытку, которая соединяется медленно (тоннель, плохая сеть), рвать нельзя —
+        // иначе канал не поднимется никогда. Сторож ждёт дольше самой длинной паузы и
+        // смотрит на попытку несколько раз, прежде чем объявить её зависшей.
+        assertTrue(Receiver.STUCK_MS > Receiver.RETRY_CEILING_MS, "сторож нетерпеливее паузы")
+        assertTrue(Receiver.STUCK_MS >= 3 * Receiver.STUCK_CHECK_MS, "сторож смотрит слишком редко")
+    }
 }

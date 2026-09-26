@@ -28,6 +28,7 @@ import io.tima.domain.chat.SyncGroupChats
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 
@@ -132,6 +133,10 @@ class Receiver(
 
     /** Что случилось с каналом в последний раз. Для диагностики, не для решений. */
     var lastOutcome: String? = null
+
+    /** Канал сейчас открыт — для сторожа попытки. */
+    @Volatile
+    private var live = false
         private set
 
     /** Ключи подписи по устройству отправителя: спрашиваются один раз на устройство. */
@@ -348,6 +353,7 @@ class Receiver(
                 onComment = { decision -> aboutComment(decision) },
                 onCall = { decision -> aboutCall(decision) },
                 onCallsTop = { top -> callsTop(top) },
+                onOpen = { live = true },
                 // Разрыв называется полосой, а не «что-то потерялось». Строка
                 // в дневнике — единственное место, где это видно человеку,
                 // который разбирает отчёт о проблеме.
@@ -391,16 +397,41 @@ class Receiver(
                         networkBrokeChannel(watch)
                         throw NetworkSwitched()
                     }
+                    // ── СТОРОЖ ПОПЫТКИ ────────────────────────────────────────
+                    //
+                    // Попытка, которая не открыла канал за [STUCK_MS] при живой сети, —
+                    // зависла. 2026-09-26 после включения VPN ПК минутами не держал ни
+                    // соединения, и ни пинг, ни пауза этого не замечали: пинг живёт внутри
+                    // открытого канала, а паузы ограничены — зависнуть можно было только
+                    // внутри попытки. Сторож рвёт её и начинает заново.
+                    val guard = launch {
+                        while (true) {
+                            delay(STUCK_CHECK_MS)
+                            val lost = NetworkWatches.current.state.value == NetworkState.LOST
+                            if (!live && !lost && msNow() - startedAt > STUCK_MS) throw ChannelStuck()
+                        }
+                    }
                     try {
                         runChannel()
                     } finally {
+                        live = false
                         breaker.cancel()
+                        guard.cancel()
                     }
                 }
             }
             // Отмена всего приёмника (выход из аккаунта) не должна проглатываться
             // `runCatching` и крутить цикл дальше.
             currentCoroutineContext().ensureActive()
+            if (outcome.exceptionOrNull() is ChannelStuck) {
+                lastOutcome = "попытка висела"
+                Journal.trouble(
+                    LogCode.NET_CHANNEL,
+                    "канал не поднялся за отведённое время — начинаю заново",
+                    "ждали с" to STUCK_MS / 1000,
+                )
+                continue
+            }
             if (outcome.exceptionOrNull() is NetworkSwitched) {
                 // Прежние неудачи были про прежнюю сеть: считать их против новой нечестно.
                 streak = 0
@@ -773,6 +804,12 @@ class Receiver(
          * за это время успевает решить, что приложение сломано.
          */
         const val RETRY_CEILING_MS = 60_000L
+
+        /** Сколько попытка может не открыть канал при живой сети, прежде чем сторож её оборвёт. */
+        const val STUCK_MS = 90_000L
+
+        /** Как часто сторож смотрит на попытку. */
+        const val STUCK_CHECK_MS = 15_000L
 
         /**
          * Сколько канал должен прожить, чтобы счёт неудач обнулился.

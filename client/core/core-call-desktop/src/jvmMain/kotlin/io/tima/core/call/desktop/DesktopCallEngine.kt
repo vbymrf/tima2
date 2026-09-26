@@ -794,7 +794,19 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             .onFailure { Journal.trouble(LogCode.CALL_DEVICE, "проверка: обработка звука не создалась", "причина" to (it.message ?: "?")) }
             .getOrNull()
         checkApm = apm
-        val check = runCatching { MicCheck(micName, speakerName, apm) { why -> _checkTrouble.value = why } }
+        val check = runCatching {
+            MicCheck(
+                micName, speakerName, apm,
+                onTrouble = { why -> _checkTrouble.value = why },
+                onStats = { raw, processed ->
+                    Journal.note(
+                        LogCode.CALL_DEVICE, "проверка: уровень речи",
+                        "микрофон дБ" to raw, "после обработки дБ" to processed,
+                        "усиление" to setup.autoGain, "шумодав" to setup.noiseSuppression,
+                    )
+                },
+            )
+        }
             .onFailure {
                 _checkTrouble.value = "микрофон не открылся: " + (it.message ?: it::class.simpleName)
                 Journal.trouble(LogCode.CALL_DEVICE, "проверка: микрофон не открылся", "причина" to (it.message ?: "?"))

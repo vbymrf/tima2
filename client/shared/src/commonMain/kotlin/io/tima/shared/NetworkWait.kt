@@ -68,3 +68,6 @@ internal suspend fun networkBrokeChannel(watch: NetworkWatch) {
 
 /** Канал разорван нами самими: сеть сменилась или пропала, и держать его незачем. */
 internal class NetworkSwitched : Exception("сеть сменилась — канал поднимается заново")
+
+/** Попытка не открыла канал за отведённое время при живой сети — сторож её оборвал. */
+internal class ChannelStuck : Exception("попытка не открыла канал — начинаю заново")

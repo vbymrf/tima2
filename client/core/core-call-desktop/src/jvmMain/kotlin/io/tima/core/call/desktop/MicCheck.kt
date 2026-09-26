@@ -29,6 +29,13 @@ internal class MicCheck(
     private val apm: CheckApm? = null,
     /** Колонки не открылись — словами для экрана. */
     private val onTrouble: (String) -> Unit = {},
+    /**
+     * Замер для журнала: пик сырого микрофона и пик после обработки, дБ от полной шкалы,
+     * раз в [STATS_MS], пока человек говорит. По двум числам видно, где теряется
+     * громкость: тихо уже на входе — микрофон и путь до Windows; громко на входе и тихо
+     * после — обработка.
+     */
+    private val onStats: (rawDb: Int, processedDb: Int) -> Unit = { _, _ -> },
 ) {
 
     private val format = AudioFormat(RATE.toFloat(), 16, 1, true, false)
@@ -54,10 +61,14 @@ internal class MicCheck(
      */
     fun run(onLevel: (Float) -> Unit) {
         val chunk = ByteArray(RATE / 50 * 2)
+        var rawMax = 0
+        var outMax = 0
+        var statsAt = System.currentTimeMillis()
         input.start()
         while (running) {
             val read = input.read(chunk, 0, chunk.size)
             if (read <= 0) continue
+            rawMax = maxOf(rawMax, peakOf(chunk, read))
             // Уровень и «слушать себя» — уже после обработки: это и услышит собеседник.
             apm?.capture(chunk, read)
             var peak = 0
@@ -68,6 +79,15 @@ internal class MicCheck(
                 i += 2
             }
             onLevel(level(peak))
+            outMax = maxOf(outMax, peak)
+            val now = System.currentTimeMillis()
+            if (now - statsAt >= STATS_MS) {
+                // Только когда есть что мерить: тишина комнаты в журнале ничего не объясняет.
+                if (db(rawMax) > SPEECH_DB) onStats(db(rawMax), db(outMax))
+                rawMax = 0
+                outMax = 0
+                statsAt = now
+            }
             if (listen) {
                 val out = output ?: runCatching { openOutput() }
                     .onFailure {
@@ -114,6 +134,23 @@ internal class MicCheck(
 
     companion object {
         private const val RATE = 48_000
+        private const val STATS_MS = 2_000L
+
+        /** Ниже этого — тишина комнаты, а не речь. */
+        private const val SPEECH_DB = -50
+
+        fun db(peak: Int): Int = if (peak <= 0) -99 else (20 * log10(peak / 32768.0)).toInt()
+
+        private fun peakOf(data: ByteArray, length: Int): Int {
+            var peak = 0
+            var i = 0
+            while (i + 1 < length) {
+                val v = abs(((data[i + 1].toInt() shl 8) or (data[i].toInt() and 0xff)).toShort().toInt())
+                if (v > peak) peak = v
+                i += 2
+            }
+            return peak
+        }
         private const val BUFFER = RATE / 10 * 2
 
         /** Нижний край шкалы: тише −60 дБ — пустая полоса. */

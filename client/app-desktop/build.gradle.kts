@@ -42,6 +42,8 @@ kotlin {
             implementation(project(":core:core-call"))
             // Наблюдатель сети ПК отдаётся каналу через `NetworkWatches` (core-network).
             implementation(project(":core:core-network"))
+            // Маршрут до сервера спрашивается у Windows (iphlpapi) — через JNA.
+            implementation(libs.jna)
         }
 
     }
