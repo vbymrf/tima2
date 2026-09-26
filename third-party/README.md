@@ -107,6 +107,8 @@ Apple нет, и падает с «no matching variant» — до нашего k
 | `reference/Maestro` | [mobile-dev-inc/Maestro](https://github.com/mobile-dev-inc/Maestro) `01a3e442afba` | **сценарии на YAML без агента** — модель 4, выбрана основной |
 | `reference/LocalVQE` | [localai-org/LocalVQE](https://github.com/localai-org/LocalVQE) `f53063c9eb2a` | нейросетевое эхо + шум, C API — разбор в `doc_mig/ПЛАН-ЗВОНКОВ-ПК.md` §2а |
 | `reference/livekit-plugins-dtln` | [aloware/livekit-plugins-dtln](https://github.com/aloware/livekit-plugins-dtln) `d12ed111d169` | нейросетевой шумодав для LiveKit (Python) — там же. **`CLAUDE.md` → `CLAUDE.upstream.md`**, sha256 `57837cca…` |
+| `reference/livekit-rust-sdks` | [livekit/rust-sdks](https://github.com/livekit/rust-sdks), тег `livekit-ffi/v0.12.80` (`5a656c4b`) | протокол FFI звонков ПК — его копия лежит в `client/core/core-call-desktop/src/proto`; `AGENTS.md` (8 шт.) → `AGENTS.upstream.md`, `.claude/` → `claude-commands.upstream/` |
+| `reference/openpnp-capture` | [openpnp/openpnp-capture](https://github.com/openpnp/openpnp-capture) `v0.0.30` (`7ed88017`) | захват камеры ПК (ПК4): C API и порядок байтов кадра |
 
 Каталог **не отслеживается git** (`.gitignore`) — это чужой код, он не наш и на вторую
 машину не едет.
