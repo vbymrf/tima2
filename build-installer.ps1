@@ -42,6 +42,17 @@ $клиент = Join-Path $корень 'client'
 function Скажи($текст) { Write-Host $текст }
 function Беда($текст) { Write-Host $текст -ForegroundColor Red }
 
+# sha256 файла средствами .NET, а не Get-FileHash: Windows PowerShell 5.1, запущенный из
+# бата внутри PowerShell 7, наследует его пути модулей — и Get-FileHash в нём «не найден».
+# 2026-09-27 так скрипт падал сразу после сборки, и MSI не доходил до doc_add\packages.
+function Хэш($путь) {
+    $поток = [System.IO.File]::OpenRead($путь)
+    try {
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        return (($sha.ComputeHash($поток) | ForEach-Object { $_.ToString('x2') }) -join '')
+    } finally { $поток.Dispose() }
+}
+
 # ── WiX ─────────────────────────────────────────────────────────────────────
 #
 # Возвращает каталог с candle.exe и light.exe либо $null. Пустой ответ — не повод
@@ -150,7 +161,7 @@ if (-not $msi) {
     exit 1
 }
 
-$хэш = (Get-FileHash -Path $msi.FullName -Algorithm SHA256).Hash.ToLower()
+$хэш = Хэш $msi.FullName
 
 Скажи ''
 Скажи 'Готово.'

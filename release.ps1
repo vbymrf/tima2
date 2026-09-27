@@ -43,6 +43,17 @@ $свойства = Join-Path $клиент 'gradle.properties'
 function Скажи($текст) { Write-Host $текст }
 function Беда($текст) { Write-Host $текст -ForegroundColor Red }
 
+# sha256 файла средствами .NET, а не Get-FileHash: Windows PowerShell 5.1, запущенный из
+# бата внутри PowerShell 7, наследует его пути модулей — и Get-FileHash в нём «не найден».
+# 2026-09-27 так скрипт падал сразу после сборки, и MSI не доходил до doc_add\packages.
+function Хэш($путь) {
+    $поток = [System.IO.File]::OpenRead($путь)
+    try {
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        return (($sha.ComputeHash($поток) | ForEach-Object { $_.ToString('x2') }) -join '')
+    } finally { $поток.Dispose() }
+}
+
 function Прочитать($имя) {
     $строка = Select-String -Path $свойства -Pattern "^$([regex]::Escape($имя))=(.*)$" | Select-Object -First 1
     if (-not $строка) { throw "в gradle.properties нет $имя" }
@@ -103,8 +114,8 @@ if (-not (Test-Path $apk)) { Беда "APK не появился: $apk"; exit 1 
 if (-not $msi) { Беда 'MSI не появился'; exit 1 }
 
 $apkФайл = Get-Item $apk
-$apkХэш = (Get-FileHash -Path $apk -Algorithm SHA256).Hash.ToLower()
-$msiХэш = (Get-FileHash -Path $msi.FullName -Algorithm SHA256).Hash.ToLower()
+$apkХэш = Хэш $apk
+$msiХэш = Хэш $msi.FullName
 
 Скажи ''
 Скажи '── Собрано ─────────────────────────────────────────────────────────────'
