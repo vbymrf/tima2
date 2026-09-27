@@ -283,6 +283,9 @@ try {
         if ($version) { Note ("   " + "$version".Trim()) }
 
         if (-not $NoLaunch) {
+            # Как значок: MAIN + LAUNCHER. Голый `-n` Android не признавал запуском со
+            # значка, и первое же нажатие значка ставило второе окно поверх (Redmi
+            # 2026-09-27, отчёт 5KXE) — с тех пор окно ещё и `singleTask`.
             $null = & $adb @server -s $t.Id shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "$package/$activity" 2>&1
             if ($LASTEXITCODE -eq 0) { Note '   запущено' } else { Bad '   поставилось, но не запустилось' }
         }
