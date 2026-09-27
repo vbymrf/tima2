@@ -17,14 +17,14 @@ import kotlin.math.log10
  * ADM WebRTC пишет микрофон только тогда, когда дорожка уходит в соединение, — без
  * звонка он молчит, и уровень Windows у такого микрофона стоит на нуле (проверено
  * 2026-09-26). Поэтому проверка пишет микрофон сама, через Java Sound, и уровень считает
- * по самому звуку. Звук здесь **без обработки звонка** (эха, шума, усиления): это проверка
- * устройства, а не разговора.
+ * по самому звуку. Звук идёт через ту же обработку WebRTC, что в звонке ([CheckApm]), —
+ * проверка слышит то, что получит собеседник.
  *
  * Устройства находятся по имени: Windows называет их одинаково для ADM и для Java Sound.
  */
 internal class MicCheck(
     microphoneName: String?,
-    private val speakerName: String?,
+    speakerName: String?,
     /** Обработка звонка — чтобы проверка слышала то, что получит собеседник. `null` — сырой звук. */
     private val apm: CheckApm? = null,
     /** Колонки не открылись — словами для экрана. */
@@ -43,6 +43,19 @@ internal class MicCheck(
 
     @Volatile
     private var output: SourceDataLine? = null
+
+    /**
+     * Колонки для «слушать себя» — **меняются на ходу** (заказчик 2026-09-27: переключил
+     * колонки, а звук остался в прежних, пока не выйдешь из настроек). Смена закрывает
+     * вывод, и следующий кадр откроет уже новые колонки.
+     */
+    @Volatile
+    var speakerName: String? = speakerName
+        set(value) {
+            if (value == field) return
+            field = value
+            closeOutput()
+        }
 
     @Volatile
     private var running = true
@@ -97,10 +110,11 @@ internal class MicCheck(
                         onTrouble("колонки не открылись: " + (it.message ?: it::class.simpleName))
                     }
                     .getOrNull()?.also { output = it }
-                if (out != null) {
-                    apm?.render(chunk, read)
-                    out.write(chunk, 0, read)
-                }
+                // В образец эхоподавления (reverse stream) это НЕ подаётся, хотя и играет в
+                // колонки: здесь играет ваш же голос, и эхоподавление, сверив его с
+                // микрофоном, вырезало бы голос как эхо — звук «ломался» даже в наушниках
+                // (заказчик 2026-09-27). В звонке образец — голос собеседника, там беды нет.
+                if (out != null) out.write(chunk, 0, read)
             }
         }
     }

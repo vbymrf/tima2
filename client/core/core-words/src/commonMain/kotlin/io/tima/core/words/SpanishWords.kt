@@ -480,7 +480,7 @@ object SpanishWords : Words {
         override val mediaEcho = "Cancelación de eco"
         override val mediaNoise = "Supresión de ruido"
         override val mediaGain = "Ganancia automática"
-        override val mediaProcessingAbout = "Desactívalo solo si molesta: auriculares con su propio filtro, música."
+        override val mediaProcessingAbout = "Desactívalo solo si molesta: auriculares con su propio filtro, música. Con auriculares la cancelación de eco no hace falta. En esta prueba no se oye: el eco solo existe en una llamada."
         override val mediaNextCall = "Los cambios se aplican desde la próxima llamada."
         override val mediaListen = "Escucharte — mejor con auriculares, o se acoplará"
         override val exitApp = "Salir"

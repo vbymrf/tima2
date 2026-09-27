@@ -2235,7 +2235,7 @@ object RussianWords : Words {
         override val mediaEcho = "Эхоподавление"
         override val mediaNoise = "Шумоподавление"
         override val mediaGain = "Автоусиление"
-        override val mediaProcessingAbout = "Выключайте, только если мешает: гарнитура со своим шумодавом, музыка."
+        override val mediaProcessingAbout = "Выключайте, только если мешает: гарнитура со своим шумодавом, музыка. В наушниках эхоподавление не нужно — его можно выключить. Здесь, в проверке, его не слышно: эхо появляется только в звонке."
         override val mediaNextCall = "Выбор действует со следующего звонка."
         override val mediaListen = "Слушать себя — лучше в наушниках, иначе засвистит"
         override val exitApp = "Выйти"

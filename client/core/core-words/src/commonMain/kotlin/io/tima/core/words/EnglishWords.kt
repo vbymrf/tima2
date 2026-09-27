@@ -482,7 +482,7 @@ object EnglishWords : Words {
         override val mediaEcho = "Echo cancellation"
         override val mediaNoise = "Noise suppression"
         override val mediaGain = "Auto gain"
-        override val mediaProcessingAbout = "Turn off only if it gets in the way: a headset with its own noise filter, music."
+        override val mediaProcessingAbout = "Turn off only if it gets in the way: a headset with its own noise filter, music. With headphones echo cancellation is not needed. It cannot be heard in this check: echo only exists in a call."
         override val mediaNextCall = "Changes apply from the next call."
         override val mediaListen = "Hear yourself — better with headphones, or it will howl"
         override val exitApp = "Quit"

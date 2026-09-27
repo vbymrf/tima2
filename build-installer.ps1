@@ -17,10 +17,21 @@
 
 .PARAMETER Проверить
     Только проверить готовность машины (JDK, WiX) и выйти, ничего не собирая.
+.PARAMETER ВПакеты
+    Установщик для проверки на другом компьютере (заказчик 2026-09-26) — им пользуется
+    `build-installer-packages.bat`. Сверх обычной сборки:
+      1. останавливает ПК-клиент, запущенный из исходников: он читает классы из каталога
+         сборки, и сборка поверх него роняет его окно;
+      2. поднимает номер сборки на единицу — у каждого пакета свой номер, иначе два
+         разных MSI с одним номером Windows примет за одну программу;
+      3. кладёт MSI в doc_add\packages как TIMA-<номер>.msi.
 #>
 [CmdletBinding()]
 param(
-    [switch]$Проверить
+    [switch]$Проверить,
+    # Латинский псевдоним — для .bat: cmd читает его в OEM, и кириллица там ломается.
+    [Alias('ToPackages')]
+    [switch]$ВПакеты
 )
 
 $ErrorActionPreference = 'Stop'
@@ -98,6 +109,30 @@ if (-not (Get-Command candle.exe -ErrorAction SilentlyContinue)) {
     $env:PATH = "$wix;$env:PATH"
 }
 
+if ($ВПакеты) {
+    # ── 1. ПК-клиент из исходников — остановить ─────────────────────────────
+    $запускалка = Join-Path $корень 'update-and-run-desktop.ps1'
+    if (Test-Path (Join-Path $env:TEMP 'tima-desktop.pid')) {
+        Скажи 'Останавливаю ПК-клиент, запущенный из исходников (сборка поверх него роняет окно)...'
+        & $запускалка -Стоп | Out-Null
+    }
+    # `-Стоп` гасит окно запускалки, а процесс приложения — потомок Gradle — остаётся.
+    Get-Process java, javaw -ErrorAction SilentlyContinue |
+        Where-Object { $_.MainWindowTitle -eq 'TIMA' } |
+        ForEach-Object { Stop-Process -Id $_.Id -Force }
+
+    # ── 2. Номер сборки + 1 ─────────────────────────────────────────────────
+    $свойства = Join-Path $клиент 'gradle.properties'
+    $текст = [System.IO.File]::ReadAllText($свойства)
+    $код = [int]([regex]::Match($текст, '(?m)^tima\.versionCode=(\d+)').Groups[1].Value)
+    $новый = $код + 1
+    $текст = [regex]::Replace($текст, '(?m)^tima\.versionCode=\d+', "tima.versionCode=$новый")
+    # Имя вида 2.0.<номер>-dev идёт вслед за номером; другое имя не трогаем.
+    $текст = [regex]::Replace($текст, "(?m)^tima\.versionName=2\.0\.$код-dev", "tima.versionName=2.0.$новый-dev")
+    [System.IO.File]::WriteAllText($свойства, $текст, (New-Object System.Text.UTF8Encoding($false)))
+    Скажи "Номер сборки: $код -> $новый (client\gradle.properties)"
+}
+
 Push-Location $клиент
 try {
     Скажи ''
@@ -125,3 +160,14 @@ $хэш = (Get-FileHash -Path $msi.FullName -Algorithm SHA256).Hash.ToLower()
 Скажи ''
 Скажи 'Хэш и размер объявляет сервер (APP_MSI_SHA256, APP_MSI_SIZE): подписи кода у'
 Скажи 'пакета нет, и это единственное, чем клиент проверит скачанное.'
+
+if ($ВПакеты) {
+    # ── 3. В doc_add\packages ───────────────────────────────────────────────
+    $пакеты = Join-Path $корень 'doc_add\packages'
+    New-Item -ItemType Directory -Force -Path $пакеты | Out-Null
+    $цель = Join-Path $пакеты "TIMA-$новый.msi"
+    Copy-Item -Path $msi.FullName -Destination $цель -Force
+    Скажи ''
+    Скажи "Положено: $цель"
+    Скажи 'Номер в client\gradle.properties поднят — эту правку надо закоммитить.'
+}

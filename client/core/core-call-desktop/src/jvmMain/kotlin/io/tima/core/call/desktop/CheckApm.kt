@@ -3,7 +3,6 @@ package io.tima.core.call.desktop
 import com.sun.jna.Memory
 import com.sun.jna.Pointer
 import io.tima.core.call.CallSetup
-import livekit.proto.ApmProcessReverseStreamRequest
 import livekit.proto.ApmProcessStreamRequest
 import livekit.proto.ApmSetStreamDelayRequest
 import livekit.proto.FfiRequest
@@ -17,9 +16,10 @@ import livekit.proto.NewApmRequest
  * 2026-09-26). С ней проверка слышит ровно то, что получит собеседник, и выключатели эха,
  * шума и усиления **можно услышать** до звонка.
  *
- * APM берёт кадры по 10 мс, 16 бит. Микрофон идёт в `process_stream`, то, что играем в
- * колонки, — в `reverse_stream`: это образец, по которому эхоподавление вычитает
- * вернувшийся из колонок звук.
+ * APM берёт кадры по 10 мс, 16 бит; микрофон идёт в `process_stream`. Образца для
+ * эхоподавления (`reverse_stream`) в проверке нет: единственное, что здесь играет в
+ * колонки, — собственный голос в «слушать себя», и сверка с ним вырезала бы голос как эхо.
+ * Поэтому эхоподавление в проверке слышно не будет — проверить его можно только звонком.
  */
 internal class CheckApm(setup: CallSetup, private val rate: Int) {
 
@@ -46,11 +46,6 @@ internal class CheckApm(setup: CallSetup, private val rate: Int) {
     /** Обработать микрофон на месте, кадрами по 10 мс. */
     fun capture(data: ByteArray, length: Int) = each(data, length) { ptr ->
         FfiRequest(apm_process_stream = ApmProcessStreamRequest(apm_handle = handle, data_ptr = ptr, size = frameBytes, sample_rate = rate, num_channels = 1))
-    }
-
-    /** Показать APM то, что уходит в колонки. Сами данные не меняются. */
-    fun render(data: ByteArray, length: Int) = each(data.copyOf(length), length) { ptr ->
-        FfiRequest(apm_process_reverse_stream = ApmProcessReverseStreamRequest(apm_handle = handle, data_ptr = ptr, size = frameBytes, sample_rate = rate, num_channels = 1))
     }
 
     fun close() = Ffi.drop(handle)

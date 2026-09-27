@@ -703,6 +703,21 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     // ── Устройства и проверка (настройка «Микрофон и камера») ──────────────
 
     override var setup: CallSetup = CallSetup()
+        set(value) {
+            val speakerChanged = value.speaker != field.speaker
+            field = value
+            // Идёт проверка — сменённые колонки подхватываются сразу, без выхода из
+            // настроек (заказчик 2026-09-27). Имя ищется в перечне устройств: Java Sound
+            // знает колонки по имени, а выбор хранится идентификатором Windows.
+            val check = micCheck
+            if (speakerChanged && check != null) {
+                // Перечень — из нативной библиотеки, не на потоке экрана: сюда зовут и из него.
+                scope.launch(Dispatchers.IO) {
+                    check.speakerName = value.speaker?.let { id -> speakers().firstOrNull { it.id == id }?.name }
+                    Journal.note(LogCode.CALL_DEVICE, "проверка: колонки сменены на ходу")
+                }
+            }
+        }
 
     private val _micLevel = MutableStateFlow(0f)
     override val micLevel: StateFlow<Float> = _micLevel.asStateFlow()
