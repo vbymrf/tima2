@@ -250,7 +250,9 @@ import io.tima.feature.shell.UpdateMemory
 import io.tima.core.ui.ButtonKind
 import io.tima.feature.shell.Notice
 import io.tima.feature.shell.NoticeAction
-import io.tima.feature.shell.NoticeScreen
+import io.tima.feature.shell.NoticeQueueScreen
+import io.tima.feature.shell.NoticeEntry
+import io.tima.feature.shell.NoticeLine
 import io.tima.feature.shell.UpdateNews
 import io.tima.feature.shell.notice
 import io.tima.feature.shell.UpdateInstaller
@@ -1602,33 +1604,28 @@ private fun App(
         return
     }
 
-    // Подокно при запуске: чем кончилась прошлая установка и не пора ли обновиться
-    // (решение заказчика 2026-09-06). После порога, а не до: там работать нельзя вовсе,
-    // и новость об успешной установке поверх этого была бы издевательством.
-    // ── ЗВОНКИ НЕ ДОЙДУТ — СОСТОЯНИЕ (ВЗ0г) ──────────────────────────────────
+    // ── СОБЫТИЯ — ОДНОЙ ОЧЕРЕДЬЮ (ПЛАН-СОБЫТИЙ, заказчик 2026-09-27) ─────────────
     //
-    // Три беды по важности: уведомления запрещены → канал «Звонки» выключен → экономия
-    // батареи душит. Показывается одна, самая важная. Сверка идёт событийно: запуск
-    // процесса, возврат окна, входящий (`BackgroundWatch`), — и каждая сверка обновляет
-    // полосу. «Позже» прячет беду на неделю; исправили — отметка снимается, и беда,
-    // вернувшаяся потом, показывается сразу.
+    // Здесь только сведения: есть ли каждое событие — да, нет или ещё не знаю. Что
+    // открыть, что в списке и что «новое», решает [EventQueue]. До 2026-09-27 каждое
+    // событие было своим `if`, важность — порядком этих `if`, и отсюда пять бед плана:
+    // мелькание, подмена под пальцем, возврат после переписки, неправдивый журнал, два
+    // события подряд.
+    //
+    // После порога обновления, а не до: там работать нельзя вовсе.
+
+    // Беды фона (ВЗ0г). Сверка событийная: запуск процесса, возврат окна, входящий
+    // (`BackgroundWatch`), — каждая сверка обновляет сведения.
     var bgFacts by remember { mutableStateOf(backgroundFacts()) }
     DisposableEffect(Unit) {
         BackgroundWatch.onCheck = { bgFacts = it }
         onDispose { BackgroundWatch.onCheck = null }
     }
     // `null` — отметки «Позже» ещё не прочитаны. До 2026-09-27 здесь стоял пустой список,
-    // и при каждом запуске событие мелькало на долю секунды: беда уже известна, а то, что
-    // её спрятали на неделю, — ещё нет (Redmi: «показали событие» через 0,1 с после
-    // запуска, «Позже» нажато накануне). Не прочитали — не показываем.
+    // и спрятанное на неделю мелькало при каждом запуске (Redmi, отчёт QN4N). Теперь
+    // это «не знаю», и очередь такое событие не показывает.
     var bgLater by remember { mutableStateOf<Map<String, String>?>(null) }
     LaunchedEffect(Unit) { environment.settings.all().collect { bgLater = it } }
-    val bgTrouble = when {
-        bgFacts.notices == false -> BackgroundTrouble.Notices
-        bgFacts.calls == false -> BackgroundTrouble.Calls
-        bgFacts.awake == false -> BackgroundTrouble.Battery
-        else -> null
-    }
     // Исправленная беда забывает своё «Позже»: иначе, вернувшись, она молчала бы неделю.
     LaunchedEffect(bgFacts) {
         val fixed = buildList {
@@ -1641,23 +1638,25 @@ private fun App(
             if (!later[bgLaterKey(t)].isNullOrEmpty()) environment.settings.put(bgLaterKey(t), "")
         }
     }
-    // «Назад» у события закрывает его до следующего запуска — не на неделю, как «Позже».
-    var bgClosed by remember { mutableStateOf(false) }
-    val bgShown = bgLater?.let { later ->
-        bgTrouble?.takeIf { t -> (later[bgLaterKey(t)]?.toLongOrNull() ?: 0L) <= msNow() }
-    }
-    LaunchedEffect(bgShown) {
-        bgShown?.let { Journal.note(bgCode(it), "показали событие «звонки могут не дойти»", "беда" to it.name) }
-    }
-    // ВЗ0б: разрешение на уведомления спрашивается само — один раз на установку. Дальше
-    // только полосой и кнопкой в «Настройки → Уведомления»: спрашивать на каждом запуске
-    // значило бы надоесть, а после второго отказа система и не покажет вопроса.
+
+    // ВЗ0б: разрешение на уведомления спрашивается само — один раз на установку, окном
+    // системы. **Пока вопрос не отвечен, событие про уведомления — «не знаю»** (заказчик
+    // 2026-09-27): иначе под системным окном стояло бы наше «включите уведомления» — два
+    // вопроса об одном. Отказали — событие ждёт следующего запуска: переспрашивать в ту же
+    // секунду незачем.
+    var noticesAsk by remember { mutableStateOf(NoticesAsk.Deciding) }
     LaunchedEffect(Unit) {
         val asked = environment.settings.all().first()[NOTICES_AUTO_ASKED]
         if (asked.isNullOrEmpty() && notifyAccessWay() == NotifyAccessWay.Ask) {
+            noticesAsk = NoticesAsk.Asking
             environment.settings.put(NOTICES_AUTO_ASKED, "1")
             Journal.note(LogCode.BG_NOTICES, "спрашиваем разрешение на уведомления — первый запуск")
-            askNotifyAccess { BackgroundWatch.check("ответ на разрешение уведомлений") }
+            askNotifyAccess {
+                BackgroundWatch.check("ответ на разрешение уведомлений")
+                noticesAsk = if (notifyAccessWay() == NotifyAccessWay.Given) NoticesAsk.Settled else NoticesAsk.DeniedNow
+            }
+        } else {
+            noticesAsk = NoticesAsk.Settled
         }
     }
 
@@ -1680,64 +1679,141 @@ private fun App(
             else -> Unit
         }
     }
-    // ── «ЗВОНКИ МОГУТ НЕ ДОЙТИ» — ПОДОКНОМ-СОБЫТИЕМ (заказчик 2026-09-26) ──────
-    //
-    // Было красной полосой под шапкой. Теперь — тем же подокном, что «Приложение
-    // обновилось»: шапка с «назад», текст, «Включить» ведёт в «Разрешения», «Позже» прячет
-    // на неделю. «Назад» закрывает до следующего запуска. Во время звонка не показывается:
-    // окно поверх разговора его бы закрыло.
-    val bgNow = bgShown
-    if (bgNow != null && !bgClosed && news == null && !callHost.active && where == Where.Nothing) {
-        val warnWords = Tima.words.settings2
-        NoticeScreen(
-            notice = io.tima.feature.shell.Notice(
-                title = warnWords.warnTitle,
-                text = when (bgNow) {
-                    BackgroundTrouble.Notices -> warnWords.warnNotices
-                    BackgroundTrouble.Calls -> warnWords.warnCalls
-                    BackgroundTrouble.Battery -> warnWords.warnBattery
-                },
-                details = listOf(warnWords.warnWhere),
-            ),
+
+    // ── Сведения для очереди ───────────────────────────────────────────────────
+    val later = bgLater
+    fun bgPresence(fact: Boolean?, trouble: BackgroundTrouble): Presence = when {
+        // `null` — платформе спрашивать нечего (ПК): беды нет, а не «не знаю».
+        fact != false -> Presence.No
+        later == null -> Presence.Unknown
+        (later[bgLaterKey(trouble)]?.toLongOrNull() ?: 0L) > msNow() -> Presence.No
+        else -> Presence.Yes
+    }
+    // «Установку не довели» и важное обновление — одна карточка (заказчик 2026-09-27):
+    // действие у них одно. Важное известно только от сервера: пока он не ответил и
+    // другого повода нет — «не знаю».
+    val brokenNews = news as? UpdateNews.Broken
+    val importantOffer = updateState.offer?.takeIf { updateState.important }
+    val eventPresence: Map<EventKind, Presence> = mapOf(
+        EventKind.Update to when {
+            brokenNews != null || importantOffer != null -> Presence.Yes
+            updateState.expect -> Presence.Unknown
+            else -> Presence.No
+        },
+        EventKind.Notices to when (noticesAsk) {
+            NoticesAsk.Deciding, NoticesAsk.Asking -> Presence.Unknown
+            NoticesAsk.DeniedNow -> Presence.No
+            NoticesAsk.Settled -> bgPresence(bgFacts.notices, BackgroundTrouble.Notices)
+        },
+        // Без уведомлений неважно, выключен ли канал: включать его человек пойдёт в то же
+        // место и увидит сам.
+        EventKind.Calls to if (bgFacts.notices == false) Presence.No else bgPresence(bgFacts.calls, BackgroundTrouble.Calls),
+        EventKind.Battery to bgPresence(bgFacts.awake, BackgroundTrouble.Battery),
+        EventKind.Installed to if (news is UpdateNews.Installed) Presence.Yes else Presence.No,
+    )
+    var eventMemory by remember { mutableStateOf(EventMemory()) }
+    // Показывать — на главном экране и не во время звонка: окно поверх разговора его бы
+    // закрыло, а поверх переписки — оторвало бы от неё. Нельзя — очередь просто ждёт.
+    val eventView = EventQueue.view(eventPresence, eventMemory, allowed = !callHost.active && where == Where.Nothing)
+
+    // Журнал: состав очереди — при каждом изменении; «показано» — когда на экране.
+    LaunchedEffect(eventView.waiting) {
+        Journal.note(LogCode.NOTICE, "очередь событий", "стоят" to eventView.waiting.joinToString(", ") { it.name }.ifEmpty { "—" })
+    }
+    LaunchedEffect(eventView.current) {
+        val shown = eventView.current ?: return@LaunchedEffect
+        eventMemory = EventQueue.shown(eventMemory, eventView)
+        Journal.note(LogCode.NOTICE, "событие показано", "что" to shown.name, "номер" to "${eventView.position} из ${eventView.total}")
+    }
+
+    val openEvent = eventView.current
+    if (openEvent != null) {
+        val warn = Tima.words.settings2
+        val upd = Tima.words.update
+        fun close(kind: EventKind, how: String) {
+            Journal.note(LogCode.NOTICE, "событие закрыто", "что" to kind.name, "чем" to how)
+            eventMemory = EventQueue.close(eventMemory, kind)
+        }
+        fun lineTitle(kind: EventKind): String = when (kind) {
+            EventKind.Update -> upd.importantOut.takeIf { importantOffer != null } ?: upd.broken
+            EventKind.Notices -> warn.eventsLineNotices
+            EventKind.Calls -> warn.eventsLineCalls
+            EventKind.Battery -> warn.eventsLineBattery
+            EventKind.Installed -> upd.installed
+        }
+        fun background(kind: EventKind, trouble: BackgroundTrouble, text: String) = NoticeEntry(
+            notice = io.tima.feature.shell.Notice(title = warn.warnTitle, text = text, details = listOf(warn.warnWhere)),
             actions = listOf(
-                NoticeAction(warnWords.warnFix) {
-                    Journal.note(bgCode(bgNow), "нажали «Включить» в событии", "беда" to bgNow.name)
-                    bgClosed = true
+                NoticeAction(warn.warnFix) {
+                    close(kind, "Включить")
                     where = Where.Settings(SettingsItem.PERMISSIONS)
                 },
-                NoticeAction(warnWords.warnLater, ButtonKind.Quiet) {
-                    Journal.note(bgCode(bgNow), "«Позже» — событие спрятано на неделю", "беда" to bgNow.name)
-                    bgClosed = true
+                NoticeAction(warn.warnLater, ButtonKind.Quiet) {
+                    close(kind, "Позже — на неделю")
                     scope.launch {
-                        environment.settings.put(bgLaterKey(bgNow), (msNow() + BG_LATER_MS).toString())
+                        environment.settings.put(bgLaterKey(trouble), (msNow() + BG_LATER_MS).toString())
                     }
                 },
             ),
-            onClose = { bgClosed = true },
         )
-        return
-    }
-    if (news != null) {
-        NoticeScreen(
-            notice = news.notice(Tima.words.update),
+        val entry: NoticeEntry = when (openEvent) {
             // Действие уводит туда, где обновление и живёт, — на вкладку настроек
-            // (решение заказчика 2026-09-06): «единая область, одна логика». Установки
-            // внутри события нет вовсе, и второй копии экрана обновления больше нет.
-            actions = when (news) {
-                // Установилось — решать нечего, и вести некуда.
-                is UpdateNews.Installed -> listOf(
-                    NoticeAction("Понятно", onPick = update::dismissNews),
-                )
-
-                else -> listOf(
-                    NoticeAction("Перейти к обновлению") {
+            // (решение заказчика 2026-09-06): установки внутри события нет вовсе.
+            EventKind.Update -> NoticeEntry(
+                notice = if (importantOffer != null) {
+                    io.tima.feature.shell.Notice(
+                        title = upd.importantOut,
+                        text = upd.availableVersion(importantOffer.versionName),
+                        details = listOfNotNull(
+                            brokenNews?.let { upd.brokenText(it.wanted, it.current.ifBlank { upd.version }) },
+                            importantOffer.notes.takeIf { it.isNotBlank() }?.let { upd.whatChanged(it) },
+                            upd.oldMayMisbehave,
+                        ),
+                    )
+                } else {
+                    (brokenNews ?: UpdateNews.Broken("", "", "")).notice(upd)
+                },
+                actions = listOf(
+                    NoticeAction(warn.eventsGoToUpdate) {
+                        close(EventKind.Update, "Перейти к обновлению")
                         update.dismissNews()
                         where = Where.Settings(SettingsItem.UPDATE)
                     },
-                    NoticeAction("Позже", ButtonKind.Quiet, update::dismissNews),
-                )
+                    NoticeAction(warn.warnLater, ButtonKind.Quiet) {
+                        close(EventKind.Update, "Позже")
+                        update.dismissNews()
+                    },
+                ),
+            )
+            EventKind.Notices -> background(openEvent, BackgroundTrouble.Notices, warn.warnNotices)
+            EventKind.Calls -> background(openEvent, BackgroundTrouble.Calls, warn.warnCalls)
+            EventKind.Battery -> background(openEvent, BackgroundTrouble.Battery, warn.warnBattery)
+            // Установилось — решать нечего, и вести некуда.
+            EventKind.Installed -> NoticeEntry(
+                notice = (news as? UpdateNews.Installed ?: UpdateNews.Installed("", "")).notice(upd),
+                actions = listOf(
+                    NoticeAction(warn.eventsGotIt) {
+                        close(EventKind.Installed, "Понятно")
+                        update.dismissNews()
+                    },
+                ),
+            )
+        }
+        NoticeQueueScreen(
+            current = entry,
+            position = eventView.position,
+            total = eventView.total,
+            rest = eventView.rest.map { line ->
+                NoticeLine(lineTitle(line.kind), line.fresh) {
+                    Journal.note(LogCode.NOTICE, "открыто из списка", "что" to line.kind.name)
+                    eventMemory = EventQueue.open(eventMemory, line.kind)
+                }
             },
-            onClose = update::dismissNews,
+            onNext = if (eventView.rest.isNotEmpty()) ({ close(openEvent, "Следующее") }) else null,
+            onSkipAll = {
+                Journal.note(LogCode.NOTICE, "пропущены все — до следующего запуска", "сколько" to eventView.waiting.size)
+                eventMemory = EventQueue.skipAll(eventMemory)
+            },
         )
         return
     }
@@ -2449,6 +2525,18 @@ private fun App(
                                 // экономия батареи, сколько живёт служба канала.
                                 permissions = io.tima.core.notify.BackgroundWatch.describe(),
                                 sessionFor = startedWords(),
+                                events = EventQueue.describe(
+                                    presence = eventPresence,
+                                    memory = eventMemory,
+                                    laterUntil = mapOf(
+                                        EventKind.Notices to BackgroundTrouble.Notices,
+                                        EventKind.Calls to BackgroundTrouble.Calls,
+                                        EventKind.Battery to BackgroundTrouble.Battery,
+                                    ).mapNotNull { (kind, trouble) ->
+                                        bgLater?.get(bgLaterKey(trouble))?.toLongOrNull()?.let { kind to it }
+                                    }.toMap(),
+                                    now = msNow(),
+                                ),
                             )
                         },
                     )
@@ -4089,8 +4177,23 @@ private fun SearchRow(
 private fun bgLaterKey(trouble: BackgroundTrouble): String = "bg.later." + trouble.name.lowercase()
 
 /** Код журнала беды: уведомления и канал — `BG-NOTICES`, батарея — `BG-POWER`. */
-private fun bgCode(trouble: BackgroundTrouble): String =
-    if (trouble == BackgroundTrouble.Battery) LogCode.BG_POWER else LogCode.BG_NOTICES
+/**
+ * Где системный вопрос про уведомления (ВЗ0б) — для очереди событий: пока он не решён,
+ * событие про уведомления — «не знаю» (заказчик 2026-09-27).
+ */
+private enum class NoticesAsk {
+    /** Ещё не прочитали, спрашивали ли в прошлые запуски. */
+    Deciding,
+
+    /** Системное окно на экране. */
+    Asking,
+
+    /** Отказали только что — событие ждёт следующего запуска. */
+    DeniedNow,
+
+    /** Спрашивать нечего или ответ «разрешить»: событие по обычным правилам. */
+    Settled,
+}
 
 /** «Позже» — неделя (решение заказчика 2026-09-26). */
 private const val BG_LATER_MS = 7L * 24 * 60 * 60 * 1000

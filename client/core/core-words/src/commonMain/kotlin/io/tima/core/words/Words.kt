@@ -237,6 +237,19 @@ interface SettingsListWords {
     val permAutostartNoProgram: String
     val warnTitle: String
     val warnWhere: String
+    // ── Очередь событий (ПЛАН-СОБЫТИЙ, заказчик 2026-09-27) ──────────────────
+    val eventsTitle: String
+    fun eventsCount(position: Int, total: Int): String
+    val eventsNext: String
+    val eventsSkipAll: String
+    val eventsMore: String
+    val eventsNew: String
+    val eventsGoToUpdate: String
+    val eventsGotIt: String
+    /** Короткие названия бед фона — для списка «Ещё», где у всех трёх был бы один заголовок. */
+    val eventsLineNotices: String
+    val eventsLineCalls: String
+    val eventsLineBattery: String
 
     // ── Экран уведомлений (У1, У14) ─────────────────────────────────────────
     val noticesShow: String
@@ -2259,6 +2272,17 @@ object RussianWords : Words {
         override val permAutostartNoProgram = "Эта копия запущена не из установленной программы — включить автозагрузку нечем."
         override val warnTitle = "Звонки могут не дойти"
         override val warnWhere = "Исправить — в «Настройки → Разрешения»."
+        override val eventsTitle = "События"
+        override fun eventsCount(position: Int, total: Int) = "$position из $total"
+        override val eventsNext = "Следующее"
+        override val eventsSkipAll = "Пропустить все"
+        override val eventsMore = "Ещё"
+        override val eventsNew = "новое"
+        override val eventsGoToUpdate = "Перейти к обновлению"
+        override val eventsGotIt = "Понятно"
+        override val eventsLineNotices = "Уведомления выключены"
+        override val eventsLineCalls = "Канал «Звонки» выключен"
+        override val eventsLineBattery = "Экономия батареи ограничивает TIMA"
         override val noticesShow = "Показывать уведомления"
         override val noticesWhat = "В уведомлении видно, кто написал или звонит, — и больше ничего."
         override val noticesNoText =

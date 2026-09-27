@@ -134,4 +134,35 @@ object EventQueue {
         memory.copy(closed = memory.closed + kind, current = memory.current.takeIf { it != kind })
 
     fun skipAll(memory: EventMemory): EventMemory = memory.copy(skippedAll = true, current = null)
+
+    /**
+     * Очередь словами — для снимка отчёта о проблеме.
+     *
+     * Отчёт QN4N показал «показали событие» и ни слова о том, что его спрятали «Позже»
+     * накануне: то, что было за пределами суток журнала, отчёт не видел. Теперь в снимке —
+     * каждое событие, которое есть или спрятано, и почему. Отсутствующие не пишутся:
+     * «нет» про пять событий — строка шума.
+     *
+     * @param laterUntil до какого времени событие спрятано «Позже», мс.
+     */
+    fun describe(
+        presence: Map<EventKind, Presence>,
+        memory: EventMemory,
+        laterUntil: Map<EventKind, Long>,
+        now: Long,
+    ): String {
+        val parts = EventKind.entries.mapNotNull { kind ->
+            val until = laterUntil[kind]?.takeIf { it > now }
+            when {
+                kind in memory.closed -> "$kind закрыто в этом запуске"
+                presence[kind] == Presence.Yes && memory.skippedAll -> "$kind пропущено"
+                presence[kind] == Presence.Yes -> "$kind стоит"
+                presence[kind] == Presence.Unknown -> "$kind не знаю"
+                until != null -> "$kind спрятано «Позже» до " +
+                    kotlinx.datetime.Instant.fromEpochMilliseconds(until).toString().take(10)
+                else -> null
+            }
+        }
+        return parts.joinToString("; ").ifEmpty { "нет" }
+    }
 }

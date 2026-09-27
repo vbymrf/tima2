@@ -141,12 +141,19 @@ data class Snapshot(
     val permissions: String = "",
     /** Сколько живёт этот запуск — сколько журнала мы вообще застали. */
     val sessionFor: String = "",
+    /**
+     * Очередь событий с причинами: что стоит, что закрыто, что спрятано «Позже» и до
+     * какого дня (ПЛАН-СОБЫТИЙ). Без этого отчёт QN4N не отличал «не показали» от
+     * «показали и спрятали».
+     */
+    val events: String = "",
 ) {
     fun lines(): List<String> = buildList {
         if (auth.isNotBlank()) add("вход: $auth")
         add("очередь: " + if (queued == 0) "пусто" else "$queued не отправлено")
         if (permissions.isNotBlank()) add("разрешения: $permissions")
         if (sessionFor.isNotBlank()) add("сеанс: $sessionFor")
+        if (events.isNotBlank()) add("события: $events")
     }
 }
 

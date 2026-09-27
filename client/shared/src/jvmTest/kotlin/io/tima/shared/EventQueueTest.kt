@@ -118,4 +118,19 @@ class EventQueueTest {
         // Следующий запуск — новая память, и важное обновление снова первое.
         assertEquals(Update, EventQueue.view(есть(Update, Battery), EventMemory(), true).current)
     }
+
+    @Test
+    fun снимок_называет_спрятанное_и_до_какого_дня() {
+        // QN4N: отчёт видел «показали», но не видел, что накануне нажато «Позже».
+        val сейчас = 1_790_000_000_000L // 2026-09-21
+        val неделя = 7L * 24 * 60 * 60 * 1000
+        val текст = EventQueue.describe(
+            есть(Update).plus(Notices to Presence.Unknown),
+            EventMemory(closed = setOf(Installed)),
+            laterUntil = mapOf(Battery to сейчас + неделя),
+            now = сейчас,
+        )
+        assertEquals("Update стоит; Notices не знаю; Battery спрятано «Позже» до 2026-09-28; Installed закрыто в этом запуске", текст)
+        assertEquals("нет", EventQueue.describe(есть(), EventMemory(), emptyMap(), сейчас))
+    }
 }

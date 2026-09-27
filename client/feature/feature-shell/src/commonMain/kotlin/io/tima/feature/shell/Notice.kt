@@ -17,6 +17,13 @@ import io.tima.core.ui.Secondary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
+import androidx.compose.foundation.layout.Row
+import io.tima.core.ui.ListLine
+import io.tima.core.ui.Name
+import io.tima.core.ui.SectionTitle
+import io.tima.core.ui.Tertiary
+import io.tima.core.ui.Tima
+import io.tima.core.ui.words
 
 /**
  * Событие, о котором приложение говорит человеку при запуске.
@@ -62,9 +69,10 @@ data class NoticeAction(
  * 2026-09-06 окно новостей об обновлении было своей вёрсткой без шапки, и выйти из него
  * при отказе от установки было нельзя.
  *
- * Событий за раз показывается **одно** (решение заказчика): следующее — после того, как
- * закрыли предыдущее. Список внутри одного окна потребовал бы порядка важности и
- * прокрутки, а событие у нас пока одно.
+ * Событий за раз показывается **одно** — так было решено 2026-09-06, пока событие было
+ * одно. **С 2026-09-27 событий несколько, и они идут очередью** ([NoticeQueueScreen]):
+ * порядок важности есть, а список остальных виден под открытым. Этот экран остался для
+ * случая, когда в очереди одно событие, — он выглядит так же, как раньше.
  */
 @Composable
 fun NoticeScreen(
@@ -87,6 +95,87 @@ fun NoticeScreen(
                 kind = action.kind,
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
+    }
+}
+
+/** Событие вместе с его кнопками — то, что очередь отдаёт на экран. */
+data class NoticeEntry(val notice: Notice, val actions: List<NoticeAction>)
+
+/** Строка списка «Ещё»: заголовок, пометка «новое» и что сделать по нажатию. */
+data class NoticeLine(val title: String, val fresh: Boolean, val onOpen: () -> Unit)
+
+/**
+ * Очередь событий — ПЛАН-СОБЫТИЙ, решения заказчика 2026-09-27.
+ *
+ * Открытое событие со своими кнопками, под ним «Следующее» и «Пропустить все», ниже —
+ * список остальных. Видно всё сразу, и ошибка в порядке важности перестаёт быть дорогой:
+ * значимые — первыми, остальные человек видит списком и открывает сам.
+ *
+ * **Одно событие — прежний экран** ([NoticeScreen]): без счётчика, без «Следующее» и без
+ * списка. «Назад» в шапке — это «Пропустить все»: выход есть всегда и там, где его ищут.
+ *
+ * @param onNext `null` — открытое последнее, листать некуда.
+ */
+@Composable
+fun NoticeQueueScreen(
+    current: NoticeEntry,
+    position: Int,
+    total: Int,
+    rest: List<NoticeLine>,
+    onNext: (() -> Unit)?,
+    onSkipAll: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (total <= 1 && rest.isEmpty()) {
+        NoticeScreen(current.notice, current.actions, onClose = onSkipAll, modifier = modifier)
+        return
+    }
+    val words = Tima.words.settings2
+    Column(modifier.fillMaxSize()) {
+        SubwindowHeader(
+            title = words.eventsTitle,
+            caption = words.eventsCount(position, total),
+            onBack = onSkipAll,
+        )
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+        ) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4).padding(top = TimaSpacing.about4),
+                verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+            ) {
+                Caption(current.notice.title, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
+                Caption(current.notice.text, fontSize = TimaType.sz4)
+                current.notice.details.forEach { Secondary(it) }
+                current.actions.forEach { action ->
+                    Button(
+                        label = action.label,
+                        onClick = action.onPick,
+                        kind = action.kind,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                // Кнопки очереди — отдельно от кнопок события и тише их: решение здесь —
+                // про событие, а листать и пропускать — про очередь.
+                Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                    if (onNext != null) {
+                        Button(label = words.eventsNext, onClick = onNext, kind = ButtonKind.Quiet, modifier = Modifier.weight(1f))
+                    }
+                    Button(label = words.eventsSkipAll, onClick = onSkipAll, kind = ButtonKind.Quiet, modifier = Modifier.weight(1f))
+                }
+            }
+            if (rest.isNotEmpty()) {
+                SectionTitle(words.eventsMore)
+                for (line in rest) {
+                    ListLine(
+                        onClick = line.onOpen,
+                        middle = { Name(line.title) },
+                        right = if (line.fresh) ({ Tertiary(words.eventsNew) }) else null,
+                    )
+                }
+            }
         }
     }
 }
