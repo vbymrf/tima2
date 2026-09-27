@@ -18,6 +18,7 @@ import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.Tima
 import io.tima.core.ui.words
 import io.tima.core.ui.Tertiary
+import io.tima.core.ui.SubwindowHeader
 
 /**
  * «Подтвердить подключение?» — экран на телефоне после скана.
@@ -28,6 +29,11 @@ import io.tima.core.ui.Tertiary
  *
  * Цена названа прямо: подключённое устройство получит доступ к новым сообщениям аккаунта.
  * Без этой строки «Доверить» читается как «ок».
+ *
+ * **Шапка с «назад» — как у любого подокна** (заказчик 2026-09-27). Без неё выйти можно
+ * было только кнопками, а пока идёт «Соединяем…» или экран застрял на ошибке, человеку
+ * нечем было уйти, не решив ничего. «Назад» — это «не сейчас»: устройство не доверено,
+ * код можно отсканировать заново.
  */
 @Composable
 fun LinkScreen(
@@ -35,13 +41,16 @@ fun LinkScreen(
     onTrust: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
-) = Column(
-    modifier = modifier
-        .fillMaxSize()
-        .background(Tima.colors.surface)
-        .padding(TimaSpacing.about4),
-    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
-) {
+) = Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
+    SubwindowHeader(title = Tima.words.auth.connectingDevice, onBack = onCancel)
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(TimaSpacing.about4),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+    ) { Body(state, onTrust, onCancel) }
+}
+
+@Composable
+private fun Body(state: LinkState, onTrust: () -> Unit, onCancel: () -> Unit) {
     val words = Tima.words.auth
     when (state) {
         is LinkState.Ask -> Ask(state, onTrust, onCancel)

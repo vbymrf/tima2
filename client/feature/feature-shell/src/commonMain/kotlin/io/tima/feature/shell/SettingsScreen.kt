@@ -78,25 +78,30 @@ fun SettingsScreen(
         // от шапки над ним и от списков переписки.
         ProvidePlace(TextPlace.MENU) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            @Composable
+            fun Line(item: SettingsItem) = ListLine(
+                modifier = Modifier.testTag(item.tag()),
+                onClick = { onOpen(item) },
+                left = { Name(item.glyph) },
+                right = value(item).takeIf { it.isNotBlank() }?.let { { Secondary(it) } },
+                // Перенос, а не обрезка (ПЛАН-ШРИФТОВ Ш2): «Секретная фраза и
+                // устройства» обрезалась уже при ×1.3, а по-испански при ×1.
+                middle = {
+                    Caption(
+                        words.item(item),
+                        fontSize = TimaType.sz4,
+                        weight = FontWeight.Bold,
+                        maxLines = 2,
+                    )
+                },
+            )
+
+            // Первой строкой, над группами — см. [SettingsItem.PINNED].
+            for (item in SettingsItem.PINNED.filter { it !in hidden }) Line(item)
             for (group in SettingsGroup.entries) {
                 SectionTitle(words.group(group))
-                for (item in SettingsItem.entries.filter { it.group == group && it !in hidden }) {
-                    ListLine(
-                        modifier = Modifier.testTag(item.tag()),
-                        onClick = { onOpen(item) },
-                        left = { Name(item.glyph) },
-                        right = value(item).takeIf { it.isNotBlank() }?.let { { Secondary(it) } },
-                        // Перенос, а не обрезка (ПЛАН-ШРИФТОВ Ш2): «Секретная фраза и
-                        // устройства» обрезалась уже при ×1.3, а по-испански при ×1.
-                        middle = {
-                            Caption(
-                                words.item(item),
-                                fontSize = TimaType.sz4,
-                                weight = FontWeight.Bold,
-                                maxLines = 2,
-                            )
-                        },
-                    )
+                for (item in SettingsItem.entries.filter { it.group == group && it !in hidden && it !in SettingsItem.PINNED }) {
+                    Line(item)
                 }
             }
         }

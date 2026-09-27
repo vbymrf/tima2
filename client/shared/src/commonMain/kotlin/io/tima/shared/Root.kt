@@ -1617,7 +1617,11 @@ private fun App(
         BackgroundWatch.onCheck = { bgFacts = it }
         onDispose { BackgroundWatch.onCheck = null }
     }
-    var bgLater by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    // `null` — отметки «Позже» ещё не прочитаны. До 2026-09-27 здесь стоял пустой список,
+    // и при каждом запуске событие мелькало на долю секунды: беда уже известна, а то, что
+    // её спрятали на неделю, — ещё нет (Redmi: «показали событие» через 0,1 с после
+    // запуска, «Позже» нажато накануне). Не прочитали — не показываем.
+    var bgLater by remember { mutableStateOf<Map<String, String>?>(null) }
     LaunchedEffect(Unit) { environment.settings.all().collect { bgLater = it } }
     val bgTrouble = when {
         bgFacts.notices == false -> BackgroundTrouble.Notices
@@ -1632,14 +1636,15 @@ private fun App(
             if (bgFacts.calls == true) add(BackgroundTrouble.Calls)
             if (bgFacts.awake == true) add(BackgroundTrouble.Battery)
         }
+        val later = bgLater ?: environment.settings.all().first()
         for (t in fixed) {
-            if (!bgLater[bgLaterKey(t)].isNullOrEmpty()) environment.settings.put(bgLaterKey(t), "")
+            if (!later[bgLaterKey(t)].isNullOrEmpty()) environment.settings.put(bgLaterKey(t), "")
         }
     }
     // «Назад» у события закрывает его до следующего запуска — не на неделю, как «Позже».
     var bgClosed by remember { mutableStateOf(false) }
-    val bgShown = bgTrouble?.takeIf { t ->
-        (bgLater[bgLaterKey(t)]?.toLongOrNull() ?: 0L) <= msNow()
+    val bgShown = bgLater?.let { later ->
+        bgTrouble?.takeIf { t -> (later[bgLaterKey(t)]?.toLongOrNull() ?: 0L) <= msNow() }
     }
     LaunchedEffect(bgShown) {
         bgShown?.let { Journal.note(bgCode(it), "показали событие «звонки могут не дойти»", "беда" to it.name) }
