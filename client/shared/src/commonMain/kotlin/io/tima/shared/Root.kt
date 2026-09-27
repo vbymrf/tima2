@@ -1714,7 +1714,13 @@ private fun App(
     var eventMemory by remember { mutableStateOf(EventMemory()) }
     // Показывать — на главном экране и не во время звонка: окно поверх разговора его бы
     // закрыло, а поверх переписки — оторвало бы от неё. Нельзя — очередь просто ждёт.
-    val eventView = EventQueue.view(eventPresence, eventMemory, allowed = !callHost.active && where == Where.Nothing)
+    // Панель «Переключение окон» тоже ждём (заказчик 2026-09-27): человек в ней выбирает,
+    // куда идти, и событие, закрывшее её собой, отняло бы этот выбор.
+    val eventView = EventQueue.view(
+        eventPresence,
+        eventMemory,
+        allowed = !callHost.active && where == Where.Nothing && !windowSwitcher,
+    )
 
     // Журнал: состав очереди — при каждом изменении; «показано» — когда на экране.
     LaunchedEffect(eventView.waiting) {
