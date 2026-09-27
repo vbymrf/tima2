@@ -2,6 +2,7 @@ package io.tima.shared
 
 import io.tima.core.call.CallSnapshot
 import io.tima.core.call.CallUpdate
+import io.tima.domain.chat.CallRecord
 import io.tima.shared.CallLedger.Action
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -89,5 +90,25 @@ class CallLedgerTest {
     @Test
     fun просмотренный_снимает_строку() {
         assertEquals(listOf(Action.MissedSeen("c1")), CallLedger.actions(я, listOf(изм(10, "seen", вызов("missed")))))
+    }
+
+    private fun строка(state: String, from: String = саша, to: String = я, at: Long = 1_000_000L) =
+        CallRecord(callId = "c-$state-$from", video = false, state = state, initiatorId = from, peerId = to, createdAt = at)
+
+    @Test
+    fun при_запуске_звонит_только_идущий_входящий() {
+        // Redmi 2026-09-27: процесс умер в секунду входящего, лента после запуска пошла
+        // дальше звонка — и телефон молчал, пока звонок ещё звонил.
+        val сейчас = 1_050_000L
+        val журнал = listOf(
+            строка("ringing"),                          // звонят мне — звонить
+            строка("ringing", from = я, to = саша),     // мой исходящий — поднимать нечем
+            строка("missed"),                           // кончился
+            строка("ringing", from = "u-старый", at = 1_050_000L - 200_000L), // пережил уборщика
+        )
+        assertEquals(
+            listOf(Action.Ring("c-ringing-$саша", саша, false)),
+            CallLedger.stillRinging(я, журнал, сейчас, freshMs = 100_000L),
+        )
     }
 }

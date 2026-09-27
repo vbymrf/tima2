@@ -1,6 +1,7 @@
 package io.tima.shared
 
 import io.tima.core.call.CallUpdate
+import io.tima.domain.chat.CallRecord
 
 /**
  * Что делать телефону по изменениям ленты звонков — ПЛАН-ВХОДЯЩЕГО-ЗВОНКА.md, ВЗ0а.
@@ -91,4 +92,17 @@ object CallLedger {
         }
         return out
     }
+
+    /**
+     * Звонки из журнала, которые звонят мне прямо сейчас, — при запуске процесса
+     * (заказчик 2026-09-27, см. `Receiver.ringingNow`).
+     *
+     * Только `ringing` и только где я вызываемый: свой исходящий после перезапуска
+     * поднимать нечем — комнату и токен знал умерший процесс. И только свежие: строка
+     * старше [freshMs] — это `ringing`, переживший уборщика сервера, а не звонок.
+     */
+    fun stillRinging(me: String, records: List<CallRecord>, nowMs: Long, freshMs: Long): List<Action.Ring> =
+        records
+            .filter { it.state == "ringing" && it.peerId == me && it.createdAt >= nowMs - freshMs }
+            .map { Action.Ring(it.callId, it.initiatorId, it.video) }
 }

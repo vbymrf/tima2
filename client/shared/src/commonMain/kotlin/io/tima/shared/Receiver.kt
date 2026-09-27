@@ -257,6 +257,8 @@ class Receiver(
      * не двигается: следующая подсказка или переподключение спросят с того же места.
      */
     internal suspend fun callsTop(top: Long): Long? {
+        // Раньше ленты: звонок, который уже звонит, лента после перезапуска не принесёт.
+        if (!ringingAsked) ringingAsked = ringingNow()
         val saved = runCatching { environment.settings.all().first() }.getOrDefault(emptyMap())
         var mine = saved[CALLS_CTS]?.toLongOrNull() ?: 0
         // Номер выше вершины бывает, только если сервер начал ленту заново (данные стёрты,
@@ -292,6 +294,38 @@ class Receiver(
         }
         Journal.note(LogCode.CALL, "лента звонков применена", "до" to mine)
         return applied
+    }
+
+    /** Спросили ли в этом процессе, не звонят ли прямо сейчас. См. [ringingNow]. */
+    private var ringingAsked = false
+
+    /**
+     * Входящий, который звонит прямо сейчас, — при первом подъёме канала в этом процессе
+     * (заказчик 2026-09-27).
+     *
+     * **Лента такой звонок после перезапуска не принесёт.** Номер ленты сохраняется, как
+     * только событие «звонят» применено, — а применено оно до того, как человек успел
+     * ответить. Процесс умер между этими двумя мгновениями (Redmi 2026-09-27: вылет в
+     * секунду входящего), и после запуска лента продолжает **после** звонка: он звонит
+     * ещё пятнадцать секунд, а телефон о нём не знает, и строка уведомления от мёртвого
+     * процесса ведёт в никуда.
+     *
+     * Спрашивается обычный журнал звонков — у каждой строки есть состояние, и `ringing`
+     * значит ровно «звонят сейчас». Повтор не опасен: тот же звонок, пришедший и лентой,
+     * `CallHost.ring` узнаёт и второй раз не показывает.
+     *
+     * Старше двух сроков звонка — не звоним: строку закрывает уборщик сервера, и
+     * переживший его перезапуск `ringing` означал бы звонок в пустую комнату.
+     *
+     * @return `false` — до сервера не дошли; спросим при следующем подъёме.
+     */
+    private suspend fun ringingNow(): Boolean {
+        val page = network.callHistory.page(limit = RINGING_PAGE) ?: return false
+        for (ring in CallLedger.stillRinging(session.userId, page.records, msNow(), RINGING_FRESH_MS)) {
+            Journal.note(LogCode.CALL, "входящий подхвачен при запуске — ещё звонит", "звонок" to ring.callId.take(8))
+            apply(ring)
+        }
+        return true
     }
 
     /**
@@ -832,3 +866,9 @@ private const val CALLS_MISSED_MARK = "calls.missedMark"
 
 /** Сколько строк журнала смотреть при разрыве: за сутки больше не пропускают. */
 private const val MISSED_PAGE = 50
+
+/** Звонящих сразу больше пары не бывает: хватает первых строк журнала. */
+private const val RINGING_PAGE = 5
+
+/** Два срока звонка на сервере (`ringDeadline`, 50 с) — дальше `ringing` уже неправда. */
+private const val RINGING_FRESH_MS = 100_000L
