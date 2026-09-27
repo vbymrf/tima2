@@ -82,9 +82,16 @@ fun ListLine(
  *
  * Прописными, разряжённо и тихим цветом: он делит список, а не соревнуется с ним за
  * внимание.
+ *
+ * @param color другой цвет — только там, где заголовок сам несёт сведения: «Разрешения»
+ *   красят красным пункт, где разрешение не дано (заказчик 2026-09-27).
  */
 @Composable
-fun SectionTitle(text: String, modifier: Modifier = Modifier) = Caption(
+fun SectionTitle(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: androidx.compose.ui.graphics.Color = Tima.colors.text3,
+) = Caption(
     text = text.uppercase(),
     modifier = modifier.padding(
         start = TimaSpacing.about4,
@@ -94,5 +101,5 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) = Caption(
     ),
     fontSize = TimaType.sz6,
     weight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
-    color = Tima.colors.text3,
+    color = color,
 )

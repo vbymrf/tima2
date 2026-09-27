@@ -137,7 +137,7 @@ fun PermissionsScreen(
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
     ) {
         // ── УВЕДОМЛЕНИЯ ─────────────────────────────────────────────────────
-        SectionTitle(words.itemNotifications)
+        Title(words.itemNotifications, missing = access != NotifyAccess.Given)
         when (access) {
             NotifyAccess.Given -> Column(Modifier.padding(horizontal = TimaSpacing.about4)) {
                 Granted(words.noticesAllowed)
@@ -164,7 +164,7 @@ fun PermissionsScreen(
         // Канал выключают одного, при разрешённых остальных уведомлениях, и тогда молчит
         // именно входящий (ВЗ0г).
         if (callsChannelOn != null && onCallsChannel != null) {
-            SectionTitle(words.noticesCalls)
+            Title(words.noticesCalls, missing = !callsChannelOn || fullScreenOn == false)
             Column(
                 Modifier.padding(horizontal = TimaSpacing.about4),
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
@@ -225,7 +225,7 @@ fun PermissionsScreen(
 
         // ── РАБОТА В ФОНЕ ────────────────────────────────────────────────────
         if (onBattery != null) {
-            SectionTitle(words.permBackground)
+            Title(words.permBackground, missing = !batteryFree)
             Column(
                 Modifier.padding(horizontal = TimaSpacing.about4),
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
@@ -263,7 +263,7 @@ private fun PermissionRow(
     askLabel: String = Tima.words.settings2.noticesAllow,
 ) {
     val words = Tima.words.settings2
-    SectionTitle(title)
+    Title(title, missing = !granted)
     Column(
         Modifier.padding(horizontal = TimaSpacing.about4),
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
@@ -298,17 +298,29 @@ private fun Rule() {
 }
 
 /**
- * «Разрешено» — пузырём цвета шапки, зелёным (заказчик 2026-09-26): выданное видно с
- * первого взгляда, а не читается среди строк пояснений.
+ * Заголовок пункта «Разрешений»: **красный, если разрешение не дано** (заказчик
+ * 2026-09-27). Всё разрешено — красного на экране нет вовсе, и это видно с первого
+ * взгляда. Автозагрузка ПК сюда не входит: это выбор человека, а не отказ системы.
+ */
+@Composable
+private fun Title(text: String, missing: Boolean) =
+    SectionTitle(text, color = if (missing) Tima.colors.alarm else Tima.colors.text3)
+
+/**
+ * «Разрешено» — серым пузырём (заказчик 2026-09-27).
+ *
+ * До того он был зелёным, цвета шапки (2026-09-26), и выглядел как кнопка: зелёная
+ * капсула в приложении — это действие. Серый говорит «так и есть, делать нечего», а
+ * внимание забирает красный заголовок там, где разрешения нет.
  */
 @Composable
 private fun Granted(text: String) {
     val colors = Tima.colors
     Box(
-        Modifier.background(colors.navigation, RoundedCornerShape(TimaSpacing.about4))
+        Modifier.background(colors.quiet, RoundedCornerShape(TimaSpacing.about4))
             .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
     ) {
-        Caption(text, fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colors.onAccent)
+        Caption(text, fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colors.text2)
     }
 }
 
