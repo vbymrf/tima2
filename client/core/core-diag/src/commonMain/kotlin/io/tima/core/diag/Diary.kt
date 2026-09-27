@@ -407,8 +407,9 @@ fun scrub(text: String): String {
     var run = StringBuilder()
 
     fun flush() {
-        if (run.length >= SECRET_LIKE) builder.append("<вырезано ").append(run.length).append(">")
-        else builder.append(run)
+        val piece = run.toString()
+        if (looksSecret(piece)) builder.append("<вырезано ").append(piece.length).append(">")
+        else builder.append(piece)
         run = StringBuilder()
     }
 
@@ -432,3 +433,55 @@ fun scrub(text: String): String {
  * намеренно: ошибиться здесь лучше в сторону вырезанного.
  */
 private const val SECRET_LIKE = 24
+
+/**
+ * Длинное — ещё не секрет: имя из кода и путь режутся только по длине, а материалом не
+ * являются (заказчик 2026-09-27).
+ *
+ * Правило «24 знака — это материал» резало всё длинное подряд: `ConcurrentModificationException`
+ * в строке о падении Redmi стало `<вырезано 31>`, в стеке пропадали
+ * `performTrampolineDispatch` и `CollectionsKt___CollectionsKt`, от путей к файлам
+ * оставались обрывки. Имя ошибки — ровно то, ради чего строку о падении читают.
+ *
+ * Различие держится на том, чем материал **отличается** от слов, а не на длине:
+ * - в ключах, токенах и подписях есть цифры почти наверняка — у 44 знаков base64 цифры
+ *   нет с вероятностью шесть на десять тысяч; UUID и шестнадцатеричное — сплошь цифры;
+ * - у слов заглавная — начало слова, и слово длиннее пары букв; в случайных буквах
+ *   заглавных половина.
+ */
+private fun looksSecret(run: String): Boolean {
+    if (run.length < SECRET_LIKE) return false
+    // «=» в начале — это «имя=значение» из текста, а не часть значения: у base64 знак
+    // равенства бывает только в конце.
+    val value = run.trimStart('=')
+    return !looksLikeName(value) && !looksLikePath(value)
+}
+
+/**
+ * Имя из кода: `ConcurrentModificationException`, `CollectionsKt___CollectionsKt`,
+ * `CALLS_MISSED_MARK_VALUE`. Без цифр и знаков base64, и заглавных не больше четверти —
+ * то есть в среднем слово не короче четырёх букв.
+ */
+private fun looksLikeName(run: String): Boolean {
+    if (run.any { it.isDigit() || it == '+' || it == '=' || it == '/' }) return false
+    val letters = run.count { it.isLetter() }
+    val upper = run.count { it.isUpperCase() }
+    // Сплошь заглавные — имя константы, но только словами через подчёркивание.
+    if (upper == letters) return '_' in run && run.split('_').all { it.isEmpty() || it.length >= 2 }
+    return upper * 4 <= letters
+}
+
+/**
+ * Путь: `/data/user/0/io.tima.app.v2/files/bench`. Сегменты без заглавных — в base64
+ * заглавные есть почти наверняка, — и ни один не похож на идентификатор из
+ * шестнадцатеричных знаков: такой вырезается вместе со всем путём.
+ */
+private fun looksLikePath(run: String): Boolean {
+    if ('/' !in run || '+' in run || '=' in run) return false
+    return run.split('/').all { segment ->
+        segment.none { it.isUpperCase() } && !(segment.length >= HEX_ID && segment.all { it.isDigit() || it in 'a'..'f' || it == '-' })
+    }
+}
+
+/** С этой длины шестнадцатеричный сегмент — идентификатор или ключ, а не слово. */
+private const val HEX_ID = 16

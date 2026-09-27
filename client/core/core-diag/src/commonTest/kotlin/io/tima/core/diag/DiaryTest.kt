@@ -106,6 +106,40 @@ class DiaryTest {
     }
 
     @Test
+    fun имя_ошибки_и_путь_не_режутся() {
+        // Redmi 2026-09-27: строка о падении пришла с «ошибка=<вырезано 31>» — чистка
+        // приняла ConcurrentModificationException за ключ. Имя ошибки — то, ради чего
+        // строку о падении читают.
+        assertEquals("ошибка=ConcurrentModificationException", scrub("ошибка=ConcurrentModificationException"))
+        assertEquals(
+            "at kotlin.collections.CollectionsKt___CollectionsKt.joinTo",
+            scrub("at kotlin.collections.CollectionsKt___CollectionsKt.joinTo"),
+        )
+        assertEquals("AndroidUiDispatcher.performTrampolineDispatch", scrub("AndroidUiDispatcher.performTrampolineDispatch"))
+        assertEquals("файл=/data/user/0/io.tima.app.v2/files/bench/2026-09-27-h264-640.md",
+            scrub("файл=/data/user/0/io.tima.app.v2/files/bench/2026-09-27-h264-640.md"))
+        assertEquals("ключ CALLS_MISSED_MARK_VALUE", scrub("ключ CALLS_MISSED_MARK_VALUE"))
+    }
+
+    @Test
+    fun материал_режется_по_прежнему() {
+        // Ослабление для имён не должно открыть дорогу ключам: у материала есть цифры,
+        // заглавные через одну или шестнадцатеричные сегменты.
+        val material = listOf(
+            "q1Zb7+J9xYkP0mW2eR5tLs8uVn3cA4dF6gH/iK0oMp=",   // ключ base64 с косой чертой
+            "3f2a9c1e-7b4d-4e8f-a0b1-c2d3e4f5a6b7",         // UUID
+            "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", // хэш
+            "xKqPwLzRtYvBnMcJhGfDsAeQ",                      // буквы без цифр, заглавные через одну
+            "/api/v1/devices/9f86d081884c7d659a2f",          // путь с идентификатором
+        )
+        for (secret in material) {
+            val cleaned = scrub("было $secret стало")
+            assertFalse(cleaned.contains(secret), "уехало бы наружу: $secret")
+            assertContains(cleaned, "<вырезано")
+        }
+    }
+
+    @Test
     fun короткое_не_режется() {
         // Идентификаторы и имена методов в журнале нужны: без них он бесполезен.
         val files = Files()
