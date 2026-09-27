@@ -54,9 +54,24 @@ object AndroidCallNotice {
         }
     }
 
+    /**
+     * Погасить службу — **командой ей самой, а не `stopService` снаружи** (Redmi
+     * 2026-09-27, отчёт 5KXE).
+     *
+     * `stopService` сразу после `startForegroundService` уничтожает службу раньше, чем та
+     * успела подняться в передний план, и Android закрывает приложение целиком:
+     * `ForegroundServiceDidNotStartInTimeException`. Так бывает, когда звонок кончился
+     * в ту же секунду, что начался: ответили — и собеседник тут же положил трубку.
+     *
+     * Команда встаёт в очередь службы **после** команды запуска: служба сначала
+     * поднимается, потом гаснет, и правило соблюдено. Из фона Android может запретить и
+     * эту команду — тогда служба давно в переднем плане, и `stopService` безопасен.
+     */
     fun off() {
         val context = app ?: return
-        runCatching { context.stopService(Intent(context, CallService::class.java)) }
+        val stop = Intent(context, CallService::class.java).setAction(CallService.STOP)
+        runCatching { context.startService(stop) }
+            .onFailure { runCatching { context.stopService(Intent(context, CallService::class.java)) } }
     }
 }
 

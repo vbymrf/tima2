@@ -41,6 +41,18 @@ class CallService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Погасить — после того как подняли: команда пришла в очередь следом за запуском
+        // (см. `AndroidCallNotice.off`).
+        if (intent?.action == STOP) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val title = intent?.getStringExtra(TITLE).orEmpty()
         val text = intent?.getStringExtra(TEXT).orEmpty()
         runCatching { raise(NOTICE_ID, notice(title, text)) }
@@ -120,6 +132,9 @@ class CallService : Service() {
     internal companion object {
         const val TITLE = "title"
         const val TEXT = "text"
+
+        /** Команда «погасить». Латиницей: это имя действия, которое видит система. */
+        const val STOP = "io.tima.core.call.STOP"
 
         /** Один звонок за раз — значит и уведомление одно, с постоянным номером. */
         private const val NOTICE_ID = 4203

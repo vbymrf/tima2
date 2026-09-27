@@ -283,7 +283,7 @@ try {
         if ($version) { Note ("   " + "$version".Trim()) }
 
         if (-not $NoLaunch) {
-            $null = & $adb @server -s $t.Id shell am start -n "$package/$activity" 2>&1
+            $null = & $adb @server -s $t.Id shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "$package/$activity" 2>&1
             if ($LASTEXITCODE -eq 0) { Note '   запущено' } else { Bad '   поставилось, но не запустилось' }
         }
     }
