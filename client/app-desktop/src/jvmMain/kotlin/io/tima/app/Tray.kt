@@ -11,7 +11,6 @@ import java.awt.RenderingHints
 import java.awt.SystemTray
 import java.awt.TrayIcon
 import java.awt.image.BufferedImage
-import java.io.File
 
 /**
  * Значок в трее — ПЛАН-УВЕДОМЛЕНИЙ.md, У4.
@@ -51,15 +50,6 @@ object Tray {
         }
         val menu = PopupMenu().apply {
             add(MenuItem("Открыть TIMA").apply { addActionListener { onOpen() } })
-            add(
-                MenuItem(autostartLabel()).apply {
-                    addActionListener {
-                        val wasOn = Autostart.enabled()
-                        Autostart.set(!wasOn)
-                        label = autostartLabel()
-                    }
-                },
-            )
             addSeparator()
             add(MenuItem("Выйти").apply { addActionListener { onExit() } })
         }
@@ -87,9 +77,6 @@ object Tray {
         icon = null
     }
 
-    private fun autostartLabel() =
-        if (Autostart.enabled()) "Не запускать при входе в систему" else "Запускать при входе в систему"
-
     /**
      * Значок рисуется, а не берётся файлом.
      *
@@ -110,66 +97,5 @@ object Tray {
         g.drawString(text, (size - metrics.stringWidth(text)) / 2, (size + metrics.ascent) / 2 - 1)
         g.dispose()
         return image
-    }
-}
-
-/**
- * Запуск при входе в систему — У4.
- *
- * Заказчик просил, чтобы приложение **просило** автозапуск, а не ставило его молча.
- * Спрашивает пункт меню значка: там же, где человек управляет поведением приложения
- * без окна, и там же, где он это отключит.
- *
- * ── ЗАПИСЬ В РЕЕСТР, А НЕ ЯРЛЫК В «АВТОЗАГРУЗКЕ» ────────────────────────────
- *
- * Ярлык пришлось бы создавать средствами оболочки Windows (COM), а это зависимость и
- * своя порция отказов. Значение в `HKCU\...\Run` ставится одной командой, видно человеку
- * в «Диспетчере задач → Автозагрузка» и снимается им же оттуда — то есть у человека
- * остаётся способ отменить нашу настройку мимо нас, и это правильно.
- *
- * `HKCU`, а не `HKLM`: права администратора нам не нужны и просить их не за что.
- */
-object Autostart {
-
-    private const val KEY = """HKCU\Software\Microsoft\Windows\CurrentVersion\Run"""
-    private const val NAME = "TIMA"
-
-    fun enabled(): Boolean = runCatching {
-        val process = ProcessBuilder("reg", "query", KEY, "/v", NAME)
-            .redirectErrorStream(true)
-            .start()
-        process.waitFor()
-        process.exitValue() == 0
-    }.getOrDefault(false)
-
-    fun set(on: Boolean) {
-        val command = if (on) {
-            val path = executable() ?: run {
-                Journal.trouble(LogCode.APP_START, "автозапуск: не нашли, что запускать")
-                return
-            }
-            listOf("reg", "add", KEY, "/v", NAME, "/t", "REG_SZ", "/d", path, "/f")
-        } else {
-            listOf("reg", "delete", KEY, "/v", NAME, "/f")
-        }
-        runCatching {
-            ProcessBuilder(command).redirectErrorStream(true).start().waitFor()
-            Journal.note(LogCode.APP_START, "автозапуск", "включён" to on)
-        }.onFailure {
-            Journal.trouble(LogCode.APP_START, "автозапуск не настроен", "почему" to it.message.orEmpty())
-        }
-    }
-
-    /**
-     * Чем себя запускать.
-     *
-     * У упакованного приложения это `TIMA.exe` рядом с `runtime`; запущенное из Gradle
-     * его не имеет, и тогда автозапуск просто не ставится — предлагать разработчику
-     * запускать Gradle при входе в систему незачем.
-     */
-    private fun executable(): String? {
-        val home = System.getProperty("jpackage.app-path")
-        if (!home.isNullOrBlank() && File(home).exists()) return home
-        return null
     }
 }

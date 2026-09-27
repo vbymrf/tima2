@@ -20,6 +20,8 @@ import androidx.compose.ui.Modifier
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Name
+import io.tima.core.ui.ListLine
+import io.tima.core.ui.CheckMark
 import io.tima.core.ui.SectionTitle
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Tertiary
@@ -121,6 +123,10 @@ fun PermissionsScreen(
     /** Система больше не спросит про контакты — кнопка ведёт в настройки. */
     contactsInSettings: Boolean = false,
     onAskContacts: () -> Unit = {},
+    /** Запускается ли вместе с системой. `null` — раздела нет (телефон). */
+    autostart: Boolean? = null,
+    /** Включить или выключить. `null` при известном [autostart] — включить нечем (запуск из исходников). */
+    onAutostart: ((Boolean) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.settings2
@@ -198,6 +204,23 @@ fun PermissionsScreen(
                 onAsk = onAskContacts, onSettings = onAskContacts,
                 askLabel = if (contactsInSettings) words.noticesOpenSettings else words.noticesAllow,
             )
+        }
+
+        // ── АВТОЗАГРУЗКА (ПК) ────────────────────────────────────────────────
+        //
+        // На ПК это то же, что «работа в фоне» на телефоне: не запущена TIMA — нет канала,
+        // и звонок не дойдёт. Раньше выключатель жил только в меню значка в трее, где его
+        // никто не искал (заказчик 2026-09-27).
+        if (autostart != null) {
+            SectionTitle(words.permAutostart)
+            Column(Modifier.padding(horizontal = TimaSpacing.about4)) { Secondary(words.permAutostartAbout) }
+            if (onAutostart != null) {
+                ListLine(onClick = { onAutostart(!autostart) }, left = { CheckMark(autostart) }) {
+                    Name(words.permAutostartOn)
+                }
+            } else {
+                Column(Modifier.padding(horizontal = TimaSpacing.about4)) { Tertiary(words.permAutostartNoProgram) }
+            }
         }
 
         // ── РАБОТА В ФОНЕ ────────────────────────────────────────────────────

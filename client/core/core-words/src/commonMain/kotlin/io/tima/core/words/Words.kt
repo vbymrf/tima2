@@ -231,6 +231,10 @@ interface SettingsListWords {
     val exitApp: String
     val exitAbout: String
     val permBackground: String
+    val permAutostart: String
+    val permAutostartAbout: String
+    val permAutostartOn: String
+    val permAutostartNoProgram: String
     val warnTitle: String
     val warnWhere: String
 
@@ -2241,6 +2245,10 @@ object RussianWords : Words {
         override val exitApp = "Выйти"
         override val exitAbout = "Звонки и сообщения не придут, пока TIMA снова не открыта"
         override val permBackground = "Работа в фоне"
+        override val permAutostart = "Автозагрузка"
+        override val permAutostartAbout = "Звонки и сообщения приходят, только пока TIMA запущена. С автозагрузкой она стартует при входе в Windows — сразу в трей, без окна."
+        override val permAutostartOn = "Запускать при входе в Windows"
+        override val permAutostartNoProgram = "Эта копия запущена не из установленной программы — включить автозагрузку нечем."
         override val warnTitle = "Звонки могут не дойти"
         override val warnWhere = "Исправить — в «Настройки → Разрешения»."
         override val noticesShow = "Показывать уведомления"

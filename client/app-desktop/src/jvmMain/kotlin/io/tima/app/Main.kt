@@ -50,7 +50,7 @@ import java.io.File
  *
  * Файл этим и ценен: он короткий. Стало длинно — значит в него протекло общее.
  */
-fun main() {
+fun main(args: Array<String>) {
     // Журнал поднимается первым — раньше окна и раньше обработчика падений. Всё, что
     // случится дальше, обязано в него попасть, а прошлые запуски — приехать с диска:
     // жалуются обычно после перезапуска, и журнал, начинающийся с этого запуска,
@@ -74,11 +74,17 @@ fun main() {
     Thread.setDefaultUncaughtExceptionHandler { _, error ->
         recordCrash(store, error)
     }
-    window(store)
+    // Включённый автозапуск — под эту установку: программа могла переехать.
+    Autostart.refresh()
+    window(store, hidden = Autostart.HIDDEN in args)
 }
 
+/**
+ * @param hidden запущены автозагрузкой при входе в Windows: окно не показывать, TIMA сразу
+ *   в трее — нужен канал, а не окно поверх рабочего стола.
+ */
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
-private fun window(store: ReportsStore) = application {
+private fun window(store: ReportsStore, hidden: Boolean) = application {
     // Переменная окружения читается ЗДЕСЬ: на ПК она есть, в общем коде её нет вовсе —
     // `System.getenv` отсутствует на iOS. Адрес по умолчанию — стенд.
     val entry = remember {
@@ -103,7 +109,7 @@ private fun window(store: ReportsStore) = application {
     // `ChannelHost`, а не композиция (У2), — и то, что окно при закрытии разбирается
     // целиком, не беда, а проверка: собранное отдаётся из процесса, и повторное открытие
     // берёт то же самое.
-    var windowShown by remember { mutableStateOf(true) }
+    var windowShown by remember { mutableStateOf(!hidden) }
     var hasTray by remember { mutableStateOf(false) }
 
     // ── ЗВОНКИ (ПЛАН-ЗВОНКОВ-ПК, маршрут A) ─────────────────────────────────
@@ -119,6 +125,8 @@ private fun window(store: ReportsStore) = application {
             onOpen = { windowShown = true },
             onExit = { Journal.diary.flush(); exitApplication() },
         )
+        // Трея нет — спрятанное окно вернуть было бы нечем.
+        if (!hasTray) windowShown = true
         onDispose { Tray.remove() }
     }
 
@@ -197,6 +205,7 @@ private fun window(store: ReportsStore) = application {
                 // ответа именно в этот момент — худшее время.
                 build = Build(name = BUILD_NAME, code = BUILD_CODE, stream = BUILD_STREAM),
                 callEngine = callEngine,
+                loginStart = Autostart,
             )
         }
     }

@@ -116,6 +116,7 @@ import io.tima.core.notify.NotifyAccessWay
 import io.tima.core.notify.askAwake
 import io.tima.core.notify.askNotifyAccess
 import io.tima.feature.shell.PermissionsScreen
+import io.tima.feature.shell.LoginStart
 import io.tima.core.contacts.contactsAllowed
 import io.tima.core.call.openCallSettings
 import io.tima.core.call.askCallAccess
@@ -341,6 +342,8 @@ fun Root(
     onLeaving: () -> Unit = {},
     /** Выйти из приложения совсем — кнопка в рейке ПК и в подокне переходов. `null` — кнопки нет. */
     onExit: (() -> Unit)? = null,
+    /** Запуск вместе с системой — «Разрешения → Автозагрузка». `null` — раздела нет (телефон). */
+    loginStart: LoginStart? = null,
     /**
      * Что платформа знает о себе для отчёта о проблеме (ПЛАН-ОТЛАДКИ.md, Б3).
      *
@@ -399,6 +402,7 @@ fun Root(
             installer = installer,
             onLeaving = onLeaving,
             onExit = onExit,
+            loginStart = loginStart,
             facts = facts,
             reportsStore = reportsStore,
             updateMemory = updateMemory,
@@ -460,6 +464,7 @@ private fun Inside(
     installer: UpdateInstaller?,
     onLeaving: () -> Unit,
     onExit: (() -> Unit)?,
+    loginStart: LoginStart?,
     facts: ProblemFacts,
     reportsStore: ReportsStore,
     updateMemory: UpdateMemory,
@@ -503,6 +508,7 @@ private fun Inside(
         installer = installer,
         onLeaving = onLeaving,
         onExit = onExit,
+        loginStart = loginStart,
         facts = facts,
         reportsStore = reportsStore,
         updateMemory = updateMemory,
@@ -732,6 +738,8 @@ private fun App(
     onLeaving: () -> Unit = {},
     /** Выйти из приложения совсем — кнопка в рейке ПК и в подокне переходов. `null` — кнопки нет. */
     onExit: (() -> Unit)? = null,
+    /** Запуск вместе с системой; `null` — раздела нет. См. [Root]. */
+    loginStart: LoginStart? = null,
     /** Что платформа знает о себе для отчёта о проблеме (Б3). */
     facts: ProblemFacts = ProblemFacts(),
     /** Где платформа держит неотправленные отчёты. */
@@ -2401,6 +2409,7 @@ private fun App(
                         callsState = callsState,
                         deviceSettings = environment.settings,
                         callDevices = callEngine as? io.tima.core.call.CallDevices,
+                        loginStart = loginStart,
                         // Снимок считается ЗДЕСЬ и в момент открытия экрана: человек
                         // жалуется тогда, когда у него не работает, — это и есть нужный
                         // момент. Собрать его может только сборка: у неё есть и токен, и
@@ -3058,6 +3067,8 @@ private fun Settings(
     deviceSettings: io.tima.domain.chat.Settings,
     /** Микрофон, колонки, камера — есть только у ПК; `null` — пункта нет. */
     callDevices: io.tima.core.call.CallDevices? = null,
+    /** Запуск вместе с системой — есть только у ПК; `null` — раздела в «Разрешениях» нет. */
+    loginStart: LoginStart? = null,
 ) {
     // Название темы считается в составе, а не в лямбде списка: лямбда не composable.
     val themeName = Tima.words.appearance.theme(appearance.choice)
@@ -3151,6 +3162,8 @@ private fun Settings(
                 var access by remember { mutableStateOf(notifyAccessWay()) }
                 var callNow by remember { mutableStateOf(callAccessState()) }
                 var contactsNow by remember { mutableStateOf(contactsAllowed()) }
+                // Автозагрузку человек мог выключить и в «Диспетчере задач» — тоже читается заново.
+                var startsWithSystem by remember { mutableStateOf(loginStart?.enabled()) }
                 val desktop = platform == Platform.DESKTOP
                 PermissionsScreen(
                     access = when (access) {
@@ -3181,6 +3194,10 @@ private fun Settings(
                     contacts = contactsNow,
                     contactsInSettings = contactsAccessWay() == ContactsAccessWay.Settings,
                     onAskContacts = { askContactsAccess { contactsNow = contactsAllowed() } },
+                    autostart = startsWithSystem,
+                    onAutostart = loginStart?.takeIf { it.available }?.let { start ->
+                        { on -> start.set(on); startsWithSystem = start.enabled() }
+                    },
                 )
             }
 

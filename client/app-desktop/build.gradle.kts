@@ -44,6 +44,8 @@ kotlin {
             implementation(project(":core:core-network"))
             // Маршрут до сервера спрашивается у Windows (iphlpapi) — через JNA.
             implementation(libs.jna)
+            // Автозагрузка — значения в реестре Windows (Advapi32Util).
+            implementation(libs.jna.platform)
         }
 
     }
