@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import io.tima.core.ui.FormatTima
 import io.tima.core.ui.Stage
 import io.tima.core.ui.TimaContrast
 import io.tima.core.ui.TimaColors
@@ -102,11 +101,14 @@ class SecondRowTest {
      * Проверяется высотой: тот же ряд на узкой полосе обязан быть **выше**, чем на
      * широкой. Высота — единственное, что отличает перенос от обрезки: обрезанный ряд
      * остаётся одной строкой при любой ширине.
+     *
+     * Ширина узкой полосы — [NARROW], а не колонка ПК: с 2026-09-27 колонка не уже
+     * телефона (360), и ряд «Коллекций» в неё встаёт. Проверяется же поведение ряда там,
+     * где места не хватило, — а такое место есть всегда, хотя бы при крупном шрифте.
      */
     @Test
     fun не_поместившееся_переносится_а_не_прячется() {
-        val column = FormatTima.DESKTOP_COLUMN.value.toInt()
-        val narrow = capture("ряд-перенос-узкий", column, 120, dark = false, backdrop = FOREIGN_BACKGROUND) {
+        val narrow = capture("ряд-перенос-узкий", NARROW, 120, dark = false, backdrop = FOREIGN_BACKGROUND) {
             collections()
         }
         val wide = capture("ряд-перенос-широкий", 900, 120, dark = false, backdrop = FOREIGN_BACKGROUND) {
@@ -244,6 +246,9 @@ class SecondRowTest {
     private companion object {
         const val WIDTH = 380
         const val HEIGHT = 800
+
+        /** Заведомо узкая полоса — прежняя колонка планшета. */
+        const val NARROW = 296
 
         /**
          * Насколько блок управления с переключателем вправе быть выше блока без него.

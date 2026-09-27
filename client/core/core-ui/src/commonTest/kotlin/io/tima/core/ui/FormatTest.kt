@@ -61,7 +61,8 @@ class FormatTest {
         // имя окна («Свободное общение», 152 точки) вместо многоточия. Порог сдвинулся
         // сам — ровно то, ради чего он и считается суммой. Число держат здесь, чтобы
         // сдвиг был виден: раскладка ПК начинается на 64 точки позже, чем вчера.
-        assertEquals(1300.dp, FormatTima.DESKTOP_THRESHOLD)
+        // 1320 с 2026-09-27: колонка ПК 340 → 360, не уже телефона.
+        assertEquals(1320.dp, FormatTima.DESKTOP_THRESHOLD)
         assertEquals(Format.Tablet, layoutFor(FormatTima.DESKTOP_THRESHOLD - 1.dp).format)
         assertEquals(Format.DESKTOP, layoutFor(FormatTima.DESKTOP_THRESHOLD).format)
     }
@@ -124,5 +125,39 @@ class FormatTest {
         assertEquals(2, layoutFor(380.dp).mediaColumns)
         assertEquals(3, layoutFor(1024.dp).mediaColumns)
         assertEquals(4, layoutFor(1440.dp).mediaColumns)
+    }
+
+    /**
+     * Разделители, выставленные мышью (заказчик 2026-09-27): колонка не уже телефона,
+     * главной области всегда что-то остаётся, рейка — только из двух положений.
+     */
+    @Test
+    fun выбор_мышью_держится_в_пределах() {
+        val tablet = layoutFor(1100.dp)
+        val squeezed = tablet.withSizes(StageSizes(column = 200.dp), 1100.dp)
+        assertEquals(FormatTima.COLUMN_MIN, squeezed.column, "уже телефона колонку не сдвинуть")
+
+        val stretched = tablet.withSizes(StageSizes(column = 5000.dp), 1100.dp)
+        assertEquals(1100.dp - FormatTima.ICON_RAIL_WIDTH - FormatTima.MAIN_DRAG_MIN, stretched.column,
+            "главной области остаётся её минимум — за неё можно потянуть назад")
+
+        val captions = tablet.withSizes(StageSizes(railCaption = true), 1100.dp)
+        assertEquals(FormatTima.CAPTION_RAIL, captions.rail)
+        assertTrue(captions.railCaption)
+
+        val desktop = layoutFor(1600.dp)
+        val icons = desktop.withSizes(StageSizes(railCaption = false, column = 5000.dp), 1600.dp)
+        assertEquals(FormatTima.ICON_RAIL_WIDTH, icons.rail)
+        assertEquals(1600.dp - FormatTima.ICON_RAIL_WIDTH - FormatTima.PANEL - FormatTima.MAIN_DRAG_MIN, icons.column,
+            "панель ПК при растянутой колонке остаётся на месте")
+    }
+
+    /** Формат выбор не трогает: телефон остаётся одной полосой, панель — при том же пороге. */
+    @Test
+    fun выбор_мышью_не_меняет_формат() {
+        val chosen = StageSizes(railCaption = true, column = 700.dp)
+        assertEquals(layoutFor(600.dp), layoutFor(600.dp).withSizes(chosen, 600.dp))
+        assertNull(layoutFor(1100.dp).withSizes(chosen, 1100.dp).panel)
+        assertEquals(FormatTima.PANEL, layoutFor(1600.dp).withSizes(chosen, 1600.dp).panel)
     }
 }

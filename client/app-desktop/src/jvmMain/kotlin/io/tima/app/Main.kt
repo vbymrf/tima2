@@ -20,6 +20,13 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
+import androidx.compose.ui.window.WindowPlacement
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.input.pointer.PointerIcon
+import io.tima.core.ui.LocalSplitterIcon
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import java.awt.Cursor
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import io.tima.core.database.desktopDatabase
@@ -93,12 +100,24 @@ private fun window(store: ReportsStore, hidden: Boolean) = application {
             host = standHost(),
         )
     }
+    // Окно открывается таким, каким его оставили (заказчик 2026-09-27): размер, место,
+    // развёрнуто ли. Ширины полос внутри помнит сам `Root` — в настройках устройства.
+    val remembered = remember { WindowMemory.load(File(dataCatalog(), WINDOW_NAME)) }
     val windowState = rememberWindowState(
+        placement = if (remembered?.maximized == true) WindowPlacement.Maximized else WindowPlacement.Floating,
         // Планшетный формат по умолчанию: три полосы влезают, и сразу видно, что раскладку
         // решает ширина окна, а не устройство. Окно можно сузить — станет телефонным.
-        size = DpSize(1100.dp, 820.dp),
-        position = WindowPosition.Aligned(Alignment.Center),
+        size = remembered?.size ?: WINDOW_DEFAULT,
+        position = remembered?.position ?: WindowPosition.Aligned(Alignment.Center),
     )
+    LaunchedEffect(windowState) {
+        snapshotFlow { Triple(windowState.size, windowState.position, windowState.placement) }
+            // Тянут мышью — событий десятки в секунду, писать файл на каждое незачем.
+            .collectLatest {
+                delay(WINDOW_SAVE_DELAY_MS)
+                WindowMemory.save(File(dataCatalog(), WINDOW_NAME), windowState, WINDOW_DEFAULT)
+            }
+    }
 
     // ── ОКНО — ВИД НА ПРОЦЕСС, А НЕ САМ ПРОЦЕСС (У4) ────────────────────────
     //
@@ -142,6 +161,8 @@ private fun window(store: ReportsStore, hidden: Boolean) = application {
     // ложится туда же, куда любое падение, и приложение закрывается честно — висящий
     // процесс без окна к тому же держал замок запускалки, и второй запуск отказывал.
     CompositionLocalProvider(
+        // Над разделителем полос — стрелка «влево-вправо», как у любой программы Windows.
+        LocalSplitterIcon provides PointerIcon(Cursor(Cursor.E_RESIZE_CURSOR)),
         LocalWindowExceptionHandlerFactory provides WindowExceptionHandlerFactory {
             WindowExceptionHandler { error ->
                 recordCrash(store, error)
@@ -342,6 +363,9 @@ private const val REPORTS_NAME = "reports.json"
 private const val DIARY_CATALOG = "logs"
 private const val DIARY_POLICY = "logs-policy.txt"
 private const val UPDATE_NAME = "update.txt"
+private const val WINDOW_NAME = "window.txt"
+private const val WINDOW_SAVE_DELAY_MS = 500L
+private val WINDOW_DEFAULT = DpSize(1100.dp, 820.dp)
 
 /**
  * Адрес стенда: из переменной окружения или по умолчанию. Одним местом — его читают и

@@ -1,6 +1,9 @@
 package io.tima.core.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -14,9 +17,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
 /**
  * Стан — ряд полос. Одна разметка на все три формата (У.4).
@@ -38,6 +51,12 @@ import androidx.compose.ui.text.font.FontWeight
  * Слот `панель` показывается только если ширина его вытерпела. Правило макета — «третья
  * полоса появляется, только когда на неё хватило места», — и вычисляет это [раскладкаДля],
  * а не таблица устройств.
+ *
+ * **Разделители тянутся мышью** (заказчик 2026-09-27), если дан [onSizes]. Рейка —
+ * переключатель: значки или подписи, промежуточной ширины нет — подписи обрезались бы.
+ * Колонка — плавно, но не уже [FormatTima.COLUMN_MIN] и не шире, чем оставляет главной
+ * области [FormatTima.MAIN_DRAG_MIN]. Сколько полос — по-прежнему решает ширина окна.
+ * Выбор отдаётся наверх, когда кнопку отпустили, — хранит его вызывающий.
  */
 @Composable
 fun Stage(
@@ -59,11 +78,25 @@ fun Stage(
      * звонка, пока кнопки и своё окошко остаются в колонке (заказчик 2026-09-26).
      */
     wideMain: (@Composable () -> Unit)? = null,
+    /** Ширины, выставленные человеком. См. [StageSizes]. */
+    sizes: StageSizes = StageSizes(),
+    /** Человек отпустил разделитель — запомнить. `null` — разделители не тянутся. */
+    onSizes: ((StageSizes) -> Unit)? = null,
 ) {
     BoxWithConstraints(modifier) {
         val available = maxWidth
-        val layout = layoutFor(available)
+        // Пока разделитель тянут, выбор живёт здесь: писать его в хранилище на каждый
+        // сдвиг мыши незачем. Пришёл новый снаружи — он и становится текущим.
+        var live by remember(sizes) { mutableStateOf(sizes) }
+        // Место под панель держится, только когда её есть чем заполнить: иначе колонка
+        // упиралась бы в пустоту шириной в панель (найдено 2026-09-27 живым прогоном).
+        val byFormat = layoutFor(available).let { if (panel == null) it.copy(panel = null) else it }
+        val layout = byFormat.withSizes(live, available)
         val colors = Tima.colors
+        // Откуда начали тянуть и сколько протянули — ширина полосы по ходу меняется сама,
+        // и считать от неё значило бы дёргаться на каждом шаге.
+        var from by remember { mutableStateOf(0.dp) }
+        var pulled by remember { mutableStateOf(0.dp) }
         CompositionLocalProvider(LayoutLocal provides layout) {
             if (layout.phone) {
                 // Перерисовка, а не полосы: выбранное подокно занимает окно целиком, и
@@ -80,7 +113,22 @@ fun Stage(
                             .fillMaxHeight()
                             .background(colors.functional)
                             .rightLine(colors.line),
-                    ) { rail?.invoke(layout) }
+                    ) {
+                        rail?.invoke(layout)
+                        if (onSizes != null) {
+                            Splitter(
+                                Modifier.align(Alignment.CenterEnd),
+                                onStart = { from = width; pulled = 0.dp },
+                                onDrag = { step ->
+                                    pulled += step
+                                    // Переключатель: за серединой между двумя ширинами — другое положение.
+                                    val caption = from + pulled > (FormatTima.ICON_RAIL_WIDTH + FormatTima.CAPTION_RAIL) / 2
+                                    if (caption != layout.railCaption) live = live.copy(railCaption = caption)
+                                },
+                                onStop = { onSizes(live) },
+                            )
+                        }
+                    }
                 }
 
                 Box(
@@ -88,7 +136,22 @@ fun Stage(
                         .width(layout.column ?: available)
                         .fillMaxHeight()
                         .rightLine(colors.line),
-                ) { column() }
+                ) {
+                    column()
+                    val columnWidth = layout.column
+                    if (onSizes != null && columnWidth != null) {
+                        Splitter(
+                            Modifier.align(Alignment.CenterEnd),
+                            onStart = { from = columnWidth; pulled = 0.dp },
+                            onDrag = { step ->
+                                pulled += step
+                                live = live.copy(column = from + pulled)
+                            },
+                            // Запоминается то, что встало, а не то, куда дотянула мышь за предел.
+                            onStop = { onSizes(live.copy(column = byFormat.withSizes(live, available).column)) },
+                        )
+                    }
+                }
 
                 Box(
                     Modifier
@@ -112,6 +175,42 @@ fun Stage(
         }
     }
 }
+
+/**
+ * Как выглядит указатель над разделителем. В общем коде есть только «рука»; ПК подставляет
+ * свою стрелку «влево-вправо», которой здесь не достать.
+ */
+val LocalSplitterIcon = staticCompositionLocalOf { PointerIcon.Hand }
+
+/**
+ * Разделитель полос: узкая полоса у правого края, за которую тянут. Лежит поверх края
+ * полосы, а не рядом, — рядом он съел бы ширину, посчитанную [withSizes].
+ */
+@Composable
+private fun Splitter(modifier: Modifier, onStart: () -> Unit, onDrag: (Dp) -> Unit, onStop: () -> Unit) {
+    val density = LocalDensity.current
+    var dragging by remember { mutableStateOf(false) }
+    val state = rememberDraggableState { px -> onDrag(with(density) { px.toDp() }) }
+    Box(
+        modifier
+            .width(SPLITTER_WIDTH)
+            .fillMaxHeight()
+            .pointerHoverIcon(LocalSplitterIcon.current)
+            .draggable(
+                state = state,
+                orientation = Orientation.Horizontal,
+                onDragStarted = { dragging = true; onStart() },
+                onDragStopped = { dragging = false; onStop() },
+            ),
+    ) {
+        // Пока тянут — линия ярче: видно, что взялось.
+        if (dragging) {
+            Box(Modifier.align(Alignment.CenterEnd).width(2.dp).fillMaxHeight().background(Tima.colors.navigation))
+        }
+    }
+}
+
+private val SPLITTER_WIDTH = 6.dp
 
 /**
  * Содержимое главной области по центру полосы.

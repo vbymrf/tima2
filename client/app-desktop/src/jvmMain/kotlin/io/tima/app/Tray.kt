@@ -10,6 +10,8 @@ import java.awt.PopupMenu
 import java.awt.RenderingHints
 import java.awt.SystemTray
 import java.awt.TrayIcon
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
 import java.awt.image.BufferedImage
 
 /**
@@ -48,8 +50,19 @@ object Tray {
             Journal.trouble(LogCode.APP_START, "трея в системе нет — окно закрывается выходом")
             return false
         }
+        // Автозапуск — и здесь, и в «Настройки → Разрешения» (заказчик 2026-09-27: из трея не
+        // убирать). Два места с одним состоянием — поэтому подпись спрашивает реестр при
+        // каждом открытии меню, а не помнит своё: включили в настройках — здесь уже видно.
+        val autostart = MenuItem(autostartLabel()).apply {
+            isEnabled = Autostart.available
+            addActionListener {
+                Autostart.set(!Autostart.enabled())
+                label = autostartLabel()
+            }
+        }
         val menu = PopupMenu().apply {
             add(MenuItem("Открыть TIMA").apply { addActionListener { onOpen() } })
+            add(autostart)
             addSeparator()
             add(MenuItem("Выйти").apply { addActionListener { onExit() } })
         }
@@ -57,6 +70,10 @@ object Tray {
             isImageAutoSize = true
             // Двойное нажатие по значку — привычный способ вернуть окно.
             addActionListener { onOpen() }
+            // Меню Windows поднимает на отпускание кнопки — нажатие приходит раньше.
+            addMouseListener(object : MouseAdapter() {
+                override fun mousePressed(e: MouseEvent) { autostart.label = autostartLabel() }
+            })
         }
         return runCatching {
             SystemTray.getSystemTray().add(tray)
@@ -70,6 +87,9 @@ object Tray {
             false
         }
     }
+
+    private fun autostartLabel() =
+        if (Autostart.enabled()) "Не запускать при входе в систему" else "Запускать при входе в систему"
 
     fun remove() {
         icon?.let { runCatching { SystemTray.getSystemTray().remove(it) } }

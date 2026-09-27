@@ -74,6 +74,9 @@ import io.tima.core.database.TimaDatabase
 import io.tima.core.words.CurrentWords
 import io.tima.feature.shell.SettingsItem
 import io.tima.core.ui.Stage
+import io.tima.core.ui.StageSizes
+import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import io.tima.domain.account.Session
 import io.tima.domain.chat.StartPersonalChat
 import io.tima.feature.auth.AuthState
@@ -1803,6 +1806,11 @@ private fun App(
         return
     }
 
+    // Ширины полос, выставленные мышью (заказчик 2026-09-27), — в настройках устройства:
+    // у другого ПК свой экран, синхронизировать тут нечего.
+    var stageStored by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    LaunchedEffect(Unit) { environment.settings.all().collect { stageStored = it } }
+
     // Плашка идущего звонка — во всех окнах, кроме самого звонка: предлагать «перейти в
     // звонок» тому, кто в нём стоит, незачем. Окно 0 временное, и без плашки оно
     // теряется: ушёл свайпом в «Чаты» — и не знаешь, разговор идёт или уже кончился.
@@ -1814,6 +1822,20 @@ private fun App(
     ) {
     Stage(
         modifier = Modifier.fillMaxSize(),
+        sizes = StageSizes(
+            railCaption = when (stageStored[STAGE_RAIL]) {
+                RAIL_CAPTIONS -> true
+                RAIL_ICONS -> false
+                else -> null
+            },
+            column = stageStored[STAGE_COLUMN]?.toIntOrNull()?.dp,
+        ),
+        onSizes = { chosen ->
+            scope.launch {
+                chosen.railCaption?.let { environment.settings.put(STAGE_RAIL, if (it) RAIL_CAPTIONS else RAIL_ICONS) }
+                chosen.column?.let { environment.settings.put(STAGE_COLUMN, it.value.roundToInt().toString()) }
+            }
+        },
         // Рейка есть только на широких форматах: на телефоне окна меняют подокном.
         // Решает это Стан — он и не позовёт рейку там, где её нет в раскладке.
         rail = { layout ->
@@ -4070,6 +4092,12 @@ private const val BG_LATER_MS = 7L * 24 * 60 * 60 * 1000
 
 /** Разрешение на уведомления спрошено само — один раз на установку (ВЗ0б). */
 private const val NOTICES_AUTO_ASKED = "notices.autoAsked"
+
+/** Рейка с подписями или значками и ширина колонки в точках — что выставлено мышью. */
+private const val STAGE_RAIL = "stage.rail"
+private const val STAGE_COLUMN = "stage.column"
+private const val RAIL_CAPTIONS = "captions"
+private const val RAIL_ICONS = "icons"
 
 /**
  * Строка выбора звука — ВЗ4: общая мелодия или звук сообщения, а в журнале контактов —

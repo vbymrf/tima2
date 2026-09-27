@@ -57,7 +57,7 @@ class StageTest {
         val snapshot = capture("стан-планшет", 1024, 768, dark = false) { stage() }
         assertEquals(0, start(snapshot, RAIL))
         assertEquals(76, start(snapshot, COLUMN), "рейка значками — 76 точек")
-        assertEquals(76 + 296, start(snapshot, MAIN), "колонка планшета — 296 точек")
+        assertEquals(76 + 360, start(snapshot, MAIN), "колонка планшета — 360 точек, как телефон")
         assertNull(start(snapshot, PANEL), "на планшете страница объекта открывается перерисовкой")
     }
 
