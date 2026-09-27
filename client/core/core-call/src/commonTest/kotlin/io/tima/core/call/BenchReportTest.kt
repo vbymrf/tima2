@@ -80,4 +80,22 @@ class BenchReportTest {
 
         assertEquals(2, text.lines().count { it.startsWith("| 1 |") || it.startsWith("| 2 |") })
     }
+
+    @Test
+    fun частота_и_qp_есть_и_в_свёртке_и_в_отсчётах() {
+        // Заказчик 2026-09-27: при 300 кбит/с разрешение «не видно», и понять, на что
+        // ушли биты — на частоту или на чёткость, — можно только по этим двум числам.
+        val preset = PublishPreset(name = "h264 1280 2")
+        val samples = listOf(
+            BenchSample(1, stats = CallStats(upBitrate = 300_000, upFps = 9.0, upQp = 40.0, downFps = 15.0, downQp = 30.0)),
+            BenchSample(2, stats = CallStats(upBitrate = 300_000, upFps = 11.0, upQp = 42.0, downFps = 15.0, downQp = 32.0)),
+        )
+
+        val text = benchReport(summarize(preset, samples), samples, preset, "phone", at)
+
+        assertTrue(text.contains("| Кадров в секунду вверх, среднее | 10.0 |"), "нет средней частоты вверх:\n$text")
+        assertTrue(text.contains("| QP вверх, среднее | 41.0 |"), "нет среднего QP вверх")
+        assertTrue(text.contains("| QP вниз, среднее | 31.0 |"), "нет среднего QP вниз")
+        assertTrue(text.lines().any { it.startsWith("| 1 | 300000 | 0 | 9.0 | 40.0 | 15.0 | 30.0 |") }, "в отсчёте нет частоты и QP:\n$text")
+    }
 }

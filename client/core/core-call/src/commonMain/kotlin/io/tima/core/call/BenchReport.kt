@@ -68,6 +68,11 @@ fun benchReport(
     row("Вверх, среднее (бит/с)", summary.upAverage?.toString())
     row("Вверх, потолок (бит/с)", summary.upPeak?.toString())
     row("Вниз, среднее (бит/с)", summary.downAverage?.toString())
+    row("Кадров в секунду вверх, среднее", summary.upFpsAverage?.let { round(it) })
+    // QP — насколько грубо сжато: больше — хуже. Шкала своя у кодека (H.264 0–51).
+    row("QP вверх, среднее", summary.upQpAverage?.let { round(it) })
+    row("Кадров в секунду вниз, среднее", summary.downFpsAverage?.let { round(it) })
+    row("QP вниз, среднее", summary.downQpAverage?.let { round(it) })
     row("Телефон отдал (байт)", summary.sentBytes?.toString())
     row("Телефон принял (байт)", summary.receivedBytes?.toString())
     row("Оборот пакета, мс", summary.rttAverageMs?.toString())
@@ -87,13 +92,17 @@ fun benchReport(
 
     appendLine("## Отсчёты")
     appendLine()
-    appendLine("| с | вверх | вниз | ЦП % | °C | заряд | мА | питание | отдано | принято |")
-    appendLine("|---|---|---|---|---|---|---|---|---|---|")
+    appendLine("| с | вверх | вниз | к/с вверх | QP вверх | к/с вниз | QP вниз | ЦП % | °C | заряд | мА | питание | отдано | принято |")
+    appendLine("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for (sample in samples) {
         appendLine(
             "| " + sample.atSecond +
                 " | " + (sample.stats?.upBitrate?.toString() ?: "—") +
                 " | " + (sample.stats?.downBitrate?.toString() ?: "—") +
+                " | " + (sample.stats?.upFps?.let { round(it) } ?: "—") +
+                " | " + (sample.stats?.upQp?.let { round(it) } ?: "—") +
+                " | " + (sample.stats?.downFps?.let { round(it) } ?: "—") +
+                " | " + (sample.stats?.downQp?.let { round(it) } ?: "—") +
                 " | " + (sample.load?.cpuPercent?.let { round(it) } ?: "—") +
                 " | " + (sample.load?.temperatureC?.let { round(it) } ?: "—") +
                 " | " + (sample.load?.batteryPercent?.toString() ?: "—") +

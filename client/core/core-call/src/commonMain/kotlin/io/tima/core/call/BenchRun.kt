@@ -74,6 +74,14 @@ data class BenchSummary(
     val hardwareEncoder: Boolean? = null,
     val rttAverageMs: Int? = null,
     val packetsLost: Long? = null,
+    /**
+     * Частота кадров и QP в среднем за прогон — вверх и вниз (заказчик 2026-09-27). Битрейт
+     * говорит, сколько бит ушло, а эти два — на что они ушли: на частоту или на чёткость.
+     */
+    val upFpsAverage: Double? = null,
+    val upQpAverage: Double? = null,
+    val downFpsAverage: Double? = null,
+    val downQpAverage: Double? = null,
 )
 
 /**
@@ -146,6 +154,10 @@ fun summarize(preset: PublishPreset, samples: List<BenchSample>): BenchSummary {
         hardwareEncoder = samples.lastNotNullOf { it.stats?.hardwareEncoder },
         rttAverageMs = rtts.averageMs()?.toInt(),
         packetsLost = samples.lastOrNull()?.stats?.packetsLost,
+        upFpsAverage = samples.mapNotNull { it.stats?.upFps }.averagePercent(),
+        upQpAverage = samples.mapNotNull { it.stats?.upQp }.averagePercent(),
+        downFpsAverage = samples.mapNotNull { it.stats?.downFps }.averagePercent(),
+        downQpAverage = samples.mapNotNull { it.stats?.downQp }.averagePercent(),
     )
 }
 

@@ -92,6 +92,26 @@ class LiveKitCallEngine(
     private var lastReceived: Long = -1
     private var statsAt: Long = 0
 
+    /**
+     * Прошлые `qpSum` и число кадров по каждой записи дорожки. QP в отчёте WebRTC — сумма
+     * за всё время, как и байты; средний QP за последний промежуток — разница суммы на
+     * разницу кадров (заказчик 2026-09-27).
+     */
+    private val lastQp = HashMap<String, Pair<Double, Long>>()
+
+    /** Видео одной записи отчёта: размер, чтобы выбрать верхнюю копию, и счётчики. */
+    private class FrameCounts(val id: String, val width: Int, val fps: Double?, val qpSum: Double?, val frames: Long?)
+
+    /** Средний QP с прошлого опроса. `null` — первый опрос, кадров не было или кодер QP не даёт. */
+    private fun qpSince(counts: FrameCounts?): Double? {
+        val sum = counts?.qpSum ?: return null
+        val frames = counts.frames ?: return null
+        val was = lastQp.put(counts.id, sum to frames) ?: return null
+        val made = frames - was.second
+        if (made <= 0) return null
+        return (sum - was.first) / made
+    }
+
     override suspend fun connect(door: CallDoor, publish: PublishPreset?) {
         // Пресет применяется ПРИ СОЗДАНИИ комнаты, а не при публикации: кодек и слои
         // участвуют в согласовании, и менять их потом — пересогласование, а иногда разрыв
@@ -414,6 +434,8 @@ class LiveKitCallEngine(
         // Ширина — чтобы сложить копии от меньшей к большей; строка — то, что покажем.
         val upFrames = mutableListOf<Pair<Int, String>>()
         var downFrame: Pair<Int, String>? = null
+        val upVideo = mutableListOf<FrameCounts>()
+        val downVideo = mutableListOf<FrameCounts>()
 
         val ours = live.localParticipant.trackPublications.values
             .mapNotNull { it.track as? io.livekit.android.room.track.Track }
@@ -438,6 +460,13 @@ class LiveKitCallEngine(
                                 val mode = entry.members["scalabilityMode"]?.toString()
                                     ?.takeIf { it.isNotBlank() && it != "L1T1" }
                                 upFrames += w to ("" + w + "×" + h + (mode?.let { " $it" } ?: ""))
+                                upVideo += FrameCounts(
+                                    id = entry.id,
+                                    width = w,
+                                    fps = (entry.members["framesPerSecond"] as? Number)?.toDouble(),
+                                    qpSum = (entry.members["qpSum"] as? Number)?.toDouble(),
+                                    frames = (entry.members["framesEncoded"] as? Number)?.toLong(),
+                                )
                             }
                         }
                     }
@@ -449,6 +478,13 @@ class LiveKitCallEngine(
                         val h = (entry.members["frameHeight"] as? Number)?.toInt()
                         if (entry.members["kind"] == "video" && w != null && h != null) {
                             if (downFrame == null || w > downFrame!!.first) downFrame = w to ("" + w + "×" + h)
+                            downVideo += FrameCounts(
+                                id = entry.id,
+                                width = w,
+                                fps = (entry.members["framesPerSecond"] as? Number)?.toDouble(),
+                                qpSum = (entry.members["qpSum"] as? Number)?.toDouble(),
+                                frames = (entry.members["framesDecoded"] as? Number)?.toLong(),
+                            )
                         }
                     }
 
@@ -483,6 +519,12 @@ class LiveKitCallEngine(
             hardwareEncoder = encoder?.let { hardware(it) },
             upFrames = upFrames.sortedBy { it.first }.map { it.second },
             downFrame = downFrame?.second,
+            // Верхняя копия: у simulcast нижние кодируются отдельно, и их частота с QP —
+            // про другое качество, а смотрят на то, что видно крупно.
+            upFps = upVideo.maxByOrNull { it.width }?.fps,
+            upQp = qpSince(upVideo.maxByOrNull { it.width }),
+            downFps = downVideo.maxByOrNull { it.width }?.fps,
+            downQp = qpSince(downVideo.maxByOrNull { it.width }),
         )
     }
 

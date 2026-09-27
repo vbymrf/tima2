@@ -367,6 +367,12 @@ private fun Numbers(last: BenchSample?) {
         // видно сразу, и simulcast от одного слоя отличается без пояснений.
         Line(words.framesUp, stats?.upFrames?.takeIf { it.isNotEmpty() }?.joinToString(", "))
         Line(words.frameDown, stats?.downFrame)
+        // Частота и QP — на что ушли биты (заказчик 2026-09-27): при нехватке их кодер
+        // жертвует частотой или чёткостью, и по одному битрейту этого не видно.
+        Line(words.fpsUp, stats?.upFps?.let { oneDecimal(it) })
+        Line(words.qpUp, stats?.upQp?.let { oneDecimal(it) })
+        Line(words.fpsDown, stats?.downFps?.let { oneDecimal(it) })
+        Line(words.qpDown, stats?.downQp?.let { oneDecimal(it) })
         val traffic = last?.traffic
         Line(words.phoneSent, traffic?.sentBytes?.let { megabytes(it) })
         Line(words.phoneReceived, traffic?.receivedBytes?.let { megabytes(it) })
@@ -528,6 +534,9 @@ internal fun kbit(bits: Long): String =
 internal fun megabytes(bytes: Long): String = "${bytes / 100_000 / 10.0} МБ"
 
 internal fun percent(value: Double): String = "${(value * 10).toInt() / 10.0} %"
+
+/** Частота кадров и QP — с одним знаком: целые прятали бы разницу между 14,6 и 15. */
+internal fun oneDecimal(value: Double): String = "${(value * 10).toInt() / 10.0}"
 
 internal fun degrees(value: Double): String = "${(value * 10).toInt() / 10.0} °C"
 
