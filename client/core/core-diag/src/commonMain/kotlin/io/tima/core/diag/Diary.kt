@@ -222,7 +222,7 @@ class Diary(
      * каждый сетевой вызов — это лишний расход батареи и износ памяти телефона. Поводов
      * четыре: беда, каждые [FLUSH_EVERY] записей, уход в фон и составление отчёта.
      */
-    fun flush() {
+    fun flush() = diskLock.hold {
         val today = dayOf(now())
         val text = synchronizedNotes {
             if (pending.isEmpty()) return@synchronizedNotes ""
@@ -294,7 +294,17 @@ class Diary(
     /** Сколько записей сейчас — для экрана «Что приложится». */
     fun size(): Int = tail().size
 
-    private inline fun <T> synchronizedNotes(block: () -> T): T = block()
+    /** Записи в памяти и очередь на диск — под одним замком: их трогают из любых потоков. */
+    private val notesLock = NotesLock()
+
+    /**
+     * Сброс на диск — под своим: взять очередь и дописать её в файл надо одним шагом,
+     * иначе два сброса из разных потоков допишут пачки не в том порядке. Замок записей при
+     * этом держится только на время «взять», а не на время диска.
+     */
+    private val diskLock = NotesLock()
+
+    private fun <T> synchronizedNotes(block: () -> T): T = notesLock.hold(block)
 
     companion object {
         const val DAY: Long = 24L * 60 * 60 * 1000
