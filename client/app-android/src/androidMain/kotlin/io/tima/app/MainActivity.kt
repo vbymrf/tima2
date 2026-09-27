@@ -137,10 +137,15 @@ class MainActivity : ComponentActivity() {
         BackgroundWatch.check(if (wasBackground) "вернулись из фона" else "окно открыто")
     }
 
+    /** Номер этого окна за жизнь процесса — см. [APP_WINDOW][LogCode.APP_WINDOW]. */
+    private var number = 0
+
     /** Был ли уже уход в фон — см. [onStart]. */
     private var wasBackground = false
 
     override fun onDestroy() {
+        alive--
+        Journal.note(LogCode.APP_WINDOW, "главное окно закрыто", "номер" to number, "открыто" to alive)
         // Удержанная активность — это утечка целого экрана. Отдаём именно себя:
         // новое окно Android умеет создать раньше, чем доломает старое, и без этого
         // уходящее обнуляло бы ссылку на живое.
@@ -168,6 +173,23 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Окно пишет о себе первым делом: два открытых сразу — это два держателя звонка,
+        // и в отчёте это должно быть видно одной строкой, а не догадкой по удвоенным
+        // (Redmi 2026-09-27, отчёт 5KXE).
+        number = ++made
+        alive++
+        val why = when {
+            linkFrom(intent) != null -> "ссылка привязки"
+            transferFrom(intent) != null -> "передача аккаунта"
+            callRequestOf(intent) != null -> "строка звонка"
+            intent?.hasCategory(Intent.CATEGORY_LAUNCHER) == true -> "значок"
+            else -> intent?.action ?: "без повода"
+        }
+        if (alive > 1) {
+            Journal.trouble(LogCode.APP_WINDOW, "главных окон открыто два — звонок поведут оба", "номер" to number, "открыто" to alive, "повод" to why)
+        } else {
+            Journal.note(LogCode.APP_WINDOW, "главное окно создано", "номер" to number, "открыто" to alive, "повод" to why)
+        }
         // Разрешение на контакты спрашивает ОКНО, а не приложение: контекст от
         // Application для системного диалога не годится (Д3).
         AndroidContactsAccess.attach(this)
@@ -290,6 +312,10 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val DATABASE_NAME = "tima.db"
+
+        /** Сколько главных окон создано за жизнь процесса и сколько открыто сейчас. */
+        var made = 0
+        var alive = 0
 
         /** Ключ строки оформления в настройках приложения. */
         const val KEY_APPEARANCE = "appearance"

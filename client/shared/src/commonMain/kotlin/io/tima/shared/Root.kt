@@ -789,7 +789,9 @@ private fun App(
     var where by remember { mutableStateOf<Where>(Where.Nothing) }
     // Куда человек ходил — второй вопрос правила журнала («что он делал»). Пишется смена,
     // а не каждая перерисовка: журнал должен читаться, а не разбухать.
-    LaunchedEffect(where) { Journal.note(LogCode.SCREEN_OPEN, whereWords(where)) }
+    // Кодом, а не названием (заказчик 2026-09-27): код один на любом языке и находится
+    // поиском в любом отчёте. Что значит код — в РЕЕСТР, для человека.
+    LaunchedEffect(where) { Journal.note(LogCode.SCREEN_OPEN, whereCode(where)) }
 
     // Какое окно открыто. Приложение начинается с окна 1: личная связь — то, ради
     // чего его открывают чаще всего, а остальные окна пока пусты по существу.
@@ -819,8 +821,12 @@ private fun App(
     // Смена окна — тоже «что человек делал»: половина жалоб про конкретное окно.
     // В журнал — ключ, а не надпись: журнал читает чинящий, и запись не должна менять
     // вид от языка приложения.
-    LaunchedEffect(window) { Journal.note(LogCode.WINDOW_OPEN, window.name) }
+    // Номер — тот, которым окна зовёт заказчик: окно 0 — звонок, окно 6 — стенд.
+    LaunchedEffect(window) { Journal.note(LogCode.WINDOW_OPEN, window.name, "номер" to window.ordinal) }
     var windowSwitcher by remember { mutableStateOf(false) }
+    // Панель «Переключение окон» — подокно без своего `Where`, и без этой строки её в
+    // журнале не было вовсе.
+    LaunchedEffect(windowSwitcher) { if (windowSwitcher) Journal.note(LogCode.SCREEN_OPEN, "switcher") }
     // Куда уходим, если очередь непуста. null — вопрос не задан: отдельного флага
     // «спрашиваем» не заводим, чтобы «спрашиваем, но некуда» не стало возможным.
     var leavingTo by remember { mutableStateOf<String?>(null) }
@@ -1601,6 +1607,9 @@ private fun App(
     // Порог совместимости (уровень 2, О5). Стоит раньше всего остального: сервер сказал,
     // что с этой сборкой больше не работает, и показывать список переписок значило бы
     // обещать доставку, которой не будет. Обходного пути нет намеренно — обходить нечего.
+    LaunchedEffect(updateState.mustUpdate) {
+        if (updateState.mustUpdate) Journal.note(LogCode.SCREEN_OPEN, "update.required")
+    }
     if (updateState.mustUpdate) {
         UpdateGate(
             state = updateState,
@@ -3609,34 +3618,33 @@ private fun howLongSince(startedAt: Long): String {
 }
 
 /**
- * Как назвать открытый экран в журнале.
+ * Код открытого подокна для журнала — латиницей, один на любом языке (заказчик
+ * 2026-09-27). Что значит каждый — `doc_mig/ЖУРНАЛ-И-ОТЛАДКА/РЕЕСТР.md`, «Экраны».
  *
- * **Имена, а не идентификаторы.** `Where.Chat(7f3a…)` в отчёте бесполезен: читающему
- * нужно знать, что человек открыл переписку, а не какую именно — и уж точно не нужен
- * идентификатор чужого разговора в нашем хранилище отчётов.
+ * До 2026-09-27 здесь стояли русские названия: «настройки: Разрешения», «переписка».
+ * Код не меняется от языка и от правки надписи, и отчёт находится поиском всегда.
+ *
+ * **Без идентификаторов.** `chat`, а не `chat:7f3a…`: читающему нужно знать, что человек
+ * открыл переписку, а не какую, — идентификатор чужого разговора в хранилище отчётов не
+ * нужен никому. Так же у страницы, группы, комментариев.
  */
-private fun whereWords(where: Where): String = when (where) {
-    Where.Nothing -> "список"
-    Where.New -> "новая переписка"
-    Where.Profile -> "профиль"
-    Where.SelfPage -> "моя страница"
-    Where.NewGroup -> "новая группа"
-    Where.NewVirtual -> "новый виртуальный аккаунт"
-    is Where.Members -> "состав группы"
-    is Where.Chat -> "переписка"
-    // Без идентификатора: журналу нужно знать, что человек открыл чужую страницу, а чью
-    // именно — в отчёте не нужно никому.
-    is Where.Person -> "личная страница"
-    is Where.Access -> "доступ к закрытым записям"
-    // Ни канала, ни номера записи: в журнале нужно знать, что человек читал разговор, а
-    // не под какой записью — идентификатор чужого поста в отчёте не нужен никому.
-    is Where.Comments -> "комментарии"
-    is Where.Community -> "сообщество"
-    is Where.Link -> "подтверждение привязки устройства"
-    is Where.Transfer -> if (where.virtualUserId == null) "приём аккаунта" else "передача аккаунта"
-    // Место в журнале — по-русски и всегда: журнал читает чинящий (ПЛАН-ЯЗЫКА §4).
-    is Where.Settings ->
-        "настройки" + (where.item?.let { ": " + RussianWords.settings2.item(it) } ?: "")
+private fun whereCode(where: Where): String = when (where) {
+    Where.Nothing -> "list"
+    Where.New -> "chat.new"
+    Where.Profile -> "profile"
+    Where.SelfPage -> "page.self"
+    Where.NewGroup -> "group.new"
+    Where.NewVirtual -> "virtual.new"
+    is Where.Members -> "group.members"
+    is Where.Chat -> "chat"
+    is Where.Person -> "page.person"
+    is Where.Access -> "group.access"
+    is Where.Comments -> "comments"
+    is Where.Community -> "community"
+    is Where.Link -> "link.confirm"
+    is Where.Transfer -> if (where.virtualUserId == null) "account.take" else "account.give"
+    // Пункт настроек — именем перечня: оно и есть ключ навигации, и латиницей.
+    is Where.Settings -> "settings" + (where.item?.let { "." + it.name.lowercase() } ?: "")
 }
 
 /**

@@ -153,6 +153,12 @@ private fun window(store: ReportsStore, hidden: Boolean) = application {
     // снова обязана уведомлять (У10). Без этого человек, закрывший окно на переписке,
     // перестал бы получать из неё уведомления до следующего открытия.
     LaunchedEffect(windowShown) { ChannelHost.notices()?.windowVisible(windowShown) }
+    // Окно ПК одно на процесс, но прячется в трей и возвращается: для отчёта это разные
+    // состояния — «не пришло уведомление» при спрятанном окне и при открытом читаются
+    // по-разному (APP-WINDOW, 2026-09-27).
+    LaunchedEffect(windowShown) {
+        Journal.note(LogCode.APP_WINDOW, if (windowShown) "окно показано" else "окно спрятано в трей")
+    }
 
     // ── ПАДЕНИЕ ВНУТРИ ОКНА ─────────────────────────────────────────────────
     //
