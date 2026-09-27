@@ -112,28 +112,30 @@ private fun Numbers(last: BenchSample?) {
     val stats = last.stats
     val load = last.load
     val traffic = last.traffic
-    val cells = listOf(
-        words.up to stats?.upBitrate?.let { kbit(it) },
-        words.down to stats?.downBitrate?.let { kbit(it) },
-        words.codecNow to stats?.videoCodec,
-        words.encoder to when (stats?.hardwareEncoder) {
-            true -> words.hardware
-            false -> words.software
-            null -> null
-        },
-        words.framesUp to stats?.upFrames?.takeIf { it.isNotEmpty() }?.joinToString(", "),
-        words.frameDown to stats?.downFrame,
-        words.fpsUp to stats?.upFps?.let { oneDecimal(it) },
-        words.qpUp to stats?.upQp?.let { oneDecimal(it) },
-        words.fpsDown to stats?.downFps?.let { oneDecimal(it) },
-        words.qpDown to stats?.downQp?.let { oneDecimal(it) },
-        words.phoneSent to traffic?.sentBytes?.let { megabytes(it) },
-        words.cpu to load?.cpuPercent?.let { percent(it) },
-        words.heat to load?.temperatureC?.let { degrees(it) },
-        words.battery to battery(load?.batteryPercent, load?.charging),
-        words.current to load?.currentMa?.let { milliAmps(it) },
+    // Строки задаются явно, а не делятся по два подряд (заказчик 2026-09-27): «вверх» и
+    // «вниз» одного показателя — в одной строке, одно под другим не ищут. Деление по
+    // счёту сдвигало пары от любой вставки: «Кадр/с вверх» оказался рядом с «QP вверх».
+    val rows: List<List<Pair<String, String?>>> = listOf(
+        listOf(words.up to stats?.upBitrate?.let { kbit(it) }, words.down to stats?.downBitrate?.let { kbit(it) }),
+        listOf(
+            words.framesUp to stats?.upFrames?.takeIf { it.isNotEmpty() }?.joinToString(", "),
+            words.frameDown to stats?.downFrame,
+        ),
+        listOf(words.fpsUp to stats?.upFps?.let { oneDecimal(it) }, words.fpsDown to stats?.downFps?.let { oneDecimal(it) }),
+        listOf(words.qpUp to stats?.upQp?.let { oneDecimal(it) }, words.qpDown to stats?.downQp?.let { oneDecimal(it) }),
+        listOf(
+            words.codecNow to stats?.videoCodec,
+            words.encoder to when (stats?.hardwareEncoder) {
+                true -> words.hardware
+                false -> words.software
+                null -> null
+            },
+        ),
+        listOf(words.phoneSent to traffic?.sentBytes?.let { megabytes(it) }, words.cpu to load?.cpuPercent?.let { percent(it) }),
+        listOf(words.heat to load?.temperatureC?.let { degrees(it) }, words.battery to battery(load?.batteryPercent, load?.charging)),
+        listOf(words.current to load?.currentMa?.let { milliAmps(it) }),
     )
-    for (pair in cells.chunked(2)) {
+    for (pair in rows) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
