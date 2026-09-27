@@ -73,10 +73,14 @@ class Assembled(
      * Входящий звонок из канала: `callId|fromUserId|kind`, пусто — никто не звонит.
      *
      * Строкой, а не своим типом: сборка не должна знать устройства звонка, а тому, кто
-     * его держит, довольно трёх слов сервера. Поток, а не событие: состояние переживает
-     * пересборку экрана, а событие потерялось бы ровно в тот момент, когда звонят.
+     * его держит, довольно трёх слов сервера.
+     *
+     * **Очередь, а не значение** (2026-09-27, отчёт FTPB). Значение переживало пересборку
+     * экрана, но хранило одно последнее — и «звонит» нового звонка затёрлось «завершён»
+     * прошлого, пришедшим через 8 мс. Очередь держит несъеденное, пока окна нет, и
+     * отдаёт всё по порядку. Подробно — [CallPings].
      */
-    val callPings: StateFlow<String>,
+    val callPings: CallPings,
     /**
      * Сервер отказался работать с этой сборкой: она ниже порога совместимости (О5).
      *
@@ -216,7 +220,7 @@ fun buildAssembled(
         // потому что живёт столько же, сколько сборка, — а не столько, сколько экран.
         val senderStamps = MutableSharedFlow<SenderStamp>(extraBufferCapacity = 64)
         val commentPings = MutableStateFlow(0L)
-        val callPings = MutableStateFlow("")
+        val callPings = CallPings()
         val outdated = MutableStateFlow(false)
 
         // ── УВЕДОМЛЕНИЯ СОБИРАЮТСЯ ЗДЕСЬ, А НЕ В ОКНЕ (У5) ──────────────────
@@ -270,7 +274,7 @@ fun buildAssembled(
                 identity = identity,
                 keyOrchestrator = keyOrchestrator,
                 onComment = { _, postId -> commentPings.value = postId },
-                onCall = { callId, from, kind -> callPings.value = "$callId|$from|$kind" },
+                onCall = { callId, from, kind -> callPings.send("$callId|$from|$kind") },
                 // Со звонком что-то стало. Слово сервера нужно там, где до комнаты не
                 // дошло: собеседник отклонил или не смог ответить, а движок SFU про это
                 // не знает — в комнату никто не входил.
@@ -299,8 +303,8 @@ fun buildAssembled(
                         // звонок — НЕ трогать: он идёт, просто не здесь. Слово отдельное
                         // именно поэтому: попади оно в «конец», сосед оборвал бы живой
                         // разговор запросом `/end`, и выглядело бы это как беда связи.
-                        "taken" -> callPings.value = "перехвачен|$callId|$state"
-                        else -> callPings.value = "конец|$callId|$state"
+                        "taken" -> callPings.send("перехвачен|$callId|$state")
+                        else -> callPings.send("конец|$callId|$state")
                     }
                 },
                 // Причина конца едет тем же кадром: `busy` — собеседник занят другим
@@ -308,10 +312,10 @@ fun buildAssembled(
                 // Ушедший из комнаты. Решает не приёмник: **кто именно ушёл**, знает
                 // только тот, кто ведёт звонок, — в группе уход одного из пятерых
                 // разговора не кончает. Сюда едет идентификатор, а выводы делает `Root`.
-                onCallLeft = { callId, userId -> callPings.value = "ушёл|$callId|$userId" },
-                onCallUnreachable = { callId -> callPings.value = "недоступен|$callId|-" },
+                onCallLeft = { callId, userId -> callPings.send("ушёл|$callId|$userId") },
+                onCallUnreachable = { callId -> callPings.send("недоступен|$callId|-") },
                 // Вызов дошёл до телефона собеседника — у звонящего «Звонит» (ВЗ0а).
-                onCallDelivered = { callId -> callPings.value = "доставлен|$callId|-" },
+                onCallDelivered = { callId -> callPings.send("доставлен|$callId|-") },
                 onStamp = { senderStamps.tryEmit(it) },
                 onOutdated = { outdated.value = true },
                 notices = notices,

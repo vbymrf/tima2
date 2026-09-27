@@ -1046,49 +1046,57 @@ private fun App(
     // Входящий звонок приходит каналом событий. Имя собеседника берём тем же механизмом,
     // что везде (Д14): карточка справочника поверх книги — иначе человек увидит
     // идентификатор вместо имени ровно в тот момент, когда решает, брать ли трубку.
-    val callPing by assembled.callPings.collectAsState()
-    LaunchedEffect(callPing) {
-        val parts = callPing.split("|")
-        when {
-            // **Сверяем, о каком звонке речь.** Раньше любой кадр `call.state` клал нашу
-            // трубку: у человека может идти один звонок и висеть отказ по другому, и
-            // чужой конец обрывал живой разговор.
-            // Ответили на другом устройстве этого же человека: закрываем окно, звонок
-            // не трогаем — он идёт там.
-            parts.size == 3 && parts[0] == "перехвачен" ->
-                if (callHost.active && callHost.callIs(parts[1])) callHost.takenElsewhere()
-            parts.size == 3 && parts[0] == "конец" ->
-                // Слово сервера едет дальше: `busy` означает, что собеседник занят
-                // другим разговором, и сказал это его собственный телефон.
-                if (callHost.active && callHost.callIs(parts[1])) callHost.ended(parts[2])
-            // Собеседник вышел из комнаты — по вебхуку SFU, а не нажатием. Так кончается
-            // звонок, у которого вторую сторону убили или она потеряла сеть насовсем:
-            // нажимать «Завершить» там было некому.
-            //
-            // **Проверяем, чей уход.** Сегодня звонок один на один, и уход собеседника
-            // его кончает; в группе уход одного из пятерых разговора не кончит, и менять
-            // придётся здесь.
-            parts.size == 3 && parts[0] == "ушёл" ->
-                if (callHost.active && callHost.peerIs(parts[2])) callHost.hangUp()
-            // Вызов не забрало ни одно устройство собеседника. Трубку не кладём: это
-            // слово о связи, а не о человеке (ADR-0025 §1а).
-            parts.size == 3 && parts[0] == "недоступен" -> callHost.peerOffline(parts[1])
-            // Вызов дошёл до телефона собеседника (ВЗ0а): «Вызов…» становится «Звонит».
-            parts.size == 3 && parts[0] == "доставлен" -> callHost.peerRinging(parts[1])
-            parts.size == 3 && parts[0].isNotEmpty() -> {
-                val (callId, fromId, kind) = parts
-                people.want(listOf(fromId))
-                callHost.ring(
-                    callId = callId,
-                    fromId = fromId,
-                    // Словарь «Вида» здесь ещё не собран — он ниже; для входящего
-                    // довольно того, как человек назвал себя сам. Имя из книги подставит
-                    // экран, когда звонок откроется.
-                    fromName = peopleCards[fromId]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE).orEmpty(),
-                    video = kind == "video",
-                )
-                showCall()
+    //
+    // Каждое событие — по порядку, из очереди (`CallPings`, отчёт FTPB 2026-09-27). Раньше
+    // окно читало одно значение, и «звонит» нового звонка затиралось «завершён» прошлого.
+    // `callPingsSeen` — сколько событий съедено: по нему поручение из строки звонка ниже
+    // узнаёт, что звонок мог стать нашим.
+    var callPingsSeen by remember { mutableStateOf(0L) }
+    LaunchedEffect(assembled) {
+        assembled.callPings.pings.collect { callPing ->
+            val parts = callPing.split("|")
+            when {
+                // **Сверяем, о каком звонке речь.** Раньше любой кадр `call.state` клал нашу
+                // трубку: у человека может идти один звонок и висеть отказ по другому, и
+                // чужой конец обрывал живой разговор.
+                // Ответили на другом устройстве этого же человека: закрываем окно, звонок
+                // не трогаем — он идёт там.
+                parts.size == 3 && parts[0] == "перехвачен" ->
+                    if (callHost.active && callHost.callIs(parts[1])) callHost.takenElsewhere()
+                parts.size == 3 && parts[0] == "конец" ->
+                    // Слово сервера едет дальше: `busy` означает, что собеседник занят
+                    // другим разговором, и сказал это его собственный телефон.
+                    if (callHost.active && callHost.callIs(parts[1])) callHost.ended(parts[2])
+                // Собеседник вышел из комнаты — по вебхуку SFU, а не нажатием. Так кончается
+                // звонок, у которого вторую сторону убили или она потеряла сеть насовсем:
+                // нажимать «Завершить» там было некому.
+                //
+                // **Проверяем, чей уход.** Сегодня звонок один на один, и уход собеседника
+                // его кончает; в группе уход одного из пятерых разговора не кончит, и менять
+                // придётся здесь.
+                parts.size == 3 && parts[0] == "ушёл" ->
+                    if (callHost.active && callHost.peerIs(parts[2])) callHost.hangUp()
+                // Вызов не забрало ни одно устройство собеседника. Трубку не кладём: это
+                // слово о связи, а не о человеке (ADR-0025 §1а).
+                parts.size == 3 && parts[0] == "недоступен" -> callHost.peerOffline(parts[1])
+                // Вызов дошёл до телефона собеседника (ВЗ0а): «Вызов…» становится «Звонит».
+                parts.size == 3 && parts[0] == "доставлен" -> callHost.peerRinging(parts[1])
+                parts.size == 3 && parts[0].isNotEmpty() -> {
+                    val (callId, fromId, kind) = parts
+                    people.want(listOf(fromId))
+                    callHost.ring(
+                        callId = callId,
+                        fromId = fromId,
+                        // Словарь «Вида» здесь ещё не собран — он ниже; для входящего
+                        // довольно того, как человек назвал себя сам. Имя из книги подставит
+                        // экран, когда звонок откроется.
+                        fromName = peopleCards[fromId]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE).orEmpty(),
+                        video = kind == "video",
+                    )
+                    showCall()
+                }
             }
+            callPingsSeen++
         }
     }
 
@@ -1098,7 +1106,7 @@ private fun App(
     // времени мог ещё не дойти до `CallHost` (окно новое, лента применится через миг).
     // Поэтому ждём, пока звонок станет нашим, и только тогда исполняем.
     val callOrder by CallRequests.order.collectAsState()
-    LaunchedEffect(callOrder, callHost.active, callPing) {
+    LaunchedEffect(callOrder, callHost.active, callPingsSeen) {
         val order = callOrder ?: return@LaunchedEffect
         if (!callHost.active || !callHost.callIs(order.callId)) return@LaunchedEffect
         CallRequests.done(order.callId)
