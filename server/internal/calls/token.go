@@ -20,6 +20,12 @@ type VideoGrant struct {
 	RoomList     bool   `json:"roomList,omitempty"`   // спросить список комнат
 	CanPublish   *bool  `json:"canPublish,omitempty"`
 	CanSubscribe *bool  `json:"canSubscribe,omitempty"`
+	// CanUpdateOwnMetadata — участник меняет свои атрибуты. Нужен обмену «кто что
+	// раскодирует» (ПЛАН-ВИДЕО.md В5: атрибут `tima.decode`). Без него LiveKit отвечает
+	// «update own metadata not allowed», и каждый собеседник через 3 с решает «не знаем —
+	// VP8» (стенд 2026-09-29). Имени в LiveKit приложение не верит — его берут из
+	// справочника, — поэтому подменить им никого нельзя.
+	CanUpdateOwnMetadata bool `json:"canUpdateOwnMetadata,omitempty"`
 }
 
 type claims struct {
@@ -51,7 +57,7 @@ func (i *Issuer) Token(room, identity string, canPublish bool, ttl time.Duration
 	}
 	pub, sub := canPublish, true
 	c := claims{
-		Video: VideoGrant{Room: room, RoomJoin: true, CanPublish: &pub, CanSubscribe: &sub},
+		Video: VideoGrant{Room: room, RoomJoin: true, CanPublish: &pub, CanSubscribe: &sub, CanUpdateOwnMetadata: true},
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    i.APIKey, // LiveKit: iss = API key
 			Subject:   identity, // identity = user_id:device_id
