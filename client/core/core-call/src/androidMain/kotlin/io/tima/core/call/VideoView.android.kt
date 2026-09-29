@@ -42,7 +42,7 @@ class LiveKitVideoHandle internal constructor(
 
     /** Создать поверхность и начать в неё рисовать. */
     fun open(context: Context): View {
-        val view = TextureViewRenderer(context)
+        val view = WakingRenderer(context)
         room.initVideoRenderer(view)
         track.addRenderer(view)
         return view
@@ -55,5 +55,29 @@ class LiveKitVideoHandle internal constructor(
         // отрисовщик. Порядок здесь важнее, чем выглядит.
         track.removeRenderer(view)
         view.release()
+    }
+}
+
+/**
+ * Окно видео, которое **сообщает LiveKit о пробуждении экрана** (Honor, отчёт NVZL,
+ * 2026-09-29).
+ *
+ * С Adaptive Stream LiveKit сам следит, видно ли окно видео, и невидимое просит сервер не
+ * слать. Пересчитывает он видимость по перерисовке разметки, прокрутке и смене видимости
+ * самого окна или его родителей. Смена видимости **окна приложения** — экран погас и
+ * загорелся — в этот перечень не входит: `TextureViewRenderer` её не слушает.
+ *
+ * На Honor при засыпании перерисовка проходила, и видео помечалось невидимым; при
+ * пробуждении перерисовки не было, пересчёта не было, и видео собеседника не возвращалось
+ * до конца звонка — своё при этом уходило. Помогало только «скрыть и показать видео»:
+ * окно пересоздавалось и видимость считалась заново.
+ *
+ * Здесь пересчёт просится явно на каждую смену видимости окна приложения. После разметки
+ * (`post`), а не сразу: в момент смены прямоугольник окна может быть ещё старым.
+ */
+private class WakingRenderer(context: Context) : TextureViewRenderer(context) {
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        post { viewVisibility?.recalculate() }
     }
 }
