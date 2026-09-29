@@ -196,6 +196,11 @@ class LiveKitCallEngine(
         val created = LiveKit.create(appContext = context, options = options, overrides = overridesFor(publish))
         publishing = publish
         target = null
+        // «Скрыть видео» — выбор ЭТОГО звонка. Без сброса он переживал конец звонка: экран
+        // следующего показывал «принимаем», а движок не подписывался, и сервер переставал
+        // слать видео, которое никто не смотрит (Samsung ← realme, 2026-09-29). На ПК
+        // сброс стоял с самого начала.
+        takeRemote = true
         peerSeen.clear()
         peerTold.clear()
         soundChosen = false

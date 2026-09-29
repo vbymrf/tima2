@@ -60,12 +60,14 @@ internal class AlignedEncoderFactory(eglContext: EglBase.Context?) : VideoEncode
     override fun createEncoder(info: VideoCodecInfo): VideoEncoder? = combined.createEncoder(info)
 
     /**
-     * Как у SDK: VP9 с параметрами (профили 1–3) не предлагается, повторы сняты. Иначе
-     * согласование в комнате с этой фабрикой шло бы по другому списку, чем без неё, и
-     * прогон с кратностью сравнивал бы не только кратность.
+     * Как у SDK: VP9 **без** параметров не предлагается — остаются записи с профилем;
+     * повторы сняты. Иначе согласование шло бы по другому списку, чем без этой фабрики.
+     *
+     * До 2026-09-29 условие стояло наоборот — выбрасывались записи с профилем, то есть VP9
+     * целиком, — и набор «VP9» с кратностью уходил VP8 или H.264 (Samsung, realme).
      */
     override fun getSupportedCodecs(): Array<VideoCodecInfo> = combined.supportedCodecs
-        .filterNot { it.name.equals("VP9", ignoreCase = true) && !it.params.isNullOrEmpty() }
+        .filterNot { it.name.equals("VP9", ignoreCase = true) && it.params.isNullOrEmpty() }
         .distinctBy { Triple(it.name, it.params, it.scalabilityModes) }
         .toTypedArray()
 }
