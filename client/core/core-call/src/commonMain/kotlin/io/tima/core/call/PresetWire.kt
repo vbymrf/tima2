@@ -20,6 +20,14 @@ package io.tima.core.call
  * [presetFromWire] возвращает `null` на всём, что не разобралось: испорченная запись,
  * запись прошлой версии, чужой мусор. Пресет — испытательная настройка, и потерять её
  * дешевле, чем показать человеку набор, который на треть угадан.
+ *
+ * ── НОВЫЕ ПОЛЯ — ВПЕРЕДИ, ЗА МЕТКОЙ ─────────────────────────────────────────
+ *
+ * Имя забирает хвост, поэтому новое поле в конец не встанет. Встань оно в середину —
+ * строка прежнего вида (17 полей) перестала бы разбираться, и выбранный набор молча
+ * сменился бы на умолчание. Поэтому новые поля идут перед прежними, за меткой `v2`:
+ * строка с меткой — новая, без неё — прежняя, и её поля получают умолчания. Первым
+ * полем прежней строки стоит кодек, а кодека `v2` не бывает — спутать нельзя.
  */
 
 private const val SEPARATOR = "|"
@@ -27,7 +35,25 @@ private const val SEPARATOR = "|"
 /** Сколько полей до имени. Имя — последнее и забирает хвост целиком. */
 private const val FIELDS = 17
 
-fun PublishPreset.toWire(): String = listOf(
+/** Метка строки, у которой перед прежними полями стоят новые. */
+private const val V2 = "v2"
+
+/** Новые поля: пока одно — кратность 16 ([VideoPreset.align16]). */
+fun PublishPreset.toWire(): String =
+    listOf(V2, if (video.align16) "1" else "0", legacyWire()).joinToString(SEPARATOR)
+
+fun presetFromWire(wire: String): PublishPreset? {
+    val marked = V2 + SEPARATOR
+    if (!wire.startsWith(marked)) return legacyFromWire(wire)
+    val rest = wire.removePrefix(marked)
+    val align = rest.substringBefore(SEPARATOR, missingDelimiterValue = "")
+    if (align != "0" && align != "1") return null
+    val preset = legacyFromWire(rest.substringAfter(SEPARATOR)) ?: return null
+    return preset.copy(video = preset.video.copy(align16 = align == "1"))
+}
+
+/** Прежние 17 полей и имя. */
+private fun PublishPreset.legacyWire(): String = listOf(
     video.codec.wire,
     video.layers.name,
     video.width.toString(),
@@ -47,7 +73,7 @@ fun PublishPreset.toWire(): String = listOf(
     name,
 ).joinToString(SEPARATOR)
 
-fun presetFromWire(wire: String): PublishPreset? {
+private fun legacyFromWire(wire: String): PublishPreset? {
     val parts = wire.split(SEPARATOR, limit = FIELDS)
     if (parts.size < FIELDS) return null
     val codec = VideoCodec.entries.firstOrNull { it.wire == parts[0] } ?: return null

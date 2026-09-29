@@ -328,6 +328,7 @@ object SpanishWords : Words {
         override val keepFrames = "mantener cuadros"
         override val asWebrtc = "que decida WebRTC"
         override val dynacast = "Dynacast"
+        override val align16 = "Múltiplo de 16 en el codificador por hardware"
         override val adaptiveStream = "Adaptive Stream"
 
         override val sound = "Audio"

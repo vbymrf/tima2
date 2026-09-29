@@ -2,6 +2,7 @@ package io.tima.core.call
 
 import android.content.Context
 import io.livekit.android.LiveKit
+import io.livekit.android.LiveKitOverrides
 import io.livekit.android.RoomOptions
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.AudioTrackPublishDefaults
@@ -15,6 +16,7 @@ import io.livekit.android.room.track.VideoCaptureParameter
 import io.livekit.android.room.track.VideoEncoding
 import io.livekit.android.room.track.VideoCodec as LkVideoCodec
 import io.livekit.android.util.flow
+import livekit.org.webrtc.EglBase
 import livekit.org.webrtc.HardwareVideoEncoderFactory
 import livekit.org.webrtc.RtpParameters.DegradationPreference
 import livekit.org.webrtc.SoftwareVideoEncoderFactory
@@ -154,7 +156,7 @@ class LiveKitCallEngine(
         // Наблюдатели прошлой комнаты гасятся ДО создания новой: работающие поверх новой
         // они удвоили бы каждый опрос и объявили бы стадию по мёртвой комнате.
         stopWatching()
-        val created = LiveKit.create(appContext = context, options = options)
+        val created = LiveKit.create(appContext = context, options = options, overrides = overridesFor(publish))
         publish?.let { publishVideoAs(created, it.video, exact = it.exact) }
         room = created
         everAnswered = false
@@ -291,6 +293,25 @@ class LiveKitCallEngine(
     } catch (e: Throwable) {
         Journal.trouble(LogCode.CALL, "не узнали кодеки телефона", "причина" to (e.message ?: e::class.simpleName))
         emptySet()
+    }
+
+    /**
+     * Своя фабрика кодеров — только когда набор просит кратность 16 ([VideoPreset.align16]).
+     * Без неё — как было: всё строит SDK.
+     *
+     * Фабрике нужен контекст EGL — тот же, что у комнаты: камера отдаёт кадры текстурами
+     * этого контекста, и кодер без него перекладывал бы каждый кадр через память. Поэтому
+     * контекст отдаётся SDK вместе с фабрикой. Он один на процесс ([sharedEgl]): SDK чужой
+     * контекст не освобождает, и новый на каждый звонок копился бы.
+     */
+    private fun overridesFor(publish: PublishPreset?): LiveKitOverrides {
+        if (publish?.video?.align16 != true) return LiveKitOverrides()
+        val egl = sharedEgl()
+        Journal.note(LogCode.CALL, "кодер: заявлена кратность 16", "набор" to publish.name)
+        return LiveKitOverrides(
+            videoEncoderFactory = AlignedEncoderFactory(egl.eglBaseContext),
+            eglBase = egl,
+        )
     }
 
     override suspend fun reenter(door: CallDoor, publish: PublishPreset?) {

@@ -32,6 +32,7 @@ class PresetWireTest {
                 degradation = Degradation.MaintainFramerate,
                 dynacast = false,
                 adaptiveStream = false,
+                align16 = true,
             ),
             audio = AudioPreset(red = false, dtx = false, bitrate = 32_000, stereo = true),
         )
@@ -90,5 +91,24 @@ class PresetWireTest {
 
         assertEquals(listOf("первый", "второй", "третий"), стал.map { it.name })
         assertTrue(стал.size == 3, "битая строка унесла соседей: ${стал.map { it.name }}")
+    }
+
+    @Test
+    fun строка_прежнего_вида_читается_без_кратности() {
+        // Так лежал выбранный набор до кратности 16. Не прочитайся он — прогон молча
+        // пошёл бы с умолчанием, а назывался бы прежним именем.
+        val прежняя = "h264|Single|640|480|15|800000|800000|—|L3T3_KEY|Balanced|1|1|1|1|24000|0|VP8 z"
+
+        val стал = presetFromWire(прежняя)
+
+        assertEquals("VP8 z", стал?.name)
+        assertEquals(Degradation.Balanced, стал?.video?.degradation)
+        assertEquals(false, стал?.video?.align16)
+    }
+
+    @Test
+    fun метка_с_непонятной_кратностью_отвергается() {
+        assertNull(presetFromWire("v2|да|" + PublishPreset(name = "x").toWire().substringAfter("v2|0|")))
+        assertNull(presetFromWire("v2|1"))
     }
 }

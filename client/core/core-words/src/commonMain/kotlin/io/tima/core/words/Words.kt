@@ -783,6 +783,8 @@ interface BenchWords {
     val asWebrtc: String
     val dynacast: String
     val adaptiveStream: String
+    /** Стенд: аппаратный кодер заявляет кратность 16 (ПЛАН-ВИДЕО.md В2). */
+    val align16: String
 
     val sound: String
     val red: String
@@ -2108,6 +2110,7 @@ object RussianWords : Words {
         override val keepFrames = "держать частоту"
         override val asWebrtc = "как решит WebRTC"
         override val dynacast = "Dynacast"
+        override val align16 = "Кратность 16 у аппаратного кодера"
         override val adaptiveStream = "Adaptive Stream"
 
         override val sound = "Звук"

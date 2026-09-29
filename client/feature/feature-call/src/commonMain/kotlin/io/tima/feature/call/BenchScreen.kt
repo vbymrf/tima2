@@ -172,6 +172,7 @@ private fun Publishing(preset: PublishPreset, onChange: (PublishPreset) -> Unit)
         ) { chosen -> video { copy(degradation = chosen) } }
         Switch(words.dynacast, video.dynacast) { on -> video { copy(dynacast = on) } }
         Switch(words.adaptiveStream, video.adaptiveStream) { on -> video { copy(adaptiveStream = on) } }
+        Switch(words.align16, video.align16) { on -> video { copy(align16 = on) } }
 
         Sound(preset.audio) { onChange(preset.copy(audio = it)) }
     }
