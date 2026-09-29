@@ -64,6 +64,9 @@ import livekit.proto.RoomEvent
 import livekit.proto.RoomOptions
 import livekit.proto.SetSubscribedRequest
 import livekit.proto.TrackKind
+import livekit.proto.GetStatsRequest
+import io.tima.core.call.RemoteVideoWatch
+import io.tima.core.call.RemoteVideoLoss
 import livekit.proto.TrackPublishOptions
 import livekit.proto.TrackSource
 import livekit.proto.VideoBufferType
@@ -140,6 +143,12 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     private val publications = HashMap<String, Publication>()
 
     private class Publication(val handle: Long, val kind: TrackKind, val identity: String)
+
+    /** Камеры, которые собеседник выключил, — по `track_muted`; для [watchLoss]. */
+    private val mutedSids = HashSet<String>()
+
+    /** Наблюдатель «видео собеседника нет» — см. [watchLoss]. */
+    private var lossJob: Job? = null
 
     // ── Звук ────────────────────────────────────────────────────────────────
     private var platformAudio = 0L
@@ -235,6 +244,64 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         Journal.note(LogCode.CALL, "вошли в комнату", "комната" to door.room)
         settle(door.callId)
         publishMicrophone(publish)
+        watchLoss()
+    }
+
+    /**
+     * Видео собеседника нет, хотя он его показывает, — и почему ([RemoteVideoWatch],
+     * заказчик 2026-09-29: «делаем и для ПК»). Правило общее с телефоном, данные — из
+     * статистики `livekit-ffi`: байты и кадры входящего видео и его кодек.
+     *
+     * На ПК это важнее, чем кажется: он заявляет, что показывает AV1, а декодера AV1 в его
+     * сборке нет (ADR-0031) — такое видео придёт и не покажется.
+     */
+    private fun watchLoss() {
+        lossJob?.cancel()
+        lossJob = scope.launch(worker) {
+            val watch = RemoteVideoWatch()
+            var told: RemoteVideoLoss? = null
+            while (isActive) {
+                delay(LOSS_EVERY_MS)
+                val published = publications.entries.any { (sid, p) ->
+                    p.kind == TrackKind.KIND_VIDEO && p.identity != myIdentity && sid !in mutedSids
+                }
+                var bytes: Long? = null
+                var frames: Long? = null
+                var codec: String? = null
+                remote?.let { shown ->
+                    val stats = runCatching {
+                        Ffi.call(STATS_TIMEOUT_MS) { id ->
+                            FfiRequest(get_stats = GetStatsRequest(track_handle = shown.track, request_async_id = id))
+                        }?.get_stats?.stats
+                    }.getOrNull().orEmpty()
+                    val inbound = stats.mapNotNull { it.inbound_rtp }.firstOrNull { it.stream.kind == "video" }
+                    bytes = inbound?.inbound?.bytes_received
+                    frames = inbound?.inbound?.frames_decoded?.toLong()
+                    codec = inbound?.stream?.codec_id?.let { id ->
+                        stats.mapNotNull { it.codec }.firstOrNull { it.rtc.id == id }?.codec?.mime_type?.removePrefix("video/")
+                    }
+                }
+                val now = _state.value
+                val loss = watch.next(
+                    RemoteVideoWatch.Poll(
+                        published = published,
+                        // Скрыто нами или погашено сервером — у этого свои события.
+                        excused = !now.remoteVideoTaken || now.videoPaused || now.stage != CallStage.Connected,
+                        bytes = bytes,
+                        frames = frames,
+                        codec = codec,
+                    ),
+                )
+                if (loss == told) continue
+                told = loss
+                _state.value = _state.value.copy(remoteVideoLoss = loss)
+                when (loss) {
+                    null -> Journal.note(LogCode.CALL, "видео собеседника снова показывается")
+                    RemoteVideoLoss.NotArriving -> Journal.trouble(LogCode.CALL, "видео собеседника не приходит", "показывает" to published)
+                    is RemoteVideoLoss.NotDecoding -> Journal.trouble(LogCode.CALL, "видео собеседника не раскодируется", "кодек" to loss.codec)
+                }
+            }
+        }
     }
 
     /**
@@ -393,9 +460,11 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         event.track_subscribed?.let { onSubscribed(it.track) }
         event.track_unsubscribed?.let { if (remote?.sid == it.track_sid) stopRemote() }
         event.track_muted?.let {
+            mutedSids += it.track_sid
             if (remote?.sid == it.track_sid) _state.value = _state.value.copy(remoteVideoShown = false)
         }
         event.track_unmuted?.let {
+            mutedSids -= it.track_sid
             if (remote?.sid == it.track_sid) _state.value = _state.value.copy(remoteVideoShown = true)
         }
     }
@@ -403,6 +472,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     private fun remember(identity: String, publication: OwnedTrackPublication) {
         publications.put(publication.info.sid, Publication(publication.handle.id, publication.info.kind, identity))
             ?.let { Ffi.drop(it.handle) }
+        if (publication.info.muted) mutedSids += publication.info.sid else mutedSids -= publication.info.sid
     }
 
     /**
@@ -526,6 +596,9 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         Ffi.unlisten(listener)
         pump?.cancel()
         pump = null
+        lossJob?.cancel()
+        lossJob = null
+        mutedSids.clear()
         while (events.tryReceive().isSuccess) Unit
         stopRemote()
         stopCamera()
@@ -1009,6 +1082,10 @@ private fun CallSetup.audioOptions() = AudioSourceOptions(
 private const val APM_GRACE_MS = 200L
 private const val CONNECT_TIMEOUT_MS = 20_000L
 private const val DISCONNECT_TIMEOUT_MS = 5_000L
+
+/** Опрос «видео собеседника нет»: два пустых подряд — шесть секунд, как на телефоне. */
+private const val LOSS_EVERY_MS = 3_000L
+private const val STATS_TIMEOUT_MS = 2_000L
 private const val PUBLISH_TIMEOUT_MS = 10_000L
 private const val PUBLISH_TRIES = 3
 private const val PUBLISH_RETRY_MS = 500L
