@@ -37,7 +37,9 @@ data class CodecChoice(
     val substituted: Boolean get() = chosen != wanted
 
     companion object {
-        private val FALLBACK = listOf(VideoCodec.H264, VideoCodec.VP8)
+        /** Перебор обычного звонка после просимого (ПЛАН-ВИДЕО.md В3). */
+        val ORDER = listOf(VideoCodec.H264, VideoCodec.VP8)
+        private val FALLBACK = ORDER
 
         /**
          * [exact] — прогон стенда: ничего не менять, даже если телефон не умеет.

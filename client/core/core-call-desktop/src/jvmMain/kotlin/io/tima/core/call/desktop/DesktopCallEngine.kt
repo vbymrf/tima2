@@ -67,6 +67,11 @@ import livekit.proto.TrackKind
 import livekit.proto.GetStatsRequest
 import io.tima.core.call.RemoteVideoWatch
 import io.tima.core.call.RemoteVideoLoss
+import io.tima.core.call.CodecChoice
+import io.tima.core.call.PeerCodecs
+import livekit.proto.AttributesEntry
+import livekit.proto.SetLocalAttributesRequest
+import livekit.proto.UnpublishTrackRequest
 import livekit.proto.TrackPublishOptions
 import livekit.proto.TrackSource
 import livekit.proto.VideoBufferType
@@ -149,6 +154,21 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
 
     /** Наблюдатель «видео собеседника нет» — см. [watchLoss]. */
     private var lossJob: Job? = null
+
+    // ── Кто что раскодирует (ПЛАН-ВИДЕО.md В5) ─────────────────────────────
+    /** Что сказал каждый собеседник; нет ключа — ещё не сказал. */
+    private val peerCodecs = HashMap<String, Set<VideoCodec>>()
+
+    /** Когда впервые увидели собеседника без слова — ждём [PeerCodecs.WAIT_MS]. */
+    private val peerSeen = HashMap<String, Long>()
+
+    /** Собеседники, про которых в журнал уже написано «не сказал». */
+    private val peerSilent = HashSet<String>()
+    private var peersJob: Job? = null
+
+    /** Публикация камеры: sid — чтобы снять её при смене кодека, и её кодек. */
+    private var cameraSid = ""
+    private var cameraCodec: VideoCodec? = null
 
     // ── Звук ────────────────────────────────────────────────────────────────
     private var platformAudio = 0L
@@ -236,6 +256,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             owned += who.participant.handle.id
             others += who.participant.info.identity
             who.publications.forEach { remember(who.participant.info.identity, it) }
+            heard(who.participant.info.identity, who.participant.info.attributes)
         }
         roomState = ConnectionState.CONN_CONNECTED
         // События комнаты библиотека держит у себя, пока мы не скажем «готов»: иначе
@@ -243,8 +264,116 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         Ffi.request(FfiRequest(ready_for_room_event = ReadyForRoomEventRequest(room_handle = room)))
         Journal.note(LogCode.CALL, "вошли в комнату", "комната" to door.room)
         settle(door.callId)
+        announceDecoding()
         publishMicrophone(publish)
         watchLoss()
+        watchPeers()
+    }
+
+    /**
+     * Сказать собеседникам, что ПК раскодирует (ПЛАН-ВИДЕО.md В5), и записать, чем он
+     * кодирует и раскодирует (В1). Всё программное: аппаратных кодеров в сборке
+     * `livekit-ffi` под Windows нет (ADR-0031). AV1 ПК объявляет, но раскодировщика AV1
+     * у него нет — в «принимаем» его нет.
+     */
+    private suspend fun announceDecoding() {
+        Journal.note(
+            LogCode.CALL, "кодеки ПК",
+            *VideoCodec.entries.map { codec ->
+                codec.name to ("код " + (if (codec in PC_ENCODES) "прог" else "нет") +
+                    " · раскод " + (if (codec in PC_DECODES) "прог" else "нет"))
+            }.toTypedArray(),
+        )
+        val answer = Ffi.call(PUBLISH_TIMEOUT_MS) { id ->
+            FfiRequest(
+                set_local_attributes = SetLocalAttributesRequest(
+                    local_participant_handle = localParticipant,
+                    attributes = listOf(AttributesEntry(key = PeerCodecs.ATTRIBUTE, value_ = PeerCodecs.write(PC_DECODES))),
+                    request_async_id = id,
+                ),
+            )
+        }?.set_local_attributes
+        if (answer == null || answer.error != null) {
+            Journal.trouble(LogCode.CALL, "не сказали собеседнику, что принимаем", "причина" to (answer?.error ?: "нет ответа"))
+        }
+        Journal.note(LogCode.CALL, "принимаем видео", "кодеки" to PC_DECODES.joinToString(", ") { it.name })
+    }
+
+    /** Собеседник сказал, что принимает, — или сказал заново. */
+    private fun heard(identity: String, attributes: Map<String, String>) {
+        val told = PeerCodecs.read(attributes[PeerCodecs.ATTRIBUTE]) ?: return
+        if (peerCodecs.put(identity, told) != told) {
+            Journal.note(LogCode.CALL, "собеседник принимает", "кодеки" to told.joinToString(", ") { it.name })
+        }
+    }
+
+    /**
+     * Кодек под собеседников. `null` — решать пока нечего: прогон стенда (кодек набора —
+     * закон) или собеседник вошёл и ещё не сказал.
+     */
+    private fun codecForPeers(): VideoCodec? {
+        val publish = preset ?: return null
+        if (publish.exact) return null
+        val now = System.currentTimeMillis()
+        val peers = mutableListOf<Set<VideoCodec>?>()
+        for (identity in others) {
+            val told = peerCodecs[identity]
+            if (told != null) {
+                peers += told
+                continue
+            }
+            val seen = peerSeen.getOrPut(identity) { now }
+            if (now - seen < PeerCodecs.WAIT_MS) return null
+            if (peerSilent.add(identity)) {
+                Journal.trouble(LogCode.CALL, "собеседник не сказал, что принимает — шлём VP8", "ждали мс" to PeerCodecs.WAIT_MS)
+            }
+            peers += null
+        }
+        return PeerCodecs.choose(publish.video.codec, PC_ENCODES, peers)
+    }
+
+    /**
+     * Пересматривать кодек камеры посреди звонка — собеседник вошёл, сказал, что примет,
+     * или не сказал ничего за [PeerCodecs.WAIT_MS]. Опубликованную камеру — переопубликовать.
+     */
+    private fun watchPeers() {
+        peersJob?.cancel()
+        peersJob = scope.launch(worker) {
+            while (isActive) {
+                delay(PEERS_EVERY_MS)
+                if (cameraSid.isEmpty()) continue
+                val codec = codecForPeers() ?: continue
+                if (codec == cameraCodec) continue
+                Journal.note(LogCode.CALL, "кодек сменён под собеседника", "был" to (cameraCodec?.name ?: "—"), "стал" to codec.name)
+                republishCamera(codec)
+            }
+        }
+    }
+
+    /**
+     * Снять публикацию камеры и опубликовать ту же дорожку другим кодеком. Кодек
+     * выбирается при публикации, у живой его не сменить; дорожка и источник остаются —
+     * камера не закрывается.
+     */
+    private suspend fun republishCamera(codec: VideoCodec) {
+        val sid = cameraSid
+        val answer = Ffi.call(PUBLISH_TIMEOUT_MS) { id ->
+            FfiRequest(
+                unpublish_track = UnpublishTrackRequest(
+                    local_participant_handle = localParticipant,
+                    track_sid = sid,
+                    stop_on_unpublish = false,
+                    request_async_id = id,
+                ),
+            )
+        }?.unpublish_track
+        if (answer == null || answer.error != null) {
+            Journal.trouble(LogCode.CALL, "публикацию камеры не сняли", "причина" to (answer?.error ?: "нет ответа"))
+            return
+        }
+        cameraSid = ""
+        val video = preset?.video ?: VideoPreset()
+        if (publishCameraTrack(video, codec)) Journal.note(LogCode.CALL, "камера переопубликована", "кодек" to codec.name)
     }
 
     /**
@@ -260,6 +389,8 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         lossJob = scope.launch(worker) {
             val watch = RemoteVideoWatch()
             var told: RemoteVideoLoss? = null
+            var decoderSaid = ""
+            var froze = 0
             while (isActive) {
                 delay(LOSS_EVERY_MS)
                 val published = publications.entries.any { (sid, p) ->
@@ -277,6 +408,23 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                     val inbound = stats.mapNotNull { it.inbound_rtp }.firstOrNull { it.stream.kind == "video" }
                     bytes = inbound?.inbound?.bytes_received
                     frames = inbound?.inbound?.frames_decoded?.toLong()
+                    // Чем раскодируется и замирало ли (ПЛАН-ВИДЕО.md В1) — только смену.
+                    inbound?.inbound?.let { got ->
+                        if (got.decoder_implementation.isNotBlank() && got.decoder_implementation != decoderSaid) {
+                            decoderSaid = got.decoder_implementation
+                            val decoded = got.frames_decoded
+                            Journal.note(
+                                LogCode.CALL, "раскодировщик видео собеседника",
+                                "имя" to got.decoder_implementation,
+                                "раскод мс" to if (decoded > 0) (Math.round(got.total_decode_time * 10_000 / decoded) / 10.0) else "—",
+                                "выброшено" to got.frames_dropped,
+                            )
+                        }
+                        if (got.freeze_count > froze) {
+                            froze = got.freeze_count
+                            Journal.trouble(LogCode.CALL, "видео собеседника замирало", "раз" to got.freeze_count)
+                        }
+                    }
                     codec = inbound?.stream?.codec_id?.let { id ->
                         stats.mapNotNull { it.codec }.firstOrNull { it.rtc.id == id }?.codec?.mime_type?.removePrefix("video/")
                     }
@@ -405,10 +553,16 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         event.participant_connected?.let {
             owned += it.info.handle.id
             others += it.info.info.identity
+            heard(it.info.info.identity, it.info.info.attributes)
             settle(callId)
+        }
+        event.participant_attributes_changed?.let { changed ->
+            heard(changed.participant_identity, changed.attributes.associate { it.key to it.value_ })
         }
         event.participant_disconnected?.let { gone ->
             others -= gone.participant_identity
+            peerCodecs -= gone.participant_identity
+            peerSeen -= gone.participant_identity
             publications.entries.removeAll { (_, p) -> (p.identity == gone.participant_identity).also { if (it) Ffi.drop(p.handle) } }
             settle(callId)
         }
@@ -598,6 +752,13 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         pump = null
         lossJob?.cancel()
         lossJob = null
+        peersJob?.cancel()
+        peersJob = null
+        peerCodecs.clear()
+        peerSeen.clear()
+        peerSilent.clear()
+        cameraSid = ""
+        cameraCodec = null
         mutedSids.clear()
         while (events.tryReceive().isSuccess) Unit
         stopRemote()
@@ -697,7 +858,23 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         cameraTrack = Ffi.request(
             FfiRequest(create_video_track = CreateVideoTrackRequest(name = "camera", source_handle = cameraSource)),
         ).create_video_track?.track?.handle?.id ?: 0L
-        val codec = if (preset == null) LkVideoCodec.VP8 else video.codec.toFfi()
+        // Кодек — под собеседников, если они уже сказали (ПЛАН-ВИДЕО.md В5); никого нет или
+        // прогон — по набору и умению ПК. Пересмотрит [watchPeers].
+        val publish = preset
+        val codec = codecForPeers()
+            ?: publish?.let { CodecChoice.pick(video.codec, null, PC_ENCODES, it.exact).chosen }
+            ?: VideoCodec.VP8
+        if (publishCameraTrack(video, codec)) return true
+        Ffi.drop(cameraTrack)
+        Ffi.drop(cameraSource)
+        cameraTrack = 0L
+        cameraSource = 0L
+        return false
+    }
+
+    /** Опубликовать уже созданную дорожку камеры кодеком [codec]. */
+    private suspend fun publishCameraTrack(video: VideoPreset, chosen: VideoCodec): Boolean {
+        val codec = chosen.toFfi()
         val answer = Ffi.call(PUBLISH_TIMEOUT_MS) { id ->
             FfiRequest(
                 publish_track = PublishTrackRequest(
@@ -726,13 +903,11 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             val why = answer?.error ?: "нет ответа"
             Journal.trouble(LogCode.CALL, "камера не опубликована", "причина" to why)
             _state.value = _state.value.copy(notice = why)
-            Ffi.drop(cameraTrack)
-            Ffi.drop(cameraSource)
-            cameraTrack = 0L
-            cameraSource = 0L
             return false
         }
         owned += publication.handle.id
+        cameraSid = publication.info.sid
+        cameraCodec = chosen
         Journal.note(LogCode.CALL, "камера опубликована", "кодек" to codec.name)
         return true
     }
@@ -1089,3 +1264,13 @@ private const val STATS_TIMEOUT_MS = 2_000L
 private const val PUBLISH_TIMEOUT_MS = 10_000L
 private const val PUBLISH_TRIES = 3
 private const val PUBLISH_RETRY_MS = 500L
+
+/**
+ * Что ПК кодирует и раскодирует — всё программно (ADR-0031): OpenH264 и libvpx. AV1 в
+ * сборке кодируется, но не раскодируется, и в обычный звонок не берётся.
+ */
+private val PC_ENCODES = setOf(VideoCodec.H264, VideoCodec.VP8, VideoCodec.VP9)
+private val PC_DECODES = setOf(VideoCodec.H264, VideoCodec.VP8, VideoCodec.VP9)
+
+/** Как часто пересматриваем кодек под собеседников. */
+private const val PEERS_EVERY_MS = 1_000L

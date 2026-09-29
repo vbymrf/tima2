@@ -300,6 +300,9 @@ interface SettingsListWords {
     val itemPrivacy: String
     val itemStorage: String
 
+    /** «Звонки» — переключатели аппаратного кодирования (ПЛАН-ВИДЕО.md В4). */
+    val itemCalls: String
+
     /** Испытательный режим звонков — временный пункт, уйдёт вместе со стендом. */
     val itemCallBench: String
     val itemBlogger: String
@@ -986,6 +989,16 @@ interface CallWords {
      * читается как «Активный звонок — 4:32».
      */
     val activeCall: String
+
+    // ── «Настройки → Звонки»: аппаратное кодирование (ПЛАН-ВИДЕО.md В4) ─────
+    val codingTitle: String
+    val codingAbout: String
+    val codingEncode: String
+    val codingEncodeAbout: String
+    val codingDecode: String
+    val codingDecodeAbout: String
+    val codingOn: String
+    val codingOff: String
 
     /**
      * Камеру не разрешили — но звонок продолжается голосом.
@@ -2335,6 +2348,7 @@ object RussianWords : Words {
         override val itemLanguage = "Язык"
         override val itemPrivacy = "Приватность и блокировки"
         override val itemStorage = "Память и трафик"
+        override val itemCalls = "Звонки"
         override val itemCallBench = "Испытательный режим звонков"
         override val itemBlogger = "Окна блогера"
         override val itemQuestions = "Частые вопросы"
@@ -2770,6 +2784,16 @@ object RussianWords : Words {
         override val noMicrophone = "Нет доступа к микрофону — звонок без него не идёт. Разрешение включается в настройках устройства"
         override val noCamera = "Камера не разрешена — разговор идёт голосом. Разрешение включается в настройках устройства"
         override val activeCall = "Активный звонок"
+        override val codingTitle = "Видео в звонке"
+        override val codingAbout = "Видео кодирует и раскодирует чип телефона. Если картинка идёт с полосами или рябью, " +
+            "выключите нужный переключатель — телефон перейдёт на программный. Действует сразу, и в идущем звонке."
+        override val codingEncode = "Аппаратное кодирование"
+        override val codingEncodeAbout = "Как вас видит собеседник. Выключено — ваше видео кодирует программа; " +
+            "H.264 тогда недоступен, уходит VP8."
+        override val codingDecode = "Аппаратное раскодирование"
+        override val codingDecodeAbout = "Как вы видите собеседника. Выключено — его видео раскодирует программа."
+        override val codingOn = "Включено"
+        override val codingOff = "Выключено"
         override val peerShowsSelf = "Собеседник показывает себя, наша камера выключена — нажмите камеру, чтобы показать себя"
         override val peerStoppedVideo = "Собеседник перестал показывать себя"
         override val peerLeft = "Собеседник положил трубку"

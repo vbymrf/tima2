@@ -454,7 +454,7 @@ private fun Line(label: String, value: String?) {
 
 /** Ряд взаимоисключающих значений. Выбранное — залитым чипом. */
 @Composable
-private fun <T> Pick(label: String, options: List<Pair<T, String>>, chosen: T, onPick: (T) -> Unit) {
+internal fun <T> Pick(label: String, options: List<Pair<T, String>>, chosen: T, onPick: (T) -> Unit) {
     Caption(label)
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),

@@ -17,9 +17,7 @@ import io.livekit.android.room.track.VideoEncoding
 import io.livekit.android.room.track.VideoCodec as LkVideoCodec
 import io.livekit.android.util.flow
 import livekit.org.webrtc.EglBase
-import livekit.org.webrtc.HardwareVideoEncoderFactory
 import livekit.org.webrtc.RtpParameters.DegradationPreference
-import livekit.org.webrtc.SoftwareVideoEncoderFactory
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
 import kotlinx.coroutines.CoroutineScope
@@ -97,6 +95,25 @@ class LiveKitCallEngine(
     /** Прогон: кодек набора телефону не по силам — см. [CallState.ownVideoUnsent]. */
     private var ownUnsent: String? = null
 
+    /** Переключатели аппаратного кодирования (ПЛАН-ВИДЕО.md В4). Их читают фабрики комнаты. */
+    @Volatile
+    private var coding = HardwareCoding()
+
+    /** Набор этого звонка — чтобы пересмотреть кодек, когда собеседник скажет, что примет. */
+    private var publishing: PublishPreset? = null
+
+    /** Кодек, под который сейчас настроена публикация камеры. */
+    private var target: VideoCodec? = null
+
+    /**
+     * Когда впервые увидели собеседника без атрибута «что принимаю». Ждём его
+     * [PeerCodecs.WAIT_MS]; не пришёл — «не знаем», и это VP8 (решение 4).
+     */
+    private val peerSeen = HashMap<String, Long>()
+
+    /** Что каждый собеседник уже сказал — чтобы писать в журнал только смену. */
+    private val peerTold = HashMap<String, String>()
+
     /**
      * Прошлые `qpSum` и число кадров по каждой записи дорожки. QP в отчёте WebRTC — сумма
      * за всё время, как и байты; средний QP за последний промежуток — разница суммы на
@@ -157,6 +174,10 @@ class LiveKitCallEngine(
         // они удвоили бы каждый опрос и объявили бы стадию по мёртвой комнате.
         stopWatching()
         val created = LiveKit.create(appContext = context, options = options, overrides = overridesFor(publish))
+        publishing = publish
+        target = null
+        peerSeen.clear()
+        peerTold.clear()
         publish?.let { publishVideoAs(created, it.video, exact = it.exact) }
         room = created
         everAnswered = false
@@ -172,6 +193,7 @@ class LiveKitCallEngine(
             // 2026-09-20). Камера не включается: голосовой звонок её не просит, и
             // разрешения на неё в этот момент ещё нет.
             Journal.note(LogCode.CALL, "вошли в комнату", "комната" to door.room)
+            announceDecoding(created)
             publishMicrophone(created)
         } catch (e: Throwable) {
             // Причина словами и в состоянии: звонок, который «просто не начался», —
@@ -196,7 +218,7 @@ class LiveKitCallEngine(
      * — первый вопрос к любому отчёту о пропавшем видео.
      */
     private fun publishVideoAs(room: Room, video: VideoPreset, exact: Boolean) {
-        val encodable = encodableCodecs()
+        val encodable = PhoneCoders.encodable(coding.encode)
         val choice = CodecChoice.pick(video.codec, video.backup, encodable, exact)
         val can = encodable.joinToString(", ") { it.name }.ifEmpty { "не узнали" }
         val backup = video.backup
@@ -228,6 +250,16 @@ class LiveKitCallEngine(
                 "шлём" to choice.chosen.name, "запасной" to (choice.backup?.name ?: "нет"), "умеет" to can,
             )
         }
+        applyDefaults(room, video, choice.chosen, choice.backup)
+    }
+
+    /**
+     * Настройки публикации камеры под кодек [codec]. Отдельно от [publishVideoAs]: кодек
+     * пересматривается посреди звонка ([watchPeers]), а остальное остаётся тем же.
+     */
+    private fun applyDefaults(room: Room, video: VideoPreset, codec: VideoCodec, backup: VideoCodec?) {
+        target = codec
+        val choice = CodecChoice(wanted = video.codec, chosen = codec, backup = backup?.takeIf { it != codec })
         room.videoTrackPublishDefaults = VideoTrackPublishDefaults(
             // Битрейт задаём сами: без него он принадлежал умолчанию SDK, и цена
             // за `MaintainResolution` ложилась на чёткость молча.
@@ -279,39 +311,177 @@ class LiveKitCallEngine(
     }
 
     /**
-     * Что умеет кодер телефона — **тем же набором фабрик, что берёт SDK**: аппаратная
-     * WebRTC плюс программная (так устроена его `SimulcastVideoEncoderFactoryWrapper`).
-     * Аппаратная отбрасывает то, чем WebRTC на этой версии Android не пользуется, —
-     * ровно то, что нам и нужно знать.
+     * Свои фабрики кодеров и раскодировщиков — **всегда**, ради переключателей
+     * аппаратного кодирования (ПЛАН-ВИДЕО.md В4): они читаются при создании кодера, и
+     * фабрика обязана стоять с самого начала звонка, чтобы смена посреди него подействовала.
      *
-     * Не удалось спросить — пустое множество, и [CodecChoice] оставит пресет как есть.
-     */
-    private fun encodableCodecs(): Set<VideoCodec> = try {
-        val infos = HardwareVideoEncoderFactory(null, true, true).supportedCodecs.toList() +
-            SoftwareVideoEncoderFactory().supportedCodecs.toList()
-        infos.mapNotNull { CodecChoice.fromWebRtcName(it.name) }.toSet()
-    } catch (e: Throwable) {
-        Journal.trouble(LogCode.CALL, "не узнали кодеки телефона", "причина" to (e.message ?: e::class.simpleName))
-        emptySet()
-    }
-
-    /**
-     * Своя фабрика кодеров — только когда набор просит кратность 16 ([VideoPreset.align16]).
-     * Без неё — как было: всё строит SDK.
+     * Включённые переключатели дают ровно ту связку, что строит SDK. Кратность 16
+     * ([VideoPreset.align16]) — наша связка кодеров вместо его.
      *
-     * Фабрике нужен контекст EGL — тот же, что у комнаты: камера отдаёт кадры текстурами
+     * Фабрикам нужен контекст EGL — тот же, что у комнаты: камера отдаёт кадры текстурами
      * этого контекста, и кодер без него перекладывал бы каждый кадр через память. Поэтому
-     * контекст отдаётся SDK вместе с фабрикой. Он один на процесс ([sharedEgl]): SDK чужой
+     * контекст отдаётся SDK вместе с фабриками. Он один на процесс ([sharedEgl]): SDK чужой
      * контекст не освобождает, и новый на каждый звонок копился бы.
      */
     private fun overridesFor(publish: PublishPreset?): LiveKitOverrides {
-        if (publish?.video?.align16 != true) return LiveKitOverrides()
         val egl = sharedEgl()
-        Journal.note(LogCode.CALL, "кодер: заявлена кратность 16", "набор" to publish.name)
+        val align16 = publish?.video?.align16 == true
+        if (align16) Journal.note(LogCode.CALL, "кодер: заявлена кратность 16", "набор" to publish?.name)
         return LiveKitOverrides(
-            videoEncoderFactory = AlignedEncoderFactory(egl.eglBaseContext),
+            videoEncoderFactory = SwitchableEncoderFactory.of(egl.eglBaseContext, align16) { coding.encode },
+            videoDecoderFactory = SwitchableDecoderFactory(egl.eglBaseContext) { coding.decode },
             eglBase = egl,
         )
+    }
+
+    /**
+     * Сказать собеседникам, что мы раскодируем (ПЛАН-ВИДЕО.md В5), и записать в журнал, чем
+     * телефон вообще умеет кодировать и раскодировать (В1).
+     */
+    private fun announceDecoding(room: Room) {
+        Journal.note(LogCode.CALL, "кодеки телефона", *PhoneCoders.describe().toTypedArray())
+        val decodable = PhoneCoders.decodable(coding.decode)
+        runCatching { room.localParticipant.updateAttributes(mapOf(PeerCodecs.ATTRIBUTE to PeerCodecs.write(decodable))) }
+            .onFailure {
+                Journal.trouble(
+                    LogCode.CALL, "не сказали собеседнику, что принимаем",
+                    "причина" to (it.message ?: it::class.simpleName),
+                )
+            }
+        Journal.note(
+            LogCode.CALL,
+            "принимаем видео",
+            "кодеки" to decodable.joinToString(", ") { it.name },
+            "раскодируем аппаратно" to coding.decode,
+            "кодируем аппаратно" to coding.encode,
+        )
+    }
+
+    /**
+     * Кодек под собеседников — что они сказали, что примут (ПЛАН-ВИДЕО.md В5). `null` —
+     * решать пока нечего: прогон стенда (кодек набора — закон) или собеседник вошёл и ещё
+     * не успел сказать.
+     */
+    private fun codecForPeers(room: Room): VideoCodec? {
+        val preset = publishing ?: return null
+        if (preset.exact) return null
+        val encodable = PhoneCoders.encodable(coding.encode)
+        val now = nowMs()
+        val peers = mutableListOf<Set<VideoCodec>?>()
+        for ((identity, who) in room.remoteParticipants) {
+            val id = identity.value
+            val raw = who.attributes[PeerCodecs.ATTRIBUTE]
+            val told = PeerCodecs.read(raw)
+            if (told != null) {
+                if (peerTold[id] != raw) {
+                    peerTold[id] = raw.orEmpty()
+                    Journal.note(LogCode.CALL, "собеседник принимает", "кодеки" to told.joinToString(", ") { it.name })
+                }
+                peers += told
+                continue
+            }
+            val seen = peerSeen.getOrPut(id) { now }
+            if (now - seen < PeerCodecs.WAIT_MS) return null
+            if (peerTold[id] != UNKNOWN) {
+                peerTold[id] = UNKNOWN
+                Journal.trouble(
+                    LogCode.CALL, "собеседник не сказал, что принимает — шлём VP8",
+                    "ждали мс" to PeerCodecs.WAIT_MS,
+                )
+            }
+            peers += null
+        }
+        return PeerCodecs.choose(preset.video.codec, encodable, peers)
+    }
+
+    /**
+     * Пересматривать кодек, пока идёт звонок: собеседник вошёл, сказал, что примет, сменил
+     * это переключателем или не сказал ничего за [PeerCodecs.WAIT_MS]. Раз в секунду —
+     * дёшево, и «не сказал за три секунды» не требует отдельного таймера.
+     */
+    private fun watchPeers(room: Room) {
+        watchers += scope.launch {
+            while (isActive) {
+                delay(PEERS_EVERY_MS)
+                val preset = publishing ?: continue
+                val codec = codecForPeers(room) ?: continue
+                if (codec == target) continue
+                Journal.note(
+                    LogCode.CALL,
+                    "кодек сменён под собеседника",
+                    "был" to (target?.name ?: "—"),
+                    "стал" to codec.name,
+                )
+                applyDefaults(room, preset.video, codec, null)
+                republishCamera(room, "кодек под собеседника")
+            }
+        }
+    }
+
+    /**
+     * Опубликовать камеру заново — **с новым кодеком или новым кодером**. Снять
+     * публикацию и включить камеру снова — единственный путь: кодек и кодер выбираются при
+     * публикации, у живой их не сменить. Разговор при этом не прерывается, картинка у
+     * собеседника замирает на секунду.
+     *
+     * Камера выключена — снимаем приглушённую публикацию: иначе включение вернуло бы её со
+     * старым кодеком.
+     */
+    private suspend fun republishCamera(room: Room, why: String) {
+        val publication = room.localParticipant.videoTrackPublications.firstOrNull() ?: return
+        val track = publication.second ?: return
+        val live = !publication.first.muted
+        attempt {
+            room.localParticipant.unpublishTrack(track, true)
+            if (live) room.localParticipant.setCameraEnabled(true)
+        }
+        Journal.note(LogCode.CALL, "камера переопубликована", "почему" to why, "камера включена" to live)
+    }
+
+    override suspend fun setHardwareCoding(coding: HardwareCoding) {
+        val was = this.coding
+        this.coding = coding
+        if (was == coding) return
+        Journal.note(
+            LogCode.CALL, "аппаратное кодирование",
+            "кодирование" to coding.encode, "раскодирование" to coding.decode,
+        )
+        val live = room ?: return
+        if (was.encode != coding.encode) {
+            // Кодер берётся из фабрики при публикации — значит переопубликовать, даже если
+            // кодек тот же. Без аппаратного H.264 нет вовсе — кодек пересмотрится.
+            publishing?.let { preset ->
+                val encodable = PhoneCoders.encodable(coding.encode)
+                val codec = codecForPeers(live) ?: CodecChoice.pick(preset.video.codec, null, encodable, preset.exact).chosen
+                applyDefaults(live, preset.video, codec, if (preset.exact) preset.video.backup else null)
+            }
+            republishCamera(live, "аппаратное кодирование " + if (coding.encode) "включено" else "выключено")
+        }
+        if (was.decode != coding.decode) {
+            // Раскодировщик создаётся при подписке — переподписаться. И сказать
+            // собеседнику новое «что принимаю»: без аппаратного может не быть H.264.
+            announceDecoding(live)
+            if (takeRemote) resubscribe(live)
+        }
+    }
+
+    /**
+     * Отписаться от видео собеседника и подписаться снова — чтобы раскодировщик создался
+     * заново из фабрики с новым переключателем. Мимо [setRemoteVideo]: та меняет
+     * состояние «скрыто нами», и в ленте окна 0 мелькнуло бы событие, которого не было.
+     */
+    private suspend fun resubscribe(room: Room) {
+        fun subscribe(on: Boolean) {
+            for (who in room.remoteParticipants.values) {
+                for (publication in who.videoTrackPublications) {
+                    (publication.first as? RemoteTrackPublication)?.setSubscribed(on)
+                }
+            }
+        }
+        attempt { subscribe(false) }
+        delay(RESUBSCRIBE_PAUSE_MS)
+        attempt { subscribe(true) }
+        Journal.note(LogCode.CALL, "видео собеседника переподписано — новый раскодировщик")
     }
 
     override suspend fun reenter(door: CallDoor, publish: PublishPreset?) {
@@ -592,6 +762,7 @@ class LiveKitCallEngine(
         watchOutgoing(room)
         watchIncoming(room)
         watchRemoteLoss(room)
+        watchPeers(room)
         watchQuality(room)
         watchBreaks(room)
     }
@@ -716,6 +887,7 @@ class LiveKitCallEngine(
         watchers += scope.launch {
             var said = ""
             var got = -1L
+            var froze = 0L
             while (isActive) {
                 delay(STATS_EVERY_MS)
                 val track = room.remoteParticipants.values
@@ -732,7 +904,32 @@ class LiveKitCallEngine(
                 val kbit = if (got < 0) -1L else (bytes - got) * 8 / (STATS_EVERY_MS / 1000) / 1000
                 got = bytes
 
-                val line = "" + w + "×" + h + "|" + (kbit / 100)
+                // ── ЧЕМ РАСКОДИРУЕТСЯ (ПЛАН-ВИДЕО.md В1) ─────────────────────
+                //
+                // Полосы VP9 у Redmi 2026-09-25 нельзя было отнести ни к кодеру
+                // собеседника, ни к своему раскодировщику: имени последнего журнал не знал.
+                // Время раскодирования кадра и выброшенные кадры — признаки того, что
+                // раскодировщик не успевает.
+                val decoder = incoming.members["decoderImplementation"]?.toString() ?: "—"
+                val decoded = (incoming.members["framesDecoded"] as? Number)?.toLong()
+                val decodeSeconds = (incoming.members["totalDecodeTime"] as? Number)?.toDouble()
+                val decodeMs = if (decoded != null && decoded > 0 && decodeSeconds != null) decodeSeconds * 1000 / decoded else null
+                val dropped = (incoming.members["framesDropped"] as? Number)?.toLong()
+
+                // Замирания — отдельной строкой и только когда их стало больше: это
+                // событие, а не число, которое дышит.
+                val freezes = (incoming.members["freezeCount"] as? Number)?.toLong() ?: 0L
+                if (freezes > froze) {
+                    froze = freezes
+                    Journal.trouble(
+                        LogCode.CALL,
+                        "видео собеседника замирало",
+                        "раз" to freezes,
+                        "всего с" to ((incoming.members["totalFreezesDuration"] as? Number)?.toDouble()?.let { tenth(it) } ?: "—"),
+                    )
+                }
+
+                val line = "" + w + "×" + h + "|" + (kbit / 100) + "|" + decoder
                 if (line == said) continue
                 said = line
                 Journal.note(
@@ -740,6 +937,9 @@ class LiveKitCallEngine(
                     "приходящее видео",
                     "кадр" to ("" + w + "×" + h),
                     "кбит/с" to if (kbit < 0) "считаем" else kbit.toString(),
+                    "раскодировщик" to decoder,
+                    "раскод мс" to (decodeMs?.let { tenth(it) } ?: "—"),
+                    "выброшено" to (dropped ?: "—"),
                 )
             }
         }
@@ -826,6 +1026,7 @@ class LiveKitCallEngine(
         watchers += scope.launch {
             var said = ""
             var sent = -1L
+            var lastCoder = "—"
             while (isActive) {
                 delay(STATS_EVERY_MS)
                 val track = room.localParticipant.videoTrackPublications
@@ -841,6 +1042,21 @@ class LiveKitCallEngine(
                 val h = outgoing.members["frameHeight"] ?: continue
                 val why = outgoing.members["qualityLimitationReason"]?.toString() ?: "—"
                 val coder = outgoing.members["encoderImplementation"]?.toString() ?: "—"
+
+                // ── АППАРАТНЫЙ СЛОМАЛСЯ — WEBRTC ПЕРЕШЁЛ САМ (ПЛАН-ВИДЕО.md В1) ─
+                //
+                // При ошибке аппаратного кодера WebRTC молча берёт программный. Раньше это
+                // было видно только по смене имени в строках раз в три секунды. Своё
+                // выключение переключателем — не поломка, о нём своя строка.
+                if (hardware(lastCoder) == true && hardware(coder) == false && coding.encode) {
+                    Journal.trouble(
+                        LogCode.CALL,
+                        "аппаратный кодер сломался, WebRTC перешёл на программный",
+                        "был" to lastCoder,
+                        "стал" to coder,
+                    )
+                }
+                lastCoder = coder
 
                 val bytes = (outgoing.members["bytesSent"] as? Number)?.toLong() ?: 0L
                 // Первый опрос сравнивать не с чем: считать от нуля значило бы объявить
@@ -944,6 +1160,15 @@ class LiveKitCallEngine(
 /** Как часто спрашиваем числа у WebRTC. Три секунды: ступень размера длится дольше. */
 private const val STATS_EVERY_MS = 3_000L
 
+/** Как часто пересматриваем кодек под собеседников. */
+private const val PEERS_EVERY_MS = 1_000L
+
+/** Пауза между отпиской и подпиской при смене раскодировщика. */
+private const val RESUBSCRIBE_PAUSE_MS = 300L
+
+/** Отметка «собеседник не сказал» в [LiveKitCallEngine.peerTold]. */
+private const val UNKNOWN = "?"
+
 /** Сколько раз просим дорожку подняться и сколько ждём между попытками. */
 private const val PUBLISH_TRIES = 3
 private const val PUBLISH_RETRY_MS = 500L
@@ -955,6 +1180,9 @@ private fun VideoCodec.toLiveKit(): LkVideoCodec = when (this) {
     VideoCodec.H265 -> LkVideoCodec.H265
     VideoCodec.VP8 -> LkVideoCodec.VP8
 }
+
+/** Число с одним знаком после запятой — для журнала. */
+private fun tenth(value: Double): String = (kotlin.math.round(value * 10) / 10).toString()
 
 /** Сейчас, миллисекунды монотонных часов. Для разниц, а не для отметок времени. */
 private fun nowMs(): Long = android.os.SystemClock.elapsedRealtime()

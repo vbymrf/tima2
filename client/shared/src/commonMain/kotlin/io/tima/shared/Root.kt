@@ -1032,6 +1032,11 @@ private fun App(
     val bench = remember(callEngine) { BenchStore(environment.settings, callEngine, scope) }
     // Выбор микрофона, колонок и камеры — в движок с запуска (ПЛАН-ЗВОНКОВ-ПК).
     followCallSetup(callEngine as? io.tima.core.call.CallDevices, environment.settings)
+    // Переключатели «Настройки → Звонки» — в движок, и в идущий звонок тоже (ПЛАН-ВИДЕО.md В4).
+    LaunchedEffect(callEngine) {
+        val live = callEngine ?: return@LaunchedEffect
+        environment.settings.all().collect { live.setHardwareCoding(io.tima.core.call.HardwareCodingKeys.read(it)) }
+    }
     val benchState by bench.state.collectAsState()
 
     // Набор — ЛЯМБДОЙ, а не значением: `CallHost` живёт от запуска до запуска, а набор
@@ -3220,7 +3225,8 @@ private fun Settings(
         opened = opened,
         onOpen = { onOpen(it) },
         // Выбирать устройства есть смысл только там, где их выбирает человек, — на ПК.
-        hidden = if (callDevices == null) setOf(SettingsItem.MEDIA) else emptySet(),
+        // Аппаратное кодирование — только на телефоне: на ПК кодеры программные.
+        hidden = if (callDevices == null) setOf(SettingsItem.MEDIA) else setOf(SettingsItem.CALLS),
         // Из пункта — к списку, из списка — из настроек. Одно «назад» на оба шага
         // выкидывало бы наружу из глубины, то есть теряло бы место, куда человек шёл.
         //
@@ -3295,6 +3301,19 @@ private fun Settings(
             // Разрешения — одно место для всех (заказчик 2026-09-26).
             // Микрофон и камера — выбор и проверка без звонка (заказчик 2026-09-26).
             SettingsItem.MEDIA -> callDevices?.let { MediaSettings(it, deviceSettings) }
+
+            SettingsItem.CALLS -> {
+                val saved by deviceSettings.all().collectAsState(emptyMap())
+                io.tima.feature.call.CallCodingScreen(
+                    coding = io.tima.core.call.HardwareCodingKeys.read(saved),
+                    onChange = { chosen ->
+                        scope.launch {
+                            deviceSettings.put(io.tima.core.call.HardwareCodingKeys.ENCODE, if (chosen.encode) "1" else "0")
+                            deviceSettings.put(io.tima.core.call.HardwareCodingKeys.DECODE, if (chosen.decode) "1" else "0")
+                        }
+                    },
+                )
+            }
 
             SettingsItem.PERMISSIONS -> {
                 // Состояние читается при каждом заходе, а не запоминается: человек мог
