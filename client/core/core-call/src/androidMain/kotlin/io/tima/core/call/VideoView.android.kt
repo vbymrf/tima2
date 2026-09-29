@@ -5,6 +5,9 @@ import android.view.View
 import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.VideoTrack
+import io.livekit.android.room.track.video.ViewVisibility
+import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
 
 /**
  * Android: дорожка плюс комната, которая умеет завести под неё поверхность.
@@ -80,4 +83,33 @@ private class WakingRenderer(context: Context) : TextureViewRenderer(context) {
         super.onWindowVisibilityChanged(visibility)
         post { viewVisibility?.recalculate() }
     }
+
+    /** Что последним ушло в журнал — пишется только переход, а не каждый пересчёт. */
+    private var told: Boolean? = null
+
+    /**
+     * Видимость для сервера — в журнал (заказчик 2026-09-29, отчёт NVZL).
+     *
+     * LiveKit заводит наблюдателя видимости только для **чужого** видео и только при
+     * Adaptive Stream — своя камера сюда не приходит. От «не видно» сервер перестаёт слать
+     * видео, и до этой строки остановку можно было заметить лишь по тому, что строки
+     * «приходящее видео» перестали появляться.
+     */
+    override var viewVisibility: ViewVisibility?
+        get() = super.viewVisibility
+        set(value) {
+            super.viewVisibility = value
+            value?.addObserver { _, _ ->
+                val seen = value.isVisible()
+                if (seen == told) return@addObserver
+                told = seen
+                val size = value.size()
+                Journal.note(
+                    LogCode.CALL,
+                    "видимость для сервера",
+                    "видно" to seen,
+                    "окно" to "" + size.width + "×" + size.height,
+                )
+            }
+        }
 }
