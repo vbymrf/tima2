@@ -109,7 +109,13 @@ internal fun CallEvents(
                 modifier = Modifier.fillMaxWidth().padding(top = TimaSpacing.about2),
                 horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
             ) {
-                Button(label = words.openSettings, onClick = { onAction(action) })
+                Button(
+                    label = when (action) {
+                        CallAction.OpenSettings -> words.openSettings
+                        CallAction.Report -> words.report
+                    },
+                    onClick = { onAction(action) },
+                )
             }
         }
 

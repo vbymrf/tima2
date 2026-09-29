@@ -137,6 +137,16 @@ interface ProblemWords {
     val willSendWhenOnlineAbout: String
     val couldNotSend: String
     val writeWhatHappened: String
+
+    // ── Фото к отчёту (ПЛАН-ВИДЕО.md В6, В8) ────────────────────────────────
+    val photos: String
+    val photosAbout: String
+    val addPhoto: String
+    val removePhoto: String
+    val photoNotImage: String
+    /** Подпись под кадром собеседника, приложенным из окна 0. */
+    val callFrame: String
+    fun photosGo(count: Int): String
 }
 
 /** Переключатель окон: аккаунты, настройки и неотправленное. */
@@ -1092,6 +1102,9 @@ interface CallWords {
      * больше не показывает, и включить микрофон можно **только** в настройках телефона.
      */
     val openSettings: String
+
+    /** Кнопка события окна 0: открыть отчёт о проблеме с кадром собеседника (ПЛАН-ВИДЕО.md В7). */
+    val report: String
 
     /** Листание событий в развёрнутом виде. */
     val nextEvent: String
@@ -2064,6 +2077,13 @@ object RussianWords : Words {
                 "можно закрыть."
         override val couldNotSend = "Не удалось отправить — попробуйте ещё раз"
         override val writeWhatHappened = "Напишите, что случилось — без этого отчёт не отправить."
+        override val photos = "Фото"
+        override val photosAbout = "Снимок экрана или фото того, что видно: полосы, рябь, криво нарисованное. До трёх."
+        override val addPhoto = "Приложить фото"
+        override val removePhoto = "Убрать"
+        override val photoNotImage = "Это не картинка — приложить нельзя"
+        override val callFrame = "Кадр собеседника из звонка — уходит с отчётом"
+        override fun photosGo(count: Int) = "Уйдёт фото: $count."
     }
 
     override val notices = object : NoticeWords {
@@ -2816,6 +2836,7 @@ object RussianWords : Words {
         override val expand = "Развернуть"
         override val collapse = "Свернуть"
         override val openSettings = "Открыть настройки"
+        override val report = "Пожаловаться"
         override val nextEvent = "Далее"
         override val previousEvent = "Назад"
         override fun ofTotal(one: Int, total: Int) = "$one из $total"

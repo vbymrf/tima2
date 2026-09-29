@@ -92,4 +92,24 @@ class ReportQueueTest {
 
         assertTrue(queue.waiting().isEmpty())
     }
+
+    @Test
+    fun отчёт_из_очереди_без_снимков_читается_как_был() {
+        // Так лежал отчёт до поля `images` (ПЛАН-ВИДЕО.md В6): прочитаться он обязан,
+        // иначе обновление приложения молча выбросило бы неотправленную жалобу.
+        var held: String? = """[{"kind":"messages","text":"старый","origin":"","platform":"android","model":"realme",""" +
+            """"os":"Android 11","build":"2.0.86","stream":"v2","nickname":"","log":"—"}]"""
+        val store = ReportsStore(load = { held }, save = { held = it })
+        val waiting = ReportQueue(store).waiting()
+        assertEquals(listOf("старый"), waiting.map { it.text })
+        assertTrue(waiting.single().images.isEmpty())
+    }
+
+    @Test
+    fun снимки_переживают_очередь() {
+        val store = store()
+        val image = io.tima.core.network.ProblemImagePost.of("image/jpeg", byteArrayOf(1, 2, 3))
+        ReportQueue(store).add(post("полосы").copy(images = listOf(image)))
+        assertEquals(listOf(image), ReportQueue(store).waiting().single().images)
+    }
 }

@@ -8,6 +8,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -51,6 +52,21 @@ class ProblemsOverHttp(
                         // переводы строк, управляющие знаки из сообщений об ошибках.
                         // Поэтому он идёт через сериализатор, а не через склейку строк.
                         put("log", JsonPrimitive(report.log))
+                        // Снимки — необязательное поле (ПЛАН-ВИДЕО.md В6): нет их — поля нет,
+                        // и сервер, не знающий его, отчёт всё равно примет.
+                        if (report.images.isNotEmpty()) {
+                            put(
+                                "images",
+                                JsonArray(
+                                    report.images.map { image ->
+                                        buildJsonObject {
+                                            put("mime", JsonPrimitive(image.mime))
+                                            put("data", JsonPrimitive(image.base64))
+                                        }
+                                    },
+                                ),
+                            )
+                        }
                     }.toString(),
                 )
             }
@@ -85,7 +101,24 @@ data class ProblemPost(
     val stream: String,
     val nickname: String,
     val log: String,
+    /**
+     * Снимки к отчёту — кадр собеседника из окна 0, фото человека (ПЛАН-ВИДЕО.md В6, В8).
+     * Пустой по умолчанию: отчёты, лежавшие в очереди до этого поля, читаются как были.
+     */
+    val images: List<ProblemImagePost> = emptyList(),
 )
+
+/**
+ * Снимок в отчёте: тип и байты **строкой base64** — так он и уходит в JSON, и так же лежит
+ * в очереди неотправленных. Байты массивом легли бы в очередь списком чисел, вчетверо
+ * длиннее.
+ */
+@Serializable
+data class ProblemImagePost(val mime: String, val base64: String) {
+    companion object {
+        fun of(mime: String, bytes: ByteArray) = ProblemImagePost(mime, encodeBase64(bytes))
+    }
+}
 
 /** Чем кончилась отправка отчёта. */
 sealed interface ProblemSendResult {

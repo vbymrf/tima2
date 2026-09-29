@@ -269,6 +269,13 @@ object EnglishWords : Words {
                 "on its own. You can close the app."
         override val couldNotSend = "Could not send — try again"
         override val writeWhatHappened = "Tell us what happened — the report will not go without it."
+        override val photos = "Photos"
+        override val photosAbout = "A screenshot or a photo of what you see: stripes, ripples, something drawn wrong. Up to three."
+        override val addPhoto = "Attach a photo"
+        override val removePhoto = "Remove"
+        override val photoNotImage = "This is not an image and cannot be attached"
+        override val callFrame = "A frame of the other person from the call — sent with the report"
+        override fun photosGo(count: Int) = "Photos to send: $count."
     }
 
     override val notices = object : NoticeWords {
@@ -1005,6 +1012,7 @@ object EnglishWords : Words {
         override val expand = "Expand"
         override val collapse = "Collapse"
         override val openSettings = "Open settings"
+        override val report = "Report"
         override val nextEvent = "Next"
         override val previousEvent = "Back"
         override fun ofTotal(one: Int, total: Int) = "$one of $total"

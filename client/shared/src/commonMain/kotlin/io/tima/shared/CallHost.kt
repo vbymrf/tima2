@@ -587,18 +587,23 @@ class CallHost(
                 forget(NO_FRAMES)
                 forget(NOT_DECODED)
             }
+            // «Пожаловаться» — у событий, где беду видно программно (ПЛАН-ВИДЕО.md В7).
             RemoteVideoLoss.NotArriving -> {
                 forget(NOT_DECODED)
-                note(words.remoteVideoNotArriving, whileTrue = NO_FRAMES)
+                note(words.remoteVideoNotArriving, CallAction.Report, whileTrue = NO_FRAMES)
             }
             is RemoteVideoLoss.NotDecoding -> {
                 forget(NO_FRAMES)
-                note(words.remoteVideoNotDecoding(loss.codec), whileTrue = NOT_DECODED)
+                note(words.remoteVideoNotDecoding(loss.codec), CallAction.Report, whileTrue = NOT_DECODED)
             }
         }
         // Прогон стенда: кодек набора телефону не по силам — своё видео собеседник не увидит.
         val unsent = now.ownVideoUnsent
-        if (unsent != null) note(words.ownCodecUnsupported(unsent), whileTrue = OWN_UNSENT) else forget(OWN_UNSENT)
+        if (unsent != null) {
+            note(words.ownCodecUnsupported(unsent), CallAction.Report, whileTrue = OWN_UNSENT)
+        } else {
+            forget(OWN_UNSENT)
+        }
 
         // ── СЛУЧИВШИЕСЯ: остаются ──────────────────────────────────────────
         if (!now.remoteVideoShown && was.remoteVideoShown && now.remoteVideoTaken) note(words.peerStoppedVideo)
@@ -769,7 +774,19 @@ class CallHost(
     fun act(action: CallAction) {
         when (action) {
             CallAction.OpenSettings -> openCallSettings()
+            // Отчёт открывает окно — это дело `Root`: он знает, где настройки.
+            CallAction.Report -> Unit
         }
+    }
+
+    /**
+     * Кадр собеседника для отчёта — снимается **в момент нажатия** «Пожаловаться»
+     * (ПЛАН-ВИДЕО.md В8): через секунду беды на картинке может уже не быть.
+     */
+    suspend fun remoteFrame(): ByteArray? {
+        val frame = engine?.remoteFrame()
+        Journal.note(LogCode.CALL, "кадр собеседника для отчёта", "снят" to (frame != null), "байт" to (frame?.size ?: 0))
+        return frame
     }
 
     /**

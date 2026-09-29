@@ -244,4 +244,46 @@ class ProblemStoreTest {
         assertContains(said, "за сутки")
         assertContains(said, "3 строк")
     }
+
+    // ── Фото к отчёту (ПЛАН-ВИДЕО.md В6, В8) ────────────────────────────────
+
+    private fun photo(byte: Int, fromCall: Boolean = false) =
+        ProblemPhoto("image/jpeg", byteArrayOf(0xFF.toByte(), byte.toByte()), fromCall)
+
+    @Test
+    fun фото_уходят_с_отчётом_и_не_больше_трёх() = runTest {
+        val sender = Sender()
+        val store = store(backgroundScope, sender = sender)
+        store.changedText("полосы на видео")
+        repeat(4) { store.addPhoto(photo(it)) }
+        assertEquals(MAX_PHOTOS, store.state.value.photos.size, "четвёртое не прикладывается")
+        assertFalse(store.state.value.morePhotos)
+
+        store.send()
+        store.state.first { it.outcome != null }
+        assertEquals(store.state.value.photos, requireNotNull(sender.seen).photos, "показали одно, отправили другое")
+    }
+
+    @Test
+    fun не_картинка_говорит_словами() = runTest {
+        val store = store(backgroundScope)
+        store.addPhoto(null)
+        assertEquals(RussianWords.problem.photoNotImage, store.state.value.photoTrouble)
+        store.addPhoto(photo(1))
+        assertEquals(null, store.state.value.photoTrouble, "следующий выбор снимает помеху")
+    }
+
+    @Test
+    fun кадр_из_звонка_не_убирается_а_своё_фото_убирается() = runTest {
+        val store = ProblemStore(
+            log = Log(""), sender = Sender(), scope = backgroundScope, origin = Origin(Window.Call),
+            facts = facts, kind = ProblemKind.Calls, photos = listOf(photo(1, fromCall = true)),
+        )
+        assertEquals(ProblemKind.Calls, store.state.value.kind, "из окна 0 — о звонках")
+        store.addPhoto(photo(2))
+        store.removePhoto(0)
+        assertEquals(2, store.state.value.photos.size, "кадр из звонка уходит всегда")
+        store.removePhoto(1)
+        assertEquals(listOf(photo(1, fromCall = true)), store.state.value.photos)
+    }
 }

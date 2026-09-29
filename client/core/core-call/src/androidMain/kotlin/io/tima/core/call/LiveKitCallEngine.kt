@@ -424,6 +424,13 @@ class LiveKitCallEngine(
         pick?.let { handler.selectDevice(it) }
     }
 
+    override suspend fun remoteFrame(): ByteArray? {
+        val track = room?.remoteParticipants?.values
+            ?.flatMap { it.videoTrackPublications }
+            ?.firstNotNullOfOrNull { it.second as? VideoTrack } ?: return null
+        return grabFrame(track)
+    }
+
     override suspend fun switchCamera() {
         cameraFront = !cameraFront
         val position = if (cameraFront) CameraPosition.FRONT else CameraPosition.BACK

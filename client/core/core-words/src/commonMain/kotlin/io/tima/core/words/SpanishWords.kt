@@ -267,6 +267,13 @@ object SpanishWords : Words {
                 "Puede cerrar la aplicación."
         override val couldNotSend = "No se pudo enviar — inténtelo otra vez"
         override val writeWhatHappened = "Cuente qué ha pasado — sin eso el informe no sale."
+        override val photos = "Fotos"
+        override val photosAbout = "Una captura o una foto de lo que se ve: rayas, ondas, algo mal dibujado. Hasta tres."
+        override val addPhoto = "Adjuntar foto"
+        override val removePhoto = "Quitar"
+        override val photoNotImage = "No es una imagen y no se puede adjuntar"
+        override val callFrame = "Un fotograma de la otra persona de la llamada: se envía con el informe"
+        override fun photosGo(count: Int) = "Fotos que se enviarán: $count."
     }
 
     override val notices = object : NoticeWords {
@@ -1005,6 +1012,7 @@ object SpanishWords : Words {
         override val expand = "Desplegar"
         override val collapse = "Plegar"
         override val openSettings = "Abrir ajustes"
+        override val report = "Reportar"
         override val nextEvent = "Siguiente"
         override val previousEvent = "Atrás"
         override fun ofTotal(one: Int, total: Int) = "$one de $total"

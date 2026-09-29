@@ -665,6 +665,26 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         Journal.note(LogCode.CALL, "видео собеседника идёт")
     }
 
+    /**
+     * Кадр собеседника для отчёта (ПЛАН-ВИДЕО.md В8) — последний показанный: на ПК кадры и
+     * так приходят картинкой BGRA, ждать следующего незачем.
+     */
+    override suspend fun remoteFrame(): ByteArray? {
+        val picture = remote?.handle?.pictures?.value ?: return null
+        return runCatching {
+            val image = java.awt.image.BufferedImage(picture.width, picture.height, java.awt.image.BufferedImage.TYPE_INT_RGB)
+            val bgra = picture.bgra
+            val pixels = IntArray(picture.width * picture.height) { i ->
+                val b = bgra[i * 4].toInt() and 0xFF
+                val g = bgra[i * 4 + 1].toInt() and 0xFF
+                val r = bgra[i * 4 + 2].toInt() and 0xFF
+                (r shl 16) or (g shl 8) or b
+            }
+            image.setRGB(0, 0, picture.width, picture.height, pixels, 0, picture.width)
+            java.io.ByteArrayOutputStream().also { javax.imageio.ImageIO.write(image, "jpg", it) }.toByteArray()
+        }.getOrNull()
+    }
+
     private fun stopRemote() {
         val shown = remote ?: return
         remote = null

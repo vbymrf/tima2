@@ -157,6 +157,22 @@ data class Snapshot(
     }
 }
 
+/**
+ * Снимок к отчёту (ПЛАН-ВИДЕО.md В6, В8): фото, приложенное человеком, или кадр
+ * собеседника из окна 0. Байты — уже сжатые, в том виде, в каком уйдут.
+ *
+ * Кадр из звонка убрать нельзя: он прикладывается всегда (решение заказчика 2026-09-29).
+ */
+class ProblemPhoto(val mime: String, val bytes: ByteArray, val fromCall: Boolean = false) {
+    override fun equals(other: Any?): Boolean =
+        other is ProblemPhoto && other.mime == mime && other.fromCall == fromCall && other.bytes.contentEquals(bytes)
+
+    override fun hashCode(): Int = bytes.contentHashCode() * 31 + mime.hashCode()
+}
+
+/** Сколько снимков можно приложить — столько же берёт сервер. */
+const val MAX_PHOTOS = 3
+
 /** Собранный отчёт. Ровно это уходит на сервер и ровно это показывает «Смотреть». */
 data class ProblemReport(
     val kind: ProblemKind,
@@ -167,6 +183,7 @@ data class ProblemReport(
     val facts: ProblemFacts,
     val snapshot: Snapshot,
     val log: String,
+    val photos: List<ProblemPhoto> = emptyList(),
 )
 
 /** Чем кончилась отправка. */
@@ -224,7 +241,14 @@ data class ProblemState(
     val snapshot: Snapshot = Snapshot(),
     val sending: Boolean = false,
     val outcome: SendOutcome? = null,
+    /** Снимки к отчёту — в том порядке, в каком приложены. */
+    val photos: List<ProblemPhoto> = emptyList(),
+    /** Выбранное не приложилось — почему. Снимается следующим выбором. */
+    val photoTrouble: String? = null,
 ) {
+    /** Можно ли приложить ещё. */
+    val morePhotos: Boolean get() = photos.size < MAX_PHOTOS && !delivered
+
     val canSend: Boolean get() = text.isNotBlank() && !sending && !delivered
 
     /**
@@ -279,6 +303,10 @@ class ProblemStore(
     snapshot: Snapshot = Snapshot(),
     /** Текст, с которого начинается отчёт: например, код отказа у неотправленного. */
     draft: String = "",
+    /** О чём — из окна 0 это звонки (ПЛАН-ВИДЕО.md В7). */
+    kind: ProblemKind = ProblemKind.Other,
+    /** Снимки, приложенные заранее: кадр собеседника из окна 0 (В8). */
+    photos: List<ProblemPhoto> = emptyList(),
 ) {
     private val _state = MutableStateFlow(
         ProblemState(
@@ -287,6 +315,8 @@ class ProblemStore(
             log = log.dump(Began.Today.days),
             snapshot = snapshot,
             text = draft,
+            kind = kind,
+            photos = photos.take(MAX_PHOTOS),
         ),
     )
     val state: StateFlow<ProblemState> = _state.asStateFlow()
@@ -312,6 +342,28 @@ class ProblemStore(
         _state.value = _state.value.copy(began = began, log = log.dump(began.days))
     }
 
+    /**
+     * Приложить снимок. `null` — выбранное не картинка: говорим об этом, а не молчим, —
+     * нажатая кнопка без последствий читается как поломка.
+     */
+    fun addPhoto(photo: ProblemPhoto?) {
+        val state = _state.value
+        if (!state.morePhotos) return
+        _state.value = if (photo == null) {
+            state.copy(photoTrouble = CurrentWords.value.problem.photoNotImage)
+        } else {
+            state.copy(photos = state.photos + photo, photoTrouble = null)
+        }
+    }
+
+    /** Убрать снимок. Кадр из звонка не убирается — он уходит всегда. */
+    fun removePhoto(index: Int) {
+        val state = _state.value
+        val photo = state.photos.getOrNull(index) ?: return
+        if (photo.fromCall || state.delivered) return
+        _state.value = state.copy(photos = state.photos.filterIndexed { i, _ -> i != index })
+    }
+
     /** «Смотреть» — показать целиком то, что уйдёт. */
     fun toggleShowing() {
         _state.value = _state.value.copy(showing = !_state.value.showing)
@@ -330,6 +382,7 @@ class ProblemStore(
                 facts = state.facts,
                 snapshot = state.snapshot,
                 log = state.log,
+                photos = state.photos,
             )
             val outcome = try {
                 sender.send(report)
@@ -359,6 +412,11 @@ fun ProblemScreen(
     onShow: () -> Unit,
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
+    /** «Приложить фото» — открыть выбор. `null` — платформа выбирать не умеет. */
+    onAddPhoto: (() -> Unit)? = null,
+    onRemovePhoto: (Int) -> Unit = {},
+    /** Показать снимок маленькой картинкой. Раскодирует тот, кто умеет, — оболочка нет. */
+    photoPreview: @Composable (ProblemPhoto) -> Unit = {},
 ) = Column(
     modifier.fillMaxSize().padding(TimaSpacing.about4).verticalScroll(rememberScrollState()),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
@@ -407,6 +465,27 @@ fun ProblemScreen(
         Tertiary(words.onlyYouKnow)
     }
 
+    // ── ФОТО (ПЛАН-ВИДЕО.md В6, В8) ───────────────────────────────────────────
+    //
+    // Полосы, рябь, криво нарисованное — в журнале их нет, на снимке они видны сразу.
+    // Кадр собеседника из окна 0 стоит здесь же, первым, и убрать его нельзя.
+    if (state.photos.isNotEmpty() || onAddPhoto != null) {
+        Caption(words.photos, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+        Secondary(words.photosAbout)
+        state.photos.forEachIndexed { index, photo ->
+            photoPreview(photo)
+            if (photo.fromCall) {
+                Tertiary(words.callFrame)
+            } else if (!state.delivered) {
+                Button(label = words.removePhoto, onClick = { onRemovePhoto(index) }, kind = ButtonKind.Quiet)
+            }
+        }
+        state.photoTrouble?.let { Alarm(it) }
+        if (onAddPhoto != null && state.morePhotos) {
+            Button(label = words.addPhoto, onClick = onAddPhoto, kind = ButtonKind.Quiet)
+        }
+    }
+
     Caption(words.whenBegan, fontSize = TimaType.sz5, weight = FontWeight.Bold)
     Began.entries.forEach { began ->
         ListLine(
@@ -440,6 +519,7 @@ fun ProblemScreen(
     // Сколько именно уходит — цифрой, а не на веру. До 2026-09-06 нигде не было сказано
     // даже того, что журнал берётся за сутки.
     Tertiary(state.attachment())
+    if (state.photos.isNotEmpty()) Tertiary(words.photosGo(state.photos.size))
 
     Button(
         label = if (state.showing) Tima.words.common.hide else words.watch,

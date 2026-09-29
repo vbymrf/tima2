@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.height
 import io.tima.core.encryption.AccountIdentitiesOverKodium
 import io.tima.core.encryption.DeviceKeyFactoryOverKodium
 import io.tima.core.encryption.IdentitySignerOverKodium
@@ -1167,6 +1168,9 @@ private fun App(
     var cameFrom by remember { mutableStateOf<Origin?>(null) }
     /** Черновик отчёта о проблеме — подставляется из подокна неотправленного сообщения. */
     var problemDraft by remember { mutableStateOf("") }
+    // Отчёт из окна 0: о звонках и с кадром собеседника (ПЛАН-ВИДЕО.md В7, В8).
+    var problemPhotos by remember { mutableStateOf(emptyList<io.tima.feature.shell.ProblemPhoto>()) }
+    var problemKind by remember { mutableStateOf(io.tima.feature.shell.ProblemKind.Other) }
 
     // Когда начался этот запуск. В снимке отчёта из него получается строка «сеанс идёт
     // 6 мин» — она говорит, сколько журнала мы вообще застали: журнал живёт в памяти
@@ -2006,7 +2010,22 @@ private fun App(
                     remoteHere = LayoutLocal.current.phone,
                     localVideo = callHost.localVideo.collectAsState().value,
                     onRemoteVideo = callHost::remoteVideo,
-                    onEventAction = callHost::act,
+                    // «Пожаловаться» (ПЛАН-ВИДЕО.md В7, В8): кадр собеседника — в момент
+                    // нажатия, отчёт — о звонках, текст пишет человек.
+                    onEventAction = { action ->
+                        if (action == io.tima.core.call.CallAction.Report) {
+                            scope.launch {
+                                val frame = callHost.remoteFrame()?.let { io.tima.core.media.reportJpeg(it) }
+                                problemPhotos = listOfNotNull(frame?.let { io.tima.feature.shell.ProblemPhoto("image/jpeg", it, fromCall = true) })
+                                problemKind = io.tima.feature.shell.ProblemKind.Calls
+                                problemDraft = ""
+                                cameFrom = Origin(Window.Call)
+                                where = Where.Settings(SettingsItem.PROBLEM)
+                            }
+                        } else {
+                            callHost.act(action)
+                        }
+                    },
                     // Жест берётся тот же, что у остальных окон, и вешается ЗДЕСЬ:
                     // у пяти настоящих окон он живёт в их оправе, а окно 0 рисуется
                     // голым — оправы с шапкой и вкладками у звонка нет. Без этой
@@ -2539,6 +2558,8 @@ private fun App(
                         ),
                         origin = cameFrom,
                         problemDraft = problemDraft,
+                        problemPhotos = problemPhotos,
+                        problemKind = problemKind,
                         reporting = reporting,
                         diaryPolicy = diaryPolicy,
                         callsLog = callsLog,
@@ -3200,6 +3221,8 @@ private fun Settings(
     problemFacts: ProblemFacts,
     /** Черновик отчёта о проблеме — из подокна неотправленного сообщения. */
     problemDraft: String = "",
+    problemPhotos: List<io.tima.feature.shell.ProblemPhoto> = emptyList(),
+    problemKind: io.tima.feature.shell.ProblemKind = io.tima.feature.shell.ProblemKind.Other,
     /** Откуда человек ушёл в настройки. `null` — попал сюда не из окна (Б2). */
     origin: Origin?,
     /** Сеть плюс очередь: отчёт не теряется, даже если связи нет. */
@@ -3395,7 +3418,10 @@ private fun Settings(
             // Отчёт о проблеме. Магазин создаётся ЗДЕСЬ, при открытии раздела: журнал
             // снимается в момент, когда человек пришёл жаловаться, а не когда дописал
             // текст — к тому времени начало поломки успело бы вытесниться.
-            SettingsItem.PROBLEM -> Problem(problemFacts, origin, reporting, scope, platform, snapshot, draft = problemDraft)
+            SettingsItem.PROBLEM -> Problem(
+                problemFacts, origin, reporting, scope, platform, snapshot,
+                draft = problemDraft, photos = problemPhotos, kind = problemKind,
+            )
 
             SettingsItem.STORAGE -> Storage(diaryPolicy, callsLog, callsState)
 
@@ -3549,6 +3575,8 @@ private fun Problem(
     platform: Platform,
     snapshot: () -> Snapshot,
     draft: String = "",
+    photos: List<io.tima.feature.shell.ProblemPhoto> = emptyList(),
+    kind: io.tima.feature.shell.ProblemKind = io.tima.feature.shell.ProblemKind.Other,
 ) {
     val store = remember {
         ProblemStore(
@@ -3576,6 +3604,7 @@ private fun Problem(
                         // добавлять в таблицу, в ручку и в разбор — ради текста, который
                         // и так читается сверху вниз.
                         log = reportBody(report.began, report.snapshot, report.log),
+                        images = report.photos.map { io.tima.core.network.ProblemImagePost.of(it.mime, it.bytes) },
                     ),
                 )
                 when (result) {
@@ -3593,9 +3622,21 @@ private fun Problem(
             facts = facts,
             snapshot = snapshot(),
             draft = draft,
+            kind = kind,
+            photos = photos,
         )
     }
     val state by store.state.collectAsState()
+    // Фото к отчёту (ПЛАН-ВИДЕО.md В6): системный выбор на телефоне, файл на ПК. Сжимается
+    // здесь, до мегабайтного предела сервера, — не на главном потоке: фото с камеры
+    // раскодируется ощутимо.
+    val pickPhoto = io.tima.core.media.rememberImagePicker { picked ->
+        if (picked == null) return@rememberImagePicker
+        scope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            val jpeg = io.tima.core.media.reportJpeg(picked.bytes)
+            store.addPhoto(jpeg?.let { io.tima.feature.shell.ProblemPhoto("image/jpeg", it) })
+        }
+    }
     ProblemScreen(
         state = state,
         onText = store::changedText,
@@ -3603,8 +3644,23 @@ private fun Problem(
         onBegan = store::chose,
         onShow = store::toggleShowing,
         onSend = store::send,
+        onAddPhoto = pickPhoto,
+        onRemovePhoto = store::removePhoto,
+        photoPreview = { photo ->
+            val picture = remember(photo) { decodeImage(photo.bytes) }
+            picture?.let {
+                androidx.compose.foundation.Image(
+                    bitmap = it,
+                    contentDescription = null,
+                    modifier = Modifier.height(PHOTO_PREVIEW),
+                )
+            }
+        },
     )
 }
+
+/** Высота снимка в форме отчёта: видно, что уходит, и не заслоняет форму. */
+private val PHOTO_PREVIEW = 160.dp
 
 /**
  * Тело отчёта: снимок сверху, хронология под ним.
