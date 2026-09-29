@@ -50,6 +50,12 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       LIVEKIT_URL: wss://lk.${DOMAIN}
+      # Потолок видео звонка (ПЛАН-ВИДЕО.md В5б). Пусто — умолчание сервера: 1280×720,
+      # 24 кадра/с, 800 кбит/с. Задаётся в `.env`, меняется без выпуска приложения.
+      CALL_VIDEO_WIDTH: ${CALL_VIDEO_WIDTH:-}
+      CALL_VIDEO_HEIGHT: ${CALL_VIDEO_HEIGHT:-}
+      CALL_VIDEO_FPS: ${CALL_VIDEO_FPS:-}
+      CALL_VIDEO_BITRATE: ${CALL_VIDEO_BITRATE:-}
       # Сервис отладки на loopback контейнера (наружу НЕ проброшен). Доступ:
       #   docker compose -f deploy/docker-compose.prod.yml exec backend wget -qO- 127.0.0.1:6060/debug/stats
       TIMA_DEBUG_ADDR: 127.0.0.1:6060

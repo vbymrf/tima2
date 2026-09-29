@@ -89,6 +89,8 @@ func startCall(deps callsDeps) http.HandlerFunc {
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"call_id": callID, "room": room, "url": deps.livekitURL(), "token": token,
+			// Потолок видео (ПЛАН-ВИДЕО.md В5б): новое поле, клиент без него берёт своё.
+			"video": deps.video(),
 		})
 	}
 }
@@ -131,7 +133,9 @@ func answerCall(deps callsDeps) http.HandlerFunc {
 		deps.notifier.CallChange(r.Context(), id.UserID, callID, "answered", id.DeviceID)
 		deps.notifier.CallChange(r.Context(), call.InitiatorID, callID, "answered", "")
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"room": call.Room, "url": deps.livekitURL(), "token": token})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"room": call.Room, "url": deps.livekitURL(), "token": token, "video": deps.video(),
+		})
 	}
 }
 

@@ -53,6 +53,8 @@ type LiveKitSettings struct {
 	Issuer *calls.Issuer     // nil → звонки отвечают 503
 	Rooms  *calls.RoomClient // закрыть комнату, выкинуть участника
 	URL    string
+	// Video — потолок видео звонка (ПЛАН-ВИДЕО.md В5б). Нулевой — умолчание.
+	Video VideoLimits
 }
 
 // callsDeps — всё, чем пользуются handler-ы этой группы.
@@ -68,6 +70,7 @@ type callsDeps struct {
 func (deps callsDeps) issuer() *calls.Issuer    { return deps.livekit().Issuer }
 func (deps callsDeps) rooms() *calls.RoomClient { return deps.livekit().Rooms }
 func (deps callsDeps) livekitURL() string       { return deps.livekit().URL }
+func (deps callsDeps) video() VideoLimits       { return deps.livekit().Video.orDefault() }
 
 // RegisterCalls — маршруты звонков 1:1, групповых звонков и аудио-комнат.
 //

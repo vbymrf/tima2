@@ -176,6 +176,7 @@ func joinCall(deps callsDeps) http.HandlerFunc {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"call_id": callID, "room": c.Room, "token": token,
 			"url": deps.livekitURL(), "livekit_url": deps.livekitURL(), "kind": c.Kind,
+			"video": deps.video(),
 		})
 	}
 }

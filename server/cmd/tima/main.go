@@ -221,6 +221,11 @@ func serve() {
 		if lk := calls.NewIssuer(os.Getenv("LIVEKIT_API_KEY"), os.Getenv("LIVEKIT_API_SECRET")); lk != nil {
 			srv.Calls = lk
 			srv.LiveKitURL = os.Getenv("LIVEKIT_URL")
+			// Потолок видео звонка (ПЛАН-ВИДЕО.md В5б): CALL_VIDEO_WIDTH/HEIGHT/FPS/BITRATE,
+			// без них — 1280×720, 24 кадра/с, 800 кбит/с.
+			srv.CallVideo = api.VideoLimitsFromEnv(os.Getenv)
+			log.Printf("Звонки: потолок видео %d×%d, %d к/с, %d бит/с",
+				srv.CallVideo.Width, srv.CallVideo.Height, srv.CallVideo.FPS, srv.CallVideo.Bitrate)
 			// Управление комнатами: адрес берём из того же LIVEKIT_URL (wss → https),
 			// чтобы не заводить второй параметр, который рассинхронизируется.
 			srv.Rooms = calls.NewRoomClient(srv.LiveKitURL, lk)

@@ -146,10 +146,11 @@ func TestCallFlow(t *testing.T) {
 	callee := registerDevice(t, ts, "+79990000031")
 
 	var start struct {
-		CallID string `json:"call_id"`
-		Room   string `json:"room"`
-		URL    string `json:"url"`
-		Token  string `json:"token"`
+		CallID string      `json:"call_id"`
+		Room   string      `json:"room"`
+		URL    string      `json:"url"`
+		Token  string      `json:"token"`
+		Video  VideoLimits `json:"video"`
 	}
 	if code := postAuthed(t, ts, caller.token, "POST", "/api/v1/calls",
 		map[string]string{"peer_id": callee.userID, "kind": "audio"}, &start); code != 201 {
@@ -161,17 +162,25 @@ func TestCallFlow(t *testing.T) {
 	if start.URL != "ws://localhost:7880" {
 		t.Fatalf("url LiveKit не передан: %q", start.URL)
 	}
+	// Потолок видео (ПЛАН-ВИДЕО.md В5б): не задан на сервере — умолчание.
+	if start.Video != DefaultVideoLimits {
+		t.Fatalf("потолок видео не передан: %+v", start.Video)
+	}
 
 	// Callee отвечает → получает свой токен
 	var ans struct {
-		Room  string `json:"room"`
-		Token string `json:"token"`
+		Room  string      `json:"room"`
+		Token string      `json:"token"`
+		Video VideoLimits `json:"video"`
 	}
 	if code := postAuthed(t, ts, callee.token, "POST", "/api/v1/calls/"+start.CallID+"/answer", nil, &ans); code != 200 {
 		t.Fatalf("answer: %d", code)
 	}
 	if ans.Room != start.Room || ans.Token == "" {
 		t.Fatalf("ответный токен неверен: %+v", ans)
+	}
+	if ans.Video != DefaultVideoLimits {
+		t.Fatalf("потолок видео принявшему не передан: %+v", ans.Video)
 	}
 
 	// Посторонний не может ответить (уже answered, и он не callee)
