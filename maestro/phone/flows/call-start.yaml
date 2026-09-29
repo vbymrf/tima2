@@ -1,0 +1,17 @@
+# Элемент «Вход» звонящего, способ Maestro: «Контакты» → строка собеседника → «📹».
+# Трубка в шапке переписки — голосовой звонок (PH-1), поэтому через «Контакты».
+appId: io.tima.app.v2
+env:
+  PEER: "redmi, @test_redmi"
+---
+- launchApp:
+    stopApp: false
+- tapOn:
+    id: "tab:Contacts"
+- scrollUntilVisible:
+    element: "${PEER}"
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: "book:video-call"
+    rightOf: "${PEER}"

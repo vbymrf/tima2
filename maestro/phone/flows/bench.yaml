@@ -1,0 +1,41 @@
+# Элемент «Прогон в окне стенда», способ Maestro: забег вооружён, выбран набор PRESET,
+# на экране «Прогон EXPECT». Потом — назад в главное окно: «Назад» из стенда закрывает
+# приложение (PH-3), поэтому сразу launchApp.
+appId: io.tima.app.v2
+env:
+  PRESET: "T h264 500 off"
+  EXPECT: "Прогон 1 из 16"
+---
+- launchApp:
+    stopApp: false
+- tapOn: "Телефон"
+# На Redmi список окон длиннее экрана — «Стенд звонков» ниже края (2026-09-29).
+- scrollUntilVisible:
+    element: "Стенд звонков"
+    direction: DOWN
+    timeout: 10000
+- tapOn: "Стенд звонков"
+- runFlow:
+    when:
+      visible: "Начать прогон"
+    commands:
+      - tapOn: "Начать прогон"
+- assertVisible: "Остановить прогон"
+# Имя набора стоит дважды: в поле названия (выше строки «Прогон N из M») и на плашке
+# (ниже неё). Первое совпадение — поле, нажатие в него открывает клавиатуру (2026-09-29).
+- scrollUntilVisible:
+    element:
+      text: "${PRESET}"
+      below: 'Прогон \d+ из \d+'
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    text: "${PRESET}"
+    below: 'Прогон \d+ из \d+'
+- assertVisible: "${EXPECT}"
+- takeScreenshot: "bench-selected"
+- back
+- launchApp:
+    stopApp: false
+- assertVisible:
+    id: "tab:Chats"

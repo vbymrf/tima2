@@ -1,0 +1,9 @@
+# Элемент «Телефон готов», способ Maestro: приложение на переднем плане, главное окно.
+# stopApp: false — launchApp по умолчанию сначала останавливает приложение, а это
+# оборвало бы идущий звонок и сбросило окна.
+appId: io.tima.app.v2
+---
+- launchApp:
+    stopApp: false
+- assertVisible:
+    id: "tab:Chats"

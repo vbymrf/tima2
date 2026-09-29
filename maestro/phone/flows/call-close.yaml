@@ -1,0 +1,7 @@
+# Закрыть окно звонка у того, кто трубку не клал.
+appId: io.tima.app.v2
+---
+- extendedWaitUntil:
+    visible: "Закрыть"
+    timeout: 15000
+- tapOn: "Закрыть"
