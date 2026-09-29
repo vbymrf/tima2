@@ -597,6 +597,13 @@ class CallHost(
                 note(words.remoteVideoNotDecoding(loss.codec), CallAction.Report, whileTrue = NOT_DECODED)
             }
         }
+        // Уходит не тот кодек, что просили (заказчик 2026-09-29) — видно программно, значит
+        // с «Пожаловаться».
+        when (val mismatch = now.codecMismatch) {
+            null -> forget(CODEC_MISMATCH)
+            else -> note(words.sentCodecDiffers(mismatch.asked, mismatch.sent), CallAction.Report, whileTrue = CODEC_MISMATCH)
+        }
+
         // Прогон стенда: кодек набора телефону не по силам — своё видео собеседник не увидит.
         val unsent = now.ownVideoUnsent
         if (unsent != null) {
@@ -896,6 +903,7 @@ class CallHost(
         const val NO_FRAMES = "видео собеседника не приходит"
         const val NOT_DECODED = "видео собеседника не раскодируется"
         const val OWN_UNSENT = "своё видео не уйдёт: кодек набора не по силам"
+        const val CODEC_MISMATCH = "уходит не тот кодек, что просили"
     }
 }
 

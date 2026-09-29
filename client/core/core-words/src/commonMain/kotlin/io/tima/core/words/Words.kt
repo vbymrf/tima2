@@ -1087,6 +1087,9 @@ interface CallWords {
     fun remoteVideoNotDecoding(codec: String): String
     fun ownCodecUnsupported(codec: String): String
 
+    /** Уходит не тот кодек, что просили ([io.tima.core.call.CodecCheck]). */
+    fun sentCodecDiffers(asked: String, sent: String): String
+
     /** Кнопки «скрыть чужое видео» и «показать обратно». */
     val hideRemote: String
     val showRemote: String
@@ -2831,6 +2834,7 @@ object RussianWords : Words {
         override val remoteVideoNotArriving = "Видео собеседника не приходит — он его показывает, но до вас не доходит ни кадра"
         override fun remoteVideoNotDecoding(codec: String) = "Не можем показать видео. Видео собеседника приходит в $codec, но этот телефон не может его показать."
         override fun ownCodecUnsupported(codec: String) = "Собеседник вас не увидит: набор стенда требует $codec, а этот телефон его не кодирует"
+        override fun sentCodecDiffers(asked: String, sent: String) = "Видео уходит в $sent, а просили $asked: телефон не отдал просимый кодек. Собеседник может не увидеть видео"
         override val hideRemote = "Скрыть видео"
         override val showRemote = "Показать видео"
         override val expand = "Развернуть"

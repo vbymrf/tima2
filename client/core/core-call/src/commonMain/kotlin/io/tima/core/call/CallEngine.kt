@@ -228,6 +228,11 @@ data class CallState(
     val cameraFront: Boolean = true,
     /** Есть ли вторая камера — стоит ли кнопка «Переключение камеры». */
     val cameraSwitchable: Boolean = false,
+    /**
+     * Уходит не тот кодек, который просили ([CodecCheck], заказчик 2026-09-29). `null` —
+     * уходит просимый или видео не уходит.
+     */
+    val codecMismatch: CodecCheck.Mismatch? = null,
 )
 
 /** Оценка связи глазами SFU (`connectionquality/scorer.go`: пороги 80 / 40 / 20). */

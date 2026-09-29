@@ -1007,6 +1007,7 @@ object SpanishWords : Words {
         override val remoteVideoNotArriving = "El vídeo del otro no llega: lo está mostrando, pero no te llega ni un fotograma"
         override fun remoteVideoNotDecoding(codec: String) = "No podemos mostrar el vídeo. El vídeo del otro llega en $codec, pero este teléfono no puede mostrarlo."
         override fun ownCodecUnsupported(codec: String) = "No te verán: el preset de prueba exige $codec y este teléfono no lo codifica"
+        override fun sentCodecDiffers(asked: String, sent: String) = "El vídeo sale en $sent, pero se pidió $asked: el teléfono no dio el códec pedido. Puede que no te vean"
         override val hideRemote = "Ocultar vídeo"
         override val showRemote = "Mostrar vídeo"
         override val expand = "Desplegar"

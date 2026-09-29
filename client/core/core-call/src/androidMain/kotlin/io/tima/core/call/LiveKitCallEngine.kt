@@ -1159,16 +1159,36 @@ class LiveKitCallEngine(
             var said = ""
             var sent = -1L
             var lastCoder = "—"
+            val check = CodecCheck()
             while (isActive) {
                 delay(STATS_EVERY_MS)
                 val track = room.localParticipant.videoTrackPublications
                     .firstNotNullOfOrNull { it.second as? VideoTrack } ?: continue
-                val outgoing = runCatching {
-                    // Отчёт приходит пустым, пока дорожка не поднялась, — это не беда, а
-                    // «ещё рано»: просто ждём следующего опроса.
-                    track.getRTCStats()?.statsMap?.values
-                        ?.firstOrNull { it.type == "outbound-rtp" && it.members["kind"] == "video" }
-                }.getOrNull() ?: continue
+                // Отчёт приходит пустым, пока дорожка не поднялась, — это не беда, а
+                // «ещё рано»: просто ждём следующего опроса.
+                val report = runCatching { track.getRTCStats()?.statsMap?.values }.getOrNull() ?: continue
+                val outgoing = report.firstOrNull { it.type == "outbound-rtp" && it.members["kind"] == "video" } ?: continue
+
+                // ── УХОДИТ ЛИ ПРОСИМЫЙ КОДЕК (заказчик 2026-09-29) ───────────────
+                //
+                // «кодек публикации шлём=» — просьба. Что ушло на деле, говорит `codecId`
+                // исходящей дорожки. Расходились они молча: Honor просил H.264 и слал VP8,
+                // Samsung с кратностью 16 просил VP9 и слал VP8.
+                val sentMime = outgoing.members["codecId"]?.toString()?.let { id ->
+                    report.firstOrNull { it.id == id }?.members?.get("mimeType")?.toString()
+                }
+                val mismatch = check.next(target, publishing?.video?.backup, sentMime)
+                if (mismatch != _state.value.codecMismatch) {
+                    _state.value = _state.value.copy(codecMismatch = mismatch)
+                    if (mismatch != null) {
+                        Journal.trouble(
+                            LogCode.CALL, "уходит не тот кодек, что просили",
+                            "просили" to mismatch.asked, "уходит" to mismatch.sent,
+                        )
+                    } else {
+                        Journal.note(LogCode.CALL, "уходит просимый кодек", "кодек" to (sentMime?.removePrefix("video/") ?: "—"))
+                    }
+                }
 
                 val w = outgoing.members["frameWidth"] ?: continue
                 val h = outgoing.members["frameHeight"] ?: continue
