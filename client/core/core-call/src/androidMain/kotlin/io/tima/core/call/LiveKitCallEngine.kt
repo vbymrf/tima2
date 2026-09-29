@@ -92,9 +92,6 @@ class LiveKitCallEngine(
     private var lastReceived: Long = -1
     private var statsAt: Long = 0
 
-    /** Прогон: кодек набора телефону не по силам и запасного нет — см. [CallState.ownVideoUnsent]. */
-    private var ownUnsent: String? = null
-
     /**
      * Прошлые `qpSum` и число кадров по каждой записи дорожки. QP в отчёте WebRTC — сумма
      * за всё время, как и байты; средний QP за последний промежуток — разница суммы на
@@ -159,7 +156,7 @@ class LiveKitCallEngine(
         room = created
         everAnswered = false
         watch(created, door.callId)
-        _state.value = CallState(stage = CallStage.Connecting, callId = door.callId, ownVideoUnsent = ownUnsent)
+        _state.value = CallState(stage = CallStage.Connecting, callId = door.callId)
         try {
             created.connect(url = door.url, token = door.token)
             // ── МИКРОФОН ВКЛЮЧАЕТСЯ ЗДЕСЬ, И БЕЗ ЭТОГО ЗВОНОК НЕМОЙ ─────────
@@ -203,20 +200,12 @@ class LiveKitCallEngine(
             // нет, чтобы прогон не числил запасным то, чего в сети не бывает.
             Journal.note(LogCode.CALL, "запасной не годится SDK, его нет", "запасной" to backup.name)
         }
-        ownUnsent = if (choice.unsendable) video.codec.name else null
-        if (choice.viaBackup) {
-            // Прогон: основной не по силам, запасной пресета — по силам. Он и идёт основным:
-            // объявленный H.264, посланный VP8, сервер выбрасывал (Honor 2026-09-29).
+        if (exact && encodable.isNotEmpty() && video.codec !in encodable) {
+            // Прогон кодек не меняет, но молчать нельзя: телефон пошлёт VP8 под именем
+            // пресета, и сервер видео выбросит. Без этой строки прогон выглядел бы
+            // поломкой звонка, а это ответ «телефон этот кодек не умеет».
             Journal.trouble(
-                LogCode.CALL, "прогон: основной кодек телефону не по силам — шлём запасной пресета основным",
-                "основной" to video.codec.name, "шлём" to choice.chosen.name, "умеет" to can,
-            )
-        } else if (choice.unsendable) {
-            // Прогон кодек не меняет, запасного по силам нет: телефон пошлёт VP8 под именем
-            // пресета, и сервер видео выбросит. Строка в журнале и событие в окне 0 — иначе
-            // это выглядело бы поломкой звонка, а это ответ «телефон этот кодек не умеет».
-            Journal.trouble(
-                LogCode.CALL, "прогон: кодек пресета телефону не по силам, запасного нет — собеседник видео не увидит",
+                LogCode.CALL, "прогон: кодек пресета телефону не по силам, не меняем",
                 "кодек" to video.codec.name, "умеет" to can,
             )
         } else if (choice.substituted) {

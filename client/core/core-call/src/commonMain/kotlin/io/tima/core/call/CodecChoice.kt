@@ -24,24 +24,11 @@ package io.tima.core.call
  * тем же способом, что и основной. Совпавший с основным — не запасной, он снимается.
  * Не годный в запасные по SDK ([VideoCodec.backupCapable]) снимается всегда, и в прогоне
  * тоже: он и раньше не посылался, а только числился.
- *
- * ── ПРОГОН: ЗАПАСНОЙ СТАНОВИТСЯ ОСНОВНЫМ (заказчик 2026-09-29) ─────────────
- *
- * Прогон кодек не меняет — но и не шлёт то, что телефону не по силам: объявленный H.264,
- * посланный VP8, сервер выбрасывает, и собеседник видео не видит (Honor, тот же BXHS).
- * Запасной кодек LiveKit спасает **получателя**, который не раскодирует основной, а не
- * отправителя, который его не закодирует. Поэтому в прогоне: основной не по силам, запасной
- * пресета по силам — запасной идёт основным ([viaBackup]); не по силам оба — видео не уйдёт
- * ([unsendable]), и об этом говорит лента окна 0.
  */
 data class CodecChoice(
     val wanted: VideoCodec,
     val chosen: VideoCodec,
     val backup: VideoCodec?,
-    /** Прогон: основной телефону не по силам, основным пошёл запасной пресета. */
-    val viaBackup: Boolean = false,
-    /** Прогон: не по силам ни основной, ни запасной — собеседник видео не увидит. */
-    val unsendable: Boolean = false,
 ) {
     /** Пришлось ли отступить от пресета — повод для строки в журнале. */
     val substituted: Boolean get() = chosen != wanted
@@ -63,16 +50,8 @@ data class CodecChoice(
         ): CodecChoice {
             // Прогон стенда и «не узнали» — пресет как есть. Прогон: кодек задан, и
             // мерить надо его (PublishPreset.exact).
-            if (encodable.isEmpty()) {
+            if (exact || encodable.isEmpty()) {
                 return CodecChoice(wanted, wanted, backup?.takeIf { it.backupCapable && it != wanted })
-            }
-            if (exact) {
-                val spare = backup?.takeIf { it.backupCapable && it != wanted }
-                if (wanted in encodable) return CodecChoice(wanted, wanted, spare)
-                if (backup != null && backup in encodable) {
-                    return CodecChoice(wanted, backup, backup = null, viaBackup = true)
-                }
-                return CodecChoice(wanted, wanted, spare, unsendable = true)
             }
             val chosen = (listOf(wanted) + FALLBACK).firstOrNull { it in encodable } ?: wanted
             val spare = backup?.takeIf { it.backupCapable && it in encodable && it != chosen }

@@ -1060,7 +1060,6 @@ interface CallWords {
     /** Видео собеседника нет, хотя он его показывает (заказчик 2026-09-29). */
     val remoteVideoNotArriving: String
     fun remoteVideoNotDecoding(codec: String): String
-    fun ownCodecUnsupported(codec: String): String
 
     /** Кнопки «скрыть чужое видео» и «показать обратно». */
     val hideRemote: String
@@ -2782,8 +2781,7 @@ object RussianWords : Words {
         override val missedCall = "Пропущенный звонок"
         override val remoteHidden = "Видео собеседника скрыто — оно не принимается и трафик на него не идёт"
         override val remoteVideoNotArriving = "Видео собеседника не приходит — он его показывает, но до вас не доходит ни кадра"
-        override fun remoteVideoNotDecoding(codec: String) = "Видео собеседника приходит в $codec, но этот телефон не может его показать"
-        override fun ownCodecUnsupported(codec: String) = "Набор стенда требует $codec, а этот телефон его не кодирует — собеседник вас не увидит"
+        override fun remoteVideoNotDecoding(codec: String) = "Не можем показать видео. Видео собеседника приходит в $codec, но этот телефон не может его показать."
         override val hideRemote = "Скрыть видео"
         override val showRemote = "Показать видео"
         override val expand = "Развернуть"
