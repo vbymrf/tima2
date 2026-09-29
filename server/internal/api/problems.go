@@ -59,6 +59,14 @@ type problemRequest struct {
 	Stream   string `json:"stream"`
 	Nickname string `json:"nickname"`
 	Log      string `json:"log"`
+	// Images — снимки к отчёту, необязательно (ПЛАН-ВИДЕО.md В6): кадр собеседника из
+	// окна 0 или фото, приложенное человеком. `data` — base64, как кладёт его JSON.
+	Images []problemImage `json:"images"`
+}
+
+type problemImage struct {
+	Mime string `json:"mime"`
+	Data []byte `json:"data"`
 }
 
 // Пределы длины. Отчёт — не место для загрузки файлов: журнал за сутки укладывается в
@@ -67,7 +75,38 @@ const (
 	maxProblemText = 4 * 1024
 	maxProblemLog  = 512 * 1024
 	maxProblemWord = 256
+
+	// Снимков — до трёх, каждый до мегабайта: клиент сжимает до ~500 КБ, запас — на
+	// снимки ПК крупного экрана. Больше — не беда отчёта: лишнее отбрасывается, отчёт
+	// принимается.
+	maxProblemImages     = 3
+	maxProblemImageBytes = 1024 * 1024
 )
+
+// acceptImages — снимки, которые берём: не больше трёх, не больше мегабайта, только
+// картинки. Негодный снимок отбрасывается молча для человека и с записью для нас:
+// жалоба важнее приложенного к ней.
+func acceptImages(in []problemImage) []store.ProblemImage {
+	var out []store.ProblemImage
+	for _, image := range in {
+		if len(out) == maxProblemImages {
+			log.Printf("problem-reports: снимков больше %d — лишние отброшены", maxProblemImages)
+			break
+		}
+		if len(image.Data) == 0 || len(image.Data) > maxProblemImageBytes {
+			log.Printf("problem-reports: снимок %d байт отброшен", len(image.Data))
+			continue
+		}
+		switch image.Mime {
+		case "image/jpeg", "image/png", "image/webp":
+		default:
+			log.Printf("problem-reports: снимок типа %q отброшен", image.Mime)
+			continue
+		}
+		out = append(out, store.ProblemImage{Mime: image.Mime, Data: image.Data})
+	}
+	return out
+}
 
 // RegisterProblems подключает приём отчётов.
 //
@@ -79,7 +118,9 @@ func RegisterProblems(mux *http.ServeMux, st ProblemStore, tokens func() *auth.I
 		// Втрое от предела журнала: он считается в рунах, а едет в байтах, и кириллица
 		// занимает по два. Без запаса длинный русский журнал упирался бы в чтение и
 		// возвращал «не разобрали тело» вместо честной обрезки.
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 3*maxProblemLog)).Decode(&req); err != nil {
+		//
+		// Снимки добавляют к пределу свой запас: base64 раздувает байты на треть.
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 3*maxProblemLog+maxProblemImages*maxProblemImageBytes*4/3+4096)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_request", "не разобрали тело запроса")
 			return
 		}
@@ -126,6 +167,7 @@ func RegisterProblems(mux *http.ServeMux, st ProblemStore, tokens func() *auth.I
 			Nickname: cut(req.Nickname, maxProblemWord),
 			Log:      cutTail(req.Log, maxProblemLog),
 			FromAddr: addr,
+			Images:   acceptImages(req.Images),
 		})
 		if err != nil {
 			log.Printf("problem-reports: запись: %v", err)
@@ -135,7 +177,7 @@ func RegisterProblems(mux *http.ServeMux, st ProblemStore, tokens func() *auth.I
 
 		// Отчёт виден в журнале сервера сразу: разбирают их обычно в тот же день, и
 		// «пришло ли вообще» — первый вопрос.
-		log.Printf("Отчёт о проблеме %s: %s, %s %s, аккаунт %q", number, req.Kind, req.Platform, req.Model, userID)
+		log.Printf("Отчёт о проблеме %s: %s, %s %s, аккаунт %q, снимков %d", number, req.Kind, req.Platform, req.Model, userID, len(req.Images))
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)

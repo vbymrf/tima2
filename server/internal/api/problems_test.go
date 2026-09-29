@@ -113,3 +113,32 @@ func TestДлинныйЖурналОбрезается(t *testing.T) {
 		t.Fatal("номер не вернулся")
 	}
 }
+
+// TestОтчётСоСнимками — снимки ложатся вместе с отчётом, негодные отбрасываются, отчёт
+// принимается (ПЛАН-ВИДЕО.md В6).
+func TestОтчётСоСнимками(t *testing.T) {
+	ts, srv := setup(t)
+
+	jpeg := []byte{0xFF, 0xD8, 0xFF, 0xE0}
+	body, err := json.Marshal(map[string]any{
+		"kind": "call", "text": "полосы на видео", "log": "—",
+		"images": []map[string]any{
+			{"mime": "image/jpeg", "data": jpeg},
+			{"mime": "application/pdf", "data": []byte{1}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, answer := отправитьОтчёт(t, ts.URL, "", string(body))
+	if status != http.StatusCreated {
+		t.Fatalf("отчёт со снимком: %d", status)
+	}
+	images, err := srv.Store.ProblemReportImages(context.Background(), answer["number"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(images) != 1 || !bytes.Equal(images[0].Data, jpeg) || images[0].Mime != "image/jpeg" {
+		t.Fatalf("снимок не лёг как прислан: %+v", images)
+	}
+}
