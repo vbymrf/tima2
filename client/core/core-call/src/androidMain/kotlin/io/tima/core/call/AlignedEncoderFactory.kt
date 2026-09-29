@@ -81,16 +81,24 @@ internal class AlignedEncoderFactory(eglContext: EglBase.Context?, way: Alignmen
         .toTypedArray()
 }
 
-/** Каждый аппаратный кодер — в [Aligned16] или [Crop16], по способу [way]. */
+/**
+ * Каждый аппаратный кодер — в [Aligned16] или [Crop16], по способу [way], а снаружи — в
+ * [Logged]: заведение и закрытие каждого кодера видны в журнале.
+ */
 private class AlignFactory(private val hardware: VideoEncoderFactory, private val way: Alignment) : VideoEncoderFactory {
-    override fun createEncoder(info: VideoCodecInfo): VideoEncoder? =
-        hardware.createEncoder(info)?.let {
-            when (way) {
-                Alignment.RequestAllLayers -> Aligned16(it, allLayers = true)
-                Alignment.RequestOneLayer -> Aligned16(it, allLayers = false)
-                Alignment.Crop -> Crop16(it)
-            }
+    override fun createEncoder(info: VideoCodecInfo): VideoEncoder? {
+        val made = hardware.createEncoder(info)
+        if (made == null) {
+            Journal.trouble(LogCode.CALL, "кодер: аппаратный не создан", "кодек" to info.name)
+            return null
         }
+        val aligned = when (way) {
+            Alignment.RequestAllLayers -> Aligned16(made, allLayers = true)
+            Alignment.RequestOneLayer -> Aligned16(made, allLayers = false)
+            Alignment.Crop -> Crop16(made)
+        }
+        return Logged(aligned, info.name)
+    }
 
     override fun getSupportedCodecs(): Array<VideoCodecInfo> = hardware.supportedCodecs
 }
@@ -181,6 +189,76 @@ private class Crop16(private val encoder: VideoEncoder) : VideoEncoder {
     override fun getResolutionBitrateLimits(): Array<VideoEncoder.ResolutionBitrateLimits> = encoder.resolutionBitrateLimits
     override fun getImplementationName(): String = encoder.implementationName
     override fun getEncoderInfo(): VideoEncoder.EncoderInfo = encoder.encoderInfo
+}
+
+/**
+ * Кодер как есть, но каждое заведение, закрытие и первая ошибка кодирования — строкой
+ * журнала (заказчик 2026-09-29, вариант 1а).
+ *
+ * ── ЗАЧЕМ ───────────────────────────────────────────────────────────────────
+ *
+ * Samsung с «Кратность 16» на H.264 застревал на 240×320: через 7 с WebRTC хотел поднять
+ * размер, старый кодер закрывался, а новый 21 с не открывался вовсе — в системном журнале
+ * ни одной попытки. Какой размер просил WebRTC и что ответил кодер, не было видно нигде:
+ * внутренний журнал WebRTC выключен. Теперь видно: `размер=` — что просил WebRTC (до
+ * обрезки), `итог=` — что ответил кодер. Закрытие без следующего заведения и есть провал.
+ *
+ * Ошибка кодирования пишется одна на заведение, иначе при 30 кадрах в секунду журнал
+ * утонул бы.
+ */
+private class Logged(private val encoder: VideoEncoder, private val codec: String) : VideoEncoder {
+    private var size = "—"
+    private var failed = false
+
+    override fun initEncode(settings: VideoEncoder.Settings, callback: VideoEncoder.Callback): VideoCodecStatus {
+        size = "${settings.width}×${settings.height}"
+        failed = false
+        val status = encoder.initEncode(settings, callback)
+        val details = arrayOf<Pair<String, Any?>>(
+            "кодек" to codec, "размер" to size, "кбит/с" to settings.startBitrate,
+            "кадров" to settings.maxFramerate, "итог" to status.name,
+        )
+        if (status == VideoCodecStatus.OK) {
+            Journal.note(LogCode.CALL, "кодер заведён", *details)
+        } else {
+            Journal.trouble(LogCode.CALL, "кодер не завёлся", *details)
+        }
+        return status
+    }
+
+    override fun release(): VideoCodecStatus {
+        val status = encoder.release()
+        Journal.note(LogCode.CALL, "кодер закрыт", "кодек" to codec, "размер" to size)
+        return status
+    }
+
+    override fun encode(frame: VideoFrame, info: VideoEncoder.EncodeInfo): VideoCodecStatus {
+        val status = encoder.encode(frame, info)
+        if (status !in QUIET && !failed) {
+            failed = true
+            Journal.trouble(
+                LogCode.CALL, "кодер: ошибка кодирования",
+                "кодек" to codec, "размер" to size,
+                "кадр" to "${frame.buffer.width}×${frame.buffer.height}", "итог" to status.name,
+            )
+        }
+        return status
+    }
+
+    override fun isHardwareEncoder(): Boolean = encoder.isHardwareEncoder
+    @Deprecated("WebRTC зовёт setRates; этот оставлен интерфейсом")
+    override fun setRateAllocation(allocation: VideoEncoder.BitrateAllocation, framerate: Int): VideoCodecStatus =
+        encoder.setRateAllocation(allocation, framerate)
+    override fun setRates(parameters: VideoEncoder.RateControlParameters): VideoCodecStatus = encoder.setRates(parameters)
+    override fun getScalingSettings(): VideoEncoder.ScalingSettings = encoder.scalingSettings
+    override fun getResolutionBitrateLimits(): Array<VideoEncoder.ResolutionBitrateLimits> = encoder.resolutionBitrateLimits
+    override fun getImplementationName(): String = encoder.implementationName
+    override fun getEncoderInfo(): VideoEncoder.EncoderInfo = encoder.encoderInfo
+
+    private companion object {
+        /** Не ошибки: кадр пропущен или поток чуть выше заказанного. */
+        val QUIET = setOf(VideoCodecStatus.OK, VideoCodecStatus.NO_OUTPUT, VideoCodecStatus.TARGET_BITRATE_OVERSHOOT)
+    }
 }
 
 /** Аппаратный с программным запасным, как у SDK. Нет одного — отдаётся другой. */
