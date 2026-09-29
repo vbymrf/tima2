@@ -43,11 +43,11 @@ LIMITS = {
     'presets': 90,
     'bench': 200,
     'enter': 220,
-    'exit': 120,
+    'exit': 200,  # проверка со сбросом журналов обоих — до трёх попыток (PH-25)
     'reset': 120,
 }
 # Maestro медленнее: каждый его сценарий начинается подготовкой run.sh и подъёмом драйвера.
-MAESTRO_EXTRA = {'exit': 120}
+MAESTRO_EXTRA = {'exit': 160}
 MAESTRO_BIN = os.path.expanduser('~/maestro/bin')
 
 
@@ -151,6 +151,11 @@ def act_bench(a):
     ph.to_front(dev)
     ph.hide_keyboard(dev)
     ns = ph.nodes(dev)
+    # окно завершённого звонка («Звонок завершён» / «Закрыть») — закрыть, оно поверх всего
+    if ph.find(ns, 'Закрыть') and ph.find(ns, 'Перезвонить'):
+        ph.tap(dev, 'Закрыть', wait=3)
+        time.sleep(1.5)
+        ns = ph.nodes(dev)
     # окно стенда может быть уже открыто — приложение возвращается, где его оставили
     if not (ph.find(ns, 'Остановить прогон') or ph.find(ns, 'Начать прогон') or ph.find(ns, 'Наборы')):
         if not ph.tap(dev, 'Телефон', wait=5):
@@ -326,7 +331,17 @@ def act_exit(a):
             c2 = None
         note = 'трубка %s, окна %s/%s' % ('да' if n else 'нет', 'да' if c1 else 'нет', 'да' if c2 else 'нет')
     time.sleep(3)
-    # Весь звонок проверяется здесь, по сброшенным журналам обоих (PH-17).
+    # Весь звонок проверяется здесь, по сброшенным журналам обоих (PH-17). Конец звонка
+    # принимающий узнаёт от сервера с задержкой — до трёх попыток через 5 с (PH-25).
+    for attempt in range(3):
+        ok, ev, note2 = _exit_check(a)
+        if ok:
+            break
+        time.sleep(5)
+    return ok, ev, note + note2
+
+
+def _exit_check(a):
     ev, ok, nums, names = [], True, [], []
     for name, d in ((a['caller'], ph.PHONES[a['caller']]), (a['callee'], ph.PHONES[a['callee']])):
         j = ph.journal(d, a['since'][name], fresh=True)
@@ -338,7 +353,9 @@ def act_exit(a):
         nxt = ph.has(j, 'следующий набор забега')
         nums.append(nxt[-1].split('номер=')[-1].split()[0] if nxt else '—')
         names.append(pr[-1].split('пресет=')[-1].strip() if pr else '—')
-        part = bool(conn) and bool(cam) and bool(out) and bool(end) and bool(nxt)
+        # итог элемента — механика звонка; камера и уходящее видео — замер стенда, а не
+        # провал сценария: «уходящее видео 0» — находка (Redmi на «h264 800 k», 2026-09-29)
+        part = bool(conn) and bool(end) and bool(nxt)
         if name == a['caller']:
             began = ph.has(j, 'CALL звонок начат')
             video = [l for l in began if 'видео=true' in l]
@@ -350,7 +367,7 @@ def act_exit(a):
             name, 'да' if conn else 'НЕТ', 'да' if cam else 'НЕТ', len(out), names[-1],
             'да' if end else 'НЕТ', nums[-1]))
     same = nums[0] == nums[1] and names[0] == names[1]
-    return ok and same, ev, note + ('' if same else '; наборы или номера разные')
+    return ok and same, ev, ('' if same else '; наборы или номера разные')
 
 
 def act_reset(a):

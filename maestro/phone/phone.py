@@ -193,10 +193,27 @@ def now(dev):
 def flush(dev):
     """Сбросить журнал приложения на диск. Журнал копит записи в памяти и пишет их при беде,
     каждые 50 записей, при уходе в фон и при отчёте (`Diary.kt`, PH-17). Уход в фон — штатный
-    способ: «Домой» и сразу обратно; звонок при этом не обрывается."""
-    sh(dev, 'input keyevent KEYCODE_HOME')
-    time.sleep(1.2)
-    to_front(dev)
+    способ: «Домой» и обратно; звонок при этом не обрывается.
+
+    Сброс **подтверждается**: в журнале должна появиться свежая «APP-BACKGROUND». Без этого
+    на Redmi сброс в «Выходе» молча не срабатывал, и проверка не видела конца звонка (PH-25)."""
+    for _ in range(3):
+        mark = now(dev)
+        sh(dev, 'input keyevent KEYCODE_HOME')
+        done = False
+        # ждём только свежую «APP-BACKGROUND» в хвосте журнала: `dumpsys window` на каждом
+        # шаге на Honor и realme стоил секунды, и сброс пары не укладывался в предел
+        for _ in range(10):
+            time.sleep(0.8)
+            tail = adb(dev, 'exec-out', 'run-as', APP, 'sh', '-c',
+                       'tail -3 files/logs/$(ls files/logs | tail -1)', limit=20)
+            if any('APP-BACKGROUND' in l and l[:19] >= mark for l in tail.splitlines()):
+                done = True
+                break
+        to_front(dev)
+        if done:
+            return True
+    return False
 
 
 def journal(dev, since, fresh=False):

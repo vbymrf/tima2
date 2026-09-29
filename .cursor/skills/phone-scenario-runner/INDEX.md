@@ -32,3 +32,6 @@
 | PH-22 | preventive | у принимающего «нет» строк, которые есть | knowledge/phone.md | да — отсечка по часам каждого |
 | PH-23 | preventive | нет плашки «Телефон» / кнопки прогона | knowledge/phone.md | да |
 | PH-24 | preventive | Maestro «Принять» не дождался | knowledge/phone.md | да |
+| PH-25 | preventive | «конец НЕТ» у принимающего, а звонок кончился | knowledge/phone.md | да — сброс с подтверждением |
+| PH-26 | preventive | сторож на паре по Wi-Fi, adb отвечает секундами | knowledge/phone.md | нет — серии по очереди |
+| PH-27 | preventive | нет плашки «Телефон» после серии | knowledge/phone.md | да |
