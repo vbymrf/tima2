@@ -265,12 +265,12 @@ class ProblemStoreTest {
     }
 
     @Test
-    fun не_картинка_говорит_словами() = runTest {
+    fun не_картинка_отмечается() = runTest {
         val store = store(backgroundScope)
         store.addPhoto(null)
-        assertEquals(RussianWords.problem.photoNotImage, store.state.value.photoTrouble)
+        assertTrue(store.state.value.photoRejected, "не картинка — экран скажет словами")
         store.addPhoto(photo(1))
-        assertEquals(null, store.state.value.photoTrouble, "следующий выбор снимает помеху")
+        assertFalse(store.state.value.photoRejected, "следующий выбор снимает помеху")
     }
 
     @Test

@@ -243,8 +243,12 @@ data class ProblemState(
     val outcome: SendOutcome? = null,
     /** Снимки к отчёту — в том порядке, в каком приложены. */
     val photos: List<ProblemPhoto> = emptyList(),
-    /** Выбранное не приложилось — почему. Снимается следующим выбором. */
-    val photoTrouble: String? = null,
+    /**
+     * Выбранное не приложилось: не картинка. Признак, а не надпись — надпись берёт экран
+     * из словаря (ПЛАН-ЯЗЫКА: хранилище глобальный словарь не читает). Снимается следующим
+     * выбором.
+     */
+    val photoRejected: Boolean = false,
 ) {
     /** Можно ли приложить ещё. */
     val morePhotos: Boolean get() = photos.size < MAX_PHOTOS && !delivered
@@ -350,9 +354,9 @@ class ProblemStore(
         val state = _state.value
         if (!state.morePhotos) return
         _state.value = if (photo == null) {
-            state.copy(photoTrouble = CurrentWords.value.problem.photoNotImage)
+            state.copy(photoRejected = true)
         } else {
-            state.copy(photos = state.photos + photo, photoTrouble = null)
+            state.copy(photos = state.photos + photo, photoRejected = false)
         }
     }
 
@@ -480,7 +484,7 @@ fun ProblemScreen(
                 Button(label = words.removePhoto, onClick = { onRemovePhoto(index) }, kind = ButtonKind.Quiet)
             }
         }
-        state.photoTrouble?.let { Alarm(it) }
+        if (state.photoRejected) Alarm(words.photoNotImage)
         if (onAddPhoto != null && state.morePhotos) {
             Button(label = words.addPhoto, onClick = onAddPhoto, kind = ButtonKind.Quiet)
         }
