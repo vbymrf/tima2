@@ -109,7 +109,16 @@ def size(dev):
     return w, h
 
 
+def hide_keyboard(dev):
+    """Спрятать клавиатуру: жест прокрутки по ней печатает буквы (2026-09-29, Redmi — в поле
+    названия набора стенда попало «by»)."""
+    if 'mInputShown=true' in sh(dev, 'dumpsys input_method | grep -m1 mInputShown'):
+        sh(dev, 'input keyevent KEYCODE_BACK')
+        time.sleep(0.8)
+
+
 def scroll_to(dev, pattern, tries=10):
+    hide_keyboard(dev)
     w, h = size(dev)
     for _ in range(tries):
         n = find(nodes(dev), pattern)
@@ -181,8 +190,20 @@ def now(dev):
     return sh(dev, 'date -u +%Y-%m-%dT%H:%M:%S').strip()
 
 
-def journal(dev, since):
-    """Строки журнала приложения, начиная с `since` (время телефона, UTC)."""
+def flush(dev):
+    """Сбросить журнал приложения на диск. Журнал копит записи в памяти и пишет их при беде,
+    каждые 50 записей, при уходе в фон и при отчёте (`Diary.kt`, PH-17). Уход в фон — штатный
+    способ: «Домой» и сразу обратно; звонок при этом не обрывается."""
+    sh(dev, 'input keyevent KEYCODE_HOME')
+    time.sleep(1.2)
+    to_front(dev)
+
+
+def journal(dev, since, fresh=False):
+    """Строки журнала приложения, начиная с `since` (время телефона, UTC).
+    `fresh` — сначала сбросить журнал на диск (иначе хвост может быть в памяти)."""
+    if fresh:
+        flush(dev)
     names = adb(dev, 'exec-out', 'run-as', APP, 'ls', 'files/logs', limit=20).split()
     names = sorted(n for n in names if n.endswith('.txt'))[-2:]
     lines = []
@@ -197,10 +218,10 @@ def has(lines, *parts):
 
 
 def in_call(dev):
-    """Идёт ли звонок — по последнему событию начала и конца в журнале."""
+    """Идёт ли звонок — по последнему событию начала и конца в журнале (сброшенном)."""
     since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M:%S')
     last = None
-    for l in journal(dev, since):
+    for l in journal(dev, since, fresh=True):
         if 'CALL звонок начат' in l or 'CALL входящий звонок' in l:
             last = 'start'
         elif 'CALL звонок закончен' in l or 'CALL звонок кончился' in l:

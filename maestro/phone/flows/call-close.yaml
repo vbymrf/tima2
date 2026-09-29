@@ -1,6 +1,9 @@
 # Закрыть окно звонка у того, кто трубку не клал.
 appId: io.tima.app.v2
 ---
+# подготовка run.sh оставляет рабочий стол (PH-16) — вернуть приложение с окном звонка
+- launchApp:
+    stopApp: false
 - extendedWaitUntil:
     visible: "Закрыть"
     timeout: 15000

@@ -1,17 +1,29 @@
-# Элемент «Вход» звонящего, способ Maestro: «Контакты» → строка собеседника → «📹».
+# Элемент «Вход» звонящего, способ Maestro: «Контакты» → поиск по имени → «📹».
 # Трубка в шапке переписки — голосовой звонок (PH-1), поэтому через «Контакты».
+#
+# Поиск, а не `rightOf: <имя>`: `rightOf` берёт любую кнопку правее имени без учёта строки,
+# и 2026-09-29 Honor трижды позвонил первой строке списка вместо realme (PH-19). После
+# поиска в списке одна строка — и одна кнопка «📹».
 appId: io.tima.app.v2
-env:
-  PEER: "redmi, @test_redmi"
+# Значения — MAESTRO_QUERY (что набрать в поиске) и MAESTRO_PEER (строка собеседника,
+# регулярное выражение); задаёт scenario.py. Своих умолчаний в `env:` нет (PH-15).
 ---
 - launchApp:
     stopApp: false
 - tapOn:
     id: "tab:Contacts"
-- scrollUntilVisible:
-    element: "${PEER}"
-    direction: DOWN
-    timeout: 15000
+# прежний запрос — стереть: он общий у «Чатов» и «Контактов»
+- tapOn:
+    text: "✕"
+    optional: true
+- tapOn: "🔍"
+- inputText: "${MAESTRO_QUERY}"
+- extendedWaitUntil:
+    visible:
+      id: "book:video-call"
+    timeout: 10000
+- assertVisible:
+    text: "${MAESTRO_PEER}"
+    below: "Вид"
 - tapOn:
     id: "book:video-call"
-    rightOf: "${PEER}"

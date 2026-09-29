@@ -2,19 +2,38 @@
 # на экране «Прогон EXPECT». Потом — назад в главное окно: «Назад» из стенда закрывает
 # приложение (PH-3), поэтому сразу launchApp.
 appId: io.tima.app.v2
-env:
-  PRESET: "T h264 500 off"
-  EXPECT: "Прогон 1 из 16"
+# Значения — переменными окружения MAESTRO_<ИМЯ> (их задаёт scenario.py). Своих умолчаний
+# в `env:` нет: блок `env:` задаёт переменную заново и перекрывает переданное (PH-15).
 ---
 - launchApp:
     stopApp: false
-- tapOn: "Телефон"
-# На Redmi список окон длиннее экрана — «Стенд звонков» ниже края (2026-09-29).
-- scrollUntilVisible:
-    element: "Стенд звонков"
-    direction: DOWN
-    timeout: 10000
-- tapOn: "Стенд звонков"
+# Окно стенда может быть уже открыто (приложение возвращается туда, где его оставили) —
+# тогда плашки «Телефон» нет, и идти через переключатель не нужно.
+- runFlow:
+    when:
+      visible: "Телефон"
+    commands:
+      - tapOn: "Телефон"
+      # На Redmi список окон длиннее экрана — «Стенд звонков» ниже края (PH-12).
+      - scrollUntilVisible:
+          element: "Стенд звонков"
+          direction: DOWN
+          timeout: 10000
+      - tapOn: "Стенд звонков"
+# Клавиатуру от прошлого раза прячет scenario.py до запуска (adb, PH-20): hideKeyboard
+# Maestro на Redmi открывал шторку уведомлений (PH-21).
+# окно стенда помнит прокрутку — кнопка вооружения вверху может быть за краем.
+# Жест — из середины: scrollUntilVisible вверх начинает от края и на Redmi тянет шторку
+# уведомлений (PH-21).
+- repeat:
+    times: 8
+    while:
+      notVisible: "(Начать|Остановить) прогон"
+    commands:
+      - swipe:
+          start: 50%, 35%
+          end: 50%, 85%
+          duration: 300
 - runFlow:
     when:
       visible: "Начать прогон"
@@ -25,14 +44,14 @@ env:
 # (ниже неё). Первое совпадение — поле, нажатие в него открывает клавиатуру (2026-09-29).
 - scrollUntilVisible:
     element:
-      text: "${PRESET}"
+      text: "${MAESTRO_PRESET}"
       below: 'Прогон \d+ из \d+'
     direction: DOWN
     timeout: 20000
 - tapOn:
-    text: "${PRESET}"
+    text: "${MAESTRO_PRESET}"
     below: 'Прогон \d+ из \d+'
-- assertVisible: "${EXPECT}"
+- assertVisible: "${MAESTRO_EXPECT}"
 - takeScreenshot: "bench-selected"
 - back
 - launchApp:

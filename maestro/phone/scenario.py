@@ -42,10 +42,12 @@ LIMITS = {
     'ready': 90,
     'presets': 90,
     'bench': 200,
-    'enter': 150,
+    'enter': 220,
     'exit': 120,
     'reset': 120,
 }
+# Maestro медленнее: каждый его сценарий начинается подготовкой run.sh и подъёмом драйвера.
+MAESTRO_EXTRA = {'exit': 120}
 MAESTRO_BIN = os.path.expanduser('~/maestro/bin')
 
 
@@ -96,16 +98,18 @@ def act_ready(a):
     notes = []
     ph.wake(dev)
     drivers = ph.maestro_drivers(dev)
-    if drivers:
+    if drivers and a['method'] == 'adb':
         ph.stop_drivers(dev)
-        notes.append('остановлен драйвер Maestro, порты %s' % ','.join(p for _, p in drivers))
+        notes.append('выгружен драйвер Maestro (мешает дереву экрана), порты %s' % ','.join(p for _, p in drivers))
     if a['method'] == 'maestro':
+        # Драйвер Maestro не выгружается между шагами — «тёплый» запуск втрое быстрее
+        # (МОДЕЛИ.md). Дерево экрана через adb при живом драйвере не читается (PH-6),
+        # поэтому проверка здесь — сценарием (assert `tab:Chats`) и без дерева.
         ok, tail = maestro('ready.yaml', a['dev'])
         notes.append('maestro: ' + ('прошёл' if ok else 'упал: ' + tail))
-        left = ph.maestro_drivers(dev)
-        if left:
-            ph.stop_drivers(dev)
-            notes.append('после прогона драйвер остался — остановлен')
+        ev = [ph.focus(dev)]
+        good = ok and ph.awake(dev) and ph.APP in ev[0] and not ph.in_call(dev)
+        return good, ev + ['главное окно: %s (сценарий)' % ('да' if ok else 'нет')], '; '.join(notes)
     else:
         ph.to_front(dev)
         ns = ph.nodes(dev)
@@ -137,22 +141,32 @@ def act_presets(a):
 
 def act_bench(a):
     dev = ph.PHONES[a['dev']]
-    ph.stop_drivers(dev)
     if a['method'] == 'maestro':
+        ph.hide_keyboard(dev)  # не дерево экрана — тёплому драйверу не мешает
+        ph.sh(dev, 'cmd statusbar collapse')
+        # сценарий сам проверяет «Остановить прогон», EXPECT и `tab:Chats`; драйвер тёплый
         ok, tail = maestro('bench.yaml', a['dev'], {'PRESET': a['preset'], 'EXPECT': a['expect']}, limit=140)
-        ph.stop_drivers(dev)
-        chats = ph.find(ph.nodes(dev), rid='tab:Chats') is not None
-        return ok and chats, ['maestro: ' + ('прошёл' if ok else 'упал'), 'главное окно: %s' % chats], tail if not ok else ''
+        return ok, ['maestro: ' + ('прошёл' if ok else 'упал')], tail if not ok else ''
+    ph.stop_drivers(dev)
     ph.to_front(dev)
-    if not ph.tap(dev, 'Телефон', wait=5):
-        return False, ['нет плашки «Телефон»'], ''
-    time.sleep(1)
-    # на Redmi список окон длиннее экрана — «Стенд звонков» ниже края
-    item = ph.scroll_to(dev, 'Стенд звонков', tries=4)
-    if not item:
-        return False, ['нет «Стенд звонков» в переключателе'], ''
-    ph.tap_node(dev, item)
-    time.sleep(2)
+    ph.hide_keyboard(dev)
+    ns = ph.nodes(dev)
+    # окно стенда может быть уже открыто — приложение возвращается, где его оставили
+    if not (ph.find(ns, 'Остановить прогон') or ph.find(ns, 'Начать прогон') or ph.find(ns, 'Наборы')):
+        if not ph.tap(dev, 'Телефон', wait=5):
+            return False, ['нет плашки «Телефон»'], ''
+        time.sleep(1)
+        # на Redmi список окон длиннее экрана — «Стенд звонков» ниже края (PH-12)
+        item = ph.scroll_to(dev, 'Стенд звонков', tries=4)
+        if not item:
+            return False, ['нет «Стенд звонков» в переключателе'], ''
+        ph.tap_node(dev, item)
+        time.sleep(2)
+    else:
+        # к началу окна — там кнопка вооружения
+        w, h = ph.size(dev)
+        for _ in range(6):
+            ph.sh(dev, 'input swipe %d %d %d %d 200' % (w // 2, int(h * 0.3), w // 2, int(h * 0.85)))
     ns = ph.nodes(dev)
     if ph.find(ns, 'Начать прогон'):
         ph.tap(dev, 'Начать прогон', wait=2)
@@ -182,18 +196,22 @@ def _accept_adb(dev, box):
 
 
 def _accept_maestro(name, box):
-    ok, tail = maestro('call-accept.yaml', name, limit=110)
+    ok, tail = maestro('call-accept.yaml', name, limit=190)
     box['accept'] = 'maestro прошёл' if ok else 'maestro упал: ' + tail
 
 
 def act_enter(a):
     """Вход в звонок: принимающий ждёт «Принять», звонящий нажимает «📹» у собеседника.
-    Одно действие с развилкой по роли."""
+    Одно действие с развилкой по роли. Проверка здесь — по экрану (окно звонка открыто у
+    того, чей экран читается): журнал ещё в памяти (PH-17). Журналом «Вход» проверяется в
+    «Выходе», после сброса журналов."""
     caller, callee = ph.PHONES[a['caller']], ph.PHONES[a['callee']]
-    t0 = ph.now(caller)
+    # отсечка — по часам каждого телефона: часы Redmi отстают от Samsung на ~10 с (PH-22)
+    t0, t0e = ph.now(caller), ph.now(callee)
     box = {}
-    for d in (caller, callee):
-        ph.stop_drivers(d)
+    if a['method'] == 'adb':
+        for d in (caller, callee):
+            ph.stop_drivers(d)
     if a['method'] == 'maestro':
         t = threading.Thread(target=_accept_maestro, args=(a['callee'], box))
     else:
@@ -201,30 +219,51 @@ def act_enter(a):
     t.start()
     time.sleep(12 if a['method'] == 'maestro' else 2)  # драйверу принимающего — подняться
     if a['method'] == 'maestro':
-        ok, tail = maestro('call-start.yaml', a['caller'], {'PEER': a['peer']}, limit=100)
+        query = a.get('query') or a['peer'].split(',')[0]
+        ok, tail = maestro('call-start.yaml', a['caller'], {'PEER': a['peer'], 'QUERY': query}, limit=100)
         started = 'maestro прошёл' if ok else 'maestro упал: ' + tail
     else:
         started = _start_adb(caller, a['peer'])
-    t.join(timeout=100)
-    for d in (caller, callee):
-        ph.stop_drivers(d)
-    # «соединён» пишется не сразу после «Принять» (PH-18) — ждём до 20 с
-    for _ in range(10):
-        jc, je = ph.journal(caller, t0), ph.journal(callee, t0)
-        if ph.has(jc, 'стадия звонка  стала=Connected') and ph.has(je, 'стадия звонка  стала=Connected'):
-            break
-        time.sleep(2)
-    began = ph.has(jc, 'CALL звонок начат', 'видео=true')
+    # Страховка PH-10: адресат сверяется сразу после набора, а не в «Выходе». Звонок не
+    # тому кладётся немедленно — 2026-09-29 Maestro трижды позвонил чужому номеру (PH-19).
     if a.get('peer_id'):
-        wrong = [l for l in ph.has(jc, 'CALL звонок начат') if 'кому=' + a['peer_id'] not in l]
+        for _ in range(3):
+            began = ph.has(ph.journal(caller, t0, fresh=True), 'CALL звонок начат')
+            if began:
+                break
+            time.sleep(2)
+        wrong = [l for l in began if 'кому=' + a['peer_id'] not in l]
         if wrong:
-            return False, [l[:140] for l in wrong], 'звонок ушёл НЕ тому собеседнику'
-    voice = ph.has(jc, 'CALL звонок начат', 'видео=false')
-    conn_c = ph.has(jc, 'стадия звонка  стала=Connected')
-    conn_e = ph.has(je, 'стадия звонка  стала=Connected')
-    ok = bool(began) and not voice and bool(conn_c) and bool(conn_e)
-    ev = (began or voice or ['звонящий: звонок не начат'])[:1] + (conn_e or ['принимающий: не соединён'])[:1]
-    return ok, [l[:140] for l in ev], 'звонящий: %s; принимающий: %s' % (started, box.get('accept', 'нет ответа'))
+            ph.hang_up(caller)
+            box['stop'] = True
+            return False, [l[:140] for l in wrong], 'звонок ушёл НЕ тому собеседнику — положен сразу'
+    t.join(timeout=190)
+    if a['method'] == 'maestro':
+        # дерево экрана при тёплом драйвере не читается — «соединён» по журналам обоих
+        ok = False
+        for _ in range(4):
+            jc = ph.journal(caller, t0, fresh=True)
+            je = ph.journal(callee, t0e, fresh=True)
+            cc, ce = ph.has(jc, 'стадия звонка  стала=Connected'), ph.has(je, 'стадия звонка  стала=Connected')
+            if cc and ce:
+                ok = True
+                break
+            time.sleep(4)
+        ev = ['соединён: звонящий %s, принимающий %s' % ('да' if cc else 'НЕТ', 'да' if ce else 'НЕТ')]
+        return ok, ev, 'звонящий: %s; принимающий: %s' % (started, box.get('accept', 'нет ответа'))
+    # окно звонка — у того, чей экран читается во время видео (Honor — нет, PH-4)
+    watch = a['callee'] if a['caller'] == 'honor' else a['caller']
+    seen = False
+    for _ in range(10):
+        try:
+            if ph.call_screen(ph.nodes(ph.PHONES[watch])):
+                seen = True
+                break
+        except Exception:
+            pass
+        time.sleep(2)
+    ev = ['окно звонка у %s: %s' % (watch, 'открыто' if seen else 'НЕТ')]
+    return seen, ev, 'звонящий: %s; принимающий: %s' % (started, box.get('accept', 'нет ответа'))
 
 
 def _start_adb(dev, peer):
@@ -246,29 +285,17 @@ def _start_adb(dev, peer):
 
 
 def act_hold(a):
-    """Разговор держится `hold` с; снимки обоих на середине. Проверка — у обоих камера
-    включена, видео уходит, и оба на одном наборе."""
-    caller, callee = ph.PHONES[a['caller']], ph.PHONES[a['callee']]
-    t0 = a['since']
+    """Разговор держится `hold` с; снимки обоих на середине. Проверка по журналу — в «Выходе»."""
     time.sleep(a['hold'] / 2)
-    for name, d in ((a['caller'], caller), (a['callee'], callee)):
+    shots = []
+    for name in (a['caller'], a['callee']):
         try:
-            ph.shot(d, os.path.join(a['out'], '%02d-%s.png' % (a['no'], name)))
+            ph.shot(ph.PHONES[name], os.path.join(a['out'], '%02d-%s.png' % (a['no'], name)))
+            shots.append(name)
         except Exception:
             pass
     time.sleep(a['hold'] / 2)
-    ev, ok = [], True
-    names = []
-    for name, d in ((a['caller'], caller), (a['callee'], callee)):
-        j = ph.journal(d, t0)
-        cam = ph.has(j, 'своя камера  включена=true')
-        out = ph.has(j, 'уходящее видео')
-        pr = ph.has(j, 'прогон стенда начат')
-        names.append(pr[-1].split('пресет=')[-1].strip() if pr else '—')
-        ok = ok and bool(cam) and bool(out)
-        ev.append('%s: камера %s, строк «уходящее видео» %d, набор %s' % (name, 'да' if cam else 'НЕТ', len(out), names[-1]))
-    same = names[0] == names[1] and names[0] != '—'
-    return ok and same, ev, '' if same else 'наборы разные: %s / %s' % tuple(names)
+    return True, ['снимки: %s' % (', '.join(shots) or 'нет')], ''
 
 
 def act_exit(a):
@@ -277,19 +304,19 @@ def act_exit(a):
     hanger = a['caller'] if a['hang'] == 'caller' else a['callee']
     other = a['callee'] if hanger == a['caller'] else a['caller']
     hd, od = ph.PHONES[hanger], ph.PHONES[other]
-    t0 = a['since']
     note = ''
     if a['method'] == 'maestro':
         box = {}
-        th = threading.Thread(target=lambda: box.setdefault('o', maestro('call-close.yaml', other, limit=90)))
-        ok1, tail = maestro('call-hangup.yaml', hanger, limit=90)
+        # оба сценария — одновременно: каждый с подготовкой run.sh идёт около минуты
+        th = threading.Thread(target=lambda: box.setdefault('o', maestro('call-close.yaml', other, limit=150)))
         th.start()
-        th.join(timeout=95)
+        ok1, tail = maestro('call-hangup.yaml', hanger, limit=150)
+        th.join(timeout=155)
         note = 'maestro: трубка %s, окно у второго %s' % ('да' if ok1 else 'нет: ' + tail,
                                                         'да' if box.get('o', (False,))[0] else 'нет')
+    else:
         for d in (hd, od):
             ph.stop_drivers(d)
-    else:
         n = ph.hang_up(hd)  # только в окне звонка (PH-10)
         time.sleep(2)
         c1 = ph.tap(hd, 'Закрыть', wait=8)
@@ -299,15 +326,31 @@ def act_exit(a):
             c2 = None
         note = 'трубка %s, окна %s/%s' % ('да' if n else 'нет', 'да' if c1 else 'нет', 'да' if c2 else 'нет')
     time.sleep(3)
-    ev, ok, nums = [], True, []
-    for name, d in ((hanger, hd), (other, od)):
-        j = ph.journal(d, t0)
+    # Весь звонок проверяется здесь, по сброшенным журналам обоих (PH-17).
+    ev, ok, nums, names = [], True, [], []
+    for name, d in ((a['caller'], ph.PHONES[a['caller']]), (a['callee'], ph.PHONES[a['callee']])):
+        j = ph.journal(d, a['since'][name], fresh=True)
+        conn = ph.has(j, 'стадия звонка  стала=Connected')
+        cam = ph.has(j, 'своя камера  включена=true')
+        out = ph.has(j, 'уходящее видео')
+        pr = ph.has(j, 'прогон стенда начат')
         end = ph.has(j, 'CALL звонок закончен') + ph.has(j, 'CALL звонок кончился')
         nxt = ph.has(j, 'следующий набор забега')
         nums.append(nxt[-1].split('номер=')[-1].split()[0] if nxt else '—')
-        ok = ok and bool(end) and bool(nxt)
-        ev.append('%s: %s; следующий набор %s' % (name, (end[-1][24:90] if end else 'звонок НЕ закончен'), nums[-1]))
-    return ok and nums[0] == nums[1], ev, note
+        names.append(pr[-1].split('пресет=')[-1].strip() if pr else '—')
+        part = bool(conn) and bool(cam) and bool(out) and bool(end) and bool(nxt)
+        if name == a['caller']:
+            began = ph.has(j, 'CALL звонок начат')
+            video = [l for l in began if 'видео=true' in l]
+            right = [l for l in began if not a.get('peer_id') or 'кому=' + a['peer_id'] in l]
+            part = part and len(began) == 1 and bool(video) and len(right) == len(began)
+            ev.append('%s: начат %s' % (name, began[-1][24:95] if began else 'НЕТ'))
+        ok = ok and part
+        ev.append('%s: соединён %s, камера %s, «уходящее видео» %d, набор %s, конец %s, следующий %s' % (
+            name, 'да' if conn else 'НЕТ', 'да' if cam else 'НЕТ', len(out), names[-1],
+            'да' if end else 'НЕТ', nums[-1]))
+    same = nums[0] == nums[1] and names[0] == names[1]
+    return ok and same, ev, note + ('' if same else '; наборы или номера разные')
 
 
 def act_reset(a):
@@ -353,6 +396,8 @@ def run(name, args, report, limit=None, devs=()):
     """Элемент отдельным процессом под сторожем. Превышен предел — процесс со всеми
     дочерними (adb, maestro, sh) останавливается, и итог — «превышено время»."""
     limit = limit or LIMITS.get(name, 120)
+    if args.get('method') == 'maestro':
+        limit += MAESTRO_EXTRA.get(name, 0)
     start = dt.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
     t = time.time()
     p = subprocess.Popen([sys.executable, '-X', 'utf8', __file__, '_act', name, json.dumps(args, ensure_ascii=False)],
@@ -381,9 +426,9 @@ def reset(devs, report):
 def call(a, report, no):
     """Один звонок: Вход → Разговор → Выход. Не достигнут элемент — сброс."""
     pair = (a['caller'], a['callee'])
-    base = dict(caller=a['caller'], callee=a['callee'], peer=a['peer'], peer_id=a.get('peer_id'), hang=a['hang'], method=a['method'],
+    base = dict(caller=a['caller'], callee=a['callee'], peer=a['peer'], peer_id=a.get('peer_id'), query=a.get('query'), hang=a['hang'], method=a['method'],
                 out=report.out, no=no)
-    since = ph.now(ph.PHONES[a['caller']])
+    since = {n: ph.now(ph.PHONES[n]) for n in pair}
     # прошлый звонок не кончился — не набирать (PH-7)
     if any(ph.in_call(ph.PHONES[n]) for n in pair) and not reset(pair, report):
         return False
@@ -419,6 +464,7 @@ def main():
     ap.add_argument('--callee')
     ap.add_argument('--peer')
     ap.add_argument('--peer-id', dest='peer_id')
+    ap.add_argument('--query')
     ap.add_argument('--hang', default='caller', choices=['caller', 'callee'])
     ap.add_argument('--hold', type=int, default=60)
     ap.add_argument('--calls', type=int, default=1)

@@ -2,6 +2,9 @@
 # «Завершить» на экране — значок трубки без подписи (PH-2).
 appId: io.tima.app.v2
 ---
+# подготовка run.sh оставляет рабочий стол (PH-16) — вернуть приложение с окном звонка
+- launchApp:
+    stopApp: false
 - tapOn: "📞"
 - extendedWaitUntil:
     visible: "Закрыть"

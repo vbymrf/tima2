@@ -13,10 +13,10 @@
 | PH-3 | preventive | «доставлен», а звонка на телефоне нет | knowledge/phone.md | да — `am start` после «Назад» |
 | PH-4 | preventive | «could not get idle state» на Honor | knowledge/phone.md | роли в паре — в вызове |
 | PH-5 | curative | «Видеозвонок» в меню не нажимается | knowledge/phone.md | да — нулевые рамки не нажимаются |
-| PH-6 | preventive | «already registered», дамп не снимается | knowledge/phone.md | свой драйвер — да; чужой — спросить |
+| PH-6 | preventive | «already registered», дамп не снимается | knowledge/phone.md | да — драйвер выгружается перед деревом экрана |
 | PH-7 | preventive | «занят другим звонком», висит первый звонок | knowledge/phone.md | да — сброс перед «Входом» |
 | PH-8 | preventive | запуск приложения | knowledge/phone.md | да |
-| PH-9 | preventive | драйвер Maestro остался после прогона | knowledge/phone.md | да |
+| PH-9 | preventive | драйвер Maestro остался — не выгружать между шагами Maestro | knowledge/phone.md | да |
 | PH-10 | preventive | звонок ушёл чужому контакту | knowledge/phone.md | да + `--peer-id` |
 | PH-11 | preventive | клавиатура вместо выбора набора | knowledge/phone.md | да |
 | PH-12 | preventive | нет «Стенд звонков» в переключателе | knowledge/phone.md | да |
@@ -24,5 +24,11 @@
 | PH-14 | preventive | «Parsing Failed» сценария Maestro | knowledge/phone.md | да |
 | PH-15 | preventive | переменная сценария Maestro | knowledge/phone.md | да |
 | PH-16 | preventive | сценарий Maestro стартует на рабочем столе | knowledge/phone.md | да |
-| PH-17 | curative | журнал приложения не растёт | knowledge/phone.md | нет — стоп и заказчику |
-| PH-18 | preventive | «Вход» не достигнут, хотя соединились | knowledge/phone.md | да — ожидание до 20 с |
+| PH-17 | preventive | журнал не растёт — пишется пачками | knowledge/phone.md | да — `journal(fresh=True)` |
+| PH-18 | preventive | «Вход» не достигнут, хотя соединились | knowledge/phone.md | да |
+| PH-19 | preventive | звонок ушёл чужому (Maestro `rightOf`) | knowledge/phone.md | да — поиск + страховка «кому=» |
+| PH-20 | preventive | прокрутка печатает буквы | knowledge/phone.md | да |
+| PH-21 | preventive | на снимке шторка уведомлений | knowledge/phone.md | да |
+| PH-22 | preventive | у принимающего «нет» строк, которые есть | knowledge/phone.md | да — отсечка по часам каждого |
+| PH-23 | preventive | нет плашки «Телефон» / кнопки прогона | knowledge/phone.md | да |
+| PH-24 | preventive | Maestro «Принять» не дождался | knowledge/phone.md | да |
