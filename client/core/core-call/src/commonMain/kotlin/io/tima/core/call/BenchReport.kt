@@ -52,6 +52,16 @@ fun benchReport(
     row("Dynacast", yesNo(preset.video.dynacast))
     row("Adaptive Stream", yesNo(preset.video.adaptiveStream))
     row("Кратность 16 у аппаратного кодера", yesNo(preset.video.align16))
+    preset.video.alignment?.let { way ->
+        row(
+            "Как выравнивать",
+            when (way) {
+                Alignment.RequestAllLayers -> "заявка на все слои"
+                Alignment.RequestOneLayer -> "заявка на один слой"
+                Alignment.Crop -> "обрезка кодером по центру"
+            },
+        )
+    }
     row("RED", yesNo(preset.audio.red))
     row("DTX", yesNo(preset.audio.dtx))
     row("Стерео", yesNo(preset.audio.stereo))

@@ -54,6 +54,7 @@ class PresetFileTest {
                 dynacast = false,
                 adaptiveStream = false,
                 align16 = true,
+                alignCrop = true,
             ),
             audio = AudioPreset(red = false, dtx = false, bitrate = 32_000, stereo = true),
         )

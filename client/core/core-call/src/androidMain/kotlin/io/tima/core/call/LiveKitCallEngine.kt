@@ -357,12 +357,20 @@ class LiveKitCallEngine(
      */
     private fun overridesFor(publish: PublishPreset?): LiveKitOverrides {
         val egl = sharedEgl()
-        val align16 = publish?.video?.align16 == true
-        if (align16) Journal.note(LogCode.CALL, "кодер: заявлена кратность 16", "набор" to publish?.name)
+        val align = publish?.video?.alignment
+        when (align) {
+            null -> Unit
+            Alignment.Crop -> Journal.note(LogCode.CALL, "кодер: кратность 16 обрезкой по центру", "набор" to publish?.name)
+            else -> Journal.note(
+                LogCode.CALL, "кодер: заявлена кратность 16",
+                "слои" to if (align == Alignment.RequestOneLayer) "один" else "все",
+                "набор" to publish?.name,
+            )
+        }
         val handler = soundHandler()
         sound = handler
         return LiveKitOverrides(
-            videoEncoderFactory = SwitchableEncoderFactory.of(egl.eglBaseContext, align16) { coding.encode },
+            videoEncoderFactory = SwitchableEncoderFactory.of(egl.eglBaseContext, align) { coding.encode },
             videoDecoderFactory = SwitchableDecoderFactory(egl.eglBaseContext) { coding.decode },
             audioOptions = AudioOptions(audioHandler = handler),
             eglBase = egl,

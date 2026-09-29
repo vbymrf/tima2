@@ -38,18 +38,39 @@ private const val FIELDS = 17
 /** Метка строки, у которой перед прежними полями стоят новые. */
 private const val V2 = "v2"
 
-/** Новые поля: пока одно — кратность 16 ([VideoPreset.align16]). */
-fun PublishPreset.toWire(): String =
-    listOf(V2, if (video.align16) "1" else "0", legacyWire()).joinToString(SEPARATOR)
+/**
+ * Новые поля: пока одно — кратность 16 ([VideoPreset.align16]). `0` или `1`, за ним —
+ * буквы способа: `c` — обрезка ([VideoPreset.alignCrop]), `s` — только один слой
+ * ([VideoPreset.alignSingle]). Строка с одной цифрой — прежняя, способ у неё — заявка на
+ * все слои.
+ */
+fun PublishPreset.toWire(): String {
+    val align = (if (video.align16) "1" else "0") +
+        (if (video.alignCrop) CROP else "") +
+        (if (video.alignSingle) SINGLE else "")
+    return listOf(V2, align, legacyWire()).joinToString(SEPARATOR)
+}
+
+private const val CROP = "c"
+private const val SINGLE = "s"
 
 fun presetFromWire(wire: String): PublishPreset? {
     val marked = V2 + SEPARATOR
     if (!wire.startsWith(marked)) return legacyFromWire(wire)
     val rest = wire.removePrefix(marked)
     val align = rest.substringBefore(SEPARATOR, missingDelimiterValue = "")
-    if (align != "0" && align != "1") return null
+    val on = align.firstOrNull()
+    val way = align.drop(1)
+    if (on != '0' && on != '1') return null
+    if (way.any { it.toString() != CROP && it.toString() != SINGLE }) return null
     val preset = legacyFromWire(rest.substringAfter(SEPARATOR)) ?: return null
-    return preset.copy(video = preset.video.copy(align16 = align == "1"))
+    return preset.copy(
+        video = preset.video.copy(
+            align16 = on == '1',
+            alignCrop = CROP in way,
+            alignSingle = SINGLE in way,
+        ),
+    )
 }
 
 /** Прежние 17 полей и имя. */

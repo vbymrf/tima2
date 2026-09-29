@@ -102,11 +102,14 @@ internal class SwitchableEncoderFactory(
     override fun getSupportedCodecs(): Array<VideoCodecInfo> = inner.supportedCodecs
 
     companion object {
-        /** Связка кодеров комнаты: с кратностью 16 или та, что строит SDK. */
-        fun of(egl: EglBase.Context, align16: Boolean, hardware: () -> Boolean): SwitchableEncoderFactory =
+        /** Связка кодеров комнаты: с кратностью 16 ([align] — каким способом) или та, что строит SDK. */
+        fun of(egl: EglBase.Context, align: Alignment?, hardware: () -> Boolean): SwitchableEncoderFactory =
             SwitchableEncoderFactory(
                 // Флаги — как у SDK: Intel VP8 — да, H.264 High — нет, программный — по нам.
-                { if (align16) AlignedEncoderFactory(egl) else CustomVideoEncoderFactory(egl, true, false, false, emptyList()) },
+                {
+                    if (align != null) AlignedEncoderFactory(egl, align)
+                    else CustomVideoEncoderFactory(egl, true, false, false, emptyList())
+                },
                 hardware,
             )
     }

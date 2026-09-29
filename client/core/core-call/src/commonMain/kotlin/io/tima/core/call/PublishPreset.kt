@@ -127,9 +127,83 @@ data class VideoPreset(
      *
      * Пока — настройка прогона: сравнить с ней и без неё. По умолчанию выключена, чтобы
      * прежние наборы мерили то же, что мерили.
+     *
+     * Как именно выравнивать — [alignCrop] и [alignSingle]; без них — заявка на все слои.
      */
     val align16: Boolean = false,
-)
+    /**
+     * «Обрезка кодером» (заказчик 2026-09-29): кратность 16 без заявки — наша обёртка
+     * обрезает кадр по центру до кратного 16 перед аппаратным кодером, а WebRTC о
+     * кратности не знает.
+     *
+     * Зачем: с заявкой Samsung (Exynos) при `balanced` раз за разом пересоздавал кодер, и
+     * отправка проваливалась. Заявку WebRTC сверяет на каждом кадре, а пока адаптер LiveKit
+     * пересоздаёт кодер, её нет, — перенастраивать нечего, если заявки нет вовсе.
+     * Действует только при [align16]; с [alignSingle] не совмещается — обрезка берёт верх.
+     */
+    val alignCrop: Boolean = false,
+    /**
+     * «Только один слой» (заказчик 2026-09-29): заявка 16, как у Google, — без
+     * распространения на все слои simulcast. Заявка «на все слои» ломает simulcast: WebRTC
+     * ради кратности сводит масштабы слоёв к единице. Действует только при [align16].
+     */
+    val alignSingle: Boolean = false,
+) {
+    /** Как выравнивать кадр для аппаратного кодера; `null` — никак. */
+    val alignment: Alignment?
+        get() = when {
+            !align16 -> null
+            alignCrop -> Alignment.Crop
+            alignSingle -> Alignment.RequestOneLayer
+            else -> Alignment.RequestAllLayers
+        }
+}
+
+/** Способ кратности 16 у аппаратного кодера ([VideoPreset.align16]). */
+enum class Alignment {
+    /** Заявка кратности на все слои — так было с 2026-09-29. */
+    RequestAllLayers,
+
+    /** Заявка кратности только на один поток, как в WebRTC Google. */
+    RequestOneLayer,
+
+    /** Без заявки: обрезка кадра по центру до кратного 16 перед кодером. */
+    Crop,
+}
+
+/**
+ * Обрезка по центру до кратного 16 ([Alignment.Crop]).
+ *
+ * [width]×[height] — размер, под который WebRTC заводит кодер. Кодер заводится под
+ * [alignedWidth]×[alignedHeight], а из кадра вырезается середина: поровну слева и справа,
+ * сверху и снизу. Смещения чётные — у кадра I420 цвет хранится по два пикселя.
+ */
+data class CenterCrop(val width: Int, val height: Int) {
+    val alignedWidth: Int = down16(width)
+    val alignedHeight: Int = down16(height)
+
+    /** Обрезать нечего — размер уже кратен. */
+    val none: Boolean get() = alignedWidth == width && alignedHeight == height
+
+    /**
+     * Что вырезать из кадра [frameWidth]×[frameHeight]: `x, y, ширина, высота`. Кадр обычно
+     * того же размера, под который заведён кодер; другой — вырезается та же доля.
+     */
+    fun region(frameWidth: Int, frameHeight: Int): List<Int> {
+        val w = (frameWidth.toLong() * alignedWidth / width).toInt().coerceIn(1, frameWidth)
+        val h = (frameHeight.toLong() * alignedHeight / height).toInt().coerceIn(1, frameHeight)
+        val x = ((frameWidth - w) / 2) and 1.inv()
+        val y = ((frameHeight - h) / 2) and 1.inv()
+        return listOf(x, y, w, h)
+    }
+
+    private companion object {
+        const val STEP = 16
+
+        /** Вниз до кратного 16; меньше 16 не трогается — меньше некуда. */
+        fun down16(side: Int): Int = if (side < STEP) side else side - side % STEP
+    }
+}
 
 /** Кодеки забега. AV1 в наборе нет — решение заказчика, а не отсутствие в SDK. */
 enum class VideoCodec(val wire: String) {

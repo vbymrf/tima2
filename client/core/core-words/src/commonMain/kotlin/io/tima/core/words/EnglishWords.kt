@@ -338,6 +338,8 @@ object EnglishWords : Words {
         override val asWebrtc = "let WebRTC decide"
         override val dynacast = "Dynacast"
         override val align16 = "Multiple of 16 for the hardware encoder"
+        override val alignCrop = "Crop in the encoder"
+        override val alignSingle = "One layer only"
         override val adaptiveStream = "Adaptive Stream"
 
         override val sound = "Audio"

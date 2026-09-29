@@ -173,6 +173,16 @@ private fun Publishing(preset: PublishPreset, onChange: (PublishPreset) -> Unit)
         Switch(words.dynacast, video.dynacast) { on -> video { copy(dynacast = on) } }
         Switch(words.adaptiveStream, video.adaptiveStream) { on -> video { copy(adaptiveStream = on) } }
         Switch(words.align16, video.align16) { on -> video { copy(align16 = on) } }
+        // Два способа под «Кратность» (заказчик 2026-09-29). Взаимоисключающие: обрезка —
+        // это кратность без заявки, а «один слой» — вид заявки. Ни одного — заявка на все слои.
+        if (video.align16) {
+            Switch(words.alignCrop, video.alignCrop) { on ->
+                video { copy(alignCrop = on, alignSingle = alignSingle && !on) }
+            }
+            Switch(words.alignSingle, video.alignSingle) { on ->
+                video { copy(alignSingle = on, alignCrop = alignCrop && !on) }
+            }
+        }
 
         Sound(preset.audio) { onChange(preset.copy(audio = it)) }
     }

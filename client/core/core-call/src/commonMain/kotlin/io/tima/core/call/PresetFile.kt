@@ -65,6 +65,10 @@ private data class PresetJson(
     val adaptive: Boolean = true,
     /** Аппаратный кодер заявляет кратность 16 ([VideoPreset.align16]). */
     val align16: Boolean = false,
+    /** Кратность — обрезкой по центру ([VideoPreset.alignCrop]). */
+    val alignCrop: Boolean = false,
+    /** Кратность — заявкой только на один слой ([VideoPreset.alignSingle]). */
+    val alignSingle: Boolean = false,
     val red: Boolean = true,
     val dtx: Boolean = true,
     val stereo: Boolean = false,
@@ -98,6 +102,8 @@ fun presetsFromJson(text: String): List<PublishPreset> = runCatching {
                     dynacast = row.dynacast,
                     adaptiveStream = row.adaptive,
                     align16 = row.align16,
+                    alignCrop = row.alignCrop,
+                    alignSingle = row.alignSingle,
                 ),
                 audio = AudioPreset(
                     red = row.red,
@@ -132,6 +138,8 @@ fun presetsToJson(presets: List<PublishPreset>): String = json.encodeToString(
                 dynacast = preset.video.dynacast,
                 adaptive = preset.video.adaptiveStream,
                 align16 = preset.video.align16,
+                alignCrop = preset.video.alignCrop,
+                alignSingle = preset.video.alignSingle,
                 red = preset.audio.red,
                 dtx = preset.audio.dtx,
                 stereo = preset.audio.stereo,

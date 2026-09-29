@@ -110,5 +110,28 @@ class PresetWireTest {
     fun метка_с_непонятной_кратностью_отвергается() {
         assertNull(presetFromWire("v2|да|" + PublishPreset(name = "x").toWire().substringAfter("v2|0|")))
         assertNull(presetFromWire("v2|1"))
+        assertNull(presetFromWire("v2|1x|" + PublishPreset(name = "x").toWire().substringAfter("v2|0|")))
+    }
+
+    @Test
+    fun способ_кратности_переживает_запись() {
+        // Галочки под «Кратность» (заказчик 2026-09-29): потеряйся способ — прогон с
+        // «Обрезка кодером» молча пошёл бы заявкой и мерил бы не то.
+        for (способ in listOf(
+            VideoPreset(align16 = true, alignCrop = true),
+            VideoPreset(align16 = true, alignSingle = true),
+            VideoPreset(align16 = true),
+        )) {
+            val был = PublishPreset(name = "h264 960 4 к", video = способ)
+            assertEquals(был, presetFromWire(был.toWire()))
+        }
+    }
+
+    @Test
+    fun строка_с_кратностью_без_способа_это_заявка_на_все_слои() {
+        // Так лежат наборы, запомненные до галочек.
+        val прежняя = PublishPreset(name = "к", video = VideoPreset(align16 = true)).toWire()
+
+        assertEquals(Alignment.RequestAllLayers, presetFromWire(прежняя)?.video?.alignment)
     }
 }

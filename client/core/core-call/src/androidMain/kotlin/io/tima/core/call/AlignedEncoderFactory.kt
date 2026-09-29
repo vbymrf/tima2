@@ -1,5 +1,7 @@
 package io.tima.core.call
 
+import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
 import livekit.org.webrtc.EglBase
 import livekit.org.webrtc.HardwareVideoEncoderFactory
 import livekit.org.webrtc.SimulcastVideoEncoderFactory
@@ -38,8 +40,15 @@ import java.util.concurrent.Executors
  * Обёртка стоит **над аппаратным кодером, а не над готовой связкой**: связка отдаёт
  * WebRTC родной объект (`createNative`), и его заявку WebRTC берёт из родного кода, мимо
  * Java. Аппаратный кодер — Java-объект, и его `getEncoderInfo` WebRTC спрашивает.
+ *
+ * ── ТРИ СПОСОБА ─────────────────────────────────────────────────────────────
+ *
+ * `way` — галочки стенда под «Кратность» (заказчик 2026-09-29):
+ * - заявка на все слои — [Aligned16] с распространением на слои, так было первым;
+ * - «Только один слой» — [Aligned16] без распространения, как в WebRTC Google;
+ * - «Обрезка кодером» — [Crop16]: заявки нет, кадр обрезается по центру перед кодером.
  */
-internal class AlignedEncoderFactory(eglContext: EglBase.Context?) : VideoEncoderFactory {
+internal class AlignedEncoderFactory(eglContext: EglBase.Context?, way: Alignment) : VideoEncoderFactory {
 
     // ── ВСЁ — ЛЕНИВО, ПРИ ПЕРВОМ ОБРАЩЕНИИ WEBRTC ─────────────────────────────
     //
@@ -52,7 +61,7 @@ internal class AlignedEncoderFactory(eglContext: EglBase.Context?) : VideoEncode
     // Те же флаги, что у SDK: Intel VP8 — да, H.264 High — нет.
     private val combined by lazy {
         val primary: VideoEncoderFactory =
-            OwnThreadFactory(Aligned16Factory(HardwareVideoEncoderFactory(eglContext, true, false)))
+            OwnThreadFactory(AlignFactory(HardwareVideoEncoderFactory(eglContext, true, false), way))
         val fallback: VideoEncoderFactory = OwnThreadFactory(FallbackFactory(primary))
         SimulcastVideoEncoderFactory(primary, fallback)
     }
@@ -72,21 +81,28 @@ internal class AlignedEncoderFactory(eglContext: EglBase.Context?) : VideoEncode
         .toTypedArray()
 }
 
-/** Каждый аппаратный кодер — в [Aligned16]. */
-private class Aligned16Factory(private val hardware: VideoEncoderFactory) : VideoEncoderFactory {
+/** Каждый аппаратный кодер — в [Aligned16] или [Crop16], по способу [way]. */
+private class AlignFactory(private val hardware: VideoEncoderFactory, private val way: Alignment) : VideoEncoderFactory {
     override fun createEncoder(info: VideoCodecInfo): VideoEncoder? =
-        hardware.createEncoder(info)?.let { Aligned16(it) }
+        hardware.createEncoder(info)?.let {
+            when (way) {
+                Alignment.RequestAllLayers -> Aligned16(it, allLayers = true)
+                Alignment.RequestOneLayer -> Aligned16(it, allLayers = false)
+                Alignment.Crop -> Crop16(it)
+            }
+        }
 
     override fun getSupportedCodecs(): Array<VideoCodecInfo> = hardware.supportedCodecs
 }
 
 /**
- * Аппаратный кодер как есть, но с заявкой кратности 16 на всех слоях.
+ * Аппаратный кодер как есть, но с заявкой кратности 16: на всех слоях ([allLayers]) или,
+ * как в WebRTC Google, только на один поток.
  *
  * `createNative` не передаётся: вернув родной объект, мы отдали бы WebRTC его заявку, а
  * не нашу. Аппаратный кодер родного объекта и не имеет.
  */
-private class Aligned16(private val encoder: VideoEncoder) : VideoEncoder {
+private class Aligned16(private val encoder: VideoEncoder, private val allLayers: Boolean) : VideoEncoder {
     override fun isHardwareEncoder(): Boolean = encoder.isHardwareEncoder
     override fun initEncode(settings: VideoEncoder.Settings, callback: VideoEncoder.Callback): VideoCodecStatus =
         encoder.initEncode(settings, callback)
@@ -99,11 +115,72 @@ private class Aligned16(private val encoder: VideoEncoder) : VideoEncoder {
     override fun getScalingSettings(): VideoEncoder.ScalingSettings = encoder.scalingSettings
     override fun getResolutionBitrateLimits(): Array<VideoEncoder.ResolutionBitrateLimits> = encoder.resolutionBitrateLimits
     override fun getImplementationName(): String = encoder.implementationName
-    override fun getEncoderInfo(): VideoEncoder.EncoderInfo = VideoEncoder.EncoderInfo(ALIGNMENT, true)
+    override fun getEncoderInfo(): VideoEncoder.EncoderInfo = VideoEncoder.EncoderInfo(ALIGNMENT, allLayers)
 
     private companion object {
         const val ALIGNMENT = 16
     }
+}
+
+/**
+ * Аппаратный кодер, которому кадр обрезают по центру до кратного 16 («Обрезка кодером»,
+ * заказчик 2026-09-29). WebRTC о кратности не знает: заявка остаётся той, что у кодера
+ * (2), и перенастраивать кодер из-за неё нечего.
+ *
+ * WebRTC заводит кодер под свой размер, например 270×480. Кодер заводится под кратный —
+ * 256×480, — а из каждого кадра вырезается середина этого размера: 6 точек слева и 8
+ * справа (смещение чётное). Кадр другого размера кодер принял бы за смену размера и перезапустился
+ * бы, поэтому обрезается каждый кадр, а не только первый.
+ *
+ * Стоит под [OwnThread]: тот уже довёл кадр до размера, под который WebRTC завёл кодер.
+ */
+private class Crop16(private val encoder: VideoEncoder) : VideoEncoder {
+    private var crop: CenterCrop? = null
+
+    override fun initEncode(settings: VideoEncoder.Settings, callback: VideoEncoder.Callback): VideoCodecStatus {
+        val next = CenterCrop(settings.width, settings.height)
+        if (next != crop && !next.none) {
+            Journal.note(
+                LogCode.CALL, "кодер: обрезка до кратного 16",
+                "было" to "${next.width}×${next.height}", "стало" to "${next.alignedWidth}×${next.alignedHeight}",
+            )
+        }
+        crop = next
+        val aligned = if (next.none) settings else VideoEncoder.Settings(
+            settings.numberOfCores, next.alignedWidth, next.alignedHeight, settings.startBitrate,
+            settings.maxFramerate, settings.numberOfSimulcastStreams, settings.automaticResizeOn,
+            settings.capabilities,
+        )
+        return encoder.initEncode(aligned, callback)
+    }
+
+    override fun encode(frame: VideoFrame, info: VideoEncoder.EncodeInfo): VideoCodecStatus {
+        val wanted = crop
+        val source = frame.buffer
+        if (wanted == null || wanted.none ||
+            (source.width == wanted.alignedWidth && source.height == wanted.alignedHeight)
+        ) {
+            return encoder.encode(frame, info)
+        }
+        val (x, y, w, h) = wanted.region(source.width, source.height)
+        val cut = source.cropAndScale(x, y, w, h, wanted.alignedWidth, wanted.alignedHeight)
+        return try {
+            encoder.encode(VideoFrame(cut, frame.rotation, frame.timestampNs), info)
+        } finally {
+            cut.release()
+        }
+    }
+
+    override fun release(): VideoCodecStatus = encoder.release()
+    override fun isHardwareEncoder(): Boolean = encoder.isHardwareEncoder
+    @Deprecated("WebRTC зовёт setRates; этот оставлен интерфейсом")
+    override fun setRateAllocation(allocation: VideoEncoder.BitrateAllocation, framerate: Int): VideoCodecStatus =
+        encoder.setRateAllocation(allocation, framerate)
+    override fun setRates(parameters: VideoEncoder.RateControlParameters): VideoCodecStatus = encoder.setRates(parameters)
+    override fun getScalingSettings(): VideoEncoder.ScalingSettings = encoder.scalingSettings
+    override fun getResolutionBitrateLimits(): Array<VideoEncoder.ResolutionBitrateLimits> = encoder.resolutionBitrateLimits
+    override fun getImplementationName(): String = encoder.implementationName
+    override fun getEncoderInfo(): VideoEncoder.EncoderInfo = encoder.encoderInfo
 }
 
 /** Аппаратный с программным запасным, как у SDK. Нет одного — отдаётся другой. */
