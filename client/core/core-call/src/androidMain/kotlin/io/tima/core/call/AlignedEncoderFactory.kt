@@ -41,11 +41,21 @@ import java.util.concurrent.Executors
  */
 internal class AlignedEncoderFactory(eglContext: EglBase.Context?) : VideoEncoderFactory {
 
+    // ── ВСЁ — ЛЕНИВО, ПРИ ПЕРВОМ ОБРАЩЕНИИ WEBRTC ─────────────────────────────
+    //
+    // Фабрика создаётся ДО комнаты, а библиотека WebRTC грузится при создании комнаты.
+    // Программный кодер WebRTC зовёт свой код в библиотеке уже в конструкторе, и созданный
+    // здесь он ронял приложение: `UnsatisfiedLinkError … nativeCreateFactory` на Samsung
+    // 2026-09-29, у звонящего и у принимающего. Первым к фабрике обращается сама WebRTC —
+    // значит, библиотека к этому моменту уже загружена.
+    //
     // Те же флаги, что у SDK: Intel VP8 — да, H.264 High — нет.
-    private val primary: VideoEncoderFactory =
-        OwnThreadFactory(Aligned16Factory(HardwareVideoEncoderFactory(eglContext, true, false)))
-    private val fallback: VideoEncoderFactory = OwnThreadFactory(FallbackFactory(primary))
-    private val combined = SimulcastVideoEncoderFactory(primary, fallback)
+    private val combined by lazy {
+        val primary: VideoEncoderFactory =
+            OwnThreadFactory(Aligned16Factory(HardwareVideoEncoderFactory(eglContext, true, false)))
+        val fallback: VideoEncoderFactory = OwnThreadFactory(FallbackFactory(primary))
+        SimulcastVideoEncoderFactory(primary, fallback)
+    }
 
     override fun createEncoder(info: VideoCodecInfo): VideoEncoder? = combined.createEncoder(info)
 
@@ -96,7 +106,8 @@ private class Aligned16(private val encoder: VideoEncoder) : VideoEncoder {
 
 /** Аппаратный с программным запасным, как у SDK. Нет одного — отдаётся другой. */
 private class FallbackFactory(private val hardware: VideoEncoderFactory) : VideoEncoderFactory {
-    private val software = SoftwareVideoEncoderFactory()
+    // Лениво — см. [AlignedEncoderFactory]: конструктор зовёт библиотеку WebRTC.
+    private val software by lazy { SoftwareVideoEncoderFactory() }
 
     override fun createEncoder(info: VideoCodecInfo): VideoEncoder? {
         val soft = software.createEncoder(info)

@@ -84,10 +84,17 @@ internal object PhoneCoders {
  * ([AlignedEncoderFactory]). Выключено — программный кодер WebRTC.
  */
 internal class SwitchableEncoderFactory(
-    private val inner: VideoEncoderFactory,
+    makeInner: () -> VideoEncoderFactory,
     private val hardware: () -> Boolean,
 ) : VideoEncoderFactory {
-    private val software = SoftwareVideoEncoderFactory()
+    // ── ВСЁ — ЛЕНИВО ────────────────────────────────────────────────────────
+    //
+    // Фабрика создаётся до комнаты, а библиотека WebRTC грузится при её создании.
+    // Программные фабрики WebRTC зовут библиотеку уже в конструкторе — созданные здесь,
+    // они роняют приложение (`UnsatisfiedLinkError`, Samsung 2026-09-29). Первым к фабрике
+    // обращается сама WebRTC, и библиотека к тому времени загружена.
+    private val inner by lazy(makeInner)
+    private val software by lazy { SoftwareVideoEncoderFactory() }
 
     override fun createEncoder(info: VideoCodecInfo): VideoEncoder? =
         if (hardware()) inner.createEncoder(info) else software.createEncoder(info)
@@ -99,7 +106,7 @@ internal class SwitchableEncoderFactory(
         fun of(egl: EglBase.Context, align16: Boolean, hardware: () -> Boolean): SwitchableEncoderFactory =
             SwitchableEncoderFactory(
                 // Флаги — как у SDK: Intel VP8 — да, H.264 High — нет, программный — по нам.
-                if (align16) AlignedEncoderFactory(egl) else CustomVideoEncoderFactory(egl, true, false, false, emptyList()),
+                { if (align16) AlignedEncoderFactory(egl) else CustomVideoEncoderFactory(egl, true, false, false, emptyList()) },
                 hardware,
             )
     }
@@ -119,9 +126,10 @@ internal class SwitchableDecoderFactory(
     egl: EglBase.Context,
     private val hardware: () -> Boolean,
 ) : VideoDecoderFactory {
-    private val wrapped = WrappedVideoDecoderFactory(egl)
-    private val software = SoftwareVideoDecoderFactory()
-    private val system = PlatformSoftwareVideoDecoderFactory(egl)
+    // Лениво — по той же причине, что у [SwitchableEncoderFactory].
+    private val wrapped by lazy { WrappedVideoDecoderFactory(egl) }
+    private val software by lazy { SoftwareVideoDecoderFactory() }
+    private val system by lazy { PlatformSoftwareVideoDecoderFactory(egl) }
 
     override fun createDecoder(info: VideoCodecInfo): VideoDecoder? =
         if (hardware()) wrapped.createDecoder(info) else software.createDecoder(info) ?: system.createDecoder(info)
