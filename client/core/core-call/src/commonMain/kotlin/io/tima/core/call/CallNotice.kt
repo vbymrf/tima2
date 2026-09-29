@@ -24,7 +24,17 @@ package io.tima.core.call
  * него человек, ушедший в другое приложение, не знает, идёт ли ещё разговор, и вернуться
  * в него может только найдя TIMA среди прочих.
  */
-expect fun callOngoing(title: String, text: String)
+expect fun callOngoing(title: String, text: String, hangUpLabel: String = "", connectedAt: Long = 0L)
+
+/**
+ * Что делать, когда трубку кладут **из шторки** — кнопкой «Завершить» уведомления
+ * (ПЛАН-ВИДЕО.md В11). Ставит тот, кто ведёт звонок (`CallHost`): служба звонка живёт в
+ * `core-call` и сигналинга не знает, а положить трубку — это и сервер, и комната.
+ */
+object CallNoticeActions {
+    @kotlin.concurrent.Volatile
+    var hangUp: (() -> Unit)? = null
+}
 
 /** Убрать. Зовётся, когда звонка больше нет: висящее уведомление хуже отсутствующего. */
 expect fun callOngoingOff()

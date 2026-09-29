@@ -20,6 +20,7 @@ import io.tima.core.call.askCallAccess
 import io.tima.core.call.callOngoing
 import io.tima.core.call.callOngoingOff
 import io.tima.core.call.callProximity
+import io.tima.core.call.CallNoticeActions
 import io.tima.core.call.SoundRoute
 import io.tima.core.call.openCallSettings
 import io.tima.core.diag.Journal
@@ -185,6 +186,8 @@ class CallHost(
     private val busy: Boolean get() = active && state.stage != CallStage.Ended
 
     init {
+        // «Завершить» из шторки — тем же путём, что кнопка окна 0 (ПЛАН-ВИДЕО.md В11).
+        CallNoticeActions.hangUp = { hangUp() }
         engine?.let { live ->
             scope.launch {
                 live.state.collectLatest { fresh ->
@@ -440,8 +443,8 @@ class CallHost(
      * Android 12 из фона её не поднять, и законное окно для этого даст лишь
      * высокоприоритетный push, которого у нас пока нет.
      */
-    private fun told() {
-        callOngoing(words().call.activeCall, peer.ifBlank { words().chat.nameless })
+    private fun told(connectedAt: Long = 0L) {
+        callOngoing(words().call.activeCall, peer.ifBlank { words().chat.nameless }, words().call.hangUp, connectedAt)
     }
 
     /** Тот ли это звонок, который у нас идёт. Чужой конец нашего разговора не касается. */
@@ -831,6 +834,8 @@ class CallHost(
     private fun startTicking() {
         if (ticking) return
         ticking = true
+        // Ответили — в шторке пошёл счётчик разговора (ПЛАН-ВИДЕО.md В11).
+        if (active) told(connectedAt = msNow())
         scope.launch {
             while (isActive && ticking) {
                 delay(1000)

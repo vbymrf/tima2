@@ -23,7 +23,7 @@ object AndroidCallNotice {
         app = context.applicationContext
     }
 
-    fun on(title: String, text: String) {
+    fun on(title: String, text: String, hangUpLabel: String = "", connectedAt: Long = 0L) {
         val context = app ?: run {
             Journal.trouble(LogCode.CALL, "службу звонка не поднять — приложение не представилось")
             return
@@ -31,6 +31,8 @@ object AndroidCallNotice {
         val intent = Intent(context, CallService::class.java)
             .putExtra(CallService.TITLE, title)
             .putExtra(CallService.TEXT, text)
+            .putExtra(CallService.HANG_UP_LABEL, hangUpLabel)
+            .putExtra(CallService.CONNECTED_AT, connectedAt)
         // ── ЗАПУСК МОЖЕТ БЫТЬ ЗАПРЕЩЁН, И ЭТО НЕ ПОЛОМКА ────────────────────
         //
         // С Android 12 службу переднего плана **нельзя поднять из фона**. Сегодня мы
@@ -121,7 +123,8 @@ object AndroidCallNotice {
     }
 }
 
-actual fun callOngoing(title: String, text: String) = AndroidCallNotice.on(title, text)
+actual fun callOngoing(title: String, text: String, hangUpLabel: String, connectedAt: Long) =
+    AndroidCallNotice.on(title, text, hangUpLabel, connectedAt)
 
 actual fun callOngoingOff() = AndroidCallNotice.off()
 

@@ -43,6 +43,13 @@ class CallService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Погасить — после того как подняли: команда пришла в очередь следом за запуском
         // (см. `AndroidCallNotice.off`).
+        // «Завершить» из шторки (ПЛАН-ВИДЕО.md В11): трубку кладёт тот, кто ведёт звонок, —
+        // сервер и комната; служба погаснет сама, когда звонок кончится.
+        if (intent?.action == HANG_UP) {
+            Journal.note(LogCode.CALL, "трубку положили из шторки")
+            CallNoticeActions.hangUp?.invoke()
+            return START_NOT_STICKY
+        }
         if (intent?.action == STOP) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -55,7 +62,9 @@ class CallService : Service() {
         }
         val title = intent?.getStringExtra(TITLE).orEmpty()
         val text = intent?.getStringExtra(TEXT).orEmpty()
-        runCatching { raise(NOTICE_ID, notice(title, text)) }
+        val hangUpLabel = intent?.getStringExtra(HANG_UP_LABEL).orEmpty()
+        val connectedAt = intent?.getLongExtra(CONNECTED_AT, 0L) ?: 0L
+        runCatching { raise(NOTICE_ID, notice(title, text, hangUpLabel, connectedAt)) }
             .onFailure {
                 // Служба не поднялась — значит микрофон в фоне мы не удержим. Сам звонок
                 // при этом идёт, и обрывать его незачем; но в журнале это обязано
@@ -87,7 +96,7 @@ class CallService : Service() {
         }
     }
 
-    private fun notice(title: String, text: String): Notification {
+    private fun notice(title: String, text: String, hangUpLabel: String, connectedAt: Long): Notification {
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && manager?.getNotificationChannel(CHANNEL) == null) {
             manager?.createNotificationChannel(
@@ -116,7 +125,7 @@ class CallService : Service() {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
         }
-        return builder
+        builder
             .setContentTitle(title)
             .setContentText(text)
             // Значок берётся у приложения: своего у core-call нет и заводить его ради
@@ -126,12 +135,50 @@ class CallService : Service() {
             // Смахнуть нельзя: убранное уведомление означало бы, что звонок идёт, а следа
             // его в системе нет.
             .setOngoing(true)
-            .build()
+            .setCategory(Notification.CATEGORY_CALL)
+
+        // ── «АКТИВНЫЙ ЗВОНОК» ЗЕЛЁНЫМ ПУЗЫРЁМ (ПЛАН-ВИДЕО.md В11) ───────────────
+        //
+        // Android 12 и новее — системный вид звонка: зелёный пузырь со временем в строке
+        // состояния, пока человек в другом приложении, и «Завершить» в шторке. Вид пузыря
+        // у каждой оболочки свой. Старше — такого вида нет: зелёный цвет (где оболочка
+        // красит) и кнопка «Завершить» обычным действием.
+        val hangUp = PendingIntent.getService(
+            this,
+            HANG_UP_REQUEST,
+            Intent(this, CallService::class.java).setAction(HANG_UP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val person = android.app.Person.Builder().setName(text.ifBlank { title }).setImportant(true).build()
+            builder.setStyle(Notification.CallStyle.forOngoingCall(person, hangUp))
+        } else {
+            builder.setColor(CALL_GREEN)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) builder.setColorized(true)
+            builder.addAction(Notification.Action.Builder(null, hangUpLabel.ifBlank { title }, hangUp).build())
+        }
+        // Счётчик времени разговора — с ответа, а не с набора.
+        if (connectedAt > 0L) builder.setWhen(connectedAt).setShowWhen(true).setUsesChronometer(true)
+        Journal.note(
+            LogCode.CALL, "уведомление звонка",
+            "вид" to if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) "системный звонок" else "зелёное",
+            "счётчик" to (connectedAt > 0L),
+        )
+        return builder.build()
     }
 
     internal companion object {
         const val TITLE = "title"
         const val TEXT = "text"
+        const val HANG_UP_LABEL = "hangUpLabel"
+        const val CONNECTED_AT = "connectedAt"
+
+        /** Команда «положить трубку» — из шторки. */
+        const val HANG_UP = "io.tima.core.call.HANG_UP"
+        private const val HANG_UP_REQUEST = 4204
+
+        /** Зелёный звонка — тот, что у звонилок. */
+        private const val CALL_GREEN = 0xFF1E8E3E.toInt()
 
         /** Команда «погасить». Латиницей: это имя действия, которое видит система. */
         const val STOP = "io.tima.core.call.STOP"
