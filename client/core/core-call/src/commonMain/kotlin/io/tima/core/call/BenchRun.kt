@@ -82,6 +82,11 @@ data class BenchSummary(
     val upQpAverage: Double? = null,
     val downFpsAverage: Double? = null,
     val downQpAverage: Double? = null,
+    /** Раскодировщик приходящего видео и его беды за прогон (ПЛАН-ВИДЕО.md В1). */
+    val downDecoder: String? = null,
+    val downFreezes: Long? = null,
+    val downDropped: Long? = null,
+    val downDecodeMs: Double? = null,
 )
 
 /**
@@ -158,6 +163,10 @@ fun summarize(preset: PublishPreset, samples: List<BenchSample>): BenchSummary {
         upQpAverage = samples.mapNotNull { it.stats?.upQp }.averagePercent(),
         downFpsAverage = samples.mapNotNull { it.stats?.downFps }.averagePercent(),
         downQpAverage = samples.mapNotNull { it.stats?.downQp }.averagePercent(),
+        downDecoder = samples.lastNotNullOf { it.stats?.downDecoder },
+        downFreezes = samples.lastNotNullOf { it.stats?.downFreezes },
+        downDropped = samples.lastNotNullOf { it.stats?.downDropped },
+        downDecodeMs = samples.lastNotNullOf { it.stats?.downDecodeMs },
     )
 }
 

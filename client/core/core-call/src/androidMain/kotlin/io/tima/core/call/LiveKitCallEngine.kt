@@ -746,6 +746,10 @@ class LiveKitCallEngine(
         var downFrame: Pair<Int, String>? = null
         val upVideo = mutableListOf<FrameCounts>()
         val downVideo = mutableListOf<FrameCounts>()
+        var decoder: String? = null
+        var freezes: Long? = null
+        var dropped: Long? = null
+        var decodeMs: Double? = null
 
         val ours = live.localParticipant.trackPublications.values
             .mapNotNull { it.track as? io.livekit.android.room.track.Track }
@@ -795,6 +799,13 @@ class LiveKitCallEngine(
                                 qpSum = (entry.members["qpSum"] as? Number)?.toDouble(),
                                 frames = (entry.members["framesDecoded"] as? Number)?.toLong(),
                             )
+                            // Раскодировщик и его беды (ПЛАН-ВИДЕО.md В1).
+                            decoder = entry.members["decoderImplementation"]?.toString() ?: decoder
+                            freezes = (entry.members["freezeCount"] as? Number)?.toLong() ?: freezes
+                            dropped = (entry.members["framesDropped"] as? Number)?.toLong() ?: dropped
+                            val decoded = (entry.members["framesDecoded"] as? Number)?.toLong()
+                            val spent = (entry.members["totalDecodeTime"] as? Number)?.toDouble()
+                            if (decoded != null && decoded > 0 && spent != null) decodeMs = spent * 1000 / decoded
                         }
                     }
 
@@ -835,6 +846,10 @@ class LiveKitCallEngine(
             upQp = qpSince(upVideo.maxByOrNull { it.width }),
             downFps = downVideo.maxByOrNull { it.width }?.fps,
             downQp = qpSince(downVideo.maxByOrNull { it.width }),
+            downDecoder = decoder,
+            downFreezes = freezes,
+            downDropped = dropped,
+            downDecodeMs = decodeMs,
         )
     }
 

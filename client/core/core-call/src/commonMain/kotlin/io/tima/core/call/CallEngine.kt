@@ -275,4 +275,13 @@ data class CallStats(
      */
     val upQp: Double? = null,
     val downQp: Double? = null,
+    /**
+     * Чем раскодируется приходящее видео, сколько раз оно замирало, сколько кадров
+     * выброшено и сколько в среднем занимает раскодирование кадра (ПЛАН-ВИДЕО.md В1).
+     * Счётчики — накопленные за звонок, как их отдаёт WebRTC.
+     */
+    val downDecoder: String? = null,
+    val downFreezes: Long? = null,
+    val downDropped: Long? = null,
+    val downDecodeMs: Double? = null,
 )
