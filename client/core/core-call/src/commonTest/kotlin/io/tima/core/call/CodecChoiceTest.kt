@@ -8,8 +8,8 @@ import kotlin.test.assertTrue
 
 class CodecChoiceTest {
 
-    /** Honor 8S: аппаратный H.264 WebRTC не берёт, H.265 нет, VP9 — программный. */
-    private val honor = setOf(VideoCodec.VP9)
+    /** Honor 8S: аппаратный H.264 WebRTC не берёт, H.265 нет, VP8 и VP9 — программные. */
+    private val honor = setOf(VideoCodec.VP8, VideoCodec.VP9)
 
     @Test
     fun умеемый_кодек_пресета_остаётся() {
@@ -20,9 +20,10 @@ class CodecChoiceTest {
     }
 
     @Test
-    fun honor_вместо_h264_публикует_vp9_а_не_молчаливый_vp8() {
+    fun honor_вместо_h264_публикует_и_объявляет_vp8() {
+        // С 2026-09-29 база — H.264, дальше VP8 (ПЛАН-ВИДЕО.md В3): VP9 в переборе нет.
         val choice = CodecChoice.pick(VideoCodec.H264, VideoCodec.H264, honor)
-        assertEquals(VideoCodec.VP9, choice.chosen)
+        assertEquals(VideoCodec.VP8, choice.chosen)
         assertTrue(choice.substituted)
         assertNull(choice.backup, "неумеемый запасной сломал бы вторую дорожку")
     }
@@ -35,8 +36,8 @@ class CodecChoiceTest {
 
     @Test
     fun запасной_совпавший_с_основным_снимается() {
-        val choice = CodecChoice.pick(VideoCodec.H265, VideoCodec.VP9, honor)
-        assertEquals(VideoCodec.VP9, choice.chosen)
+        val choice = CodecChoice.pick(VideoCodec.H265, VideoCodec.VP8, honor)
+        assertEquals(VideoCodec.VP8, choice.chosen)
         assertNull(choice.backup)
     }
 
@@ -57,12 +58,19 @@ class CodecChoiceTest {
     }
 
     @Test
-    fun vp8_последняя_страховка() {
+    fun vp8_последняя_страховка_vp9_и_h265_в_переборе_нет() {
         assertEquals(VideoCodec.VP8, CodecChoice.pick(VideoCodec.H264, null, setOf(VideoCodec.VP8)).chosen)
+        // VP9 у Redmi раскодируется с полосами, H.265 не показывает ПК (2026-09-29).
         assertEquals(
-            VideoCodec.VP9,
-            CodecChoice.pick(VideoCodec.H264, null, setOf(VideoCodec.VP8, VideoCodec.VP9)).chosen,
+            VideoCodec.VP8,
+            CodecChoice.pick(VideoCodec.H264, null, setOf(VideoCodec.VP8, VideoCodec.VP9, VideoCodec.H265)).chosen,
         )
+    }
+
+    @Test
+    fun просимый_vp9_остаётся_если_умеем() {
+        // Стенд вне прогона может попросить VP9 — просимый стоит первым в переборе.
+        assertEquals(VideoCodec.VP9, CodecChoice.pick(VideoCodec.VP9, null, honor).chosen)
     }
 
     @Test

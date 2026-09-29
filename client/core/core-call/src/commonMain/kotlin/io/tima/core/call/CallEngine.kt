@@ -95,12 +95,15 @@ interface CallEngine {
  *   от развёртывания, и зашивать его в клиент значит ломать при переезде.
  * @param token доступ в комнату, подписан ключом LiveKit на бэкенде; клиент секрета не
  *   знает и знать не должен.
+ * @param video потолок видео от сервера (ПЛАН-ВИДЕО.md В5б). `null` — сервер его не прислал
+ *   (старее этого поля), и звонок берёт умолчание приложения — те же числа.
  */
 data class CallDoor(
     val callId: String,
     val room: String,
     val url: String,
     val token: String,
+    val video: VideoCeiling? = null,
 )
 
 /**

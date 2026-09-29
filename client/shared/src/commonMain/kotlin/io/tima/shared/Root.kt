@@ -1041,11 +1041,14 @@ private fun App(
         // Прогон — звонок при нажатой «Начать прогон» (`armed`), и кодек пресета в нём не
         // заменяется (заказчик 2026-09-25). Без неё звонок обычный, даже при включённом
         // испытательном режиме, — кодек по умению телефона.
+        //
+        // Испытательный режим выключен — набора нет вовсе: обычный звонок, H.264 или VP8,
+        // потолок от сервера (ПЛАН-ВИДЕО.md В3, В5б). Стенд при этом не меняется.
         CallHost(
             network.calls,
             callEngine,
             scope,
-            preset = { bench.state.value.let { it.preset.copy(exact = it.armed) } },
+            preset = { bench.state.value.let { if (it.on) it.preset.copy(exact = it.armed) else null } },
         )
     }
 

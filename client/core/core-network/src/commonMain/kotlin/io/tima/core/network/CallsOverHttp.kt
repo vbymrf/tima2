@@ -14,6 +14,8 @@ import io.tima.core.call.CallStep
 import io.tima.core.call.CallUpdate
 import io.tima.core.call.CallUpdates
 import io.tima.core.call.Calls
+import io.tima.core.call.VideoCeiling
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 
@@ -201,6 +203,20 @@ class CallsOverHttp(
         if (room.isEmpty() || url.isEmpty() || access.isEmpty() || callId.isEmpty()) {
             return CallStep.Refused("ответ без двери")
         }
-        return CallStep.Door(CallDoor(callId = callId, room = room, url = url, token = access))
+        return CallStep.Door(CallDoor(callId = callId, room = room, url = url, token = access, video = ceilingOf(body)))
+    }
+
+    /**
+     * Потолок видео от сервера (ПЛАН-ВИДЕО.md В5б). Нет поля или оно неполное — `null`, и
+     * звонок берёт умолчание приложения: половина потолка хуже умолчания целиком.
+     */
+    private fun ceilingOf(body: JsonObject?): VideoCeiling? {
+        val video = body?.get("video") as? JsonObject ?: return null
+        return VideoCeiling(
+            width = video.int("width")?.takeIf { it > 0 } ?: return null,
+            height = video.int("height")?.takeIf { it > 0 } ?: return null,
+            fps = video.int("fps")?.takeIf { it > 0 } ?: return null,
+            bitrate = video.int("bitrate")?.takeIf { it > 0 } ?: return null,
+        )
     }
 }

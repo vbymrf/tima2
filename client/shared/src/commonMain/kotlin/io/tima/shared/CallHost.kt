@@ -15,6 +15,7 @@ import io.tima.core.call.CallStep
 import io.tima.core.call.Calls
 import io.tima.core.call.PublishPreset
 import io.tima.core.call.VideoHandle
+import io.tima.core.call.basePreset
 import io.tima.core.call.askCallAccess
 import io.tima.core.call.callOngoing
 import io.tima.core.call.callOngoingOff
@@ -63,10 +64,12 @@ class CallHost(
      * который был выбран при старте, — и человек, сменивший кодек, звонил бы прежним, не
      * понимая почему.
      *
-     * **Читается он и при выключенном флаге** (ПЛАН-СТЕНДА §4): выбранный набор
-     * становится обычным поведением приложения, уходит только испытательная обвязка.
+     * **`null` — обычный звонок** (ПЛАН-ВИДЕО.md В3, В5б, 2026-09-29): H.264 или VP8 без
+     * запасного, потолок — от сервера ([basePreset]). Набор стенда отдаётся, только пока
+     * испытательный режим включён: там он был и остаётся законом, а за стендом обычный
+     * звонок его больше не наследует.
      */
-    private val preset: () -> PublishPreset = { PublishPreset(name = "умолчание") },
+    private val preset: () -> PublishPreset? = { null },
     /**
      * Спросить доступ к микрофону (и камере — `true`). Платформенный вопрос по умолчанию;
      * параметром — ради проверок: на ПК ответ даёт Windows, и проверка не должна зависеть
@@ -266,7 +269,7 @@ class CallHost(
                         callId = step.door.callId
                         door = step.door
                         Journal.note(LogCode.CALL, "звонок начат", "кому" to peerId.take(8), "видео" to video)
-                        live.connect(step.door, preset())
+                        live.connect(step.door, publishFor(step.door))
                         told()
                         // Видеозвонок показывает себя сразу, не дожидаясь нажатия (ЗВ9):
                         // разрешение уже спрошено выше — `withAccess(video)`.
@@ -335,7 +338,7 @@ class CallHost(
                 when (val step = calls.answer(callId)) {
                     is CallStep.Door -> {
                         door = step.door
-                        live.connect(step.door, preset())
+                        live.connect(step.door, publishFor(step.door))
                         told()
                         // **Принял видеозвонок — показываешь себя.** Так решил заказчик
                         // 2026-09-20: отдельного согласия на камеру не спрашиваем, его
@@ -683,7 +686,8 @@ class CallHost(
         if (callId.isEmpty()) return
         // Пока не соединились, применять нечего: набор и так возьмётся при входе.
         if (state.stage != CallStage.Connected && state.stage != CallStage.Reconnecting) return
-        val name = preset().name
+        // Набор меняют на стенде; вне стенда применять нечего — обычный звонок один.
+        val name = preset()?.name ?: return
         scope.launch {
             // ── СНАЧАЛА ДВЕРЬ, ПОТОМ ЛОМАТЬ КОМНАТУ ─────────────────────────
             //
@@ -704,8 +708,27 @@ class CallHost(
             door = step.door
             Journal.note(LogCode.CALL, "набор применён на ходу", "набор" to name)
             note(words().call.presetApplied(name))
-            live.reenter(step.door, preset())
+            live.reenter(step.door, publishFor(step.door))
         }
+    }
+
+    /**
+     * Чем публиковать в этот звонок: набор стенда, если он включён, иначе обычный звонок с
+     * потолком от сервера. Потолок пишется в журнал с источником: «видео 640×480» без
+     * «откуда» не отличить от настройки, которую никто не ставил.
+     */
+    private fun publishFor(door: CallDoor): PublishPreset {
+        preset()?.let { return it }
+        val base = basePreset(door.video)
+        Journal.note(
+            LogCode.CALL,
+            "потолок видео",
+            "кадр" to ("" + base.video.width + "×" + base.video.height),
+            "к/с" to base.video.fps,
+            "бит/с" to base.video.bitrate,
+            "откуда" to if (door.video != null) "сервер" else "приложение",
+        )
+        return base
     }
 
     /** Сделать то, что предлагает событие. */
