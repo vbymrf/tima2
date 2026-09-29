@@ -1,6 +1,8 @@
 # Технологический стек
 
 > **Актуализировано:** 2026-07-12. Конкретные версии проверяются на момент старта каждой фазы — не копировать из исследовательских docx (там версии устарели и внутренне несогласованы).
+>
+> **Библиотеки и версии — в [ADR-0031](../adr/0031-dependencies.md)** (2026-09-29), сверенном со сборкой. Здесь — обзор выбора; строки, которые так и не сбылись, помечены ниже.
 
 ## Клиент
 
@@ -10,11 +12,11 @@
 | UI | Compose Multiplatform | Android, iOS, Desktop (Windows) |
 | Локальная БД | SQLDelight | ~~+ SQLite FTS5 для локального поиска~~ — **не действует, сверено 2026-08-21.** Принят вариант A шифрования покоя ([Plan.md §3.4.3](../../doc_mig/Plan.md)): содержимое лежит зашифрованным, а FTS5 индексирует только то, что видит. Индекс по расшифрованному тексту — это второй, незашифрованный экземпляр переписки на диске. Поиск идёт расшифровкой на лету |
 | HTTP/WS | Ktor Client | |
-| DI | Koin | |
+| DI | ~~Koin~~ | **не используется, сверено 2026-09-29** — зависимости передаются параметрами ([ADR-0031](../adr/0031-dependencies.md)) |
 | Сериализация | kotlinx.serialization + Protobuf | Конверты — Protobuf ([crypto-protocol.md](../03-security/crypto-protocol.md)) |
 | Криптография | **Kodium** (`eu.livotov.labs:kodium`) | Единственная криптобиблиотека, [ADR-0005](../adr/0005-kodium-readiness-gate.md) |
 | Сжатие | zstd (до шифрования) | expect/actual биндинги |
-| Архитектурный контроль | Konsist | Правила в CI |
+| Архитектурный контроль | ~~Konsist~~ | **не используется, сверено 2026-09-29** — правила обычными тестами в `architecture-tests` |
 | Минимальные ОС | Android API 26+ · iOS 15+ · Windows 10+ | Пересмотреть на старте |
 | Web-клиент | В планах (пост-MVP) | Compose Multiplatform for Web/Wasm — оценить зрелость на момент старта; доверие через QR-привязку, как Windows |
 
@@ -23,14 +25,14 @@
 | Компонент | Выбор | Примечание |
 |-----------|-------|-----------|
 | Язык | Go (актуальный stable) | [ADR-0002](../adr/0002-go-backend.md) |
-| HTTP router | chi или echo | Выбрать при старте фазы 0 |
+| HTTP router | ~~chi или echo~~ | **не выбран, сверено 2026-09-29** — стандартная библиотека `net/http` |
 | WebSocket | nhooyr/websocket (coder/websocket) | |
-| PostgreSQL driver | pgx v5 | + golang-migrate для миграций |
+| PostgreSQL driver | pgx v5 | ~~+ golang-migrate для миграций~~ — **миграции свой код**, `server/migrations` (сверено 2026-09-29) |
 | Redis | go-redis v9 | Streams, Pub/Sub |
 | S3 | minio-go v7 | |
-| LiveKit | livekit/server-sdk-go | Токены комнат, webhooks |
+| LiveKit | ~~livekit/server-sdk-go~~ | **не используется, сверено 2026-09-29** — пропуска в комнаты подписываются golang-jwt (`server/internal/calls/token.go`) |
 | Push | FCM HTTP v1 + APNs (token-based) | |
-| Метрики | prometheus/client_golang | |
+| Метрики | ~~prometheus/client_golang~~ | **нет в `go.mod`, сверено 2026-09-29** |
 
 ## Инфраструктура
 
