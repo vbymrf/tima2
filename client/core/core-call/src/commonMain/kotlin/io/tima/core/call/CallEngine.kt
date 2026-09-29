@@ -180,6 +180,16 @@ data class CallState(
     val quality: CallQuality = CallQuality.Unknown,
     val trouble: String? = null,
     val notice: String? = null,
+    /**
+     * Собеседник показывает себя, а у нас ни кадра — почему ([RemoteVideoWatch]). `null` —
+     * видео идёт или его и не шлют (заказчик 2026-09-29).
+     */
+    val remoteVideoLoss: RemoteVideoLoss? = null,
+    /**
+     * Прогон стенда: кодек набора телефону не по силам, запасного по силам нет — своё видео
+     * собеседник не увидит. Имя кодека; `null` — видео уходит ([CodecChoice.unsendable]).
+     */
+    val ownVideoUnsent: String? = null,
 )
 
 /** Оценка связи глазами SFU (`connectionquality/scorer.go`: пороги 80 / 40 / 20). */

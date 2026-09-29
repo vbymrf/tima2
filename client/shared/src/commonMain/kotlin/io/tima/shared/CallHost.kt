@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import io.tima.core.call.CallAction
 import io.tima.core.call.CallDoor
 import io.tima.core.call.CallEngine
+import io.tima.core.call.RemoteVideoLoss
 import io.tima.core.call.CallEvent
 import io.tima.core.call.CallStage
 import io.tima.core.call.CallState
@@ -541,6 +542,27 @@ class CallHost(
 
         if (!now.remoteVideoTaken) note(words.remoteHidden, whileTrue = HIDDEN) else forget(HIDDEN)
 
+        // Видео собеседника нет, хотя он его показывает, — и почему (заказчик 2026-09-29).
+        // Смена кодека на запасной сюда не попадает: кадры при ней идут. Два ключа, а не
+        // один: длящееся событие с тем же ключом не переписывается, а причина может смениться.
+        when (val loss = now.remoteVideoLoss) {
+            null -> {
+                forget(NO_FRAMES)
+                forget(NOT_DECODED)
+            }
+            RemoteVideoLoss.NotArriving -> {
+                forget(NOT_DECODED)
+                note(words.remoteVideoNotArriving, whileTrue = NO_FRAMES)
+            }
+            is RemoteVideoLoss.NotDecoding -> {
+                forget(NO_FRAMES)
+                note(words.remoteVideoNotDecoding(loss.codec), whileTrue = NOT_DECODED)
+            }
+        }
+        // Своё видео не уйдёт: кодек набора стенда телефону не по силам.
+        val unsent = now.ownVideoUnsent
+        if (unsent != null) note(words.ownCodecUnsupported(unsent), whileTrue = OWN_UNSENT) else forget(OWN_UNSENT)
+
         // ── СЛУЧИВШИЕСЯ: остаются ──────────────────────────────────────────
         if (!now.remoteVideoShown && was.remoteVideoShown && now.remoteVideoTaken) note(words.peerStoppedVideo)
 
@@ -795,6 +817,9 @@ class CallHost(
         const val HIDDEN = "чужое видео скрыто нами"
         const val NO_CAMERA = "камера не разрешена"
         const val OFFLINE = "устройство собеседника не на связи"
+        const val NO_FRAMES = "видео собеседника не приходит"
+        const val NOT_DECODED = "видео собеседника не раскодируется"
+        const val OWN_UNSENT = "своё видео не уйдёт: кодек не по силам"
     }
 }
 

@@ -92,6 +92,9 @@ class LiveKitCallEngine(
     private var lastReceived: Long = -1
     private var statsAt: Long = 0
 
+    /** Прогон: кодек набора телефону не по силам и запасного нет — см. [CallState.ownVideoUnsent]. */
+    private var ownUnsent: String? = null
+
     /**
      * Прошлые `qpSum` и число кадров по каждой записи дорожки. QP в отчёте WebRTC — сумма
      * за всё время, как и байты; средний QP за последний промежуток — разница суммы на
@@ -156,7 +159,7 @@ class LiveKitCallEngine(
         room = created
         everAnswered = false
         watch(created, door.callId)
-        _state.value = CallState(stage = CallStage.Connecting, callId = door.callId)
+        _state.value = CallState(stage = CallStage.Connecting, callId = door.callId, ownVideoUnsent = ownUnsent)
         try {
             created.connect(url = door.url, token = door.token)
             // ── МИКРОФОН ВКЛЮЧАЕТСЯ ЗДЕСЬ, И БЕЗ ЭТОГО ЗВОНОК НЕМОЙ ─────────
@@ -200,12 +203,20 @@ class LiveKitCallEngine(
             // нет, чтобы прогон не числил запасным то, чего в сети не бывает.
             Journal.note(LogCode.CALL, "запасной не годится SDK, его нет", "запасной" to backup.name)
         }
-        if (exact && encodable.isNotEmpty() && video.codec !in encodable) {
-            // Прогон кодек не меняет, но молчать нельзя: телефон пошлёт VP8 под именем
-            // пресета, и сервер видео выбросит. Без этой строки прогон выглядел бы
-            // поломкой звонка, а это ответ «телефон этот кодек не умеет».
+        ownUnsent = if (choice.unsendable) video.codec.name else null
+        if (choice.viaBackup) {
+            // Прогон: основной не по силам, запасной пресета — по силам. Он и идёт основным:
+            // объявленный H.264, посланный VP8, сервер выбрасывал (Honor 2026-09-29).
             Journal.trouble(
-                LogCode.CALL, "прогон: кодек пресета телефону не по силам, не меняем",
+                LogCode.CALL, "прогон: основной кодек телефону не по силам — шлём запасной пресета основным",
+                "основной" to video.codec.name, "шлём" to choice.chosen.name, "умеет" to can,
+            )
+        } else if (choice.unsendable) {
+            // Прогон кодек не меняет, запасного по силам нет: телефон пошлёт VP8 под именем
+            // пресета, и сервер видео выбросит. Строка в журнале и событие в окне 0 — иначе
+            // это выглядело бы поломкой звонка, а это ответ «телефон этот кодек не умеет».
+            Journal.trouble(
+                LogCode.CALL, "прогон: кодек пресета телефону не по силам, запасного нет — собеседник видео не увидит",
                 "кодек" to video.codec.name, "умеет" to can,
             )
         } else if (choice.substituted) {
@@ -563,6 +574,7 @@ class LiveKitCallEngine(
         watchRemoteVideo(room)
         watchOutgoing(room)
         watchIncoming(room)
+        watchRemoteLoss(room)
         watchQuality(room)
         watchBreaks(room)
     }
@@ -639,6 +651,50 @@ class LiveKitCallEngine(
      * Пишем только смену: размер за звонок меняется единицы раз, а опрос идёт каждые три
      * секунды.
      */
+    /**
+     * Видео собеседника нет, хотя он его показывает, — и почему ([RemoteVideoWatch],
+     * заказчик 2026-09-29).
+     *
+     * Honor, объявивший H.264 и пославший VP8: у Redmi не было ни строки «видео собеседника
+     * идёт» — человек видел чёрное и не знал почему. Теперь это событие в ленте окна 0.
+     */
+    private fun watchRemoteLoss(room: Room) {
+        watchers += scope.launch {
+            val watch = RemoteVideoWatch()
+            var told: RemoteVideoLoss? = null
+            while (isActive) {
+                delay(STATS_EVERY_MS)
+                val publications = room.remoteParticipants.values.flatMap { it.videoTrackPublications }
+                val published = publications.any { !it.first.muted }
+                val track = publications.firstNotNullOfOrNull { it.second as? VideoTrack }
+                val report = track?.let { runCatching { it.getRTCStats()?.statsMap?.values }.getOrNull() }
+                val incoming = report?.firstOrNull { it.type == "inbound-rtp" && it.members["kind"] == "video" }
+                val codec = incoming?.members?.get("codecId")?.toString()?.let { id ->
+                    report.firstOrNull { it.id == id }?.members?.get("mimeType")?.toString()?.removePrefix("video/")
+                }
+                val now = _state.value
+                val loss = watch.next(
+                    RemoteVideoWatch.Poll(
+                        published = published,
+                        // Скрыто нами или погашено сервером — у этого свои события.
+                        excused = !now.remoteVideoTaken || now.videoPaused || now.stage != CallStage.Connected,
+                        bytes = (incoming?.members?.get("bytesReceived") as? Number)?.toLong(),
+                        frames = (incoming?.members?.get("framesDecoded") as? Number)?.toLong(),
+                        codec = codec,
+                    ),
+                )
+                if (loss == told) continue
+                told = loss
+                _state.value = _state.value.copy(remoteVideoLoss = loss)
+                when (loss) {
+                    null -> Journal.note(LogCode.CALL, "видео собеседника снова показывается")
+                    RemoteVideoLoss.NotArriving -> Journal.trouble(LogCode.CALL, "видео собеседника не приходит", "показывает" to published)
+                    is RemoteVideoLoss.NotDecoding -> Journal.trouble(LogCode.CALL, "видео собеседника не раскодируется", "кодек" to loss.codec)
+                }
+            }
+        }
+    }
+
     private fun watchIncoming(room: Room) {
         watchers += scope.launch {
             var said = ""

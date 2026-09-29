@@ -54,6 +54,7 @@ class CodecChoiceTest {
         assertNull(CodecChoice.pick(VideoCodec.H264, VideoCodec.H265, all).backup)
         assertEquals(VideoCodec.VP8, CodecChoice.pick(VideoCodec.VP9, VideoCodec.VP8, all).backup)
         assertNull(CodecChoice.pick(VideoCodec.H264, VideoCodec.VP9, all, exact = true).backup)
+        assertNull(CodecChoice.pick(VideoCodec.H264, VideoCodec.H264, all, exact = true).backup)
     }
 
     @Test
@@ -66,11 +67,31 @@ class CodecChoiceTest {
     }
 
     @Test
-    fun прогон_стенда_кодек_не_меняет_даже_неумеемый() {
-        val choice = CodecChoice.pick(VideoCodec.H264, VideoCodec.VP8, honor, exact = true)
-        assertEquals(VideoCodec.H264, choice.chosen, "прогон «H.264» померил бы не H.264")
+    fun прогон_умеемый_кодек_не_меняет() {
+        val all = setOf(VideoCodec.H264, VideoCodec.VP8, VideoCodec.VP9)
+        val choice = CodecChoice.pick(VideoCodec.H264, VideoCodec.VP8, all, exact = true)
+        assertEquals(VideoCodec.H264, choice.chosen)
         assertEquals(VideoCodec.VP8, choice.backup, "прогон запасной пресета не трогает")
         assertFalse(choice.substituted)
+    }
+
+    @Test
+    fun прогон_неумеемый_основной_шлёт_запасной_основным() {
+        // Honor 2026-09-29, набор «h264 VP8»: объявленный H.264 и посланный VP8 сервер
+        // выбрасывал — картинка появлялась и замирала.
+        val honorReal = setOf(VideoCodec.VP8, VideoCodec.VP9)
+        val choice = CodecChoice.pick(VideoCodec.H264, VideoCodec.VP8, honorReal, exact = true)
+        assertEquals(VideoCodec.VP8, choice.chosen)
+        assertNull(choice.backup)
+        assertTrue(choice.viaBackup)
+        assertFalse(choice.unsendable)
+    }
+
+    @Test
+    fun прогон_не_по_силам_ни_основной_ни_запасной_видео_не_уйдёт() {
+        val choice = CodecChoice.pick(VideoCodec.H264, null, setOf(VideoCodec.VP8, VideoCodec.VP9), exact = true)
+        assertEquals(VideoCodec.H264, choice.chosen, "прогон «H.264» другим кодеком не подменяется")
+        assertTrue(choice.unsendable)
     }
 
     @Test
