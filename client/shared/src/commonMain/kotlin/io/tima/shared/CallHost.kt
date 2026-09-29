@@ -559,6 +559,9 @@ class CallHost(
                 note(words.remoteVideoNotDecoding(loss.codec), whileTrue = NOT_DECODED)
             }
         }
+        // Прогон стенда: кодек набора телефону не по силам — своё видео собеседник не увидит.
+        val unsent = now.ownVideoUnsent
+        if (unsent != null) note(words.ownCodecUnsupported(unsent), whileTrue = OWN_UNSENT) else forget(OWN_UNSENT)
 
         // ── СЛУЧИВШИЕСЯ: остаются ──────────────────────────────────────────
         if (!now.remoteVideoShown && was.remoteVideoShown && now.remoteVideoTaken) note(words.peerStoppedVideo)
@@ -816,6 +819,7 @@ class CallHost(
         const val OFFLINE = "устройство собеседника не на связи"
         const val NO_FRAMES = "видео собеседника не приходит"
         const val NOT_DECODED = "видео собеседника не раскодируется"
+        const val OWN_UNSENT = "своё видео не уйдёт: кодек набора не по силам"
     }
 }
 

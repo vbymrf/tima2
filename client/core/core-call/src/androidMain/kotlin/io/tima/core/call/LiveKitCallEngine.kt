@@ -92,6 +92,9 @@ class LiveKitCallEngine(
     private var lastReceived: Long = -1
     private var statsAt: Long = 0
 
+    /** Прогон: кодек набора телефону не по силам — см. [CallState.ownVideoUnsent]. */
+    private var ownUnsent: String? = null
+
     /**
      * Прошлые `qpSum` и число кадров по каждой записи дорожки. QP в отчёте WebRTC — сумма
      * за всё время, как и байты; средний QP за последний промежуток — разница суммы на
@@ -156,7 +159,7 @@ class LiveKitCallEngine(
         room = created
         everAnswered = false
         watch(created, door.callId)
-        _state.value = CallState(stage = CallStage.Connecting, callId = door.callId)
+        _state.value = CallState(stage = CallStage.Connecting, callId = door.callId, ownVideoUnsent = ownUnsent)
         try {
             created.connect(url = door.url, token = door.token)
             // ── МИКРОФОН ВКЛЮЧАЕТСЯ ЗДЕСЬ, И БЕЗ ЭТОГО ЗВОНОК НЕМОЙ ─────────
@@ -200,7 +203,11 @@ class LiveKitCallEngine(
             // нет, чтобы прогон не числил запасным то, чего в сети не бывает.
             Journal.note(LogCode.CALL, "запасной не годится SDK, его нет", "запасной" to backup.name)
         }
-        if (exact && encodable.isNotEmpty() && video.codec !in encodable) {
+        val unsent = exact && encodable.isNotEmpty() && video.codec !in encodable
+        // Событие в окне 0 звонящего (заказчик 2026-09-29): стенд кодек не меняет — и не
+        // должен, он показывает слабое место, — но человек видит это сразу, а не в журнале.
+        ownUnsent = if (unsent) video.codec.name else null
+        if (unsent) {
             // Прогон кодек не меняет, но молчать нельзя: телефон пошлёт VP8 под именем
             // пресета, и сервер видео выбросит. Без этой строки прогон выглядел бы
             // поломкой звонка, а это ответ «телефон этот кодек не умеет».
