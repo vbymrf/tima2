@@ -2031,6 +2031,8 @@ private fun App(
                     onHangUp = callHost::hangUp,
                     onMicrophone = callHost::microphone,
                     onCamera = callHost::camera,
+                    onSpeaker = callHost::speaker,
+                    onSwitchCamera = callHost::switchCamera,
                     onCallAgain = if (callHost.possible) callHost::again else null,
                     redialVideo = callHost.video,
                     onRedialKind = callHost::redialAs,

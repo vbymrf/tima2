@@ -2,6 +2,7 @@ package io.tima.core.call
 
 import android.content.Context
 import android.content.Intent
+import android.os.PowerManager
 import android.os.Build
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
@@ -67,6 +68,51 @@ object AndroidCallNotice {
      * поднимается, потом гаснет, и правило соблюдено. Из фона Android может запретить и
      * эту команду — тогда служба давно в переднем плане, и `stopService` безопасен.
      */
+    /** Блокировка «гасить экран по датчику»; `null` — не взята. */
+    private var nearEar: PowerManager.WakeLock? = null
+    private var toldNoSensor = false
+
+    /**
+     * Гасить экран по датчику приближения (ПЛАН-ВИДЕО.md В10). Механизм системный — тот же,
+     * что у звонилки телефона: пока блокировка взята, телефон у уха гасит экран и не
+     * принимает касаний, от уха — зажигает.
+     *
+     * Отпускается с флагом «дождаться, пока отведут»: иначе экран загорелся бы прямо у уха
+     * в ту секунду, когда звонок стал видео или громким.
+     */
+    @Synchronized
+    fun proximity(on: Boolean) {
+        val context = app ?: return
+        if (on == (nearEar != null)) return
+        val power = context.getSystemService(PowerManager::class.java) ?: return
+        if (!on) {
+            runCatching { nearEar?.release(PowerManager.RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY) }
+            nearEar = null
+            Journal.note(LogCode.CALL, "датчик приближения", "гасит экран" to false)
+            return
+        }
+        if (!power.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) {
+            if (!toldNoSensor) {
+                toldNoSensor = true
+                Journal.note(LogCode.CALL, "датчика приближения нет — экран у уха не гаснет")
+            }
+            return
+        }
+        nearEar = runCatching {
+            power.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "tima:call-near-ear").apply {
+                setReferenceCounted(false)
+                // Срок — страховка от забытой блокировки: разговор дольше часа — редкость,
+                // а экран, который не гаснет у уха, хуже, чем не гаснущий никогда.
+                acquire(NEAR_EAR_LIMIT_MS)
+            }
+        }.onFailure {
+            Journal.trouble(LogCode.CALL, "датчик приближения не взят", "причина" to (it.message ?: it::class.simpleName))
+        }.getOrNull()
+        if (nearEar != null) Journal.note(LogCode.CALL, "датчик приближения", "гасит экран" to true)
+    }
+
+    private const val NEAR_EAR_LIMIT_MS = 3_600_000L
+
     fun off() {
         val context = app ?: return
         val stop = Intent(context, CallService::class.java).setAction(CallService.STOP)
@@ -78,3 +124,5 @@ object AndroidCallNotice {
 actual fun callOngoing(title: String, text: String) = AndroidCallNotice.on(title, text)
 
 actual fun callOngoingOff() = AndroidCallNotice.off()
+
+actual fun callProximity(on: Boolean) = AndroidCallNotice.proximity(on)

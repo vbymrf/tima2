@@ -19,6 +19,8 @@ import io.tima.core.call.basePreset
 import io.tima.core.call.askCallAccess
 import io.tima.core.call.callOngoing
 import io.tima.core.call.callOngoingOff
+import io.tima.core.call.callProximity
+import io.tima.core.call.SoundRoute
 import io.tima.core.call.openCallSettings
 import io.tima.core.diag.Journal
 import io.tima.core.words.CurrentWords
@@ -191,6 +193,7 @@ class CallHost(
                     if (fresh.stage == CallStage.Connected) startTicking()
                     if (fresh.stage == CallStage.Ended) stopTicking()
                     noticed(was, fresh)
+                    nearEar(fresh)
                 }
             }
         }
@@ -450,6 +453,8 @@ class CallHost(
     fun close() {
         watchdog?.cancel()
         callOngoingOff()
+        nearEarOn = false
+        callProximity(false)
         active = false
         callId = ""
         peerId = ""
@@ -460,6 +465,32 @@ class CallHost(
 
     fun microphone(on: Boolean) {
         scope.launch { engine?.setMicrophone(on) }
+    }
+
+    /** Кнопка «Динамик» — громкая или разговорный (ПЛАН-ВИДЕО.md В9). */
+    fun speaker(on: Boolean) {
+        scope.launch { engine?.setSpeaker(on) }
+    }
+
+    /** Кнопка «Переключение камеры» — передняя ↔ задняя (ПЛАН-ВИДЕО.md В9). */
+    fun switchCamera() {
+        scope.launch { engine?.switchCamera() }
+    }
+
+    /** Взята ли блокировка «гасить экран у уха». */
+    private var nearEarOn = false
+
+    /**
+     * Датчик приближения — вариант 2а (ПЛАН-ВИДЕО.md В10): гасить экран у уха **только в
+     * голосовом разговоре и только когда звук в разговорном динамике**. В видеозвонке, при
+     * громкой связи и в наушниках телефон к уху не подносят, и погасший от ладони экран
+     * только мешал бы.
+     */
+    private fun nearEar(now: CallState) {
+        val want = nearEarWanted(active, now)
+        if (want == nearEarOn) return
+        nearEarOn = want
+        callProximity(want)
     }
 
     /**
@@ -848,3 +879,7 @@ class CallHost(
 
 /** Дверь, собранная сигналингом: адрес SFU, комната и токен. */
 internal typealias Door = CallDoor
+
+/** Гасить ли экран у уха (ПЛАН-ВИДЕО.md В10, вариант 2а). Отдельно — ради проверки. */
+internal fun nearEarWanted(active: Boolean, state: CallState): Boolean =
+    active && state.stage == CallStage.Connected && !state.cameraOn && state.sound == SoundRoute.Earpiece

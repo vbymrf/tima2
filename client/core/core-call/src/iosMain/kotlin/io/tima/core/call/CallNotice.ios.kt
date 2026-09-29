@@ -4,3 +4,5 @@ package io.tima.core.call
 actual fun callOngoing(title: String, text: String) = Unit
 
 actual fun callOngoingOff() = Unit
+
+actual fun callProximity(on: Boolean) = Unit

@@ -1,6 +1,12 @@
 package io.tima.core.call
 
 import android.content.Context
+import android.hardware.camera2.CameraManager
+import com.twilio.audioswitch.AudioDevice
+import io.livekit.android.AudioOptions
+import io.livekit.android.audio.AudioSwitchHandler
+import io.livekit.android.room.track.CameraPosition
+import io.livekit.android.room.track.LocalVideoTrack
 import io.livekit.android.LiveKit
 import io.livekit.android.LiveKitOverrides
 import io.livekit.android.RoomOptions
@@ -114,6 +120,20 @@ class LiveKitCallEngine(
     /** Что каждый собеседник уже сказал — чтобы писать в журнал только смену. */
     private val peerTold = HashMap<String, String>()
 
+    /** Выбор динамика этого звонка — наш экземпляр, с нашим порядком (ПЛАН-ВИДЕО.md В9). */
+    private var sound: AudioSwitchHandler? = null
+
+    /** Человек нажал «Динамик» — дальше звонок его выбор не трогает. */
+    private var soundChosen = false
+
+    /** Передняя ли камера — для «Переключение камеры» и для переопубликации. */
+    private var cameraFront = true
+
+    /** Сколько камер у телефона. Одна — кнопки «Переключение камеры» нет. */
+    private val cameras: Int by lazy {
+        runCatching { (context.getSystemService(Context.CAMERA_SERVICE) as CameraManager).cameraIdList.size }.getOrDefault(0)
+    }
+
     /**
      * Прошлые `qpSum` и число кадров по каждой записи дорожки. QP в отчёте WebRTC — сумма
      * за всё время, как и байты; средний QP за последний промежуток — разница суммы на
@@ -178,11 +198,18 @@ class LiveKitCallEngine(
         target = null
         peerSeen.clear()
         peerTold.clear()
+        soundChosen = false
+        cameraFront = true
         publish?.let { publishVideoAs(created, it.video, exact = it.exact) }
         room = created
         everAnswered = false
         watch(created, door.callId)
-        _state.value = CallState(stage = CallStage.Connecting, callId = door.callId, ownVideoUnsent = ownUnsent)
+        _state.value = CallState(
+            stage = CallStage.Connecting,
+            callId = door.callId,
+            ownVideoUnsent = ownUnsent,
+            cameraSwitchable = cameras > 1,
+        )
         try {
             created.connect(url = door.url, token = door.token)
             // ── МИКРОФОН ВКЛЮЧАЕТСЯ ЗДЕСЬ, И БЕЗ ЭТОГО ЗВОНОК НЕМОЙ ─────────
@@ -327,11 +354,89 @@ class LiveKitCallEngine(
         val egl = sharedEgl()
         val align16 = publish?.video?.align16 == true
         if (align16) Journal.note(LogCode.CALL, "кодер: заявлена кратность 16", "набор" to publish?.name)
+        val handler = soundHandler()
+        sound = handler
         return LiveKitOverrides(
             videoEncoderFactory = SwitchableEncoderFactory.of(egl.eglBaseContext, align16) { coding.encode },
             videoDecoderFactory = SwitchableDecoderFactory(egl.eglBaseContext) { coding.decode },
+            audioOptions = AudioOptions(audioHandler = handler),
             eglBase = egl,
         )
+    }
+
+    /**
+     * Выбор динамика — тот же, что у SDK, но **с нашим порядком** (ПЛАН-ВИДЕО.md В9,
+     * решение заказчика 2026-09-29): наушники, потом разговорный, потом громкая.
+     *
+     * У SDK громкая стоит выше разговорного, и любой звонок шёл в громкую. Голосовой звонок
+     * теперь идёт в разговорный; видеозвонок переводится в громкую, когда включается камера
+     * ([autoSound]).
+     */
+    private fun soundHandler(): AudioSwitchHandler = AudioSwitchHandler(context).apply {
+        preferredDeviceList = listOf(
+            AudioDevice.BluetoothHeadset::class.java,
+            AudioDevice.WiredHeadset::class.java,
+            AudioDevice.Earpiece::class.java,
+            AudioDevice.Speakerphone::class.java,
+        )
+        registerAudioDeviceChangeListener { _, selected -> routed(selected) }
+    }
+
+    /** Звук пошёл в [selected] — в состояние и в журнал. */
+    private fun routed(selected: AudioDevice?) {
+        val route = when (selected) {
+            is AudioDevice.Speakerphone -> SoundRoute.Speaker
+            is AudioDevice.Earpiece -> SoundRoute.Earpiece
+            is AudioDevice.WiredHeadset, is AudioDevice.BluetoothHeadset -> SoundRoute.Headset
+            else -> SoundRoute.Unknown
+        }
+        if (route == _state.value.sound) return
+        _state.value = _state.value.copy(sound = route)
+        Journal.note(LogCode.CALL, "звук идёт", "куда" to route.name, "устройство" to (selected?.name ?: "—"))
+    }
+
+    /**
+     * Видеозвонок — в громкую, голосовой — в разговорный (решение заказчика 2026-09-29).
+     * Звонок становится видео, когда включают камеру, поэтому решает камера. Человек нажал
+     * «Динамик» или подключены наушники — не трогаем.
+     */
+    private fun autoSound(cameraOn: Boolean) {
+        if (soundChosen) return
+        val handler = sound ?: return
+        val selected = handler.selectedAudioDevice
+        if (selected is AudioDevice.WiredHeadset || selected is AudioDevice.BluetoothHeadset) return
+        val want = if (cameraOn) AudioDevice.Speakerphone::class.java else AudioDevice.Earpiece::class.java
+        if (want.isInstance(selected)) return
+        handler.availableAudioDevices.firstOrNull { want.isInstance(it) }?.let { handler.selectDevice(it) }
+    }
+
+    override suspend fun setSpeaker(on: Boolean) {
+        val handler = sound ?: return
+        soundChosen = true
+        val available = handler.availableAudioDevices
+        val pick = if (on) {
+            available.firstOrNull { it is AudioDevice.Speakerphone }
+        } else {
+            available.firstOrNull { it is AudioDevice.BluetoothHeadset || it is AudioDevice.WiredHeadset }
+                ?: available.firstOrNull { it is AudioDevice.Earpiece }
+        }
+        Journal.note(LogCode.CALL, "кнопка «Динамик»", "громкая" to on, "устройство" to (pick?.name ?: "нет такого"))
+        pick?.let { handler.selectDevice(it) }
+    }
+
+    override suspend fun switchCamera() {
+        cameraFront = !cameraFront
+        val position = if (cameraFront) CameraPosition.FRONT else CameraPosition.BACK
+        val live = room
+        if (live != null) {
+            // И в настройки захвата: камеру переопубликовывают (смена кодека), и новая
+            // дорожка должна снимать той же камерой, а не передней по умолчанию.
+            live.videoTrackCaptureDefaults = live.videoTrackCaptureDefaults.copy(position = position)
+            val track = live.localParticipant.videoTrackPublications.firstNotNullOfOrNull { it.second as? LocalVideoTrack }
+            if (track != null) attempt { track.switchCamera(position = position) }
+        }
+        _state.value = _state.value.copy(cameraFront = cameraFront)
+        Journal.note(LogCode.CALL, "камера сменена", "стала" to if (cameraFront) "передняя" else "задняя")
     }
 
     /**
@@ -1088,6 +1193,7 @@ class LiveKitCallEngine(
                 val track = published.firstOrNull()?.second as? VideoTrack
                 show(_localVideo, room, track)
                 _state.value = _state.value.copy(cameraOn = track != null)
+                autoSound(cameraOn = track != null)
             }
         }
     }

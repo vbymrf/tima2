@@ -93,7 +93,22 @@ interface CallEngine {
      * переподписывается. На ПК кодеры и так программные — там ничего не делается.
      */
     suspend fun setHardwareCoding(coding: HardwareCoding) = Unit
+
+    /**
+     * Кнопка «Динамик»: громкая связь или разговорный (ПЛАН-ВИДЕО.md В9). Нажатая — выбор
+     * человека до конца звонка. Наушники главнее: пока они подключены, звук идёт в них.
+     */
+    suspend fun setSpeaker(on: Boolean) = Unit
+
+    /** Кнопка «Переключение камеры»: передняя ↔ задняя (ПЛАН-ВИДЕО.md В9). */
+    suspend fun switchCamera() = Unit
 }
+
+/**
+ * Куда идёт звук звонка. `Unknown` — движок этого не знает или не выбирает (ПК: колонки
+ * выбираются в настройках), и кнопки «Динамик» нет.
+ */
+enum class SoundRoute { Unknown, Earpiece, Speaker, Headset }
 
 /**
  * Дверь в комнату — то, что выдал наш сервер на `POST /api/v1/calls` или `/answer`.
@@ -201,6 +216,12 @@ data class CallState(
      * уходит (заказчик 2026-09-29).
      */
     val ownVideoUnsent: String? = null,
+    /** Куда идёт звук (ПЛАН-ВИДЕО.md В9). */
+    val sound: SoundRoute = SoundRoute.Unknown,
+    /** Какая камера: передняя — `true`. */
+    val cameraFront: Boolean = true,
+    /** Есть ли вторая камера — стоит ли кнопка «Переключение камеры». */
+    val cameraSwitchable: Boolean = false,
 )
 
 /** Оценка связи глазами SFU (`connectionquality/scorer.go`: пороги 80 / 40 / 20). */

@@ -20,6 +20,7 @@ import io.tima.core.call.CallEvent
 import io.tima.core.call.CallQuality
 import io.tima.core.call.CallStage
 import io.tima.core.call.CallState
+import io.tima.core.call.SoundRoute
 import io.tima.core.call.VideoHandle
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.AvatarSize
@@ -49,7 +50,7 @@ import io.tima.core.ui.words
  * |---|---|
  * | **входящий** — нам звонят, мы ещё не ответили | Принять · Отклонить |
  * | **исходящий** — звоним мы, там ещё не сняли | Отменить |
- * | **разговор** | микрофон · камера · Завершить |
+ * | **разговор** | динамик · микрофон · камера · переключение камеры · скрыть видео · Завершить |
  * | **завершён** | Перезвонить · Закрыть |
  *
  * Первые два различает не состояние SFU, а то, **кто начал**: у SFU оба выглядят как
@@ -113,6 +114,13 @@ fun CallScreen(
     onRemoteVideo: ((Boolean) -> Unit)? = null,
     /** Сделать то, что предлагает событие: уйти в настройки телефона. */
     onEventAction: ((CallAction) -> Unit)? = null,
+    /**
+     * «Динамик» — громкая или разговорный (ПЛАН-ВИДЕО.md В9). Кнопка стоит, только когда
+     * движок знает, куда идёт звук: на ПК колонки выбираются в настройках.
+     */
+    onSpeaker: ((Boolean) -> Unit)? = null,
+    /** «Переключение камеры». Стоит, только когда камер больше одной. */
+    onSwitchCamera: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.call
@@ -249,6 +257,20 @@ fun CallScreen(
                     // местах при любом состоянии. Состояние несёт цвет: салатовый —
                     // включено, серый — выключено. Что именно случилось, словами говорит
                     // полоса событий сверху, и там на это есть место.
+                    // Порядок — решение заказчика 2026-09-29: «Динамик», «Микрофон»,
+                    // «Камера», «Переключение камеры», дальше прежние (ПЛАН-ВИДЕО.md В9).
+                    // Горит — громкая связь; наушники — свой значок, нажатие ведёт в громкую.
+                    if (onSpeaker != null && state.sound != SoundRoute.Unknown) {
+                        CallButton(
+                            glyph = when (state.sound) {
+                                SoundRoute.Speaker -> "🔊"
+                                SoundRoute.Headset -> "🎧"
+                                else -> "🔈"
+                            },
+                            on = state.sound == SoundRoute.Speaker,
+                            onClick = { onSpeaker(state.sound != SoundRoute.Speaker) },
+                        )
+                    }
                     CallButton(
                         glyph = if (state.microphoneOn) "🎤" else "🔇",
                         on = state.microphoneOn,
@@ -259,6 +281,10 @@ fun CallScreen(
                         on = state.cameraOn,
                         onClick = { onCamera(!state.cameraOn) },
                     )
+                    // Действие, а не состояние: горит, когда снимает задняя.
+                    if (onSwitchCamera != null && state.cameraSwitchable) {
+                        CallButton(glyph = "🔄", on = !state.cameraFront, onClick = onSwitchCamera)
+                    }
                     // Принимать ли чужое видео — **решение, а не действие**, и потому
                     // кнопка стоит всегда, а не появляется вместе с картинкой. Нажали
                     // заранее — чужая камера, включённая потом, к нам не приедет и
