@@ -15,6 +15,11 @@ import io.tima.core.notify.AndroidNotices
 import io.tima.core.notify.BackgroundWatch
 import io.tima.core.secrets.AndroidSecrets
 import io.tima.shared.ReportsStore
+import io.tima.shared.CallKeep
+import io.tima.core.call.LiveKitCallEngine
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import io.tima.shared.rememberCrash
 
 /**
@@ -31,8 +36,18 @@ import io.tima.shared.rememberCrash
  */
 class TimaApplication : Application() {
 
+    /**
+     * Движок звонка — **один на процесс**, а не на окно (заказчик 2026-09-30, 1а). Android
+     * пересоздаёт окно сам (Redmi 2026-09-30, смена ресурсов у всех приложений разом); движок
+     * в окне уходил вместе с ним, а комната LiveKit с камерой оставалась без хозяина. Создаётся
+     * при первом окне: процессу, поднятому ради службы канала, LiveKit не нужен.
+     */
+    val callEngine: LiveKitCallEngine by lazy { LiveKitCallEngine(this, CallKeep.scope) }
+
     override fun onCreate() {
         super.onCreate()
+        // Звонок и стенд живут у процесса ([CallKeep]) — на главном потоке, как раньше в окне.
+        CallKeep.scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         // Службе звонка нужен контекст ПРИЛОЖЕНИЯ, а не окна: она переживает окно —
         // человек сворачивает приложение, окно умирает, а разговор продолжается. Ради
         // этого она и заводилась.

@@ -8,6 +8,7 @@ import io.tima.core.call.CallStep
 import io.tima.core.call.Calls
 import io.tima.core.call.PublishPreset
 import io.tima.core.call.VideoHandle
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -317,9 +318,35 @@ class CallHostTest {
         assertEquals(listOf(false), calls.startedVideo, "переключатель не решил вид повтора")
     }
 
-    private fun TestScope.host(calls: Calls = FakeCalls()) = CallHost(
+    @Test
+    fun трубку_положили_пока_входили_в_комнату_камера_и_служба_не_поднимаются() = runTest {
+        // Redmi 2026-09-30: звонок положен через 0,1 с, пока шёл вход в комнату; код после
+        // `connect` поднял службу у законченного звонка — Android закрыл приложение.
+        val engine = FakeEngine()
+        val gate = CompletableDeferred<Unit>()
+        engine.onConnect = { gate.await() }
+        val host = host(engine = engine)
+
+        host.start("u-1", "Аня", video = true)
+        host.hangUp()
+        gate.complete(Unit)
+
+        assertEquals(emptyList(), engine.camera, "камера включилась у законченного звонка")
+    }
+
+    @Test
+    fun вошли_в_комнату_камера_видеозвонка_включается() = runTest {
+        val engine = FakeEngine()
+        val host = host(engine = engine)
+
+        host.start("u-1", "Аня", video = true)
+
+        assertEquals(listOf(true), engine.camera)
+    }
+
+    private fun TestScope.host(calls: Calls = FakeCalls(), engine: FakeEngine = FakeEngine()) = CallHost(
         calls,
-        FakeEngine(),
+        engine,
         // **Неограниченный диспетчер, а не очередь.** `CallHost` делает работу в
         // корутинах — кладёт трубку, зовёт сигналинг, — и с очередью её пришлось бы
         // «проматывать» вручную в каждой проверке. Здесь она случается сразу, и проверка
@@ -372,10 +399,16 @@ class CallHostTest {
         private val none = MutableStateFlow<VideoHandle?>(null)
         override val localVideo: StateFlow<VideoHandle?> = none.asStateFlow()
         override val remoteVideo: StateFlow<VideoHandle?> = none.asStateFlow()
-        override suspend fun connect(door: CallDoor, publish: PublishPreset?) = Unit
+        /** Что делает вход в комнату — по умолчанию ничего, сразу. */
+        var onConnect: suspend () -> Unit = {}
+        /** Как включали и выключали камеру. */
+        val camera = mutableListOf<Boolean>()
+        override suspend fun connect(door: CallDoor, publish: PublishPreset?) = onConnect()
         override suspend fun disconnect() = Unit
         override suspend fun setMicrophone(on: Boolean) = Unit
-        override suspend fun setCamera(on: Boolean) = Unit
+        override suspend fun setCamera(on: Boolean) {
+            camera += on
+        }
 
         /** Сказать за движок: «комната ответила вот этим». */
         fun say(state: CallState) {

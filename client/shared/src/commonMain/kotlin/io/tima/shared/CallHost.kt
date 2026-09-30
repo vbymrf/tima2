@@ -278,6 +278,7 @@ class CallHost(
                         door = step.door
                         Journal.note(LogCode.CALL, "звонок начат", "кому" to peerId.take(8), "видео" to video)
                         live.connect(step.door, publishFor(step.door))
+                        if (!stillOurs(step.door.callId)) return@launch
                         told()
                         // Видеозвонок показывает себя сразу, не дожидаясь нажатия (ЗВ9):
                         // разрешение уже спрошено выше — `withAccess(video)`.
@@ -347,6 +348,7 @@ class CallHost(
                     is CallStep.Door -> {
                         door = step.door
                         live.connect(step.door, publishFor(step.door))
+                        if (!stillOurs(step.door.callId)) return@launch
                         told()
                         // **Принял видеозвонок — показываешь себя.** Так решил заказчик
                         // 2026-09-20: отдельного согласия на камеру не спрашиваем, его
@@ -447,6 +449,20 @@ class CallHost(
      */
     private fun told(connectedAt: Long = 0L) {
         callOngoing(words().call.activeCall, peer.ifBlank { words().chat.nameless }, words().call.hangUp, connectedAt)
+    }
+
+    /**
+     * Жив ли ещё звонок [id] — после входа в комнату (БЕДЫ 2026-09-30-служба-звонка-после-отмены).
+     *
+     * Вход в комнату — `suspend`, и пока он шёл, трубку могли положить: `hangUp` уже
+     * погасил службу и отменил вход, а код после `connect` всё равно выполняется. Без этой
+     * проверки он поднимал службу «идёт звонок» у законченного звонка и включал камеру —
+     * Redmi 2026-09-30 закрылся с `ForegroundServiceDidNotStartInTimeException`.
+     */
+    private fun stillOurs(id: String): Boolean {
+        if (busy && callId == id) return true
+        Journal.note(LogCode.CALL, "звонок кончился, пока входили в комнату — службу и камеру не поднимаем", "звонок" to id.take(8))
+        return false
     }
 
     /** Тот ли это звонок, который у нас идёт. Чужой конец нашего разговора не касается. */

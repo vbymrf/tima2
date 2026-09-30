@@ -39,6 +39,7 @@ import io.tima.feature.shell.ProblemFacts
 import io.tima.feature.shell.UpdateMemory
 import io.tima.shared.Build
 import io.tima.shared.ChannelHost
+import io.tima.shared.CallKeep
 import io.tima.shared.ReportsStore
 import io.tima.shared.rememberCrash
 import io.tima.shared.Entry
@@ -81,6 +82,9 @@ fun main(args: Array<String>) {
     Thread.setDefaultUncaughtExceptionHandler { _, error ->
         recordCrash(store, error)
     }
+    // Звонок и стенд живут у процесса (`CallKeep`, заказчик 2026-09-30, 1а): окно, закрытое в
+    // трей, разбирает композицию, а звонок идёт. Поток — окна (Swing), как раньше у `Root`.
+    CallKeep.scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     // Включённый автозапуск — под эту установку: программа могла переехать.
     Autostart.refresh()
     window(store, hidden = Autostart.HIDDEN in args)

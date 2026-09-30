@@ -13,9 +13,7 @@ import io.tima.core.notify.AndroidNotifyAccess
 import io.tima.shared.ChannelHost
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import io.tima.core.call.AndroidCallAccess
-import io.tima.core.call.LiveKitCallEngine
 import io.tima.core.call.AndroidCallNotice
 import android.view.WindowManager
 import androidx.compose.runtime.LaunchedEffect
@@ -148,7 +146,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         alive--
-        Journal.note(LogCode.APP_WINDOW, "главное окно закрыто", "номер" to number, "открыто" to alive)
+        // Пересоздаёт система (заказчик 2026-09-30): поворот, тема, смена ресурсов у всех
+        // приложений разом (Redmi, `Config changes=80000000`). Отдельной строкой и с маской
+        // причины — иначе в журнале это неотличимо от закрытия человеком.
+        if (isChangingConfigurations) {
+            recreating = true
+            Journal.note(
+                LogCode.APP_WINDOW, "главное окно пересоздаёт система",
+                "номер" to number, "причина" to changeWords(changingConfigurations),
+            )
+        } else {
+            Journal.note(LogCode.APP_WINDOW, "главное окно закрыто", "номер" to number, "открыто" to alive)
+        }
         // Удержанная активность — это утечка целого экрана. Отдаём именно себя:
         // новое окно Android умеет создать раньше, чем доломает старое, и без этого
         // уходящее обнуляло бы ссылку на живое.
@@ -181,7 +190,11 @@ class MainActivity : ComponentActivity() {
         // (Redmi 2026-09-27, отчёт 5KXE).
         number = ++made
         alive++
+        // Пересозданное системой окно получает прежнее намерение — «значок» здесь врал бы.
+        val rebuilt = recreating || savedInstanceState != null
+        recreating = false
         val why = when {
+            rebuilt -> "пересоздано системой"
             linkFrom(intent) != null -> "ссылка привязки"
             transferFrom(intent) != null -> "передача аккаунта"
             callRequestOf(intent) != null -> "строка звонка"
@@ -236,8 +249,9 @@ class MainActivity : ComponentActivity() {
             // Звонок исполняет livekit-android: ему нужен Context, а общий код его не
             // видит. Поэтому движок собирается здесь и передаётся вниз — так же, как
             // база и установщик. На ПК и iOS его нет, и там окна 0 не будет вовсе.
-            val callScope = rememberCoroutineScope()
-            val callEngine = remember { LiveKitCallEngine(applicationContext, callScope) }
+            // Один на процесс (`TimaApplication.callEngine`): пересозданное системой окно берёт
+            // тот же движок, и идущий звонок не теряет хозяина (заказчик 2026-09-30, 1а).
+            val callEngine = remember { (application as TimaApplication).callEngine }
             // Видеозвонок — экран не гаснет (решение заказчика 2026-09-30). Флаг окна, а не
             // блокировка питания: ушёл человек из приложения — система сняла его сама.
             LaunchedEffect(Unit) {
@@ -331,6 +345,35 @@ class MainActivity : ComponentActivity() {
         /** Сколько главных окон создано за жизнь процесса и сколько открыто сейчас. */
         var made = 0
         var alive = 0
+
+        /** Прежнее окно ушло пересоздаваться системой — следующее создаётся ей же. */
+        var recreating = false
+
+        /**
+         * Причина пересоздания словами и маской (`ActivityInfo.CONFIG_*`). Маска — ради тех,
+         * у кого слова нет: `0x80000000` — смена путей к ресурсам, скрытая константа Android.
+         */
+        fun changeWords(mask: Int): String {
+            val known = listOf(
+                android.content.pm.ActivityInfo.CONFIG_DENSITY to "плотность",
+                android.content.pm.ActivityInfo.CONFIG_FONT_SCALE to "размер шрифта",
+                android.content.pm.ActivityInfo.CONFIG_LOCALE to "язык",
+                android.content.pm.ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE to "наименьшая сторона",
+                android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE to "размер окна",
+                android.content.pm.ActivityInfo.CONFIG_ORIENTATION to "поворот",
+                android.content.pm.ActivityInfo.CONFIG_UI_MODE to "тема",
+                android.content.pm.ActivityInfo.CONFIG_COLOR_MODE to "цвет",
+                android.content.pm.ActivityInfo.CONFIG_KEYBOARD to "клавиатура",
+                android.content.pm.ActivityInfo.CONFIG_NAVIGATION to "навигация",
+                android.content.pm.ActivityInfo.CONFIG_LAYOUT_DIRECTION to "направление письма",
+                ASSETS_PATHS to "ресурсы приложений",
+            )
+            val words = known.filter { mask and it.first != 0 }.joinToString(", ") { it.second }
+            return (if (words.isEmpty()) "" else "$words ") + "0x" + mask.toUInt().toString(16)
+        }
+
+        /** `ActivityInfo.CONFIG_ASSETS_PATHS` — скрыта в SDK. */
+        private const val ASSETS_PATHS = Int.MIN_VALUE
 
         /** Ключ строки оформления в настройках приложения. */
         const val KEY_APPEARANCE = "appearance"

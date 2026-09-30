@@ -57,7 +57,11 @@ class CallService : Service() {
                 @Suppress("DEPRECATION")
                 stopForeground(true)
             }
-            stopSelf()
+            // Со своим номером запуска: пришла следом команда «поднять» (новый звонок) — служба
+            // не гаснет, а поднимается ею. Без номера `stopSelf` гасил и её, и обещанный
+            // системе подъём оставался невыполненным — Android закрывал приложение
+            // (БЕДЫ 2026-09-30-служба-звонка-после-отмены).
+            stopSelf(startId)
             return START_NOT_STICKY
         }
         val title = intent?.getStringExtra(TITLE).orEmpty()
