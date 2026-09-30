@@ -46,12 +46,34 @@ class Accounts(private val vault: SecretVault) {
      * токена).
      */
     fun remember(account: Account, session: Session, deviceSecret: ByteArray) {
+        // Тот же аккаунт вошёл заново другим устройством (выход и вход по QR, А5): ключ
+        // покоя новый, и прежняя база им не откроется. Помечаем — база получит новое имя,
+        // прежний файл останется на месте нетронутым.
+        val before = store(account.userId).session()
+        if (before != null && before.deviceId != session.deviceId) {
+            vault.put(relinkedAlias(account.userId), session.deviceId.encodeToByteArray())
+        }
         val others = all().filterNot { it.userId == account.userId }
         write(others + account)
         store(account.userId).saveSession(session)
         store(account.userId).saveDeviceSecret(deviceSecret)
         switchTo(account.userId)
     }
+
+    /**
+     * Выйти из аккаунта на этом устройстве (ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, А4): снимается только
+     * указатель «текущий». Запись в списке, ключи и база остаются — аккаунт отложен, и
+     * вернуться в него можно тем же [switchTo] (решение заказчика 1в, 2026-09-30).
+     */
+    fun leave() {
+        vault.remove(CURRENT)
+    }
+
+    /**
+     * Каким устройством аккаунт вошёл заново, если входил повторно (А5). `null` — входил
+     * один раз, база под обычным именем.
+     */
+    fun relinked(userId: String): String? = vault.get(relinkedAlias(userId))?.decodeToString()?.ifBlank { null }
 
     /** Переключиться. Ничего не проверяет: проверка — дело того, кто собирает окружение. */
     fun switchTo(userId: String) {
@@ -125,6 +147,7 @@ class Accounts(private val vault: SecretVault) {
         // Точка, а не «собака»: имя секрета допускает только a-z, цифры, точку,
         // дефис и подчёркивание — см. пояснение у Scoped.
         fun pendingAlias(userId: String) = SecretAlias("accounts.pending.v1.$userId")
+        fun relinkedAlias(userId: String) = SecretAlias("accounts.relinked.v1.$userId")
     }
 }
 

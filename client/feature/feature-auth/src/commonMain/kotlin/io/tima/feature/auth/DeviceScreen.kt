@@ -10,6 +10,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -47,8 +51,16 @@ fun DeviceScreen(
      * приложения. Пусто — версия не передана (проверки, снимки), строки нет.
      */
     buildVersion: String = "",
+    /**
+     * Выйти из аккаунта на этом устройстве (ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, А4). `null` — кнопки
+     * нет (проверки, снимки).
+     */
+    onSignOut: (() -> Unit)? = null,
+    /** Список не пришёл — запросить снова (А7). */
+    onRetry: (() -> Unit)? = null,
 ) = Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
     val words = Tima.words.auth
+    var signingOut by rememberSaveable { mutableStateOf(false) }
     // Фон заливается явно. Экран без своего фона показывает то, что под ним, — на телефоне
     // это выглядело как тёмный экран внутри светлой темы, и найдено это было только глазами
     // на устройстве: снимки видят компонент, а не окно.
@@ -70,6 +82,25 @@ fun DeviceScreen(
 
     state.trouble?.let {
         Column(Modifier.padding(TimaSpacing.about4)) { Trouble(it) }
+    }
+
+    // Выход — до ранних выходов экрана: он нужен и тогда, когда список не пришёл. Так было
+    // на ПК 2026-09-30 — «Смотрим…» без конца, а выйти и войти заново было неоткуда.
+    if (onSignOut != null) {
+        if (signingOut) {
+            SignOutQuestion(
+                last = state.devices.size == 1,
+                onConfirm = { signingOut = false; onSignOut() },
+                onChangedMind = { signingOut = false },
+            )
+            return@Column
+        }
+        Button(
+            label = words.signOut,
+            onClick = { signingOut = true },
+            kind = ButtonKind.Quiet,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4),
+        )
     }
 
     val ask = state.ask
@@ -108,6 +139,13 @@ fun DeviceScreen(
                 else -> words.emptyListIsOurs
             },
         )
+        if (!state.expect && onRetry != null) {
+            Button(
+                label = words.retryList,
+                onClick = onRetry,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4),
+            )
+        }
         return@Column
     }
 
@@ -164,6 +202,20 @@ private fun Line(device: AccountDevice, onAsk: (String) -> Unit) {
  * Занимает весь экран, а не всплывает над списком: отозванное устройство обратно не
  * вернуть, и решение должно выглядеть решением.
  */
+/** Вопрос перед выходом из аккаунта: что будет с аккаунтом и как вернуться (А4). */
+@Composable
+private fun SignOutQuestion(last: Boolean, onConfirm: () -> Unit, onChangedMind: () -> Unit) = Column(
+    modifier = Modifier.fillMaxWidth().padding(TimaSpacing.about4),
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+) {
+    val words = Tima.words.auth
+    Caption(words.signOut, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
+    Secondary(words.signOutAbout)
+    if (last) Secondary(words.signOutLast)
+    Button(label = words.signOutYes, onClick = onConfirm, kind = ButtonKind.Dangerous, modifier = Modifier.fillMaxWidth())
+    Button(label = words.keep, onClick = onChangedMind, modifier = Modifier.fillMaxWidth())
+}
+
 @Composable
 private fun Question(name: String, onConfirm: () -> Unit, onChangedMind: () -> Unit) = Column(
     modifier = Modifier.fillMaxSize().padding(TimaSpacing.about4),

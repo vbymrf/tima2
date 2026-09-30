@@ -139,7 +139,7 @@ fun buildAssembled(
 ): Assembled =
     run {
         val environment = Environment.open(
-            deviceDatabase(databaseFor(device.session.userId, firstAccount)),
+            deviceDatabase(databaseFor(device.session.userId, firstAccount, entry.relinkedDevice(device.session.userId))),
             device.secret,
             device.session.userId,
             device.session.deviceId,

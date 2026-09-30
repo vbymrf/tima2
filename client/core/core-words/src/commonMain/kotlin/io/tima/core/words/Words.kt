@@ -1456,6 +1456,19 @@ interface AuthWords {
     val disconnectAbout: String
     val keep: String
 
+    // Выход из аккаунта и возврат (ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, 2026-09-30).
+    val signOut: String
+    val signOutAbout: String
+    val signOutLast: String
+    val signOutYes: String
+    val revokedTitle: String
+    val revokedAbout: String
+    val signInAgain: String
+    val returnTitle: String
+    fun returnTo(name: String): String
+    val listTimedOut: String
+    val retryList: String
+
     // Виртуальные аккаунты списком.
     // Беды входа.
     fun badPhone(reason: String): String
@@ -3213,6 +3226,17 @@ object RussianWords : Words {
             "Оно перестанет получать сообщения и потеряет доступ к аккаунту. Вернуть его " +
                 "нельзя — на нём придётся подключаться заново."
         override val keep = "Оставить"
+        override val signOut = "Выйти из аккаунта на этом устройстве"
+        override val signOutAbout = "Аккаунт будет отложен: переписка и ключи останутся на устройстве. Вернуться — кнопкой «Вернуть прежний аккаунт» на экране входа"
+        override val signOutLast = "Это последнее устройство аккаунта. Войти в него снова можно и по номеру телефона с секретной фразой"
+        override val signOutYes = "Выйти"
+        override val revokedTitle = "Это устройство отключено от аккаунта"
+        override val revokedAbout = "Сервер больше не признаёт это устройство. Войдите снова: по QR-коду с телефона, где вы уже вошли, или по номеру телефона"
+        override val signInAgain = "Войти снова"
+        override val returnTitle = "Вернуть прежний аккаунт"
+        override fun returnTo(name: String) = "Вернуть: $name"
+        override val listTimedOut = "Список не пришёл за 20 секунд"
+        override val retryList = "Повторить"
 
         override fun badPhone(reason: String) = "Номер не тот: $reason"
         override val wrongCode = "Код неверен или просрочен"

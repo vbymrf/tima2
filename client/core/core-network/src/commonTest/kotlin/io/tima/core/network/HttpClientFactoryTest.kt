@@ -2,6 +2,8 @@ package io.tima.core.network
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.request.get
+import io.ktor.client.request.post
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.pluginOrNull
@@ -88,6 +90,23 @@ class HttpClientFactoryTest {
             "на этой платформе ожидался движок $expectedEngine, а собрался $name",
         )
         client.close()
+    }
+
+    @Test
+    fun отказ_на_само_обновление_не_запускает_обновление() = runTest {
+        // 2026-09-30, ПК: обновление токена шло тем же клиентом, и его 401 запускал новое
+        // обновление, а то — ещё одно. 12 231 попытка за 17 минут.
+        var renews = 0
+        val renewal = TokenRenewal().apply { renew = { renews++; null } }
+        val engine = MockEngine { respond("", HttpStatusCode.Unauthorized) }
+        val client = HttpClient(engine) { timaDefaults(renewal = renewal) }
+
+        client.post("https://example.com/api/v1/auth/device/token")
+        assertEquals(0, renews, "отказ на обновление не должен звать обновление")
+        assertEquals(1, engine.requestHistory.size)
+
+        client.get("https://example.com/api/v1/devices")
+        assertEquals(1, renews, "обычная ручка на 401 обновляет токен, как и прежде")
     }
 }
 

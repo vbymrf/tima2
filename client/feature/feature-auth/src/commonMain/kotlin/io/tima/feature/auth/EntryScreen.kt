@@ -61,6 +61,12 @@ fun EntryScreen(
     onPhraseSaved: () -> Unit = {},
     onConnect: (() -> Unit)? = null,
     /**
+     * Отложенные аккаунты этого устройства — `userId` и как его назвать (ПЛАН-ВЫХОДА-ИЗ-
+     * АККАУНТА.md, А6). Пусто — возвращать некого, раздела нет.
+     */
+    returnable: List<Pair<String, String>> = emptyList(),
+    onReturn: (String) -> Unit = {},
+    /**
      * Номер сборки — единственное место, где он виден человеку.
      *
      * Стоит именно на входе: это первый экран после установки, и проверять, обновилось
@@ -82,7 +88,7 @@ fun EntryScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             when (state) {
-                is AuthState.Phone -> Phone(state, onNumber, onCodeCountry, onRequest, onConnect)
+                is AuthState.Phone -> Phone(state, onNumber, onCodeCountry, onRequest, onConnect, returnable, onReturn)
                 is AuthState.Code -> Code(state, onCode, onConfirm, onBack)
                 is AuthState.Phrase -> Phrase(state, onPhraseSaved)
                 is AuthState.PhraseInput -> PhraseInput(state, onPhrase, onEnterByPhrase, onStartAnew, onBack)
@@ -110,6 +116,8 @@ private fun Phone(
     onCodeCountry: (String) -> Unit,
     onRequest: () -> Unit,
     onConnect: (() -> Unit)?,
+    returnable: List<Pair<String, String>> = emptyList(),
+    onReturn: (String) -> Unit = {},
 ) {
     val words = Tima.words.auth
     Caption(words.welcome, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
@@ -150,6 +158,19 @@ private fun Phone(
             kind = ButtonKind.Quiet,
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+
+    // Отложенные выходом аккаунты (А6): вернуться в прежний — одним нажатием, без входа.
+    if (returnable.isNotEmpty()) {
+        Tertiary(words.returnTitle)
+        for ((userId, name) in returnable) {
+            Button(
+                label = words.returnTo(name),
+                onClick = { onReturn(userId) },
+                kind = ButtonKind.Quiet,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 

@@ -1375,6 +1375,17 @@ object EnglishWords : Words {
             "It will stop receiving messages and lose access to the account. It cannot be " +
                 "brought back — it will have to connect again from scratch."
         override val keep = "Keep it"
+        override val signOut = "Sign out on this device"
+        override val signOutAbout = "The account will be set aside: chats and keys stay on the device. Return with “Return previous account” on the sign-in screen"
+        override val signOutLast = "This is the account's last device. You can also sign in again with your phone number and secret phrase"
+        override val signOutYes = "Sign out"
+        override val revokedTitle = "This device was disconnected from the account"
+        override val revokedAbout = "The server no longer recognises this device. Sign in again: with a QR code from a phone already signed in, or with your phone number"
+        override val signInAgain = "Sign in again"
+        override val returnTitle = "Return previous account"
+        override fun returnTo(name: String) = "Return: $name"
+        override val listTimedOut = "The list did not arrive in 20 seconds"
+        override val retryList = "Retry"
 
         override fun badPhone(reason: String) = "Wrong number: $reason"
         override val wrongCode = "The code is wrong or expired"

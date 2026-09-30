@@ -1374,6 +1374,17 @@ object SpanishWords : Words {
             "Dejará de recibir mensajes y perderá el acceso a la cuenta. No se puede " +
                 "recuperar — habrá que conectarlo de nuevo desde cero."
         override val keep = "Dejarlo"
+        override val signOut = "Cerrar sesión en este dispositivo"
+        override val signOutAbout = "La cuenta quedará apartada: los chats y las claves siguen en el dispositivo. Vuelve con «Recuperar la cuenta anterior» en la pantalla de acceso"
+        override val signOutLast = "Es el último dispositivo de la cuenta. También puedes volver a entrar con tu número y la frase secreta"
+        override val signOutYes = "Cerrar sesión"
+        override val revokedTitle = "Este dispositivo fue desconectado de la cuenta"
+        override val revokedAbout = "El servidor ya no reconoce este dispositivo. Vuelve a entrar: con un código QR desde un teléfono con sesión iniciada o con tu número"
+        override val signInAgain = "Volver a entrar"
+        override val returnTitle = "Recuperar la cuenta anterior"
+        override fun returnTo(name: String) = "Recuperar: $name"
+        override val listTimedOut = "La lista no llegó en 20 segundos"
+        override val retryList = "Reintentar"
 
         override fun badPhone(reason: String) = "Número incorrecto: $reason"
         override val wrongCode = "El código es incorrecto o ha caducado"

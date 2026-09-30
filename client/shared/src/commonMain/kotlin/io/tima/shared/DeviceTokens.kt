@@ -5,7 +5,12 @@ import io.tima.core.diag.LogCode
 import kotlinx.datetime.Clock
 import io.tima.core.network.DeviceTokenApi
 import io.tima.core.network.DeviceTokenResult
+import io.tima.core.network.ServerClock
 import io.tima.core.network.deviceTokenSigningBytes
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import io.tima.domain.account.Session
 
 /**
@@ -80,9 +85,62 @@ class DeviceTokens(
      */
     fun words(): String = state(expiresAt(access)).second
 
+    /**
+     * Устройство отключено от аккаунта (сервер: `device_revoked`). Дальше обновлять нечего —
+     * экран предлагает войти снова (ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, А3).
+     */
+    val revoked: StateFlow<Boolean> get() = _revoked
+    private val _revoked = MutableStateFlow(false)
+
+    /**
+     * Обновление одно на всё приложение (А1, 2026-09-30).
+     *
+     * На `401` отвечают все ручки разом, и каждая просит новый токен. Без замка каждая
+     * шла на сервер сама; теперь первая обновляет, остальные ждут её и берут результат.
+     */
+    private val lock = Mutex()
+    private var lastSuccess = 0L
+    private var lastFailure = 0L
+    private var failures = 0
+
     /** Обновить сейчас. `false` — не вышло; прежний токен остаётся на месте. */
-    suspend fun renew(): Boolean {
-        val issuedAt = now() / 1000
+    suspend fun renew(): Boolean = lock.withLock {
+        val at = now()
+        // Только что обновили — токен уже свежий, второй раз за ним не ходим.
+        if (at - lastSuccess < FRESH) return@withLock true
+        if (_revoked.value) return@withLock false
+        // После отказа — пауза с ростом: 30 с, 1 мин, 5 мин. Без неё отказ превращался в
+        // шквал: 12 231 попытка за 17 минут на ПК со сбитыми часами (2026-09-30).
+        val wait = pause(failures)
+        if (failures > 0 && at - lastFailure < wait) {
+            if (!waitTold) {
+                waitTold = true
+                Journal.trouble(LogCode.AUTH_RENEW_WAIT, "обновление после отказа выжидает", "пауза" to howLong(wait))
+            }
+            return@withLock false
+        }
+        waitTold = false
+        val ok = attempt(retryStale = true)
+        if (ok) {
+            lastSuccess = now()
+            failures = 0
+        } else {
+            lastFailure = now()
+            failures++
+        }
+        ok
+    }
+
+    private var waitTold = false
+
+    /**
+     * Одна попытка. Метка времени — **время сервера** (А2): часы устройства могут
+     * расходиться с ним дальше окна в две минуты, и тогда подпись по своим часам не
+     * принимается никогда. `stale_signature` значит, что поправка устарела; её обновил сам
+     * ответ с отказом (заголовок `Date`), поэтому переподписываем один раз.
+     */
+    private suspend fun attempt(retryStale: Boolean): Boolean {
+        val issuedAt = ServerClock.now(now()) / 1000
         val signature = sign(deviceTokenSigningBytes(session.userId, session.deviceId, issuedAt))
         if (signature == null) {
             Journal.trouble(LogCode.AUTH_NO_KEY, "нечем подписать обновление: ключа устройства нет")
@@ -99,10 +157,10 @@ class DeviceTokens(
             }
 
             DeviceTokenResult.Revoked -> {
-                // Отзыв — это конец, а не заминка: у этого устройства доступа больше нет,
-                // и повторять запрос бессмысленно. Человеку это скажет экран, когда
-                // дойдёт до действия; здесь важно не крутить обновление впустую.
+                // Отзыв — это конец, а не заминка: у этого устройства доступа больше нет.
+                // Экран предложит войти снова (А3); крутить обновление впустую незачем.
                 Journal.trouble(LogCode.AUTH_REVOKED, "устройство отозвано — нужен новый вход")
+                _revoked.value = true
                 false
             }
 
@@ -118,7 +176,7 @@ class DeviceTokens(
                     "код" to answer.status,
                     "причина" to answer.code,
                 )
-                false
+                if (answer.code == STALE && retryStale) attempt(retryStale = false) else false
             }
         }
     }
@@ -133,6 +191,20 @@ class DeviceTokens(
     }
 
     private companion object {
+        /** Сервер: метка подписи вне окна — часы разошлись. */
+        const val STALE = "stale_signature"
+
+        /** Столько после удачного обновления второе не нужно: токен и так свежий. */
+        const val FRESH: Long = 10_000
+
+        /** Пауза после N-го отказа подряд. */
+        fun pause(failures: Int): Long = when (failures) {
+            0 -> 0L
+            1 -> 30_000L
+            2 -> 60_000L
+            else -> 300_000L
+        }
+
         /**
          * За сколько до конца обновляемся.
          *

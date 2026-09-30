@@ -82,6 +82,8 @@ kotlin {
         // JVM, потому что ей нужна файловая база.
         jvmTest.dependencies {
             implementation(libs.sqldelight.driver.jvm)
+            // Поддельный сервер для проверки обновления токена (ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, А1/А2).
+            implementation(libs.ktor.client.mock)
         }
     }
 }

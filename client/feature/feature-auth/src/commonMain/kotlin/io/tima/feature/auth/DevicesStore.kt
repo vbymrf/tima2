@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Свои устройства: список и отключение.
@@ -44,7 +45,13 @@ class DevicesStore(
     fun refresh() {
         _state.value = _state.value.copy(expect = true, trouble = null)
         scope.launch {
-            _state.value = when (val step = devices.list()) {
+            // Предел ожидания (ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, А7). 2026-09-30 на ПК запрос ждал
+            // токен, которого сервер не выдавал, и экран держал «Смотрим…» без конца.
+            // Упавший вызов — тоже не вечное ожидание: исключение раньше убивало корутину,
+            // и состояние оставалось «ждём».
+            val step = withTimeoutOrNull(LIST_TIMEOUT_MS) { runCatching { devices.list() }.getOrNull() }
+            _state.value = when (step) {
+                null -> _state.value.copy(expect = false, trouble = words().auth.listTimedOut)
                 is DevicesStep.Devices -> _state.value.copy(
                     devices = step.devices,
                     expect = false,
@@ -57,6 +64,10 @@ class DevicesStore(
                 is DevicesStep.Refused -> _state.value.copy(expect = false, trouble = step.reason)
             }
         }
+    }
+
+    private companion object {
+        const val LIST_TIMEOUT_MS = 20_000L
     }
 
     /** Человек нажал «Отключить» у строки: спрашиваем. */

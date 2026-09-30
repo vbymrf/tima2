@@ -489,7 +489,15 @@ private fun Inside(
         // привязку нечем — своего ключа у него нет. Показываем обычный вход, а не
         // сообщение о беде: человек, скорее всего, просто отсканировал код не тем
         // приложением.
-        Occurrence(entry, build) { device = entry.created() }
+        Occurrence(
+            entry,
+            build,
+            // Вернуть отложенный выходом аккаунт (ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, А6).
+            onReturn = { userId ->
+                entry.returnTo(userId)
+                device = entry.created()
+            },
+        ) { device = entry.created() }
         return
     }
 
@@ -503,6 +511,22 @@ private fun Inside(
     // Первый аккаунт сохраняет прежнее имя базы: у того, кто уже пользуется
     // приложением, переписка лежит в `tima.db`, и переименование потеряло бы её.
     val assembled = assemble(entry, current, build, deviceDatabase, entry.accountList().firstOrNull()?.userId)
+
+    // Выход из аккаунта на этом устройстве (ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, А4): канал
+    // отпускается, указатель «текущий» снимается, аккаунт откладывается — и приложение
+    // возвращается на экран входа, где есть и QR, и «Вернуть прежний аккаунт».
+    val signOut: () -> Unit = {
+        ChannelHost.release()
+        if (entry.signOut()) device = entry.created()
+    }
+
+    // Отключённое устройство (А3): вместо вечных `401` — экран «отключено» и вход заново.
+    val noRevoke = remember { kotlinx.coroutines.flow.MutableStateFlow(false) }
+    val revoked by (assembled.network.tokenKeeper?.revoked ?: noRevoke).collectAsState()
+    if (revoked) {
+        RevokedDevice(onAgain = signOut)
+        return
+    }
 
     App(
         assembled = assembled,
@@ -539,6 +563,7 @@ private fun Inside(
             entry.switchAccount(userId)
             device = entry.created()
         },
+        onSignOut = signOut,
         // Заведённый виртуальный аккаунт записывается и становится текущим — то есть
         // приложение сразу входит в него. Иначе человек, только что придумавший ему ник
         // и записавший фразу, оставался бы в прежнем аккаунте и гадал, что произошло.
@@ -570,7 +595,7 @@ private fun Inside(
 }
 
 @Composable
-private fun Occurrence(entry: Entry, build: Build, onEntered: () -> Unit) {
+private fun Occurrence(entry: Entry, build: Build, onReturn: (String) -> Unit = {}, onEntered: () -> Unit) {
     val scope = rememberCoroutineScope()
     val store = remember {
         AuthStore(
@@ -601,6 +626,10 @@ private fun Occurrence(entry: Entry, build: Build, onEntered: () -> Unit) {
         onPhraseSaved = store::savedPhrase,
         onConnect = store::connect,
         buildVersion = build.name,
+        // Отложенные выходом аккаунты (А6). Имя — ник; у основного его нет, тогда хвост
+        // идентификатора: различить два своих аккаунта хватит.
+        returnable = entry.accountList().map { it.userId to it.nickname.ifBlank { "…" + it.userId.takeLast(6) } },
+        onReturn = onReturn,
     )
 }
 
@@ -763,6 +792,8 @@ private fun App(
     /** Аккаунты этого устройства: основной и его виртуальные (Д11). */
     accounts: List<Account> = emptyList(),
     onSwitchAccount: (String) -> Unit = {},
+    /** Выйти из аккаунта на этом устройстве (ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, А4). */
+    onSignOut: () -> Unit = {},
     /**
      * Заведён виртуальный аккаунт: записать его в список и войти в него.
      *
@@ -2532,6 +2563,7 @@ private fun App(
                     Settings(
                         opened = current.item,
                         onOpen = { where = Where.Settings(it) },
+                        onSignOut = onSignOut,
                         network = network,
                         scope = scope,
                         platform = platform,
@@ -3190,6 +3222,7 @@ private fun LinkConfirmation(
 private fun Settings(
     opened: SettingsItem?,
     onOpen: (SettingsItem?) -> Unit,
+    onSignOut: () -> Unit,
     network: DevicePorts,
     scope: kotlinx.coroutines.CoroutineScope,
     platform: Platform,
@@ -3315,7 +3348,7 @@ private fun Settings(
                 )
             }
 
-            SettingsItem.DEVICES -> Devices(fleet, devices, build.name)
+            SettingsItem.DEVICES -> Devices(fleet, devices, build.name, onSignOut)
 
             // Уведомления (У1, У14). Пункт стоял в списке с самого начала и не
             // открывал ничего; теперь здесь два действия, без которых уведомления на
@@ -3452,6 +3485,7 @@ private fun Devices(
     store: DevicesStore,
     state: DevicesState,
     buildVersion: String,
+    onSignOut: () -> Unit,
 ) {
     DeviceScreen(
         state = state,
@@ -3459,7 +3493,30 @@ private fun Devices(
         onConfirm = store::revoke,
         onChangedMind = store::changedMind,
         buildVersion = buildVersion,
+        onSignOut = onSignOut,
+        onRetry = store::refresh,
     )
+}
+
+/**
+ * Устройство отключено от аккаунта (ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, А3): сервер ответил
+ * `device_revoked`. Раньше приложение крутило `401` молча; теперь говорит, что случилось, и
+ * ведёт на вход — там и QR, и номер телефона.
+ */
+@Composable
+private fun RevokedDevice(onAgain: () -> Unit) {
+    val words = Tima.words.auth
+    androidx.compose.foundation.layout.Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Tima.colors.surface)
+            .padding(io.tima.core.ui.TimaSpacing.about4),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(io.tima.core.ui.TimaSpacing.about3),
+    ) {
+        io.tima.core.ui.Caption(words.revokedTitle, weight = androidx.compose.ui.text.font.FontWeight.ExtraBold)
+        io.tima.core.ui.Secondary(words.revokedAbout)
+        io.tima.core.ui.Button(label = words.signInAgain, onClick = onAgain, modifier = Modifier.fillMaxWidth())
+    }
 }
 
 /**

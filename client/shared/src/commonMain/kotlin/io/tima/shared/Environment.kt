@@ -1,5 +1,7 @@
 package io.tima.shared
 
+import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
 import io.tima.core.network.CallHistoryOverHttp
 import io.tima.core.network.CallsOverHttp
 import io.tima.core.database.SqlCallLog
@@ -183,6 +185,35 @@ class Entry private constructor(
      * которое само лезет в сеть, нечем отменить.
      */
     fun switchAccount(userId: String) = accounts.switchTo(userId)
+
+    /**
+     * Выйти из аккаунта на этом устройстве (ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, А4/А5).
+     *
+     * Аккаунт **откладывается** (решение 1в): остаются запись в списке, ключи и база — снят
+     * только указатель «текущий». Прежнее одиночное место сессии (до Д11) очищается: иначе
+     * [created] нашёл бы его и вошёл обратно; в список аккаунт к этому времени уже
+     * переехал — это проверяется, и без переезда выход не делается вовсе.
+     *
+     * @return `false` — выходить не из чего или аккаунт не переехал в список.
+     */
+    fun signOut(): Boolean {
+        val userId = accounts.current() ?: return false
+        val store = accounts.store(userId)
+        if (store.session() == null || store.deviceSecret() == null) return false
+        accounts.leave()
+        secrets.clear()
+        Journal.note(LogCode.ACCOUNT_OUT, "выход из аккаунта — отложен", "отложенных" to accounts.all().size)
+        return true
+    }
+
+    /** Вернуть отложенный аккаунт (А6). */
+    fun returnTo(userId: String) {
+        accounts.switchTo(userId)
+        Journal.note(LogCode.ACCOUNT_BACK, "возврат отложенного аккаунта")
+    }
+
+    /** Каким устройством аккаунт вошёл заново — для имени его базы (А5). */
+    fun relinkedDevice(userId: String): String? = accounts.relinked(userId)
 
     /** Запомнить заведённый аккаунт (свой или виртуальный) и сделать текущим. */
     fun rememberAccount(account: Account, session: Session, deviceSecret: ByteArray) =

@@ -48,4 +48,14 @@ class DatabaseNameTest {
     fun у_двух_аккаунтов_имена_разные() {
         assertTrue(databaseFor(первый) != databaseFor(второй))
     }
+
+    @Test
+    fun тот_же_аккаунт_вошедший_заново_получает_новую_базу() {
+        // ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, А5: новый ключ покоя прежнюю базу не откроет —
+        // значит и открывать её он не должен; прежний файл остаётся на месте.
+        val id = "0b7f1c2a-1111-2222-3333-444455556666"
+        val again = databaseFor(id, first = id, relinked = "9e8d7c6b-aaaa-bbbb-cccc-ddddeeeeffff")
+        assertEquals("tima-$id-9e8d7c6b-aaa.db", again)
+        assertEquals("tima.db", databaseFor(id, first = id))
+    }
 }

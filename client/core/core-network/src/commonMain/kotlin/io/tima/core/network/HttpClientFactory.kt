@@ -80,6 +80,11 @@ fun HttpClientConfig<*>.timaDefaults(
                 val first = proceed(request)
                 if (first.response.status != HttpStatusCode.Unauthorized) return@on first
                 val path = shortPath(request.url.build().encodedPath)
+                // Отказ на само обновление не обновляется снова (2026-09-30). Обновление
+                // идёт тем же клиентом, и его `401` запускал новое обновление, а то — ещё
+                // одно: на ПК со сбитыми часами 12 231 попытка за 17 минут. Причину отказа
+                // разбирает тот, кто обновлял (`DeviceTokens`).
+                if (path == RENEW_PATH) return@on first
                 // Общий код: сервер отказал по авторизации. Причину назовёт частный —
                 // её знает тот, кто владеет токеном, а не транспорт.
                 Journal.trouble(LogCode.NET_401, "сервер не принял токен — пробую обновить", "путь" to path)
@@ -138,6 +143,9 @@ fun HttpClientConfig<*>.timaDefaults(
             }
         }
         onResponse { response ->
+            // Время сервера — с каждого ответа: по нему подписывается обновление токена,
+            // когда часы устройства разошлись с сервером (ServerClock, А2).
+            ServerClock.observe(response.headers[HttpHeaders.Date])
             val started = response.call.request.attributes.getOrNull(startedAt)
             val spent = started?.let { Clock.System.now().toEpochMilliseconds() - it } ?: -1
             val path = shortPath(response.call.request.url.encodedPath)
@@ -157,6 +165,9 @@ fun HttpClientConfig<*>.timaDefaults(
         }
     })
 }
+
+/** Путь обновления токена: его `401` не обновляется снова. */
+internal const val RENEW_PATH = "/api/v1/auth/device/token"
 
 /** Когда ушёл запрос — чтобы в журнале было время ответа, а не только его код. */
 private val startedAt = AttributeKey<Long>("tima-started-at")

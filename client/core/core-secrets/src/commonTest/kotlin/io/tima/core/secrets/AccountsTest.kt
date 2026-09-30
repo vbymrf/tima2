@@ -2,6 +2,7 @@ package io.tima.core.secrets
 
 import io.tima.domain.account.Session
 import kotlin.test.Test
+import kotlin.test.assertNotNull
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -85,5 +86,31 @@ class AccountsTest {
         assertEquals(0, accounts.pending("u-2"))
         // Указатель не остаётся на несуществующем: это неотличимо от «входа не было».
         assertEquals("u-1", accounts.current())
+    }
+
+    @Test
+    fun выход_откладывает_аккаунт_а_не_стирает() {
+        // ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, А4/А5, решение 1в: снимается только «текущий».
+        accounts.remember(Account("u-1"), session("u-1"), ByteArray(32) { 1 })
+
+        accounts.leave()
+
+        assertNull(accounts.current())
+        assertEquals(listOf("u-1"), accounts.all().map { it.userId }, "аккаунт остался в списке")
+        assertNotNull(accounts.store("u-1").session(), "сессия на месте — вернуться можно")
+        accounts.switchTo("u-1")
+        assertEquals("u-1", accounts.current())
+    }
+
+    @Test
+    fun вход_тем_же_аккаунтом_новым_устройством_помечается() {
+        // Выход и вход по QR в тот же аккаунт (А5): ключ покоя новый, прежняя база им не
+        // откроется — база получит новое имя.
+        accounts.remember(Account("u-1"), session("u-1"), ByteArray(32) { 1 })
+        assertNull(accounts.relinked("u-1"))
+
+        accounts.remember(Account("u-1"), Session("u-1", "d-новое", "jwt"), ByteArray(32) { 2 })
+
+        assertEquals("d-новое", accounts.relinked("u-1"))
     }
 }

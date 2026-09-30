@@ -15,8 +15,14 @@ package io.tima.shared
  * Здесь, а не в приложениях: путь к каталогу платформенный, а правило именования — нет,
  * и два одинаковых правила в двух приложениях однажды разошлись бы.
  */
-fun databaseFor(userId: String, first: String? = null): String =
-    if (first != null && userId == first) LEGACY else "tima-${safe(userId)}.db"
+fun databaseFor(userId: String, first: String? = null, relinked: String? = null): String = when {
+    // Тот же аккаунт вошёл заново (выход и вход по QR, ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md А5): ключ
+    // покоя новый, прежняя база им не откроется — новая база под новым именем, прежний
+    // файл остаётся на месте.
+    relinked != null -> "tima-${safe(userId)}-${safe(relinked).take(12)}.db"
+    first != null && userId == first -> LEGACY
+    else -> "tima-${safe(userId)}.db"
+}
 
 /** Прежнее имя: одна база на приложение, как было до Д11. */
 const val LEGACY: String = "tima.db"
