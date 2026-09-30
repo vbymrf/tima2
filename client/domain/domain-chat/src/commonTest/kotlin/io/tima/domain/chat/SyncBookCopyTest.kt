@@ -139,6 +139,22 @@ class SyncBookCopyTest {
     }
 
     @Test
+    fun перезапуск_без_правок_не_отдаёт_ту_же_книгу_снова() = runTest {
+        // Redmi 2026-09-30: 127 → 128 → 129 за четыре минуты без единой правки — отпечаток
+        // отданного жил в памяти и терялся с перезапуском (ЖУ9).
+        val cell = Cell()
+        val phone = MemoryCopy(BookCopy(0, "T1", listOf(contact("+1", "Витя", at = 10, device = "T1")), emptyList()))
+        var print: Int? = null
+        fun запуск() = SyncBookCopy(phone, cell, Plain, { byteArrayOf(1) }, Memory().apply { value = cell.revision }, { "T1" },
+            lastPrint = { print }, rememberPrint = { print = it })
+        cell.caller = "T1"
+        assertIs<CopyStep.Pushed>(запуск().push())
+
+        assertEquals(CopyStep.Unchanged, запуск().push(), "второй запуск без правок")
+        assertEquals(1L, cell.revision)
+    }
+
+    @Test
     fun без_ключа_ходов_нет() = runTest {
         val sync = SyncBookCopy(MemoryCopy(BookCopy.EMPTY), Cell(), Plain, { null }, Memory(), { "T1" })
         assertEquals(CopyStep.NoKey, sync.pull())

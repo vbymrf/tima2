@@ -1415,20 +1415,35 @@ private fun App(
         new.reset()
     }
 
-    // Фоновые циклы — в своём файле: это политика времени, а не навигация.
-    BackgroundLoops(assembled, platform, changeSign = listState, onPending = onPending)
 
-    // Копия книги между устройствами (Р2а): забрать при запуске, отдавать после правок.
+    // Копия аккаунта между устройствами (Р2а, ЖУ9): книга и отметки «просмотрено до».
     // Один раз на сборку — `remember`, иначе каждая перерисовка заводила бы новый цикл.
-    remember(assembled) {
+    val accountCopy = remember(assembled) {
         BookCopySync(
             environment = environment,
             store = network.accountStore,
             keys = assembled.keyOrchestrator,
             deviceId = session.deviceId,
             scope = scope,
+            // Копия аккаунта — одна отправка за сессию, забор по событию (ЖУ9).
+            shown = assembled.notices.shown,
+            changes = assembled.storeChanges,
+            readState = environment.readState,
+            onReadElsewhere = { chatId -> assembled.notices.viewed(chatId, "прочитано на другом устройстве") },
+            readsStore = network.readsStore,
         ).also { it.start() }
     }
+
+    // Фоновые циклы — в своём файле: это политика времени, а не навигация.
+    //
+    // Очередь убыла — сообщение ушло, сеть поднята: копия аккаунта уходит в тот же момент,
+    // если в ней есть неотданное (ЖУ9). Иначе — в конце сессии.
+    var pendingBefore by remember { mutableStateOf(-1) }
+    BackgroundLoops(assembled, platform, changeSign = listState, onPending = { howMany ->
+        if (pendingBefore > howMany) accountCopy.sessionEnded()
+        pendingBefore = howMany
+        onPending(howMany)
+    })
 
     /**
      * Начать звонок откуда угодно — из шапки переписки, из книги, с личной страницы.
@@ -3061,7 +3076,13 @@ private fun Chat(
     // останется «открытой» навсегда и замолчит насовсем.
     DisposableEffect(chatId, notices) {
         notices?.watching(chatId)
-        onDispose { notices?.watching(null) }
+        seenUpTo(environment, chatId)
+        onDispose {
+            notices?.watching(null)
+            // И на выходе: пока переписка была открыта, в ней могло прийти новое — его тоже
+            // видели.
+            seenUpTo(environment, chatId)
+        }
     }
     // Store живёт столько, сколько открыта переписка: ключ по chatId, чтобы при переходе в
     // другую он пересоздался, а не показал реплики предыдущей.
@@ -4060,6 +4081,19 @@ private fun Members(
  * его нет, и подставлять туда ноль было бы не честнее: ноль означает «прочитано всё»,
  * а правда в том, что считать нечего — социального слоя на сервере нет.
  */
+/**
+ * Отметка «просмотрено до» — время последнего входящего в открытой переписке (ЖУ9). Только
+ * в базу устройства: в копию аккаунта она уйдёт одной отправкой в конце сессии.
+ */
+private fun seenUpTo(environment: Environment, chatId: String) {
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+        runCatching {
+            val upto = environment.readState.lastIncomingTs(chatId)
+            if (upto > 0) environment.readState.markLocal(chatId, upto)
+        }
+    }
+}
+
 private fun windowCounters(counts: io.tima.domain.chat.NoticeCounts): Map<Window, Int> {
     // Счётчик идёт ЗА перепиской, а не остаётся там, где она лежала. Группы уехали на
     // вкладку окна 5 — значит и новое в них считается окну 5. Иначе человек видит

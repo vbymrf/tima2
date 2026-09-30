@@ -68,6 +68,11 @@ class Receiver(
      */
     private val onComment: (String, Long) -> Unit = { _, _ -> },
     /**
+     * Копия аккаунта изменилась на другом устройстве: `(вид, ревизия)` (ЖУ9). Приёмник
+     * только приносит номер; забирать ли — решает тот, кто держит копию.
+     */
+    private val onStoreChanged: (String, Long) -> Unit = { _, _ -> },
+    /**
      * Нам звонят: `(callId, fromUserId, kind)`.
      *
      * Приёмник только приносит — кто этот человек и что показать, решает тот, кто держит
@@ -429,6 +434,7 @@ class Receiver(
                 onGroupKeys = { decision -> aboutKeys(decision) },
                 onLevelNarrowed = { decision -> aboutLevel(decision) },
                 onComment = { decision -> aboutComment(decision) },
+                onStoreChanged = { decision -> onStoreChanged(decision.kind, decision.revision) },
                 onCall = { decision -> aboutCall(decision) },
                 onCallsTop = { top -> callsTop(top) },
                 onOpen = { live = true },

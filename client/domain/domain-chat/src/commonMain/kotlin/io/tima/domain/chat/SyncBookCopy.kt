@@ -35,6 +35,13 @@ class SyncBookCopy(
     /** Запомненная ревизия сервера: от неё считается следующая. */
     private val revision: RevisionMemory,
     private val device: () -> String,
+    /**
+     * Отпечаток последнего отданного — **переживает перезапуск** (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md,
+     * ЖУ9). В памяти он терялся, и каждый запуск отдавал ту же книгу новой ревизией: Redmi
+     * 2026-09-30 — 127 → 128 → 129 за четыре минуты без единой правки.
+     */
+    private val lastPrint: () -> Int? = { null },
+    private val rememberPrint: (Int) -> Unit = {},
 ) {
 
     suspend fun pull(): CopyStep {
@@ -53,9 +60,19 @@ class SyncBookCopy(
 
     /** Отпечаток последнего отданного: одно и то же дважды не гоняем. */
     private var pushed: Int? = null
+    private var printRead = false
+
+    private fun remembered(print: Int) {
+        pushed = print
+        rememberPrint(print)
+    }
 
     suspend fun push(): CopyStep {
         val k = key() ?: return CopyStep.NoKey
+        if (!printRead) {
+            pushed = pushed ?: lastPrint()
+            printRead = true
+        }
         var attempts = 0
         while (true) {
             val next = revision.last() + 1
@@ -70,7 +87,7 @@ class SyncBookCopy(
             when (val sent = store.put(next, sealed)) {
                 AccountStoreStep.Stored -> {
                     revision.remember(next)
-                    pushed = print
+                    remembered(print)
                     return CopyStep.Pushed(next)
                 }
                 is AccountStoreStep.Conflict -> {
@@ -97,7 +114,7 @@ class SyncBookCopy(
         // Если после приёма наша книга совпала с принятой — отдавать нечего: иначе каждый
         // запуск отвечал бы серверу его же копией под новой ревизией.
         if (copy.snapshot().copy(revision = 0, device = "") == theirs.copy(revision = 0, device = "")) {
-            pushed = theirs.copy(revision = 0, device = "").hashCode()
+            remembered(theirs.copy(revision = 0, device = "").hashCode())
         }
         return CopyStep.Pulled(blob.revision, from = blob.device)
     }

@@ -26,6 +26,9 @@ class SqlReadState(private val db: TimaDatabase) {
     fun missedUnseen(me: String): Map<String, String> =
         db.callLogQueries.missedUnseenRows(me).executeAsList().associate { it.call_id to it.initiator_id }
 
+    /** Сколько в переписке непрочитанного. */
+    fun unread(chatId: String): Long = db.messagesQueries.unreadInChat(chatId = chatId, stored = stored).executeAsOne()
+
     /** Время последнего входящего в переписке — отметка «просмотрено до» (ЖУ9). `0` — входящих нет. */
     fun lastIncomingTs(chatId: String): Long =
         db.messagesQueries.lastIncomingTs(chatId).executeAsOne()

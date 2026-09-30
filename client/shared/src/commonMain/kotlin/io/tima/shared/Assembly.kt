@@ -70,6 +70,11 @@ class Assembled(
      */
     val commentPings: StateFlow<Long>,
     /**
+     * Ревизии копии аккаунта, о которых сказал сервер: вид → ревизия (ЖУ9). Приносит
+     * приёмник, читает тот, кто держит копию.
+     */
+    val storeChanges: StateFlow<Map<String, Long>>,
+    /**
      * Входящий звонок из канала: `callId|fromUserId|kind`, пусто — никто не звонит.
      *
      * Строкой, а не своим типом: сборка не должна знать устройства звонка, а тому, кто
@@ -220,6 +225,7 @@ fun buildAssembled(
         // потому что живёт столько же, сколько сборка, — а не столько, сколько экран.
         val senderStamps = MutableSharedFlow<SenderStamp>(extraBufferCapacity = 64)
         val commentPings = MutableStateFlow(0L)
+        val storeChanges = MutableStateFlow<Map<String, Long>>(emptyMap())
         val callPings = CallPings()
         val outdated = MutableStateFlow(false)
 
@@ -276,6 +282,10 @@ fun buildAssembled(
                 identity = identity,
                 keyOrchestrator = keyOrchestrator,
                 onComment = { _, postId -> commentPings.value = postId },
+                onStoreChanged = { kind, revision ->
+                    val known = storeChanges.value
+                    if (revision > (known[kind] ?: 0)) storeChanges.value = known + (kind to revision)
+                },
                 onCall = { callId, from, kind -> callPings.send("$callId|$from|$kind") },
                 // Со звонком что-то стало. Слово сервера нужно там, где до комнаты не
                 // дошло: собеседник отклонил или не смог ответить, а движок SFU про это
@@ -325,6 +335,7 @@ fun buildAssembled(
             notices = notices,
             keyOrchestrator = keyOrchestrator,
             commentPings = commentPings,
+            storeChanges = storeChanges,
             callPings = callPings,
             outdated = outdated,
             senderStamps = senderStamps,

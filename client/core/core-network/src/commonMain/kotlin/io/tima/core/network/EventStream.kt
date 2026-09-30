@@ -69,6 +69,8 @@ class EventStream(
          * обязан работать и там, где страницы нет вовсе.
          */
         onComment: suspend (EventStreamProtocol.Decision.CommentArrived) -> Unit = {},
+        /** Копия аккаунта изменилась на другом устройстве (ЖУ9). По умолчанию ничего. */
+        onStoreChanged: suspend (EventStreamProtocol.Decision.StoreChanged) -> Unit = {},
         /**
          * Нам звонят или со звонком что-то стало.
          *
@@ -181,6 +183,15 @@ class EventStream(
                         // каждом подключении.
                         is EventStreamProtocol.Decision.CommentArrived -> {
                             onComment(decision)
+                            decision.eventId?.let {
+                                last = it
+                                send(Frame.Text(protocol.ackFrame(it)))
+                            }
+                        }
+
+                        // «Копия изменилась» — так же: запомнили номер — обработано.
+                        is EventStreamProtocol.Decision.StoreChanged -> {
+                            onStoreChanged(decision)
                             decision.eventId?.let {
                                 last = it
                                 send(Frame.Text(protocol.ackFrame(it)))

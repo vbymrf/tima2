@@ -162,6 +162,13 @@ class EventStreamProtocol {
         ) : Decision
 
         /**
+         * Копия аккаунта изменилась на другом устройстве (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ9):
+         * вид (`book`, `reads`) и ревизия. Устройство в фоне только запоминает номер и
+         * забирает копию, выйдя на экран, — и только если номер новее своего.
+         */
+        data class StoreChanged(val kind: String, val revision: Long, val eventId: Long?) : Decision
+
+        /**
          * Участник просит недостающие версии ключа (`recovery.gk_request`).
          *
          * Просьба адресована нам, потому что сервер знает: эти версии у нас есть.
@@ -567,6 +574,16 @@ class EventStreamProtocol {
                         authorId = json.string("author_id") ?: "",
                         eventId = eventId,
                     )
+                }
+            }
+
+            "store.changed" -> {
+                val kind = json.string("kind")
+                val revision = json["revision"]?.jsonPrimitive?.longOrNull
+                if (kind == null || revision == null) {
+                    Decision.Skip("store.changed без обязательных полей", eventId)
+                } else {
+                    Decision.StoreChanged(kind, revision, eventId)
                 }
             }
 

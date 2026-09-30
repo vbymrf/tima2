@@ -319,7 +319,16 @@ class Notices(
     /** Окно показалось или ушло — У4. Убранное окно ничего не показывает глазами. */
     fun windowVisible(visible: Boolean) {
         windowShown = visible
+        _shown.value = visible
     }
+
+    private val _shown = kotlinx.coroutines.flow.MutableStateFlow(true)
+
+    /**
+     * Видно ли окно — сессия человека: ушло с экрана — конец сессии, копия аккаунта
+     * отдаётся; вышло на экран — забирается, если сервер сказал, что есть новее (ЖУ9).
+     */
+    val shown: kotlinx.coroutines.flow.StateFlow<Boolean> = _shown
 
     /**
      * Сверка журнала с базой при запуске (ЖУ1).

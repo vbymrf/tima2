@@ -346,6 +346,10 @@ class Network(
     val accountStore: AccountStoreOverHttp =
         AccountStoreOverHttp(link.route, link.client, token = { token() })
 
+    /** Ячейка отметок «просмотрено до» — копия аккаунта, вид `reads` (ЖУ9). */
+    val readsStore: AccountStoreOverHttp =
+        AccountStoreOverHttp(link.route, link.client, token = { token() }, kind = "reads")
+
     /** Медиа-хранилище: init → PUT → complete. Пока единственный потребитель — аватар. */
     override val media: Media = MediaOverHttp(link.route, link.client, token = { token() })
 
