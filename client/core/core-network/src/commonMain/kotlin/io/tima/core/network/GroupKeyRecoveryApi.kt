@@ -6,6 +6,7 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
 import io.ktor.http.contentType
 
 /**
@@ -92,7 +93,10 @@ class GroupKeyRecoveryApi(
         } catch (e: Throwable) {
             return ProvideResult.NoConnection(classifyFailure(e))
         }
-        if (response.status == HttpStatusCode.OK) return ProvideResult.Provided(keys.size)
+        // Сервер отвечает 201 «создано» (`groupKeyProvide`). До 2026-09-30 здесь ждали ровно 200,
+        // и каждая удачная передача считалась отказом: «ключи новому устройству: отданы не все,
+        // отдано=0 нет=3» на Redmi — при том что все три обёртки легли на сервер.
+        if (response.status.isSuccess()) return ProvideResult.Provided(keys.size)
         return ProvideResult.Refused(response.status.value, response.jsonBody().codeOf())
     }
 }
