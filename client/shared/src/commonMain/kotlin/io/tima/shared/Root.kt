@@ -524,6 +524,9 @@ private fun Inside(
     val noRevoke = remember { kotlinx.coroutines.flow.MutableStateFlow(false) }
     val revoked by (assembled.network.tokenKeeper?.revoked ?: noRevoke).collectAsState()
     if (revoked) {
+        // Канал с отозванным токеном переподнимался раз в 20 с впустую (ПК, 2026-09-30):
+        // отпускаем его сразу, не дожидаясь «Войти снова».
+        LaunchedEffect(Unit) { ChannelHost.release() }
         RevokedDevice(onAgain = signOut)
         return
     }
