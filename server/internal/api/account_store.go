@@ -35,12 +35,20 @@ const maxStoreBlob = 1 << 20
 
 // storeKinds — виды копий, которые сервер принимает. Перечень, а не любая строка: строку
 // не с чем сверить, и опечатка в клиенте завела бы вторую ячейку рядом с первой.
-var storeKinds = map[string]bool{"book": true}
+//
+// `reads` — отметки «просмотрено до» (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ9, заказчик
+// 2026-09-30): прочитанное на одном устройстве снимает числа на остальных. Сервер их
+// не читает, как и книгу, — кто что смотрел, он не знает.
+var storeKinds = map[string]bool{"book": true, "reads": true}
 
-func RegisterAccountStore(mux *http.ServeMux, st AccountStoreStore, requireDevice Middleware) {
+// StoreChanged — сообщить остальным устройствам аккаунта, что копия изменилась (ЖУ9).
+// `nil` — не сообщать: так собираются проверки без шины.
+type StoreChanged func(ctx context.Context, userID, byDevice, kind string, revision int64)
+
+func RegisterAccountStore(mux *http.ServeMux, st AccountStoreStore, changed StoreChanged, requireDevice Middleware) {
 	mux.HandleFunc("GET /api/v1/users/me/store/group", requireDevice(storeGroup(st)))
 	mux.HandleFunc("GET /api/v1/users/me/store/{kind}", requireDevice(getAccountStore(st)))
-	mux.HandleFunc("PUT /api/v1/users/me/store/{kind}", requireDevice(putAccountStore(st)))
+	mux.HandleFunc("PUT /api/v1/users/me/store/{kind}", requireDevice(putAccountStore(st, changed)))
 }
 
 // storeGroup — служебная группа аккаунта: её ключом шифруется копия. Заводится при первом
@@ -89,7 +97,7 @@ func getAccountStore(st AccountStoreStore) http.HandlerFunc {
 	}
 }
 
-func putAccountStore(st AccountStoreStore) http.HandlerFunc {
+func putAccountStore(st AccountStoreStore, changed StoreChanged) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		kind := r.PathValue("kind")
 		if !storeKinds[kind] {
@@ -141,6 +149,12 @@ func putAccountStore(st AccountStoreStore) http.HandlerFunc {
 			log.Printf("putAccountStore: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
+		}
+		// Остальным устройствам — «копия изменилась, ревизия N» (ЖУ9). Событие маленькое
+		// и в полосе `seq`: важен факт, а не порядок. Устройство в фоне только запоминает
+		// номер и забирает копию, когда выйдет на экран, — и только если номер новее.
+		if changed != nil {
+			changed(r.Context(), id.UserID, id.DeviceID, kind, req.Revision)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"kind": kind, "revision": req.Revision, "device_id": id.DeviceID})

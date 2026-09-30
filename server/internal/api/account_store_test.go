@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/base64"
 	"testing"
 )
@@ -72,6 +73,52 @@ func TestРевизияПринимаетсяТолькоСледующая(t *t
 	if code := postAuthed(t, ts, me.token, "PUT", "/api/v1/users/me/store/book",
 		map[string]any{"revision": 5, "blob": blobOf(t, "x")}, nil); code != 409 {
 		t.Fatalf("перескок — ждём 409, получили %d", code)
+	}
+}
+
+// Копия «просмотрено» (ЖУ9): вид принимается, и остальные устройства аккаунта узнают об
+// изменении событием в журнале, а сохранившее — нет.
+func TestКопияПросмотренногоИСобытиеОстальнымУстройствам(t *testing.T) {
+	ts, srv := setup(t)
+	me := registerDevice(t, ts, "+79990000245")
+	start, encPub, signPub := startLink(t, ts, "ПК")
+	secret := qrParam(t, start.QRPayload, "secret")
+	if code := confirmLink(t, ts, me.token, start.SessionID, secret, encPub, signPub, me.signKey); code != 200 {
+		t.Fatalf("link/confirm: %d", code)
+	}
+	var other string
+	for _, d := range myDevices(t, ts, me.token) {
+		if d.DeviceID != me.id {
+			other = d.DeviceID
+		}
+	}
+	if other == "" {
+		t.Fatal("второе устройство не появилось")
+	}
+
+	if code := postAuthed(t, ts, me.token, "PUT", "/api/v1/users/me/store/reads",
+		map[string]any{"revision": 1, "blob": blobOf(t, "отметки")}, nil); code != 200 {
+		t.Fatalf("сохранение отметок: %d", code)
+	}
+
+	count := func(device string) int {
+		events, err := srv.Store.ListDeviceEvents(context.Background(), device, 0, 500)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := 0
+		for _, e := range events {
+			if e.EventType == "store.changed" {
+				n++
+			}
+		}
+		return n
+	}
+	if count(other) != 1 {
+		t.Fatalf("второе устройство не узнало об изменении копии")
+	}
+	if count(me.id) != 0 {
+		t.Fatalf("сохранившему сообщили его же изменение")
 	}
 }
 

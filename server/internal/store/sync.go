@@ -58,7 +58,7 @@ func LaneOf(eventType string) int16 {
 		return LanePts
 	case "key.rotated", "recovery.gk_request", "recovery.gk_ready", "group.rotation_needed":
 		return LaneQts
-	case "channel.comment":
+	case "channel.comment", "store.changed":
 		return LaneSeq
 	default:
 		return LaneNone

@@ -146,7 +146,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	RegisterLocale(mux, s.Store, s.requireActiveDevice)
 	// Копия личных данных аккаунта — книга и разделы — блобом под ключом служебной
 	// группы (ПЛАН-РАЗДЕЛОВ Р2а). Сервер её не читает: принимает, отдаёт, следит за ревизией.
-	RegisterAccountStore(mux, s.Store, s.requireActiveDevice)
+	RegisterAccountStore(mux, s.Store, s.notifier().StoreChanged, s.requireActiveDevice)
 	// Страница человека: своя лента и перенос к себе. Лента — канал, который ищут по
 	// человеку, поэтому регистратор стоит рядом с каналами, а не с группами.
 	RegisterFeeds(mux, s.Store, s.requireActiveDevice)

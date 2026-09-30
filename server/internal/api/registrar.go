@@ -189,6 +189,23 @@ func pokeFor(event string, eventID int64, lanes store.Lanes, payload map[string]
 	}
 }
 
+// StoreChanged — копия аккаунта изменилась: остальным устройствам человека событие
+// `store.changed {kind, revision}` (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ9). Сохранившему — нет:
+// своё он знает.
+func (n *Notifier) StoreChanged(ctx context.Context, userID, byDevice, kind string, revision int64) {
+	devices, err := n.store.ListDevices(ctx, userID)
+	if err != nil {
+		log.Printf("notify store.changed: devices of %s: %v", userID, err)
+		return
+	}
+	for _, d := range devices {
+		if d.DeviceID == byDevice {
+			continue
+		}
+		n.Device(ctx, d.DeviceID, "store.changed", map[string]any{"kind": kind, "revision": revision})
+	}
+}
+
 // Users — то же событие всем устройствам перечисленных людей.
 //
 // Отказ по одному человеку не останавливает рассылку: у остальных событие уже
