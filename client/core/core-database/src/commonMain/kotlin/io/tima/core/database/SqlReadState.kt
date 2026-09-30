@@ -14,9 +14,9 @@ class SqlReadState(private val db: TimaDatabase) {
     private val stored = IncomingState.STORED.ordinal.toLong()
     private val read = IncomingState.READ.ordinal.toLong()
 
-    /** Переписки с непрочитанным: переписка → группа ли. */
+    /** Переписки с непрочитанным, в том числе ещё не разобранным: переписка → группа ли. */
     fun unreadChats(): Map<String, Boolean> {
-        val chats = db.messagesQueries.unreadChats(stored).executeAsList().map { it.chat_id }
+        val chats = db.messagesQueries.unreadChats(read).executeAsList().map { it.chat_id }
         return chats.associateWith { chatId ->
             db.chatsQueries.chatById(chatId).executeAsOneOrNull()?.kind == 1L
         }

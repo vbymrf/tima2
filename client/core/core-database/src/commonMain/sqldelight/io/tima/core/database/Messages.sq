@@ -288,10 +288,12 @@ WHERE direction = 1 AND chat_id = :chatId AND state = :stored AND client_ts <= :
 lastIncomingTs:
 SELECT coalesce(max(client_ts), 0) FROM messages WHERE direction = 1 AND chat_id = ?;
 
--- Непрочитанные по перепискам — сверка журнала уведомлений при запуске (ЖУ1).
+-- Непрочитанные по перепискам — сверка журнала уведомлений при запуске (ЖУ1). Всё входящее,
+-- что не прочитано, в том числе ещё не разобранное: уведомление о нём уже стоит, и снимать
+-- его сверкой нельзя (живая проверка 2026-09-30).
 unreadChats:
 SELECT chat_id, max(server_id) FROM messages
-WHERE direction = 1 AND state = :stored GROUP BY chat_id;
+WHERE direction = 1 AND state <> :read GROUP BY chat_id;
 
 -- Сколько сообщений В ЭТОЙ переписке ещё не отмечены прочитанными.
 --

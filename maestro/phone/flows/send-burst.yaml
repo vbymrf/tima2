@@ -1,0 +1,42 @@
+# Пачка сообщений одному собеседнику — проверка «звук один на пачку» (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ ЖУ3, ЖУ7).
+#
+# Через Maestro, а не `adb input`: поле ввода Compose касанием adb фокус не берёт (2026-09-30,
+# realme — текст уходил мимо, а касания после «Назад» попадали на рабочий стол).
+# Кнопка отправки без надписи — точкой справа от поля, после того как клавиатура убрана.
+appId: io.tima.app.v2
+# MAESTRO_PEER — строка собеседника в «Чатах»; MAESTRO_TIMES — сколько сообщений.
+---
+- launchApp:
+    stopApp: false
+# Приложение могло остаться в переписке или на странице человека — назад до главного окна.
+- repeat:
+    while:
+      notVisible:
+        id: "tab:Chats"
+    times: 4
+    commands:
+      - back
+      - launchApp:
+          stopApp: false
+- tapOn:
+    id: "tab:Chats"
+- tapOn:
+    text: "${MAESTRO_PEER}"
+    below: "Вид"
+# Касание по имени в «Чатах» открывает страницу человека — с неё «Написать».
+- tapOn:
+    text: "Написать"
+    optional: true
+# «Сообщение» — подсказка поля, в дереве её нет; признак переписки — «•••» в шапке.
+- extendedWaitUntil:
+    visible: "•••"
+    timeout: 10000
+- repeat:
+    times: ${MAESTRO_TIMES}
+    commands:
+      - tapOn:
+          point: "40%,90%"
+      - inputText: "пачка"
+      - hideKeyboard
+      - tapOn:
+          point: "92%,90%"

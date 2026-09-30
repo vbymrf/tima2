@@ -35,3 +35,4 @@
 | PH-25 | preventive | «конец НЕТ» у принимающего, а звонок кончился | knowledge/phone.md | да — сброс с подтверждением |
 | PH-26 | preventive | сторож на паре по Wi-Fi, adb отвечает секундами | knowledge/phone.md | нет — серии по очереди |
 | PH-27 | preventive | нет плашки «Телефон» после серии | knowledge/phone.md | да |
+| PH-28 | preventive | экран гаснет посреди видеозвонка, «Выход» — сторож | knowledge/phone.md | нет — `--hold` короче тайм-аута экрана |
