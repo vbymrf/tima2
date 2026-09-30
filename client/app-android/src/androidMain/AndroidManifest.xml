@@ -260,6 +260,11 @@
 
         <!-- «Отклонить» из строки звонка — без окна (ВЗ2). Не экспортирован: зовёт только
              наша строка уведомления. -->
+        <!-- Сканер кода подключения — «Фраза и устройства → Сканировать код» (1б). -->
+        <activity
+            android:name="io.tima.app.QrScanActivity"
+            android:exported="false" />
+
         <receiver
             android:name="io.tima.core.notify.CallActionReceiver"
             android:exported="false" />

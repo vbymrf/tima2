@@ -244,6 +244,9 @@ class MainActivity : ComponentActivity() {
                 // обратно, и «вышедшее» приложение продолжало бы жить в шторке.
                 onExit = { quit() },
                 onLeave = { leave() },
+                // Сканер кода подключения (1б): ответ — строка кода, дальше тем же путём, что
+                // ссылка из штатной камеры.
+                onScanCode = { scan.launch(Intent(this@MainActivity, QrScanActivity::class.java)) },
                 // Имя файла приходит готовым: правило именования общее (Д11).
                 deviceDatabase = { name -> androidDatabase(applicationContext, name) },
                 appearanceStore = appearanceStore(),
@@ -326,6 +329,14 @@ class MainActivity : ComponentActivity() {
 
         /** Ключ памяти о начатой установке. */
         const val KEY_UPDATE = "started"
+    }
+
+    /**
+     * Ответ сканера — код подключения. Кладётся туда же, куда ссылка `tima://link/…` из
+     * штатной камеры: главное окно по нему открывает «Доверить …?».
+     */
+    private val scan = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+        result.data?.getStringExtra(QrScanActivity.CODE)?.let { code.value = it }
     }
 
     /** «Закрыть приложение»: журнал — на диск, служба канала — стоп, задача и процесс — закрыть. */

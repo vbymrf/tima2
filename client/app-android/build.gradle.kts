@@ -41,6 +41,12 @@ kotlin {
             // тем, что человек успел сделать (ПЛАН-ОТЛАДКИ.md, Б7).
             implementation(project(":core:core-diag"))
             implementation(libs.androidx.activity.compose)
+            // Сканер кода подключения в «Фраза и устройства» (заказчик 2026-09-30, 1б):
+            // камера CameraX и чтение QR ZXing — без сервисов Google, целиком на устройстве.
+            implementation(libs.androidx.camera.camera2)
+            implementation(libs.androidx.camera.lifecycle)
+            implementation(libs.androidx.camera.view)
+            implementation(libs.zxing.core)
             // foundation нужен самой Activity: тема системы (isSystemInDarkTheme) живёт там.
             implementation(compose.foundation)
         }

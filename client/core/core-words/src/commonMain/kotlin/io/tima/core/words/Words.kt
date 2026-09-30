@@ -1476,6 +1476,15 @@ interface AuthWords {
 
     // Выход из аккаунта и возврат (ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, 2026-09-30).
     val signOut: String
+
+    /** «Фраза и устройства» — сканер кода подключения (заказчик 2026-09-30, 1б). */
+    val scanCode: String
+    val scanCodeAbout: String
+    val scanTitle: String
+    val scanHint: String
+    val scanNotOurs: String
+    val scanNoCamera: String
+    val scanClose: String
     val signOutAbout: String
     val signOutLast: String
     val signOutYes: String
@@ -3262,6 +3271,13 @@ object RussianWords : Words {
                 "нельзя — на нём придётся подключаться заново."
         override val keep = "Оставить"
         override val signOut = "Выйти из аккаунта на этом устройстве"
+        override val scanCode = "Сканировать код"
+        override val scanCodeAbout = "Подключить компьютер или телефон: код показан на его экране"
+        override val scanTitle = "Код подключения"
+        override val scanHint = "Наведите камеру на код с экрана нового устройства"
+        override val scanNotOurs = "Это не код подключения TIMA"
+        override val scanNoCamera = "Нет доступа к камере — разрешите его в настройках телефона"
+        override val scanClose = "Закрыть"
         override val signOutAbout = "Аккаунт будет отложен: переписка и ключи останутся на устройстве. Вернуться — кнопкой «Вернуть прежний аккаунт» на экране входа"
         override val signOutLast = "Это последнее устройство аккаунта. Войти в него снова можно и по номеру телефона с секретной фразой"
         override val signOutYes = "Выйти"

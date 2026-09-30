@@ -351,6 +351,8 @@ fun Root(
     onExit: (() -> Unit)? = null,
     /** «Выйти» — уйти с экрана, фон работает (заказчик 2026-09-30). `null` — платформа не умеет. */
     onLeave: (() -> Unit)? = null,
+    /** Сканер кода подключения — только телефон (заказчик 2026-09-30, 1б). `null` — кнопки нет. */
+    onScanCode: (() -> Unit)? = null,
     /** Запуск вместе с системой — «Разрешения → Автозагрузка». `null` — раздела нет (телефон). */
     loginStart: LoginStart? = null,
     /**
@@ -412,6 +414,7 @@ fun Root(
             onLeaving = onLeaving,
             onExit = onExit,
             onLeave = onLeave,
+            onScanCode = onScanCode,
             loginStart = loginStart,
             facts = facts,
             reportsStore = reportsStore,
@@ -475,6 +478,7 @@ private fun Inside(
     onLeaving: () -> Unit,
     onExit: (() -> Unit)?,
     onLeave: (() -> Unit)?,
+    onScanCode: (() -> Unit)?,
     loginStart: LoginStart?,
     facts: ProblemFacts,
     reportsStore: ReportsStore,
@@ -547,6 +551,7 @@ private fun Inside(
         onLeaving = onLeaving,
         onExit = onExit,
         onLeave = onLeave,
+        onScanCode = onScanCode,
         loginStart = loginStart,
         facts = facts,
         reportsStore = reportsStore,
@@ -784,6 +789,8 @@ private fun App(
     onExit: (() -> Unit)? = null,
     /** «Выйти» — уйти с экрана, фон работает (заказчик 2026-09-30). `null` — платформа не умеет. */
     onLeave: (() -> Unit)? = null,
+    /** Сканер кода подключения — только телефон (заказчик 2026-09-30, 1б). `null` — кнопки нет. */
+    onScanCode: (() -> Unit)? = null,
     /** Запуск вместе с системой; `null` — раздела нет. См. [Root]. */
     loginStart: LoginStart? = null,
     /** Что платформа знает о себе для отчёта о проблеме (Б3). */
@@ -2644,6 +2651,7 @@ private fun App(
                         opened = current.item,
                         onOpen = { where = Where.Settings(it) },
                         onSignOut = onSignOut,
+                        onScanCode = onScanCode,
                         network = network,
                         scope = scope,
                         platform = platform,
@@ -3313,6 +3321,7 @@ private fun Settings(
     opened: SettingsItem?,
     onOpen: (SettingsItem?) -> Unit,
     onSignOut: () -> Unit,
+    onScanCode: (() -> Unit)?,
     network: DevicePorts,
     scope: kotlinx.coroutines.CoroutineScope,
     platform: Platform,
@@ -3438,7 +3447,7 @@ private fun Settings(
                 )
             }
 
-            SettingsItem.DEVICES -> Devices(fleet, devices, build.name, onSignOut)
+            SettingsItem.DEVICES -> Devices(fleet, devices, build.name, onSignOut, onScanCode)
 
             // Уведомления (У1, У14). Пункт стоял в списке с самого начала и не
             // открывал ничего; теперь здесь два действия, без которых уведомления на
@@ -3576,6 +3585,7 @@ private fun Devices(
     state: DevicesState,
     buildVersion: String,
     onSignOut: () -> Unit,
+    onScanCode: (() -> Unit)?,
 ) {
     DeviceScreen(
         state = state,
@@ -3585,6 +3595,7 @@ private fun Devices(
         buildVersion = buildVersion,
         onSignOut = onSignOut,
         onRetry = store::refresh,
+        onScan = onScanCode,
     )
 }
 

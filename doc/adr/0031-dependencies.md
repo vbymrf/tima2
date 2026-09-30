@@ -63,6 +63,8 @@
 |---|---|---|
 | Android Gradle Plugin | 8.13.2 | сборка APK |
 | androidx.activity-compose | 1.9.3 | окно приложения на Compose |
+| androidx.camera: camera-camera2, camera-lifecycle, camera-view | 1.4.1 | сканер кода подключения в «Фраза и устройства» — только Android (заказчик 2026-09-30, 1б) |
+| com.google.zxing:core | 3.5.3 | чтение QR в том же сканере; Apache 2.0, чистая Java, без сервисов Google. APK +2 МБ вместе с CameraX |
 | **LiveKit Android** | 2.28.2 | звонки; внутри libwebrtc 144.7559.14. Самая тяжёлая зависимость: ~21 МБ нативных библиотек на четыре архитектуры |
 
 ## Клиент — ПК (Windows)

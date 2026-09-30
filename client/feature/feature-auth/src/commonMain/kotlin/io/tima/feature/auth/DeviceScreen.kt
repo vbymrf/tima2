@@ -58,6 +58,12 @@ fun DeviceScreen(
     onSignOut: (() -> Unit)? = null,
     /** Список не пришёл — запросить снова (А7). */
     onRetry: (() -> Unit)? = null,
+    /**
+     * Сканировать код подключения нового устройства (заказчик 2026-09-30, 1б). `null` —
+     * кнопки нет: на ПК подтверждать подключение сервер не даёт — только телефону
+     * (`not_a_phone`), и сканер там незачем.
+     */
+    onScan: (() -> Unit)? = null,
 ) = Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
     val words = Tima.words.auth
     var signingOut by rememberSaveable { mutableStateOf(false) }
@@ -82,6 +88,20 @@ fun DeviceScreen(
 
     state.trouble?.let {
         Column(Modifier.padding(TimaSpacing.about4)) { Trouble(it) }
+    }
+
+    // Сканер — тоже до ранних выходов: подключить новое устройство можно и тогда, когда
+    // список не пришёл.
+    if (onScan != null && !signingOut) {
+        Button(
+            label = words.scanCode,
+            onClick = onScan,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4),
+        )
+        Tertiary(
+            words.scanCodeAbout,
+            Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about1),
+        )
     }
 
     // Выход — до ранних выходов экрана: он нужен и тогда, когда список не пришёл. Так было
