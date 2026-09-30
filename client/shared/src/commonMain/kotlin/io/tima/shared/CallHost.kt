@@ -20,6 +20,7 @@ import io.tima.core.call.askCallAccess
 import io.tima.core.call.callOngoing
 import io.tima.core.call.callOngoingOff
 import io.tima.core.call.callProximity
+import io.tima.core.call.callKeepScreen
 import io.tima.core.call.CallNoticeActions
 import io.tima.core.call.SoundRoute
 import io.tima.core.call.openCallSettings
@@ -197,6 +198,7 @@ class CallHost(
                     if (fresh.stage == CallStage.Ended) stopTicking()
                     noticed(was, fresh)
                     nearEar(fresh)
+                    screenOn(fresh)
                 }
             }
         }
@@ -458,6 +460,8 @@ class CallHost(
         callOngoingOff()
         nearEarOn = false
         callProximity(false)
+        screenOnNow = false
+        callKeepScreen(false)
         active = false
         callId = ""
         peerId = ""
@@ -494,6 +498,17 @@ class CallHost(
         if (want == nearEarOn) return
         nearEarOn = want
         callProximity(want)
+    }
+
+    /** Держим ли экран включённым. */
+    private var screenOnNow = false
+
+    /** Видеозвонок — экран не гаснет (решение заказчика 2026-09-30). */
+    private fun screenOn(now: CallState) {
+        val want = screenOnWanted(active, now)
+        if (want == screenOnNow) return
+        screenOnNow = want
+        callKeepScreen(want)
     }
 
     /**
@@ -911,5 +926,15 @@ class CallHost(
 internal typealias Door = CallDoor
 
 /** Гасить ли экран у уха (ПЛАН-ВИДЕО.md В10, вариант 2а). Отдельно — ради проверки. */
+/**
+ * Не гасить экран (решение заказчика 2026-09-30): звонок идёт и в нём есть видео — своё или
+ * собеседника. Скрытое нами видео собеседника звонок видеозвонком быть не перестаёт: скрыли
+ * на минуту — и экран не должен погаснуть за эту минуту.
+ */
+internal fun screenOnWanted(active: Boolean, state: CallState): Boolean =
+    active &&
+        (state.stage == CallStage.Connecting || state.stage == CallStage.Connected || state.stage == CallStage.Reconnecting) &&
+        (state.cameraOn || state.remoteVideoShown)
+
 internal fun nearEarWanted(active: Boolean, state: CallState): Boolean =
     active && state.stage == CallStage.Connected && !state.cameraOn && state.sound == SoundRoute.Earpiece

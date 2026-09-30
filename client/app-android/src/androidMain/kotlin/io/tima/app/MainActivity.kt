@@ -16,6 +16,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import io.tima.core.call.AndroidCallAccess
 import io.tima.core.call.LiveKitCallEngine
+import io.tima.core.call.AndroidCallNotice
+import android.view.WindowManager
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -235,6 +238,14 @@ class MainActivity : ComponentActivity() {
             // база и установщик. На ПК и iOS его нет, и там окна 0 не будет вовсе.
             val callScope = rememberCoroutineScope()
             val callEngine = remember { LiveKitCallEngine(applicationContext, callScope) }
+            // Видеозвонок — экран не гаснет (решение заказчика 2026-09-30). Флаг окна, а не
+            // блокировка питания: ушёл человек из приложения — система сняла его сама.
+            LaunchedEffect(Unit) {
+                AndroidCallNotice.screenOn.collect { on ->
+                    if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
 
             Root(
                 entry = entry,

@@ -46,3 +46,11 @@ expect fun callOngoingOff()
  * решает [io.tima.shared.CallHost]. На ПК и там, где датчика нет, — ничего.
  */
 expect fun callProximity(on: Boolean)
+
+/**
+ * Не гасить экран, пока идёт видеозвонок (решение заказчика 2026-09-30). Без этого экран
+ * гас по таймауту системы посреди разговора — Samsung через 30 с (PH-28), — и собеседник
+ * пропадал с экрана, хотя звонок шёл. Когда звонок видео — решает
+ * [io.tima.shared.CallHost]. На ПК — ничего.
+ */
+expect fun callKeepScreen(on: Boolean)

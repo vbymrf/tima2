@@ -6,3 +6,5 @@ actual fun callOngoing(title: String, text: String, hangUpLabel: String, connect
 actual fun callOngoingOff() = Unit
 
 actual fun callProximity(on: Boolean) = Unit
+
+actual fun callKeepScreen(on: Boolean) = Unit

@@ -6,6 +6,7 @@ import android.os.PowerManager
 import android.os.Build
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * Android: служба переднего плана на время звонка — [CallService].
@@ -115,6 +116,21 @@ object AndroidCallNotice {
 
     private const val NEAR_EAR_LIMIT_MS = 3_600_000L
 
+    /**
+     * Держать ли экран включённым — видеозвонок (решение заказчика 2026-09-30).
+     *
+     * Флаг ставит главное окно (`FLAG_KEEP_SCREEN_ON`), а не блокировка питания: он живёт,
+     * пока окно на экране, и сам снимается, когда человек ушёл в другое приложение, —
+     * забыть его отпустить нельзя. Отсюда окна не видно, поэтому здесь только желание.
+     */
+    val screenOn = MutableStateFlow(false)
+
+    fun keepScreen(on: Boolean) {
+        if (screenOn.value == on) return
+        screenOn.value = on
+        Journal.note(LogCode.CALL, "экран во время видеозвонка", "не гаснет" to on)
+    }
+
     fun off() {
         val context = app ?: return
         val stop = Intent(context, CallService::class.java).setAction(CallService.STOP)
@@ -129,3 +145,5 @@ actual fun callOngoing(title: String, text: String, hangUpLabel: String, connect
 actual fun callOngoingOff() = AndroidCallNotice.off()
 
 actual fun callProximity(on: Boolean) = AndroidCallNotice.proximity(on)
+
+actual fun callKeepScreen(on: Boolean) = AndroidCallNotice.keepScreen(on)
