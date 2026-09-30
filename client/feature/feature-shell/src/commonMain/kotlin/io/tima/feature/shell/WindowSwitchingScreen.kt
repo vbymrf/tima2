@@ -123,9 +123,14 @@ fun WindowSwitchingScreen(
      */
     onNewAccount: (() -> Unit)? = null,
     /**
-     * Выйти из приложения совсем — последним пунктом (заказчик 2026-09-26). Фоновый канал
-     * останавливается, и звонки не придут, пока приложение снова не открыто, — это
-     * сказано под кнопкой. `null` — пункта нет.
+     * «Выйти» — уйти с экрана, фон работает: звонки и сообщения приходят (заказчик
+     * 2026-09-30). `null` — пункта нет.
+     */
+    onLeave: (() -> Unit)? = null,
+    /**
+     * «Закрыть приложение» — последним пунктом (заказчик 2026-09-26, имя — 2026-09-30).
+     * Фоновый канал останавливается, и звонки не придут, пока приложение снова не
+     * открыто, — это сказано под кнопкой. `null` — пункта нет.
      */
     onExit: (() -> Unit)? = null,
 ) {
@@ -229,6 +234,17 @@ fun WindowSwitchingScreen(
                     onClick = it,
                     left = { Glyph("＋") },
                     middle = { Name(words.virtualAccount) },
+                )
+            }
+
+            onLeave?.let {
+                ListLine(
+                    onClick = it,
+                    left = { Glyph("↩") },
+                    middle = {
+                        Name(Tima.words.settings2.leaveApp)
+                        Secondary(Tima.words.settings2.leaveAbout)
+                    },
                 )
             }
 
@@ -397,6 +413,64 @@ fun AccountLeavingSheet(
                 left = { Glyph("→") },
                 middle = { Name(words.leaveNow) },
             )
+        }
+    }
+}
+
+/**
+ * Вопрос перед «Закрыть приложение» (заказчик 2026-09-30, 3а): закрыть совсем или выйти.
+ *
+ * Закрытие останавливает фон — звонки и сообщения не придут до следующего открытия, и
+ * случайное касание молча оставило бы человека без входящих. Поэтому вопрос предлагает и
+ * то, что человек, скорее всего, хотел: выйти, оставив фон работать.
+ */
+@Composable
+fun CloseQuestionSheet(
+    /** Закрыть совсем: фон останавливается. */
+    onClose: () -> Unit,
+    /** Выйти, фон работает. `null` — платформа этого не умеет (ПК без трея), строки нет. */
+    onLeave: (() -> Unit)?,
+    /** Передумал — касание вне панели. */
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = Tima.colors
+    val words = Tima.words.settings2
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(colors.text.copy(alpha = DIM))
+            .clickable(onClick = onCancel),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = TimaShapes.radius, topEnd = TimaShapes.radius))
+                .background(colors.surface)
+                .clickable(enabled = false, onClick = {})
+                .padding(TimaSpacing.about4),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+        ) {
+            SectionTitle(words.closeQuestion)
+            ListLine(
+                onClick = onClose,
+                left = { Glyph("🚪") },
+                middle = {
+                    Name(words.closeYes)
+                    Secondary(words.exitAbout)
+                },
+            )
+            onLeave?.let {
+                ListLine(
+                    onClick = it,
+                    left = { Glyph("↩") },
+                    middle = {
+                        Name(words.leaveApp)
+                        Secondary(words.leaveAbout)
+                    },
+                )
+            }
         }
     }
 }

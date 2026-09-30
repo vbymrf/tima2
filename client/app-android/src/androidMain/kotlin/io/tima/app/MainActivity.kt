@@ -243,6 +243,7 @@ class MainActivity : ComponentActivity() {
                 // останавливается ДО конца процесса — иначе START_STICKY подняла бы её
                 // обратно, и «вышедшее» приложение продолжало бы жить в шторке.
                 onExit = { quit() },
+                onLeave = { leave() },
                 // Имя файла приходит готовым: правило именования общее (Д11).
                 deviceDatabase = { name -> androidDatabase(applicationContext, name) },
                 appearanceStore = appearanceStore(),
@@ -327,12 +328,23 @@ class MainActivity : ComponentActivity() {
         const val KEY_UPDATE = "started"
     }
 
-    /** Выйти совсем: журнал — на диск, служба канала — стоп, задача и процесс — закрыть. */
+    /** «Закрыть приложение»: журнал — на диск, служба канала — стоп, задача и процесс — закрыть. */
     private fun quit() {
-        Journal.note(LogCode.APP_BACKGROUND, "выход по кнопке «Выйти»")
+        Journal.note(LogCode.APP_BACKGROUND, "закрыто кнопкой «Закрыть приложение» — фон остановлен")
         Journal.diary.flush()
         stopService(Intent(this, ChannelService::class.java))
         finishAndRemoveTask()
         android.os.Process.killProcess(android.os.Process.myPid())
+    }
+
+    /**
+     * «Выйти» (заказчик 2026-09-30, 2б): закрывается экран, а служба канала и процесс живут —
+     * звонки и сообщения приходят. Канал держит процесс, а не окно (У2), поэтому закрытый
+     * экран его не роняет; следующее открытие собирает экран заново.
+     */
+    private fun leave() {
+        Journal.note(LogCode.APP_BACKGROUND, "выход по кнопке «Выйти» — фон работает")
+        Journal.diary.flush()
+        finish()
     }
 }

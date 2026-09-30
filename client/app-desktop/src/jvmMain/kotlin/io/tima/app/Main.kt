@@ -219,12 +219,23 @@ private fun window(store: ReportsStore, hidden: Boolean) = application {
                 // программы, и Windows вместо установки предложила бы перезагрузку.
                 installer = DesktopInstaller(),
                 onLeaving = { Journal.diary.flush(); exitApplication() },
-                // «Выйти» в рейке (заказчик 2026-09-26): крестик окна прячет в трей, а
-                // закрыть совсем раньше можно было только из меню значка.
+                // «Закрыть приложение» в рейке (заказчик 2026-09-26, имя — 2026-09-30):
+                // крестик окна прячет в трей, а закрыть совсем раньше можно было только из
+                // меню значка.
                 onExit = {
-                    Journal.note(LogCode.APP_BACKGROUND, "выход по кнопке «Выйти»")
+                    Journal.note(LogCode.APP_BACKGROUND, "закрыто кнопкой «Закрыть приложение» — фон остановлен")
                     Journal.diary.flush()
                     exitApplication()
+                },
+                // «Выйти» — то же, что крестик окна: окно в трей, канал и звонки живут.
+                // Трея нет — спрятанное окно вернуть нечем, и кнопки нет.
+                onLeave = if (hasTray) {
+                    {
+                        Journal.note(LogCode.APP_BACKGROUND, "выход по кнопке «Выйти» — фон работает")
+                        windowShown = false
+                    }
+                } else {
+                    null
                 },
                 // Версия порождается сборкой из gradle.properties — одна на Android и ПК.
                 // До 2026-08-26 десктоп её не знал и показывал «Установлена —»: вопрос

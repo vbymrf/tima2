@@ -96,7 +96,9 @@ fun Rail(
         if (onExit != null) {
             Item(
                 glyph = "🚪",
-                caption = Tima.words.settings2.exitApp,
+                // Рейка узкая: «Закрыть», а что закрыть и чем это грозит — в вопросе,
+                // который кнопка открывает.
+                caption = Tima.words.settings2.closeYes,
                 selected = false,
                 howMany = 0,
                 withCaption = withCaptions,

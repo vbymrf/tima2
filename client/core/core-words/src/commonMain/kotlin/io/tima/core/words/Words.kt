@@ -238,8 +238,15 @@ interface SettingsListWords {
     val mediaProcessingAbout: String
     val mediaNextCall: String
     val mediaListen: String
+    /** «Закрыть приложение» — фон останавливается (заказчик 2026-09-30). */
     val exitApp: String
     val exitAbout: String
+    /** «Выйти» — уйти с экрана, фон работает (заказчик 2026-09-30). */
+    val leaveApp: String
+    val leaveAbout: String
+    /** Вопрос перед «Закрыть приложение»: закрыть совсем или выйти, оставив фон. */
+    val closeQuestion: String
+    val closeYes: String
     val permBackground: String
     val permAutostart: String
     val permAutostartAbout: String
@@ -2336,8 +2343,12 @@ object RussianWords : Words {
         override val mediaProcessingAbout = "Выключайте, только если мешает: гарнитура со своим шумодавом, музыка. В наушниках эхоподавление не нужно — его можно выключить. Здесь, в проверке, его не слышно: эхо появляется только в звонке."
         override val mediaNextCall = "Выбор действует со следующего звонка."
         override val mediaListen = "Слушать себя — лучше в наушниках, иначе засвистит"
-        override val exitApp = "Выйти"
+        override val exitApp = "Закрыть приложение"
         override val exitAbout = "Звонки и сообщения не придут, пока TIMA снова не открыта"
+        override val leaveApp = "Выйти"
+        override val leaveAbout = "TIMA работает в фоне: звонки и сообщения придут"
+        override val closeQuestion = "Закрыть или выйти вы хотите?"
+        override val closeYes = "Закрыть"
         override val permBackground = "Работа в фоне"
         override val permAutostart = "Автозагрузка"
         override val permAutostartAbout = "Звонки и сообщения приходят, только пока TIMA запущена. С автозагрузкой она стартует при входе в Windows — сразу в трей, без окна."

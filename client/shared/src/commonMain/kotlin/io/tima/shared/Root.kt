@@ -200,6 +200,7 @@ import io.tima.feature.chat.ProfileStore
 import io.tima.feature.chat.BookScreen
 import io.tima.feature.shell.beganLabel
 import io.tima.feature.shell.AccountLeavingSheet
+import io.tima.feature.shell.CloseQuestionSheet
 import io.tima.feature.shell.CALL_FILTERS
 import io.tima.feature.shell.Window
 import io.tima.feature.shell.MediaWindow
@@ -346,8 +347,10 @@ fun Root(
     installer: UpdateInstaller? = null,
     /** Установщик запущен — платформе пора закрыть приложение. */
     onLeaving: () -> Unit = {},
-    /** Выйти из приложения совсем — кнопка в рейке ПК и в подокне переходов. `null` — кнопки нет. */
+    /** «Закрыть приложение» — кнопка в рейке ПК и в подокне переходов, фон останавливается. `null` — кнопки нет. */
     onExit: (() -> Unit)? = null,
+    /** «Выйти» — уйти с экрана, фон работает (заказчик 2026-09-30). `null` — платформа не умеет. */
+    onLeave: (() -> Unit)? = null,
     /** Запуск вместе с системой — «Разрешения → Автозагрузка». `null` — раздела нет (телефон). */
     loginStart: LoginStart? = null,
     /**
@@ -408,6 +411,7 @@ fun Root(
             installer = installer,
             onLeaving = onLeaving,
             onExit = onExit,
+            onLeave = onLeave,
             loginStart = loginStart,
             facts = facts,
             reportsStore = reportsStore,
@@ -470,6 +474,7 @@ private fun Inside(
     installer: UpdateInstaller?,
     onLeaving: () -> Unit,
     onExit: (() -> Unit)?,
+    onLeave: (() -> Unit)?,
     loginStart: LoginStart?,
     facts: ProblemFacts,
     reportsStore: ReportsStore,
@@ -541,6 +546,7 @@ private fun Inside(
         installer = installer,
         onLeaving = onLeaving,
         onExit = onExit,
+        onLeave = onLeave,
         loginStart = loginStart,
         facts = facts,
         reportsStore = reportsStore,
@@ -774,8 +780,10 @@ private fun App(
     installer: UpdateInstaller? = null,
     /** Установщик запущен — пора закрыть приложение. */
     onLeaving: () -> Unit = {},
-    /** Выйти из приложения совсем — кнопка в рейке ПК и в подокне переходов. `null` — кнопки нет. */
+    /** «Закрыть приложение» — кнопка в рейке ПК и в подокне переходов, фон останавливается. `null` — кнопки нет. */
     onExit: (() -> Unit)? = null,
+    /** «Выйти» — уйти с экрана, фон работает (заказчик 2026-09-30). `null` — платформа не умеет. */
+    onLeave: (() -> Unit)? = null,
     /** Запуск вместе с системой; `null` — раздела нет. См. [Root]. */
     loginStart: LoginStart? = null,
     /** Что платформа знает о себе для отчёта о проблеме (Б3). */
@@ -865,6 +873,8 @@ private fun App(
     // Куда уходим, если очередь непуста. null — вопрос не задан: отдельного флага
     // «спрашиваем» не заводим, чтобы «спрашиваем, но некуда» не стало возможным.
     var leavingTo by remember { mutableStateOf<String?>(null) }
+    // «Закрыть приложение» сначала спрашивает: закрыть или выйти (заказчик 2026-09-30, 3а).
+    var closeAsked by remember { mutableStateOf(false) }
     // Подокно «Вид» вкладки «Контакты»: настроек три группы и они независимы, перебор
     // по кругу не дал бы угадать следующее состояние.
     var bookView by remember { mutableStateOf(false) }
@@ -1620,6 +1630,24 @@ private fun App(
         return
     }
 
+    if (closeAsked && onExit != null) {
+        CloseQuestionSheet(
+            onClose = {
+                closeAsked = false
+                onExit()
+            },
+            onLeave = onLeave?.let { leave ->
+                {
+                    closeAsked = false
+                    windowSwitcher = false
+                    leave()
+                }
+            },
+            onCancel = { closeAsked = false },
+        )
+        return
+    }
+
     // Уход из аккаунта с непустой очередью — вопрос, а не сообщение (Д11). Оба ответа
     // законны: молча уйти значит соврать про «отправляется», молча ждать — задержать
     // того, кто спешит.
@@ -1942,7 +1970,14 @@ private fun App(
             },
             // Виртуальный не заводит виртуальных — сервер это отвергает (Д10), и
             // предлагать здесь то, что не сработает, нельзя.
-            onExit = onExit,
+            // «Выйти» — сразу, «Закрыть приложение» — через вопрос (заказчик 2026-09-30).
+            onLeave = onLeave?.let { leave ->
+                {
+                    windowSwitcher = false
+                    leave()
+                }
+            },
+            onExit = onExit?.let { { closeAsked = true } },
             onNewAccount = if (accounts.none { it.userId == session.userId && it.virtual }) {
                 {
                     windowSwitcher = false
@@ -2001,7 +2036,7 @@ private fun App(
                 onSettings = toSettings,
                 inCall = callHost.active,
                 bench = benchState.on,
-                onExit = onExit,
+                onExit = onExit?.let { { closeAsked = true } },
             )
         },
         column = {

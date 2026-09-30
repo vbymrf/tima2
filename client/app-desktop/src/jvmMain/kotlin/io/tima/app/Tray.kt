@@ -64,7 +64,8 @@ object Tray {
             add(MenuItem("Открыть TIMA").apply { addActionListener { onOpen() } })
             add(autostart)
             addSeparator()
-            add(MenuItem("Выйти").apply { addActionListener { onExit() } })
+            // «Выйти» у нас — уйти, оставив фон (заказчик 2026-09-30); этот пункт закрывает совсем.
+            add(MenuItem("Закрыть приложение").apply { addActionListener { onExit() } })
         }
         val tray = TrayIcon(letter(), "TIMA", menu).apply {
             isImageAutoSize = true
