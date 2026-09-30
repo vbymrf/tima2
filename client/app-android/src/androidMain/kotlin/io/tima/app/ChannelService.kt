@@ -118,8 +118,18 @@ class ChannelService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && manager?.getNotificationChannel(CHANNEL) == null) {
             manager?.createNotificationChannel(
                 // Тихо и без всплытия: эта строка висит всегда, и звенеть ей не о чем.
-                NotificationChannel(CHANNEL, "На связи", NotificationManager.IMPORTANCE_MIN),
+                NotificationChannel(CHANNEL, "На связи", NotificationManager.IMPORTANCE_MIN).apply {
+                    // ── НЕ В ЗНАЧКЕ (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ4) ─────────
+                    //
+                    // Число на значке приложения — сумма чисел вкладок. Оболочка Xiaomi
+                    // считает строки, а не число строки, и эта постоянная строка добавляла
+                    // единицу: Redmi 2026-09-30 показывал «2» при одном пропущенном.
+                    // Свойство канала после заведения не меняется — поэтому канал новый.
+                    setShowBadge(false)
+                },
             )
+            // Прежний канал — со значком; он больше не нужен.
+            runCatching { manager?.deleteNotificationChannel(OLD_CHANNEL) }
         }
         val open = PendingIntent.getActivity(
             this,
@@ -142,7 +152,10 @@ class ChannelService : Service() {
     }
 
     companion object {
-        private const val CHANNEL = "tima.online"
+        private const val CHANNEL = "tima.online.2"
+
+        /** Канал до 2026-09-30 — строка службы шла в число на значке. */
+        private const val OLD_CHANNEL = "tima.online"
         private const val NOTICE = 7301
 
         /**
