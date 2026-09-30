@@ -136,9 +136,16 @@ def shot(dev, path):
 # ── ПРИЛОЖЕНИЕ И ТЕЛЕФОН ────────────────────────────────────────────────────
 
 def wake(dev):
+    """Разбудить и снять блокировку. `dismiss-keyguard` снимает не везде: на Samsung нужен
+    ещё жест вверх, как пальцем (так делает и `maestro/wake-phone.sh`)."""
     sh(dev, 'input keyevent KEYCODE_WAKEUP')
     time.sleep(0.5)
     sh(dev, 'wm dismiss-keyguard')
+    time.sleep(0.5)
+    if 'NotificationShade' in focus(dev) or 'Keyguard' in focus(dev):
+        w, h = [int(v) for v in re.findall(r'(\d+)x(\d+)', sh(dev, 'wm size'))[-1]]
+        sh(dev, 'input swipe %d %d %d %d 200' % (w // 2, int(h * 0.8), w // 2, int(h * 0.2)))
+        time.sleep(1)
 
 
 def to_front(dev):

@@ -166,9 +166,12 @@ private class CodecProber(private val progress: (String) -> Unit) {
         sb.appendLine()
         sb.appendLine("| кодек | " + SIZES.joinToString(" | ") { it.toString() } + " |")
         sb.appendLine("|---|" + SIZES.joinToString("") { "---|" })
-        for (info in supported.distinctBy { it.name }) {
-            val cells = SIZES.map { size -> webrtcInit(factory, info, size) }
-            sb.appendLine("| ${info.name} | " + cells.joinToString(" | ") + " |")
+        // у H.264 в перечне несколько записей (профили); берём первую, для которой фабрика
+        // даёт кодер, — у записи High при выключенном High кодера нет
+        for ((name, infos) in supported.groupBy { it.name }) {
+            val info = infos.firstOrNull { i -> runCatching { factory.createEncoder(i)?.also { it.release() } }.getOrNull() != null }
+            val cells = SIZES.map { size -> if (info == null) "нет кодера" else webrtcInit(factory, info, size) }
+            sb.appendLine("| $name | " + cells.joinToString(" | ") + " |")
         }
         sb.appendLine()
         return sb.toString()
