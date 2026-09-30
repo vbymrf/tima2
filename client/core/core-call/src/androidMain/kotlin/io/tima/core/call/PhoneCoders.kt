@@ -103,7 +103,7 @@ internal class SwitchableEncoderFactory(
     companion object {
         /**
          * Связка кодеров комнаты — наша в каждом звонке (ПЛАН-ВИДЕО.md В2.1): аппаратный кодер
-         * с обрезкой до кратного 16, [crop] `false` — галочка стенда «Без обрезки».
+         * с обрезкой до кратного 16, [crop] `false` — галочка стенда «Обрезка до кратного 16» снята.
          */
         fun of(egl: EglBase.Context, crop: Boolean, hardware: () -> Boolean): SwitchableEncoderFactory =
             SwitchableEncoderFactory({ AlignedEncoderFactory(egl, crop) }, hardware)

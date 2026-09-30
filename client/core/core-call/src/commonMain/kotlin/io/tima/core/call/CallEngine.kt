@@ -286,6 +286,13 @@ data class CallStats(
      * Счётчики — накопленные за звонок, как их отдаёт WebRTC.
      */
     val downDecoder: String? = null,
+    /**
+     * Каким кодеком пришло видео и раскодировано ли железом — «Кодек вниз VP9 А» в окне 0
+     * (заказчик 2026-09-30, 2а). Железо — по имени раскодировщика: имена производителя
+     * (`OMX.MTK…`, `c2.mtk…`) — да, `libvpx`, `c2.android…`, `OMX.google…` — нет.
+     */
+    val downCodec: String? = null,
+    val hardwareDecoder: Boolean? = null,
     val downFreezes: Long? = null,
     val downDropped: Long? = null,
     val downDecodeMs: Double? = null,

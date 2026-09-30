@@ -42,16 +42,37 @@ private const val V2 = "v2"
  * Новое поле строки `v2` — кратность. Первая цифра `0` или `1` и буквы `c`, `s` —
  * прежние галочки «Кратность 16», «Обрезка кодером», «Только один слой»: **читаются и
  * пропускаются** (ПЛАН-ВИДЕО.md В2.3, заказчик 2026-09-30) — обрезка теперь всегда.
- * Буква `n` — «без обрезки» ([VideoPreset.noCrop]). Пишется `0` или `0n`.
+ * Буква `n` — обрезка выключена ([VideoPreset.noCrop]). Пишется `0` или `0n`.
+ *
+ * Там же — выбор кодера и раскодировщика прогона (заказчик 2026-09-30, 1а): `h` / `p` —
+ * кодер аппаратный / программный, `H` / `P` — то же у раскодировщика; нет буквы — «как в
+ * настройках». Буквы, а не новое поле: поле в середине строки ломало бы прежний разбор.
  */
 fun PublishPreset.toWire(): String {
-    val align = "0" + (if (video.noCrop) NO_CROP else "")
+    val align = "0" + (if (video.noCrop) NO_CROP else "") + coderLetters(video.encoder, ENC_HW, ENC_SW) + coderLetters(video.decoder, DEC_HW, DEC_SW)
     return listOf(V2, align, legacyWire()).joinToString(SEPARATOR)
+}
+
+private fun coderLetters(choice: CoderChoice, hardware: Char, software: Char): String = when (choice) {
+    CoderChoice.Settings -> ""
+    CoderChoice.Hardware -> hardware.toString()
+    CoderChoice.Software -> software.toString()
+}
+
+private fun coderOf(way: String, hardware: Char, software: Char): CoderChoice = when {
+    hardware in way -> CoderChoice.Hardware
+    software in way -> CoderChoice.Software
+    else -> CoderChoice.Settings
 }
 
 /** Прежние буквы способа — пропускаются. */
 private val OLD_WAYS = setOf('c', 's')
 private const val NO_CROP = 'n'
+private const val ENC_HW = 'h'
+private const val ENC_SW = 'p'
+private const val DEC_HW = 'H'
+private const val DEC_SW = 'P'
+private val CODER_LETTERS = setOf(ENC_HW, ENC_SW, DEC_HW, DEC_SW)
 
 fun presetFromWire(wire: String): PublishPreset? {
     val marked = V2 + SEPARATOR
@@ -61,9 +82,15 @@ fun presetFromWire(wire: String): PublishPreset? {
     val on = align.firstOrNull()
     val way = align.drop(1)
     if (on != '0' && on != '1') return null
-    if (way.any { it !in OLD_WAYS && it != NO_CROP }) return null
+    if (way.any { it !in OLD_WAYS && it != NO_CROP && it !in CODER_LETTERS }) return null
     val preset = legacyFromWire(rest.substringAfter(SEPARATOR)) ?: return null
-    return preset.copy(video = preset.video.copy(noCrop = NO_CROP in way))
+    return preset.copy(
+        video = preset.video.copy(
+            noCrop = NO_CROP in way,
+            encoder = coderOf(way, ENC_HW, ENC_SW),
+            decoder = coderOf(way, DEC_HW, DEC_SW),
+        ),
+    )
 }
 
 /** Прежние 17 полей и имя. */

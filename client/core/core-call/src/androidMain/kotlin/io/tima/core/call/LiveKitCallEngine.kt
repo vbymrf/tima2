@@ -101,9 +101,20 @@ class LiveKitCallEngine(
     /** Прогон: кодек набора телефону не по силам — см. [CallState.ownVideoUnsent]. */
     private var ownUnsent: String? = null
 
-    /** Переключатели аппаратного кодирования (ПЛАН-ВИДЕО.md В4). Их читают фабрики комнаты. */
+    /** Переключатели аппаратного кодирования (ПЛАН-ВИДЕО.md В4) — «Настройки → Звонки». */
     @Volatile
-    private var coding = HardwareCoding()
+    private var settingsCoding = HardwareCoding()
+
+    /** Набор прогона этого звонка — его выбор кодера и раскодировщика; `null` — обычный звонок. */
+    @Volatile
+    private var runVideo: VideoPreset? = null
+
+    /**
+     * Чем кодировать и раскодировать **в этом звонке**: настройки, поверх — выбор прогона
+     * стенда (заказчик 2026-09-30, 1а). «Как в настройках» следует за переключателями и
+     * посреди звонка. Читают фабрики комнаты — при создании каждого кодера.
+     */
+    private val coding: HardwareCoding get() = settingsCoding.forRun(runVideo)
 
     /** Набор этого звонка — чтобы пересмотреть кодек, когда собеседник скажет, что примет. */
     private var publishing: PublishPreset? = null
@@ -193,6 +204,15 @@ class LiveKitCallEngine(
         // Наблюдатели прошлой комнаты гасятся ДО создания новой: работающие поверх новой
         // они удвоили бы каждый опрос и объявили бы стадию по мёртвой комнате.
         stopWatching()
+        // Выбор кодера прогона — до фабрик: они читают его при создании первого кодера.
+        runVideo = publish?.video
+        if (publish != null && (publish.video.encoder != CoderChoice.Settings || publish.video.decoder != CoderChoice.Settings)) {
+            Journal.note(
+                LogCode.CALL, "кодер и раскодировщик — выбор прогона",
+                "набор" to publish.name, "кодер" to publish.video.encoder.wire, "раскодировщик" to publish.video.decoder.wire,
+                "кодируем аппаратно" to coding.encode, "раскодируем аппаратно" to coding.decode,
+            )
+        }
         val created = LiveKit.create(appContext = context, options = options, overrides = overridesFor(publish))
         publishing = publish
         target = null
@@ -348,8 +368,8 @@ class LiveKitCallEngine(
      * фабрика обязана стоять с самого начала звонка, чтобы смена посреди него подействовала.
      *
      * Связка кодеров — наша в каждом звонке (ПЛАН-ВИДЕО.md В2.1): та, что строит SDK, но
-     * аппаратный кодер получает кадр, обрезанный до кратного 16. Галочка стенда «Без
-     * обрезки» ([VideoPreset.noCrop]) оставляет связку и журнал, но кадр не режет.
+     * аппаратный кодер получает кадр, обрезанный до кратного 16. Снятая галочка стенда
+     * «Обрезка до кратного 16» ([VideoPreset.noCrop]) оставляет связку и журнал, но кадр не режет.
      *
      * Фабрикам нужен контекст EGL — тот же, что у комнаты: камера отдаёт кадры текстурами
      * этого контекста, и кодер без него перекладывал бы каждый кадр через память. Поэтому
@@ -359,7 +379,7 @@ class LiveKitCallEngine(
     private fun overridesFor(publish: PublishPreset?): LiveKitOverrides {
         val egl = sharedEgl()
         val crop = publish?.video?.noCrop != true
-        if (!crop) Journal.note(LogCode.CALL, "кодер: без обрезки до кратного 16 — галочка стенда", "набор" to publish?.name)
+        if (!crop) Journal.note(LogCode.CALL, "кодер: обрезка до кратного 16 выключена набором стенда", "набор" to publish?.name)
         val handler = soundHandler()
         sound = handler
         return LiveKitOverrides(
@@ -556,9 +576,12 @@ class LiveKitCallEngine(
         Journal.note(LogCode.CALL, "камера переопубликована", "почему" to why, "камера включена" to live)
     }
 
-    override suspend fun setHardwareCoding(coding: HardwareCoding) {
-        val was = this.coding
-        this.coding = coding
+    override suspend fun setHardwareCoding(settings: HardwareCoding) {
+        val was = coding
+        settingsCoding = settings
+        // Выбор прогона сильнее настроек: переключатель посреди прогона с «аппаратным» или
+        // «программным» ничего не меняет, и переопубликовывать нечего.
+        val coding = coding
         if (was == coding) return
         Journal.note(
             LogCode.CALL, "аппаратное кодирование",
@@ -747,6 +770,7 @@ class LiveKitCallEngine(
         // ту запись, которая описывает работающий кодек.
         val codecs = HashMap<String, String>()
         var videoCodecId: String? = null
+        var downCodecId: String? = null
         // Ширина — чтобы сложить копии от меньшей к большей; строка — то, что покажем.
         val upFrames = mutableListOf<Pair<Int, String>>()
         var downFrame: Pair<Int, String>? = null
@@ -807,6 +831,8 @@ class LiveKitCallEngine(
                             )
                             // Раскодировщик и его беды (ПЛАН-ВИДЕО.md В1).
                             decoder = entry.members["decoderImplementation"]?.toString() ?: decoder
+                            // Кодек пришедшего — окно 0 «Кодек вниз» (заказчик 2026-09-30, 2а).
+                            downCodecId = entry.members["codecId"]?.toString() ?: downCodecId
                             freezes = (entry.members["freezeCount"] as? Number)?.toLong() ?: freezes
                             dropped = (entry.members["framesDropped"] as? Number)?.toLong() ?: dropped
                             val decoded = (entry.members["framesDecoded"] as? Number)?.toLong()
@@ -853,6 +879,8 @@ class LiveKitCallEngine(
             downFps = downVideo.maxByOrNull { it.width }?.fps,
             downQp = qpSince(downVideo.maxByOrNull { it.width }),
             downDecoder = decoder,
+            downCodec = downCodecId?.let { codecs[it] }?.removePrefix("video/"),
+            hardwareDecoder = decoder?.let { hardware(it) },
             downFreezes = freezes,
             downDropped = dropped,
             downDecodeMs = decodeMs,

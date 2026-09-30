@@ -115,7 +115,7 @@ class PresetWireTest {
 
     @Test
     fun без_обрезки_переживает_запись() {
-        // Галочка «Без обрезки» (ПЛАН-ВИДЕО.md В2.3): потеряйся она — прогон, который
+        // Снятая галочка «Обрезка до кратного 16» (ПЛАН-ВИДЕО.md В2.3): потеряйся она — прогон, который
         // воспроизводит прежнюю беду, молча пошёл бы с обрезкой и мерил бы не то.
         for (галочка in listOf(true, false)) {
             val был = PublishPreset(name = "h264 960 4 к", video = VideoPreset(noCrop = галочка))
@@ -134,5 +134,22 @@ class PresetWireTest {
             assertEquals("к", стал?.name, "поле «$поле»")
             assertEquals(false, стал?.video?.noCrop, "поле «$поле»")
         }
+    }
+
+    @Test
+    fun выбор_кодера_и_раскодировщика_переживает_запись() {
+        // Заказчик 2026-09-30, 1а: потеряйся выбор — прогон «программный кодер» молча пошёл
+        // бы аппаратным и мерил бы не то.
+        for (кодер in CoderChoice.entries) for (раскодировщик in CoderChoice.entries) {
+            val был = PublishPreset(name = "vp8 | $кодер", video = VideoPreset(noCrop = true, encoder = кодер, decoder = раскодировщик))
+            assertEquals(был, presetFromWire(был.toWire()), "$кодер / $раскодировщик")
+        }
+    }
+
+    @Test
+    fun прежний_набор_берёт_кодер_как_в_настройках() {
+        val стал = presetFromWire("v2|0n|" + PublishPreset(name = "к").toWire().substringAfter("v2|0|"))
+        assertEquals(CoderChoice.Settings, стал?.video?.encoder)
+        assertEquals(CoderChoice.Settings, стал?.video?.decoder)
     }
 }

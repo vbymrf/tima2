@@ -47,7 +47,7 @@ import java.util.concurrent.Executors
  * кадрами внутри себя, и Java-обёртка их не видит. Что программный путь шлёт некратное —
  * видно строкой «ушло некратное» по статистике (ПЛАН-ВИДЕО.md В2.4).
  *
- * [crop] `false` — галочка стенда «Без обрезки» (В2.3): связка та же, строки журнала те
+ * [crop] `false` — галочка стенда «Обрезка до кратного 16» снята (В2.3): связка та же, строки журнала те
  * же, кадр не режется.
  */
 internal class AlignedEncoderFactory(eglContext: EglBase.Context?, crop: Boolean) : VideoEncoderFactory {
@@ -84,7 +84,7 @@ internal class AlignedEncoderFactory(eglContext: EglBase.Context?, crop: Boolean
 }
 
 /**
- * Каждый аппаратный кодер — в [Crop16] (кроме «Без обрезки»), а снаружи — в [Logged]:
+ * Каждый аппаратный кодер — в [Crop16] (если «Обрезка до кратного 16» не снята), а снаружи — в [Logged]:
  * заведение и закрытие каждого кодера видны в журнале каждого звонка.
  */
 private class AlignFactory(private val hardware: VideoEncoderFactory, private val crop: Boolean) : VideoEncoderFactory {

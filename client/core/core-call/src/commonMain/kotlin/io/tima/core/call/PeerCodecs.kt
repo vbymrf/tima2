@@ -10,6 +10,13 @@ package io.tima.core.call
  */
 data class HardwareCoding(val encode: Boolean = true, val decode: Boolean = true)
 
+/**
+ * Настройки с поправкой на прогон стенда: его выбор кодера и раскодировщика сильнее
+ * переключателей (заказчик 2026-09-30, 1а). `null` — обычный звонок, одни настройки.
+ */
+fun HardwareCoding.forRun(video: VideoPreset?): HardwareCoding =
+    if (video == null) this else HardwareCoding(video.encoder.pick(encode), video.decoder.pick(decode))
+
 /** Ключи в настройках устройства — не синхронизируются: у каждого телефона свои кодеры. */
 object HardwareCodingKeys {
     const val ENCODE = "call.hw.encode"

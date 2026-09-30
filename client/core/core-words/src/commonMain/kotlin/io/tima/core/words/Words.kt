@@ -818,8 +818,16 @@ interface BenchWords {
     val asWebrtc: String
     val dynacast: String
     val adaptiveStream: String
-    /** Стенд: выключить обрезку кадра до кратного 16 — воспроизвести прежнее (ПЛАН-ВИДЕО.md В2.3). */
-    val noCrop: String
+    /**
+     * Стенд: обрезка кадра до кратного 16; выключить — воспроизвести прежнее (ПЛАН-ВИДЕО.md
+     * В2.3). Называется без отрицания (заказчик 2026-09-30): «без обрезки — вкл» читалось
+     * через два «не».
+     */
+    val crop: String
+    /** Стенд: кодер и раскодировщик прогона (заказчик 2026-09-30, 1а). */
+    val encoderChoice: String
+    val decoderChoice: String
+    val asSettings: String
 
     val sound: String
     val red: String
@@ -868,7 +876,13 @@ interface BenchWords {
     val down: String
     val rtt: String
     val lost: String
-    val codecNow: String
+    /** «Кодек вверх VP8 П» — кодек ушедшего и кто кодировал (заказчик 2026-09-30, 2а). */
+    val codecUp: String
+    /** «Кодек вниз VP9 А» — кодек пришедшего и кто раскодировал. */
+    val codecDown: String
+    /** Буквы «А» — аппаратный, «П» — программный. */
+    val hardwareShort: String
+    val softwareShort: String
     /** Размеры исходящих копий видео одной строкой. */
     val framesUp: String
     /** Размер входящего кадра. */
@@ -886,7 +900,6 @@ interface BenchWords {
     val currentAverage: String
     /** Единица тока. */
     val milliAmps: String
-    val encoder: String
     val hardware: String
     val software: String
     val phoneSent: String
@@ -2223,7 +2236,10 @@ object RussianWords : Words {
         override val keepFrames = "держать частоту"
         override val asWebrtc = "как решит WebRTC"
         override val dynacast = "Dynacast"
-        override val noCrop = "Без обрезки до кратного 16"
+        override val crop = "Обрезка до кратного 16"
+        override val encoderChoice = "Кодер (отправка)"
+        override val decoderChoice = "Раскодировщик (приём)"
+        override val asSettings = "как в настройках"
         override val adaptiveStream = "Adaptive Stream"
 
         override val sound = "Звук"
@@ -2274,7 +2290,10 @@ object RussianWords : Words {
         override val down = "Вниз, по дорожкам"
         override val rtt = "Оборот пакета"
         override val lost = "Потеряно пакетов"
-        override val codecNow = "Кодек на самом деле"
+        override val codecUp = "Кодек вверх"
+        override val codecDown = "Кодек вниз"
+        override val hardwareShort = "А"
+        override val softwareShort = "П"
         override val framesUp = "Кадр вверх, по копиям"
         override val frameDown = "Кадр вниз"
         override val fpsUp = "Кадр/с вверх"
@@ -2286,7 +2305,6 @@ object RussianWords : Words {
         override val mahSpent = "Ушло, мА·ч"
         override val currentAverage = "Ток, среднее"
         override val milliAmps = "мА"
-        override val encoder = "Кодер"
         override val hardware = "аппаратный"
         override val software = "программный"
         override val phoneSent = "Телефон отдал"

@@ -72,6 +72,9 @@ data class BenchSummary(
     /** Чем кодировалось на самом деле и железом ли. Без этого числа нечитаемы (§5а). */
     val codec: String? = null,
     val hardwareEncoder: Boolean? = null,
+    /** Каким кодеком пришло и раскодировано ли железом — «Кодек вниз» (заказчик 2026-09-30, 2а). */
+    val downCodec: String? = null,
+    val hardwareDecoder: Boolean? = null,
     val rttAverageMs: Int? = null,
     val packetsLost: Long? = null,
     /**
@@ -157,6 +160,8 @@ fun summarize(preset: PublishPreset, samples: List<BenchSample>): BenchSummary {
         // поднялась, и первые отсчёты про них не знают ничего.
         codec = samples.lastNotNullOf { it.stats?.videoCodec },
         hardwareEncoder = samples.lastNotNullOf { it.stats?.hardwareEncoder },
+        downCodec = samples.lastNotNullOf { it.stats?.downCodec },
+        hardwareDecoder = samples.lastNotNullOf { it.stats?.hardwareDecoder },
         rttAverageMs = rtts.averageMs()?.toInt(),
         packetsLost = samples.lastOrNull()?.stats?.packetsLost,
         upFpsAverage = samples.mapNotNull { it.stats?.upFps }.averagePercent(),

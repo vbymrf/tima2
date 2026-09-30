@@ -924,7 +924,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
 
     /**
      * Какую середину кадра камеры отдавать: кратную 16 (ПЛАН-ВИДЕО.md В2.2) или, с
-     * галочкой стенда «Без обрезки», весь кадр.
+     * снятой галочкой стенда «Обрезка до кратного 16», весь кадр.
      */
     private fun cutOf(opened: Camera): CenterCrop? =
         if (preset?.video?.noCrop == true) null else CenterCrop(opened.width, opened.height)

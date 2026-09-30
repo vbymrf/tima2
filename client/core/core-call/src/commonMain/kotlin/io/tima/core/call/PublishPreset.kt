@@ -111,7 +111,8 @@ data class VideoPreset(
     val dynacast: Boolean = true,
     val adaptiveStream: Boolean = true,
     /**
-     * «Без обрезки» — выключить обрезку кадра до кратного 16 (ПЛАН-ВИДЕО.md В2.3).
+     * Обрезка кадра до кратного 16 выключена — `true` (ПЛАН-ВИДЕО.md В2.3). На экране — галочка
+     * «Обрезка до кратного 16», снятая: название без отрицания (заказчик 2026-09-30).
      *
      * ── ЧТО ПО УМОЛЧАНИЮ ────────────────────────────────────────────────────
      *
@@ -135,7 +136,35 @@ data class VideoPreset(
      * «ушло некратное».
      */
     val noCrop: Boolean = false,
+    /**
+     * Кодер прогона — «как в настройках», аппаратный или программный (заказчик 2026-09-30,
+     * 1а). Только на звонок прогона; после него — снова «Настройки → Звонки». Аппаратный —
+     * просьба: нет у телефона кодера этого кодека в железе — WebRTC возьмёт программный, и
+     * окно 0 покажет «П».
+     */
+    val encoder: CoderChoice = CoderChoice.Settings,
+    /** Раскодировщик прогона — так же, как [encoder]. Решает принимающий телефон, за себя. */
+    val decoder: CoderChoice = CoderChoice.Settings,
 )
+
+/** Выбор кодера или раскодировщика в наборе прогона (заказчик 2026-09-30, 1а). */
+enum class CoderChoice(val wire: String) {
+    /** Как в «Настройки → Звонки». */
+    Settings("settings"),
+    Hardware("hardware"),
+    Software("software");
+
+    /** Аппаратно ли — при переключателе настроек [setting]. */
+    fun pick(setting: Boolean): Boolean = when (this) {
+        Settings -> setting
+        Hardware -> true
+        Software -> false
+    }
+
+    companion object {
+        fun of(wire: String?): CoderChoice = entries.firstOrNull { it.wire == wire } ?: Settings
+    }
+}
 
 /**
  * Обрезка по центру до кратного 16 ([VideoPreset.noCrop] — выключить).

@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import io.tima.core.call.AudioPreset
 import io.tima.core.call.BenchSample
 import io.tima.core.call.BenchSummary
+import io.tima.core.call.CoderChoice
 import io.tima.core.call.Degradation
 import io.tima.core.call.LayerMode
 import io.tima.core.call.PublishPreset
@@ -179,9 +180,19 @@ private fun Publishing(preset: PublishPreset, onChange: (PublishPreset) -> Unit)
         ) { chosen -> video { copy(degradation = chosen) } }
         Switch(words.dynacast, video.dynacast) { on -> video { copy(dynacast = on) } }
         Switch(words.adaptiveStream, video.adaptiveStream) { on -> video { copy(adaptiveStream = on) } }
-        // Обрезка до кратного 16 — всегда (заказчик 2026-09-30); галочка только чтобы
-        // воспроизвести прежнее, если беда вернётся.
-        Switch(words.noCrop, video.noCrop) { on -> video { copy(noCrop = on) } }
+        // Обрезка до кратного 16 — всегда (заказчик 2026-09-30); выключить — только чтобы
+        // воспроизвести прежнее, если беда вернётся. Включено = режем: без отрицания в
+        // названии (заказчик 2026-09-30).
+        Switch(words.crop, !video.noCrop) { on -> video { copy(noCrop = !on) } }
+        // Кодер и раскодировщик прогона (заказчик 2026-09-30, 1а) — сильнее «Настройки →
+        // Звонки», только на звонок прогона.
+        val coders = listOf(
+            CoderChoice.Settings to words.asSettings,
+            CoderChoice.Hardware to words.hardware,
+            CoderChoice.Software to words.software,
+        )
+        Pick(words.encoderChoice, coders, video.encoder) { chosen -> video { copy(encoder = chosen) } }
+        Pick(words.decoderChoice, coders, video.decoder) { chosen -> video { copy(decoder = chosen) } }
 
         Sound(preset.audio) { onChange(preset.copy(audio = it)) }
     }
@@ -381,15 +392,8 @@ private fun Numbers(last: BenchSample?) {
         Line(words.down, stats?.downBitrate?.let { kbit(it) })
         Line(words.rtt, stats?.rttMs?.let { "$it мс" })
         Line(words.lost, stats?.packetsLost?.toString())
-        Line(words.codecNow, stats?.videoCodec)
-        Line(
-            words.encoder,
-            when (stats?.hardwareEncoder) {
-                true -> words.hardware
-                false -> words.software
-                null -> null
-            },
-        )
+        Line(words.codecUp, codecWho(stats?.videoCodec, stats?.hardwareEncoder))
+        Line(words.codecDown, codecWho(stats?.downCodec, stats?.hardwareDecoder))
         // Все копии одной строкой через запятую (заказчик 2026-09-25): сколько их и каких —
         // видно сразу, и simulcast от одного слоя отличается без пояснений.
         Line(words.framesUp, stats?.upFrames?.takeIf { it.isNotEmpty() }?.joinToString(", "))
@@ -432,15 +436,8 @@ private fun Runs(runs: List<BenchSummary>) {
             Line(words.mahSpent, run.mahSpent?.toString())
             Line(words.currentAverage, run.currentAverageMa?.let { milliAmps(it) })
             if (run.onCharger) Secondary(words.onCharger)
-            Line(words.codecNow, run.codec)
-            Line(
-                words.encoder,
-                when (run.hardwareEncoder) {
-                    true -> words.hardware
-                    false -> words.software
-                    null -> null
-                },
-            )
+            Line(words.codecUp, codecWho(run.codec, run.hardwareEncoder))
+            Line(words.codecDown, codecWho(run.downCodec, run.hardwareDecoder))
         }
     }
 }

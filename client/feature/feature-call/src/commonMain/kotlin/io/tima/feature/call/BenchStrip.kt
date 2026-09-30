@@ -123,13 +123,11 @@ private fun Numbers(last: BenchSample?) {
         ),
         listOf(words.fpsUp to stats?.upFps?.let { oneDecimal(it) }, words.fpsDown to stats?.downFps?.let { oneDecimal(it) }),
         listOf(words.qpUp to stats?.upQp?.let { oneDecimal(it) }, words.qpDown to stats?.downQp?.let { oneDecimal(it) }),
+        // «Кодек вверх VP8 П», «Кодек вниз VP9 А» — что ушло и пришло и кто обработал
+        // (заказчик 2026-09-30, 2а).
         listOf(
-            words.codecNow to stats?.videoCodec,
-            words.encoder to when (stats?.hardwareEncoder) {
-                true -> words.hardware
-                false -> words.software
-                null -> null
-            },
+            words.codecUp to codecWho(stats?.videoCodec, stats?.hardwareEncoder),
+            words.codecDown to codecWho(stats?.downCodec, stats?.hardwareDecoder),
         ),
         listOf(words.phoneSent to traffic?.sentBytes?.let { megabytes(it) }, words.cpu to load?.cpuPercent?.let { percent(it) }),
         listOf(words.heat to load?.temperatureC?.let { degrees(it) }, words.battery to battery(load?.batteryPercent, load?.charging)),
@@ -170,4 +168,20 @@ private fun Cell(label: String, value: String?, modifier: Modifier) {
             lineOne = true,
         )
     }
+}
+
+/**
+ * «VP8 П» — кодек и кто его обработал: «А» — аппаратный, «П» — программный (заказчик
+ * 2026-09-30, 2а). Кодек не известен — `null`, и ячейка покажет прочерк.
+ */
+@Composable
+internal fun codecWho(codec: String?, hardware: Boolean?): String? {
+    val words = Tima.words.bench
+    codec ?: return null
+    val who = when (hardware) {
+        true -> words.hardwareShort
+        false -> words.softwareShort
+        null -> return codec
+    }
+    return "$codec $who"
 }

@@ -51,7 +51,9 @@ fun benchReport(
     row("Чем жертвовать", preset.video.degradation.name)
     row("Dynacast", yesNo(preset.video.dynacast))
     row("Adaptive Stream", yesNo(preset.video.adaptiveStream))
-    row("Обрезка до кратного 16", if (preset.video.noCrop) "выключена" else "по центру, аппаратный кодер")
+    row("Обрезка до кратного 16", if (preset.video.noCrop) "выключена" else "включена: по центру, аппаратный кодер")
+    row("Кодер (отправка)", choiceText(preset.video.encoder))
+    row("Раскодировщик (приём)", choiceText(preset.video.decoder))
     row("RED", yesNo(preset.audio.red))
     row("DTX", yesNo(preset.audio.dtx))
     row("Стерео", yesNo(preset.audio.stereo))
@@ -62,10 +64,11 @@ fun benchReport(
     appendLine()
     appendLine("| Что | Значение |")
     appendLine("|---|---|")
-    row("Кодек на самом деле", summary.codec)
-    // Вид кодера — обязательная строка отчёта (ПЛАН-СТЕНДА §5а): разница между H.264 на
-    // Samsung и на Redmi может оказаться разницей двух реализаций, а не настроек.
-    row("Кодер", summary.hardwareEncoder?.let { if (it) "аппаратный" else "программный" })
+    // Кодек и кто его обрабатывал — обязательные строки отчёта (ПЛАН-СТЕНДА §5а): разница
+    // между H.264 на Samsung и на Redmi может оказаться разницей двух реализаций, а не
+    // настроек. Вниз — с 2026-09-30 (заказчик, 2а): раскодировщик так же важен.
+    row("Кодек вверх", codecText(summary.codec, summary.hardwareEncoder))
+    row("Кодек вниз", codecText(summary.downCodec, summary.hardwareDecoder))
     row("Вверх, среднее (бит/с)", summary.upAverage?.toString())
     row("Вверх, потолок (бит/с)", summary.upPeak?.toString())
     row("Вниз, среднее (бит/с)", summary.downAverage?.toString())
@@ -172,3 +175,15 @@ expect fun saveBenchReport(fileName: String, text: String): String?
 
 /** Модель телефона. Три телефона стенда различаются только так. */
 expect fun phoneModel(): String
+
+/** «VP8, программный» — кодек и кто его обработал; не знаем ни того ни другого — пусто. */
+private fun codecText(codec: String?, hardware: Boolean?): String? {
+    val who = hardware?.let { if (it) "аппаратный" else "программный" }
+    return listOfNotNull(codec, who).joinToString(", ").ifEmpty { null }
+}
+
+private fun choiceText(choice: CoderChoice): String = when (choice) {
+    CoderChoice.Settings -> "как в настройках"
+    CoderChoice.Hardware -> "аппаратный"
+    CoderChoice.Software -> "программный"
+}

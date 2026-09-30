@@ -70,8 +70,11 @@ private data class PresetJson(
     val align16: Boolean? = null,
     val alignCrop: Boolean? = null,
     val alignSingle: Boolean? = null,
-    /** «Без обрезки» ([VideoPreset.noCrop]). */
+    /** Обрезка выключена ([VideoPreset.noCrop]). */
     val noCrop: Boolean = false,
+    /** Кодер и раскодировщик прогона: `settings` · `hardware` · `software` ([CoderChoice]). */
+    val encoder: String = "settings",
+    val decoder: String = "settings",
     val red: Boolean = true,
     val dtx: Boolean = true,
     val stereo: Boolean = false,
@@ -105,6 +108,8 @@ fun presetsFromJson(text: String): List<PublishPreset> = runCatching {
                     dynacast = row.dynacast,
                     adaptiveStream = row.adaptive,
                     noCrop = row.noCrop,
+                    encoder = CoderChoice.of(row.encoder),
+                    decoder = CoderChoice.of(row.decoder),
                 ),
                 audio = AudioPreset(
                     red = row.red,
@@ -139,6 +144,8 @@ fun presetsToJson(presets: List<PublishPreset>): String = json.encodeToString(
                 dynacast = preset.video.dynacast,
                 adaptive = preset.video.adaptiveStream,
                 noCrop = preset.video.noCrop,
+                encoder = preset.video.encoder.wire,
+                decoder = preset.video.decoder.wire,
                 red = preset.audio.red,
                 dtx = preset.audio.dtx,
                 stereo = preset.audio.stereo,
