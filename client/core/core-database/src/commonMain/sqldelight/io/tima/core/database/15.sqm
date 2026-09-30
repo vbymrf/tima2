@@ -1,0 +1,28 @@
+-- Схема 15 → 16: журнал уведомлений и отметки «просмотрено» для копии аккаунта.
+-- План: doc_mig/ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ1.
+--
+-- Новая таблица, прежние не трогаются. Пустая после обновления — её наполняет сверка
+-- при запуске: у непрочитанных переписок и непросмотренных пропущенных появляются строки
+-- без звука и без строки в шторке (`source = seed`).
+CREATE TABLE notice_log (
+    id          INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    at_ms       INTEGER NOT NULL,
+    tab         TEXT    NOT NULL,
+    entity      TEXT    NOT NULL,
+    what        TEXT    NOT NULL,
+    ref         TEXT    NOT NULL,
+    source      TEXT    NOT NULL,
+    done        TEXT    NOT NULL DEFAULT '',
+    cleared_at  INTEGER NOT NULL DEFAULT 0,
+    cleared_by  TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE UNIQUE INDEX notice_log_ref ON notice_log(what, ref);
+CREATE INDEX notice_log_active ON notice_log(cleared_at, tab, entity);
+
+-- Отметки «просмотрено до» — ЖУ9: едут между устройствами копией аккаунта.
+CREATE TABLE read_marks (
+    chat_id  TEXT    NOT NULL PRIMARY KEY,
+    upto_ms  INTEGER NOT NULL,
+    dirty    INTEGER NOT NULL DEFAULT 0
+);

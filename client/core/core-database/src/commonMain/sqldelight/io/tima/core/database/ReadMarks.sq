@@ -1,0 +1,36 @@
+-- Отметки «просмотрено до» — ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ9.
+--
+-- Человек открыл переписку — здесь запоминается время последнего входящего в ней
+-- (`client_ts` отправителя). Отметки уходят в копию аккаунта **одной отправкой за сессию**,
+-- а не на каждый переход: `dirty = 1` — изменено здесь и ещё не отдано. Пришедшие с
+-- другого устройства сливаются взятием большего: порядок прихода неважен, спорить нечему.
+CREATE TABLE read_marks (
+    chat_id  TEXT    NOT NULL PRIMARY KEY,
+    upto_ms  INTEGER NOT NULL,
+    -- 1 — изменено на этом устройстве, в копию ещё не отдано.
+    dirty    INTEGER NOT NULL DEFAULT 0
+);
+
+-- Своя отметка: только вперёд, и помечается к отправке.
+markLocal:
+INSERT INTO read_marks(chat_id, upto_ms, dirty) VALUES (:chatId, :uptoMs, 1)
+ON CONFLICT(chat_id) DO UPDATE SET upto_ms = excluded.upto_ms, dirty = 1
+WHERE excluded.upto_ms > read_marks.upto_ms;
+
+-- Пришедшая из копии: только вперёд, к отправке не помечается.
+mergeRemote:
+INSERT INTO read_marks(chat_id, upto_ms, dirty) VALUES (:chatId, :uptoMs, 0)
+ON CONFLICT(chat_id) DO UPDATE SET upto_ms = excluded.upto_ms
+WHERE excluded.upto_ms > read_marks.upto_ms;
+
+all:
+SELECT chat_id, upto_ms FROM read_marks;
+
+dirtyCount:
+SELECT count(*) FROM read_marks WHERE dirty = 1;
+
+markSent:
+UPDATE read_marks SET dirty = 0 WHERE dirty = 1;
+
+uptoOf:
+SELECT upto_ms FROM read_marks WHERE chat_id = ?;

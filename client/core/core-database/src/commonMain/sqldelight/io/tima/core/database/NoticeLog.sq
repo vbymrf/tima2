@@ -1,0 +1,57 @@
+-- Журнал уведомлений — ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ1.
+--
+-- Строка — одно событие: сообщение или пропущенный звонок. Числа на вкладках, окнах и
+-- значке считаются отсюда, по сущностям, а не по строкам. Снятие не удаляет строку, а
+-- помечает временем и причиной: «куда исчезло» остаётся видно.
+--
+-- Текста здесь нет, как и в `call_log`: только идентификаторы, времена и слова разбора.
+CREATE TABLE notice_log (
+    id          INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    at_ms       INTEGER NOT NULL,
+    -- chats | calls | groups
+    tab         TEXT    NOT NULL,
+    -- Переписка («Чаты», «Группы») или звонивший («Звонки»).
+    entity      TEXT    NOT NULL,
+    -- message | missed
+    what        TEXT    NOT NULL,
+    -- Номер сообщения или звонок: вместе с `what` опознаёт повтор.
+    ref         TEXT    NOT NULL,
+    -- live | catchup | seed
+    source      TEXT    NOT NULL,
+    -- Что сделали: «строка+звук», «строка», «тишина: перерыв» …
+    done        TEXT    NOT NULL DEFAULT '',
+    -- 0 — не снято.
+    cleared_at  INTEGER NOT NULL DEFAULT 0,
+    cleared_by  TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE UNIQUE INDEX notice_log_ref ON notice_log(what, ref);
+CREATE INDEX notice_log_active ON notice_log(cleared_at, tab, entity);
+
+record:
+INSERT OR IGNORE INTO notice_log(at_ms, tab, entity, what, ref, source)
+VALUES (?, ?, ?, ?, ?, ?);
+
+changes:
+SELECT changes();
+
+done:
+UPDATE notice_log SET done = ? WHERE what = ? AND ref = ?;
+
+isActive:
+SELECT count(*) FROM notice_log WHERE cleared_at = 0 AND tab = ? AND entity = ? AND what = ?;
+
+clearEntity:
+UPDATE notice_log SET cleared_at = ?, cleared_by = ? WHERE cleared_at = 0 AND tab = ? AND entity = ?;
+
+clearTab:
+UPDATE notice_log SET cleared_at = ?, cleared_by = ? WHERE cleared_at = 0 AND tab = ?;
+
+clearRef:
+UPDATE notice_log SET cleared_at = ?, cleared_by = ? WHERE cleared_at = 0 AND what = ? AND ref = ?;
+
+active:
+SELECT DISTINCT tab, entity, what FROM notice_log WHERE cleared_at = 0;
+
+purge:
+DELETE FROM notice_log WHERE cleared_at > 0 AND cleared_at < ?;

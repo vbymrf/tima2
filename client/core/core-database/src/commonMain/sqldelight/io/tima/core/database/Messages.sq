@@ -278,6 +278,21 @@ markChatRead:
 UPDATE messages SET state = :read
 WHERE direction = 1 AND chat_id = :chatId AND state = :stored;
 
+-- Прочитано на другом устройстве — до отметки копии аккаунта (ЖУ9). Позже отметки
+-- пришедшее остаётся непрочитанным: его на том устройстве ещё не видели.
+markChatReadUpTo:
+UPDATE messages SET state = :read
+WHERE direction = 1 AND chat_id = :chatId AND state = :stored AND client_ts <= :uptoMs;
+
+-- Время последнего входящего в переписке — что запомнить отметкой «просмотрено до».
+lastIncomingTs:
+SELECT max(client_ts) FROM messages WHERE direction = 1 AND chat_id = ?;
+
+-- Непрочитанные по перепискам — сверка журнала уведомлений при запуске (ЖУ1).
+unreadChats:
+SELECT chat_id, max(server_id) FROM messages
+WHERE direction = 1 AND state = :stored GROUP BY chat_id;
+
 -- Сколько сообщений В ЭТОЙ переписке ещё не отмечены прочитанными.
 --
 -- Нужен, чтобы НЕ выполнять markChatRead, когда отмечать нечего. Причина не в экономии:

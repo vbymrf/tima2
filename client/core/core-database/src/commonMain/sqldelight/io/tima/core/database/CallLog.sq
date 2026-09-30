@@ -92,6 +92,11 @@ missedUnseen:
 SELECT count(*) FROM call_log
 WHERE seen = 0 AND state = 'missed' AND initiator_id <> :me;
 
+-- Непросмотренные пропущенные поимённо — сверка журнала уведомлений при запуске (ЖУ1).
+missedUnseenRows:
+SELECT call_id, initiator_id, created_at FROM call_log
+WHERE seen = 0 AND state = 'missed' AND initiator_id <> :me;
+
 -- Сколько строк вообще не просмотрено.
 --
 -- Нужен, чтобы НЕ выполнять markSeen, когда отмечать нечего. Причина та же, что у
