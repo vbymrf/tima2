@@ -46,6 +46,19 @@ class DeviceScreenTest {
     }
 
     /**
+     * Ключа копии нет — блок «Запросить ключ» нарисован (заказчик 2026-09-30); есть — его нет.
+     */
+    @Test
+    fun без_ключа_виден_запрос_ключа() {
+        val withKey = capture("устройства-ключ-есть", WIDTH, HEIGHT, dark = false) { screen(STATE) }
+        val withoutKey = capture("устройства-ключа-нет", WIDTH, HEIGHT, dark = false) {
+            DeviceScreen(state = STATE, onAsk = {}, onConfirm = {}, onChangedMind = {}, onRequestKey = {})
+        }
+
+        assertTrue(withKey.difference(withoutKey) > 0.0, "блок «Запросить ключ» не нарисовался")
+    }
+
+    /**
      * **Экран заливает свой фон.**
      *
      * Найдено глазами на телефоне: экран без фона показывает то, что под ним, и в светлой

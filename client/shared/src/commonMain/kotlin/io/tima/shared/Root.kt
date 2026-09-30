@@ -2658,6 +2658,7 @@ private fun App(
                         onOpen = { where = Where.Settings(it) },
                         onSignOut = onSignOut,
                         onScanCode = onScanCode,
+                        accountCopy = accountCopy,
                         network = network,
                         scope = scope,
                         platform = platform,
@@ -3328,6 +3329,8 @@ private fun Settings(
     onOpen: (SettingsItem?) -> Unit,
     onSignOut: () -> Unit,
     onScanCode: (() -> Unit)?,
+    /** Копия аккаунта — ради «Запросить ключ» в «Секретная фраза и устройства». */
+    accountCopy: BookCopySync,
     network: DevicePorts,
     scope: kotlinx.coroutines.CoroutineScope,
     platform: Platform,
@@ -3453,7 +3456,7 @@ private fun Settings(
                 )
             }
 
-            SettingsItem.DEVICES -> Devices(fleet, devices, build.name, onSignOut, onScanCode)
+            SettingsItem.DEVICES -> Devices(fleet, devices, build.name, onSignOut, onScanCode, accountCopy)
 
             // Уведомления (У1, У14). Пункт стоял в списке с самого начала и не
             // открывал ничего; теперь здесь два действия, без которых уведомления на
@@ -3592,7 +3595,22 @@ private fun Devices(
     buildVersion: String,
     onSignOut: () -> Unit,
     onScanCode: (() -> Unit)?,
+    accountCopy: BookCopySync,
 ) {
+    // Ключа служебной группы нет — «Запросить ключ» (заказчик 2026-09-30).
+    val keyMissing by accountCopy.keyMissing.collectAsState()
+    val keyAsk by accountCopy.keyAsk.collectAsState()
+    val auth = Tima.words.auth
+    val keyNotice = when (val ask = keyAsk) {
+        KeyAsk.Idle -> null
+        KeyAsk.Sending -> auth.requestKeySending
+        is KeyAsk.Asked -> auth.requestKeyAsked(ask.helpers)
+        KeyAsk.NoHelpers -> auth.requestKeyNoHelpers
+        KeyAsk.WrongPhrase -> auth.wrongPhrase
+        KeyAsk.Got -> auth.requestKeyGot
+        KeyAsk.NoAnswer -> auth.requestKeyNoAnswer
+        is KeyAsk.Failed -> auth.requestKeyFailed(ask.reason)
+    }
     DeviceScreen(
         state = state,
         onAsk = store::ask,
@@ -3602,6 +3620,9 @@ private fun Devices(
         onSignOut = onSignOut,
         onRetry = store::refresh,
         onScan = onScanCode,
+        onRequestKey = if (keyMissing && keyAsk !is KeyAsk.Got) accountCopy::requestKey else null,
+        keyNotice = keyNotice,
+        keySending = keyAsk == KeyAsk.Sending,
     )
 }
 

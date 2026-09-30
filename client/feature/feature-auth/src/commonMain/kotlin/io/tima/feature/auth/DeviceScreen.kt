@@ -12,12 +12,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import io.tima.core.ui.Trouble
+import io.tima.core.ui.Field
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Button
@@ -64,6 +66,15 @@ fun DeviceScreen(
      * (`not_a_phone`), и сканер там незачем.
      */
     onScan: (() -> Unit)? = null,
+    /**
+     * Ключа служебной группы нет — копия контактов не придёт (заказчик 2026-09-30).
+     * `null` — кнопки нет: ключ есть или просить нечем.
+     */
+    onRequestKey: ((String) -> Unit)? = null,
+    /** Что сказать под кнопкой о просьбе; `null` — ещё не просили. */
+    keyNotice: String? = null,
+    /** Просьба в пути — кнопку не нажать второй раз. */
+    keySending: Boolean = false,
 ) = Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
     val words = Tima.words.auth
     var signingOut by rememberSaveable { mutableStateOf(false) }
@@ -88,6 +99,13 @@ fun DeviceScreen(
 
     state.trouble?.let {
         Column(Modifier.padding(TimaSpacing.about4)) { Trouble(it) }
+    }
+
+    // Ключ копии — до ранних выходов: его просят и тогда, когда список устройств не пришёл.
+    if (onRequestKey != null && !signingOut) {
+        KeyRequest(onRequestKey, keyNotice, keySending)
+    } else if (keyNotice != null) {
+        Secondary(keyNotice, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
     }
 
     // Сканер — тоже до ранних выходов: подключить новое устройство можно и тогда, когда
@@ -257,4 +275,43 @@ private fun Question(name: String, onConfirm: () -> Unit, onChangedMind: () -> U
         onClick = onChangedMind,
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/**
+ * «Ключ копии контактов не получен» и «Запросить ключ» (заказчик 2026-09-30).
+ *
+ * Фраза набирается здесь же и никуда не записывается: слова уходят в подпись просьбы и
+ * дальше не живут. Поле стирается после отправки.
+ */
+@Composable
+private fun KeyRequest(onRequest: (String) -> Unit, notice: String?, sending: Boolean) = Column(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+) {
+    val words = Tima.words.auth
+    var open by rememberSaveable { mutableStateOf(false) }
+    var phrase by remember { mutableStateOf("") }
+    Caption(words.keyMissingTitle, weight = FontWeight.ExtraBold)
+    Secondary(words.keyMissingAbout)
+    if (!open) {
+        Button(label = words.requestKey, onClick = { open = true }, modifier = Modifier.fillMaxWidth())
+    } else {
+        Field(
+            value = phrase,
+            onChange = { phrase = it },
+            hint = words.phraseHint,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(
+            label = if (sending) words.requestKeySending else words.requestKeySend,
+            onClick = {
+                if (!sending && phrase.isNotBlank()) {
+                    onRequest(phrase)
+                    phrase = ""
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    notice?.let { Secondary(it) }
 }

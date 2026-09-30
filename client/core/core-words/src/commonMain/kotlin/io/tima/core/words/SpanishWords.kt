@@ -1381,6 +1381,20 @@ object SpanishWords : Words {
                 "recuperar — habrá que conectarlo de nuevo desde cero."
         override val keep = "Dejarlo"
         override val signOut = "Cerrar sesión en este dispositivo"
+        override val keyMissingTitle = "La clave de la copia de contactos no ha llegado"
+        override val keyMissingAbout =
+            "Sin ella, los contactos y secciones de tus otros dispositivos no llegarán aquí. Cualquiera de " +
+                "tus dispositivos conectados enviará la clave: firma la solicitud con tu frase secreta."
+        override val requestKey = "Solicitar la clave"
+        override val requestKeySend = "Enviar la solicitud"
+        override val requestKeySending = "Enviando…"
+        override fun requestKeyAsked(devices: Int) =
+            "Solicitud enviada; esperando a tus dispositivos conectados: $devices. Hasta tres minutos."
+        override val requestKeyNoHelpers =
+            "Nadie puede responder: ninguno de tus otros dispositivos está conectado. Abre la app en el teléfono y vuelve a intentarlo."
+        override val requestKeyGot = "Clave recibida: los contactos están llegando."
+        override val requestKeyNoAnswer = "La clave no llegó en tres minutos. Abre la app en el teléfono y vuelve a intentarlo."
+        override fun requestKeyFailed(reason: String) = "La solicitud no se envió: $reason"
         override val scanCode = "Escanear código"
         override val scanCodeAbout = "Conectar un ordenador o teléfono: el código está en su pantalla"
         override val scanTitle = "Código de conexión"

@@ -1382,6 +1382,20 @@ object EnglishWords : Words {
                 "brought back — it will have to connect again from scratch."
         override val keep = "Keep it"
         override val signOut = "Sign out on this device"
+        override val keyMissingTitle = "The contacts copy key has not arrived"
+        override val keyMissingAbout =
+            "Without it, contacts and sections from your other devices will not come here. Any of your " +
+                "devices that is online will send the key — sign the request with your secret phrase."
+        override val requestKey = "Request the key"
+        override val requestKeySend = "Send the request"
+        override val requestKeySending = "Sending…"
+        override fun requestKeyAsked(devices: Int) =
+            "Request sent; waiting for your online devices: $devices. Up to three minutes."
+        override val requestKeyNoHelpers =
+            "Nobody can answer: none of your other devices is online. Open the app on your phone and try again."
+        override val requestKeyGot = "Key received — contacts are coming in."
+        override val requestKeyNoAnswer = "The key did not arrive in three minutes. Open the app on your phone and try again."
+        override fun requestKeyFailed(reason: String) = "The request was not sent: $reason"
         override val scanCode = "Scan code"
         override val scanCodeAbout = "Connect a computer or phone: the code is on its screen"
         override val scanTitle = "Connection code"

@@ -116,6 +116,19 @@ class BookCopySync(
         },
     )
 
+    private val _keyMissing = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+    /**
+     * Ключа служебной группы нет — копия не открывается и не отдаётся. По нему «Секретная
+     * фраза и устройства» показывает «Запросить ключ» (заказчик 2026-09-30).
+     */
+    val keyMissing: StateFlow<Boolean> = _keyMissing
+
+    private val _keyAsk = kotlinx.coroutines.flow.MutableStateFlow<KeyAsk>(KeyAsk.Idle)
+
+    /** Что вышло с просьбой о ключе по кнопке. */
+    val keyAsk: StateFlow<KeyAsk> = _keyAsk
+
     /** Правили книгу в этой сессии — отдать при её конце. */
     @kotlin.concurrent.Volatile
     private var bookDirty = false
@@ -213,27 +226,72 @@ class BookCopySync(
      * @return `true` — просьба ушла: ответа стоит подождать.
      */
     private suspend fun askKeyByPhrase(): Boolean {
-        val request = keyRequest ?: return false
         val words = PhraseOnce.take() ?: return false
-        val gid = groupId ?: store.storeGroup()?.also { groupId = it } ?: return false
-        return when (val step = request.request(gid, words)) {
+        return askKey(words)?.let { it is io.tima.domain.chat.RecoveryStep.Requested && it.helpers > 0 } ?: false
+    }
+
+    /**
+     * «Запросить ключ» в «Секретная фраза и устройства» (заказчик 2026-09-30): просьба,
+     * подписанная фразой, и ожидание ответа — забор копии раз в 15 с, пока ключ не придёт.
+     *
+     * Фраза проверяется на месте: опечатка в слове — не повод тревожить сеть и чужие
+     * устройства. Слова дальше этого вызова не живут.
+     */
+    fun requestKey(phrase: String) {
+        val words = phrase.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+        scope.launch {
+            _keyAsk.value = KeyAsk.Sending
+            if (io.tima.core.encryption.AccountIdentitiesOverKodium.fromWords(words) == null) {
+                _keyAsk.value = KeyAsk.WrongPhrase
+                return@launch
+            }
+            val step = askKey(words)
+            _keyAsk.value = when (step) {
+                is io.tima.domain.chat.RecoveryStep.Requested ->
+                    if (step.helpers > 0) KeyAsk.Asked(step.helpers) else KeyAsk.NoHelpers
+                io.tima.domain.chat.RecoveryStep.NeedsSecretPhrase -> KeyAsk.WrongPhrase
+                null -> KeyAsk.Failed("просьба не ушла")
+                else -> KeyAsk.Failed(step.toString())
+            }
+            if (_keyAsk.value !is KeyAsk.Asked) return@launch
+            // Ответит устройство на связи — обёртки ляжут на сервер, отсюда их забирает
+            // лечение группы при заборе копии.
+            repeat(ASK_TRIES) {
+                delay(ASK_PAUSE_MS)
+                val pulled = turn.withLock { sync.pull() }
+                note("забрать после просьбы о ключе", pulled)
+                if (pulled != CopyStep.NoKey && pulled !is CopyStep.Offline) {
+                    _keyAsk.value = KeyAsk.Got
+                    turn.withLock {
+                        pullReads("забрать после просьбы о ключе")
+                        pushReads("отдать после просьбы о ключе")
+                    }
+                    return@launch
+                }
+            }
+            _keyAsk.value = KeyAsk.NoAnswer
+        }
+    }
+
+    /** Одна просьба о ключе служебной группы, подписанная словами. `null` — не ушла. */
+    private suspend fun askKey(words: List<String>): io.tima.domain.chat.RecoveryStep? {
+        val request = keyRequest ?: return null
+        val gid = groupId ?: store.storeGroup()?.also { groupId = it } ?: return null
+        val step = request.request(gid, words)
+        when (step) {
             is io.tima.domain.chat.RecoveryStep.Requested -> {
                 if (step.helpers == 0) {
                     Journal.trouble(COPY, "ключ служебной группы попрошен фразой — ответить некому: других устройств на связи нет")
                 } else {
                     Journal.note(COPY, "ключ служебной группы попрошен фразой", "версий" to step.versions, "устройств" to step.helpers)
                 }
-                step.helpers > 0
             }
-            io.tima.domain.chat.RecoveryStep.NeedsSecretPhrase -> {
+            io.tima.domain.chat.RecoveryStep.NeedsSecretPhrase ->
                 Journal.trouble(COPY, "ключ служебной группы: сервер не принял подпись фразой")
-                false
-            }
-            else -> {
+            else ->
                 Journal.trouble(COPY, "ключ служебной группы: просьба не ушла", "исход" to step.toString())
-                false
-            }
         }
+        return step
     }
 
     /** Забрать то, о чём сервер сказал, что оно новее нашего. */
@@ -278,6 +336,13 @@ class BookCopySync(
     }
 
     private fun note(what: String, step: CopyStep) {
+        // Ключа нет — «Запросить ключ» в «Секретная фраза и устройства»; есть — кнопка уходит.
+        when (step) {
+            CopyStep.NoKey -> _keyMissing.value = true
+            CopyStep.Offline -> Unit
+            is CopyStep.Refused -> Unit
+            else -> _keyMissing.value = false
+        }
         when (step) {
             // Сервер без ручек копии (до выкатки 0051) отвечает 404 — это не беда, а
             // возраст сервера: отмечается, но бедой не считается.
@@ -317,6 +382,9 @@ class BookCopySync(
     }
 
     private companion object {
+        /** Ответа на просьбу о ключе ждём до трёх минут: 12 раз по 15 с. */
+        const val ASK_TRIES = 12
+        const val ASK_PAUSE_MS = 15_000L
         const val COPY = LogCode.BOOK_COPY
         const val KIND_BOOK = "book"
         const val KIND_READS = "reads"
@@ -348,4 +416,20 @@ private class SettingsRevisionMemory(
         value = revision
         scope.launch { settings.put(key, revision.toString()) }
     }
+}
+
+/** Что вышло с просьбой о ключе служебной группы по кнопке «Запросить ключ». */
+sealed interface KeyAsk {
+    data object Idle : KeyAsk
+    data object Sending : KeyAsk
+
+    /** Ушла; ответят [helpers] устройств на связи — ждём. */
+    data class Asked(val helpers: Int) : KeyAsk
+    data object NoHelpers : KeyAsk
+    data object WrongPhrase : KeyAsk
+    data object Got : KeyAsk
+
+    /** Просьба ушла, а ключ за три минуты так и не пришёл. */
+    data object NoAnswer : KeyAsk
+    data class Failed(val reason: String) : KeyAsk
 }

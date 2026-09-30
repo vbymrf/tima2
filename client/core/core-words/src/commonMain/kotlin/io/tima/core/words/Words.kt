@@ -1477,6 +1477,18 @@ interface AuthWords {
     // Выход из аккаунта и возврат (ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, 2026-09-30).
     val signOut: String
 
+    /** «Фраза и устройства» — ключ копии не получен, просьба фразой (заказчик 2026-09-30). */
+    val keyMissingTitle: String
+    val keyMissingAbout: String
+    val requestKey: String
+    val requestKeySend: String
+    val requestKeySending: String
+    fun requestKeyAsked(devices: Int): String
+    val requestKeyNoHelpers: String
+    val requestKeyGot: String
+    val requestKeyNoAnswer: String
+    fun requestKeyFailed(reason: String): String
+
     /** «Фраза и устройства» — сканер кода подключения (заказчик 2026-09-30, 1б). */
     val scanCode: String
     val scanCodeAbout: String
@@ -3271,6 +3283,21 @@ object RussianWords : Words {
                 "нельзя — на нём придётся подключаться заново."
         override val keep = "Оставить"
         override val signOut = "Выйти из аккаунта на этом устройстве"
+        override val keyMissingTitle = "Ключ копии контактов не получен"
+        override val keyMissingAbout =
+            "Без него контакты и разделы с других ваших устройств сюда не придут. Ключ отдаст любое " +
+                "ваше устройство, которое сейчас на связи, — подпишите просьбу секретной фразой."
+        override val requestKey = "Запросить ключ"
+        override val requestKeySend = "Отправить просьбу"
+        override val requestKeySending = "Отправляем…"
+        override fun requestKeyAsked(devices: Int) =
+            "Просьба ушла, ждём ответа ваших устройств на связи: $devices. Это до трёх минут."
+        override val requestKeyNoHelpers =
+            "Ответить некому: других ваших устройств на связи нет. Откройте приложение на телефоне и попробуйте снова."
+        override val requestKeyGot = "Ключ получен — контакты подтягиваются."
+        override val requestKeyNoAnswer =
+            "Ключ за три минуты не пришёл. Откройте приложение на телефоне и попробуйте снова."
+        override fun requestKeyFailed(reason: String) = "Просьба не ушла: $reason"
         override val scanCode = "Сканировать код"
         override val scanCodeAbout = "Подключить компьютер или телефон: код показан на его экране"
         override val scanTitle = "Код подключения"
