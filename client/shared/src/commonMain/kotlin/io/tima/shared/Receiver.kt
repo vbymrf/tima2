@@ -281,14 +281,8 @@ class Receiver(
         // событие начинало ленту «заново», с разрывом и всеми старыми пропущенными. Прежний
         // общий ключ берётся, только если он не выше вершины: значит, писало это устройство.
         val legacy = saved[CALLS_CTS]?.toLongOrNull()?.takeIf { it <= top }
-        var mine = saved[ctsKey()]?.toLongOrNull() ?: legacy ?: 0
-        // Номер выше вершины бывает, только если сервер начал ленту заново (данные стёрты,
-        // Plan §0.0 решение 2). Ждать своего номера тогда пришлось бы вечно.
-        if (top < mine) {
-            Journal.note(LogCode.CALL, "лента звонков начата заново сервером", "мой" to mine, "вершина" to top)
-            mine = 0
-        }
-        if (top <= mine) return null
+        val own = saved[ctsKey()]?.toLongOrNull() ?: legacy ?: 0
+        var mine = callsFrom(top, own) { network.calls.updates(own)?.top } ?: return null
         var mark = saved[markKey()]?.toLongOrNull() ?: (if (legacy != null) saved[CALLS_MISSED_MARK]?.toLongOrNull() else null) ?: 0
         var applied: Long? = null
         while (true) {
@@ -316,6 +310,9 @@ class Receiver(
         Journal.note(LogCode.CALL, "лента звонков применена", "до" to mine)
         return applied
     }
+
+    /** Когда это устройство вошло в аккаунт — см. [deviceSince]; читается один раз. */
+    private var sinceCached: Long? = null
 
     /** Спросили ли в этом процессе, не звонят ли прямо сейчас. См. [ringingNow]. */
     private var ringingAsked = false
@@ -384,11 +381,13 @@ class Receiver(
      * у обновлённого устройства это время обновления, и старое тоже не зазвучит.
      */
     private suspend fun deviceSince(): Long {
+        sinceCached?.let { return it }
         val key = "device.since." + session.deviceId
         val saved = runCatching { environment.settings.all().first()[key] }.getOrNull()?.toLongOrNull()
-        if (saved != null) return saved
+        if (saved != null) return saved.also { sinceCached = it }
         val now = io.tima.core.network.ServerClock.now()
         runCatching { environment.settings.put(key, now.toString()) }
+        sinceCached = now
         return now
     }
 
@@ -419,8 +418,16 @@ class Receiver(
                 notices?.callOver(action.callId)
                 onCallState(action.callId, action.why)
             }
-            is CallLedger.Action.Missed ->
-                if (action.fromId !in blocked()) notices?.missed(action.callId, action.fromId, atMs = action.atMs)
+            is CallLedger.Action.Missed -> when {
+                action.fromId in blocked() -> Unit
+                // Пропущенный до входа устройства в аккаунт — только журнал звонков, без
+                // уведомления (заказчик 2026-09-30, 2а). Лента помнит сутки, и новое
+                // устройство, начав её с нуля, уведомляло о звонках, сделанных до него:
+                // ПК 2026-09-30 — 14 строк сразу после входа по QR.
+                missedBeforeDevice(action.atMs, deviceSince()) ->
+                    Journal.note(LogCode.NOTICE, "пропущенный старше входа устройства не уведомлён", "звонок" to action.callId.take(8))
+                else -> notices?.missed(action.callId, action.fromId, atMs = action.atMs)
+            }
             is CallLedger.Action.MissedSeen -> notices?.missedSeen(action.callId)
             is CallLedger.Action.Delivered -> onCallDelivered(action.callId)
             is CallLedger.Action.Unreachable -> onCallUnreachable(action.callId)
@@ -926,3 +933,35 @@ private const val RINGING_PAGE = 5
 
 /** Два срока звонка на сервере (`ringDeadline`, 50 с) — дальше `ringing` уже неправда. */
 private const val RINGING_FRESH_MS = 100_000L
+
+/**
+ * С какого номера забирать ленту звонков; `null` — забирать нечего.
+ *
+ * **Подсказка младше своего номера — почти всегда опоздавшая, а не сброс** (заказчик
+ * 2026-09-30, 1а). Открыли «Звонки» с 14 пропущенными — сервер пишет 14 изменений `seen` и
+ * шлёт 14 подсказок, каждую со своим номером. Первая забирает ленту до конца, остальные
+ * приходят с номерами ниже. До 2026-09-30 каждая такая считалась «сервер начал ленту
+ * заново»: номер в ноль, полный проход и запрос имени на каждый пропущенный — ПК за две
+ * минуты сделал 15 проходов и 218 запросов имён.
+ *
+ * Поэтому младшая подсказка сверяется с вершиной у самого сервера ([realTop] — один
+ * короткий запрос). Ниже своего номера она бывает, только если сервер и правда начал ленту
+ * заново (данные стёрты, Plan §0.0 решение 2) — тогда с нуля, иначе ждать своего номера
+ * пришлось бы вечно.
+ */
+internal suspend fun callsFrom(hint: Long, mine: Long, realTop: suspend () -> Long?): Long? {
+    if (hint > mine) return mine
+    if (hint == mine) return null
+    val real = realTop() ?: return null
+    return when {
+        real < mine -> {
+            Journal.note(LogCode.CALL, "лента звонков начата заново сервером", "мой" to mine, "вершина" to real)
+            0
+        }
+        real > mine -> mine
+        else -> null
+    }
+}
+
+/** Пропущенный кончился до входа устройства в аккаунт (время неизвестно — не до). */
+internal fun missedBeforeDevice(atMs: Long, since: Long): Boolean = atMs in 1 until since

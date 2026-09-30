@@ -240,7 +240,6 @@ class Notices(
      */
     suspend fun missed(callId: String, fromUserId: String, atMs: Long = 0, from: NoticeFrom = NoticeFrom.Live) {
         if (!shouldNotify(fromUserId)) return
-        val name = nameOf(fromUserId)
         lock.withLock {
             val at = now()
             val fresh = from == NoticeFrom.Live && (atMs <= 0 || at - atMs <= FRESH_MS)
@@ -258,7 +257,9 @@ class Notices(
                 return@withLock
             }
             Journal.note(LogCode.CALL, "уведомление о пропущенном", "звонок" to callId.take(8))
-            if (name != null) named[fromUserId] = name
+            // Имя — только для нового уведомления: повтор строки не меняет, а запрос имени
+            // стоит похода на сервер (ПК 2026-09-30 — 218 запросов на повторах, 1а).
+            nameOf(fromUserId)?.let { named[fromUserId] = it }
             showTab(NoticeTab.Calls, decide(record, wasActive, fresh), record)
         }
     }
