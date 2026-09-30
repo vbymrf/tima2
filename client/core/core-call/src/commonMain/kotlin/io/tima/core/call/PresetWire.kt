@@ -39,20 +39,19 @@ private const val FIELDS = 17
 private const val V2 = "v2"
 
 /**
- * Новые поля: пока одно — кратность 16 ([VideoPreset.align16]). `0` или `1`, за ним —
- * буквы способа: `c` — обрезка ([VideoPreset.alignCrop]), `s` — только один слой
- * ([VideoPreset.alignSingle]). Строка с одной цифрой — прежняя, способ у неё — заявка на
- * все слои.
+ * Новое поле строки `v2` — кратность. Первая цифра `0` или `1` и буквы `c`, `s` —
+ * прежние галочки «Кратность 16», «Обрезка кодером», «Только один слой»: **читаются и
+ * пропускаются** (ПЛАН-ВИДЕО.md В2.3, заказчик 2026-09-30) — обрезка теперь всегда.
+ * Буква `n` — «без обрезки» ([VideoPreset.noCrop]). Пишется `0` или `0n`.
  */
 fun PublishPreset.toWire(): String {
-    val align = (if (video.align16) "1" else "0") +
-        (if (video.alignCrop) CROP else "") +
-        (if (video.alignSingle) SINGLE else "")
+    val align = "0" + (if (video.noCrop) NO_CROP else "")
     return listOf(V2, align, legacyWire()).joinToString(SEPARATOR)
 }
 
-private const val CROP = "c"
-private const val SINGLE = "s"
+/** Прежние буквы способа — пропускаются. */
+private val OLD_WAYS = setOf('c', 's')
+private const val NO_CROP = 'n'
 
 fun presetFromWire(wire: String): PublishPreset? {
     val marked = V2 + SEPARATOR
@@ -62,15 +61,9 @@ fun presetFromWire(wire: String): PublishPreset? {
     val on = align.firstOrNull()
     val way = align.drop(1)
     if (on != '0' && on != '1') return null
-    if (way.any { it.toString() != CROP && it.toString() != SINGLE }) return null
+    if (way.any { it !in OLD_WAYS && it != NO_CROP }) return null
     val preset = legacyFromWire(rest.substringAfter(SEPARATOR)) ?: return null
-    return preset.copy(
-        video = preset.video.copy(
-            align16 = on == '1',
-            alignCrop = CROP in way,
-            alignSingle = SINGLE in way,
-        ),
-    )
+    return preset.copy(video = preset.video.copy(noCrop = NO_CROP in way))
 }
 
 /** Прежние 17 полей и имя. */

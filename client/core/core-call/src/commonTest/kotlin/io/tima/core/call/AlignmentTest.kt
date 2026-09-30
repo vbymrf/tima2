@@ -2,23 +2,26 @@ package io.tima.core.call
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Кратность 16: какой способ выбран и что обрезается (заказчик 2026-09-29). */
+/** Обрезка до кратного 16: что обрезается и что кратно (ПЛАН-ВИДЕО.md В2, заказчик 2026-09-30). */
 class AlignmentTest {
 
     @Test
-    fun без_кратности_галочки_не_действуют() {
-        assertNull(VideoPreset(alignCrop = true, alignSingle = true).alignment)
+    fun обрезка_по_умолчанию_включена() {
+        // Решение заказчика 2026-09-30: в каждом звонке, а галочка — только выключить.
+        assertFalse(VideoPreset().noCrop)
     }
 
     @Test
-    fun способ_по_галочкам() {
-        assertEquals(Alignment.RequestAllLayers, VideoPreset(align16 = true).alignment)
-        assertEquals(Alignment.RequestOneLayer, VideoPreset(align16 = true, alignSingle = true).alignment)
-        assertEquals(Alignment.Crop, VideoPreset(align16 = true, alignCrop = true).alignment)
-        assertEquals(Alignment.Crop, VideoPreset(align16 = true, alignCrop = true, alignSingle = true).alignment, "обрезка берёт верх")
+    fun кратен_ли_кадр() {
+        assertTrue(CenterCrop.aligned(256, 480))
+        assertTrue(CenterCrop.aligned(720, 1280))
+        assertFalse(CenterCrop.aligned(270, 480), "ширина 270 — не кратна")
+        assertFalse(CenterCrop.aligned(540, 960))
+        assertFalse(CenterCrop.aligned(352, 469), "нечётная сторона от заявки кратности")
+        assertTrue(CenterCrop.aligned(8, 480), "сторону меньше 16 не режут — считается кратной")
     }
 
     @Test

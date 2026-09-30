@@ -17,16 +17,18 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
- * Фабрика кодеров, у которой аппаратный кодер заявляет кратность 16 (ПЛАН-ВИДЕО.md В2).
+ * Связка кодеров каждого звонка: аппаратный кодер получает кадр, обрезанный по центру до
+ * кратного 16 (ПЛАН-ВИДЕО.md В2, решение заказчика 2026-09-30).
  *
  * ── ЗАЧЕМ ───────────────────────────────────────────────────────────────────
  *
  * Аппаратный кодер WebRTC нашей сборки (`HardwareVideoEncoder`, libwebrtc 144) заявляет
- * кратность 2 — «MediaCodec requires 2x2 alignment». WebRTC и ужимает кадр при нехватке
- * канала до 270×480 или 360×480, а кодер H.264 realme (Unisoc) на стороне, не кратной
- * 16, даёт полосы. Заявка кратности — штатный путь WebRTC: получив 16, он сам подбирает
- * размеры, кратные 16, и сам же решает, когда и насколько ужимать. Мы ему только
- * сообщаем ограничение, а не вмешиваемся в его решения.
+ * кратность 2, и WebRTC при нехватке канала ужимает кадр до 270×480, 360×480. Кодеры
+ * производителей на стороне, не кратной 16, вне гарантии: полосы у H.264 realme (Unisoc),
+ * мусор у H.264 Honor (MTK) в пробе 2026-09-30. Заявить WebRTC кратность 16 — штатный путь,
+ * но он давал нечётную сторону (352×469), и кодер не заводился вовсе. Поэтому заявки нет:
+ * кодер заводится под кратный размер, а из кадра вырезается середина ([Crop16]).
+ * Разбор — `БЕДЫ/2026-09-30-кратность-16-и-полосы.md`.
  *
  * ── КАК УСТРОЕНО ────────────────────────────────────────────────────────────
  *
@@ -34,21 +36,21 @@ import java.util.concurrent.Executors
  * (`CustomVideoEncoderFactory` → `SimulcastVideoEncoderFactoryWrapper`): аппаратная
  * фабрика, каждый кодер — на своём потоке, программный — запасным через
  * `VideoEncoderFallback`, сверху `SimulcastVideoEncoderFactory` WebRTC. Отличие одно:
- * аппаратный кодер обёрнут в [Aligned16]. Классы SDK закрытые, поэтому повторены, а не
- * взяты; при обновлении SDK сверить с его `SimulcastVideoEncoderFactoryWrapper`.
+ * аппаратный кодер обёрнут в [Crop16] и [Logged]. Классы SDK закрытые, поэтому повторены, а
+ * не взяты; при обновлении SDK сверить с его `SimulcastVideoEncoderFactoryWrapper`.
  *
- * Обёртка стоит **над аппаратным кодером, а не над готовой связкой**: связка отдаёт
- * WebRTC родной объект (`createNative`), и его заявку WebRTC берёт из родного кода, мимо
- * Java. Аппаратный кодер — Java-объект, и его `getEncoderInfo` WebRTC спрашивает.
+ * ── ПРОГРАММНЫЙ КОДЕР НЕ ОБРЕЗАЕТСЯ ─────────────────────────────────────────
  *
- * ── ТРИ СПОСОБА ─────────────────────────────────────────────────────────────
+ * Обёртка возможна только над аппаратным кодером: он Java-объект, и кадры WebRTC отдаёт
+ * ему через Java. Программный (libvpx VP8/VP9) — родной объект библиотеки
+ * (`WrappedNativeVideoEncoder`, его `encode` в Java — «Not implemented»): WebRTC кормит его
+ * кадрами внутри себя, и Java-обёртка их не видит. Что программный путь шлёт некратное —
+ * видно строкой «ушло некратное» по статистике (ПЛАН-ВИДЕО.md В2.4).
  *
- * `way` — галочки стенда под «Кратность» (заказчик 2026-09-29):
- * - заявка на все слои — [Aligned16] с распространением на слои, так было первым;
- * - «Только один слой» — [Aligned16] без распространения, как в WebRTC Google;
- * - «Обрезка кодером» — [Crop16]: заявки нет, кадр обрезается по центру перед кодером.
+ * [crop] `false` — галочка стенда «Без обрезки» (В2.3): связка та же, строки журнала те
+ * же, кадр не режется.
  */
-internal class AlignedEncoderFactory(eglContext: EglBase.Context?, way: Alignment) : VideoEncoderFactory {
+internal class AlignedEncoderFactory(eglContext: EglBase.Context?, crop: Boolean) : VideoEncoderFactory {
 
     // ── ВСЁ — ЛЕНИВО, ПРИ ПЕРВОМ ОБРАЩЕНИИ WEBRTC ─────────────────────────────
     //
@@ -61,7 +63,7 @@ internal class AlignedEncoderFactory(eglContext: EglBase.Context?, way: Alignmen
     // Те же флаги, что у SDK: Intel VP8 — да, H.264 High — нет.
     private val combined by lazy {
         val primary: VideoEncoderFactory =
-            OwnThreadFactory(AlignFactory(HardwareVideoEncoderFactory(eglContext, true, false), way))
+            OwnThreadFactory(AlignFactory(HardwareVideoEncoderFactory(eglContext, true, false), crop))
         val fallback: VideoEncoderFactory = OwnThreadFactory(FallbackFactory(primary))
         SimulcastVideoEncoderFactory(primary, fallback)
     }
@@ -82,58 +84,26 @@ internal class AlignedEncoderFactory(eglContext: EglBase.Context?, way: Alignmen
 }
 
 /**
- * Каждый аппаратный кодер — в [Aligned16] или [Crop16], по способу [way], а снаружи — в
- * [Logged]: заведение и закрытие каждого кодера видны в журнале.
+ * Каждый аппаратный кодер — в [Crop16] (кроме «Без обрезки»), а снаружи — в [Logged]:
+ * заведение и закрытие каждого кодера видны в журнале каждого звонка.
  */
-private class AlignFactory(private val hardware: VideoEncoderFactory, private val way: Alignment) : VideoEncoderFactory {
+private class AlignFactory(private val hardware: VideoEncoderFactory, private val crop: Boolean) : VideoEncoderFactory {
     override fun createEncoder(info: VideoCodecInfo): VideoEncoder? {
         val made = hardware.createEncoder(info)
         if (made == null) {
             Journal.trouble(LogCode.CALL, "кодер: аппаратный не создан", "кодек" to info.name)
             return null
         }
-        val aligned = when (way) {
-            Alignment.RequestAllLayers -> Aligned16(made, allLayers = true)
-            Alignment.RequestOneLayer -> Aligned16(made, allLayers = false)
-            Alignment.Crop -> Crop16(made)
-        }
-        return Logged(aligned, info.name)
+        return Logged(if (crop) Crop16(made) else made, info.name)
     }
 
     override fun getSupportedCodecs(): Array<VideoCodecInfo> = hardware.supportedCodecs
 }
 
 /**
- * Аппаратный кодер как есть, но с заявкой кратности 16: на всех слоях ([allLayers]) или,
- * как в WebRTC Google, только на один поток.
- *
- * `createNative` не передаётся: вернув родной объект, мы отдали бы WebRTC его заявку, а
- * не нашу. Аппаратный кодер родного объекта и не имеет.
- */
-private class Aligned16(private val encoder: VideoEncoder, private val allLayers: Boolean) : VideoEncoder {
-    override fun isHardwareEncoder(): Boolean = encoder.isHardwareEncoder
-    override fun initEncode(settings: VideoEncoder.Settings, callback: VideoEncoder.Callback): VideoCodecStatus =
-        encoder.initEncode(settings, callback)
-    override fun release(): VideoCodecStatus = encoder.release()
-    override fun encode(frame: VideoFrame, info: VideoEncoder.EncodeInfo): VideoCodecStatus = encoder.encode(frame, info)
-    @Deprecated("WebRTC зовёт setRates; этот оставлен интерфейсом")
-    override fun setRateAllocation(allocation: VideoEncoder.BitrateAllocation, framerate: Int): VideoCodecStatus =
-        encoder.setRateAllocation(allocation, framerate)
-    override fun setRates(parameters: VideoEncoder.RateControlParameters): VideoCodecStatus = encoder.setRates(parameters)
-    override fun getScalingSettings(): VideoEncoder.ScalingSettings = encoder.scalingSettings
-    override fun getResolutionBitrateLimits(): Array<VideoEncoder.ResolutionBitrateLimits> = encoder.resolutionBitrateLimits
-    override fun getImplementationName(): String = encoder.implementationName
-    override fun getEncoderInfo(): VideoEncoder.EncoderInfo = VideoEncoder.EncoderInfo(ALIGNMENT, allLayers)
-
-    private companion object {
-        const val ALIGNMENT = 16
-    }
-}
-
-/**
- * Аппаратный кодер, которому кадр обрезают по центру до кратного 16 («Обрезка кодером»,
- * заказчик 2026-09-29). WebRTC о кратности не знает: заявка остаётся той, что у кодера
- * (2), и перенастраивать кодер из-за неё нечего.
+ * Аппаратный кодер, которому кадр обрезают по центру до кратного 16 (ПЛАН-ВИДЕО.md В2,
+ * заказчик 2026-09-30 — в каждом звонке). WebRTC о кратности не знает: заявка остаётся той,
+ * что у кодера (2), и перенастраивать кодер из-за неё нечего.
  *
  * WebRTC заводит кодер под свой размер, например 270×480. Кодер заводится под кратный —
  * 256×480, — а из каждого кадра вырезается середина этого размера: 6 точек слева и 8
@@ -151,6 +121,7 @@ private class Crop16(private val encoder: VideoEncoder) : VideoEncoder {
             Journal.note(
                 LogCode.CALL, "кодер: обрезка до кратного 16",
                 "было" to "${next.width}×${next.height}", "стало" to "${next.alignedWidth}×${next.alignedHeight}",
+                "кодер" to "апп",
             )
         }
         crop = next
@@ -330,7 +301,7 @@ private class OwnThread(private val encoder: VideoEncoder) : VideoEncoder {
 }
 
 /**
- * Контекст EGL для комнат с [AlignedEncoderFactory] — один на процесс.
+ * Контекст EGL для комнат — один на процесс.
  *
  * SDK освобождает только тот контекст, что создал сам; отданный ему — нет. Новый на
  * каждый звонок так бы и копился, а один живёт, пока жив процесс, — как и у SDK.

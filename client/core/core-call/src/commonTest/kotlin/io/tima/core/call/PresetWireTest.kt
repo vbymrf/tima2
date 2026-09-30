@@ -32,7 +32,7 @@ class PresetWireTest {
                 degradation = Degradation.MaintainFramerate,
                 dynacast = false,
                 adaptiveStream = false,
-                align16 = true,
+                noCrop = true,
             ),
             audio = AudioPreset(red = false, dtx = false, bitrate = 32_000, stereo = true),
         )
@@ -103,7 +103,7 @@ class PresetWireTest {
 
         assertEquals("VP8 z", стал?.name)
         assertEquals(Degradation.Balanced, стал?.video?.degradation)
-        assertEquals(false, стал?.video?.align16)
+        assertEquals(false, стал?.video?.noCrop)
     }
 
     @Test
@@ -114,24 +114,25 @@ class PresetWireTest {
     }
 
     @Test
-    fun способ_кратности_переживает_запись() {
-        // Галочки под «Кратность» (заказчик 2026-09-29): потеряйся способ — прогон с
-        // «Обрезка кодером» молча пошёл бы заявкой и мерил бы не то.
-        for (способ in listOf(
-            VideoPreset(align16 = true, alignCrop = true),
-            VideoPreset(align16 = true, alignSingle = true),
-            VideoPreset(align16 = true),
-        )) {
-            val был = PublishPreset(name = "h264 960 4 к", video = способ)
+    fun без_обрезки_переживает_запись() {
+        // Галочка «Без обрезки» (ПЛАН-ВИДЕО.md В2.3): потеряйся она — прогон, который
+        // воспроизводит прежнюю беду, молча пошёл бы с обрезкой и мерил бы не то.
+        for (галочка in listOf(true, false)) {
+            val был = PublishPreset(name = "h264 960 4 к", video = VideoPreset(noCrop = галочка))
             assertEquals(был, presetFromWire(был.toWire()))
         }
     }
 
     @Test
-    fun строка_с_кратностью_без_способа_это_заявка_на_все_слои() {
-        // Так лежат наборы, запомненные до галочек.
-        val прежняя = PublishPreset(name = "к", video = VideoPreset(align16 = true)).toWire()
-
-        assertEquals(Alignment.RequestAllLayers, presetFromWire(прежняя)?.video?.alignment)
+    fun прежние_способы_кратности_читаются_и_пропускаются() {
+        // Так лежат наборы, запомненные с галочками 2026-09-29: «Кратность 16», «Обрезка
+        // кодером», «Только один слой». Обрезка теперь всегда — поля пропускаются, набор
+        // читается (заказчик 2026-09-30, 1а).
+        val хвост = PublishPreset(name = "к").toWire().substringAfter("v2|0|")
+        for (поле in listOf("1", "1c", "1s", "0")) {
+            val стал = presetFromWire("v2|" + поле + "|" + хвост)
+            assertEquals("к", стал?.name, "поле «$поле»")
+            assertEquals(false, стал?.video?.noCrop, "поле «$поле»")
+        }
     }
 }

@@ -803,12 +803,8 @@ interface BenchWords {
     val asWebrtc: String
     val dynacast: String
     val adaptiveStream: String
-    /** Стенд: аппаратный кодер заявляет кратность 16 (ПЛАН-ВИДЕО.md В2). */
-    val align16: String
-    /** Стенд, под «Кратность»: кадр обрезается по центру, заявки нет. */
-    val alignCrop: String
-    /** Стенд, под «Кратность»: заявка только на один слой, как у Google. */
-    val alignSingle: String
+    /** Стенд: выключить обрезку кадра до кратного 16 — воспроизвести прежнее (ПЛАН-ВИДЕО.md В2.3). */
+    val noCrop: String
 
     val sound: String
     val red: String
@@ -2176,9 +2172,7 @@ object RussianWords : Words {
         override val keepFrames = "держать частоту"
         override val asWebrtc = "как решит WebRTC"
         override val dynacast = "Dynacast"
-        override val align16 = "Кратность 16 у аппаратного кодера"
-        override val alignCrop = "Обрезка кодером"
-        override val alignSingle = "Только один слой"
+        override val noCrop = "Без обрезки до кратного 16"
         override val adaptiveStream = "Adaptive Stream"
 
         override val sound = "Звук"

@@ -1,6 +1,5 @@
 package io.tima.core.call
 
-import io.livekit.android.webrtc.CustomVideoEncoderFactory
 import livekit.org.webrtc.EglBase
 import livekit.org.webrtc.HardwareVideoDecoderFactory
 import livekit.org.webrtc.HardwareVideoEncoderFactory
@@ -80,8 +79,8 @@ internal object PhoneCoders {
  * кодеков для согласования не меняется: иначе комната с выключенным переключателем
  * договаривалась бы о другом, чем без него.
  *
- * Внутри — связка SDK как есть ([CustomVideoEncoderFactory]) или наша с кратностью 16
- * ([AlignedEncoderFactory]). Выключено — программный кодер WebRTC.
+ * Внутри — наша связка ([AlignedEncoderFactory]): аппаратный кодер с обрезкой до кратного
+ * 16 (ПЛАН-ВИДЕО.md В2) и программный запасным. Выключено — программный кодер WebRTC.
  */
 internal class SwitchableEncoderFactory(
     makeInner: () -> VideoEncoderFactory,
@@ -102,16 +101,12 @@ internal class SwitchableEncoderFactory(
     override fun getSupportedCodecs(): Array<VideoCodecInfo> = inner.supportedCodecs
 
     companion object {
-        /** Связка кодеров комнаты: с кратностью 16 ([align] — каким способом) или та, что строит SDK. */
-        fun of(egl: EglBase.Context, align: Alignment?, hardware: () -> Boolean): SwitchableEncoderFactory =
-            SwitchableEncoderFactory(
-                // Флаги — как у SDK: Intel VP8 — да, H.264 High — нет, программный — по нам.
-                {
-                    if (align != null) AlignedEncoderFactory(egl, align)
-                    else CustomVideoEncoderFactory(egl, true, false, false, emptyList())
-                },
-                hardware,
-            )
+        /**
+         * Связка кодеров комнаты — наша в каждом звонке (ПЛАН-ВИДЕО.md В2.1): аппаратный кодер
+         * с обрезкой до кратного 16, [crop] `false` — галочка стенда «Без обрезки».
+         */
+        fun of(egl: EglBase.Context, crop: Boolean, hardware: () -> Boolean): SwitchableEncoderFactory =
+            SwitchableEncoderFactory({ AlignedEncoderFactory(egl, crop) }, hardware)
     }
 }
 

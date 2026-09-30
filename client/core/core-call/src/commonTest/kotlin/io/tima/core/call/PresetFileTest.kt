@@ -53,13 +53,22 @@ class PresetFileTest {
                 degradation = Degradation.MaintainFramerate,
                 dynacast = false,
                 adaptiveStream = false,
-                align16 = true,
-                alignCrop = true,
+                noCrop = true,
             ),
             audio = AudioPreset(red = false, dtx = false, bitrate = 32_000, stereo = true),
         )
 
         assertEquals(listOf(был), presetsFromJson(presetsToJson(listOf(был))))
+    }
+
+    @Test
+    fun прежние_галочки_кратности_читаются_и_пропускаются() {
+        // Файлы наборов 2026-09-29 с «Кратность 16» и способами: обрезка теперь всегда,
+        // поля пропускаются, а набор читается (ПЛАН-ВИДЕО.md В2.3).
+        val наборы = presetsFromJson("""{"presets":[{"name":"к","align16":true,"alignCrop":true,"alignSingle":false}]}""")
+
+        assertEquals("к", наборы.single().name)
+        assertEquals(false, наборы.single().video.noCrop)
     }
 
     @Test

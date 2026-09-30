@@ -347,8 +347,9 @@ class LiveKitCallEngine(
      * аппаратного кодирования (ПЛАН-ВИДЕО.md В4): они читаются при создании кодера, и
      * фабрика обязана стоять с самого начала звонка, чтобы смена посреди него подействовала.
      *
-     * Включённые переключатели дают ровно ту связку, что строит SDK. Кратность 16
-     * ([VideoPreset.align16]) — наша связка кодеров вместо его.
+     * Связка кодеров — наша в каждом звонке (ПЛАН-ВИДЕО.md В2.1): та, что строит SDK, но
+     * аппаратный кодер получает кадр, обрезанный до кратного 16. Галочка стенда «Без
+     * обрезки» ([VideoPreset.noCrop]) оставляет связку и журнал, но кадр не режет.
      *
      * Фабрикам нужен контекст EGL — тот же, что у комнаты: камера отдаёт кадры текстурами
      * этого контекста, и кодер без него перекладывал бы каждый кадр через память. Поэтому
@@ -357,20 +358,12 @@ class LiveKitCallEngine(
      */
     private fun overridesFor(publish: PublishPreset?): LiveKitOverrides {
         val egl = sharedEgl()
-        val align = publish?.video?.alignment
-        when (align) {
-            null -> Unit
-            Alignment.Crop -> Journal.note(LogCode.CALL, "кодер: кратность 16 обрезкой по центру", "набор" to publish?.name)
-            else -> Journal.note(
-                LogCode.CALL, "кодер: заявлена кратность 16",
-                "слои" to if (align == Alignment.RequestOneLayer) "один" else "все",
-                "набор" to publish?.name,
-            )
-        }
+        val crop = publish?.video?.noCrop != true
+        if (!crop) Journal.note(LogCode.CALL, "кодер: без обрезки до кратного 16 — галочка стенда", "набор" to publish?.name)
         val handler = soundHandler()
         sound = handler
         return LiveKitOverrides(
-            videoEncoderFactory = SwitchableEncoderFactory.of(egl.eglBaseContext, align) { coding.encode },
+            videoEncoderFactory = SwitchableEncoderFactory.of(egl.eglBaseContext, crop) { coding.encode },
             videoDecoderFactory = SwitchableDecoderFactory(egl.eglBaseContext) { coding.decode },
             audioOptions = AudioOptions(audioHandler = handler),
             eglBase = egl,
@@ -1028,6 +1021,7 @@ class LiveKitCallEngine(
             var said = ""
             var got = -1L
             var froze = 0L
+            var misaligned = ""
             while (isActive) {
                 delay(STATS_EVERY_MS)
                 val track = room.remoteParticipants.values
@@ -1068,6 +1062,18 @@ class LiveKitCallEngine(
                         "всего с" to ((incoming.members["totalFreezesDuration"] as? Number)?.toDouble()?.let { tenth(it) } ?: "—"),
                     )
                 }
+
+                // ── ПРИШЛО НЕКРАТНОЕ (ПЛАН-ВИДЕО.md В2.4) ────────────────────
+                //
+                // Отправитель вне обрезки до кратного 16: старая сборка, программный кодер,
+                // ПК на нижнем слое, чужое приложение. Одна строка на смену размера.
+                val inSize = "" + w + "×" + h
+                val inW = (w as? Number)?.toInt()
+                val inH = (h as? Number)?.toInt()
+                if (inW != null && inH != null && !CenterCrop.aligned(inW, inH) && inSize != misaligned) {
+                    Journal.trouble(LogCode.CALL, "пришло некратное", "кадр" to inSize, "раскодировщик" to decoder)
+                }
+                misaligned = inSize
 
                 val line = "" + w + "×" + h + "|" + (kbit / 100) + "|" + decoder
                 if (line == said) continue
@@ -1167,6 +1173,7 @@ class LiveKitCallEngine(
             var said = ""
             var sent = -1L
             var lastCoder = "—"
+            var misaligned = ""
             val check = CodecCheck()
             while (isActive) {
                 delay(STATS_EVERY_MS)
@@ -1227,6 +1234,23 @@ class LiveKitCallEngine(
                 // Битрейт округляется до сотни: он дышит постоянно, и без округления
                 // строка менялась бы каждые три секунды, ничего не объясняя.
                 val size = "" + w + "×" + h
+
+                // ── УШЛО НЕКРАТНОЕ (ПЛАН-ВИДЕО.md В2.4) ──────────────────────
+                //
+                // В кодер попал кадр не кратного 16 размера — дыра в обрезке. Аппаратный
+                // путь режется всегда; программный (libvpx) обрезать нечем — он и даст эту
+                // строку. Одна строка на смену размера.
+                val outW = (w as? Number)?.toInt()
+                val outH = (h as? Number)?.toInt()
+                if (outW != null && outH != null && !CenterCrop.aligned(outW, outH) && size != misaligned) {
+                    Journal.trouble(
+                        LogCode.CALL, "ушло некратное",
+                        "кадр" to size, "кодер" to coder,
+                        "путь" to when (hardware(coder)) { true -> "апп"; false -> "прог"; null -> "—" },
+                    )
+                }
+                misaligned = size
+
                 val line = size + "|" + why + "|" + coder + "|" + (kbit / 100)
                 if (line == said) continue
                 said = line

@@ -2,6 +2,7 @@ package io.tima.core.call.desktop
 
 import com.sun.jna.Pointer
 import io.tima.core.call.CallDoor
+import io.tima.core.call.CenterCrop
 import io.tima.core.call.CallEngine
 import io.tima.core.call.CallQuality
 import io.tima.core.call.CallStage
@@ -391,6 +392,8 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             var told: RemoteVideoLoss? = null
             var decoderSaid = ""
             var froze = 0
+            var inMisaligned = ""
+            var outMisaligned = ""
             while (isActive) {
                 delay(LOSS_EVERY_MS)
                 val published = publications.entries.any { (sid, p) ->
@@ -424,11 +427,36 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                             froze = got.freeze_count
                             Journal.trouble(LogCode.CALL, "видео собеседника замирало", "раз" to got.freeze_count)
                         }
+                        // Пришло некратное (ПЛАН-ВИДЕО.md В2.4) — отправитель вне обрезки.
+                        val size = "${got.frame_width}×${got.frame_height}"
+                        if (got.frame_width > 0 && !CenterCrop.aligned(got.frame_width, got.frame_height) && size != inMisaligned) {
+                            Journal.trouble(LogCode.CALL, "пришло некратное", "кадр" to size, "раскодировщик" to got.decoder_implementation)
+                        }
+                        inMisaligned = size
                     }
                     codec = inbound?.stream?.codec_id?.let { id ->
                         stats.mapNotNull { it.codec }.firstOrNull { it.rtc.id == id }?.codec?.mime_type?.removePrefix("video/")
                     }
                 }
+                // Ушло некратное (ПЛАН-ВИДЕО.md В2.4): верхний слой режется до передачи
+                // (В2.2), нижние слои simulcast ужимает сам LiveKit — они и попадут сюда.
+                val track = cameraTrack
+                if (track != 0L) {
+                    val sizes = runCatching {
+                        Ffi.call(STATS_TIMEOUT_MS) { id ->
+                            FfiRequest(get_stats = GetStatsRequest(track_handle = track, request_async_id = id))
+                        }?.get_stats?.stats
+                    }.getOrNull().orEmpty()
+                        .mapNotNull { it.outbound_rtp?.outbound }
+                        .filter { it.frame_width > 0 && !CenterCrop.aligned(it.frame_width, it.frame_height) }
+                        .map { "${it.frame_width}×${it.frame_height}" }
+                    val said = sizes.joinToString(", ")
+                    if (said.isNotEmpty() && said != outMisaligned) {
+                        Journal.trouble(LogCode.CALL, "ушло некратное", "кадр" to said, "путь" to "ПК")
+                    }
+                    outMisaligned = said
+                }
+
                 val now = _state.value
                 val loss = watch.next(
                     RemoteVideoWatch.Poll(
@@ -871,7 +899,9 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             FfiRequest(
                 new_video_source = NewVideoSourceRequest(
                     type = VideoSourceType.VIDEO_SOURCE_NATIVE,
-                    resolution = VideoSourceResolution(width = opened.width, height = opened.height),
+                    resolution = cutOf(opened).let { cut ->
+                        VideoSourceResolution(width = cut?.alignedWidth ?: opened.width, height = cut?.alignedHeight ?: opened.height)
+                    },
                 ),
             ),
         ).new_video_source?.source?.handle?.id ?: 0L
@@ -891,6 +921,13 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         cameraSource = 0L
         return false
     }
+
+    /**
+     * Какую середину кадра камеры отдавать: кратную 16 (ПЛАН-ВИДЕО.md В2.2) или, с
+     * галочкой стенда «Без обрезки», весь кадр.
+     */
+    private fun cutOf(opened: Camera): CenterCrop? =
+        if (preset?.video?.noCrop == true) null else CenterCrop(opened.width, opened.height)
 
     /** Опубликовать уже созданную дорожку камеры кодеком [codec]. */
     private suspend fun publishCameraTrack(video: VideoPreset, chosen: VideoCodec): Boolean {
@@ -940,6 +977,22 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     private suspend fun pumpCamera(opened: Camera, source: Long, preview: Frames) {
         val wait = (500L / opened.fps).coerceIn(5L, 50L)
         var shown = 0
+        // ── ОБРЕЗКА ДО КРАТНОГО 16 (ПЛАН-ВИДЕО.md В2.2) ──────────────────────
+        //
+        // Кодирует LiveKit на Rust, программно, внутри себя — обёртку перед кодером не
+        // вставить. Поэтому режется кадр **до передачи**: середина кратного 16 размера
+        // указывается смещением начала и прежним шагом строки, без копирования. При
+        // `MaintainResolution` (умолчание) WebRTC размер не ужимает, и верхний слой уходит
+        // кратным; нижние слои simulcast он ужимает сам — их проверяет «ушло некратное».
+        val cut = cutOf(opened)
+        val (x, y, w, h) = if (cut == null || cut.none) listOf(0, 0, opened.width, opened.height) else cut.region(opened.width, opened.height)
+        val offset = (y.toLong() * opened.width + x) * 3
+        if (cut != null && !cut.none) {
+            Journal.note(
+                LogCode.CALL, "кодер: обрезка до кратного 16",
+                "было" to "${opened.width}×${opened.height}", "стало" to "${w}×${h}", "кодер" to "ПК",
+            )
+        }
         while (currentCoroutineContext().isActive) {
             if (!opened.grab()) {
                 delay(wait)
@@ -952,9 +1005,9 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                             source_handle = source,
                             buffer = VideoBufferInfo(
                                 type = VideoBufferType.RGB24,
-                                width = opened.width,
-                                height = opened.height,
-                                data_ptr = Pointer.nativeValue(opened.frame),
+                                width = w,
+                                height = h,
+                                data_ptr = Pointer.nativeValue(opened.frame) + offset,
                                 stride = opened.width * 3,
                             ),
                             timestamp_us = System.nanoTime() / 1000,
