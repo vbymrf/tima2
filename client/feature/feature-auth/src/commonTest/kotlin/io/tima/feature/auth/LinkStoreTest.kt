@@ -53,6 +53,21 @@ class LinkStoreTest {
         assertEquals(1, network.confirmations)
     }
 
+    @Test
+    fun доверили_и_новому_устройству_отданы_ключи() = runTest {
+        // ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ8: без этого второе устройство не получало ключ
+        // служебной группы никогда — и копию книги тоже (ПК 2026-09-30).
+        val отдано = mutableListOf<Pair<String, ByteArray>>()
+        val store = LinkStore(ConfirmDeviceLink(network, AlwaysSigner), backgroundScope, "tima://link/v1?…",
+            onTrusted = { id, pub -> отдано += id to pub })
+
+        store.trust()
+        store.state.first { it is LinkState.Done }
+
+        assertEquals("d-2", отдано.single().first, "ключи — на адрес, что вернул сервер")
+        assertTrue(отдано.single().second.isNotEmpty(), "открытый ключ — из самого QR")
+    }
+
     /** Второе нажатие не посылает второе подтверждение. */
     @Test
     fun второе_нажатие_не_повторяет_вызов() = runTest {

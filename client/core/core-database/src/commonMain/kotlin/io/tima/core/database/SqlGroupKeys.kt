@@ -36,6 +36,9 @@ class SqlGroupKeys(
         // нет» получается сам собой, без второго запроса и без счёта строк.
         q.latestGroupKey(groupId).executeAsOne().version?.toInt()
 
+    /** Группы, ключи которых у нас есть (ЖУ8). */
+    fun groupsWithKeys(): List<String> = db.groupKeysQueries.keyedGroups().executeAsList()
+
     override fun versions(groupId: String): List<Int> =
         q.groupKeyVersions(groupId).executeAsList().map { it.toInt() }
 

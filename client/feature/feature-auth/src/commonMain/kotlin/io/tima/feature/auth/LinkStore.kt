@@ -35,6 +35,12 @@ class LinkStore(
      * жизнь store, и после смены языка беда пришла бы на прежнем.
      */
     private val words: () -> Words = { CurrentWords.value },
+    /**
+     * Доверие подтверждено — отдать новому устройству ключи групп **в том же нажатии**
+     * (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ8): адрес нового устройства вернул сервер, открытый
+     * ключ шифрования — в самом QR. Отказ не отменяет привязку: устройство уже доверено.
+     */
+    private val onTrusted: suspend (deviceId: String, encryptionPub: ByteArray) -> Unit = { _, _ -> },
 ) {
 
     private val _state = MutableStateFlow<LinkState>(parse(code))
@@ -50,7 +56,12 @@ class LinkStore(
 
         scope.launch {
             _state.value = when (val step = confirm.confirm(code)) {
-                is LinkConfirmStep.Confirmed -> LinkState.Done(step.deviceId)
+                is LinkConfirmStep.Confirmed -> {
+                    confirm.read(code)?.let { read ->
+                        runCatching { onTrusted(step.deviceId, read.encryptionPub) }
+                    }
+                    LinkState.Done(step.deviceId)
+                }
 
                 // Каждый отказ — своё действие человека, поэтому и текст свой.
                 LinkConfirmStep.NotAPhone -> current.copyWithTrouble(

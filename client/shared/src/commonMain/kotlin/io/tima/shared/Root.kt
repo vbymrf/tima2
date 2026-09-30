@@ -2706,6 +2706,8 @@ private fun App(
                         code = current.code,
                         scope = scope,
                         onClose = { where = Where.Nothing },
+                        // Ключи групп — новому устройству в том же нажатии (ЖУ8).
+                        onTrusted = { id, pub -> assembled.keyOrchestrator.handOver(id, pub) },
                     )
                 }
             }
@@ -3264,12 +3266,14 @@ private fun LinkConfirmation(
     code: String,
     scope: kotlinx.coroutines.CoroutineScope,
     onClose: () -> Unit,
+    onTrusted: suspend (String, ByteArray) -> Unit = { _, _ -> },
 ) {
     val store = remember(code) {
         LinkStore(
             confirm = network.linkConfirmation(deviceIdentityFrom(deviceSecret)),
             scope = scope,
             code = code,
+            onTrusted = onTrusted,
         )
     }
     val state by store.state.collectAsState()

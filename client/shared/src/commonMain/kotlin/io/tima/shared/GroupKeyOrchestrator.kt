@@ -1,5 +1,8 @@
 package io.tima.shared
 
+import io.tima.core.diag.Journal
+import io.tima.core.diag.LogCode
+import io.tima.domain.chat.ShareStep
 import io.tima.core.encryption.GroupKeyUnwrapOverKodium
 import io.tima.core.encryption.GroupKeyWrapOverKodium
 import io.tima.core.encryption.DeviceIdentity
@@ -67,6 +70,37 @@ class GroupKeyOrchestrator(
         book = groupKeys,
         msNow = msNow,
     )
+
+    /**
+     * Новое устройство человека получило доверие по QR — отдать ему ключи всех групп, что
+     * есть здесь (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ8).
+     *
+     * **Служебная группа аккаунта — в первую очередь.** Её ключом зашифрована копия книги,
+     * а ротаций у неё не бывает (в ней нет сообщений), и просьбу о ключе никто не шлёт:
+     * без этого второе устройство копию не получало никогда (ПК 2026-09-30: «ключа
+     * служебной группы нет» при каждом запуске). Путь тот же, что у ответа на просьбу
+     * участника (`ShareGroupKeys`): сервер принимает обёртки без просьбы, если получатель —
+     * устройство участника, а своё устройство им и является.
+     *
+     * @return сколько групп отдано.
+     */
+    suspend fun handOver(deviceId: String, encryptionPub: ByteArray): Int {
+        var shared = 0
+        var failed = 0
+        for (groupId in groupKeys.groupsWithKeys()) {
+            when (sharing.share(groupId, deviceId, encryptionPub, groupKeys.versions(groupId))) {
+                is ShareStep.Shared -> shared++
+                ShareStep.NothingToShare -> Unit
+                else -> failed++
+            }
+        }
+        if (failed > 0) {
+            Journal.trouble(LogCode.NET_CHANNEL, "ключи новому устройству: отданы не все", "отдано" to shared, "нет" to failed)
+        } else {
+            Journal.note(LogCode.NET_CHANNEL, "ключи новому устройству отданы", "групп" to shared)
+        }
+        return shared
+    }
 
     /** Ключи этого устройства: их читает разбор сообщений группы. */
     val keys: SqlGroupKeys get() = groupKeys
