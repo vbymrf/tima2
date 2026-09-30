@@ -8,7 +8,11 @@ import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.BookKey
 import io.tima.domain.chat.BookList
 import io.tima.domain.chat.ChatPerson
+import io.tima.domain.chat.NoticeFrom
+import io.tima.domain.chat.NoticeWhat
 import io.tima.domain.chat.PersonLook
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -16,18 +20,20 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Правила уведомлений — У5…У10.
+ * Правила уведомлений — У5…У10 и ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ0…ЖУ6.
  *
- * Проверяется не «показалось ли», а **шесть решений**, каждое из которых легко отменить
- * одной строкой, и экран при этом останется на вид работающим.
+ * Проверяется не «показалось ли», а **решения**, каждое из которых легко отменить одной
+ * строкой, и экран при этом останется на вид работающим.
  */
 class NoticesTest {
 
     private class Показ : Notifier {
         val строки = mutableListOf<Notice>()
         val снято = mutableListOf<String>()
-        override fun show(notice: Notice) {
+        val значок = mutableListOf<Int>()
+        override fun show(notice: Notice): Long {
             строки += notice
+            return if (notice.alert) 300 else 0
         }
 
         override fun hide(key: String) {
@@ -35,9 +41,20 @@ class NoticesTest {
         }
 
         override fun hideAll() = Unit
+
+        override fun badge(total: Int) {
+            значок += total
+        }
+
+        /** Сколько раз прозвучало. */
+        val сигналов get() = строки.count { it.alert }
     }
 
     private val показ = Показ()
+    private val журнал = MemoryNoticeJournal()
+
+    /** Часы сервера в проверке: двигаются руками. */
+    private var сейчас = 1_000_000L
 
     private val борис = BookEntry(
         id = BookKey.ofPhone("+79160001122"),
@@ -46,7 +63,7 @@ class NoticesTest {
         userId = "u-борис",
     )
 
-    private fun уведомления(
+    private fun TestScope.уведомления(
         книга: Map<String, BookEntry> = mapOf("u-борис" to борис),
         карточки: Map<String, ChatPerson> = emptyMap(),
     ) = Notices(
@@ -56,6 +73,9 @@ class NoticesTest {
         cardOf = { id -> карточки[id] },
         look = { PersonLook() },
         words = { RussianWords },
+        journal = журнал,
+        now = { сейчас },
+        scope = this,
     )
 
     // ── две стадии одной строки (У6) ────────────────────────────────────────
@@ -72,21 +92,21 @@ class NoticesTest {
     }
 
     @Test
-    fun подпись_сошлась_и_та_же_строка_получает_имя() = runTest {
+    fun подпись_сошлась_та_же_строка_получает_имя_молча() = runTest {
         val уведомления = уведомления()
         уведомления.arrived("chat-1", "u-борис")
         уведомления.opened("chat-1", "u-борис")
 
         // Ключ один — значит строка одна: два уведомления об одном сообщении человек
         // читает как два сообщения.
-        assertEquals(listOf("chat-1", "chat-1"), показ.строки.map { it.key })
+        assertEquals(1, показ.строки.map { it.key }.toSet().size)
         assertEquals("Борис", показ.строки.last().who)
+        // До 2026-09-30 вторая стадия звучала второй раз — два сигнала на сообщение.
+        assertEquals(1, показ.сигналов, "имя появилось — второй сигнал")
     }
 
     @Test
     fun ключ_не_доехал_и_строка_остаётся_безымянной() = runTest {
-        // Ровно тот случай, ради которого первая стадия и нужна: разбора не было, а
-        // узнать, что пришло, человеку надо.
         уведомления().arrived("chat-1", "u-борис")
         assertEquals(1, показ.строки.size)
         assertNull(показ.строки.single().who)
@@ -96,14 +116,13 @@ class NoticesTest {
 
     @Test
     fun заблокированный_молчит() = runTest {
-        // Явной проверкой, а не само собой. Пока строка ставилась после разбора,
-        // молчание выходило бесплатно — конверт заблокированного мы не открываем (Л9).
         val блок = борис.copy(list = BookList.Blocked, known = true)
         val уведомления = уведомления(книга = mapOf("u-борис" to блок))
 
         assertTrue(!уведомления.arrived("chat-1", "u-борис"))
         уведомления.opened("chat-1", "u-борис")
         уведомления.calling("call-1", "u-борис")
+        уведомления.missed("call-1", "u-борис")
 
         assertTrue(показ.строки.isEmpty(), "заблокированный уведомил о себе")
     }
@@ -116,25 +135,18 @@ class NoticesTest {
 
     @Test
     fun открытая_переписка_не_уведомляет() = runTest {
-        // Человек читает её глазами. Строка в шторке была бы уведомлением о том, что он
-        // и так видит.
         val уведомления = уведомления()
         уведомления.watching("chat-1")
 
         assertTrue(!уведомления.arrived("chat-1", "u-борис"))
         assertTrue(уведомления.arrived("chat-2", "u-борис"), "молчат и чужие переписки")
 
-        // Ушли с экрана — переписка снова уведомляет.
         уведомления.watching(null)
         assertTrue(уведомления.arrived("chat-1", "u-борис"))
     }
 
     @Test
     fun убранное_окно_возвращает_уведомления_открытой_переписке() = runTest {
-        // Человек свернул приложение (или закрыл окно в трей), не выходя из переписки.
-        // Она числится открытой — но глазами он её не видит, и молчать не за что.
-        // Без этого «у меня не приходят сообщения» появляется у того, кто просто нажал
-        // «Домой» на чужой реплике.
         val уведомления = уведомления()
         уведомления.watching("chat-1")
         assertTrue(!уведомления.arrived("chat-1", "u-борис"))
@@ -154,18 +166,20 @@ class NoticesTest {
             книга = emptyMap(),
             карточки = mapOf("u-чужой" to ChatPerson(nick = "anna_kovaleva")),
         )
+        уведомления.arrived("chat-1", "u-чужой")
         уведомления.opened("chat-1", "u-чужой")
 
-        assertEquals("@anna_kovaleva", показ.строки.single().who)
+        assertEquals("@anna_kovaleva", показ.строки.last().who)
     }
 
     @Test
     fun ника_нет_и_имени_нет_вовсе() = runTest {
         // Решение заказчика 2026-09-24: выдуманное имя хуже отсутствующего.
         val уведомления = уведомления(книга = emptyMap(), карточки = emptyMap())
+        уведомления.arrived("chat-1", "u-чужой")
         уведомления.opened("chat-1", "u-чужой")
 
-        val строка = показ.строки.single()
+        val строка = показ.строки.last()
         assertNull(строка.who)
         assertEquals(RussianWords.notices.newMessage, строка.what, "строка без имени обещает имя")
     }
@@ -174,8 +188,6 @@ class NoticesTest {
 
     @Test
     fun звонок_называет_имя_сразу_и_снимается_по_концу() = runTest {
-        // Кто звонит, утверждает СЕРВЕР: строку в `calls` заводит он, а не звонящий.
-        // Мы ему в этом уже верим каждый раз, когда рисуем журнал (ADR-0026).
         val уведомления = уведомления()
         уведомления.calling("call-1", "u-борис")
 
@@ -188,12 +200,144 @@ class NoticesTest {
     }
 
     @Test
-    fun ключи_звонка_и_переписки_не_сталкиваются() = runTest {
+    fun ключи_звонка_и_вкладки_не_сталкиваются() = runTest {
         val уведомления = уведомления()
         уведомления.arrived("call-1", "u-борис")
         уведомления.calling("call-1", "u-борис")
 
-        // Совпади ключи — конец звонка снял бы уведомление о сообщении.
         assertEquals(2, показ.строки.map { it.key }.toSet().size, "звонок и переписка делят ключ")
+    }
+
+    // ── звук — один на пачку (ЖУ3) ──────────────────────────────────────────
+
+    @Test
+    fun пачка_сообщений_от_троих_один_сигнал() = runTest {
+        // ПК 2026-09-30: «прилетело 4 уведомления — друг за другом пиликало».
+        val уведомления = уведомления(книга = mapOf("u-борис" to борис, "u-аня" to борис.copy(userId = "u-аня"), "u-лёша" to борис.copy(userId = "u-лёша")))
+        for (i in 0 until 20) {
+            val кто = listOf("u-борис", "u-аня", "u-лёша")[i % 3]
+            уведомления.arrived("chat-$кто", кто, ref = "chat-$кто/$i")
+            сейчас += 50
+        }
+
+        assertEquals(1, показ.сигналов, "двадцать сообщений за секунду — один сигнал")
+    }
+
+    @Test
+    fun второе_сообщение_той_же_сущности_молчит() = runTest {
+        val уведомления = уведомления()
+        уведомления.arrived("chat-1", "u-борис", ref = "chat-1/1")
+        сейчас += 60_000
+        уведомления.arrived("chat-1", "u-борис", ref = "chat-1/2")
+
+        assertEquals(1, показ.сигналов, "у сущности уже есть уведомление — второе не звучит")
+        assertEquals("тишина: у сущности уже есть", журнал.doneOf(NoticeWhat.Message, "chat-1/2"))
+    }
+
+    @Test
+    fun догонка_молчит() = runTest {
+        // Пришедшее при запуске и после разрыва канала — старое: без звука.
+        val уведомления = уведомления()
+        уведомления.arrived("chat-1", "u-борис", ref = "chat-1/1", sentAtMs = сейчас - 10 * 60_000)
+
+        assertEquals(0, показ.сигналов)
+        assertEquals(1, показ.строки.size, "строка есть — молча")
+        assertEquals("тишина: догонка", журнал.doneOf(NoticeWhat.Message, "chat-1/1"))
+    }
+
+    // ── один звонок — одно уведомление (ЖУ0) ────────────────────────────────
+
+    @Test
+    fun тот_же_пропущенный_второй_раз_не_уведомляет() = runTest {
+        // ПК 2026-09-30: четыре пропущенных — шестнадцать уведомлений: разрыв ленты и два
+        // прохода разом поднимали те же звонки снова.
+        val уведомления = уведомления()
+        repeat(4) { уведомления.missed("call-1", "u-борис", from = NoticeFrom.CatchUp) }
+
+        assertEquals(1, показ.строки.size)
+    }
+
+    @Test
+    fun пропущенные_из_догонки_молчат() = runTest {
+        val уведомления = уведомления()
+        уведомления.missed("call-1", "u-борис", from = NoticeFrom.CatchUp)
+
+        assertEquals(0, показ.сигналов)
+    }
+
+    // ── строка на вкладку, значок — сумма вкладок (ЖУ4) ──────────────────────
+
+    @Test
+    fun строка_вкладки_с_числом_и_значок_суммой() = runTest {
+        // Пример заказчика: redmi 3 сообщения и 2 пропущенных, Moi 1 сообщение —
+        // «Чаты» 2, «Звонки» 1, значок 3.
+        val redmi = борис.copy(userId = "u-redmi", namePhone = "redmi")
+        val moi = борис.copy(userId = "u-moi", namePhone = "Moi")
+        val уведомления = уведомления(книга = mapOf("u-redmi" to redmi, "u-moi" to moi))
+        repeat(3) { уведомления.arrived("chat-redmi", "u-redmi", ref = "chat-redmi/$it") }
+        уведомления.missed("c1", "u-redmi")
+        уведомления.missed("c2", "u-redmi")
+        уведомления.arrived("chat-moi", "u-moi", ref = "chat-moi/1")
+
+        val чаты = показ.строки.last { it.key == "tab:chats" }
+        assertEquals(2, чаты.number)
+        assertEquals(RussianWords.notices.messagesFrom(2), чаты.what)
+        assertEquals(1, показ.строки.last { it.key == "tab:calls" }.number)
+        assertEquals(3, показ.значок.last())
+    }
+
+    // ── что снимает (ЖУ6) ───────────────────────────────────────────────────
+
+    @Test
+    fun просмотр_сущности_минус_один_у_вкладки() = runTest {
+        val уведомления = уведомления()
+        уведомления.arrived("chat-1", "u-борис", ref = "chat-1/1")
+        уведомления.arrived("chat-2", "u-борис", ref = "chat-2/1")
+
+        уведомления.watching("chat-1")
+        advanceUntilIdle()
+        assertEquals(1, показ.строки.last { it.key == "tab:chats" }.number)
+
+        уведомления.watching("chat-2")
+        advanceUntilIdle()
+        assertTrue("tab:chats" in показ.снято, "ноль — строки нет")
+        assertEquals(0, показ.значок.last())
+    }
+
+    @Test
+    fun открыли_звонки_число_обнулилось() = runTest {
+        val уведомления = уведомления()
+        уведомления.missed("c1", "u-борис")
+        уведомления.missed("c2", "u-аня")
+
+        уведомления.callsViewed()
+        advanceUntilIdle()
+
+        assertTrue("tab:calls" in показ.снято)
+        assertEquals(0, показ.значок.last())
+    }
+
+    @Test
+    fun seen_снимает_только_свой_звонок() = runTest {
+        val уведомления = уведомления()
+        уведомления.missed("c1", "u-борис")
+        уведомления.missed("c2", "u-аня")
+
+        уведомления.missedSeen("c1")
+        advanceUntilIdle()
+
+        assertEquals(1, показ.строки.last { it.key == "tab:calls" }.number)
+    }
+
+    @Test
+    fun сверка_при_запуске_заводит_без_звука_и_снимает_прочитанное() = runTest {
+        val уведомления = уведомления()
+        уведомления.arrived("chat-старый", "u-борис", ref = "chat-старый/1")
+        val былоСигналов = показ.сигналов
+
+        уведомления.reconcile(unread = mapOf("chat-1" to false, "g-1" to true), missed = mapOf("c1" to "u-борис"))
+
+        assertEquals(былоСигналов, показ.сигналов, "сверка не звучит")
+        assertEquals(3, показ.значок.last(), "«Чаты» 1, «Группы» 1, «Звонки» 1 — прочитанный снят")
     }
 }

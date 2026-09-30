@@ -4,6 +4,7 @@ import io.tima.core.database.SqlChatBook
 import io.tima.core.encryption.GroupMessages
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
+import kotlinx.coroutines.sync.withLock
 import io.tima.core.network.EventStreamProtocol
 import io.tima.core.network.GroupFrame
 import io.tima.core.network.GroupsOverHttp
@@ -256,11 +257,26 @@ class Receiver(
      * `null` — подтверждать нечего: нового нет или до сервера не дошли. Номер при неудаче
      * не двигается: следующая подсказка или переподключение спросят с того же места.
      */
-    internal suspend fun callsTop(top: Long): Long? {
+    internal suspend fun callsTop(top: Long): Long? = callsLock.withLock { callsTopOnce(top) }
+
+    /**
+     * Проходы ленты — **по одному** (ЖУ0). 2026-09-30 на ПК приветствие канала и подсказка
+     * запустили два прохода разом, оба от нуля, — и те же пропущенные уведомлялись дважды.
+     */
+    private val callsLock = kotlinx.coroutines.sync.Mutex()
+
+    private suspend fun callsTopOnce(top: Long): Long? {
         // Раньше ленты: звонок, который уже звонит, лента после перезапуска не принесёт.
         if (!ringingAsked) ringingAsked = ringingNow()
         val saved = runCatching { environment.settings.all().first() }.getOrDefault(emptyMap())
-        var mine = saved[CALLS_CTS]?.toLongOrNull() ?: 0
+        // ── НОМЕР ЛЕНТЫ — УСТРОЙСТВА, А НЕ АККАУНТА (ЖУ0) ────────────────────
+        //
+        // Лента звонков своя у каждого устройства. Номер лежал в настройках аккаунта и
+        // пережил повторный вход (ПК 2026-09-30: свой 26 при вершине 23) — и каждое новое
+        // событие начинало ленту «заново», с разрывом и всеми старыми пропущенными. Прежний
+        // общий ключ берётся, только если он не выше вершины: значит, писало это устройство.
+        val legacy = saved[CALLS_CTS]?.toLongOrNull()?.takeIf { it <= top }
+        var mine = saved[ctsKey()]?.toLongOrNull() ?: legacy ?: 0
         // Номер выше вершины бывает, только если сервер начал ленту заново (данные стёрты,
         // Plan §0.0 решение 2). Ждать своего номера тогда пришлось бы вечно.
         if (top < mine) {
@@ -268,7 +284,7 @@ class Receiver(
             mine = 0
         }
         if (top <= mine) return null
-        var mark = saved[CALLS_MISSED_MARK]?.toLongOrNull() ?: 0
+        var mark = saved[markKey()]?.toLongOrNull() ?: (if (legacy != null) saved[CALLS_MISSED_MARK]?.toLongOrNull() else null) ?: 0
         var applied: Long? = null
         while (true) {
             val page = network.calls.updates(mine)
@@ -287,8 +303,8 @@ class Receiver(
             if (reached > mine) mine = reached
             applied = mine
             runCatching {
-                environment.settings.put(CALLS_CTS, mine.toString())
-                environment.settings.put(CALLS_MISSED_MARK, mark.toString())
+                environment.settings.put(ctsKey(), mine.toString())
+                environment.settings.put(markKey(), mark.toString())
             }
             if (!page.more || page.updates.isEmpty()) break
         }
@@ -340,14 +356,42 @@ class Receiver(
         val page = network.callHistory.page(limit = MISSED_PAGE) ?: return mark
         var newest = mark
         val me = session.userId
+        // Звонки старше входа этого устройства в аккаунт не уведомляются (ЖУ0): их
+        // пропустили задолго до того, как устройство появилось, — остаются журналом звонков.
+        val since = deviceSince()
+        var older = 0
         for (record in page.records) {
             if (record.createdAt <= mark || record.outcome(me) != io.tima.domain.chat.CallOutcome.Missed) continue
             if (record.initiatorId in blocked()) continue
-            notices?.missed(record.callId, record.initiatorId)
             if (record.createdAt > newest) newest = record.createdAt
+            if (record.createdAt < since) {
+                older++
+                continue
+            }
+            notices?.missed(record.callId, record.initiatorId, atMs = record.createdAt, from = io.tima.domain.chat.NoticeFrom.CatchUp)
         }
+        if (older > 0) Journal.note(LogCode.NOTICE, "пропущенные старше входа устройства не уведомлены", "сколько" to older)
         return newest
     }
+
+    /**
+     * Когда это устройство вошло в аккаунт — первый запуск с ним. Запоминается один раз;
+     * у обновлённого устройства это время обновления, и старое тоже не зазвучит.
+     */
+    private suspend fun deviceSince(): Long {
+        val key = "device.since." + session.deviceId
+        val saved = runCatching { environment.settings.all().first()[key] }.getOrNull()?.toLongOrNull()
+        if (saved != null) return saved
+        val now = io.tima.core.network.ServerClock.now()
+        runCatching { environment.settings.put(key, now.toString()) }
+        return now
+    }
+
+    /** Номер ленты звонков этого устройства (ЖУ0). */
+    private fun ctsKey() = CALLS_CTS + "." + session.deviceId
+
+    /** «О пропущенных уведомил до…» этого устройства. */
+    private fun markKey() = CALLS_MISSED_MARK + "." + session.deviceId
 
     /** Одно действие ленты — туда же, куда раньше шли кадры звонка. */
     private suspend fun apply(action: CallLedger.Action) {
@@ -371,7 +415,7 @@ class Receiver(
                 onCallState(action.callId, action.why)
             }
             is CallLedger.Action.Missed ->
-                if (action.fromId !in blocked()) notices?.missed(action.callId, action.fromId)
+                if (action.fromId !in blocked()) notices?.missed(action.callId, action.fromId, atMs = action.atMs)
             is CallLedger.Action.MissedSeen -> notices?.missedSeen(action.callId)
             is CallLedger.Action.Delivered -> onCallDelivered(action.callId)
             is CallLedger.Action.Unreachable -> onCallUnreachable(action.callId)
@@ -576,6 +620,10 @@ class Receiver(
         // Время написания — из кадра: по нему переписка на всех устройствах в одном порядке.
         environment.incoming.receive(groupId, messageId, frame, sentAtMs = parsed?.createdAtUnixMs ?: 0)
 
+        // Сообщение группы — вкладка «Группы» журнала уведомлений (ЖУ1, ЖУ4). До 2026-09-30
+        // группы не уведомляли вовсе. Своё и от заблокированного молчит — решает `Notices`.
+        notices?.arrived(groupId, parsed?.senderId, ref = "$groupId/$messageId", sentAtMs = parsed?.createdAtUnixMs ?: 0, group = true)
+
         // Ключ подписи спрашивается до разбора: сам разбор синхронный, и ходить за ним
         // изнутри нельзя. Промах кэша означает лишь, что сообщение откроется следующей
         // попыткой — оно уже записано и не потеряется.
@@ -709,7 +757,7 @@ class Receiver(
         //
         // Кого не уведомлять (заблокированный, своё с другого устройства), решает
         // `Notices`: правило живёт в одном месте, а не расходится по вызовам.
-        notices?.arrived(chatId, sender?.userId)
+        notices?.arrived(chatId, sender?.userId, ref = "$chatId/$messageId", sentAtMs = sender?.createdAtMs ?: 0)
 
         // ── ОТ ЗАБЛОКИРОВАННОГО: ЗАПИСАТЬ, НО НЕ ОТКРЫВАТЬ (Л9) ─────────────
         //

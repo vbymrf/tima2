@@ -247,6 +247,8 @@ fun buildAssembled(
                     ?: soundChoiceOf(all[SoundKeys.RING])
             },
             messageSound = { soundChoiceOf(environment.settings.all().first()[SoundKeys.MESSAGE]) },
+            // Журнал уведомлений — в базе аккаунта (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ1).
+            journal = environment.noticeJournal,
         )
 
         Assembled(

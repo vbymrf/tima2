@@ -194,6 +194,20 @@ private fun window(store: ReportsStore, hidden: Boolean) = application {
             state = windowState,
             title = "TIMA",
         ) {
+            // Число на значке — и в трее, и в панели задач (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ4).
+            // Считает общий код по журналу уведомлений, рисует приложение: окно есть только
+            // здесь. В панели задач число видно, пока окно открыто или свёрнуто; спрятанное в
+            // трей окно кнопки в панели не имеет — там число остаётся на значке трея.
+            val frame = window
+            androidx.compose.runtime.DisposableEffect(frame) {
+                io.tima.core.notify.DesktopBadge.listen { total ->
+                    java.awt.EventQueue.invokeLater {
+                        Tray.number(total)
+                        taskbarBadge(frame, total)
+                    }
+                }
+                onDispose { }
+            }
             // Тема здесь больше не решается: её выбирает человек в настройках, и держит
             // выбор `Root`. Платформе осталось только место для хранения строки.
             Root(
@@ -408,4 +422,17 @@ private fun recordCrash(store: ReportsStore, error: Throwable) {
         )
     }
     error.printStackTrace()
+}
+
+/**
+ * Число на кнопке окна в панели задач Windows — ЖУ4. Рисуется картинкой поверх значка:
+ * текстового числа Windows у своих кнопок не показывает. Ноль — снять.
+ */
+private fun taskbarBadge(window: java.awt.Window, total: Int) {
+    runCatching {
+        if (!java.awt.Taskbar.isTaskbarSupported()) return
+        val taskbar = java.awt.Taskbar.getTaskbar()
+        if (!taskbar.isSupported(java.awt.Taskbar.Feature.ICON_BADGE_IMAGE_WINDOW)) return
+        taskbar.setWindowIconBadge(window, if (total <= 0) null else Tray.counted(total, size = 16))
+    }
 }

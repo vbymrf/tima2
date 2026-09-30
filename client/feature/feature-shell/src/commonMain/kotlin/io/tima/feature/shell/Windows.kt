@@ -244,6 +244,8 @@ fun PageWindow(
      * одной вкладки.
      */
     groups: (@Composable () -> Unit)? = null,
+    /** Число вкладки — из журнала уведомлений (ЖУ2): у «Групп» — сколько групп с новым. */
+    countOf: (WindowTab) -> Int = { 0 },
 ) {
     var collections by remember { mutableStateOf(COLLECTION_TABS.first()) }
     var outline by remember { mutableStateOf(COLLECTION_MODES.last()) }
@@ -251,6 +253,7 @@ fun PageWindow(
         window = Window.Page,
         // Порядок из макета: страница открывается на «Подписан», и это её первая вкладка.
         tabs = PAGE_TABS,
+        countOf = countOf,
         onSwitchWindows = onSwitchWindows,
         onSearch = onSearch,
         onSettings = onSettings,
@@ -391,6 +394,8 @@ private fun WindowWithTabs(
     /** Вкладка, которую держит вызывающий; `null` — окно держит её само. */
     selectedOutside: WindowTab? = null,
     onSelectOutside: ((WindowTab) -> Unit)? = null,
+    /** Число вкладки (ЖУ2). */
+    countOf: (WindowTab) -> Int = { 0 },
     content: @Composable (WindowTab) -> Unit,
 ) {
     var own by remember(window) { mutableStateOf(tabs.first()) }
@@ -409,6 +414,7 @@ private fun WindowWithTabs(
         modifier = modifier,
         tabsTrailing = if (trailing == null) null else ({ trailing(selected) }),
         secondRow = if (row == null) null else ({ row(selected) }),
+        countOf = countOf,
     ) {
         content(selected)
     }

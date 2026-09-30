@@ -1059,6 +1059,24 @@ private fun App(
     }
     val callsState by callsLog.state.collectAsState()
 
+    // Числа вкладок, окон и строк — из журнала уведомлений (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md,
+    // ЖУ2): по сущностям, а не по сообщениям, и из одного места.
+    // Сверка журнала с базой при запуске (ЖУ1): после обновления журнал пуст, а
+    // непрочитанное есть; прочитанное могли отметить мимо журнала.
+    LaunchedEffect(assembled) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            runCatching {
+                assembled.notices.reconcile(
+                    unread = environment.readState.unreadChats(),
+                    missed = environment.readState.missedUnseen(session.userId),
+                )
+            }.onFailure { Journal.trouble(LogCode.NOTICE, "журнал уведомлений не сверен", "почему" to it.message.orEmpty()) }
+        }
+    }
+    val noticeCounts by remember {
+        environment.noticeJournal.active().let { flow -> kotlinx.coroutines.flow.flow { flow.collect { emit(io.tima.domain.chat.NoticeCounts(it)) } } }
+    }.collectAsState(io.tima.domain.chat.NoticeCounts.NONE)
+
     // Окно 2 «Социум»: свои группы и карточки, которые открыли контакты. Списки живут
     // здесь, а не в оболочке: рама знает раму, работа с сервером — дело feature-group.
     val social = remember { SocialStore(GroupsOverHttp(network.groups), scope, network.communities) }
@@ -1940,7 +1958,7 @@ private fun App(
             alias = profileState.savedNickname.takeIf { it.isNotBlank() }?.let { "@$it" } ?: "",
             phone = profileState.phone,
             avatar = remember(profileState.avatarBytes) { profileState.avatarBytes?.let(::decodeImage) },
-            counters = windowCounters(listState),
+            counters = windowCounters(noticeCounts),
             onSelect = { selected ->
                 window = selected
                 where = Where.Nothing
@@ -2032,7 +2050,7 @@ private fun App(
                     // Смена окна закрывает подокно: оно принадлежало прежнему окну.
                     where = Where.Nothing
                 },
-                counters = windowCounters(listState),
+                counters = windowCounters(noticeCounts),
                 onSettings = toSettings,
                 inCall = callHost.active,
                 bench = benchState.on,
@@ -2162,7 +2180,13 @@ private fun App(
                     } else {
                         null
                     },
-                    onOpenedCalls = callsLog::opened,
+                    // Открыли «Звонки» — число вкладки обнуляется (ЖУ6): сущностей для
+                    // просмотра там нет, всё и так увидели.
+                    onOpenedCalls = {
+                        callsLog.opened()
+                        assembled.notices.callsViewed()
+                    },
+                    noticeCounts = noticeCounts,
                     // Имя пользователя и ник у контактов — со справочника, пачкой по разу.
                     personOf = personOfBook,
                     // Картинка аватара — по карточке справочника, приезжает потоком.
@@ -2383,6 +2407,8 @@ private fun App(
                 }
 
                 Window.Page -> PageWindow(
+                    // Число «Групп» — сколько групп с новым (ЖУ2).
+                    countOf = { which -> if (which == WindowTab.Groups) noticeCounts.tab(io.tima.domain.chat.NoticeTab.Groups) else 0 },
                     onSwitchWindows = { windowSwitcher = true },
                     onSearch = {},
                     onSettings = toSettings,
@@ -2416,6 +2442,7 @@ private fun App(
                                 state = listState,
                                 onOpen = { where = Where.Chat(it.chatId, it.title) },
                                 chosen = groupSection,
+                                countOf = { chat -> noticeCounts.chat(chat.chatId, null) },
                             )
                         }
                     },
@@ -4029,13 +4056,17 @@ private fun Members(
  * его нет, и подставлять туда ноль было бы не честнее: ноль означает «прочитано всё»,
  * а правда в том, что считать нечего — социального слоя на сервере нет.
  */
-private fun windowCounters(list: ChatsState): Map<Window, Int> {
+private fun windowCounters(counts: io.tima.domain.chat.NoticeCounts): Map<Window, Int> {
     // Счётчик идёт ЗА перепиской, а не остаётся там, где она лежала. Группы уехали на
-    // вкладку окна 5 — значит и непрочитанное в них считается окну 5. Иначе человек видит
+    // вкладку окна 5 — значит и новое в них считается окну 5. Иначе человек видит
     // янтарную точку на «Телефоне», открывает его и не находит там ничего: счётчик
     // указывает в пустоту, и это хуже отсутствующего счётчика.
-    val phone = list.personal.sumOf { it.unread }
-    val page = list.groups.sumOf { it.unread }
+    //
+    // Число окна — **сумма чисел его вкладок** (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ2, заказчик
+    // 2026-09-30): «Телефон» = «Чаты» + «Звонки». До того — сумма непрочитанных сообщений,
+    // без пропущенных звонков.
+    val phone = counts.tab(io.tima.domain.chat.NoticeTab.Chats) + counts.tab(io.tima.domain.chat.NoticeTab.Calls)
+    val page = counts.tab(io.tima.domain.chat.NoticeTab.Groups)
     return buildMap {
         if (phone > 0) put(Window.Phone, phone)
         if (page > 0) put(Window.Page, page)
@@ -4118,6 +4149,8 @@ private fun PhoneWindow(
     onCallAgain: ((CallRecord) -> Unit)? = null,
     /** Открыли вкладку «Звонки»: сходить за свежим журналом и погасить счётчик. */
     onOpenedCalls: () -> Unit = {},
+    /** Числа вкладок и строк — из журнала уведомлений (ЖУ2). */
+    noticeCounts: io.tima.domain.chat.NoticeCounts = io.tima.domain.chat.NoticeCounts.NONE,
     /** Открыли вкладку: прочитать телефонную книгу и сверить. */
     onOpenedContacts: () -> Unit,
     /**
@@ -4161,7 +4194,16 @@ private fun PhoneWindow(
         // 2026-09-23): «три непрочитанных» и «три пропущенных звонка» — разные срочности
         // и разные поступки. Сложенные в одно число, они означают «что-то есть», то есть
         // не означают ничего.
-        countOf = { which -> if (which == WindowTab.Calls) callsState.missed else 0 },
+        //
+        // С 2026-09-30 — из журнала уведомлений (ЖУ2): у вкладки — сколько сущностей на ней с
+        // новым. «Чаты» — сколько переписок, «Звонки» — сколько звонивших.
+        countOf = { which ->
+            when (which) {
+                WindowTab.Chats -> noticeCounts.tab(io.tima.domain.chat.NoticeTab.Chats)
+                WindowTab.Calls -> noticeCounts.tab(io.tima.domain.chat.NoticeTab.Calls)
+                else -> 0
+            }
+        },
         onSwitchWindows = onSwitchWindows,
         // У «Звонков» кнопки поиска нет, и это уже не «журнала нет» (прежний довод,
         // К7): журнал есть. Искать в нём нечем — строка журнала не содержит текста
@@ -4236,6 +4278,7 @@ private fun PhoneWindow(
                 personOf = personOfChat,
                 faceOf = faceOfChat,
                 look = book.view.look(),
+                countOf = { chat -> noticeCounts.chat(chat.chatId, chat.peerId) },
             )
 
             WindowTab.Contacts -> {

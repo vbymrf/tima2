@@ -41,8 +41,8 @@ class AndroidNotifier(
 
     private val manager get() = context.getSystemService(NotificationManager::class.java)
 
-    override fun show(notice: Notice) {
-        val manager = manager ?: return
+    override fun show(notice: Notice): Long? {
+        val manager = manager ?: return 0
         ensureChannel(manager, notice.kind)
         val builder = Notification.Builder(context, channelOf(notice.kind))
             .setSmallIcon(android.R.drawable.sym_action_email)
@@ -51,6 +51,12 @@ class AndroidNotifier(
             .setContentTitle(notice.who ?: APP)
             .setContentText(notice.what)
             .setAutoCancel(true)
+            // Обновление строки — молча: звучит только то, что разрешило правило звука
+            // (ЖУ3). Каналы и так беззвучные — звучит приложение само, — но оболочки
+            // производителей бывают и со своим сигналом на каждое обновление.
+            .setOnlyAlertOnce(true)
+        // Число строки — число её вкладки: оболочка суммирует его на значке (ЖУ4).
+        if (notice.number > 0) builder.setNumber(notice.number)
         // ── НА ЗАМКЕ — ТО ЖЕ САМОЕ ──────────────────────────────────────────
         //
         // Прятать на замке нечего: текста сообщения в строке нет вовсе, а «кто и что» —
@@ -83,7 +89,7 @@ class AndroidNotifier(
         runCatching { manager.notify(notice.key, idOf(notice.key), builder.build()) }
             .onFailure {
                 Journal.trouble(LogCode.PERM_DENIED, "уведомление не показано", "почему" to it.message.orEmpty())
-                return
+                return 0
             }
         // Звук — после показа: строки нет, звенеть незачем. Каналы беззвучные — звучит
         // приложение само (см. AndroidRinger).
@@ -91,9 +97,9 @@ class AndroidNotifier(
         if (call != null) {
             ringingKey = notice.key
             AndroidRinger.ring(context, call.ring)
-        } else {
-            AndroidRinger.once(context, notice.sound)
+            return null
         }
+        return if (notice.alert) AndroidRinger.once(context, notice.sound) else 0
     }
 
     /**

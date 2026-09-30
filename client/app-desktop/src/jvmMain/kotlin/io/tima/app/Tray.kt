@@ -92,6 +92,39 @@ object Tray {
     private fun autostartLabel() =
         if (Autostart.enabled()) "Не запускать при входе в систему" else "Запускать при входе в систему"
 
+    /**
+     * Число на значке в трее — сумма чисел вкладок (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ4,
+     * заказчик 2026-09-30, 1а). Ноль — прежняя буква. Трей виден всегда, пока приложение
+     * работает, — поэтому число здесь, а не только в панели задач: окно чаще спрятано.
+     */
+    fun number(total: Int) {
+        val tray = icon ?: return
+        runCatching {
+            tray.image = if (total <= 0) letter() else counted(total)
+            tray.toolTip = if (total <= 0) "TIMA" else "TIMA — новое: $total"
+        }
+    }
+
+    /**
+     * Число — янтарём, тем же, что у счётчиков в приложении (`Tokens.activity`). Больше 99 —
+     * «99+»: в значок трея больше не влезает.
+     */
+    fun counted(total: Int, size: Int = 32): BufferedImage {
+        val image = BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB)
+        val g = image.createGraphics()
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+        g.color = Color(0xFE, 0xBB, 0x02)
+        g.fillOval(0, 0, size, size)
+        g.color = Color.BLACK
+        val text = if (total > 99) "99+" else total.toString()
+        g.font = Font(Font.SANS_SERIF, Font.BOLD, if (text.length >= 3) size * 9 / 20 else size * 13 / 20)
+        val metrics = g.fontMetrics
+        g.drawString(text, (size - metrics.stringWidth(text)) / 2, (size - metrics.height) / 2 + metrics.ascent)
+        g.dispose()
+        return image
+    }
+
     fun remove() {
         icon?.let { runCatching { SystemTray.getSystemTray().remove(it) } }
         DesktopNotices.install(null)

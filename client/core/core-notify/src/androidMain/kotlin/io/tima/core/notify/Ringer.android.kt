@@ -89,17 +89,26 @@ internal object AndroidRinger {
         }
     }
 
-    /** Сообщение: звук один раз и короткая вибрация. */
+    /**
+     * Сообщение: звук один раз и короткая вибрация.
+     *
+     * @return сколько звучало, мс: `0` — ничего (идёт звонок, тишина телефона), `null` —
+     *   звучало, а длина неизвестна. Длину спрашивает правило звука (ЖУ3): перерыв
+     *   отсчитывается от конца сигнала.
+     */
     @Synchronized
-    fun once(context: Context, choice: SoundChoice) {
+    fun once(context: Context, choice: SoundChoice): Long? {
         // Звонок идёт — сообщение его не перебивает.
-        if (player != null) return
+        if (player != null) return 0
         val mode = mode(context)
-        if (mode == Mode.Quiet) return
+        if (mode == Mode.Quiet) return 0
         vibrator(context)?.let { runCatching { it.vibrate(VibrationEffect.createOneShot(ONCE_MS, VibrationEffect.DEFAULT_AMPLITUDE)) } }
         if (mode == Mode.Sound && choice != SoundChoice.Silent) {
-            play(context, choice, ring = false)?.setOnCompletionListener { it.release() }
+            val played = play(context, choice, ring = false) ?: return ONCE_MS
+            played.setOnCompletionListener { it.release() }
+            return runCatching { played.duration.toLong() }.getOrNull()?.takeIf { it > 0 }?.coerceAtLeast(ONCE_MS)
         }
+        return ONCE_MS
     }
 
     @Synchronized

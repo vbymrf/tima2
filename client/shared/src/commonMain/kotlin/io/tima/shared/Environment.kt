@@ -620,6 +620,12 @@ class Environment private constructor(
      */
     val callLog: CallLog = SqlCallLog(db)
 
+    /** Журнал уведомлений — числа вкладок, окон, строк и значка (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ1). */
+    val noticeJournal: io.tima.domain.chat.NoticeJournal = io.tima.core.database.SqlNoticeJournal(db)
+
+    /** Что прочитано: сверка журнала уведомлений (ЖУ1) и отметки копии аккаунта (ЖУ9). */
+    val readState: io.tima.core.database.SqlReadState = io.tima.core.database.SqlReadState(db)
+
 
     val chat: ObserveChat = ObserveChat(SqlChatFeed(db, TextBodyCodec, cipher, myUserId))
 

@@ -78,6 +78,13 @@ fun ChatsScreen(
     faceOf: (ChatSummary) -> ImageBitmap? = { null },
     /** Как называть человека — тот же «Вид», что у книги. */
     look: PersonLook = PersonLook.DEFAULT,
+    /**
+     * Число строки — сколько уведомлений у сущности, из журнала уведомлений
+     * (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ2): сообщения и, у личной, пропущенные звонки её
+     * собеседника — redmi с тем и другим показывает 2. `null` — прежнее число
+     * непрочитанных сообщений.
+     */
+    countOf: ((ChatSummary) -> Int)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -127,7 +134,7 @@ fun ChatsScreen(
                     explanation = words.writeFirst,
                 )
 
-                else -> List(state.chats, onOpen, personOf, faceOf, look)
+                else -> List(state.chats, onOpen, personOf, faceOf, look, countOf)
             }
         }
     }
@@ -155,6 +162,8 @@ fun GroupsScreen(
     modifier: Modifier = Modifier,
     /** Выбранный раздел набора сообществ — ключ полосы; пусто — «Всё». */
     chosen: String = "",
+    /** Число строки группы — из журнала уведомлений, см. [ChatsScreen]. */
+    countOf: ((ChatSummary) -> Int)? = null,
 ) {
     val wanted = if (chosen == COMMON_SECTION) "" else chosen
     val groups = if (chosen.isEmpty()) state.groups else state.groups.filter { it.sectionId == wanted }
@@ -167,7 +176,7 @@ fun GroupsScreen(
                     "которых состоите. Создание группы — из каталога окна «Социум».",
             )
 
-            else -> List(chats = groups, onOpen = onOpen)
+            else -> List(chats = groups, onOpen = onOpen, countOf = countOf)
         }
     }
 }
@@ -179,11 +188,12 @@ private fun List(
     personOf: (ChatSummary) -> ChatPerson? = { null },
     faceOf: (ChatSummary) -> ImageBitmap? = { null },
     look: PersonLook = PersonLook.DEFAULT,
+    countOf: ((ChatSummary) -> Int)? = null,
 ) = LazyColumn(
     modifier = Modifier.fillMaxSize(),
 ) {
     items(chats, key = { it.chatId }) { chat ->
-        ChatLine(chat, personOf(chat), faceOf(chat), look) { onOpen(chat) }
+        ChatLine(chat, personOf(chat), faceOf(chat), look, countOf?.invoke(chat) ?: chat.unread) { onOpen(chat) }
     }
 }
 
@@ -193,6 +203,8 @@ private fun ChatLine(
     who: ChatPerson?,
     face: ImageBitmap?,
     look: PersonLook,
+    /** Число строки: уведомления сущности (ЖУ2) либо непрочитанные. */
+    count: Int,
     onClick: () -> Unit,
 ) = ListLine(
     onClick = onClick,
@@ -218,8 +230,8 @@ private fun ChatLine(
                 // Счётчик и отметка не спорят за место: счётчик — про чужие сообщения,
                 // отметка — про своё последнее. Одновременно они бывают редко, и тогда
                 // важнее непрочитанное.
-                if (chat.unread > 0) {
-                    Counter(chat.unread)
+                if (count > 0) {
+                    Counter(count)
                 } else if (chat.lastOutgoing) {
                     chat.lastDisplay?.let { mark(it) }?.let { Mark(it) }
                 }

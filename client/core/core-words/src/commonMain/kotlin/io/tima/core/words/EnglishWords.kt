@@ -282,6 +282,10 @@ object EnglishWords : Words {
         override val newMessage = "New message"
         override val wroteToYou = "Wrote to you"
         override val incomingCall = "Incoming call"
+        override fun messagesFrom(people: Int) = "Messages from $people " + if (people == 1) "person" else "people"
+        override fun messagesInGroups(groups: Int) = "Messages in $groups " + if (groups == 1) "group" else "groups"
+        override val newInGroup = "New message in the group"
+        override fun missedFrom(people: Int) = "Missed calls from $people " + if (people == 1) "person" else "people"
     }
 
     override val switching = object : SwitchingWords {

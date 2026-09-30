@@ -11,17 +11,18 @@ CREATE TABLE read_marks (
     dirty    INTEGER NOT NULL DEFAULT 0
 );
 
--- Своя отметка: только вперёд, и помечается к отправке.
-markLocal:
-INSERT INTO read_marks(chat_id, upto_ms, dirty) VALUES (:chatId, :uptoMs, 1)
-ON CONFLICT(chat_id) DO UPDATE SET upto_ms = excluded.upto_ms, dirty = 1
-WHERE excluded.upto_ms > read_marks.upto_ms;
+-- Своя отметка: только вперёд, и помечается к отправке. Две команды, а не одна
+-- вставка с заменой: диалект сборки (SQLite 3.18) не знает `ON CONFLICT … DO UPDATE`.
+markLocal {
+    INSERT OR IGNORE INTO read_marks(chat_id, upto_ms, dirty) VALUES (:chatId, :uptoMs, 1);
+    UPDATE read_marks SET upto_ms = :uptoMs, dirty = 1 WHERE chat_id = :chatId AND upto_ms < :uptoMs;
+}
 
 -- Пришедшая из копии: только вперёд, к отправке не помечается.
-mergeRemote:
-INSERT INTO read_marks(chat_id, upto_ms, dirty) VALUES (:chatId, :uptoMs, 0)
-ON CONFLICT(chat_id) DO UPDATE SET upto_ms = excluded.upto_ms
-WHERE excluded.upto_ms > read_marks.upto_ms;
+mergeRemote {
+    INSERT OR IGNORE INTO read_marks(chat_id, upto_ms, dirty) VALUES (:chatId, :uptoMs, 0);
+    UPDATE read_marks SET upto_ms = :uptoMs WHERE chat_id = :chatId AND upto_ms < :uptoMs;
+}
 
 all:
 SELECT chat_id, upto_ms FROM read_marks;

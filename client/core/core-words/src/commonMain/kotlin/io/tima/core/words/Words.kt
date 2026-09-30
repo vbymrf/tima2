@@ -81,6 +81,21 @@ interface NoticeWords {
     val wroteToYou: String
 
     val incomingCall: String
+
+    /**
+     * Строка вкладки «Чаты» в шторке, когда новое от нескольких (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md,
+     * ЖУ4): «Сообщения от 2 пользователей». Одна строка на вкладку, а не на сущность.
+     */
+    fun messagesFrom(people: Int): String
+
+    /** Строка вкладки «Группы»: «Сообщения в 3 группах». */
+    fun messagesInGroups(groups: Int): String
+
+    /** Строка группы, когда новое в одной: заголовок — название группы. */
+    val newInGroup: String
+
+    /** Строка вкладки «Звонки», когда не дозвонились несколько: «Пропущенные звонки от 2 человек». */
+    fun missedFrom(people: Int): String
 }
 
 /**
@@ -2119,6 +2134,21 @@ object RussianWords : Words {
         override val newMessage = "Новое сообщение"
         override val wroteToYou = "Написал вам"
         override val incomingCall = "Входящий звонок"
+
+        // После «от» и «в» — родительный и предложный падежи: одна форма у 1, 21, 31…
+        // (кроме 11), другая у остальных. «от 2 пользователей», «от 21 пользователя».
+        override fun messagesFrom(people: Int) =
+            "Сообщения от $people " + if (singular(people)) "пользователя" else "пользователей"
+
+        override fun messagesInGroups(groups: Int) =
+            "Сообщения в $groups " + if (singular(groups)) "группе" else "группах"
+
+        override val newInGroup = "Новое сообщение в группе"
+
+        override fun missedFrom(people: Int) =
+            "Пропущенные звонки от $people " + if (singular(people)) "человека" else "человек"
+
+        private fun singular(n: Int) = n % 10 == 1 && n % 100 != 11
     }
 
     override val switching = object : SwitchingWords {

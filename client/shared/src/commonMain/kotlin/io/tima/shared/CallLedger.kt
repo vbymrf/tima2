@@ -37,8 +37,11 @@ object CallLedger {
         /** Звонок кончился; [why] — слово ленты: declined, cancelled, busy, ended, missed. */
         data class End(override val callId: String, val why: String) : Action
 
-        /** Нам звонили и не дождались — уведомление «пропущенный». */
-        data class Missed(override val callId: String, val fromId: String, val video: Boolean) : Action
+        /**
+         * Нам звонили и не дождались — уведомление «пропущенный». [atMs] — когда сервер
+         * записал конец: по нему старое, поднятое догонкой, молчит (ЖУ3).
+         */
+        data class Missed(override val callId: String, val fromId: String, val video: Boolean, val atMs: Long = 0) : Action
 
         /** Пропущенный просмотрен на каком-то устройстве — снять строку в шторке. */
         data class MissedSeen(override val callId: String) : Action
@@ -78,7 +81,7 @@ object CallLedger {
                 callee && u.change in ENDS -> {
                     out += Action.End(u.callId, u.change)
                     if (u.change in MISSED_FOR_CALLEE && missedTold.add(u.callId)) {
-                        out += Action.Missed(u.callId, u.call.initiatorId, u.call.video)
+                        out += Action.Missed(u.callId, u.call.initiatorId, u.call.video, u.atMs)
                     }
                 }
                 callee && u.change == "seen" -> out += Action.MissedSeen(u.callId)

@@ -26,8 +26,11 @@ import java.io.File
  */
 class DesktopNotifier(private val icon: TrayIcon?) : Notifier {
 
-    override fun show(notice: Notice) {
-        val tray = icon ?: return
+    override fun show(notice: Notice): Long? {
+        // Молчаливое обновление подсказке не нужно: заменить прежнюю она не умеет, а
+        // новая подсказка на каждое сообщение пачки — то самое «пиликает весь день» (ЖУ4).
+        if (!notice.alert && notice.call == null) return 0
+        val tray = icon ?: return 0
         // Имя и повод одной строкой: у всплывающей подсказки заголовок короткий, и
         // длинное имя в нём обрезается посередине слова.
         val title = notice.who ?: APP
@@ -42,10 +45,12 @@ class DesktopNotifier(private val icon: TrayIcon?) : Notifier {
         val call = notice.call
         if (call != null) {
             DesktopRinger.ring(notice.key, call.ring)
-        } else {
-            DesktopRinger.once(notice.sound)
+            return null
         }
+        return DesktopRinger.once(notice.sound)
     }
+
+    override fun badge(total: Int) = DesktopBadge.set(total)
 
     /** Подсказка гаснет сама; снимать нечего — но мелодия звонка обязана замолчать. */
     override fun hide(key: String) = DesktopRinger.stop(key)
@@ -136,12 +141,21 @@ internal object DesktopRinger {
     }
 
     @Synchronized
-    fun once(choice: SoundChoice) {
-        if (choice == SoundChoice.Silent || ringingKey != null) return
+    /** @return сколько звучало, мс; `0` — не звучало. См. `Notifier.show`. */
+    fun once(choice: SoundChoice): Long? {
+        if (choice == SoundChoice.Silent || ringingKey != null) return 0
         val file = (choice as? SoundChoice.File)?.path?.let(::File)
         val c = file?.takeIf { it.extension.equals("wav", ignoreCase = true) }?.let { openClip(it) }
-        if (c != null) c.start() else java.awt.Toolkit.getDefaultToolkit().beep()
+        if (c != null) {
+            c.start()
+            return (c.microsecondLength / 1000).takeIf { it > 0 }
+        }
+        java.awt.Toolkit.getDefaultToolkit().beep()
+        return BEEP_MS
     }
+
+    /** Системный сигнал Windows короткий; длина его не сообщается — берётся с запасом. */
+    private const val BEEP_MS = 500L
 
     @Synchronized
     fun stop(key: String) {

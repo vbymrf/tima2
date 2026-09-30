@@ -31,7 +31,9 @@ class SqlNoticeJournal(
         q.changes().executeAsOne() > 0
     }
 
-    override fun done(what: NoticeWhat, ref: String, done: String) = q.done(done, what.wire, ref)
+    override fun done(what: NoticeWhat, ref: String, done: String) {
+        q.done(done, what.wire, ref)
+    }
 
     override fun isActive(tab: NoticeTab, entity: String, what: NoticeWhat): Boolean =
         q.isActive(tab.wire, entity, what.wire).executeAsOne() > 0

@@ -2,49 +2,77 @@ package io.tima.shared
 
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
+import io.tima.core.network.ServerClock
 import io.tima.core.notify.BackgroundWatch
 import io.tima.core.notify.CallAlert
-import io.tima.core.notify.SoundChoice
 import io.tima.core.notify.Notice
 import io.tima.core.notify.NoticeKind
 import io.tima.core.notify.Notifier
+import io.tima.core.notify.SoundChoice
+import io.tima.core.notify.SoundGate
 import io.tima.core.words.CurrentWords
 import io.tima.core.words.Words
 import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.BookList
 import io.tima.domain.chat.ChatPerson
-import io.tima.feature.chat.PERSON_FIRST_LINE
+import io.tima.domain.chat.NoticeCounts
+import io.tima.domain.chat.NoticeFrom
+import io.tima.domain.chat.NoticeJournal
+import io.tima.domain.chat.NoticeRecord
+import io.tima.domain.chat.NoticeTab
+import io.tima.domain.chat.NoticeWhat
 import io.tima.domain.chat.PersonLook
 import io.tima.domain.chat.line
+import io.tima.feature.chat.PERSON_FIRST_LINE
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
- * Что заслуживает уведомления — ПЛАН-УВЕДОМЛЕНИЙ.md, У5…У10.
+ * Что заслуживает уведомления — ПЛАН-УВЕДОМЛЕНИЙ.md, У5…У10, и как оно считается и звучит —
+ * ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ0…ЖУ6.
  *
  * Правила живут здесь, а не в `core-notify`, потому что они знают то, чего показу знать
  * незачем: кто заблокирован, какое устройство своё и сошлась ли подпись.
+ *
+ * ── ЖУРНАЛ — ИСТОЧНИК ЧИСЕЛ (ЖУ1) ───────────────────────────────────────────
+ *
+ * Каждое событие — строка [NoticeJournal]: откуда пришло, что с ним сделали, когда и чем
+ * снято. Строка в шторке, число на ней и на значке считаются **из журнала**, а не по
+ * событию. Повтор того же события (разрыв ленты, два прохода разом) журнал узнаёт и
+ * второй раз не уведомляет (ЖУ0).
+ *
+ * ── СТРОКА НА ВКЛАДКУ, А НЕ НА СУЩНОСТЬ (ЖУ4) ───────────────────────────────
+ *
+ * «Сообщения от 2 пользователей», «Пропущенные звонки от redmi» — по строке на вкладку, с
+ * числом вкладки (заказчик 2026-09-30: «Сколько в вкладке, столько и в шторке»). Строка с
+ * одной сущностью называет её — после проверки подписи, как и раньше.
+ *
+ * ── ЗВУК — ОДИН НА ПАЧКУ (ЖУ3) ──────────────────────────────────────────────
+ *
+ * Звучит только **новое в журнале** — уведомление, которого у сущности ещё не было, — и
+ * только **свежее**: догонка (запуск, разрыв канала, очередь) молчит. Сигналы разделяет
+ * [SoundGate]: перерыв 5 с от конца сигнала, пропущенное не ждёт.
  *
  * ── ДВЕ СТАДИИ ОДНОЙ СТРОКИ (У6) ────────────────────────────────────────────
  *
  * ```
  * конверт пришёл       →  «Новое сообщение»   [arrived]
- * подпись сошлась      →  «Борис»             [opened] — ТА ЖЕ строка, по тому же ключу
+ * подпись сошлась      →  «Борис»             [opened] — ТА ЖЕ строка, молча
  * подпись не сошлась   →  остаётся безымянной
  * ```
  *
- * Обе нужны, и ни одну нельзя выкинуть:
- *
- * - показать имя сразу нельзя — оно лежит в **открытой** части конверта, подписью не
- *   покрыто, и «Мама написала» подделал бы всякий, кто знает `user_id` мамы. А узнать
- *   его можно: он виден тому, кто состоит с человеком в одной группе или нашёл его
- *   поиском по нику;
- * - ждать разбора тоже нельзя — при недоехавшем ключе человек не узнал бы **ничего**, а
- *   это как раз тот случай, когда узнать надо.
+ * Показать имя сразу нельзя — оно лежит в **открытой** части конверта, подписью не
+ * покрыто. Ждать разбора тоже нельзя — при недоехавшем ключе человек не узнал бы ничего.
+ * До 2026-09-30 вторая стадия звучала второй раз: каждое сообщение — два сигнала.
  *
  * ── ЗВОНОК — НАОБОРОТ, И ЭТО ЗАКОННО ────────────────────────────────────────
  *
- * Кто звонит, говорит **сервер**: строку в `calls` заводит он, а не звонящий. Для
- * звонков сервер и есть источник правды (ADR-0026), и мы ему в этом уже верим каждый
- * раз, когда рисуем журнал. Значит имя показывается сразу.
+ * Кто звонит, говорит **сервер**: строку в `calls` заводит он, а не звонящий. Значит имя
+ * показывается сразу.
  */
 class Notices(
     private val notifier: Notifier,
@@ -69,6 +97,14 @@ class Notices(
     private val ringFor: suspend (String) -> SoundChoice = { SoundChoice.Default },
     /** Общий звук уведомления о сообщении (ВЗ4). */
     private val messageSound: suspend () -> SoundChoice = { SoundChoice.Default },
+    /** Журнал уведомлений (ЖУ1). По умолчанию — в памяти: так собираются проверки. */
+    private val journal: NoticeJournal = MemoryNoticeJournal(),
+    /** Время — серверное (ЖУ3: свежесть события меряется им, а не часами устройства). */
+    private val now: () -> Long = { ServerClock.now() },
+    /** Название группы — заголовок её строки, когда новое в одной группе. */
+    private val groupTitle: suspend (String) -> String? = { null },
+    /** Где снимать уведомления, когда зовут с экрана: база — не на потоке экрана. */
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
 
     /**
@@ -78,61 +114,89 @@ class Notices(
      * здесь, а не проверяется на экране, потому что решает это **приёмник** — он
      * приходит в чужую минуту, и спрашивать у экрана ему не у кого.
      */
-    @Volatile
     private var openChat: String? = null
 
     /**
      * Видно ли окно приложения.
      *
      * Без этого открытая переписка молчала бы и **после того, как окно убрали**: человек
-     * нажал «Домой» или закрыл окно в трей, а переписка по-прежнему числится открытой —
-     * и уведомления из неё пропадают до следующего захода. Ровно та поломка, которую
-     * замечают не сразу и объясняют «у меня не приходят сообщения».
+     * нажал «Домой» или закрыл окно в трей, а переписка по-прежнему числится открытой.
      */
-    @Volatile
     private var windowShown: Boolean = true
 
+    /** Журнал, звук и строки — под одним замком: решение «звучать ли» читает журнал. */
+    private val lock = Mutex()
+    private val gate = SoundGate()
+
+    /**
+     * Проверенные имена: переписка → собеседник (после подписи, У6), звонивший → имя.
+     * Нужны строке вкладки с одной сущностью: назвать её, а не «Новое сообщение».
+     */
+    private val named = mutableMapOf<String, String>()
+
+    /** Сколько событий догонки промолчало подряд — строка журнала одна на пачку. */
+    private var catchUpRun = 0
+
+    /** Событие без номера (проверки, старые вызовы) — своя ссылка каждому, не повтор. */
+    private var unnamedRefs = 0
+
+    /** Число на значке, как его видит человек; `-1` — ещё не ставили. */
+    private var badgeShown = -1
 
     /**
      * Конверт записан, подпись ещё не проверена — У6, первая стадия.
      *
-     * @return `true`, если строка показана. Ложь — уведомлять было не о чем.
+     * @param ref какое сообщение: по нему журнал узнаёт повтор.
+     * @param sentAtMs когда написано; старое — догонка, без звука (ЖУ3). `0` — не знаем,
+     *   считается свежим.
+     * @param group сообщение группы — вкладка «Группы».
+     * @return `true`, если уведомление записано. Ложь — уведомлять было не о чем.
      */
-    suspend fun arrived(chatId: String, senderId: String?): Boolean {
-        if (isWatched(chatId) || !shouldNotify(senderId)) return false
-        notifier.show(
-            Notice(
-                key = chatId,
-                kind = NoticeKind.Message,
-                sound = messageSound(),
-                // Имени нет намеренно: до проверки подписи называть человека нельзя.
-                who = null,
-                what = words().notices.newMessage,
-            ),
-        )
-        return true
+    suspend fun arrived(
+        chatId: String,
+        senderId: String?,
+        ref: String = "",
+        sentAtMs: Long = 0,
+        group: Boolean = false,
+    ): Boolean {
+        if (!shouldNotify(senderId)) return false
+        val tab = if (group) NoticeTab.Groups else NoticeTab.Chats
+        return lock.withLock {
+            val at = now()
+            val fresh = sentAtMs <= 0 || at - sentAtMs <= FRESH_MS
+            val record = NoticeRecord(
+                tab = tab,
+                entity = chatId,
+                what = NoticeWhat.Message,
+                ref = ref.ifBlank { "$chatId@$at#" + (++unnamedRefs) },
+                atMs = at,
+                from = if (fresh) NoticeFrom.Live else NoticeFrom.CatchUp,
+            )
+            val wasActive = journal.isActive(tab, chatId, NoticeWhat.Message)
+            if (!journal.record(record)) return@withLock false
+            if (isWatched(chatId)) {
+                journal.clearEntity(tab, chatId, "открыта при приходе", at)
+                journal.done(NoticeWhat.Message, record.ref, "тишина: переписка открыта")
+                return@withLock false
+            }
+            showTab(tab, decide(record, wasActive, fresh), record)
+            true
+        }
     }
 
     /**
-     * Подпись сошлась — У6, вторая стадия: та же строка получает имя.
+     * Подпись сошлась — У6, вторая стадия: та же строка получает имя, **молча**.
      *
-     * Не вторая строка: два уведомления об одном сообщении человек читает как два
-     * сообщения.
+     * Не вторая строка и не второй сигнал: два уведомления об одном сообщении человек
+     * читает как два сообщения.
      */
     suspend fun opened(chatId: String, senderId: String) {
         if (isWatched(chatId) || !shouldNotify(senderId)) return
         val name = nameOf(senderId)
-        notifier.show(
-            Notice(
-                key = chatId,
-                kind = NoticeKind.Message,
-                sound = messageSound(),
-                who = name,
-                // Назвать нечем — остаётся то же, что было: «Новое сообщение». Строка
-                // «Написал вам» без имени не значила бы ничего.
-                what = if (name == null) words().notices.newMessage else words().notices.wroteToYou,
-            ),
-        )
+        lock.withLock {
+            if (name != null) named[chatId] = name
+            if (journal.isActive(NoticeTab.Chats, chatId, NoticeWhat.Message)) showTab(NoticeTab.Chats, alert = false)
+        }
     }
 
     /** Нам звонят — У7. Имя сразу: его утверждает сервер, а не звонящий. */
@@ -165,40 +229,91 @@ class Notices(
     /**
      * Пропущенный звонок — уведомлением (решение заказчика 2026-09-26, ВЗ0а).
      *
-     * Своим ключом, не ключом звонка: строка «звонит» снимается концом звонка, а
-     * пропущенный обязан остаться — до тех пор, пока человек не откроет журнал звонков на
-     * любом своём устройстве (тогда придёт «seen», см. [missedSeen]).
+     * Строка — вкладки «Звонки», одна на всех звонивших; держится, пока человек не откроет
+     * «Звонки» на любом своём устройстве (тогда придёт «seen», см. [missedSeen]).
+     *
+     * **Один звонок — одно уведомление** (ЖУ0): тот же звонок, поднятый снова разрывом
+     * ленты или вторым проходом, журнал узнаёт и отбрасывает.
+     *
+     * @param atMs когда звонок кончился; старое — догонка, без звука.
+     * @param from `CatchUp` — поднят из журнала звонков при разрыве ленты.
      */
-    suspend fun missed(callId: String, fromUserId: String) {
+    suspend fun missed(callId: String, fromUserId: String, atMs: Long = 0, from: NoticeFrom = NoticeFrom.Live) {
         if (!shouldNotify(fromUserId)) return
-        Journal.note(LogCode.CALL, "уведомление о пропущенном", "звонок" to callId.take(8))
-        notifier.show(
-            Notice(
-                key = MISSED_KEY_PREFIX + callId,
-                kind = NoticeKind.Message,
-                sound = messageSound(),
-                who = nameOf(fromUserId),
-                what = words().call.missedCall,
-            ),
-        )
+        val name = nameOf(fromUserId)
+        lock.withLock {
+            val at = now()
+            val fresh = from == NoticeFrom.Live && (atMs <= 0 || at - atMs <= FRESH_MS)
+            val record = NoticeRecord(
+                tab = NoticeTab.Calls,
+                entity = fromUserId,
+                what = NoticeWhat.Missed,
+                ref = callId,
+                atMs = at,
+                from = if (fresh) NoticeFrom.Live else NoticeFrom.CatchUp,
+            )
+            val wasActive = journal.isActive(NoticeTab.Calls, fromUserId, NoticeWhat.Missed)
+            if (!journal.record(record)) {
+                Journal.note(LogCode.NOTICE, "повтор пропущенного отброшен", "звонок" to callId.take(8))
+                return@withLock
+            }
+            Journal.note(LogCode.CALL, "уведомление о пропущенном", "звонок" to callId.take(8))
+            if (name != null) named[fromUserId] = name
+            showTab(NoticeTab.Calls, decide(record, wasActive, fresh), record)
+        }
     }
 
-    /** Пропущенный просмотрен — на этом или другом устройстве человека. */
-    fun missedSeen(callId: String) = notifier.hide(MISSED_KEY_PREFIX + callId)
-
-    /** Звонок кончился — чем бы ни кончился. Строка звонка не переживает звонок. */
-    fun callOver(callId: String) = notifier.hide(CALL_KEY_PREFIX + callId)
+    /** Пропущенный просмотрен — на этом или другом устройстве человека (`seen`). */
+    fun missedSeen(callId: String) {
+        scope.launch {
+            lock.withLock {
+                if (journal.clearRef(NoticeWhat.Missed, callId, "seen", now()) > 0) showTab(NoticeTab.Calls, alert = false)
+            }
+        }
+    }
 
     /**
-     * Человек открыл переписку или ушёл из неё — У10.
+     * Открыли вкладку «Звонки» — её число обнуляется, строка в шторке уходит (ЖУ6,
+     * заказчик 2026-09-30): сущностей для просмотра там нет, всё и так увидели.
+     */
+    fun callsViewed() {
+        scope.launch {
+            lock.withLock {
+                if (journal.clearTab(NoticeTab.Calls, "вкладка открыта", now()) > 0) showTab(NoticeTab.Calls, alert = false)
+            }
+        }
+    }
+
+    /** Звонок кончился — чем бы ни кончился. Строка звонка не переживает звонок. */
+    fun callOver(callId: String) {
+        notifier.hide(CALL_KEY_PREFIX + callId)
+    }
+
+    /**
+     * Человек открыл переписку или ушёл из неё — У10, ЖУ6.
      *
-     * Снимает то, что уже показано, и **гасит будущие**: сообщение, пришедшее при
-     * открытой переписке, человек видит и так — строка в шторке про него была бы
-     * уведомлением о том, что он читает.
+     * Открыл — её уведомления сняты в журнале с причиной «просмотрена», у вкладки минус
+     * один, строка вкладки и значок пересчитаны. Пока она открыта, новое в ней не
+     * уведомляет: человек видит его и так.
      */
     fun watching(chatId: String?) {
         openChat = chatId
-        chatId?.let(notifier::hide)
+        if (chatId != null) viewed(chatId, "просмотрена")
+    }
+
+    /**
+     * Переписка просмотрена — здесь или на другом устройстве (копия аккаунта, ЖУ9).
+     * Вкладка — та, где сущность есть: личная или группа.
+     */
+    fun viewed(chatId: String, by: String) {
+        scope.launch {
+            lock.withLock {
+                val at = now()
+                for (tab in ENTITY_TABS) {
+                    if (journal.clearEntity(tab, chatId, by, at) > 0) showTab(tab, alert = false)
+                }
+            }
+        }
     }
 
     /** Окно показалось или ушло — У4. Убранное окно ничего не показывает глазами. */
@@ -206,37 +321,167 @@ class Notices(
         windowShown = visible
     }
 
+    /**
+     * Сверка журнала с базой при запуске (ЖУ1).
+     *
+     * Журнал пуст после обновления, а непрочитанное в базе есть; прочитанное могли отметить
+     * мимо журнала. Сверка заводит строки без звука и без строки в шторке
+     * (`source = seed`) и снимает то, что уже прочитано, — числа сходятся с базой.
+     *
+     * @param unread непрочитанные переписки: переписка → группа ли.
+     * @param missed непросмотренные пропущенные: звонок → звонивший.
+     */
+    suspend fun reconcile(unread: Map<String, Boolean>, missed: Map<String, String>) {
+        lock.withLock {
+            val at = now()
+            var seeded = 0
+            var cleared = 0
+            for ((chatId, group) in unread) {
+                val tab = if (group) NoticeTab.Groups else NoticeTab.Chats
+                if (!journal.isActive(tab, chatId, NoticeWhat.Message)) {
+                    val ref = "seed:$chatId@$at"
+                    if (journal.record(NoticeRecord(tab, chatId, NoticeWhat.Message, ref, at, NoticeFrom.Seed))) {
+                        journal.done(NoticeWhat.Message, ref, "тишина: сверка при запуске")
+                        seeded++
+                    }
+                }
+            }
+            for ((callId, from) in missed) {
+                if (journal.record(NoticeRecord(NoticeTab.Calls, from, NoticeWhat.Missed, callId, at, NoticeFrom.Seed))) {
+                    journal.done(NoticeWhat.Missed, callId, "тишина: сверка при запуске")
+                    seeded++
+                }
+            }
+            val counts = NoticeCounts(journal.activeNow())
+            for (tab in ENTITY_TABS) {
+                for (entity in counts.entities(tab) - unread.keys) cleared += journal.clearEntity(tab, entity, "прочитано", at)
+            }
+            for (entity in counts.entities(NoticeTab.Calls) - missed.values.toSet()) {
+                cleared += journal.clearEntity(NoticeTab.Calls, entity, "просмотрено", at)
+            }
+            val purged = journal.purge(at - KEEP_MS)
+            if (seeded + cleared + purged > 0) {
+                Journal.note(LogCode.NOTICE, "журнал уведомлений сверен", "заведено" to seeded, "снято" to cleared, "убрано" to purged)
+            }
+            for (tab in NoticeTab.entries) showTab(tab, alert = false)
+        }
+    }
+
     /** Выход из аккаунта: чужих строк в шторке остаться не должно. */
-    fun forget() = notifier.hideAll()
+    fun forget() {
+        notifier.hideAll()
+        notifier.badge(0)
+    }
+
+    // ── Решение и показ ─────────────────────────────────────────────────────
+
+    /**
+     * Звучать ли этому событию — ЖУ3. Слово решения пишется в журнал строкой события: по
+     * нему видно, почему было тихо.
+     */
+    private fun decide(record: NoticeRecord, wasActive: Boolean, fresh: Boolean): Boolean {
+        val at = record.atMs
+        val why = when {
+            !fresh -> {
+                if (catchUpRun++ == 0) Journal.note(LogCode.NOTICE, "догонка без звука", "вкладка" to record.tab.wire)
+                "тишина: догонка"
+            }
+            wasActive -> "тишина: у сущности уже есть"
+            else -> {
+                if (catchUpRun > 0) {
+                    Journal.note(LogCode.NOTICE, "догонка без звука — итог", "сколько" to catchUpRun)
+                    catchUpRun = 0
+                }
+                val skippedBefore = gate.skipped
+                if (gate.ask(at, lengthMs = null)) {
+                    if (skippedBefore > 0) Journal.note(LogCode.NOTICE, "звук: в прошлой пачке промолчало", "сколько" to skippedBefore)
+                    null
+                } else {
+                    if (gate.skipped == 1) Journal.note(LogCode.NOTICE, "звук пропущен — перерыв после сигнала")
+                    "тишина: перерыв"
+                }
+            }
+        }
+        journal.done(record.what, record.ref, why ?: "строка+звук")
+        return why == null
+    }
+
+    /**
+     * Строка вкладки в шторке — с числом вкладки; ноль — строки нет. Значок — сумма вкладок.
+     *
+     * @param alert звучать ли; сигнал разрешило [decide].
+     */
+    private suspend fun showTab(tab: NoticeTab, alert: Boolean, cause: NoticeRecord? = null) {
+        val counts = NoticeCounts(journal.activeNow())
+        val n = counts.tab(tab)
+        val key = TAB_KEY_PREFIX + tab.wire
+        if (n == 0) {
+            notifier.hide(key)
+        } else {
+            val one = counts.entities(tab).singleOrNull()
+            val notices = words().notices
+            val (who, what) = when (tab) {
+                NoticeTab.Chats -> if (n == 1) {
+                    val name = one?.let { named[it] }
+                    name to (if (name == null) notices.newMessage else notices.wroteToYou)
+                } else {
+                    null to notices.messagesFrom(n)
+                }
+                NoticeTab.Groups -> if (n == 1) {
+                    (one?.let { groupTitle(it) }) to notices.newInGroup
+                } else {
+                    null to notices.messagesInGroups(n)
+                }
+                NoticeTab.Calls -> if (n == 1) {
+                    (one?.let { named[it] }) to words().call.missedCall
+                } else {
+                    null to notices.missedFrom(n)
+                }
+            }
+            val start = now()
+            val length = notifier.show(
+                Notice(
+                    key = key,
+                    kind = NoticeKind.Message,
+                    sound = messageSound(),
+                    who = who,
+                    what = what,
+                    alert = alert,
+                    number = n,
+                ),
+            )
+            // Перерыв — от настоящего конца сигнала: платформа знает длину, когда играет.
+            if (alert) gate.played(start, length)
+            if (alert && cause != null && length == 0L) journal.done(cause.what, cause.ref, "строка; звука нет — тишина телефона")
+        }
+        val total = counts.total
+        if (total != badgeShown) {
+            if (badgeShown >= 0) Journal.note(LogCode.NOTICE, "значок сменился", "было" to badgeShown, "стало" to total)
+            badgeShown = total
+            notifier.badge(total)
+        }
+    }
 
     /**
      * Уведомлять ли о человеке — У8.
      *
-     * Заблокированный молчит, и проверка здесь **явная**. Пока уведомление ставилось
-     * после разбора, молчание выходило само собой — его конверт мы не открываем (Л9).
-     * Теперь строка ставится ДО разбора, и «само собой» больше не работает.
-     *
-     * Своё сообщение с другого своего устройства — тоже молча: человек сам его и
-     * написал. Отправитель здесь не проверен подписью, но для **умолчания** этого
-     * довольно: худшее, чего добьётся подделка, — не покажет своего же уведомления.
+     * Заблокированный молчит, и проверка здесь **явная**. Своё сообщение с другого своего
+     * устройства — тоже молча: человек сам его и написал.
      */
-    /** Человек смотрит на эту переписку прямо сейчас. */
-    private fun isWatched(chatId: String): Boolean = windowShown && chatId == openChat
-
     private suspend fun shouldNotify(userId: String?): Boolean {
         if (userId.isNullOrBlank() || userId == me) return false
         return entryOf(userId)?.list != BookList.Blocked
     }
 
+    /** Человек смотрит на эту переписку прямо сейчас. */
+    private fun isWatched(chatId: String): Boolean = windowShown && chatId == openChat
+
     /**
      * Как назвать человека — У9.
      *
-     * Он в книге — зовём тем же порядком полей, что и списки: заказчик уже распространил
-     * «Отображать пользователя как» на журнал звонков 2026-09-19, и второй источник имени
-     * однажды разошёлся бы с первым.
-     *
-     * Его в книге нет — остаётся `@ник`. Ника нет — **строка без имени вовсе** (решение
-     * заказчика 2026-09-24): выдуманное имя хуже отсутствующего.
+     * Он в книге — зовём тем же порядком полей, что и списки. Его в книге нет — остаётся
+     * `@ник`. Ника нет — **строка без имени вовсе** (решение заказчика 2026-09-24):
+     * выдуманное имя хуже отсутствующего.
      */
     private suspend fun nameOf(userId: String): String? {
         val card = cardOf(userId)
@@ -255,14 +500,24 @@ class Notices(
 
     private companion object {
         /**
-         * Ключи звонков и переписок не должны столкнуться.
-         *
-         * Идентификаторы у них разной природы, и совпадение маловероятно — но «маловероятно»
-         * здесь означало бы, что звонок однажды снимет уведомление о сообщении.
+         * Ключи звонков и вкладок не должны столкнуться: звонок однажды снял бы строку
+         * вкладки.
          */
         const val CALL_KEY_PREFIX = "call:"
 
-        /** Ключ строки «пропущенный»: отдельный от звонка — она переживает звонок. */
-        const val MISSED_KEY_PREFIX = "missed:"
+        /** Строка вкладки в шторке — одна на вкладку (ЖУ4). */
+        const val TAB_KEY_PREFIX = "tab:"
+
+        /** Вкладки, где сущность — переписка. */
+        val ENTITY_TABS = listOf(NoticeTab.Chats, NoticeTab.Groups)
+
+        /**
+         * Свежее — не старше двух минут по часам сервера. Старше — догонка, без звука (ЖУ3).
+         * С запасом на часы отправителя: у Redmi они отставали на 35 с.
+         */
+        const val FRESH_MS = 120_000L
+
+        /** Снятые строки журнала хранятся месяц — для разбора «куда исчезло». */
+        const val KEEP_MS = 30L * 24 * 60 * 60 * 1000
     }
 }
