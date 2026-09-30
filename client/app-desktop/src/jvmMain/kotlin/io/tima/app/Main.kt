@@ -9,6 +9,7 @@ import io.tima.core.call.desktop.DesktopCallEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -84,7 +85,11 @@ fun main(args: Array<String>) {
     }
     // Звонок и стенд живут у процесса (`CallKeep`, заказчик 2026-09-30, 1а): окно, закрытое в
     // трей, разбирает композицию, а звонок идёт. Поток — окна (Swing), как раньше у `Root`.
-    CallKeep.scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    // Своим исполнителем, а не `Dispatchers.Main`: модуля с ним у ПК нет, и 2026-09-30 версия
+    // 95 падала при первом окне («Module with the Main dispatcher is missing»).
+    CallKeep.scope = CoroutineScope(
+        SupervisorJob() + java.util.concurrent.Executor { javax.swing.SwingUtilities.invokeLater(it) }.asCoroutineDispatcher(),
+    )
     // Включённый автозапуск — под эту установку: программа могла переехать.
     Autostart.refresh()
     window(store, hidden = Autostart.HIDDEN in args)
