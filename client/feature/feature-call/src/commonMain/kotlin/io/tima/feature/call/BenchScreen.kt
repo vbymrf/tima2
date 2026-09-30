@@ -87,6 +87,12 @@ fun BenchScreen(
     onSkip: (Int) -> Unit,
     onStop: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Идёт проба кодеров и что она проверяет сейчас. */
+    probing: Boolean = false,
+    probeStep: String = "",
+    /** Куда лёг отчёт последней пробы. */
+    probeFile: String? = null,
+    onProbe: () -> Unit = {},
 ) {
     val words = Tima.words.bench
     Column(
@@ -104,6 +110,7 @@ fun BenchScreen(
         Saving(preset, presets, onChange, onSave, onForget, onStep)
         Applying(inCall, onApply)
         Running(running, samples, lastFile, skip, onSkip, onStop)
+        Probe(probing, probeStep, probeFile, enabled = !running && !inCall, onProbe)
         Numbers(samples.lastOrNull())
         Runs(runs)
         Tertiary(words.appliesToNextCall)
@@ -343,6 +350,23 @@ private fun Running(
         // куда он лёг, не должен никто.
         if (!running) {
             if (lastFile != null) Secondary(words.savedTo(lastFile)) else Tertiary(words.notSaved)
+        }
+    }
+}
+
+/**
+ * Проба кодеров по размерам (заказчик 2026-09-30). Во время звонка кнопка недоступна:
+ * кодеры заняты звонком.
+ */
+@Composable
+private fun Probe(probing: Boolean, step: String, file: String?, enabled: Boolean, onProbe: () -> Unit) {
+    val words = Tima.words.bench
+    Section(words.sectionProbe) {
+        Button(label = words.probeRun, onClick = onProbe, kind = ButtonKind.Action, enabled = enabled && !probing)
+        when {
+            probing -> Secondary(words.probeGoing(step))
+            file != null -> Secondary(words.probeSaved(file))
+            else -> Tertiary(words.probeAbout)
         }
     }
 }

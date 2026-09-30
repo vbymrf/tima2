@@ -818,6 +818,12 @@ interface BenchWords {
     val apply: String
     val applyAbout: String
     val stop: String
+    /** Стенд: проба кодеров по размерам (заказчик 2026-09-30). */
+    val sectionProbe: String
+    val probeRun: String
+    val probeAbout: String
+    fun probeGoing(step: String): String
+    fun probeSaved(path: String): String
     val runsBySelf: String
 
     /** Вооружить забег: пока не нажато, звонок идёт как обычный. */
@@ -2179,6 +2185,11 @@ object RussianWords : Words {
             "Пока не нажато, звонок идёт как обычный: наборы не переключаются, числа не пишутся. " +
                 "Публикуется при этом выбранный набор — он и есть обычное поведение приложения"
         override val stop = "Прекратить запись"
+        override val sectionProbe = "Проба кодеров"
+        override val probeRun = "Проверить кодеры"
+        override val probeAbout = "Каждый кодер и раскодировщик телефона сжимает и разворачивает тестовую картинку на всех размерах, которые даёт WebRTC. Около минуты, без звонка"
+        override fun probeGoing(step: String) = "Идёт проба: $step"
+        override fun probeSaved(path: String) = "Отчёт пробы: $path"
         override val runsBySelf =
             "Запись идёт сама, пока идёт разговор, и файл пишется, когда он кончится"
         override val skip = "Не учитывать первых секунд"

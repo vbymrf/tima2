@@ -364,6 +364,11 @@ object SpanishWords : Words {
             "Mientras no se pulse, la llamada va como siempre: los conjuntos no rotan, los números no se registran. " +
                 "El conjunto elegido se publica igualmente: es el comportamiento normal de la aplicación"
         override val stop = "Detener la grabación"
+        override val sectionProbe = "Prueba de códecs"
+        override val probeRun = "Probar códecs"
+        override val probeAbout = "Cada codificador y decodificador del teléfono comprime y restaura una imagen de prueba en todos los tamaños que usa WebRTC. Cerca de un minuto, sin llamada"
+        override fun probeGoing(step: String) = "Prueba en curso: $step"
+        override fun probeSaved(path: String) = "Informe de la prueba: $path"
         override val runsBySelf =
             "La grabación corre sola mientras dura la llamada, y el archivo se escribe cuando termina"
         override val skip = "No contar los primeros segundos"

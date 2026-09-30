@@ -11,6 +11,7 @@ import io.tima.core.call.saveBenchReport
 import io.tima.core.call.PublishPreset
 import io.tima.core.call.phoneLoad
 import io.tima.core.call.phoneTraffic
+import io.tima.core.call.probeCodecs
 import io.tima.core.call.presetFromWire
 import io.tima.core.call.presetsFromJson
 import io.tima.core.call.presetsFromWire
@@ -66,6 +67,7 @@ class BenchStore(
     val state: StateFlow<BenchState> = _state.asStateFlow()
 
     private var sampling: Job? = null
+    private var probing: Job? = null
 
     init {
         settings.all()
@@ -230,6 +232,28 @@ class BenchStore(
      * «Начать заново» — её убрали решением заказчика 2026-09-21: настройка делает то же
      * самое и не требует помнить про неё в каждом звонке.
      */
+    /**
+     * Проба кодеров по размерам (заказчик 2026-09-30) — без звонка, около минуты.
+     *
+     * Ход — в [BenchState.probeStep], отчёт — файлом `probe-…md` рядом с отчётами прогонов:
+     * его забирает тот же `pull-bench-reports`. Во время звонка не запускается: кодеры телефона
+     * заняты звонком, и проба мерила бы их вперемешку.
+     */
+    fun probe() {
+        if (probing?.isActive == true || _state.value.running) return
+        probing = scope.launch {
+            _state.value = _state.value.copy(probing = true, probeStep = "", probeFile = null)
+            val text = runCatching {
+                probeCodecs { step -> _state.value = _state.value.copy(probeStep = step) }
+            }.getOrElse { e ->
+                Journal.trouble(LogCode.CALL, "проба кодеров упала", "причина" to (e.message ?: e::class.simpleName))
+                null
+            }
+            val file = text?.let { saveBenchReport("probe-" + benchFileName(phoneModel()), it) }
+            _state.value = _state.value.copy(probing = false, probeStep = "", probeFile = file)
+        }
+    }
+
     fun skipSeconds(seconds: Int) {
         val clean = seconds.coerceIn(0, 60)
         scope.launch { settings.put(KEY_SKIP, clean.toString()) }
@@ -415,6 +439,12 @@ data class BenchState(
     val lastFile: String? = null,
     val skip: Int = BenchStore.SKIP_DEFAULT,
     val armed: Boolean = false,
+    /** Идёт проба кодеров ([BenchStore.probe]). */
+    val probing: Boolean = false,
+    /** Что проба проверяет сейчас: «H264 352×469». */
+    val probeStep: String = "",
+    /** Куда лёг отчёт последней пробы; `null` — пробы не было или записать не удалось. */
+    val probeFile: String? = null,
 ) {
     /** Номер текущего набора в забеге, с единицы. `0` — набора нет в списке. */
     val at: Int get() = presets.indexOfFirst { it.name == preset.name } + 1

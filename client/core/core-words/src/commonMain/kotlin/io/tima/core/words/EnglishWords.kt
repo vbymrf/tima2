@@ -366,6 +366,11 @@ object EnglishWords : Words {
             "Until this is pressed a call goes as usual: presets do not rotate, numbers are not recorded. " +
                 "The chosen preset is still published — it is the app's normal behaviour"
         override val stop = "Stop recording"
+        override val sectionProbe = "Codec probe"
+        override val probeRun = "Probe codecs"
+        override val probeAbout = "Every encoder and decoder of the phone compresses and restores a test picture at every size WebRTC uses. About a minute, no call needed"
+        override fun probeGoing(step: String) = "Probing: $step"
+        override fun probeSaved(path: String) = "Probe report: $path"
         override val runsBySelf =
             "Recording goes by itself while the call is on, and the file is written when it ends"
         override val skip = "Skip the first seconds"

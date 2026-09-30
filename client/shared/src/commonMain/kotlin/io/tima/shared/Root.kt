@@ -2300,6 +2300,10 @@ private fun App(
                     onStep = bench::step,
                     onSkip = bench::skipSeconds,
                     onStop = bench::stop,
+                    probing = benchState.probing,
+                    probeStep = benchState.probeStep,
+                    probeFile = benchState.probeFile,
+                    onProbe = bench::probe,
                     // Жест тот же, что у окна 0, и по той же причине: у стенда нет оправы
                     // с шапкой, а окно, из которого нельзя выйти пальцем, — не окно.
                     modifier = Modifier.windowSwipe(
