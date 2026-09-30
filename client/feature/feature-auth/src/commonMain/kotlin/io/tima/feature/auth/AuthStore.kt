@@ -55,6 +55,12 @@ class AuthStore(
      * жизнь store, и после смены языка беда пришла бы на прежнем.
      */
     private val words: () -> Words = { CurrentWords.value },
+    /**
+     * Вошли по фразе — слова отдаются один раз, для просьбы о ключе служебной группы
+     * (заказчик 2026-09-30, 2а). Хранить их здесь нельзя: состояние экрана — не место для
+     * секрета.
+     */
+    private val onEnteredByPhrase: (List<String>) -> Unit = {},
 ) {
 
     /**
@@ -196,7 +202,10 @@ class AuthStore(
         scope.launch {
             _state.value = when (val step = register.continueWithToken(current.registrationToken, key)) {
                 // Фразу показывать не надо: она у человека есть, он её только что ввёл.
-                is RegistrationStep.Registered -> AuthState.Done(step.userId, step.deviceId)
+                is RegistrationStep.Registered -> {
+                    onEnteredByPhrase(words)
+                    AuthState.Done(step.userId, step.deviceId)
+                }
                 RegistrationStep.AlreadyRegistered -> AuthState.CreatedAlready
                 is RegistrationStep.IdentityMismatch -> current.copyWithTrouble(words().auth.wrongPhrase)
                 RegistrationStep.WrongCode -> current.copyWithTrouble(words().auth.wrongCode)

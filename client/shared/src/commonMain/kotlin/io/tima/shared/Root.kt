@@ -618,6 +618,8 @@ private fun Occurrence(entry: Entry, build: Build, onReturn: (String) -> Unit = 
             scope = scope,
             link = entry.link,
             deviceName = entry.platform.deviceName,
+            // Вход по фразе — слова один раз до просьбы о ключе служебной группы (2а).
+            onEnteredByPhrase = PhraseOnce::hold,
         )
     }
     val state by store.state.collectAsState()
@@ -1438,6 +1440,10 @@ private fun App(
             readState = environment.readState,
             onReadElsewhere = { chatId -> assembled.notices.viewed(chatId, "прочитано на другом устройстве") },
             readsStore = network.readsStore,
+            // Вошли по фразе — попросить ключ служебной группы, подписав словами (2а).
+            keyRequest = io.tima.core.network.GroupKeyRecoveryOverHttp(network.keyRecovery) { gid, words ->
+                io.tima.core.encryption.RecoverySignature.sign(words, gid, session.deviceId)
+            },
         ).also { it.start() }
     }
 

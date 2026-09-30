@@ -37,12 +37,16 @@ class AuthStoreTest {
 
     private val link = FakeStart()
 
+    /** Слова, отданные после входа по фразе (2а). */
+    private val отданоСлов = mutableListOf<List<String>>()
+
     private fun store(scope: kotlinx.coroutines.CoroutineScope) = AuthStore(
         register = RegisterDevice(api, keys, store, platform = "проба"),
         identities = identity,
         scope = scope,
         link = LinkNewDevice(link, keys, store),
         deviceName = "Компьютер",
+        onEnteredByPhrase = { отданоСлов += it },
     )
 
     // ── набранное не теряется ────────────────────────────────────────────────
@@ -274,6 +278,34 @@ class AuthStoreTest {
         assertIs<AuthState.Done>(state)
         assertEquals("d-2", state.deviceId)
         assertContentEquals(PUBLIC, api.sentIdentity)
+    }
+
+    /**
+     * Вошли по фразе — слова отданы один раз, для просьбы о ключе служебной группы
+     * (заказчик 2026-09-30, 2а). Без этого устройству, вошедшему по фразе, ключ служебной
+     * группы не достаётся никогда, а с ним и копия книги.
+     */
+    @Test
+    fun вход_по_фразе_отдаёт_слова_один_раз() = runTest {
+        val store = deliveredUntilInputPhrase(backgroundScope)
+        api.onCreation = { DeviceCreateStep.Created("u-1", "d-2", "a-2") }
+
+        store.changedPhrase(WORDS.joinToString(" "))
+        store.enterByPhrase()
+        store.state.first { it is AuthState.Done }
+
+        assertEquals(listOf(WORDS), отданоСлов)
+    }
+
+    @Test
+    fun неверная_фраза_слов_не_отдаёт() = runTest {
+        val store = deliveredUntilInputPhrase(backgroundScope)
+        identity.accepts = false
+
+        store.changedPhrase("не та фраза совсем")
+        store.enterByPhrase()
+
+        assertEquals(emptyList(), отданоСлов)
     }
 
     /**

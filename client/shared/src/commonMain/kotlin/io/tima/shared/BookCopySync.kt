@@ -68,6 +68,11 @@ class BookCopySync(
     private val onReadElsewhere: (String) -> Unit = {},
     /** Ячейка отметок у сервера. */
     private val readsStore: AccountStoreOverHttp? = null,
+    /**
+     * Просьба о ключе служебной группы, подписанная фразой (заказчик 2026-09-30, 2а).
+     * Нужна устройству, вошедшему по номеру и фразе: ключей ему никто не передал.
+     */
+    private val keyRequest: io.tima.domain.chat.GroupKeyRecovery? = null,
 ) {
     private val memory = SettingsRevisionMemory(environment.settings, scope, BOOK_REVISION)
     private val readsMemory = SettingsRevisionMemory(environment.settings, scope, READS_REVISION)
@@ -146,9 +151,17 @@ class BookCopySync(
             // первые секунды после пробуждения). Без сети или без ключа — повторить с
             // растущей паузой, а не ждать следующего запуска.
             var pause = 5_000L
-            repeat(4) { attempt ->
+            var tries = 4
+            var attempt = 0
+            while (attempt < tries) {
                 val pulled = turn.withLock { sync.pull() }
                 note("забрать при запуске", pulled)
+                // Ключа нет, а вошли только что по фразе — попросить его у своих устройств,
+                // подписав словами (2а). Ответят те, что на связи; ждём дольше обычного.
+                if (pulled == CopyStep.NoKey && askKeyByPhrase()) {
+                    tries = 12
+                    pause = 15_000L
+                }
                 if (pulled !is CopyStep.Offline && pulled != CopyStep.NoKey) {
                     turn.withLock {
                         note("отдать при запуске", sync.push())
@@ -157,8 +170,9 @@ class BookCopySync(
                     }
                     return@launch
                 }
-                if (attempt < 3) delay(pause)
-                pause *= 3
+                attempt++
+                if (attempt < tries) delay(pause)
+                if (tries == 4) pause *= 3
             }
         }
         // Правка книги — только отметка «изменено»: отдаётся в конце сессии (ЖУ9), а не
@@ -189,6 +203,35 @@ class BookCopySync(
                     note("отдать в конце сессии", sync.push())
                 }
                 pushReads("отдать в конце сессии")
+            }
+        }
+    }
+
+    /**
+     * Попросить ключ служебной группы, подписав фразой, — один раз после входа по фразе.
+     *
+     * @return `true` — просьба ушла: ответа стоит подождать.
+     */
+    private suspend fun askKeyByPhrase(): Boolean {
+        val request = keyRequest ?: return false
+        val words = PhraseOnce.take() ?: return false
+        val gid = groupId ?: store.storeGroup()?.also { groupId = it } ?: return false
+        return when (val step = request.request(gid, words)) {
+            is io.tima.domain.chat.RecoveryStep.Requested -> {
+                if (step.helpers == 0) {
+                    Journal.trouble(COPY, "ключ служебной группы попрошен фразой — ответить некому: других устройств на связи нет")
+                } else {
+                    Journal.note(COPY, "ключ служебной группы попрошен фразой", "версий" to step.versions, "устройств" to step.helpers)
+                }
+                step.helpers > 0
+            }
+            io.tima.domain.chat.RecoveryStep.NeedsSecretPhrase -> {
+                Journal.trouble(COPY, "ключ служебной группы: сервер не принял подпись фразой")
+                false
+            }
+            else -> {
+                Journal.trouble(COPY, "ключ служебной группы: просьба не ушла", "исход" to step.toString())
+                false
             }
         }
     }
