@@ -52,4 +52,22 @@ class GroupCallScreenTest {
         val off = screen(3)
         assertTrue(on.difference(off) > 0.0, "пауза на экране не видна")
     }
+
+    @Test
+    fun журнал_стенда_группового_список_и_карточка_участника() {
+        val tiles = stage(3).tiles.mapIndexed { i, t ->
+            if (i == 1) t.copy(bench = "h264 960 · H264 720×960 · апп OMX.Exynos.AVC.Encoder · обрезка 16",
+                incoming = io.tima.core.call.PeerIncoming("720×960", "H264", 340, "OMX.sprd.h264.decoder", 6.1, 2, 1))
+            else t
+        }
+        val line = BenchLine(at = 3, total = 24, preset = "h264 320")
+        val list = capture("групповой-журнал-стенда", 400, 500, dark = false) {
+            GroupBenchJournal(line, tiles, onClose = {})
+        }
+        capture("групповой-полоса-стенда", 400, 80, dark = false) { GroupBenchStrip(line, onJournal = {}) }
+        val empty = capture("групповой-журнал-стенда-пусто", 400, 500, dark = false) {
+            GroupBenchJournal(line, emptyList(), onClose = {})
+        }
+        kotlin.test.assertTrue(list.difference(empty) > 0.01, "участников в журнале стенда не видно")
+    }
 }

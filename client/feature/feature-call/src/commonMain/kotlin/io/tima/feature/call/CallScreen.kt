@@ -136,13 +136,23 @@ fun CallScreen(
     val colors = Tima.colors
     val words = Tima.words.call
     var askHangUp by remember { mutableStateOf(false) }
+    var benchJournal by remember { mutableStateOf(false) }
     Column(
         modifier = modifier.fillMaxSize().background(colors.surface),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // Полоса забега выше ленты событий: номер прогона — это про то, ЧТО сейчас
-        // меряется, и без него лента про камеру и микрофон читается не о том.
-        bench?.let { BenchStrip(it) }
+        // меряется, и без него лента про камеру и микрофон читается не о том. В групповом —
+        // без разворачивания, с «Журналом стенда» по участникам (заказчик 2026-10-01, 5а).
+        if (group != null) {
+            bench?.let { GroupBenchStrip(it, onJournal = { benchJournal = true }) }
+        } else {
+            bench?.let { BenchStrip(it) }
+        }
+        if (group != null && benchJournal) {
+            GroupBenchJournal(bench, group.tiles, onClose = { benchJournal = false }, modifier = Modifier.weight(1f))
+            return@Column
+        }
 
         // Полоса событий — в самом верху, над всем остальным: это то, что случилось, и
         // читается оно первым (ЗВ10).
@@ -398,6 +408,10 @@ data class GroupTile(
     val self: Boolean,
     /** Видео участника не приходит или не раскодируется — словами на его клетке; `null` — всё в порядке. */
     val videoTrouble: String? = null,
+    /** Его набор с его слов — для журнала стенда (5а); `null` — не сказал. */
+    val bench: String? = null,
+    /** Что я от него принимаю — для журнала стенда. */
+    val incoming: io.tima.core.call.PeerIncoming? = null,
 )
 
 /**

@@ -102,6 +102,106 @@ internal fun BenchStrip(line: BenchLine, modifier: Modifier = Modifier) {
  * собеседника. Теперь по два, и **значение показывается целиком, а описание — сколько
  * влезло**: число и есть то, ради чего смотрят, а описание узнаётся по началу.
  */
+/**
+ * Полоса стенда группового звонка (заказчик 2026-10-01, 5а): номер прогона и набор, без
+ * разворачивания — вместо него «Журнал стенда»: все участники, у каждого — его набор и
+ * что я от него принимаю.
+ */
+@Composable
+internal fun GroupBenchStrip(line: BenchLine, onJournal: () -> Unit, modifier: Modifier = Modifier) {
+    if (line.at <= 0 || line.total <= 0) return
+    Row(
+        modifier = modifier.fillMaxWidth().background(Tima.colors.softAccent)
+            .padding(horizontal = TimaSpacing.about3, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+    ) {
+        Caption(
+            text = Tima.words.bench.runAt(line.at, line.total) + " · " + line.preset,
+            fontSize = TimaType.sz5,
+            weight = FontWeight.Bold,
+            lineOne = true,
+            modifier = Modifier.weight(1f),
+        )
+        io.tima.core.ui.Button(label = Tima.words.groupCall.benchJournal, onClick = onJournal, kind = io.tima.core.ui.ButtonKind.Quiet)
+    }
+}
+
+/**
+ * Журнал стенда группового: список участников в виде нашего журнала; нажал — его карточка.
+ * Своя карточка — те же числа, что в окне 0 при развёрнутом стенде.
+ */
+@Composable
+internal fun GroupBenchJournal(line: BenchLine?, tiles: List<GroupTile>, onClose: () -> Unit, modifier: Modifier = Modifier) {
+    val words = Tima.words.groupCall
+    var open by remember { mutableStateOf<String?>(null) }
+    val chosen = tiles.firstOrNull { it.key == open }
+    Column(modifier.fillMaxWidth().background(Tima.colors.surface)) {
+        Row(
+            Modifier.fillMaxWidth().background(Tima.colors.functional).padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about1),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        ) {
+            IconButton(glyph = "‹", onClick = { if (chosen != null) open = null else onClose() }, live = true)
+            Caption(
+                chosen?.name ?: words.benchJournal,
+                modifier = Modifier.weight(1f),
+                fontSize = TimaType.sz4,
+                weight = FontWeight.Bold,
+                lineOne = true,
+            )
+        }
+        if (chosen == null) {
+            for (tile in tiles) {
+                io.tima.core.ui.ListLine(
+                    onClick = { open = tile.key },
+                    left = { io.tima.core.ui.Avatar(letters = tile.letters) },
+                    middle = {
+                        io.tima.core.ui.Name(tile.name)
+                        Tertiary(
+                            if (tile.self) line?.preset ?: words.benchUnknown else tile.bench ?: words.benchUnknown,
+                            lineOne = true,
+                        )
+                    },
+                    right = { Tertiary("›", lineOne = true) },
+                )
+            }
+        } else if (chosen.self) {
+            Column(Modifier.padding(TimaSpacing.about3)) { Numbers(line?.last) }
+        } else {
+            PeerNumbers(chosen)
+        }
+    }
+}
+
+/** Карточка участника: его набор с его слов и что я от него принимаю. */
+@Composable
+private fun PeerNumbers(tile: GroupTile) {
+    val words = Tima.words.groupCall
+    Column(Modifier.fillMaxWidth().padding(TimaSpacing.about3), verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
+        Secondary(words.benchSet)
+        Caption(tile.bench ?: words.benchUnknown, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+        Secondary(words.benchReceive)
+        val n = tile.incoming
+        if (n == null) {
+            Tertiary(words.benchNothing)
+            return
+        }
+        val rows: List<List<Pair<String, String?>>> = listOf(
+            listOf(words.benchFrame to n.frame, words.benchCodec to n.codec),
+            listOf(words.benchKbit to n.kbit?.toString(), Tima.words.bench.codecDown to n.decoder),
+            listOf(words.benchDecodeMs to n.decodeMs?.let { oneDecimal(it) }, words.benchDropped to n.dropped?.toString()),
+            listOf(words.benchFreezes to n.freezes.toString()),
+        )
+        for (pair in rows) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3)) {
+                for ((label, value) in pair) Cell(label, value, Modifier.weight(1f))
+                if (pair.size == 1) Row(Modifier.weight(1f)) {}
+            }
+        }
+    }
+}
+
 @Composable
 private fun Numbers(last: BenchSample?) {
     val words = Tima.words.bench

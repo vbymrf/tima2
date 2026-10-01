@@ -90,6 +90,12 @@ class LiveKitCallEngine(
     /** Пропажа видео у каждого участника группового — для его клетки ([CallPeer.videoLoss]). */
     private val peerLoss = java.util.concurrent.ConcurrentHashMap<String, RemoteVideoLoss>()
 
+    /** Что я принимаю от каждого участника группового — для журнала стенда. */
+    private val peerNumbers = java.util.concurrent.ConcurrentHashMap<String, PeerIncoming>()
+
+    /** Что уже сказано о своей публикации атрибутом [BenchAttribute] — шлём только перемену. */
+    private var benchSaid = ""
+
     private var room: Room? = null
 
     /**
@@ -733,6 +739,8 @@ class LiveKitCallEngine(
         _peers.value = emptyList()
         peerHandles.clear()
         peerLoss.clear()
+        peerNumbers.clear()
+        benchSaid = ""
         _state.value = _state.value.copy(stage = CallStage.Ended)
     }
 
@@ -1112,7 +1120,7 @@ class LiveKitCallEngine(
     }
 
     /** Что знаем о входящем видео одного участника между опросами. */
-    private class PeerIncoming {
+    private class PeerWatch {
         var said = ""
         var got = -1L
         var froze = 0L
@@ -1131,14 +1139,14 @@ class LiveKitCallEngine(
      */
     private fun watchGroupIncoming(room: Room) {
         watchers += scope.launch {
-            val known = HashMap<String, PeerIncoming>()
+            val known = HashMap<String, PeerWatch>()
             while (isActive) {
                 delay(STATS_EVERY_MS)
                 val present = HashSet<String>()
                 for (who in room.remoteParticipants.values) {
                     val identity = who.identity?.value ?: continue
                     present += identity
-                    val me = known.getOrPut(identity) { PeerIncoming() }
+                    val me = known.getOrPut(identity) { PeerWatch() }
                     val kto = userOfIdentity(identity).take(8)
                     val camera = who.videoTrackPublications.firstOrNull { (pub, _) -> pub.source == Track.Source.CAMERA }
                     val published = camera != null && !camera.first.muted
@@ -1197,6 +1205,10 @@ class LiveKitCallEngine(
                     }
                     me.misaligned = inSize
 
+                    peerNumbers[identity] = PeerIncoming(
+                        frame = inSize, codec = codec, kbit = kbit.takeIf { it >= 0 }, decoder = decoder,
+                        decodeMs = decodeMs, dropped = dropped, freezes = freezes,
+                    )
                     val line = inSize + "|" + (kbit / 100) + "|" + decoder + "|" + codec
                     if (line == me.said) continue
                     me.said = line
@@ -1214,6 +1226,7 @@ class LiveKitCallEngine(
                 // Ушедшие — забыть: вернётся, начнём заново.
                 known.keys.retainAll(present)
                 peerLoss.keys.retainAll(present)
+                peerNumbers.keys.retainAll(present)
             }
         }
     }
@@ -1365,6 +1378,8 @@ class LiveKitCallEngine(
                         paused = who.attributes[VideoPause.ATTRIBUTE] == VideoPause.PAUSED,
                         video = handle,
                         videoLoss = peerLoss[identity],
+                        bench = who.attributes[BenchAttribute.ATTRIBUTE]?.takeIf { it.isNotBlank() },
+                        incoming = peerNumbers[identity],
                     )
                 }.sortedBy { it.identity }
                 if (list != _peers.value) _peers.value = list
@@ -1377,6 +1392,25 @@ class LiveKitCallEngine(
                 delay(PEERS_POLL_MS)
             }
         }
+    }
+
+    /**
+     * Сказать участникам группового, чем публикую: набор, кодек, кадр, кодер, обрезка —
+     * для их журнала стенда (заказчик 2026-10-01, 5а). Только перемену: строка без полосы.
+     */
+    private fun announceBench(room: Room, codec: String?, size: String, coder: String) {
+        val preset = publishing
+        val kind = when (hardware(coder)) {
+            true -> "апп"
+            false -> "прог"
+            null -> "—"
+        }
+        val crop = if (preset?.video?.noCrop == true) "без обрезки" else "обрезка 16"
+        val text = listOf(preset?.name ?: "—", (codec ?: "—") + " " + size, kind + " " + coder, crop).joinToString(" · ")
+        if (text == benchSaid) return
+        benchSaid = text
+        runCatching { room.localParticipant.updateAttributes(mapOf(BenchAttribute.ATTRIBUTE to text)) }
+            .onFailure { Journal.trouble(LogCode.CALL, "не сказали участникам свой набор", "причина" to (it.message ?: it::class.simpleName)) }
     }
 
     /** Пауза создателя — в данных комнаты `{"paused":true}` (решение 5). */
@@ -1527,6 +1561,7 @@ class LiveKitCallEngine(
                 }
                 misaligned = size
 
+                if (group != null) announceBench(room, sentMime?.removePrefix("video/"), size, coder)
                 val line = size + "|" + why + "|" + coder + "|" + (kbit / 100)
                 if (line == said) continue
                 said = line

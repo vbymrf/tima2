@@ -1421,6 +1421,8 @@ private fun App(
     LaunchedEffect(groupDesk) {
         callHost.myUserId = { session.userId }
         callHost.onStarted = { groupId, _, invited -> groupDesk.sendInvites(groupId, invited) }
+        // Строки звонка в переписке группы — у себя, в переписку не уходят (8б).
+        callHost.onGroupLine = { groupId, key, text -> runCatching { environment.journal.note(groupId, key, text, msNow()) } }
     }
     val callGroupsTtl by assembled.callGroups.collectAsState()
     // Сроки временных групп — при запуске, чтобы «удалится через» было видно сразу.
@@ -2193,6 +2195,8 @@ private fun App(
                 key = p.identity, name = name, letters = lettersOf(name), video = p.video,
                 microphoneOn = p.microphoneOn, speaking = p.speaking, paused = p.paused, self = false,
                 // Пропажа видео — на клетке того, у кого пропало (заказчик 2026-10-01).
+                bench = p.bench,
+                incoming = p.incoming,
                 videoTrouble = when (val loss = p.videoLoss) {
                     null -> null
                     io.tima.core.call.RemoteVideoLoss.NotArriving -> wordsNow.groupCall.tileVideoNotArriving

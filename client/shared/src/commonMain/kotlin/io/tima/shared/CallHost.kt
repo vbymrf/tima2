@@ -1137,6 +1137,13 @@ class CallHost(
      */
     var onStarted: (String, String, List<String>) -> Unit = { _, _, _ -> }
 
+    /**
+     * Строка звонка в переписку группы: `(groupId, ключ, текст)` — пауза, продолжение,
+     * «вас удалили» (заказчик 2026-10-01, 8б). Пишет только тот, кто был в звонке: другие о
+     * паузе не знают. Ставит сборка — у неё хранилище.
+     */
+    var onGroupLine: (String, String, String) -> Unit = { _, _, _ -> }
+
     /** С чем начинали групповой — «Перезвонить» повторяет (решение 6). */
     private var lastStart: GroupStart? = null
     private var pendingInvites: List<String>? = null
@@ -1170,6 +1177,7 @@ class CallHost(
     private fun paused(on: Boolean) {
         if (on) {
             if (beforePause == null) beforePause = state.microphoneOn to state.cameraOn
+            group?.let { g -> onGroupLine(g.groupId, "call:$callId:pause:" + msNow(), words().groupCall.linePaused) }
             note(words().groupCall.paused, whileTrue = ROOM_PAUSED)
             scope.launch {
                 engine?.setMicrophone(false)
@@ -1180,6 +1188,7 @@ class CallHost(
         forget(ROOM_PAUSED)
         val was = beforePause ?: return
         beforePause = null
+        group?.let { g -> onGroupLine(g.groupId, "call:$callId:resume:" + msNow(), words().groupCall.lineResumed) }
         note(words().groupCall.resumed)
         scope.launch {
             if (was.first && !micForbidden) engine?.setMicrophone(true)
@@ -1242,6 +1251,7 @@ class CallHost(
             }
             GroupControl.Remove -> {
                 note(w.removed)
+                group?.let { g -> onGroupLine(g.groupId, "call:$callId:removed", w.lineRemoved) }
                 watchdog?.cancel()
                 service.off()
                 scope.launch { engine?.disconnect() }

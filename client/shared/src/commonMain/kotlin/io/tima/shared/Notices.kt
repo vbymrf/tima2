@@ -527,7 +527,8 @@ class Notices(
      * `@ник`. Ника нет — **строка без имени вовсе** (решение заказчика 2026-09-24):
      * выдуманное имя хуже отсутствующего.
      */
-    private suspend fun nameOf(userId: String): String? {
+    /** Как назвать человека в строке — тем же правилом, что уведомления. */
+    internal suspend fun nameOf(userId: String): String? {
         val card = cardOf(userId)
         val entry = entryOf(userId)
         if (entry != null) {

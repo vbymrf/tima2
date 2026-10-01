@@ -106,6 +106,8 @@ class Receiver(
     private val onGroupEvent: (String, String) -> Unit = { _, _ -> },
     /** Временные группы звонка и когда удалятся — «удалится через N ч» (решение 11). */
     private val onCallGroups: (Map<String, Long>) -> Unit = {},
+    /** Словарь — ссылкой: строки звонка пишутся словами на момент события. */
+    private val words: () -> io.tima.core.words.Words = { io.tima.core.words.CurrentWords.value },
     /**
      * Штамп отправителя из обёртки события (сервер 0052/0053): кто, счётчик его профиля,
      * группа и цвет. Наружу, а не в базу: это подсказка карточкам людей, а не сообщение.
@@ -246,6 +248,7 @@ class Receiver(
                 onCallControl(decision.callId, decision.action, decision.by)
             is EventStreamProtocol.Decision.GroupCall -> {
                 onGroupEvent(decision.groupId, decision.state)
+                callLine(decision)
                 // Звонок двигает срок временной группы — «удалится через» обновляется; и
                 // позванный узнаёт, что группа временная, — она встаёт в «Чаты».
                 syncGroups()
@@ -693,6 +696,30 @@ class Receiver(
             book.remember(chatId = groupId, kind = ChatKind.Group, title = "Группа", peerId = null)
             syncGroups()
         }
+    }
+
+    /**
+     * Строка звонка в переписке группы — её рисует сам телефон и хранит у себя, в переписку
+     * ничего не уходит (заказчик 2026-10-01, 8б). «Начат» и «завершён» видят все участники
+     * группы: сервер рассылает им это событие. Ключ — по звонку: событие, приехавшее дважды
+     * (живым каналом и догоном), строку не удвоит.
+     */
+    private suspend fun callLine(d: EventStreamProtocol.Decision.GroupCall) {
+        if (d.callId.isEmpty()) return
+        val w = words().groupCall
+        val text = when (d.state) {
+            "live" -> {
+                val who = when {
+                    d.by.isEmpty() -> null
+                    d.by == session.userId -> w.stateSelf
+                    else -> notices?.nameOf(d.by)
+                }
+                w.lineStarted(who ?: words().chat.nameless)
+            }
+            "ended" -> w.lineEnded
+            else -> return
+        }
+        runCatching { environment.journal.note(d.groupId, "call:" + d.callId + ":" + d.state, text, msNow()) }
     }
 
     /** Сверка групп с сервером — и сроки временных групп звонка наружу (решение 11). */

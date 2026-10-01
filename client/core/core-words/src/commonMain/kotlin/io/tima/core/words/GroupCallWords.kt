@@ -85,6 +85,26 @@ interface GroupCallWords {
     val forbiddenVideo: String
     val removed: String
 
+    // Журнал стенда группового звонка (заказчик 2026-10-01, 5а).
+    val benchJournal: String
+    val benchSet: String
+    val benchReceive: String
+    val benchFrame: String
+    val benchCodec: String
+    val benchKbit: String
+    val benchDecodeMs: String
+    val benchDropped: String
+    val benchFreezes: String
+    val benchUnknown: String
+    val benchNothing: String
+
+    // Строки звонка в переписке группы — рисует телефон сам (заказчик 2026-10-01, 8б).
+    fun lineStarted(who: String): String
+    val lineEnded: String
+    val linePaused: String
+    val lineResumed: String
+    val lineRemoved: String
+
     // Клетка участника: его видео пропало (заказчик 2026-10-01).
     val tileVideoNotArriving: String
     fun tileVideoNotDecoding(codec: String): String
@@ -175,6 +195,22 @@ object RussianGroupCall : GroupCallWords {
     override val forbiddenMic = "микрофон запрещён"
     override val forbiddenVideo = "видео запрещено"
     override val removed = "Создатель удалил вас из звонка"
+    override val benchJournal = "Журнал стенда"
+    override val benchSet = "Набор"
+    override val benchReceive = "Что принимаю"
+    override val benchFrame = "Кадр"
+    override val benchCodec = "Кодек"
+    override val benchKbit = "кбит/с"
+    override val benchDecodeMs = "Раскод мс"
+    override val benchDropped = "Выброшено"
+    override val benchFreezes = "Замирания"
+    override val benchUnknown = "не сказал — версия старее"
+    override val benchNothing = "видео от него не приходит"
+    override fun lineStarted(who: String) = "Звонок начат: $who"
+    override val lineEnded = "Звонок завершён"
+    override val linePaused = "Пауза звонка"
+    override val lineResumed = "Звонок продолжается"
+    override val lineRemoved = "Вас удалили из звонка"
     override val tileVideoNotArriving = "Видео не приходит"
     override fun tileVideoNotDecoding(codec: String) = "Видео $codec не раскодируется"
 
@@ -263,6 +299,22 @@ object EnglishGroupCall : GroupCallWords {
     override val forbiddenMic = "microphone forbidden"
     override val forbiddenVideo = "video forbidden"
     override val removed = "The creator removed you from the call"
+    override val benchJournal = "Test log"
+    override val benchSet = "Set"
+    override val benchReceive = "What I receive"
+    override val benchFrame = "Frame"
+    override val benchCodec = "Codec"
+    override val benchKbit = "kbit/s"
+    override val benchDecodeMs = "Decode ms"
+    override val benchDropped = "Dropped"
+    override val benchFreezes = "Freezes"
+    override val benchUnknown = "did not say — older version"
+    override val benchNothing = "no video arriving from them"
+    override fun lineStarted(who: String) = "Call started: $who"
+    override val lineEnded = "Call ended"
+    override val linePaused = "Call paused"
+    override val lineResumed = "Call continues"
+    override val lineRemoved = "You were removed from the call"
     override val tileVideoNotArriving = "Video is not arriving"
     override fun tileVideoNotDecoding(codec: String) = "Cannot decode $codec video"
 
@@ -351,6 +403,22 @@ object SpanishGroupCall : GroupCallWords {
     override val forbiddenMic = "micrófono prohibido"
     override val forbiddenVideo = "vídeo prohibido"
     override val removed = "El creador le quitó de la llamada"
+    override val benchJournal = "Registro de pruebas"
+    override val benchSet = "Conjunto"
+    override val benchReceive = "Lo que recibo"
+    override val benchFrame = "Cuadro"
+    override val benchCodec = "Códec"
+    override val benchKbit = "kbit/s"
+    override val benchDecodeMs = "Decodif. ms"
+    override val benchDropped = "Descartados"
+    override val benchFreezes = "Congelaciones"
+    override val benchUnknown = "no lo dijo — versión antigua"
+    override val benchNothing = "no llega vídeo suyo"
+    override fun lineStarted(who: String) = "Llamada iniciada: $who"
+    override val lineEnded = "Llamada terminada"
+    override val linePaused = "Llamada en pausa"
+    override val lineResumed = "La llamada continúa"
+    override val lineRemoved = "Le quitaron de la llamada"
     override val tileVideoNotArriving = "El vídeo no llega"
     override fun tileVideoNotDecoding(codec: String) = "No se puede decodificar el vídeo $codec"
 

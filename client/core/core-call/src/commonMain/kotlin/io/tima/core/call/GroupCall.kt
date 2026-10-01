@@ -67,7 +67,37 @@ data class CallPeer(
      * каждого участника: в групповом общая строка окна говорила бы про случайного.
      */
     val videoLoss: RemoteVideoLoss? = null,
+    /**
+     * Чем он публикует — его слово атрибутом [BenchAttribute.ATTRIBUTE]: набор, кодек, кадр,
+     * кодер, обрезка. `null` — не сказал (старая версия). Для журнала стенда (заказчик
+     * 2026-10-01, 5а).
+     */
+    val bench: String? = null,
+    /** Что я принимаю от него — числа моей стороны. `null` — видео от него не приходит. */
+    val incoming: PeerIncoming? = null,
 )
+
+/**
+ * Входящее видео одного участника глазами получателя: кадр, кодек, полоса, раскодировщик,
+ * время на кадр, выброшенные кадры и замирания за звонок.
+ */
+data class PeerIncoming(
+    val frame: String,
+    val codec: String?,
+    val kbit: Long?,
+    val decoder: String,
+    val decodeMs: Double?,
+    val dropped: Long?,
+    val freezes: Long,
+)
+
+/**
+ * Чем участник публикует — атрибутом, как «что раскодирую» ([PeerCodecs]). Обновляется
+ * при перемене, а не по часам: полоса и кадры в секунду в него не входят.
+ */
+object BenchAttribute {
+    const val ATTRIBUTE = "tima.bench"
+}
 
 /** Кто такой участник по `identity` LiveKit: `user:device`. */
 fun userOfIdentity(identity: String): String = identity.substringBefore(':')

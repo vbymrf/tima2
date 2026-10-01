@@ -253,7 +253,7 @@ class EventStreamProtocol {
         data class CallControl(val callId: String, val action: String, val by: String, val eventId: Long?) : Decision
 
         /** В группе начался или кончился звонок — полоса «Идёт звонок» над перепиской. */
-        data class GroupCall(val groupId: String, val callId: String, val state: String, val eventId: Long?) : Decision
+        data class GroupCall(val groupId: String, val callId: String, val state: String, val eventId: Long?, val by: String = "") : Decision
 
         /** Временная группа звонка удалена: срок вышел (решение 1). */
         data class GroupDeleted(val groupId: String, val eventId: Long?) : Decision
@@ -579,7 +579,7 @@ class EventStreamProtocol {
                 if (groupId == null) {
                     Decision.Skip("group.call без group_id", eventId)
                 } else {
-                    Decision.GroupCall(groupId, json.string("call_id") ?: "", json.string("state") ?: "", eventId)
+                    Decision.GroupCall(groupId, json.string("call_id") ?: "", json.string("state") ?: "", eventId, json.string("by") ?: "")
                 }
             }
 

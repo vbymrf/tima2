@@ -225,6 +225,24 @@ class GroupCallTest {
     }
 
     @Test
+    fun пауза_и_удаление_пишут_строку_в_переписку_группы() = runTest {
+        // 8б: строки рисует сам телефон — пишет только бывший в звонке.
+        val engine = GroupEngine()
+        val host = host(GroupCalls(creator = создатель), engine)
+        val lines = mutableListOf<Pair<String, String>>()
+        host.onGroupLine = { g, _, text -> lines += g to text }
+        host.joinGroup("g1", "группа", "Планёрка", video = false)
+        engine.say(CallState(stage = CallStage.Connected, microphoneOn = true))
+        engine.say(CallState(stage = CallStage.Connected, microphoneOn = true, roomPaused = true))
+        engine.say(CallState(stage = CallStage.Connected, microphoneOn = false, roomPaused = false))
+        host.controlled("g1", GroupControl.Remove.wire, создатель)
+        assertEquals(
+            listOf("группа" to "Пауза звонка", "группа" to "Звонок продолжается", "группа" to "Вас удалили из звонка"),
+            lines,
+        )
+    }
+
+    @Test
     fun уход_одного_участника_группового_не_кладёт_трубку() = runTest {
         val host = host(GroupCalls(creator = создатель))
         host.joinGroup("g1", "группа", "Планёрка", video = false)
