@@ -915,7 +915,7 @@ object EnglishWords : Words {
         override val listEmpty = "Nothing here"
         override val ledgerTitle = "Contact register"
         override val ledgerAbout = "section, list and own ringtone — for several at once"
-        override val ledgerAll = "All"
+        override val ledgerAll = "All lists"
         override val ledgerOwnSound = "With own ringtone"
         override val ledgerAllSections = "All sections"
         override val ledgerSelectAll = "Select all"

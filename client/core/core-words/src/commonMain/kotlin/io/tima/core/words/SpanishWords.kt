@@ -915,7 +915,7 @@ object SpanishWords : Words {
         override val listEmpty = "Aquí no hay nadie"
         override val ledgerTitle = "Registro de contactos"
         override val ledgerAbout = "sección, lista y tono propio — para varios a la vez"
-        override val ledgerAll = "Todos"
+        override val ledgerAll = "Todas las listas"
         override val ledgerOwnSound = "Con tono propio"
         override val ledgerAllSections = "Todas las secciones"
         override val ledgerSelectAll = "Seleccionar todo"

@@ -2846,7 +2846,7 @@ object RussianWords : Words {
         override val listEmpty = "Здесь пусто"
         override val ledgerTitle = "Журнал контактов"
         override val ledgerAbout = "раздел, список и своя мелодия — для нескольких сразу"
-        override val ledgerAll = "Все"
+        override val ledgerAll = "Все списки"
         override val ledgerOwnSound = "Со своей мелодией"
         override val ledgerAllSections = "Все разделы"
         override val ledgerSelectAll = "Выделить все"

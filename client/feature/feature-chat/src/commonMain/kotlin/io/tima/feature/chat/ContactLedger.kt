@@ -132,7 +132,11 @@ fun ContactLedgerPage(
         // первого человека. Теперь разделы — та же полоса, что во вкладке «Контакты», и в
         // том же исполнении («Меню» — значками, «Имена» — словами); списки — такой же
         // полосой словами. Обе тянутся пальцем, не переносятся.
-        val sectionTabs = sectionTabs(sections, null, words)
+        // Первая вкладка — «Все разделы», а не «Все»: под ней полоса списков со своей «Все
+        // списки», и два одинаковых «Все» подряд путались.
+        val sectionTabs = sectionTabs(sections, null, words).let { t ->
+            listOf(t.first().copy(name = words.ledgerAllSections)) + t.drop(1)
+        }
         SectionsRow(
             tabs = sectionTabs,
             chosen = when (section) {
