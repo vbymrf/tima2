@@ -180,7 +180,7 @@ func startRoomCall(deps callsDeps) http.HandlerFunc {
 			}
 			go closeRoomUnanswered(deps, callID)
 		}
-		notifyGroupCall(deps, r.Context(), members, groupID, callID, "live")
+		notifyGroupCall(deps, r.Context(), members, groupID, callID, "live", id.UserID)
 		call, err := deps.store.GetCall(r.Context(), callID)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -601,7 +601,7 @@ func closeRoomCall(deps callsDeps, ctx context.Context, call store.Call, enderID
 			_ = deps.store.BumpCallGroupTTL(ctx, call.GroupID, deps.groupRules().TTL)
 		}
 		if members, err := deps.store.ListGroupMembers(ctx, call.GroupID); err == nil {
-			notifyGroupCall(deps, ctx, members, call.GroupID, call.CallID, "ended")
+			notifyGroupCall(deps, ctx, members, call.GroupID, call.CallID, "ended", enderID)
 		}
 	}
 }
@@ -654,13 +654,15 @@ func missedIfNotJoined(deps callsDeps, callID, userID string) {
 
 // notifyGroupCall — участникам группы: звонок в ней начался или кончился. Полоса «Идёт
 // звонок» над перепиской обновляется по этому событию, не дожидаясь своего опроса.
-func notifyGroupCall(deps callsDeps, ctx context.Context, members []store.Member, groupID, callID, state string) {
+// `by` — кто начал или завершил (пусто — никто: опустела комната или вышел срок). По нему
+// телефоны пишут строку в переписку группы: «Звонок начат: Анна» (заказчик 2026-10-01, 8б).
+func notifyGroupCall(deps callsDeps, ctx context.Context, members []store.Member, groupID, callID, state, by string) {
 	ids := make([]string, 0, len(members))
 	for _, m := range members {
 		ids = append(ids, m.UserID)
 	}
 	deps.notifier.Users(ctx, ids, "group.call", map[string]any{
-		"group_id": groupID, "call_id": callID, "state": state,
+		"group_id": groupID, "call_id": callID, "state": state, "by": by,
 	})
 }
 
