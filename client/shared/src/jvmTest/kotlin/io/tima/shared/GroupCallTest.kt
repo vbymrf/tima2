@@ -201,6 +201,30 @@ class GroupCallTest {
     }
 
     @Test
+    fun пропущенный_пришедший_в_идущий_групповой_трубку_не_кладёт() = runTest {
+        // 2026-10-01: сервер не знал о вошедших и по сроку вызова слал им «пропущенный».
+        val engine = GroupEngine()
+        val calls = GroupCalls(creator = создатель)
+        val host = host(calls, engine)
+        host.joinGroup("g1", "группа", "Планёрка", video = false)
+        engine.say(CallState(stage = CallStage.Connected))
+        host.ended("missed")
+        host.ended("declined")
+        assertEquals(CallStage.Connected, host.state.stage, "идущий групповой положен словом о вызове")
+        assertTrue(calls.ended.isEmpty())
+        host.ended("ended")
+        assertEquals(CallStage.Ended, host.state.stage, "настоящий конец кладёт")
+    }
+
+    @Test
+    fun пропущенный_у_ещё_звонящего_группового_вызова_гасит_его() = runTest {
+        val host = host(GroupCalls(creator = создатель))
+        host.ringGroup("g1", "группа", "Планёрка", создатель, video = false)
+        host.ended("missed")
+        assertEquals(CallStage.Ended, host.state.stage)
+    }
+
+    @Test
     fun уход_одного_участника_группового_не_кладёт_трубку() = runTest {
         val host = host(GroupCalls(creator = создатель))
         host.joinGroup("g1", "группа", "Планёрка", video = false)
