@@ -332,6 +332,10 @@ interface SettingsListWords {
     val quietOnAbout: String
     val quietFrom: String
     val quietTo: String
+    val quietCalls: String
+    val quietCallsAbout: String
+    val quietMessages: String
+    val quietMessagesAbout: String
     val soundRingAbout: String
     val soundMessageAbout: String
     val soundDefaultAbout: String
@@ -2506,14 +2510,18 @@ object RussianWords : Words {
         override val soundFromSystem = "Из стандартных"
         override val soundFromFile = "Загрузить файл"
         override val noticesSeen = "Что видно в уведомлении"
-        override val quietTitle = "Не показывать по часам"
-        override val quietAbout = "Сообщения и пропущенные — без строки и звука; входящий звонок звонит"
+        override val quietTitle = "Не беспокоить, в часы:"
+        override val quietAbout = "Что глушить — галочками: звонки, сообщения"
         override val quietOff = "Выключено"
         override val quietOffAbout = "Уведомления в любое время"
         override val quietOn = "Включено"
         override val quietOnAbout = "В эти часы — без строки в шторке и без звука"
         override val quietFrom = "С"
         override val quietTo = "До"
+        override val quietCalls = "Звонки"
+        override val quietCallsAbout = "Входящий — строкой без мелодии и полного экрана; пропущенные — без строки"
+        override val quietMessages = "Сообщения"
+        override val quietMessagesAbout = "Личные и групповые — без строки в шторке и без звука"
         override val soundRingAbout = "Входящий звонок"
         override val soundMessageAbout = "Новое сообщение и пропущенный звонок"
         override val soundDefaultAbout = "Звук, выбранный в настройках телефона"

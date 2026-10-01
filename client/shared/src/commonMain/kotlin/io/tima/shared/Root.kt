@@ -3491,11 +3491,13 @@ private fun Settings(
                 quiet = run {
                     val saved by deviceSettings.all().collectAsState(emptyMap())
                     val q = QuietHours.read(saved)
-                    io.tima.feature.shell.QuietRow(q.on, q.from, q.to) { on, from, to ->
+                    io.tima.feature.shell.QuietRow(q.on, q.from, q.to, q.calls, q.messages) { r ->
                         scope.launch {
-                            deviceSettings.put(QuietHours.KEY_ON, if (on) "1" else "0")
-                            deviceSettings.put(QuietHours.KEY_FROM, from.toString())
-                            deviceSettings.put(QuietHours.KEY_TO, to.toString())
+                            deviceSettings.put(QuietHours.KEY_ON, if (r.on) "1" else "0")
+                            deviceSettings.put(QuietHours.KEY_FROM, r.from.toString())
+                            deviceSettings.put(QuietHours.KEY_TO, r.to.toString())
+                            deviceSettings.put(QuietHours.KEY_CALLS, if (r.calls) "1" else "0")
+                            deviceSettings.put(QuietHours.KEY_MESSAGES, if (r.messages) "1" else "0")
                         }
                     }
                 },

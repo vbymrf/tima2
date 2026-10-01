@@ -106,10 +106,10 @@ class Notices(
     /** Где снимать уведомления, когда зовут с экрана: база — не на потоке экрана. */
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     /**
-     * Тихие часы (заказчик 2026-10-01): сейчас — не показывать строку и не звучать. Числа и
-     * значок копятся как обычно; входящий звонок сюда не попадает — он звонит всегда.
+     * «Не беспокоить, в часы:» (заказчик 2026-10-01): что глушить сейчас — галочками
+     * «Звонки» и «Сообщения». Числа и значок копятся как обычно.
      */
-    private val quiet: suspend () -> Boolean = { false },
+    private val quiet: suspend () -> QuietHours = { QuietHours() },
 ) {
 
     /**
@@ -218,6 +218,21 @@ class Notices(
             )
         } else {
             Journal.note(LogCode.CALL, "уведомление о входящем поставлено", "звонок" to callId.take(8))
+        }
+        // «Не беспокоить» со звонками: строка в шторке, без мелодии и полного экрана. Ключ —
+        // тот же, что у звонящей строки: конец звонка снимает её так же.
+        if (quiet().callsMuted()) {
+            Journal.note(LogCode.NOTICE, "не беспокоить — входящий без мелодии", "звонок" to callId.take(8))
+            notifier.show(
+                Notice(
+                    key = CALL_KEY_PREFIX + callId,
+                    kind = NoticeKind.Message,
+                    who = nameOf(fromUserId),
+                    what = words().notices.incomingCall,
+                    alert = false,
+                ),
+            )
+            return
         }
         notifier.show(
             Notice(
@@ -457,7 +472,8 @@ class Notices(
             }
             // Тихие часы: строку не показываем и не звучим; накопленное покажет первое
             // событие после них. Значок ниже обновляется как обычно.
-            if (quiet()) {
+            val q = quiet()
+            if (if (tab == NoticeTab.Calls) q.callsMuted() else q.messagesMuted()) {
                 if (alert && cause != null) journal.done(cause.what, cause.ref, "тихие часы — без строки и звука")
                 Journal.note(LogCode.NOTICE, "тихие часы — строка не показана", "вкладка" to tab.wire, "число" to n)
                 updateBadge(counts.total)

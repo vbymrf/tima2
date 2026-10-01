@@ -451,16 +451,20 @@ private fun SoundChoice(label: String, about: String, on: Boolean, onClick: () -
 }
 
 /**
- * «Не показывать уведомления с … до …» (заказчик 2026-10-01).
+ * «Не беспокоить, в часы:» (заказчик 2026-10-01).
  *
  * @param from начало, минуты от полуночи; [to] — конец.
- * @param onChange включено, начало, конец — всё сразу: так их не разорвать.
+ * @param calls глушить звонки: входящий без мелодии, пропущенные без строки.
+ * @param messages глушить сообщения — личные и групповые.
+ * @param onChange новое значение целиком: часы и галочки сохраняются вместе.
  */
 data class QuietRow(
     val on: Boolean,
     val from: Int,
     val to: Int,
-    val onChange: (on: Boolean, from: Int, to: Int) -> Unit,
+    val calls: Boolean = true,
+    val messages: Boolean = true,
+    val onChange: (QuietRow) -> Unit,
 )
 
 /** «12:30» из минут от полуночи. */
@@ -493,13 +497,30 @@ private fun QuietSetting(row: QuietRow) {
     )
     if (!open) return
     Column(Modifier.fillMaxWidth().background(Tima.colors.softAccent)) {
-        SoundChoice(words.quietOff, words.quietOffAbout, !row.on) { row.onChange(false, row.from, row.to) }
-        SoundChoice(words.quietOn, words.quietOnAbout, row.on) { row.onChange(true, row.from, row.to) }
+        SoundChoice(words.quietOff, words.quietOffAbout, !row.on) { row.onChange(row.copy(on = false)) }
+        SoundChoice(words.quietOn, words.quietOnAbout, row.on) { row.onChange(row.copy(on = true)) }
         if (row.on) {
-            QuietTime(words.quietFrom, row.from) { row.onChange(true, it, row.to) }
-            QuietTime(words.quietTo, row.to) { row.onChange(true, row.from, it) }
+            QuietTime(words.quietFrom, row.from) { row.onChange(row.copy(from = it)) }
+            QuietTime(words.quietTo, row.to) { row.onChange(row.copy(to = it)) }
+            // Что глушить — галочками (заказчик 2026-10-01): квадрат — «сколько угодно».
+            QuietCheck(words.quietCalls, words.quietCallsAbout, row.calls) { row.onChange(row.copy(calls = it)) }
+            QuietCheck(words.quietMessages, words.quietMessagesAbout, row.messages) { row.onChange(row.copy(messages = it)) }
         }
     }
+}
+
+/** Галочка «Звонки» / «Сообщения» тихих часов. */
+@Composable
+private fun QuietCheck(label: String, about: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    ListLine(
+        modifier = Modifier.padding(start = TimaSpacing.about5),
+        onClick = { onChange(!on) },
+        left = { io.tima.core.ui.CheckMark(on) },
+        middle = {
+            Caption(label, fontSize = TimaType.sz4, weight = if (on) FontWeight.Bold else FontWeight.Normal)
+            Tertiary(about)
+        },
+    )
 }
 
 /** «С 23:00» и кнопки − / + по 30 минут, через полночь по кругу. */
