@@ -543,6 +543,8 @@ fun BookViewSheet(
     /** Своя мелодия человека — имя; `null` — своей нет. */
     soundTitleOf: (BookEntry) -> String? = { null },
     onOpenPerson: ((BookEntry) -> Unit)? = null,
+    /** Аватар человека для журнала контактов — тот же, что во вкладке «Контакты». */
+    faceOf: (BookEntry) -> androidx.compose.ui.graphics.ImageBitmap? = { null },
     /** Выбрать мелодию выделенным — панель рисует тот, у кого выбор звука. */
     onSound: (List<BookEntry>) -> Unit = {},
 ) {
@@ -616,6 +618,8 @@ fun BookViewSheet(
                     onList = { ids, to -> ids.forEach { onPickList(it, to) } },
                     onSection = onPickSection,
                     onSound = onSound,
+                    view = view,
+                    faceOf = faceOf,
                 )
                 open != null -> {
                     // Правится — показываем всю книгу: за добавлением сюда и приходят.

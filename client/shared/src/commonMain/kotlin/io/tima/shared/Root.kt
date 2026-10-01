@@ -1683,6 +1683,7 @@ private fun App(
                 }
             },
             onSound = { chosen -> ledgerSound = chosen },
+            faceOf = { entry -> entry.userId?.let { people.wantFace(it); peopleFaces[it] } },
         )
         ledgerSound?.let { targets ->
             ContactSoundSheet(
@@ -4598,6 +4599,12 @@ internal fun soundRow(
         onSilent = { save(SoundChoice.Silent) },
         onDefault = { save(SoundChoice.Default) },
         trouble = trouble,
+        picked = when (choice) {
+            SoundChoice.Default -> io.tima.feature.shell.SoundPicked.Default
+            SoundChoice.Silent -> io.tima.feature.shell.SoundPicked.Silent
+            is SoundChoice.System -> io.tima.feature.shell.SoundPicked.System
+            is SoundChoice.File -> io.tima.feature.shell.SoundPicked.File
+        },
     )
 }
 

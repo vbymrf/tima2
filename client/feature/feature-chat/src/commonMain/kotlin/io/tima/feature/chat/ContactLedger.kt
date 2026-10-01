@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import io.tima.core.ui.Avatar
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.CheckMark
@@ -35,6 +36,8 @@ import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.BookList
 import io.tima.domain.chat.ChatPerson
 import io.tima.domain.chat.Section
+import io.tima.domain.chat.letter
+import io.tima.domain.chat.line
 
 /**
  * Чем отбирать в журнале контактов — первая строка фильтров (ВЗ8).
@@ -102,6 +105,13 @@ fun ContactLedgerPage(
     onSection: (List<String>, String) -> Unit = { _, _ -> },
     /** Выбрать мелодию выделенным (панель выбора рисует тот, у кого выбор звука). */
     onSound: (List<BookEntry>) -> Unit = {},
+    /**
+     * «Вид» книги: разделы значками («Меню») или словами («Имена») и чем называть человека —
+     * журнал показывает их так же, как вкладка «Контакты» (заказчик 2026-10-01).
+     */
+    view: BookView = BookView(),
+    /** Аватар человека — тот же, что во вкладке «Контакты»; `null` — буква. */
+    faceOf: (BookEntry) -> androidx.compose.ui.graphics.ImageBitmap? = { null },
 ) {
     val words = Tima.words.book
     var list by remember { mutableStateOf(LedgerList.All) }
@@ -116,63 +126,67 @@ fun ContactLedgerPage(
     }
 
     Column(modifier.fillMaxWidth()) {
-        // ── ДВА ФИЛЬТРА, ДВЕ СТРОКИ ──────────────────────────────────────────
+        // ── ЕДИНЫЙ СТИЛЬ С «КОНТАКТАМИ» (заказчик 2026-10-01) ──────────────────
+        //
+        // Было: шесть списков и все разделы — крупными кнопками в два ряда, полэкрана до
+        // первого человека. Теперь разделы — та же полоса, что во вкладке «Контакты», и в
+        // том же исполнении («Меню» — значками, «Имена» — словами); списки — такой же
+        // полосой словами. Обе тянутся пальцем, не переносятся.
+        val sectionTabs = sectionTabs(sections, null, words)
+        SectionsRow(
+            tabs = sectionTabs,
+            chosen = when (section) {
+                null -> ""
+                "" -> COMMON_SECTION
+                else -> section!!
+            },
+            icons = view.icons,
+            onPick = { id ->
+                section = when (id) {
+                    "" -> null
+                    COMMON_SECTION -> ""
+                    else -> id
+                }
+            },
+        )
+        SectionsRow(
+            tabs = LedgerList.entries.map { l ->
+                SectionTab(
+                    l.name,
+                    when (l) {
+                        LedgerList.All -> words.ledgerAll
+                        LedgerList.Book -> words.listBook
+                        LedgerList.Tima -> words.listTima
+                        LedgerList.Removed -> words.listRemoved
+                        LedgerList.Blocked -> words.listBlocked
+                        LedgerList.OwnSound -> words.ledgerOwnSound
+                    },
+                    0,
+                )
+            },
+            chosen = list.name,
+            icons = false,
+            onPick = { id -> list = LedgerList.valueOf(id) },
+        )
         Column(
             Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
-            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
         ) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-                verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-            ) {
-                for (l in LedgerList.entries) {
-                    Button(
-                        label = when (l) {
-                            LedgerList.All -> words.ledgerAll
-                            LedgerList.Book -> words.listBook
-                            LedgerList.Tima -> words.listTima
-                            LedgerList.Removed -> words.listRemoved
-                            LedgerList.Blocked -> words.listBlocked
-                            LedgerList.OwnSound -> words.ledgerOwnSound
-                        },
-                        kind = if (list == l) ButtonKind.Action else ButtonKind.Quiet,
-                        onClick = { list = l },
-                    )
-                }
-            }
-            // Разделы — те же, что во вкладке «Контакты»: там ими и группируют.
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-                verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-            ) {
-                Button(
-                    label = words.ledgerAllSections,
-                    kind = if (section == null) ButtonKind.Action else ButtonKind.Quiet,
-                    onClick = { section = null },
-                )
-                Button(
-                    label = words.commonSection,
-                    kind = if (section == "") ButtonKind.Action else ButtonKind.Quiet,
-                    onClick = { section = "" },
-                )
-                for (s in sections) {
-                    Button(
-                        label = s.name,
-                        kind = if (section == s.id) ButtonKind.Action else ButtonKind.Quiet,
-                        onClick = { section = s.id },
-                    )
-                }
-            }
             Field(value = query, onChange = { query = it }, hint = words.ledgerSearch)
-            Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-                Button(
-                    label = words.ledgerSelectAll,
-                    kind = ButtonKind.Quiet,
+            // «Выделить все» и «Сбросить» — тихими надписями, а не кнопками: это служебное,
+            // и крупные кнопки спорили со списком за внимание.
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Tertiary(words.ledgerSelected(chosen.size), lineOne = true)
+                Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3)) {
                     // «Все» — видимые под фильтром: выделить скрытых значило бы действовать
                     // над теми, кого человек не видит.
-                    onClick = { selected = selected + rows.map { it.id } },
-                )
-                Button(label = words.ledgerSelectNone, kind = ButtonKind.Quiet, onClick = { selected = emptySet() })
+                    LedgerLink(words.ledgerSelectAll) { selected = selected + rows.map { it.id } }
+                    LedgerLink(words.ledgerSelectNone) { selected = emptySet() }
+                }
             }
         }
 
@@ -189,9 +203,11 @@ fun ContactLedgerPage(
                 val on = entry.id in selected
                 ListLine(
                     onClick = onOpenPerson?.let { open -> { open(entry) } },
+                    // Аватар и имя — как во вкладке «Контакты»: человек узнаёт «своего» Сашу.
+                    left = { Avatar(letters = person.letter(), image = faceOf(entry)) },
                     middle = {
                         Column {
-                            Name(person.name ?: entry.name ?: entry.phone)
+                            Name(person.line(view.look(), PERSON_FIRST_LINE) ?: entry.name ?: entry.phone)
                             // Раздел · список · ♪ мелодия — мелодия, только если своя.
                             val listName = when {
                                 BookRoster.Blocked.holds(entry) -> words.listBlocked
@@ -238,7 +254,6 @@ fun ContactLedgerPage(
                     }
                 }
             }
-            Tertiary(words.ledgerSelected(chosen.size), lineOne = true)
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -262,4 +277,17 @@ private fun LedgerAction(glyph: String, label: String, active: Boolean, onClick:
         IconButton(glyph = glyph, onClick = { if (active) onClick() }, live = active)
         Tertiary(label, lineOne = true)
     }
+}
+
+/** Служебное действие журнала тихой надписью цветом акцента. */
+@Composable
+private fun LedgerLink(label: String, onClick: () -> Unit) {
+    io.tima.core.ui.Caption(
+        label,
+        modifier = Modifier.clickable(onClick = onClick).padding(vertical = TimaSpacing.about1),
+        fontSize = io.tima.core.ui.TimaType.sz5,
+        weight = androidx.compose.ui.text.font.FontWeight.Bold,
+        color = Tima.colors.navigation,
+        lineOne = true,
+    )
 }

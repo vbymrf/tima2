@@ -28,6 +28,15 @@ import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.words
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Row
+import io.tima.core.ui.ProvidePlace
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.RadioMark
 
 /**
  * Настройки уведомлений — ПЛАН-УВЕДОМЛЕНИЙ.md, У1 и У14.
@@ -60,28 +69,43 @@ fun NotificationsScreen(
     val colors = Tima.colors
     val words = Tima.words.settings2
 
-    Column(
-        modifier.fillMaxSize().background(colors.surface).verticalScroll(rememberScrollState())
-            .padding(bottom = TimaSpacing.about5),
-        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-    ) {
-        SectionTitle(words.noticesShow)
-        Column(Modifier.padding(horizontal = TimaSpacing.about4)) {
-            Secondary(words.noticesWhat)
+    // ── ВИД — КАК У СПИСКА НАСТРОЕК (заказчик 2026-10-01) ──────────────────────
+    //
+    // Было: подписи мелкие, а под каждой настройкой — четыре крупные кнопки; выбранное
+    // висело строкой без подписи, что это; разделителей не было. Теперь каждая настройка —
+    // строка, как в самом списке настроек: значок, название, под ним — что это, справа —
+    // что выбрано. Нажатие раскрывает выбор: варианты строками с точкой «одно из» и
+    // пояснением. Те же размеры, что у списка настроек (группа «меню», ПЛАН-ШРИФТОВ Ш3).
+    ProvidePlace(TextPlace.MENU) {
+        Column(
+            modifier.fillMaxSize().background(colors.surface).verticalScroll(rememberScrollState())
+                .padding(bottom = TimaSpacing.about5),
+        ) {
+            SectionTitle(words.noticesShow)
+            // Что видно в уведомлении — сведение, а не выбор: строка без стрелки.
             // Сказано до нажатия, а не после: текст сообщения не показывается никогда, и
             // человек вправе знать это, не выясняя опытом.
-            Tertiary(words.noticesNoText)
-        }
+            ListLine(
+                left = { Name("👁") },
+                middle = {
+                    Caption(words.noticesSeen, fontSize = TimaType.sz4, weight = FontWeight.Bold, maxLines = 2)
+                    Secondary(words.noticesWhat)
+                    Tertiary(words.noticesNoText)
+                },
+            )
 
-        // ── ЗВУКИ (ВЗ4) ─────────────────────────────────────────────────────
-        //
-        // Общие мелодия звонка и звук сообщения. Своя мелодия у контакта — в журнале
-        // контактов (ВЗ8), и она важнее общей.
-        if (ring != null || message != null) {
-            SectionTitle(words.soundsTitle)
-            ring?.let { SoundSetting(words.soundRing, it) }
-            message?.let { SoundSetting(words.soundMessage, it) }
-            Column(Modifier.padding(horizontal = TimaSpacing.about4)) { Tertiary(words.soundsNotSynced) }
+            // ── ЗВУКИ (ВЗ4) ─────────────────────────────────────────────────
+            //
+            // Общие мелодия звонка и звук сообщения. Своя мелодия у контакта — в журнале
+            // контактов (ВЗ8), и она важнее общей.
+            if (ring != null || message != null) {
+                SectionTitle(words.soundsTitle)
+                ring?.let { SoundSetting("📞", words.soundRing, words.soundRingAbout, it) }
+                message?.let { SoundSetting("💬", words.soundMessage, words.soundMessageAbout, it) }
+                Column(Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)) {
+                    Tertiary(words.soundsNotSynced)
+                }
+            }
         }
     }
 }
@@ -336,6 +360,7 @@ enum class NotifyAccess { Given, Ask, Settings }
  * Одна настройка звука: что выбрано сейчас и четыре пути — ВЗ4.
  *
  * @param current как назвать выбранное: имя мелодии или файла, «Как в системе», «Без звука».
+ * @param picked какой из путей выбран — на нём точка в раскрытом выборе.
  * @param onSystem выбор из стандартных; `null` — у платформы их нет (ПК).
  * @param trouble почему последний файл не взят; `null` — всё хорошо.
  */
@@ -346,27 +371,73 @@ data class SoundRow(
     val onSilent: () -> Unit,
     val onDefault: () -> Unit,
     val trouble: String? = null,
+    val picked: SoundPicked = SoundPicked.Default,
 )
 
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+/** Какой путь выбора звука сейчас в силе. */
+enum class SoundPicked { Default, System, File, Silent }
+
+/**
+ * Настройка звука строкой списка (заказчик 2026-10-01): значок, название, что это; справа —
+ * что выбрано и стрелка. Нажатие раскрывает четыре варианта строками; выбранный — с точкой.
+ * «Из стандартных» и «Свой файл» открывают выбор мелодии; «Как в системе» и «Без звука»
+ * ставятся сразу.
+ */
 @Composable
-fun SoundSetting(title: String, row: SoundRow) {
+fun SoundSetting(glyph: String, title: String, about: String, row: SoundRow) {
     val words = Tima.words.settings2
-    Column(
-        Modifier.padding(horizontal = TimaSpacing.about4),
-        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-    ) {
-        Secondary(title)
-        Name(row.current)
-        androidx.compose.foundation.layout.FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-        ) {
-            row.onSystem?.let { Button(label = words.soundFromSystem, onClick = it, kind = ButtonKind.Quiet) }
-            Button(label = words.soundFromFile, onClick = row.onFile, kind = ButtonKind.Quiet)
-            Button(label = words.soundSilent, onClick = row.onSilent, kind = ButtonKind.Quiet)
-            Button(label = words.soundDefault, onClick = row.onDefault, kind = ButtonKind.Quiet)
+    var open by remember(title) { mutableStateOf(false) }
+    ListLine(
+        onClick = { open = !open },
+        left = { Name(glyph) },
+        right = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                Secondary(row.current, lineOne = true)
+                Secondary(if (open) "⌃" else "›")
+            }
+        },
+        middle = {
+            Caption(title, fontSize = TimaType.sz4, weight = FontWeight.Bold, maxLines = 2)
+            Tertiary(about)
+        },
+    )
+    if (open) {
+        Column(Modifier.fillMaxWidth().background(Tima.colors.softAccent)) {
+            SoundChoice(words.soundDefault, words.soundDefaultAbout, row.picked == SoundPicked.Default) {
+                row.onDefault()
+                open = false
+            }
+            row.onSystem?.let { pick ->
+                SoundChoice(words.soundFromSystem, words.soundFromSystemAbout, row.picked == SoundPicked.System) {
+                    pick()
+                    open = false
+                }
+            }
+            SoundChoice(words.soundFromFile, words.soundFromFileAbout, row.picked == SoundPicked.File) {
+                row.onFile()
+                open = false
+            }
+            SoundChoice(words.soundSilent, words.soundSilentAbout, row.picked == SoundPicked.Silent) {
+                row.onSilent()
+                open = false
+            }
         }
-        row.trouble?.let { Secondary(it) }
     }
+    row.trouble?.let {
+        Column(Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)) { Secondary(it) }
+    }
+}
+
+/** Вариант выбора звука: точка «одно из», название и пояснение — строкой с отступом. */
+@Composable
+private fun SoundChoice(label: String, about: String, on: Boolean, onClick: () -> Unit) {
+    ListLine(
+        modifier = Modifier.padding(start = TimaSpacing.about5),
+        onClick = onClick,
+        left = { RadioMark(on) },
+        middle = {
+            Caption(label, fontSize = TimaType.sz4, weight = if (on) FontWeight.Bold else FontWeight.Normal, maxLines = 2)
+            Tertiary(about)
+        },
+    )
 }

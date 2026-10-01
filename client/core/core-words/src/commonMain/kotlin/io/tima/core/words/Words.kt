@@ -321,6 +321,14 @@ interface SettingsListWords {
     val soundSilent: String
     val soundFromSystem: String
     val soundFromFile: String
+    /** Строки «Настройки → Уведомления» (заказчик 2026-10-01): что видно, что звучит, пояснения выбора. */
+    val noticesSeen: String
+    val soundRingAbout: String
+    val soundMessageAbout: String
+    val soundDefaultAbout: String
+    val soundFromSystemAbout: String
+    val soundFromFileAbout: String
+    val soundSilentAbout: String
     val soundTooBig: String
     val soundBadType: String
     val soundsNotSynced: String
@@ -2477,6 +2485,13 @@ object RussianWords : Words {
         override val soundSilent = "Без звука"
         override val soundFromSystem = "Из стандартных"
         override val soundFromFile = "Загрузить файл"
+        override val noticesSeen = "Что видно в уведомлении"
+        override val soundRingAbout = "Входящий звонок"
+        override val soundMessageAbout = "Новое сообщение и пропущенный звонок"
+        override val soundDefaultAbout = "Звук, выбранный в настройках телефона"
+        override val soundFromSystemAbout = "Одна из мелодий телефона"
+        override val soundFromFileAbout = "Свой звуковой файл"
+        override val soundSilentAbout = "Уведомление придёт без звука"
         override val soundTooBig = "Файл больше 5 МБ — не взят"
         override val soundBadType = "Нужен звук: mp3, ogg, m4a или wav"
         override val soundsNotSynced = "Выбор у каждого устройства свой и между ними не переносится."

@@ -79,3 +79,4 @@ WebRTC о кратности не знает и ужимает кадр как �
 
 - [ADR-0006](0006-livekit-media-policy.md) — медиа на LiveKit;
 - [ADR-0031](0031-dependencies.md) — версии WebRTC и LiveKit.
+- [ADR-0034](0034-call-lives-in-process-and-background-video.md) — видео при сворачивании, кодер и раскодировщик прогона, «Кодек вверх / вниз».
