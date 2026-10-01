@@ -62,5 +62,13 @@ object CallKeep {
      * Какое окно открыто у устройства [deviceId]. Процесс начинается с окна 1 — личная связь;
      * пересозданное окно Android показывает то, что было открыто.
      */
+    /**
+     * Окно приложения на экране или нет — от платформы (Android: `onStart` / `onStop`).
+     * Ведущему звонка это решает паузу своего видео и сторож камеры (заказчик 2026-10-01).
+     */
+    fun visible(visible: Boolean) {
+        for (k in kept.values) k.host.appVisible(visible)
+    }
+
     fun window(deviceId: String): MutableState<Window> = windows.getOrPut(deviceId) { mutableStateOf(Window.Phone) }
 }

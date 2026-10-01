@@ -92,6 +92,18 @@ interface CallEngine {
      * В4). Действуют сразу, в идущем звонке: камера переопубликуется, видео собеседника
      * переподписывается. На ПК кодеры и так программные — там ничего не делается.
      */
+    /**
+     * Сколько кадров своей камеры закодировано за звонок — для сторожа камеры после фона
+     * (заказчик 2026-10-01). `null` — не знаем: нет своей дорожки или платформа не умеет.
+     */
+    suspend fun cameraFrames(): Long? = null
+
+    /** Открыть камеру заново — система отобрала её, пока приложение было свёрнуто. */
+    suspend fun restartCamera() = Unit
+
+    /** Сказать собеседнику, что своё видео на паузе из-за сворачивания (атрибут участника). */
+    suspend fun announcePaused(paused: Boolean) = Unit
+
     suspend fun setHardwareCoding(coding: HardwareCoding) = Unit
 
     /**
@@ -206,6 +218,12 @@ data class CallState(
     val videoPaused: Boolean = false,
     /** Собеседник показывает себя. Событие, а не наша настройка: решает он. */
     val remoteVideoShown: Boolean = false,
+    /**
+     * Собеседник свернул приложение, и его видео на паузе (заказчик 2026-10-01, 1б) — его
+     * телефон сказал это атрибутом [VideoPause.ATTRIBUTE]. Не «перестал показывать себя»:
+     * вернётся — видео пойдёт само.
+     */
+    val peerPaused: Boolean = false,
     /** Принимаем ли мы его видео. Выключается кнопкой «скрыть» (ЗВ11). */
     val remoteVideoTaken: Boolean = true,
     val quality: CallQuality = CallQuality.Unknown,

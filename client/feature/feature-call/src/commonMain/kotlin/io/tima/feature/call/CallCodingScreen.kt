@@ -29,6 +29,9 @@ fun CallCodingScreen(
     coding: HardwareCoding,
     onChange: (HardwareCoding) -> Unit,
     modifier: Modifier = Modifier,
+    /** «Видео при сворачивании»: `false` — пауза (по умолчанию), `true` — продолжать показывать. */
+    cameraInBackground: Boolean = false,
+    onCameraInBackground: ((Boolean) -> Unit)? = null,
 ) {
     val words = Tima.words.call
     val onOff = listOf(true to words.codingOn, false to words.codingOff)
@@ -46,5 +49,16 @@ fun CallCodingScreen(
         Secondary(words.codingEncodeAbout)
         Pick(words.codingDecode, onOff, coding.decode) { onChange(coding.copy(decode = it)) }
         Secondary(words.codingDecodeAbout)
+        // Свернули посреди видеозвонка (заказчик 2026-10-01): пауза по умолчанию (1б),
+        // продолжать показывать — по выбору (1в).
+        if (onCameraInBackground != null) {
+            Pick(
+                words.backgroundVideo,
+                listOf(false to words.backgroundPause, true to words.backgroundKeep),
+                cameraInBackground,
+                onCameraInBackground,
+            )
+            Secondary(words.backgroundVideoAbout)
+        }
     }
 }

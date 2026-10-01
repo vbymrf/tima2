@@ -80,6 +80,12 @@ class CallHost(
      * от переключателей машины, на которой идёт.
      */
     private val access: (video: Boolean, onResult: (Boolean) -> Unit) -> Unit = ::askCallAccess,
+    /**
+     * «Настройки → Звонки → Видео при сворачивании: продолжать показывать» (заказчик
+     * 2026-10-01, 1в). Выключено — по умолчанию: свернули — своё видео на паузу (1б).
+     * Ссылкой: настройку меняют, пока ведущий жив.
+     */
+    private val cameraInBackground: () -> Boolean = { false },
 ) {
     /** Идёт ли звонок. По этому признаку окно 0 есть или его нет (`Window.shown`). */
     var active by mutableStateOf(false)
@@ -447,8 +453,78 @@ class CallHost(
      * Android 12 из фона её не поднять, и законное окно для этого даст лишь
      * высокоприоритетный push, которого у нас пока нет.
      */
-    private fun told(connectedAt: Long = 0L) {
-        callOngoing(words().call.activeCall, peer.ifBlank { words().chat.nameless }, words().call.hangUp, connectedAt)
+    private fun told(connectedAt: Long = toldAt) {
+        toldAt = connectedAt
+        toldOnce = true
+        // Камера — в тип службы, только когда человек выбрал показывать себя свёрнутым (1в):
+        // без этого типа HyperOS отбирает камеру у свёрнутого приложения через секунды.
+        callOngoing(
+            words().call.activeCall, peer.ifBlank { words().chat.nameless }, words().call.hangUp, connectedAt,
+            camera = cameraInBackground() && state.cameraOn,
+        )
+    }
+
+    /** Служба звонка поднята в этом звонке; с какого времени идёт счётчик. */
+    private var toldOnce = false
+    private var toldAt = 0L
+
+    // ── СВЕРНУЛИ ПОСРЕДИ ВИДЕОЗВОНКА (заказчик 2026-10-01, 1б и 1в) ─────────────
+    //
+    // HyperOS отбирает камеру у свёрнутого приложения через несколько секунд, и видео не
+    // возвращалось до конца звонка (`БЕДЫ/2026-10-01-камера-в-фоне.md`). По умолчанию (1б)
+    // своё видео через 2 с фона ставится на паузу — собеседник видит «свернул приложение»;
+    // вернулись — камера включается. 2 с — чтобы взгляд в шторку не мигал паузой. С
+    // настройкой «продолжать показывать» (1в) паузы нет: камеру держит тип службы.
+    // В обоих случаях после возврата сторож проверяет, идут ли кадры, и открывает камеру
+    // заново, если нет.
+
+    private var pauseJob: kotlinx.coroutines.Job? = null
+    private var pausedByBackground = false
+
+    /** Окно приложения на экране или нет — зовёт платформа ([CallKeep.visible]). */
+    fun appVisible(visible: Boolean) {
+        if (!busy) return
+        if (!visible) {
+            if (!state.cameraOn || cameraInBackground()) return
+            pauseJob?.cancel()
+            pauseJob = scope.launch {
+                kotlinx.coroutines.delay(PAUSE_AFTER_MS)
+                if (!busy || !state.cameraOn) return@launch
+                Journal.note(LogCode.CALL, "свернули — своё видео на паузу")
+                engine?.announcePaused(true)
+                engine?.setCamera(false)
+                pausedByBackground = true
+            }
+            return
+        }
+        pauseJob?.cancel()
+        pauseJob = null
+        scope.launch {
+            if (pausedByBackground) {
+                pausedByBackground = false
+                Journal.note(LogCode.CALL, "вернулись — своё видео снова идёт")
+                engine?.setCamera(true)
+                engine?.announcePaused(false)
+            }
+            cameraWatch()
+        }
+    }
+
+    /**
+     * Идут ли кадры своей камеры после возврата. Нет — открыть её заново: система могла
+     * отобрать её в фоне, а сама она не вернётся.
+     */
+    private suspend fun cameraWatch() {
+        val live = engine ?: return
+        kotlinx.coroutines.delay(CAMERA_SETTLE_MS)
+        if (!busy || !state.cameraOn) return
+        val before = live.cameraFrames() ?: return
+        kotlinx.coroutines.delay(CAMERA_PROBE_MS)
+        if (!busy || !state.cameraOn) return
+        val after = live.cameraFrames() ?: return
+        if (after > before) return
+        Journal.trouble(LogCode.CALL, "камера не даёт кадров после фона — открываем заново", "кадров" to after)
+        live.restartCamera()
     }
 
     /**
@@ -478,6 +554,11 @@ class CallHost(
         callProximity(false)
         screenOnNow = false
         callKeepScreen(false)
+        pauseJob?.cancel()
+        pauseJob = null
+        pausedByBackground = false
+        toldOnce = false
+        toldAt = 0L
         active = false
         callId = ""
         peerId = ""
@@ -643,8 +724,14 @@ class CallHost(
             forget(OWN_UNSENT)
         }
 
+        // Собеседник свернул приложение — его видео на паузе (1б): длится, пока не вернётся.
+        if (now.peerPaused) note(words.peerPausedVideo, whileTrue = PEER_PAUSED) else forget(PEER_PAUSED)
+
         // ── СЛУЧИВШИЕСЯ: остаются ──────────────────────────────────────────
-        if (!now.remoteVideoShown && was.remoteVideoShown && now.remoteVideoTaken) note(words.peerStoppedVideo)
+        if (!now.remoteVideoShown && was.remoteVideoShown && now.remoteVideoTaken && !now.peerPaused) note(words.peerStoppedVideo)
+
+        // Камеру включили или выключили при «продолжать показывать» — тип службы следом (1в).
+        if (now.cameraOn != was.cameraOn && toldOnce && busy && cameraInBackground()) told()
 
         // ── ТО ЖЕ САМОЕ В ЖУРНАЛ ────────────────────────────────────────────
         //
@@ -904,6 +991,13 @@ class CallHost(
     }
 
     private companion object {
+        /** Свернули — через столько своё видео на паузу (1б): взгляд в шторку короче. */
+        const val PAUSE_AFTER_MS = 2_000L
+
+        /** После возврата камере дать подняться, потом считать кадры. */
+        const val CAMERA_SETTLE_MS = 2_000L
+        const val CAMERA_PROBE_MS = 1_500L
+
         /**
          * Сколько ждём ответа.
          *
@@ -926,6 +1020,7 @@ class CallHost(
         // Ключи длящихся событий. Строками, а не перечнем: их читает только этот файл,
         // и перечень на четыре значения был бы лестницей к одной ступеньке.
         const val PEER_ALONE = "чужое видео при нашей выключенной камере"
+        const val PEER_PAUSED = "собеседник свернул приложение"
         const val PAUSED = "видео погашено полосой"
         const val BACKING = "связь возвращается"
         const val HIDDEN = "чужое видео скрыто нами"

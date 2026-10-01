@@ -68,7 +68,8 @@ class CallService : Service() {
         val text = intent?.getStringExtra(TEXT).orEmpty()
         val hangUpLabel = intent?.getStringExtra(HANG_UP_LABEL).orEmpty()
         val connectedAt = intent?.getLongExtra(CONNECTED_AT, 0L) ?: 0L
-        runCatching { raise(NOTICE_ID, notice(title, text, hangUpLabel, connectedAt)) }
+        val camera = intent?.getBooleanExtra(CAMERA, false) ?: false
+        runCatching { raise(NOTICE_ID, notice(title, text, hangUpLabel, connectedAt), camera) }
             .onFailure {
                 // Служба не поднялась — значит микрофон в фоне мы не удержим. Сам звонок
                 // при этом идёт, и обрывать его незачем; но в журнале это обязано
@@ -92,12 +93,29 @@ class CallService : Service() {
      * Имя своё, а не `startForeground`: одноимённый метод есть у [Service], и перекрытие
      * с другой подписью читается как переопределение, которым не является.
      */
-    private fun raise(id: Int, notification: Notification) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-        } else {
+    private fun raise(id: Int, notification: Notification, camera: Boolean = false) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             startForeground(id, notification)
+            return
         }
+        // Камера — в тип, только когда человек выбрал показывать себя свёрнутым (заказчик
+        // 2026-10-01, 1в) и разрешение на неё есть: без разрешения система откажет всей службе.
+        val withCamera = camera &&
+            checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (withCamera) {
+            val done = runCatching {
+                startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
+            }
+            if (done.isSuccess) {
+                Journal.note(LogCode.CALL, "служба звонка держит камеру в фоне")
+                return
+            }
+            Journal.trouble(
+                LogCode.CALL, "служба звонка не взяла камеру — свёрнутым видео не покажем",
+                "причина" to (done.exceptionOrNull()?.message ?: "неизвестно"),
+            )
+        }
+        startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
     }
 
     private fun notice(title: String, text: String, hangUpLabel: String, connectedAt: Long): Notification {
@@ -176,6 +194,7 @@ class CallService : Service() {
         const val TEXT = "text"
         const val HANG_UP_LABEL = "hangUpLabel"
         const val CONNECTED_AT = "connectedAt"
+        const val CAMERA = "camera"
 
         /** Команда «положить трубку» — из шторки. */
         const val HANG_UP = "io.tima.core.call.HANG_UP"

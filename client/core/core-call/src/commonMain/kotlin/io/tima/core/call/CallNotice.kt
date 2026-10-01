@@ -24,7 +24,11 @@ package io.tima.core.call
  * него человек, ушедший в другое приложение, не знает, идёт ли ещё разговор, и вернуться
  * в него может только найдя TIMA среди прочих.
  */
-expect fun callOngoing(title: String, text: String, hangUpLabel: String = "", connectedAt: Long = 0L)
+/**
+ * @param camera служба держит ещё и камеру — «продолжать показывать себя свёрнутым»
+ *   (заказчик 2026-10-01, 1в). Без этого типа HyperOS отбирает камеру у свёрнутого приложения.
+ */
+expect fun callOngoing(title: String, text: String, hangUpLabel: String = "", connectedAt: Long = 0L, camera: Boolean = false)
 
 /**
  * Что делать, когда трубку кладут **из шторки** — кнопкой «Завершить» уведомления

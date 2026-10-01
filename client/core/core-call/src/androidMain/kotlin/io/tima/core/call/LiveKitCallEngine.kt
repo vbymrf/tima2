@@ -541,6 +541,12 @@ class LiveKitCallEngine(
         watchers += scope.launch {
             while (isActive) {
                 delay(PEERS_EVERY_MS)
+                // Собеседник свернул приложение — его видео на паузе (1б, 2026-10-01).
+                val paused = room.remoteParticipants.values.any { it.attributes[VideoPause.ATTRIBUTE] == VideoPause.PAUSED }
+                if (paused != _state.value.peerPaused) {
+                    _state.value = _state.value.copy(peerPaused = paused)
+                    Journal.note(LogCode.CALL, "собеседник свернул приложение — его видео на паузе", "на паузе" to paused)
+                }
                 val preset = publishing ?: continue
                 val codec = codecForPeers(room) ?: continue
                 if (codec == target) continue
@@ -729,6 +735,31 @@ class LiveKitCallEngine(
     override suspend fun setCamera(on: Boolean) {
         val done = attempt { room?.localParticipant?.setCameraEnabled(on) }
         if (done) _state.value = _state.value.copy(cameraOn = on)
+    }
+
+    override suspend fun cameraFrames(): Long? {
+        val track = room?.localParticipant?.videoTrackPublications?.firstOrNull()?.second ?: return null
+        val report = runCatching { track.getRTCStats() }.getOrNull() ?: return null
+        return report.statsMap.values
+            .filter { it.type == "outbound-rtp" && it.members["kind"] == "video" }
+            .sumOf { (it.members["framesEncoded"] as? Number)?.toLong() ?: 0L }
+    }
+
+    /**
+     * Камеру открыть заново (заказчик 2026-10-01). HyperOS отбирает её у свёрнутого
+     * приложения через несколько секунд, и ни WebRTC, ни LiveKit этого не замечают: дорожка
+     * опубликована, кадров нет — `БЕДЫ/2026-10-01-камера-в-фоне.md`.
+     */
+    override suspend fun restartCamera() {
+        val track = room?.localParticipant?.videoTrackPublications?.firstOrNull()?.second as? LocalVideoTrack ?: return
+        val done = attempt { track.restartTrack() }
+        Journal.note(LogCode.CALL, "камера открыта заново", "удалось" to done)
+    }
+
+    override suspend fun announcePaused(paused: Boolean) {
+        val live = room ?: return
+        runCatching { live.localParticipant.updateAttributes(mapOf(VideoPause.ATTRIBUTE to VideoPause.value(paused))) }
+            .onFailure { Journal.trouble(LogCode.CALL, "не сказали собеседнику про паузу видео", "причина" to (it.message ?: it::class.simpleName)) }
     }
 
     /**

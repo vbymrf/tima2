@@ -122,6 +122,8 @@ class MainActivity : ComponentActivity() {
         // обязана снова уведомлять (У10). Без этого человек, свернувший приложение на
         // переписке, перестал бы получать из неё уведомления до следующего захода.
         ChannelHost.notices()?.windowVisible(false)
+        // Свернули посреди видеозвонка — своё видео на паузу через 2 с (заказчик 2026-10-01).
+        io.tima.shared.CallKeep.visible(false)
         Journal.note(LogCode.APP_BACKGROUND, "ушли в фон")
         Journal.diary.flush()
         super.onStop()
@@ -133,6 +135,8 @@ class MainActivity : ComponentActivity() {
         // «вернулись» рядом с `APP-START` было бы неправдой и лишней строкой.
         if (wasBackground) Journal.note(LogCode.APP_FOREGROUND, "вернулись из фона")
         ChannelHost.notices()?.windowVisible(true)
+        // Вернулись — видео снова идёт, сторож проверяет, что камера даёт кадры.
+        io.tima.shared.CallKeep.visible(true)
         // Человек мог сходить в настройки и включить уведомления или белый список — сверяем.
         // Не изменилось — строки нет.
         BackgroundWatch.check(if (wasBackground) "вернулись из фона" else "окно открыто")

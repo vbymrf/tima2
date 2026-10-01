@@ -1052,6 +1052,15 @@ interface CallWords {
     val codingOff: String
 
     /**
+     * «Видео при сворачивании»: пауза (по умолчанию) или продолжать показывать — заказчик
+     * 2026-10-01, 1б и 1в.
+     */
+    val backgroundVideo: String
+    val backgroundPause: String
+    val backgroundKeep: String
+    val backgroundVideoAbout: String
+
+    /**
      * Камеру не разрешили — но звонок продолжается голосом.
      *
      * Не «не удалось включить камеру»: человек только что нажал кнопку, и ему нужно
@@ -1077,6 +1086,8 @@ interface CallWords {
 
     /** Собеседник перестал показывать себя: пропавшая картинка иначе читается как обрыв. */
     val peerStoppedVideo: String
+    /** Собеседник свернул приложение — его видео на паузе, вернётся само (1б). */
+    val peerPausedVideo: String
 
     /**
      * Ни одно устройство собеседника не забрало вызов: сейчас он не на связи.
@@ -2921,8 +2932,13 @@ object RussianWords : Words {
         override val codingDecodeAbout = "Как вы видите собеседника. Выключено — его видео раскодирует программа."
         override val codingOn = "Включено"
         override val codingOff = "Выключено"
+        override val backgroundVideo = "Видео при сворачивании"
+        override val backgroundPause = "Пауза"
+        override val backgroundKeep = "Продолжать показывать"
+        override val backgroundVideoAbout = "Пауза — свернули приложение, и через 2 секунды ваше видео встаёт на паузу: собеседник видит, что вы свернули, вернётесь — видео пойдёт снова. Продолжать показывать — камера работает и в свёрнутом приложении, на телефоне горит значок камеры."
         override val peerShowsSelf = "Собеседник показывает себя, наша камера выключена — нажмите камеру, чтобы показать себя"
         override val peerStoppedVideo = "Собеседник перестал показывать себя"
+        override val peerPausedVideo = "Собеседник свернул приложение — его видео на паузе"
         override val peerLeft = "Собеседник положил трубку"
         override fun presetApplied(name: String) =
             "Набор «$name» применён — связь прервалась на пару секунд не сама"

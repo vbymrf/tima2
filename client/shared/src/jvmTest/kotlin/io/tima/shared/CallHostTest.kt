@@ -344,7 +344,88 @@ class CallHostTest {
         assertEquals(listOf(true), engine.camera)
     }
 
-    private fun TestScope.host(calls: Calls = FakeCalls(), engine: FakeEngine = FakeEngine()) = CallHost(
+    // ── СВЕРНУЛИ ПОСРЕДИ ВИДЕОЗВОНКА (заказчик 2026-10-01, 1б и 1в) ──────────
+
+    /** Видеозвонок идёт, своя камера включена. */
+    private fun TestScope.videoCall(engine: FakeEngine, keep: Boolean = false): CallHost {
+        val host = host(engine = engine, cameraInBackground = { keep })
+        host.start("u-1", "Аня", video = true)
+        engine.camera.clear()
+        engine.say(CallState(stage = CallStage.Connected, cameraOn = true))
+        return host
+    }
+
+    @Test
+    fun свернули_дольше_двух_секунд_своё_видео_на_паузу_вернулись_идёт() = runTest {
+        val engine = FakeEngine()
+        val host = videoCall(engine)
+
+        host.appVisible(false)
+        advanceTimeBy(2_100)
+        assertEquals(listOf(false), engine.camera, "видео не встало на паузу")
+        assertEquals(listOf(true), engine.paused, "собеседнику не сказали про паузу")
+
+        host.appVisible(true)
+        assertEquals(listOf(false, true), engine.camera, "камера не включилась после возврата")
+        assertEquals(listOf(true, false), engine.paused)
+    }
+
+    @Test
+    fun взгляд_в_шторку_короче_двух_секунд_паузы_не_ставит() = runTest {
+        val engine = FakeEngine()
+        val host = videoCall(engine)
+
+        host.appVisible(false)
+        advanceTimeBy(1_000)
+        host.appVisible(true)
+        advanceTimeBy(5_000)
+
+        assertEquals(emptyList(), engine.camera)
+        assertEquals(emptyList(), engine.paused)
+    }
+
+    @Test
+    fun продолжать_показывать_паузы_нет() = runTest {
+        val engine = FakeEngine()
+        val host = videoCall(engine, keep = true)
+
+        host.appVisible(false)
+        advanceTimeBy(10_000)
+
+        assertEquals(emptyList(), engine.camera, "при «продолжать показывать» камеру выключили")
+    }
+
+    @Test
+    fun вернулись_а_кадров_нет_камера_открывается_заново() = runTest {
+        val engine = FakeEngine()
+        val host = videoCall(engine, keep = true)
+        engine.frames = 100 // кадры стоят — камеру отобрали в фоне
+
+        host.appVisible(false)
+        host.appVisible(true)
+        advanceTimeBy(4_000)
+
+        assertEquals(1, engine.restarts, "камеру без кадров не открыли заново")
+    }
+
+    @Test
+    fun вернулись_и_кадры_идут_камеру_не_трогаем() = runTest {
+        val engine = FakeEngine()
+        val host = videoCall(engine, keep = true)
+        engine.framesGrow = true
+
+        host.appVisible(false)
+        host.appVisible(true)
+        advanceTimeBy(4_000)
+
+        assertEquals(0, engine.restarts)
+    }
+
+    private fun TestScope.host(
+        calls: Calls = FakeCalls(),
+        engine: FakeEngine = FakeEngine(),
+        cameraInBackground: () -> Boolean = { false },
+    ) = CallHost(
         calls,
         engine,
         // **Неограниченный диспетчер, а не очередь.** `CallHost` делает работу в
@@ -357,6 +438,7 @@ class CallHostTest {
         CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
         words = { io.tima.core.words.RussianWords },
         access = allowed,
+        cameraInBackground = cameraInBackground,
     )
 
     /**
@@ -408,6 +490,24 @@ class CallHostTest {
         override suspend fun setMicrophone(on: Boolean) = Unit
         override suspend fun setCamera(on: Boolean) {
             camera += on
+        }
+
+        /** Что сказали собеседнику про паузу видео. */
+        val paused = mutableListOf<Boolean>()
+        var frames = 0L
+        var framesGrow = false
+        var restarts = 0
+        override suspend fun announcePaused(paused: Boolean) {
+            this.paused += paused
+        }
+
+        override suspend fun cameraFrames(): Long? {
+            if (framesGrow) frames += 30
+            return frames
+        }
+
+        override suspend fun restartCamera() {
+            restarts++
         }
 
         /** Сказать за движок: «комната ответила вот этим». */

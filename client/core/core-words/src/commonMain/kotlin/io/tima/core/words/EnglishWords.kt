@@ -1008,8 +1008,13 @@ object EnglishWords : Words {
         override val codingDecodeAbout = "How you see the other person. Off — their video is decoded in software."
         override val codingOn = "On"
         override val codingOff = "Off"
+        override val backgroundVideo = "Video when minimized"
+        override val backgroundPause = "Pause"
+        override val backgroundKeep = "Keep showing"
+        override val backgroundVideoAbout = "Pause — when you minimize the app, your video pauses after 2 seconds: the other side sees you minimized it, and video resumes when you return. Keep showing — the camera keeps working while the app is minimized; the phone shows the camera indicator."
         override val peerShowsSelf = "The other side is showing video, your camera is off — tap the camera to show yourself"
         override val peerStoppedVideo = "The other side stopped showing video"
+        override val peerPausedVideo = "The other side minimized the app — their video is paused"
         override val peerLeft = "The other side hung up"
         override fun presetApplied(name: String) =
             "Preset \"$name\" applied — the two-second drop was not an accident"

@@ -22,6 +22,14 @@ object HardwareCodingKeys {
     const val ENCODE = "call.hw.encode"
     const val DECODE = "call.hw.decode"
 
+    /**
+     * «Видео при сворачивании: продолжать показывать» (заказчик 2026-10-01, 1в). Нет ключа —
+     * пауза (1б).
+     */
+    const val CAMERA_BACKGROUND = "call.camera.background"
+
+    fun cameraInBackground(all: Map<String, String>): Boolean = all[CAMERA_BACKGROUND] == "1"
+
     fun read(all: Map<String, String>): HardwareCoding = HardwareCoding(
         encode = all[ENCODE] != "0",
         decode = all[DECODE] != "0",
@@ -75,4 +83,17 @@ object PeerCodecs {
         fun weEncode(codec: VideoCodec) = encodable.isEmpty() || codec in encodable
         return order.firstOrNull { weEncode(it) && everyoneTakes(it) } ?: VideoCodec.VP8
     }
+}
+
+/**
+ * «Своё видео на паузе: свернули приложение» — атрибутом участника LiveKit, тем же путём, что
+ * [PeerCodecs] (заказчик 2026-10-01, 1б). Собеседник показывает «свернул приложение — видео на
+ * паузе», а не замершую картинку и не «перестал показывать себя».
+ */
+object VideoPause {
+    const val ATTRIBUTE = "tima.video"
+    const val PAUSED = "paused"
+
+    /** Пустое значение атрибут снимает. */
+    fun value(paused: Boolean): String = if (paused) PAUSED else ""
 }

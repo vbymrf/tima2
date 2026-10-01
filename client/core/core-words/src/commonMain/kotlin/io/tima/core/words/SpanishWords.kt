@@ -1008,8 +1008,13 @@ object SpanishWords : Words {
         override val codingDecodeAbout = "Cómo ves a la otra persona. Apagado: su vídeo se decodifica por software."
         override val codingOn = "Activado"
         override val codingOff = "Desactivado"
+        override val backgroundVideo = "Vídeo al minimizar"
+        override val backgroundPause = "Pausa"
+        override val backgroundKeep = "Seguir mostrando"
+        override val backgroundVideoAbout = "Pausa — al minimizar la aplicación, tu vídeo se pausa a los 2 segundos: la otra persona ve que la minimizaste y el vídeo vuelve al regresar. Seguir mostrando — la cámara sigue funcionando con la aplicación minimizada; el teléfono muestra el indicador de cámara."
         override val peerShowsSelf = "La otra persona muestra vídeo y tu cámara está apagada: toca la cámara para mostrarte"
         override val peerStoppedVideo = "La otra persona dejó de mostrar vídeo"
+        override val peerPausedVideo = "La otra persona minimizó la aplicación — su vídeo está en pausa"
         override val peerLeft = "La otra persona colgó"
         override fun presetApplied(name: String) =
             "Conjunto «$name» aplicado: el corte de dos segundos no fue un fallo"

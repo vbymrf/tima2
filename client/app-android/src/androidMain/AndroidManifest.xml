@@ -71,12 +71,17 @@
       с Android 14 и тоже не спрашивается — но без него служба с типом `microphone` не
       поднимется вовсе.
 
-      Типа `camera` здесь НЕТ намеренно: с Android 14 объявленный тип требует выданного
-      разрешения, и заявить камеру, не имея её, — падение вместо звонка у всех, кто
-      камеру не разрешил. Держать её в фоне и незачем — человек показывал бы потолок.
+      Тип `camera` объявлен с 2026-10-01 (заказчик, 1в): «Настройки → Звонки → Видео при
+      сворачивании: продолжать показывать». Объявить в манифесте — не значит взять:
+      служба поднимается с камерой, только когда эта настройка включена, камера в звонке
+      включена и разрешение на неё выдано (`CallService.raise`). Иначе — только
+      микрофон, как прежде, — и падения у тех, кто камеру не разрешил, нет. Без типа
+      `camera` HyperOS отбирает камеру у свёрнутого приложения через секунды
+      (`БЕДЫ/2026-10-01-камера-в-фоне.md`).
     -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
 
     <!--
       Служба живого канала (У3). Тип `specialUse`, а НЕ `dataSync`, и это не вкус:
@@ -284,7 +289,7 @@
         <service
             android:name="io.tima.core.call.CallService"
             android:exported="false"
-            android:foregroundServiceType="microphone" />
+            android:foregroundServiceType="microphone|camera" />
 
     </application>
 

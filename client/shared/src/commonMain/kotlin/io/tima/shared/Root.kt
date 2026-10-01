@@ -136,6 +136,8 @@ import io.tima.core.notify.soundChoiceOf
 import io.tima.core.notify.SoundKeys
 import io.tima.core.notify.SoundChoice
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import io.tima.feature.shell.BackgroundTrouble
 import io.tima.core.notify.openCallsChannelSettings
 import io.tima.core.notify.openFullScreenSettings
@@ -1120,11 +1122,16 @@ private fun App(
             //
             // Испытательный режим выключен — набора нет вовсе: обычный звонок, H.264 или VP8,
             // потолок от сервера (ПЛАН-ВИДЕО.md В3, В5б). Стенд при этом не меняется.
+            // «Видео при сворачивании» (1в) — ссылкой на поток настроек: меняют посреди жизни.
+            val cameraInBackground = environment.settings.all()
+                .map { io.tima.core.call.HardwareCodingKeys.cameraInBackground(it) }
+                .stateIn(keepScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, false)
             val host = CallHost(
                 network.calls,
                 callEngine,
                 keepScope,
                 preset = { bench.state.value.let { if (it.on) it.preset.copy(exact = it.armed) else null } },
+                cameraInBackground = { cameraInBackground.value },
             )
             CallKeep.Kept(callEngine, bench, host)
         }
@@ -3493,6 +3500,10 @@ private fun Settings(
                             deviceSettings.put(io.tima.core.call.HardwareCodingKeys.ENCODE, if (chosen.encode) "1" else "0")
                             deviceSettings.put(io.tima.core.call.HardwareCodingKeys.DECODE, if (chosen.decode) "1" else "0")
                         }
+                    },
+                    cameraInBackground = io.tima.core.call.HardwareCodingKeys.cameraInBackground(saved),
+                    onCameraInBackground = { keep ->
+                        scope.launch { deviceSettings.put(io.tima.core.call.HardwareCodingKeys.CAMERA_BACKGROUND, if (keep) "1" else "0") }
                     },
                 )
             }
