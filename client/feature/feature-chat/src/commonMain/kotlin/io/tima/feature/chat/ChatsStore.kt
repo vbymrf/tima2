@@ -78,6 +78,18 @@ data class ChatsState(
     val personal: List<ChatSummary>
         get() = chats.filter { it.kind == ChatKind.Personal && it.peerId?.let(blocked::contains) != true }
 
+    /**
+     * Вкладка «Чаты» окна 1: личные переписки и **временные группы звонка** — единственные
+     * группы, которым тут место: они часть телефонного звонка (заказчик 2026-10-01).
+     * Порядок общий — по последнему сообщению, как у всего списка.
+     *
+     * @param callGroups временные группы звонка (у них есть срок жизни).
+     */
+    fun phone(callGroups: Set<String>): List<ChatSummary> {
+        val mine = personal.map { it.chatId }.toSet()
+        return chats.filter { it.chatId in mine || (it.kind == ChatKind.Group && it.chatId in callGroups) }
+    }
+
     /** Групповые переписки — вкладка «Группы» окна 5. */
     val groups: List<ChatSummary> get() = chats.filter { it.kind == ChatKind.Group }
 }

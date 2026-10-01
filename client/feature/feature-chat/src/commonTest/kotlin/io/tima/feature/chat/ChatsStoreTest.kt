@@ -97,6 +97,20 @@ class ChatsStoreTest {
         assertEquals(1, store.state.first { it.blocked.isEmpty() }.personal.size)
     }
 
+    @Test
+    fun в_чатах_личные_и_временные_группы_звонка_но_не_обычные_группы() {
+        // Заказчик 2026-10-01: группа звонка — часть телефонного звонка, ей место в «Чатах».
+        val state = ChatsState(
+            chats = listOf(
+                line("личная"),
+                line("звонок").copy(kind = ChatKind.Group, peerId = null),
+                line("обычная").copy(kind = ChatKind.Group, peerId = null),
+            ),
+        )
+        assertEquals(listOf("личная", "звонок"), state.phone(setOf("звонок")).map { it.chatId })
+        assertEquals(listOf("звонок", "обычная"), state.groups.map { it.chatId }, "в «Группах» она остаётся")
+    }
+
     private fun line(chatId: String, peer: String = "u-1") = ChatSummary(
         chatId = chatId,
         title = "Аня",

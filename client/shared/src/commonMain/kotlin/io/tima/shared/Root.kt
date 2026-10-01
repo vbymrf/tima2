@@ -1414,6 +1414,8 @@ private fun App(
             scope = scope,
             me = session.userId,
             sendTo = { userId, text -> environment.send.send(openPersonalChat(userId, null, null), text) },
+            // Новая временная группа — сразу в «Чаты»: её срок узнаём сверкой групп.
+            onCallGroupCreated = { scope.launch { runCatching { assembled.receiver.syncGroups() } } },
         )
     }
     LaunchedEffect(groupDesk) {
@@ -2381,7 +2383,8 @@ private fun App(
                     // заказчика 2026-09-17; до него они стояли здесь вперемешку с
                     // личными, и это было временным размещением, записанным в
                     // `ИНТЕРФЕЙС/04-социум/ФУНКЦИОНАЛ.md`.
-                    list = listState.copy(chats = listState.personal),
+                    // Личные и временные группы звонка — они часть телефонного звонка.
+                    list = listState.copy(chats = listState.phone(callGroupsTtl.keys)),
                     // Ники — со справочника: в книге их нет, а искать по ним надо
                     // (Л19). У человека без номера ник — единственное, чем его найти.
                     book = bookState.copy(

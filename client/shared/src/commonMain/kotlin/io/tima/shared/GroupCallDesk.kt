@@ -79,6 +79,8 @@ class GroupCallDesk(
     private val me: String,
     /** Отправить текст в личную переписку с человеком: `(userId, текст)`. */
     private val sendTo: (String, String) -> Unit,
+    /** Временная группа звонка создана — сверить группы, чтобы она встала в «Чаты». */
+    private val onCallGroupCreated: () -> Unit = {},
     private val words: () -> Words = { CurrentWords.value },
 ) {
     /** Откуда открыли групповой звонок. */
@@ -244,6 +246,7 @@ class GroupCallDesk(
                             "группа" to made.groupId.take(8), "позвано" to people.size, "не добавлены" to made.notInvited.size,
                         )
                         ledger = null
+                        onCallGroupCreated()
                         if (mode == Mode.Pick) {
                             host.startGroup(made.groupId, ask.title, ring, video, people)
                             onCall()

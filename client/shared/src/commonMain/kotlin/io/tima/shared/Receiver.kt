@@ -246,8 +246,9 @@ class Receiver(
                 onCallControl(decision.callId, decision.action, decision.by)
             is EventStreamProtocol.Decision.GroupCall -> {
                 onGroupEvent(decision.groupId, decision.state)
-                // Звонок двигает срок временной группы — «удалится через» обновляется.
-                if (decision.state == "ended") syncGroups()
+                // Звонок двигает срок временной группы — «удалится через» обновляется; и
+                // позванный узнаёт, что группа временная, — она встаёт в «Чаты».
+                syncGroups()
             }
             is EventStreamProtocol.Decision.GroupDeleted -> {
                 wipeGroup(decision.groupId)
