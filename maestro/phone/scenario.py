@@ -173,8 +173,11 @@ def act_bench(a):
         for _ in range(6):
             ph.sh(dev, 'input swipe %d %d %d %d 200' % (w // 2, int(h * 0.3), w // 2, int(h * 0.85)))
     ns = ph.nodes(dev)
-    if ph.find(ns, 'Начать прогон'):
-        ph.tap(dev, 'Начать прогон', wait=2)
+    # «Начать прогон» в окне дважды: заголовок раздела и кнопка под ним. Нажимать кнопку —
+    # последнюю в дереве; первая — заголовок, нажатие в него ничего не делает (PH-29).
+    same = [n for n in ns if n['text'] == 'Начать прогон']
+    if same:
+        ph.tap_node(dev, same[-1])
         time.sleep(1)
         ns = ph.nodes(dev)
     armed = ph.find(ns, 'Остановить прогон') is not None

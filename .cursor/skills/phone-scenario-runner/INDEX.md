@@ -36,3 +36,5 @@
 | PH-26 | preventive | сторож на паре по Wi-Fi, adb отвечает секундами | knowledge/phone.md | нет — серии по очереди |
 | PH-27 | preventive | нет плашки «Телефон» после серии | knowledge/phone.md | да |
 | PH-28 | preventive | экран гаснет посреди видеозвонка, «Выход» — сторож | knowledge/phone.md | нет — `--hold` короче тайм-аута экрана |
+| PH-29 | preventive | забег не вооружён после «bench» | knowledge/phone.md | да — нажимается кнопка, а не заголовок |
+| PH-30 | preventive | свернул посреди видео — видео пропало | knowledge/phone.md | нет — не сворачивать Redmi в замерах дольше 4 с |
