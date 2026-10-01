@@ -87,6 +87,9 @@ class LiveKitCallEngine(
     /** Потолок высоты своего видео по числу участников; `null` — не урезано. */
     private var ceilingHeight: Int? = null
 
+    /** Пропажа видео у каждого участника группового — для его клетки ([CallPeer.videoLoss]). */
+    private val peerLoss = java.util.concurrent.ConcurrentHashMap<String, RemoteVideoLoss>()
+
     private var room: Room? = null
 
     /**
@@ -729,6 +732,7 @@ class LiveKitCallEngine(
         _remoteVideo.value = null
         _peers.value = emptyList()
         peerHandles.clear()
+        peerLoss.clear()
         _state.value = _state.value.copy(stage = CallStage.Ended)
     }
 
@@ -977,8 +981,14 @@ class LiveKitCallEngine(
         watchLocalVideo(room)
         watchRemoteVideo(room)
         watchOutgoing(room)
-        watchIncoming(room)
-        watchRemoteLoss(room)
+        // Групповой — по каждому участнику (заказчик 2026-10-01): общий наблюдатель смотрел
+        // на одну случайную дорожку, и в журнале был виден только один из участников.
+        if (group != null) {
+            watchGroupIncoming(room)
+        } else {
+            watchIncoming(room)
+            watchRemoteLoss(room)
+        }
         watchPeers(room)
         watchQuality(room)
         watchBreaks(room)
@@ -1097,6 +1107,113 @@ class LiveKitCallEngine(
                     RemoteVideoLoss.NotArriving -> Journal.trouble(LogCode.CALL, "видео собеседника не приходит", "показывает" to published)
                     is RemoteVideoLoss.NotDecoding -> Journal.trouble(LogCode.CALL, "видео собеседника не раскодируется", "кодек" to loss.codec)
                 }
+            }
+        }
+    }
+
+    /** Что знаем о входящем видео одного участника между опросами. */
+    private class PeerIncoming {
+        var said = ""
+        var got = -1L
+        var froze = 0L
+        var misaligned = ""
+        val watch = RemoteVideoWatch()
+        var told: RemoteVideoLoss? = null
+    }
+
+    /**
+     * Входящее видео группового звонка — **по каждому участнику** (заказчик 2026-10-01).
+     *
+     * Те же строки, что у звонка на двоих, и каждая называет участника (`кто=` — первые
+     * восемь знаков его номера): кадр, кодек, полоса, раскодировщик, время на кадр,
+     * выброшенные, замирания, некратный кадр, пропажа видео. Строка пишется на смену, а не
+     * на каждый опрос: участников до 25, и лента из одинаковых строк ничего не объясняет.
+     */
+    private fun watchGroupIncoming(room: Room) {
+        watchers += scope.launch {
+            val known = HashMap<String, PeerIncoming>()
+            while (isActive) {
+                delay(STATS_EVERY_MS)
+                val present = HashSet<String>()
+                for (who in room.remoteParticipants.values) {
+                    val identity = who.identity?.value ?: continue
+                    present += identity
+                    val me = known.getOrPut(identity) { PeerIncoming() }
+                    val kto = userOfIdentity(identity).take(8)
+                    val camera = who.videoTrackPublications.firstOrNull { (pub, _) -> pub.source == Track.Source.CAMERA }
+                    val published = camera != null && !camera.first.muted
+                    val track = camera?.second as? VideoTrack
+                    val report = track?.let { runCatching { it.getRTCStats()?.statsMap?.values }.getOrNull() }
+                    val incoming = report?.firstOrNull { it.type == "inbound-rtp" && it.members["kind"] == "video" }
+                    val codec = incoming?.members?.get("codecId")?.toString()?.let { id ->
+                        report.firstOrNull { it.id == id }?.members?.get("mimeType")?.toString()?.removePrefix("video/")
+                    }
+
+                    // Пропажа видео — своя у участника, на его клетку.
+                    val loss = me.watch.next(
+                        RemoteVideoWatch.Poll(
+                            published = published,
+                            excused = !takeRemote || _state.value.roomPaused || _state.value.stage != CallStage.Connected,
+                            bytes = (incoming?.members?.get("bytesReceived") as? Number)?.toLong(),
+                            frames = (incoming?.members?.get("framesDecoded") as? Number)?.toLong(),
+                            codec = codec,
+                        ),
+                    )
+                    if (loss != me.told) {
+                        me.told = loss
+                        if (loss == null) peerLoss.remove(identity) else peerLoss[identity] = loss
+                        when (loss) {
+                            null -> Journal.note(LogCode.CALL, "видео участника снова показывается", "кто" to kto)
+                            RemoteVideoLoss.NotArriving -> Journal.trouble(LogCode.CALL, "видео участника не приходит", "кто" to kto)
+                            is RemoteVideoLoss.NotDecoding -> Journal.trouble(LogCode.CALL, "видео участника не раскодируется", "кто" to kto, "кодек" to loss.codec)
+                        }
+                    }
+                    incoming ?: continue
+
+                    val w = incoming.members["frameWidth"] ?: continue
+                    val h = incoming.members["frameHeight"] ?: continue
+                    val bytes = (incoming.members["bytesReceived"] as? Number)?.toLong() ?: 0L
+                    val kbit = if (me.got < 0) -1L else (bytes - me.got) * 8 / (STATS_EVERY_MS / 1000) / 1000
+                    me.got = bytes
+                    val decoder = incoming.members["decoderImplementation"]?.toString() ?: "—"
+                    val decoded = (incoming.members["framesDecoded"] as? Number)?.toLong()
+                    val decodeSeconds = (incoming.members["totalDecodeTime"] as? Number)?.toDouble()
+                    val decodeMs = if (decoded != null && decoded > 0 && decodeSeconds != null) decodeSeconds * 1000 / decoded else null
+                    val dropped = (incoming.members["framesDropped"] as? Number)?.toLong()
+
+                    val freezes = (incoming.members["freezeCount"] as? Number)?.toLong() ?: 0L
+                    if (freezes > me.froze) {
+                        me.froze = freezes
+                        Journal.trouble(
+                            LogCode.CALL, "видео участника замирало", "кто" to kto, "раз" to freezes,
+                            "всего с" to ((incoming.members["totalFreezesDuration"] as? Number)?.toDouble()?.let { tenth(it) } ?: "—"),
+                        )
+                    }
+                    val inSize = "" + w + "×" + h
+                    val inW = (w as? Number)?.toInt()
+                    val inH = (h as? Number)?.toInt()
+                    if (inW != null && inH != null && !CenterCrop.aligned(inW, inH) && inSize != me.misaligned) {
+                        Journal.trouble(LogCode.CALL, "пришло некратное", "кто" to kto, "кадр" to inSize, "раскодировщик" to decoder)
+                    }
+                    me.misaligned = inSize
+
+                    val line = inSize + "|" + (kbit / 100) + "|" + decoder + "|" + codec
+                    if (line == me.said) continue
+                    me.said = line
+                    Journal.note(
+                        LogCode.CALL, "приходящее видео участника",
+                        "кто" to kto,
+                        "кадр" to inSize,
+                        "кодек" to (codec ?: "—"),
+                        "кбит/с" to if (kbit < 0) "считаем" else kbit.toString(),
+                        "раскодировщик" to decoder,
+                        "раскод мс" to (decodeMs?.let { tenth(it) } ?: "—"),
+                        "выброшено" to (dropped ?: "—"),
+                    )
+                }
+                // Ушедшие — забыть: вернётся, начнём заново.
+                known.keys.retainAll(present)
+                peerLoss.keys.retainAll(present)
             }
         }
     }
@@ -1247,6 +1364,7 @@ class LiveKitCallEngine(
                         speaking = who.isSpeaking,
                         paused = who.attributes[VideoPause.ATTRIBUTE] == VideoPause.PAUSED,
                         video = handle,
+                        videoLoss = peerLoss[identity],
                     )
                 }.sortedBy { it.identity }
                 if (list != _peers.value) _peers.value = list

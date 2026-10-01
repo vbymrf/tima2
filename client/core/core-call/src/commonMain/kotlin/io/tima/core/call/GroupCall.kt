@@ -62,6 +62,11 @@ data class CallPeer(
     val speaking: Boolean = false,
     val paused: Boolean = false,
     val video: VideoHandle? = null,
+    /**
+     * Его видео показывается, а у нас кадров нет — и почему ([RemoteVideoWatch]). Своё у
+     * каждого участника: в групповом общая строка окна говорила бы про случайного.
+     */
+    val videoLoss: RemoteVideoLoss? = null,
 )
 
 /** Кто такой участник по `identity` LiveKit: `user:device`. */

@@ -2192,6 +2192,12 @@ private fun App(
             io.tima.feature.call.GroupTile(
                 key = p.identity, name = name, letters = lettersOf(name), video = p.video,
                 microphoneOn = p.microphoneOn, speaking = p.speaking, paused = p.paused, self = false,
+                // Пропажа видео — на клетке того, у кого пропало (заказчик 2026-10-01).
+                videoTrouble = when (val loss = p.videoLoss) {
+                    null -> null
+                    io.tima.core.call.RemoteVideoLoss.NotArriving -> wordsNow.groupCall.tileVideoNotArriving
+                    is io.tima.core.call.RemoteVideoLoss.NotDecoding -> wordsNow.groupCall.tileVideoNotDecoding(loss.codec)
+                },
             )
         }
         LaunchedEffect(peers.map { it.userId }) { people.want(peers.map { it.userId }.filter { it != me }) }

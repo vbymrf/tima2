@@ -396,6 +396,8 @@ data class GroupTile(
     val speaking: Boolean,
     val paused: Boolean,
     val self: Boolean,
+    /** Видео участника не приходит или не раскодируется — словами на его клетке; `null` — всё в порядке. */
+    val videoTrouble: String? = null,
 )
 
 /**
@@ -433,6 +435,16 @@ private fun GroupCell(tile: GroupTile, modifier: Modifier) {
             CallVideo(tile.video, Modifier.fillMaxSize())
         } else {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Avatar(letters = tile.letters, size = AvatarSize.Big) }
+        }
+        tile.videoTrouble?.let {
+            Caption(
+                it,
+                modifier = Modifier.align(Alignment.TopStart).background(colors.surface.copy(alpha = 0.8f))
+                    .padding(horizontal = TimaSpacing.about2, vertical = TimaSpacing.about1),
+                fontSize = TimaType.sz6,
+                weight = FontWeight.SemiBold,
+                color = colors.alarm,
+            )
         }
         val marks = (if (!tile.microphoneOn) " 🔇" else "") + (if (tile.paused) " ⏸" else "")
         Caption(

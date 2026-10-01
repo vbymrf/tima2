@@ -85,6 +85,10 @@ interface GroupCallWords {
     val forbiddenVideo: String
     val removed: String
 
+    // Клетка участника: его видео пропало (заказчик 2026-10-01).
+    val tileVideoNotArriving: String
+    fun tileVideoNotDecoding(codec: String): String
+
     // ── Группа и приглашение (решения 3а, 10, 11) ──
     val start: String
     val join: String
@@ -171,6 +175,8 @@ object RussianGroupCall : GroupCallWords {
     override val forbiddenMic = "микрофон запрещён"
     override val forbiddenVideo = "видео запрещено"
     override val removed = "Создатель удалил вас из звонка"
+    override val tileVideoNotArriving = "Видео не приходит"
+    override fun tileVideoNotDecoding(codec: String) = "Видео $codec не раскодируется"
 
     override val start = "Совершить групповой звонок"
     override val join = "Присоединиться"
@@ -257,6 +263,8 @@ object EnglishGroupCall : GroupCallWords {
     override val forbiddenMic = "microphone forbidden"
     override val forbiddenVideo = "video forbidden"
     override val removed = "The creator removed you from the call"
+    override val tileVideoNotArriving = "Video is not arriving"
+    override fun tileVideoNotDecoding(codec: String) = "Cannot decode $codec video"
 
     override val start = "Start a group call"
     override val join = "Join"
@@ -343,6 +351,8 @@ object SpanishGroupCall : GroupCallWords {
     override val forbiddenMic = "micrófono prohibido"
     override val forbiddenVideo = "vídeo prohibido"
     override val removed = "El creador le quitó de la llamada"
+    override val tileVideoNotArriving = "El vídeo no llega"
+    override fun tileVideoNotDecoding(codec: String) = "No se puede decodificar el vídeo $codec"
 
     override val start = "Hacer una llamada grupal"
     override val join = "Unirse"

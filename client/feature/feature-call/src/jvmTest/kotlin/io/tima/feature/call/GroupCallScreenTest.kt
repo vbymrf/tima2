@@ -15,7 +15,7 @@ class GroupCallScreenTest {
     private fun stage(count: Int, paused: Boolean = false) = GroupStage(
         title = "Планёрка",
         tiles = listOf("Вы", "Анна", "Борис", "Вера", "Галина", "Дмитрий", "Елена", "Жанна", "Зоя").take(count)
-            .mapIndexed { i, n -> tile(i, n, mic = i != 2, speaking = i == 1) },
+            .mapIndexed { i, n -> tile(i, n, mic = i != 2, speaking = i == 1).copy(videoTrouble = "Видео не приходит".takeIf { i == 3 }) },
         count = count,
         max = 25,
         paused = paused,
