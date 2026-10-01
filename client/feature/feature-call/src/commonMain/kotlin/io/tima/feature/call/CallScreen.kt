@@ -427,12 +427,12 @@ private fun GroupCell(tile: GroupTile, modifier: Modifier) {
     Box(
         modifier
             .background(colors.functional)
-            .border(width = if (tile.speaking) 3.dp else 0.dp, color = if (tile.speaking) colors.activity else colors.functional),
+            .border(width = if (tile.speaking) 3.dp else 0.dp, color = if (tile.speaking) colors.navigation else colors.functional),
     ) {
         if (tile.video != null) {
             CallVideo(tile.video, Modifier.fillMaxSize())
         } else {
-            InCenter(Modifier.fillMaxSize()) { Avatar(letters = tile.letters) }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Avatar(letters = tile.letters, size = AvatarSize.Big) }
         }
         val marks = (if (!tile.microphoneOn) " 🔇" else "") + (if (tile.paused) " ⏸" else "")
         Caption(

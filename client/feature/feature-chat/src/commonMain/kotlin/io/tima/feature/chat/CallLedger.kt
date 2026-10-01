@@ -227,7 +227,8 @@ fun CallLedgerPage(
                 if (tooMany) Caption(words.tooMany(max), fontSize = TimaType.sz5, weight = FontWeight.SemiBold, color = Tima.colors.alarm)
                 Row(
                     Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    // В идущем звонке шесть кнопок — по ширине; до звонка две — рядом слева.
+                    horizontalArrangement = if (live) Arrangement.SpaceBetween else Arrangement.spacedBy(TimaSpacing.about5),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     CallAction("➕", words.add, chosenPool.isNotEmpty() && !tooMany) {
