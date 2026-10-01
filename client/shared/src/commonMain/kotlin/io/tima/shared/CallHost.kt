@@ -86,7 +86,21 @@ class CallHost(
      * Ссылкой: настройку меняют, пока ведущий жив.
      */
     private val cameraInBackground: () -> Boolean = { false },
+    /**
+     * Служба звонка: поднять и погасить. Платформенные по умолчанию; параметрами — ради
+     * проверок, которым нужно видеть, сколько раз и когда службу трогали.
+     */
+    serviceOn: (ServiceWish) -> Unit = { callOngoing(it.title, it.text, it.hangUpLabel, it.connectedAt, it.camera) },
+    serviceOff: () -> Unit = ::callOngoingOff,
+    /** Часы ворот службы — в проверках виртуальные. */
+    clock: () -> Long = { msNow() },
 ) {
+    /**
+     * Все подъёмы и гашения службы — только здесь: не чаще одного подъёма в секунду, повтор
+     * того же не отправляется (заказчик 2026-10-01, [ServiceGate]).
+     */
+    private val service = ServiceGate(scope, clock, serviceOn, serviceOff)
+
     /** Идёт ли звонок. По этому признаку окно 0 есть или его нет (`Window.shown`). */
     var active by mutableStateOf(false)
         private set
@@ -414,7 +428,7 @@ class CallHost(
         // понятным — по нему кажется, что звонков было два.
         if (!active || state.stage == CallStage.Ended) return
         watchdog?.cancel()
-        callOngoingOff()
+        service.off()
         scope.launch {
             engine?.disconnect()
             if (id.isNotEmpty()) calls.end(id)
@@ -458,9 +472,11 @@ class CallHost(
         toldOnce = true
         // Камера — в тип службы, только когда человек выбрал показывать себя свёрнутым (1в):
         // без этого типа HyperOS отбирает камеру у свёрнутого приложения через секунды.
-        callOngoing(
-            words().call.activeCall, peer.ifBlank { words().chat.nameless }, words().call.hangUp, connectedAt,
-            camera = cameraInBackground() && state.cameraOn,
+        service.want(
+            ServiceWish(
+                words().call.activeCall, peer.ifBlank { words().chat.nameless }, words().call.hangUp, connectedAt,
+                camera = cameraInBackground() && state.cameraOn,
+            ),
         )
     }
 
@@ -549,7 +565,7 @@ class CallHost(
 
     fun close() {
         watchdog?.cancel()
-        callOngoingOff()
+        service.off()
         nearEarOn = false
         callProximity(false)
         screenOnNow = false
@@ -747,7 +763,7 @@ class CallHost(
             // Звонка нет — и следа его в шторке быть не должно: висящее уведомление
             // «идёт звонок» хуже отсутствующего, потому что ему верят.
             if (now.stage == CallStage.Ended) {
-                callOngoingOff()
+                service.off()
                 // ── И ОТПУСТИТЬ МЕДИА ───────────────────────────────────────
                 //
                 // **Трубку мог положить собеседник, и тогда наш движок никто не
