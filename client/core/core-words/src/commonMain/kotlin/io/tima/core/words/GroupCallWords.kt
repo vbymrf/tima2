@@ -113,6 +113,13 @@ interface GroupCallWords {
     val viewSelf: String
     val back: String
     val voiceTitle: String
+    val viewSpeaker: String
+    val viewAbout: String
+    val viewSelfOn: String
+    val viewSelfOff: String
+    val voiceButton: String
+    val voiceForbidden: String
+    val pinnedMark: String
 
     // Клетка участника: его видео пропало (заказчик 2026-10-01).
     val tileVideoNotArriving: String
@@ -138,7 +145,7 @@ object RussianGroupCall : GroupCallWords {
     override val ring = "Звонить"
     override val ringAbout = "Один вызов отмеченным; кто не ответил — повторно не звоним, ему придёт приглашение"
     override val video = "Включить видео"
-    override val videoAbout = "Камера включится сразу; больше 8 участников — только голос"
+    override val videoAbout = "Камера включится сразу; видео принимаем только тех, кто на экране"
     override val pickFromContacts = "Выбрать участников по журналу контактов"
     override val pickFromContactsAbout = "Отметьте людей — звонок начнётся сразу"
     override val pickFromGroup = "Журнал группы"
@@ -227,6 +234,13 @@ object RussianGroupCall : GroupCallWords {
     override val viewSelf = "Показывать себя"
     override val back = "Назад"
     override val voiceTitle = "Голосом"
+    override val viewSpeaker = "Говорящий"
+    override val viewAbout = "Как показывать участников в звонке"
+    override val viewSelfOn = "себя показываем"
+    override val viewSelfOff = "себя не показываем"
+    override val voiceButton = "Голос"
+    override val voiceForbidden = "голос запрещён"
+    override val pinnedMark = "закреплён"
     override val tileVideoNotArriving = "Видео не приходит"
     override fun tileVideoNotDecoding(codec: String) = "Видео $codec не раскодируется"
 
@@ -249,7 +263,7 @@ object EnglishGroupCall : GroupCallWords {
     override val ring = "Ring"
     override val ringAbout = "One ring to the chosen people; those who miss it are not called again — they get an invitation"
     override val video = "Turn on video"
-    override val videoAbout = "The camera starts right away; over 8 people — voice only"
+    override val videoAbout = "The camera starts right away; video comes only from those on screen"
     override val pickFromContacts = "Choose people from the contact ledger"
     override val pickFromContactsAbout = "Tick people — the call starts right away"
     override val pickFromGroup = "Group ledger"
@@ -338,6 +352,13 @@ object EnglishGroupCall : GroupCallWords {
     override val viewSelf = "Show myself"
     override val back = "Back"
     override val voiceTitle = "Voice only"
+    override val viewSpeaker = "Speaker"
+    override val viewAbout = "How to show the call participants"
+    override val viewSelfOn = "I show myself"
+    override val viewSelfOff = "I hide myself"
+    override val voiceButton = "Voice"
+    override val voiceForbidden = "voice forbidden"
+    override val pinnedMark = "pinned"
     override val tileVideoNotArriving = "Video is not arriving"
     override fun tileVideoNotDecoding(codec: String) = "Cannot decode $codec video"
 
@@ -360,7 +381,7 @@ object SpanishGroupCall : GroupCallWords {
     override val ring = "Llamar"
     override val ringAbout = "Una llamada a los marcados; a quien no conteste no se le vuelve a llamar — le llega una invitación"
     override val video = "Activar vídeo"
-    override val videoAbout = "La cámara se enciende enseguida; más de 8 personas — solo voz"
+    override val videoAbout = "La cámara se enciende enseguida; solo recibimos el vídeo de quienes están en pantalla"
     override val pickFromContacts = "Elegir participantes del registro de contactos"
     override val pickFromContactsAbout = "Marque a las personas — la llamada empieza enseguida"
     override val pickFromGroup = "Registro del grupo"
@@ -449,6 +470,13 @@ object SpanishGroupCall : GroupCallWords {
     override val viewSelf = "Mostrarme"
     override val back = "Atrás"
     override val voiceTitle = "Solo voz"
+    override val viewSpeaker = "Quien habla"
+    override val viewAbout = "Cómo mostrar a los participantes"
+    override val viewSelfOn = "me muestro"
+    override val viewSelfOff = "no me muestro"
+    override val voiceButton = "Voz"
+    override val voiceForbidden = "voz prohibida"
+    override val pinnedMark = "fijado"
     override val tileVideoNotArriving = "El vídeo no llega"
     override fun tileVideoNotDecoding(codec: String) = "No se puede decodificar el vídeo $codec"
 

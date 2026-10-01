@@ -1280,7 +1280,7 @@ class CallHost(
             // лишь страхует, если данные комнаты не дошли.
             GroupControl.Pause -> if (!state.roomPaused) paused(true)
             GroupControl.Resume -> if (beforePause != null) paused(false)
-            GroupControl.Stop, GroupControl.Invite, null -> Unit
+            GroupControl.Stop, GroupControl.Invite, GroupControl.Pin, GroupControl.Unpin, null -> Unit
         }
     }
 

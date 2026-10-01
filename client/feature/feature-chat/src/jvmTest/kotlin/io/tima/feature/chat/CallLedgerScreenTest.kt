@@ -29,7 +29,10 @@ class CallLedgerScreenTest {
     @Test
     fun настройка_звонка_две_галочки_и_две_кнопки() {
         val shot = capture("групповой-настройка", 400, 700, dark = false) {
-            GroupCallSetup(ring = false, video = true, fromGroup = false, onRing = {}, onVideo = {}, onPick = {}, onCreateChat = {})
+            GroupCallSetup(
+                ring = false, video = true, fromGroup = false, onRing = {}, onVideo = {}, onPick = {}, onCreateChat = {},
+                viewNow = "По 4 · себя показываем",
+            )
         }
         assertTrue(shot.has(TimaColors.light.navigation, tolerance = 0.06), "отмеченное «Включить видео» не выделено")
     }

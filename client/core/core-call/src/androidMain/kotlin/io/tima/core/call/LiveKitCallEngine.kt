@@ -1395,7 +1395,12 @@ class LiveKitCallEngine(
                 }.sortedBy { it.identity }
                 if (list != _peers.value) _peers.value = list
                 val paused = roomPaused(room.metadata)
-                if (paused != _state.value.roomPaused) _state.value = _state.value.copy(roomPaused = paused)
+                val pinned = RoomMeta.pinned(room.metadata)
+                val selfSpeaking = room.localParticipant.isSpeaking
+                val was = _state.value
+                if (paused != was.roomPaused || pinned != was.roomPinned || selfSpeaking != was.selfSpeaking) {
+                    _state.value = was.copy(roomPaused = paused, roomPinned = pinned, selfSpeaking = selfSpeaking)
+                }
                 if (paused != saidPaused) {
                     if (saidPaused != null) Journal.note(LogCode.CALL, "пауза группового звонка", "на паузе" to paused)
                     saidPaused = paused

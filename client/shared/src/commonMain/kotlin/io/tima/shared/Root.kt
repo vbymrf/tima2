@@ -21,6 +21,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
@@ -1768,6 +1771,19 @@ private fun App(
         return
     }
 
+    // Вид группового — один на окно 0, область 3 ПК и настройку звонка; выбор сохраняется
+    // и становится видом следующего звонка (заказчик 2026-10-01).
+    val groupView = remember(assembled) { io.tima.feature.call.GroupView() }
+    LaunchedEffect(groupView) {
+        runCatching { environment.settings.all().first()[GROUP_VIEW_KEY] }.getOrNull()?.let { groupView.restore(it) }
+        snapshotFlow { groupView.saved() }.collect { runCatching { environment.settings.put(GROUP_VIEW_KEY, it) } }
+    }
+    // Новый звонок — с первой страницы, ничего не развёрнуто, места наверху заново.
+    LaunchedEffect(callHost.group?.groupId) {
+        groupView.page = 0
+        groupView.expanded = null
+        groupView.choosing = false
+    }
     // Окна группового звонка — поверх всего: настройка и журнал звонка (ГЗ5, ГЗ6).
     val groupNameOf: (String) -> String = { uid ->
         if (uid == session.userId) {
@@ -1798,6 +1814,7 @@ private fun App(
                 where = Where.Chat(groupId, title)
                 groupDesk.trouble = null
             },
+            groupView = groupView,
         )
     ) return
 
@@ -2177,8 +2194,9 @@ private fun App(
         ).takeIf { callHost.active && window != Window.Call },
     ) {
     // Групповой звонок для окна 0 и области 3 широкого формата (ГЗ4, ГЗ8).
-    // Вид группового — один на окно 0 и область 3 ПК; новый звонок — вид по умолчанию.
-    val groupView = remember(callHost.group?.groupId) { io.tima.feature.call.GroupView() }
+    val forbiddenMics = callHost.group?.groupId?.let { gid ->
+        groupDesk.live[gid]?.call?.members?.filter { it.micForbidden }?.map { it.userId }?.toSet()
+    }.orEmpty()
     val groupStage = callHost.group?.let { g ->
         // Порядок — по входу (4б): вошедший в конец, ушедший выпадает.
         val order = callHost.peerOrder
@@ -2190,8 +2208,10 @@ private fun App(
                 key = "me", name = selfName,
                 letters = lettersOf(peopleCards[me]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE) ?: selfName),
                 video = callHost.localVideo.collectAsState().value,
-                microphoneOn = callHost.state.microphoneOn, speaking = false, paused = false, self = true,
+                microphoneOn = callHost.state.microphoneOn, speaking = callHost.state.selfSpeaking, paused = false, self = true,
                 cameraOn = callHost.state.cameraOn,
+                userId = me,
+                micForbidden = callHost.micForbidden,
             ),
         ) + peers.map { p ->
             val name = peopleCards[p.userId]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)
@@ -2202,6 +2222,8 @@ private fun App(
                 microphoneOn = p.microphoneOn, speaking = p.speaking, paused = p.paused, self = false,
                 // Показывает себя — клетка; нет — строка «голосом» (заказчик 2026-10-01).
                 cameraOn = p.cameraOn,
+                userId = p.userId,
+                micForbidden = forbiddenMics.contains(p.userId),
                 // Пропажа видео — на клетке того, у кого пропало (заказчик 2026-10-01).
                 bench = p.bench,
                 incoming = p.incoming,
@@ -2223,7 +2245,44 @@ private fun App(
             onParticipants = groupDesk::openLive,
             onStopAll = { callHost.control(io.tima.core.call.GroupControl.Stop) },
             view = groupView,
+            pinnedKey = callHost.state.roomPinned.takeIf { it.isNotEmpty() }?.let { pin ->
+                if (pin == me) "me" else peers.firstOrNull { it.userId == pin }?.identity
+            },
+            // «Голос» и «📌» — только у создателя (заказчик 2026-10-01).
+            onVoice = if (g.mine) ({ t ->
+                callHost.control(
+                    if (t.micForbidden) io.tima.core.call.GroupControl.AllowMic else io.tima.core.call.GroupControl.MuteMic,
+                    t.userId,
+                )
+                groupDesk.refreshSoon(g.groupId)
+            }) else null,
+            onPin = if (g.mine) ({ t ->
+                val pinnedNow = callHost.state.roomPinned == t.userId
+                callHost.control(if (pinnedNow) io.tima.core.call.GroupControl.Unpin else io.tima.core.call.GroupControl.Pin, t.userId)
+            }) else null,
         )
+    }
+    // Правило мест вида «Говорящий» — раз в полсекунды: замолчавший становится вытесняемым
+    // по времени, а не по событию.
+    val stageNow by rememberUpdatedState(groupStage)
+    LaunchedEffect(callHost.group?.groupId, groupView.mode) {
+        if (callHost.group == null || groupView.mode != io.tima.feature.call.GroupMode.Speaker) return@LaunchedEffect
+        while (true) {
+            val st = stageNow ?: break
+            val peersKeys = st.tiles.filter { !it.self }.map { it.key }
+            val order = peersKeys + "me"
+            val speaking = st.tiles.filter { it.speaking }.map { it.key }.toSet()
+            groupView.slots = groupView.speaker.update(order, speaking, st.pinnedKey, msNow())
+            delay(500)
+        }
+    }
+    // Запреты голоса — со слов сервера, пока идёт групповой: пузыри и журнал звонка.
+    LaunchedEffect(callHost.group?.groupId) {
+        val g = callHost.group ?: return@LaunchedEffect
+        while (true) {
+            groupDesk.refresh(g.groupId)
+            delay(5_000)
+        }
     }
     // Принимаем видео только видимых на странице (2а): ушла страница — отписка.
     val visibleNow = groupStage?.let { st ->
@@ -4932,3 +4991,6 @@ private fun ContactSoundSheet(
 
 /** Кому уже уходило приглашение в группу звонка — ключ настроек устройства + номер группы. */
 private const val INVITED_PREFIX = "call.group.invited."
+
+/** Выбранный вид группового звонка — ключ настроек устройства. */
+private const val GROUP_VIEW_KEY = "call.group.view"

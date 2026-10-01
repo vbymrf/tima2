@@ -99,6 +99,14 @@ object BenchAttribute {
     const val ATTRIBUTE = "tima.bench"
 }
 
+/** Пауза и закреплённый — из данных комнаты: `{"paused":true,"pinned":"<user>"}`. */
+object RoomMeta {
+    fun paused(metadata: String?): Boolean = metadata?.replace(" ", "")?.contains("\"paused\":true") == true
+
+    fun pinned(metadata: String?): String =
+        metadata?.let { Regex("\"pinned\"\\s*:\\s*\"([^\"]*)\"").find(it)?.groupValues?.get(1) }.orEmpty()
+}
+
 /** Кто такой участник по `identity` LiveKit: `user:device`. */
 fun userOfIdentity(identity: String): String = identity.substringBefore(':')
 
@@ -161,6 +169,9 @@ enum class GroupControl(val wire: String) {
     /** Снять запрет — включает участник сам. */
     AllowMic("allow_mic"),
     AllowVideo("allow_video"),
+    /** Закрепить участника наверху вида «Говорящий» у всех; открепить (заказчик 2026-10-01). */
+    Pin("pin"),
+    Unpin("unpin"),
     Remove("remove"),
     Pause("pause"),
     Resume("resume"),

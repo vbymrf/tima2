@@ -108,6 +108,9 @@ class GroupCallDesk(
     var ledger by mutableStateOf<Pair<Mode, Ask>?>(null)
         private set
     var help by mutableStateOf(false)
+
+    /** Открыто подокно «Вид» из настройки звонка; «‹» возвращает в настройку. */
+    var viewing by mutableStateOf(false)
     var ring by mutableStateOf(false)
     var video by mutableStateOf(true)
 
@@ -167,6 +170,7 @@ class GroupCallDesk(
 
     fun closeSetup() {
         setup = null
+        viewing = false
     }
 
     /** Первая кнопка настройки — журнал: контактов или группы. */
@@ -414,9 +418,23 @@ fun GroupCallOverlays(
     view: BookView,
     onShowCall: () -> Unit,
     onOpenChat: (String, String) -> Unit,
+    /** Вид группового — тот же, что в звонке: выбор здесь становится видом звонка. */
+    groupView: io.tima.feature.call.GroupView = io.tima.feature.call.GroupView(),
 ): Boolean {
     val words = Tima.words.groupCall
     desk.setup?.let { ask ->
+        if (desk.viewing) {
+            Box(
+                Modifier.fillMaxSize().background(Tima.colors.text.copy(alpha = 0.45f)).clickable { desk.viewing = false },
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                Column(Modifier.fillMaxWidth().background(Tima.colors.surface).clickable(enabled = false) {}) {
+                    Header(title = words.viewButton, onBack = { desk.viewing = false }, onClose = desk::closeSetup)
+                    io.tima.feature.call.GroupViewChoice(groupView)
+                }
+            }
+            return true
+        }
         Box(
             Modifier.fillMaxSize().background(Tima.colors.text.copy(alpha = 0.45f)).clickable { desk.closeSetup() },
             contentAlignment = Alignment.BottomCenter,
@@ -433,6 +451,13 @@ fun GroupCallOverlays(
                         onPick = desk::pick,
                         onCreateChat = if (ask.groupId == null) desk::pickForChat else null,
                         noRights = !ask.canStart,
+                        viewNow = if (groupView.mode == io.tima.feature.call.GroupMode.Speaker) {
+                            words.viewSpeaker
+                        } else {
+                            (when (groupView.perPage) { 1 -> words.viewOne; 2 -> words.viewTwo; else -> words.viewFour }) +
+                                " · " + (if (groupView.showSelf) words.viewSelfOn else words.viewSelfOff)
+                        },
+                        onView = { desk.viewing = true },
                     )
                 }
             }

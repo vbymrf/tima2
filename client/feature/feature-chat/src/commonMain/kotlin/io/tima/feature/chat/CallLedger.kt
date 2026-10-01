@@ -464,11 +464,28 @@ fun GroupCallSetup(
     modifier: Modifier = Modifier,
     onCreateChat: (() -> Unit)? = null,
     noRights: Boolean = false,
+    /** Выбранный вид словами — под строкой «Вид»; `null` — строки нет. */
+    viewNow: String? = null,
+    /** «Вид» — подокно выбора вида, то же, что в звонке (заказчик 2026-10-01). */
+    onView: () -> Unit = {},
 ) {
     val words = Tima.words.groupCall
     Column(modifier.fillMaxWidth().padding(vertical = TimaSpacing.about2)) {
         SetupCheck(words.ring, words.ringAbout, ring) { onRing(!ring) }
         SetupCheck(words.video, words.videoAbout, video) { onVideo(!video) }
+        // «Вид» — сразу после «Включить видео», в том же виде: название, описание, справа
+        // маленькая кнопка «Вид», как в окне звонка.
+        viewNow?.let { now ->
+            ListLine(
+                onClick = onView,
+                left = { Box(Modifier.size(TimaZones.zone1 * 0.8f)) },
+                middle = {
+                    Caption(words.viewButton, fontSize = TimaType.sz4, weight = FontWeight.Bold)
+                    Tertiary(words.viewAbout + ": " + now)
+                },
+                right = { Button(label = words.viewButton, onClick = onView, kind = ButtonKind.Quiet) },
+            )
+        }
         Column(
             Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about3),
             verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),

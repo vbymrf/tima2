@@ -851,14 +851,20 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             mutedSids -= it.track_sid
             if (remote?.sid == it.track_sid) _state.value = _state.value.copy(remoteVideoShown = true)
         }
-        event.active_speakers_changed?.let { speaking = it.participant_identities.toSet() }
+        event.active_speakers_changed?.let {
+            speaking = it.participant_identities.toSet()
+            val me = myIdentity in speaking
+            if (me != _state.value.selfSpeaking) _state.value = _state.value.copy(selfSpeaking = me)
+        }
         event.room_metadata_changed?.let { roomPaused(it.metadata) }
         if (group != null) publishPeers()
     }
 
     /** Пауза создателя — в данных комнаты `{"paused":true}` (решение 5). */
     private fun roomPaused(metadata: String?) {
-        val paused = metadata?.replace(" ", "")?.contains("\"paused\":true") == true
+        val paused = io.tima.core.call.RoomMeta.paused(metadata)
+        val pinned = io.tima.core.call.RoomMeta.pinned(metadata)
+        if (pinned != _state.value.roomPinned) _state.value = _state.value.copy(roomPinned = pinned)
         if (paused == _state.value.roomPaused) return
         _state.value = _state.value.copy(roomPaused = paused)
         Journal.note(LogCode.CALL, "пауза группового звонка", "на паузе" to paused)

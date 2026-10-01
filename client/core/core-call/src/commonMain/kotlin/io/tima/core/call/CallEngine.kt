@@ -270,6 +270,10 @@ data class CallState(
      * комнате, звук и видео стоят.
      */
     val roomPaused: Boolean = false,
+    /** Закреплённый создателем участник (вид «Говорящий»); пусто — никто. */
+    val roomPinned: String = "",
+    /** Говорю ли я сейчас — со слов SFU: в виде «Говорящий» я наверху, как все. */
+    val selfSpeaking: Boolean = false,
     /** Какая камера: передняя — `true`. */
     val cameraFront: Boolean = true,
     /** Есть ли вторая камера — стоит ли кнопка «Переключение камеры». */
