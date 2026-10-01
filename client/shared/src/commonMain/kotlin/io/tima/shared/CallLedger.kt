@@ -22,8 +22,11 @@ object CallLedger {
     sealed interface Action {
         val callId: String
 
-        /** Нам звонят — звонить. */
-        data class Ring(override val callId: String, val fromId: String, val video: Boolean) : Action
+        /**
+         * Нам звонят — звонить. [groupId] — групповой звонок: зовёт создатель в группу
+         * (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ3); пусто — звонок на двоих.
+         */
+        data class Ring(override val callId: String, val fromId: String, val video: Boolean, val groupId: String = "") : Action
 
         /** Трубку взяли на другом устройстве этого человека — замолчать, звонок не трогать. */
         data class Taken(override val callId: String) : Action
@@ -41,7 +44,13 @@ object CallLedger {
          * Нам звонили и не дождались — уведомление «пропущенный». [atMs] — когда сервер
          * записал конец: по нему старое, поднятое догонкой, молчит (ЖУ3).
          */
-        data class Missed(override val callId: String, val fromId: String, val video: Boolean, val atMs: Long = 0) : Action
+        data class Missed(
+            override val callId: String,
+            val fromId: String,
+            val video: Boolean,
+            val atMs: Long = 0,
+            val groupId: String = "",
+        ) : Action
 
         /** Пропущенный просмотрен на каком-то устройстве — снять строку в шторке. */
         data class MissedSeen(override val callId: String) : Action
@@ -62,14 +71,39 @@ object CallLedger {
         // Звонки, которые в этой же пачке кончились или ушли на другое устройство, —
         // звонить по ним нечего.
         val closed = updates
-            .filter { it.change in ENDS || (it.change == "answered" && it.call.peerId == me) }
+            .filter { it.change in ENDS || (it.change == "answered" && invitee(me, it)) }
             .map { it.callId }
             .toSet()
         val missedTold = mutableSetOf<String>()
         val out = mutableListOf<Action>()
         for (u in updates) {
-            val callee = u.call.peerId == me
             val caller = u.call.initiatorId == me
+            // ── ГРУППОВОЙ (ГЗ3) ────────────────────────────────────────────────
+            //
+            // Собеседника нет: лента приходит позванным и тем, кто был в звонке. Позванный —
+            // всякий, кто не создатель. Конец групповой никогда не «отклонил собеседник»:
+            // `declined` — это мой отказ с другого устройства, `missed` — не вошёл за срок.
+            if (u.call.group) {
+                when {
+                    caller && u.change in ENDS -> out += Action.End(u.callId, u.change)
+                    caller -> Unit
+                    u.change == "ringing" ->
+                        if (u.callId !in closed && u.call.ringing) {
+                            out += Action.Ring(u.callId, u.call.initiatorId, u.call.video, u.call.groupId)
+                        }
+                    u.change == "answered" ->
+                        out += if (u.here) Action.AnsweredHere(u.callId) else Action.Taken(u.callId)
+                    u.change in ENDS -> {
+                        out += Action.End(u.callId, u.change)
+                        if (u.change == "missed" && missedTold.add(u.callId)) {
+                            out += Action.Missed(u.callId, u.call.initiatorId, u.call.video, u.atMs, u.call.groupId)
+                        }
+                    }
+                    u.change == "seen" -> out += Action.MissedSeen(u.callId)
+                }
+                continue
+            }
+            val callee = u.call.peerId == me
             when {
                 callee && u.change == "ringing" ->
                     // Снимок — на момент чтения: звонок мог кончиться, пока телефон спал.
@@ -95,6 +129,10 @@ object CallLedger {
         }
         return out
     }
+
+    /** Изменение касается меня как позванного: вызываемый личного, не создатель группового. */
+    private fun invitee(me: String, u: CallUpdate): Boolean =
+        if (u.call.group) u.call.initiatorId != me else u.call.peerId == me
 
     /**
      * Звонки из журнала, которые звонят мне прямо сейчас, — при запуске процесса

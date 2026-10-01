@@ -962,7 +962,6 @@ object SpanishWords : Words {
         override val videoCall = "Videollamada"
         override val groupCall = "Llamada en grupo"
         override val write = "Escribir"
-        override val groupCallLater = "Las llamadas en grupo llegarán más adelante. Por ahora se puede llamar a una sola persona"
         override val commentsOn = "Las entradas se pueden debatir"
         override val commentsOff = "Los debates están desactivados"
         override val turnCommentsOff = "Desactivar los debates"
@@ -1005,6 +1004,7 @@ object SpanishWords : Words {
         override val nameSelfChosen = "cómo se llamó a sí mismo"
     }
 
+    override val groupCall: GroupCallWords = SpanishGroupCall
     override val call = object : CallWords {
         override val incoming = "Llamada entrante"
         override val outgoing = "Llamando"

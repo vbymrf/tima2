@@ -2,6 +2,11 @@ package io.tima.core.call.desktop
 
 import com.sun.jna.Pointer
 import io.tima.core.call.CallDoor
+import io.tima.core.call.CallPeer
+import io.tima.core.call.GroupRoom
+import io.tima.core.call.VideoPause
+import io.tima.core.call.cappedTo
+import io.tima.core.call.userOfIdentity
 import io.tima.core.call.CenterCrop
 import io.tima.core.call.CallEngine
 import io.tima.core.call.CallQuality
@@ -129,6 +134,31 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     private val _remoteVideo = MutableStateFlow<VideoHandle?>(null)
     override val remoteVideo: StateFlow<VideoHandle?> = _remoteVideo.asStateFlow()
 
+    // ── ГРУППОВОЙ ЗВОНОК (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ8) ─────────────────────────────
+    private val _peers = MutableStateFlow<List<CallPeer>>(emptyList())
+    override val peers: StateFlow<List<CallPeer>> = _peers.asStateFlow()
+
+    /** Группа идущего звонка; `null` — звонок на двоих. */
+    @Volatile
+    private var group: GroupRoom? = null
+
+    /**
+     * Картинки участников группового: по потоку кадров. Читается потоком библиотеки при
+     * каждом кадре — отсюда потокобезопасная таблица.
+     */
+    private val groupRemotes = java.util.concurrent.ConcurrentHashMap<Long, GroupRemote>()
+
+    private class GroupRemote(val identity: String, val sid: String, val track: Long, val stream: Long, val handle: Frames)
+
+    /** Атрибуты участников — «свернул приложение» у каждого (1б). */
+    private val peerAttributes = HashMap<String, Map<String, String>>()
+
+    /** Кто говорит — по `active_speakers_changed`. */
+    private var speaking = emptySet<String>()
+
+    /** Потолок высоты своего видео по числу участников; `null` — не урезано. */
+    private var ceilingHeight: Int? = null
+
     // ── Комната. Всё — ручки библиотеки; 0 — нет. ───────────────────────────
     private var room = 0L
     private var localParticipant = 0L
@@ -218,7 +248,9 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         preset = publish
         everAnswered = false
         takeRemote = true
-        _state.value = CallState(stage = CallStage.Connecting, callId = door.callId)
+        group = door.group
+        ceilingHeight = null
+        _state.value = CallState(stage = CallStage.Connecting, callId = door.callId, roomPaused = door.group?.paused == true)
         Ffi.listen(listener)
         pump = scope.launch(worker) { for (event in events) onRoom(event) }
 
@@ -253,6 +285,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         localParticipant = result.local_participant.handle.id
         owned += localParticipant
         myIdentity = result.local_participant.info.identity
+        roomPaused(result.room.info.metadata)
         for (who in result.participants) {
             owned += who.participant.handle.id
             others += who.participant.info.identity
@@ -302,6 +335,8 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
 
     /** Собеседник сказал, что принимает, — или сказал заново. */
     private fun heard(identity: String, attributes: Map<String, String>) {
+        peerAttributes[identity] = attributes
+        if (group != null) publishPeers()
         val told = PeerCodecs.read(attributes[PeerCodecs.ATTRIBUTE]) ?: return
         if (peerCodecs.put(identity, told) != told) {
             Journal.note(LogCode.CALL, "собеседник принимает", "кодеки" to told.joinToString(", ") { it.name })
@@ -589,6 +624,8 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         }
         event.participant_disconnected?.let { gone ->
             others -= gone.participant_identity
+            peerAttributes -= gone.participant_identity
+            groupRemotes.entries.removeAll { (_, r) -> (r.identity == gone.participant_identity).also { if (it) dropRemote(r) } }
             peerCodecs -= gone.participant_identity
             peerSeen -= gone.participant_identity
             publications.entries.removeAll { (_, p) -> (p.identity == gone.participant_identity).also { if (it) Ffi.drop(p.handle) } }
@@ -639,8 +676,13 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         event.track_unpublished?.let { gone ->
             publications.remove(gone.publication_sid)?.let { Ffi.drop(it.handle) }
         }
-        event.track_subscribed?.let { onSubscribed(it.track) }
-        event.track_unsubscribed?.let { if (remote?.sid == it.track_sid) stopRemote() }
+        event.track_subscribed?.let {
+            if (group != null) onGroupSubscribed(it.participant_identity, it.track) else onSubscribed(it.track)
+        }
+        event.track_unsubscribed?.let { gone ->
+            if (remote?.sid == gone.track_sid) stopRemote()
+            groupRemotes.entries.removeAll { (_, r) -> (r.sid == gone.track_sid).also { if (it) dropRemote(r) } }
+        }
         event.track_muted?.let {
             mutedSids += it.track_sid
             if (remote?.sid == it.track_sid) _state.value = _state.value.copy(remoteVideoShown = false)
@@ -648,6 +690,95 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         event.track_unmuted?.let {
             mutedSids -= it.track_sid
             if (remote?.sid == it.track_sid) _state.value = _state.value.copy(remoteVideoShown = true)
+        }
+        event.active_speakers_changed?.let { speaking = it.participant_identities.toSet() }
+        event.room_metadata_changed?.let { roomPaused(it.metadata) }
+        if (group != null) publishPeers()
+    }
+
+    /** Пауза создателя — в данных комнаты `{"paused":true}` (решение 5). */
+    private fun roomPaused(metadata: String?) {
+        val paused = metadata?.replace(" ", "")?.contains("\"paused\":true") == true
+        if (paused == _state.value.roomPaused) return
+        _state.value = _state.value.copy(roomPaused = paused)
+        Journal.note(LogCode.CALL, "пауза группового звонка", "на паузе" to paused)
+    }
+
+    /**
+     * Участники группового — список для окна 0 и журнала звонка: у кого микрофон и камера
+     * (по публикациям и выключенным), кто говорит, кто свернул, чья картинка.
+     */
+    private fun publishPeers() {
+        val list = others.filter { it != myIdentity }.map { identity ->
+            val own = publications.entries.filter { it.value.identity == identity }
+            val mic = own.any { (sid, p) -> p.kind == TrackKind.KIND_AUDIO && sid !in mutedSids }
+            val cam = own.any { (sid, p) -> p.kind == TrackKind.KIND_VIDEO && sid !in mutedSids }
+            val picture = groupRemotes.values.firstOrNull { it.identity == identity && it.sid !in mutedSids }
+            CallPeer(
+                identity = identity,
+                userId = userOfIdentity(identity),
+                microphoneOn = mic,
+                cameraOn = cam,
+                speaking = identity in speaking,
+                paused = peerAttributes[identity]?.get(VideoPause.ATTRIBUTE) == VideoPause.PAUSED,
+                video = picture?.handle?.takeIf { takeRemote },
+            )
+        }.sortedBy { it.identity }
+        if (list != _peers.value) _peers.value = list
+    }
+
+    /** Чужая дорожка в групповом: видео — поток кадров на участника, звук играет ADM сам. */
+    private fun onGroupSubscribed(identity: String, track: OwnedTrack) {
+        if (track.info.kind != TrackKind.KIND_VIDEO) {
+            owned += track.handle.id
+            return
+        }
+        val stream = runCatching {
+            Ffi.request(
+                FfiRequest(
+                    new_video_stream = NewVideoStreamRequest(
+                        track_handle = track.handle.id,
+                        type = VideoStreamType.VIDEO_STREAM_NATIVE,
+                        format = VideoBufferType.BGRA,
+                        normalize_stride = true,
+                    ),
+                ),
+            ).new_video_stream?.stream?.handle?.id
+        }.getOrNull()
+        if (stream == null) {
+            Journal.trouble(LogCode.CALL, "видео участника не открылось")
+            Ffi.drop(track.handle.id)
+            return
+        }
+        groupRemotes[stream] = GroupRemote(identity, track.info.sid, track.handle.id, stream, Frames())
+        Journal.note(LogCode.CALL, "видео участника идёт", "участников с видео" to groupRemotes.size)
+    }
+
+    private fun dropRemote(r: GroupRemote) {
+        Ffi.drop(r.stream)
+        Ffi.drop(r.track)
+    }
+
+    override suspend fun setVideoCeiling(height: Int?) = withContext(worker) {
+        if (height == ceilingHeight) return@withContext
+        ceilingHeight = height
+        if (height == null) {
+            Journal.note(LogCode.CALL, "групповой: участников много — только голос")
+            setCamera(false)
+            return@withContext
+        }
+        val was = preset ?: return@withContext
+        val capped = was.cappedTo(height)
+        if (capped == was) return@withContext
+        preset = capped
+        Journal.note(
+            LogCode.CALL, "групповой: потолок видео по числу участников",
+            "кадр" to ("" + capped.video.width + "×" + capped.video.height),
+        )
+        // Камера ПК открывается под размер набора: открыть заново — единственный путь.
+        if (camera != null) {
+            setCamera(false)
+            setCamera(true)
         }
     }
 
@@ -729,6 +860,12 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     private fun onVideo(event: VideoStreamEvent) {
         val frame = event.frame_received ?: return
         try {
+            groupRemotes[event.stream_handle]?.let { r ->
+                val info = frame.buffer.info
+                val bytes = Pointer(info.data_ptr).getByteArray(0, info.width * info.height * 4)
+                r.handle.pictures.value = turn(VideoPicture(info.width, info.height, bytes), frame.rotation)
+                return
+            }
             val shown = remote ?: return
             if (event.stream_handle != shown.stream) return
             val info = frame.buffer.info
@@ -750,6 +887,8 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         val stage = when {
             roomState == ConnectionState.CONN_DISCONNECTED -> CallStage.Ended
             roomState == ConnectionState.CONN_RECONNECTING -> CallStage.Reconnecting
+            // Групповой: в комнате — в звонке, пустая комната не конец (ГЗ3).
+            group != null -> CallStage.Connected
             others.isNotEmpty() -> CallStage.Connected
             everAnswered -> CallStage.Ended
             else -> CallStage.Connecting
@@ -759,8 +898,9 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             others = others.toList(),
             inRoom = roomState == ConnectionState.CONN_CONNECTED,
             stage = stage,
-            peerLeft = stage == CallStage.Ended && everAnswered && roomState == ConnectionState.CONN_CONNECTED,
+            peerLeft = group == null && stage == CallStage.Ended && everAnswered && roomState == ConnectionState.CONN_CONNECTED,
         )
+        if (group != null) publishPeers()
     }
 
     override suspend fun disconnect() = withContext(worker) {
@@ -810,6 +950,12 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         mutedSids.clear()
         while (events.tryReceive().isSuccess) Unit
         stopRemote()
+        // Картинки участников группового — назад библиотеке, список — пустой.
+        for (r in groupRemotes.values) dropRemote(r)
+        groupRemotes.clear()
+        peerAttributes.clear()
+        speaking = emptySet()
+        _peers.value = emptyList()
         stopCamera()
         Ffi.drop(cameraTrack)
         Ffi.drop(cameraSource)

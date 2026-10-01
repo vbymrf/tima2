@@ -69,6 +69,50 @@ class CallsOverHttpTest {
         assertEquals(CallStep.Refused("peer_blocked"), calls.start(peerId = "u-2", video = true))
     }
 
+    @Test
+    fun дверь_группового_несёт_группу_создателя_и_правила() = runTest {
+        // ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ2: сверх обычных полей — группа, создатель, пауза, правила.
+        val calls = api(
+            HttpStatusCode.Created,
+            """{"call_id":"g-1","room":"call-g","url":"wss://lk","token":"t","type":"group","group_id":"grp",""" +
+                """"creator_id":"u-1","paused":true,"rules":{"max":12,"video":[{"up_to":3,"height":540}]}}""",
+        )
+        val step = calls.startGroup("grp", ring = true, video = true, invited = listOf("u-2"))
+        assertTrue(step is CallStep.Door, "дверь не собралась: $step")
+        val group = step.door.group
+        assertEquals("grp", group?.groupId)
+        assertEquals("u-1", group?.creatorId)
+        assertEquals(true, group?.paused)
+        assertEquals(12, group?.rules?.max)
+        assertEquals(540, group?.rules?.heightFor(3))
+        assertEquals(null, group?.rules?.heightFor(4))
+    }
+
+    @Test
+    fun дверь_личного_без_группы() = runTest {
+        val calls = api(HttpStatusCode.OK, """{"call_id":"c-1","room":"r","url":"wss://lk","token":"t"}""")
+        val step = calls.start(peerId = "u-2", video = false)
+        assertTrue(step is CallStep.Door)
+        assertEquals(null, step.door.group)
+    }
+
+    @Test
+    fun звонок_группы_читается_с_участниками() = runTest {
+        val calls = api(
+            HttpStatusCode.OK,
+            """{"call":{"call_id":"g-1","creator_id":"u-1","kind":"video","started_at":"2026-10-01T10:00:00Z","paused":false,""" +
+                """"participants":[{"user_id":"u-1","state":"joined","invited":true,"removed":false},""" +
+                """{"user_id":"u-2","state":"invited","invited":true,"removed":false}]},""" +
+                """"rules":{"max":25,"video":[{"up_to":4,"height":720},{"up_to":8,"height":480}]},"my_role":"member","can_start":false,""" +
+                """"call_ttl_until":"2026-10-01T22:00:00Z"}""",
+        )
+        val info = calls.groupCall("grp")
+        assertEquals("g-1", info?.call?.callId)
+        assertEquals(1, info?.call?.members?.count { it.inRoom })
+        assertEquals(false, info?.canStart)
+        assertTrue((info?.ttlUntilMs ?: 0) > 0, "срок временной группы не прочитан")
+    }
+
     private fun api(status: HttpStatusCode, body: String) = CallsOverHttp(
         route = ServerRoute.from(RouteConfig(host = "example.com")),
         client = HttpClient(

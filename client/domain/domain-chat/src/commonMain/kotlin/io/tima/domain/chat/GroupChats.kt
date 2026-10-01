@@ -99,6 +99,25 @@ class CreateGroupChat(
         return CreateGroupStep.Created(groupId = groupId, notInvited = notInvited, keyIssued = keyed)
     }
 
+    /**
+     * Временная группа звонка с людьми из журнала контактов (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ5):
+     * по идентификаторам, а не по номерам — их отмечают галочками, номер может быть скрыт.
+     * Порядок тот же, что у [create]: сервер, местная строка, участники, первый ключ.
+     */
+    suspend fun createForCall(title: String, userIds: List<String>): CreateGroupStep {
+        val name = title.trim().ifEmpty { return CreateGroupStep.BadTitle("Без названия группу не найти в списке") }
+        val groupId = when (val creation = groups.createForCall(name)) {
+            is GroupCreateStep.Created -> creation.groupId
+            is GroupCreateStep.Offline -> return CreateGroupStep.Offline(creation.retryAfterMs)
+            is GroupCreateStep.Refused -> return CreateGroupStep.Refused(creation.reason)
+        }
+        chats.remember(chatId = groupId, kind = ChatKind.Group, title = name, peerId = null)
+        val notInvited = userIds.distinct().filter { groups.addMember(groupId, it) !is MemberStep.Done }
+        val keyed = rotator?.rotate(groupId, RotationReason.MemberJoin)
+            .let { it == null || it is RotateStep.Rotated || it is RotateStep.VersionConflict }
+        return CreateGroupStep.Created(groupId = groupId, notInvited = notInvited, keyIssued = keyed)
+    }
+
     private companion object {
         /** Предел сервера на название — в БАЙТАХ, а не знаках: кириллица занимает по два. */
         const val MAX_TITLE_LENGTH = 200
@@ -133,7 +152,10 @@ class SyncGroupChats(
                     peerId = null,
                 )
             }
-            SyncGroupsStep.Synced(answer.groups.size)
+            SyncGroupsStep.Synced(
+                answer.groups.size,
+                callGroups = answer.groups.mapNotNull { g -> g.callTtlUntilMs?.let { g.groupId to it } }.toMap(),
+            )
         }
         is GroupsStep.Offline -> SyncGroupsStep.Offline(answer.retryAfterMs)
         is GroupsStep.Refused -> SyncGroupsStep.Refused(answer.reason)
@@ -150,6 +172,13 @@ interface GroupRegistry {
         description: String = "",
     ): GroupCreateStep
     suspend fun mine(): GroupsStep
+
+    /**
+     * Временная личная группа звонка (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ1): живёт срок от последнего
+     * звонка и удаляется вместе с перепиской. Не умеющий — отказ, а не обычная группа:
+     * постоянная вместо временной была бы обещанием, которого никто не давал.
+     */
+    suspend fun createForCall(title: String): GroupCreateStep = GroupCreateStep.Refused("no_call_groups")
     suspend fun members(groupId: String): MembersStep
     suspend fun addMember(groupId: String, userId: String): MemberStep
     suspend fun removeMember(groupId: String, userId: String): MemberStep
@@ -231,6 +260,11 @@ class GroupInfo(
      * сервер вида не назвал.
      */
     val kind: GroupKind? = null,
+    /**
+     * Временная группа звонка — когда удалится, мс (решение 11: «удалится через N ч»).
+     * `null` — группа обычная.
+     */
+    val callTtlUntilMs: Long? = null,
 )
 
 /** Участник группы. */
@@ -292,7 +326,8 @@ sealed interface CreateGroupStep {
 }
 
 sealed interface SyncGroupsStep {
-    data class Synced(val count: Int) : SyncGroupsStep
+    /** @param callGroups временные группы звонка и когда они удалятся, мс (решение 11). */
+    data class Synced(val count: Int, val callGroups: Map<String, Long> = emptyMap()) : SyncGroupsStep
     data class Offline(val retryAfterMs: Long) : SyncGroupsStep
     data class Refused(val reason: String) : SyncGroupsStep
 }

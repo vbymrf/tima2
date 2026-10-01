@@ -183,6 +183,17 @@ fun ChatScreen(
      * тогда нет вовсе, а не погашена: погашенная спрашивает «почему», отсутствующая — нет.
      */
     onCall: (() -> Unit)? = null,
+    /**
+     * Полоса над лентой — «Идёт звонок · Присоединиться» в группе (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ,
+     * решение 3а). `null` — полосы нет.
+     */
+    banner: (@Composable () -> Unit)? = null,
+    /**
+     * Приглашение в групповой звонок вместо пузыря: что с ним сейчас. `null` у реплики —
+     * обычное сообщение.
+     */
+    invite: (ChatLine) -> CallInvite? = { null },
+    onInvite: (ChatLine) -> Unit = {},
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -218,6 +229,7 @@ fun ChatScreen(
         if (state.noGroupKey) {
             NoKeyYet(expect = state.expectKey, onRequest = onRequestKey)
         }
+        banner?.invoke()
 
         Feed(
             lines = state.lines,
@@ -243,6 +255,8 @@ fun ChatScreen(
             onCarry = onCarry,
             onThread = onThread,
             onFailed = onFailed,
+            invite = invite,
+            onInvite = onInvite,
         )
 
         // Полоса недоступной истории — над вводом и ОДНА на экран, а не у каждой строки.
@@ -307,6 +321,8 @@ private fun Feed(
     onCarry: ((Long, Int) -> Unit)? = null,
     onThread: ((Long) -> Unit)? = null,
     onFailed: ((ChatLine) -> Unit)? = null,
+    invite: (ChatLine) -> CallInvite? = { null },
+    onInvite: (ChatLine) -> Unit = {},
 ) =
     // Сообщения — своя группа размера (ПЛАН-ШРИФТОВ Ш3): её укрупняют чаще всего, и
     // от списка чатов она не зависит.
@@ -339,6 +355,15 @@ private fun Feed(
             val index = lines.indexOf(line)
             // Предыдущее по времени лежит НИЖЕ в списке: список идёт новым сверху.
             val previous = lines.getOrNull(index + 1)
+            // Приглашение в групповой звонок — карточкой словами читающего (решение 3а).
+            val called = invite(line)
+            if (called != null) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = if (line.outgoing) Arrangement.End else Arrangement.Start,
+                ) { CallInviteCard(called, onJoin = { onInvite(line) }) }
+                return@items
+            }
             Reply(
                 line = line,
                 author = authorName(line),

@@ -247,6 +247,18 @@ class EventStreamProtocol {
         data class CallLeft(val callId: String, val userId: String, val eventId: Long?) : Decision
 
         /**
+         * Создатель группового звонка скомандовал (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ, решения 5, 6, 17):
+         * `mute_mic`, `mute_video`, `remove` — мне; `pause`, `resume` — всем в звонке.
+         */
+        data class CallControl(val callId: String, val action: String, val by: String, val eventId: Long?) : Decision
+
+        /** В группе начался или кончился звонок — полоса «Идёт звонок» над перепиской. */
+        data class GroupCall(val groupId: String, val callId: String, val state: String, val eventId: Long?) : Decision
+
+        /** Временная группа звонка удалена: срок вышел (решение 1). */
+        data class GroupDeleted(val groupId: String, val eventId: Long?) : Decision
+
+        /**
          * Вызов не забрало ни одно устройство собеседника (`call.unreachable`).
          *
          * **Это не конец звонка и не состояние человека.** Сервер говорит ровно то, что
@@ -551,6 +563,29 @@ class EventStreamProtocol {
                     Decision.CallState(callId = callId, state = state, eventId = eventId)
                 }
             }
+
+            "call.control" -> {
+                val callId = json.string("call_id")
+                val action = json.string("action")
+                if (callId == null || action == null) {
+                    Decision.Skip("call.control без call_id или action", eventId)
+                } else {
+                    Decision.CallControl(callId = callId, action = action, by = json.string("by") ?: "", eventId = eventId)
+                }
+            }
+
+            "group.call" -> {
+                val groupId = json.string("group_id")
+                if (groupId == null) {
+                    Decision.Skip("group.call без group_id", eventId)
+                } else {
+                    Decision.GroupCall(groupId, json.string("call_id") ?: "", json.string("state") ?: "", eventId)
+                }
+            }
+
+            "group.deleted" ->
+                json.string("group_id")?.let { Decision.GroupDeleted(it, eventId) }
+                    ?: Decision.Skip("group.deleted без group_id", eventId)
 
             "call.unreachable" -> {
                 val callId = json.string("call_id")

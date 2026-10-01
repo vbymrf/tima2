@@ -94,6 +94,13 @@ class Assembled(
      * два места, решающих «пора обновиться», разошлись бы на первой же правке.
      */
     val outdated: StateFlow<Boolean>,
+    /**
+     * В группе начался или кончился звонок, или временная группа удалена: `(groupId,
+     * live | ended | deleted)` (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ). Полоса «Идёт звонок» и список групп.
+     */
+    val groupEvents: MutableSharedFlow<Pair<String, String>> = MutableSharedFlow(extraBufferCapacity = 32),
+    /** Временные группы звонка и когда удалятся, мс — «удалится через N ч» (решение 11). */
+    val callGroups: MutableStateFlow<Map<String, Long>> = MutableStateFlow(emptyMap()),
 )
 
 /**
@@ -228,6 +235,8 @@ fun buildAssembled(
         val storeChanges = MutableStateFlow<Map<String, Long>>(emptyMap())
         val callPings = CallPings()
         val outdated = MutableStateFlow(false)
+        val groupEvents = MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 32)
+        val callGroups = MutableStateFlow<Map<String, Long>>(emptyMap())
 
         // ── УВЕДОМЛЕНИЯ СОБИРАЮТСЯ ЗДЕСЬ, А НЕ В ОКНЕ (У5) ──────────────────
         //
@@ -330,6 +339,12 @@ fun buildAssembled(
                 onCallUnreachable = { callId -> callPings.send("недоступен|$callId|-") },
                 // Вызов дошёл до телефона собеседника — у звонящего «Звонит» (ВЗ0а).
                 onCallDelivered = { callId -> callPings.send("доставлен|$callId|-") },
+                // Групповой звонок (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ3): вызов в группу — своим словом,
+                // команды создателя — своим; события группы — полосе «Идёт звонок».
+                onGroupCall = { callId, from, kind, groupId -> callPings.send("группа|$callId|$from|$kind|$groupId") },
+                onCallControl = { callId, action, by -> callPings.send("команда|$callId|$action|$by") },
+                onGroupEvent = { groupId, state -> groupEvents.tryEmit(groupId to state) },
+                onCallGroups = { callGroups.value = it },
                 onStamp = { senderStamps.tryEmit(it) },
                 onOutdated = { outdated.value = true },
                 notices = notices,
@@ -341,6 +356,8 @@ fun buildAssembled(
             callPings = callPings,
             outdated = outdated,
             senderStamps = senderStamps,
+            groupEvents = groupEvents,
+            callGroups = callGroups,
         )
     }
 

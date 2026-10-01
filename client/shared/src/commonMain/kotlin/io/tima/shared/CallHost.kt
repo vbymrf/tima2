@@ -12,7 +12,11 @@ import io.tima.core.call.CallEvent
 import io.tima.core.call.CallStage
 import io.tima.core.call.CallState
 import io.tima.core.call.CallStep
+import io.tima.core.call.CallPeer
 import io.tima.core.call.Calls
+import io.tima.core.call.GroupControl
+import io.tima.core.call.GroupRules
+import io.tima.core.call.cappedTo
 import io.tima.core.call.PublishPreset
 import io.tima.core.call.VideoHandle
 import io.tima.core.call.basePreset
@@ -147,6 +151,32 @@ class CallHost(
 
     private val noVideo = MutableStateFlow<VideoHandle?>(null)
 
+    // ── ГРУППОВОЙ ЗВОНОК (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ3) ─────────────────────────────
+
+    /**
+     * Групповой звонок: группа, её название, создатель, правила. `null` — звонок на двоих.
+     * Окно 0 по этому признаку рисует сетку участников вместо одного собеседника.
+     */
+    var group by mutableStateOf<GroupCallView?>(null)
+        private set
+
+    /** Участники группового звонка — каждый со своей картинкой. */
+    val peers: StateFlow<List<CallPeer>> get() = engine?.peers ?: noPeers
+    private val noPeers = MutableStateFlow<List<CallPeer>>(emptyList())
+
+    /**
+     * Участников больше, чем видео по правилам (решение 4: больше 8 — только голос): своя
+     * камера выключена и не включается, чужое видео не принимаем.
+     */
+    var voiceOnly by mutableStateOf(false)
+        private set
+
+    /** Своё на паузе создателя: что было включено до неё — вернуть после (решение 5). */
+    private var beforePause: Pair<Boolean, Boolean>? = null
+
+    /** Групповой ли идущий звонок — для решений вне окна (кто ушёл, конец по ленте). */
+    val isGroup: Boolean get() = group != null
+
     private var peerId: String = ""
 
     /** Кто на другом конце — чтобы окно подтянуло его имя, когда приедет карточка. */
@@ -217,9 +247,14 @@ class CallHost(
                     if (fresh.stage == CallStage.Connected) startTicking()
                     if (fresh.stage == CallStage.Ended) stopTicking()
                     noticed(was, fresh)
+                    if (fresh.roomPaused != was.roomPaused && group != null) paused(fresh.roomPaused)
                     nearEar(fresh)
                     screenOn(fresh)
                 }
+            }
+            // Число участников группового — потолок видео (решение 4).
+            scope.launch {
+                live.peers.collect { list -> if (group != null && busy) countChanged(list.size + 1) }
             }
         }
     }
@@ -258,6 +293,15 @@ class CallHost(
                 "ждали" to RINGING_LIMIT_MS / 1000,
             )
             note(if (incoming) words().call.missedCall else words().call.noAnswer)
+            if (incoming && group != null) {
+                // Групповой вызов не «отклонён», а пропущен: `/end` сказал бы серверу
+                // «отказался», и пропущенного у человека не осталось бы. Звонок у
+                // остальных идёт, и войти в него можно и позже.
+                watchdog?.cancel()
+                stopTicking()
+                state = state.copy(stage = CallStage.Ended)
+                return@launch
+            }
             hangUp()
         }
     }
@@ -364,7 +408,9 @@ class CallHost(
         // соединится, а звука не будет ни в одну сторону.
         withAccess(video) {
             scope.launch {
-                when (val step = calls.answer(callId)) {
+                // Групповой — вход в звонок группы, а не ответ: отвечать некому (ГЗ3).
+                val step = if (group != null) calls.join(callId) else calls.answer(callId)
+                when (step) {
                     is CallStep.Door -> {
                         door = step.door
                         live.connect(step.door, publishFor(step.door))
@@ -433,7 +479,10 @@ class CallHost(
             engine?.disconnect()
             if (id.isNotEmpty()) calls.end(id)
         }
-        Journal.note(LogCode.CALL, "звонок закончен", "звонок" to id.take(8), "длился" to seconds)
+        Journal.note(
+            LogCode.CALL, if (group != null) "вышли из группового звонка" else "звонок закончен",
+            "звонок" to id.take(8), "длился" to seconds,
+        )
         stopTicking()
         state = state.copy(stage = CallStage.Ended)
     }
@@ -445,6 +494,12 @@ class CallHost(
      * Держать идентификатор на экране значило бы отдать ему работу сигналинга.
      */
     fun again() {
+        // Групповой — тот же звонок в той же группе с теми же галочками (решение 6).
+        lastStart?.takeIf { group != null }?.let { g ->
+            close()
+            startGroup(g.groupId, g.title, g.ring, video, g.invited)
+            return
+        }
         val id = peerId
         val name = peer
         if (id.isEmpty()) return
@@ -560,8 +615,11 @@ class CallHost(
     /** Тот ли это звонок, который у нас идёт. Чужой конец нашего разговора не касается. */
     fun callIs(id: String): Boolean = id.isNotEmpty() && id == callId
 
-    /** Тот ли это человек, с кем мы говорим. Нужен, чтобы понять, чей уход нас касается. */
-    fun peerIs(userId: String): Boolean = userId.isNotEmpty() && userId == peerId
+    /**
+     * Тот ли это человек, с кем мы говорим. Нужен, чтобы понять, чей уход нас касается. В
+     * групповом — никто: уход одного из пятерых разговора не кончает.
+     */
+    fun peerIs(userId: String): Boolean = group == null && userId.isNotEmpty() && userId == peerId
 
     fun close() {
         watchdog?.cancel()
@@ -580,6 +638,10 @@ class CallHost(
         peerId = ""
         peer = ""
         seconds = 0
+        group = null
+        voiceOnly = false
+        beforePause = null
+        pendingInvites = null
         state = CallState()
     }
 
@@ -635,6 +697,15 @@ class CallHost(
      * Выключение разрешения не требует вовсе: перестать показывать можно всегда.
      */
     fun camera(on: Boolean) {
+        if (on && voiceOnly) {
+            // Больше 8 — только голос (решение 4): правило сервера, а не поломка камеры.
+            note(words().groupCall.voiceOnly(group?.rules?.videoUpTo ?: 8))
+            return
+        }
+        if (on && state.roomPaused) {
+            note(words().groupCall.pausedWait)
+            return
+        }
         if (!on) {
             // Выключил камеру — звонок стал голосовым, и перезвонит окно тоже голосом.
             video = false
@@ -899,7 +970,12 @@ class CallHost(
      */
     private fun publishFor(door: CallDoor): PublishPreset {
         preset()?.let { return it }
-        val base = basePreset(door.video)
+        val base = basePreset(door.video).let { b ->
+            // Групповой: до 4 — 720p, дальше ниже; число на входе неизвестно, потолок
+            // пересчитается по участникам, как только они станут видны (решение 4).
+            val top = door.group?.rules?.heightFor(1)
+            if (top != null) b.cappedTo(top) else b
+        }
         Journal.note(
             LogCode.CALL,
             "потолок видео",
@@ -909,6 +985,217 @@ class CallHost(
             "откуда" to if (door.video != null) "сервер" else "приложение",
         )
         return base
+    }
+
+    // ── ГРУППОВОЙ ЗВОНОК: НАЧАТЬ, ВОЙТИ, КОМАНДЫ ────────────────────────────────
+
+    /**
+     * Групповой звонок в группе [groupId] (ГЗ5): «Звонить» — [ring], «Включить видео» —
+     * [video], позвать — [invited] (пусто — всех участников группы). Идёт уже — сервер
+     * впускает в него же.
+     */
+    fun startGroup(groupId: String, title: String, ring: Boolean, video: Boolean, invited: List<String>) {
+        val live = engine ?: return
+        if (busy) {
+            Journal.note(LogCode.CALL, "звонок уже идёт — групповой не начат", "группа" to groupId.take(8))
+            return
+        }
+        open(groupId, title, video, incoming = false)
+        lastStart = GroupStart(groupId, title, ring, video, invited)
+        pendingInvites = invited
+        withAccess(video) {
+            scope.launch {
+                when (val step = calls.startGroup(groupId, ring, video, invited)) {
+                    is CallStep.Door -> enter(live, step.door, video)
+                    else -> refuse(step)
+                }
+            }
+        }
+    }
+
+    /**
+     * Войти в идущий групповой звонок — по полосе «Идёт звонок» в группе или по
+     * приглашению в личном чате (решение 3а).
+     */
+    fun joinGroup(callId: String, groupId: String, title: String, video: Boolean) {
+        val live = engine ?: return
+        if (busy) {
+            if (this.callId == callId) return
+            Journal.note(LogCode.CALL, "звонок уже идёт — во второй не входим", "звонок" to callId.take(8))
+            return
+        }
+        open(groupId, title, video, incoming = false)
+        this.callId = callId
+        withAccess(video) {
+            scope.launch {
+                when (val step = calls.join(callId)) {
+                    is CallStep.Door -> enter(live, step.door, video)
+                    else -> refuse(step)
+                }
+            }
+        }
+    }
+
+    /** Зовут в групповой звонок (решение 3): входящий, принять — войти. */
+    fun ringGroup(callId: String, groupId: String, title: String, fromId: String, video: Boolean) {
+        if (active && callId == this.callId) return
+        if (busy) {
+            // Один сеанс за раз. Групповому «занят» не говорим: звонок идёт у остальных, и
+            // войти можно будет после — по полосе в группе.
+            Journal.note(LogCode.CALL, "зовут в групповой во время звонка — не показан", "звонок" to callId.take(8))
+            return
+        }
+        ring(callId, fromId, title, video)
+        group = GroupCallView(groupId = groupId, title = title, creatorId = fromId, mine = false, rules = GroupRules())
+    }
+
+    private fun open(groupId: String, title: String, video: Boolean, incoming: Boolean) {
+        this.video = video
+        this.incoming = incoming
+        peerId = ""
+        peer = title
+        active = true
+        seconds = 0
+        events.clear()
+        delivered = false
+        group = GroupCallView(groupId = groupId, title = title, creatorId = "", mine = false, rules = GroupRules())
+        state = CallState(stage = CallStage.Connecting)
+    }
+
+    /** Вошли в дверь группового: создатель и правила — от сервера. */
+    private suspend fun enter(live: CallEngine, door: CallDoor, video: Boolean) {
+        callId = door.callId
+        this.door = door
+        val room = door.group
+        val me = myUserId()
+        group = group?.copy(
+            creatorId = room?.creatorId.orEmpty(),
+            mine = room?.creatorId == me && me.isNotEmpty(),
+            rules = room?.rules ?: GroupRules(),
+        )
+        Journal.note(
+            LogCode.CALL, "групповой звонок: вошли",
+            "звонок" to door.callId.take(8), "группа" to (room?.groupId?.take(8) ?: "—"),
+            "создатель" to (group?.mine == true), "видео" to video,
+        )
+        // Начали сами — приглашения в личные чаты позванным (решение 3а). Вход в чужой
+        // идущий звонок их не шлёт: позвал его создатель.
+        val invites = pendingInvites
+        pendingInvites = null
+        if (invites != null && group?.mine == true && room != null) onStarted(room.groupId, group?.title.orEmpty(), invites)
+        live.connect(door, publishFor(door))
+        if (!stillOurs(door.callId)) return
+        told()
+        if (room?.paused == true) paused(true)
+        if (video && !voiceOnly && room?.paused != true) live.setCamera(true)
+    }
+
+    /** Кто я — чтобы узнать себя создателем. Ставит сборка; в проверках — пусто. */
+    var myUserId: () -> String = { "" }
+
+    /**
+     * Звонок начат мной — разослать приглашения в личные чаты: `(groupId, название,
+     * позванные)`; пусто — все участники группы. Ставит сборка: она умеет отправлять.
+     */
+    var onStarted: (String, String, List<String>) -> Unit = { _, _, _ -> }
+
+    /** С чем начинали групповой — «Перезвонить» повторяет (решение 6). */
+    private var lastStart: GroupStart? = null
+    private var pendingInvites: List<String>? = null
+
+    /** Позвать ещё участников группы в идущий звонок — «Добавить» в журнале звонка. */
+    fun inviteMore(userIds: List<String>) {
+        for (u in userIds) control(GroupControl.Invite, u)
+        if (userIds.isNotEmpty()) group?.let { onStarted(it.groupId, it.title, userIds) }
+    }
+
+    /** Сменилось число участников — потолок видео по правилам (решение 4). */
+    private suspend fun countChanged(count: Int) {
+        val rules = group?.rules ?: return
+        val height = rules.heightFor(count)
+        val nowVoice = height == null
+        engine?.setVideoCeiling(height)
+        if (nowVoice == voiceOnly) return
+        voiceOnly = nowVoice
+        if (nowVoice) {
+            Journal.note(LogCode.CALL, "групповой: участников больше, чем видео по правилам", "участников" to count)
+            engine?.setRemoteVideo(false)
+            note(words().groupCall.voiceOnly(rules.videoUpTo), whileTrue = VOICE_ONLY)
+        } else {
+            Journal.note(LogCode.CALL, "групповой: видео снова по правилам", "участников" to count)
+            engine?.setRemoteVideo(true)
+            forget(VOICE_ONLY)
+        }
+    }
+
+    /** Пауза создателя (решение 5): своё стоит у всех, после — как было. */
+    private fun paused(on: Boolean) {
+        if (on) {
+            if (beforePause == null) beforePause = state.microphoneOn to state.cameraOn
+            note(words().groupCall.paused, whileTrue = ROOM_PAUSED)
+            scope.launch {
+                engine?.setMicrophone(false)
+                engine?.setCamera(false)
+            }
+            return
+        }
+        forget(ROOM_PAUSED)
+        val was = beforePause ?: return
+        beforePause = null
+        note(words().groupCall.resumed)
+        scope.launch {
+            if (was.first) engine?.setMicrophone(true)
+            if (was.second && !voiceOnly) engine?.setCamera(true)
+        }
+    }
+
+    /**
+     * Команда создателя (решения 5, 6, 17). Только у создателя — кнопок у других нет, а
+     * сервер чужую команду и так отвергнет.
+     */
+    fun control(action: GroupControl, userId: String = "") {
+        val g = group ?: return
+        if (!g.mine || callId.isEmpty()) return
+        val id = callId
+        scope.launch {
+            val done = calls.control(id, action, userId)
+            Journal.note(LogCode.CALL, "команда создателя", "команда" to action.wire, "кому" to userId.take(8), "принята" to done)
+            if (!done) note(words().groupCall.controlFailed)
+        }
+        if (action == GroupControl.Stop) {
+            note(words().groupCall.stopped)
+            hangUp()
+        }
+    }
+
+    /** Сервер передал команду создателя мне (событие `call.control`). */
+    fun controlled(callId: String, action: String, by: String) {
+        if (!active || !callIs(callId) || group == null) return
+        val w = words().groupCall
+        Journal.note(LogCode.CALL, "команда создателя пришла", "команда" to action)
+        when (GroupControl.of(action)) {
+            GroupControl.MuteMic -> {
+                note(w.mutedMic)
+                scope.launch { engine?.setMicrophone(false) }
+            }
+            GroupControl.MuteVideo -> {
+                note(w.mutedVideo)
+                scope.launch { engine?.setCamera(false) }
+            }
+            GroupControl.Remove -> {
+                note(w.removed)
+                watchdog?.cancel()
+                service.off()
+                scope.launch { engine?.disconnect() }
+                stopTicking()
+                state = state.copy(stage = CallStage.Ended)
+            }
+            // Пауза приходит и данными комнаты — там и обрабатывается; событие здесь
+            // лишь страхует, если данные комнаты не дошли.
+            GroupControl.Pause -> if (!state.roomPaused) paused(true)
+            GroupControl.Resume -> if (beforePause != null) paused(false)
+            GroupControl.Stop, GroupControl.Invite, null -> Unit
+        }
     }
 
     /** Сделать то, что предлагает событие. */
@@ -1046,8 +1333,32 @@ class CallHost(
         const val NOT_DECODED = "видео собеседника не раскодируется"
         const val OWN_UNSENT = "своё видео не уйдёт: кодек набора не по силам"
         const val CODEC_MISMATCH = "уходит не тот кодек, что просили"
+        const val VOICE_ONLY = "групповой: только голос"
+        const val ROOM_PAUSED = "групповой: пауза создателя"
     }
 }
+
+/**
+ * Групповой звонок глазами окна 0.
+ *
+ * @param mine я создатель — у меня команды (решение 6).
+ */
+/** С чем начинали групповой звонок. */
+private data class GroupStart(
+    val groupId: String,
+    val title: String,
+    val ring: Boolean,
+    val video: Boolean,
+    val invited: List<String>,
+)
+
+data class GroupCallView(
+    val groupId: String,
+    val title: String,
+    val creatorId: String,
+    val mine: Boolean,
+    val rules: GroupRules,
+)
 
 /** Дверь, собранная сигналингом: адрес SFU, комната и токен. */
 internal typealias Door = CallDoor

@@ -67,6 +67,11 @@ fun ChatMenuSheet(
      * движка.
      */
     onVideoCall: (() -> Unit)? = null,
+    /**
+     * «Групповой звонок» (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ, решения 9 и 3б): в личной переписке — звонок
+     * с этим человеком и другими, в группе — звонок в ней. `null` — пункта нет.
+     */
+    onGroupCall: (() -> Unit)? = null,
     /** Групповая переписка — заголовок «Настройка группы», иначе «Настройка переписки». */
     group: Boolean = circlesShown != null,
 ) {
@@ -131,8 +136,14 @@ fun ChatMenuSheet(
                 }
             }
 
-            // Первым пунктом: это действие, а не настройка, и меню открывают ради
-            // действия чаще, чем ради галочки.
+            // Действия — первыми: меню открывают ради действия чаще, чем ради галочки.
+            if (onGroupCall != null) {
+                ListLine(
+                    onClick = { onGroupCall(); onClose() },
+                    middle = { Name(if (group) Tima.words.groupCall.start else Tima.words.groupCall.title) },
+                    right = { Tertiary("›", lineOne = true) },
+                )
+            }
             if (onVideoCall != null) {
                 ListLine(
                     onClick = { onVideoCall(); onClose() },

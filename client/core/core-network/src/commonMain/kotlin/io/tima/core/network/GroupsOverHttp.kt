@@ -32,9 +32,22 @@ class GroupsOverHttp(private val api: GroupsApi) : GroupRegistry {
         is GroupCreateResult.Refused -> GroupCreateStep.Refused(answer.code)
     }
 
+    override suspend fun createForCall(title: String): GroupCreateStep =
+        when (val answer = api.create(title, GroupKind.Personal.wire, "", callTemp = true)) {
+            is GroupCreateResult.Created -> GroupCreateStep.Created(answer.groupId)
+            is GroupCreateResult.NoConnection -> GroupCreateStep.Offline(answer.link.retryDelayMs)
+            is GroupCreateResult.Refused -> GroupCreateStep.Refused(answer.code)
+        }
+
     override suspend fun mine(): GroupsStep = when (val answer = api.mine()) {
         is GroupsResult.Groups -> GroupsStep.Groups(
-            answer.groups.map { GroupInfo(it.groupId, it.title, GroupRole.from(it.myRole), ownerId = it.ownerId, kind = GroupKind.fromWire(it.kind)) },
+            answer.groups.map {
+                GroupInfo(
+                    it.groupId, it.title, GroupRole.from(it.myRole), ownerId = it.ownerId, kind = GroupKind.fromWire(it.kind),
+                    callTtlUntilMs = it.callTtlUntil.takeIf { t -> t.isNotEmpty() }
+                        ?.let { t -> runCatching { kotlinx.datetime.Instant.parse(t).toEpochMilliseconds() }.getOrNull() },
+                )
+            },
         )
         is GroupsResult.NoConnection -> GroupsStep.Offline(answer.link.retryDelayMs)
         is GroupsResult.Refused -> GroupsStep.Refused(answer.code)

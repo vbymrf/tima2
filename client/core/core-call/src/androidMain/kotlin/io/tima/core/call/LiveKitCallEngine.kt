@@ -17,6 +17,7 @@ import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.room.participant.VideoTrackPublishDefaults
 import io.livekit.android.room.track.LocalVideoTrackOptions
 import io.livekit.android.room.track.RemoteTrackPublication
+import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.VideoTrack
 import io.livekit.android.room.track.VideoCaptureParameter
 import io.livekit.android.room.track.VideoEncoding
@@ -68,6 +69,23 @@ class LiveKitCallEngine(
 
     private val _remoteVideo = MutableStateFlow<VideoHandle?>(null)
     override val remoteVideo: StateFlow<VideoHandle?> = _remoteVideo.asStateFlow()
+
+    // ── ГРУППОВОЙ ЗВОНОК (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ3) ─────────────────────────────
+    private val _peers = MutableStateFlow<List<CallPeer>>(emptyList())
+    override val peers: StateFlow<List<CallPeer>> = _peers.asStateFlow()
+
+    /** Группа идущего звонка; `null` — звонок на двоих. */
+    private var group: GroupRoom? = null
+
+    /**
+     * Ручки картинок участников — по одной на дорожку, и та же самая, пока дорожка та же:
+     * новая ручка на каждый опрос заставила бы экран перебирать поверхность, и картинка
+     * замирала бы (та же беда, что `RX9A`, см. [show]).
+     */
+    private val peerHandles = mutableMapOf<String, LiveKitVideoHandle>()
+
+    /** Потолок высоты своего видео по числу участников; `null` — не урезано. */
+    private var ceilingHeight: Int? = null
 
     private var room: Room? = null
 
@@ -215,6 +233,10 @@ class LiveKitCallEngine(
         }
         val created = LiveKit.create(appContext = context, options = options, overrides = overridesFor(publish))
         publishing = publish
+        group = door.group
+        ceilingHeight = null
+        peerHandles.clear()
+        _peers.value = emptyList()
         target = null
         // «Скрыть видео» — выбор ЭТОГО звонка. Без сброса он переживал конец звонка: экран
         // следующего показывал «принимаем», а движок не подписывался, и сервер переставал
@@ -234,6 +256,7 @@ class LiveKitCallEngine(
             callId = door.callId,
             ownVideoUnsent = ownUnsent,
             cameraSwitchable = cameras > 1,
+            roomPaused = door.group?.paused == true,
         )
         try {
             created.connect(url = door.url, token = door.token)
@@ -704,6 +727,8 @@ class LiveKitCallEngine(
         // держали бы поверхность, которой больше некуда рисовать.
         _localVideo.value = null
         _remoteVideo.value = null
+        _peers.value = emptyList()
+        peerHandles.clear()
         _state.value = _state.value.copy(stage = CallStage.Ended)
     }
 
@@ -957,6 +982,7 @@ class LiveKitCallEngine(
         watchPeers(room)
         watchQuality(room)
         watchBreaks(room)
+        if (group != null) watchGroup(room)
     }
 
     /**
@@ -1174,6 +1200,9 @@ class LiveKitCallEngine(
             roomState == Room.State.DISCONNECTED -> CallStage.Ended
             roomState == Room.State.RECONNECTING -> CallStage.Reconnecting
             roomState != Room.State.CONNECTED -> CallStage.Connecting
+            // Групповой: вошёл в комнату — ты в звонке, даже если пока один. Пустая
+            // комната здесь не конец: остальные входят и выходят, звонок идёт (ГЗ3).
+            group != null -> CallStage.Connected
             others.isNotEmpty() -> CallStage.Connected
             // В комнате одни. До ответа это набор, после — разговор кончился.
             everAnswered -> CallStage.Ended
@@ -1184,8 +1213,78 @@ class LiveKitCallEngine(
             others = others,
             inRoom = roomState == Room.State.CONNECTED,
             stage = stage,
-            peerLeft = stage == CallStage.Ended && everAnswered && roomState == Room.State.CONNECTED,
+            peerLeft = group == null && stage == CallStage.Ended && everAnswered && roomState == Room.State.CONNECTED,
         )
+    }
+
+    /**
+     * Участники группового звонка и пауза создателя — опросом раз в [PEERS_POLL_MS].
+     *
+     * Опрос, а не подписка на каждое поле каждого участника: полей пять, участников до 25,
+     * и сотня подписок, гаснущих и заводящихся при каждом входе, дороже списка раз в
+     * полсекунды. Список сравнивается целиком — поток одинаковое не повторяет.
+     */
+    private fun watchGroup(room: Room) {
+        watchers += scope.launch {
+            var saidPaused: Boolean? = null
+            while (isActive) {
+                val list = room.remoteParticipants.values.map { who ->
+                    val identity = who.identity?.value.orEmpty()
+                    val camera = who.videoTrackPublications.firstOrNull { (pub, _) -> pub.source == Track.Source.CAMERA }
+                    // «Больше 8 — только голос» и «скрыть видео»: отписываемся и от тех, кто
+                    // включил камеру после нашего решения.
+                    if (!takeRemote) (camera?.first as? RemoteTrackPublication)?.takeIf { it.subscribed }?.setSubscribed(false)
+                    val track = (camera?.second as? VideoTrack)?.takeIf { takeRemote && !camera.first.muted }
+                    val handle = track?.let { t ->
+                        peerHandles[identity]?.takeIf { it.track === t } ?: LiveKitVideoHandle(room, t).also { peerHandles[identity] = it }
+                    }
+                    if (handle == null) peerHandles.remove(identity)
+                    CallPeer(
+                        identity = identity,
+                        userId = userOfIdentity(identity),
+                        microphoneOn = who.isMicrophoneEnabled,
+                        cameraOn = who.isCameraEnabled,
+                        speaking = who.isSpeaking,
+                        paused = who.attributes[VideoPause.ATTRIBUTE] == VideoPause.PAUSED,
+                        video = handle,
+                    )
+                }.sortedBy { it.identity }
+                if (list != _peers.value) _peers.value = list
+                val paused = roomPaused(room.metadata)
+                if (paused != _state.value.roomPaused) _state.value = _state.value.copy(roomPaused = paused)
+                if (paused != saidPaused) {
+                    if (saidPaused != null) Journal.note(LogCode.CALL, "пауза группового звонка", "на паузе" to paused)
+                    saidPaused = paused
+                }
+                delay(PEERS_POLL_MS)
+            }
+        }
+    }
+
+    /** Пауза создателя — в данных комнаты `{"paused":true}` (решение 5). */
+    private fun roomPaused(metadata: String?): Boolean =
+        metadata?.replace(" ", "")?.contains("\"paused\":true") == true
+
+    override suspend fun setVideoCeiling(height: Int?) {
+        val live = room ?: return
+        if (height == ceilingHeight) return
+        ceilingHeight = height
+        if (height == null) {
+            Journal.note(LogCode.CALL, "групповой: участников много — только голос")
+            setCamera(false)
+            return
+        }
+        val preset = publishing ?: return
+        val capped = preset.cappedTo(height)
+        Journal.note(
+            LogCode.CALL, "групповой: потолок видео по числу участников",
+            "кадр" to ("" + capped.video.width + "×" + capped.video.height), "бит/с" to capped.video.bitrate,
+        )
+        live.videoTrackCaptureDefaults = LocalVideoTrackOptions(
+            captureParams = VideoCaptureParameter(width = capped.video.width, height = capped.video.height, maxFps = capped.video.fps),
+        )
+        applyDefaults(live, capped.video, target ?: capped.video.codec, null)
+        republishCamera(live, "потолок по числу участников")
     }
 
     /**
@@ -1403,6 +1502,9 @@ class LiveKitCallEngine(
 
 /** Как часто спрашиваем числа у WebRTC. Три секунды: ступень размера длится дольше. */
 private const val STATS_EVERY_MS = 3_000L
+
+/** Как часто перечитываем участников группового звонка. */
+private const val PEERS_POLL_MS = 500L
 
 /** Как часто пересматриваем кодек под собеседников. */
 private const val PEERS_EVERY_MS = 1_000L

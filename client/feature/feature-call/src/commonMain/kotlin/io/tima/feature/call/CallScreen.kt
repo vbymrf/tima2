@@ -10,7 +10,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -121,9 +127,15 @@ fun CallScreen(
     onSpeaker: ((Boolean) -> Unit)? = null,
     /** «Переключение камеры». Стоит, только когда камер больше одной. */
     onSwitchCamera: (() -> Unit)? = null,
+    /**
+     * Групповой звонок (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ4): сетка участников вместо одного
+     * собеседника. `null` — звонок на двоих.
+     */
+    group: GroupStage? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.call
+    var askHangUp by remember { mutableStateOf(false) }
     Column(
         modifier = modifier.fillMaxSize().background(colors.surface),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -136,6 +148,37 @@ fun CallScreen(
         // читается оно первым (ЗВ10).
         CallEvents(events, onAction = onEventAction)
 
+        // Групповой в разговоре — сетка участников, своя картинка — одной из клеток.
+        if (group != null && state.stage == CallStage.Connected) {
+            Column(Modifier.weight(1f).fillMaxWidth()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about1),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Name(group.title)
+                    Secondary(Tima.words.groupCall.count(group.count, group.max) + " · " + words.duration(seconds))
+                }
+                if (group.paused) {
+                    Caption(
+                        Tima.words.groupCall.pausedBanner,
+                        modifier = Modifier.padding(horizontal = TimaSpacing.about4),
+                        fontSize = TimaType.sz5,
+                        weight = FontWeight.SemiBold,
+                        color = colors.alarm,
+                    )
+                }
+                if (group.tiles.size <= 1) {
+                    Tertiary(Tima.words.groupCall.alone, modifier = Modifier.padding(horizontal = TimaSpacing.about4))
+                }
+                // Широкий формат: сетка — в области 3, рядом с окном (как видео собеседника).
+                if (remoteHere) {
+                    GroupCallGrid(group.tiles, Modifier.weight(1f).fillMaxWidth().padding(TimaSpacing.about2))
+                } else {
+                    Box(Modifier.weight(1f))
+                }
+            }
+        } else
         Box(Modifier.weight(1f).fillMaxWidth()) {
             // Картинка собеседника во весь кадр, если он себя показывает. Аватар и имя
             // под ней не рисуются: они отвечают на тот же вопрос «с кем говорю», и
@@ -220,6 +263,20 @@ fun CallScreen(
             verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
         ) {
             when {
+                // Создатель кладёт трубку — выйти самому или завершить для всех (решение 6).
+                askHangUp && group != null && state.stage == CallStage.Connected -> {
+                    Secondary(Tima.words.groupCall.hangUpQuestion)
+                    Button(label = Tima.words.groupCall.leave, kind = ButtonKind.Quiet, onClick = {
+                        askHangUp = false
+                        onHangUp()
+                    })
+                    Button(label = Tima.words.groupCall.stopAll, kind = ButtonKind.Dangerous, onClick = {
+                        askHangUp = false
+                        group.onStopAll()
+                    })
+                    Button(label = words.cancel, kind = ButtonKind.Quiet, onClick = { askHangUp = false })
+                }
+
                 state.stage == CallStage.Ended -> {
                     onCallAgain?.let { Button(label = words.callAgain, onClick = it) }
                     if (onCallAgain != null && onRedialKind != null) {
@@ -296,15 +353,96 @@ fun CallScreen(
                             onClick = { onRemoteVideo(!state.remoteVideoTaken) },
                         )
                     }
+                    // Групповой: журнал звонка — кто в нём и команды (ГЗ6).
+                    if (group != null) {
+                        CallButton(glyph = "👥", on = true, onClick = group.onParticipants)
+                    }
                     CallButton(
                         glyph = "📞",
                         on = false,
                         danger = true,
-                        onClick = onHangUp,
+                        onClick = { if (group?.mine == true) askHangUp = true else onHangUp() },
                     )
                 }
             }
         }
+    }
+}
+
+/**
+ * Групповой звонок для окна 0 (ГЗ4).
+ *
+ * @param tiles клетки сетки: участники и я; у кого видео — картинка, у кого нет — аватар.
+ * @param mine я создатель: «Завершить» спрашивает «выйти или для всех».
+ */
+data class GroupStage(
+    val title: String,
+    val tiles: List<GroupTile>,
+    val count: Int,
+    val max: Int,
+    val paused: Boolean,
+    val mine: Boolean,
+    val onParticipants: () -> Unit,
+    val onStopAll: () -> Unit,
+)
+
+/** Клетка сетки группового звонка. */
+data class GroupTile(
+    val key: String,
+    val name: String,
+    val letters: String,
+    val video: VideoHandle?,
+    val microphoneOn: Boolean,
+    val speaking: Boolean,
+    val paused: Boolean,
+    val self: Boolean,
+)
+
+/**
+ * Сетка: один — во весь кадр, до четырёх — 2×2, до девяти — 3×3, больше — по четыре в
+ * ряд (видео там нет по правилам, только аватары). Говорящий — в рамке.
+ */
+@Composable
+fun GroupCallGrid(tiles: List<GroupTile>, modifier: Modifier) {
+    val columns = when {
+        tiles.size <= 1 -> 1
+        tiles.size <= 4 -> 2
+        tiles.size <= 9 -> 3
+        else -> 4
+    }
+    val rows = tiles.chunked(columns)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
+        for (row in rows) {
+            Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
+                for (tile in row) GroupCell(tile, Modifier.weight(1f).fillMaxHeight())
+                repeat(columns - row.size) { Box(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GroupCell(tile: GroupTile, modifier: Modifier) {
+    val colors = Tima.colors
+    Box(
+        modifier
+            .background(colors.functional)
+            .border(width = if (tile.speaking) 3.dp else 0.dp, color = if (tile.speaking) colors.activity else colors.functional),
+    ) {
+        if (tile.video != null) {
+            CallVideo(tile.video, Modifier.fillMaxSize())
+        } else {
+            InCenter(Modifier.fillMaxSize()) { Avatar(letters = tile.letters) }
+        }
+        val marks = (if (!tile.microphoneOn) " 🔇" else "") + (if (tile.paused) " ⏸" else "")
+        Caption(
+            tile.name + marks,
+            modifier = Modifier.align(Alignment.BottomStart).background(colors.surface.copy(alpha = 0.7f))
+                .padding(horizontal = TimaSpacing.about2, vertical = TimaSpacing.about1),
+            fontSize = TimaType.sz5,
+            weight = FontWeight.SemiBold,
+            lineOne = true,
+        )
     }
 }
 

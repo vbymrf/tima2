@@ -113,16 +113,13 @@ fun GuestPageScreen(
      * Каждое `null` — кнопки нет вовсе, а не погашена: погашенная спрашивает «почему»,
      * отсутствующая не спрашивает ничего.
      *
-     * [groupCall] — **заглушка, и обратного вызова у неё нет намеренно.** Групповых
-     * звонков в проекте нет ни в одном плане, звать снаружи нечего, а лямбда, ничего не
-     * делающая у вызывающего, через месяц читается как забытая. Поэтому объяснение
-     * показывает сам экран, а снаружи приходит только «есть ли чем звонить вообще».
-     *
-     * Кнопка при этом **говорит**: немая читается как поломка, и в неё жмут повторно.
+     * [onGroupCall] — групповой звонок с этим человеком (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ7):
+     * настройка звонка, где он уже отмечен. До 2026-10-01 здесь была заглушка «групповые
+     * звонки будут позже».
      */
     onCall: (() -> Unit)? = null,
     onVideoCall: (() -> Unit)? = null,
-    groupCall: Boolean = false,
+    onGroupCall: (() -> Unit)? = null,
     onWrite: (() -> Unit)? = null,
     /**
      * Поменять **наше** имя этого человека — ✎ напротив «Имя» (заказчик 2026-09-26: «а где
@@ -161,8 +158,7 @@ fun GuestPageScreen(
 
             // Ряд действий — сразу под аватаром: страница отвечает на вопрос «кто это»,
             // а действия с человеком — первое, зачем её открывают.
-            var groupCallAsked by remember { mutableStateOf(false) }
-            if (onCall != null || onVideoCall != null || groupCall || onWrite != null) {
+            if (onCall != null || onVideoCall != null || onGroupCall != null || onWrite != null) {
                 FlowRow(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -172,22 +168,8 @@ fun GuestPageScreen(
                 ) {
                     onCall?.let { Button(label = words.call, onClick = it) }
                     onVideoCall?.let { Button(label = words.videoCall, kind = ButtonKind.Quiet, onClick = it) }
-                    if (groupCall) {
-                        Button(
-                            label = words.groupCall,
-                            kind = ButtonKind.Quiet,
-                            onClick = { groupCallAsked = !groupCallAsked },
-                        )
-                    }
+                    onGroupCall?.let { Button(label = words.groupCall, kind = ButtonKind.Quiet, onClick = it) }
                     onWrite?.let { Button(label = words.write, kind = ButtonKind.Quiet, onClick = it) }
-                }
-            }
-
-            // Сказано только тому, кто спросил: строка появляется по нажатию и уходит
-            // по второму. Висеть всегда ей незачем — это ответ, а не свойство человека.
-            if (groupCallAsked) {
-                Box(Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)) {
-                    Tertiary(words.groupCallLater)
                 }
             }
 

@@ -142,6 +142,19 @@ class SqlChatBook(
             peerId = peerId,
         )
     }
+
+    /**
+     * Стереть переписку целиком — сообщения, строку списка и ключи группы. Для временной
+     * группы звонка, которую удалил сервер (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ, решение 1): «удаляется
+     * вместе с перепиской» относится и к копии на устройстве.
+     */
+    fun wipe(chatId: String) {
+        db.transaction {
+            db.messagesQueries.deleteChat(chatId)
+            db.chatsQueries.deleteChatRow(chatId)
+            db.groupKeysQueries.deleteGroupKeys(chatId)
+        }
+    }
 }
 
 /**

@@ -24,6 +24,7 @@ import io.tima.domain.account.Session
 import io.tima.domain.chat.AutoReplyBlocked
 import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.MessageCircle
+import io.tima.domain.chat.SyncGroupsStep
 import io.tima.domain.chat.ChatKind
 import io.tima.domain.chat.SyncGroupChats
 import kotlinx.coroutines.coroutineScope
@@ -91,6 +92,20 @@ class Receiver(
     private val onCallUnreachable: (String) -> Unit = { _ -> },
     /** Вызов дошёл до телефона собеседника — у звонящего «Звонит» (ВЗ0а). */
     private val onCallDelivered: (String) -> Unit = { _ -> },
+    /**
+     * Зовут в групповой звонок (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ3): `(callId, fromUserId, kind,
+     * groupId)`. Отдельно от [onCall]: принять его — войти в звонок группы, а не ответить.
+     */
+    private val onGroupCall: (String, String, String, String) -> Unit = { _, _, _, _ -> },
+    /** Создатель группового звонка скомандовал: `(callId, action, by)`. */
+    private val onCallControl: (String, String, String) -> Unit = { _, _, _ -> },
+    /**
+     * В группе начался или кончился звонок, или временная группа удалена: `(groupId,
+     * state)` — `live`, `ended`, `deleted`. Полоса «Идёт звонок» и список групп.
+     */
+    private val onGroupEvent: (String, String) -> Unit = { _, _ -> },
+    /** Временные группы звонка и когда удалятся — «удалится через N ч» (решение 11). */
+    private val onCallGroups: (Map<String, Long>) -> Unit = {},
     /**
      * Штамп отправителя из обёртки события (сервер 0052/0053): кто, счётчик его профиля,
      * группа и цвет. Наружу, а не в базу: это подсказка карточкам людей, а не сообщение.
@@ -217,11 +232,26 @@ class Receiver(
                         Journal.note(LogCode.NET_CHANNEL, "подсказка о звонке опоздала", "состояние" to call.state)
                     call.initiatorId in blocked() ->
                         Journal.note(LogCode.NET_CHANNEL, "звонок от заблокированного — не звоним", "звонок" to decision.callId)
+                    call.group -> {
+                        notices?.calling(decision.callId, call.initiatorId, call.video)
+                        onGroupCall(decision.callId, call.initiatorId, if (call.video) "video" else "audio", call.groupId)
+                    }
                     else -> {
                         notices?.calling(decision.callId, call.initiatorId)
                         onCall(decision.callId, call.initiatorId, if (call.video) "video" else "audio")
                     }
                 }
+            }
+            is EventStreamProtocol.Decision.CallControl ->
+                onCallControl(decision.callId, decision.action, decision.by)
+            is EventStreamProtocol.Decision.GroupCall -> {
+                onGroupEvent(decision.groupId, decision.state)
+                // Звонок двигает срок временной группы — «удалится через» обновляется.
+                if (decision.state == "ended") syncGroups()
+            }
+            is EventStreamProtocol.Decision.GroupDeleted -> {
+                wipeGroup(decision.groupId)
+                onGroupEvent(decision.groupId, "deleted")
             }
             is EventStreamProtocol.Decision.CallState -> {
                 // Строка звонка не переживает звонок — чем бы он ни кончился (У7).
@@ -405,6 +435,9 @@ class Receiver(
                 // остаётся, телефон не звонит.
                 if (action.fromId in blocked()) {
                     Journal.note(LogCode.NET_CHANNEL, "звонок от заблокированного — не звоним", "звонок" to action.callId)
+                } else if (action.groupId.isNotEmpty()) {
+                    notices?.calling(action.callId, action.fromId, action.video)
+                    onGroupCall(action.callId, action.fromId, if (action.video) "video" else "audio", action.groupId)
                 } else {
                     notices?.calling(action.callId, action.fromId, action.video)
                     onCall(action.callId, action.fromId, if (action.video) "video" else "audio")
@@ -657,8 +690,24 @@ class Receiver(
         // название с сервера, оно перекроет заглушку.
         if (!environment.chatFacts.knows(groupId)) {
             book.remember(chatId = groupId, kind = ChatKind.Group, title = "Группа", peerId = null)
-            groupsSync.refresh()
+            syncGroups()
         }
+    }
+
+    /** Сверка групп с сервером — и сроки временных групп звонка наружу (решение 11). */
+    internal suspend fun syncGroups() {
+        val step = groupsSync.refresh()
+        if (step is SyncGroupsStep.Synced) onCallGroups(step.callGroups)
+    }
+
+    /**
+     * Временная группа звонка удалена сервером (срок вышел, решение 1) — стираем её и здесь:
+     * переписку, строку списка и ключи. «Удаляется вместе с перепиской и всем» относится и
+     * к копии на устройстве, а не только к серверу.
+     */
+    private fun wipeGroup(groupId: String) {
+        runCatching { book.wipe(groupId) }.onFailure { Journal.trouble(LogCode.NET_CHANNEL, "временная группа звонка не стёрта", "группа" to groupId.take(8), "причина" to (it.message ?: "?")) }
+        Journal.note(LogCode.NET_CHANNEL, "временная группа звонка удалена — стёрта и здесь", "группа" to groupId.take(8))
     }
 
     private fun openGroup(entry: IncomingEntry): OpenOutcome {

@@ -49,6 +49,9 @@ interface Words {
     val auth: AuthWords
     val chat: ChatWords
     val call: CallWords
+
+    /** Групповой звонок (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ). */
+    val groupCall: GroupCallWords
     val callLog: CallLogWords
     val bench: BenchWords
     val book: BookWords
@@ -730,7 +733,6 @@ interface PageWords {
     val write: String
 
     /** Почему групповой звонок не начинается. Открывается нажатием на [groupCall]. */
-    val groupCallLater: String
 
     val commentsOn: String
     val commentsOff: String
@@ -2918,7 +2920,6 @@ object RussianWords : Words {
         override val videoCall = "Видеозвонок"
         override val groupCall = "Групповой звонок"
         override val write = "Написать"
-        override val groupCallLater = "Групповые звонки будут позже. Сейчас можно позвать только одного собеседника"
         override val commentsOn = "Записи можно обсуждать"
         override val commentsOff = "Обсуждения выключены"
         override val turnCommentsOff = "Выключить обсуждения"
@@ -2961,6 +2962,7 @@ object RussianWords : Words {
         override val nameSelfChosen = "как себя назвал"
     }
 
+    override val groupCall: GroupCallWords = RussianGroupCall
     override val call = object : CallWords {
         override val incoming = "Входящий вызов"
         override val outgoing = "Вызов"

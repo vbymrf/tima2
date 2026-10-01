@@ -206,6 +206,9 @@ class EventStream(
                         is EventStreamProtocol.Decision.CallState,
                         is EventStreamProtocol.Decision.CallLeft,
                         is EventStreamProtocol.Decision.CallUnreachable,
+                        is EventStreamProtocol.Decision.CallControl,
+                        is EventStreamProtocol.Decision.GroupCall,
+                        is EventStreamProtocol.Decision.GroupDeleted,
                         -> {
                             onCall(decision)
                             val id = when (decision) {
@@ -213,6 +216,9 @@ class EventStream(
                                 is EventStreamProtocol.Decision.CallState -> decision.eventId
                                 is EventStreamProtocol.Decision.CallLeft -> decision.eventId
                                 is EventStreamProtocol.Decision.CallUnreachable -> decision.eventId
+                                is EventStreamProtocol.Decision.CallControl -> decision.eventId
+                                is EventStreamProtocol.Decision.GroupCall -> decision.eventId
+                                is EventStreamProtocol.Decision.GroupDeleted -> decision.eventId
                                 else -> null
                             }
                             id?.let {

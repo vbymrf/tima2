@@ -85,6 +85,11 @@ fun ChatsScreen(
      * непрочитанных сообщений.
      */
     countOf: ((ChatSummary) -> Int)? = null,
+    /**
+     * Третья строка — пометка переписки: у временной группы звонка «удалится через N ч»
+     * (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ, решение 11). `null` — строки нет.
+     */
+    tagOf: (ChatSummary) -> String? = { null },
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -134,7 +139,7 @@ fun ChatsScreen(
                     explanation = words.writeFirst,
                 )
 
-                else -> List(state.chats, onOpen, personOf, faceOf, look, countOf)
+                else -> List(state.chats, onOpen, personOf, faceOf, look, countOf, tagOf)
             }
         }
     }
@@ -164,6 +169,8 @@ fun GroupsScreen(
     chosen: String = "",
     /** Число строки группы — из журнала уведомлений, см. [ChatsScreen]. */
     countOf: ((ChatSummary) -> Int)? = null,
+    /** «Удалится через N ч» у временной группы звонка (решение 11). */
+    tagOf: (ChatSummary) -> String? = { null },
 ) {
     val wanted = if (chosen == COMMON_SECTION) "" else chosen
     val groups = if (chosen.isEmpty()) state.groups else state.groups.filter { it.sectionId == wanted }
@@ -176,7 +183,7 @@ fun GroupsScreen(
                     "которых состоите. Создание группы — из каталога окна «Социум».",
             )
 
-            else -> List(chats = groups, onOpen = onOpen, countOf = countOf)
+            else -> List(chats = groups, onOpen = onOpen, countOf = countOf, tagOf = tagOf)
         }
     }
 }
@@ -189,11 +196,12 @@ private fun List(
     faceOf: (ChatSummary) -> ImageBitmap? = { null },
     look: PersonLook = PersonLook.DEFAULT,
     countOf: ((ChatSummary) -> Int)? = null,
+    tagOf: (ChatSummary) -> String? = { null },
 ) = LazyColumn(
     modifier = Modifier.fillMaxSize(),
 ) {
     items(chats, key = { it.chatId }) { chat ->
-        ChatLine(chat, personOf(chat), faceOf(chat), look, countOf?.invoke(chat) ?: chat.unread) { onOpen(chat) }
+        ChatLine(chat, personOf(chat), faceOf(chat), look, countOf?.invoke(chat) ?: chat.unread, onClick = { onOpen(chat) }, tag = tagOf(chat))
     }
 }
 
@@ -206,6 +214,7 @@ private fun ChatLine(
     /** Число строки: уведомления сущности (ЖУ2) либо непрочитанные. */
     count: Int,
     onClick: () -> Unit,
+    tag: String? = null,
 ) = ListLine(
     onClick = onClick,
     // Картинка, если она есть, иначе буква — та же, что в книге. У группы человека нет,
@@ -246,7 +255,8 @@ private fun ChatLine(
         // отменяет — сообщение есть, и человек должен его видеть.
         Name(who?.line(look, PERSON_FIRST_LINE) ?: chat.title ?: Tima.words.chat.nameless)
         // Превью обрезается: иначе строка списка растёт от чужого длинного сообщения.
-        Secondary(preview(chat, Tima.words.chat), lineOne = true)
+        Secondary(preview(chat, Tima.words.chat, Tima.words.groupCall.title), lineOne = true)
+        tag?.let { Tertiary(it, lineOne = true) }
     },
 )
 
@@ -256,7 +266,9 @@ private fun ChatLine(
  * У неразобранного или нечитаемого входящего текста нет, и вместо него — слова, а не
  * пустота: пустая строка выглядит как поломка списка, а не как состояние сообщения.
  */
-private fun preview(chat: ChatSummary, words: ChatWords): String = chat.preview
+private fun preview(chat: ChatSummary, words: ChatWords, invite: String): String = chat.preview
+    // Приглашение в групповой звонок — словами, а не ссылкой: в самом сообщении только она.
+    ?.let { text -> if (CallInviteLink.groupOf(text) != null) "🔊 $invite" else text }
     ?: when (chat.lastDisplay) {
         MessageDisplay.UNREADABLE -> words.messageUnreadable
         else -> words.newMessage

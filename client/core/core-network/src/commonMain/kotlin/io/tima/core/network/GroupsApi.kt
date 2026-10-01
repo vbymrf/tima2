@@ -38,16 +38,23 @@ class GroupsApi(
      *   явно: вид группы решает, кто её видит, и полагаться на чужое умолчание в таком
      *   вопросе нельзя.
      */
-    suspend fun create(title: String, kind: String = "private", description: String = ""): GroupCreateResult {
+    suspend fun create(
+        title: String,
+        kind: String = "private",
+        description: String = "",
+        /** Временная группа звонка (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ1): живёт срок от последнего звонка. */
+        callTemp: Boolean = false,
+    ): GroupCreateResult {
         val response = try {
             client.post(route.api("/api/v1/groups")) {
                 header("Authorization", "Bearer ${token()}")
                 contentType(ContentType.Application.Json)
+                val temp = if (callTemp) ""","call_temp":true""" else ""
                 setBody(
                     if (description.isEmpty()) {
-                        """{"kind":"$kind","title":${quote(title)}}"""
+                        """{"kind":"$kind","title":${quote(title)}$temp}"""
                     } else {
-                        """{"kind":"$kind","title":${quote(title)},"description":${quote(description)}}"""
+                        """{"kind":"$kind","title":${quote(title)},"description":${quote(description)}$temp}"""
                     },
                 )
             }
@@ -84,6 +91,7 @@ class GroupsApi(
                 kind = objectValue.str("kind").orEmpty(),
                 ownerId = objectValue.str("owner_id").orEmpty(),
                 myRole = objectValue.str("my_role").orEmpty(),
+                callTtlUntil = objectValue.str("call_ttl_until").orEmpty(),
             )
         }
         return groups?.let { GroupsResult.Groups(it) }
@@ -260,6 +268,8 @@ class RemoteGroup(
     val ownerId: String,
     /** Моя роль: `owner`, `admin`, `moderator`, `member`. От неё зависит, что мне можно. */
     val myRole: String,
+    /** Временная группа звонка — когда удалится (RFC 3339); пусто — группа обычная. */
+    val callTtlUntil: String = "",
 )
 
 /** Участник группы. */

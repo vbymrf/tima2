@@ -14,7 +14,14 @@ import io.tima.core.call.CallStep
 import io.tima.core.call.CallUpdate
 import io.tima.core.call.CallUpdates
 import io.tima.core.call.Calls
+import io.tima.core.call.GroupCallInfo
+import io.tima.core.call.GroupCallLive
+import io.tima.core.call.GroupCallMember
+import io.tima.core.call.GroupControl
+import io.tima.core.call.GroupRoom
+import io.tima.core.call.GroupRules
 import io.tima.core.call.VideoCeiling
+import io.tima.core.call.VideoTier
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -125,6 +132,7 @@ class CallsOverHttp(
             video = body.str("kind") == "video",
             initiatorId = body.str("initiator_id").orEmpty(),
             peerId = body.str("peer_id").orEmpty(),
+            groupId = body.str("group_id").orEmpty(),
         )
     }
 
@@ -156,6 +164,7 @@ class CallsOverHttp(
                     video = call.str("kind") == "video",
                     initiatorId = call.str("initiator_id").orEmpty(),
                     peerId = call.str("peer_id").orEmpty(),
+                    groupId = call.str("group_id").orEmpty(),
                 ),
                 atMs = o.str("at")
                     ?.let { runCatching { kotlinx.datetime.Instant.parse(it).toEpochMilliseconds() }.getOrNull() }
@@ -203,8 +212,109 @@ class CallsOverHttp(
         if (room.isEmpty() || url.isEmpty() || access.isEmpty() || callId.isEmpty()) {
             return CallStep.Refused("ответ без двери")
         }
-        return CallStep.Door(CallDoor(callId = callId, room = room, url = url, token = access, video = ceilingOf(body)))
+        return CallStep.Door(
+            CallDoor(callId = callId, room = room, url = url, token = access, video = ceilingOf(body), group = groupOf(body)),
+        )
     }
+
+    /** Групповой звонок в двери (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ2); у звонка на двоих — `null`. */
+    private fun groupOf(body: JsonObject?): GroupRoom? {
+        if (body?.str("type") != "group") return null
+        val groupId = body.str("group_id").orEmpty().ifEmpty { return null }
+        return GroupRoom(
+            groupId = groupId,
+            creatorId = body.str("creator_id").orEmpty(),
+            paused = body.bool("paused") == true,
+            rules = rulesOf(body["rules"] as? JsonObject),
+        )
+    }
+
+    /** Правила группового звонка; нет поля — умолчание приложения, те же числа (решение 4). */
+    private fun rulesOf(rules: JsonObject?): GroupRules {
+        rules ?: return GroupRules()
+        val tiers = rules["video"]?.jsonArrayOrNull()?.mapNotNull { e ->
+            val o = e.jsonObjectOrNull() ?: return@mapNotNull null
+            VideoTier(upTo = o.int("up_to") ?: return@mapNotNull null, height = o.int("height") ?: return@mapNotNull null)
+        }
+        return GroupRules(
+            max = rules.int("max")?.takeIf { it > 1 } ?: GroupRules().max,
+            tiers = tiers?.takeIf { it.isNotEmpty() } ?: GroupRules().tiers,
+        )
+    }
+
+    override suspend fun startGroup(groupId: String, ring: Boolean, video: Boolean, invited: List<String>): CallStep {
+        val response = try {
+            client.post(route.api("/api/v1/groups/$groupId/call")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody(
+                    buildJsonObject {
+                        put("ring", JsonPrimitive(ring))
+                        put("video", JsonPrimitive(video))
+                        put("invited", kotlinx.serialization.json.JsonArray(invited.map { JsonPrimitive(it) }))
+                    }.toString(),
+                )
+            }
+        } catch (e: Throwable) {
+            return CallStep.Offline(classifyFailure(e).retryDelayMs)
+        }
+        return doorOf(response, needCallId = true)
+    }
+
+    override suspend fun groupCall(groupId: String): GroupCallInfo? {
+        val response = try {
+            client.get(route.api("/api/v1/groups/$groupId/call")) {
+                header("Authorization", "Bearer ${token()}")
+            }
+        } catch (_: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        val body = response.jsonBody() ?: return null
+        val call = (body["call"] as? JsonObject)?.let { c ->
+            GroupCallLive(
+                callId = c.str("call_id").orEmpty(),
+                creatorId = c.str("creator_id").orEmpty(),
+                video = c.str("kind") == "video",
+                startedAtMs = msOf(c.str("started_at")),
+                paused = c.bool("paused") == true,
+                members = c["participants"]?.jsonArrayOrNull()?.mapNotNull { e ->
+                    val o = e.jsonObjectOrNull() ?: return@mapNotNull null
+                    GroupCallMember(
+                        userId = o.str("user_id") ?: return@mapNotNull null,
+                        state = o.str("state").orEmpty(),
+                        invited = o.bool("invited") == true,
+                        removed = o.bool("removed") == true,
+                    )
+                }.orEmpty(),
+            )
+        }?.takeIf { it.callId.isNotEmpty() }
+        return GroupCallInfo(
+            call = call,
+            canStart = body.bool("can_start") == true,
+            myRole = body.str("my_role").orEmpty(),
+            rules = rulesOf(body["rules"] as? JsonObject),
+            ttlUntilMs = body.str("call_ttl_until")?.let { msOf(it) }?.takeIf { it > 0 },
+        )
+    }
+
+    override suspend fun control(callId: String, action: GroupControl, userId: String): Boolean = try {
+        client.post(route.api("/api/v1/calls/$callId/control")) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put("action", JsonPrimitive(action.wire))
+                    if (userId.isNotEmpty()) put("user_id", JsonPrimitive(userId))
+                }.toString(),
+            )
+        }.status == HttpStatusCode.OK
+    } catch (_: Throwable) {
+        false
+    }
+
+    private fun msOf(text: String?): Long =
+        text?.let { runCatching { kotlinx.datetime.Instant.parse(it).toEpochMilliseconds() }.getOrNull() } ?: 0
 
     /**
      * Потолок видео от сервера (ПЛАН-ВИДЕО.md В5б). Нет поля или оно неполное — `null`, и

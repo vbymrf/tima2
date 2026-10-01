@@ -31,6 +31,18 @@ interface CallEngine {
     val remoteVideo: StateFlow<VideoHandle?>
 
     /**
+     * Участники группового звонка — каждый со своей картинкой (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ3).
+     * В звонке на двоих не нужен: там [remoteVideo]. Пусто — движок групп не умеет.
+     */
+    val peers: StateFlow<List<CallPeer>> get() = NoPeers
+
+    /**
+     * Потолок своего видео в групповом звонке по числу участников (решение 4): высота
+     * кадра; `null` — только голос, камера выключается и не включается, пока людей много.
+     */
+    suspend fun setVideoCeiling(height: Int?) = Unit
+
+    /**
      * Принимать ли чужое видео (ЗВ11).
      *
      * **Отписка, а не занавеска.** Собеседник включает камеру, не спрашивая нас
@@ -144,6 +156,11 @@ data class CallDoor(
     val url: String,
     val token: String,
     val video: VideoCeiling? = null,
+    /**
+     * Групповой звонок (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ3): группа, создатель, правила. `null` —
+     * звонок на двоих. Движку важно одно: в групповом пустая комната — не конец звонка.
+     */
+    val group: GroupRoom? = null,
 )
 
 /**
@@ -242,6 +259,11 @@ data class CallState(
     val ownVideoUnsent: String? = null,
     /** Куда идёт звук (ПЛАН-ВИДЕО.md В9). */
     val sound: SoundRoute = SoundRoute.Unknown,
+    /**
+     * Создатель поставил групповой звонок на паузу (решение 5) — данные комнаты. Все в
+     * комнате, звук и видео стоят.
+     */
+    val roomPaused: Boolean = false,
     /** Какая камера: передняя — `true`. */
     val cameraFront: Boolean = true,
     /** Есть ли вторая камера — стоит ли кнопка «Переключение камеры». */
@@ -315,3 +337,6 @@ data class CallStats(
     val downDropped: Long? = null,
     val downDecodeMs: Double? = null,
 )
+
+/** Пустой список участников — у движков, не умеющих групп, и у звонка на двоих. */
+private val NoPeers: StateFlow<List<CallPeer>> = kotlinx.coroutines.flow.MutableStateFlow(emptyList())

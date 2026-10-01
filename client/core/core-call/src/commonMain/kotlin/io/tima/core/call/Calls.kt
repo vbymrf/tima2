@@ -75,6 +75,22 @@ interface Calls {
      * устройствах человека (решение заказчика 2026-09-26).
      */
     suspend fun seen(callIds: List<String>): Boolean = false
+
+    /**
+     * Групповой звонок в личной группе — `POST /groups/{id}/call` (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ
+     * ГЗ2). Идёт уже — сервер впускает в него же, нового не заводит.
+     *
+     * @param ring «Звонить»: отмеченным — вызов (решение 3).
+     * @param invited кого позвать; пусто — всех участников группы.
+     */
+    suspend fun startGroup(groupId: String, ring: Boolean, video: Boolean, invited: List<String>): CallStep =
+        CallStep.Refused("no_group_calls")
+
+    /** Звонок группы прямо сейчас — `GET /groups/{id}/call`. `null` — до сервера не дошли. */
+    suspend fun groupCall(groupId: String): GroupCallInfo? = null
+
+    /** Команда создателя — `POST /calls/{id}/control`. */
+    suspend fun control(callId: String, action: GroupControl, userId: String = ""): Boolean = false
 }
 
 /**
@@ -123,9 +139,20 @@ data class CallSnapshot(
     val video: Boolean,
     val initiatorId: String,
     val peerId: String,
+    /**
+     * Групповой звонок — его группа (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ2). Пусто — звонок на двоих.
+     * У группового «звонит» значит «идёт»: комнату занимает создатель сразу, и сервер
+     * ставит `answered` с первым входом.
+     */
+    val groupId: String = "",
 ) {
-    /** Вызов ещё звонит — только на это и стоит звонить телефону. */
-    val ringing: Boolean get() = state == "ringing"
+    val group: Boolean get() = groupId.isNotEmpty()
+
+    /**
+     * Вызов ещё звонит — только на это и стоит звонить телефону. У группового — пока звонок
+     * идёт: `answered` там значит «кто-то вошёл», а не «ответили мне».
+     */
+    val ringing: Boolean get() = state == "ringing" || (group && state == "answered")
 }
 
 /** Чем кончилась попытка начать или принять звонок. */
