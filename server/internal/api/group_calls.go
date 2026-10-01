@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -213,9 +214,12 @@ func livekitWebhook(deps callsDeps) http.HandlerFunc {
 			Participant struct {
 				Identity string `json:"identity"`
 			} `json:"participant"`
-			CreatedAt int64 `json:"createdAt"`
+			CreatedAt flexInt `json:"createdAt"`
 		}
 		if err := json.Unmarshal(body, &ev); err != nil {
+			// Громко: отвергнутое событие LiveKit больше не повторит, и сервер так и не
+			// узнает, кто в комнате. Именно так оно и было с первого дня до 2026-10-01.
+			log.Printf("вебхук LiveKit не разобран: %v", err)
 			writeErr(w, http.StatusBadRequest, "bad_json", "не разобрано событие")
 			return
 		}
@@ -230,7 +234,7 @@ func livekitWebhook(deps callsDeps) http.HandlerFunc {
 		userID, _, _ := strings.Cut(ev.Participant.Identity, ":")
 		at := time.Now()
 		if ev.CreatedAt > 0 {
-			at = time.Unix(ev.CreatedAt, 0).UTC()
+			at = time.Unix(int64(ev.CreatedAt), 0).UTC()
 		}
 
 		switch ev.Event {
@@ -286,6 +290,32 @@ func livekitWebhook(deps callsDeps) http.HandlerFunc {
 		}
 		w.WriteHeader(http.StatusOK)
 	}
+}
+
+// flexInt — целое, которое LiveKit пишет СТРОКОЙ.
+//
+// ── ПОЧЕМУ СЕРВЕР НЕ ПРИНЯЛ НИ ОДНОГО СОБЫТИЯ ДО 2026-10-01 ──────────────────
+//
+// LiveKit кодирует вебхук по правилам protobuf JSON, а там 64-битное целое — строка:
+// `"createdAt": "1790882683"`. Поле было `int64`, разбор падал на каждом событии, сервер
+// отвечал 400, и LiveKit событие выбрасывал. Звонку на двоих это не мешало — его конец
+// говорят телефоны, — а групповой без событий не знал, кто в комнате, и через 50 с
+// объявлял «пропущенный» всем, включая вошедших (заказчик 2026-10-01, п. 1). Тесты слали
+// число и потому проходили. Принимаются оба вида.
+type flexInt int64
+
+func (f *flexInt) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	if s == "" || s == "null" {
+		*f = 0
+		return nil
+	}
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return err
+	}
+	*f = flexInt(v)
+	return nil
 }
 
 // notifyCallParticipants рассылает событие устройствам всех приглашённых.

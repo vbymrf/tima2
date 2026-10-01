@@ -5,6 +5,7 @@ package api
 
 import (
 	"bytes"
+	"strconv"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -327,4 +328,43 @@ func TestWebhookUnknownRoomIsAccepted(t *testing.T) {
 		t.Fatalf("чужая комната: %d, ожидали 200", code)
 	}
 	_ = srv
+}
+
+// Вебхук LiveKit — время СТРОКОЙ, как его кодирует protobuf JSON. До 2026-10-01 такое
+// событие отвергалось целиком, и сервер ни разу не узнал, кто вошёл в комнату.
+func TestWebhookCreatedAtAsString(t *testing.T) {
+	ts, srv := setup(t)
+	withCalls(srv)
+	owner := registerDevice(t, ts, "+79990065001")
+	member := registerDevice(t, ts, "+79990065002")
+	groupID := createGroupWith(t, ts, owner, member)
+	call, _ := startGroupCallAs(t, ts, owner, groupID)
+
+	raw := []byte(`{"event":"participant_joined","room":{"name":"` + call.Room + `"},` +
+		`"participant":{"identity":"` + member.userID + ":" + member.id + `"},"createdAt":"` +
+		strconv.FormatInt(time.Now().Unix(), 10) + `","id":"EV_x"}`)
+	if code := postWebhook(t, ts, raw, "Bearer "+signedRaw(t, raw)); code != 200 {
+		t.Fatalf("событие со временем-строкой: %d, ожидали 200", code)
+	}
+	active, _ := srv.Store.ActiveParticipants(t.Context(), call.CallID)
+	if len(active) != 1 || active[0] != member.userID {
+		t.Fatalf("вход не записан: %v", active)
+	}
+}
+
+// signedRaw подписывает готовое тело так же, как LiveKit.
+func signedRaw(t *testing.T, body []byte) string {
+	t.Helper()
+	sum := sha256.Sum256(body)
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"iss":    testLiveKitKey,
+		"sha256": base64.StdEncoding.EncodeToString(sum[:]),
+		"exp":    time.Now().Add(time.Minute).Unix(),
+		"nbf":    time.Now().Add(-time.Minute).Unix(),
+	})
+	signed, err := tok.SignedString([]byte(testLiveKitSecret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signed
 }

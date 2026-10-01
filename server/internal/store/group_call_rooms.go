@@ -39,6 +39,12 @@ func (s *Store) CreateRoomCall(ctx context.Context, room, kind, groupID, creator
 	if err != nil {
 		return "", err
 	}
+	// Создатель не позван — он звонит. Иначе по сроку вызова ему, как не вошедшему,
+	// уходил «пропущенный», и его телефон клал трубку собственного звонка (2026-10-01).
+	if _, err := s.pool.Exec(ctx, `
+		UPDATE call_participants SET invited = false WHERE call_id = $1 AND user_id = $2`, callID, creatorID); err != nil {
+		return "", err
+	}
 	if ring {
 		if _, err := s.pool.Exec(ctx, `UPDATE calls SET ring = true WHERE call_id = $1`, callID); err != nil {
 			return "", err

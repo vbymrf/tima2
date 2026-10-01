@@ -384,3 +384,29 @@ func hasID(list []string, s string) bool {
 	}
 	return false
 }
+
+// Создатель не позван — «пропущенного» ему не бывает: ни по сроку, ни при остановке
+// (2026-10-01: по сроку вызова его телефон клал трубку собственного звонка).
+func TestRoomCallCreatorNeverMissed(t *testing.T) {
+	ts, srv := setup(t)
+	withCalls(srv)
+	owner := registerDevice(t, ts, "+79990076001")
+	a := registerDevice(t, ts, "+79990076002")
+	groupID := createGroupWith(t, ts, owner, a)
+	door, _ := startRoomCallAs(t, ts, owner, groupID, map[string]any{"ring": true})
+	parts, _ := srv.Store.GroupCallParticipants(t.Context(), door.CallID)
+	for _, p := range parts {
+		if p.UserID == owner.userID && p.Invited {
+			t.Fatal("создатель записан позванным")
+		}
+	}
+	jsonAuth(t, ts, "POST", "/api/v1/calls/"+door.CallID+"/control", owner.token, map[string]any{"action": "stop"}, nil)
+	for _, c := range roomChanges(t, ts, owner, door.CallID) {
+		if c == "missed" {
+			t.Fatal("создателю ушёл «пропущенный»")
+		}
+	}
+	if got := roomChanges(t, ts, a, door.CallID); len(got) != 2 || got[1] != "missed" {
+		t.Fatalf("позванному, не вошедшему: %v, ожидали ringing и missed", got)
+	}
+}

@@ -583,6 +583,8 @@ func closeRoomCall(deps callsDeps, ctx context.Context, call store.Call, enderID
 	missedDue := time.Since(call.CreatedAt) < ringDeadline
 	for _, p := range parts {
 		switch {
+		case p.UserID == call.InitiatorID:
+			deps.notifier.CallChange(ctx, p.UserID, call.CallID, "ended", "")
 		case p.Removed:
 			// уже сказано при удалении
 		case p.State == store.PartInvited && p.Invited && ring:
@@ -623,8 +625,9 @@ func closeRoomUnanswered(deps callsDeps, callID string) {
 		return
 	}
 	for _, p := range parts {
-		if p.State == store.PartInvited && p.Invited && !p.Removed {
+		if p.State == store.PartInvited && p.Invited && !p.Removed && p.UserID != call.InitiatorID {
 			deps.notifier.CallChange(ctx, p.UserID, callID, "missed", "")
+			log.Printf("групповой звонок %s: %s не вошёл за срок вызова — пропущенный", short(callID), short(p.UserID))
 		}
 	}
 }
