@@ -21,6 +21,9 @@ data class GroupRoom(
     val creatorId: String,
     val paused: Boolean = false,
     val rules: GroupRules = GroupRules(),
+    /** Мне запрещены микрофон и видео — запрет создателя держится при перезаходе. */
+    val micForbidden: Boolean = false,
+    val videoForbidden: Boolean = false,
 )
 
 /**
@@ -103,6 +106,9 @@ data class GroupCallMember(
     val state: String,
     val invited: Boolean,
     val removed: Boolean,
+    /** Запрет создателя: сервер не принимает от него звук или видео (уточнение 2026-10-01). */
+    val micForbidden: Boolean = false,
+    val videoForbidden: Boolean = false,
 ) {
     val inRoom: Boolean get() = state == "joined"
 }
@@ -111,8 +117,15 @@ data class GroupCallMember(
 enum class GroupControl(val wire: String) {
     /** Позвать ещё участника группы в идущий звонок («Добавить» в журнале звонка). */
     Invite("invite"),
+    /**
+     * Запретить микрофон или видео: сервер перестаёт принимать этот источник, пока создатель
+     * не разрешит (уточнение заказчика 2026-10-01: это запрет, а не выключение).
+     */
     MuteMic("mute_mic"),
     MuteVideo("mute_video"),
+    /** Снять запрет — включает участник сам. */
+    AllowMic("allow_mic"),
+    AllowVideo("allow_video"),
     Remove("remove"),
     Pause("pause"),
     Resume("resume"),

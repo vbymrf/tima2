@@ -171,6 +171,15 @@ class CallHost(
     var voiceOnly by mutableStateOf(false)
         private set
 
+    /**
+     * Запрет создателя (уточнение заказчика 2026-10-01): сервер не принимает от меня звук или
+     * видео, пока создатель не разрешит. Кнопки не включают запрещённое — говорят почему.
+     */
+    var micForbidden by mutableStateOf(false)
+        private set
+    var videoForbidden by mutableStateOf(false)
+        private set
+
     /** Своё на паузе создателя: что было включено до неё — вернуть после (решение 5). */
     private var beforePause: Pair<Boolean, Boolean>? = null
 
@@ -640,12 +649,19 @@ class CallHost(
         seconds = 0
         group = null
         voiceOnly = false
+        micForbidden = false
+        videoForbidden = false
         beforePause = null
         pendingInvites = null
         state = CallState()
     }
 
     fun microphone(on: Boolean) {
+        if (on && micForbidden) {
+            // Запрет создателя: сервер звук не примет — говорим, а не делаем вид.
+            note(words().groupCall.mutedMic, whileTrue = MIC_FORBIDDEN)
+            return
+        }
         scope.launch { engine?.setMicrophone(on) }
     }
 
@@ -704,6 +720,10 @@ class CallHost(
         }
         if (on && state.roomPaused) {
             note(words().groupCall.pausedWait)
+            return
+        }
+        if (on && videoForbidden) {
+            note(words().groupCall.mutedVideo, whileTrue = VIDEO_FORBIDDEN)
             return
         }
         if (!on) {
@@ -1073,6 +1093,8 @@ class CallHost(
             mine = room?.creatorId == me && me.isNotEmpty(),
             rules = room?.rules ?: GroupRules(),
         )
+        micForbidden = room?.micForbidden == true
+        videoForbidden = room?.videoForbidden == true
         Journal.note(
             LogCode.CALL, "групповой звонок: вошли",
             "звонок" to door.callId.take(8), "группа" to (room?.groupId?.take(8) ?: "—"),
@@ -1086,8 +1108,12 @@ class CallHost(
         live.connect(door, publishFor(door))
         if (!stillOurs(door.callId)) return
         told()
+        // Запрет держится при перезаходе: сервер выдал права без запрещённого, и включать
+        // его незачем — дорожку не примут.
+        if (micForbidden) live.setMicrophone(false)
+        if (micForbidden || videoForbidden) forbidNotes()
         if (room?.paused == true) paused(true)
-        if (video && !voiceOnly && room?.paused != true) live.setCamera(true)
+        if (video && !voiceOnly && !videoForbidden && room?.paused != true) live.setCamera(true)
     }
 
     /** Кто я — чтобы узнать себя создателем. Ставит сборка; в проверках — пусто. */
@@ -1144,8 +1170,8 @@ class CallHost(
         beforePause = null
         note(words().groupCall.resumed)
         scope.launch {
-            if (was.first) engine?.setMicrophone(true)
-            if (was.second && !voiceOnly) engine?.setCamera(true)
+            if (was.first && !micForbidden) engine?.setMicrophone(true)
+            if (was.second && !voiceOnly && !videoForbidden) engine?.setCamera(true)
         }
     }
 
@@ -1168,6 +1194,14 @@ class CallHost(
         }
     }
 
+    /** Длящиеся строки о запретах: пока запрет стоит — строка есть, сняли — уходит. */
+    private fun forbidNotes() {
+        val w = words().groupCall
+        if (micForbidden) note(w.mutedMic, whileTrue = MIC_FORBIDDEN) else forget(MIC_FORBIDDEN)
+        if (videoForbidden) note(w.mutedVideo, whileTrue = VIDEO_FORBIDDEN) else forget(VIDEO_FORBIDDEN)
+        if (micForbidden && videoForbidden) note(w.watching, whileTrue = WATCHING) else forget(WATCHING)
+    }
+
     /** Сервер передал команду создателя мне (событие `call.control`). */
     fun controlled(callId: String, action: String, by: String) {
         if (!active || !callIs(callId) || group == null) return
@@ -1175,12 +1209,24 @@ class CallHost(
         Journal.note(LogCode.CALL, "команда создателя пришла", "команда" to action)
         when (GroupControl.of(action)) {
             GroupControl.MuteMic -> {
-                note(w.mutedMic)
+                micForbidden = true
                 scope.launch { engine?.setMicrophone(false) }
+                forbidNotes()
             }
             GroupControl.MuteVideo -> {
-                note(w.mutedVideo)
+                videoForbidden = true
                 scope.launch { engine?.setCamera(false) }
+                forbidNotes()
+            }
+            GroupControl.AllowMic -> {
+                micForbidden = false
+                forbidNotes()
+                note(w.allowedMic)
+            }
+            GroupControl.AllowVideo -> {
+                videoForbidden = false
+                forbidNotes()
+                note(w.allowedVideo)
             }
             GroupControl.Remove -> {
                 note(w.removed)
@@ -1335,6 +1381,9 @@ class CallHost(
         const val CODEC_MISMATCH = "уходит не тот кодек, что просили"
         const val VOICE_ONLY = "групповой: только голос"
         const val ROOM_PAUSED = "групповой: пауза создателя"
+        const val MIC_FORBIDDEN = "групповой: микрофон запрещён"
+        const val VIDEO_FORBIDDEN = "групповой: видео запрещено"
+        const val WATCHING = "групповой: только смотрю"
     }
 }
 

@@ -226,6 +226,8 @@ class CallsOverHttp(
             creatorId = body.str("creator_id").orEmpty(),
             paused = body.bool("paused") == true,
             rules = rulesOf(body["rules"] as? JsonObject),
+            micForbidden = (body["forbidden"] as? JsonObject)?.bool("mic") == true,
+            videoForbidden = (body["forbidden"] as? JsonObject)?.bool("video") == true,
         )
     }
 
@@ -285,6 +287,8 @@ class CallsOverHttp(
                         state = o.str("state").orEmpty(),
                         invited = o.bool("invited") == true,
                         removed = o.bool("removed") == true,
+                        micForbidden = o.bool("mic_forbidden") == true,
+                        videoForbidden = o.bool("video_forbidden") == true,
                     )
                 }.orEmpty(),
             )

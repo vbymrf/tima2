@@ -78,6 +78,11 @@ interface GroupCallWords {
     val stopped: String
     val mutedMic: String
     val mutedVideo: String
+    val allowedMic: String
+    val allowedVideo: String
+    val watching: String
+    val forbiddenMic: String
+    val forbiddenVideo: String
     val removed: String
 
     // ── Группа и приглашение (решения 3а, 10, 11) ──
@@ -137,12 +142,12 @@ object RussianGroupCall : GroupCallWords {
     override val helpTitle = "Что делают кнопки"
     override val helpAdd = "Отмеченных — в участники; в идущем звонке — позвать отмеченных участников группы"
     override val helpRemove = "Отмеченных — из звонка. Из группы человек не удаляется"
-    override val helpMic = "Выключить микрофон отмеченным; включить его обратно может сам человек"
-    override val helpCamera = "Выключить видео отмеченным"
+    override val helpMic = "Запретить отмеченным микрофон: сервер перестаёт принимать их звук, пока вы не разрешите. Нажать снова — разрешить"
+    override val helpCamera = "Запретить отмеченным видео — так же; запрещено и то и другое — человек только смотрит и слушает"
     override val helpPause = "Пауза для всех: все остаются в звонке, звук и видео стоят; «Продолжить» — снять"
     override val helpStop = "Завершить звонок для всех"
     override val helpRowTitle = "Микрофон и камера в строке"
-    override val helpRow = "У создателя — у каждого участника; у остальных — только у себя"
+    override val helpRow = "У создателя — у каждого участника: нажатие запрещает или разрешает; у остальных — только у себя"
     override val helpSectionsTitle = "Разделы"
     override val helpSections = "«Участники» — кто добавлен в звонок; остальные разделы — кого можно добавить"
 
@@ -158,8 +163,13 @@ object RussianGroupCall : GroupCallWords {
     override val resumed = "Звонок продолжается"
     override val controlFailed = "Команда не прошла — нет связи с сервером"
     override val stopped = "Вы завершили звонок для всех"
-    override val mutedMic = "Создатель выключил вам микрофон — включить можно кнопкой"
-    override val mutedVideo = "Создатель выключил вам видео"
+    override val mutedMic = "Создатель запретил вам микрофон — вас не слышно, пока он не разрешит"
+    override val mutedVideo = "Создатель запретил вам видео — вас не видно, пока он не разрешит"
+    override val allowedMic = "Создатель разрешил микрофон — включите его кнопкой"
+    override val allowedVideo = "Создатель разрешил видео — включите камеру кнопкой"
+    override val watching = "Вы смотрите и слушаете звонок; писать можно в группе звонка"
+    override val forbiddenMic = "микрофон запрещён"
+    override val forbiddenVideo = "видео запрещено"
     override val removed = "Создатель удалил вас из звонка"
 
     override val start = "Совершить групповой звонок"
@@ -218,12 +228,12 @@ object EnglishGroupCall : GroupCallWords {
     override val helpTitle = "What the buttons do"
     override val helpAdd = "Ticked people become participants; during a call — call the ticked group members"
     override val helpRemove = "Remove the ticked from the call. They stay in the group"
-    override val helpMic = "Turn off the ticked people's microphone; they can turn it back on themselves"
-    override val helpCamera = "Turn off the ticked people's video"
+    override val helpMic = "Forbid the ticked people's microphone: the server stops taking their sound until you allow it. Tap again to allow"
+    override val helpCamera = "Forbid the ticked people's video the same way; with both forbidden a person only watches and listens"
     override val helpPause = "Pause for everyone: all stay in the call, sound and video stop; “Resume” lifts it"
     override val helpStop = "End the call for everyone"
     override val helpRowTitle = "Microphone and camera in a row"
-    override val helpRow = "The creator has them for everyone; others only for themselves"
+    override val helpRow = "The creator has them for every participant: a tap forbids or allows; others only for themselves"
     override val helpSectionsTitle = "Sections"
     override val helpSections = "“Participants” — who is in the call; the other sections — who can be added"
 
@@ -239,8 +249,13 @@ object EnglishGroupCall : GroupCallWords {
     override val resumed = "The call continues"
     override val controlFailed = "The command did not go through — no connection to the server"
     override val stopped = "You ended the call for everyone"
-    override val mutedMic = "The creator turned your microphone off — you can turn it back on"
-    override val mutedVideo = "The creator turned your video off"
+    override val mutedMic = "The creator forbade your microphone — nobody hears you until it is allowed"
+    override val mutedVideo = "The creator forbade your video — nobody sees you until it is allowed"
+    override val allowedMic = "The creator allowed your microphone — turn it on with the button"
+    override val allowedVideo = "The creator allowed your video — turn the camera on with the button"
+    override val watching = "You watch and listen to the call; you can write in the call's group"
+    override val forbiddenMic = "microphone forbidden"
+    override val forbiddenVideo = "video forbidden"
     override val removed = "The creator removed you from the call"
 
     override val start = "Start a group call"
@@ -299,12 +314,12 @@ object SpanishGroupCall : GroupCallWords {
     override val helpTitle = "Qué hacen los botones"
     override val helpAdd = "Los marcados pasan a participantes; durante la llamada — llamar a los miembros marcados"
     override val helpRemove = "Quitar a los marcados de la llamada. Siguen en el grupo"
-    override val helpMic = "Apagar el micrófono de los marcados; pueden volver a encenderlo ellos mismos"
-    override val helpCamera = "Apagar el vídeo de los marcados"
+    override val helpMic = "Prohibir el micrófono a los marcados: el servidor deja de recibir su sonido hasta que usted lo permita. Pulsar otra vez — permitir"
+    override val helpCamera = "Prohibir el vídeo a los marcados igual; con ambos prohibidos la persona solo mira y escucha"
     override val helpPause = "Pausa para todos: siguen en la llamada, sonido y vídeo parados; «Continuar» la quita"
     override val helpStop = "Terminar la llamada para todos"
     override val helpRowTitle = "Micrófono y cámara en la fila"
-    override val helpRow = "El creador los tiene para cada uno; los demás, solo para sí mismos"
+    override val helpRow = "El creador los tiene para cada participante: pulsar prohíbe o permite; los demás, solo para sí mismos"
     override val helpSectionsTitle = "Secciones"
     override val helpSections = "«Participantes» — quién está en la llamada; las demás — a quién se puede añadir"
 
@@ -320,8 +335,13 @@ object SpanishGroupCall : GroupCallWords {
     override val resumed = "La llamada continúa"
     override val controlFailed = "La orden no pasó — sin conexión con el servidor"
     override val stopped = "Ha terminado la llamada para todos"
-    override val mutedMic = "El creador le apagó el micrófono — puede volver a encenderlo"
-    override val mutedVideo = "El creador le apagó el vídeo"
+    override val mutedMic = "El creador le prohibió el micrófono — no se le oye hasta que lo permita"
+    override val mutedVideo = "El creador le prohibió el vídeo — no se le ve hasta que lo permita"
+    override val allowedMic = "El creador permitió su micrófono — enciéndalo con el botón"
+    override val allowedVideo = "El creador permitió su vídeo — encienda la cámara con el botón"
+    override val watching = "Mira y escucha la llamada; puede escribir en el grupo de la llamada"
+    override val forbiddenMic = "micrófono prohibido"
+    override val forbiddenVideo = "vídeo prohibido"
     override val removed = "El creador le quitó de la llamada"
 
     override val start = "Hacer una llamada grupal"

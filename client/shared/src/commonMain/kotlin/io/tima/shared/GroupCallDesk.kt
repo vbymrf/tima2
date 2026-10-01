@@ -197,6 +197,14 @@ class GroupCallDesk(
         scope.launch { live[groupId] = calls.groupCall(groupId) }
     }
 
+    /** Перечитать вскоре — после команды, когда сервер её уже записал. */
+    fun refreshSoon(groupId: String) {
+        scope.launch {
+            delay(600)
+            live[groupId] = calls.groupCall(groupId)
+        }
+    }
+
     /** «Добавить»: до звонка — в участники; в звонке — позвать (решение 8). */
     fun add(ids: List<String>) {
         if (ledger?.first == Mode.Live) {
@@ -310,6 +318,7 @@ class GroupCallDesk(
         val self = CallMember(
             userId = me, name = nameOf(me), letters = lettersOf(nameOf(me)), state = CallMemberState.Self,
             face = faceOf(me), microphoneOn = st.microphoneOn, cameraOn = st.cameraOn, creator = creator == me,
+            micForbidden = host.micForbidden, videoForbidden = host.videoForbidden,
         )
         val byUser = peers.associateBy { it.userId }
         val fromServer = info?.members.orEmpty().filter { it.userId != me }.map { m ->
@@ -323,7 +332,7 @@ class GroupCallDesk(
                     else -> CallMemberState.Invited
                 },
                 face = faceOf(m.userId), microphoneOn = peer?.microphoneOn == true, cameraOn = peer?.cameraOn == true,
-                creator = creator == m.userId,
+                creator = creator == m.userId, micForbidden = m.micForbidden, videoForbidden = m.videoForbidden,
             )
         }
         val known = fromServer.map { it.userId }.toSet()
@@ -457,8 +466,14 @@ fun GroupCallOverlays(
                 ),
                 onAdd = desk::add,
                 onRemove = desk::remove,
-                onMuteMic = { ids -> ids.forEach { host.control(GroupControl.MuteMic, it) } },
-                onMuteCamera = { ids -> ids.forEach { host.control(GroupControl.MuteVideo, it) } },
+                onForbidMic = { ids, forbid ->
+                    ids.forEach { host.control(if (forbid) GroupControl.MuteMic else GroupControl.AllowMic, it) }
+                    ask.groupId?.let { g -> desk.refreshSoon(g) }
+                },
+                onForbidCamera = { ids, forbid ->
+                    ids.forEach { host.control(if (forbid) GroupControl.MuteVideo else GroupControl.AllowVideo, it) }
+                    ask.groupId?.let { g -> desk.refreshSoon(g) }
+                },
                 onPause = { on -> host.control(if (on) GroupControl.Pause else GroupControl.Resume) },
                 onStop = {
                     host.control(GroupControl.Stop)

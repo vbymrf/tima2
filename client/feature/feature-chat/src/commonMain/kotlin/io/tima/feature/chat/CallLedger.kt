@@ -68,6 +68,9 @@ data class CallMember(
     val microphoneOn: Boolean = false,
     val cameraOn: Boolean = false,
     val creator: Boolean = false,
+    /** Запрет создателя: сервер не принимает от него звук или видео. */
+    val micForbidden: Boolean = false,
+    val videoForbidden: Boolean = false,
 )
 
 /** Ключ раздела «Участники» на полосе. */
@@ -100,8 +103,9 @@ fun CallLedgerPage(
     setup: CallLedgerSetup? = null,
     onAdd: (List<String>) -> Unit = {},
     onRemove: (List<String>) -> Unit = {},
-    onMuteMic: (List<String>) -> Unit = {},
-    onMuteCamera: (List<String>) -> Unit = {},
+    /** Запретить (`true`) или разрешить микрофон отмеченным (уточнение 2026-10-01). */
+    onForbidMic: (List<String>, Boolean) -> Unit = { _, _ -> },
+    onForbidCamera: (List<String>, Boolean) -> Unit = { _, _ -> },
     onPause: (Boolean) -> Unit = {},
     onStop: () -> Unit = {},
     onOwnMic: (Boolean) -> Unit = {},
@@ -186,10 +190,10 @@ fun CallLedgerPage(
                         on = m.userId in selected,
                         onToggle = { selected = if (m.userId in selected) selected - m.userId else selected + m.userId },
                         onMic = {
-                            if (m.state == CallMemberState.Self) onOwnMic(!m.microphoneOn) else if (m.microphoneOn) onMuteMic(listOf(m.userId))
+                            if (m.state == CallMemberState.Self) onOwnMic(!m.microphoneOn) else onForbidMic(listOf(m.userId), !m.micForbidden)
                         },
                         onCamera = {
-                            if (m.state == CallMemberState.Self) onOwnCamera(!m.cameraOn) else if (m.cameraOn) onMuteCamera(listOf(m.userId))
+                            if (m.state == CallMemberState.Self) onOwnCamera(!m.cameraOn) else onForbidCamera(listOf(m.userId), !m.videoForbidden)
                         },
                     )
                 }
@@ -240,12 +244,14 @@ fun CallLedgerPage(
                         selected = emptySet()
                     }
                     if (live) {
+                        // Все отмеченные уже под запретом — кнопка снимает его, иначе ставит.
+                        val chosen = members.filter { it.userId in chosenMembers }
                         CallAction("🔇", words.mic, chosenMembers.isNotEmpty()) {
-                            onMuteMic(chosenMembers)
+                            onForbidMic(chosenMembers, !chosen.all { it.micForbidden })
                             selected = emptySet()
                         }
                         CallAction("🚫", words.camera, chosenMembers.isNotEmpty()) {
-                            onMuteCamera(chosenMembers)
+                            onForbidCamera(chosenMembers, !chosen.all { it.videoForbidden })
                             selected = emptySet()
                         }
                         CallAction(if (paused) "▶" else "⏸", if (paused) words.resume else words.pause, true) { onPause(!paused) }
@@ -330,7 +336,15 @@ private fun MemberRow(
         middle = {
             Column {
                 Name(m.name)
-                Tertiary(listOfNotNull(state, words.creator.takeIf { m.creator }).joinToString(" · "), lineOne = true)
+                Tertiary(
+                    listOfNotNull(
+                        state,
+                        words.creator.takeIf { m.creator },
+                        words.forbiddenMic.takeIf { m.micForbidden },
+                        words.forbiddenVideo.takeIf { m.videoForbidden },
+                    ).joinToString(" · "),
+                    lineOne = true,
+                )
             }
         },
         right = {
@@ -339,14 +353,26 @@ private fun MemberRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (controls) {
-                    IconButton(glyph = if (m.microphoneOn) "🎤" else "🔇", onClick = onMic, live = m.microphoneOn)
-                    IconButton(glyph = "📹", onClick = onCamera, live = m.cameraOn)
+                    // Запрещённое — красным: это не «выключено», а «не принимается».
+                    ForbidButton(if (m.microphoneOn) "🎤" else "🔇", m.microphoneOn, m.micForbidden, onMic)
+                    ForbidButton("📹", m.cameraOn, m.videoForbidden, onCamera)
                 }
                 if (mine && !self) {
                     Box(Modifier.clickable(onClick = onToggle).padding(TimaSpacing.about2)) { CheckMark(on) }
                 }
             }
         },
+    )
+}
+
+@Composable
+private fun ForbidButton(glyph: String, on: Boolean, forbidden: Boolean, onClick: () -> Unit) {
+    IconButton(
+        glyph = glyph,
+        onClick = onClick,
+        live = on && !forbidden,
+        background = if (forbidden) Tima.colors.alarm else null,
+        colorGlyph = if (forbidden) Tima.colors.onAccent else null,
     )
 }
 

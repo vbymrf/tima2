@@ -17,7 +17,7 @@ class CallLedgerScreenTest {
 
     private val me = CallMember("me", "Евгений", "Е", CallMemberState.Self, microphoneOn = true, cameraOn = true, creator = true)
     private val anna = CallMember("u1", "Анна Петрова", "АП", CallMemberState.In, microphoneOn = true, cameraOn = true)
-    private val boris = CallMember("u2", "Борис", "Б", CallMemberState.In, microphoneOn = false, cameraOn = false)
+    private val boris = CallMember("u2", "Борис", "Б", CallMemberState.In, microphoneOn = false, cameraOn = false, micForbidden = true)
     private val vera = CallMember("u3", "Вера", "В", CallMemberState.Invited)
     private val people = listOf(
         CallCandidate("u4", "Галина", "Г", sectionId = "s1"),

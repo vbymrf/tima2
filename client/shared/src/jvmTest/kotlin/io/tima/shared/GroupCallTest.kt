@@ -180,6 +180,27 @@ class GroupCallTest {
     }
 
     @Test
+    fun запрет_создателя_не_даёт_включить_пока_не_разрешат() = runTest {
+        val engine = GroupEngine()
+        val host = host(GroupCalls(creator = создатель), engine)
+        host.joinGroup("g1", "группа", "Планёрка", video = false)
+        engine.say(CallState(stage = CallStage.Connected, microphoneOn = true))
+        host.controlled("g1", GroupControl.MuteMic.wire, создатель)
+        assertTrue(host.micForbidden)
+        assertEquals(false, engine.mic.last(), "микрофон выключен сразу")
+        val before = engine.mic.size
+        host.microphone(true)
+        assertEquals(before, engine.mic.size, "запрещённый микрофон кнопкой не включается")
+        host.controlled("g1", GroupControl.MuteVideo.wire, создатель)
+        assertTrue(host.events.any { it.text.contains("смотрите и слушаете") }, "оба запрета — человек только смотрит")
+        host.controlled("g1", GroupControl.AllowMic.wire, создатель)
+        assertFalse(host.micForbidden)
+        assertFalse(host.events.any { it.text.contains("смотрите и слушаете") }, "снят один запрет — уже не только зритель")
+        host.microphone(true)
+        assertEquals(true, engine.mic.last(), "разрешённый включается")
+    }
+
+    @Test
     fun уход_одного_участника_группового_не_кладёт_трубку() = runTest {
         val host = host(GroupCalls(creator = создатель))
         host.joinGroup("g1", "группа", "Планёрка", video = false)
