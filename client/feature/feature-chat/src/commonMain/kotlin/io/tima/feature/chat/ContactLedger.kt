@@ -32,6 +32,8 @@ import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.words
+import io.tima.core.ui.TimaZones
+import androidx.compose.foundation.layout.size
 import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.BookList
 import io.tima.domain.chat.ChatPerson
@@ -316,7 +318,15 @@ fun LedgerHelpPage(modifier: Modifier = Modifier) {
         )
         for ((glyph, title, about) in rows) {
             ListLine(
-                left = { IconButton(glyph = glyph, onClick = {}, live = true) },
+                // Квадрат выбора — настоящий, как в строках журнала: символ «☐» на части
+                // телефонов рисуется чужим значком (на Samsung — урной).
+                left = {
+                    if (glyph == "☐") {
+                        Box(Modifier.size(TimaZones.zone1 * 0.8f), contentAlignment = Alignment.Center) { CheckMark(true) }
+                    } else {
+                        IconButton(glyph = glyph, onClick = {}, live = true)
+                    }
+                },
                 middle = {
                     Name(title)
                     Secondary(about)
