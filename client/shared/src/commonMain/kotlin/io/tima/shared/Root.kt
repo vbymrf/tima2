@@ -127,6 +127,7 @@ import io.tima.core.call.askCallAccess
 import io.tima.core.call.callAccessState
 import io.tima.feature.shell.SoundRow
 import io.tima.core.media.systemSoundsAvailable
+import io.tima.core.media.systemDefaultSoundTitle
 import io.tima.core.media.rememberSoundFilePicker
 import io.tima.core.media.rememberSystemSoundPicker
 import io.tima.core.media.SoundUse
@@ -3486,6 +3487,18 @@ private fun Settings(
                 // Звуки: общий выбор — в настройках устройства, не синхронизируется.
                 ring = soundRow(deviceSettings, SoundKeys.RING, SoundUse.Ring, "ring"),
                 message = soundRow(deviceSettings, SoundKeys.MESSAGE, SoundUse.Message, "message"),
+                // Тихие часы (заказчик 2026-10-01) — в настройках устройства.
+                quiet = run {
+                    val saved by deviceSettings.all().collectAsState(emptyMap())
+                    val q = QuietHours.read(saved)
+                    io.tima.feature.shell.QuietRow(q.on, q.from, q.to) { on, from, to ->
+                        scope.launch {
+                            deviceSettings.put(QuietHours.KEY_ON, if (on) "1" else "0")
+                            deviceSettings.put(QuietHours.KEY_FROM, from.toString())
+                            deviceSettings.put(QuietHours.KEY_TO, to.toString())
+                        }
+                    }
+                },
             )
 
             // Разрешения — одно место для всех (заказчик 2026-09-26).
@@ -4588,11 +4601,20 @@ internal fun soundRow(
     val system = rememberSystemSoundPicker(use, onPick)
     val file = rememberSoundFilePicker(fileName, onPick)
     return SoundRow(
+        // Справа — каким путём выбрано, под названием настройки — что звучит (заказчик
+        // 2026-10-01: «какая мелодия выбрана — название»). «Как в системе» тоже называется:
+        // мелодия телефона.
         current = when (choice) {
             SoundChoice.Default -> words.soundDefault
             SoundChoice.Silent -> words.soundSilent
-            is SoundChoice.System -> choice.title.ifBlank { words.soundDefault }
-            is SoundChoice.File -> choice.title
+            is SoundChoice.System -> words.soundFromSystem
+            is SoundChoice.File -> words.soundFromFile
+        },
+        sound = when (choice) {
+            SoundChoice.Default -> systemDefaultSoundTitle(use)
+            SoundChoice.Silent -> null
+            is SoundChoice.System -> choice.title.ifBlank { null }
+            is SoundChoice.File -> choice.title.ifBlank { null }
         },
         onSystem = if (systemSoundsAvailable) system else null,
         onFile = file,

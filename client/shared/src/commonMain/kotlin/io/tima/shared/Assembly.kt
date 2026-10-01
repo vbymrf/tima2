@@ -255,6 +255,8 @@ fun buildAssembled(
             messageSound = { soundChoiceOf(environment.settings.all().first()[SoundKeys.MESSAGE]) },
             // Журнал уведомлений — в базе аккаунта (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ1).
             journal = environment.noticeJournal,
+            // Тихие часы — в настройках устройства, по местным часам (заказчик 2026-10-01).
+            quiet = { QuietHours.read(environment.settings.all().first()).now() },
         )
 
         Assembled(

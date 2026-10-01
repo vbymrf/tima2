@@ -323,6 +323,15 @@ interface SettingsListWords {
     val soundFromFile: String
     /** Строки «Настройки → Уведомления» (заказчик 2026-10-01): что видно, что звучит, пояснения выбора. */
     val noticesSeen: String
+    /** «Не показывать по часам» (заказчик 2026-10-01). */
+    val quietTitle: String
+    val quietAbout: String
+    val quietOff: String
+    val quietOffAbout: String
+    val quietOn: String
+    val quietOnAbout: String
+    val quietFrom: String
+    val quietTo: String
     val soundRingAbout: String
     val soundMessageAbout: String
     val soundDefaultAbout: String
@@ -667,6 +676,17 @@ interface BookWords {
     val ledgerTitle: String
     val ledgerAbout: String
     val ledgerAll: String
+    /** «?» журнала контактов — что делают кнопки (заказчик 2026-10-01). */
+    val ledgerHelpTitle: String
+    val ledgerHelpToSection: String
+    val ledgerHelpRemove: String
+    val ledgerHelpBlock: String
+    val ledgerHelpRestore: String
+    val ledgerHelpSound: String
+    val ledgerHelpSelectTitle: String
+    val ledgerHelpSelect: String
+    val ledgerHelpFiltersTitle: String
+    val ledgerHelpFilters: String
     val ledgerOwnSound: String
     val ledgerAllSections: String
     val ledgerSelectAll: String
@@ -2486,6 +2506,14 @@ object RussianWords : Words {
         override val soundFromSystem = "Из стандартных"
         override val soundFromFile = "Загрузить файл"
         override val noticesSeen = "Что видно в уведомлении"
+        override val quietTitle = "Не показывать по часам"
+        override val quietAbout = "Сообщения и пропущенные — без строки и звука; входящий звонок звонит"
+        override val quietOff = "Выключено"
+        override val quietOffAbout = "Уведомления в любое время"
+        override val quietOn = "Включено"
+        override val quietOnAbout = "В эти часы — без строки в шторке и без звука"
+        override val quietFrom = "С"
+        override val quietTo = "До"
         override val soundRingAbout = "Входящий звонок"
         override val soundMessageAbout = "Новое сообщение и пропущенный звонок"
         override val soundDefaultAbout = "Звук, выбранный в настройках телефона"
@@ -2847,6 +2875,16 @@ object RussianWords : Words {
         override val ledgerTitle = "Журнал контактов"
         override val ledgerAbout = "раздел, список и своя мелодия — для нескольких сразу"
         override val ledgerAll = "Все списки"
+        override val ledgerHelpTitle = "Что делают кнопки"
+        override val ledgerHelpToSection = "Переносит выделенных в выбранный раздел — во вкладке «Контакты» они будут там"
+        override val ledgerHelpRemove = "Кладёт в «Убранные»: из контактов пропадают, переписка и звонки идут как обычно"
+        override val ledgerHelpBlock = "Кладёт в «Заблокированные»: из контактов пропадают, переписки скрыты, звонок молчит"
+        override val ledgerHelpRestore = "Возвращает из «Убранных» и «Заблокированных» обратно в контакты"
+        override val ledgerHelpSound = "Своя мелодия звонка выделенным: из стандартных, свой файл или «как в настройках»"
+        override val ledgerHelpSelectTitle = "Квадрат справа"
+        override val ledgerHelpSelect = "Выделяет человека для кнопок внизу. Нажатие на саму строку открывает его страницу"
+        override val ledgerHelpFiltersTitle = "Полосы сверху"
+        override val ledgerHelpFilters = "Разделы и списки — фильтры; выбранные складываются: «Работа» и «Заблокированные» — заблокированные из «Работы»"
         override val ledgerOwnSound = "Со своей мелодией"
         override val ledgerAllSections = "Все разделы"
         override val ledgerSelectAll = "Выделить все"

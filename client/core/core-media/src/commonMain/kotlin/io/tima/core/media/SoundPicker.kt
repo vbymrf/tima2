@@ -33,6 +33,13 @@ enum class SoundUse { Ring, Message }
 expect val systemSoundsAvailable: Boolean
 
 /**
+ * Как называется мелодия, выбранная в настройках телефона, — для строки «Как в системе ·
+ * ♪ название» (заказчик 2026-10-01). `null` — платформа не говорит (ПК) или не нашлась.
+ */
+@Composable
+expect fun systemDefaultSoundTitle(use: SoundUse): String?
+
+/**
  * Выбор из стандартных. Ничего не выбрали — `null`.
  */
 @Composable

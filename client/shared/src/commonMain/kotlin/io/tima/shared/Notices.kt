@@ -105,6 +105,11 @@ class Notices(
     private val groupTitle: suspend (String) -> String? = { null },
     /** Где снимать уведомления, когда зовут с экрана: база — не на потоке экрана. */
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    /**
+     * Тихие часы (заказчик 2026-10-01): сейчас — не показывать строку и не звучать. Числа и
+     * значок копятся как обычно; входящий звонок сюда не попадает — он звонит всегда.
+     */
+    private val quiet: suspend () -> Boolean = { false },
 ) {
 
     /**
@@ -450,6 +455,14 @@ class Notices(
                     null to notices.missedFrom(n)
                 }
             }
+            // Тихие часы: строку не показываем и не звучим; накопленное покажет первое
+            // событие после них. Значок ниже обновляется как обычно.
+            if (quiet()) {
+                if (alert && cause != null) journal.done(cause.what, cause.ref, "тихие часы — без строки и звука")
+                Journal.note(LogCode.NOTICE, "тихие часы — строка не показана", "вкладка" to tab.wire, "число" to n)
+                updateBadge(counts.total)
+                return
+            }
             val start = now()
             val length = notifier.show(
                 Notice(
@@ -466,7 +479,10 @@ class Notices(
             if (alert) gate.played(start, length)
             if (alert && cause != null && length == 0L) journal.done(cause.what, cause.ref, "строка; звука нет — тишина телефона")
         }
-        val total = counts.total
+        updateBadge(counts.total)
+    }
+
+    private fun updateBadge(total: Int) {
         if (total != badgeShown) {
             if (badgeShown >= 0) Journal.note(LogCode.NOTICE, "значок сменился", "было" to badgeShown, "стало" to total)
             badgeShown = total

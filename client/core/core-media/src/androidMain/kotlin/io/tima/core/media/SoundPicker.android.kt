@@ -13,6 +13,18 @@ import java.io.File
 
 actual val systemSoundsAvailable: Boolean = true
 
+@Composable
+actual fun systemDefaultSoundTitle(use: SoundUse): String? {
+    val context = LocalContext.current
+    return androidx.compose.runtime.remember(use) {
+        runCatching {
+            val type = if (use == SoundUse.Ring) RingtoneManager.TYPE_RINGTONE else RingtoneManager.TYPE_NOTIFICATION
+            val uri = RingtoneManager.getActualDefaultRingtoneUri(context, type) ?: return@runCatching null
+            RingtoneManager.getRingtone(context, uri)?.getTitle(context)
+        }.getOrNull()
+    }
+}
+
 /**
  * Android: системный выбор мелодий — тот же список, что в настройках телефона.
  *

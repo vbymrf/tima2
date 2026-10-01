@@ -12,6 +12,9 @@ import java.io.File
 /** На ПК своего списка стандартных мелодий нет — кнопки «Из стандартных» не будет. */
 actual val systemSoundsAvailable: Boolean = false
 
+@androidx.compose.runtime.Composable
+actual fun systemDefaultSoundTitle(use: SoundUse): String? = null
+
 @Composable
 actual fun rememberSystemSoundPicker(use: SoundUse, onPicked: (SoundPick?) -> Unit): () -> Unit =
     { onPicked(null) }

@@ -194,7 +194,8 @@ fun ContactLedgerPage(
             }
         }
 
-        LazyColumn(Modifier.weight(1f, fill = false)) {
+        // Едет только список; фильтры и полоса действий — на месте.
+        LazyColumn(Modifier.weight(1f)) {
             if (rows.isEmpty()) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(TimaSpacing.about5), contentAlignment = Alignment.Center) {
@@ -294,4 +295,33 @@ private fun LedgerLink(label: String, onClick: () -> Unit) {
         color = Tima.colors.navigation,
         lineOne = true,
     )
+}
+
+/**
+ * «?» журнала контактов (заказчик 2026-10-01): значки полосы действий и что делает каждый,
+ * тем же видом, что сама полоса, — человек узнаёт кнопку по значку.
+ */
+@Composable
+fun LedgerHelpPage(modifier: Modifier = Modifier) {
+    val words = Tima.words.book
+    Column(modifier.fillMaxWidth()) {
+        val rows = listOf(
+            Triple("📁", words.ledgerToSection, words.ledgerHelpToSection),
+            Triple("➖", words.ledgerRemove, words.ledgerHelpRemove),
+            Triple("⛔", words.ledgerBlock, words.ledgerHelpBlock),
+            Triple("↩", words.ledgerRestore, words.ledgerHelpRestore),
+            Triple("♪", words.ledgerSound, words.ledgerHelpSound),
+            Triple("☐", words.ledgerHelpSelectTitle, words.ledgerHelpSelect),
+            Triple("▤", words.ledgerHelpFiltersTitle, words.ledgerHelpFilters),
+        )
+        for ((glyph, title, about) in rows) {
+            ListLine(
+                left = { IconButton(glyph = glyph, onClick = {}, live = true) },
+                middle = {
+                    Name(title)
+                    Secondary(about)
+                },
+            )
+        }
+    }
 }

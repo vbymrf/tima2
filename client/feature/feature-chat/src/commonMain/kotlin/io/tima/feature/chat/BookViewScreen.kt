@@ -553,6 +553,8 @@ fun BookViewSheet(
     var page by remember { mutableStateOf<ViewPage?>(null) }
     var roster by remember { mutableStateOf<BookRoster?>(null) }
     var ledger by remember { mutableStateOf(false) }
+    // «?» журнала — подокно «что делают кнопки» (заказчик 2026-10-01).
+    var ledgerHelp by remember { mutableStateOf(false) }
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -563,9 +565,12 @@ fun BookViewSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                // Поле сверху — прозрачное: сквозь него видно затемнение, и нажатие туда
-                // закрывает подокно даже при самом длинном содержимом.
-                .padding(top = TimaZones.zone1)
+                // Журнал — окном на весь экран (заказчик 2026-10-01): шапка и фильтры
+                // прибиты сверху, едет только список. Панель по содержимому прыгала по
+                // высоте от каждого фильтра.
+                .then(if (ledger) Modifier.fillMaxSize() else Modifier.padding(top = TimaZones.zone1))
+                // Поле сверху у прочих страниц — прозрачное: сквозь него видно затемнение, и
+                // нажатие туда закрывает подокно даже при самом длинном содержимом.
                 .background(colors.surface)
                 // Проглатывает касание: нажатие внутри панели не должно её закрывать.
                 .clickable(enabled = false, onClick = {}),
@@ -584,12 +589,18 @@ fun BookViewSheet(
                 val current = page
                 val list = roster
                 if (current != null || list != null || ledger) {
-                    IconButton(glyph = "‹", onClick = { page = null; roster = null; ledger = false }, live = true)
+                    IconButton(
+                        glyph = "‹",
+                        // Из подсказки — назад в журнал, а не из журнала.
+                        onClick = { if (ledgerHelp) ledgerHelp = false else { page = null; roster = null; ledger = false } },
+                        live = true,
+                    )
                 }
                 Box(Modifier.weight(1f)) {
                     ProvidePlace(TextPlace.HEADERS) {
                         Name(
                             when {
+                                ledger && ledgerHelp -> words.ledgerHelpTitle
                                 ledger -> words.ledgerTitle
                                 list != null -> words.roster(list)
                                 current == ViewPage.Sections -> words.sectionsLook
@@ -599,6 +610,8 @@ fun BookViewSheet(
                         )
                     }
                 }
+                // «?» — перед крестиком, только в журнале: что делает каждая кнопка.
+                if (ledger && !ledgerHelp) IconButton(glyph = "?", onClick = { ledgerHelp = true })
                 IconButton(glyph = "✕", onClick = onClose)
             }
             // `weight(fill = false)`: короткое содержимое — панель по содержимому, длинное —
@@ -608,10 +621,11 @@ fun BookViewSheet(
             when {
                 // Журнал со своим списком и полосой внизу — не в общей прокрутке: список в
                 // прокрутке прокручиваться не может.
+                ledger && ledgerHelp -> LedgerHelpPage(scrolling)
                 ledger && onPickList != null && onPickSection != null -> ContactLedgerPage(
                     people = everyone,
                     sections = sections,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier.weight(1f),
                     personOf = personOf,
                     soundTitleOf = soundTitleOf,
                     onOpenPerson = onOpenPerson,

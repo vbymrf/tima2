@@ -65,6 +65,8 @@ fun NotificationsScreen(
     ring: SoundRow? = null,
     /** Звук уведомления о сообщении (ВЗ4). */
     message: SoundRow? = null,
+    /** Не показывать уведомления с … до … (заказчик 2026-10-01). `null` — строки нет. */
+    quiet: QuietRow? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.settings2
@@ -81,19 +83,6 @@ fun NotificationsScreen(
             modifier.fillMaxSize().background(colors.surface).verticalScroll(rememberScrollState())
                 .padding(bottom = TimaSpacing.about5),
         ) {
-            SectionTitle(words.noticesShow)
-            // Что видно в уведомлении — сведение, а не выбор: строка без стрелки.
-            // Сказано до нажатия, а не после: текст сообщения не показывается никогда, и
-            // человек вправе знать это, не выясняя опытом.
-            ListLine(
-                left = { Name("👁") },
-                middle = {
-                    Caption(words.noticesSeen, fontSize = TimaType.sz4, weight = FontWeight.Bold, maxLines = 2)
-                    Secondary(words.noticesWhat)
-                    Tertiary(words.noticesNoText)
-                },
-            )
-
             // ── ЗВУКИ (ВЗ4) ─────────────────────────────────────────────────
             //
             // Общие мелодия звонка и звук сообщения. Своя мелодия у контакта — в журнале
@@ -106,6 +95,21 @@ fun NotificationsScreen(
                     Tertiary(words.soundsNotSynced)
                 }
             }
+
+            // Ниже «Звуков» (заказчик 2026-10-01): что видно и когда не показывать.
+            SectionTitle(words.noticesShow)
+            // Что видно в уведомлении — сведение, а не выбор: строка без стрелки.
+            // Сказано до нажатия, а не после: текст сообщения не показывается никогда, и
+            // человек вправе знать это, не выясняя опытом.
+            ListLine(
+                left = { Name("👁") },
+                middle = {
+                    Caption(words.noticesSeen, fontSize = TimaType.sz4, weight = FontWeight.Bold, maxLines = 2)
+                    Secondary(words.noticesWhat)
+                    Tertiary(words.noticesNoText)
+                },
+            )
+            quiet?.let { QuietSetting(it) }
         }
     }
 }
@@ -372,6 +376,8 @@ data class SoundRow(
     val onDefault: () -> Unit,
     val trouble: String? = null,
     val picked: SoundPicked = SoundPicked.Default,
+    /** Что звучит: название мелодии или файла; у «Как в системе» — мелодия телефона. */
+    val sound: String? = null,
 )
 
 /** Какой путь выбора звука сейчас в силе. */
@@ -399,6 +405,8 @@ fun SoundSetting(glyph: String, title: String, about: String, row: SoundRow) {
         middle = {
             Caption(title, fontSize = TimaType.sz4, weight = FontWeight.Bold, maxLines = 2)
             Tertiary(about)
+            // Что звучит — названием (заказчик 2026-10-01).
+            row.sound?.let { Secondary("♪ $it", lineOne = true) }
         },
     )
     if (open) {
@@ -441,3 +449,73 @@ private fun SoundChoice(label: String, about: String, on: Boolean, onClick: () -
         },
     )
 }
+
+/**
+ * «Не показывать уведомления с … до …» (заказчик 2026-10-01).
+ *
+ * @param from начало, минуты от полуночи; [to] — конец.
+ * @param onChange включено, начало, конец — всё сразу: так их не разорвать.
+ */
+data class QuietRow(
+    val on: Boolean,
+    val from: Int,
+    val to: Int,
+    val onChange: (on: Boolean, from: Int, to: Int) -> Unit,
+)
+
+/** «12:30» из минут от полуночи. */
+fun clockOf(minute: Int): String {
+    val m = ((minute % 1440) + 1440) % 1440
+    return (m / 60).toString().padStart(2, '0') + ":" + (m % 60).toString().padStart(2, '0')
+}
+
+/**
+ * Тихие часы строкой списка: справа — «выкл» или «23:00–08:00»; нажатие раскрывает
+ * «Выключено / Включено» и, при включённом, «С» и «До» кнопками − и + по 30 минут.
+ */
+@Composable
+private fun QuietSetting(row: QuietRow) {
+    val words = Tima.words.settings2
+    var open by remember { mutableStateOf(false) }
+    ListLine(
+        onClick = { open = !open },
+        left = { Name("🌙") },
+        right = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                Secondary(if (row.on) clockOf(row.from) + "–" + clockOf(row.to) else words.quietOff, lineOne = true)
+                Secondary(if (open) "⌃" else "›")
+            }
+        },
+        middle = {
+            Caption(words.quietTitle, fontSize = TimaType.sz4, weight = FontWeight.Bold, maxLines = 2)
+            Tertiary(words.quietAbout)
+        },
+    )
+    if (!open) return
+    Column(Modifier.fillMaxWidth().background(Tima.colors.softAccent)) {
+        SoundChoice(words.quietOff, words.quietOffAbout, !row.on) { row.onChange(false, row.from, row.to) }
+        SoundChoice(words.quietOn, words.quietOnAbout, row.on) { row.onChange(true, row.from, row.to) }
+        if (row.on) {
+            QuietTime(words.quietFrom, row.from) { row.onChange(true, it, row.to) }
+            QuietTime(words.quietTo, row.to) { row.onChange(true, row.from, it) }
+        }
+    }
+}
+
+/** «С 23:00» и кнопки − / + по 30 минут, через полночь по кругу. */
+@Composable
+private fun QuietTime(label: String, minute: Int, onChange: (Int) -> Unit) {
+    ListLine(
+        modifier = Modifier.padding(start = TimaSpacing.about5),
+        middle = { Caption(label + " " + clockOf(minute), fontSize = TimaType.sz4, weight = FontWeight.Bold) },
+        right = {
+            Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                io.tima.core.ui.IconButton(glyph = "−", onClick = { onChange((minute - STEP + 1440) % 1440) })
+                io.tima.core.ui.IconButton(glyph = "+", onClick = { onChange((minute + STEP) % 1440) })
+            }
+        },
+    )
+}
+
+/** Шаг часов — полчаса: точнее для «не беспокоить» не нужно. */
+private const val STEP = 30
