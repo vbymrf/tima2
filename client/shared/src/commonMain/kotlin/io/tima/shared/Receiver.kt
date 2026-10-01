@@ -21,6 +21,8 @@ import io.tima.core.network.EventStream
 import io.tima.core.outbox.IncomingEntry
 import io.tima.core.outbox.OpenOutcome
 import io.tima.domain.account.Session
+import io.tima.core.words.CurrentWords
+import io.tima.core.words.Words
 import io.tima.domain.chat.AutoReplyBlocked
 import io.tima.domain.chat.BookEntry
 import io.tima.domain.chat.MessageCircle
@@ -107,7 +109,7 @@ class Receiver(
     /** Временные группы звонка и когда удалятся — «удалится через N ч» (решение 11). */
     private val onCallGroups: (Map<String, Long>) -> Unit = {},
     /** Словарь — ссылкой: строки звонка пишутся словами на момент события. */
-    private val words: () -> io.tima.core.words.Words = { io.tima.core.words.CurrentWords.value },
+    private val words: () -> Words = { CurrentWords.value },
     /**
      * Штамп отправителя из обёртки события (сервер 0052/0053): кто, счётчик его профиля,
      * группа и цвет. Наружу, а не в базу: это подсказка карточкам людей, а не сообщение.

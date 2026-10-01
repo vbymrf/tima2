@@ -180,6 +180,18 @@ class CallHost(
     var videoForbidden by mutableStateOf(false)
         private set
 
+    /**
+     * Порядок участников группового: вошедший — в конец, ушедший выпадает (заказчик
+     * 2026-10-01, 4б).
+     */
+    var peerOrder by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /** Чьё видео принимать — видимых на странице сетки (2а). */
+    fun showPeers(identities: Set<String>) {
+        scope.launch { engine?.setVisiblePeers(identities) }
+    }
+
     /** Своё на паузе создателя: что было включено до неё — вернуть после (решение 5). */
     private var beforePause: Pair<Boolean, Boolean>? = null
 
@@ -261,9 +273,12 @@ class CallHost(
                     screenOn(fresh)
                 }
             }
-            // Число участников группового — потолок видео (решение 4).
+            // Число участников группового — потолок видео (решение 4); порядок — по входу.
             scope.launch {
-                live.peers.collect { list -> if (group != null && busy) countChanged(list.size + 1) }
+                live.peers.collect { list ->
+                    peerOrder = io.tima.feature.call.groupOrder(peerOrder, list.map { it.identity })
+                    if (group != null && busy) countChanged(list.size + 1)
+                }
             }
         }
     }
@@ -660,6 +675,7 @@ class CallHost(
         peer = ""
         seconds = 0
         group = null
+        peerOrder = emptyList()
         voiceOnly = false
         micForbidden = false
         videoForbidden = false
@@ -1157,7 +1173,9 @@ class CallHost(
     /** Сменилось число участников — потолок видео по правилам (решение 4). */
     private suspend fun countChanged(count: Int) {
         val rules = group?.rules ?: return
-        val height = rules.heightFor(count)
+        // 2а (заказчик 2026-10-01): после 8 видео остаётся — с самым низким потолком; полосу
+        // держит то, что принимаем только видимых на странице, а не выключение видео у всех.
+        val height = rules.heightFor(count) ?: rules.tiers.minOfOrNull { it.height }
         val nowVoice = height == null
         engine?.setVideoCeiling(height)
         if (nowVoice == voiceOnly) return

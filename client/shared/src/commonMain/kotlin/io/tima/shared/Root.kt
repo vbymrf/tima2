@@ -1416,6 +1416,12 @@ private fun App(
             sendTo = { userId, text -> environment.send.send(openPersonalChat(userId, null, null), text) },
             // Новая временная группа — сразу в «Чаты»: её срок узнаём сверкой групп.
             onCallGroupCreated = { scope.launch { runCatching { assembled.receiver.syncGroups() } } },
+            onShowCall = { showCall() },
+            invitedBefore = { groupId ->
+                runCatching { environment.settings.all().first()[INVITED_PREFIX + groupId] }.getOrNull()
+                    ?.split(',')?.filter { it.isNotBlank() }?.toSet().orEmpty()
+            },
+            rememberInvited = { groupId, who -> runCatching { environment.settings.put(INVITED_PREFIX + groupId, who.joinToString(",")) } },
         )
     }
     LaunchedEffect(groupDesk) {
@@ -1429,13 +1435,8 @@ private fun App(
     LaunchedEffect(assembled) { runCatching { assembled.receiver.syncGroups() } }
     LaunchedEffect(assembled) {
         assembled.groupEvents.collect { (groupId, state) ->
-            if (state == "deleted") {
-                groupDesk.live.remove(groupId)
-                groupDesk.invites[groupId] = io.tima.feature.chat.CallInvite.Ended(groupTitleOf(groupId))
-            } else {
-                groupDesk.refresh(groupId)
-                groupDesk.invites.remove(groupId)
-            }
+            if (state == "deleted") groupDesk.live.remove(groupId) else groupDesk.refresh(groupId)
+            groupDesk.inviteChanged(groupId, state, groupTitleOf(groupId))
         }
     }
 
@@ -2176,8 +2177,12 @@ private fun App(
         ).takeIf { callHost.active && window != Window.Call },
     ) {
     // Групповой звонок для окна 0 и области 3 широкого формата (ГЗ4, ГЗ8).
+    // Вид группового — один на окно 0 и область 3 ПК; новый звонок — вид по умолчанию.
+    val groupView = remember(callHost.group?.groupId) { io.tima.feature.call.GroupView() }
     val groupStage = callHost.group?.let { g ->
-        val peers = callHost.peers.collectAsState().value
+        // Порядок — по входу (4б): вошедший в конец, ушедший выпадает.
+        val order = callHost.peerOrder
+        val peers = callHost.peers.collectAsState().value.sortedBy { p -> order.indexOf(p.identity).let { if (it < 0) Int.MAX_VALUE else it } }
         val me = session.userId
         val selfName = Tima.words.groupCall.stateSelf
         val tiles = listOf(
@@ -2186,6 +2191,7 @@ private fun App(
                 letters = lettersOf(peopleCards[me]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE) ?: selfName),
                 video = callHost.localVideo.collectAsState().value,
                 microphoneOn = callHost.state.microphoneOn, speaking = false, paused = false, self = true,
+                cameraOn = callHost.state.cameraOn,
             ),
         ) + peers.map { p ->
             val name = peopleCards[p.userId]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)
@@ -2194,6 +2200,8 @@ private fun App(
             io.tima.feature.call.GroupTile(
                 key = p.identity, name = name, letters = lettersOf(name), video = p.video,
                 microphoneOn = p.microphoneOn, speaking = p.speaking, paused = p.paused, self = false,
+                // Показывает себя — клетка; нет — строка «голосом» (заказчик 2026-10-01).
+                cameraOn = p.cameraOn,
                 // Пропажа видео — на клетке того, у кого пропало (заказчик 2026-10-01).
                 bench = p.bench,
                 incoming = p.incoming,
@@ -2214,8 +2222,14 @@ private fun App(
             mine = g.mine,
             onParticipants = groupDesk::openLive,
             onStopAll = { callHost.control(io.tima.core.call.GroupControl.Stop) },
+            view = groupView,
         )
     }
+    // Принимаем видео только видимых на странице (2а): ушла страница — отписка.
+    val visibleNow = groupStage?.let { st ->
+        io.tima.feature.call.groupVisible(io.tima.feature.call.groupPages(st.tiles.filter { !it.self }, groupView.perPage), groupView)
+    }
+    LaunchedEffect(visibleNow) { visibleNow?.let { callHost.showPeers(it) } }
     Stage(
         modifier = Modifier.fillMaxSize(),
         sizes = StageSizes(
@@ -2675,7 +2689,7 @@ private fun App(
         // Видео собеседника на широком формате — в области 3, пока открыто окно звонка.
         // Групповой — сетка участников там же, где видео собеседника (ГЗ8: ПК).
         wideMain = if (groupStage != null && window == Window.Call && callHost.state.stage == CallStage.Connected) {
-            { io.tima.feature.call.GroupCallGrid(groupStage.tiles, Modifier.fillMaxSize().padding(TimaSpacing.about2)) }
+            { io.tima.feature.call.GroupCallBody(groupStage, groupView, withSelf = false, modifier = Modifier.fillMaxSize()) }
         } else {
             callHost.remoteVideo.collectAsState().value
                 ?.takeIf { window == Window.Call }
@@ -4915,3 +4929,6 @@ private fun ContactSoundSheet(
         }
     }
 }
+
+/** Кому уже уходило приглашение в группу звонка — ключ настроек устройства + номер группы. */
+private const val INVITED_PREFIX = "call.group.invited."

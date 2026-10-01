@@ -105,6 +105,15 @@ interface GroupCallWords {
     val lineResumed: String
     val lineRemoved: String
 
+    // Вид окна группового (заказчик 2026-10-01).
+    val viewButton: String
+    val viewOne: String
+    val viewTwo: String
+    val viewFour: String
+    val viewSelf: String
+    val back: String
+    val voiceTitle: String
+
     // Клетка участника: его видео пропало (заказчик 2026-10-01).
     val tileVideoNotArriving: String
     fun tileVideoNotDecoding(codec: String): String
@@ -211,6 +220,13 @@ object RussianGroupCall : GroupCallWords {
     override val linePaused = "Пауза звонка"
     override val lineResumed = "Звонок продолжается"
     override val lineRemoved = "Вас удалили из звонка"
+    override val viewButton = "Вид"
+    override val viewOne = "По одному"
+    override val viewTwo = "По 2"
+    override val viewFour = "По 4"
+    override val viewSelf = "Показывать себя"
+    override val back = "Назад"
+    override val voiceTitle = "Голосом"
     override val tileVideoNotArriving = "Видео не приходит"
     override fun tileVideoNotDecoding(codec: String) = "Видео $codec не раскодируется"
 
@@ -315,6 +331,13 @@ object EnglishGroupCall : GroupCallWords {
     override val linePaused = "Call paused"
     override val lineResumed = "Call continues"
     override val lineRemoved = "You were removed from the call"
+    override val viewButton = "View"
+    override val viewOne = "One"
+    override val viewTwo = "By 2"
+    override val viewFour = "By 4"
+    override val viewSelf = "Show myself"
+    override val back = "Back"
+    override val voiceTitle = "Voice only"
     override val tileVideoNotArriving = "Video is not arriving"
     override fun tileVideoNotDecoding(codec: String) = "Cannot decode $codec video"
 
@@ -419,6 +442,13 @@ object SpanishGroupCall : GroupCallWords {
     override val linePaused = "Llamada en pausa"
     override val lineResumed = "La llamada continúa"
     override val lineRemoved = "Le quitaron de la llamada"
+    override val viewButton = "Vista"
+    override val viewOne = "De uno"
+    override val viewTwo = "De 2"
+    override val viewFour = "De 4"
+    override val viewSelf = "Mostrarme"
+    override val back = "Atrás"
+    override val voiceTitle = "Solo voz"
     override val tileVideoNotArriving = "El vídeo no llega"
     override fun tileVideoNotDecoding(codec: String) = "No se puede decodificar el vídeo $codec"
 

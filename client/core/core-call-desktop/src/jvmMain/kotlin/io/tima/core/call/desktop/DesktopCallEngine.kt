@@ -3,6 +3,8 @@ package io.tima.core.call.desktop
 import com.sun.jna.Pointer
 import io.tima.core.call.CallDoor
 import io.tima.core.call.CallPeer
+import io.tima.core.call.BenchAttribute
+import io.tima.core.call.PeerIncoming
 import io.tima.core.call.GroupRoom
 import io.tima.core.call.VideoPause
 import io.tima.core.call.cappedTo
@@ -159,6 +161,16 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     /** Потолок высоты своего видео по числу участников; `null` — не урезано. */
     private var ceilingHeight: Int? = null
 
+    // Входящее видео группового — по каждому участнику (заказчик 2026-10-01).
+    private val peerLoss = java.util.concurrent.ConcurrentHashMap<String, RemoteVideoLoss>()
+    private val peerNumbers = java.util.concurrent.ConcurrentHashMap<String, PeerIncoming>()
+    private var groupJob: Job? = null
+    private var benchSaid = ""
+
+    /** Чьё видео принимать (страница сетки); `null` — всех. */
+    @Volatile
+    private var visiblePeers: Set<String>? = null
+
     // ── Комната. Всё — ручки библиотеки; 0 — нет. ───────────────────────────
     private var room = 0L
     private var localParticipant = 0L
@@ -302,6 +314,152 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         publishMicrophone(publish)
         watchLoss()
         watchPeers()
+        if (group != null) watchGroupIncoming()
+    }
+
+    /** Что знаем о входящем видео одного участника между опросами. */
+    private class PeerWatch {
+        var said = ""
+        var got = -1L
+        var froze = 0
+        var misaligned = ""
+        val watch = RemoteVideoWatch()
+        var told: RemoteVideoLoss? = null
+    }
+
+    /**
+     * Входящее видео группового — по каждому участнику, те же строки, что на Android:
+     * `кто=` — первые 8 знаков номера (заказчик 2026-10-01). Заодно — свой набор атрибутом
+     * для журнала стенда участников и выбор, чьё видео принимать (страница сетки).
+     */
+    private fun watchGroupIncoming() {
+        groupJob?.cancel()
+        groupJob = scope.launch(worker) {
+            val known = HashMap<String, PeerWatch>()
+            while (isActive) {
+                delay(LOSS_EVERY_MS)
+                announceBench()
+                applyVisible()
+                val present = HashSet<String>()
+                for (identity in others.toList()) {
+                    if (identity == myIdentity) continue
+                    present += identity
+                    val me = known.getOrPut(identity) { PeerWatch() }
+                    val kto = userOfIdentity(identity).take(8)
+                    val published = publications.entries.any { (sid, p) ->
+                        p.kind == TrackKind.KIND_VIDEO && p.identity == identity && sid !in mutedSids
+                    }
+                    var bytes: Long? = null
+                    var frames: Long? = null
+                    var codec: String? = null
+                    groupRemotes.values.firstOrNull { it.identity == identity }?.let { r ->
+                        val stats = runCatching {
+                            Ffi.call(STATS_TIMEOUT_MS) { id ->
+                                FfiRequest(get_stats = GetStatsRequest(track_handle = r.track, request_async_id = id))
+                            }?.get_stats?.stats
+                        }.getOrNull().orEmpty()
+                        val inbound = stats.mapNotNull { it.inbound_rtp }.firstOrNull { it.stream.kind == "video" } ?: return@let
+                        val got = inbound.inbound
+                        bytes = got.bytes_received
+                        frames = got.frames_decoded.toLong()
+                        codec = inbound.stream.codec_id.let { id ->
+                            stats.mapNotNull { it.codec }.firstOrNull { it.rtc.id == id }?.codec?.mime_type?.removePrefix("video/")
+                        }
+                        val kbit = if (me.got < 0) -1L else (got.bytes_received - me.got) * 8 / (LOSS_EVERY_MS / 1000) / 1000
+                        me.got = got.bytes_received
+                        val decodeMs = if (got.frames_decoded > 0) Math.round(got.total_decode_time * 10_000 / got.frames_decoded) / 10.0 else null
+                        val size = "${got.frame_width}×${got.frame_height}"
+                        if (got.freeze_count > me.froze) {
+                            me.froze = got.freeze_count
+                            Journal.trouble(LogCode.CALL, "видео участника замирало", "кто" to kto, "раз" to got.freeze_count)
+                        }
+                        if (got.frame_width > 0 && !CenterCrop.aligned(got.frame_width, got.frame_height) && size != me.misaligned) {
+                            Journal.trouble(LogCode.CALL, "пришло некратное", "кто" to kto, "кадр" to size, "раскодировщик" to got.decoder_implementation)
+                        }
+                        me.misaligned = size
+                        peerNumbers[identity] = PeerIncoming(
+                            frame = size, codec = codec, kbit = kbit.takeIf { it >= 0 }, decoder = got.decoder_implementation.ifBlank { "—" },
+                            decodeMs = decodeMs, dropped = got.frames_dropped.toLong(), freezes = got.freeze_count.toLong(),
+                        )
+                        val line = size + "|" + (kbit / 100) + "|" + got.decoder_implementation + "|" + codec
+                        if (line != me.said) {
+                            me.said = line
+                            Journal.note(
+                                LogCode.CALL, "приходящее видео участника",
+                                "кто" to kto, "кадр" to size, "кодек" to (codec ?: "—"),
+                                "кбит/с" to if (kbit < 0) "считаем" else kbit.toString(),
+                                "раскодировщик" to got.decoder_implementation.ifBlank { "—" },
+                                "раскод мс" to (decodeMs ?: "—"), "выброшено" to got.frames_dropped,
+                            )
+                        }
+                    }
+                    val shownHere = visiblePeers?.contains(identity) != false
+                    val loss = me.watch.next(
+                        RemoteVideoWatch.Poll(
+                            published = published,
+                            excused = !takeRemote || !shownHere || _state.value.roomPaused || _state.value.stage != CallStage.Connected,
+                            bytes = bytes,
+                            frames = frames,
+                            codec = codec,
+                        ),
+                    )
+                    if (loss != me.told) {
+                        me.told = loss
+                        if (loss == null) peerLoss.remove(identity) else peerLoss[identity] = loss
+                        when (loss) {
+                            null -> Journal.note(LogCode.CALL, "видео участника снова показывается", "кто" to kto)
+                            RemoteVideoLoss.NotArriving -> Journal.trouble(LogCode.CALL, "видео участника не приходит", "кто" to kto)
+                            is RemoteVideoLoss.NotDecoding -> Journal.trouble(LogCode.CALL, "видео участника не раскодируется", "кто" to kto, "кодек" to loss.codec)
+                        }
+                    }
+                }
+                known.keys.retainAll(present)
+                peerLoss.keys.retainAll(present)
+                peerNumbers.keys.retainAll(present)
+                publishPeers()
+            }
+        }
+    }
+
+    /** Свой набор участникам — атрибутом, только перемену (журнал стенда, 5а). */
+    private suspend fun announceBench() {
+        if (localParticipant == 0L) return
+        val cam = camera
+        val size = if (cam != null) "${cam.width}×${cam.height}" else "—"
+        val crop = if (preset?.video?.noCrop == true) "без обрезки" else "обрезка 16"
+        val text = listOf(preset?.name ?: "—", (cameraCodec?.name ?: "—") + " " + size, "прог ПК", crop).joinToString(" · ")
+        if (text == benchSaid) return
+        benchSaid = text
+        val target = localParticipant
+        Ffi.call(PUBLISH_TIMEOUT_MS) { id ->
+            FfiRequest(
+                set_local_attributes = SetLocalAttributesRequest(
+                    local_participant_handle = target,
+                    attributes = listOf(AttributesEntry(key = BenchAttribute.ATTRIBUTE, value_ = text)),
+                    request_async_id = id,
+                ),
+            )
+        }
+    }
+
+    /** Принимать видео только видимых на странице сетки (заказчик 2026-10-01, 2а). */
+    private fun applyVisible() {
+        val want = visiblePeers
+        for ((sid, p) in publications) {
+            if (p.kind != TrackKind.KIND_VIDEO || p.identity == myIdentity) continue
+            val on = takeRemote && (want == null || p.identity in want)
+            // Только перемену: подписка — запрос к библиотеке, а опрос идёт раз в 3 с.
+            if (subscribedAs[sid] == on) continue
+            subscribedAs[sid] = on
+            subscribe(p.handle, on)
+        }
+    }
+
+    /** Чью подписку уже ставили — по sid публикации. */
+    private val subscribedAs = HashMap<String, Boolean>()
+
+    override suspend fun setVisiblePeers(identities: Set<String>?) {
+        visiblePeers = identities
     }
 
     /**
@@ -492,6 +650,8 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                     outMisaligned = said
                 }
 
+                // Групповой — пропажа по каждому участнику ведёт watchGroupIncoming.
+                if (group != null) continue
                 val now = _state.value
                 val loss = watch.next(
                     RemoteVideoWatch.Poll(
@@ -722,6 +882,9 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                 speaking = identity in speaking,
                 paused = peerAttributes[identity]?.get(VideoPause.ATTRIBUTE) == VideoPause.PAUSED,
                 video = picture?.handle?.takeIf { takeRemote },
+                videoLoss = peerLoss[identity],
+                bench = peerAttributes[identity]?.get(BenchAttribute.ATTRIBUTE)?.takeIf { it.isNotBlank() },
+                incoming = peerNumbers[identity],
             )
         }.sortedBy { it.identity }
         if (list != _peers.value) _peers.value = list
@@ -950,6 +1113,13 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         mutedSids.clear()
         while (events.tryReceive().isSuccess) Unit
         stopRemote()
+        groupJob?.cancel()
+        groupJob = null
+        peerLoss.clear()
+        peerNumbers.clear()
+        benchSaid = ""
+        visiblePeers = null
+        subscribedAs.clear()
         // Картинки участников группового — назад библиотеке, список — пустой.
         for (r in groupRemotes.values) dropRemote(r)
         groupRemotes.clear()

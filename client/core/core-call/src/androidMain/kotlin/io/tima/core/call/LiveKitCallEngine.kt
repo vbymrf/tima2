@@ -93,6 +93,14 @@ class LiveKitCallEngine(
     /** Что я принимаю от каждого участника группового — для журнала стенда. */
     private val peerNumbers = java.util.concurrent.ConcurrentHashMap<String, PeerIncoming>()
 
+    /** Чьё видео принимать (страница сетки); `null` — всех. */
+    @Volatile
+    private var visiblePeers: Set<String>? = null
+
+    override suspend fun setVisiblePeers(identities: Set<String>?) {
+        visiblePeers = identities
+    }
+
     /** Что уже сказано о своей публикации атрибутом [BenchAttribute] — шлём только перемену. */
     private var benchSaid = ""
 
@@ -740,6 +748,7 @@ class LiveKitCallEngine(
         peerHandles.clear()
         peerLoss.clear()
         peerNumbers.clear()
+        visiblePeers = null
         benchSaid = ""
         _state.value = _state.value.copy(stage = CallStage.Ended)
     }
@@ -1161,7 +1170,8 @@ class LiveKitCallEngine(
                     val loss = me.watch.next(
                         RemoteVideoWatch.Poll(
                             published = published,
-                            excused = !takeRemote || _state.value.roomPaused || _state.value.stage != CallStage.Connected,
+                            excused = !takeRemote || visiblePeers?.contains(identity) == false ||
+                                _state.value.roomPaused || _state.value.stage != CallStage.Connected,
                             bytes = (incoming?.members?.get("bytesReceived") as? Number)?.toLong(),
                             frames = (incoming?.members?.get("framesDecoded") as? Number)?.toLong(),
                             codec = codec,
@@ -1361,10 +1371,11 @@ class LiveKitCallEngine(
                 val list = room.remoteParticipants.values.map { who ->
                     val identity = who.identity?.value.orEmpty()
                     val camera = who.videoTrackPublications.firstOrNull { (pub, _) -> pub.source == Track.Source.CAMERA }
-                    // «Больше 8 — только голос» и «скрыть видео»: отписываемся и от тех, кто
-                    // включил камеру после нашего решения.
-                    if (!takeRemote) (camera?.first as? RemoteTrackPublication)?.takeIf { it.subscribed }?.setSubscribed(false)
-                    val track = (camera?.second as? VideoTrack)?.takeIf { takeRemote && !camera.first.muted }
+                    // Принимаем видео только видимых на странице (2а) и не при «скрыть видео»;
+                    // подписка — только перемена, опрос идёт дважды в секунду.
+                    val want = takeRemote && (visiblePeers?.contains(identity) != false)
+                    (camera?.first as? RemoteTrackPublication)?.let { pub -> if (pub.subscribed != want) pub.setSubscribed(want) }
+                    val track = (camera?.second as? VideoTrack)?.takeIf { want && !camera.first.muted }
                     val handle = track?.let { t ->
                         peerHandles[identity]?.takeIf { it.track === t } ?: LiveKitVideoHandle(room, t).also { peerHandles[identity] = it }
                     }

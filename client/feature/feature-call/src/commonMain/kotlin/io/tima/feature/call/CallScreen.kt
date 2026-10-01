@@ -161,14 +161,8 @@ fun CallScreen(
         // Групповой в разговоре — сетка участников, своя картинка — одной из клеток.
         if (group != null && state.stage == CallStage.Connected) {
             Column(Modifier.weight(1f).fillMaxWidth()) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about1),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Name(group.title)
-                    Secondary(Tima.words.groupCall.count(group.count, group.max) + " · " + words.duration(seconds))
-                }
+                val peers = group.tiles.filter { !it.self }
+                GroupTopBar(group, group.view, groupPages(peers, group.view.perPage).size, words.duration(seconds))
                 if (group.paused) {
                     Caption(
                         Tima.words.groupCall.pausedBanner,
@@ -178,14 +172,17 @@ fun CallScreen(
                         color = colors.alarm,
                     )
                 }
-                if (group.tiles.size <= 1) {
-                    Tertiary(Tima.words.groupCall.alone, modifier = Modifier.padding(horizontal = TimaSpacing.about4))
-                }
-                // Широкий формат: сетка — в области 3, рядом с окном (как видео собеседника).
+                // Телефон: страница и своё окошко здесь. ПК с тремя областями: здесь — себя
+                // крупно, остальные — в области 3 (заказчик 2026-10-01).
                 if (remoteHere) {
-                    GroupCallGrid(group.tiles, Modifier.weight(1f).fillMaxWidth().padding(TimaSpacing.about2))
+                    GroupCallBody(group, group.view, withSelf = true, modifier = Modifier.weight(1f).fillMaxWidth())
                 } else {
-                    Box(Modifier.weight(1f))
+                    val self = group.tiles.firstOrNull { it.self }
+                    if (self != null && group.view.showSelf) {
+                        GroupCell(self, Modifier.weight(1f).fillMaxWidth().padding(TimaSpacing.about2))
+                    } else {
+                        Box(Modifier.weight(1f))
+                    }
                 }
             }
         } else
@@ -394,6 +391,8 @@ data class GroupStage(
     val mine: Boolean,
     val onParticipants: () -> Unit,
     val onStopAll: () -> Unit,
+    /** Вид: сколько на странице, страница, развёрнутая клетка, своё окошко (2026-10-01). */
+    val view: GroupView = GroupView(),
 )
 
 /** Клетка сетки группового звонка. */
@@ -406,6 +405,8 @@ data class GroupTile(
     val speaking: Boolean,
     val paused: Boolean,
     val self: Boolean,
+    /** Показывает ли себя — клетка в сетке; нет — строка в списке «голосом». */
+    val cameraOn: Boolean = video != null,
     /** Видео участника не приходит или не раскодируется — словами на его клетке; `null` — всё в порядке. */
     val videoTrouble: String? = null,
     /** Его набор с его слов — для журнала стенда (5а); `null` — не сказал. */
@@ -413,64 +414,6 @@ data class GroupTile(
     /** Что я от него принимаю — для журнала стенда. */
     val incoming: io.tima.core.call.PeerIncoming? = null,
 )
-
-/**
- * Сетка: один — во весь кадр, до четырёх — 2×2, до девяти — 3×3, больше — по четыре в
- * ряд (видео там нет по правилам, только аватары). Говорящий — в рамке.
- */
-@Composable
-fun GroupCallGrid(tiles: List<GroupTile>, modifier: Modifier) {
-    val columns = when {
-        tiles.size <= 1 -> 1
-        tiles.size <= 4 -> 2
-        tiles.size <= 9 -> 3
-        else -> 4
-    }
-    val rows = tiles.chunked(columns)
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
-        for (row in rows) {
-            Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
-                for (tile in row) GroupCell(tile, Modifier.weight(1f).fillMaxHeight())
-                repeat(columns - row.size) { Box(Modifier.weight(1f)) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun GroupCell(tile: GroupTile, modifier: Modifier) {
-    val colors = Tima.colors
-    Box(
-        modifier
-            .background(colors.functional)
-            .border(width = if (tile.speaking) 3.dp else 0.dp, color = if (tile.speaking) colors.navigation else colors.functional),
-    ) {
-        if (tile.video != null) {
-            CallVideo(tile.video, Modifier.fillMaxSize())
-        } else {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Avatar(letters = tile.letters, size = AvatarSize.Big) }
-        }
-        tile.videoTrouble?.let {
-            Caption(
-                it,
-                modifier = Modifier.align(Alignment.TopStart).background(colors.surface.copy(alpha = 0.8f))
-                    .padding(horizontal = TimaSpacing.about2, vertical = TimaSpacing.about1),
-                fontSize = TimaType.sz6,
-                weight = FontWeight.SemiBold,
-                color = colors.alarm,
-            )
-        }
-        val marks = (if (!tile.microphoneOn) " 🔇" else "") + (if (tile.paused) " ⏸" else "")
-        Caption(
-            tile.name + marks,
-            modifier = Modifier.align(Alignment.BottomStart).background(colors.surface.copy(alpha = 0.7f))
-                .padding(horizontal = TimaSpacing.about2, vertical = TimaSpacing.about1),
-            fontSize = TimaType.sz5,
-            weight = FontWeight.SemiBold,
-            lineOne = true,
-        )
-    }
-}
 
 /**
  * Круглая кнопка управления разговором.

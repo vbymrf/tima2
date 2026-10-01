@@ -137,23 +137,32 @@ class GroupCallTest {
     }
 
     @Test
-    fun девятый_участник_выключает_видео_восьмерым_оно_возвращается() = runTest {
+    fun после_восьми_видео_остаётся_с_нижним_потолком() = runTest {
+        // 2а (заказчик 2026-10-01): после 8 видео не выключается — полосу держит то, что
+        // принимаем только видимых на странице.
         val engine = GroupEngine()
         val host = host(GroupCalls(creator = я), engine)
         host.startGroup("группа", "Планёрка", ring = false, video = true, invited = emptyList())
         engine.say(CallState(stage = CallStage.Connected, cameraOn = true))
-        engine.peersAre(8)
-        assertTrue(host.voiceOnly, "девятеро вместе со мной — только голос")
-        assertEquals(null, engine.ceilings.last())
-        assertTrue(engine.remoteTaken.last() == false, "чужое видео не принимаем")
-        val before = engine.camera.size
-        host.camera(true)
-        assertEquals(before, engine.camera.size, "камера при «только голос» не включается")
-        assertTrue(host.events.any { it.text.contains("только голос") }, "сказано словами, почему")
         engine.peersAre(4)
-        assertFalse(host.voiceOnly)
         assertEquals(480, engine.ceilings.last(), "пятеро — 480")
-        assertTrue(engine.remoteTaken.last() == true)
+        engine.peersAre(12)
+        assertFalse(host.voiceOnly, "после 8 — не «только голос»")
+        assertEquals(480, engine.ceilings.last(), "тринадцать — нижний потолок")
+        assertTrue(engine.remoteTaken.isEmpty(), "чужое видео целиком не отключаем")
+        engine.peersAre(3)
+        assertEquals(720, engine.ceilings.last(), "четверо — 720")
+    }
+
+    @Test
+    fun порядок_участников_по_входу() = runTest {
+        val engine = GroupEngine()
+        val host = host(GroupCalls(creator = я), engine)
+        host.joinGroup("g1", "группа", "Планёрка", video = false)
+        engine.peersAre(3)
+        assertEquals(listOf("u-1:d", "u-2:d", "u-3:d"), host.peerOrder)
+        engine.peersOf("u-3", "u-1", "u-4")
+        assertEquals(listOf("u-1:d", "u-3:d", "u-4:d"), host.peerOrder, "ушедший выпал, вошедший — в конец, порядок прочих прежний")
     }
 
     @Test
@@ -334,6 +343,9 @@ class GroupCallTest {
         }
         fun peersAre(count: Int) {
             _peers.value = (1..count).map { CallPeer(identity = "u-$it:d", userId = "u-$it") }
+        }
+        fun peersOf(vararg users: String) {
+            _peers.value = users.map { CallPeer(identity = "$it:d", userId = it) }
         }
     }
 }

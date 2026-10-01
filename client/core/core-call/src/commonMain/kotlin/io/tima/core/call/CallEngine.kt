@@ -43,6 +43,12 @@ interface CallEngine {
     suspend fun setVideoCeiling(height: Int?) = Unit
 
     /**
+     * Чьё видео принимать в групповом — видимых на странице сетки (заказчик 2026-10-01,
+     * 2а): полоса не растёт с числом участников. `null` — всех.
+     */
+    suspend fun setVisiblePeers(identities: Set<String>?) = Unit
+
+    /**
      * Принимать ли чужое видео (ЗВ11).
      *
      * **Отписка, а не занавеска.** Собеседник включает камеру, не спрашивая нас

@@ -81,6 +81,15 @@ class GroupCallDesk(
     private val sendTo: (String, String) -> Unit,
     /** Временная группа звонка создана — сверить группы, чтобы она встала в «Чаты». */
     private val onCallGroupCreated: () -> Unit = {},
+    /** Открыть окно звонка — вход в идущий звонок из группы его не открывал (2026-10-01). */
+    private val onShowCall: () -> Unit = {},
+    /**
+     * Кому приглашение в группу уже уходило — одно сообщение на группу звонка (заказчик
+     * 2026-10-01): `(groupId) → кому`, и запомнить новых. Хранит сборка — в настройках
+     * устройства: переживает перезапуск.
+     */
+    private val invitedBefore: suspend (String) -> Set<String> = { emptySet() },
+    private val rememberInvited: suspend (String, Set<String>) -> Unit = { _, _ -> },
     private val words: () -> Words = { CurrentWords.value },
 ) {
     /** Откуда открыли групповой звонок. */
@@ -135,6 +144,7 @@ class GroupCallDesk(
             val call = info?.call
             if (call != null) {
                 join(call.callId, groupId, title)
+                onShowCall()
                 return@launch
             }
             setup = Ask(groupId = groupId, title = title, canStart = info?.canStart == true)
@@ -281,6 +291,21 @@ class GroupCallDesk(
         return CallInvite.Checking(title)
     }
 
+    /**
+     * Звонок в группе начался, кончился или группа удалена — карточку приглашения спросить
+     * заново. Раньше забывался ответ, но не то, что спрашивали, и карточка залипала на
+     * «Узнаём, идёт ли звонок…» (заказчик 2026-10-01).
+     */
+    fun inviteChanged(groupId: String, state: String, title: String) {
+        when (state) {
+            "ended", "deleted" -> invites[groupId] = CallInvite.Ended(title)
+            else -> {
+                invites.remove(groupId)
+                asked.remove(groupId)
+            }
+        }
+    }
+
     /** Нажали «Присоединиться» в приглашении. */
     fun joinInvite(groupId: String, title: String) {
         scope.launch {
@@ -299,8 +324,16 @@ class GroupCallDesk(
             val to = invited.ifEmpty {
                 (groups.members(groupId) as? MembersStep.Members)?.members?.map { it.userId }.orEmpty()
             }.filter { it != me }.distinct()
-            for (u in to) sendTo(u, CallInviteLink.of(groupId))
-            Journal.note(LogCode.CALL, "приглашения в групповой звонок разосланы", "группа" to groupId.take(8), "кому" to to.size)
+            // Одно приглашение на группу звонка: кому уже уходило, второго не шлём — его
+            // карточка и так покажет, идёт ли звонок сейчас (заказчик 2026-10-01).
+            val before = invitedBefore(groupId)
+            val fresh = to.filter { it !in before }
+            for (u in fresh) sendTo(u, CallInviteLink.of(groupId))
+            if (fresh.isNotEmpty()) rememberInvited(groupId, before + fresh)
+            Journal.note(
+                LogCode.CALL, "приглашения в групповой звонок разосланы", "группа" to groupId.take(8),
+                "кому" to fresh.size, "уже приглашены" to (to.size - fresh.size),
+            )
         }
     }
 
