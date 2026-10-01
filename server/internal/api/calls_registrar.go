@@ -49,6 +49,7 @@ type CallStore interface {
 	JoinGroupCall(ctx context.Context, callID, userID string, max int) error
 	RemoveFromCall(ctx context.Context, callID, userID string) error
 	InviteToCall(ctx context.Context, callID, userID string) error
+	SetCallForbidden(ctx context.Context, callID, userID, what string, forbidden bool) error
 	SetCallPaused(ctx context.Context, callID string, paused bool) error
 	BumpCallGroupTTL(ctx context.Context, groupID string, ttl time.Duration) error
 }

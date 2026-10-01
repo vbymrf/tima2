@@ -113,3 +113,29 @@ func TestServiceGrants(t *testing.T) {
 		t.Fatalf("служебный токен пускает в медиа: %v", g)
 	}
 }
+
+// TestTokenSourcesForbids — запрет создателя группового звонка ложится в права токена:
+// без запретов — всё, с запретом микрофона — только камера, оба запрета — публиковать нельзя.
+func TestTokenSourcesForbids(t *testing.T) {
+	iss := NewIssuer("APIkey123", "supersecret")
+	read := func(sources []string) VideoGrant {
+		tok, err := iss.TokenSources("r", "u:d", sources, time.Minute, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		parsed, err := jwt.ParseWithClaims(tok, &claims{}, func(*jwt.Token) (any, error) { return []byte("supersecret"), nil })
+		if err != nil {
+			t.Fatal(err)
+		}
+		return parsed.Claims.(*claims).Video
+	}
+	if g := read(nil); g.CanPublish == nil || !*g.CanPublish || len(g.CanPublishSources) != 0 {
+		t.Fatalf("без запретов: %+v", g)
+	}
+	if g := read([]string{"camera"}); !*g.CanPublish || len(g.CanPublishSources) != 1 || g.CanPublishSources[0] != "camera" {
+		t.Fatalf("запрет микрофона: %+v", g)
+	}
+	if g := read([]string{}); *g.CanPublish {
+		t.Fatalf("оба запрета, а публиковать можно: %+v", g)
+	}
+}

@@ -26,6 +26,9 @@ type VideoGrant struct {
 	// VP8» (стенд 2026-09-29). Имени в LiveKit приложение не верит — его берут из
 	// справочника, — поэтому подменить им никого нельзя.
 	CanUpdateOwnMetadata bool `json:"canUpdateOwnMetadata,omitempty"`
+	// CanPublishSources — что участнику можно публиковать: `microphone`, `camera`. Пусто —
+	// всё. Запрет создателя группового звонка ложится сюда (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ).
+	CanPublishSources []string `json:"canPublishSources,omitempty"`
 }
 
 type claims struct {
@@ -61,6 +64,30 @@ func (i *Issuer) Token(room, identity string, canPublish bool, ttl time.Duration
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    i.APIKey, // LiveKit: iss = API key
 			Subject:   identity, // identity = user_id:device_id
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+			NotBefore: jwt.NewNumericDate(now.Add(-10 * time.Second)),
+			IssuedAt:  jwt.NewNumericDate(now),
+		},
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, c).SignedString([]byte(i.APISecret))
+}
+
+// TokenSources — как [Issuer.Token], но с перечнем того, что можно публиковать
+// (`microphone`, `camera`). `nil` — всё; пустой перечень — ничего: участник только смотрит
+// и слушает (запрет создателя группового звонка на оба источника).
+func (i *Issuer) TokenSources(room, identity string, sources []string, ttl time.Duration, now time.Time) (string, error) {
+	if i == nil {
+		return "", ErrNotConfigured
+	}
+	pub, sub := sources == nil || len(sources) > 0, true
+	c := claims{
+		Video: VideoGrant{
+			Room: room, RoomJoin: true, CanPublish: &pub, CanSubscribe: &sub, CanUpdateOwnMetadata: true,
+			CanPublishSources: sources,
+		},
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    i.APIKey,
+			Subject:   identity,
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 			NotBefore: jwt.NewNumericDate(now.Add(-10 * time.Second)),
 			IssuedAt:  jwt.NewNumericDate(now),

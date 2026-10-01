@@ -240,7 +240,9 @@ func enterRoomCall(deps callsDeps, w http.ResponseWriter, r *http.Request, call 
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return
 	}
-	token, err := deps.issuer().Token(call.Room, callIdentity(id), true, callTokenTTL, time.Now())
+	// Запрет создателя действует и при перезаходе: что можно публиковать — в правах токена.
+	micOff, videoOff := forbidsOf(deps, r.Context(), call.CallID, id.UserID)
+	token, err := deps.issuer().TokenSources(call.Room, callIdentity(id), tokenSources(micOff, videoOff), callTokenTTL, time.Now())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
 		return
@@ -251,7 +253,68 @@ func enterRoomCall(deps callsDeps, w http.ResponseWriter, r *http.Request, call 
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(roomDoorJSON(deps, call, token))
+	door := roomDoorJSON(deps, call, token)
+	door["forbidden"] = map[string]any{"mic": micOff, "video": videoOff}
+	_ = json.NewEncoder(w).Encode(door)
+}
+
+// forbidsOf — запрещены ли участнику микрофон и видео в этом звонке.
+func forbidsOf(deps callsDeps, ctx context.Context, callID, userID string) (bool, bool) {
+	parts, err := deps.store.GroupCallParticipants(ctx, callID)
+	if err != nil {
+		return false, false
+	}
+	for _, p := range parts {
+		if p.UserID == userID {
+			return p.MicForbidden, p.VideoForbidden
+		}
+	}
+	return false, false
+}
+
+// tokenSources — что можно публиковать при запретах: `nil` — всё, пусто — ничего.
+func tokenSources(micOff, videoOff bool) []string {
+	if !micOff && !videoOff {
+		return nil
+	}
+	out := []string{}
+	if !micOff {
+		out = append(out, "microphone")
+	}
+	if !videoOff {
+		out = append(out, "camera")
+	}
+	return out
+}
+
+// applyForbids — запреты участника в живую комнату: на всех его устройствах.
+func applyForbids(deps callsDeps, ctx context.Context, room, userID string, micOff, videoOff bool) error {
+	rooms := deps.rooms()
+	if rooms == nil {
+		return nil
+	}
+	parts, err := rooms.ListParticipants(ctx, room)
+	if err != nil {
+		return err
+	}
+	var sources []string
+	if !micOff {
+		sources = append(sources, "MICROPHONE")
+	}
+	if !videoOff {
+		sources = append(sources, "CAMERA")
+	}
+	if !micOff && !videoOff {
+		sources = append(sources, "SCREEN_SHARE", "SCREEN_SHARE_AUDIO")
+	}
+	for _, p := range parts {
+		if strings.HasPrefix(p.Identity, userID+":") {
+			if err := rooms.SetPublishSources(ctx, room, p.Identity, sources); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // roomDoorJSON — дверь группового звонка: те же поля, что у личного, и сверх них — группа,
@@ -293,6 +356,7 @@ func roomCallState(deps callsDeps) http.HandlerFunc {
 			for _, p := range parts {
 				list = append(list, map[string]any{
 					"user_id": p.UserID, "state": string(p.State), "invited": p.Invited, "removed": p.Removed,
+					"mic_forbidden": p.MicForbidden, "video_forbidden": p.VideoForbidden,
 				})
 			}
 			out["call"] = map[string]any{
@@ -315,7 +379,10 @@ func roomCallState(deps callsDeps) http.HandlerFunc {
 // у себя, без сервера.
 //
 //	invite               — позвать ещё участника группы (с «Звонить» — вызов ему);
-//	mute_mic · mute_video — выключить участнику микрофон или камеру (включит он сам);
+//	mute_mic · mute_video — ЗАПРЕТИТЬ участнику микрофон или камеру: сервер перестаёт
+//	                       принимать этот источник, пока создатель не разрешит (уточнение
+//	                       заказчика 2026-10-01); при перезаходе запрет в правах токена;
+//	allow_mic · allow_video — разрешить снова (включает участник сам);
 //	remove               — удалить из звонка, не из группы (решение 17);
 //	pause · resume       — пауза «висит»: все в комнате, звук и видео стоят;
 //	stop                 — завершить звонок для всех.
@@ -371,25 +438,40 @@ func controlRoomCall(deps callsDeps) http.HandlerFunc {
 				go missedIfNotJoined(deps, callID, req.UserID)
 			}
 			log.Printf("групповой звонок %s: позван ещё %s", short(callID), short(req.UserID))
-		case "mute_mic", "mute_video":
+		case "mute_mic", "mute_video", "allow_mic", "allow_video":
 			if req.UserID == "" || req.UserID == id.UserID {
 				writeErr(w, http.StatusBadRequest, "bad_user", "нужен user_id участника, не свой")
 				return
 			}
-			source := "MICROPHONE"
-			if req.Action == "mute_video" {
-				source = "CAMERA"
+			what := "mic"
+			if strings.HasSuffix(req.Action, "video") {
+				what = "video"
 			}
-			muted, err := muteUser(deps, ctx, call.Room, req.UserID, source)
-			if err != nil {
-				log.Printf("control %s %s: %v", req.Action, short(callID), err)
-				writeErr(w, http.StatusServiceUnavailable, "no_livekit", "LiveKit не ответил")
+			forbid := strings.HasPrefix(req.Action, "mute_")
+			if err := deps.store.SetCallForbidden(ctx, callID, req.UserID, what, forbid); err != nil {
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 				return
+			}
+			micOff, videoOff := forbidsOf(deps, ctx, callID, req.UserID)
+			if forbid && deps.rooms() != nil {
+				// Сразу выключить, не дожидаясь, пока LiveKit снимет дорожку по правам.
+				source := "MICROPHONE"
+				if what == "video" {
+					source = "CAMERA"
+				}
+				if _, err := muteUser(deps, ctx, call.Room, req.UserID, source); err != nil {
+					log.Printf("control %s %s: выключение: %v", req.Action, short(callID), err)
+				}
+			}
+			if err := applyForbids(deps, ctx, call.Room, req.UserID, micOff, videoOff); err != nil {
+				// Запрет записан и подействует при перезаходе; живая комната не ответила.
+				log.Printf("control %s %s: права в комнате: %v", req.Action, short(callID), err)
 			}
 			deps.notifier.Users(ctx, []string{req.UserID}, "call.control", map[string]any{
 				"call_id": callID, "action": req.Action, "by": id.UserID,
 			})
-			log.Printf("групповой звонок %s: %s у %s, дорожек %d", short(callID), req.Action, short(req.UserID), muted)
+			log.Printf("групповой звонок %s: %s у %s (микрофон запрещён=%v, видео запрещено=%v)",
+				short(callID), req.Action, short(req.UserID), micOff, videoOff)
 		case "remove":
 			if req.UserID == "" || req.UserID == id.UserID {
 				writeErr(w, http.StatusBadRequest, "bad_user", "нужен user_id участника, не свой")
@@ -431,7 +513,7 @@ func controlRoomCall(deps callsDeps) http.HandlerFunc {
 			closeRoomCall(deps, ctx, call, id.UserID)
 			log.Printf("групповой звонок %s: остановлен создателем", short(callID))
 		default:
-			writeErr(w, http.StatusBadRequest, "bad_action", "action: invite · mute_mic · mute_video · remove · pause · resume · stop")
+			writeErr(w, http.StatusBadRequest, "bad_action", "action: invite · mute_mic · mute_video · allow_mic · allow_video · remove · pause · resume · stop")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

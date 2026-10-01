@@ -27,6 +27,9 @@ type CallParticipant struct {
 	Invited bool // отмечен создателем; false — вошёл сам по полосе в группе
 	Removed bool
 	Joined  bool // хоть раз был в комнате
+	// Запрет создателя (0059): сервер не принимает от участника звук или видео.
+	MicForbidden   bool
+	VideoForbidden bool
 }
 
 // CreateRoomCall заводит звонок в группе: создатель и отмеченные (решение 15).
@@ -78,7 +81,8 @@ func (s *Store) LiveGroupCall(ctx context.Context, groupID string) (Call, error)
 // GroupCallParticipants — все участники звонка: отмеченные, вошедшие сами, удалённые.
 func (s *Store) GroupCallParticipants(ctx context.Context, callID string) ([]CallParticipant, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT user_id::text, state, invited, removed_at IS NOT NULL, joined_at IS NOT NULL
+		SELECT user_id::text, state, invited, removed_at IS NOT NULL, joined_at IS NOT NULL,
+		       mic_forbidden, video_forbidden
 		  FROM call_participants WHERE call_id = $1
 		 ORDER BY invited_at`, callID)
 	if err != nil {
@@ -88,7 +92,7 @@ func (s *Store) GroupCallParticipants(ctx context.Context, callID string) ([]Cal
 	var out []CallParticipant
 	for rows.Next() {
 		var p CallParticipant
-		if err := rows.Scan(&p.UserID, &p.State, &p.Invited, &p.Removed, &p.Joined); err != nil {
+		if err := rows.Scan(&p.UserID, &p.State, &p.Invited, &p.Removed, &p.Joined, &p.MicForbidden, &p.VideoForbidden); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -147,6 +151,18 @@ func (s *Store) InviteToCall(ctx context.Context, callID, userID string) error {
 		DO UPDATE SET invited = true, removed_at = NULL,
 		              state = CASE WHEN call_participants.state = 'joined' THEN 'joined' ELSE 'invited' END`,
 		callID, userID)
+	return err
+}
+
+// SetCallForbidden — запрет создателя: `mic` или `video`, поставить или снять (0059).
+func (s *Store) SetCallForbidden(ctx context.Context, callID, userID, what string, forbidden bool) error {
+	col := "mic_forbidden"
+	if what == "video" {
+		col = "video_forbidden"
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO call_participants (call_id, user_id, invited, `+col+`) VALUES ($1, $2, false, $3)
+		ON CONFLICT (call_id, user_id) DO UPDATE SET `+col+` = EXCLUDED.`+col, callID, userID, forbidden)
 	return err
 }
 

@@ -181,6 +181,30 @@ func (c *RoomClient) MuteTrack(ctx context.Context, room, identity, trackSid str
 	}, nil)
 }
 
+// SetPublishSources — что участнику можно публиковать прямо сейчас: запрет создателя
+// группового звонка (уточнение заказчика 2026-10-01: «сервер перестаёт принимать от
+// него»). `sources` — `MICROPHONE`, `CAMERA`; пусто — ничего, участник только смотрит.
+// Дорожки запрещённого источника LiveKit снимает сам.
+func (c *RoomClient) SetPublishSources(ctx context.Context, room, identity string, sources []string) error {
+	if c == nil {
+		return nil
+	}
+	token, err := c.Issuer.RoomAdminToken(room, roomAdminTTL, time.Now())
+	if err != nil {
+		return err
+	}
+	if sources == nil {
+		sources = []string{}
+	}
+	return c.post(ctx, token, "UpdateParticipant", map[string]any{
+		"room": room, "identity": identity,
+		"permission": map[string]any{
+			"can_subscribe": true, "can_publish": len(sources) > 0, "can_publish_data": true,
+			"can_update_metadata": true, "can_publish_sources": sources,
+		},
+	}, nil)
+}
+
 // SetRoomMetadata — данные комнаты, которые видят все в ней. Пауза группового звонка
 // ложится сюда (решение 5): вошедший видит её сразу, перемену — событием комнаты.
 func (c *RoomClient) SetRoomMetadata(ctx context.Context, room, metadata string) error {

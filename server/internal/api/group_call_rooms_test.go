@@ -188,6 +188,32 @@ func TestRoomCallControlByCreatorOnly(t *testing.T) {
 		t.Fatalf("продолжение: %d", code)
 	}
 
+	// Запрет создателя (уточнение 2026-10-01): записан, держится при перезаходе, снимается.
+	if code := control(owner, "mute_mic", member.userID); code != 200 {
+		t.Fatalf("запрет микрофона: %d", code)
+	}
+	var again struct {
+		Forbidden struct {
+			Mic   bool `json:"mic"`
+			Video bool `json:"video"`
+		} `json:"forbidden"`
+	}
+	jsonAuth(t, ts, "POST", "/api/v1/calls/"+liveCallOf(t, ts, owner, groupID)+"/join", member.token, nil, &again)
+	if !again.Forbidden.Mic || again.Forbidden.Video {
+		t.Fatalf("при перезаходе запрет не сказан: %+v", again.Forbidden)
+	}
+	if code := control(member, "allow_mic", owner.userID); code != http.StatusForbidden {
+		t.Fatalf("участник снял запрет: %d", code)
+	}
+	if code := control(owner, "allow_mic", member.userID); code != 200 {
+		t.Fatalf("разрешение: %d", code)
+	}
+	again.Forbidden.Mic = true
+	jsonAuth(t, ts, "POST", "/api/v1/calls/"+liveCallOf(t, ts, owner, groupID)+"/join", member.token, nil, &again)
+	if again.Forbidden.Mic {
+		t.Fatal("разрешение не сняло запрет")
+	}
+
 	if code := control(owner, "remove", member.userID); code != 200 {
 		t.Fatalf("удаление: %d", code)
 	}
@@ -333,6 +359,21 @@ func TestCallGroupLifetime(t *testing.T) {
 	if code := getAuthed(t, ts, owner.token, "/api/v1/groups/"+temp.GroupID+"/call", nil); code != http.StatusNotFound {
 		t.Fatalf("удалённая группа отвечает: %d", code)
 	}
+}
+
+// liveCallOf — номер идущего звонка группы.
+func liveCallOf(t *testing.T, ts *httptest.Server, d *device, groupID string) string {
+	t.Helper()
+	var st struct {
+		Call *struct {
+			CallID string `json:"call_id"`
+		} `json:"call"`
+	}
+	getAuthed(t, ts, d.token, "/api/v1/groups/"+groupID+"/call", &st)
+	if st.Call == nil {
+		t.Fatal("звонка в группе нет")
+	}
+	return st.Call.CallID
 }
 
 func hasID(list []string, s string) bool {
