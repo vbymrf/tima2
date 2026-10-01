@@ -48,6 +48,7 @@ type CallStore interface {
 	GroupCallParticipants(ctx context.Context, callID string) ([]store.CallParticipant, error)
 	JoinGroupCall(ctx context.Context, callID, userID string, max int) error
 	RemoveFromCall(ctx context.Context, callID, userID string) error
+	InviteToCall(ctx context.Context, callID, userID string) error
 	SetCallPaused(ctx context.Context, callID string, paused bool) error
 	BumpCallGroupTTL(ctx context.Context, groupID string, ttl time.Duration) error
 }

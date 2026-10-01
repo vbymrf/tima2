@@ -138,6 +138,18 @@ func (s *Store) JoinGroupCall(ctx context.Context, callID, userID string, max in
 	return tx.Commit(ctx)
 }
 
+// InviteToCall — создатель позвал ещё одного участника группы в идущий звонок. Удалённый
+// раньше снова допускается: позвать обратно — его решение, как и удалить.
+func (s *Store) InviteToCall(ctx context.Context, callID, userID string) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO call_participants (call_id, user_id, invited) VALUES ($1, $2, true)
+		ON CONFLICT (call_id, user_id)
+		DO UPDATE SET invited = true, removed_at = NULL,
+		              state = CASE WHEN call_participants.state = 'joined' THEN 'joined' ELSE 'invited' END`,
+		callID, userID)
+	return err
+}
+
 // RemoveFromCall — создатель удалил участника из звонка. Из группы он не удаляется.
 func (s *Store) RemoveFromCall(ctx context.Context, callID, userID string) error {
 	_, err := s.pool.Exec(ctx, `

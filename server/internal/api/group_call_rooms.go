@@ -314,6 +314,7 @@ func roomCallState(deps callsDeps) http.HandlerFunc {
 // создателя (решения 5, 6). Остальным — 403: участник выключает только своё, и делает это
 // у себя, без сервера.
 //
+//	invite               — позвать ещё участника группы (с «Звонить» — вызов ему);
 //	mute_mic · mute_video — выключить участнику микрофон или камеру (включит он сам);
 //	remove               — удалить из звонка, не из группы (решение 17);
 //	pause · resume       — пауза «висит»: все в комнате, звук и видео стоят;
@@ -352,6 +353,24 @@ func controlRoomCall(deps callsDeps) http.HandlerFunc {
 		}
 		ctx := r.Context()
 		switch req.Action {
+		case "invite":
+			if req.UserID == "" || req.UserID == id.UserID {
+				writeErr(w, http.StatusBadRequest, "bad_user", "нужен user_id участника, не свой")
+				return
+			}
+			if _, err := deps.store.GroupRole(ctx, call.GroupID, req.UserID); err != nil {
+				writeErr(w, http.StatusBadRequest, "not_member", "позвать можно только участника группы")
+				return
+			}
+			if err := deps.store.InviteToCall(ctx, callID, req.UserID); err != nil {
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+				return
+			}
+			if ring, _ := deps.store.CallRings(ctx, callID); ring {
+				deps.notifier.CallChange(ctx, req.UserID, callID, "ringing", "")
+				go missedIfNotJoined(deps, callID, req.UserID)
+			}
+			log.Printf("групповой звонок %s: позван ещё %s", short(callID), short(req.UserID))
 		case "mute_mic", "mute_video":
 			if req.UserID == "" || req.UserID == id.UserID {
 				writeErr(w, http.StatusBadRequest, "bad_user", "нужен user_id участника, не свой")
@@ -412,7 +431,7 @@ func controlRoomCall(deps callsDeps) http.HandlerFunc {
 			closeRoomCall(deps, ctx, call, id.UserID)
 			log.Printf("групповой звонок %s: остановлен создателем", short(callID))
 		default:
-			writeErr(w, http.StatusBadRequest, "bad_action", "action: mute_mic · mute_video · remove · pause · resume · stop")
+			writeErr(w, http.StatusBadRequest, "bad_action", "action: invite · mute_mic · mute_video · remove · pause · resume · stop")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -524,6 +543,26 @@ func closeRoomUnanswered(deps callsDeps, callID string) {
 	for _, p := range parts {
 		if p.State == store.PartInvited && p.Invited && !p.Removed {
 			deps.notifier.CallChange(ctx, p.UserID, callID, "missed", "")
+		}
+	}
+}
+
+// missedIfNotJoined — позванному посреди звонка: не вошёл за срок вызова — пропущенный.
+func missedIfNotJoined(deps callsDeps, callID, userID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), ringDeadline+30*time.Second)
+	defer cancel()
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(ringDeadline):
+	}
+	parts, err := deps.store.GroupCallParticipants(ctx, callID)
+	if err != nil {
+		return
+	}
+	for _, p := range parts {
+		if p.UserID == userID && p.State == store.PartInvited && p.Invited && !p.Removed {
+			deps.notifier.CallChange(ctx, userID, callID, "missed", "")
 		}
 	}
 }

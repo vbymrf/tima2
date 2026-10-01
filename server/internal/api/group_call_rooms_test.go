@@ -197,6 +197,16 @@ func TestRoomCallControlByCreatorOnly(t *testing.T) {
 	if role, err := srv.Store.GroupRole(t.Context(), groupID, member.userID); err != nil || role == "" {
 		t.Fatalf("удалённый из звонка выпал из группы: %q %v", role, err)
 	}
+	// Позвать обратно — его решение, как и удалить: удалённый снова входит.
+	if code := control(owner, "invite", member.userID); code != 200 {
+		t.Fatalf("позвать обратно: %d", code)
+	}
+	if code := jsonAuth(t, ts, "POST", "/api/v1/calls/"+door.CallID+"/join", member.token, nil, nil); code != 200 {
+		t.Fatalf("позванный обратно не вошёл: %d", code)
+	}
+	if code := control(owner, "remove", member.userID); code != 200 {
+		t.Fatalf("удаление второй раз: %d", code)
+	}
 
 	if code := control(owner, "stop", ""); code != 200 {
 		t.Fatalf("остановка: %d", code)
