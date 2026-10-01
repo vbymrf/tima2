@@ -410,3 +410,36 @@ func TestRoomCallCreatorNeverMissed(t *testing.T) {
 		t.Fatalf("позванному, не вошедшему: %v, ожидали ringing и missed", got)
 	}
 }
+
+// Закрепить и открепить — только создатель и только участника группы (вид «Говорящий»).
+func TestRoomCallPin(t *testing.T) {
+	ts, srv := setup(t)
+	withCalls(srv)
+	owner := registerDevice(t, ts, "+79990077001")
+	a := registerDevice(t, ts, "+79990077002")
+	outsider := registerDevice(t, ts, "+79990077003")
+	groupID := createGroupWith(t, ts, owner, a)
+	door, _ := startRoomCallAs(t, ts, owner, groupID, map[string]any{})
+	control := func(d *device, action, user string) int {
+		return jsonAuth(t, ts, "POST", "/api/v1/calls/"+door.CallID+"/control", d.token,
+			map[string]any{"action": action, "user_id": user}, nil)
+	}
+	if code := control(a, "pin", a.userID); code != http.StatusForbidden {
+		t.Fatalf("участник закрепил: %d", code)
+	}
+	if code := control(owner, "pin", outsider.userID); code != http.StatusBadRequest {
+		t.Fatalf("закреплён посторонний: %d", code)
+	}
+	if code := control(owner, "pin", a.userID); code != 200 {
+		t.Fatalf("закрепить: %d", code)
+	}
+	if call, _ := srv.Store.GetCall(t.Context(), door.CallID); call.PinnedUser != a.userID {
+		t.Fatalf("закреплённый не записан: %q", call.PinnedUser)
+	}
+	if code := control(owner, "unpin", ""); code != 200 {
+		t.Fatalf("открепить: %d", code)
+	}
+	if call, _ := srv.Store.GetCall(t.Context(), door.CallID); call.PinnedUser != "" {
+		t.Fatalf("откреплённый остался: %q", call.PinnedUser)
+	}
+}

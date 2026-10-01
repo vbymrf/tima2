@@ -192,6 +192,16 @@ func (s *Store) SetCallPaused(ctx context.Context, callID string, paused bool) e
 	return err
 }
 
+// SetCallPinned — закреплённый создателем участник (0060); пусто — открепить.
+func (s *Store) SetCallPinned(ctx context.Context, callID, userID string) error {
+	var v any
+	if userID != "" {
+		v = userID
+	}
+	_, err := s.pool.Exec(ctx, `UPDATE calls SET pinned_user = $2 WHERE call_id = $1`, callID, v)
+	return err
+}
+
 // BumpCallGroupTTL — звонок во временной группе отодвигает её срок. Обычную группу не
 // трогает: у неё срока нет, и появиться он не может.
 func (s *Store) BumpCallGroupTTL(ctx context.Context, groupID string, ttl time.Duration) error {

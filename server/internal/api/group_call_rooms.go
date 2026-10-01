@@ -324,7 +324,7 @@ func roomDoorJSON(deps callsDeps, call store.Call, token string) map[string]any 
 		"call_id": call.CallID, "room": call.Room, "token": token,
 		"url": deps.livekitURL(), "livekit_url": deps.livekitURL(), "kind": call.Kind,
 		"video": deps.video(), "type": "group", "group_id": call.GroupID,
-		"creator_id": call.InitiatorID, "paused": !call.PausedAt.IsZero(),
+		"creator_id": call.InitiatorID, "paused": !call.PausedAt.IsZero(), "pinned": call.PinnedUser,
 		"rules": deps.groupRules(),
 	}
 }
@@ -385,6 +385,7 @@ func roomCallState(deps callsDeps) http.HandlerFunc {
 //	allow_mic · allow_video — разрешить снова (включает участник сам);
 //	remove               — удалить из звонка, не из группы (решение 17);
 //	pause · resume       — пауза «висит»: все в комнате, звук и видео стоят;
+//	pin · unpin          — закрепить участника наверху вида «Говорящий» у всех;
 //	stop                 — завершить звонок для всех.
 func controlRoomCall(deps callsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -494,16 +495,28 @@ func controlRoomCall(deps callsDeps) http.HandlerFunc {
 				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 				return
 			}
-			meta, _ := json.Marshal(map[string]any{"paused": paused})
-			if rooms := deps.rooms(); rooms != nil {
-				if err := rooms.SetRoomMetadata(ctx, call.Room, string(meta)); err != nil {
-					log.Printf("control pause %s: %v", short(callID), err)
-				}
-			}
+			pushRoomMeta(deps, ctx, callID)
 			notifyCallUsers(deps, ctx, callID, "call.control", map[string]any{
 				"call_id": callID, "action": req.Action, "by": id.UserID,
 			})
 			log.Printf("групповой звонок %s: %s", short(callID), req.Action)
+		case "pin", "unpin":
+			who := req.UserID
+			if req.Action == "unpin" {
+				who = ""
+			} else if who == "" {
+				writeErr(w, http.StatusBadRequest, "bad_user", "нужен user_id")
+				return
+			} else if _, err := deps.store.GroupRole(ctx, call.GroupID, who); err != nil {
+				writeErr(w, http.StatusBadRequest, "not_member", "закрепить можно только участника группы")
+				return
+			}
+			if err := deps.store.SetCallPinned(ctx, callID, who); err != nil {
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+				return
+			}
+			pushRoomMeta(deps, ctx, callID)
+			log.Printf("групповой звонок %s: %s %s", short(callID), req.Action, short(who))
 		case "stop":
 			if rooms := deps.rooms(); rooms != nil {
 				if err := rooms.DeleteRoom(ctx, call.Room); err != nil {
@@ -513,11 +526,31 @@ func controlRoomCall(deps callsDeps) http.HandlerFunc {
 			closeRoomCall(deps, ctx, call, id.UserID)
 			log.Printf("групповой звонок %s: остановлен создателем", short(callID))
 		default:
-			writeErr(w, http.StatusBadRequest, "bad_action", "action: invite · mute_mic · mute_video · allow_mic · allow_video · remove · pause · resume · stop")
+			writeErr(w, http.StatusBadRequest, "bad_action", "action: invite · mute_mic · mute_video · allow_mic · allow_video · remove · pause · resume · pin · unpin · stop")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}
+}
+
+// roomMeta — данные комнаты целиком: пауза и закреплённый. Собираются из базы при каждой
+// перемене, иначе пауза стирала бы закреплённого и наоборот.
+func roomMeta(call store.Call) string {
+	meta, _ := json.Marshal(map[string]any{"paused": !call.PausedAt.IsZero(), "pinned": call.PinnedUser})
+	return string(meta)
+}
+
+// pushRoomMeta — данные комнаты в LiveKit по свежему звонку из базы.
+func pushRoomMeta(deps callsDeps, ctx context.Context, callID string) {
+	call, err := deps.store.GetCall(ctx, callID)
+	if err != nil {
+		return
+	}
+	if rooms := deps.rooms(); rooms != nil {
+		if err := rooms.SetRoomMetadata(ctx, call.Room, roomMeta(call)); err != nil {
+			log.Printf("данные комнаты %s: %v", short(callID), err)
+		}
 	}
 }
 

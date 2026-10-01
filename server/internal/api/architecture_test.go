@@ -197,7 +197,9 @@ const (
 	//
 	// 230 → 231: `SetCallForbidden` — запрет создателя (0059, уточнение заказчика 2026-10-01:
 	// «сервер перестаёт принимать от него»). Читается тем же `GroupCallParticipants`.
-	storeMethodBudget = 231
+	//
+	// 231 → 232: `SetCallPinned` — закреплённый создателем в виде «Говорящий» (0060).
+	storeMethodBudget = 232
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
 )

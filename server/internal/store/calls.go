@@ -22,6 +22,8 @@ type Call struct {
 	GroupID string
 	// PausedAt — пауза группового звонка (0058); нулевое — не на паузе.
 	PausedAt time.Time
+	// PinnedUser — закреплённый создателем участник (0060); пусто — никто.
+	PinnedUser string
 
 	// ── ВРЕМЕНА И «КТО ПОЛОЖИЛ ТРУБКУ» ──────────────────────────────────────
 	//
@@ -163,16 +165,19 @@ func (s *Store) GetCall(ctx context.Context, callID string) (Call, error) {
 	var c Call
 	// peer_id стал nullable в 0023 ради групповых, ended_by — в 0054. Сканировать
 	// их прямо в строку значило бы падать на данных, которые база допускает.
-	var peer, endedBy, groupID *string
+	var peer, endedBy, groupID, pinned *string
 	var answered, ended, delivered, paused *time.Time
 	err := s.pool.QueryRow(ctx, `
 		SELECT call_id, room, kind, initiator_id, peer_id, state,
 		       ended_by, created_at, answered_at, ended_at, delivered_at,
-		       type, group_id::text, paused_at
+		       type, group_id::text, paused_at, pinned_user::text
 		FROM calls WHERE call_id = $1`, callID).
 		Scan(&c.CallID, &c.Room, &c.Kind, &c.InitiatorID, &peer, &c.State,
 			&endedBy, &c.CreatedAt, &answered, &ended, &delivered,
-			&c.Type, &groupID, &paused)
+			&c.Type, &groupID, &paused, &pinned)
+	if pinned != nil {
+		c.PinnedUser = *pinned
+	}
 	if groupID != nil {
 		c.GroupID = *groupID
 	}

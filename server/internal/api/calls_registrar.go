@@ -51,6 +51,7 @@ type CallStore interface {
 	InviteToCall(ctx context.Context, callID, userID string) error
 	SetCallForbidden(ctx context.Context, callID, userID, what string, forbidden bool) error
 	SetCallPaused(ctx context.Context, callID string, paused bool) error
+	SetCallPinned(ctx context.Context, callID, userID string) error
 	BumpCallGroupTTL(ctx context.Context, groupID string, ttl time.Duration) error
 }
 
