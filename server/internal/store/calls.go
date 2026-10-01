@@ -17,6 +17,11 @@ type Call struct {
 	InitiatorID string
 	PeerID      string
 	State       string
+	// Type — `direct` или `group`; GroupID — группа группового звонка (0023).
+	Type    string
+	GroupID string
+	// PausedAt — пауза группового звонка (0058); нулевое — не на паузе.
+	PausedAt time.Time
 
 	// ── ВРЕМЕНА И «КТО ПОЛОЖИЛ ТРУБКУ» ──────────────────────────────────────
 	//
@@ -46,6 +51,8 @@ func (c Call) Row() CallRow {
 		State:       c.State,
 		InitiatorID: c.InitiatorID,
 		PeerID:      c.PeerID,
+		Type:        c.Type,
+		GroupID:     c.GroupID,
 		EndedBy:     c.EndedBy,
 		CreatedAt:   c.CreatedAt,
 		AnsweredAt:  c.AnsweredAt,
@@ -156,14 +163,22 @@ func (s *Store) GetCall(ctx context.Context, callID string) (Call, error) {
 	var c Call
 	// peer_id стал nullable в 0023 ради групповых, ended_by — в 0054. Сканировать
 	// их прямо в строку значило бы падать на данных, которые база допускает.
-	var peer, endedBy *string
-	var answered, ended, delivered *time.Time
+	var peer, endedBy, groupID *string
+	var answered, ended, delivered, paused *time.Time
 	err := s.pool.QueryRow(ctx, `
 		SELECT call_id, room, kind, initiator_id, peer_id, state,
-		       ended_by, created_at, answered_at, ended_at, delivered_at
+		       ended_by, created_at, answered_at, ended_at, delivered_at,
+		       type, group_id::text, paused_at
 		FROM calls WHERE call_id = $1`, callID).
 		Scan(&c.CallID, &c.Room, &c.Kind, &c.InitiatorID, &peer, &c.State,
-			&endedBy, &c.CreatedAt, &answered, &ended, &delivered)
+			&endedBy, &c.CreatedAt, &answered, &ended, &delivered,
+			&c.Type, &groupID, &paused)
+	if groupID != nil {
+		c.GroupID = *groupID
+	}
+	if paused != nil {
+		c.PausedAt = *paused
+	}
 	if errors.Is(err, pgx.ErrNoRows) || isBadUUID(err) {
 		return c, ErrCallNotFound
 	}
@@ -224,6 +239,10 @@ type CallRow struct {
 	State       string // ringing|answered|ended|missed|busy|lost
 	InitiatorID string
 	PeerID      string
+	// Type — `direct` · `group`; GroupID — группа группового звонка. Новые поля строки:
+	// клиент, не знающий их, видит прежнюю строку.
+	Type        string
+	GroupID     string
 	EndedBy     string // кто положил трубку; пусто — некому было, звонок бросили
 	CreatedAt   time.Time
 	AnsweredAt  time.Time // нулевое — трубку не брали

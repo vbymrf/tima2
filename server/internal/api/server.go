@@ -49,6 +49,8 @@ type Server struct {
 	// CallVideo — потолок видео звонка, который получает клиент (ПЛАН-ВИДЕО.md В5б).
 	// Нулевой — умолчание, 1280×720, 24 кадра/с, 800 кбит/с.
 	CallVideo VideoLimits
+	// CallGroups — правила группового звонка (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ, решение 4).
+	CallGroups GroupCallRules
 	// Rooms — управление комнатами LiveKit (закрыть, выкинуть участника).
 	// nil → «завершить звонок» меняет только наше состояние, комната живёт до
 	// empty_timeout, и клиент, не услышавший уведомление, продолжает публиковать.
@@ -128,7 +130,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/escrow/key", s.requireActiveDevice(s.escrowKeyForChat))
 	// Группы: состав, сообщения и ключи (шаг 4). Три файла держатся вместе
 	// инвариантом ротации: смена состава обязана менять ключ.
-	RegisterGroups(mux, s.Store, func() *ratelimit.Limiter { return s.Limit }, s.notifier(), s.requireActiveDevice)
+	RegisterGroups(mux, s.Store, func() *ratelimit.Limiter { return s.Limit }, s.notifier(), s.requireActiveDevice,
+		func() time.Duration { return s.CallGroups.orDefault().TTL })
 	// Медиа (шаг 4): вместе с маршрутами уехало поле Blob.
 	RegisterMedia(mux, s.Store, func() *blob.Client { return s.Blob }, s.requireActiveDevice)
 	// Каналы — первая группа, вынесенная в registrar (шаг 4 программы). Дальше
@@ -171,7 +174,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 // livekitSettings — снимок полей звонков НА МОМЕНТ ВЫЗОВА. Передаётся функцией, а
 // не значением: cmd/tima и тесты заполняют эти поля уже после Register.
 func (s *Server) livekitSettings() LiveKitSettings {
-	return LiveKitSettings{Issuer: s.Calls, Rooms: s.Rooms, URL: s.LiveKitURL, Video: s.CallVideo}
+	return LiveKitSettings{Issuer: s.Calls, Rooms: s.Rooms, URL: s.LiveKitURL, Video: s.CallVideo, Group: s.CallGroups}
 }
 
 // notifier — уведомитель для registrar-ов: тот же порядок доставки, что у notify,

@@ -6,6 +6,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"tima/server/internal/calls"
@@ -94,6 +95,9 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 			return w.Store.GCCalls(ctx, journal)
 		}},
 		{"device_link_sessions", func() (int64, error) { return w.Store.GCExpiredLinkSessions(ctx) }},
+		// Временные группы звонка с вышедшим сроком — вместе с перепиской (ПЛАН-ГРУППОВЫХ-
+		// ЗВОНКОВ, решение 1). Группу с идущим звонком не трогаем.
+		{"call_groups", func() (int64, error) { return w.dropExpiredCallGroups(ctx) }},
 		// Стирание содержимого сообщений, чьи ключи эпох уже уничтожены анклавом.
 		// Метаданные строки остаются: у них отдельный срок — они не удаляются
 		// никогда (ПЛАН-РЕФАКТОРИНГА.md §0).
@@ -234,4 +238,39 @@ func (w *Worker) closeAbandonedCalls(ctx context.Context) (int64, error) {
 		closed++
 	}
 	return closed, nil
+}
+
+// dropExpiredCallGroups удаляет временные группы звонка, чей срок вышел (ГЗ1).
+//
+// Участникам — событие `group.deleted` в журнал устройства: группа уходит из списка, не
+// дожидаясь его перечитывания. Через журнал, а не шину: уборщик — отдельный процесс, и
+// событие должно дожить до устройства, которое сейчас не в сети.
+func (w *Worker) dropExpiredCallGroups(ctx context.Context) (int64, error) {
+	ids, err := w.Store.ExpiredCallGroups(ctx, 100)
+	if err != nil {
+		return 0, err
+	}
+	var dropped int64
+	for _, groupID := range ids {
+		members, err := w.Store.DeleteCallGroup(ctx, groupID)
+		if err != nil {
+			log.Printf("call_groups %s: %v", groupID, err)
+			continue
+		}
+		dropped++
+		raw, _ := json.Marshal(map[string]any{"group_id": groupID, "reason": "call_ttl"})
+		for _, uid := range members {
+			devices, err := w.Store.ListDevices(ctx, uid)
+			if err != nil {
+				continue
+			}
+			for _, d := range devices {
+				if _, _, err := w.Store.AppendDeviceEvent(ctx, d.DeviceID, "group.deleted", raw); err != nil {
+					log.Printf("call_groups %s: событие %s: %v", groupID, d.DeviceID, err)
+				}
+			}
+		}
+		log.Printf("временная группа звонка %s удалена: срок вышел, участников %d", groupID, len(members))
+	}
+	return dropped, nil
 }

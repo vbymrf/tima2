@@ -226,6 +226,11 @@ func serve() {
 			srv.CallVideo = api.VideoLimitsFromEnv(os.Getenv)
 			log.Printf("Звонки: потолок видео %d×%d, %d к/с, %d бит/с",
 				srv.CallVideo.Width, srv.CallVideo.Height, srv.CallVideo.FPS, srv.CallVideo.Bitrate)
+			// Групповой звонок (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ): CALL_GROUP_MAX, CALL_GROUP_TTL,
+			// CALL_GROUP_HD_UPTO/HEIGHT, CALL_GROUP_SD_UPTO/HEIGHT.
+			srv.CallGroups = api.GroupCallRulesFromEnv(os.Getenv)
+			log.Printf("Групповые звонки: до %d участников, видео %v, временная группа %s",
+				srv.CallGroups.Max, srv.CallGroups.Video, srv.CallGroups.TTL)
 			// Управление комнатами: адрес берём из того же LIVEKIT_URL (wss → https),
 			// чтобы не заводить второй параметр, который рассинхронизируется.
 			srv.Rooms = calls.NewRoomClient(srv.LiveKitURL, lk)

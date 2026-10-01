@@ -120,6 +120,12 @@ func joinCall(deps callsDeps) http.HandlerFunc {
 			return
 		}
 		id, _ := auth.FromContext(r.Context())
+		// Звонок в группе (ГЗ2): право на вход — членство в группе, а не строка
+		// приглашения; место и удаление проверяет enterRoomCall.
+		if call, err := deps.store.GetCall(r.Context(), callID); err == nil && call.Type == "group" && call.GroupID != "" {
+			enterRoomCall(deps, w, r, call, id, http.StatusOK)
+			return
+		}
 		c, err := deps.store.CallForJoinByID(r.Context(), callID, id.UserID)
 		if errors.Is(err, store.ErrNotInvited) {
 			// ── ЗВОНОК ОДИН НА ОДИН: УЧАСТНИКОВ В ТАБЛИЦЕ НЕТ ──────────────
@@ -264,6 +270,13 @@ func livekitWebhook(deps callsDeps) http.HandlerFunc {
 			// Комната кончилась сама — человека за этим нет.
 			if callType == "direct" {
 				endDirectByRoom(deps, r.Context(), callID, "")
+			} else if call, err := deps.store.GetCall(r.Context(), callID); err == nil && call.GroupID != "" {
+				// Групповой: пропущенные позванным, «кончился» бывшим в нём, срок
+				// временной группы — от конца звонка (ГЗ1–ГЗ2).
+				closeRoomCall(deps, r.Context(), call, "")
+				notifyParticipants(deps, r, callID, "call.state", map[string]any{
+					"call_id": callID, "state": "ended",
+				})
 			} else {
 				_ = deps.store.SetCallState(r.Context(), callID, "ended", "")
 				notifyParticipants(deps, r, callID, "call.state", map[string]any{

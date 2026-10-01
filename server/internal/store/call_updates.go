@@ -64,7 +64,8 @@ func (s *Store) ListCallUpdates(ctx context.Context, userID string, after int64,
 	rows, err := s.pool.Query(ctx, `
 		SELECT u.cts, u.call_id::text, u.change, COALESCE(u.device_id::text, ''), u.created_at,
 		       c.kind, c.state, c.initiator_id::text, COALESCE(c.peer_id::text, ''),
-		       COALESCE(c.ended_by::text, ''), c.created_at, c.answered_at, c.ended_at
+		       COALESCE(c.ended_by::text, ''), c.created_at, c.answered_at, c.ended_at,
+		       c.type, COALESCE(c.group_id::text, '')
 		  FROM call_updates u
 		  JOIN calls c ON c.call_id = u.call_id
 		 WHERE u.user_id = $1 AND u.cts > $2
@@ -83,7 +84,8 @@ func (s *Store) ListCallUpdates(ctx context.Context, userID string, after int64,
 		var answered, ended *time.Time
 		if err := rows.Scan(&u.Cts, &u.CallID, &u.Change, &u.DeviceID, &u.At,
 			&u.Call.Kind, &u.Call.State, &u.Call.InitiatorID, &u.Call.PeerID,
-			&u.Call.EndedBy, &u.Call.CreatedAt, &answered, &ended); err != nil {
+			&u.Call.EndedBy, &u.Call.CreatedAt, &answered, &ended,
+			&u.Call.Type, &u.Call.GroupID); err != nil {
 			return nil, err
 		}
 		u.Call.CallID = u.CallID

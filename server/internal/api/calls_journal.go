@@ -96,6 +96,12 @@ func callJSON(c store.CallRow) map[string]any {
 	if c.EndedBy != "" {
 		m["ended_by"] = c.EndedBy
 	}
+	// Групповой звонок (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ2): поля новые, у личного их нет вовсе —
+	// строка личного звонка не меняется ни на байт.
+	if c.Type == "group" {
+		m["type"] = "group"
+		m["group_id"] = c.GroupID
+	}
 	if !c.AnsweredAt.IsZero() {
 		m["answered_at"] = c.AnsweredAt.UTC().Format(time.RFC3339Nano)
 	}

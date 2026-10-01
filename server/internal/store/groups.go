@@ -25,6 +25,9 @@ type Group struct {
 	// CommunityID — сообщество, с которым группа связана. Пусто — группа отдельная.
 	// Нужен клиенту ровно для одного: не предлагать вносить то, что уже внесено.
 	CommunityID string
+	// CallTTLUntil — временная группа звонка (0058): живёт до этого срока, каждый звонок
+	// его отодвигает. nil — обычная группа, срока нет (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ, решение 1).
+	CallTTLUntil *time.Time
 }
 
 type Member struct {
@@ -61,10 +64,10 @@ func (s *Store) CreateGroup(ctx context.Context, g Group) (string, error) {
 
 	var id string
 	if err := tx.QueryRow(ctx, `
-		INSERT INTO groups (kind, title, description, owner_id, slow_mode_sec, premoderation, threads_only)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		INSERT INTO groups (kind, title, description, owner_id, slow_mode_sec, premoderation, threads_only, call_ttl_until)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		RETURNING group_id`,
-		g.Kind, g.Title, g.Description, g.OwnerID, g.SlowModeSec, g.Premoderation, g.ThreadsOnly).Scan(&id); err != nil {
+		g.Kind, g.Title, g.Description, g.OwnerID, g.SlowModeSec, g.Premoderation, g.ThreadsOnly, g.CallTTLUntil).Scan(&id); err != nil {
 		return "", err
 	}
 	if _, err := tx.Exec(ctx, `
@@ -79,9 +82,9 @@ func (s *Store) GetGroup(ctx context.Context, groupID string) (Group, error) {
 	g := Group{GroupID: groupID}
 	err := s.pool.QueryRow(ctx, `
 		SELECT kind, title, COALESCE(description, ''), owner_id,
-		       COALESCE(slow_mode_sec, 0), premoderation, threads_only
+		       COALESCE(slow_mode_sec, 0), premoderation, threads_only, call_ttl_until
 		FROM groups WHERE group_id = $1 AND deleted_at IS NULL`, groupID).
-		Scan(&g.Kind, &g.Title, &g.Description, &g.OwnerID, &g.SlowModeSec, &g.Premoderation, &g.ThreadsOnly)
+		Scan(&g.Kind, &g.Title, &g.Description, &g.OwnerID, &g.SlowModeSec, &g.Premoderation, &g.ThreadsOnly, &g.CallTTLUntil)
 	if errors.Is(err, pgx.ErrNoRows) || isBadUUID(err) {
 		return g, ErrGroupNotFound
 	}
@@ -261,7 +264,7 @@ func (s *Store) ListGroupsForUser(ctx context.Context, userID string) ([]MyGroup
 	rows, err := s.pool.Query(ctx, `
 		SELECT g.group_id, g.kind, g.title, COALESCE(g.description, ''), g.owner_id,
 		       COALESCE(g.slow_mode_sec, 0), g.premoderation, g.threads_only,
-		       COALESCE(g.community_id::text, ''), m.role
+		       COALESCE(g.community_id::text, ''), m.role, g.call_ttl_until
 		FROM memberships m
 		JOIN groups g ON g.group_id = m.target_id AND g.deleted_at IS NULL
 		WHERE m.target_type = 'group' AND m.user_id = $1 AND m.left_at IS NULL
@@ -277,7 +280,7 @@ func (s *Store) ListGroupsForUser(ctx context.Context, userID string) ([]MyGroup
 	for rows.Next() {
 		var g MyGroup
 		if err := rows.Scan(&g.GroupID, &g.Kind, &g.Title, &g.Description, &g.OwnerID,
-			&g.SlowModeSec, &g.Premoderation, &g.ThreadsOnly, &g.CommunityID, &g.MyRole); err != nil {
+			&g.SlowModeSec, &g.Premoderation, &g.ThreadsOnly, &g.CommunityID, &g.MyRole, &g.CallTTLUntil); err != nil {
 			return nil, err
 		}
 		out = append(out, g)

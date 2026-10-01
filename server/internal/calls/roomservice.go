@@ -136,6 +136,64 @@ func (c *RoomClient) RemoveParticipant(ctx context.Context, room, identity strin
 	return c.post(ctx, token, "RemoveParticipant", map[string]any{"room": room, "identity": identity}, nil)
 }
 
+// RoomParticipant — участник комнаты со слов LiveKit: кто и какие дорожки публикует.
+type RoomParticipant struct {
+	Identity string `json:"identity"`
+	Tracks   []struct {
+		Sid    string `json:"sid"`
+		Source string `json:"source"` // MICROPHONE · CAMERA · SCREEN_SHARE …
+		Muted  bool   `json:"muted"`
+	} `json:"tracks"`
+}
+
+// ListParticipants — кто сейчас в комнате. Нужен командам создателя группового звонка:
+// выключить чужой микрофон можно только по номеру дорожки, а его знает LiveKit.
+func (c *RoomClient) ListParticipants(ctx context.Context, room string) ([]RoomParticipant, error) {
+	if c == nil {
+		return nil, errNoLiveKit
+	}
+	token, err := c.Issuer.RoomAdminToken(room, roomAdminTTL, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	var answer struct {
+		Participants []RoomParticipant `json:"participants"`
+	}
+	if err := c.post(ctx, token, "ListParticipants", map[string]any{"room": room}, &answer); err != nil {
+		return nil, err
+	}
+	return answer.Participants, nil
+}
+
+// MuteTrack выключает чужую дорожку (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ, решение 6). Только
+// выключает: включить её обратно может сам участник, а не сервер (LiveKit по умолчанию
+// включать чужое и не даёт).
+func (c *RoomClient) MuteTrack(ctx context.Context, room, identity, trackSid string) error {
+	if c == nil {
+		return nil
+	}
+	token, err := c.Issuer.RoomAdminToken(room, roomAdminTTL, time.Now())
+	if err != nil {
+		return err
+	}
+	return c.post(ctx, token, "MutePublishedTrack", map[string]any{
+		"room": room, "identity": identity, "track_sid": trackSid, "muted": true,
+	}, nil)
+}
+
+// SetRoomMetadata — данные комнаты, которые видят все в ней. Пауза группового звонка
+// ложится сюда (решение 5): вошедший видит её сразу, перемену — событием комнаты.
+func (c *RoomClient) SetRoomMetadata(ctx context.Context, room, metadata string) error {
+	if c == nil {
+		return nil
+	}
+	token, err := c.Issuer.RoomAdminToken(room, roomAdminTTL, time.Now())
+	if err != nil {
+		return err
+	}
+	return c.post(ctx, token, "UpdateRoomMetadata", map[string]any{"room": room, "metadata": metadata}, nil)
+}
+
 // post — twirp-вызов RoomService. Токен приходит снаружи: право у каждой ручки своё,
 // и выбирать его обязан тот, кто знает, что зовёт.
 //

@@ -39,6 +39,17 @@ type CallStore interface {
 	// Лента звонков (0056, ВЗ0а): вершина и изменения после номера.
 	CallTop(ctx context.Context, userID string) (int64, error)
 	ListCallUpdates(ctx context.Context, userID string, after int64, limit int) ([]store.CallUpdate, error)
+	// Групповой звонок в личной группе (0058, ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ2).
+	GetGroup(ctx context.Context, groupID string) (store.Group, error)
+	GroupRole(ctx context.Context, groupID, userID string) (string, error)
+	CreateRoomCall(ctx context.Context, room, kind, groupID, creatorID string, invited []string, ring bool) (string, error)
+	CallRings(ctx context.Context, callID string) (bool, error)
+	LiveGroupCall(ctx context.Context, groupID string) (store.Call, error)
+	GroupCallParticipants(ctx context.Context, callID string) ([]store.CallParticipant, error)
+	JoinGroupCall(ctx context.Context, callID, userID string, max int) error
+	RemoveFromCall(ctx context.Context, callID, userID string) error
+	SetCallPaused(ctx context.Context, callID string, paused bool) error
+	BumpCallGroupTTL(ctx context.Context, groupID string, ttl time.Duration) error
 }
 
 var _ CallStore = (*store.Store)(nil)
@@ -55,6 +66,9 @@ type LiveKitSettings struct {
 	URL    string
 	// Video — потолок видео звонка (ПЛАН-ВИДЕО.md В5б). Нулевой — умолчание.
 	Video VideoLimits
+	// Group — правила группового звонка (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ, решение 4). Нулевые —
+	// умолчание: 25 участников, 720p до 4, 480p до 8, срок временной группы 12 ч.
+	Group GroupCallRules
 }
 
 // callsDeps — всё, чем пользуются handler-ы этой группы.
@@ -71,6 +85,9 @@ func (deps callsDeps) issuer() *calls.Issuer    { return deps.livekit().Issuer }
 func (deps callsDeps) rooms() *calls.RoomClient { return deps.livekit().Rooms }
 func (deps callsDeps) livekitURL() string       { return deps.livekit().URL }
 func (deps callsDeps) video() VideoLimits       { return deps.livekit().Video.orDefault() }
+func (deps callsDeps) groupRules() GroupCallRules {
+	return deps.livekit().Group.orDefault()
+}
 
 // RegisterCalls — маршруты звонков 1:1, групповых звонков и аудио-комнат.
 //
@@ -96,6 +113,10 @@ func RegisterCalls(
 	mux.HandleFunc("POST /api/v1/calls/{callID}/end", requireDevice(endCall(deps)))
 	mux.HandleFunc("POST /api/v1/calls/group", requireDevice(startGroupCall(deps)))
 	mux.HandleFunc("POST /api/v1/calls/{callID}/join", requireDevice(joinCall(deps)))
+	// Групповой звонок в личной группе (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ2).
+	mux.HandleFunc("POST /api/v1/groups/{groupID}/call", requireDevice(startRoomCall(deps)))
+	mux.HandleFunc("GET /api/v1/groups/{groupID}/call", requireDevice(roomCallState(deps)))
+	mux.HandleFunc("POST /api/v1/calls/{callID}/control", requireDevice(controlRoomCall(deps)))
 	mux.HandleFunc("POST /livekit/webhook", livekitWebhook(deps))
 
 	mux.HandleFunc("POST /api/v1/voice-rooms", requireDevice(createVoiceRoom(deps)))

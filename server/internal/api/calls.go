@@ -313,6 +313,11 @@ func endCall(deps callsDeps) http.HandlerFunc {
 			return
 		}
 		id, _ := auth.FromContext(r.Context())
+		// Групповой: уход одного звонок не кончает (ГЗ2). Для всех — `control stop`.
+		if call.Type == "group" && call.GroupID != "" {
+			leaveRoomCall(deps, w, r, call, id)
+			return
+		}
 		if call.InitiatorID != id.UserID && call.PeerID != id.UserID {
 			writeErr(w, http.StatusForbidden, "not_participant", "завершить может участник звонка")
 			return

@@ -86,6 +86,9 @@ type groupsDeps struct {
 	store    GroupStore
 	limiter  func() *ratelimit.Limiter
 	notifier *Notifier
+	// callTTL — срок временной группы звонка от последнего звонка (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ,
+	// решение 1). Функцией: cmd/tima заполняет правила после Register.
+	callTTL func() time.Duration
 }
 
 // RegisterGroups — шестнадцать маршрутов групп.
@@ -95,8 +98,9 @@ func RegisterGroups(
 	limit func() *ratelimit.Limiter,
 	n *Notifier,
 	requireDevice Middleware,
+	callTTL func() time.Duration,
 ) {
-	deps := groupsDeps{store: st, limiter: limit, notifier: n}
+	deps := groupsDeps{store: st, limiter: limit, notifier: n, callTTL: callTTL}
 
 	mux.HandleFunc("POST /api/v1/groups", requireDevice(createGroup(deps)))
 	mux.HandleFunc("GET /api/v1/groups", requireDevice(listMyGroups(deps)))

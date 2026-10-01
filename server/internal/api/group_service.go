@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"tima/server/internal/auth"
 	"tima/server/internal/store"
@@ -61,6 +62,9 @@ func createGroup(deps groupsDeps) http.HandlerFunc {
 			SlowModeSec   int32  `json:"slow_mode_sec"`
 			Premoderation bool   `json:"premoderation"`
 			ThreadsOnly   bool   `json:"threads_only"`
+			// CallTemp — временная группа звонка (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ1): живёт срок
+			// от последнего звонка и удаляется вместе с перепиской. Только личная.
+			CallTemp bool `json:"call_temp"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -78,9 +82,23 @@ func createGroup(deps groupsDeps) http.HandlerFunc {
 			return
 		}
 		id, _ := auth.FromContext(r.Context())
+		var ttlUntil *time.Time
+		if req.CallTemp {
+			if req.Kind != "private" {
+				writeErr(w, http.StatusBadRequest, "bad_kind", "временная группа звонка — только личная")
+				return
+			}
+			ttl := 12 * time.Hour
+			if deps.callTTL != nil {
+				ttl = deps.callTTL()
+			}
+			until := time.Now().Add(ttl).UTC()
+			ttlUntil = &until
+		}
 		groupID, err := deps.store.CreateGroup(r.Context(), store.Group{
 			Kind: req.Kind, Title: req.Title, Description: req.Description, OwnerID: id.UserID,
 			SlowModeSec: req.SlowModeSec, Premoderation: req.Premoderation, ThreadsOnly: req.ThreadsOnly,
+			CallTTLUntil: ttlUntil,
 		})
 		if err != nil {
 			log.Printf("createGroup: %v", err)
@@ -89,7 +107,11 @@ func createGroup(deps groupsDeps) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(map[string]any{"group_id": groupID})
+		answer := map[string]any{"group_id": groupID}
+		if ttlUntil != nil {
+			answer["call_ttl_until"] = ttlUntil.Format(time.RFC3339)
+		}
+		_ = json.NewEncoder(w).Encode(answer)
 	}
 }
 
@@ -113,7 +135,7 @@ func listMyGroups(deps groupsDeps) http.HandlerFunc {
 }
 
 func groupJSON(g store.Group, myRole string) map[string]any {
-	return map[string]any{
+	m := map[string]any{
 		"group_id": g.GroupID, "kind": g.Kind, "title": g.Title, "description": g.Description,
 		"owner_id": g.OwnerID, "slow_mode_sec": g.SlowModeSec,
 		"premoderation": g.Premoderation, "threads_only": g.ThreadsOnly, "my_role": myRole,
@@ -121,6 +143,12 @@ func groupJSON(g store.Group, myRole string) map[string]any {
 		// для того, чтобы не предлагать внести уже внесённое.
 		"community_id": g.CommunityID,
 	}
+	// Временная группа звонка: когда удалится (решение 11 — «удалится через N ч»).
+	// Поле новое и только у временной: строка обычной группы не меняется.
+	if g.CallTTLUntil != nil {
+		m["call_ttl_until"] = g.CallTTLUntil.UTC().Format(time.RFC3339)
+	}
+	return m
 }
 
 // getGroup — GET /groups/{groupID}. Ответ участнику прежний, поле в поле.
