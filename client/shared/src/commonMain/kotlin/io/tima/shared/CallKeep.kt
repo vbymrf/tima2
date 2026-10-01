@@ -70,5 +70,15 @@ object CallKeep {
         for (k in kept.values) k.host.appVisible(visible)
     }
 
+    /**
+     * Человек закрыл окно сам («Назад», «Выйти») — следующее открытие начинается с окна 1, как
+     * задумано («личная связь — то, ради чего открывают чаще всего»). Открытое окно хранится
+     * у процесса ради пересоздания системой, а не ради выхода: до 2026-10-01 оно переживало и
+     * выход — и приложение открывалось на стенде.
+     */
+    fun windowsFromStart() {
+        for (w in windows.values) w.value = Window.Phone
+    }
+
     fun window(deviceId: String): MutableState<Window> = windows.getOrPut(deviceId) { mutableStateOf(Window.Phone) }
 }

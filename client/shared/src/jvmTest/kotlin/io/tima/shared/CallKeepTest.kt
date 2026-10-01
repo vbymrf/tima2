@@ -26,4 +26,13 @@ class CallKeepTest {
     fun новое_устройство_начинает_с_телефона() {
         assertEquals(Window.Phone, CallKeep.window("проверка-нового").value)
     }
+
+    @Test
+    fun закрыл_человек_следующее_открытие_с_телефона() {
+        CallKeep.window("проверка-выхода").value = Window.Bench
+
+        CallKeep.windowsFromStart()
+
+        assertEquals(Window.Phone, CallKeep.window("проверка-выхода").value)
+    }
 }
