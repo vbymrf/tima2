@@ -121,3 +121,30 @@ func (s *Store) SetDeviceAttestation(ctx context.Context, userID, deviceID, stat
 	}
 	return nil
 }
+
+// CertifiedDevices — какие из устройств заверены действующей цепочкой (ДУ3): свидетельство
+// ключом личности или неотозванным ключом подписи устройств.
+func (s *Store) CertifiedDevices(ctx context.Context, deviceIDs []string) (map[string]bool, error) {
+	out := make(map[string]bool, len(deviceIDs))
+	if len(deviceIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT d.device_id::text FROM devices d
+		WHERE d.device_id::text = ANY($1) AND d.revoked_at IS NULL
+		  AND (d.cert_by = 'identity'
+		       OR (d.cert_by = 'ask' AND EXISTS (SELECT 1 FROM account_signing_keys k
+		                                         WHERE k.ask_id = d.cert_ask_id AND k.revoked_at IS NULL)))`, deviceIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}

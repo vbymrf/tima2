@@ -494,3 +494,44 @@ func TestAttestationRecordsWithoutRefusing(t *testing.T) {
 		t.Fatalf("итог аттестации не записан: %+v", mine.Devices)
 	}
 }
+
+// Полнота получателей ключа группы (ADR-0017 §6, ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ часть 3): ротация,
+// пропустившая устройство участника, — отказ; в строгом режиме обязаны только заверенные.
+func TestRotationMissingRecipientIsRefused(t *testing.T) {
+	ts, srv := setup(t)
+	srv.DeviceTrust = trustRecord
+	admin := registerDevice(t, ts, "+79990000301")
+	member := registerDevice(t, ts, "+79990000302")
+	g := createGroupAPI(t, ts, admin.token)
+	addMemberAPI(t, ts, admin.token, g, member.userID, "member")
+	if _, code := doRotate(t, ts, admin.token, g, 1, "periodic", []*device{admin}); code != http.StatusConflict {
+		t.Fatalf("без устройства участника: ожидался 409, получен %d", code)
+	}
+	if _, code := doRotate(t, ts, admin.token, g, 1, "periodic", []*device{admin, member}); code != 200 && code != 201 {
+		t.Fatalf("полная ротация: %d", code)
+	}
+	// Строгий режим: незаверенные устройства не обязаны получать ключ.
+	srv.DeviceTrust = trustRequire
+	if _, code := doRotate(t, ts, admin.token, g, 2, "member_leave", []*device{}); code == http.StatusConflict {
+		t.Fatalf("в строгом режиме незаверенные не обязательны, а получен 409")
+	}
+}
+
+// Версия ключа депозитария в конверте — из реестра (ADR-0012): где депозитарий настроен,
+// неизвестная — отказ; в тестах (депозитарий не настроен) проверки нет.
+func TestUnknownEscrowKeyRefusedWhenEscrowConfigured(t *testing.T) {
+	ts, srv := setup(t)
+	a := registerDevice(t, ts, "+79990000303")
+	b := registerDevice(t, ts, "+79990000304")
+	resp := post(t, ts, sealEnvelope(t, a, []*device{b}, 3031, []byte("один")), a.token, "eeeeeeee-0000-0000-0000-000000003031")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("без депозитария: ожидался 201, получен %d", resp.StatusCode)
+	}
+	srv.EscrowURL = "http://escrow.invalid"
+	resp = post(t, ts, sealEnvelope(t, a, []*device{b}, 3032, []byte("два")), a.token, "eeeeeeee-0000-0000-0000-000000003032")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("неизвестный ключ депозитария: ожидался 400, получен %d", resp.StatusCode)
+	}
+}

@@ -120,7 +120,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 			return nil
 		}
 		return s.Events
-	}, s.notifier(), s.requireActiveDevice)
+	}, s.notifier(), s.requireActiveDevice, func() bool { return s.EscrowURL != "" })
 	// Чаты: архив, копии и восстановление истории (шаг 4).
 	RegisterChats(mux, s.Store, s.notifier(), s.requireActiveDevice)
 	mux.HandleFunc("GET /api/v1/keys/devices", s.requireActiveDevice(s.listDeviceKeys))
@@ -141,7 +141,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// Группы: состав, сообщения и ключи (шаг 4). Три файла держатся вместе
 	// инвариантом ротации: смена состава обязана менять ключ.
 	RegisterGroups(mux, s.Store, func() *ratelimit.Limiter { return s.Limit }, s.notifier(), s.requireActiveDevice,
-		func() time.Duration { return s.CallGroups.orDefault().TTL })
+		func() time.Duration { return s.CallGroups.orDefault().TTL },
+		func() string { return NormalizeDeviceTrust(s.DeviceTrust) })
 	// Медиа (шаг 4): вместе с маршрутами уехало поле Blob.
 	RegisterMedia(mux, s.Store, func() *blob.Client { return s.Blob }, s.requireActiveDevice)
 	// Каналы — первая группа, вынесенная в registrar (шаг 4 программы). Дальше
@@ -231,6 +232,16 @@ func postMessage(deps messagesDeps) http.HandlerFunc {
 		if msg := validateEnvelope(&env); msg != "" {
 			writeErr(w, http.StatusBadRequest, "bad_envelope", msg)
 			return
+		}
+		// Ключ депозитария, на который завёрнут ключ сообщения, обязан быть из реестра (ADR-0012
+		// «Что осталось»; ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ, часть 3): иначе копия для ордера ложится под
+		// ключ, которого у анклава нет, — и сообщение молча выпадает из депозитария. Проверка —
+		// там, где депозитарий настроен; без него (тесты, разработка) реестр пуст.
+		if deps.escrowOn != nil && deps.escrowOn() {
+			if _, err := deps.store.EscrowKeyEpoch(r.Context(), env.GetEscrow().GetEscrowKeyVersion()); errors.Is(err, store.ErrEscrowKeyUnknown) {
+				writeErr(w, http.StatusBadRequest, "unknown_escrow_key", "ключ депозитария этой версии неизвестен — обновите конфигурацию депозитария")
+				return
+			}
 		}
 		meta := env.GetMeta()
 

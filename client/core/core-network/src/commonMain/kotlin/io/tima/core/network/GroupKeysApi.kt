@@ -81,6 +81,9 @@ class GroupKeysApi(
             // перечитать состав. Это единственный отказ, который означает «данные у нас
             // старые», а не «нам нельзя».
             code == "recipient_not_member" -> RotateResult.StaleMembers
+            // Обратное: ключ не упакован для устройства участника (ADR-0017 §6). Тоже «наш
+            // список устройств устарел» — перечитать и повторить.
+            code == "missing_recipients" -> RotateResult.StaleMembers
             else -> RotateResult.Refused(response.status.value, code)
         }
     }

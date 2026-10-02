@@ -206,7 +206,9 @@ const (
 	// ListGroupClaims, ConfirmGroupClaim), отмена (CancelNewerIdentities), заверенность
 	// устройства для отмены (DeviceCertified). Потребитель — узкий IdentityCancelStore.
 	// 242 → 243: итог аттестации устройства (0063, ДУ8) — SetDeviceAttestation.
-	storeMethodBudget = 243
+	// 243 → 244: какие устройства заверены (ДУ3) — полнота получателей ключа группы в строгом
+	// режиме (CertifiedDevices).
+	storeMethodBudget = 244
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
 )

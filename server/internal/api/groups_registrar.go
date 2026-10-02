@@ -69,6 +69,9 @@ type GroupStore interface {
 
 	// Устройства участников: покрытие ротации и адресаты уведомлений
 	ActiveMemberDevices(ctx context.Context, groupID, exceptDevice string) ([]string, error)
+	// Какие из устройств заверены цепочкой доверия (ДУ3) — в строгом режиме ключ группы
+	// получают только они.
+	CertifiedDevices(ctx context.Context, deviceIDs []string) (map[string]bool, error)
 	NonMemberDevices(ctx context.Context, groupID string, deviceIDs []string) ([]string, error)
 	IsGroupMemberDevice(ctx context.Context, groupID, deviceID string) (bool, error)
 	DeviceEncryptionPub(ctx context.Context, deviceID string) ([]byte, error)
@@ -89,6 +92,8 @@ type groupsDeps struct {
 	// callTTL — срок временной группы звонка от последнего звонка (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ,
 	// решение 1). Функцией: cmd/tima заполняет правила после Register.
 	callTTL func() time.Duration
+	// trust — режим доверия к устройствам: от него зависит, кому обязан дойти ключ группы.
+	trust func() string
 }
 
 // RegisterGroups — шестнадцать маршрутов групп.
@@ -99,8 +104,9 @@ func RegisterGroups(
 	n *Notifier,
 	requireDevice Middleware,
 	callTTL func() time.Duration,
+	trust func() string,
 ) {
-	deps := groupsDeps{store: st, limiter: limit, notifier: n, callTTL: callTTL}
+	deps := groupsDeps{store: st, limiter: limit, notifier: n, callTTL: callTTL, trust: trust}
 
 	mux.HandleFunc("POST /api/v1/groups", requireDevice(createGroup(deps)))
 	mux.HandleFunc("GET /api/v1/groups", requireDevice(listMyGroups(deps)))

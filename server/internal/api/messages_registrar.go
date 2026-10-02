@@ -22,6 +22,7 @@ type MessageStore interface {
 	SigningKey(ctx context.Context, deviceID, userID string) ([]byte, error)
 	ChatHelperDevices(ctx context.Context, chatID, requesterDevice, requesterUser string) ([]store.ChatHelper, error)
 	UsersOfDevices(ctx context.Context, deviceIDs []string) (map[string]string, error)
+	EscrowKeyEpoch(ctx context.Context, id uint32) (string, error)
 }
 
 var _ MessageStore = (*store.Store)(nil)
@@ -35,6 +36,8 @@ type messagesDeps struct {
 	store    MessageStore
 	bus      func() Publisher
 	notifier *Notifier
+	// escrowOn — депозитарий настроен: версия ключа депозитария в конверте проверяется по реестру.
+	escrowOn func() bool
 }
 
 // RegisterMessages — четыре маршрута: отправка, чтение, прочитано, печатает.
@@ -44,8 +47,9 @@ func RegisterMessages(
 	bus func() Publisher,
 	n *Notifier,
 	requireDevice Middleware,
+	escrowOn func() bool,
 ) {
-	deps := messagesDeps{store: st, bus: bus, notifier: n}
+	deps := messagesDeps{store: st, bus: bus, notifier: n, escrowOn: escrowOn}
 
 	mux.HandleFunc("POST /api/v1/messages", requireDevice(postMessage(deps)))
 	mux.HandleFunc("GET /api/v1/chats/{chatID}/messages", requireDevice(listMessages(deps)))

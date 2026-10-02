@@ -177,23 +177,38 @@ func groupRotate(deps groupsDeps) http.HandlerFunc {
 			return
 		}
 
-		// Полнота получателей (ADR-0017 §6). Пока считаем и пишем в журнал, не отвергая:
-		// сегодняшний клиент такую ротацию присылать может, а сервер обязан работать со
-		// старым клиентом. Отказ missing_recipients включается после выката клиента.
+		// Полнота получателей (ADR-0017 §6) — отказ, а не запись в журнал (ПЛАН-УСТРОЙСТВ-И-
+		// ИСТОРИИ, часть 3): устройство без обёртки перестаёт читать группу молча, и для человека
+		// это выглядит как «в группе тихо». В строгом режиме доверия обязаны получить только
+		// заверенные устройства — незаверенным клиент ключ не упаковывает (ДУ3).
 		if all, err := deps.store.ActiveMemberDevices(r.Context(), r.PathValue("groupID"), ""); err != nil {
 			log.Printf("groupRotate: устройства участников: %v", err)
 		} else {
+			expected := all
+			if deps.trust != nil && deps.trust() == trustRequire {
+				certified, cerr := deps.store.CertifiedDevices(r.Context(), all)
+				if cerr != nil {
+					log.Printf("groupRotate: заверенные устройства: %v", cerr)
+				}
+				expected = nil
+				for _, dev := range all {
+					if certified[dev] {
+						expected = append(expected, dev)
+					}
+				}
+			}
 			uncovered := make([]string, 0)
-			for _, dev := range all {
+			for _, dev := range expected {
 				if _, ok := wrapped[dev]; !ok {
 					uncovered = append(uncovered, dev)
 				}
 			}
 			if len(uncovered) > 0 {
-				// Это не мелочь: устройство без обёртки перестаёт читать группу молча —
-				// для человека это выглядит как «в группе тихо», а не как отказ.
-				log.Printf("groupRotate: группа %s версия %d — без обёрток остались устройства: %s",
+				log.Printf("groupRotate: группа %s версия %d — без обёрток устройства: %s — отказ",
 					r.PathValue("groupID"), req.GKVersion, strings.Join(uncovered, ", "))
+				writeErr(w, http.StatusConflict, "missing_recipients",
+					"ключ группы не упакован для устройств участников: "+strings.Join(uncovered, ", "))
+				return
 			}
 		}
 
