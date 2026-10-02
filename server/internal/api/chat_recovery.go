@@ -227,3 +227,45 @@ func chatRecoverProvide(deps chatsDeps) http.HandlerFunc {
 		_ = json.NewEncoder(w).Encode(map[string]any{"saved": len(keys)})
 	}
 }
+
+// listPersonalChats — GET /chats/personal: мои личные переписки и собеседник каждой
+// (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ ИУ1). Новое устройство по нему заводит строки списка и забирает
+// историю, которую ему перезавернуло своё доверенное устройство.
+//
+// Список собеседников — это сведения о человеке, а не только о переписке. В строгом режиме
+// доверия его получает только заверенное устройство: укравший SIM иначе узнал бы, с кем
+// человек переписывается, даже не читая сообщений.
+func listPersonalChats(deps chatsDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		if deps.trust != nil && deps.trust() == trustRequire {
+			ok, err := deps.store.DeviceCertified(r.Context(), id.UserID, id.DeviceID)
+			if err != nil {
+				log.Printf("listPersonalChats: certified: %v", err)
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+				return
+			}
+			if !ok {
+				writeErr(w, http.StatusForbidden, "device_unproven", "устройство не заверено — список переписок не выдаётся")
+				return
+			}
+		}
+		chats, err := deps.store.PersonalChatsOf(r.Context(), id.UserID)
+		if err != nil {
+			log.Printf("listPersonalChats: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		type item struct {
+			ChatID        string `json:"chat_id"`
+			PeerID        string `json:"peer_id"`
+			LastMessageID uint64 `json:"last_message_id"`
+		}
+		out := make([]item, 0, len(chats))
+		for _, c := range chats {
+			out = append(out, item{ChatID: c.ChatID, PeerID: c.PeerID, LastMessageID: c.LastMessageID})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"chats": out})
+	}
+}

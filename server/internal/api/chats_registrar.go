@@ -27,6 +27,10 @@ type ChatStore interface {
 	IsChatParticipantDevice(ctx context.Context, chatID, deviceID string) (bool, error)
 	DeviceEncryptionPub(ctx context.Context, deviceID string) ([]byte, error)
 	IdentityPub(ctx context.Context, userID string) ([]byte, error)
+
+	// История на новом устройстве (ИУ1)
+	PersonalChatsOf(ctx context.Context, userID string) ([]store.PersonalChatRef, error)
+	DeviceCertified(ctx context.Context, userID, deviceID string) (bool, error)
 }
 
 var _ ChatStore = (*store.Store)(nil)
@@ -34,11 +38,16 @@ var _ ChatStore = (*store.Store)(nil)
 type chatsDeps struct {
 	store    ChatStore
 	notifier *Notifier
+	// trust — режим доверия к устройствам: в строгом список переписок получает только
+	// заверенное устройство.
+	trust func() string
 }
 
-// RegisterChats — семь маршрутов архива и восстановления.
-func RegisterChats(mux *http.ServeMux, st ChatStore, n *Notifier, requireDevice Middleware) {
-	deps := chatsDeps{store: st, notifier: n}
+// RegisterChats — восемь маршрутов архива и восстановления.
+func RegisterChats(mux *http.ServeMux, st ChatStore, n *Notifier, requireDevice Middleware, trust func() string) {
+	deps := chatsDeps{store: st, notifier: n, trust: trust}
+
+	mux.HandleFunc("GET /api/v1/chats/personal", requireDevice(listPersonalChats(deps)))
 
 	mux.HandleFunc("GET /api/v1/chats/archived", requireDevice(listArchivedChats(deps)))
 	mux.HandleFunc("PUT /api/v1/chats/{chatID}/archive", requireDevice(archiveChat(deps)))

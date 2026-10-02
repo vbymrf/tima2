@@ -126,7 +126,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 		return s.Events
 	}, s.notifier(), s.requireActiveDevice, func() bool { return s.EscrowURL != "" })
 	// Чаты: архив, копии и восстановление истории (шаг 4).
-	RegisterChats(mux, s.Store, s.notifier(), s.requireActiveDevice)
+	RegisterChats(mux, s.Store, s.notifier(), s.requireActiveDevice, func() string { return NormalizeDeviceTrust(s.DeviceTrust) })
 	mux.HandleFunc("GET /api/v1/keys/devices", s.requireActiveDevice(s.listDeviceKeys))
 	// Люди и аккаунт (шаг 4): справочник, имена, личности, удаление.
 	RegisterUsers(mux, s.Store, func() IdentityTokens { return s.Auth },

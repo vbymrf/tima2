@@ -210,7 +210,9 @@ const (
 	// режиме (CertifiedDevices).
 	// 244 → 245: группы с ключом прошлой эпохи — плановая смена по расписанию (ADR-0017 §3,
 	// GroupsWithStaleEpoch).
-	storeMethodBudget = 245
+	// 245 → 246: личные переписки личности — история на новом устройстве (ИУ1,
+	// PersonalChatsOf).
+	storeMethodBudget = 246
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
 )

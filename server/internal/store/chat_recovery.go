@@ -143,3 +143,47 @@ func (s *Store) SaveRecoveryMessageKeys(ctx context.Context, chatID, recipient s
 	}
 	return nil
 }
+
+// PersonalChatRef — личная переписка, в которой участвует личность: с кем и докуда.
+type PersonalChatRef struct {
+	ChatID        string
+	PeerID        string
+	LastMessageID uint64
+}
+
+// PersonalChatsOf — личные переписки личности (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ ИУ1): новое устройство
+// узнаёт, какие у него переписки и с кем. Участие выводится так же, как в
+// IsChatParticipant, — по отправленным и по обёрткам ключей на свои устройства. Собеседник —
+// другая сторона; переписка с самим собой отдаётся с собеседником-собой.
+func (s *Store) PersonalChatsOf(ctx context.Context, userID string) ([]PersonalChatRef, error) {
+	rows, err := s.pool.Query(ctx, `
+		WITH mine AS (
+		  SELECT DISTINCT k.chat_id FROM personal_message_keys k
+		    JOIN devices d ON d.device_id = k.recipient WHERE d.user_id = $1
+		  UNION
+		  SELECT DISTINCT chat_id FROM personal_messages WHERE sender_id = $1
+		)
+		SELECT c.chat_id::text,
+		  COALESCE(
+		    (SELECT m.sender_id::text FROM personal_messages m WHERE m.chat_id = c.chat_id AND m.sender_id <> $1 LIMIT 1),
+		    (SELECT d.user_id::text FROM personal_message_keys k JOIN devices d ON d.device_id = k.recipient
+		       WHERE k.chat_id = c.chat_id AND d.user_id <> $1 LIMIT 1),
+		    $1::text),
+		  COALESCE((SELECT max(m.message_id) FROM personal_messages m WHERE m.chat_id = c.chat_id AND NOT m.deleted), 0)
+		FROM mine c`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PersonalChatRef
+	for rows.Next() {
+		var r PersonalChatRef
+		var last int64
+		if err := rows.Scan(&r.ChatID, &r.PeerID, &last); err != nil {
+			return nil, err
+		}
+		r.LastMessageID = uint64(last)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
