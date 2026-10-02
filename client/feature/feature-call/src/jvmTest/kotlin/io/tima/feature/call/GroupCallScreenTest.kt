@@ -65,6 +65,7 @@ class GroupCallScreenTest {
             GroupBenchJournal(line, tiles, onClose = {})
         }
         capture("групповой-полоса-стенда", 400, 80, dark = false) { GroupBenchStrip(line, onJournal = {}) }
+        capture("полоса-стенда-динамик-выключен", 400, 100, dark = false) { BenchStrip(line.copy(speakerOff = true)) }
         val empty = capture("групповой-журнал-стенда-пусто", 400, 500, dark = false) {
             GroupBenchJournal(line, emptyList(), onClose = {})
         }

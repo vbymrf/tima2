@@ -2377,6 +2377,7 @@ private fun App(
                             total = benchState.total,
                             preset = benchState.preset.name,
                             last = benchState.samples.lastOrNull(),
+                            speakerOff = benchState.speakerOff,
                         )
                     } else {
                         null
@@ -2693,6 +2694,8 @@ private fun App(
                     probeStep = benchState.probeStep,
                     probeFile = benchState.probeFile,
                     onProbe = bench::probe,
+                    speakerOff = benchState.speakerOff,
+                    onSpeakerOff = bench::speakerOff,
                     // Жест тот же, что у окна 0, и по той же причине: у стенда нет оправы
                     // с шапкой, а окно, из которого нельзя выйти пальцем, — не окно.
                     modifier = Modifier.windowSwipe(

@@ -36,6 +36,8 @@ data class BenchLine(
     val total: Int,
     val preset: String,
     val last: BenchSample? = null,
+    /** Динамик выключен стендом — звук с сервера не играет (заказчик 2026-10-02). */
+    val speakerOff: Boolean = false,
 )
 
 /**
@@ -86,8 +88,21 @@ internal fun BenchStrip(line: BenchLine, modifier: Modifier = Modifier) {
                 live = true,
             )
         }
+        if (line.speakerOff) SpeakerOffLine()
         if (expanded) Numbers(line.last)
     }
+}
+
+/** Событие стенда: динамик выключен. Красным — иначе тишину примут за поломку звонка. */
+@Composable
+private fun SpeakerOffLine() {
+    Caption(
+        text = Tima.words.bench.speakerOffNow,
+        fontSize = TimaType.sz5,
+        weight = FontWeight.SemiBold,
+        color = Tima.colors.alarm,
+        lineOne = true,
+    )
 }
 
 /**
@@ -111,6 +126,11 @@ internal fun BenchStrip(line: BenchLine, modifier: Modifier = Modifier) {
 @Composable
 internal fun GroupBenchStrip(line: BenchLine, onJournal: () -> Unit, modifier: Modifier = Modifier) {
     if (line.at <= 0 || line.total <= 0) return
+    Column(modifier.fillMaxWidth()) { GroupBenchRow(line, onJournal) }
+}
+
+@Composable
+private fun GroupBenchRow(line: BenchLine, onJournal: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.fillMaxWidth().background(Tima.colors.softAccent)
             .padding(horizontal = TimaSpacing.about3, vertical = 4.dp),
@@ -125,6 +145,11 @@ internal fun GroupBenchStrip(line: BenchLine, onJournal: () -> Unit, modifier: M
             modifier = Modifier.weight(1f),
         )
         io.tima.core.ui.Button(label = Tima.words.groupCall.benchJournal, onClick = onJournal, kind = io.tima.core.ui.ButtonKind.Quiet)
+    }
+    if (line.speakerOff) {
+        Row(Modifier.fillMaxWidth().background(Tima.colors.softAccent).padding(horizontal = TimaSpacing.about3, vertical = 2.dp)) {
+            SpeakerOffLine()
+        }
     }
 }
 

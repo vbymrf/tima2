@@ -771,6 +771,41 @@ class LiveKitCallEngine(
         pickRemote(live)
     }
 
+    /** Звук с сервера молчит (стенд). Новые дорожки получают то же — см. [watchRemoteAudio]. */
+    @Volatile
+    private var remoteSilent = false
+
+    override suspend fun setRemoteAudioSilent(silent: Boolean) {
+        if (remoteSilent == silent) return
+        remoteSilent = silent
+        Journal.note(LogCode.CALL, "стенд: звук с сервера", "играет" to !silent)
+        room?.let { applyRemoteVolume(it) }
+    }
+
+    /** Громкость каждой чужой звуковой дорожки: 0 — молчит, 1 — как обычно. */
+    private fun applyRemoteVolume(room: Room) {
+        val volume = if (remoteSilent) 0.0 else 1.0
+        for (who in room.remoteParticipants.values) {
+            for ((_, track) in who.audioTrackPublications) {
+                (track as? io.livekit.android.room.track.RemoteAudioTrack)?.setVolume(volume)
+            }
+        }
+    }
+
+    /** Следить за чужим звуком: вошедший позже или включивший микрофон тоже молчит. */
+    private fun watchRemoteAudio(room: Room) {
+        watchers += scope.launch {
+            room::remoteParticipants.flow.collectLatest { participants ->
+                applyRemoteVolume(room)
+                coroutineScope {
+                    for (who in participants.values) {
+                        launch { who::audioTrackPublications.flow.collect { applyRemoteVolume(room) } }
+                    }
+                }
+            }
+        }
+    }
+
     override suspend fun setMicrophone(on: Boolean) {
         val done = attempt { room?.localParticipant?.setMicrophoneEnabled(on) }
         // Состояние меняется, только если дорожка действительно поднялась. Иначе экран
@@ -997,6 +1032,7 @@ class LiveKitCallEngine(
         }
         watchLocalVideo(room)
         watchRemoteVideo(room)
+        watchRemoteAudio(room)
         watchOutgoing(room)
         // Групповой — по каждому участнику (заказчик 2026-10-01): общий наблюдатель смотрел
         // на одну случайную дорожку, и в журнале был виден только один из участников.

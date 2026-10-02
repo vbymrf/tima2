@@ -885,6 +885,10 @@ interface BenchWords {
     fun probeGoing(step: String): String
     fun probeSaved(path: String): String
     val runsBySelf: String
+    /** «Отключить динамик» (заказчик 2026-10-02): звук с сервера не играет во время прогона. */
+    val speakerOff: String
+    val speakerOffAbout: String
+    val speakerOffNow: String
 
     /** Вооружить забег: пока не нажато, звонок идёт как обычный. */
     val arm: String
@@ -2318,6 +2322,10 @@ object RussianWords : Words {
         override fun probeSaved(path: String) = "Отчёт пробы: $path"
         override val runsBySelf =
             "Запись идёт сама, пока идёт разговор, и файл пишется, когда он кончится"
+        override val speakerOff = "Отключить динамик"
+        override val speakerOffAbout =
+            "Во время прогона звук с сервера принимается и считается, но не играет — телефоны на одном столе не слышат друг друга"
+        override val speakerOffNow = "Динамик выключен — звук с сервера не играет"
         override val skip = "Не учитывать первых секунд"
         override fun runAt(at: Int, total: Int) = "Прогон $at из $total"
         override val ringAbout =

@@ -94,6 +94,9 @@ fun BenchScreen(
     /** Куда лёг отчёт последней пробы. */
     probeFile: String? = null,
     onProbe: () -> Unit = {},
+    /** «Отключить динамик» и его переключение. */
+    speakerOff: Boolean = false,
+    onSpeakerOff: (Boolean) -> Unit = {},
 ) {
     val words = Tima.words.bench
     Column(
@@ -107,6 +110,7 @@ fun BenchScreen(
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
     ) {
         Arming(armed, onArm)
+        SpeakerOff(speakerOff, onSpeakerOff)
         Publishing(preset, onChange)
         Saving(preset, presets, onChange, onSave, onForget, onStep)
         Applying(inCall, onApply)
@@ -231,6 +235,20 @@ private fun Arming(armed: Boolean, onArm: (Boolean) -> Unit) {
         )
         Tertiary(if (armed) words.armAbout else words.idleAbout)
     }
+}
+
+/** «Отключить динамик» — галочкой, рядом с «Начать прогон»: действует только в прогоне. */
+@Composable
+private fun SpeakerOff(on: Boolean, onChange: (Boolean) -> Unit) {
+    val words = Tima.words.bench
+    io.tima.core.ui.ListLine(
+        onClick = { onChange(!on) },
+        left = { io.tima.core.ui.CheckMark(on) },
+        middle = {
+            io.tima.core.ui.Caption(words.speakerOff, fontSize = io.tima.core.ui.TimaType.sz4, weight = if (on) FontWeight.Bold else FontWeight.Normal)
+            Tertiary(words.speakerOffAbout)
+        },
+    )
 }
 
 @Composable

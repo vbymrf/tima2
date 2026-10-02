@@ -378,6 +378,10 @@ object EnglishWords : Words {
         override fun probeSaved(path: String) = "Probe report: $path"
         override val runsBySelf =
             "Recording goes by itself while the call is on, and the file is written when it ends"
+        override val speakerOff = "Turn off the speaker"
+        override val speakerOffAbout =
+            "During a run, sound from the server is received and counted but not played — phones on one desk don't hear each other"
+        override val speakerOffNow = "Speaker off — sound from the server isn't played"
         override val skip = "Skip the first seconds"
         override fun runAt(at: Int, total: Int) = "Run $at of $total"
         override val ringAbout =

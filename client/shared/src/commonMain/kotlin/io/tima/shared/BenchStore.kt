@@ -31,6 +31,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -80,9 +82,24 @@ class BenchStore(
                     // Пресет читается отдельным ключом от флага — см. заголовок.
                     preset = all[KEY_PRESET]?.let { presetFromWire(it) } ?: DEFAULT,
                     skip = all[KEY_SKIP]?.toIntOrNull()?.coerceIn(0, 60) ?: SKIP_DEFAULT,
+                    speakerOff = all[KEY_SPEAKER_OFF] == YES,
                 )
             }
             .launchIn(scope)
+
+        // ── «ОТКЛЮЧИТЬ ДИНАМИК» — ТОЛЬКО ВО ВРЕМЯ ПРОГОНА ──────────────────────
+        //
+        // Заказчик 2026-10-02: несколько телефонов на одном столе слышат друг друга. Настройка
+        // стенда; действует, когда нажата «Начать прогон» и идёт разговор. Глушится только
+        // пришедшее с сервера — в остальную работу телефона стенд не вмешивается.
+        engine?.let { e ->
+            combine(_state, e.state) { bench, live ->
+                bench.armed && bench.speakerOff && live.stage == CallStage.Connected
+            }
+                .distinctUntilChanged()
+                .onEach { silent -> e.setRemoteAudioSilent(silent) }
+                .launchIn(scope)
+        }
 
         reload()
 
@@ -254,6 +271,12 @@ class BenchStore(
         }
     }
 
+    /** «Отключить динамик» — настройка стенда, действует во время прогона. */
+    fun speakerOff(on: Boolean) {
+        scope.launch { settings.put(KEY_SPEAKER_OFF, if (on) YES else NO) }
+        Journal.note(LogCode.CALL, "стенд: отключить динамик", "включено" to on)
+    }
+
     fun skipSeconds(seconds: Int) {
         val clean = seconds.coerceIn(0, 60)
         scope.launch { settings.put(KEY_SKIP, clean.toString()) }
@@ -394,6 +417,7 @@ class BenchStore(
         /** Наборы жили здесь до 2026-09-21; ключ остался ради переноса в файл. */
         const val KEY_PRESETS = "call.bench.presets"
         const val KEY_SKIP = "call.bench.skip"
+        const val KEY_SPEAKER_OFF = "call.bench.speaker_off"
 
         /**
          * Вооружён ли забег. Переживает перезапуск (решение заказчика 2026-09-23):
@@ -445,6 +469,8 @@ data class BenchState(
     val probeStep: String = "",
     /** Куда лёг отчёт последней пробы; `null` — пробы не было или записать не удалось. */
     val probeFile: String? = null,
+    /** «Отключить динамик»: во время прогона звук с сервера не играет. */
+    val speakerOff: Boolean = false,
 ) {
     /** Номер текущего набора в забеге, с единицы. `0` — набора нет в списке. */
     val at: Int get() = presets.indexOfFirst { it.name == preset.name } + 1

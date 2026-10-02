@@ -907,10 +907,36 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         if (list != _peers.value) _peers.value = list
     }
 
+    /** Чужие звуковые дорожки — чтобы заглушить их стендом. */
+    private val remoteAudio = mutableSetOf<Long>()
+
+    /** Звук с сервера молчит (стенд, «Отключить динамик»). */
+    @Volatile
+    private var remoteSilent = false
+
+    override suspend fun setRemoteAudioSilent(silent: Boolean) = withContext(worker) {
+        if (remoteSilent == silent) return@withContext
+        remoteSilent = silent
+        Journal.note(LogCode.CALL, "стенд: звук с сервера", "играет" to !silent)
+        for (handle in remoteAudio.toList()) enableRemote(handle, !silent)
+    }
+
+    /**
+     * Выключенная чужая дорожка принимается и раскодируется, но в ADM идёт тишина — у
+     * WebRTC это и есть «молчать, не отписываясь».
+     */
+    private fun enableRemote(handle: Long, on: Boolean) {
+        runCatching {
+            Ffi.request(FfiRequest(enable_remote_track = livekit.proto.EnableRemoteTrackRequest(track_handle = handle, enabled = on)))
+        }.onFailure { Journal.trouble(LogCode.CALL, "стенд: звук с сервера не переключился", "причина" to (it.message ?: "?")) }
+    }
+
     /** Чужая дорожка в групповом: видео — поток кадров на участника, звук играет ADM сам. */
     private fun onGroupSubscribed(identity: String, track: OwnedTrack) {
         if (track.info.kind != TrackKind.KIND_VIDEO) {
             owned += track.handle.id
+            remoteAudio += track.handle.id
+            if (remoteSilent) enableRemote(track.handle.id, false)
             return
         }
         val stream = runCatching {
@@ -975,6 +1001,8 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     private fun onSubscribed(track: OwnedTrack) {
         if (track.info.kind != TrackKind.KIND_VIDEO) {
             owned += track.handle.id
+            remoteAudio += track.handle.id
+            if (remoteSilent) enableRemote(track.handle.id, false)
             return
         }
         if (remote != null) stopRemote()

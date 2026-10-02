@@ -376,6 +376,10 @@ object SpanishWords : Words {
         override fun probeSaved(path: String) = "Informe de la prueba: $path"
         override val runsBySelf =
             "La grabación corre sola mientras dura la llamada, y el archivo se escribe cuando termina"
+        override val speakerOff = "Apagar el altavoz"
+        override val speakerOffAbout =
+            "Durante la prueba, el sonido del servidor se recibe y se cuenta, pero no suena: los teléfonos en una mesa no se oyen entre sí"
+        override val speakerOffNow = "Altavoz apagado: el sonido del servidor no suena"
         override val skip = "No contar los primeros segundos"
         override fun runAt(at: Int, total: Int) = "Prueba $at de $total"
         override val ringAbout =
