@@ -117,6 +117,20 @@ class KeysApi(
             }
         }
 
+    /** Аттестация ключа телефона — `POST /devices/me/attestation` (ДУ8). */
+    suspend fun sendAttestation(challengeToken: String, chain: List<ByteArray>, signature: ByteArray): TrustCallResult =
+        trustCall {
+            client.post(route.api("/api/v1/devices/me/attestation")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody(
+                    """{"challenge_token":"$challengeToken","kind":"android-key",""" +
+                        """"chain":[${chain.joinToString(",") { "\"" + encodeBase64Url(it) + "\"" }}],""" +
+                        """"signature":"${encodeBase64Url(signature)}"}""",
+                )
+            }
+        }
+
     /** Заверить своё другое устройство — `PUT /devices/{id}/certificate` (ДУ2). */
     suspend fun certifyDevice(deviceId: String, by: String, signature: ByteArray): TrustCallResult =
         trustCall {

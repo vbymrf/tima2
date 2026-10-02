@@ -288,6 +288,8 @@ class MainActivity : ComponentActivity() {
                 // ПК, не нужно: Android сам покажет установщик поверх, а замену пакета
                 // проведёт, когда сочтёт нужным.
                 installer = AndroidInstaller(applicationContext),
+                // Аттестация ключа телефона (ДУ8): сервер пока только записывает итог.
+                attester = AndroidAttester(applicationContext),
                 // Что телефон знает о себе для отчёта о проблеме. Производитель и модель
                 // решают половину разбора: «на realme не работает, на Xiaomi работает».
                 facts = ProblemFacts(

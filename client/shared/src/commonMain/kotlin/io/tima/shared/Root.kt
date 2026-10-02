@@ -351,6 +351,8 @@ fun Root(
      * хуже её отсутствия — по ней судят, что приложение сломано.
      */
     installer: UpdateInstaller? = null,
+    /** Аттестация ключа телефона (ДУ8); `null` — платформа не умеет. */
+    attester: DeviceAttester? = null,
     /** Установщик запущен — платформе пора закрыть приложение. */
     onLeaving: () -> Unit = {},
     /** «Закрыть приложение» — кнопка в рейке ПК и в подокне переходов, фон останавливается. `null` — кнопки нет. */
@@ -417,6 +419,7 @@ fun Root(
             linkCode = linkCode,
             transferCode = transferCode,
             installer = installer,
+            attester = attester,
             onLeaving = onLeaving,
             onExit = onExit,
             onLeave = onLeave,
@@ -481,6 +484,7 @@ private fun Inside(
     linkCode: String?,
     transferCode: String?,
     installer: UpdateInstaller?,
+    attester: DeviceAttester?,
     onLeaving: () -> Unit,
     onExit: (() -> Unit)?,
     onLeave: (() -> Unit)?,
@@ -555,6 +559,7 @@ private fun Inside(
         linkCode = linkCode,
         transferCode = transferCode,
         installer = installer,
+        attester = attester,
         onLeaving = onLeaving,
         onExit = onExit,
         onLeave = onLeave,
@@ -797,6 +802,8 @@ private fun App(
     transferCode: String? = null,
     /** Кто ставит обновление; `null` — платформа не умеет. См. пояснение у [Root]. */
     installer: UpdateInstaller? = null,
+    /** Аттестация ключа телефона (ДУ8); `null` — платформа не умеет. */
+    attester: DeviceAttester? = null,
     /** Установщик запущен — пора закрыть приложение. */
     onLeaving: () -> Unit = {},
     /** «Закрыть приложение» — кнопка в рейке ПК и в подокне переходов, фон останавливается. `null` — кнопки нет. */
@@ -1497,6 +1504,23 @@ private fun App(
     // только при открытии, и до того строки «кто создал» не было (проверка 2026-10-02).
     val callOwners by assembled.callOwners.collectAsState()
     // ДУ6: с номера начали заново (событие или проверка при запуске); заявки в группы.
+    // Аттестация ключа телефона (ДУ8, Р22): один раз на установку — сервер в режиме «записывать»
+    // видит, какие телефоны и прошивки проходят. Выключенный сервер ответит «пусто», и это не беда.
+    LaunchedEffect(assembled.session.userId, attester) {
+        val at = attester ?: return@LaunchedEffect
+        val key = "trust.attested.v1"
+        if (runCatching { environment.settings.all().first()[key] }.getOrNull() != null) return@LaunchedEffect
+        val token = network.directory.identityChallenge() ?: return@LaunchedEffect
+        val identity = deviceIdentityFrom(deviceSecret)
+        val signed = io.tima.core.encryption.DeviceTrustCheck.deviceCertBytes(identity.encryptionPublic, identity.signingPublic)
+        val proof = runCatching { at.attest(token, signed) }
+            .onFailure { Journal.trouble(LogCode.DEVICE_TRUST, "аттестация не сделалась", "причина" to (it.message ?: "?")) }
+            .getOrNull() ?: return@LaunchedEffect
+        val step = network.keys.sendAttestation(token, proof.chain, proof.signature)
+        Journal.note(LogCode.DEVICE_TRUST, "аттестация отправлена", "итог" to step.toString().take(60), "сертификатов" to proof.chain.size)
+        if (step is io.tima.core.network.TrustCallResult.Done) runCatching { environment.settings.put(key, "1") }
+    }
+
     // Один человек — одна переписка (ДУ6, Р26): при запуске и раз в пять минут.
     LaunchedEffect(assembled.session.userId) {
         val chain = IdentityChain(environment, network.directory, assembled.session.userId, ::msNow)

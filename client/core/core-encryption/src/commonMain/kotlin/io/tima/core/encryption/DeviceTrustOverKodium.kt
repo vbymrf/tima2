@@ -89,6 +89,10 @@ object DeviceTrustCheck {
     const val BY_IDENTITY: String = DeviceTrust.BY_IDENTITY
     const val BY_ASK: String = DeviceTrust.BY_ASK
 
+    /** Что подписывают, заверяя устройство: ключ аттестации подписывает то же самое (ДУ8). */
+    fun deviceCertBytes(encryptionPub: ByteArray, signingPub: ByteArray): ByteArray =
+        DeviceTrust.deviceCertBytes(encryptionPub, signingPub)
+
     /** Ключ подписи устройств аккаунта со свидетельством — как его отдал сервер. */
     class SigningKey(val askId: String, val askPub: ByteArray, val askSig: ByteArray)
 
