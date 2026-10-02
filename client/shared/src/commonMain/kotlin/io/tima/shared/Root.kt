@@ -1532,6 +1532,13 @@ private fun App(
     LaunchedEffect(assembled.session.userId) {
         val key = "history.swept.v1"
         if (runCatching { environment.settings.all().first()[key] }.getOrNull() != null) return@LaunchedEffect
+        // Только на свежем устройстве — без единой личной переписки. На работающем сверка
+        // вернула бы в переписку то, что человек у себя удалил: сервер этого не знает.
+        val fresh = runCatching { io.tima.core.database.SqlChatRehome(environment.db).personalPeers().isEmpty() }.getOrDefault(false)
+        if (!fresh) {
+            runCatching { environment.settings.put(key, "1") }
+            return@LaunchedEffect
+        }
         val added = runCatching { assembled.receiver.pullAllHistory() }.getOrNull() ?: return@LaunchedEffect
         Journal.note(LogCode.DEVICE_TRUST, "история при первом запуске забрана", "новых" to added)
         runCatching { environment.settings.put(key, "1") }
