@@ -12,6 +12,10 @@ class SqlChatRehome(db: TimaDatabase) {
     private val messages = db.messagesQueries
     private val chats = db.chatsQueries
 
+    /** Личные переписки и их собеседники: `chatId → peerId`. */
+    fun personalPeers(): List<Pair<String, String>> =
+        chats.personalContacts().executeAsList().mapNotNull { row -> row.peer_id?.let { row.chat_id to it } }
+
     fun rehome(oldChat: String, newChat: String, newPeer: String) {
         if (oldChat == newChat) return
         messages.transaction {

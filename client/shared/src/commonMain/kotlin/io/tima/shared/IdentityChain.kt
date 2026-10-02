@@ -28,19 +28,18 @@ class IdentityChain(
 
     /** Проверить все личные переписки. Возвращает, сколько переехало. */
     suspend fun refresh(): Int {
-        val chats = runCatching { environment.db.chatsQueries.personalContacts().executeAsList() }.getOrDefault(emptyList())
-        val peers = chats.mapNotNull { it.peer_id }.distinct()
+        val chats = runCatching { rehome.personalPeers() }.getOrDefault(emptyList())
+        val peers = chats.map { it.second }.distinct()
         if (peers.isEmpty()) return 0
         val statuses = users.identities(peers) ?: return 0
         var moved = 0
-        for (chat in chats) {
-            val peer = chat.peer_id ?: continue
+        for ((chatId, peer) in chats) {
             val st = statuses[peer] ?: continue
             if (st.cancelled) rememberCancelled(peer)
             val current = st.currentId ?: continue
             if (current == peer || current == me) continue
             val newChat = PersonalChatIdsOverKodium.personalChatId(me, current)
-            runCatching { rehome.rehome(chat.chat_id, newChat, current) }
+            runCatching { rehome.rehome(chatId, newChat, current) }
                 .onFailure { Journal.trouble(LogCode.DEVICE_TRUST, "переписка не переехала", "причина" to (it.message ?: "?")) }
                 .onSuccess {
                     moved++
