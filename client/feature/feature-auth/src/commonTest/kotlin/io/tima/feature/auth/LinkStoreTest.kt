@@ -147,6 +147,7 @@ class LinkStoreTest {
             sessionId: String,
             secret: String,
             signature: ByteArray,
+            deviceCert: ByteArray?,
         ): LinkConfirmStep {
             confirmations++
             return onConfirmation()

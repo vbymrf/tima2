@@ -127,8 +127,12 @@ class ConfirmDeviceLink(
             encryptionPub = data.encryptionPub,
             signingPub = data.signingPub,
         ) ?: return LinkConfirmStep.CannotSign
+        // Свидетельство нового устройства ключом подписи устройств этого телефона (ДУ2). Нет
+        // ключа (телефон не подтверждён фразой) — без свидетельства; в строгом режиме сервер
+        // откажет, и человек узнает, что сначала надо ввести фразу.
+        val certificate = signer.certify(data.encryptionPub, data.signingPub)
 
-        return api.confirm(data.sessionId, data.secret, caption)
+        return api.confirm(data.sessionId, data.secret, caption, certificate)
     }
 }
 
@@ -144,7 +148,7 @@ interface DeviceLinkStart {
 interface DeviceLinkConfirm {
     /** @return `null` — код не наш или испорчен. */
     fun parse(code: String): LinkCode?
-    suspend fun confirm(sessionId: String, secret: String, signature: ByteArray): LinkConfirmStep
+    suspend fun confirm(sessionId: String, secret: String, signature: ByteArray, deviceCert: ByteArray? = null): LinkConfirmStep
 }
 
 /**
@@ -167,6 +171,9 @@ class LinkCode(
  */
 interface LinkSigner {
     fun sign(sessionId: String, secret: String, encryptionPub: ByteArray, signingPub: ByteArray): ByteArray?
+
+    /** Свидетельство нового устройства ключом подписи устройств (ДУ2); `null` — ключа нет. */
+    fun certify(encryptionPub: ByteArray, signingPub: ByteArray): ByteArray? = null
 }
 
 // ── исходы ──────────────────────────────────────────────────────────────────
@@ -225,6 +232,9 @@ sealed interface LinkConfirmStep {
 
     /** Подпись не сошлась: разобранный код расходится с тем, что лежит на сервере. */
     data object BadSignature : LinkConfirmStep
+
+    /** Строгий режим доверия, а этот телефон не подтверждён фразой (ДУ2). */
+    data object PhoneUnproven : LinkConfirmStep
     data class Offline(val retryAfterMs: Long) : LinkConfirmStep
     data class Refused(val reason: String) : LinkConfirmStep
 }

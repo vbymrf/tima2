@@ -42,12 +42,13 @@ class DeviceLinkConfirmOverHttp(private val api: LinkConfirmApi) : DeviceLinkCon
         LinkCode(it.sessionId, it.secret, it.encryptionPub, it.signingPub, it.deviceName)
     }
 
-    override suspend fun confirm(sessionId: String, secret: String, signature: ByteArray): LinkConfirmStep =
-        when (val answer = api.confirm(sessionId, secret, signature)) {
+    override suspend fun confirm(sessionId: String, secret: String, signature: ByteArray, deviceCert: ByteArray?): LinkConfirmStep =
+        when (val answer = api.confirm(sessionId, secret, signature, deviceCert)) {
             is LinkConfirmResult.Confirmed -> LinkConfirmStep.Confirmed(answer.deviceId)
             LinkConfirmResult.NotAPhone -> LinkConfirmStep.NotAPhone
             LinkConfirmResult.SessionGone -> LinkConfirmStep.SessionGone
             LinkConfirmResult.BadSignature -> LinkConfirmStep.BadSignature
+            LinkConfirmResult.PhoneUnproven -> LinkConfirmStep.PhoneUnproven
             is LinkConfirmResult.NoConnection -> LinkConfirmStep.Offline(answer.link.retryDelayMs)
             is LinkConfirmResult.Refused -> LinkConfirmStep.Refused(answer.code)
         }

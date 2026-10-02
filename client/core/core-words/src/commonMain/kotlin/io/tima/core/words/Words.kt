@@ -1595,6 +1595,18 @@ interface AuthWords {
     val nicknameFree: String
     val nicknameBusy: String
     val onlyPhoneConfirms: String
+    /** Строгий режим доверия, а телефон не подтверждён фразой (ДУ2). */
+    val phoneUnproven: String
+    /** Доверие к своим устройствам (ДУ5). */
+    val deviceCertified: String
+    val deviceUncertified: String
+    val confirmWithPhrase: String
+    val confirmWithPhraseAbout: String
+    val confirmWithPhraseSend: String
+    val certifyDevice: String
+    val trustDone: String
+    val trustNoKey: String
+    fun trustFailed(reason: String): String
     val codeNoLongerValid: String
     val codeReadWrong: String
     val deviceHasNoKey: String
@@ -3449,6 +3461,17 @@ object RussianWords : Words {
         override val nicknameBusy = "Занят"
         override val onlyPhoneConfirms =
             "Подтвердить подключение может только телефон — на компьютере это не работает"
+        override val phoneUnproven =
+            "Сначала подтвердите этот телефон секретной фразой: «Настройки» → «Устройства» → «Подтвердить фразой»"
+        override val deviceCertified = "заверено"
+        override val deviceUncertified = "не заверено"
+        override val confirmWithPhrase = "Подтвердить фразой"
+        override val confirmWithPhraseAbout = "Это устройство ещё не заверено. Введите секретную фразу — тогда собеседники будут знать, что оно ваше. На телефоне фраза нужна один раз: дальше он сам заверяет ваши новые устройства."
+        override val confirmWithPhraseSend = "Подтвердить"
+        override val certifyDevice = "Заверить"
+        override val trustDone = "Готово: устройство заверено"
+        override val trustNoKey = "Сначала подтвердите этот телефон фразой"
+        override fun trustFailed(reason: String) = "Не получилось: $reason"
         override val codeNoLongerValid = "Код больше не действует — попросите на том устройстве новый"
         override val codeReadWrong = "Код прочитан неверно — отсканируйте заново"
         override val deviceHasNoKey = "Это устройство не может подтверждать: у него нет своего ключа"

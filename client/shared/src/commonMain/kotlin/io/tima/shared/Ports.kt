@@ -210,7 +210,7 @@ interface DevicePorts {
      * Подтверждение привязки требует ключа ЭТОГО устройства: подпись над данными из
      * кода делается им, а живёт он в хранилище платформы, а не в сети.
      */
-    fun linkConfirmation(identity: DeviceIdentity): ConfirmDeviceLink
+    fun linkConfirmation(identity: DeviceIdentity, signingKey: ByteArray? = null): ConfirmDeviceLink
 }
 
 /**

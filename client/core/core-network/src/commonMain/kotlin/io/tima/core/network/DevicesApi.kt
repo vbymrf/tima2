@@ -53,6 +53,9 @@ class DevicesApi(
                 name = objectValue.str("name").orEmpty(),
                 createdAt = objectValue.str("created_at"),
                 current = objectValue.bool("current") == true,
+                certified = objectValue.bool("certified") == true,
+                signingKey = objectValue.bool("signing_key") == true,
+                platform = objectValue.str("platform").orEmpty(),
             )
         }
         return list?.let { MyDevicesResult.Devices(it) }
@@ -118,6 +121,10 @@ class MyDevice(
     val createdAt: String?,
     /** Это устройство. Отзывать его — значит выходить из аккаунта здесь. */
     val current: Boolean,
+    /** Доверие (ДУ5): заверено ли, держит ли свой ключ подписи устройств. */
+    val certified: Boolean = false,
+    val signingKey: Boolean = false,
+    val platform: String = "",
 )
 
 /** Чем закончился запрос списка устройств. */

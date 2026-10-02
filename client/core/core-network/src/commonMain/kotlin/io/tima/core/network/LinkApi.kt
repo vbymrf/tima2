@@ -115,14 +115,21 @@ class LinkConfirmApi(
     private val token: () -> String,
 ) {
 
-    suspend fun confirm(sessionId: String, secret: String, signature: ByteArray): LinkConfirmResult {
+    suspend fun confirm(
+        sessionId: String,
+        secret: String,
+        signature: ByteArray,
+        /** Свидетельство нового устройства ключом подписи устройств этого телефона (ДУ2). */
+        deviceCert: ByteArray? = null,
+    ): LinkConfirmResult {
         val response = try {
             client.post(route.api("/api/v1/link/confirm")) {
                 header("Authorization", "Bearer ${token()}")
                 contentType(ContentType.Application.Json)
                 setBody(
                     """{"session_id":"$sessionId","secret":"$secret",""" +
-                        """"signature":"${encodeBase64Url(signature)}"}""",
+                        """"signature":"${encodeBase64Url(signature)}"""" +
+                        (deviceCert?.let { ""","device_cert_sig":"${encodeBase64Url(it)}"""" } ?: "") + "}",
                 )
             }
         } catch (e: Throwable) {
@@ -139,6 +146,8 @@ class LinkConfirmApi(
             code == "not_a_phone" -> LinkConfirmResult.NotAPhone
             code == "bad_session" -> LinkConfirmResult.SessionGone
             code == "bad_signature" -> LinkConfirmResult.BadSignature
+            // Строгий режим доверия: телефон, не подтвердивший себя фразой, устройства не приводит.
+            code == "phone_unproven" -> LinkConfirmResult.PhoneUnproven
             else -> LinkConfirmResult.Refused(response.status.value, code)
         }
     }
@@ -184,4 +193,7 @@ sealed interface LinkConfirmResult {
     data object BadSignature : LinkConfirmResult
     data class Refused(val status: Int, val code: String) : LinkConfirmResult
     data class NoConnection(val link: LinkState) : LinkConfirmResult
+
+    /** Телефон не подтвердил себя фразой, а сервер в строгом режиме доверия. */
+    data object PhoneUnproven : LinkConfirmResult
 }

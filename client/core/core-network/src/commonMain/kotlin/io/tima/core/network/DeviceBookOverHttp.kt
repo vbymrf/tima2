@@ -10,7 +10,7 @@ class DeviceBookOverHttp(private val api: DevicesApi) : DeviceBook {
 
     override suspend fun mine(): DevicesStep = when (val answer = api.mine()) {
         is MyDevicesResult.Devices -> DevicesStep.Devices(
-            answer.devices.map { AccountDevice(it.deviceId, it.name, it.createdAt, it.current) },
+            answer.devices.map { AccountDevice(it.deviceId, it.name, it.createdAt, it.current, it.certified, it.signingKey, it.platform) },
         )
         is MyDevicesResult.NoConnection -> DevicesStep.Offline(answer.link.retryDelayMs)
         is MyDevicesResult.Refused -> DevicesStep.Refused(answer.code)

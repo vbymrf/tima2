@@ -112,6 +112,8 @@ class AuthApi(
         identityPub: ByteArray? = null,
         platform: String? = null,
         forceNewIdentity: Boolean = false,
+        /** Доказательство устройства (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ ДУ2); `null` — без него. */
+        proof: DeviceProofFields? = null,
     ): RegisterResult {
         require(encryptionPub.size == KEY_BYTES) { "encryption_pub обязан быть $KEY_BYTES байт" }
         require(signingPub.size == KEY_BYTES) { "signing_pub обязан быть $KEY_BYTES байт" }
@@ -126,6 +128,14 @@ class AuthApi(
             if (identityPub != null) add(""""identity_pub":"${encodeBase64Url(identityPub)}"""")
             if (platform != null) add(""""platform":"$platform"""")
             if (forceNewIdentity) add(""""force_new_identity":true""")
+            if (proof != null) {
+                if (proof.askPub != null && proof.askSig != null) {
+                    add(""""ask_pub":"${encodeBase64Url(proof.askPub)}"""")
+                    add(""""ask_sig":"${encodeBase64Url(proof.askSig)}"""")
+                }
+                add(""""device_cert_by":"${proof.certBy}"""")
+                add(""""device_cert_sig":"${encodeBase64Url(proof.certSig)}"""")
+            }
         }
         val response = try {
             client.post(route.api("/api/v1/auth/register")) {
@@ -207,3 +217,16 @@ sealed interface RegisterResult {
     data class Refused(val status: Int, val code: String) : RegisterResult
     data class NoConnection(val link: LinkState) : RegisterResult
 }
+
+/**
+ * Что устройство приносит при заведении в доказательство, что оно хозяйское (ДУ2): телефон —
+ * свой ключ подписи устройств со свидетельством ключом личности и свидетельство себя этим
+ * ключом; ПК — свидетельство себя ключом личности.
+ */
+class DeviceProofFields(
+    val askPub: ByteArray?,
+    val askSig: ByteArray?,
+    /** `ask` или `identity`. */
+    val certBy: String,
+    val certSig: ByteArray,
+)

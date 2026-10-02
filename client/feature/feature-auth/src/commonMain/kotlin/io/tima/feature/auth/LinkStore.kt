@@ -73,6 +73,9 @@ class LinkStore(
                 LinkConfirmStep.BadSignature -> current.copyWithTrouble(
                     words().auth.codeReadWrong,
                 )
+                LinkConfirmStep.PhoneUnproven -> current.copyWithTrouble(
+                    words().auth.phoneUnproven,
+                )
                 LinkConfirmStep.NotOurCode -> LinkState.NotOurCode
                 LinkConfirmStep.CannotSign -> current.copyWithTrouble(
                     words().auth.deviceHasNoKey,

@@ -186,6 +186,7 @@ class LinkDeviceTest {
             sessionId: String,
             secret: String,
             signature: ByteArray,
+            deviceCert: ByteArray?,
         ): LinkConfirmStep {
             confirmations++
             confirmed = sessionId

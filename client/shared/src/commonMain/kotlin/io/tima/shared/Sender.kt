@@ -165,8 +165,9 @@ class Sender(
 
     private suspend fun devices(userId: String): List<RecipientDevice>? =
         when (val outcome = network.keys.devicesOf(userId)) {
+            // Только доверенные (ДУ3): устройству вора ключ сообщения не упаковывается.
             is DeviceKeysResult.Devices ->
-                outcome.devices.map { RecipientDevice(it.deviceId, it.encryptionPub) }
+                environment.trustGate.admit(userId, outcome).map { RecipientDevice(it.deviceId, it.encryptionPub) }
 
             is DeviceKeysResult.Offline -> {
                 lastTrouble = "нет связи с сервером"

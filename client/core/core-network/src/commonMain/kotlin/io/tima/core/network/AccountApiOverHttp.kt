@@ -4,6 +4,7 @@ import io.tima.domain.account.AccountApi
 import io.tima.domain.account.CodeRequestStep
 import io.tima.domain.account.CodeSubmitStep
 import io.tima.domain.account.DeviceCreateStep
+import io.tima.domain.account.DeviceProof
 
 /**
  * Переходник: порт `domain-account` над [AuthApi].
@@ -41,6 +42,7 @@ class AccountApiOverHttp(private val auth: AuthApi) : AccountApi {
         identityPub: ByteArray?,
         platform: String,
         forceNewIdentity: Boolean,
+        proof: DeviceProof?,
     ): DeviceCreateStep = when (
         val outcome = auth.register(
             registrationToken = registrationToken,
@@ -49,6 +51,7 @@ class AccountApiOverHttp(private val auth: AuthApi) : AccountApi {
             identityPub = identityPub,
             platform = platform,
             forceNewIdentity = forceNewIdentity,
+            proof = proof?.let { DeviceProofFields(it.askPub, it.askSig, it.certBy, it.certSig) },
         )
     ) {
         is RegisterResult.Registered ->

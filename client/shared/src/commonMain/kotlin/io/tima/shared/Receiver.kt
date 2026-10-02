@@ -955,7 +955,9 @@ class Receiver(
         senderKeys[deviceId]?.let { return it }
         val outcome = network.keys.devicesOf(userId)
         if (outcome !is DeviceKeysResult.Devices) return null
-        for (device in outcome.devices) {
+        // Подпись принимается только от доверенного устройства (ДУ3): сообщение с устройства
+        // вора в строгом режиме не проходит проверку подписи.
+        for (device in environment.trustGate.admit(userId, outcome)) {
             senderKeys[device.deviceId] = device.signingPub
         }
         return senderKeys[deviceId]

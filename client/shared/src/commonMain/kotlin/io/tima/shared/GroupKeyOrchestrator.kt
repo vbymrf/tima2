@@ -69,6 +69,7 @@ class GroupKeyOrchestrator(
         groupKeys = network.groupKeys,
         book = groupKeys,
         msNow = msNow,
+        trust = environment.trustGate,
     )
 
     /**

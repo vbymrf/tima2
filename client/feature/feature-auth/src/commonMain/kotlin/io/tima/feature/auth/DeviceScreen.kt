@@ -75,6 +75,10 @@ fun DeviceScreen(
     keyNotice: String? = null,
     /** Просьба в пути — кнопку не нажать второй раз. */
     keySending: Boolean = false,
+    /** Подтвердить это устройство фразой (ДУ5); `null` — действия нет. */
+    onConfirmWithPhrase: ((String) -> Unit)? = null,
+    /** Заверить другое своё устройство ключом этого телефона; `null` — этот телефон ключа не держит. */
+    onCertify: ((String) -> Unit)? = null,
 ) = Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
     val words = Tima.words.auth
     var signingOut by rememberSaveable { mutableStateOf(false) }
@@ -106,6 +110,16 @@ fun DeviceScreen(
         KeyRequest(onRequestKey, keyNotice, keySending)
     } else if (keyNotice != null) {
         Secondary(keyNotice, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
+    }
+
+    // Доверие к этому устройству (ДУ5): не заверено — предложить фразу. До ранних выходов:
+    // подтверждать себя можно и тогда, когда список не пришёл целиком.
+    val self = state.devices.firstOrNull { it.current }
+    if (onConfirmWithPhrase != null && !signingOut && self != null && !self.certified) {
+        TrustByPhrase(onConfirmWithPhrase, state.trusting)
+    }
+    state.trustNotice?.let {
+        Secondary(it, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
     }
 
     // Сканер — тоже до ранних выходов: подключить новое устройство можно и тогда, когда
@@ -193,13 +207,13 @@ fun DeviceScreen(
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
     ) {
         items(state.devices, key = { it.deviceId }) { device ->
-            Line(device, onAsk)
+            Line(device, onAsk, onCertify.takeIf { !state.trusting })
         }
     }
 }
 
 @Composable
-private fun Line(device: AccountDevice, onAsk: (String) -> Unit) {
+private fun Line(device: AccountDevice, onAsk: (String) -> Unit, onCertify: ((String) -> Unit)? = null) {
     val words = Tima.words.auth
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -220,6 +234,19 @@ private fun Line(device: AccountDevice, onAsk: (String) -> Unit) {
                     device.createdAt,
                 ).joinToString(" · ").ifEmpty { "—" },
                 lineOne = true,
+            )
+            // Доверие (ДУ5): незаверенное — красным, иначе его не отличить от своего.
+            Caption(
+                text = if (device.certified) words.deviceCertified else words.deviceUncertified,
+                fontSize = TimaType.sz6,
+                color = if (device.certified) Tima.colors.text3 else Tima.colors.alarm,
+                maxLines = 2,
+            )
+        }
+        if (!device.current && !device.certified && onCertify != null) {
+            Button(
+                label = words.certifyDevice,
+                onClick = { onCertify(device.deviceId) },
             )
         }
         // Своё устройство отключается не отсюда: «выйти» — это другое действие с другими
@@ -283,6 +310,34 @@ private fun Question(name: String, onConfirm: () -> Unit, onChangedMind: () -> U
  * Фраза набирается здесь же и никуда не записывается: слова уходят в подпись просьбы и
  * дальше не живут. Поле стирается после отправки.
  */
+/** Подтвердить это устройство фразой (ДУ5). Устроено как просьба ключа: поле, кнопка. */
+@Composable
+private fun TrustByPhrase(onConfirm: (String) -> Unit, busy: Boolean) = Column(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+) {
+    val words = Tima.words.auth
+    var open by rememberSaveable { mutableStateOf(false) }
+    var phrase by remember { mutableStateOf("") }
+    Caption(words.confirmWithPhrase, weight = FontWeight.ExtraBold)
+    Secondary(words.confirmWithPhraseAbout)
+    if (!open) {
+        Button(label = words.confirmWithPhrase, onClick = { open = true }, modifier = Modifier.fillMaxWidth())
+    } else {
+        Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, modifier = Modifier.fillMaxWidth())
+        Button(
+            label = words.confirmWithPhraseSend,
+            onClick = {
+                if (!busy && phrase.isNotBlank()) {
+                    onConfirm(phrase)
+                    phrase = ""
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
 @Composable
 private fun KeyRequest(onRequest: (String) -> Unit, notice: String?, sending: Boolean) = Column(
     modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),

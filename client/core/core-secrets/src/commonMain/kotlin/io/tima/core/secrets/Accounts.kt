@@ -57,6 +57,12 @@ class Accounts(private val vault: SecretVault) {
         write(others + account)
         store(account.userId).saveSession(session)
         store(account.userId).saveDeviceSecret(deviceSecret)
+        // Ключ подписи устройств, заведённый при регистрации (ДУ1), лёг в общее место — как и
+        // секрет устройства до Д11. Переезжает к своему аккаунту, общее место пустеет.
+        vault.get(Secrets.ASK_SECRET)?.let {
+            store(account.userId).saveAskSecret(it)
+            vault.remove(Secrets.ASK_SECRET)
+        }
         switchTo(account.userId)
     }
 

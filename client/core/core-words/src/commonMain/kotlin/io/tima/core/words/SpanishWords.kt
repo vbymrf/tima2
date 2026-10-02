@@ -1487,6 +1487,17 @@ object SpanishWords : Words {
         override val nicknameBusy = "Ocupado"
         override val onlyPhoneConfirms =
             "Solo un teléfono puede confirmar la conexión — en el ordenador no funciona"
+        override val phoneUnproven =
+            "Primero confirme este teléfono con su frase secreta: Ajustes → Dispositivos → Confirmar con la frase"
+        override val deviceCertified = "verificado"
+        override val deviceUncertified = "sin verificar"
+        override val confirmWithPhrase = "Confirmar con la frase"
+        override val confirmWithPhraseAbout = "Este dispositivo aún no está verificado. Introduzca su frase secreta para que los contactos sepan que es suyo. En un teléfono la frase se pide una vez: después verifica él mismo sus dispositivos nuevos."
+        override val confirmWithPhraseSend = "Confirmar"
+        override val certifyDevice = "Verificar"
+        override val trustDone = "Listo: el dispositivo está verificado"
+        override val trustNoKey = "Primero confirme este teléfono con su frase"
+        override fun trustFailed(reason: String) = "No funcionó: $reason"
         override val codeNoLongerValid = "El código ya no sirve — pida uno nuevo en aquel dispositivo"
         override val codeReadWrong = "El código se leyó mal — escanéelo de nuevo"
         override val deviceHasNoKey = "Este dispositivo no puede confirmar: no tiene clave propia"

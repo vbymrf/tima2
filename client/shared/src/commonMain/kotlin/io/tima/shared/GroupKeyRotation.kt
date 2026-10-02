@@ -46,6 +46,8 @@ class GroupKeyRotation(
     private val groupKeys: GroupKeysApi,
     private val book: GroupKeyBook,
     private val msNow: () -> Long,
+    /** Каким устройствам участников выдавать ключ группы (ДУ3); `null` — всем, как раньше. */
+    private val trust: DeviceTrustGate? = null,
 ) : GroupKeyRotator {
 
     override suspend fun rotate(groupId: String, reason: RotationReason): RotateStep {
@@ -66,8 +68,9 @@ class GroupKeyRotation(
         val recipients = mutableListOf<RecipientDevice>()
         for (who in members) {
             when (val answer = deviceKeys.devicesOf(who)) {
+                // Ключ группы — только доверенным устройствам участника (ДУ3).
                 is DeviceKeysResult.Devices ->
-                    recipients += answer.devices.map { RecipientDevice(it.deviceId, it.encryptionPub) }
+                    recipients += (trust?.admit(who, answer) ?: answer.devices).map { RecipientDevice(it.deviceId, it.encryptionPub) }
 
                 is DeviceKeysResult.Offline -> return RotateStep.Offline(answer.link.retryDelayMs)
 

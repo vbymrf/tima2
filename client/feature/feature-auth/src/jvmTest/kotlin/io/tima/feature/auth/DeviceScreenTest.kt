@@ -90,6 +90,24 @@ class DeviceScreenTest {
         assertTrue(question.difference(list) > 0.05, "вопрос не заменил список")
     }
 
+    @Test
+    fun доверие_видно_и_незаверенное_предлагает_фразу() {
+        // ДУ5: это устройство не заверено — «Подтвердить фразой»; телефон с ключом заверяет
+        // другие кнопкой «Заверить»; заверенное и нет различаются надписью.
+        val trust = DevicesState(
+            devices = listOf(
+                AccountDevice("d-1", "Телефон", "2026-08-20T10:00:00Z", current = true, certified = false),
+                AccountDevice("d-2", "Компьютер", "2026-08-23T10:00:00Z", current = false, certified = false),
+                AccountDevice("d-3", "Планшет", "2026-08-24T10:00:00Z", current = false, certified = true),
+            ),
+        )
+        val with = capture("устройства-доверие", WIDTH, HEIGHT, dark = false) {
+            DeviceScreen(state = trust, onAsk = {}, onConfirm = {}, onChangedMind = {}, onConfirmWithPhrase = {}, onCertify = {})
+        }
+        val without = capture("устройства-доверие-без-действий", WIDTH, HEIGHT, dark = false) { screen(trust) }
+        assertTrue(with.difference(without) > 0.01, "действий доверия не видно")
+    }
+
     private companion object {
         const val WIDTH = 380
         const val HEIGHT = 700

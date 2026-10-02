@@ -139,6 +139,13 @@ class ReceiveHarness(private val inbox: Inbox) {
                 sent += protocol.pullFrame(null)
             }
 
+            // Групповые звонки, удаление группы, копии аккаунта — харнессу не предмет, но курсор
+            // обязан двигаться: подтверждаем, как живой канал.
+            is EventStreamProtocol.Decision.CallControl -> decision.eventId?.let { sent += protocol.ackFrame(it) }
+            is EventStreamProtocol.Decision.GroupCall -> decision.eventId?.let { sent += protocol.ackFrame(it) }
+            is EventStreamProtocol.Decision.GroupDeleted -> decision.eventId?.let { sent += protocol.ackFrame(it) }
+            is EventStreamProtocol.Decision.StoreChanged -> decision.eventId?.let { sent += protocol.ackFrame(it) }
+
             is EventStreamProtocol.Decision.NeedHistory,
             is EventStreamProtocol.Decision.ServerTrouble,
             is EventStreamProtocol.Decision.AppOutdated,

@@ -15,7 +15,15 @@ import io.tima.domain.account.LinkSigner
  * @param личность ключ этого устройства. `null` — подписывать нечем: устройство не
  *   заведено, и подтверждать привязку ему нельзя.
  */
-class LinkSignerOverKodium(private val identity: DeviceIdentity?) : LinkSigner {
+class LinkSignerOverKodium(
+    private val identity: DeviceIdentity?,
+    /** Ключ подписи устройств этого телефона (ДУ2); `null` — телефон не подтверждён фразой. */
+    private val signingKey: AccountSigningKey? = null,
+) : LinkSigner {
+
+    override fun certify(encryptionPub: ByteArray, signingPub: ByteArray): ByteArray? =
+        signingKey?.certify(encryptionPub, signingPub)
+
 
     override fun sign(
         sessionId: String,

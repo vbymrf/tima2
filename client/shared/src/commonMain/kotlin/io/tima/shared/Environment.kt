@@ -27,7 +27,9 @@ import io.tima.core.database.SqlGroupKeys
 import io.tima.core.database.SqlOutboxStore
 import io.tima.core.database.SqlReadMarks
 import io.tima.core.database.TimaDatabase
+import io.tima.core.encryption.AccountSigningKey
 import io.tima.core.encryption.DeviceIdentity
+import io.tima.core.encryption.DeviceProverOverKodium
 import io.tima.core.encryption.DeviceKeyFactoryOverKodium
 import io.tima.core.encryption.LinkSignerOverKodium
 import io.tima.core.encryption.LocalStoreFieldCipher
@@ -236,6 +238,15 @@ class Entry private constructor(
     /** Всё, что нужно приложению после входа: ключ покоя базы и кто мы для сервера. */
     class Device(val secret: ByteArray, val session: Session)
 
+    /**
+     * Ключ подписи устройств этого телефона у аккаунта [userId] (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ ДУ1):
+     * читается при подтверждении QR, пишется, когда человек вводит фразу в «Устройствах».
+     */
+    fun signingKeys(userId: String): AskSecrets = object : AskSecrets {
+        override fun get(): ByteArray? = accounts.store(userId).askSecret()
+        override fun put(secret: ByteArray) = accounts.store(userId).saveAskSecret(secret)
+    }
+
     companion object {
 
         /**
@@ -281,6 +292,7 @@ class Entry private constructor(
                     keys = DeviceKeyFactoryOverKodium,
                     secrets = secrets,
                     platform = platform.server,
+                    prover = DeviceProverOverKodium,
                 ),
                 secrets = secrets,
                 accounts = Accounts(secretStore),
@@ -478,9 +490,9 @@ class Network(
      * Требует ключа этого устройства: подпись над данными из кода делается им. Ключ даёт
      * приложение, потому что он живёт в хранилище платформы, а не в сети.
      */
-    override fun linkConfirmation(identity: DeviceIdentity): ConfirmDeviceLink = ConfirmDeviceLink(
+    override fun linkConfirmation(identity: DeviceIdentity, signingKey: ByteArray?): ConfirmDeviceLink = ConfirmDeviceLink(
         api = DeviceLinkConfirmOverHttp(LinkConfirmApi(link.route, link.client, token = { token() })),
-        signer = LinkSignerOverKodium(identity),
+        signer = LinkSignerOverKodium(identity, signingKey?.let { AccountSigningKey.fromRaw(it) }),
     )
 
     /**
@@ -614,6 +626,9 @@ class Environment private constructor(
     /** Настройки экранов: вид списка и что показывать (Д5). */
     val settings: Settings = SqlSettings(db)
 
+    /** Каким устройствам собеседников доверять (ДУ3): ключи личности, запомненные при встрече. */
+    val trustGate: DeviceTrustGate = DeviceTrustGate(settings)
+
     /**
      * Журнал звонков — копия серверного (Ж2).
      *
@@ -669,4 +684,10 @@ class Environment private constructor(
         fun open(db: TimaDatabase, deviceSecret: ByteArray, myUserId: String, myDeviceId: String = ""): Environment =
             Environment(db, LocalStoreFieldCipher(deviceSecret), myUserId, myDeviceId)
     }
+}
+
+/** Где лежит ключ подписи устройств телефона (ДУ1). */
+interface AskSecrets {
+    fun get(): ByteArray?
+    fun put(secret: ByteArray)
 }

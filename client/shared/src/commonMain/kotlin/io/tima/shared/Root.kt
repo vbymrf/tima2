@@ -551,6 +551,7 @@ private fun Inside(
         platform = entry.platform,
         callEngine = callEngine,
         deviceSecret = current.secret,
+        askSecrets = remember(current.session.userId) { entry.signingKeys(current.session.userId) },
         linkCode = linkCode,
         transferCode = transferCode,
         installer = installer,
@@ -786,6 +787,8 @@ private fun App(
     assembled: Assembled,
     platform: Platform,
     deviceSecret: ByteArray,
+    /** Ключ подписи устройств этого телефона (ДУ1–ДУ2). */
+    askSecrets: AskSecrets,
     linkCode: String?,
     /** Код передачи, принесённый камерой (Д12). См. пояснение у [Root]. */
     transferCode: String? = null,
@@ -2980,6 +2983,15 @@ private fun App(
                         build = build,
                         appearance = appearance,
                         onAppearance = onAppearance,
+                        deviceTrust = remember(askSecrets) {
+                            DeviceTrustActionsOverNetwork(
+                                keys = network.keys,
+                                userId = assembled.session.userId,
+                                identity = deviceIdentityFrom(deviceSecret),
+                                asks = askSecrets,
+                                phone = platform.server in io.tima.domain.account.PHONES,
+                            )
+                        },
                         language = language,
                         onLanguage = onLanguage,
                         locale = locale,
@@ -3048,6 +3060,7 @@ private fun App(
                     LinkConfirmation(
                         network = network,
                         deviceSecret = deviceSecret,
+                        signingKey = askSecrets.get(),
                         code = current.code,
                         scope = scope,
                         onClose = { where = Where.Nothing },
@@ -3678,6 +3691,8 @@ private fun ChatLine.asComment(root: Long) = CommentEntry(
 private fun LinkConfirmation(
     network: DevicePorts,
     deviceSecret: ByteArray,
+    /** Ключ подписи устройств этого телефона (ДУ2); `null` — телефон не подтверждён фразой. */
+    signingKey: ByteArray?,
     code: String,
     scope: kotlinx.coroutines.CoroutineScope,
     onClose: () -> Unit,
@@ -3685,7 +3700,7 @@ private fun LinkConfirmation(
 ) {
     val store = remember(code) {
         LinkStore(
-            confirm = network.linkConfirmation(deviceIdentityFrom(deviceSecret)),
+            confirm = network.linkConfirmation(deviceIdentityFrom(deviceSecret), signingKey),
             scope = scope,
             code = code,
             onTrusted = onTrusted,
@@ -3716,6 +3731,8 @@ private fun Settings(
     build: Build,
     appearance: Appearance,
     onAppearance: (Appearance) -> Unit,
+    /** Доверие к своим устройствам (ДУ5). */
+    deviceTrust: io.tima.domain.account.DeviceTrustActions? = null,
     language: Language,
     onLanguage: (Language) -> Unit,
     /** Страна и отбор выдачи (ПЛАН-ЯЗЫКА Я7): живут рядом с выбором языка. */
@@ -3767,7 +3784,7 @@ private fun Settings(
 ) {
     // Название темы считается в составе, а не в лямбде списка: лямбда не composable.
     val themeName = Tima.words.appearance.theme(appearance.choice)
-    val fleet = remember { DevicesStore(network.myFleet, scope) }
+    val fleet = remember { DevicesStore(network.myFleet, scope, trust = deviceTrust) }
     val devices by fleet.state.collectAsState()
 
     SettingsScreen(
@@ -4020,6 +4037,9 @@ private fun Devices(
         onRequestKey = if (keyMissing && keyAsk !is KeyAsk.Got) accountCopy::requestKey else null,
         keyNotice = keyNotice,
         keySending = keyAsk == KeyAsk.Sending,
+        // Доверие (ДУ5): подтвердить себя фразой; заверять другие — только телефон с ключом.
+        onConfirmWithPhrase = store::confirmWithPhrase,
+        onCertify = if (store.holdsKey()) store::certify else null,
     )
 }
 

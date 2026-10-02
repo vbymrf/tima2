@@ -19,6 +19,12 @@ class RegisterDevice(
     private val secrets: DeviceSecretStore,
     /** Показывается человеку в списке его устройств. Сервер значение не проверяет. */
     private val platform: String,
+    /**
+     * Доказательство устройства (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ ДУ2): фраза в руках — телефон заводит
+     * свой ключ подписи устройств и заверяет им себя, ПК заверяет себя ключом личности.
+     * `null` — доказывать нечем (сборка без шифрования, проверки).
+     */
+    private val prover: DeviceProver? = null,
 ) {
 
     /**
@@ -52,6 +58,8 @@ class RegisterDevice(
         identityPub: ByteArray? = null,
         replaceExisting: Boolean = false,
         forceNewIdentity: Boolean = false,
+        /** Фраза, если она в руках: из неё — доказательство устройства (ДУ2). */
+        words: List<String>? = null,
     ): RegistrationStep {
         if (!replaceExisting && secrets.hasDevice()) {
             return RegistrationStep.AlreadyRegistered
@@ -59,7 +67,7 @@ class RegisterDevice(
 
         when (val check = api.submitCode(requestId, code)) {
             is CodeSubmitStep.Accepted ->
-                return create(check.registrationToken, identityPub, forceNewIdentity)
+                return create(check.registrationToken, identityPub, forceNewIdentity, words)
             CodeSubmitStep.WrongCode -> return RegistrationStep.WrongCode
             is CodeSubmitStep.Offline -> return RegistrationStep.Offline(check.retryAfterMs)
             is CodeSubmitStep.Refused -> return RegistrationStep.Refused(check.reason)
@@ -81,14 +89,20 @@ class RegisterDevice(
         registrationToken: String,
         identityPub: ByteArray? = null,
         forceNewIdentity: Boolean = false,
-    ): RegistrationStep = create(registrationToken, identityPub, forceNewIdentity)
+        words: List<String>? = null,
+    ): RegistrationStep = create(registrationToken, identityPub, forceNewIdentity, words)
 
     private suspend fun create(
         registrationToken: String,
         identityPub: ByteArray?,
         forceNewIdentity: Boolean,
+        words: List<String>?,
     ): RegistrationStep {
         val material = keys.newDeviceKeys()
+        // Доказательство — пока фраза в руках: дальше её не будет нигде. Ключ подписи устройств
+        // телефона пишется в хранилище ДО вызова, по той же причине, что и секрет устройства.
+        val proof = words?.let { prover?.prove(it, material.encryptionPub, material.signingPub, phone = platform in PHONES) }
+        proof?.askSecret?.let { secrets.saveAskSecret(it) }
 
         // Секрет пишется ДО вызова, и это главное решение здесь.
         //
@@ -106,6 +120,7 @@ class RegisterDevice(
             identityPub = identityPub,
             platform = platform,
             forceNewIdentity = forceNewIdentity,
+            proof = proof,
         )) {
             is DeviceCreateStep.Created -> {
                 // Токен — после успеха: до него он не существует, а его наличие и есть
@@ -194,7 +209,34 @@ interface AccountApi {
         identityPub: ByteArray?,
         platform: String,
         forceNewIdentity: Boolean = false,
+        proof: DeviceProof? = null,
     ): DeviceCreateStep
+}
+
+/** Платформы, которые держат ключ подписи устройств (Р12: только телефон). */
+val PHONES: Set<String> = setOf("android", "ios")
+
+/**
+ * Доказательство, что устройство хозяйское (ДУ2).
+ *
+ * @param askSecret закрытый ключ подписи устройств — только у телефона; `null` у ПК.
+ * @param certBy `ask` или `identity`.
+ */
+class DeviceProof(
+    val askPub: ByteArray?,
+    val askSig: ByteArray?,
+    val askSecret: ByteArray?,
+    val certBy: String,
+    val certSig: ByteArray,
+)
+
+/**
+ * Делает доказательство из фразы. Реализует `core-encryption`.
+ *
+ * @return `null` — слова не складываются в личность.
+ */
+fun interface DeviceProver {
+    fun prove(words: List<String>, encryptionPub: ByteArray, signingPub: ByteArray, phone: Boolean): DeviceProof?
 }
 
 /** Ключи устройства. Порождает `core-encryption`. */
@@ -278,4 +320,8 @@ interface DeviceSecretStore {
     fun saveDeviceSecret(secret: ByteArray)
     fun saveSession(session: Session)
     fun session(): Session?
+
+    /** Ключ подписи устройств этого телефона (ДУ1). По умолчанию — хранить негде. */
+    fun saveAskSecret(secret: ByteArray) {}
+    fun askSecret(): ByteArray? = null
 }

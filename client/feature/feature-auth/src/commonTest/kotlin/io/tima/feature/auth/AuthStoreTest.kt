@@ -5,6 +5,7 @@ import io.tima.domain.account.AccountApi
 import io.tima.domain.account.CodeRequestStep
 import io.tima.domain.account.CodeSubmitStep
 import io.tima.domain.account.DeviceCreateStep
+import io.tima.domain.account.DeviceProof
 import io.tima.domain.account.DeviceKeyFactory
 import io.tima.domain.account.DeviceKeyMaterial
 import io.tima.domain.account.DeviceSecretStore
@@ -572,6 +573,7 @@ class AuthStoreTest {
             identityPub: ByteArray?,
             platform: String,
             forceNewIdentity: Boolean,
+            proof: DeviceProof?,
         ): DeviceCreateStep {
             creations++
             sentIdentity = identityPub

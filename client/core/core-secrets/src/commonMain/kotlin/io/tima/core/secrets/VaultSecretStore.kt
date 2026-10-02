@@ -29,6 +29,13 @@ class VaultSecretStore(private val vault: SecretVault) : DeviceSecretStore {
     /** Секрет устройства; `null` на первом запуске. */
     fun deviceSecret(): ByteArray? = vault.get(Secrets.DEVICE_SECRET)
 
+    override fun saveAskSecret(secret: ByteArray) {
+        require(secret.size == DEVICE_SECRET_BYTES) { "ключ подписи устройств обязан быть $DEVICE_SECRET_BYTES байт" }
+        vault.put(Secrets.ASK_SECRET, secret)
+    }
+
+    override fun askSecret(): ByteArray? = vault.get(Secrets.ASK_SECRET)
+
     override fun saveSession(session: Session) {
         val parts = listOf(session.userId, session.deviceId, session.accessToken)
         require(parts.none { it.isEmpty() }) { "пустое поле сессии: $parts" }
@@ -53,6 +60,7 @@ class VaultSecretStore(private val vault: SecretVault) : DeviceSecretStore {
     fun clear() {
         vault.remove(SESSION)
         vault.remove(Secrets.DEVICE_SECRET)
+        vault.remove(Secrets.ASK_SECRET)
     }
 
     private companion object {

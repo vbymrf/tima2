@@ -40,6 +40,11 @@ class RegisterDeviceTest {
             savedSession = session
         }
         override fun session(): Session? = savedSession
+        var savedAsk: ByteArray? = null
+        override fun saveAskSecret(secret: ByteArray) {
+            order += "ключ телефона"
+            savedAsk = secret
+        }
     }
 
     private class Server(
@@ -52,6 +57,7 @@ class RegisterDeviceTest {
         var sentIdentity: ByteArray? = null
         var sentPlatform: String? = null
         var sentFork: Boolean = false
+        var sentProof: DeviceProof? = null
 
         override suspend fun requestCode(phone: String): CodeRequestStep {
             calls += "запрос"
@@ -68,12 +74,14 @@ class RegisterDeviceTest {
             identityPub: ByteArray?,
             platform: String,
             forceNewIdentity: Boolean,
+            proof: DeviceProof?,
         ): DeviceCreateStep {
             calls += "заведение"
             sentKeys = encryptionPub to signingPub
             sentIdentity = identityPub
             sentPlatform = platform
             sentFork = forceNewIdentity
+            sentProof = proof
             return creation
         }
     }
@@ -88,6 +96,39 @@ class RegisterDeviceTest {
     )
 
     // ── удачный путь ─────────────────────────────────────────────────────────
+
+    @Test
+    fun фраза_в_руках_телефон_доказывает_себя_и_ключ_пишется_до_вызова() = runTest {
+        // Беда «вор SIM читает новые сообщения» (ДУ2): устройство приносит доказательство из
+        // фразы. Ключ подписи устройств телефона пишется ДО вызова — как и секрет устройства.
+        val server = Server()
+        val store = Store()
+        val asked = mutableListOf<Boolean>()
+        val register = RegisterDevice(
+            server, DeviceKeyFactory { material }, store, platform = "android",
+            prover = DeviceProver { words, enc, sig, phone ->
+                asked += phone
+                assertEquals(listOf("слово"), words)
+                assertContentEquals(material.encryptionPub, enc)
+                assertContentEquals(material.signingPub, sig)
+                DeviceProof(ByteArray(32) { 7 }, ByteArray(64) { 8 }, ByteArray(32) { 9 }, "ask", ByteArray(64) { 6 })
+            },
+        )
+        register.confirm("r-1", "123456", identityPub = ByteArray(32) { 5 }, words = listOf("слово"))
+        assertEquals(listOf(true), asked, "телефон держит ключ подписи устройств")
+        assertEquals("ask", server.sentProof?.certBy)
+        assertContentEquals(ByteArray(32) { 9 }, store.savedAsk)
+        assertTrue(store.order.indexOf("ключ телефона") < store.order.indexOf("сессия"), "ключ — до сессии: ${store.order}")
+    }
+
+    @Test
+    fun без_фразы_доказательства_нет() = runTest {
+        val server = Server()
+        val register = RegisterDevice(server, DeviceKeyFactory { material }, Store(), platform = "desktop",
+            prover = DeviceProver { _, _, _, _ -> error("без фразы доказывать нечем") })
+        register.confirm("r-1", "123456")
+        assertNull(server.sentProof)
+    }
 
     @Test
     fun секрет_записывается_до_вызова_сервера_а_токен_после() = runTest {

@@ -4,6 +4,8 @@ import io.tima.core.words.CurrentWords
 import io.tima.core.words.Words
 import io.tima.core.words.RussianWords
 import io.tima.domain.account.AccountDevice
+import io.tima.domain.account.TrustStep
+import io.tima.domain.account.DeviceTrustActions
 import io.tima.domain.account.DevicesStep
 import io.tima.domain.account.MyDevices
 import io.tima.domain.account.RevokeStep
@@ -33,6 +35,8 @@ class DevicesStore(
      * жизнь store, и после смены языка беда пришла бы на прежнем.
      */
     private val words: () -> Words = { CurrentWords.value },
+    /** Доверие к своим устройствам (ДУ5); `null` — действий доверия нет (проверки, снимки). */
+    private val trust: DeviceTrustActions? = null,
 ) {
 
     private val _state = MutableStateFlow(DevicesState(expect = true))
@@ -68,6 +72,45 @@ class DevicesStore(
 
     private companion object {
         const val LIST_TIMEOUT_MS = 20_000L
+    }
+
+    /** Держит ли это устройство свой ключ подписи устройств — показывать ли «Заверить». */
+    fun holdsKey(): Boolean = trust?.holdsKey() == true
+
+    /**
+     * Подтвердить это устройство фразой (ДУ5). Слова не хранятся: приходят, превращаются в
+     * подпись и уходят.
+     */
+    fun confirmWithPhrase(phrase: String) {
+        val actions = trust ?: return
+        if (_state.value.trusting) return
+        val words = phrase.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        scope.launch {
+            val step = runCatching { actions.confirmWithPhrase(words) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
+            _state.value = _state.value.copy(trusting = false, trustNotice = notice(step))
+            if (step == TrustStep.Done) refresh()
+        }
+    }
+
+    /** Заверить другое своё устройство ключом этого телефона (ДУ5). */
+    fun certify(deviceId: String) {
+        val actions = trust ?: return
+        if (_state.value.trusting) return
+        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        scope.launch {
+            val step = runCatching { actions.certify(deviceId) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
+            _state.value = _state.value.copy(trusting = false, trustNotice = notice(step))
+            if (step == TrustStep.Done) refresh()
+        }
+    }
+
+    private fun notice(step: TrustStep): String = when (step) {
+        TrustStep.Done -> words().auth.trustDone
+        TrustStep.WrongPhrase -> words().auth.wrongPhrase
+        TrustStep.NoKey -> words().auth.trustNoKey
+        is TrustStep.Offline -> words().auth.trustFailed(words().auth.tryAgain)
+        is TrustStep.Refused -> words().auth.trustFailed(step.reason)
     }
 
     /** Человек нажал «Отключить» у строки: спрашиваем. */
@@ -126,4 +169,8 @@ data class DevicesState(
     val expect: Boolean = false,
     val ask: String? = null,
     val trouble: String? = null,
+    /** Идёт действие доверия (ДУ5). */
+    val trusting: Boolean = false,
+    /** Что сказать о последнем действии доверия. */
+    val trustNotice: String? = null,
 )

@@ -139,7 +139,7 @@ class AuthStore(
         scope.launch {
             val identity = identities.fresh().also { fresh = it }
             _state.value = when (
-                val step = register.confirm(current.requestId, current.code, identity.identityPub)
+                val step = register.confirm(current.requestId, current.code, identity.identityPub, words = identity.words)
             ) {
                 // Личность приняли — значит у аккаунта теперь наша, и фразу надо показать.
                 // Один раз: второго раза у неё не бывает.
@@ -200,7 +200,7 @@ class AuthStore(
         _state.value = current.copy(expect = true, trouble = null)
 
         scope.launch {
-            _state.value = when (val step = register.continueWithToken(current.registrationToken, key)) {
+            _state.value = when (val step = register.continueWithToken(current.registrationToken, key, words = words)) {
                 // Фразу показывать не надо: она у человека есть, он её только что ввёл.
                 is RegistrationStep.Registered -> {
                     onEnteredByPhrase(words)
@@ -243,6 +243,7 @@ class AuthStore(
                     registrationToken = current.registrationToken,
                     identityPub = identity.identityPub,
                     forceNewIdentity = true,
+                    words = identity.words,
                 )
             ) {
                 // Личность теперь новая — и фраза к ней новая. Показать обязательно: иначе
