@@ -34,6 +34,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log"
@@ -415,8 +416,8 @@ func sendStored(ctx context.Context, conn *websocket.Conn, deviceID string, even
 				}
 				continue
 			}
-			frame := map[string]any{}
-			if json.Unmarshal(e.Payload, &frame) != nil {
+			frame, err := eventFrame(e.Payload)
+			if err != nil {
 				continue
 			}
 			frame["event"] = e.EventType
@@ -426,8 +427,8 @@ func sendStored(ctx context.Context, conn *websocket.Conn, deviceID string, even
 			}
 			continue
 		}
-		frame := map[string]any{}
-		if err := json.Unmarshal(e.Payload, &frame); err != nil {
+		frame, err := eventFrame(e.Payload)
+		if err != nil {
 			// Отдать нечего, но отметку двигаем: иначе испорченное событие
 			// перечитывается вечно.
 			log.Printf("ws %s: событие %d повреждено: %v", deviceID, e.EventID, err)
@@ -449,6 +450,24 @@ func sendStored(ctx context.Context, conn *websocket.Conn, deviceID string, even
 		*last = e.EventID
 	}
 	return nil
+}
+
+// eventFrame — тело события из журнала устройства как кадр, в который дописываются вид и
+// номер.
+//
+// **Числа — как написаны, а не через float64.** Обычный разбор в map[string]any делает из
+// каждого числа float64, и номер сообщения больше 2⁵³ при сборке кадра терял последние
+// разряды: 956072612176218224 уходил клиенту как 956072612176218200. Клиент записывал
+// сообщение под чужим номером — и то же сообщение, взятое потом из истории под настоящим,
+// становилось дублем (стенд 2026-10-02).
+func eventFrame(payload []byte) (map[string]any, error) {
+	dec := json.NewDecoder(bytes.NewReader(payload))
+	dec.UseNumber()
+	frame := map[string]any{}
+	if err := dec.Decode(&frame); err != nil {
+		return nil, err
+	}
+	return frame, nil
 }
 
 func writeJSON(ctx context.Context, conn *websocket.Conn, v any) error {

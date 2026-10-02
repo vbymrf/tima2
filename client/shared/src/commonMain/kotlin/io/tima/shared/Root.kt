@@ -1524,6 +1524,15 @@ private fun App(
         if (state == "verified") runCatching { environment.settings.put(key, "1") }
     }
 
+    // Двойники из-за округлённого номера сообщения (сервер до 2026-10-02) — убрать один раз.
+    LaunchedEffect(assembled.session.userId) {
+        val key = "repair.rounded.v1"
+        if (runCatching { environment.settings.all().first()[key] }.getOrNull() != null) return@LaunchedEffect
+        val dropped = runCatching { io.tima.core.database.SqlMessageRepair(environment.db).dropRoundedTwins() }.getOrNull() ?: return@LaunchedEffect
+        Journal.note(LogCode.DEVICE_TRUST, "двойники из-за округлённого номера убраны", "строк" to dropped)
+        runCatching { environment.settings.put(key, "1") }
+    }
+
     // История личных переписок (ИУ1, ИУ3): своё устройство передало — забрать; при первом
     // запуске — строки всех своих переписок и всё, что уже можно прочесть.
     LaunchedEffect(assembled.session.userId) {

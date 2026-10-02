@@ -328,3 +328,15 @@ SELECT thread_root, count(*) AS replies FROM messages
 -- человека один, а идентификатор чата выводится из пары личностей.
 rehomeMessages:
 UPDATE messages SET chat_id = :newChat WHERE chat_id = :oldChat;
+
+-- Двойники из-за округлённого номера (стенд 2026-10-02): живой канал отдавал номер сообщения
+-- через float64, и строка записывалась под округлённым номером; история с сервера потом
+-- приносила то же сообщение под настоящим — вторая строка. Остаётся первая: у неё уже
+-- отметка прочтения и место в переписке. Сравнение — через тот же double (REAL в SQLite).
+dropRoundedTwins:
+DELETE FROM messages WHERE direction = 1 AND server_id IS NOT NULL AND EXISTS (
+  SELECT 1 FROM messages b
+  WHERE b.chat_id = messages.chat_id AND b.direction = 1 AND b.local_id < messages.local_id
+    AND b.sender_id = messages.sender_id AND b.server_id IS NOT NULL AND b.server_id <> messages.server_id
+    AND CAST(CAST(b.server_id AS REAL) AS INTEGER) = CAST(CAST(messages.server_id AS REAL) AS INTEGER)
+);
