@@ -1508,7 +1508,9 @@ private fun App(
     // видит, какие телефоны и прошивки проходят. Выключенный сервер ответит «пусто», и это не беда.
     LaunchedEffect(assembled.session.userId, attester) {
         val at = attester ?: return@LaunchedEffect
-        val key = "trust.attested.v1"
+        // v2: прежняя отметка ставилась и при неудаче — Honor тогда не прошёл из-за строгого
+        // разбора сертификата на сервере, и повторять было некому.
+        val key = "trust.attested.v2"
         if (runCatching { environment.settings.all().first()[key] }.getOrNull() != null) return@LaunchedEffect
         val token = network.directory.identityChallenge() ?: return@LaunchedEffect
         val identity = deviceIdentityFrom(deviceSecret)
@@ -1516,9 +1518,10 @@ private fun App(
         val proof = runCatching { at.attest(token, signed) }
             .onFailure { Journal.trouble(LogCode.DEVICE_TRUST, "аттестация не сделалась", "причина" to (it.message ?: "?")) }
             .getOrNull() ?: return@LaunchedEffect
-        val step = network.keys.sendAttestation(token, proof.chain, proof.signature)
-        Journal.note(LogCode.DEVICE_TRUST, "аттестация отправлена", "итог" to step.toString().take(60), "сертификатов" to proof.chain.size)
-        if (step is io.tima.core.network.TrustCallResult.Done) runCatching { environment.settings.put(key, "1") }
+        val state = network.keys.sendAttestation(token, proof.chain, proof.signature)
+        Journal.note(LogCode.DEVICE_TRUST, "аттестация отправлена", "итог" to (state ?: "не дошла"), "сертификатов" to proof.chain.size)
+        // Отметка — только когда сервер её принял: не дошла или не прошла — повторим при запуске.
+        if (state == "verified") runCatching { environment.settings.put(key, "1") }
     }
 
     // Один человек — одна переписка (ДУ6, Р26): при запуске и раз в пять минут.

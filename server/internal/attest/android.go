@@ -13,7 +13,6 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/asn1"
 	"encoding/hex"
 	"errors"
@@ -48,9 +47,9 @@ func VerifyAndroid(chainDER [][]byte, challenge, signed, signature []byte) Resul
 		r.Problem = "цепочка короче двух сертификатов"
 		return r
 	}
-	certs := make([]*x509.Certificate, 0, len(chainDER))
+	certs := make([]*cert, 0, len(chainDER))
 	for i, der := range chainDER {
-		c, err := x509.ParseCertificate(der)
+		c, err := parseLenient(der)
 		if err != nil {
 			r.Problem = fmt.Sprintf("сертификат %d не разобран: %v", i, err)
 			return r
@@ -59,22 +58,22 @@ func VerifyAndroid(chainDER [][]byte, challenge, signed, signature []byte) Resul
 	}
 	r.ChainOK = true
 	for i := 0; i < len(certs)-1; i++ {
-		if err := certs[i].CheckSignatureFrom(certs[i+1]); err != nil {
+		if err := certs[i].checkSignedBy(certs[i+1]); err != nil {
 			r.ChainOK = false
 			r.Problem = fmt.Sprintf("сертификат %d не подписан следующим: %v", i, err)
 			break
 		}
 	}
 	root := certs[len(certs)-1]
-	if err := root.CheckSignatureFrom(root); err != nil && r.ChainOK {
+	if err := root.checkSignedBy(root); err != nil && r.ChainOK {
 		r.ChainOK = false
 		r.Problem = "корень не самоподписан"
 	}
-	sum := sha256.Sum256(root.RawSubjectPublicKeyInfo)
+	sum := sha256.Sum256(root.spki)
 	r.RootSPKI = hex.EncodeToString(sum[:])
 
 	leaf := certs[0]
-	if pub, ok := leaf.PublicKey.(*ecdsa.PublicKey); ok {
+	if pub, ok := leaf.publicKey.(*ecdsa.PublicKey); ok {
 		digest := sha256.Sum256(signed)
 		r.SignatureOK = ecdsa.VerifyASN1(pub, digest[:], signature)
 	}
@@ -83,7 +82,7 @@ func VerifyAndroid(chainDER [][]byte, challenge, signed, signature []byte) Resul
 	}
 
 	var ext []byte
-	for _, e := range leaf.Extensions {
+	for _, e := range leaf.extensions {
 		if e.Id.Equal(oidKeyDescription) {
 			ext = e.Value
 		}

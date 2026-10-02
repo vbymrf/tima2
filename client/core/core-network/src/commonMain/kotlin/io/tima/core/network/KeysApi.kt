@@ -117,9 +117,14 @@ class KeysApi(
             }
         }
 
-    /** Аттестация ключа телефона — `POST /devices/me/attestation` (ДУ8). */
-    suspend fun sendAttestation(challengeToken: String, chain: List<ByteArray>, signature: ByteArray): TrustCallResult =
-        trustCall {
+    /**
+     * Аттестация ключа телефона — `POST /devices/me/attestation` (ДУ8).
+     *
+     * @return итог сервера: `verified`, `failed`, `off` (сервер не смотрит) или `null` — сеть или
+     *   отказ.
+     */
+    suspend fun sendAttestation(challengeToken: String, chain: List<ByteArray>, signature: ByteArray): String? {
+        val response = try {
             client.post(route.api("/api/v1/devices/me/attestation")) {
                 header("Authorization", "Bearer ${token()}")
                 contentType(ContentType.Application.Json)
@@ -129,7 +134,13 @@ class KeysApi(
                         """"signature":"${encodeBase64Url(signature)}"}""",
                 )
             }
+        } catch (e: Throwable) {
+            return null
         }
+        if (response.status == HttpStatusCode.NoContent) return "off"
+        if (response.status != HttpStatusCode.OK) return null
+        return runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject["state"]?.jsonPrimitive?.content }.getOrNull()
+    }
 
     /** Заверить своё другое устройство — `PUT /devices/{id}/certificate` (ДУ2). */
     suspend fun certifyDevice(deviceId: String, by: String, signature: ByteArray): TrustCallResult =
