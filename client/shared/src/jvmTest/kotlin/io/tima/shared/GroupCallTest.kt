@@ -155,6 +155,23 @@ class GroupCallTest {
     }
 
     @Test
+    fun при_стенде_потолок_по_числу_участников_не_применяется() = runTest {
+        val engine = GroupEngine()
+        val host = CallHost(
+            GroupCalls(creator = я), engine,
+            CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
+            words = { io.tima.core.words.RussianWords },
+            preset = { io.tima.core.call.basePreset(null).copy(name = "h264 960") },
+            access = { _, done -> done(true) },
+            serviceOn = {}, serviceOff = {},
+        ).also { it.myUserId = { я } }
+        host.startGroup("группа", "Планёрка", ring = false, video = true, invited = emptyList())
+        engine.say(CallState(stage = CallStage.Connected, cameraOn = true))
+        engine.peersAre(8)
+        assertTrue(engine.ceilings.isEmpty(), "набор стенда урезан потолком")
+    }
+
+    @Test
     fun порядок_участников_по_входу() = runTest {
         val engine = GroupEngine()
         val host = host(GroupCalls(creator = я), engine)

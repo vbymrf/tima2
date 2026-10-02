@@ -192,6 +192,9 @@ class CallHost(
         scope.launch { engine?.setVisiblePeers(identities) }
     }
 
+    /** Сказано ли в журнал, что стенд отменяет потолок, — один раз за звонок. */
+    private var benchCeilingSaid = false
+
     /** Своё на паузе создателя: что было включено до неё — вернуть после (решение 5). */
     private var beforePause: Pair<Boolean, Boolean>? = null
 
@@ -574,6 +577,7 @@ class CallHost(
         group = null
         lastStart = null
         peerOrder = emptyList()
+        benchCeilingSaid = false
         voiceOnly = false
         micForbidden = false
         videoForbidden = false
@@ -1209,7 +1213,16 @@ class CallHost(
         // держит то, что принимаем только видимых на странице, а не выключение видео у всех.
         val height = rules.heightFor(count) ?: rules.tiers.minOfOrNull { it.height }
         val nowVoice = height == null
-        engine?.setVideoCeiling(height)
+        // Стенд включён — набор стенда закон, как в звонке на двоих (заказчик 2026-10-02, 2а):
+        // прогон меряет выбранное, а не урезанное потолком.
+        if (preset() != null) {
+            if (!benchCeilingSaid) {
+                benchCeilingSaid = true
+                Journal.note(LogCode.CALL, "групповой: стенд включён — потолок по числу участников не применяется", "участников" to count)
+            }
+        } else {
+            engine?.setVideoCeiling(height)
+        }
         if (nowVoice == voiceOnly) return
         voiceOnly = nowVoice
         if (nowVoice) {
