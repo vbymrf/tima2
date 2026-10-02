@@ -26,6 +26,10 @@ type DeviceStore interface {
 	SetDevicePlatform(ctx context.Context, deviceID, platform string) error
 	SigningKey(ctx context.Context, deviceID, userID string) ([]byte, error)
 
+	// Доверие (ДУ2): свидетельство нового устройства от КПУ подтверждающего телефона
+	DeviceSigningKey(ctx context.Context, userID, deviceID string) (store.SigningKey, error)
+	SetDeviceCertificate(ctx context.Context, userID, deviceID, by, askID string, sig []byte) error
+
 	// Привязка по QR
 	CreateLinkSession(ctx context.Context, encryptionPub, signingPub []byte, deviceName string,
 		secretHash, claimTokenHash []byte, expiresAt time.Time) (string, error)
@@ -52,6 +56,8 @@ type devicesDeps struct {
 	limiter  func() *ratelimit.Limiter
 	tokens   func() TokenIssuer
 	notifier *Notifier
+	// trust — режим доверия к устройствам (off | record | require).
+	trust func() string
 }
 
 // RegisterDevices — шесть маршрутов: три про свои устройства, три про привязку.
@@ -66,8 +72,9 @@ func RegisterDevices(
 	tokens func() TokenIssuer,
 	n *Notifier,
 	requireDevice Middleware,
+	trust func() string,
 ) {
-	deps := devicesDeps{store: st, limiter: limit, tokens: tokens, notifier: n}
+	deps := devicesDeps{store: st, limiter: limit, tokens: tokens, notifier: n, trust: trust}
 
 	mux.HandleFunc("GET /api/v1/devices", requireDevice(listMyDevices(deps)))
 	mux.HandleFunc("PUT /api/v1/devices/me/platform", requireDevice(setMyPlatform(deps)))

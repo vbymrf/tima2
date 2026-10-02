@@ -199,7 +199,10 @@ const (
 	// «сервер перестаёт принимать от него»). Читается тем же `GroupCallParticipants`.
 	//
 	// 231 → 232: `SetCallPinned` — закреплённый создателем в виде «Говорящий» (0060).
-	storeMethodBudget = 232
+	// 232 → 237: доверие к устройствам (0061, ДУ1–ДУ2) — КПУ телефона (AddSigningKey,
+	// ActiveSigningKeys, DeviceSigningKey), свидетельство устройства (SetDeviceCertificate,
+	// DeviceKeys). Потребитель — узкий DeviceTrustStore рядом с ручками.
+	storeMethodBudget = 237
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
 )

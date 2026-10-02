@@ -37,6 +37,9 @@ type Server struct {
 	Events *events.Bus        // nil → /ws отвечает 503, доставка только REST-историей
 	Limit  *ratelimit.Limiter // nil → без лимитов частоты (dev без Redis)
 	DevSMS bool               // TIMA_DEV_SMS=1: код из /auth/sms/request возвращается в ответе
+	// DeviceTrust — режим доверия к устройствам (TIMA_DEVICE_TRUST: off|record|require; пусто —
+	// record). ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ Р24: строгость включает сервер, а не выпуск клиента.
+	DeviceTrust string
 
 	// Переопределение лимитов auth (0 → прод-дефолт). Для dev/тестов, где с одного
 	// IP регистрируется много устройств (иначе rate limit ложно срабатывает).
@@ -125,7 +128,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// Устройства и привязка по QR (шаг 4). link/start и link/claim идут без
 	// requireDevice: их зовёт устройство, у которого токена ещё нет.
 	RegisterDevices(mux, s.Store, func() *ratelimit.Limiter { return s.Limit },
-		func() TokenIssuer { return s.Auth }, s.notifier(), s.requireActiveDevice)
+		func() TokenIssuer { return s.Auth }, s.notifier(), s.requireActiveDevice,
+		func() string { return NormalizeDeviceTrust(s.DeviceTrust) })
+	RegisterDeviceTrust(mux, s.Store, s.requireActiveDevice)
 	mux.HandleFunc("GET /api/v1/escrow/pubkey", s.requireActiveDevice(s.escrowPubkey))
 	mux.HandleFunc("GET /api/v1/escrow/key", s.requireActiveDevice(s.escrowKeyForChat))
 	// Группы: состав, сообщения и ключи (шаг 4). Три файла держатся вместе

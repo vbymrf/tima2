@@ -118,6 +118,9 @@ func linkConfirm(deps devicesDeps) http.HandlerFunc {
 			SessionID string `json:"session_id"`
 			Secret    string `json:"secret"`
 			Signature string `json:"signature"` // base64url, 64 B
+			// Свидетельство нового устройства от ключа подписи устройств этого телефона
+			// (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ ДУ2). Необязательное: телефон, заведённый до ДУ1, КПУ не имеет.
+			DeviceCertSig string `json:"device_cert_sig,omitempty"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -165,6 +168,29 @@ func linkConfirm(deps devicesDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "bad_signature", "подпись не сходится")
 			return
 		}
+		// Свидетельство нового устройства: КПУ этого телефона над ключами из QR. Нет КПУ или
+		// подпись не сходится — в строгом режиме отказ: телефон, не доказавший фразу, не
+		// вправе приводить в аккаунт новые устройства.
+		certAskID := ""
+		var certSig []byte
+		if req.DeviceCertSig != "" {
+			if cs, derr := base64.RawURLEncoding.DecodeString(req.DeviceCertSig); derr == nil {
+				if k, kerr := deps.store.DeviceSigningKey(ctx, id.UserID, id.DeviceID); kerr == nil &&
+					verifyDeviceCert(k.Pub, ls.EncryptionPub, ls.SigningPub, cs) {
+					certAskID, certSig = k.AskID, cs
+				}
+			}
+		}
+		if certSig == nil && deps.trust != nil {
+			switch deps.trust() {
+			case trustRequire:
+				writeErr(w, http.StatusForbidden, "phone_unproven",
+					"Сначала подтвердите этот телефон фразой («Устройства» → «Подтвердить фразой»), потом подключайте новое устройство.")
+				return
+			case trustRecord:
+				log.Printf("доверие: телефон %s подтвердил устройство без свидетельства", id.DeviceID)
+			}
+		}
 		newDeviceID, err := deps.store.ConfirmLinkSession(ctx, req.SessionID, hashLinkToken(req.Secret), id.UserID)
 		if errors.Is(err, store.ErrLinkSessionInvalid) {
 			writeErr(w, http.StatusForbidden, "bad_session", "сессия привязки не найдена, просрочена или уже подтверждена")
@@ -176,6 +202,11 @@ func linkConfirm(deps devicesDeps) http.HandlerFunc {
 		}
 		log.Printf("linkConfirm: устройство %s подтвердило %q (%s) для %s",
 			id.DeviceID, ls.DeviceName, newDeviceID, id.UserID)
+		if certSig != nil {
+			if err := deps.store.SetDeviceCertificate(ctx, id.UserID, newDeviceID, certByAsk, certAskID, certSig); err != nil {
+				log.Printf("доверие: свидетельство привязанного %s не записано: %v", newDeviceID, err)
+			}
+		}
 		// device_id возвращается не для отчётности: подтвердившее устройство сразу
 		// перезаворачивает на него ключи истории (ADR-0010 §этап 2, тот же путь, что
 		// у восстановления), а для этого нужен адрес получателя обёрток. Само новое

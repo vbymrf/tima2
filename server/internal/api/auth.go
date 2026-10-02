@@ -219,6 +219,13 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		// правила «подтверждать привязку по QR может только телефон»
 		// (key-lifecycle.md §2). До аттестации непроверяема — см. миграцию 0029.
 		Platform string `json:"platform,omitempty"`
+		// Доверие к устройству (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ ДУ2). Необязательные: телефон, вошедший
+		// с фразой, заводит свой ключ подписи устройств (ask_*) и заверяет им себя; ПК с фразой
+		// заверяет себя ключом личности (device_cert_by=identity).
+		AskPub        string `json:"ask_pub,omitempty"`
+		AskSig        string `json:"ask_sig,omitempty"`
+		DeviceCertBy  string `json:"device_cert_by,omitempty"`
+		DeviceCertSig string `json:"device_cert_sig,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -243,11 +250,54 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	proof, err := decodeProof(req.AskPub, req.AskSig, req.DeviceCertBy, req.DeviceCertSig)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "bad_proof", err.Error())
+		return
+	}
 	userID, err := s.Store.UpsertUserByPhone(r.Context(), claims.Subject)
 	if err != nil {
 		log.Printf("register: upsert user: %v", err)
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return
+	}
+	// ── ДОКАЗАТЕЛЬСТВО ВЛАДЕНИЯ (ДУ2, беда «вор SIM читает новые сообщения») ──────────
+	//
+	// Код SMS доказывает номер, а номера перевыпускают. Сверка присланного identity_pub с
+	// заведённым ничего не доказывает: ключ открытый, сервер сам отдаёт его любому. Доказывает
+	// только подпись: устройство заверено ключом личности или ключом подписи устройств,
+	// который заверен ключом личности. Ключ личности для проверки — заведённый у аккаунта,
+	// а у нового аккаунта (или «начать заново») — присланный.
+	existing, err := s.Store.IdentityPub(r.Context(), userID)
+	if err != nil {
+		log.Printf("register: identity: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	effective := existing
+	if len(effective) == 0 || (req.ForceNewIdentity && len(identityPub) > 0) {
+		// Новый аккаунт или «начать заново»: заверять устройство будет новая личность.
+		effective = identityPub
+	}
+	askOK, certBy := proofHolds(effective, enc, sig, proof)
+	mode := NormalizeDeviceTrust(s.DeviceTrust)
+	if mode != trustOff {
+		switch {
+		case len(effective) == 0:
+			log.Printf("доверие: регистрация в аккаунт %s без фразы (режим %s)", userID, mode)
+			if mode == trustRequire {
+				writeErr(w, http.StatusForbidden, "phrase_required",
+					"Аккаунт без секретной фразы недоступен. Обновите приложение и войдите заново.")
+				return
+			}
+		case certBy == "":
+			log.Printf("доверие: устройство в аккаунт %s без доказательства фразы (режим %s, ask=%v)", userID, mode, askOK)
+			if mode == trustRequire {
+				writeErr(w, http.StatusForbidden, "device_unproven",
+					"Этот номер привязан к аккаунту с секретной фразой. Введите фразу или подключите устройство по QR с телефона.")
+				return
+			}
+		}
 	}
 	if req.ForceNewIdentity {
 		userID, err = s.forceNewIdentityIfConflict(r.Context(), userID, identityPub)
@@ -271,11 +321,32 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return
 	}
-	deviceID, err := s.Store.NewDevice(r.Context(), userID, enc, sig, normalizePlatform(req.Platform))
+	platform := normalizePlatform(req.Platform)
+	deviceID, err := s.Store.NewDevice(r.Context(), userID, enc, sig, platform)
 	if err != nil {
 		log.Printf("register: new device: %v", err)
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return
+	}
+	// Свидетельство — после заведения: устройству нужен device_id. Сбой здесь не отменяет
+	// регистрацию: устройство заведено и годно, свидетельство телефон пришлёт снова
+	// («Устройства» → «Подтвердить фразой»).
+	if certBy != "" {
+		askID := ""
+		if certBy == certByAsk {
+			// КПУ держит только телефон (Р12): ПК, приславший КПУ, заверяется только сам.
+			if store.PlatformPhone[platform] && askOK {
+				askID, err = s.Store.AddSigningKey(r.Context(), userID, deviceID, proof.AskPub, proof.AskSig)
+			} else {
+				err = errors.New("ключ подписи устройств прислало не-телефонное устройство")
+			}
+		}
+		if err == nil {
+			err = s.Store.SetDeviceCertificate(r.Context(), userID, deviceID, certBy, askID, proof.CertSig)
+		}
+		if err != nil {
+			log.Printf("доверие: свидетельство устройства %s не записано: %v", deviceID, err)
+		}
 	}
 	access, err := s.Auth.IssueAccess(userID, deviceID)
 	if err != nil {
@@ -512,16 +583,54 @@ func (s *Server) listDeviceKeys(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return
 	}
+	// Цепочка доверия (ДУ3): ключ личности, действующие КПУ со свидетельствами, у каждого
+	// устройства — его свидетельство. Проверяет клиент: сервер — не якорь доверия.
+	identityPub, err := s.Store.IdentityPub(r.Context(), userID)
+	if err != nil {
+		log.Printf("listDeviceKeys: identity: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
+	asks, err := s.Store.ActiveSigningKeys(r.Context(), userID)
+	if err != nil {
+		log.Printf("listDeviceKeys: asks: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		return
+	}
 	b64 := base64.RawURLEncoding
 	type item struct {
 		DeviceID      string `json:"device_id"`
 		EncryptionPub string `json:"encryption_pub"`
 		SigningPub    string `json:"signing_pub"`
+		CertBy        string `json:"cert_by,omitempty"`
+		CertAskID     string `json:"cert_ask_id,omitempty"`
+		CertSig       string `json:"cert_sig,omitempty"`
+	}
+	type askItem struct {
+		AskID  string `json:"ask_id"`
+		AskPub string `json:"ask_pub"`
+		AskSig string `json:"ask_sig"`
 	}
 	out := make([]item, 0, len(devices))
 	for _, d := range devices {
-		out = append(out, item{d.DeviceID, b64.EncodeToString(d.EncryptionPub), b64.EncodeToString(d.SigningPub)})
+		it := item{DeviceID: d.DeviceID, EncryptionPub: b64.EncodeToString(d.EncryptionPub), SigningPub: b64.EncodeToString(d.SigningPub)}
+		if d.CertBy != "" && len(d.CertSig) > 0 {
+			it.CertBy, it.CertAskID, it.CertSig = d.CertBy, d.CertAskID, b64.EncodeToString(d.CertSig)
+		}
+		out = append(out, it)
+	}
+	askOut := make([]askItem, 0, len(asks))
+	for _, k := range asks {
+		askOut = append(askOut, askItem{k.AskID, b64.EncodeToString(k.Pub), b64.EncodeToString(k.Sig)})
+	}
+	resp := map[string]any{
+		"user_id": userID, "devices": out,
+		"signing_keys": askOut,
+		"trust_mode":   NormalizeDeviceTrust(s.DeviceTrust),
+	}
+	if len(identityPub) == 32 {
+		resp["identity_pub"] = b64.EncodeToString(identityPub)
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"user_id": userID, "devices": out})
+	_ = json.NewEncoder(w).Encode(resp)
 }

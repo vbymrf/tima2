@@ -106,7 +106,13 @@ func (s *Store) RevokeDevice(ctx context.Context, userID, deviceID string) error
 	if ct.RowsAffected() == 0 {
 		return ErrDeviceNotFound
 	}
-	return nil
+	// Отозванный телефон уносит и свой ключ подписи устройств (ДУ4): всё, что им заверено,
+	// перестаёт быть доверенным у собеседников — иначе вор с украденным телефоном подписывал
+	// бы себе новые устройства и после отзыва.
+	_, err = s.pool.Exec(ctx, `
+		UPDATE account_signing_keys SET revoked_at = now()
+		WHERE device_id = $1 AND user_id = $2 AND revoked_at IS NULL`, deviceID, userID)
+	return err
 }
 
 // CountActiveDevices — сколько активных устройств у аккаунта (api не даёт
@@ -139,7 +145,8 @@ func (s *Store) NewDevice(ctx context.Context, userID string, encryptionPub, sig
 // (GET /keys/devices: отправителю — для обёрток, получателю — для проверки подписи).
 func (s *Store) ListDevices(ctx context.Context, userID string) ([]Device, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT device_id, user_id, encryption_pub, signing_pub
+		SELECT device_id, user_id, encryption_pub, signing_pub,
+		       cert_by, COALESCE(cert_ask_id::text, ''), cert_sig
 		FROM devices WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at`, userID)
 	if err != nil {
 		return nil, err
@@ -148,7 +155,8 @@ func (s *Store) ListDevices(ctx context.Context, userID string) ([]Device, error
 	var out []Device
 	for rows.Next() {
 		var d Device
-		if err := rows.Scan(&d.DeviceID, &d.UserID, &d.EncryptionPub, &d.SigningPub); err != nil {
+		if err := rows.Scan(&d.DeviceID, &d.UserID, &d.EncryptionPub, &d.SigningPub,
+			&d.CertBy, &d.CertAskID, &d.CertSig); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
@@ -162,6 +170,10 @@ type Device struct {
 	UserID        string
 	EncryptionPub []byte
 	SigningPub    []byte
+	// Свидетельство (ДУ1–ДУ2): кем подписаны ключи устройства. CertBy пусто — не подписано.
+	CertBy    string
+	CertAskID string
+	CertSig   []byte
 }
 
 // SigningKey возвращает Ed25519-ключ неотозванного устройства пользователя.
