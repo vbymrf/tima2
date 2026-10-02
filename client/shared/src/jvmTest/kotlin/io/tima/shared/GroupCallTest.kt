@@ -252,6 +252,38 @@ class GroupCallTest {
     }
 
     @Test
+    fun личный_входящий_после_группового_не_становится_групповым() = runTest {
+        // Отчёт 2FDW (2026-10-02): окно прошлого группового осталось открытым, пришёл личный
+        // видеозвонок — «Принять» шло входом в группу, окно рисовалось групповым.
+        val engine = GroupEngine()
+        val calls = GroupCalls(creator = я)
+        val host = host(calls, engine)
+        host.startGroup("группа", "Планёрка", ring = false, video = true, invited = emptyList())
+        engine.say(CallState(stage = CallStage.Connected))
+        host.hangUp()
+        assertTrue(host.isGroup, "окно конца группового — ещё групповое")
+        host.ring("личный", "u-друг", "Друг", video = true)
+        assertFalse(host.isGroup, "личный входящий унёс пометку группового")
+        host.accept()
+        assertEquals(listOf("личный"), calls.answered, "принят ответом, а не входом в группу")
+        assertTrue(calls.joined.isEmpty())
+    }
+
+    @Test
+    fun перезвонить_в_групповом_не_работает_вместо_него_создать_звонок() = runTest {
+        val engine = GroupEngine()
+        val calls = GroupCalls(creator = я)
+        val host = host(calls, engine)
+        host.startGroup("группа", "Планёрка", ring = true, video = true, invited = listOf("u-1"))
+        engine.say(CallState(stage = CallStage.Connected))
+        host.hangUp()
+        host.again()
+        assertEquals(1, calls.started.size, "«Перезвонить» не заводит групповой")
+        host.createAgain()
+        assertEquals(listOf(true to listOf("u-1")), calls.started.drop(1), "«Создать звонок» — с прежними галочками")
+    }
+
+    @Test
     fun уход_одного_участника_группового_не_кладёт_трубку() = runTest {
         val host = host(GroupCalls(creator = создатель))
         host.joinGroup("g1", "группа", "Планёрка", video = false)
@@ -298,10 +330,22 @@ class GroupCallTest {
                 group = GroupRoom(groupId = "группа", creatorId = creator),
             ),
         )
+        val answered = mutableListOf<String>()
+        val joined = mutableListOf<String>()
+        val started = mutableListOf<Pair<Boolean, List<String>>>()
         override suspend fun start(peerId: String, video: Boolean): CallStep = CallStep.Refused("не здесь")
-        override suspend fun answer(callId: String): CallStep = CallStep.Refused("не здесь")
-        override suspend fun join(callId: String): CallStep = door(callId)
-        override suspend fun startGroup(groupId: String, ring: Boolean, video: Boolean, invited: List<String>) = door("g1")
+        override suspend fun answer(callId: String): CallStep {
+            answered += callId
+            return CallStep.Door(CallDoor(callId = callId, room = "к", url = "wss://х", token = "т"))
+        }
+        override suspend fun join(callId: String): CallStep {
+            joined += callId
+            return door(callId)
+        }
+        override suspend fun startGroup(groupId: String, ring: Boolean, video: Boolean, invited: List<String>): CallStep {
+            started += ring to invited
+            return door("g1")
+        }
         override suspend fun control(callId: String, action: GroupControl, userId: String): Boolean {
             controls += action to userId
             return true

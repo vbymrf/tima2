@@ -155,14 +155,16 @@ fun CallScreen(
         }
 
         // Полоса событий — в самом верху, над всем остальным: это то, что случилось, и
-        // читается оно первым (ЗВ10).
-        CallEvents(events, onAction = onEventAction)
+        // читается оно первым (ЗВ10). У идущего группового — кнопкой «развернуть» в его
+        // верхней полосе и листом поверх окна (заказчик 2026-10-02).
+        val groupLive = group != null && state.stage == CallStage.Connected
+        if (!groupLive) CallEvents(events, onAction = onEventAction)
 
         // Групповой в разговоре — сетка участников, своя картинка — одной из клеток.
         if (group != null && state.stage == CallStage.Connected) {
             Column(Modifier.weight(1f).fillMaxWidth()) {
                 val peers = group.tiles.filter { !it.self }
-                GroupTopBar(group, group.view, groupPages(peers, group.view.perPage).size, words.duration(seconds))
+                GroupTopBar(group, group.view, groupPages(peers, group.view.perPage).size, words.duration(seconds), events.size)
                 if (group.paused) {
                     Caption(
                         Tima.words.groupCall.pausedBanner,
@@ -175,7 +177,12 @@ fun CallScreen(
                 // Телефон: страница и своё окошко здесь. ПК с тремя областями: здесь — себя
                 // крупно, остальные — в области 3 (заказчик 2026-10-01).
                 if (remoteHere) {
-                    GroupCallBody(group, group.view, withSelf = true, modifier = Modifier.weight(1f).fillMaxWidth())
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        GroupCallBody(group, group.view, withSelf = true, modifier = Modifier.fillMaxSize())
+                        if (group.view.eventsOpen) {
+                            CallEvents(events, modifier = Modifier.align(Alignment.TopCenter), onAction = onEventAction, startExpanded = true)
+                        }
+                    }
                 } else {
                     val self = group.tiles.firstOrNull { it.self }
                     if (self != null && group.view.showSelf) {
@@ -282,6 +289,17 @@ fun CallScreen(
                         group.onStopAll()
                     })
                     Button(label = words.cancel, kind = ButtonKind.Quiet, onClick = { askHangUp = false })
+                }
+
+                // Конец группового — своё окно (заказчик 2026-10-02): автор создаёт звонок
+                // заново, остальные присоединяются, пока звонок в группе идёт.
+                state.stage == CallStage.Ended && group != null -> {
+                    if (group.mine) {
+                        group.onCreateAgain?.let { Button(label = Tima.words.groupCall.createCall, onClick = it) }
+                    } else {
+                        group.onJoinAgain?.let { Button(label = Tima.words.groupCall.join, onClick = it, enabled = group.joinLive) }
+                    }
+                    onClose?.let { Button(label = words.close, kind = ButtonKind.Quiet, onClick = it) }
                 }
 
                 state.stage == CallStage.Ended -> {
@@ -399,6 +417,11 @@ data class GroupStage(
     val onVoice: ((GroupTile) -> Unit)? = null,
     /** «📌» под пузырём — закрепить или открепить; `null` — я не создатель. */
     val onPin: ((GroupTile) -> Unit)? = null,
+    /** Конец звонка, я автор — «Создать звонок». */
+    val onCreateAgain: (() -> Unit)? = null,
+    /** Конец звонка, не автор — «Присоединиться»; активна, пока звонок в группе идёт. */
+    val onJoinAgain: (() -> Unit)? = null,
+    val joinLive: Boolean = false,
 )
 
 /** Клетка сетки группового звонка. */

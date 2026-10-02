@@ -57,12 +57,14 @@ internal fun CallEvents(
     modifier: Modifier = Modifier,
     /** Сделать то, что предлагает событие. `null` — делать нечем, кнопки нет. */
     onAction: ((CallAction) -> Unit)? = null,
+    /** Открыть сразу развёрнутым — лист событий группового. */
+    startExpanded: Boolean = false,
 ) {
     if (events.isEmpty()) return
     val colors = Tima.colors
     val words = Tima.words.call
 
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(startExpanded) }
     // Место в ленте. Считается от конца: пока событий не прибавилось, стоим где стояли, а
     // как прибавилось — показываем новое. Иначе свежее событие приходило бы молча, за
     // спиной у того, кто листает.
@@ -94,9 +96,11 @@ internal fun CallEvents(
             // Стрелка — обычной круглой кнопкой, как все прочие значки приложения, и
             // крупная: голый символ размером с текст читался как часть надписи, и в него
             // не попадали пальцем (заказчик 2026-09-20).
+            // Зелёная, как все «развернуть» звонка: здесь есть что развернуть (2026-10-02).
             IconButton(
                 glyph = if (expanded) "▲" else "▼",
                 onClick = { expanded = !expanded },
+                live = true,
             )
         }
 

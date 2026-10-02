@@ -319,6 +319,8 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
 
     /** Что знаем о входящем видео одного участника между опросами. */
     private class PeerWatch {
+        var qpSum = -1L
+        var qpFrames = -1L
         var said = ""
         var got = -1L
         var froze = 0
@@ -377,9 +379,18 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                             Journal.trouble(LogCode.CALL, "пришло некратное", "кто" to kto, "кадр" to size, "раскодировщик" to got.decoder_implementation)
                         }
                         me.misaligned = size
+                        val decodedNow = got.frames_decoded.toLong()
+                        val qp = if (me.qpFrames >= 0 && decodedNow > me.qpFrames) {
+                            (got.qp_sum - me.qpSum).toDouble() / (decodedNow - me.qpFrames)
+                        } else {
+                            null
+                        }
+                        me.qpSum = got.qp_sum
+                        me.qpFrames = decodedNow
                         peerNumbers[identity] = PeerIncoming(
                             frame = size, codec = codec, kbit = kbit.takeIf { it >= 0 }, decoder = got.decoder_implementation.ifBlank { "—" },
                             decodeMs = decodeMs, dropped = got.frames_dropped.toLong(), freezes = got.freeze_count.toLong(),
+                            fps = got.frames_per_second, qp = qp,
                         )
                         val line = size + "|" + (kbit / 100) + "|" + got.decoder_implementation + "|" + codec
                         if (line != me.said) {

@@ -113,7 +113,8 @@ fun CallLedgerPage(
 ) {
     val words = Tima.words.groupCall
     val book = Tima.words.book
-    var tab by remember { mutableStateOf(if (members.size <= 1 && !live) EVERYONE else PARTICIPANTS) }
+    // Открывается всегда на «Все контакты» (заказчик 2026-10-02).
+    var tab by remember { mutableStateOf(EVERYONE) }
     var query by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf(setOf<String>()) }
 
@@ -134,22 +135,41 @@ fun CallLedgerPage(
         // Разделы — та же полоса, что в журнале контактов: «Участники» первым, дальше —
         // откуда звать. У группы — один раздел «Группа»; у книги — её разделы.
         val tabs = buildList {
-            add(SectionTab(PARTICIPANTS, words.participants + " · " + counted, 0))
             add(SectionTab(EVERYONE, if (fromGroup) words.groupMembers else words.allContacts, 0))
             if (!fromGroup) addAll(sectionTabs(sections, null, book).drop(1))
         }
-        SectionsRow(
-            tabs = tabs,
-            chosen = tab,
-            icons = view.icons && !fromGroup,
-            onPick = { id ->
-                tab = when (id) {
-                    "" -> EVERYONE
-                    else -> id
-                }
-                selected = emptySet()
-            },
-        )
+        // «Участники» — отдельным серым пузырём слева (второй уровень серого темы), дальше —
+        // откуда звать (заказчик 2026-10-02).
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val on = tab == PARTICIPANTS
+            Caption(
+                words.participants + " · " + counted,
+                modifier = Modifier.padding(start = TimaSpacing.about3)
+                    .background(Tima.colors.quiet, androidx.compose.foundation.shape.RoundedCornerShape(50))
+                    .clickable {
+                        tab = PARTICIPANTS
+                        selected = emptySet()
+                    }
+                    .padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about1),
+                fontSize = TimaType.sz5,
+                weight = if (on) FontWeight.Bold else FontWeight.SemiBold,
+                color = if (on) Tima.colors.navigation else Tima.colors.text,
+                lineOne = true,
+            )
+            SectionsRow(
+                tabs = tabs,
+                chosen = if (tab == PARTICIPANTS) "-" else tab,
+                icons = view.icons && !fromGroup,
+                onPick = { id ->
+                    tab = when (id) {
+                        "" -> EVERYONE
+                        else -> id
+                    }
+                    selected = emptySet()
+                },
+                modifier = Modifier.weight(1f),
+            )
+        }
         Column(
             Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
             verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
@@ -464,7 +484,7 @@ fun GroupCallSetup(
     modifier: Modifier = Modifier,
     onCreateChat: (() -> Unit)? = null,
     noRights: Boolean = false,
-    /** Выбранный вид словами — под строкой «Вид»; `null` — строки нет. */
+    /** Выбранный тип вида — зелёным под строкой «Вид»; `null` — строки нет. */
     viewNow: String? = null,
     /** «Вид» — подокно выбора вида, то же, что в звонке (заказчик 2026-10-01). */
     onView: () -> Unit = {},
@@ -481,7 +501,8 @@ fun GroupCallSetup(
                 left = { Box(Modifier.size(TimaZones.zone1 * 0.8f)) },
                 middle = {
                     Caption(words.viewButton, fontSize = TimaType.sz4, weight = FontWeight.Bold)
-                    Tertiary(words.viewAbout + ": " + now)
+                    Tertiary(words.viewAbout)
+                    Caption(now, fontSize = TimaType.sz5, weight = FontWeight.Bold, color = Tima.colors.navigation)
                 },
                 right = { Button(label = words.viewButton, onClick = onView, kind = ButtonKind.Quiet) },
             )

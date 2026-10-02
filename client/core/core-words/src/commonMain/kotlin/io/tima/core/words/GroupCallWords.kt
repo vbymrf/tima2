@@ -114,6 +114,14 @@ interface GroupCallWords {
     val back: String
     val voiceTitle: String
     val viewSpeaker: String
+    val viewGrid: String
+    val viewType: String
+    val viewSpeakerAbout: String
+    val viewGridAbout: String
+    val viewSelfAbout: String
+    val createCall: String
+    val benchFps: String
+    val benchQp: String
     val viewAbout: String
     val viewSelfOn: String
     val viewSelfOff: String
@@ -241,6 +249,14 @@ object RussianGroupCall : GroupCallWords {
     override val voiceButton = "Голос"
     override val voiceForbidden = "голос запрещён"
     override val pinnedMark = "закреплён"
+    override val viewGrid = "Групповой"
+    override val viewType = "Тип"
+    override val viewSpeakerAbout = "Наверху — двое говорящих, внизу — все участники"
+    override val viewGridAbout = "Участники на странице, листать «‹ ›»"
+    override val viewSelfAbout = "Малое окно «Я» справа внизу"
+    override val createCall = "Создать звонок"
+    override val benchFps = "Кадров/с"
+    override val benchQp = "Качество (QP)"
     override val tileVideoNotArriving = "Видео не приходит"
     override fun tileVideoNotDecoding(codec: String) = "Видео $codec не раскодируется"
 
@@ -359,6 +375,14 @@ object EnglishGroupCall : GroupCallWords {
     override val voiceButton = "Voice"
     override val voiceForbidden = "voice forbidden"
     override val pinnedMark = "pinned"
+    override val viewGrid = "Group"
+    override val viewType = "Type"
+    override val viewSpeakerAbout = "Two speakers on top, everyone below"
+    override val viewGridAbout = "Participants per page, flip with «‹ ›»"
+    override val viewSelfAbout = "Small “Me” window at the bottom right"
+    override val createCall = "Start a call"
+    override val benchFps = "Frames/s"
+    override val benchQp = "Quality (QP)"
     override val tileVideoNotArriving = "Video is not arriving"
     override fun tileVideoNotDecoding(codec: String) = "Cannot decode $codec video"
 
@@ -477,6 +501,14 @@ object SpanishGroupCall : GroupCallWords {
     override val voiceButton = "Voz"
     override val voiceForbidden = "voz prohibida"
     override val pinnedMark = "fijado"
+    override val viewGrid = "Grupal"
+    override val viewType = "Tipo"
+    override val viewSpeakerAbout = "Arriba, dos que hablan; abajo, todos"
+    override val viewGridAbout = "Participantes por página, pasar con «‹ ›»"
+    override val viewSelfAbout = "Ventana pequeña «Yo» abajo a la derecha"
+    override val createCall = "Crear llamada"
+    override val benchFps = "Cuadros/s"
+    override val benchQp = "Calidad (QP)"
     override val tileVideoNotArriving = "El vídeo no llega"
     override fun tileVideoNotDecoding(codec: String) = "No se puede decodificar el vídeo $codec"
 

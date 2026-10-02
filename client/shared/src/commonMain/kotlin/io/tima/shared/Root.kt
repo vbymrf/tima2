@@ -1425,9 +1425,13 @@ private fun App(
                     ?.split(',')?.filter { it.isNotBlank() }?.toSet().orEmpty()
             },
             rememberInvited = { groupId, who -> runCatching { environment.settings.put(INVITED_PREFIX + groupId, who.joinToString(",")) } },
+            myTitle = {
+                peopleCards[session.userId]?.let { me -> me.nick?.takeIf { it.isNotBlank() }?.let { "@$it" } ?: me.userName ?: me.name }
+            },
         )
     }
     LaunchedEffect(groupDesk) {
+        people.want(listOf(session.userId))
         callHost.myUserId = { session.userId }
         callHost.onStarted = { groupId, _, invited -> groupDesk.sendInvites(groupId, invited) }
         // Строки звонка в переписке группы — у себя, в переписку не уходят (8б).
@@ -2256,6 +2260,13 @@ private fun App(
                 )
                 groupDesk.refreshSoon(g.groupId)
             }) else null,
+            // Конец группового — своё окно: автор создаёт заново, остальные присоединяются,
+            // пока звонок в группе идёт (заказчик 2026-10-02).
+            onCreateAgain = { callHost.createAgain() },
+            onJoinAgain = {
+                groupDesk.live[g.groupId]?.call?.let { live -> groupDesk.join(live.callId, g.groupId, g.title) }
+            },
+            joinLive = groupDesk.live[g.groupId]?.call?.let { it.callId != callHost.state.callId } == true,
             onPin = if (g.mine) ({ t ->
                 val pinnedNow = callHost.state.roomPinned == t.userId
                 callHost.control(if (pinnedNow) io.tima.core.call.GroupControl.Unpin else io.tima.core.call.GroupControl.Pin, t.userId)

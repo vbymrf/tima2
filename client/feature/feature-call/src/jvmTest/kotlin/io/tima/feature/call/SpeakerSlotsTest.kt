@@ -87,5 +87,24 @@ class SpeakerSlotsTest {
             )
         }
         capture("групповой-вид-подокно", 400, 300, dark = false) { GroupViewChoice(view) }
+        // Не автор: пузыри в две строки, без кнопок.
+        val many = tiles + listOf("Елена", "Жанна", "Зоя", "Игорь").map { GroupTile(it, it, it.take(1), null, true, false, false, false, userId = it) }
+        capture("групповой-говорящий-участник", 400, 760, dark = false) {
+            CallScreen(
+                state = CallState(stage = CallStage.Connected, microphoneOn = true),
+                peer = "Планёрка", incoming = false, onAccept = {}, onDecline = {}, onHangUp = {},
+                onMicrophone = {}, onCamera = {}, seconds = 75,
+                events = listOf(io.tima.core.call.CallEvent(seconds = 3, text = "Создатель запретил вам микрофон")),
+                group = GroupStage("Планёрка", many, 10, 25, false, false, {}, {}, view, pinnedKey = "Борис"),
+            )
+        }
+        capture("групповой-конец-не-автор", 400, 400, dark = false) {
+            CallScreen(
+                state = CallState(stage = CallStage.Ended),
+                peer = "Планёрка", incoming = false, onAccept = {}, onDecline = {}, onHangUp = {},
+                onMicrophone = {}, onCamera = {}, onClose = {}, onCallAgain = {},
+                group = GroupStage("Планёрка", many, 10, 25, false, false, {}, {}, view, onJoinAgain = {}, joinLive = false),
+            )
+        }
     }
 }

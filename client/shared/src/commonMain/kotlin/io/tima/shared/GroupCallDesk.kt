@@ -90,6 +90,8 @@ class GroupCallDesk(
      */
     private val invitedBefore: suspend (String) -> Set<String> = { emptySet() },
     private val rememberInvited: suspend (String, Set<String>) -> Unit = { _, _ -> },
+    /** Как назвать меня в имени временной группы: «@ник», а без ника — имя (2026-10-02). */
+    private val myTitle: () -> String? = { null },
     private val words: () -> Words = { CurrentWords.value },
 ) {
     /** Откуда открыли групповой звонок. */
@@ -385,7 +387,12 @@ class GroupCallDesk(
         return listOf(self) + fromServer + extra
     }
 
+    /**
+     * Имя временной группы — «Групповой звонок @ник» автора (заказчик 2026-10-02, 2а: без ника —
+     * имя). Ни того ни другого — время, как было.
+     */
     private fun defaultTitle(): String {
+        myTitle()?.takeIf { it.isNotBlank() }?.let { return words().groupCall.title + " " + it }
         val t = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
         val hh = t.hour.toString().padStart(2, '0')
         val mm = t.minute.toString().padStart(2, '0')
@@ -429,7 +436,8 @@ fun GroupCallOverlays(
                 contentAlignment = Alignment.BottomCenter,
             ) {
                 Column(Modifier.fillMaxWidth().background(Tima.colors.surface).clickable(enabled = false) {}) {
-                    Header(title = words.viewButton, onBack = { desk.viewing = false }, onClose = desk::closeSetup)
+                    // Крестик — как «назад»: в подокно «Групповой звонок» (заказчик 2026-10-02).
+                    Header(title = words.viewButton, onBack = { desk.viewing = false }, onClose = { desk.viewing = false })
                     io.tima.feature.call.GroupViewChoice(groupView)
                 }
             }
@@ -451,12 +459,14 @@ fun GroupCallOverlays(
                         onPick = desk::pick,
                         onCreateChat = if (ask.groupId == null) desk::pickForChat else null,
                         noRights = !ask.canStart,
-                        viewNow = if (groupView.mode == io.tima.feature.call.GroupMode.Speaker) {
-                            words.viewSpeaker
-                        } else {
-                            (when (groupView.perPage) { 1 -> words.viewOne; 2 -> words.viewTwo; else -> words.viewFour }) +
-                                " · " + (if (groupView.showSelf) words.viewSelfOn else words.viewSelfOff)
-                        },
+                        // Тип — зелёным: «Говорящий» или «Групповой · по 4».
+                        viewNow = (
+                            if (groupView.mode == io.tima.feature.call.GroupMode.Speaker) {
+                                words.viewSpeaker
+                            } else {
+                                words.viewGrid + " · " + (when (groupView.perPage) { 1 -> words.viewOne; 2 -> words.viewTwo; else -> words.viewFour }).lowercase()
+                            }
+                            ) + " · " + (if (groupView.showSelf) words.viewSelfOn else words.viewSelfOff),
                         onView = { desk.viewing = true },
                     )
                 }
@@ -501,6 +511,7 @@ fun GroupCallOverlays(
             onBack = if (desk.help) ({ desk.help = false }) else null,
             onHelp = if (!desk.help) ({ desk.help = true }) else null,
             onClose = desk::closeLedger,
+            ledger = true,
         )
         if (desk.help) {
             CallLedgerHelpPage(Modifier.verticalScroll(rememberScrollState()))
@@ -549,9 +560,16 @@ fun GroupCallOverlays(
 }
 
 @Composable
-private fun Header(title: String, onClose: () -> Unit, onBack: (() -> Unit)? = null, onHelp: (() -> Unit)? = null) {
+private fun Header(
+    title: String,
+    onClose: () -> Unit,
+    onBack: (() -> Unit)? = null,
+    onHelp: (() -> Unit)? = null,
+    /** Шапка журнала — вторым уровнем серого (заказчик 2026-10-02). */
+    ledger: Boolean = false,
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().background(Tima.colors.functional)
+        modifier = Modifier.fillMaxWidth().background(if (ledger) Tima.colors.quiet else Tima.colors.functional)
             .heightIn(min = TimaZones.zone1).padding(horizontal = TimaSpacing.about4),
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
         verticalAlignment = Alignment.CenterVertically,

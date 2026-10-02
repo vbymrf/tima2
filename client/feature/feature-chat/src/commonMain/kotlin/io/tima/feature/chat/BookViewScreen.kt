@@ -580,7 +580,8 @@ fun BookViewSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(colors.functional)
+                    // Журнал — вторым уровнем серого, как журнал звонка (заказчик 2026-10-02).
+                    .background(if (ledger) colors.quiet else colors.functional)
                     .heightIn(min = TimaZones.zone1)
                     .padding(horizontal = TimaSpacing.about4),
                 horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),

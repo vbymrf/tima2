@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -84,6 +85,10 @@ class GroupView {
 
     /** Открыт ли выбор вида. */
     var choosing by mutableStateOf(false)
+
+    /** Открыт ли лист событий звонка и сколько событий уже видено — зелёная «развернуть». */
+    var eventsOpen by mutableStateOf(false)
+    var eventsSeen by mutableStateOf(0)
 }
 
 /** Страница сетки: клетки с видео или список тех, кто только голосом. */
@@ -127,16 +132,29 @@ fun groupVisible(pages: List<GroupPage>, view: GroupView): Set<String> {
     return if (page is GroupPage.Video) page.tiles.map { it.key }.toSet() else emptySet()
 }
 
-/** Верхняя полоса: «Вид» слева, название, «‹ 2/5 ›» и время справа. */
+/**
+ * Верхняя полоса: «развернуть» событий и «Вид» слева, название, «‹ 2/5 ›» и время справа.
+ * События больше не занимают строку сверху: «развернуть» зелёная, когда есть новое, серая —
+ * когда нет; нажатие открывает лист событий поверх окна (заказчик 2026-10-02).
+ */
 @Composable
-internal fun GroupTopBar(group: GroupStage, view: GroupView, pages: Int, time: String) {
+internal fun GroupTopBar(group: GroupStage, view: GroupView, pages: Int, time: String, events: Int = 0) {
     val words = Tima.words.groupCall
+    if (view.eventsOpen && events > view.eventsSeen) view.eventsSeen = events
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about2, vertical = TimaSpacing.about1),
             horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            IconButton(
+                glyph = if (view.eventsOpen) "▲" else "▼",
+                onClick = {
+                    view.eventsOpen = !view.eventsOpen
+                    view.eventsSeen = events
+                },
+                live = events > view.eventsSeen,
+            )
             Button(label = words.viewButton, onClick = { view.choosing = !view.choosing }, kind = ButtonKind.Quiet)
             Caption(group.title, modifier = Modifier.weight(1f), fontSize = TimaType.sz4, weight = FontWeight.Bold, lineOne = true)
             if (pages > 1 && view.expanded == null && view.mode == GroupMode.Pages) {
@@ -150,54 +168,66 @@ internal fun GroupTopBar(group: GroupStage, view: GroupView, pages: Int, time: S
     }
 }
 
-/** Выбор вида: по одному, по 2, по 4, «Говорящий»; показывать ли себя. */
+/** Выбор вида поверх окна — тот же, что в настройке звонка. */
 @Composable
 private fun ViewChoice(view: GroupView) = GroupViewChoice(view, Modifier.background(Tima.colors.functional))
 
 /**
- * Выбор вида — то же подокно в звонке и в настройке группового звонка (заказчик
- * 2026-10-01): выбранное сохраняется и становится видом следующего звонка.
+ * Выбор вида — то же подокно в звонке и в настройке группового звонка, в стиле настроек
+ * уведомлений (заказчик 2026-10-02): переключатель «Тип» — «Говорящий» или «Групповой»; у
+ * «Группового» — «По одному», «По 2», «По 4»; ниже «Показывать себя». Выбор сохраняется.
  */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun GroupViewChoice(view: GroupView, modifier: Modifier = Modifier) {
     val words = Tima.words.groupCall
-    Column(modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about1)) {
-        androidx.compose.foundation.layout.FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
-        ) {
+    Column(modifier.fillMaxWidth().padding(vertical = TimaSpacing.about1)) {
+        Caption(
+            words.viewType,
+            modifier = Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about1),
+            fontSize = TimaType.sz5,
+            weight = FontWeight.Bold,
+            color = Tima.colors.text2,
+        )
+        ChoiceLine(words.viewSpeaker, words.viewSpeakerAbout, view.mode == GroupMode.Speaker, indent = false) {
+            view.mode = GroupMode.Speaker
+            view.expanded = null
+        }
+        ChoiceLine(words.viewGrid, words.viewGridAbout, view.mode == GroupMode.Pages, indent = false) {
+            view.mode = GroupMode.Pages
+            view.expanded = null
+        }
+        if (view.mode == GroupMode.Pages) {
             for ((n, label) in listOf(1 to words.viewOne, 2 to words.viewTwo, 4 to words.viewFour)) {
-                Button(
-                    label = label,
-                    onClick = {
-                        view.mode = GroupMode.Pages
-                        view.perPage = n
-                        view.page = 0
-                        view.expanded = null
-                    },
-                    kind = if (view.mode == GroupMode.Pages && view.perPage == n) ButtonKind.Action else ButtonKind.Quiet,
-                )
-            }
-            Button(
-                label = words.viewSpeaker,
-                onClick = {
-                    view.mode = GroupMode.Speaker
+                ChoiceLine(label, null, view.perPage == n, indent = true) {
+                    view.perPage = n
+                    view.page = 0
                     view.expanded = null
-                },
-                kind = if (view.mode == GroupMode.Speaker) ButtonKind.Action else ButtonKind.Quiet,
-            )
+                }
+            }
         }
-        // В «Говорящем» я — как все: наверху, когда говорю; своего окошка там нет.
-        if (view.mode == GroupMode.Pages) Row(
-            Modifier.clickable { view.showSelf = !view.showSelf }.padding(vertical = TimaSpacing.about1),
-            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CheckMark(view.showSelf)
-            Caption(words.viewSelf, fontSize = TimaType.sz4, lineOne = true)
-        }
+        ListLine(
+            onClick = { view.showSelf = !view.showSelf },
+            left = { CheckMark(view.showSelf) },
+            middle = {
+                Caption(words.viewSelf, fontSize = TimaType.sz4, weight = if (view.showSelf) FontWeight.Bold else FontWeight.Normal)
+                io.tima.core.ui.Tertiary(words.viewSelfAbout)
+            },
+        )
     }
+}
+
+/** Строка выбора с точкой — как в настройках уведомлений. */
+@Composable
+private fun ChoiceLine(label: String, about: String?, on: Boolean, indent: Boolean, onClick: () -> Unit) {
+    ListLine(
+        modifier = if (indent) Modifier.padding(start = TimaSpacing.about5) else Modifier,
+        onClick = onClick,
+        left = { io.tima.core.ui.RadioMark(on) },
+        middle = {
+            Caption(label, fontSize = TimaType.sz4, weight = if (on) FontWeight.Bold else FontWeight.Normal)
+            about?.let { io.tima.core.ui.Tertiary(it) }
+        },
+    )
 }
 
 /**
@@ -224,11 +254,11 @@ fun GroupCallBody(group: GroupStage, view: GroupView, withSelf: Boolean, modifie
             )
             return@BoxWithConstraints
         }
+        val selfShown = withSelf && view.showSelf && self != null
+        val selfWidth = maxWidth / 4
         if (view.mode == GroupMode.Speaker) {
-            SpeakerBody(group, view, peers, Modifier.fillMaxSize())
-            return@BoxWithConstraints
-        }
-        when (val page = pages[at]) {
+            SpeakerBody(group, view, peers, Modifier.fillMaxSize(), reserve = if (selfShown) selfWidth + TimaSpacing.about2 else 0.dp)
+        } else when (val page = pages[at]) {
             is GroupPage.Video ->
                 if (page.tiles.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -237,20 +267,15 @@ fun GroupCallBody(group: GroupStage, view: GroupView, withSelf: Boolean, modifie
                 } else {
                     PageGrid(page.tiles, view.perPage, Modifier.fillMaxSize()) { view.expanded = it.key }
                 }
-            // Список не уходит под своё окошко: кнопки микрофона должны быть видны.
-            is GroupPage.Voice -> VoiceList(
-                page.tiles,
-                Modifier.fillMaxSize().padding(end = if (withSelf && view.showSelf && self != null) maxWidth / 4 + TimaSpacing.about2 else 0.dp),
-            )
+            is GroupPage.Voice -> VoiceList(page.tiles, Modifier.fillMaxSize())
         }
-        // Себя — окошко в правом верхнем углу, четверть ширины, 3:4. Меньше — лица не
-        // различить, больше — закрывает собеседника. Нажатием не меняется (5а).
-        if (withSelf && view.showSelf && self != null) {
-            // Рамка — чтобы своё окошко не сливалось с клеткой под ним.
+        // «Я» — малое окно справа внизу во всех видах (заказчик 2026-10-02): четверть ширины,
+        // 3:4, в рамке. Нажатием не меняется.
+        if (selfShown && self != null) {
             GroupCell(
                 self,
-                Modifier.align(Alignment.TopEnd).padding(TimaSpacing.about2)
-                    .width(maxWidth / 4).aspectRatio(3f / 4f)
+                Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about2)
+                    .width(selfWidth).aspectRatio(3f / 4f)
                     .border(2.dp, Tima.colors.text3),
                 compact = true,
             )
@@ -385,16 +410,19 @@ class SpeakerSlots(private val enterMs: Long = 1_000, private val leaveMs: Long 
 }
 
 /**
- * «Говорящий»: верх — две трети, два места рядом; низ — пузыри всех, кто в комнате, листаются
- * влево-вправо. Под пузырём у создателя — «Голос» и «📌».
+ * «Говорящий»: верх — два места рядом; низ — пузыри всех, кто в комнате (заказчик 2026-10-02):
+ * у не автора в две строки, если влезает, — пузырь узкий, по аватару; у автора — одна строка,
+ * «Голос» и «📌» встают столбиком рядом с аватаром. В конце ряда — запас [reserve], чтобы
+ * последний пузырь выкручивался из-под окна «Я».
  */
 @Composable
-private fun SpeakerBody(group: GroupStage, view: GroupView, peers: List<GroupTile>, modifier: Modifier) {
+private fun SpeakerBody(group: GroupStage, view: GroupView, peers: List<GroupTile>, modifier: Modifier, reserve: androidx.compose.ui.unit.Dp) {
     val words = Tima.words.groupCall
     val everyone = peers + group.tiles.filter { it.self }
+    val author = group.onVoice != null || group.onPin != null
     Column(modifier) {
         Row(
-            Modifier.weight(2f).fillMaxWidth().padding(TimaSpacing.about1),
+            Modifier.weight(1f).fillMaxWidth().padding(TimaSpacing.about1),
             horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
         ) {
             for (key in view.slots) {
@@ -411,39 +439,64 @@ private fun SpeakerBody(group: GroupStage, view: GroupView, peers: List<GroupTil
                 }
             }
         }
-        androidx.compose.foundation.lazy.LazyRow(
-            Modifier.weight(1f).fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2),
-        ) {
-            items(everyone.size, key = { everyone[it].key }) { i -> Bubble(everyone[i], group, words) }
+        val padding = androidx.compose.foundation.layout.PaddingValues(
+            start = TimaSpacing.about3, end = TimaSpacing.about3 + reserve, top = TimaSpacing.about1, bottom = TimaSpacing.about1,
+        )
+        if (author) {
+            androidx.compose.foundation.lazy.LazyRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                contentPadding = padding,
+            ) {
+                items(everyone.size, key = { everyone[it].key }) { i -> Bubble(everyone[i], group, words, author = true) }
+            }
+        } else {
+            androidx.compose.foundation.lazy.grid.LazyHorizontalGrid(
+                rows = androidx.compose.foundation.lazy.grid.GridCells.Fixed(if (everyone.size > 4) 2 else 1),
+                modifier = Modifier.fillMaxWidth().height(if (everyone.size > 4) BUBBLE_HEIGHT * 2 + TimaSpacing.about3 else BUBBLE_HEIGHT + TimaSpacing.about2),
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
+                contentPadding = padding,
+            ) {
+                items(everyone.size, key = { everyone[it].key }) { i -> Bubble(everyone[i], group, words, author = false) }
+            }
         }
     }
 }
 
-/** Пузырь участника: аватар, имя, рамка говорящего, отметки; у создателя — «Голос» и «📌». */
+/** Высота пузыря: аватар и строка имени. */
+private val BUBBLE_HEIGHT = 64.dp
+
+/** Пузырь участника: аватар, имя, рамка говорящего, отметки; у автора — «Голос» и «📌» столбиком. */
 @Composable
-private fun Bubble(tile: GroupTile, group: GroupStage, words: io.tima.core.words.GroupCallWords) {
-    Column(
-        Modifier.width(88.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Box(
-            Modifier.border(
-                width = if (tile.speaking) 3.dp else 0.dp,
-                color = if (tile.speaking) Tima.colors.navigation else Tima.colors.surface,
-            ).padding(2.dp),
-        ) { Avatar(letters = tile.letters) }
-        Caption(tile.name, fontSize = TimaType.sz6, weight = FontWeight.SemiBold, lineOne = true)
-        val marks = listOfNotNull(
-            "🔇".takeIf { !tile.microphoneOn },
-            "📌".takeIf { tile.key == group.pinnedKey },
-        ).joinToString(" ")
-        if (marks.isNotEmpty()) Caption(marks, fontSize = TimaType.sz6, lineOne = true)
-        if (tile.micForbidden) Caption(words.voiceForbidden, fontSize = TimaType.sz6, color = Tima.colors.alarm, lineOne = true)
-        if (!tile.self && (group.onVoice != null || group.onPin != null)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+private fun Bubble(tile: GroupTile, group: GroupStage, words: io.tima.core.words.GroupCallWords, author: Boolean) {
+    val marks = listOfNotNull(
+        "🔇".takeIf { !tile.microphoneOn || tile.micForbidden },
+        "📌".takeIf { tile.key == group.pinnedKey },
+    ).joinToString("")
+    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.width(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier.border(
+                    width = if (tile.speaking) 3.dp else 0.dp,
+                    color = if (tile.speaking) Tima.colors.navigation else Tima.colors.surface,
+                ).padding(2.dp),
+            ) {
+                Avatar(letters = tile.letters)
+                if (marks.isNotEmpty()) {
+                    Caption(marks, modifier = Modifier.align(Alignment.TopEnd), fontSize = TimaType.sz6, lineOne = true)
+                }
+            }
+            Caption(
+                tile.name,
+                fontSize = TimaType.sz6,
+                weight = FontWeight.SemiBold,
+                color = if (tile.micForbidden) Tima.colors.alarm else Tima.colors.text,
+                lineOne = true,
+            )
+        }
+        if (author && !tile.self) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 group.onVoice?.let { voice ->
                     IconButton(
                         glyph = if (tile.micForbidden) "🔇" else "🎤",

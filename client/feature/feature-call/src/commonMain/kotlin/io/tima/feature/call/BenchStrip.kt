@@ -83,6 +83,7 @@ internal fun BenchStrip(line: BenchLine, modifier: Modifier = Modifier) {
             IconButton(
                 glyph = if (expanded) "▲" else "▼",
                 onClick = { expanded = !expanded },
+                live = true,
             )
         }
         if (expanded) Numbers(line.last)
@@ -156,10 +157,17 @@ internal fun GroupBenchJournal(line: BenchLine?, tiles: List<GroupTile>, onClose
                 io.tima.core.ui.ListLine(
                     onClick = { open = tile.key },
                     left = { io.tima.core.ui.Avatar(letters = tile.letters) },
+                    // Строка 1 — имя и набор; строка 2 — «H.264 А 720×1280» или «Видео не
+                    // приходит» (заказчик 2026-10-02).
                     middle = {
-                        io.tima.core.ui.Name(tile.name)
-                        Tertiary(
-                            if (tile.self) line?.preset ?: words.benchUnknown else tile.bench ?: words.benchUnknown,
+                        val preset = if (tile.self) line?.preset else tile.bench?.split(" · ")?.firstOrNull()
+                        io.tima.core.ui.Name(listOfNotNull(tile.name, preset?.takeIf { it != "—" }).joinToString(" · "))
+                        val trouble = tile.videoTrouble
+                        Caption(
+                            trouble ?: benchSecondLine(tile, line) ?: words.benchUnknown,
+                            fontSize = TimaType.sz6,
+                            weight = FontWeight.SemiBold,
+                            color = if (trouble != null) Tima.colors.alarm else Tima.colors.text3,
                             lineOne = true,
                         )
                     },
@@ -172,6 +180,41 @@ internal fun GroupBenchJournal(line: BenchLine?, tiles: List<GroupTile>, onClose
             PeerNumbers(chosen)
         }
     }
+}
+
+/**
+ * Вторая строка журнала стенда: кодек вверх, аппаратный или программный, кадр — «H.264 А
+ * 720×1280». Свой — по своим числам; участника — с его слов (атрибут `tima.bench`).
+ */
+@Composable
+private fun benchSecondLine(tile: GroupTile, line: BenchLine?): String? {
+    val bench = Tima.words.bench
+    if (tile.self) {
+        val st = line?.last?.stats ?: return null
+        val codec = st.videoCodec ?: return null
+        val who = when (st.hardwareEncoder) {
+            true -> bench.hardwareShort
+            false -> bench.softwareShort
+            null -> ""
+        }
+        return listOf(prettyCodec(codec), who, st.upFrames.lastOrNull().orEmpty()).filter { it.isNotBlank() }.joinToString(" ")
+    }
+    val parts = tile.bench?.split(" · ") ?: return null
+    val codecSize = parts.getOrNull(1)?.split(" ") ?: return null
+    val who = when {
+        parts.getOrNull(2)?.startsWith("апп") == true -> bench.hardwareShort
+        parts.getOrNull(2)?.startsWith("прог") == true -> bench.softwareShort
+        else -> ""
+    }
+    return listOf(prettyCodec(codecSize.getOrNull(0).orEmpty()), who, codecSize.getOrNull(1).orEmpty())
+        .filter { it.isNotBlank() && it != "—" }.joinToString(" ").ifBlank { null }
+}
+
+/** Кодек словом, как его пишут люди: H264 → H.264. */
+private fun prettyCodec(codec: String): String = when (codec.uppercase()) {
+    "H264" -> "H.264"
+    "H265" -> "H.265"
+    else -> codec.uppercase()
 }
 
 /** Карточка участника: его набор с его слов и что я от него принимаю. */
@@ -191,6 +234,7 @@ private fun PeerNumbers(tile: GroupTile) {
             listOf(words.benchFrame to n.frame, words.benchCodec to n.codec),
             listOf(words.benchKbit to n.kbit?.toString(), Tima.words.bench.codecDown to n.decoder),
             listOf(words.benchDecodeMs to n.decodeMs?.let { oneDecimal(it) }, words.benchDropped to n.dropped?.toString()),
+            listOf(words.benchFps to n.fps?.let { oneDecimal(it) }, words.benchQp to n.qp?.let { oneDecimal(it) }),
             listOf(words.benchFreezes to n.freezes.toString()),
         )
         for (pair in rows) {

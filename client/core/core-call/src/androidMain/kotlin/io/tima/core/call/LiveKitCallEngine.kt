@@ -1130,6 +1130,8 @@ class LiveKitCallEngine(
 
     /** Что знаем о входящем видео одного участника между опросами. */
     private class PeerWatch {
+        var qpSum = -1.0
+        var qpFrames = -1L
         var said = ""
         var got = -1L
         var froze = 0L
@@ -1215,9 +1217,20 @@ class LiveKitCallEngine(
                     }
                     me.misaligned = inSize
 
+                    val fps = (incoming.members["framesPerSecond"] as? Number)?.toDouble()
+                    val qpSum = (incoming.members["qpSum"] as? Number)?.toDouble()
+                    val qp = if (qpSum != null && decoded != null && me.qpFrames >= 0 && decoded > me.qpFrames) {
+                        (qpSum - me.qpSum) / (decoded - me.qpFrames)
+                    } else {
+                        null
+                    }
+                    if (qpSum != null && decoded != null) {
+                        me.qpSum = qpSum
+                        me.qpFrames = decoded
+                    }
                     peerNumbers[identity] = PeerIncoming(
                         frame = inSize, codec = codec, kbit = kbit.takeIf { it >= 0 }, decoder = decoder,
-                        decodeMs = decodeMs, dropped = dropped, freezes = freezes,
+                        decodeMs = decodeMs, dropped = dropped, freezes = freezes, fps = fps, qp = qp,
                     )
                     val line = inSize + "|" + (kbit / 100) + "|" + decoder + "|" + codec
                     if (line == me.said) continue

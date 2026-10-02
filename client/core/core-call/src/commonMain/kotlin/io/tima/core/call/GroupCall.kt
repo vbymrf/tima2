@@ -89,6 +89,9 @@ data class PeerIncoming(
     val decodeMs: Double?,
     val dropped: Long?,
     val freezes: Long,
+    /** Кадров в секунду приходит и средний QP за опрос — грубость сжатия (2026-10-02). */
+    val fps: Double? = null,
+    val qp: Double? = null,
 )
 
 /**

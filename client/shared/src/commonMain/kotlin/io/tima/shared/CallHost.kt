@@ -346,6 +346,7 @@ class CallHost(
             Journal.note(LogCode.CALL, "звонок уже идёт — второй не начат", "кому" to peerId.take(8))
             return
         }
+        forgetGroup()
         this.peerId = peerId
         this.video = video
         peer = peerName
@@ -409,6 +410,9 @@ class CallHost(
             scope.launch { calls.end(callId, busy = true) }
             return
         }
+        // Входящий личный — прежний групповой забыть: иначе «Принять» шло входом в группу,
+        // а окно рисовалось групповым (отчёт 2FDW, 2026-10-02).
+        forgetGroup()
         this.callId = callId
         this.video = video
         peerId = fromId
@@ -530,12 +534,9 @@ class CallHost(
      * Держать идентификатор на экране значило бы отдать ему работу сигналинга.
      */
     fun again() {
-        // Групповой — тот же звонок в той же группе с теми же галочками (решение 6).
-        lastStart?.takeIf { group != null }?.let { g ->
-            close()
-            startGroup(g.groupId, g.title, g.ring, video, g.invited)
-            return
-        }
+        // Групповой — у окна свои кнопки: «Создать звонок» у автора, «Присоединиться» у
+        // остальных ([createAgain]); «Перезвонить» здесь только для звонка на двоих.
+        if (group != null) return
         val id = peerId
         val name = peer
         if (id.isEmpty()) return
@@ -547,6 +548,34 @@ class CallHost(
     /** Переключатель «голос · видео» на окне 0: чем перезвонить. */
     fun redialAs(video: Boolean) {
         this.video = video
+    }
+
+    /**
+     * Конец группового, я автор — «Создать звонок»: в той же группе, с теми же галочками,
+     * что в прошлый раз; не начинал здесь — «Звонить» выключено, позвать всех.
+     */
+    fun createAgain() {
+        val g = group ?: return
+        val last = lastStart?.takeIf { it.groupId == g.groupId }
+        val kind = video
+        close()
+        startGroup(g.groupId, g.title, last?.ring ?: false, kind, last?.invited.orEmpty())
+    }
+
+    /**
+     * Забыть групповой — личный звонок начинается с чистого листа. Окно прошлого группового
+     * могло остаться открытым («Перезвонить» ещё на экране), и пометка «звонок групповой»
+     * переезжала в следующий личный: вход вместо ответа, сетка вместо собеседника.
+     */
+    private fun forgetGroup() {
+        group = null
+        lastStart = null
+        peerOrder = emptyList()
+        voiceOnly = false
+        micForbidden = false
+        videoForbidden = false
+        beforePause = null
+        pendingInvites = null
     }
 
     /** Закрыть окно 0: звонка больше нет. */
