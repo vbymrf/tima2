@@ -340,9 +340,13 @@ class MainActivity : ComponentActivity() {
         CallRequests.post(CallOrder(request.callId, request.accept))
     }
 
-    /** Наш ли это переход. Чужие ссылки нас не касаются, даже если система их принесла. */
+    /**
+     * Наш ли это переход. Чужие ссылки нас не касаются, даже если система их принесла.
+     *
+     * Код заверения (Р32) едет тем же путём, что код привязки: различает их главное окно.
+     */
     private fun linkFrom(intent: Intent?): String? =
-        intent?.data?.toString()?.takeIf { it.startsWith("tima://link/") }
+        intent?.data?.toString()?.takeIf { it.startsWith("tima://link/") || it.startsWith("tima://certify/") }
 
     /** Код передачи аккаунта: та же схема, другой хост, другой экран. */
     private fun transferFrom(intent: Intent?): String? =
