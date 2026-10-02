@@ -28,6 +28,13 @@ class GroupCallViewTest {
     }
 
     @Test
+    fun в_сетке_себя_первым_если_не_показываю_малым_окном() {
+        val tiles = listOf(tile("Вы", camera = true, self = true), tile("Анна", camera = true), tile("Борис", camera = false))
+        assertEquals(listOf("Анна", "Борис"), gridTiles(tiles, GroupView()).map { it.key }, "малое окно — в сетке меня нет")
+        assertEquals(listOf("Вы", "Анна", "Борис"), gridTiles(tiles, GroupView().apply { showSelf = false }).map { it.key })
+    }
+
+    @Test
     fun принимаем_только_видимых_или_развёрнутого() {
         val peers = (1..6).map { tile("v$it", camera = true) }
         val view = GroupView().apply { perPage = 4; page = 1 }
@@ -63,6 +70,7 @@ class GroupCallViewTest {
         shot("групповой-вид-голосом", GroupView().apply { page = 2 }, peers)
         shot("групповой-вид-выбор", GroupView().apply { choosing = true }, peers)
         shot("групповой-вид-развёрнут", GroupView().apply { expanded = "Борис" }, peers)
+        shot("групповой-вид-себя-в-сетке", GroupView().apply { showSelf = false }, peers)
         assertTrue(four.difference(two) > 0.02, "по 4 и по 2 одинаковы")
     }
 }

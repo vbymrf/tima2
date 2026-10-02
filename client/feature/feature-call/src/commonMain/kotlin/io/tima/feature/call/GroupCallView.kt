@@ -135,6 +135,16 @@ fun groupPages(peers: List<GroupTile>, perPage: Int, voicePerPage: Int = VOICE_P
     return pages.ifEmpty { listOf(GroupPage.Video(emptyList())) }
 }
 
+/**
+ * Кто в «Сетке»: «Показывать себя» включено — я малым окном, в сетке меня нет; выключено —
+ * я первой клеткой (заказчик 2026-10-02).
+ */
+fun gridTiles(tiles: List<GroupTile>, view: GroupView): List<GroupTile> {
+    val peers = tiles.filter { !it.self }
+    if (view.showSelf) return peers
+    return tiles.filter { it.self } + peers
+}
+
 /** Чьё видео принимать: клетки текущей страницы или развёрнутая. Список голосом — ничьё. */
 fun groupVisible(pages: List<GroupPage>, view: GroupView): Set<String> {
     view.expanded?.let { return setOf(it) }
@@ -269,7 +279,7 @@ private fun ChoiceLine(label: String, about: String?, on: Boolean, indent: Boole
 fun GroupCallBody(group: GroupStage, view: GroupView, withSelf: Boolean, modifier: Modifier = Modifier) {
     val self = group.tiles.firstOrNull { it.self }
     val peers = group.tiles.filter { !it.self }
-    val pages = groupPages(peers, view.perPage)
+    val pages = groupPages(gridTiles(group.tiles, view), view.perPage)
     // Ушёл участник — страниц стало меньше: показываем последнюю, состояние не трогаем.
     val at = view.page.coerceIn(0, pages.size - 1)
     val expanded = view.expanded?.let { key -> group.tiles.firstOrNull { it.key == key } }

@@ -2310,7 +2310,7 @@ private fun App(
     }
     // Принимаем видео только видимых на странице (2а): ушла страница — отписка.
     val visibleNow = groupStage?.let { st ->
-        io.tima.feature.call.groupVisible(io.tima.feature.call.groupPages(st.tiles.filter { !it.self }, groupView.perPage), groupView)
+        io.tima.feature.call.groupVisible(io.tima.feature.call.groupPages(io.tima.feature.call.gridTiles(st.tiles, groupView), groupView.perPage), groupView)
     }
     LaunchedEffect(visibleNow) { visibleNow?.let { callHost.showPeers(it) } }
     Stage(
