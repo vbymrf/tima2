@@ -1497,6 +1497,14 @@ private fun App(
     // только при открытии, и до того строки «кто создал» не было (проверка 2026-10-02).
     val callOwners by assembled.callOwners.collectAsState()
     // ДУ6: с номера начали заново (событие или проверка при запуске); заявки в группы.
+    // Один человек — одна переписка (ДУ6, Р26): при запуске и раз в пять минут.
+    LaunchedEffect(assembled.session.userId) {
+        val chain = IdentityChain(environment, network.directory, assembled.session.userId, ::msNow)
+        while (true) {
+            runCatching { chain.refresh() }
+            kotlinx.coroutines.delay(5 * 60_000L)
+        }
+    }
     val identityReplaced by assembled.identityReplaced.collectAsState()
     val identityClaims by assembled.identityClaims.collectAsState()
     LaunchedEffect(assembled.session.userId) {
@@ -3618,7 +3626,13 @@ private fun Chat(
     }
     var myColor by remember { mutableStateOf(false) }
     var myColorTrouble by remember { mutableStateOf<String?>(null) }
+    // Отправители, чья личность отменена владельцем (ДУ6, Р30) — из настроек аккаунта.
+    val settingsNow by environment.settings.all().collectAsState(initial = emptyMap())
+    val cancelledSenders = remember(settingsNow) {
+        settingsNow.keys.filter { it.startsWith(IdentityChain.CANCELLED_PREFIX) }.map { it.removePrefix(IdentityChain.CANCELLED_PREFIX) }.toSet()
+    }
     ChatScreen(
+        cancelledSenders = cancelledSenders,
         state = state,
         onPerson = onPerson,
         onCall = onCall,

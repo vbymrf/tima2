@@ -189,3 +189,12 @@ DELETE FROM community_section WHERE id = ?;
 -- Переписки убранного раздела возвращаются в «Общий», а не исчезают вместе с ним.
 emptyCommunitySection:
 UPDATE chats SET section_id = '' WHERE section_id = ?;
+
+-- Строка переписки переезжает вместе с сообщениями (ДУ6, Р26). Новой строки ещё нет —
+-- старая становится ею (имя и раздел остаются); уже есть — старая удаляется отдельно.
+moveChatRow:
+UPDATE chats SET chat_id = :newChat, peer_id = :peer
+WHERE chat_id = :oldChat AND NOT EXISTS (SELECT 1 FROM chats WHERE chat_id = :newChat);
+
+setChatPeer:
+UPDATE chats SET peer_id = :peer WHERE chat_id = :chatId;

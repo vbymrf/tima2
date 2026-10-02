@@ -410,6 +410,9 @@ func TestStartAnewMakesClaimAndOwnerCanCancelWithPhrase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if ids[neu.userID].CurrentID != old.userID {
+		t.Fatalf("текущая личность аккаунта после отмены — прежняя, а не %q", ids[neu.userID].CurrentID)
+	}
 	if !ids[neu.userID].Cancelled || !ids[old.userID].Current || ids[neu.userID].Current {
 		t.Fatalf("цепочка после отмены не та: %+v", ids)
 	}

@@ -244,6 +244,7 @@ class UsersApi(
                 personId = o["person_id"]?.jsonPrimitive?.content.orEmpty(),
                 current = o["current"]?.jsonPrimitive?.content == "true",
                 cancelled = o["cancelled"]?.jsonPrimitive?.content == "true",
+                currentId = o["current_id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() },
             )
         }.toMap()
     }
@@ -287,4 +288,10 @@ private fun kotlinx.serialization.json.JsonArrayBuilder.add(value: String) {
 }
 
 /** Состояние личности (ДУ6): чей аккаунт, текущая ли, отменена ли хозяином. */
-class IdentityStatus(val personId: String, val current: Boolean, val cancelled: Boolean)
+class IdentityStatus(
+    val personId: String,
+    val current: Boolean,
+    val cancelled: Boolean,
+    /** Текущая личность того же аккаунта; `null` — сервер старый. */
+    val currentId: String? = null,
+)

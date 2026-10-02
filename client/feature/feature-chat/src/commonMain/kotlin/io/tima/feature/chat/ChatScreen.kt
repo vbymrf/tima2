@@ -89,6 +89,8 @@ const val CALL_BUTTON_TAG: String = "chat:call"
  */
 @Composable
 fun ChatScreen(
+    /** Отправители, чья личность отменена владельцем (ДУ6, Р30). */
+    cancelledSenders: Set<String> = emptySet(),
     state: ChatState,
     /** Имя собеседника в шапке. Над сообщениями его нет: в личной переписке подписей нет. */
     peer: String,
@@ -201,6 +203,7 @@ fun ChatScreen(
     invite: (ChatLine) -> CallInvite? = { null },
     onInvite: (ChatLine) -> Unit = {},
 ) {
+    val cancelledMark = Tima.words.auth.identityCancelledMark
     val colors = Tima.colors
     val words = Tima.words.chat
     Column(modifier.fillMaxSize().background(colors.surface)) {
@@ -248,7 +251,10 @@ fun ChatScreen(
             // В группе имя берётся по отправителю; неизвестное не выдумываем:
             // «Участник» честнее чужого имени.
             authorName = { line ->
-                if (!state.group) null
+                // Личность отменена владельцем (Р30) — это и подпись, и предупреждение: в
+                // личной переписке тоже, хотя обычно там подписи нет.
+                if (line.senderId != null && line.senderId in cancelledSenders) cancelledMark
+                else if (!state.group) null
                 else state.names[line.senderId]?.line(authorLook) ?: words.someone
             },
             authorLetter = { line -> state.names[line.senderId]?.letter() ?: "+" },

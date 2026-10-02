@@ -323,3 +323,8 @@ SELECT * FROM messages WHERE chat_id = ? AND thread_root = ? ORDER BY local_id;
 threadCounts:
 SELECT thread_root, count(*) AS replies FROM messages
  WHERE chat_id = ? AND thread_root <> 0 GROUP BY thread_root;
+
+-- Переписка прежней личности собеседника переезжает под чат его текущей (ДУ6, Р26): чат у
+-- человека один, а идентификатор чата выводится из пары личностей.
+rehomeMessages:
+UPDATE messages SET chat_id = :newChat WHERE chat_id = :oldChat;

@@ -1621,6 +1621,10 @@ interface AuthWords {
     val nothingToCancel: String
     /** Заверение по QR (Р32). */
     val showCertifyCode: String
+    /** Строки переписки о смене личности собеседника (ДУ6, Р8, Р10, Р30). */
+    val identityChangedLine: String
+    val identityRestoredLine: String
+    val identityCancelledMark: String
     val certifyCodeAbout: String
     val certifyTitle: String
     val certifyAsk: String
@@ -3501,6 +3505,9 @@ object RussianWords : Words {
         override val replacedCancelled = "Новая личность отменена: её устройства отключены, вы снова главный"
         override val nothingToCancel = "Отменять нечего"
         override val showCertifyCode = "Показать код заверения"
+        override val identityChangedLine = "Собеседник сменил ключ личности: начал заново с того же номера. Прежние сообщения у вас остались, у него — нет. Если сомневаетесь, что это он, — уточните."
+        override val identityRestoredLine = "Новая личность собеседника отменена владельцем — переписка снова с прежней."
+        override val identityCancelledMark = "личность отменена владельцем"
         override val certifyCodeAbout = "Откройте на своём телефоне «Секретная фраза и устройства» → «Сканировать код» и наведите камеру на этот код"
         override val certifyTitle = "Заверить устройство"
         override val certifyAsk = "Устройство перед камерой станет доверенным: собеседники начнут писать и ему. Заверяйте только своё."
