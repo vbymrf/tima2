@@ -93,9 +93,13 @@ class GroupView {
     /** Открыт ли выбор вида. */
     var choosing by mutableStateOf(false)
 
-    /** Открыт ли лист событий звонка и сколько событий уже видено — зелёная «развернуть». */
+    /**
+     * Открыт ли лист событий и какое событие видено последним — «развернуть» зелёная, пока
+     * последнее событие не видено. По событию, а не по числу: событие, сменившее другое
+     * («пауза» → «продолжается»), число не меняет, и кнопка не зеленела (2026-10-02).
+     */
     var eventsOpen by mutableStateOf(false)
-    var eventsSeen by mutableStateOf(0)
+    var eventsSeenLast by mutableStateOf<Any?>(null)
 }
 
 /** Страница сетки: клетки с видео или список тех, кто только голосом. */
@@ -145,26 +149,15 @@ fun groupVisible(pages: List<GroupPage>, view: GroupView): Set<String> {
  * когда нет; нажатие открывает лист событий поверх окна (заказчик 2026-10-02).
  */
 @Composable
-internal fun GroupTopBar(group: GroupStage, view: GroupView, pages: Int, time: String, events: Int = 0) {
+internal fun GroupTopBar(group: GroupStage, view: GroupView, pages: Int, time: String, lastEvent: Any? = null) {
     val words = Tima.words.groupCall
-    // Новый звонок — событий меньше, чем видено в прошлом: счёт заново, иначе кнопка не
-    // зеленела вовсе (заказчик 2026-10-02).
-    if (events < view.eventsSeen) view.eventsSeen = 0
-    if (view.eventsOpen && events > view.eventsSeen) view.eventsSeen = events
+    if (view.eventsOpen && lastEvent != view.eventsSeenLast) view.eventsSeenLast = lastEvent
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about2, vertical = TimaSpacing.about1),
             horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(
-                glyph = if (view.eventsOpen) "▲" else "▼",
-                onClick = {
-                    view.eventsOpen = !view.eventsOpen
-                    view.eventsSeen = events
-                },
-                live = events > view.eventsSeen,
-            )
             Button(label = words.viewButton, onClick = { view.choosing = !view.choosing }, kind = ButtonKind.Quiet)
             Caption(group.title, modifier = Modifier.weight(1f), fontSize = TimaType.sz4, weight = FontWeight.Bold, lineOne = true)
             if (pages > 1 && view.expanded == null && view.mode == GroupMode.Pages) {
@@ -173,6 +166,15 @@ internal fun GroupTopBar(group: GroupStage, view: GroupView, pages: Int, time: S
                 IconButton(glyph = "›", onClick = { if (view.page < pages - 1) view.page++ }, live = view.page < pages - 1)
             }
             Secondary(words.count(group.count, group.max) + " · " + time, lineOne = true)
+            // События — в правом конце (заказчик 2026-10-02): зелёная, пока новое не видено.
+            IconButton(
+                glyph = if (view.eventsOpen) "▲" else "▼",
+                onClick = {
+                    view.eventsOpen = !view.eventsOpen
+                    view.eventsSeenLast = lastEvent
+                },
+                live = lastEvent != null && lastEvent != view.eventsSeenLast,
+            )
         }
         if (view.choosing) ViewChoice(view)
     }
@@ -180,7 +182,8 @@ internal fun GroupTopBar(group: GroupStage, view: GroupView, pages: Int, time: S
 
 /** Выбор вида поверх окна — тот же, что в настройке звонка. */
 @Composable
-private fun ViewChoice(view: GroupView) = GroupViewChoice(view, Modifier.background(Tima.colors.functional))
+private fun ViewChoice(view: GroupView) =
+    GroupViewChoice(view, Modifier.background(Tima.colors.functional), onCollapse = { view.choosing = false })
 
 /**
  * Выбор вида — то же подокно в звонке и в настройке группового звонка, в стиле настроек
@@ -188,16 +191,29 @@ private fun ViewChoice(view: GroupView) = GroupViewChoice(view, Modifier.backgro
  * «Группового» — «По одному», «По 2», «По 4»; ниже «Показывать себя». Выбор сохраняется.
  */
 @Composable
-fun GroupViewChoice(view: GroupView, modifier: Modifier = Modifier) {
+fun GroupViewChoice(view: GroupView, modifier: Modifier = Modifier, onCollapse: (() -> Unit)? = null) {
     val words = Tima.words.groupCall
     Column(modifier.fillMaxWidth().padding(vertical = TimaSpacing.about1)) {
-        Caption(
-            words.viewType,
-            modifier = Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about1),
-            fontSize = TimaType.sz5,
-            weight = FontWeight.Bold,
-            color = Tima.colors.text2,
-        )
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about1),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Caption(words.viewType, modifier = Modifier.weight(1f), fontSize = TimaType.sz5, weight = FontWeight.Bold, color = Tima.colors.text2)
+            // «Свернуть» — узким зелёным пузырём напротив «Тип» (заказчик 2026-10-02).
+            onCollapse?.let { collapse ->
+                Caption(
+                    "▲ " + words.collapse,
+                    modifier = Modifier
+                        .background(Tima.colors.navigation, androidx.compose.foundation.shape.RoundedCornerShape(50))
+                        .clickable(onClick = collapse)
+                        .padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about1),
+                    fontSize = TimaType.sz5,
+                    weight = FontWeight.Bold,
+                    color = Tima.colors.onAccent,
+                    lineOne = true,
+                )
+            }
+        }
         ChoiceLine(words.viewSpeaker, words.viewSpeakerAbout, view.mode == GroupMode.Speaker, indent = false) {
             view.mode = GroupMode.Speaker
             view.expanded = null
@@ -425,7 +441,7 @@ class SpeakerSlots(private val enterMs: Long = 1_000, private val leaveMs: Long 
 
 /**
  * «Говорящий» (заказчик 2026-10-02), два вида:
- * - горизонтально — говорящие рядом, участники строкой сверху и строкой снизу;
+ * - горизонтально — говорящие рядом, участники двумя строками снизу;
  * - вертикально — говорящие один над другим, участники строкой снизу.
  * У автора у пузыря «Голос» и «📌» столбиком. В конце нижней строки — запас [reserve], чтобы
  * последний пузырь выкручивался из-под окна «Я».
@@ -436,11 +452,10 @@ private fun SpeakerBody(group: GroupStage, view: GroupView, peers: List<GroupTil
     val everyone = peers + group.tiles.filter { it.self }
     val author = group.onVoice != null || group.onPin != null
     val vertical = view.speakerVertical
-    // Горизонтально — участники пополам: первая половина сверху, вторая снизу.
-    val top = if (vertical) emptyList() else everyone.take((everyone.size + 1) / 2)
-    val bottom = if (vertical) everyone else everyone.drop(top.size)
+    // Горизонтально — участники пополам, обе строки снизу (заказчик 2026-10-02).
+    val first = if (vertical) everyone else everyone.take((everyone.size + 1) / 2)
+    val second = if (vertical) emptyList() else everyone.drop(first.size)
     Column(modifier) {
-        if (top.isNotEmpty()) BubbleRow(top, group, words, author, 0.dp)
         val slotsModifier = Modifier.weight(1f).fillMaxWidth().padding(TimaSpacing.about1)
         @Composable
         fun Slot(key: String?, m: Modifier) {
@@ -465,7 +480,8 @@ private fun SpeakerBody(group: GroupStage, view: GroupView, peers: List<GroupTil
                 for (key in view.slots) Slot(key, Modifier.weight(1f).fillMaxHeight())
             }
         }
-        if (bottom.isNotEmpty()) BubbleRow(bottom, group, words, author, reserve)
+        if (first.isNotEmpty()) BubbleRow(first, group, words, author, reserve)
+        if (second.isNotEmpty()) BubbleRow(second, group, words, author, reserve)
     }
 }
 

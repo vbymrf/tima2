@@ -164,7 +164,7 @@ fun CallScreen(
         if (group != null && state.stage == CallStage.Connected) {
             Column(Modifier.weight(1f).fillMaxWidth()) {
                 val peers = group.tiles.filter { !it.self }
-                GroupTopBar(group, group.view, groupPages(peers, group.view.perPage).size, words.duration(seconds), events.size)
+                GroupTopBar(group, group.view, groupPages(peers, group.view.perPage).size, words.duration(seconds), events.lastOrNull())
                 if (group.paused) {
                     Caption(
                         Tima.words.groupCall.pausedBanner,

@@ -51,6 +51,12 @@ object CallKeep {
      * это случается лишь в проверках. Прежний ведущий тогда кладёт трубку — звонка без хозяина
      * не остаётся.
      */
+    /**
+     * Идёт ли звонок на каком-нибудь аккаунте этого процесса — личный, видео или групповой.
+     * Уведомления о сообщениях в это время без звука (заказчик 2026-10-02).
+     */
+    fun anyBusy(): Boolean = kept.values.any { it.host.busyNow }
+
     fun kept(deviceId: String, engine: CallEngine?, build: (CoroutineScope) -> Kept): Kept {
         val had = kept[deviceId]
         if (had != null && had.engine === engine) return had

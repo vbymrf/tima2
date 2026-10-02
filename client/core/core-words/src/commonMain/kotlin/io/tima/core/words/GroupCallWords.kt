@@ -116,6 +116,7 @@ interface GroupCallWords {
     val voiceTitle: String
     val viewSpeaker: String
     val viewGrid: String
+    val collapse: String
     val viewVertical: String
     val viewHorizontal: String
     val viewVerticalAbout: String
@@ -266,7 +267,8 @@ object RussianGroupCall : GroupCallWords {
     override val viewVertical = "Вертикально"
     override val viewHorizontal = "Горизонтально"
     override val viewVerticalAbout = "Говорящие один над другим, участники внизу"
-    override val viewHorizontalAbout = "Говорящие рядом, участники сверху и снизу"
+    override val viewHorizontalAbout = "Говорящие рядом, участники двумя строками снизу"
+    override val collapse = "Свернуть"
     override val tileVideoNotArriving = "Видео не приходит"
     override fun tileVideoNotDecoding(codec: String) = "Видео $codec не раскодируется"
 
@@ -397,7 +399,8 @@ object EnglishGroupCall : GroupCallWords {
     override val viewVertical = "Vertical"
     override val viewHorizontal = "Horizontal"
     override val viewVerticalAbout = "Speakers one above the other, participants below"
-    override val viewHorizontalAbout = "Speakers side by side, participants above and below"
+    override val viewHorizontalAbout = "Speakers side by side, participants in two rows below"
+    override val collapse = "Collapse"
     override val tileVideoNotArriving = "Video is not arriving"
     override fun tileVideoNotDecoding(codec: String) = "Cannot decode $codec video"
 
@@ -528,7 +531,8 @@ object SpanishGroupCall : GroupCallWords {
     override val viewVertical = "Vertical"
     override val viewHorizontal = "Horizontal"
     override val viewVerticalAbout = "Quienes hablan uno sobre otro, participantes abajo"
-    override val viewHorizontalAbout = "Quienes hablan lado a lado, participantes arriba y abajo"
+    override val viewHorizontalAbout = "Quienes hablan lado a lado, participantes en dos filas abajo"
+    override val collapse = "Plegar"
     override val tileVideoNotArriving = "El vídeo no llega"
     override fun tileVideoNotDecoding(codec: String) = "No se puede decodificar el vídeo $codec"
 

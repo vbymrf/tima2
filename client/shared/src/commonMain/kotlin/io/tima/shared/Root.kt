@@ -1788,7 +1788,7 @@ private fun App(
         groupView.expanded = null
         groupView.choosing = false
         groupView.eventsOpen = false
-        groupView.eventsSeen = 0
+        groupView.eventsSeenLast = null
     }
     // Окна группового звонка — поверх всего: настройка и журнал звонка (ГЗ5, ГЗ6).
     val groupNameOf: (String) -> String = { uid ->

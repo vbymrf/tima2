@@ -438,7 +438,7 @@ fun GroupCallOverlays(
                 Column(Modifier.fillMaxWidth().background(Tima.colors.surface).clickable(enabled = false) {}) {
                     // Крестик — как «назад»: в подокно «Групповой звонок» (заказчик 2026-10-02).
                     Header(title = words.viewButton, onBack = { desk.viewing = false }, onClose = { desk.viewing = false })
-                    io.tima.feature.call.GroupViewChoice(groupView)
+                    io.tima.feature.call.GroupViewChoice(groupView, onCollapse = { desk.viewing = false })
                 }
             }
             return true

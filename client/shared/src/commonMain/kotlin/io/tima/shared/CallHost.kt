@@ -257,6 +257,9 @@ class CallHost(
      */
     private val busy: Boolean get() = active && state.stage != CallStage.Ended
 
+    /** Идёт ли звонок — для уведомлений: во время звонка сообщения без звука (2026-10-02). */
+    val busyNow: Boolean get() = busy
+
     init {
         // «Завершить» из шторки — тем же путём, что кнопка окна 0 (ПЛАН-ВИДЕО.md В11).
         CallNoticeActions.hangUp = { hangUp() }

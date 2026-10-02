@@ -86,7 +86,7 @@ class SpeakerSlotsTest {
                 group = GroupStage("Планёрка", tiles, 6, 25, false, true, {}, {}, view, pinnedKey = "Борис", onVoice = {}, onPin = {}),
             )
         }
-        capture("групповой-вид-подокно", 400, 300, dark = false) { GroupViewChoice(view) }
+        capture("групповой-вид-подокно", 400, 300, dark = false) { GroupViewChoice(view, onCollapse = {}) }
         // Не автор: пузыри в две строки, без кнопок.
         val many = tiles + listOf("Елена", "Жанна", "Зоя", "Игорь").map { GroupTile(it, it, it.take(1), null, true, false, false, false, userId = it) }
         capture("групповой-говорящий-участник", 400, 760, dark = false) {

@@ -110,6 +110,8 @@ class Notices(
      * «Звонки» и «Сообщения». Числа и значок копятся как обычно.
      */
     private val quiet: suspend () -> QuietHours = { QuietHours() },
+    /** Идёт ли звонок — тогда уведомления о сообщениях без звука (заказчик 2026-10-02). */
+    private val inCall: () -> Boolean = { CallKeep.anyBusy() },
 ) {
 
     /**
@@ -444,6 +446,13 @@ class Notices(
      * @param alert звучать ли; сигнал разрешило [decide].
      */
     private suspend fun showTab(tab: NoticeTab, alert: Boolean, cause: NoticeRecord? = null) {
+        // Идёт звонок — строка есть, звука нет: сообщение не должно звенеть поверх разговора.
+        val calling = alert && inCall()
+        if (calling) Journal.note(LogCode.NOTICE, "идёт звонок — уведомление без звука", "вкладка" to tab.wire)
+        showTabNow(tab, alert && !calling, cause)
+    }
+
+    private suspend fun showTabNow(tab: NoticeTab, alert: Boolean, cause: NoticeRecord?) {
         val counts = NoticeCounts(journal.activeNow())
         val n = counts.tab(tab)
         val key = TAB_KEY_PREFIX + tab.wire
