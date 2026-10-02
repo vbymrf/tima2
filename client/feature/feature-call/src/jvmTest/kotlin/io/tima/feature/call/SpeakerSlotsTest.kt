@@ -98,6 +98,26 @@ class SpeakerSlotsTest {
                 group = GroupStage("Планёрка", many, 10, 25, false, false, {}, {}, view, pinnedKey = "Борис"),
             )
         }
+        capture("групповой-говорящий-вертикально", 400, 760, dark = false) {
+            CallScreen(
+                state = CallState(stage = CallStage.Connected, microphoneOn = true),
+                peer = "Планёрка", incoming = false, onAccept = {}, onDecline = {}, onHangUp = {},
+                onMicrophone = {}, onCamera = {}, seconds = 75,
+                group = GroupStage("Планёрка", many, 10, 25, false, true, {}, {},
+                    GroupView().apply { mode = GroupMode.Speaker; speakerVertical = true; slots = listOf("Анна", "Борис") },
+                    pinnedKey = "Борис", onVoice = {}, onPin = {}),
+            )
+        }
+        capture("групповой-говорящий-лист-событий", 400, 760, dark = false) {
+            CallScreen(
+                state = CallState(stage = CallStage.Connected, microphoneOn = true),
+                peer = "Планёрка", incoming = false, onAccept = {}, onDecline = {}, onHangUp = {},
+                onMicrophone = {}, onCamera = {}, seconds = 75,
+                events = listOf(io.tima.core.call.CallEvent(seconds = 3, text = "Создатель запретил вам микрофон")),
+                group = GroupStage("Планёрка", many, 10, 25, false, false, {}, {},
+                    GroupView().apply { mode = GroupMode.Speaker; slots = listOf("Анна", "Борис"); eventsOpen = true }),
+            )
+        }
         capture("групповой-конец-не-автор", 400, 400, dark = false) {
             CallScreen(
                 state = CallState(stage = CallStage.Ended),

@@ -179,8 +179,10 @@ fun CallScreen(
                 if (remoteHere) {
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         GroupCallBody(group, group.view, withSelf = true, modifier = Modifier.fillMaxSize())
+                        // Лист событий — без своей «развернуть»: ею служит кнопка в верхней
+                        // полосе (заказчик 2026-10-02).
                         if (group.view.eventsOpen) {
-                            CallEvents(events, modifier = Modifier.align(Alignment.TopCenter), onAction = onEventAction, startExpanded = true)
+                            CallEvents(events, modifier = Modifier.align(Alignment.TopCenter), onAction = onEventAction, startExpanded = true, toggle = false)
                         }
                     }
                 } else {
@@ -440,6 +442,8 @@ data class GroupTile(
     val userId: String = "",
     /** Голос запрещён создателем — только смотрит. */
     val micForbidden: Boolean = false,
+    /** Аватар-картинка человека; `null` — буквы (2026-10-02: раньше буквы были всегда). */
+    val face: androidx.compose.ui.graphics.ImageBitmap? = null,
     /** Видео участника не приходит или не раскодируется — словами на его клетке; `null` — всё в порядке. */
     val videoTrouble: String? = null,
     /** Его набор с его слов — для журнала стенда (5а); `null` — не сказал. */

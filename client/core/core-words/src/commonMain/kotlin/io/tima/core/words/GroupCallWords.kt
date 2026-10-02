@@ -115,6 +115,10 @@ interface GroupCallWords {
     val voiceTitle: String
     val viewSpeaker: String
     val viewGrid: String
+    val viewVertical: String
+    val viewHorizontal: String
+    val viewVerticalAbout: String
+    val viewHorizontalAbout: String
     val viewType: String
     val viewSpeakerAbout: String
     val viewGridAbout: String
@@ -257,6 +261,10 @@ object RussianGroupCall : GroupCallWords {
     override val createCall = "Создать звонок"
     override val benchFps = "Кадров/с"
     override val benchQp = "Качество (QP)"
+    override val viewVertical = "Вертикально"
+    override val viewHorizontal = "Горизонтально"
+    override val viewVerticalAbout = "Говорящие один над другим, участники внизу"
+    override val viewHorizontalAbout = "Говорящие рядом, участники сверху и снизу"
     override val tileVideoNotArriving = "Видео не приходит"
     override fun tileVideoNotDecoding(codec: String) = "Видео $codec не раскодируется"
 
@@ -383,6 +391,10 @@ object EnglishGroupCall : GroupCallWords {
     override val createCall = "Start a call"
     override val benchFps = "Frames/s"
     override val benchQp = "Quality (QP)"
+    override val viewVertical = "Vertical"
+    override val viewHorizontal = "Horizontal"
+    override val viewVerticalAbout = "Speakers one above the other, participants below"
+    override val viewHorizontalAbout = "Speakers side by side, participants above and below"
     override val tileVideoNotArriving = "Video is not arriving"
     override fun tileVideoNotDecoding(codec: String) = "Cannot decode $codec video"
 
@@ -509,6 +521,10 @@ object SpanishGroupCall : GroupCallWords {
     override val createCall = "Crear llamada"
     override val benchFps = "Cuadros/s"
     override val benchQp = "Calidad (QP)"
+    override val viewVertical = "Vertical"
+    override val viewHorizontal = "Horizontal"
+    override val viewVerticalAbout = "Quienes hablan uno sobre otro, participantes abajo"
+    override val viewHorizontalAbout = "Quienes hablan lado a lado, participantes arriba y abajo"
     override val tileVideoNotArriving = "El vídeo no llega"
     override fun tileVideoNotDecoding(codec: String) = "No se puede decodificar el vídeo $codec"
 

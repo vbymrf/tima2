@@ -1787,6 +1787,8 @@ private fun App(
         groupView.page = 0
         groupView.expanded = null
         groupView.choosing = false
+        groupView.eventsOpen = false
+        groupView.eventsSeen = 0
     }
     // Окна группового звонка — поверх всего: настройка и журнал звонка (ГЗ5, ГЗ6).
     val groupNameOf: (String) -> String = { uid ->
@@ -2216,6 +2218,7 @@ private fun App(
                 cameraOn = callHost.state.cameraOn,
                 userId = me,
                 micForbidden = callHost.micForbidden,
+                face = peopleFaces[me],
             ),
         ) + peers.map { p ->
             val name = peopleCards[p.userId]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)
@@ -2228,6 +2231,8 @@ private fun App(
                 cameraOn = p.cameraOn,
                 userId = p.userId,
                 micForbidden = forbiddenMics.contains(p.userId),
+                // Аватар — тот же, что в списках (заказчик 2026-10-02: были только буквы).
+                face = peopleFaces[p.userId],
                 // Пропажа видео — на клетке того, у кого пропало (заказчик 2026-10-01).
                 bench = p.bench,
                 incoming = p.incoming,
@@ -2238,7 +2243,10 @@ private fun App(
                 },
             )
         }
-        LaunchedEffect(peers.map { it.userId }) { people.want(peers.map { it.userId }.filter { it != me }) }
+        LaunchedEffect(peers.map { it.userId }) {
+            people.want(peers.map { it.userId }.filter { it != me })
+            (peers.map { it.userId } + me).distinct().forEach { people.wantFace(it) }
+        }
         io.tima.feature.call.GroupStage(
             title = g.title,
             tiles = tiles,

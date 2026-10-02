@@ -59,6 +59,8 @@ internal fun CallEvents(
     onAction: ((CallAction) -> Unit)? = null,
     /** Открыть сразу развёрнутым — лист событий группового. */
     startExpanded: Boolean = false,
+    /** Своя кнопка «развернуть»; `false` — её роль у кнопки снаружи (лист группового). */
+    toggle: Boolean = true,
 ) {
     if (events.isEmpty()) return
     val colors = Tima.colors
@@ -97,11 +99,13 @@ internal fun CallEvents(
             // крупная: голый символ размером с текст читался как часть надписи, и в него
             // не попадали пальцем (заказчик 2026-09-20).
             // Зелёная, как все «развернуть» звонка: здесь есть что развернуть (2026-10-02).
-            IconButton(
-                glyph = if (expanded) "▲" else "▼",
-                onClick = { expanded = !expanded },
-                live = true,
-            )
+            if (toggle) {
+                IconButton(
+                    glyph = if (expanded) "▲" else "▼",
+                    onClick = { expanded = !expanded },
+                    live = true,
+                )
+            }
         }
 
         // Что можно сделать по событию. Кнопка нужна там, где сказать мало: отказ в
