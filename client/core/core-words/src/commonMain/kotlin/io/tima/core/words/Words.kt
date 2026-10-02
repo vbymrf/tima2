@@ -466,6 +466,10 @@ interface StorageWords {
  * названием группы и отвечает на вопрос «кто я здесь», а не «кто такой владелец».
  */
 interface SocialWords {
+    /** Заявки новых личностей на место прежних (ДУ6, Р9). */
+    val identityClaims: String
+    fun identityClaimLine(newName: String, oldName: String): String
+    val identityClaimConfirm: String
     // Списки.
     val noGroupsYet: String
     val lookingForGroups: String
@@ -1607,6 +1611,14 @@ interface AuthWords {
     val trustDone: String
     val trustNoKey: String
     fun trustFailed(reason: String): String
+    /** «Начать заново» с номера этого аккаунта (ДУ6). */
+    val replacedTitle: String
+    val replacedAbout: String
+    val replacedCancel: String
+    val replacedCancelSend: String
+    val replacedItsMe: String
+    val replacedCancelled: String
+    val nothingToCancel: String
     val codeNoLongerValid: String
     val codeReadWrong: String
     val deviceHasNoKey: String
@@ -2715,6 +2727,9 @@ object RussianWords : Words {
     }
 
     override val social = object : SocialWords {
+        override val identityClaims = "Подтвердите личность"
+        override fun identityClaimLine(newName: String, oldName: String) = "$newName начал заново вместо $oldName — номер тот же, ключ новый. Подтвердите, если уверены, что это он: ключ группы сменится"
+        override val identityClaimConfirm = "Подтвердить"
         override val noGroupsYet = "Групп пока нет"
         override val lookingForGroups = "Смотрим, какие есть группы…"
         override val createFirst = "Создайте первую: плюс в правом нижнем углу."
@@ -3472,6 +3487,13 @@ object RussianWords : Words {
         override val trustDone = "Готово: устройство заверено"
         override val trustNoKey = "Сначала подтвердите этот телефон фразой"
         override fun trustFailed(reason: String) = "Не получилось: $reason"
+        override val replacedTitle = "С вашего номера начали заново"
+        override val replacedAbout = "На другом устройстве завели новую личность вашего аккаунта — так бывает, когда теряют телефон и фразу или перевыпускают SIM-карту. Собеседники пишут теперь ей, а не вам. Если это не вы — отмените: понадобится секретная фраза."
+        override val replacedCancel = "Отменить новую личность"
+        override val replacedCancelSend = "Отменить"
+        override val replacedItsMe = "Это я"
+        override val replacedCancelled = "Новая личность отменена: её устройства отключены, вы снова главный"
+        override val nothingToCancel = "Отменять нечего"
         override val codeNoLongerValid = "Код больше не действует — попросите на том устройстве новый"
         override val codeReadWrong = "Код прочитан неверно — отсканируйте заново"
         override val deviceHasNoKey = "Это устройство не может подтверждать: у него нет своего ключа"

@@ -258,6 +258,12 @@ class EventStreamProtocol {
         /** Временная группа звонка удалена: срок вышел (решение 1). */
         data class GroupDeleted(val groupId: String, val eventId: Long?) : Decision
 
+        /** С номера аккаунта начали заново — новая личность [newUserId] (ДУ6). */
+        data class IdentityReplaced(val newUserId: String, val eventId: Long?) : Decision
+
+        /** Заявка новой личности [userId] в группу [groupId] (ДУ6, Р9). */
+        data class IdentityClaim(val groupId: String, val userId: String, val eventId: Long?) : Decision
+
         /**
          * Вызов не забрало ни одно устройство собеседника (`call.unreachable`).
          *
@@ -586,6 +592,14 @@ class EventStreamProtocol {
             "group.deleted" ->
                 json.string("group_id")?.let { Decision.GroupDeleted(it, eventId) }
                     ?: Decision.Skip("group.deleted без group_id", eventId)
+
+            // С номера этого аккаунта начали заново (ДУ6): «это вы? отменить».
+            "identity.replaced" -> Decision.IdentityReplaced(json.string("new_user_id").orEmpty(), eventId)
+
+            // Новая личность просит место прежней в группе — решать владельцу или модератору.
+            "group.identity_claim" ->
+                json.string("group_id")?.let { Decision.IdentityClaim(it, json.string("user_id").orEmpty(), eventId) }
+                    ?: Decision.Skip("group.identity_claim без group_id", eventId)
 
             "call.unreachable" -> {
                 val callId = json.string("call_id")

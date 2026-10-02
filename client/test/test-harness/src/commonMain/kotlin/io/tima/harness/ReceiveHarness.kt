@@ -145,6 +145,8 @@ class ReceiveHarness(private val inbox: Inbox) {
             is EventStreamProtocol.Decision.GroupCall -> decision.eventId?.let { sent += protocol.ackFrame(it) }
             is EventStreamProtocol.Decision.GroupDeleted -> decision.eventId?.let { sent += protocol.ackFrame(it) }
             is EventStreamProtocol.Decision.StoreChanged -> decision.eventId?.let { sent += protocol.ackFrame(it) }
+            is EventStreamProtocol.Decision.IdentityReplaced -> decision.eventId?.let { sent += protocol.ackFrame(it) }
+            is EventStreamProtocol.Decision.IdentityClaim -> decision.eventId?.let { sent += protocol.ackFrame(it) }
 
             is EventStreamProtocol.Decision.NeedHistory,
             is EventStreamProtocol.Decision.ServerTrouble,

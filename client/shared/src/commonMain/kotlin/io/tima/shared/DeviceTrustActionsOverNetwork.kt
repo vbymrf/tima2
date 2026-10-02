@@ -18,6 +18,8 @@ import io.tima.domain.account.TrustStep
  */
 class DeviceTrustActionsOverNetwork(
     private val keys: KeysApi,
+    /** Личности аккаунта и отмена новой (ДУ6). */
+    private val users: io.tima.core.network.UsersApi? = null,
     private val userId: String,
     private val identity: DeviceIdentity,
     private val asks: AskSecrets,
@@ -64,6 +66,30 @@ class DeviceTrustActionsOverNetwork(
         }
         val cert = ask.certify(target.encryptionPub, target.signingPub) ?: return TrustStep.Refused("подпись не сделалась")
         return keys.certifyDevice(deviceId, DeviceTrustCheck.BY_ASK, cert).step()
+    }
+
+    override suspend fun replaced(): Boolean {
+        val api = users ?: return false
+        val me = api.identities(listOf(userId))?.get(userId) ?: return false
+        // Не текущая и не отменённая — значит текущая другая, новее: начали заново.
+        return !me.current && !me.cancelled
+    }
+
+    override suspend fun cancelNewIdentity(words: List<String>): TrustStep {
+        val api = users ?: return TrustStep.Refused("нет сети пользователей")
+        val challenge = api.identityChallenge() ?: return TrustStep.Offline(0)
+        val signature = io.tima.core.encryption.IdentitySignerOverKodium.sign(words, challenge.encodeToByteArray())
+            ?: return TrustStep.WrongPhrase
+        return when (val answer = api.cancelNewIdentity(challenge, signature)) {
+            TrustCallResult.Done -> TrustStep.Done
+            is TrustCallResult.Offline -> TrustStep.Offline(answer.link.retryDelayMs)
+            is TrustCallResult.Refused -> when (answer.code) {
+                "bad_signature" -> TrustStep.WrongPhrase
+                "device_unproven" -> TrustStep.NoKey
+                "nothing_to_cancel" -> TrustStep.NothingToCancel
+                else -> TrustStep.Refused(answer.code)
+            }
+        }
     }
 
     /**

@@ -209,6 +209,8 @@ class EventStream(
                         is EventStreamProtocol.Decision.CallControl,
                         is EventStreamProtocol.Decision.GroupCall,
                         is EventStreamProtocol.Decision.GroupDeleted,
+                        is EventStreamProtocol.Decision.IdentityReplaced,
+                        is EventStreamProtocol.Decision.IdentityClaim,
                         -> {
                             onCall(decision)
                             val id = when (decision) {
@@ -219,6 +221,8 @@ class EventStream(
                                 is EventStreamProtocol.Decision.CallControl -> decision.eventId
                                 is EventStreamProtocol.Decision.GroupCall -> decision.eventId
                                 is EventStreamProtocol.Decision.GroupDeleted -> decision.eventId
+                                is EventStreamProtocol.Decision.IdentityReplaced -> decision.eventId
+                                is EventStreamProtocol.Decision.IdentityClaim -> decision.eventId
                                 else -> null
                             }
                             id?.let {

@@ -746,6 +746,9 @@ object SpanishWords : Words {
     }
 
     override val social = object : SocialWords {
+        override val identityClaims = "Confirme la identidad"
+        override fun identityClaimLine(newName: String, oldName: String) = "$newName empezó de nuevo en lugar de $oldName: mismo número, clave nueva. Confirme si está seguro de que es él: la clave del grupo cambiará"
+        override val identityClaimConfirm = "Confirmar"
         override val noGroupsYet = "Todavía no hay grupos"
         override val lookingForGroups = "Buscando sus grupos…"
         override val createFirst = "Cree el primero: el más de la esquina inferior derecha."
@@ -1498,6 +1501,13 @@ object SpanishWords : Words {
         override val trustDone = "Listo: el dispositivo está verificado"
         override val trustNoKey = "Primero confirme este teléfono con su frase"
         override fun trustFailed(reason: String) = "No funcionó: $reason"
+        override val replacedTitle = "Alguien empezó de nuevo con su número"
+        override val replacedAbout = "En otro dispositivo se creó una identidad nueva de su cuenta: pasa cuando se pierden el teléfono y la frase o se reemite la SIM. Los contactos ahora le escriben a ella, no a usted. Si no fue usted, cancélela: necesitará su frase secreta."
+        override val replacedCancel = "Cancelar la identidad nueva"
+        override val replacedCancelSend = "Cancelar"
+        override val replacedItsMe = "Fui yo"
+        override val replacedCancelled = "La identidad nueva está cancelada: sus dispositivos se desconectaron, usted vuelve a ser el principal"
+        override val nothingToCancel = "No hay nada que cancelar"
         override val codeNoLongerValid = "El código ya no sirve — pida uno nuevo en aquel dispositivo"
         override val codeReadWrong = "El código se leyó mal — escanéelo de nuevo"
         override val deviceHasNoKey = "Este dispositivo no puede confirmar: no tiene clave propia"

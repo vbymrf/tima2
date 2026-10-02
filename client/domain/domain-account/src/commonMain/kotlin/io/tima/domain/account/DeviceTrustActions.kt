@@ -19,6 +19,15 @@ interface DeviceTrustActions {
 
     /** Заверить другое своё устройство ключом этого телефона. */
     suspend fun certify(deviceId: String): TrustStep
+
+    /**
+     * С номера начали заново, а это устройство — прежней личности (ДУ6): отменить новые
+     * личности аккаунта, подтвердив фразой (Р27, Р31).
+     */
+    suspend fun cancelNewIdentity(words: List<String>): TrustStep = TrustStep.Refused("не умеем")
+
+    /** Начинали ли с номера заново после этой личности — и не отменено ли это (ДУ6). */
+    suspend fun replaced(): Boolean = false
 }
 
 /** Чем кончилось действие доверия. */
@@ -30,6 +39,9 @@ sealed interface TrustStep {
 
     /** У этого телефона нет своего ключа подписи устройств — сначала фраза. */
     data object NoKey : TrustStep
+
+    /** Отменять нечего: заново с номера не начинали или уже отменено. */
+    data object NothingToCancel : TrustStep
     data class Offline(val retryAfterMs: Long) : TrustStep
     data class Refused(val reason: String) : TrustStep
 }

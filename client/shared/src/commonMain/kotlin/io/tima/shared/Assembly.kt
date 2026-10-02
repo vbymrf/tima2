@@ -103,6 +103,10 @@ class Assembled(
     val callGroups: MutableStateFlow<Map<String, Long>> = MutableStateFlow(emptyMap()),
     /** Создатель временной группы звонка — `groupId → userId` (строка «кто создал»). */
     val callOwners: MutableStateFlow<Map<String, String>> = MutableStateFlow(emptyMap()),
+    /** С номера начали заново, а это устройство — прежней личности (ДУ6). */
+    val identityReplaced: MutableStateFlow<Boolean> = MutableStateFlow(false),
+    /** Группы, где ждёт заявка новой личности (ДУ6). */
+    val identityClaims: MutableStateFlow<Set<String>> = MutableStateFlow(emptySet()),
 )
 
 /**
@@ -240,6 +244,8 @@ fun buildAssembled(
         val groupEvents = MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 32)
         val callGroups = MutableStateFlow<Map<String, Long>>(emptyMap())
         val callOwners = MutableStateFlow<Map<String, String>>(emptyMap())
+        val identityReplaced = MutableStateFlow(false)
+        val identityClaims = MutableStateFlow<Set<String>>(emptySet())
 
         // ── УВЕДОМЛЕНИЯ СОБИРАЮТСЯ ЗДЕСЬ, А НЕ В ОКНЕ (У5) ──────────────────
         //
@@ -349,6 +355,8 @@ fun buildAssembled(
                 onGroupEvent = { groupId, state -> groupEvents.tryEmit(groupId to state) },
                 onCallGroups = { callGroups.value = it },
                 onCallOwners = { callOwners.value = it },
+                onIdentityReplaced = { identityReplaced.value = true },
+                onIdentityClaim = { g -> identityClaims.value = identityClaims.value + g },
                 onStamp = { senderStamps.tryEmit(it) },
                 onOutdated = { outdated.value = true },
                 notices = notices,
@@ -363,6 +371,8 @@ fun buildAssembled(
             groupEvents = groupEvents,
             callGroups = callGroups,
             callOwners = callOwners,
+            identityReplaced = identityReplaced,
+            identityClaims = identityClaims,
         )
     }
 

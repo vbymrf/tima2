@@ -144,6 +144,35 @@ class GroupsApi(
     }
 
     /** `GET /api/v1/groups/{id}/members` — участники и роли. */
+    /**
+     * Заявки новых личностей на место прежних — `GET /groups/{id}/identity-claims` (ДУ6, Р9).
+     * Видят владелец, админ и модератор; остальным — `null`, как и при сбое сети.
+     */
+    suspend fun identityClaims(groupId: String): List<IdentityClaim>? {
+        val response = try {
+            client.get(route.api("/api/v1/groups/$groupId/identity-claims")) {
+                header("Authorization", "Bearer ${token()}")
+            }
+        } catch (e: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        val body = response.jsonBody()
+        return body?.get("claims")?.jsonArrayOrNull()?.mapNotNull { element ->
+            val o = element.jsonObjectOrNull() ?: return@mapNotNull null
+            IdentityClaim(o.str("user_id") ?: return@mapNotNull null, o.str("from_user_id").orEmpty(), o.str("role").orEmpty())
+        }.orEmpty()
+    }
+
+    /** Подтвердить новую личность: она становится участником, прежняя выходит (Р14). */
+    suspend fun confirmIdentityClaim(groupId: String, userId: String): Boolean = try {
+        client.post(route.api("/api/v1/groups/$groupId/identity-claims/$userId/confirm")) {
+            header("Authorization", "Bearer ${token()}")
+        }.status.value in 200..299
+    } catch (e: Throwable) {
+        false
+    }
+
     suspend fun members(groupId: String): MembersResult {
         val response = try {
             client.get(route.api("/api/v1/groups/$groupId/members")) {
@@ -333,3 +362,6 @@ sealed interface MemberResult {
     data class Refused(val status: Int, val code: String) : MemberResult
     data class NoConnection(val link: LinkState) : MemberResult
 }
+
+/** Заявка новой личности на место прежней в группе (ДУ6). */
+class IdentityClaim(val userId: String, val fromUserId: String, val role: String)

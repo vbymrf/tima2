@@ -79,6 +79,8 @@ fun DeviceScreen(
     onConfirmWithPhrase: ((String) -> Unit)? = null,
     /** Заверить другое своё устройство ключом этого телефона; `null` — этот телефон ключа не держит. */
     onCertify: ((String) -> Unit)? = null,
+    /** Отменить новую личность фразой (ДУ6); `null` — отменять нечем. */
+    onCancelNewIdentity: ((String) -> Unit)? = null,
 ) = Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
     val words = Tima.words.auth
     var signingOut by rememberSaveable { mutableStateOf(false) }
@@ -110,6 +112,11 @@ fun DeviceScreen(
         KeyRequest(onRequestKey, keyNotice, keySending)
     } else if (keyNotice != null) {
         Secondary(keyNotice, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
+    }
+
+    // С номера начали заново (ДУ6) — первым делом: это важнее всего остального на экране.
+    if (state.replaced && onCancelNewIdentity != null && !signingOut) {
+        CancelNewIdentity(onCancelNewIdentity, state.trusting)
     }
 
     // Доверие к этому устройству (ДУ5): не заверено — предложить фразу. До ранних выходов:
@@ -310,6 +317,35 @@ private fun Question(name: String, onConfirm: () -> Unit, onChangedMind: () -> U
  * Фраза набирается здесь же и никуда не записывается: слова уходят в подпись просьбы и
  * дальше не живут. Поле стирается после отправки.
  */
+/** «С вашего номера начали заново» — отменить фразой (ДУ6). */
+@Composable
+private fun CancelNewIdentity(onCancel: (String) -> Unit, busy: Boolean) = Column(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+) {
+    val words = Tima.words.auth
+    var open by rememberSaveable { mutableStateOf(false) }
+    var phrase by remember { mutableStateOf("") }
+    Caption(words.replacedTitle, weight = FontWeight.ExtraBold, color = Tima.colors.alarm)
+    Secondary(words.replacedAbout)
+    if (!open) {
+        Button(label = words.replacedCancel, onClick = { open = true }, kind = ButtonKind.Dangerous, modifier = Modifier.fillMaxWidth())
+    } else {
+        Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, modifier = Modifier.fillMaxWidth())
+        Button(
+            label = words.replacedCancelSend,
+            onClick = {
+                if (!busy && phrase.isNotBlank()) {
+                    onCancel(phrase)
+                    phrase = ""
+                }
+            },
+            kind = ButtonKind.Dangerous,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
 /** Подтвердить это устройство фразой (ДУ5). Устроено как просьба ключа: поле, кнопка. */
 @Composable
 private fun TrustByPhrase(onConfirm: (String) -> Unit, busy: Boolean) = Column(

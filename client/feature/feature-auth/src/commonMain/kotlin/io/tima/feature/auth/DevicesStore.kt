@@ -37,6 +37,8 @@ class DevicesStore(
     private val words: () -> Words = { CurrentWords.value },
     /** Доверие к своим устройствам (ДУ5); `null` — действий доверия нет (проверки, снимки). */
     private val trust: DeviceTrustActions? = null,
+    /** Новая личность отменена — снять событие «начали заново». */
+    private val onIdentityRestored: () -> Unit = {},
 ) {
 
     private val _state = MutableStateFlow(DevicesState(expect = true))
@@ -44,6 +46,30 @@ class DevicesStore(
 
     init {
         refresh()
+        // Начинали ли с номера заново (ДУ6) — спрашиваем при каждом открытии экрана.
+        trust?.let { actions ->
+            scope.launch {
+                val r = runCatching { actions.replaced() }.getOrDefault(false)
+                _state.value = _state.value.copy(replaced = r)
+            }
+        }
+    }
+
+    /** Отменить новую личность фразой (ДУ6, Р27, Р31). */
+    fun cancelNewIdentity(phrase: String) {
+        val actions = trust ?: return
+        if (_state.value.trusting) return
+        val words = phrase.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        scope.launch {
+            val step = runCatching { actions.cancelNewIdentity(words) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
+            _state.value = _state.value.copy(
+                trusting = false,
+                trustNotice = if (step == TrustStep.Done) words().auth.replacedCancelled else notice(step),
+                replaced = if (step == TrustStep.Done || step == TrustStep.NothingToCancel) false else _state.value.replaced,
+            )
+            if (step == TrustStep.Done) onIdentityRestored()
+        }
     }
 
     fun refresh() {
@@ -109,6 +135,7 @@ class DevicesStore(
         TrustStep.Done -> words().auth.trustDone
         TrustStep.WrongPhrase -> words().auth.wrongPhrase
         TrustStep.NoKey -> words().auth.trustNoKey
+        TrustStep.NothingToCancel -> words().auth.nothingToCancel
         is TrustStep.Offline -> words().auth.trustFailed(words().auth.tryAgain)
         is TrustStep.Refused -> words().auth.trustFailed(step.reason)
     }
@@ -173,4 +200,6 @@ data class DevicesState(
     val trusting: Boolean = false,
     /** Что сказать о последнем действии доверия. */
     val trustNotice: String? = null,
+    /** С номера начали заново, а это устройство — прежней личности (ДУ6). */
+    val replaced: Boolean = false,
 )

@@ -22,6 +22,17 @@ class EventStreamProtocolTest {
     ) = """{"event":"message.new","event_id":$eventId,"chat_id":"$chatId",""" +
         """"message_id":$messageId,"envelope":"${encodeBase64Url(envelope)}"}"""
 
+    @Test
+    fun начали_заново_и_заявка_в_группу_разбираются() {
+        // ДУ6: прежнее устройство узнаёт «с номера начали заново», модератор — о заявке.
+        val replaced = protocol.decide("""{"event":"identity.replaced","event_id":9,"new_user_id":"u-новая"}""")
+        assertEquals(EventStreamProtocol.Decision.IdentityReplaced("u-новая", 9), replaced)
+        val claim = protocol.decide("""{"event":"group.identity_claim","event_id":10,"group_id":"g-1","user_id":"u-новая"}""")
+        assertEquals(EventStreamProtocol.Decision.IdentityClaim("g-1", "u-новая", 10), claim)
+        val broken = protocol.decide("""{"event":"group.identity_claim","event_id":11}""")
+        assertTrue(broken is EventStreamProtocol.Decision.Skip, "заявка без группы — пропуск с подтверждением")
+    }
+
     // ── кадры, которые мы отправляем ─────────────────────────────────────────
 
     @Test

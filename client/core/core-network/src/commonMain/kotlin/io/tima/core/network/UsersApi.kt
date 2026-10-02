@@ -219,8 +219,72 @@ class UsersApi(
             ?.get(userId)?.jsonPrimitive?.content
             ?.takeIf { it.isNotBlank() }
     }
+
+    /**
+     * Чьи это личности и какие из них текущие или отменены — `POST /users/identities`
+     * (ДУ6). `null` — сеть или отказ.
+     */
+    suspend fun identities(ids: Collection<String>): Map<String, IdentityStatus>? {
+        if (ids.isEmpty()) return emptyMap()
+        val response = try {
+            client.post(route.api("/api/v1/users/identities")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { putJsonArray("ids") { ids.forEach { add(it) } } }.toString())
+            }
+        } catch (e: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        val body = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull() ?: return null
+        val map = body["identities"] as? JsonObject ?: return emptyMap()
+        return map.mapNotNull { (id, el) ->
+            val o = el as? JsonObject ?: return@mapNotNull null
+            id to IdentityStatus(
+                personId = o["person_id"]?.jsonPrimitive?.content.orEmpty(),
+                current = o["current"]?.jsonPrimitive?.content == "true",
+                cancelled = o["cancelled"]?.jsonPrimitive?.content == "true",
+            )
+        }.toMap()
+    }
+
+    /** Вызов для подписи фразой — `POST /users/me/reidentify/challenge`. `null` — не дали. */
+    suspend fun identityChallenge(): String? {
+        val response = try {
+            client.post(route.api("/api/v1/users/me/reidentify/challenge")) {
+                header("Authorization", "Bearer ${token()}")
+            }
+        } catch (e: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        return runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject["challenge_token"]?.jsonPrimitive?.content }.getOrNull()
+    }
+
+    /**
+     * Отменить новые личности своего аккаунта — `POST /users/me/identity/cancel` (ДУ6, Р27):
+     * прежнее устройство подтверждает фразой (подпись вызова ключом личности).
+     */
+    suspend fun cancelNewIdentity(challenge: String, signature: ByteArray): TrustCallResult {
+        val response = try {
+            client.post(route.api("/api/v1/users/me/identity/cancel")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody("""{"challenge_token":"$challenge","signature":"${encodeBase64Url(signature)}"}""")
+            }
+        } catch (e: Throwable) {
+            return TrustCallResult.Offline(classifyFailure(e))
+        }
+        if (response.status.value in 200..299) return TrustCallResult.Done
+        val code = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject["code"]?.jsonPrimitive?.content }.getOrNull() ?: "без кода"
+        return TrustCallResult.Refused(response.status.value, code)
+    }
+
 }
 
 private fun kotlinx.serialization.json.JsonArrayBuilder.add(value: String) {
     add(kotlinx.serialization.json.JsonPrimitive(value))
 }
+
+/** Состояние личности (ДУ6): чей аккаунт, текущая ли, отменена ли хозяином. */
+class IdentityStatus(val personId: String, val current: Boolean, val cancelled: Boolean)

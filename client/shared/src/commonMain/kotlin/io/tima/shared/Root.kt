@@ -1492,6 +1492,14 @@ private fun App(
     // Владелец — из сверки групп при запуске; окно «Социум» знает его тоже, но загружается
     // только при открытии, и до того строки «кто создал» не было (проверка 2026-10-02).
     val callOwners by assembled.callOwners.collectAsState()
+    // ДУ6: с номера начали заново (событие или проверка при запуске); заявки в группы.
+    val identityReplaced by assembled.identityReplaced.collectAsState()
+    val identityClaims by assembled.identityClaims.collectAsState()
+    LaunchedEffect(assembled.session.userId) {
+        val me = assembled.session.userId
+        val status = runCatching { network.directory.identities(listOf(me)) }.getOrNull()?.get(me)
+        if (status != null && !status.current && !status.cancelled) assembled.identityReplaced.value = true
+    }
     val callOwnerOf: (String) -> String? = { groupId ->
         groupId.takeIf { it in callGroupsTtl }?.let { gid ->
             callOwners[gid] ?: socialState.mine.firstOrNull { it.groupId == gid }?.ownerId?.ifBlank { null }
@@ -2033,6 +2041,9 @@ private fun App(
         EventKind.Calls to if (bgFacts.notices == false) Presence.No else bgPresence(bgFacts.calls, BackgroundTrouble.Calls),
         EventKind.Battery to bgPresence(bgFacts.awake, BackgroundTrouble.Battery),
         EventKind.Installed to if (news is UpdateNews.Installed) Presence.Yes else Presence.No,
+        // ДУ6: с номера начали заново — важнее всего; заявки новых личностей в группы.
+        EventKind.IdentityReplaced to if (identityReplaced) Presence.Yes else Presence.No,
+        EventKind.IdentityClaim to if (identityClaims.isNotEmpty()) Presence.Yes else Presence.No,
     )
     var eventMemory by remember { mutableStateOf(EventMemory()) }
     // Показывать — на главном экране и не во время звонка: окно поверх разговора его бы
@@ -2063,7 +2074,11 @@ private fun App(
             Journal.note(LogCode.NOTICE, "событие закрыто", "что" to kind.name, "чем" to how)
             eventMemory = EventQueue.close(eventMemory, kind)
         }
+        val authWords = Tima.words.auth
+        val socialWords = Tima.words.social
         fun lineTitle(kind: EventKind): String = when (kind) {
+            EventKind.IdentityReplaced -> authWords.replacedTitle
+            EventKind.IdentityClaim -> socialWords.identityClaims
             EventKind.Update -> upd.importantOut.takeIf { importantOffer != null } ?: upd.broken
             EventKind.Notices -> warn.eventsLineNotices
             EventKind.Calls -> warn.eventsLineCalls
@@ -2086,6 +2101,33 @@ private fun App(
             ),
         )
         val entry: NoticeEntry = when (openEvent) {
+            // ДУ6: «С вашего номера начали заново» — отменить фразой на экране «Устройства».
+            EventKind.IdentityReplaced -> NoticeEntry(
+                notice = io.tima.feature.shell.Notice(title = Tima.words.auth.replacedTitle, text = Tima.words.auth.replacedAbout),
+                actions = listOf(
+                    NoticeAction(Tima.words.auth.replacedCancel, ButtonKind.Dangerous) {
+                        close(EventKind.IdentityReplaced, "Отменить")
+                        where = Where.Settings(SettingsItem.DEVICES)
+                    },
+                    NoticeAction(Tima.words.auth.replacedItsMe, ButtonKind.Quiet) {
+                        close(EventKind.IdentityReplaced, "Это я")
+                    },
+                ),
+            )
+            // Заявка новой личности в группу — к составу группы, там «Подтвердить».
+            EventKind.IdentityClaim -> NoticeEntry(
+                notice = io.tima.feature.shell.Notice(title = Tima.words.social.identityClaims, text = Tima.words.social.identityClaimConfirm),
+                actions = listOf(
+                    NoticeAction(Tima.words.social.identityClaimConfirm) {
+                        close(EventKind.IdentityClaim, "Открыть")
+                        identityClaims.firstOrNull()?.let { g ->
+                            assembled.identityClaims.value = assembled.identityClaims.value - g
+                            where = Where.Members(g, null)
+                        }
+                    },
+                    NoticeAction(warn.warnLater, ButtonKind.Quiet) { close(EventKind.IdentityClaim, "Позже") },
+                ),
+            )
             // Действие уводит туда, где обновление и живёт, — на вкладку настроек
             // (решение заказчика 2026-09-06): установки внутри события нет вовсе.
             EventKind.Update -> NoticeEntry(
@@ -2990,6 +3032,7 @@ private fun App(
                         deviceTrust = remember(askSecrets) {
                             DeviceTrustActionsOverNetwork(
                                 keys = network.keys,
+                                users = network.directory,
                                 userId = assembled.session.userId,
                                 identity = deviceIdentityFrom(deviceSecret),
                                 asks = askSecrets,
@@ -2999,6 +3042,7 @@ private fun App(
                         language = language,
                         onLanguage = onLanguage,
                         locale = locale,
+                        onIdentityRestored = { assembled.identityReplaced.value = false },
                         onBack = { where = Where.Nothing },
                         profile = profile,
                         profileState = profileState,
@@ -3737,6 +3781,8 @@ private fun Settings(
     onAppearance: (Appearance) -> Unit,
     /** Доверие к своим устройствам (ДУ5). */
     deviceTrust: io.tima.domain.account.DeviceTrustActions? = null,
+    /** Новая личность отменена — снять событие «начали заново» (ДУ6). */
+    onIdentityRestored: () -> Unit = {},
     language: Language,
     onLanguage: (Language) -> Unit,
     /** Страна и отбор выдачи (ПЛАН-ЯЗЫКА Я7): живут рядом с выбором языка. */
@@ -3788,7 +3834,7 @@ private fun Settings(
 ) {
     // Название темы считается в составе, а не в лямбде списка: лямбда не composable.
     val themeName = Tima.words.appearance.theme(appearance.choice)
-    val fleet = remember { DevicesStore(network.myFleet, scope, trust = deviceTrust) }
+    val fleet = remember { DevicesStore(network.myFleet, scope, trust = deviceTrust, onIdentityRestored = onIdentityRestored) }
     val devices by fleet.state.collectAsState()
 
     SettingsScreen(
@@ -4044,6 +4090,7 @@ private fun Devices(
         // Доверие (ДУ5): подтвердить себя фразой; заверять другие — только телефон с ключом.
         onConfirmWithPhrase = store::confirmWithPhrase,
         onCertify = if (store.holdsKey()) store::certify else null,
+        onCancelNewIdentity = store::cancelNewIdentity,
     )
 }
 
@@ -4502,6 +4549,9 @@ private fun Members(
                     groupKeys = network.groupKeys,
                     book = SqlGroupKeys(environment.db, environment.cipher),
                     msNow = ::msNow,
+                    // Ключ группы — только доверенным устройствам (ДУ3): без этого смена
+                    // состава из «Участников» обходила проверку.
+                    trust = environment.trustGate,
                 ),
             ),
             groupId = groupId,
@@ -4515,6 +4565,17 @@ private fun Members(
     // Состав спрашивается при открытии: он меняется чужими руками, и показывать
     // вчерашний список значит показывать неправду.
     LaunchedEffect(groupId) { store.refresh() }
+
+    // Заявки новых личностей (ДУ6, Р9): видят и решают владелец и модераторы; остальным
+    // сервер их не отдаёт, и блока нет.
+    var claims by remember(groupId) { mutableStateOf<List<io.tima.feature.group.IdentityClaimLine>>(emptyList()) }
+    var claimsRev by remember(groupId) { mutableStateOf(0) }
+    LaunchedEffect(groupId, claimsRev) {
+        val raw = network.groups.identityClaims(groupId).orEmpty()
+        suspend fun name(id: String): String =
+            people?.person(id)?.let { it.userName ?: it.name ?: it.nick?.let { n -> "@$n" } } ?: ("…" + id.takeLast(6))
+        claims = raw.map { c -> io.tima.feature.group.IdentityClaimLine(c.userId, name(c.userId), name(c.fromUserId)) }
+    }
 
     MemberScreen(
         state = state,
@@ -4530,6 +4591,15 @@ private fun Members(
         contacts = contacts,
         onContacts = store::contactsSheet,
         onInviteUser = store::inviteUser,
+        claims = claims,
+        onConfirmClaim = { userId ->
+            scope.launch {
+                if (network.groups.confirmIdentityClaim(groupId, userId)) {
+                    claimsRev++
+                    store.refresh()
+                }
+            }
+        },
     )
 }
 

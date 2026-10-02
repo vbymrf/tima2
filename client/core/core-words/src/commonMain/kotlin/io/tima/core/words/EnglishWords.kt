@@ -747,6 +747,9 @@ object EnglishWords : Words {
     }
 
     override val social = object : SocialWords {
+        override val identityClaims = "Confirm identity"
+        override fun identityClaimLine(newName: String, oldName: String) = "$newName started over instead of $oldName — same number, new key. Confirm if you are sure it is them: the group key will change"
+        override val identityClaimConfirm = "Confirm"
         override val noGroupsYet = "No groups yet"
         override val lookingForGroups = "Looking for your groups…"
         override val createFirst = "Create the first one: the plus in the bottom right corner."
@@ -1498,6 +1501,13 @@ object EnglishWords : Words {
         override val trustDone = "Done: the device is verified"
         override val trustNoKey = "First confirm this phone with your phrase"
         override fun trustFailed(reason: String) = "Did not work: $reason"
+        override val replacedTitle = "Someone started over with your number"
+        override val replacedAbout = "A new identity of your account was created on another device — this happens when a phone and phrase are lost or the SIM card is reissued. Contacts now write to it, not to you. If it was not you, cancel it: you will need your secret phrase."
+        override val replacedCancel = "Cancel the new identity"
+        override val replacedCancelSend = "Cancel"
+        override val replacedItsMe = "It was me"
+        override val replacedCancelled = "The new identity is cancelled: its devices are disconnected, you are the main one again"
+        override val nothingToCancel = "Nothing to cancel"
         override val codeNoLongerValid = "The code no longer works — ask that device for a new one"
         override val codeReadWrong = "The code was read wrong — scan it again"
         override val deviceHasNoKey = "This device cannot confirm: it has no key of its own"

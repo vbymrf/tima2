@@ -110,6 +110,10 @@ class Receiver(
     private val onCallGroups: (Map<String, Long>) -> Unit = {},
     /** Создатели временных групп звонка — из той же сверки групп. */
     private val onCallOwners: (Map<String, String>) -> Unit = {},
+    /** С номера начали заново (ДУ6) — событие «это вы? отменить». */
+    private val onIdentityReplaced: () -> Unit = {},
+    /** Заявка новой личности в группу — решать владельцу или модератору (ДУ6). */
+    private val onIdentityClaim: (String) -> Unit = {},
     /** Словарь — ссылкой: строки звонка пишутся словами на момент события. */
     private val words: () -> Words = { CurrentWords.value },
     /**
@@ -260,6 +264,14 @@ class Receiver(
             is EventStreamProtocol.Decision.GroupDeleted -> {
                 wipeGroup(decision.groupId)
                 onGroupEvent(decision.groupId, "deleted")
+            }
+            is EventStreamProtocol.Decision.IdentityReplaced -> {
+                Journal.trouble(LogCode.DEVICE_TRUST, "с номера аккаунта начали заново", "новая" to decision.newUserId.take(8))
+                onIdentityReplaced()
+            }
+            is EventStreamProtocol.Decision.IdentityClaim -> {
+                Journal.note(LogCode.DEVICE_TRUST, "заявка новой личности в группу", "группа" to decision.groupId.take(8))
+                onIdentityClaim(decision.groupId)
             }
             is EventStreamProtocol.Decision.CallState -> {
                 // Строка звонка не переживает звонок — чем бы он ни кончился (У7).

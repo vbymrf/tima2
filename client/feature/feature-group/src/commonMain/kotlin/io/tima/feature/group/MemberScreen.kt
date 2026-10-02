@@ -78,6 +78,9 @@ fun MemberScreen(
     contacts: List<InviteCandidate>? = null,
     onContacts: (Boolean) -> Unit = {},
     onInviteUser: (String) -> Unit = {},
+    /** Заявки новых личностей (ДУ6, Р9) — только у владельца и модераторов. */
+    claims: List<IdentityClaimLine> = emptyList(),
+    onConfirmClaim: (String) -> Unit = {},
 ) {
     val colors = Tima.colors
     val words = Tima.words.social
@@ -97,6 +100,21 @@ fun MemberScreen(
         ) {
             state.trouble?.let { Trouble(it) }
             state.warning?.let { Trouble(it) }
+
+            // Заявки новых личностей — первыми: решение за модератором, и ждать оно не должно.
+            if (claims.isNotEmpty()) {
+                io.tima.core.ui.Caption(words.identityClaims, weight = androidx.compose.ui.text.font.FontWeight.ExtraBold, color = colors.alarm)
+                for (c in claims) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        io.tima.core.ui.Secondary(words.identityClaimLine(c.newName, c.oldName), Modifier.weight(1f))
+                        Button(label = words.identityClaimConfirm, onClick = { onConfirmClaim(c.userId) })
+                    }
+                }
+            }
 
             if (state.memberEdit) {
                 Row(
@@ -281,3 +299,6 @@ private fun roleCaption(role: GroupRole, words: SocialWords): String = when (rol
     // соврать про права, которых мы не понимаем.
     GroupRole.Unknown -> words.roleUnknown
 }
+
+/** Заявка новой личности для экрана: кто начал заново и вместо кого (ДУ6). */
+data class IdentityClaimLine(val userId: String, val newName: String, val oldName: String)
