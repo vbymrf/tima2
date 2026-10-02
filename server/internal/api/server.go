@@ -6,6 +6,7 @@
 package api
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -36,7 +37,10 @@ type Server struct {
 	Blob   *blob.Client       // nil → media-эндпоинты отвечают 503
 	Events *events.Bus        // nil → /ws отвечает 503, доставка только REST-историей
 	Limit  *ratelimit.Limiter // nil → без лимитов частоты (dev без Redis)
-	DevSMS bool               // TIMA_DEV_SMS=1: код из /auth/sms/request возвращается в ответе
+	// EpochReminders — как часто напоминать тихим группам о смене ключа на новую эпоху
+	// (ADR-0017 §3). Ноль — не напоминать по расписанию (тесты, разработка).
+	EpochReminders time.Duration
+	DevSMS         bool // TIMA_DEV_SMS=1: код из /auth/sms/request возвращается в ответе
 	// DeviceTrust — режим доверия к устройствам (TIMA_DEVICE_TRUST: off|record|require; пусто —
 	// record). ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ Р24: строгость включает сервер, а не выпуск клиента.
 	DeviceTrust string
@@ -140,6 +144,10 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/escrow/key", s.requireActiveDevice(s.escrowKeyForChat))
 	// Группы: состав, сообщения и ключи (шаг 4). Три файла держатся вместе
 	// инвариантом ротации: смена состава обязана менять ключ.
+	if s.EpochReminders > 0 {
+		go runEpochReminders(context.Background(), s.Store,
+			groupsDeps{store: s.Store, limiter: func() *ratelimit.Limiter { return s.Limit }, notifier: s.notifier()}, s.EpochReminders)
+	}
 	RegisterGroups(mux, s.Store, func() *ratelimit.Limiter { return s.Limit }, s.notifier(), s.requireActiveDevice,
 		func() time.Duration { return s.CallGroups.orDefault().TTL },
 		func() string { return NormalizeDeviceTrust(s.DeviceTrust) })

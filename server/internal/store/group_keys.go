@@ -275,3 +275,30 @@ func (s *Store) ListGroupKeysForDevice(ctx context.Context, groupID, deviceID st
 	}
 	return out, rows.Err()
 }
+
+// GroupsWithStaleEpoch — группы, у которых последняя версия ключа выпущена не на эпоху epoch
+// (ADR-0017 §3, плановая смена по расписанию). Только живые private-группы с ключом.
+func (s *Store) GroupsWithStaleEpoch(ctx context.Context, epoch string, limit int) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT g.group_id::text
+		FROM groups g
+		JOIN LATERAL (SELECT escrow_epoch FROM group_key_history h
+		              WHERE h.group_id = g.group_id ORDER BY gk_version DESC LIMIT 1) last ON TRUE
+		WHERE g.deleted_at IS NULL AND g.kind = 'private'
+		  AND last.escrow_epoch IS DISTINCT FROM $1
+		ORDER BY g.group_id
+		LIMIT $2`, epoch, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}

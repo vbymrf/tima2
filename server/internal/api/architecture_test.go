@@ -208,7 +208,9 @@ const (
 	// 242 → 243: итог аттестации устройства (0063, ДУ8) — SetDeviceAttestation.
 	// 243 → 244: какие устройства заверены (ДУ3) — полнота получателей ключа группы в строгом
 	// режиме (CertifiedDevices).
-	storeMethodBudget = 244
+	// 244 → 245: группы с ключом прошлой эпохи — плановая смена по расписанию (ADR-0017 §3,
+	// GroupsWithStaleEpoch).
+	storeMethodBudget = 245
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
 )

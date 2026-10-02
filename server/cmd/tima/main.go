@@ -306,6 +306,8 @@ func serve() {
 		} else {
 			log.Print("APP_WIN_VERSION_CODE не задан — /app/version?platform=windows отдаёт 204")
 		}
+		// Плановая смена ключа тихих групп (ADR-0017 §3): напоминание по расписанию.
+		srv.EpochReminders = time.Hour
 		srv.Register(mux)
 		log.Print("Auth + Message Service подключены")
 	} else {
