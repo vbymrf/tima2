@@ -169,7 +169,11 @@ internal fun GroupTopBar(group: GroupStage, view: GroupView, pages: Int, time: S
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Button(label = words.viewButton, onClick = { view.choosing = !view.choosing }, kind = ButtonKind.Quiet)
-            Caption(group.title, modifier = Modifier.weight(1f), fontSize = TimaType.sz4, weight = FontWeight.Bold, lineOne = true)
+            Column(Modifier.weight(1f)) {
+                Caption(group.title, fontSize = TimaType.sz4, weight = FontWeight.Bold, lineOne = true)
+                // Создатель — отдельной строкой (заказчик 2026-10-02).
+                group.creator?.let { Secondary(it, lineOne = true) }
+            }
             if (pages > 1 && view.expanded == null && view.mode == GroupMode.Pages) {
                 IconButton(glyph = "‹", onClick = { if (view.page > 0) view.page-- }, live = view.page > 0)
                 Caption("" + (view.page + 1) + "/" + pages, fontSize = TimaType.sz5, weight = FontWeight.Bold, lineOne = true)

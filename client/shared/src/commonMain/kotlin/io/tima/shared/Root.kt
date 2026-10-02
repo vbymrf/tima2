@@ -1481,6 +1481,37 @@ private fun App(
             (peopleCards[id] ?: ChatPerson()).withBookName(entry?.name, entry?.phone)
         }
     }
+    // ── ГРУППА ЗВОНКА: СОЗДАТЕЛЬ ─────────────────────────────────────────────
+    //
+    // Заказчик 2026-10-02: имя человека (не ник), создавшего групповой звонок, — отдельной
+    // строкой в окне звонка, в списках «Чаты» и «Группы», в шапке переписки; его аватар — с
+    // «ГЗ» поверх. Создатель временной группы звонка — её владелец.
+    val callOwnerOf: (String) -> String? = { groupId ->
+        groupId.takeIf { it in callGroupsTtl }
+            ?.let { gid -> socialState.mine.firstOrNull { it.groupId == gid }?.ownerId?.ifBlank { null } }
+    }
+    // Имя человека: из книги, иначе из его карточки; ник — только если имени нет вовсе.
+    val creatorNameOf: (String) -> String? = { id ->
+        people.want(listOf(id))
+        val card = peopleCards[id]
+        bookStateForChats.all.firstOrNull { it.userId == id }?.name?.takeIf { it.isNotBlank() }
+            ?: card?.name?.takeIf { it.isNotBlank() }
+            ?: card?.userName?.takeIf { it.isNotBlank() }
+            ?: card?.nick?.takeIf { it.isNotBlank() }?.let { "@$it" }
+    }
+    val creatorFaceOf: (String) -> ImageBitmap? = { id ->
+        people.wantFace(id)
+        peopleFaces[id]
+    }
+    val callCreatorName: (String) -> String? = { groupId -> callOwnerOf(groupId)?.let(creatorNameOf) }
+    val callCreatorFace: (String) -> ImageBitmap? = { groupId -> callOwnerOf(groupId)?.let(creatorFaceOf) }
+    val callGroupOf: (ChatSummary) -> io.tima.feature.chat.CallGroupLook? = { chat ->
+        if (chat.kind == ChatKind.Group && chat.chatId in callGroupsTtl) {
+            io.tima.feature.chat.CallGroupLook(callCreatorName(chat.chatId), callCreatorFace(chat.chatId))
+        } else {
+            null
+        }
+    }
     val faceOfChat: (ChatSummary) -> ImageBitmap? = { chat ->
         chat.peerId?.takeIf { chat.kind == ChatKind.Personal }?.let { id ->
             people.wantFace(id)
@@ -2254,6 +2285,9 @@ private fun App(
         }
         io.tima.feature.call.GroupStage(
             title = g.title,
+            // В окне — кто начал звонок; у группы звонка это и её создатель.
+            creator = g.creatorId.ifBlank { null }?.let(creatorNameOf) ?: callCreatorName(g.groupId),
+            creatorFace = g.creatorId.ifBlank { null }?.let(creatorFaceOf) ?: callCreatorFace(g.groupId),
             tiles = tiles,
             count = peers.distinctBy { it.userId }.size + 1,
             max = g.rules.max,
@@ -2501,6 +2535,7 @@ private fun App(
                     onSearchInBook = book::changedSearch,
                     personOfChat = personOfChat,
                     faceOfChat = faceOfChat,
+                    callGroupOf = callGroupOf,
                     onOpen = { where = Where.Chat(it.chatId, it.title) },
                     // Открыть можно только того, кто в TIMa: у остальных переписки нет
                     // и завести её не из чего — им «Пригласить».
@@ -2745,6 +2780,7 @@ private fun App(
                                 tagOf = { chat ->
                                     callGroupsTtl[chat.chatId]?.let { wordsNow.groupCall.ttl(((it - msNow()) / 3_600_000L).toInt().coerceAtLeast(0)) }
                                 },
+                                callGroupOf = callGroupOf,
                             )
                         }
                     },
@@ -3127,6 +3163,8 @@ private fun App(
                         },
                         inCallHere = callHost.active && callHost.group?.groupId == current.chatId,
                         ttlUntilMs = callGroupsTtl[current.chatId],
+                        callCreator = callCreatorName(current.chatId),
+                        callCreatorFace = callCreatorFace(current.chatId),
                         inviteOf = { line ->
                             io.tima.feature.chat.CallInviteLink.groupOf(line.text)?.let { g -> groupDesk.inviteOf(g, groupTitleOf(g)) }
                         },
@@ -3392,6 +3430,9 @@ private fun Chat(
     inCallHere: Boolean = false,
     /** Временная группа звонка — когда удалится, мс (решение 11). */
     ttlUntilMs: Long? = null,
+    /** Группа звонка: имя создателя и его аватар (заказчик 2026-10-02). */
+    callCreator: String? = null,
+    callCreatorFace: ImageBitmap? = null,
     inviteOf: (ChatLine) -> io.tima.feature.chat.CallInvite? = { null },
     onInvite: (ChatLine) -> Unit = {},
 ) {
@@ -3491,7 +3532,9 @@ private fun Chat(
         state = state,
         onPerson = onPerson,
         onCall = onCall,
-        peerFace = peerFace,
+        peerFace = if (ttlUntilMs != null) callCreatorFace else peerFace,
+        callCreator = callCreator,
+        callGroup = ttlUntilMs != null,
         authorLook = authorLook,
         ownerId = ownerId,
         hues = hues,
@@ -4538,6 +4581,8 @@ private fun PhoneWindow(
     personOfChat: (ChatSummary) -> ChatPerson? = { null },
     /** Аватар собеседника личной переписки. */
     faceOfChat: (ChatSummary) -> ImageBitmap? = { null },
+    /** Группа звонка: создатель и его аватар. */
+    callGroupOf: (ChatSummary) -> io.tima.feature.chat.CallGroupLook? = { null },
     faceOf: (BookEntry) -> ImageBitmap? = { null },
     onSearchInBook: (String) -> Unit,
     onOpen: (ChatSummary) -> Unit,
@@ -4712,6 +4757,7 @@ private fun PhoneWindow(
                 look = book.view.look(),
                 countOf = { chat -> noticeCounts.chat(chat.chatId, chat.peerId) },
                 tagOf = tagOf,
+                callGroupOf = callGroupOf,
             )
 
             WindowTab.Contacts -> {

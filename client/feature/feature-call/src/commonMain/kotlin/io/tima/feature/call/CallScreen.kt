@@ -209,8 +209,14 @@ fun CallScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
                 ) {
-                    Avatar(letters = letters(peer), size = AvatarSize.Big)
+                    if (group != null) {
+                        val badge = Tima.words.groupCall.badge
+                        Avatar(letters = badge, size = AvatarSize.Big, image = group.creatorFace, overlay = badge)
+                    } else {
+                        Avatar(letters = letters(peer), size = AvatarSize.Big)
+                    }
                     Name(peer.ifBlank { Tima.words.chat.nameless })
+                    group?.creator?.let { Secondary(it) }
                     Secondary(under(state, incoming, seconds, peerRinging))
 
                     // Оценка связи — от SFU, своей не считаем. Пока не сказали — молчим:
@@ -418,6 +424,10 @@ data class GroupStage(
     val onVoice: ((GroupTile) -> Unit)? = null,
     /** «📌» под пузырём — закрепить или открепить; `null` — я не создатель. */
     val onPin: ((GroupTile) -> Unit)? = null,
+    /** Создатель группы звонка — имя отдельной строкой (заказчик 2026-10-02). */
+    val creator: String? = null,
+    /** Аватар создателя; на него ложится «ГЗ». */
+    val creatorFace: androidx.compose.ui.graphics.ImageBitmap? = null,
     /** Конец звонка, я автор — «Создать звонок». */
     val onCreateAgain: (() -> Unit)? = null,
     /** Конец звонка, не автор — «Присоединиться»; активна, пока звонок в группе идёт. */

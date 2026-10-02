@@ -42,6 +42,11 @@ fun Avatar(
      * правило формы (квадрат — «кто-то», круг — «нажми») от содержимого не зависит.
      */
     image: ImageBitmap? = null,
+    /**
+     * Надпись поверх картинки — «ГЗ» у группы звонка на аватаре создателя (заказчик
+     * 2026-10-02). Без картинки не рисуется: тогда сами буквы и есть надпись.
+     */
+    overlay: String? = null,
 ) {
     val colors = Tima.colors
     val shape = RoundedCornerShape(size.rounding)
@@ -59,6 +64,13 @@ fun Avatar(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
             )
+            // Подложка полупрозрачная из цветов темы: надпись читается и на светлом, и на
+            // тёмном лице, а лицо под ней остаётся узнаваемым.
+            overlay?.let {
+                Box(Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.4f)), contentAlignment = Alignment.Center) {
+                    Caption(text = it, fontSize = size.fontSize, weight = FontWeight.ExtraBold, color = colors.surface)
+                }
+            }
         } else {
             Caption(
                 text = letters,

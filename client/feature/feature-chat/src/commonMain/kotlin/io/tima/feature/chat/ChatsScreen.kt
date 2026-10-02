@@ -90,6 +90,8 @@ fun ChatsScreen(
      * (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ, решение 11). `null` — строки нет.
      */
     tagOf: (ChatSummary) -> String? = { null },
+    /** Группа звонка: создатель и его аватар (заказчик 2026-10-02); `null` — обычная. */
+    callGroupOf: (ChatSummary) -> CallGroupLook? = { null },
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -139,7 +141,7 @@ fun ChatsScreen(
                     explanation = words.writeFirst,
                 )
 
-                else -> List(state.chats, onOpen, personOf, faceOf, look, countOf, tagOf)
+                else -> List(state.chats, onOpen, personOf, faceOf, look, countOf, tagOf, callGroupOf)
             }
         }
     }
@@ -171,6 +173,8 @@ fun GroupsScreen(
     countOf: ((ChatSummary) -> Int)? = null,
     /** «Удалится через N ч» у временной группы звонка (решение 11). */
     tagOf: (ChatSummary) -> String? = { null },
+    /** Группа звонка: создатель и его аватар (заказчик 2026-10-02); `null` — обычная. */
+    callGroupOf: (ChatSummary) -> CallGroupLook? = { null },
 ) {
     val wanted = if (chosen == COMMON_SECTION) "" else chosen
     val groups = if (chosen.isEmpty()) state.groups else state.groups.filter { it.sectionId == wanted }
@@ -183,7 +187,7 @@ fun GroupsScreen(
                     "которых состоите. Создание группы — из каталога окна «Социум».",
             )
 
-            else -> List(chats = groups, onOpen = onOpen, countOf = countOf, tagOf = tagOf)
+            else -> List(chats = groups, onOpen = onOpen, countOf = countOf, tagOf = tagOf, callGroupOf = callGroupOf)
         }
     }
 }
@@ -197,11 +201,13 @@ private fun List(
     look: PersonLook = PersonLook.DEFAULT,
     countOf: ((ChatSummary) -> Int)? = null,
     tagOf: (ChatSummary) -> String? = { null },
+    /** Группа звонка: создатель и его аватар (заказчик 2026-10-02); `null` — обычная. */
+    callGroupOf: (ChatSummary) -> CallGroupLook? = { null },
 ) = LazyColumn(
     modifier = Modifier.fillMaxSize(),
 ) {
     items(chats, key = { it.chatId }) { chat ->
-        ChatLine(chat, personOf(chat), faceOf(chat), look, countOf?.invoke(chat) ?: chat.unread, onClick = { onOpen(chat) }, tag = tagOf(chat))
+        ChatLine(chat, personOf(chat), faceOf(chat), look, countOf?.invoke(chat) ?: chat.unread, onClick = { onOpen(chat) }, tag = tagOf(chat), call = callGroupOf(chat))
     }
 }
 
@@ -215,11 +221,19 @@ private fun ChatLine(
     count: Int,
     onClick: () -> Unit,
     tag: String? = null,
+    call: CallGroupLook? = null,
 ) = ListLine(
     onClick = onClick,
     // Картинка, если она есть, иначе буква — та же, что в книге. У группы человека нет,
-    // и буквы берутся из её названия.
-    left = { Avatar(letters = who?.letter() ?: letters(chat), image = face) },
+    // и буквы берутся из её названия. Группа звонка — аватар создателя и «ГЗ» поверх.
+    left = {
+        if (call != null) {
+            val badge = Tima.words.groupCall.badge
+            Avatar(letters = badge, image = call.face, overlay = badge)
+        } else {
+            Avatar(letters = who?.letter() ?: letters(chat), image = face)
+        }
+    },
     right = {
         Column(
             horizontalAlignment = Alignment.End,
@@ -254,6 +268,8 @@ private fun ChatLine(
         // переписки. Имени может не быть и вовсе: профиль не приезжал. Строку это не
         // отменяет — сообщение есть, и человек должен его видеть.
         Name(who?.line(look, PERSON_FIRST_LINE) ?: chat.title ?: Tima.words.chat.nameless)
+        // Группа звонка — имя создателя отдельной строкой (заказчик 2026-10-02).
+        call?.creator?.let { Secondary(it, lineOne = true) }
         // Превью обрезается: иначе строка списка растёт от чужого длинного сообщения.
         Secondary(preview(chat, Tima.words.chat, Tima.words.groupCall.title), lineOne = true)
         tag?.let { Tertiary(it, lineOne = true) }
@@ -314,3 +330,9 @@ fun ChatSummary.matches(request: String): Boolean {
     return title?.contains(clean, ignoreCase = true) == true ||
         preview?.contains(clean, ignoreCase = true) == true
 }
+
+/**
+ * Как показать группу звонка в списке и шапке: имя создателя (не ник — заказчик 2026-10-02)
+ * и его аватар, на который ложится «ГЗ».
+ */
+data class CallGroupLook(val creator: String?, val face: ImageBitmap?)

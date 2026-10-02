@@ -177,6 +177,12 @@ fun ChatScreen(
     /** Картинка аватара собеседника в шапке; `null` — буквы, как было. */
     peerFace: ImageBitmap? = null,
     /**
+     * Группа звонка (заказчик 2026-10-02): имя создателя отдельной строкой под названием и
+     * «ГЗ» на аватаре — поверх его картинки, а без неё буквами. `null` — группа обычная.
+     */
+    callCreator: String? = null,
+    callGroup: Boolean = false,
+    /**
      * Позвонить собеседнику — телефонная кнопка в шапке (макет `03-personal-chat.md`).
      *
      * `null` — звонить нечем или некому: у группы, на платформе без движка. Кнопки
@@ -204,8 +210,10 @@ fun ChatScreen(
             caption = caption,
             // Аватар собеседника — по макету подокна чата. Буквы, а не картинка: картинки
             // приезжают вместе с медиа, а место под них тут то же самое.
-            avatar = peerLetters(peer),
+            avatar = if (callGroup) Tima.words.groupCall.badge else peerLetters(peer),
             avatarImage = peerFace,
+            avatarOverlay = if (callGroup) Tima.words.groupCall.badge else null,
+            subcaption = callCreator,
             // Чипы «Доступность» и «Участники» из шапки убраны (решение заказчика
             // 2026-09-17: это про группу, а не про переписку). Они живут в меню «•••».
             onMore = onMore,

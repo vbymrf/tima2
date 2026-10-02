@@ -64,6 +64,27 @@ class ChatsScreenTest {
     }
 
     @Test
+    fun группа_звонка_с_создателем_и_ГЗ_на_его_аватаре() {
+        // Заказчик 2026-10-02: имя создателя отдельной строкой; его аватар — с «ГЗ» поверх.
+        val face = androidx.compose.ui.graphics.ImageBitmap(64, 64)
+        androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(
+            androidx.compose.ui.unit.Density(1f), androidx.compose.ui.unit.LayoutDirection.Ltr,
+            androidx.compose.ui.graphics.Canvas(face), androidx.compose.ui.geometry.Size(64f, 64f),
+        ) { drawRect(FOREIGN_BACKGROUND) }
+        val state = ChatsState(
+            chats = listOf(line("g-1", title = "Групповой звонок @anna", preview = "Звонок начат: Анна", unread = 0).copy(kind = ChatKind.Group)),
+            read = true,
+        )
+        val with = capture("переписки-группа-звонка", WIDTH, 200, dark = false) {
+            Stage(column = { ChatsScreen(state = state, onOpen = {}, callGroupOf = { CallGroupLook("Анна Петрова", face) }) })
+        }
+        val plain = capture("переписки-группа-звонка-без-создателя", WIDTH, 200, dark = false) {
+            Stage(column = { ChatsScreen(state = state, onOpen = {}) })
+        }
+        assertTrue(with.difference(plain) > 0.0, "создателя и его аватара не видно")
+    }
+
+    @Test
     fun непрочитанное_видно_янтарём() {
         for ((name, snapshot) in bothThemes("переписки", WIDTH, HEIGHT) { screen(list()) }) {
             assertTrue(

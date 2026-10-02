@@ -180,6 +180,10 @@ fun SubwindowHeader(
     avatar: String? = null,
     /** Картинка аватара; `null` — буквы. Та же картинка, что в списке и на странице. */
     avatarImage: ImageBitmap? = null,
+    /** Надпись поверх картинки аватара — «ГЗ» у группы звонка. */
+    avatarOverlay: String? = null,
+    /** Строка между названием и подписью — создатель группы звонка (2026-10-02). */
+    subcaption: String? = null,
     right: (@Composable () -> Unit)? = null,
     /**
      * «•••» правее названия — меню подокна (решение заказчика 2026-09-18). Круглая
@@ -233,6 +237,7 @@ fun SubwindowHeader(
             Avatar(
                 letters = it,
                 image = avatarImage,
+                overlay = avatarOverlay,
                 size = AvatarSize.Small,
                 modifier = if (onPerson != null) Modifier.clickable(onClick = onPerson) else Modifier,
             )
@@ -247,6 +252,7 @@ fun SubwindowHeader(
             // на плашке одно слово перенести некуда, а обрезать его нельзя — от него
             // и зависит, понял ли человек, где он (решение заказчика 2026-09-16).
             HeaderTitle(title)
+            subcaption?.let { Secondary(it, lineOne = true) }
             // Подпись шапки — одна строка: шапка не растёт от длинного имени.
             caption?.let { Tertiary(it, lineOne = true) }
         }

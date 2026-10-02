@@ -125,7 +125,7 @@ class SpeakerSlotsTest {
                 state = CallState(stage = CallStage.Ended),
                 peer = "Планёрка", incoming = false, onAccept = {}, onDecline = {}, onHangUp = {},
                 onMicrophone = {}, onCamera = {}, onClose = {}, onCallAgain = {},
-                group = GroupStage("Планёрка", many, 10, 25, false, false, {}, {}, view, onJoinAgain = {}, joinLive = false),
+                group = GroupStage("Планёрка", many, 10, 25, false, false, {}, {}, view, onJoinAgain = {}, joinLive = false, creator = "Анна Петрова"),
             )
         }
     }
