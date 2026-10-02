@@ -205,7 +205,8 @@ const (
 	// 237 → 242: «начать заново» и её отмена (0062, ДУ6) — заявки в группы (CopyGroupClaims,
 	// ListGroupClaims, ConfirmGroupClaim), отмена (CancelNewerIdentities), заверенность
 	// устройства для отмены (DeviceCertified). Потребитель — узкий IdentityCancelStore.
-	storeMethodBudget = 242
+	// 242 → 243: итог аттестации устройства (0063, ДУ8) — SetDeviceAttestation.
+	storeMethodBudget = 243
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
 )

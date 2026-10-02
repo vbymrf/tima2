@@ -179,6 +179,8 @@ func serve() {
 			DevSMS: os.Getenv("TIMA_DEV_SMS") == "1",
 			// Доверие к устройствам (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ Р24): off | record | require.
 			DeviceTrust: api.NormalizeDeviceTrust(os.Getenv("TIMA_DEVICE_TRUST")),
+			// Аттестация телефона (ДУ8, Р21): off | record | require; пусто — off.
+			Attestation: os.Getenv("TIMA_ATTESTATION"),
 			// Переопределение лимитов auth (0 → прод-дефолт): dev/нагрузочные прогоны
 			SMSPerPhone:   atoiOr("TIMA_RL_SMS_PER_PHONE", 0),
 			SMSPerIP:      atoiOr("TIMA_RL_SMS_PER_IP", 0),

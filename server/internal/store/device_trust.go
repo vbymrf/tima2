@@ -107,3 +107,17 @@ func (s *Store) DeviceKeys(ctx context.Context, userID, deviceID string) (enc, s
 	}
 	return enc, sig, err
 }
+
+// SetDeviceAttestation записывает итог аттестации устройства (ДУ8, режим «записывать»).
+func (s *Store) SetDeviceAttestation(ctx context.Context, userID, deviceID, state, info string) error {
+	ct, err := s.pool.Exec(ctx, `
+		UPDATE devices SET attestation_state = $3, attestation_info = $4, attested_at = now()
+		WHERE device_id = $1 AND user_id = $2 AND revoked_at IS NULL`, deviceID, userID, state, info)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrDeviceNotFound
+	}
+	return nil
+}

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"net/http"
 
+	"tima/server/internal/attest"
 	"tima/server/internal/auth"
 	timacrypto "tima/server/internal/crypto"
 	"tima/server/internal/store"
@@ -265,4 +267,83 @@ func certifyDevice(deps deviceTrustDeps) http.HandlerFunc {
 		log.Printf("доверие: %s заверил устройство %s (%s)", id.DeviceID, target, proof.CertBy)
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// ── Аттестация (ДУ8, закладка Р20–Р23) ─────────────────────────────────────────
+
+// Режимы аттестации — настройка TIMA_ATTESTATION (Р21): off — не смотрим; record —
+// проверяем и пишем; require — пока как record (отказывать будет регистрация, когда включат).
+func normalizeAttestation(v string) string {
+	switch v {
+	case trustOff, trustRecord, trustRequire:
+		return v
+	}
+	return trustOff
+}
+
+// AttestationStore — что аттестации нужно от хранилища.
+type AttestationStore interface {
+	DeviceKeys(ctx context.Context, userID, deviceID string) ([]byte, []byte, error)
+	SetDeviceAttestation(ctx context.Context, userID, deviceID, state, info string) error
+}
+
+// RegisterAttestation — POST /devices/me/attestation: телефон присылает цепочку аттестации ключа
+// и подпись им над ключами своего устройства. Вызов — `/users/me/reidentify/challenge`, в запись
+// аттестации кладётся sha256 его токена.
+func RegisterAttestation(mux *http.ServeMux, st AttestationStore, tokens func() IdentityTokens, mode func() string, requireDevice Middleware) {
+	mux.HandleFunc("POST /api/v1/devices/me/attestation", requireDevice(func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		if mode() == trustOff {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		var req struct {
+			ChallengeToken string   `json:"challenge_token"`
+			Kind           string   `json:"kind"`
+			Chain          []string `json:"chain"`
+			Signature      string   `json:"signature"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
+			return
+		}
+		claims, err := tokens().Parse(req.ChallengeToken, auth.ScopeReidentify)
+		if err != nil || claims.Subject != id.UserID {
+			writeErr(w, http.StatusForbidden, "bad_challenge", "вызов просрочен или выдан не этой сессии")
+			return
+		}
+		if req.Kind != "android-key" {
+			writeErr(w, http.StatusBadRequest, "bad_kind", "вид аттестации — android-key")
+			return
+		}
+		b64 := base64.RawURLEncoding
+		var chain [][]byte
+		for _, c := range req.Chain {
+			der, err := b64.DecodeString(c)
+			if err != nil {
+				writeErr(w, http.StatusBadRequest, "bad_chain", "цепочка — base64url DER")
+				return
+			}
+			chain = append(chain, der)
+		}
+		sig, _ := b64.DecodeString(req.Signature)
+		enc, sgn, err := st.DeviceKeys(r.Context(), id.UserID, id.DeviceID)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		challenge := sha256.Sum256([]byte(req.ChallengeToken))
+		res := attest.VerifyAndroid(chain, challenge[:], timacrypto.DeviceCertBytes(enc, sgn), sig)
+		state := "failed"
+		if res.Ok() {
+			state = "verified"
+		}
+		info, _ := json.Marshal(res)
+		if err := st.SetDeviceAttestation(r.Context(), id.UserID, id.DeviceID, state, string(info)); err != nil {
+			log.Printf("attestation: store: %v", err)
+		}
+		log.Printf("аттестация: устройство %s — %s (%s, загрузка %s, %s) %s", id.DeviceID, state, res.SecurityLevel, res.VerifiedBoot, res.PackageName, res.Problem)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"state": state, "problem": res.Problem})
+	}))
 }

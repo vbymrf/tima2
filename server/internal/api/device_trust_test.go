@@ -465,3 +465,32 @@ func TestCancelNeedsCertifiedDevice(t *testing.T) {
 		t.Fatalf("незаверенное устройство отменяет личность: %d", code)
 	}
 }
+
+// Аттестация (ДУ8): выключено — молчим; «записывать» — проверяем и пишем, не отказывая.
+func TestAttestationRecordsWithoutRefusing(t *testing.T) {
+	ts, srv := setup(t)
+	acc := newTrustAccount()
+	dev, _, _ := registerProof(t, ts, "+79990000207", acc.identityPub(), acc.withAsk)
+	ch := challengeFor(t, ts, dev.token)
+	body := map[string]any{"challenge_token": ch, "kind": "android-key", "chain": []string{"AAAA", "BBBB"}, "signature": "AAAA"}
+	srv.Attestation = "off"
+	if code := authedJSON(t, ts, "POST", "/api/v1/devices/me/attestation", dev.token, body, nil); code != http.StatusNoContent {
+		t.Fatalf("выключено: ожидался 204, получен %d", code)
+	}
+	srv.Attestation = "record"
+	var res struct {
+		State string `json:"state"`
+	}
+	if code := authedJSON(t, ts, "POST", "/api/v1/devices/me/attestation", dev.token, body, &res); code != 200 || res.State != "failed" {
+		t.Fatalf("записывать: ожидался 200 failed, получен %d %+v", code, res)
+	}
+	var mine struct {
+		Devices []struct {
+			Attestation string `json:"attestation"`
+		} `json:"devices"`
+	}
+	getAuthed(t, ts, dev.token, "/api/v1/devices", &mine)
+	if len(mine.Devices) != 1 || mine.Devices[0].Attestation != "failed" {
+		t.Fatalf("итог аттестации не записан: %+v", mine.Devices)
+	}
+}

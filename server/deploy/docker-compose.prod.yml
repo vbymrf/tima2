@@ -66,6 +66,8 @@ services:
       # Доверие к устройствам (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ Р24): off | record | require. По умолчанию
       # record — проверяем и пишем, не отказываем; require включается, когда устройства заверены.
       TIMA_DEVICE_TRUST: ${TIMA_DEVICE_TRUST:-record}
+      # Аттестация телефона (ДУ8, Р21): off | record | require. На стенде — по слову заказчика.
+      TIMA_ATTESTATION: ${TIMA_ATTESTATION:-off}
       # Авто-обновление приложения. При выпуске новой версии: положи новый APK в
       # deploy/download/, подними числа/ссылку в .env, перезапусти backend.
       APP_LATEST_VERSION_CODE: ${APP_LATEST_VERSION_CODE:-0}

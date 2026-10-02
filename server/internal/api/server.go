@@ -40,6 +40,8 @@ type Server struct {
 	// DeviceTrust — режим доверия к устройствам (TIMA_DEVICE_TRUST: off|record|require; пусто —
 	// record). ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ Р24: строгость включает сервер, а не выпуск клиента.
 	DeviceTrust string
+	// Attestation — режим аттестации телефона (TIMA_ATTESTATION: off|record|require; пусто — off).
+	Attestation string
 
 	// Переопределение лимитов auth (0 → прод-дефолт). Для dev/тестов, где с одного
 	// IP регистрируется много устройств (иначе rate limit ложно срабатывает).
@@ -132,6 +134,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 		func() string { return NormalizeDeviceTrust(s.DeviceTrust) })
 	RegisterDeviceTrust(mux, s.Store, s.requireActiveDevice)
 	RegisterIdentityCancel(mux, s.Store, func() IdentityTokens { return s.Auth }, s.notifier(), s.requireActiveDevice)
+	RegisterAttestation(mux, s.Store, func() IdentityTokens { return s.Auth },
+		func() string { return normalizeAttestation(s.Attestation) }, s.requireActiveDevice)
 	mux.HandleFunc("GET /api/v1/escrow/pubkey", s.requireActiveDevice(s.escrowPubkey))
 	mux.HandleFunc("GET /api/v1/escrow/key", s.requireActiveDevice(s.escrowKeyForChat))
 	// Группы: состав, сообщения и ключи (шаг 4). Три файла держатся вместе

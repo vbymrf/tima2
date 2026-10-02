@@ -68,6 +68,8 @@ type UserDevice struct {
 	// экрана «Устройства» — проверка, на которую опирается шифрование, у клиентов (ДУ3).
 	Certified  bool
 	SigningKey bool
+	// Итог аттестации (ДУ8): '' — не присылали, verified, failed.
+	Attestation string
 }
 
 // ListUserDevices — активные устройства аккаунта, старые первыми (порядок
@@ -81,7 +83,8 @@ func (s *Store) ListUserDevices(ctx context.Context, userID string) ([]UserDevic
 		                                 WHERE k.ask_id = d.cert_ask_id AND k.revoked_at IS NULL)
 		         ELSE false END,
 		       EXISTS (SELECT 1 FROM account_signing_keys k
-		               WHERE k.device_id = d.device_id AND k.revoked_at IS NULL)
+		               WHERE k.device_id = d.device_id AND k.revoked_at IS NULL),
+		       d.attestation_state
 		FROM devices d WHERE d.user_id = $1 AND d.revoked_at IS NULL
 		ORDER BY d.created_at`, userID)
 	if err != nil {
@@ -91,7 +94,7 @@ func (s *Store) ListUserDevices(ctx context.Context, userID string) ([]UserDevic
 	out := make([]UserDevice, 0, 4)
 	for rows.Next() {
 		var d UserDevice
-		if err := rows.Scan(&d.DeviceID, &d.Name, &d.CreatedAt, &d.Platform, &d.Certified, &d.SigningKey); err != nil {
+		if err := rows.Scan(&d.DeviceID, &d.Name, &d.CreatedAt, &d.Platform, &d.Certified, &d.SigningKey, &d.Attestation); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
