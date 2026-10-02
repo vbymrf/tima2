@@ -63,6 +63,9 @@ services:
       # TIMA_DEV_SMS=1 в .env: код придёт прямо в ответе приложения (поле «dev-код»).
       # ПЕРЕД РЕАЛЬНЫМИ ПОЛЬЗОВАТЕЛЯМИ вернуть 0 и подключить SMS-провайдер.
       TIMA_DEV_SMS: ${TIMA_DEV_SMS:-0}
+      # Доверие к устройствам (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ Р24): off | record | require. По умолчанию
+      # record — проверяем и пишем, не отказываем; require включается, когда устройства заверены.
+      TIMA_DEVICE_TRUST: ${TIMA_DEVICE_TRUST:-record}
       # Авто-обновление приложения. При выпуске новой версии: положи новый APK в
       # deploy/download/, подними числа/ссылку в .env, перезапусти backend.
       APP_LATEST_VERSION_CODE: ${APP_LATEST_VERSION_CODE:-0}
