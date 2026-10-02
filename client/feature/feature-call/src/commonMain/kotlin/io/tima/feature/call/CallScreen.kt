@@ -442,6 +442,8 @@ data class GroupTile(
     val userId: String = "",
     /** Голос запрещён создателем — только смотрит. */
     val micForbidden: Boolean = false,
+    /** Видео запрещено создателем (заказчик 2026-10-02, 6д). */
+    val videoForbidden: Boolean = false,
     /** Аватар-картинка человека; `null` — буквы (2026-10-02: раньше буквы были всегда). */
     val face: androidx.compose.ui.graphics.ImageBitmap? = null,
     /** Видео участника не приходит или не раскодируется — словами на его клетке; `null` — всё в порядке. */

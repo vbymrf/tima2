@@ -2203,6 +2203,9 @@ private fun App(
     val forbiddenMics = callHost.group?.groupId?.let { gid ->
         groupDesk.live[gid]?.call?.members?.filter { it.micForbidden }?.map { it.userId }?.toSet()
     }.orEmpty()
+    val forbiddenVideos = callHost.group?.groupId?.let { gid ->
+        groupDesk.live[gid]?.call?.members?.filter { it.videoForbidden }?.map { it.userId }?.toSet()
+    }.orEmpty()
     val groupStage = callHost.group?.let { g ->
         // Порядок — по входу (4б): вошедший в конец, ушедший выпадает.
         val order = callHost.peerOrder
@@ -2218,6 +2221,7 @@ private fun App(
                 cameraOn = callHost.state.cameraOn,
                 userId = me,
                 micForbidden = callHost.micForbidden,
+                videoForbidden = callHost.videoForbidden,
                 face = peopleFaces[me],
             ),
         ) + peers.map { p ->
@@ -2231,6 +2235,7 @@ private fun App(
                 cameraOn = p.cameraOn,
                 userId = p.userId,
                 micForbidden = forbiddenMics.contains(p.userId),
+                videoForbidden = forbiddenVideos.contains(p.userId),
                 // Аватар — тот же, что в списках (заказчик 2026-10-02: были только буквы).
                 face = peopleFaces[p.userId],
                 // Пропажа видео — на клетке того, у кого пропало (заказчик 2026-10-01).

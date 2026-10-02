@@ -524,12 +524,27 @@ private fun Bubble(tile: GroupTile, group: GroupStage, words: io.tima.core.words
                 if (marks.isNotEmpty()) {
                     Caption(marks, modifier = Modifier.align(Alignment.TopEnd), fontSize = TimaType.sz6, lineOne = true)
                 }
+                // Камера выключена — в нижнем углу на сером кружке; запрещена создателем — на
+                // красном (заказчик 2026-10-02, 6а, 6д).
+                if (!tile.cameraOn || tile.videoForbidden) {
+                    Caption(
+                        "📷",
+                        modifier = Modifier.align(Alignment.BottomEnd)
+                            .background(
+                                if (tile.videoForbidden) Tima.colors.alarm else Tima.colors.quiet,
+                                androidx.compose.foundation.shape.CircleShape,
+                            )
+                            .padding(1.dp),
+                        fontSize = TimaType.sz6,
+                        lineOne = true,
+                    )
+                }
             }
             Caption(
                 tile.name,
                 fontSize = TimaType.sz6,
                 weight = FontWeight.SemiBold,
-                color = if (tile.micForbidden) Tima.colors.alarm else Tima.colors.text,
+                color = if (tile.micForbidden || tile.videoForbidden) Tima.colors.alarm else Tima.colors.text,
                 lineOne = true,
             )
         }
