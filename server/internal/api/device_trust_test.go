@@ -260,6 +260,22 @@ func TestPhoneIssuesSigningKeyAndCertifiesOwnDevice(t *testing.T) {
 	if certified != 2 {
 		t.Fatalf("оба устройства должны быть заверены КПУ, заверено %d: %+v", certified, v.Devices)
 	}
+	// Экран «Устройства» видит доверие (ДУ5).
+	var mine struct {
+		Devices []struct {
+			DeviceID   string `json:"device_id"`
+			Certified  bool   `json:"certified"`
+			SigningKey bool   `json:"signing_key"`
+		} `json:"devices"`
+	}
+	if code := getAuthed(t, ts, pcDev.token, "/api/v1/devices", &mine); code != 200 {
+		t.Fatalf("/devices: %d", code)
+	}
+	for _, d := range mine.Devices {
+		if !d.Certified || (d.DeviceID == phoneDev.id) != d.SigningKey {
+			t.Fatalf("список устройств не отражает доверие: %+v", mine.Devices)
+		}
+	}
 	// Отзыв телефона отзывает его КПУ — заверенное им у собеседников перестаёт быть доверенным.
 	if code := authedJSON(t, ts, "DELETE", "/api/v1/devices/"+phoneDev.id, pcDev.token, nil, nil); code != http.StatusNoContent && code != 200 {
 		t.Fatalf("отзыв телефона: %d", code)

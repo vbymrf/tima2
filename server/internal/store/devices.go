@@ -63,15 +63,27 @@ type UserDevice struct {
 	DeviceID  string
 	Name      string
 	CreatedAt time.Time
+	Platform  string
+	// Доверие (ДУ5): заверено ли действующей цепочкой и держит ли телефон свой КПУ. Для
+	// экрана «Устройства» — проверка, на которую опирается шифрование, у клиентов (ДУ3).
+	Certified  bool
+	SigningKey bool
 }
 
 // ListUserDevices — активные устройства аккаунта, старые первыми (порядок
 // подключения читается естественнее, чем обратный).
 func (s *Store) ListUserDevices(ctx context.Context, userID string) ([]UserDevice, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT device_id, name, created_at
-		FROM devices WHERE user_id = $1 AND revoked_at IS NULL
-		ORDER BY created_at`, userID)
+		SELECT d.device_id, d.name, d.created_at, d.platform,
+		       CASE d.cert_by
+		         WHEN 'identity' THEN true
+		         WHEN 'ask' THEN EXISTS (SELECT 1 FROM account_signing_keys k
+		                                 WHERE k.ask_id = d.cert_ask_id AND k.revoked_at IS NULL)
+		         ELSE false END,
+		       EXISTS (SELECT 1 FROM account_signing_keys k
+		               WHERE k.device_id = d.device_id AND k.revoked_at IS NULL)
+		FROM devices d WHERE d.user_id = $1 AND d.revoked_at IS NULL
+		ORDER BY d.created_at`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +91,7 @@ func (s *Store) ListUserDevices(ctx context.Context, userID string) ([]UserDevic
 	out := make([]UserDevice, 0, 4)
 	for rows.Next() {
 		var d UserDevice
-		if err := rows.Scan(&d.DeviceID, &d.Name, &d.CreatedAt); err != nil {
+		if err := rows.Scan(&d.DeviceID, &d.Name, &d.CreatedAt, &d.Platform, &d.Certified, &d.SigningKey); err != nil {
 			return nil, err
 		}
 		out = append(out, d)

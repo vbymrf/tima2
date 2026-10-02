@@ -33,14 +33,21 @@ func listMyDevices(deps devicesDeps) http.HandlerFunc {
 			Name      string `json:"name"`
 			CreatedAt string `json:"created_at"`
 			Current   bool   `json:"current"`
+			// Доверие (ДУ5): платформа, заверено ли, держит ли свой ключ подписи устройств.
+			Platform   string `json:"platform"`
+			Certified  bool   `json:"certified"`
+			SigningKey bool   `json:"signing_key"`
 		}
 		out := make([]item, 0, len(devices))
 		for _, d := range devices {
 			out = append(out, item{
-				DeviceID:  d.DeviceID,
-				Name:      d.Name,
-				CreatedAt: d.CreatedAt.UTC().Format(time.RFC3339),
-				Current:   d.DeviceID == id.DeviceID,
+				DeviceID:   d.DeviceID,
+				Name:       d.Name,
+				CreatedAt:  d.CreatedAt.UTC().Format(time.RFC3339),
+				Current:    d.DeviceID == id.DeviceID,
+				Platform:   d.Platform,
+				Certified:  d.Certified,
+				SigningKey: d.SigningKey,
 			})
 		}
 		w.Header().Set("Content-Type", "application/json")
