@@ -28,6 +28,15 @@ interface DeviceTrustActions {
 
     /** Начинали ли с номера заново после этой личности — и не отменено ли это (ДУ6). */
     suspend fun replaced(): Boolean = false
+
+    /** Код заверения этого устройства для QR (Р32); `null` — не знаем своего `device_id`. */
+    suspend fun certifyCode(): String? = null
+
+    /**
+     * Заверить устройство по отсканированному коду (Р32): код сверяется с ключами устройства
+     * у сервера в своём аккаунте, подписывает ключ подписи устройств этого телефона.
+     */
+    suspend fun certifyByCode(code: String): TrustStep = TrustStep.Refused("не умеем")
 }
 
 /** Чем кончилось действие доверия. */

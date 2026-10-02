@@ -81,6 +81,8 @@ fun DeviceScreen(
     onCertify: ((String) -> Unit)? = null,
     /** Отменить новую личность фразой (ДУ6); `null` — отменять нечем. */
     onCancelNewIdentity: ((String) -> Unit)? = null,
+    /** Показать код заверения этого устройства (Р32); `null` — кнопки нет. */
+    onShowCertifyCode: (() -> Unit)? = null,
 ) = Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
     val words = Tima.words.auth
     var signingOut by rememberSaveable { mutableStateOf(false) }
@@ -124,6 +126,21 @@ fun DeviceScreen(
     val self = state.devices.firstOrNull { it.current }
     if (onConfirmWithPhrase != null && !signingOut && self != null && !self.certified) {
         TrustByPhrase(onConfirmWithPhrase, state.trusting)
+    }
+    // Или по QR своим телефоном (Р32): единственный путь заверить уже подключённое без фразы.
+    if (onShowCertifyCode != null && !signingOut && self != null && !self.certified) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        ) {
+            val code = state.certifyCode
+            if (code == null) {
+                Button(label = words.showCertifyCode, onClick = onShowCertifyCode, kind = ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
+            } else {
+                Secondary(words.certifyCodeAbout)
+                io.tima.core.ui.QrCodeImage(code, Modifier.fillMaxWidth().padding(TimaSpacing.about4))
+            }
+        }
     }
     state.trustNotice?.let {
         Secondary(it, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
@@ -250,12 +267,8 @@ private fun Line(device: AccountDevice, onAsk: (String) -> Unit, onCertify: ((St
                 maxLines = 2,
             )
         }
-        if (!device.current && !device.certified && onCertify != null) {
-            Button(
-                label = words.certifyDevice,
-                onClick = { onCertify(device.deviceId) },
-            )
-        }
+        // «Заверить» по строке списка убрано (Р32): список приходит от сервера, и по нему
+        // заверялось бы и устройство вора. Заверяют по QR — код показывает само устройство.
         // Своё устройство отключается не отсюда: «выйти» — это другое действие с другими
         // последствиями, и оно живёт в настройках аккаунта.
         if (!device.current) {

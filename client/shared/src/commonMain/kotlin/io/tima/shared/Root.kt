@@ -741,6 +741,9 @@ private sealed interface Where {
      */
     data class Link(val code: String) : Where
 
+    /** Заверить устройство по отсканированному коду (Р32). */
+    data class Certify(val code: String) : Where
+
     /**
      * Настройки: подокно с вкладками.
      *
@@ -1314,7 +1317,8 @@ private fun App(
     // Код снаружи открывает подтверждение поверх всего: человек только что навёл камеру и
     // ждёт ответа именно на это.
     LaunchedEffect(linkCode) {
-        linkCode?.let { where = Where.Link(it) }
+        // Код заверения уже подключённого устройства (Р32) приходит тем же сканером.
+        linkCode?.let { where = if (io.tima.core.network.CertifyQr.isCertify(it)) Where.Certify(it) else Where.Link(it) }
     }
 
     // Код передачи приходит тем же путём и ведёт на приём: человек навёл камеру на чужой
@@ -3103,6 +3107,31 @@ private fun App(
                 }
             }
 
+            is Where.Certify -> {
+                {
+                    val certifier = remember(askSecrets) {
+                        io.tima.feature.auth.DevicesStore(
+                            network.myFleet, scope,
+                            trust = DeviceTrustActionsOverNetwork(
+                                keys = network.keys,
+                                users = network.directory,
+                                userId = assembled.session.userId,
+                                identity = deviceIdentityFrom(deviceSecret),
+                                asks = askSecrets,
+                                phone = platform.server in io.tima.domain.account.PHONES,
+                            ),
+                        )
+                    }
+                    val cs by certifier.state.collectAsState()
+                    io.tima.feature.auth.CertifyScreen(
+                        busy = cs.trusting,
+                        notice = cs.trustNotice,
+                        onCertify = { certifier.certifyByCode(current.code) },
+                        onCancel = { where = Where.Nothing },
+                    )
+                }
+            }
+
             is Where.Link -> {
                 {
                     LinkConfirmation(
@@ -4089,8 +4118,8 @@ private fun Devices(
         keySending = keyAsk == KeyAsk.Sending,
         // Доверие (ДУ5): подтвердить себя фразой; заверять другие — только телефон с ключом.
         onConfirmWithPhrase = store::confirmWithPhrase,
-        onCertify = if (store.holdsKey()) store::certify else null,
         onCancelNewIdentity = store::cancelNewIdentity,
+        onShowCertifyCode = store::showCertifyCode,
     )
 }
 
@@ -4379,6 +4408,7 @@ private fun whereCode(where: Where): String = when (where) {
     is Where.Comments -> "comments"
     is Where.Community -> "community"
     is Where.Link -> "link.confirm"
+    is Where.Certify -> "device.certify"
     is Where.Transfer -> if (where.virtualUserId == null) "account.take" else "account.give"
     // Пункт настроек — именем перечня: оно и есть ключ навигации, и латиницей.
     is Where.Settings -> "settings" + (where.item?.let { "." + it.name.lowercase() } ?: "")

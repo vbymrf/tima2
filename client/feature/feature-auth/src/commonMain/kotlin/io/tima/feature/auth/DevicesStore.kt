@@ -55,6 +55,30 @@ class DevicesStore(
         }
     }
 
+    /** Показать код заверения этого устройства (Р32). */
+    fun showCertifyCode() {
+        val actions = trust ?: return
+        scope.launch {
+            val code = runCatching { actions.certifyCode() }.getOrNull()
+            _state.value = _state.value.copy(certifyCode = code, trustNotice = if (code == null) words().auth.trustFailed(words().auth.tryAgain) else null)
+        }
+    }
+
+    /** Заверить устройство по отсканированному коду (Р32). */
+    fun certifyByCode(code: String, done: () -> Unit = {}) {
+        val actions = trust ?: return
+        if (_state.value.trusting) return
+        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        scope.launch {
+            val step = runCatching { actions.certifyByCode(code) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
+            _state.value = _state.value.copy(trusting = false, trustNotice = notice(step))
+            if (step == TrustStep.Done) {
+                refresh()
+                done()
+            }
+        }
+    }
+
     /** Отменить новую личность фразой (ДУ6, Р27, Р31). */
     fun cancelNewIdentity(phrase: String) {
         val actions = trust ?: return
@@ -202,4 +226,6 @@ data class DevicesState(
     val trustNotice: String? = null,
     /** С номера начали заново, а это устройство — прежней личности (ДУ6). */
     val replaced: Boolean = false,
+    /** Код заверения этого устройства для показа QR (Р32); `null` — не показываем. */
+    val certifyCode: String? = null,
 )

@@ -55,6 +55,28 @@ class DeviceTrustActionsOverNetwork(
         return step
     }
 
+    override suspend fun certifyCode(): String? {
+        val id = selfId().ifEmpty { return null }
+        return io.tima.core.network.CertifyQr.payload(id, identity.encryptionPublic, identity.signingPublic)
+    }
+
+    override suspend fun certifyByCode(code: String): TrustStep {
+        val read = io.tima.core.network.CertifyQr.parse(code) ?: return TrustStep.Refused("это не код заверения")
+        val raw = asks.get() ?: return TrustStep.NoKey
+        val listed = when (val answer = keys.devicesOf(userId)) {
+            is DeviceKeysResult.Devices -> answer.devices.firstOrNull { it.deviceId == read.deviceId }
+            is DeviceKeysResult.Offline -> return TrustStep.Offline(answer.link.retryDelayMs)
+            is DeviceKeysResult.Refused -> return TrustStep.Refused(answer.code)
+        } ?: return TrustStep.Refused("устройство не из этого аккаунта")
+        // Ключи с экрана обязаны совпасть с ключами у сервера: иначе заверили бы не то
+        // устройство, что перед камерой.
+        if (!listed.encryptionPub.contentEquals(read.encryptionPub) || !listed.signingPub.contentEquals(read.signingPub)) {
+            return TrustStep.Refused("ключи на экране не совпадают с ключами устройства у сервера")
+        }
+        val cert = AccountSigningKey.fromRaw(raw).certify(read.encryptionPub, read.signingPub) ?: return TrustStep.Refused("подпись не сделалась")
+        return keys.certifyDevice(read.deviceId, DeviceTrustCheck.BY_ASK, cert).step()
+    }
+
     override suspend fun certify(deviceId: String): TrustStep {
         val raw = asks.get() ?: return TrustStep.NoKey
         val ask = AccountSigningKey.fromRaw(raw)

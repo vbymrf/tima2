@@ -1619,6 +1619,12 @@ interface AuthWords {
     val replacedItsMe: String
     val replacedCancelled: String
     val nothingToCancel: String
+    /** Заверение по QR (Р32). */
+    val showCertifyCode: String
+    val certifyCodeAbout: String
+    val certifyTitle: String
+    val certifyAsk: String
+    val certifyYes: String
     val codeNoLongerValid: String
     val codeReadWrong: String
     val deviceHasNoKey: String
@@ -3494,6 +3500,11 @@ object RussianWords : Words {
         override val replacedItsMe = "Это я"
         override val replacedCancelled = "Новая личность отменена: её устройства отключены, вы снова главный"
         override val nothingToCancel = "Отменять нечего"
+        override val showCertifyCode = "Показать код заверения"
+        override val certifyCodeAbout = "Откройте на своём телефоне «Секретная фраза и устройства» → «Сканировать код» и наведите камеру на этот код"
+        override val certifyTitle = "Заверить устройство"
+        override val certifyAsk = "Устройство перед камерой станет доверенным: собеседники начнут писать и ему. Заверяйте только своё."
+        override val certifyYes = "Заверить"
         override val codeNoLongerValid = "Код больше не действует — попросите на том устройстве новый"
         override val codeReadWrong = "Код прочитан неверно — отсканируйте заново"
         override val deviceHasNoKey = "Это устройство не может подтверждать: у него нет своего ключа"
