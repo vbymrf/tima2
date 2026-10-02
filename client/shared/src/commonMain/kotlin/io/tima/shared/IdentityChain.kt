@@ -39,13 +39,14 @@ class IdentityChain(
             val current = st.currentId ?: continue
             if (current == peer || current == me) continue
             val newChat = PersonalChatIdsOverKodium.personalChatId(me, current)
-            runCatching { rehome.rehome(chatId, newChat, current) }
+            runCatching { rehome.rehome(chatId, newChat, peer, current) }
                 .onFailure { Journal.trouble(LogCode.DEVICE_TRUST, "переписка не переехала", "причина" to (it.message ?: "?")) }
                 .onSuccess {
                     moved++
                     val line = if (st.cancelled) words().auth.identityRestoredLine else words().auth.identityChangedLine
                     runCatching { environment.journal.note(newChat, "identity:$peer>$current", line, msNow()) }
-                    Journal.note(LogCode.DEVICE_TRUST, "собеседник сменил личность — переписка переехала", "было" to peer.take(8), "стало" to current.take(8))
+                    val what = if (st.cancelled) "новую личность собеседника отменили — переписка вернулась" else "собеседник сменил личность — переписка переехала"
+                    Journal.note(LogCode.DEVICE_TRUST, what, "было" to peer.take(8), "стало" to current.take(8))
                 }
         }
         return moved

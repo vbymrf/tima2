@@ -162,6 +162,11 @@ UPDATE book SET user_id = ? WHERE phone = ?;
 clearUserId:
 UPDATE book SET user_id = NULL WHERE phone = ?;
 
+-- Собеседник сменил личность (ДУ6, Р26): запись книги идёт за человеком, а не за прежней
+-- личностью — иначе имя из записной книжки пропадает у переехавшей переписки.
+moveUserId:
+UPDATE book SET user_id = :newUser WHERE user_id = :oldUser;
+
 -- Переложить в другой список. Не DELETE: строка нужна, чтобы синхронизация не вернула
 -- убранного — без неё удаление выглядело бы неработающим.
 --

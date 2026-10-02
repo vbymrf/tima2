@@ -24,7 +24,7 @@ class SqlChatRehomeTest {
         place("раз", "chat-старый")
         place("два", "chat-старый")
 
-        SqlChatRehome(db).rehome("chat-старый", "chat-новый", "u-новая")
+        SqlChatRehome(db).rehome("chat-старый", "chat-новый", "u-прежняя", "u-новая")
 
         assertEquals(listOf("раз", "два"), q.chatPage("chat-новый", 10).executeAsList().map { it.dedup_key }.sorted().reversed())
         assertEquals(0, q.chatPage("chat-старый", 10).executeAsList().size)
@@ -40,9 +40,21 @@ class SqlChatRehomeTest {
         place("старое", "chat-старый")
         place("новое", "chat-новый")
 
-        SqlChatRehome(db).rehome("chat-старый", "chat-новый", "u-новая")
+        SqlChatRehome(db).rehome("chat-старый", "chat-новый", "u-прежняя", "u-новая")
 
         assertEquals(2, q.chatPage("chat-новый", 10).executeAsList().size)
         assertNull(db.chatsQueries.chatById("chat-старый").executeAsOneOrNull())
+    }
+
+    @Test
+    fun запись_книги_идёт_за_человеком() {
+        db.chatsQueries.upsertChat(chatId = "chat-старый", kind = 0, titleEnc = null, peerId = "u-прежняя")
+        db.bookQueries.fromPhoneBookInsert("tel:+79990000105", "+79990000105")
+        db.bookQueries.setUserId("u-прежняя", "+79990000105")
+
+        SqlChatRehome(db).rehome("chat-старый", "chat-новый", "u-прежняя", "u-новая")
+
+        assertEquals("tel:+79990000105", db.bookQueries.byUserId("u-новая").executeAsOneOrNull())
+        assertNull(db.bookQueries.byUserId("u-прежняя").executeAsOneOrNull())
     }
 }
