@@ -710,13 +710,22 @@ class Receiver(
         if (d.callId.isEmpty()) return
         val w = words().groupCall
         val text = when (d.state) {
+            // Одно сообщение (заказчик 2026-10-02): «Звонок начат: имя, ник» и следующей
+            // строкой «Участники: …; …» — кого позвали, без меня, все. Кого позвали, говорит
+            // звонок группы на сервере (у участника отметка «позван»).
             "live" -> {
                 val who = when {
                     d.by.isEmpty() -> null
                     d.by == session.userId -> w.stateSelf
-                    else -> notices?.nameOf(d.by)
+                    else -> notices?.nameAndNick(d.by)
                 }
-                w.lineStarted(who ?: words().chat.nameless)
+                val called = runCatching { network.calls.groupCall(d.groupId) }.getOrNull()?.call
+                    ?.takeIf { it.callId == d.callId }
+                    ?.members.orEmpty()
+                    .filter { it.invited && it.userId != session.userId && it.userId != d.by }
+                    .map { notices?.nameOf(it.userId) ?: words().chat.nameless }
+                val first = w.lineStarted(who ?: words().chat.nameless)
+                if (called.isEmpty()) first else first + "\n" + w.lineParticipants(called.joinToString("; "))
             }
             "ended" -> w.lineEnded
             else -> return

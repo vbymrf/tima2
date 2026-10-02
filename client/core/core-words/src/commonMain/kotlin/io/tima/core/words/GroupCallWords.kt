@@ -100,6 +100,7 @@ interface GroupCallWords {
 
     // Строки звонка в переписке группы — рисует телефон сам (заказчик 2026-10-01, 8б).
     fun lineStarted(who: String): String
+    fun lineParticipants(who: String): String
     val lineEnded: String
     val linePaused: String
     val lineResumed: String
@@ -235,6 +236,7 @@ object RussianGroupCall : GroupCallWords {
     override val benchUnknown = "не сказал — версия старее"
     override val benchNothing = "видео от него не приходит"
     override fun lineStarted(who: String) = "Звонок начат: $who"
+    override fun lineParticipants(who: String) = "Участники: $who"
     override val lineEnded = "Звонок завершён"
     override val linePaused = "Пауза звонка"
     override val lineResumed = "Звонок продолжается"
@@ -365,6 +367,7 @@ object EnglishGroupCall : GroupCallWords {
     override val benchUnknown = "did not say — older version"
     override val benchNothing = "no video arriving from them"
     override fun lineStarted(who: String) = "Call started: $who"
+    override fun lineParticipants(who: String) = "Participants: $who"
     override val lineEnded = "Call ended"
     override val linePaused = "Call paused"
     override val lineResumed = "Call continues"
@@ -495,6 +498,7 @@ object SpanishGroupCall : GroupCallWords {
     override val benchUnknown = "no lo dijo — versión antigua"
     override val benchNothing = "no llega vídeo suyo"
     override fun lineStarted(who: String) = "Llamada iniciada: $who"
+    override fun lineParticipants(who: String) = "Participantes: $who"
     override val lineEnded = "Llamada terminada"
     override val linePaused = "Llamada en pausa"
     override val lineResumed = "La llamada continúa"

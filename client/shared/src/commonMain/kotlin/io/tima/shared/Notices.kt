@@ -527,6 +527,16 @@ class Notices(
      * `@ник`. Ника нет — **строка без имени вовсе** (решение заказчика 2026-09-24):
      * выдуманное имя хуже отсутствующего.
      */
+    /**
+     * Имя и ник — для строки «Звонок начат: Анна Петрова, @anna» (заказчик 2026-10-02).
+     * Ника нет — одно имя; имени нет — один ник.
+     */
+    internal suspend fun nameAndNick(userId: String): String? {
+        val nick = cardOf(userId)?.nick?.takeIf { it.isNotBlank() }?.let { "@$it" }
+        val name = nameOf(userId)?.takeIf { it != nick }
+        return listOfNotNull(name, nick).joinToString(", ").ifEmpty { null }
+    }
+
     /** Как назвать человека в строке — тем же правилом, что уведомления. */
     internal suspend fun nameOf(userId: String): String? {
         val card = cardOf(userId)
