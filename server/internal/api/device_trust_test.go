@@ -325,3 +325,140 @@ func TestLinkConfirmCarriesCertificate(t *testing.T) {
 		t.Fatalf("ожидалось два устройства, есть %d", len(devices))
 	}
 }
+
+// ── «Начать заново» и её отмена (ДУ6, Р27–Р31) ────────────────────────────────
+
+func startAnew(acc trustAccount) func(enc, sig []byte) map[string]any {
+	return func(enc, sig []byte) map[string]any {
+		m := acc.withAsk(enc, sig)
+		m["force_new_identity"] = true
+		return m
+	}
+}
+
+func signChallenge(key ed25519.PrivateKey, challenge string) string {
+	return base64.RawURLEncoding.EncodeToString(ed25519.Sign(key, []byte(challenge)))
+}
+
+func TestStartAnewMakesClaimAndOwnerCanCancelWithPhrase(t *testing.T) {
+	ts, srv := setup(t)
+	srv.DeviceTrust = trustRecord
+	owner := registerDevice(t, ts, "+79990000201")
+	phone := "+79990000202"
+	acc := newTrustAccount()
+	old, code, _ := registerProof(t, ts, phone, acc.identityPub(), acc.withAsk)
+	if code != 201 {
+		t.Fatalf("хозяин: %d", code)
+	}
+	g := createGroupAPI(t, ts, owner.token)
+	addMemberAPI(t, ts, owner.token, g, old.userID, "member")
+
+	// Вор с перевыпущенной SIM «начинает заново» со своей фразой.
+	thief := newTrustAccount()
+	neu, code, why := registerProof(t, ts, phone, thief.identityPub(), startAnew(thief))
+	if code != 201 || neu.userID == old.userID {
+		t.Fatalf("начать заново: %d %s, личность %s (прежняя %s)", code, why, neu.userID, old.userID)
+	}
+	// В группе новая личность — заявка, а не участник.
+	var claims struct {
+		Claims []struct {
+			UserID     string `json:"user_id"`
+			FromUserID string `json:"from_user_id"`
+		} `json:"claims"`
+	}
+	if code := authedJSON(t, ts, "GET", "/api/v1/groups/"+g+"/identity-claims", owner.token, nil, &claims); code != 200 {
+		t.Fatalf("заявки: %d", code)
+	}
+	if len(claims.Claims) != 1 || claims.Claims[0].UserID != neu.userID || claims.Claims[0].FromUserID != old.userID {
+		t.Fatalf("заявка новой личности не заведена: %+v", claims.Claims)
+	}
+	if role, _ := srv.Store.GroupRole(t.Context(), g, neu.userID); role != "" {
+		t.Fatalf("новая личность стала участником без подтверждения: %s", role)
+	}
+	// Простой участник заявок не видит.
+	if code := authedJSON(t, ts, "GET", "/api/v1/groups/"+g+"/identity-claims", neu.token, nil, nil); code != http.StatusForbidden {
+		t.Fatalf("заявки видны не модератору: %d", code)
+	}
+
+	// Хозяин отменяет с прежнего устройства. Не та фраза — отказ.
+	ch := challengeFor(t, ts, old.token)
+	if code := authedJSON(t, ts, "POST", "/api/v1/users/me/identity/cancel", old.token,
+		map[string]string{"challenge_token": ch, "signature": signChallenge(thief.identity, ch)}, nil); code != http.StatusForbidden {
+		t.Fatalf("отмена чужой фразой: ожидался 403, получен %d", code)
+	}
+	ch = challengeFor(t, ts, old.token)
+	var res struct {
+		Cancelled []string `json:"cancelled"`
+	}
+	if code := authedJSON(t, ts, "POST", "/api/v1/users/me/identity/cancel", old.token,
+		map[string]string{"challenge_token": ch, "signature": signChallenge(acc.identity, ch)}, &res); code != 200 {
+		t.Fatalf("отмена фразой: %d", code)
+	}
+	if len(res.Cancelled) != 1 || res.Cancelled[0] != neu.userID {
+		t.Fatalf("отменена не та личность: %+v", res.Cancelled)
+	}
+	// Устройство вора отозвано, заявка снята, личность помечена отменённой.
+	if code := getAuthed(t, ts, neu.token, "/api/v1/devices", nil); code != http.StatusUnauthorized {
+		t.Fatalf("устройство отменённой личности живо: %d", code)
+	}
+	claims.Claims = nil
+	authedJSON(t, ts, "GET", "/api/v1/groups/"+g+"/identity-claims", owner.token, nil, &claims)
+	if len(claims.Claims) != 0 {
+		t.Fatalf("заявка отменённой личности осталась: %+v", claims.Claims)
+	}
+	ids, err := srv.Store.IdentitiesOf(t.Context(), []string{neu.userID, old.userID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ids[neu.userID].Cancelled || !ids[old.userID].Current || ids[neu.userID].Current {
+		t.Fatalf("цепочка после отмены не та: %+v", ids)
+	}
+	// Второй раз отменять нечего.
+	ch = challengeFor(t, ts, old.token)
+	if code := authedJSON(t, ts, "POST", "/api/v1/users/me/identity/cancel", old.token,
+		map[string]string{"challenge_token": ch, "signature": signChallenge(acc.identity, ch)}, nil); code != http.StatusConflict {
+		t.Fatalf("повторная отмена: ожидался 409, получен %d", code)
+	}
+}
+
+func TestConfirmedClaimReplacesMember(t *testing.T) {
+	ts, srv := setup(t)
+	srv.DeviceTrust = trustRecord
+	owner := registerDevice(t, ts, "+79990000203")
+	phone := "+79990000204"
+	acc := newTrustAccount()
+	old, _, _ := registerProof(t, ts, phone, acc.identityPub(), acc.withAsk)
+	g := createGroupAPI(t, ts, owner.token)
+	addMemberAPI(t, ts, owner.token, g, old.userID, "moderator")
+	// Хозяин потерял всё и начал заново сам.
+	fresh := newTrustAccount()
+	neu, code, _ := registerProof(t, ts, phone, fresh.identityPub(), startAnew(fresh))
+	if code != 201 {
+		t.Fatalf("начать заново: %d", code)
+	}
+	if code := authedJSON(t, ts, "POST", "/api/v1/groups/"+g+"/identity-claims/"+neu.userID+"/confirm", owner.token, nil, nil); code != http.StatusNoContent {
+		t.Fatalf("подтверждение: %d", code)
+	}
+	if role, _ := srv.Store.GroupRole(t.Context(), g, neu.userID); role != "moderator" {
+		t.Fatalf("новая личность не получила роль прежней: %q", role)
+	}
+	if role, _ := srv.Store.GroupRole(t.Context(), g, old.userID); role != "" {
+		t.Fatalf("прежняя личность осталась в группе: %q", role)
+	}
+}
+
+func TestCancelNeedsCertifiedDevice(t *testing.T) {
+	ts, srv := setup(t)
+	srv.DeviceTrust = trustRecord
+	phone := "+79990000205"
+	acc := newTrustAccount()
+	// Устройство «до ДУ1»: фраза есть, свидетельства нет.
+	old, _, _ := registerProof(t, ts, phone, acc.identityPub(), nil)
+	fresh := newTrustAccount()
+	registerProof(t, ts, phone, fresh.identityPub(), startAnew(fresh))
+	ch := challengeFor(t, ts, old.token)
+	if code := authedJSON(t, ts, "POST", "/api/v1/users/me/identity/cancel", old.token,
+		map[string]string{"challenge_token": ch, "signature": signChallenge(acc.identity, ch)}, nil); code != http.StatusForbidden {
+		t.Fatalf("незаверенное устройство отменяет личность: %d", code)
+	}
+}

@@ -105,6 +105,9 @@ type Identity struct {
 	PersonID string       `json:"person_id"`
 	Link     IdentityLink `json:"link"`
 	Current  bool         `json:"current"` // текущая личность аккаунта (под ней пишут сейчас)
+	// Отменена прежним устройством хозяина (ДУ6, Р27): её сообщения собеседники помечают
+	// «личность отменена владельцем» (Р30).
+	Cancelled bool `json:"cancelled"`
 }
 
 // IdentitiesOf — по списку user_id вернуть аккаунт каждой личности. Клиент так
@@ -117,7 +120,8 @@ func (s *Store) IdentitiesOf(ctx context.Context, ids []string) (map[string]Iden
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT user_id, person_id, linked_from IS NULL AS is_root,
-		       link_proof IS NOT NULL AS proven, valid_to IS NULL AS current
+		       link_proof IS NOT NULL AS proven, valid_to IS NULL AS current,
+		       cancelled_at IS NOT NULL AS cancelled
 		FROM users WHERE user_id = ANY($1)`, ids)
 	if err != nil {
 		return nil, err
@@ -125,8 +129,8 @@ func (s *Store) IdentitiesOf(ctx context.Context, ids []string) (map[string]Iden
 	defer rows.Close()
 	for rows.Next() {
 		var id, personID string
-		var isRoot, proven, current bool
-		if err := rows.Scan(&id, &personID, &isRoot, &proven, &current); err != nil {
+		var isRoot, proven, current, cancelled bool
+		if err := rows.Scan(&id, &personID, &isRoot, &proven, &current, &cancelled); err != nil {
 			return nil, err
 		}
 		link := LinkAdministrative
@@ -136,7 +140,7 @@ func (s *Store) IdentitiesOf(ctx context.Context, ids []string) (map[string]Iden
 		case proven:
 			link = LinkProven
 		}
-		out[id] = Identity{PersonID: personID, Link: link, Current: current}
+		out[id] = Identity{PersonID: personID, Link: link, Current: current, Cancelled: cancelled}
 	}
 	return out, rows.Err()
 }

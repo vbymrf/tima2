@@ -131,6 +131,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 		func() TokenIssuer { return s.Auth }, s.notifier(), s.requireActiveDevice,
 		func() string { return NormalizeDeviceTrust(s.DeviceTrust) })
 	RegisterDeviceTrust(mux, s.Store, s.requireActiveDevice)
+	RegisterIdentityCancel(mux, s.Store, func() IdentityTokens { return s.Auth }, s.notifier(), s.requireActiveDevice)
 	mux.HandleFunc("GET /api/v1/escrow/pubkey", s.requireActiveDevice(s.escrowPubkey))
 	mux.HandleFunc("GET /api/v1/escrow/key", s.requireActiveDevice(s.escrowKeyForChat))
 	// Группы: состав, сообщения и ключи (шаг 4). Три файла держатся вместе

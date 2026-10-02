@@ -300,11 +300,16 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.ForceNewIdentity {
+		before := userID
 		userID, err = s.forceNewIdentityIfConflict(r.Context(), userID, identityPub)
 		if err != nil {
 			log.Printf("register: force new identity: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
+		}
+		// Новая личность заведена (ДУ6): прежней — «отменить?», группам — заявки.
+		if userID != before {
+			announceNewIdentity(r.Context(), s.Store, s.notifier(), before, userID)
 		}
 	}
 	// Ключ личности: первое устройство устанавливает, последующие обязаны совпасть

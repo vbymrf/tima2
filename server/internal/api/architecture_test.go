@@ -202,7 +202,10 @@ const (
 	// 232 → 237: доверие к устройствам (0061, ДУ1–ДУ2) — КПУ телефона (AddSigningKey,
 	// ActiveSigningKeys, DeviceSigningKey), свидетельство устройства (SetDeviceCertificate,
 	// DeviceKeys). Потребитель — узкий DeviceTrustStore рядом с ручками.
-	storeMethodBudget = 237
+	// 237 → 242: «начать заново» и её отмена (0062, ДУ6) — заявки в группы (CopyGroupClaims,
+	// ListGroupClaims, ConfirmGroupClaim), отмена (CancelNewerIdentities), заверенность
+	// устройства для отмены (DeviceCertified). Потребитель — узкий IdentityCancelStore.
+	storeMethodBudget = 242
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
 )
