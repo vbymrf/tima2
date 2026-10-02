@@ -155,6 +155,8 @@ class SyncGroupChats(
             SyncGroupsStep.Synced(
                 answer.groups.size,
                 callGroups = answer.groups.mapNotNull { g -> g.callTtlUntilMs?.let { g.groupId to it } }.toMap(),
+                callOwners = answer.groups.filter { it.callTtlUntilMs != null && it.ownerId.isNotBlank() }
+                    .associate { it.groupId to it.ownerId },
             )
         }
         is GroupsStep.Offline -> SyncGroupsStep.Offline(answer.retryAfterMs)
@@ -327,7 +329,12 @@ sealed interface CreateGroupStep {
 
 sealed interface SyncGroupsStep {
     /** @param callGroups временные группы звонка и когда они удалятся, мс (решение 11). */
-    data class Synced(val count: Int, val callGroups: Map<String, Long> = emptyMap()) : SyncGroupsStep
+    data class Synced(
+        val count: Int,
+        val callGroups: Map<String, Long> = emptyMap(),
+        /** Создатель (владелец) временной группы звонка — строка «кто создал» в списках (2026-10-02). */
+        val callOwners: Map<String, String> = emptyMap(),
+    ) : SyncGroupsStep
     data class Offline(val retryAfterMs: Long) : SyncGroupsStep
     data class Refused(val reason: String) : SyncGroupsStep
 }

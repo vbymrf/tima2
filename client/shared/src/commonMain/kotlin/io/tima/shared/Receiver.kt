@@ -108,6 +108,8 @@ class Receiver(
     private val onGroupEvent: (String, String) -> Unit = { _, _ -> },
     /** Временные группы звонка и когда удалятся — «удалится через N ч» (решение 11). */
     private val onCallGroups: (Map<String, Long>) -> Unit = {},
+    /** Создатели временных групп звонка — из той же сверки групп. */
+    private val onCallOwners: (Map<String, String>) -> Unit = {},
     /** Словарь — ссылкой: строки звонка пишутся словами на момент события. */
     private val words: () -> Words = { CurrentWords.value },
     /**
@@ -736,7 +738,10 @@ class Receiver(
     /** Сверка групп с сервером — и сроки временных групп звонка наружу (решение 11). */
     internal suspend fun syncGroups() {
         val step = groupsSync.refresh()
-        if (step is SyncGroupsStep.Synced) onCallGroups(step.callGroups)
+        if (step is SyncGroupsStep.Synced) {
+            onCallGroups(step.callGroups)
+            onCallOwners(step.callOwners)
+        }
     }
 
     /**

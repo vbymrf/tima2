@@ -1489,9 +1489,13 @@ private fun App(
     // Заказчик 2026-10-02: имя человека (не ник), создавшего групповой звонок, — отдельной
     // строкой в окне звонка, в списках «Чаты» и «Группы», в шапке переписки; его аватар — с
     // «ГЗ» поверх. Создатель временной группы звонка — её владелец.
+    // Владелец — из сверки групп при запуске; окно «Социум» знает его тоже, но загружается
+    // только при открытии, и до того строки «кто создал» не было (проверка 2026-10-02).
+    val callOwners by assembled.callOwners.collectAsState()
     val callOwnerOf: (String) -> String? = { groupId ->
-        groupId.takeIf { it in callGroupsTtl }
-            ?.let { gid -> socialState.mine.firstOrNull { it.groupId == gid }?.ownerId?.ifBlank { null } }
+        groupId.takeIf { it in callGroupsTtl }?.let { gid ->
+            callOwners[gid] ?: socialState.mine.firstOrNull { it.groupId == gid }?.ownerId?.ifBlank { null }
+        }
     }
     // Имя человека: из книги, иначе из его карточки; ник — только если имени нет вовсе.
     val creatorNameOf: (String) -> String? = { id ->

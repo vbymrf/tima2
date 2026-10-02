@@ -101,6 +101,8 @@ class Assembled(
     val groupEvents: MutableSharedFlow<Pair<String, String>> = MutableSharedFlow(extraBufferCapacity = 32),
     /** Временные группы звонка и когда удалятся, мс — «удалится через N ч» (решение 11). */
     val callGroups: MutableStateFlow<Map<String, Long>> = MutableStateFlow(emptyMap()),
+    /** Создатель временной группы звонка — `groupId → userId` (строка «кто создал»). */
+    val callOwners: MutableStateFlow<Map<String, String>> = MutableStateFlow(emptyMap()),
 )
 
 /**
@@ -237,6 +239,7 @@ fun buildAssembled(
         val outdated = MutableStateFlow(false)
         val groupEvents = MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 32)
         val callGroups = MutableStateFlow<Map<String, Long>>(emptyMap())
+        val callOwners = MutableStateFlow<Map<String, String>>(emptyMap())
 
         // ── УВЕДОМЛЕНИЯ СОБИРАЮТСЯ ЗДЕСЬ, А НЕ В ОКНЕ (У5) ──────────────────
         //
@@ -345,6 +348,7 @@ fun buildAssembled(
                 onCallControl = { callId, action, by -> callPings.send("команда|$callId|$action|$by") },
                 onGroupEvent = { groupId, state -> groupEvents.tryEmit(groupId to state) },
                 onCallGroups = { callGroups.value = it },
+                onCallOwners = { callOwners.value = it },
                 onStamp = { senderStamps.tryEmit(it) },
                 onOutdated = { outdated.value = true },
                 notices = notices,
@@ -358,6 +362,7 @@ fun buildAssembled(
             senderStamps = senderStamps,
             groupEvents = groupEvents,
             callGroups = callGroups,
+            callOwners = callOwners,
         )
     }
 
