@@ -107,6 +107,8 @@ class Assembled(
     val identityReplaced: MutableStateFlow<Boolean> = MutableStateFlow(false),
     /** Группы, где ждёт заявка новой личности (ДУ6). */
     val identityClaims: MutableStateFlow<Set<String>> = MutableStateFlow(emptySet()),
+    /** Переписки, чью историю передало своё устройство (ИУ3), — забрать. */
+    val historyReady: MutableSharedFlow<String> = MutableSharedFlow(extraBufferCapacity = 64),
 )
 
 /**
@@ -246,6 +248,7 @@ fun buildAssembled(
         val callOwners = MutableStateFlow<Map<String, String>>(emptyMap())
         val identityReplaced = MutableStateFlow(false)
         val identityClaims = MutableStateFlow<Set<String>>(emptySet())
+        val historyReady = MutableSharedFlow<String>(extraBufferCapacity = 64)
 
         // ── УВЕДОМЛЕНИЯ СОБИРАЮТСЯ ЗДЕСЬ, А НЕ В ОКНЕ (У5) ──────────────────
         //
@@ -357,6 +360,7 @@ fun buildAssembled(
                 onCallOwners = { callOwners.value = it },
                 onIdentityReplaced = { identityReplaced.value = true },
                 onIdentityClaim = { g -> identityClaims.value = identityClaims.value + g },
+                onHistoryReady = { chat -> historyReady.tryEmit(chat) },
                 onStamp = { senderStamps.tryEmit(it) },
                 onOutdated = { outdated.value = true },
                 notices = notices,
@@ -373,6 +377,7 @@ fun buildAssembled(
             callOwners = callOwners,
             identityReplaced = identityReplaced,
             identityClaims = identityClaims,
+            historyReady = historyReady,
         )
     }
 

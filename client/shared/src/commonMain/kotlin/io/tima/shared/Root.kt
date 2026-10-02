@@ -1524,6 +1524,19 @@ private fun App(
         if (state == "verified") runCatching { environment.settings.put(key, "1") }
     }
 
+    // История личных переписок (ИУ1, ИУ3): своё устройство передало — забрать; при первом
+    // запуске — строки всех своих переписок и всё, что уже можно прочесть.
+    LaunchedEffect(assembled.session.userId) {
+        assembled.historyReady.collect { chat -> runCatching { assembled.receiver.pullHistory(chat, null) } }
+    }
+    LaunchedEffect(assembled.session.userId) {
+        val key = "history.swept.v1"
+        if (runCatching { environment.settings.all().first()[key] }.getOrNull() != null) return@LaunchedEffect
+        val added = runCatching { assembled.receiver.pullAllHistory() }.getOrNull() ?: return@LaunchedEffect
+        Journal.note(LogCode.DEVICE_TRUST, "история при первом запуске забрана", "новых" to added)
+        runCatching { environment.settings.put(key, "1") }
+    }
+
     // Один человек — одна переписка (ДУ6, Р26): при запуске и раз в пять минут.
     LaunchedEffect(assembled.session.userId) {
         val chain = IdentityChain(environment, network.directory, assembled.session.userId, ::msNow)
@@ -3076,6 +3089,13 @@ private fun App(
                                 identity = deviceIdentityFrom(deviceSecret),
                                 asks = askSecrets,
                                 phone = platform.server in io.tima.domain.account.PHONES,
+                                // Заверенному по коду — ключи групп и история переписок (ИУ2).
+                                onCertified = { id, pub ->
+                                    scope.launch {
+                                        runCatching { assembled.keyOrchestrator.handOver(id, pub) }
+                                        HistoryHandover(network.history, assembled.session.deviceId, deviceIdentityFrom(deviceSecret)).handOver(id, pub)
+                                    }
+                                },
                             )
                         },
                         language = language,
@@ -3154,6 +3174,13 @@ private fun App(
                                 identity = deviceIdentityFrom(deviceSecret),
                                 asks = askSecrets,
                                 phone = platform.server in io.tima.domain.account.PHONES,
+                                // Заверенному по коду — ключи групп и история переписок (ИУ2).
+                                onCertified = { id, pub ->
+                                    scope.launch {
+                                        runCatching { assembled.keyOrchestrator.handOver(id, pub) }
+                                        HistoryHandover(network.history, assembled.session.deviceId, deviceIdentityFrom(deviceSecret)).handOver(id, pub)
+                                    }
+                                },
                             ),
                         )
                     }
@@ -3176,8 +3203,14 @@ private fun App(
                         code = current.code,
                         scope = scope,
                         onClose = { where = Where.Nothing },
-                        // Ключи групп — новому устройству в том же нажатии (ЖУ8).
-                        onTrusted = { id, pub -> assembled.keyOrchestrator.handOver(id, pub) },
+                        // Ключи групп — новому устройству в том же нажатии (ЖУ8); история личных
+                        // переписок — следом, в фоне: страниц может быть много (ИУ2).
+                        onTrusted = { id, pub ->
+                            assembled.keyOrchestrator.handOver(id, pub)
+                            scope.launch {
+                                HistoryHandover(network.history, assembled.session.deviceId, deviceIdentityFrom(deviceSecret)).handOver(id, pub)
+                            }
+                        },
                     )
                 }
             }

@@ -459,6 +459,10 @@ class Network(
     override val keyRecovery: GroupKeyRecoveryApi =
         GroupKeyRecoveryApi(link.route, link.client, token = { token() })
 
+    /** История личных переписок на новом устройстве (ИУ1–ИУ3). */
+    val history: io.tima.core.network.HistoryApi =
+        io.tima.core.network.HistoryApi(link.route, link.client, token = { token() })
+
     /**
      * То же самое под именем порта групп.
      *

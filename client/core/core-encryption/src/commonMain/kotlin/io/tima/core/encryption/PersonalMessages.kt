@@ -78,7 +78,7 @@ class PersonalMessages(escrowKey: EscrowEpochKey) {
          * `null` — конверт не разобрался: битые байты или чужой формат.
          */
         fun peekSender(envelopeBytes: ByteArray): EnvelopeSender? =
-            MessageSerializer.decodeEnvelope(envelopeBytes).getOrNull()?.meta?.let {
+            MessageSerializer.decodeEnvelope(HistoryFrame.split(envelopeBytes).second).getOrNull()?.meta?.let {
                 EnvelopeSender(userId = it.senderId, deviceId = it.senderDevice, createdAtMs = it.createdAtUnixMs)
             }
 
@@ -102,12 +102,15 @@ class PersonalMessages(escrowKey: EscrowEpochKey) {
             me: DeviceIdentity,
             senderSigningPublic: ByteArray,
         ): Result<ReceivedMessage> = runCatching {
-            val sealed = MessageSerializer.decodeEnvelope(envelopeBytes).getOrThrow()
+            // Конверт истории (ИУ3) несёт эфемерал обёртки помощника рядом с собой.
+            val (wrapEphemeral, envelope) = HistoryFrame.split(envelopeBytes)
+            val sealed = MessageSerializer.decodeEnvelope(envelope).getOrThrow()
             val payload = PersonalMessageSealer.openWithWrappedKey(
                 message = sealed,
                 myDeviceId = myDeviceId,
                 myDeviceKey = me.key,
                 senderSigningPub = senderSigningPublic,
+                wrapEphemeralOverride = wrapEphemeral,
             ).getOrThrow()
             val body = MessageSerializer.decodeBody(payload).getOrThrow()
             ReceivedMessage(

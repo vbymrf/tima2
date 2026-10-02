@@ -33,6 +33,15 @@ class EventStreamProtocolTest {
         assertTrue(broken is EventStreamProtocol.Decision.Skip, "заявка без группы — пропуск с подтверждением")
     }
 
+    @Test
+    fun история_передана_разбирается() {
+        // ИУ3: своё доверенное устройство перезавернуло ключи — новое забирает переписку.
+        val ready = protocol.decide("""{"event":"recovery.msg_ready","event_id":12,"chat_id":"c-1","count":3}""")
+        assertEquals(EventStreamProtocol.Decision.HistoryReady("c-1", 12), ready)
+        val broken = protocol.decide("""{"event":"recovery.msg_ready","event_id":13}""")
+        assertTrue(broken is EventStreamProtocol.Decision.Skip, "без переписки — пропуск с подтверждением")
+    }
+
     // ── кадры, которые мы отправляем ─────────────────────────────────────────
 
     @Test

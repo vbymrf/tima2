@@ -1,5 +1,7 @@
 package io.tima.shared
 
+import io.tima.core.network.HistoryApi
+import io.tima.core.encryption.HistoryFrame
 import io.tima.core.database.SqlChatBook
 import io.tima.core.encryption.GroupMessages
 import io.tima.core.diag.Journal
@@ -114,6 +116,11 @@ class Receiver(
     private val onIdentityReplaced: () -> Unit = {},
     /** Заявка новой личности в группу — решать владельцу или модератору (ДУ6). */
     private val onIdentityClaim: (String) -> Unit = {},
+    /**
+     * Своё устройство передало историю переписки (ИУ3). Забирать её здесь нельзя: страниц
+     * может быть много, а канал всё это время стоял бы.
+     */
+    private val onHistoryReady: (String) -> Unit = {},
     /** Словарь — ссылкой: строки звонка пишутся словами на момент события. */
     private val words: () -> Words = { CurrentWords.value },
     /**
@@ -272,6 +279,10 @@ class Receiver(
             is EventStreamProtocol.Decision.IdentityClaim -> {
                 Journal.note(LogCode.DEVICE_TRUST, "заявка новой личности в группу", "группа" to decision.groupId.take(8))
                 onIdentityClaim(decision.groupId)
+            }
+            is EventStreamProtocol.Decision.HistoryReady -> {
+                Journal.note(LogCode.DEVICE_TRUST, "своё устройство передало историю", "переписка" to decision.chatId.take(8))
+                onHistoryReady(decision.chatId)
             }
             is EventStreamProtocol.Decision.CallState -> {
                 // Строка звонка не переживает звонок — чем бы он ни кончился (У7).
@@ -930,6 +941,77 @@ class Receiver(
                 title = network.directory.nameOrNumber(sender.userId),
                 peerId = sender.userId,
             )
+        }
+    }
+
+    /**
+     * История переписки с сервера (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ ИУ1, ИУ3).
+     *
+     * Сервер отдаёт страницами сообщения, для которых у этого устройства есть обёртка: свои,
+     * пришедшие после привязки, и те, что перезавернуло своё доверенное устройство. Каждое
+     * записывается в очередь входящих тем же путём, что пришедшее живым каналом, и
+     * открывается тем же разбором: подпись и обязательство проверяются по исходному
+     * конверту. Уведомлений нет — это прошлое, а не новость.
+     *
+     * @param peerId собеседник, если известен (из списка переписок); строку списка без
+     *   него назвать нечем, пока не придёт сообщение собеседника.
+     * @return сколько сообщений записано впервые.
+     */
+    suspend fun pullHistory(chatId: String, peerId: String?): Int {
+        var before = 0L
+        var added = 0
+        var peer = peerId
+        while (true) {
+            val page = network.history.page(chatId, before) ?: break
+            if (page.isEmpty()) break
+            for (item in page) {
+                val stored = item.wrapEphemeral?.takeIf { it.size == 32 }
+                    ?.let { HistoryFrame.toStored(it, item.envelope) } ?: item.envelope
+                val sender = envelopeSender(stored) ?: continue
+                if (ownCopy(sender.deviceId)) continue
+                if (peer == null && sender.userId != session.userId) peer = sender.userId
+                captionKey(sender.userId, sender.deviceId)
+                if (environment.incoming.receive(chatId, item.messageId, stored, sentAtMs = sender.createdAtMs)) added++
+            }
+            if (page.size < HistoryApi.PAGE) break
+            before = page.last().messageId
+        }
+        if (peer != null && !environment.chatFacts.knows(chatId)) {
+            book.remember(chatId = chatId, kind = ChatKind.Personal, title = network.directory.nameOrNumber(peer), peerId = peer)
+        }
+        if (added > 0) drainIncoming()
+        Journal.note(LogCode.DEVICE_TRUST, "история переписки забрана", "переписка" to chatId.take(8), "новых" to added)
+        return added
+    }
+
+    /** Все свои личные переписки (ИУ1): строки списка и то, что уже можно прочесть. */
+    suspend fun pullAllHistory(): Int? {
+        val chats = network.history.personalChats() ?: return null
+        var added = 0
+        for (chat in chats) added += pullHistory(chat.chatId, chat.peerId.takeIf { it != session.userId })
+        return added
+    }
+
+    /**
+     * Разобрать всё, что ждёт в очереди, — каждую запись своим путём. В отличие от разбора
+     * при живом событии, ключ подписи берётся у отправителя ЭТОЙ записи, а не пришедшей.
+     */
+    private suspend fun drainIncoming() {
+        val held = heldChats()
+        while (true) {
+            environment.incoming.openNext(held) { entry ->
+                if (GroupFrame.isGroupFrame(entry.envelope)) {
+                    openGroup(entry)
+                } else {
+                    val s = envelopeSender(entry.envelope)
+                    val key = s?.let { senderKeys[it.deviceId] }
+                    when {
+                        s == null -> OpenOutcome.Rejected("конверт не разбирается")
+                        key == null -> OpenOutcome.NoKey("ключ подписи отправителя не получен")
+                        else -> open(entry, key)
+                    }
+                }
+            } ?: break
         }
     }
 

@@ -24,6 +24,11 @@ class DeviceTrustActionsOverNetwork(
     private val identity: DeviceIdentity,
     private val asks: AskSecrets,
     private val phone: Boolean,
+    /**
+     * Своё устройство заверено этим телефоном: `(deviceId, ключ шифрования)`. По нему ему
+     * передаются ключи групп и история переписок (ИУ2).
+     */
+    private val onCertified: (String, ByteArray) -> Unit = { _, _ -> },
 ) : DeviceTrustActions {
 
     override fun holdsKey(): Boolean = phone && asks.get() != null
@@ -74,7 +79,9 @@ class DeviceTrustActionsOverNetwork(
             return TrustStep.Refused("ключи на экране не совпадают с ключами устройства у сервера")
         }
         val cert = AccountSigningKey.fromRaw(raw).certify(read.encryptionPub, read.signingPub) ?: return TrustStep.Refused("подпись не сделалась")
-        return keys.certifyDevice(read.deviceId, DeviceTrustCheck.BY_ASK, cert).step()
+        val step = keys.certifyDevice(read.deviceId, DeviceTrustCheck.BY_ASK, cert).step()
+        if (step == TrustStep.Done) onCertified(read.deviceId, read.encryptionPub)
+        return step
     }
 
     override suspend fun certify(deviceId: String): TrustStep {
@@ -87,7 +94,9 @@ class DeviceTrustActionsOverNetwork(
             is DeviceKeysResult.Refused -> return TrustStep.Refused(answer.code)
         }
         val cert = ask.certify(target.encryptionPub, target.signingPub) ?: return TrustStep.Refused("подпись не сделалась")
-        return keys.certifyDevice(deviceId, DeviceTrustCheck.BY_ASK, cert).step()
+        val step = keys.certifyDevice(deviceId, DeviceTrustCheck.BY_ASK, cert).step()
+        if (step == TrustStep.Done) onCertified(deviceId, target.encryptionPub)
+        return step
     }
 
     override suspend fun replaced(): Boolean {

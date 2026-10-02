@@ -264,6 +264,9 @@ class EventStreamProtocol {
         /** Заявка новой личности [userId] в группу [groupId] (ДУ6, Р9). */
         data class IdentityClaim(val groupId: String, val userId: String, val eventId: Long?) : Decision
 
+        /** Своё устройство передало этому историю переписки [chatId] — забрать (ИУ3). */
+        data class HistoryReady(val chatId: String, val eventId: Long?) : Decision
+
         /**
          * Вызов не забрало ни одно устройство собеседника (`call.unreachable`).
          *
@@ -600,6 +603,11 @@ class EventStreamProtocol {
             "group.identity_claim" ->
                 json.string("group_id")?.let { Decision.IdentityClaim(it, json.string("user_id").orEmpty(), eventId) }
                     ?: Decision.Skip("group.identity_claim без group_id", eventId)
+
+            // История переписки передана этому устройству (ИУ2–ИУ3).
+            "recovery.msg_ready" ->
+                json.string("chat_id")?.let { Decision.HistoryReady(it, eventId) }
+                    ?: Decision.Skip("recovery.msg_ready без chat_id", eventId)
 
             "call.unreachable" -> {
                 val callId = json.string("call_id")
