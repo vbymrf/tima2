@@ -138,7 +138,9 @@ class AuthStore(
      */
     fun confirm() {
         val current = _state.value as? AuthState.Code ?: return
-        if (current.expect) return
+        // Пустое поле — нажатие ни к чему: сеть пустой код отвергает исключением, и до
+        // 2026-10-05 оно закрывало приложение на ПК («код пустой»).
+        if (current.expect || current.code.isBlank()) return
         _state.value = current.copy(expect = true, trouble = null)
 
         scope.launch {

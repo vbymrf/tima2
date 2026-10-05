@@ -92,6 +92,20 @@ class AuthStoreTest {
         assertEquals("Код неверен или просрочен", state.trouble)
     }
 
+    /** Пустой код в сеть не уходит: 2026-10-05 «Подтвердить» с пустым полем закрыл ПК. */
+    @Test
+    fun пустой_код_не_уходит_в_сеть() = runTest {
+        val store = deliveredUntilCode(backgroundScope)
+        store.changedCode("  ")
+
+        store.confirm()
+
+        val state = store.state.value
+        assertIs<AuthState.Code>(state)
+        assertEquals(false, state.expect)
+        assertEquals(0, api.codeChecks)
+    }
+
     /** «Изменить номер» возвращает к телефону с уже набранным номером. */
     @Test
     fun назад_помнит_номер() = runTest {
