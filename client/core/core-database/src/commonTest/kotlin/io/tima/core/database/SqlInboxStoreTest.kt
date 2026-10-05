@@ -73,6 +73,20 @@ class SqlInboxStoreTest {
         assertEquals(1, e.attempts)
     }
 
+    /**
+     * Не открывшееся сообщение прочитанным не становится никогда, и сверка журнала уведомлений
+     * поднимала его переписку при каждом запуске — у раздела стояло 3, у строк ничего
+     * (realme 2026-10-05). Ещё не разобранное — в счёт: уведомление о нём уже стоит.
+     */
+    @Test
+    fun не_открывшееся_не_держит_переписку_непрочитанной() {
+        val read = SqlReadState(db)
+        inbox.receive("chat-1", 42, envelope)
+        assertEquals(setOf("chat-1"), read.unreadChats().keys, "принятое, но не разобранное — непрочитанное")
+        inbox.openNext(open = { OpenOutcome.NoKey("нет ключа") })
+        assertTrue(read.unreadChats().isEmpty(), "не открывшееся в сверку не идёт")
+    }
+
     @Test
     fun появился_ключ_и_разбор_повторяется() {
         inbox.receive("chat-1", 42, envelope)

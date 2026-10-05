@@ -46,6 +46,12 @@ fun CatalogTab(
      * Получает группы и то, как рисовать одну.
      */
     layout: (@Composable (groups: List<GroupInfo>, line: @Composable (GroupInfo) -> Unit) -> Unit)? = null,
+    /**
+     * Число новых у группы — из журнала уведомлений, того же, что у «Страницы» и вкладок
+     * (ЖУ2). До 2026-10-05 у строк каталога числа не было вовсе: новое в группе было видно на
+     * «Странице», а в каталоге — нет (заказчик, Г).
+     */
+    countOf: (String) -> Int = { 0 },
 ) {
     val words = Tima.words.social
     Column(modifier.fillMaxSize()) {
@@ -87,10 +93,10 @@ fun CatalogTab(
                 },
             )
         } else if (layout != null) {
-            Box(Modifier.weight(1f)) { layout(state.mine) { group -> GroupLine(group, onOpen) } }
+            Box(Modifier.weight(1f)) { layout(state.mine) { group -> GroupLine(group, onOpen, countOf(group.groupId)) } }
         } else {
             LazyColumn(Modifier.weight(1f)) {
-                items(state.mine, key = { it.groupId }) { group -> GroupLine(group, onOpen) }
+                items(state.mine, key = { it.groupId }) { group -> GroupLine(group, onOpen, countOf(group.groupId)) }
             }
         }
 
@@ -104,11 +110,12 @@ fun CatalogTab(
 
 /** Строка группы каталога: имя и моя роль в ней. */
 @Composable
-fun GroupLine(group: GroupInfo, onOpen: (GroupInfo) -> Unit) {
+fun GroupLine(group: GroupInfo, onOpen: (GroupInfo) -> Unit, howMany: Int = 0) {
     val words = Tima.words.social
     ListLine(
         onClick = { onOpen(group) },
         left = { Avatar(letters = group.title.take(2).uppercase()) },
+        right = if (howMany > 0) ({ io.tima.core.ui.Counter(howMany) }) else null,
         middle = {
             Column {
                 Name(group.title)

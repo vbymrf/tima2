@@ -1652,11 +1652,13 @@ private fun App(
         }
     }
     // Янтарная цифра раздела — сколько людей раздела написали новое. Считается по личным
-    // перепискам: у переписки есть непрочитанное, у собеседника — раздел в книге.
+    // перепискам с новым **в журнале уведомлений** — том же, что у строк, вкладки и значка
+    // приложения (ЖУ2). До 2026-10-05 считалось по `unread` базы, а в нём навсегда оставались
+    // не открывшиеся сообщения: у раздела стояло 3, у строк и на значке — ничего (заказчик, Г).
     val newInSection: (String) -> Int = { key ->
         val id = if (key == COMMON_SECTION) "" else key
         val everyone = key.isEmpty() || key == ALL_SECTION
-        listState.personal.count { chat -> chat.unread > 0 && (everyone || sectionOfChat(chat) == id) }
+        listState.personal.count { chat -> noticeCounts.chat(chat.chatId, null) > 0 && (everyone || sectionOfChat(chat) == id) }
     }
     // Полоса разделов у личных переписок (Р4) — тем же сбором, что книга и сообщества:
     // все заведённые разделы, «Всё» и «Общий». До 2026-09-19 здесь стояло своё правило —
@@ -2833,10 +2835,11 @@ private fun App(
                     val sectionOfGroup: (String) -> String = { id ->
                         listState.groups.firstOrNull { it.chatId == id }?.sectionId.orEmpty()
                     }
+                    // Тот же журнал уведомлений, что у строк (ЖУ2), — не `unread` базы.
                     val freshInCatalog: (String) -> Int = { key ->
                         val id = if (key == COMMON_SECTION) "" else key
                         val everyone = key.isEmpty() || key == ALL_SECTION
-                        listState.groups.count { it.unread > 0 && (everyone || it.sectionId == id) }
+                        listState.groups.count { noticeCounts.chat(it.chatId, null) > 0 && (everyone || it.sectionId == id) }
                     }
                     val catalogTabs = sectionTabs(communityShelves, communityCommon, Tima.words.book)
                     SocialWindow(
@@ -2864,6 +2867,7 @@ private fun App(
                         catalog = {
                             CatalogTab(
                                 state = socialState,
+                                countOf = { groupId -> noticeCounts.chat(groupId, null) },
                                 onOpen = { where = Where.Chat(it.groupId, it.title) },
                                 onNew = { where = Where.NewGroup },
                                 onOpenCommunity = { where = Where.Community(it) },
@@ -2983,7 +2987,7 @@ private fun App(
                                     newIn = { key ->
                                         val id = if (key == COMMON_SECTION) "" else key
                                         val everyone = key.isEmpty() || key == ALL_SECTION
-                                        listState.groups.count { it.unread > 0 && (everyone || it.sectionId == id) }
+                                        listState.groups.count { noticeCounts.chat(it.chatId, null) > 0 && (everyone || it.sectionId == id) }
                                     },
                                 )
                             }
