@@ -87,8 +87,9 @@ CREATE INDEX IF NOT EXISTS book_phone ON book(phone);
 -- По `user_id` ищут, чтобы не завести одного человека дважды — по номеру и по нику.
 CREATE INDEX IF NOT EXISTS book_user ON book(user_id);
 
-CREATE INDEX book_by_section ON book (section_id);
-CREATE INDEX book_by_user ON book (user_id);
+-- По разделу снимают раздел у всех его записей (`emptySection`). Индекс по `user_id` —
+-- `book_user` выше; второй такой же (`book_by_user`) убран миграцией 16.
+CREATE INDEX IF NOT EXISTS book_by_section ON book(section_id);
 
 -- Разделы книги. Отдельная таблица, а не набор строк из `book.section`: пустой раздел
 -- существует до того, как в него кого-то положили, и без своей строки исчезал бы.

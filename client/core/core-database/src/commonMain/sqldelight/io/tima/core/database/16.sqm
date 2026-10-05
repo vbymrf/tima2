@@ -1,0 +1,8 @@
+-- Схема 16 → 17: индексы книги после пересборки таблицы в миграции 13.
+--
+-- 13 пересобрала `book` и вернула только `book_phone` и `book_user`; индексы из 8 —
+-- `book_by_section` и `book_by_user` — пропали у обновлённых баз и остались у свежих, и
+-- проверка миграций это поймала. `book_by_user` — дубль `book_user` (тот же столбец),
+-- поэтому не возвращается, а убирается и из свежей схемы.
+DROP INDEX IF EXISTS book_by_user;
+CREATE INDEX IF NOT EXISTS book_by_section ON book(section_id);
