@@ -66,7 +66,7 @@ fun SocialWindow(
     onTab: ((WindowTab) -> Unit)? = null,
 ) = WindowWithTabs(
     window = Window.Social,
-    tabs = COMMON_TABS,
+    tabs = SOCIUM_TABS,
     selectedOutside = tab,
     onSelectOutside = onTab,
     onSwitchWindows = onSwitchWindows,
@@ -334,8 +334,11 @@ fun PageWindow(
  * ([RowFitTest]). Список, переписанный в тест руками, разошёлся бы с окном молча — а
  * тест мерил бы старые слова и уверял, что всё помещается.
  */
-/** Вкладки окон 2 и 3 (`§4`, `§5`). */
+/** Вкладки окна 3 (`§5`). */
 internal val COMMON_TABS = listOf(WindowTab.Common, WindowTab.Friends, WindowTab.Catalogue)
+
+/** Вкладки «Социума» (окно 2, `§4`): «Каталог» первым — решение заказчика 2026-10-05. */
+internal val SOCIUM_TABS = listOf(WindowTab.Catalogue, WindowTab.Common, WindowTab.Friends)
 
 /** Вкладки окна 4 (`§6`). */
 internal val SOCIAL_TABS = listOf(WindowTab.Answers, WindowTab.Reactions, WindowTab.Collections)

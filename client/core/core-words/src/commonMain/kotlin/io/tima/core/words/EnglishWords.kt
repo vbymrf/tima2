@@ -1332,7 +1332,7 @@ object EnglishWords : Words {
         override val otherNumber = "Another number"
         override val noPhrase =
             "No phrase? You can start over: the earlier chats will not come back, and the " +
-                "people you talk to will see a warning that the identity changed."
+                "people you talk to will see a warning that the identity key changed."
         override val startAnew = "Start over"
 
         override val virtualAccount = "Virtual account"
@@ -1480,10 +1480,10 @@ object EnglishWords : Words {
         override val codeExpired = "The code has expired — request a new one"
         override val timeIsUp = "Time is up — request the code again"
         override val wrongPhrase = "Wrong phrase — check what you wrote down"
-        override val identityRefused = "The server refused to change the identity"
+        override val identityRefused = "The server refused to change the identity key"
         override val identityClosed =
-            "This is the phrase of your previous identity: someone started over with this number. " +
-                "You can get it back by cancelling the new identity from your previous device, or by re-registering."
+            "This is the phrase of your previous identity key: someone started over with this number. " +
+                "You can get it back by cancelling the new identity key from your previous device, or by re-registering."
         override val codeTermOver = "The code's term is over — ask for a new one"
         override val notYourVirtual = "That is not your virtual account"
         override val cancelDidNotReach =
@@ -1520,11 +1520,11 @@ object EnglishWords : Words {
         override val trustNoKey = "First confirm this phone with your phrase"
         override fun trustFailed(reason: String) = "Did not work: $reason"
         override val replacedTitle = "Someone started over with your number"
-        override val replacedAbout = "A new identity of your account was created on another device — this happens when a phone and phrase are lost or the SIM card is reissued. Contacts now write to it, not to you. If it was not you, cancel it: you will need your secret phrase."
-        override val replacedCancel = "Cancel the new identity"
+        override val replacedAbout = "A new identity key of your account was created on another device — this happens when a phone and phrase are lost or the SIM card is reissued. Contacts now write to it, not to you. If it was not you, cancel it: you will need your secret phrase."
+        override val replacedCancel = "Cancel the new identity key"
         override val replacedCancelSend = "Cancel"
         override val replacedItsMe = "It was me"
-        override val replacedCancelled = "The new identity is cancelled: its devices are disconnected, you are the main one again"
+        override val replacedCancelled = "The new identity key is cancelled: its devices are disconnected, you are the main one again"
         override val banTitle = "Forbid “Start over”"
         override val banAbout =
             "After this, nobody can sign in to the account without the secret phrase — not even with this number's SIM card. " +
@@ -1547,34 +1547,34 @@ object EnglishWords : Words {
         override val copyStarted = "The message copy is started"
         override val reregTitle = "Re-registration"
         override val reregAbout =
-            "If someone else has access to the account: the old phrase and an SMS code create a new identity with a new phrase. " +
+            "If someone else has access to the account: the old phrase and an SMS code create a new identity key with a new phrase. " +
                 "Earlier certifications are withdrawn, then a confirmation window opens."
         override val reregStart = "Re-register"
         override val reregEntryTitle = "Account re-registration"
-        override val reregEntryAbout = "Confirm the account number with the SMS code — a new identity with a new secret phrase will be created."
+        override val reregEntryAbout = "Confirm the account number with the SMS code — a new identity key with a new secret phrase will be created."
         override val reregPhraseAbout =
-            "The account is re-registered to a new identity. Earlier certifications are withdrawn: only phones with the secret phrase work. " +
+            "The account is re-registered to a new identity key. Earlier certifications are withdrawn: only phones with the secret phrase work. " +
                 "In the confirmation window — its dates are in “Secret phrase and devices” — confirm the re-registration: the old phrase, " +
-                "the new phrase and an SMS code. Without confirmation the new identity will be deleted."
-        override val reregOpen = "The account is being re-registered: no new identity until it is decided."
+                "the new phrase and an SMS code. Without confirmation the new identity key will be deleted."
+        override val reregOpen = "The account is being re-registered: no new identity key until it is decided."
         override val reregStale = "The old phrase was not confirmed — start the re-registration again in “Secret phrase and devices”."
         override fun reregNewAbout(from: String, to: String) =
-            "The account is re-registered to a new identity. Earlier certifications are withdrawn: only phones with the secret phrase work. " +
+            "The account is re-registered to a new identity key. Earlier certifications are withdrawn: only phones with the secret phrase work. " +
                 "Between $from and $to confirm the re-registration — the old phrase, the new phrase and an SMS code. " +
-                "Without confirmation the new identity will be deleted."
+                "Without confirmation the new identity key will be deleted."
         override val reregOldAbout =
-            "A re-registration to a new identity was started on your account. If it was not you, file “Account stolen”: " +
+            "A re-registration to a new identity key was started on your account. If it was not you, file “Account stolen”: " +
                 "you need the phrase and an SMS code. If it was you, nothing to do."
         override val reregClaim = "Account stolen"
         override val reregClaimed = "Claim accepted"
         override fun reregClaimedAbout(from: String, to: String) =
-            "Claim accepted. The account is disputed until $to: nobody can certify devices or create a new identity now. " +
+            "Claim accepted. The account is disputed until $to: nobody can certify devices or create a new identity key now. " +
                 "Between $from and $to confirm the claim with the phrase and an SMS code."
         override fun reregDisputedNewAbout(from: String, to: String) =
             "The account is disputed until $to: “Account stolen” was filed. Devices cannot be certified now. " +
                 "Between $from and $to confirm the re-registration — two phrases and an SMS code."
         override fun reregWindowNew(to: String) =
-            "Time to confirm the re-registration: before $to enter the old and the new phrases and an SMS code. Without it the new identity will be deleted."
+            "Time to confirm the re-registration: before $to enter the old and the new phrases and an SMS code. Without it the new identity key will be deleted."
         override fun reregWindowOld(to: String) = "Time to confirm “Account stolen”: before $to enter the phrase and an SMS code."
         override val reregConfirm = "Confirm"
         override val reregConfirmed = "Confirmation accepted"
@@ -1582,11 +1582,11 @@ object EnglishWords : Words {
         override val reregOldPhrase = "old phrase"
         override val reregNewPhrase = "new phrase"
         override val reregNotInWindow = "Confirmation is accepted only within the confirmation window."
-        override val reregNewWon = "Re-registration confirmed. The old identity is deleted, restrictions lifted — certify your devices as usual."
+        override val reregNewWon = "Re-registration confirmed. The old identity key is deleted, restrictions lifted — certify your devices as usual."
         override val reregOldLost =
-            "Your identity is deleted: the re-registration was confirmed. You can fight for the account — file again — or create a new account on another number."
+            "Your identity key is deleted: the re-registration was confirmed. You can fight for the account — file again — or create a new account on another number."
         override fun reregNewLost(date: String) =
-            "The re-registration was not confirmed. Your identity will be deleted $date, the account stays with the old one. " +
+            "The re-registration was not confirmed. Your identity key will be deleted $date, the account stays with the old one. " +
                 "You can repeat the procedure or create a new account on another number."
         override val reregOldWon = "Re-registration cancelled: the account is yours again, restrictions lifted."
         override fun reregExtended(from: String, to: String) =
@@ -1599,7 +1599,7 @@ object EnglishWords : Words {
             "The contact re-registered the account: the identity key changed. Your earlier messages remain. If unsure it is them, check."
         override fun peerDisputed(to: String) = "The contact's account is disputed until $to: a theft claim was filed."
         override val peerDisputeOver = "The dispute over the contact's account is over."
-        override val peerBackToOld = "The contact returned to the previous identity — the chat is with it again."
+        override val peerBackToOld = "The contact returned to the previous identity key — the chat is with it again."
         override val deviceAddedTitle = "A new device was added"
         override fun deviceAddedText(platform: String): String {
             val what = when (platform) {
@@ -1617,8 +1617,8 @@ object EnglishWords : Words {
         override val nothingToCancel = "Nothing to cancel"
         override val showCertifyCode = "Show verification code"
         override val identityChangedLine = "Your contact changed their identity key: started over with the same number. Earlier messages stay with you, not with them. If in doubt that it is them, ask."
-        override val identityRestoredLine = "The contact\u2019s new identity was cancelled by the owner — the conversation is with the previous one again."
-        override val identityCancelledMark = "identity cancelled by the owner"
+        override val identityRestoredLine = "The contact\u2019s new identity key was cancelled by the owner — the conversation is with the previous one again."
+        override val identityCancelledMark = "identity key cancelled by the owner"
         override val certifyCodeAbout = "On your phone open Secret phrase and devices → Scan code and point the camera at this code"
         override val certifyTitle = "Verify device"
         override val certifyAsk = "The device in front of the camera becomes trusted: contacts will start writing to it too. Verify only your own."

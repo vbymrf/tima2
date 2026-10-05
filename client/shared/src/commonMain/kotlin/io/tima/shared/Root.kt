@@ -939,7 +939,8 @@ private fun App(
     }
     var communityViewSheet by remember { mutableStateOf(false) }
     /** Вкладка Социума — здесь, чтобы пережить подокно «Вид» (оно перестраивает окно). */
-    var socialTab by remember { mutableStateOf(WindowTab.Common) }
+    // «Социум» открывается на «Каталоге» — он первый (заказчик 2026-10-05).
+    var socialTab by remember { mutableStateOf(WindowTab.Catalogue) }
     // Люди за идентификаторами — одно место на книгу, реплики и состав (2026-09-18).
     val people = remember(assembled) { People(network.directory, environment.bookStorage, scope, network.media) }
     val peopleCards by people.cards.collectAsState()
