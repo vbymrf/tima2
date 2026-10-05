@@ -46,8 +46,15 @@ func TestShamirSplitCombine(t *testing.T) {
 	if err == nil && bytes.Equal(got, secret) {
 		t.Fatal("2 доли не должны восстанавливать секрет")
 	}
-	// Повреждённая доля → другой секрет
-	bad := shares[2][:len(shares[2])-2] + "xx"
+	// Повреждённая доля → другой секрет. Портится байт доли, а не её запись: замена хвоста
+	// base64 на «xx» раз примерно на тысячу совпадала с исходными битами, и тест падал зря.
+	cut := strings.LastIndex(shares[2], ":") + 1
+	payload, err := base64.RawURLEncoding.DecodeString(shares[2][cut:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload[0] ^= 0xff
+	bad := shares[2][:cut] + base64.RawURLEncoding.EncodeToString(payload)
 	got, err = CombineShares([]string{shares[0], shares[1], bad})
 	if err == nil && bytes.Equal(got, secret) {
 		t.Fatal("повреждённая доля не должна давать верный секрет")
