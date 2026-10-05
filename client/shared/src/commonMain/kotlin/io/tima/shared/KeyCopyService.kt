@@ -8,7 +8,6 @@ import io.tima.core.encryption.KeyCopy
 import io.tima.core.network.DeviceKeysResult
 import io.tima.core.network.KeyCopyApi
 import io.tima.core.network.KeysApi
-import io.tima.crypto.MessageSerializer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -178,7 +177,7 @@ class KeyCopyService(
                 val (eph, envelope) = HistoryFrame.split(stored)
                 val (epoch, copyPub) = pub() ?: return@launch
                 val blob = KeyCopy.wrapMessage(envelope, eph, deviceId, identity, copyPub) ?: return@launch
-                val messageId = MessageSerializer.decodeEnvelope(envelope).getOrThrow().meta.messageId.toLong()
+                val messageId = KeyCopy.messageIdOf(envelope) ?: return@launch
                 if (api.saveMessages(chatId, epoch, listOf(messageId to blob)) == KeyCopyApi.Saved.STALE) {
                     lock.withLock { cached = null }
                 }

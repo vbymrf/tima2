@@ -73,6 +73,10 @@ object KeyCopy {
     ): ByteArray? = HistoryKeys.rewrap(envelope, wrapEphemeral, myDeviceId, me, copyPub)
         ?.let { it.ephemeralPub + it.wrapped }
 
+    /** Номер сообщения из конверта — под него обёртка ложится в копию; `null` — конверт не разобрался. */
+    fun messageIdOf(envelope: ByteArray): Long? =
+        MessageSerializer.decodeEnvelope(envelope).getOrNull()?.meta?.messageId?.toLong()
+
     /** Обёртка версии ключа группы в копию (М2): `эфемерал (32) || обёртка`. */
     fun wrapGroupKey(copyPub: ByteArray, groupKey: ByteArray): ByteArray? = runCatching {
         require(copyPub.size == 32) { "открытый ключ копии — 32 байта" }
