@@ -48,7 +48,11 @@ func getKeyCopy(deps chatsDeps) http.HandlerFunc {
 		}
 		b64 := base64.RawURLEncoding
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"epoch": k.Epoch, "pub": b64.EncodeToString(k.Pub), "sig": b64.EncodeToString(k.Sig)})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"epoch": k.Epoch, "pub": b64.EncodeToString(k.Pub), "sig": b64.EncodeToString(k.Sig),
+			// После отключения устройства — сменить пару (М5).
+			"rotation_due": k.RotationDue,
+		})
 	}
 }
 

@@ -33,6 +33,8 @@ import kotlinx.coroutines.sync.withLock
 class KeyCopyService(
     private val api: KeyCopyApi,
     private val keys: KeysApi,
+    /** Список своих личных переписок — для смены пары (М5). */
+    private val history: io.tima.core.network.HistoryApi,
     private val userId: String,
     private val deviceId: String,
     private val identity: DeviceIdentity,
@@ -87,6 +89,87 @@ class KeyCopyService(
     /** Секрет копии, которым это устройство может её открыть; `null` — не может. */
     fun copyIdentity(): DeviceIdentity? =
         fromPhrase ?: secrets?.get()?.let { (_, raw) -> runCatching { DeviceIdentity.fromRaw(raw) }.getOrNull() }
+
+    /** Не заведена ли копия у личности (Р44); `null` — не узнали. */
+    suspend fun missing(): Boolean? = when (api.current()) {
+        KeyCopyApi.Current.Missing -> true
+        is KeyCopyApi.Current.Published -> false
+        KeyCopyApi.Current.Unknown -> null
+    }
+
+    /**
+     * Завести копию фразой (Р44) — для работающих устройств: фразу они больше не вводят, а копия
+     * обязана быть. Фраза сверяется с ключом личности: чужая фраза завела бы копию, которую
+     * личность не откроет.
+     */
+    suspend fun start(words: List<String>): Rotation {
+        val mine = (keys.devicesOf(userId) as? DeviceKeysResult.Devices)?.identityPub ?: return Rotation.OFFLINE
+        val claimed = io.tima.core.encryption.AccountIdentitiesOverKodium.fromWords(words) ?: return Rotation.WRONG_PHRASE
+        if (!claimed.contentEquals(mine)) return Rotation.WRONG_PHRASE
+        onPhrase(words)
+        return if (missing() == false) Rotation.DONE else Rotation.OFFLINE
+    }
+
+    /** Пора ли сменить пару копии: отключили своё устройство (М5). */
+    suspend fun rotationDue(): Boolean =
+        (api.current() as? KeyCopyApi.Current.Published)?.key?.rotationDue == true
+
+    /** Исход смены пары копии (М5). */
+    enum class Rotation { DONE, WRONG_PHRASE, OFFLINE }
+
+    /**
+     * Перевести копию на новую пару (М5): отключённое устройство могло унести секрет.
+     *
+     * Из фразы выводятся и прежняя пара, и новая. Всё, что есть в копии, разворачивается
+     * прежней и заворачивается под новую; затем публикуется новая эпоха и заливаются обёртки.
+     * До заливки копия под новой эпохой пуста — это минуты, а не потеря: прежние обёртки на
+     * сервере заменяются, а не стираются.
+     */
+    suspend fun rotate(words: List<String>): Rotation {
+        val current = (api.current() as? KeyCopyApi.Current.Published)?.key ?: return Rotation.OFFLINE
+        val mine = (keys.devicesOf(userId) as? DeviceKeysResult.Devices)?.identityPub ?: return Rotation.OFFLINE
+        val claimed = io.tima.core.encryption.AccountIdentitiesOverKodium.fromWords(words) ?: return Rotation.WRONG_PHRASE
+        if (!claimed.contentEquals(mine)) return Rotation.WRONG_PHRASE
+        val old = KeyCopy.fromWords(words, current.epoch) ?: return Rotation.WRONG_PHRASE
+        val epoch = current.epoch + 1
+        val next = KeyCopy.fromWords(words, epoch) ?: return Rotation.WRONG_PHRASE
+
+        val groups = api.groupKeys() ?: return Rotation.OFFLINE
+        val groupItems = groups.mapNotNull { item ->
+            val key = KeyCopy.openGroupKey(old, item.wrapped) ?: return@mapNotNull null
+            KeyCopy.wrapGroupKey(next.encryptionPublic, key)?.let { KeyCopyApi.GroupItem(item.groupId, item.gkVersion, it) }
+        }
+        val chats = history.personalChats() ?: return Rotation.OFFLINE
+        val perChat = HashMap<String, MutableList<Pair<Long, ByteArray>>>()
+        for (chat in chats) {
+            var before = 0L
+            while (true) {
+                val page = api.page(chat.chatId, before) ?: return Rotation.OFFLINE
+                if (page.isEmpty()) break
+                for (item in page) {
+                    val r = KeyCopy.rewrapFor(item.envelope, item.wrapEphemeral, old, next.encryptionPublic) ?: continue
+                    perChat.getOrPut(chat.chatId) { mutableListOf() } += item.messageId to (r.ephemeralPub + r.wrapped)
+                }
+                if (page.size < KeyCopyApi.PAGE) break
+                before = page.last().messageId
+            }
+        }
+
+        val sig = KeyCopy.sign(words, epoch, next.encryptionPublic) ?: return Rotation.WRONG_PHRASE
+        if (!api.publish(KeyCopyApi.Key(epoch, next.encryptionPublic, sig))) return Rotation.OFFLINE
+        lock.withLock { cached = epoch to next.encryptionPublic }
+        fromPhrase = next
+        secrets?.put(epoch, next.exportRaw())
+        for (part in groupItems.chunked(KeyCopyApi.PAGE)) api.saveGroupKeys(epoch, part)
+        var moved = 0
+        for ((chatId, items) in perChat) {
+            for (part in items.chunked(KeyCopyApi.PAGE)) {
+                if (api.saveMessages(chatId, epoch, part) == KeyCopyApi.Saved.OK) moved += part.size
+            }
+        }
+        Journal.note(LogCode.DEVICE_TRUST, "копия ключей переведена на новую пару", "эпоха" to epoch, "сообщений" to moved, "ключей групп" to groupItems.size)
+        return Rotation.DONE
+    }
 
     /** Сообщение получено или отправлено — его ключ в копию (М2). Без ожидания. */
     fun feedMessage(chatId: String, stored: ByteArray) {

@@ -289,6 +289,7 @@ fun buildAssembled(
         val keyCopy = KeyCopyService(
             api = network.keyCopy,
             keys = network.keys,
+            history = network.history,
             userId = device.session.userId,
             deviceId = device.session.deviceId,
             identity = identity,

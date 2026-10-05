@@ -1533,6 +1533,18 @@ object EnglishWords : Words {
         override val banCodeHint = "Code from SMS"
         override val banConfirm = "Forbid for good"
         override val bannedTitle = "“Start over” is forbidden"
+        override val copyRotateTitle = "Change the copy key"
+        override val copyRotateAbout =
+            "You disconnected a device — it may have taken the key to your message copy. Enter your secret phrase: " +
+                "the copy will move to a new key, and the disconnected device will no longer open it."
+        override val copyRotateSend = "Change key"
+        override val copyRotated = "The copy has moved to a new key"
+        override val copyStartTitle = "Start the message copy"
+        override val copyStartAbout =
+            "The key copy keeps your messages encrypted on the server: a new phone with the secret phrase restores them on its own. " +
+                "Enter the phrase once, and after that the copy fills itself."
+        override val copyStartSend = "Start copy"
+        override val copyStarted = "The message copy is started"
         override val deviceAddedTitle = "A new device was added"
         override fun deviceAddedText(platform: String): String {
             val what = when (platform) {

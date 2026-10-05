@@ -3153,6 +3153,7 @@ private fun App(
                                 users = network.directory,
                                 sms = network.sms,
                                 onPhrase = { w -> assembled.keyCopy?.onPhrase(w) },
+                                keyCopy = assembled.keyCopy,
                                 userId = assembled.session.userId,
                                 identity = deviceIdentityFrom(deviceSecret),
                                 asks = askSecrets,
@@ -3240,6 +3241,7 @@ private fun App(
                                 users = network.directory,
                                 sms = network.sms,
                                 onPhrase = { w -> assembled.keyCopy?.onPhrase(w) },
+                                keyCopy = assembled.keyCopy,
                                 userId = assembled.session.userId,
                                 identity = deviceIdentityFrom(deviceSecret),
                                 asks = askSecrets,
@@ -4267,6 +4269,10 @@ private fun Devices(
         // Запрет «Начать заново» (ДУ10, Р41): SMS, потом фраза и код.
         onSendBanCode = store::sendBanCode,
         onBanStartAnew = store::banStartAnew,
+        // Сменить ключ копии после отключения устройства (М5).
+        onRotateCopy = store::rotateCopy,
+        // Завести копию на работающем устройстве (Р44).
+        onStartCopy = store::startCopy,
     )
 }
 

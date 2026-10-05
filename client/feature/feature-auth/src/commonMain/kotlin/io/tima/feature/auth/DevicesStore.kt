@@ -57,6 +57,49 @@ class DevicesStore(
                 val banned = runCatching { actions.startAnewBanned() }.getOrNull()
                 _state.value = _state.value.copy(startAnewBanned = banned)
             }
+            checkCopyRotation()
+        }
+    }
+
+    /** Пора ли сменить ключ копии — после отключения своего устройства (М5). */
+    private fun checkCopyRotation() {
+        val actions = trust ?: return
+        scope.launch {
+            val due = runCatching { actions.copyRotationDue() }.getOrDefault(false)
+            val missing = runCatching { actions.copyMissing() }.getOrNull() == true
+            _state.value = _state.value.copy(copyRotationDue = due, copyMissing = missing)
+        }
+    }
+
+    /** Завести копию ключей фразой (Р44) — работающее устройство фразу больше не вводит. */
+    fun startCopy(phrase: String) {
+        val actions = trust ?: return
+        if (_state.value.trusting) return
+        val words = phrase.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        scope.launch {
+            val step = runCatching { actions.startCopy(words) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
+            _state.value = _state.value.copy(
+                trusting = false,
+                trustNotice = if (step == TrustStep.Done) words().auth.copyStarted else notice(step),
+                copyMissing = if (step == TrustStep.Done) false else _state.value.copyMissing,
+            )
+        }
+    }
+
+    /** Перевести копию ключей на новую пару фразой (М5). Слова не хранятся. */
+    fun rotateCopy(phrase: String) {
+        val actions = trust ?: return
+        if (_state.value.trusting) return
+        val words = phrase.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        scope.launch {
+            val step = runCatching { actions.rotateCopy(words) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
+            _state.value = _state.value.copy(
+                trusting = false,
+                trustNotice = if (step == TrustStep.Done) words().auth.copyRotated else notice(step),
+                copyRotationDue = if (step == TrustStep.Done) false else _state.value.copyRotationDue,
+            )
         }
     }
 
@@ -230,6 +273,8 @@ class DevicesStore(
                 RevokeStep.Revoked, RevokeStep.Gone -> {
                     _state.value = _state.value.copy(ask = null, expect = false)
                     refresh()
+                    // Отключённое могло унести ключ копии — сервер ставит отметку (М5).
+                    checkCopyRotation()
                 }
                 RevokeStep.LastDevice -> _state.value = _state.value.copy(
                     ask = null,
@@ -274,4 +319,8 @@ data class DevicesState(
     val startAnewBanned: Boolean? = null,
     /** Код запрета отправлен — ждём его и фразу. */
     val banCode: io.tima.domain.account.BanCode? = null,
+    /** Пора сменить ключ копии — отключили своё устройство (М5). */
+    val copyRotationDue: Boolean = false,
+    /** Копия ключей у личности ещё не заведена (Р44). */
+    val copyMissing: Boolean = false,
 )

@@ -1644,6 +1644,16 @@ interface AuthWords {
     val banCodeHint: String
     val banConfirm: String
     val bannedTitle: String
+    /** М5: сменить ключ копии после отключения устройства. */
+    val copyRotateTitle: String
+    val copyRotateAbout: String
+    val copyRotateSend: String
+    val copyRotated: String
+    /** Р44: завести копию ключей на работающем устройстве. */
+    val copyStartTitle: String
+    val copyStartAbout: String
+    val copyStartSend: String
+    val copyStarted: String
     /** Р48: к аккаунту добавлено новое устройство — событие в подокне. */
     val deviceAddedTitle: String
     fun deviceAddedText(platform: String): String
@@ -3563,6 +3573,18 @@ object RussianWords : Words {
         override val banCodeHint = "Код из SMS"
         override val banConfirm = "Запретить навсегда"
         override val bannedTitle = "«Начать заново» запрещено"
+        override val copyRotateTitle = "Сменить ключ копии"
+        override val copyRotateAbout =
+            "Вы отключили устройство — оно могло унести ключ копии вашей переписки. Введите секретную фразу: " +
+                "копия перейдёт на новый ключ, и отключённое устройство её больше не откроет."
+        override val copyRotateSend = "Сменить ключ"
+        override val copyRotated = "Копия переведена на новый ключ"
+        override val copyStartTitle = "Завести копию переписки"
+        override val copyStartAbout =
+            "Копия ключей хранит вашу переписку зашифрованной на сервере: новый телефон с секретной фразой поднимет её сам. " +
+                "Введите фразу один раз — дальше копия пополняется сама."
+        override val copyStartSend = "Завести копию"
+        override val copyStarted = "Копия переписки заведена"
         override val deviceAddedTitle = "Добавлено новое устройство"
         override fun deviceAddedText(platform: String): String {
             val what = when (platform) {

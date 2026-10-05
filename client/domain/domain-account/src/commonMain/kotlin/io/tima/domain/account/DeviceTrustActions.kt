@@ -50,6 +50,18 @@ interface DeviceTrustActions {
      */
     suspend fun banStartAnew(words: List<String>, requestId: String, code: String): TrustStep =
         TrustStep.Refused("не умеем")
+
+    /** Отключили своё устройство — пора сменить ключ копии (модель Matrix, М5). */
+    suspend fun copyRotationDue(): Boolean = false
+
+    /** Перевести копию ключей на новую пару — фразой (М5). */
+    suspend fun rotateCopy(words: List<String>): TrustStep = TrustStep.Refused("не умеем")
+
+    /** Копия ключей у личности ещё не заведена (Р44: она обязана быть) — `null`, не узнали. */
+    suspend fun copyMissing(): Boolean? = null
+
+    /** Завести копию ключей фразой — для устройств, которые фразу больше не вводят (Р44). */
+    suspend fun startCopy(words: List<String>): TrustStep = TrustStep.Refused("не умеем")
 }
 
 /** Отправленный код запрета (ДУ10). `devCode` — код в ответе стенда (`TIMA_DEV_SMS`). */

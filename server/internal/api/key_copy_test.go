@@ -118,9 +118,27 @@ func TestKeyCopyMatrixModel(t *testing.T) {
 		t.Fatalf("ключи групп в копии: %d %+v", code, groups.Items)
 	}
 
-	// Эпоха только растёт: вторая — можно, назад к первой — нет.
+	// М5: отключение своего устройства ставит отметку «сменить пару» — оно могло унести секрет.
+	second, code, _ := registerRaw(t, ts, "+79990062001", idPub, false)
+	if code != 201 {
+		t.Fatalf("второе устройство: %d", code)
+	}
+	if code := jsonAuth(t, ts, "DELETE", "/api/v1/devices/"+second.id, owner.token, nil, nil); code != 200 {
+		t.Fatalf("отключение: %d", code)
+	}
+	var due struct {
+		RotationDue bool `json:"rotation_due"`
+	}
+	if code := getAuthed(t, ts, owner.token, "/api/v1/users/me/key-copy", &due); code != 200 || !due.RotationDue {
+		t.Fatalf("после отключения устройства: %d rotation_due=%v, ждали true", code, due.RotationDue)
+	}
+
+	// Эпоха только растёт: вторая — можно и снимает отметку, назад к первой — нет.
 	if code := publish(2, idPriv); code != 204 {
 		t.Fatalf("эпоха 2: %d", code)
+	}
+	if code := getAuthed(t, ts, owner.token, "/api/v1/users/me/key-copy", &due); code != 200 || due.RotationDue {
+		t.Fatalf("после новой эпохи отметка обязана сняться: %d rotation_due=%v", code, due.RotationDue)
 	}
 	if code := publish(1, idPriv); code != 409 {
 		t.Fatalf("возврат к эпохе 1: %d, ждали 409", code)

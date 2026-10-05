@@ -84,6 +84,8 @@ type KeyCopyKey struct {
 	Epoch int
 	Pub   []byte
 	Sig   []byte
+	// RotationDue — после отключения устройства пару пора сменить (М5).
+	RotationDue bool
 }
 
 // ErrKeyCopyMissing — личность ещё не публиковала ключ копии.
@@ -95,8 +97,8 @@ var ErrKeyCopyStale = errors.New("эпоха копии не новее дейс
 // KeyCopy — открытый ключ копии личности.
 func (s *Store) KeyCopy(ctx context.Context, userID string) (KeyCopyKey, error) {
 	var k KeyCopyKey
-	err := s.pool.QueryRow(ctx, `SELECT epoch, pub, sig FROM key_copy WHERE user_id = $1`, userID).
-		Scan(&k.Epoch, &k.Pub, &k.Sig)
+	err := s.pool.QueryRow(ctx, `SELECT epoch, pub, sig, rotation_due FROM key_copy WHERE user_id = $1`, userID).
+		Scan(&k.Epoch, &k.Pub, &k.Sig, &k.RotationDue)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return KeyCopyKey{}, ErrKeyCopyMissing
 	}
@@ -110,7 +112,8 @@ func (s *Store) SetKeyCopy(ctx context.Context, userID string, k KeyCopyKey) err
 	tag, err := s.pool.Exec(ctx, `
 		INSERT INTO key_copy (user_id, epoch, pub, sig) VALUES ($1, $2, $3, $4)
 		ON CONFLICT (user_id) DO UPDATE SET epoch = EXCLUDED.epoch, pub = EXCLUDED.pub,
-		       sig = EXCLUDED.sig, updated_at = now()
+		       sig = EXCLUDED.sig, updated_at = now(),
+		       rotation_due = key_copy.rotation_due AND key_copy.epoch = EXCLUDED.epoch
 		 WHERE key_copy.epoch < EXCLUDED.epoch
 		    OR (key_copy.epoch = EXCLUDED.epoch AND key_copy.pub = EXCLUDED.pub)`,
 		userID, k.Epoch, k.Pub, k.Sig)

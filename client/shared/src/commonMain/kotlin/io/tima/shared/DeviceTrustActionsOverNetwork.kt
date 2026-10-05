@@ -33,6 +33,8 @@ class DeviceTrustActionsOverNetwork(
     private val sms: io.tima.core.network.AuthApi? = null,
     /** Фраза подтверждена — копии ключей вывести свою пару (модель Matrix, М1). */
     private val onPhrase: suspend (List<String>) -> Unit = {},
+    /** Копия ключей — смена пары после отключения устройства (М5). */
+    private val keyCopy: KeyCopyService? = null,
 ) : DeviceTrustActions {
 
     override fun holdsKey(): Boolean = phone && asks.get() != null
@@ -132,6 +134,24 @@ class DeviceTrustActionsOverNetwork(
     }
 
     override suspend fun startAnewBanned(): Boolean? = users?.startAnewState()?.banned
+
+    override suspend fun copyRotationDue(): Boolean = keyCopy?.rotationDue() == true
+
+    override suspend fun copyMissing(): Boolean? = keyCopy?.missing()
+
+    override suspend fun startCopy(words: List<String>): TrustStep = when (keyCopy?.start(words)) {
+        KeyCopyService.Rotation.DONE -> TrustStep.Done
+        KeyCopyService.Rotation.WRONG_PHRASE -> TrustStep.WrongPhrase
+        KeyCopyService.Rotation.OFFLINE -> TrustStep.Offline(0)
+        null -> TrustStep.Refused("копии ключей нет")
+    }
+
+    override suspend fun rotateCopy(words: List<String>): TrustStep = when (keyCopy?.rotate(words)) {
+        KeyCopyService.Rotation.DONE -> TrustStep.Done
+        KeyCopyService.Rotation.WRONG_PHRASE -> TrustStep.WrongPhrase
+        KeyCopyService.Rotation.OFFLINE -> TrustStep.Offline(0)
+        null -> TrustStep.Refused("копии ключей нет")
+    }
 
     override suspend fun sendBanCode(): io.tima.domain.account.BanCode? {
         val phone = users?.startAnewState()?.phone?.takeIf { it.isNotBlank() } ?: return null

@@ -1533,6 +1533,18 @@ object SpanishWords : Words {
         override val banCodeHint = "Código del SMS"
         override val banConfirm = "Prohibir para siempre"
         override val bannedTitle = "«Empezar de cero» está prohibido"
+        override val copyRotateTitle = "Cambiar la clave de la copia"
+        override val copyRotateAbout =
+            "Desconectaste un dispositivo: pudo llevarse la clave de la copia de tus mensajes. Escribe tu frase secreta: " +
+                "la copia pasará a una clave nueva y el dispositivo desconectado ya no podrá abrirla."
+        override val copyRotateSend = "Cambiar clave"
+        override val copyRotated = "La copia pasó a una clave nueva"
+        override val copyStartTitle = "Crear la copia de los mensajes"
+        override val copyStartAbout =
+            "La copia de claves guarda tus mensajes cifrados en el servidor: un teléfono nuevo con la frase secreta los recupera solo. " +
+                "Escribe la frase una vez; después la copia se completa sola."
+        override val copyStartSend = "Crear copia"
+        override val copyStarted = "La copia de los mensajes está creada"
         override val deviceAddedTitle = "Se añadió un dispositivo nuevo"
         override fun deviceAddedText(platform: String): String {
             val what = when (platform) {

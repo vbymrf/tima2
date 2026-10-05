@@ -87,6 +87,10 @@ fun DeviceScreen(
     onSendBanCode: (() -> Unit)? = null,
     /** Запрет «Начать заново»: фраза и код из SMS. */
     onBanStartAnew: ((String, String) -> Unit)? = null,
+    /** Сменить ключ копии фразой — после отключения своего устройства (М5). */
+    onRotateCopy: ((String) -> Unit)? = null,
+    /** Завести копию ключей фразой (Р44). */
+    onStartCopy: ((String) -> Unit)? = null,
 ) = Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
     val words = Tima.words.auth
     var signingOut by rememberSaveable { mutableStateOf(false) }
@@ -145,6 +149,14 @@ fun DeviceScreen(
                 io.tima.core.ui.QrCodeImage(code, Modifier.fillMaxWidth().padding(TimaSpacing.about4))
             }
         }
+    }
+    // Отключённое устройство могло унести ключ копии (М5) — сменить его фразой, первым делом.
+    if (state.copyRotationDue && onRotateCopy != null && !signingOut) {
+        RotateCopy(onRotateCopy, state.trusting)
+    }
+    // Копии ещё нет (Р44) — завести её фразой: это устройство фразу больше не вводит.
+    if (state.copyMissing && onStartCopy != null && !signingOut) {
+        RotateCopy(onStartCopy, state.trusting, start = true)
     }
     // Запрет «Начать заново» (ДУ10, Р41): до запрета — кнопка, после — что закрыто навсегда.
     val banned = state.startAnewBanned
@@ -414,6 +426,34 @@ private fun StartAnewBan(
             )
         }
     }
+}
+
+/** Сменить ключ копии ключей (модель Matrix, М5): поле фразы, кнопка. */
+@Composable
+private fun RotateCopy(onRotate: (String) -> Unit, busy: Boolean, start: Boolean = false) = Column(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+) {
+    val words = Tima.words.auth
+    var phrase by remember { mutableStateOf("") }
+    if (start) {
+        Caption(words.copyStartTitle, weight = FontWeight.ExtraBold)
+        Secondary(words.copyStartAbout)
+    } else {
+        Caption(words.copyRotateTitle, weight = FontWeight.ExtraBold, color = Tima.colors.alarm)
+        Secondary(words.copyRotateAbout)
+    }
+    Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, modifier = Modifier.fillMaxWidth())
+    Button(
+        label = if (start) words.copyStartSend else words.copyRotateSend,
+        onClick = {
+            if (!busy && phrase.isNotBlank()) {
+                onRotate(phrase)
+                phrase = ""
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /** Подтвердить это устройство фразой (ДУ5). Устроено как просьба ключа: поле, кнопка. */

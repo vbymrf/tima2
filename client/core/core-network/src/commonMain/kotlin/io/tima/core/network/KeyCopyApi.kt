@@ -24,7 +24,13 @@ class KeyCopyApi(
 ) {
 
     /** Открытый ключ копии своей личности. */
-    class Key(val epoch: Int, val pub: ByteArray, val sig: ByteArray)
+    class Key(
+        val epoch: Int,
+        val pub: ByteArray,
+        val sig: ByteArray,
+        /** Отключили своё устройство — пару пора сменить (М5). */
+        val rotationDue: Boolean = false,
+    )
 
     /** Что ответил сервер на вопрос о ключе копии. */
     sealed interface Current {
@@ -47,7 +53,7 @@ class KeyCopyApi(
         val sig = body.str("sig")?.let { decodeBase64Url(it) }
         val epoch = body.int("epoch") ?: return Current.Unknown
         if (pub == null || sig == null) return Current.Unknown
-        return Current.Published(Key(epoch, pub, sig))
+        return Current.Published(Key(epoch, pub, sig, rotationDue = body.bool("rotation_due") == true))
     }
 
     /** `PUT /users/me/key-copy` — опубликовать пару копии. `true` — принято или уже было. */

@@ -127,6 +127,12 @@ func (s *Store) RevokeDevice(ctx context.Context, userID, deviceID string) error
 	_, err = s.pool.Exec(ctx, `
 		UPDATE account_signing_keys SET revoked_at = now()
 		WHERE device_id = $1 AND user_id = $2 AND revoked_at IS NULL`, deviceID, userID)
+	if err != nil {
+		return err
+	}
+	// И секрет копии ключей (Р46, М5): копию пора перевести на новую пару — до этого
+	// «Секретная фраза и устройства» просит фразу.
+	_, err = s.pool.Exec(ctx, `UPDATE key_copy SET rotation_due = true WHERE user_id = $1`, userID)
 	return err
 }
 
