@@ -58,7 +58,8 @@ class GroupKeyRecoveryApi(
         }
         return when (body.codeOf()) {
             // Не отказ по существу: аккаунт защищён фразой, и её надо ввести.
-            "bad_identity_sig" -> RecoverResult.NeedsSecretPhrase
+            // `phrase_required` — у аккаунта фразы нет вовсе (Р42): без неё ключей не дадут.
+            "bad_identity_sig", "phrase_required" -> RecoverResult.NeedsSecretPhrase
             "not_member" -> RecoverResult.NotMember
             else -> RecoverResult.Refused(response.status.value, body.codeOf())
         }

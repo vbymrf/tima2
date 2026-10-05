@@ -281,10 +281,10 @@ func groupKeyRecover(deps groupsDeps) http.HandlerFunc {
 			return
 		}
 
-		// Аутентификация запроса ключом личности (ADR-0010 §этап 3): если у аккаунта
-		// установлен identity_pub, запрос обязан быть им подписан — барьер против угона
-		// номера (укравший SIM имеет device JWT, но без фразы не подпишет). Аккаунт без
-		// фразы (identity_pub NULL) — восстановление по членству (совместимость).
+		// Аутентификация запроса ключом личности (ADR-0010 §этап 3, Р42): запрос обязан быть
+		// подписан ключом личности из фразы — барьер против угона номера (укравший SIM имеет
+		// device JWT, но без фразы не подпишет). До 2026-10-05 аккаунт без фразы получал
+		// ключи «по членству»; по Р42 (и Р7 — аккаунт без фразы не пускается вовсе) — отказ.
 		var req struct {
 			Signature string `json:"signature"` // base64url, Ed25519 над recoverCanonical
 		}
@@ -295,12 +295,14 @@ func groupKeyRecover(deps groupsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		if len(identityPub) == 32 {
-			sig, derr := base64.RawURLEncoding.DecodeString(req.Signature)
-			if derr != nil || !timacrypto.VerifyEnvelopeSignature(identityPub, recoverCanonical(groupID, id.DeviceID), sig) {
-				writeErr(w, http.StatusForbidden, "bad_identity_sig", "запрос не подписан ключом личности аккаунта")
-				return
-			}
+		if len(identityPub) != 32 {
+			writeErr(w, http.StatusForbidden, "phrase_required", "ключи группы выдаются только по секретной фразе")
+			return
+		}
+		sig, derr := base64.RawURLEncoding.DecodeString(req.Signature)
+		if derr != nil || !timacrypto.VerifyEnvelopeSignature(identityPub, recoverCanonical(groupID, id.DeviceID), sig) {
+			writeErr(w, http.StatusForbidden, "bad_identity_sig", "запрос не подписан ключом личности аккаунта")
+			return
 		}
 		missing, err := deps.store.MissingGKVersions(r.Context(), groupID, id.DeviceID)
 		if err != nil {
