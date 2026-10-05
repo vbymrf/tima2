@@ -1,6 +1,7 @@
 package io.tima.core.network
 
 import io.ktor.client.HttpClient
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -87,6 +88,41 @@ class GroupMessagesApi(
             body.codeOf() == "banned" -> SendGroupResult.Banned
             else -> SendGroupResult.Refused(response.status.value, body.codeOf())
         }
+    }
+
+    /**
+     * История группы страницей (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ ИУ3): `GET /groups/{id}/messages`,
+     * от новых к старым, до `before`.
+     *
+     * Элемент страницы — кадр **в том самом виде, в каком его приносит живой канал**
+     * (`GroupFrame.toStored`): сервер отдаёт историю тем же JSON, что и событие
+     * `message.group`, и открывается она тем же разбором — подпись по метаданным и payload.
+     * Сколько отдать и до какого уровня — решает сервер по роли (ADR-0019).
+     *
+     * @return `null` — сеть или отказ: страница не получена, а не «истории нет».
+     */
+    suspend fun page(groupId: String, before: Long, limit: Int = PAGE): List<Page>? {
+        val path = "/api/v1/groups/$groupId/messages?limit=$limit" + if (before > 0) "&before=$before" else ""
+        val response = try {
+            client.get(route.api(path)) { header("Authorization", "Bearer ${token()}") }
+        } catch (e: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        val list = response.jsonBody()?.get("messages")?.jsonArrayOrNull() ?: return null
+        return list.mapNotNull { el ->
+            val o = el.jsonObjectOrNull() ?: return@mapNotNull null
+            val frame = GroupFrame.fromJson(o) ?: return@mapNotNull null
+            Page(messageId = frame.messageId, stored = GroupFrame.toStored(o.toString()), sentAtMs = frame.createdAtUnixMs)
+        }
+    }
+
+    /** Сообщение истории: номер, кадр для очереди входящих, время написания. */
+    class Page(val messageId: Long, val stored: ByteArray, val sentAtMs: Long)
+
+    companion object {
+        /** Страница истории — как у личной (`HistoryApi.PAGE`). */
+        const val PAGE: Int = 100
     }
 }
 

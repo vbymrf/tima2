@@ -1540,17 +1540,35 @@ private fun App(
     }
     LaunchedEffect(assembled.session.userId) {
         val key = "history.swept.v1"
-        if (runCatching { environment.settings.all().first()[key] }.getOrNull() != null) return@LaunchedEffect
-        // Только на свежем устройстве — без единой личной переписки. На работающем сверка
-        // вернула бы в переписку то, что человек у себя удалил: сервер этого не знает.
-        val fresh = runCatching { io.tima.core.database.SqlChatRehome(environment.db).personalPeers().isEmpty() }.getOrDefault(false)
-        if (!fresh) {
+        // История групп (ИУ3) — своей отметкой: устройства, прошедшие личную сверку до неё,
+        // свежими уже не считаются и групп не забирают.
+        val groupsKey = "history.groups.swept.v1"
+        // «Свежее» решается один раз, до первой забранной страницы, и запоминается: после
+        // личной истории переписки на устройстве уже есть, и второй раз решить было бы не по
+        // чему. Не удалось забрать группы — попытка повторится при следующем запуске.
+        val groupsPending = "history.groups.pending.v1"
+        val marks = runCatching { environment.settings.all().first() }.getOrNull() ?: return@LaunchedEffect
+        if (marks[key] == null) {
+            // Только на свежем устройстве — без единой личной переписки. На работающем сверка
+            // вернула бы в переписку то, что человек у себя удалил: сервер этого не знает.
+            val fresh = runCatching { io.tima.core.database.SqlChatRehome(environment.db).personalPeers().isEmpty() }.getOrDefault(false)
+            if (!fresh) {
+                runCatching { environment.settings.put(key, "1") }
+                runCatching { environment.settings.put(groupsKey, "1") }
+                return@LaunchedEffect
+            }
+            runCatching { environment.settings.put(groupsPending, "1") }
+            val added = runCatching { assembled.receiver.pullAllHistory() }.getOrNull() ?: return@LaunchedEffect
+            Journal.note(LogCode.DEVICE_TRUST, "история при первом запуске забрана", "новых" to added)
             runCatching { environment.settings.put(key, "1") }
+        } else if (marks[groupsKey] == null && marks[groupsPending] == null) {
+            runCatching { environment.settings.put(groupsKey, "1") }
             return@LaunchedEffect
         }
-        val added = runCatching { assembled.receiver.pullAllHistory() }.getOrNull() ?: return@LaunchedEffect
-        Journal.note(LogCode.DEVICE_TRUST, "история при первом запуске забрана", "новых" to added)
-        runCatching { environment.settings.put(key, "1") }
+        if (marks[groupsKey] != null) return@LaunchedEffect
+        val groupsAdded = runCatching { assembled.receiver.pullAllGroupHistory() }.getOrNull() ?: return@LaunchedEffect
+        Journal.note(LogCode.DEVICE_TRUST, "история групп при первом запуске забрана", "новых" to groupsAdded)
+        runCatching { environment.settings.put(groupsKey, "1") }
     }
 
     // Один человек — одна переписка (ДУ6, Р26): при запуске и раз в пять минут.

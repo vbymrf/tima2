@@ -1,6 +1,8 @@
 package io.tima.shared
 
 import io.tima.core.network.HistoryApi
+import io.tima.core.network.GroupMessagesApi
+import io.tima.core.network.GroupsResult
 import io.tima.core.encryption.HistoryFrame
 import io.tima.core.database.SqlChatBook
 import io.tima.core.encryption.GroupMessages
@@ -989,6 +991,46 @@ class Receiver(
         val chats = network.history.personalChats() ?: return null
         var added = 0
         for (chat in chats) added += pullHistory(chat.chatId, chat.peerId.takeIf { it != session.userId })
+        return added
+    }
+
+    /**
+     * История группы с сервера (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ ИУ3, групповая часть).
+     *
+     * Сервер отдаёт страницы тем же кадром, что живой канал, и ровно то, что этой роли
+     * положено видеть (ADR-0019). Каждый кадр ложится в очередь входящих тем же путём,
+     * что пришедший живым, и открывается тем же разбором. Ключи групп новое устройство
+     * получает при привязке (`handOver`); сообщение версии, ключа которой нет, остаётся
+     * «недоступным» с кнопкой «Запросить ключ» — как у пришедшего живым. Уведомлений нет:
+     * это прошлое, а не новость.
+     *
+     * @return сколько сообщений записано впервые.
+     */
+    suspend fun pullGroupHistory(groupId: String): Int {
+        var before = 0L
+        var added = 0
+        while (true) {
+            val page = network.groupMessages.page(groupId, before) ?: break
+            if (page.isEmpty()) break
+            for (item in page) {
+                val frame = GroupFrame.parse(item.stored) ?: continue
+                captionKey(frame.senderId, frame.senderDevice)
+                if (environment.incoming.receive(groupId, item.messageId, item.stored, sentAtMs = item.sentAtMs)) added++
+            }
+            if (page.size < GroupMessagesApi.PAGE) break
+            before = page.last().messageId
+        }
+        if (added > 0) drainIncoming()
+        Journal.note(LogCode.DEVICE_TRUST, "история группы забрана", "группа" to groupId.take(8), "новых" to added)
+        return added
+    }
+
+    /** Все свои группы (ИУ3): строки списка — сверкой групп, затем история каждой. */
+    suspend fun pullAllGroupHistory(): Int? {
+        val groups = (network.groups.mine() as? GroupsResult.Groups)?.groups ?: return null
+        syncGroups()
+        var added = 0
+        for (group in groups) added += pullGroupHistory(group.groupId)
         return added
     }
 
