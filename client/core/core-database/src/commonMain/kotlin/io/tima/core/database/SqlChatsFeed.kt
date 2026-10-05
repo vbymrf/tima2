@@ -44,6 +44,8 @@ class SqlChatsFeed(
     private val cipher: FieldCipher,
     /** Кто я: последнее сообщение может быть своим, пришедшим со второго устройства. */
     private val myUserId: String,
+    /** Прежние личности аккаунта (М6): последнее сообщение прежней — тоже своё. */
+    private val priorIds: () -> Set<String> = { emptySet() },
 ) : ChatsFeed {
 
     override fun list(limit: Int): Flow<List<ChatSummary>> {
@@ -76,7 +78,7 @@ class SqlChatsFeed(
         preview = preview(last_direction, last_state, last_body),
         // То же правило, что в переписке: входящее от себя же — своё.
         lastOutgoing = last_direction == OUTGOING ||
-            (last_sender.isNotEmpty() && last_sender == myUserId),
+            (last_sender.isNotEmpty() && (last_sender == myUserId || last_sender in priorIds())),
         lastDisplay = displayOf(last_direction, last_state),
         atMs = last_at ?: 0,
         unread = unread.toInt(),

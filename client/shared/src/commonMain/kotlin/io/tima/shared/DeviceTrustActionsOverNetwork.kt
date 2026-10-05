@@ -201,7 +201,7 @@ class DeviceTrustActionsOverNetwork(
         val challenge = api.identityChallenge() ?: return failed(TrustStep.Offline(0))
         val signature = io.tima.core.encryption.IdentitySignerOverKodium.sign(words, challenge.encodeToByteArray())
             ?: return failed(TrustStep.WrongPhrase)
-        return io.tima.domain.account.PrepareRereg.Ready(phone, io.tima.domain.account.ReregProof(challenge, signature))
+        return io.tima.domain.account.PrepareRereg.Ready(phone, io.tima.domain.account.ReregProof(challenge, signature), words)
     }
 
     override suspend fun sendCode(purpose: String): io.tima.domain.account.CodeSend {

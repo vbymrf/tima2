@@ -123,4 +123,63 @@ class KeyCopyBackfillTest {
         assertFalse(service.backfillOnce())
         assertTrue(settings.values.value.isEmpty(), "отметки нет — повтор при следующем запуске")
     }
+
+    /**
+     * Перенос копии прежней личности в копию новой (М6, Р55): ключи групп и ключи сообщений
+     * её переписок разворачиваются парой из её фразы и заворачиваются под свою копию. Чужая
+     * фраза ничего не переносит.
+     */
+    @Test
+    fun копия_прежней_личности_переносится_в_свою() = runTest {
+        val prior = AccountIdentitiesOverKodium.fresh()
+        val priorCopy = KeyCopy.fromWords(prior.words, 3)!!
+        val groupKey = ByteArray(32) { 7 }
+        val postedGroups = mutableListOf<String>()
+        val engine = MockEngine { request ->
+            val path = request.url.encodedPath
+            val owner = request.url.parameters["owner"]
+            when {
+                path == "/api/v1/users/me/key-copy" && owner == "u-прежняя" -> respond(
+                    """{"epoch":3,"pub":"${b64(priorCopy.encryptionPublic)}","sig":"${b64(KeyCopy.sign(prior.words, 3, priorCopy.encryptionPublic)!!)}"}""",
+                    HttpStatusCode.OK, json,
+                )
+                path == "/api/v1/users/me/key-copy" -> respond(
+                    """{"epoch":1,"pub":"${b64(copy.encryptionPublic)}","sig":"${b64(KeyCopy.sign(account.words, 1, copy.encryptionPublic)!!)}"}""",
+                    HttpStatusCode.OK, json,
+                )
+                path == "/api/v1/keys/devices" ->
+                    respond("""{"devices":[],"identity_pub":"${b64(account.identityPub)}"}""", HttpStatusCode.OK, json)
+                path == "/api/v1/users/me/key-copy/groups" && request.method == HttpMethod.Get && owner == "u-прежняя" -> respond(
+                    """{"items":[{"group_id":"g-1","gk_version":2,"wrapped":"${b64(KeyCopy.wrapGroupKey(priorCopy.encryptionPublic, groupKey)!!)}"}]}""",
+                    HttpStatusCode.OK, json,
+                )
+                path == "/api/v1/users/me/key-copy/groups" && request.method == HttpMethod.Post -> {
+                    postedGroups += (request.body as TextContent).text
+                    respond("", HttpStatusCode.Created)
+                }
+                path == "/api/v1/chats/personal" -> respond("""{"chats":[]}""", HttpStatusCode.OK, json)
+                else -> respond("", HttpStatusCode.NotFound)
+            }
+        }
+        val client = HttpClient(engine) { timaDefaults() }
+        val route = ServerRoute.from(RouteConfig(host = "example.com"))
+        val service = KeyCopyService(
+            api = KeyCopyApi(route, client) { "t" },
+            keys = KeysApi(route, client) { "t" },
+            history = HistoryApi(route, client) { "t" },
+            userId = "u-новая",
+            deviceId = "d-1",
+            identity = DeviceIdentity.generate(),
+            scope = CoroutineScope(coroutineContext),
+            secrets = null,
+        )
+
+        assertEquals(KeyCopyService.Adopt.WRONG_PHRASE, service.adoptPrior(account.words, "u-прежняя"), "фраза не прежней личности")
+        assertTrue(postedGroups.isEmpty())
+        assertEquals(KeyCopyService.Adopt.DONE, service.adoptPrior(prior.words, "u-прежняя"))
+        val item = Json.parseToJsonElement(postedGroups.single()).jsonObject["items"]!!.jsonArray.single().jsonObject
+        assertEquals(2, item["gk_version"]!!.jsonPrimitive.int)
+        val wrapped = java.util.Base64.getUrlDecoder().decode(item["wrapped"]!!.jsonPrimitive.content)
+        assertContentEquals(groupKey, KeyCopy.openGroupKey(copy, wrapped), "ключ прежней открывается своей копией")
+    }
 }

@@ -43,6 +43,8 @@ class SqlChatFeed(
      * можно только по проверенному отправителю, поэтому он и записывается.
      */
     private val myUserId: String,
+    /** Прежние личности аккаунта (М6): их сообщения в перенесённой истории — тоже свои. */
+    private val priorIds: () -> Set<String> = { emptySet() },
 ) : ChatFeed {
 
     override fun page(chatId: String, limit: Int): Flow<List<ChatLine>> =
@@ -91,7 +93,7 @@ class SqlChatFeed(
      * автора у него пока нет, и своим оно не считается.
      */
     private fun own(direction: Long, senderId: String): Boolean =
-        direction == OUTGOING || (senderId.isNotEmpty() && senderId == myUserId)
+        direction == OUTGOING || (senderId.isNotEmpty() && (senderId == myUserId || senderId in priorIds()))
 
     /**
      * Текст строки — или его отсутствие.

@@ -1060,11 +1060,17 @@ class Receiver(
             environment.groupKeyBook.put(item.groupId, item.gkVersion, key)
             keys++
         }
-        val chats = network.history.personalChats() ?: return null
+        // Переписки всех личностей аккаунта (М6, Р55): после перерегистрации копия прежней
+        // перенесена в свою, её переписки склеиваются с перепиской новой.
+        val chats = network.history.personalChats(allIdentities = true) ?: return null
+        val prior = chats.map { it.ownerId }.filter { it.isNotBlank() && it != session.userId }.toSet()
+        prior.forEach(environment.priorIdentities::add)
         var added = 0
+        val rehome = mutableListOf<Pair<String, String>>()
         for (chat in chats) {
             var before = 0L
-            var peer = chat.peerId.takeIf { it != session.userId }
+            val me = setOf(session.userId) + prior
+            var peer = chat.peerId.takeIf { it !in me }
             while (true) {
                 val page = network.keyCopy.page(chat.chatId, before) ?: break
                 if (page.isEmpty()) break
@@ -1073,7 +1079,7 @@ class Receiver(
                         item.envelope, item.wrapEphemeral, copy, session.deviceId, identity.encryptionPublic,
                     ) ?: continue
                     val sender = envelopeSender(stored) ?: continue
-                    if (peer == null && sender.userId != session.userId) peer = sender.userId
+                    if (peer == null && sender.userId !in me) peer = sender.userId
                     captionKey(sender.userId, sender.deviceId)
                     if (environment.incoming.receive(chat.chatId, item.messageId, stored, sentAtMs = sender.createdAtMs)) added++
                 }
@@ -1083,8 +1089,16 @@ class Receiver(
             if (peer != null && !environment.chatFacts.knows(chat.chatId)) {
                 book.remember(chatId = chat.chatId, kind = ChatKind.Personal, title = network.directory.nameOrNumber(peer), peerId = peer)
             }
+            if (peer != null && chat.ownerId.isNotBlank() && chat.ownerId != session.userId) rehome += chat.chatId to peer
         }
         if (added > 0) drainIncoming()
+        // Переписка прежней личности — под переписку новой с тем же собеседником: человек один.
+        if (rehome.isNotEmpty()) {
+            val move = io.tima.core.database.SqlChatRehome(environment.db)
+            for ((chatId, peer) in rehome) {
+                runCatching { move.rehome(chatId, io.tima.core.encryption.PersonalChatIdsOverKodium.personalChatId(session.userId, peer), peer, peer) }
+            }
+        }
         Journal.note(LogCode.DEVICE_TRUST, "история из копии забрана", "ключей групп" to keys, "сообщений" to added)
         return added
     }

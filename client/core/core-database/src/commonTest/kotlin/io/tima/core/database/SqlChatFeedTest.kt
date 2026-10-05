@@ -228,6 +228,25 @@ class SqlChatFeedTest {
         assertEquals("со телефона", line.text)
     }
 
+    /**
+     * **Сообщение прежней личности — своё** (М6, Р55): после перерегистрации её история
+     * перенесена в новую, и написанное человеком до перерегистрации остаётся его, справа.
+     * Прежняя запоминается в настройках аккаунта и читается лентой сразу.
+     */
+    @Test
+    fun входящее_от_прежней_личности_считается_своим() = runTest {
+        PriorIdentities(db).add(PRIOR)
+        val prior = PriorIdentities(db)
+        val withPrior = ObserveChat(SqlChatFeed(db, Codec, cipher, Me, prior::ids))
+        val machine = io.tima.core.outbox.Inbox(inbox, nowMs = { 2_000 })
+        machine.receive("chat-1", 42, bodyWithoutEnvelope)
+        machine.openNext { io.tima.core.outbox.OpenOutcome.Opened(Codec.encodeText("до перерегистрации"), PRIOR) }
+
+        assertTrue(withPrior.page("chat-1").first().single().outgoing, "написанное прежней личностью — моё")
+        assertTrue(!chat.page("chat-1").first().single().outgoing, "без списка прежних — чужое, как было")
+        assertEquals(setOf(PRIOR), prior.ids())
+    }
+
     @Test
     fun входящее_от_собеседника_остаётся_чужим() = runTest {
         val machine = io.tima.core.outbox.Inbox(inbox, nowMs = { 2_000 })
@@ -330,5 +349,6 @@ class SqlChatFeedTest {
         /** Кто я и кто собеседник: своё сообщение отличается от чужого отправителем. */
         const val Me = "u-я"
         const val PEER = "u-аня"
+        const val PRIOR = "u-я-прежняя"
     }
 }

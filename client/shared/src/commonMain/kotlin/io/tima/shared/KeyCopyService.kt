@@ -240,6 +240,56 @@ class KeyCopyService(
         return Rotation.DONE
     }
 
+    /** Исход переноса копии прежней личности. */
+    enum class Adopt { DONE, NO_COPY, WRONG_PHRASE, OFFLINE }
+
+    /**
+     * Перенести копию прежней личности [priorUserId] в свою (М6, Р55): перерегистрация завела
+     * новую личность, а человек тот же — его история с ним.
+     *
+     * Пара копии прежней выводится из её фразы [priorWords] (её вводили для перерегистрации
+     * минуты назад) и сверяется с опубликованным ключом. Всё, что в копии прежней, — ключи групп
+     * и ключи сообщений её личных переписок — разворачивается ею и заворачивается под ключ своей
+     * копии. Сервер пускает в копию прежней только личность того же аккаунта и принимает
+     * обёртки в её переписки. Сама копия прежней не трогается: исход перерегистрации может
+     * вернуть аккаунт ей.
+     */
+    suspend fun adoptPrior(priorWords: List<String>, priorUserId: String): Adopt {
+        val theirs = when (val c = api.current(owner = priorUserId)) {
+            is KeyCopyApi.Current.Published -> c.key
+            KeyCopyApi.Current.Missing -> return Adopt.NO_COPY
+            KeyCopyApi.Current.Unknown -> return Adopt.OFFLINE
+        }
+        val old = KeyCopy.fromWords(priorWords, theirs.epoch) ?: return Adopt.WRONG_PHRASE
+        if (!old.encryptionPublic.contentEquals(theirs.pub)) return Adopt.WRONG_PHRASE
+        val (epoch, copyPub) = pub() ?: return Adopt.OFFLINE
+
+        val groups = api.groupKeys(owner = priorUserId) ?: return Adopt.OFFLINE
+        val groupItems = groups.mapNotNull { item ->
+            val key = KeyCopy.openGroupKey(old, item.wrapped) ?: return@mapNotNull null
+            KeyCopy.wrapGroupKey(copyPub, key)?.let { KeyCopyApi.GroupItem(item.groupId, item.gkVersion, it) }
+        }
+        for (part in groupItems.chunked(KeyCopyApi.PAGE)) api.saveGroupKeys(epoch, part)
+
+        val chats = history.personalChats(allIdentities = true) ?: return Adopt.OFFLINE
+        var moved = 0
+        for (chat in chats.filter { it.ownerId == priorUserId }) {
+            var before = 0L
+            while (true) {
+                val page = api.page(chat.chatId, before, owner = priorUserId) ?: return Adopt.OFFLINE
+                if (page.isEmpty()) break
+                val items = page.mapNotNull { item ->
+                    KeyCopy.rewrapFor(item.envelope, item.wrapEphemeral, old, copyPub)?.let { item.messageId to (it.ephemeralPub + it.wrapped) }
+                }
+                if (api.saveMessages(chat.chatId, epoch, items) == KeyCopyApi.Saved.OK) moved += items.size
+                if (page.size < KeyCopyApi.PAGE) break
+                before = page.last().messageId
+            }
+        }
+        Journal.note(LogCode.DEVICE_TRUST, "копия прежней личности перенесена", "эпоха" to epoch, "сообщений" to moved, "ключей групп" to groupItems.size)
+        return Adopt.DONE
+    }
+
     /** Сообщение получено или отправлено — его ключ в копию (М2). Без ожидания. */
     fun feedMessage(chatId: String, stored: ByteArray) {
         scope.launch {
@@ -267,6 +317,31 @@ class KeyCopyService(
             }
         }
     }
+}
+
+/**
+ * Фраза прежней личности — от «Перерегистрации» до сборки новой (М6, Р55): новая переносит к
+ * себе копию прежней. Как [KeyCopyPhrase]: в памяти процесса, берётся один раз и сама забывается.
+ */
+object PriorCopyPhrase {
+    @kotlin.concurrent.Volatile
+    private var words: List<String>? = null
+
+    @kotlin.concurrent.Volatile
+    private var at = 0L
+
+    fun hold(words: List<String>) {
+        this.words = words.toList()
+        at = msNow()
+    }
+
+    fun take(): List<String>? {
+        val held = words
+        words = null
+        return held?.takeIf { msNow() - at <= KEEP_MS }
+    }
+
+    private const val KEEP_MS = 30 * 60 * 1000L
 }
 
 /**

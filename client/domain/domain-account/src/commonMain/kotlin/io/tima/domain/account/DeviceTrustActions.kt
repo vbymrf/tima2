@@ -115,7 +115,8 @@ sealed interface CodeSend {
 /** Чем кончилась подготовка перерегистрации. */
 sealed interface PrepareRereg {
     /** Можно входить тем же номером [phone] с доказательством [proof]. */
-    class Ready(val phone: String, val proof: ReregProof) : PrepareRereg
+    /** [words] — фраза прежней личности: новая переносит её копию к себе (М6). */
+    class Ready(val phone: String, val proof: ReregProof, val words: List<String> = emptyList()) : PrepareRereg
 
     class Failed(val step: TrustStep) : PrepareRereg
 }

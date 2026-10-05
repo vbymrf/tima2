@@ -595,6 +595,8 @@ private fun Inside(
         // номером новой личностью. Прежняя личность остаётся отложенной: она живёт до исхода (Р50).
         onRereg = { ready ->
             ReregHandoff.hold(ready)
+            // М6: фраза прежней — новой личности, чтобы перенести её копию к себе.
+            if (ready.words.isNotEmpty()) PriorCopyPhrase.hold(ready.words)
             signOut()
         },
         // Заведённый виртуальный аккаунт записывается и становится текущим — то есть
@@ -1562,6 +1564,16 @@ private fun App(
         // Фраза, введённая при входе или выданная новому аккаунту, — копии ключей: вывести пару,
         // опубликовать открытый ключ, на телефоне сохранить секрет (модель Matrix, М1, Р46).
         KeyCopyPhrase.take()?.let { words -> runCatching { assembled.keyCopy?.onPhrase(words) } }
+        // М6 (Р55): новая личность после перерегистрации — копию прежней в свою, прежнюю — в свои.
+        PriorCopyPhrase.take()?.let { oldWords ->
+            val prior = runCatching { network.directory.reregState() }.getOrNull()
+                ?.takeIf { it.active && it.role == "new" }?.oldUserId?.takeIf { it.isNotBlank() }
+            if (prior != null) {
+                environment.priorIdentities.add(prior)
+                val adopted = runCatching { assembled.keyCopy?.adoptPrior(oldWords, prior) }.getOrNull()
+                Journal.note(LogCode.DEVICE_TRUST, "перенос копии прежней личности", "исход" to (adopted?.name ?: "сбой"))
+            }
+        }
         val marks = runCatching { environment.settings.all().first() }.getOrNull() ?: return@LaunchedEffect
         if (marks[key] == null) {
             // Только на свежем устройстве — без единой личной переписки. На работающем сверка

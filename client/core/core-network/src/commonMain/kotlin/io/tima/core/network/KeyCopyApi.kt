@@ -39,10 +39,13 @@ class KeyCopyApi(
         data object Unknown : Current
     }
 
-    /** `GET /users/me/key-copy`. */
-    suspend fun current(): Current {
+    /**
+     * `GET /users/me/key-copy`. [owner] — копия другой личности своего аккаунта (М6, Р55): новая
+     * переносит к себе копию прежней; пусто — своя.
+     */
+    suspend fun current(owner: String = ""): Current {
         val response = try {
-            client.get(route.api("/api/v1/users/me/key-copy")) { header("Authorization", "Bearer ${token()}") }
+            client.get(route.api("/api/v1/users/me/key-copy" + ownerQuery(owner, first = true))) { header("Authorization", "Bearer ${token()}") }
         } catch (e: Throwable) {
             return Current.Unknown
         }
@@ -118,8 +121,8 @@ class KeyCopyApi(
     class PageItem(val messageId: Long, val envelope: ByteArray, val wrapEphemeral: ByteArray)
 
     /** `GET /chats/{id}/backup` — страница копии, от новых к старым; `null` — не получена. */
-    suspend fun page(chatId: String, before: Long, limit: Int = PAGE): List<PageItem>? {
-        val path = "/api/v1/chats/$chatId/backup?limit=$limit" + if (before > 0) "&before=$before" else ""
+    suspend fun page(chatId: String, before: Long, limit: Int = PAGE, owner: String = ""): List<PageItem>? {
+        val path = "/api/v1/chats/$chatId/backup?limit=$limit" + (if (before > 0) "&before=$before" else "") + ownerQuery(owner, first = false)
         val response = try {
             client.get(route.api(path)) { header("Authorization", "Bearer ${token()}") }
         } catch (e: Throwable) {
@@ -140,10 +143,10 @@ class KeyCopyApi(
     /** Версия ключа группы в копии. */
     class GroupItem(val groupId: String, val gkVersion: Int, val wrapped: ByteArray)
 
-    /** `GET /users/me/key-copy/groups`; `null` — не получено. */
-    suspend fun groupKeys(): List<GroupItem>? {
+    /** `GET /users/me/key-copy/groups`; `null` — не получено. [owner] — как у [current]. */
+    suspend fun groupKeys(owner: String = ""): List<GroupItem>? {
         val response = try {
-            client.get(route.api("/api/v1/users/me/key-copy/groups")) { header("Authorization", "Bearer ${token()}") }
+            client.get(route.api("/api/v1/users/me/key-copy/groups" + ownerQuery(owner, first = true))) { header("Authorization", "Bearer ${token()}") }
         } catch (e: Throwable) {
             return null
         }
@@ -158,6 +161,9 @@ class KeyCopyApi(
             )
         }
     }
+
+    private fun ownerQuery(owner: String, first: Boolean): String =
+        if (owner.isBlank()) "" else (if (first) "?" else "&") + "owner=$owner"
 
     companion object {
         /** Страница копии — как у истории. */

@@ -317,6 +317,7 @@ class UsersApi(
             windowTo = body.msOf("window_to") ?: 0,
             disputed = body.bool("disputed") == true,
             confirmed = body.bool("confirmed") == true,
+            oldUserId = body.str("old_user_id").orEmpty(),
         )
     }
 
@@ -395,4 +396,6 @@ class ReregState(
     val windowTo: Long = 0,
     val disputed: Boolean = false,
     val confirmed: Boolean = false,
+    /** Прежняя личность (С) — новой нужна, чтобы перенести её копию к себе (М6). */
+    val oldUserId: String = "",
 )

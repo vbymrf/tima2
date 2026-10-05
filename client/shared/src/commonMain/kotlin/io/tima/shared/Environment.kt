@@ -628,7 +628,10 @@ class Environment private constructor(
 
     val chatFacts: ChatFacts = SqlChatFacts(db)
 
-    val chats: ObserveChats = ObserveChats(SqlChatsFeed(db, TextBodyCodec, cipher, myUserId))
+    /** Прежние личности аккаунта (М6, Р55): их сообщения в перенесённой истории — свои. */
+    val priorIdentities: io.tima.core.database.PriorIdentities = io.tima.core.database.PriorIdentities(db)
+
+    val chats: ObserveChats = ObserveChats(SqlChatsFeed(db, TextBodyCodec, cipher, myUserId, priorIdentities::ids))
 
     /**
      * Прежняя книга: люди, с которыми уже есть переписка.
@@ -670,7 +673,7 @@ class Environment private constructor(
     val readState: io.tima.core.database.SqlReadState = io.tima.core.database.SqlReadState(db)
 
 
-    val chat: ObserveChat = ObserveChat(SqlChatFeed(db, TextBodyCodec, cipher, myUserId))
+    val chat: ObserveChat = ObserveChat(SqlChatFeed(db, TextBodyCodec, cipher, myUserId, priorIdentities::ids))
 
     /**
      * Местные записи в переписке: смена круга у сообщения и служебная строка о ней.

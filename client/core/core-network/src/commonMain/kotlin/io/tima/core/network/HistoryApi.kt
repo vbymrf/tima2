@@ -21,8 +21,11 @@ class HistoryApi(
     private val token: () -> String,
 ) {
 
-    /** Личная переписка: с кем и докуда. */
-    class ChatRef(val chatId: String, val peerId: String, val lastMessageId: Long)
+    /**
+     * Личная переписка: с кем и докуда. [ownerId] — чья она из личностей аккаунта (М6): пусто —
+     * своя, иначе прежней личности, чью копию новая перенесла к себе.
+     */
+    class ChatRef(val chatId: String, val peerId: String, val lastMessageId: Long, val ownerId: String = "")
 
     /** Сообщение истории: конверт с обёрткой под это устройство и эфемерал обёртки. */
     class Item(val messageId: Long, val envelope: ByteArray, val wrapEphemeral: ByteArray?)
@@ -35,9 +38,11 @@ class HistoryApi(
      *
      * @return `null` — сеть или отказ (в строгом режиме незаверенному списка не дают).
      */
-    suspend fun personalChats(): List<ChatRef>? {
+    suspend fun personalChats(allIdentities: Boolean = false): List<ChatRef>? {
+        // `all=1` — переписки всех личностей аккаунта с отметкой владельца (М6, Р55).
+        val path = "/api/v1/chats/personal" + if (allIdentities) "?all=1" else ""
         val response = try {
-            client.get(route.api("/api/v1/chats/personal")) { header("Authorization", "Bearer ${token()}") }
+            client.get(route.api(path)) { header("Authorization", "Bearer ${token()}") }
         } catch (e: Throwable) {
             return null
         }
@@ -49,6 +54,7 @@ class HistoryApi(
                 chatId = o.str("chat_id") ?: return@mapNotNull null,
                 peerId = o.str("peer_id") ?: return@mapNotNull null,
                 lastMessageId = o.long("last_message_id") ?: 0,
+                ownerId = o.str("owner_id").orEmpty(),
             )
         }
     }
