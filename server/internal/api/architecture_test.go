@@ -213,7 +213,9 @@ const (
 	// 245 → 246: личные переписки личности — история на новом устройстве (ИУ1,
 	// PersonalChatsOf).
 	// 246 → 247: запрет «Начать заново» на аккаунте (ДУ10, Р41, BanStartAnew).
-	storeMethodBudget = 247
+	// 247 → 251: копия ключей по модели Matrix (§3а, Р43): ключ копии и его публикация
+	// (KeyCopy, SetKeyCopy), ключи групп в копии (SaveGroupKeyCopies, ListGroupKeyCopies).
+	storeMethodBudget = 251
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
 )

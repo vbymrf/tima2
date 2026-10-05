@@ -27,9 +27,9 @@ type Me struct {
 // Me — профиль по user_id текущей личности.
 func (s *Store) Me(ctx context.Context, userID string) (Me, error) {
 	var (
-		phoneEnc, nameEnc []byte
+		phoneEnc, nameEnc   []byte
 		nick, setBy, avatar *string
-		banned            bool
+		banned              bool
 	)
 	err := s.pool.QueryRow(ctx, `
 		SELECT p.phone_enc, p.name_enc, p.nickname, p.nickname_set_by::text, p.avatar_media_id::text,

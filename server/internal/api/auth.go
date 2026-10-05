@@ -46,8 +46,8 @@ const (
 	//
 	// Десять — это девять неверных фраз за сутки при трёх заведённых передачах: для
 	// человека, которому фразу продиктовали, с запасом; для перебора — ничто.
-	rlSmsPerDay   = 10
-	rlWindowDay   = 24 * time.Hour
+	rlSmsPerDay = 10
+	rlWindowDay = 24 * time.Hour
 )
 
 func (s *Server) limSmsPerPhone() int64   { return orDefault(s.SMSPerPhone, rlSmsPerPhone) }

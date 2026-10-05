@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 
 	"tima/server/internal/auth"
 	timacrypto "tima/server/internal/crypto"
@@ -33,6 +34,8 @@ func chatBackupSave(deps chatsDeps) http.HandlerFunc {
 			return
 		}
 		var req struct {
+			// Эпоха ключа копии, под который завёрнуты обёртки (§3а): обязана быть действующей.
+			Epoch int `json:"epoch"`
 			Items []struct {
 				MessageID uint64 `json:"message_id"`
 				Wrapped   string `json:"wrapped"`
@@ -52,7 +55,16 @@ func chatBackupSave(deps chatsDeps) http.HandlerFunc {
 			}
 			items = append(items, store.MessageBackup{MessageID: it.MessageID, Wrapped: wrapped})
 		}
-		if err := deps.store.SaveMessageBackups(r.Context(), chatID, id.UserID, items); err != nil {
+		epoch, err := currentCopyEpoch(deps, r, id.UserID)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		if epoch == 0 || req.Epoch != epoch {
+			writeErr(w, http.StatusConflict, "stale_epoch", "копия под другой эпохой — перечитайте ключ копии")
+			return
+		}
+		if err := deps.store.SaveMessageBackups(r.Context(), chatID, id.UserID, epoch, items); err != nil {
 			log.Printf("chatBackupSave: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -78,20 +90,45 @@ func chatBackupList(deps chatsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "not_participant", "бэкап доступен только участнику чата")
 			return
 		}
-		items, err := deps.store.ListMessageBackups(r.Context(), chatID, id.UserID)
+		var before uint64
+		if v := r.URL.Query().Get("before"); v != "" {
+			before, _ = strconv.ParseUint(v, 10, 64)
+		}
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		epoch, err := currentCopyEpoch(deps, r, id.UserID)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		items, err := deps.store.ListMessageBackups(r.Context(), chatID, id.UserID, epoch, before, limit)
 		if err != nil {
 			log.Printf("chatBackupList: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
+		// Страница копии — с конвертами (М3): новое устройство открывает их тем же разбором,
+		// что живые. Обёртка копии — `эфемерал (32) || обёртка`, отдаётся раздельно, как у
+		// истории: конверт с адресатом `key-copy` и эфемерал рядом.
 		b64 := base64.RawURLEncoding
 		type item struct {
 			MessageID uint64 `json:"message_id"`
-			Wrapped   string `json:"wrapped"`
+			Envelope  string `json:"envelope"`
+			WrapEph   string `json:"wrap_ephemeral"`
 		}
 		out := make([]item, 0, len(items))
 		for _, it := range items {
-			out = append(out, item{MessageID: it.MessageID, Wrapped: b64.EncodeToString(it.Wrapped)})
+			if len(it.WrappedKeyForDevice) <= 32 {
+				continue
+			}
+			blob := it.WrappedKeyForDevice
+			it.WrappedKeyForDevice = blob[32:]
+			raw, err := storedEnvelope(it, keyCopyRecipient)
+			if err != nil {
+				log.Printf("chatBackupList: marshal: %v", err)
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка сериализации")
+				return
+			}
+			out = append(out, item{MessageID: it.MessageID, Envelope: b64.EncodeToString(raw), WrapEph: b64.EncodeToString(blob[:32])})
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": out})

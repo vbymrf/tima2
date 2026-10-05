@@ -118,6 +118,9 @@ func runWorker() {
 		Store:        st,
 		Retention:    envDays("TIMA_RETENTION_DAYS", 90),
 		AppealWindow: envDays("TIMA_APPEAL_WINDOW_DAYS", 30),
+		// Срок содержимого личных сообщений (Р45): пусто — вместе с депозитарием, как было;
+		// число — дней; forever — бессрочно.
+		MessageContentDays: messageContentDays(os.Getenv("TIMA_MESSAGE_RETENTION")),
 		// Спросить LiveKit, жива ли комната брошенного звонка. Ключей нет — уборщик
 		// такие строки не трогает вовсе: закрывать их по одному возрасту значило бы
 		// однажды оборвать живой разговор.
@@ -357,4 +360,20 @@ func startDebugServer(addr string) {
 			log.Printf("сервис отладки остановлен: %v", err)
 		}
 	}()
+}
+
+// messageContentDays — разбор TIMA_MESSAGE_RETENTION (Р45). Ошибка в настройке — отказ запуска:
+// молча подставленное «по умолчанию» стёрло бы то, что велели хранить.
+func messageContentDays(v string) int {
+	switch v {
+	case "", "escrow":
+		return store.ContentWithEscrow
+	case "forever":
+		return store.ContentForever
+	}
+	days, err := strconv.Atoi(v)
+	if err != nil || days < 1 {
+		log.Fatalf("TIMA_MESSAGE_RETENTION: число дней ≥ 1, forever или пусто, получено %q", v)
+	}
+	return days
 }

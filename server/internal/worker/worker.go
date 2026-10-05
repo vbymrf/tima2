@@ -27,6 +27,10 @@ type Worker struct {
 	// политики нет — то есть на базе, где 0030 не применена.
 	Retention    time.Duration // обёртки ключей и журнал событий: 90 дней (sync-offline.md §1)
 	AppealWindow time.Duration // wrapped_GK исключённых: 30 дней (crypto-protocol §4.2)
+	// MessageContentDays — срок содержимого личных сообщений (Р45): store.ContentWithEscrow —
+	// вместе с ключом депозитария (умолчание), N > 0 — дней от отправки, store.ContentForever —
+	// бессрочно. Поля депозитария уходят по сроку закона при любом значении.
+	MessageContentDays int
 }
 
 // wholeDays — длительность в целых сутках. Сроки задаются днями и в переменных
@@ -102,7 +106,7 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		// Метаданные строки остаются: у них отдельный срок — они не удаляются
 		// никогда (ПЛАН-РЕФАКТОРИНГА.md §0).
 		{"message_content", func() (int64, error) {
-			return w.Store.PurgeMessageContent(ctx, time.Now(), purgeBatch)
+			return w.Store.PurgeMessageContent(ctx, time.Now(), purgeBatch, w.MessageContentDays)
 		}},
 		// Временные аккаунты, молчавшие дольше срока, уходят в архив. Постоянных
 		// это не касается: они по неактивности не удаляются никогда.

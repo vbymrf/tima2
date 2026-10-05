@@ -207,14 +207,25 @@ func confirmIdentityClaim(deps identityCancelDeps) http.HandlerFunc {
 	}
 }
 
-// announceNewDevice — к личности добавилось устройство (Р48): всем её устройствам событие
-// `device.added`. Само новое устройство своё событие узнает по `device_id` и не покажет. Это
+// announceNewDevice — к личности добавилось устройство (Р48): остальным её устройствам событие
+// `device.added`. Это
 // не тревога о краже — обычно это смена телефона; человек видит событие и, если это не он,
 // отключает устройство в «Секретная фраза и устройства».
 func announceNewDevice(ctx context.Context, n *Notifier, userID, deviceID, platform string) {
 	if n == nil {
 		return
 	}
-	n.Users(ctx, []string{userID}, "device.added", map[string]any{"device_id": deviceID, "platform": platform})
+	devices, err := n.store.ListDevices(ctx, userID)
+	if err != nil {
+		log.Printf("новое устройство %s: список устройств: %v", deviceID, err)
+		return
+	}
+	payload := map[string]any{"device_id": deviceID, "platform": platform}
+	for _, d := range devices {
+		// Самому новому — нет: он знает, что он новый, а лишнее событие в его журнале
+		// сбивало бы счёт догона.
+		if d.DeviceID != deviceID {
+			n.Device(ctx, d.DeviceID, "device.added", payload)
+		}
+	}
 }
-

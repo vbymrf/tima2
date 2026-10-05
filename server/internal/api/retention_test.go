@@ -144,7 +144,7 @@ func TestPurgeGatedByEscrowKey(t *testing.T) {
 	}
 
 	// Ключ жив — содержимое обязано остаться: срок хранения ещё не истёк.
-	n, err := srv.Store.PurgeMessageContent(ctx, time.Now(), 100)
+	n, err := srv.Store.PurgeMessageContent(ctx, time.Now(), 100, store.ContentWithEscrow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestPurgeGatedByEscrowKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n, err = srv.Store.PurgeMessageContent(ctx, k.DestroyAt.Add(time.Hour), 100)
+	n, err = srv.Store.PurgeMessageContent(ctx, k.DestroyAt.Add(time.Hour), 100, store.ContentWithEscrow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestPurgeGatedByEscrowKey(t *testing.T) {
 func TestPurgeIsIdempotent(t *testing.T) {
 	_, srv := setup(t)
 	ctx := context.Background()
-	n, err := srv.Store.PurgeMessageContent(ctx, time.Now().Add(1000*24*time.Hour), 100)
+	n, err := srv.Store.PurgeMessageContent(ctx, time.Now().Add(1000*24*time.Hour), 100, store.ContentWithEscrow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,3 +189,64 @@ func TestPurgeIsIdempotent(t *testing.T) {
 }
 
 var _ store.AccountState = store.StatePermanent
+
+// Р45: срок содержимого — настройка сервера. «Бессрочно»: после уничтожения ключа депозитария
+// уходят только его поля (их срок — закон), содержимое остаётся. Срок в днях: содержимое уходит
+// по возрасту, даже при живом ключе депозитария.
+func TestPurgeContentBySetting(t *testing.T) {
+	ts, srv := setup(t)
+	withEnclave(t, srv)
+	ctx := context.Background()
+	sender := registerDevice(t, ts, "+79990050014")
+	recipient := registerDevice(t, ts, "+79990050015")
+	chatID := personalChatID(sender.userID, recipient.userID)
+	got, code := getEscrowKey(t, ts, sender.token, chatID)
+	if code != 200 {
+		t.Fatalf("/escrow/key: %d", code)
+	}
+	env := sealEnvelope(t, sender, []*device{sender, recipient}, 900011, []byte("хранить"))
+	env.Escrow.EscrowKeyVersion = got.Current.ID
+	if resp := post(t, ts, env, sender.token, "cccccccc-0000-0000-0000-000000000011"); resp.StatusCode != 201 {
+		defer resp.Body.Close()
+		t.Fatalf("отправка: %d", resp.StatusCode)
+	}
+	k, err := srv.Store.FindEscrowKey(ctx, "ru", got.Current.Epoch, chatID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := func() (int, int) {
+		items, err := srv.Store.ListMessages(ctx, chatID, recipient.id, 0, 10)
+		if err != nil || len(items) == 0 {
+			t.Fatalf("сообщение пропало: %v", err)
+		}
+		return len(items[0].EncryptedPayload), len(items[0].EscrowWrappedKey)
+	}
+
+	// Бессрочно: ключ депозитария уничтожен — его поля стёрты, содержимое на месте.
+	if _, err := srv.Store.PurgeMessageContent(ctx, k.DestroyAt.Add(time.Hour), 100, store.ContentForever); err != nil {
+		t.Fatal(err)
+	}
+	if body, escrow := payload(); body == 0 || escrow != 0 {
+		t.Fatalf("бессрочно: содержимое %d байт, депозитарий %d байт — ждали содержимое и пустой депозитарий", body, escrow)
+	}
+
+	// Срок в днях: сообщение моложе срока — остаётся; старше — содержимое стирается. «Сейчас»
+	// считается от времени самого сообщения: тестовый конверт несёт своё время отправки.
+	items, err := srv.Store.ListMessages(ctx, chatID, recipient.id, 0, 10)
+	if err != nil || len(items) == 0 {
+		t.Fatal("сообщение пропало")
+	}
+	sent := time.UnixMilli(items[0].CreatedAtUnixMs)
+	if _, err := srv.Store.PurgeMessageContent(ctx, sent.Add(24*time.Hour), 100, 30); err != nil {
+		t.Fatal(err)
+	}
+	if body, _ := payload(); body == 0 {
+		t.Fatal("сообщение моложе срока стёрлось")
+	}
+	if _, err := srv.Store.PurgeMessageContent(ctx, sent.Add(31*24*time.Hour), 100, 30); err != nil {
+		t.Fatal(err)
+	}
+	if body, _ := payload(); body != 0 {
+		t.Fatal("сообщение старше срока не стёрлось")
+	}
+}

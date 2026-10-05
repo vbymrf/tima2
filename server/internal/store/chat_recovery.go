@@ -14,15 +14,18 @@ type MessageBackup struct {
 	Wrapped   []byte
 }
 
-// SaveMessageBackups кладёт резервные обёртки владельца (ADR-0010 §этап 4).
-func (s *Store) SaveMessageBackups(ctx context.Context, chatID, ownerID string, items []MessageBackup) error {
+// SaveMessageBackups кладёт обёртки копии ключей владельца под эпоху копии (М2). Обёртка
+// прежней эпохи заменяется новой: так копия переезжает на новую пару (М5).
+func (s *Store) SaveMessageBackups(ctx context.Context, chatID, ownerID string, epoch int, items []MessageBackup) error {
 	batch := &pgx.Batch{}
 	for _, it := range items {
 		batch.Queue(`
-			INSERT INTO personal_message_backup (chat_id, message_id, owner_id, wrapped)
-			VALUES ($1, $2, $3, $4)
-			ON CONFLICT (chat_id, message_id, owner_id) DO NOTHING`,
-			chatID, it.MessageID, ownerID, it.Wrapped)
+			INSERT INTO personal_message_backup (chat_id, message_id, owner_id, wrapped, epoch)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (chat_id, message_id, owner_id) DO UPDATE
+			   SET wrapped = EXCLUDED.wrapped, epoch = EXCLUDED.epoch
+			 WHERE personal_message_backup.epoch < EXCLUDED.epoch`,
+			chatID, it.MessageID, ownerID, it.Wrapped, epoch)
 	}
 	br := s.pool.SendBatch(ctx, batch)
 	defer br.Close()
@@ -34,25 +37,135 @@ func (s *Store) SaveMessageBackups(ctx context.Context, chatID, ownerID string, 
 	return nil
 }
 
-// ListMessageBackups — резервные обёртки владельца для чата (новые → старые).
-func (s *Store) ListMessageBackups(ctx context.Context, chatID, ownerID string) ([]MessageBackup, error) {
+// ListMessageBackups — страница копии владельца в эпохе: сами сообщения (для конверта) и
+// обёртки копии (М3). Удалённые и стёртые по сроку не отдаются — открывать там нечего.
+func (s *Store) ListMessageBackups(ctx context.Context, chatID, ownerID string, epoch int, before uint64, limit int) ([]StoredMessage, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+	if before == 0 {
+		before = ^uint64(0) >> 1
+	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT b.message_id, b.wrapped
+		SELECT m.chat_id, m.message_id, m.client_msg_id, m.sender_id, m.sender_device, m.kind,
+		       m.created_at_unix_ms, m.reply_to, m.format_version, m.encrypted_payload,
+		       m.escrow_mlkem_ct, m.escrow_wrapped_key, m.escrow_key_version,
+		       m.sender_ephemeral_pub, COALESCE(m.ratchet_envelope, ''::bytea), m.signature, COALESCE(m.key_commitment, ''::bytea),
+		       b.wrapped
 		FROM personal_message_backup b
-		JOIN personal_messages m ON m.chat_id = b.chat_id AND m.message_id = b.message_id AND NOT m.deleted
-		WHERE b.chat_id = $1 AND b.owner_id = $2
-		ORDER BY b.message_id DESC`, chatID, ownerID)
+		JOIN personal_messages m ON m.chat_id = b.chat_id AND m.message_id = b.message_id
+		WHERE b.chat_id = $1 AND b.owner_id = $2 AND b.epoch = $3 AND b.message_id < $4
+		  AND NOT m.deleted AND octet_length(m.encrypted_payload) > 0
+		ORDER BY b.message_id DESC
+		LIMIT $5`, chatID, ownerID, epoch, before, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []MessageBackup
+	var out []StoredMessage
 	for rows.Next() {
-		var it MessageBackup
-		if err := rows.Scan(&it.MessageID, &it.Wrapped); err != nil {
+		var sm StoredMessage
+		if err := rows.Scan(
+			&sm.ChatID, &sm.MessageID, &sm.ClientMsgID, &sm.SenderID, &sm.SenderDevice, &sm.Kind,
+			&sm.CreatedAtUnixMs, &sm.ReplyTo, &sm.FormatVersion, &sm.EncryptedPayload,
+			&sm.EscrowMlkemCt, &sm.EscrowWrappedKey, &sm.EscrowKeyVersion,
+			&sm.SenderEphemeralPub, &sm.RatchetEnvelope, &sm.Signature, &sm.KeyCommitment,
+			&sm.WrappedKeyForDevice,
+		); err != nil {
 			return nil, err
 		}
-		out = append(out, it)
+		out = append(out, sm)
+	}
+	return out, rows.Err()
+}
+
+// KeyCopyKey — открытый ключ копии личности (М1).
+type KeyCopyKey struct {
+	Epoch int
+	Pub   []byte
+	Sig   []byte
+}
+
+// ErrKeyCopyMissing — личность ещё не публиковала ключ копии.
+var ErrKeyCopyMissing = errors.New("ключ копии не опубликован")
+
+// ErrKeyCopyStale — публикуемая эпоха не новее действующей.
+var ErrKeyCopyStale = errors.New("эпоха копии не новее действующей")
+
+// KeyCopy — открытый ключ копии личности.
+func (s *Store) KeyCopy(ctx context.Context, userID string) (KeyCopyKey, error) {
+	var k KeyCopyKey
+	err := s.pool.QueryRow(ctx, `SELECT epoch, pub, sig FROM key_copy WHERE user_id = $1`, userID).
+		Scan(&k.Epoch, &k.Pub, &k.Sig)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return KeyCopyKey{}, ErrKeyCopyMissing
+	}
+	return k, err
+}
+
+// SetKeyCopy публикует открытый ключ копии. Эпоха только растёт: прежнюю пару вернуть нельзя,
+// иначе после отключения украденного устройства (М5) копия снова пополнялась бы под ключ,
+// который оно унесло. Повтор той же эпохи с тем же ключом — не ошибка.
+func (s *Store) SetKeyCopy(ctx context.Context, userID string, k KeyCopyKey) error {
+	tag, err := s.pool.Exec(ctx, `
+		INSERT INTO key_copy (user_id, epoch, pub, sig) VALUES ($1, $2, $3, $4)
+		ON CONFLICT (user_id) DO UPDATE SET epoch = EXCLUDED.epoch, pub = EXCLUDED.pub,
+		       sig = EXCLUDED.sig, updated_at = now()
+		 WHERE key_copy.epoch < EXCLUDED.epoch
+		    OR (key_copy.epoch = EXCLUDED.epoch AND key_copy.pub = EXCLUDED.pub)`,
+		userID, k.Epoch, k.Pub, k.Sig)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrKeyCopyStale
+	}
+	return nil
+}
+
+// GroupKeyCopy — обёртка одной версии ключа группы в копии.
+type GroupKeyCopy struct {
+	GroupID   string
+	GKVersion int32
+	Wrapped   []byte
+}
+
+// SaveGroupKeyCopies кладёт версии ключей групп в копию владельца (М2).
+func (s *Store) SaveGroupKeyCopies(ctx context.Context, ownerID string, epoch int, items []GroupKeyCopy) error {
+	batch := &pgx.Batch{}
+	for _, it := range items {
+		batch.Queue(`
+			INSERT INTO group_key_copy (owner_id, group_id, gk_version, epoch, wrapped)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (owner_id, group_id, gk_version, epoch) DO NOTHING`,
+			ownerID, it.GroupID, it.GKVersion, epoch, it.Wrapped)
+	}
+	br := s.pool.SendBatch(ctx, batch)
+	defer br.Close()
+	for range items {
+		if _, err := br.Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ListGroupKeyCopies — все версии ключей групп в копии владельца в эпохе (М3).
+func (s *Store) ListGroupKeyCopies(ctx context.Context, ownerID string, epoch int) ([]GroupKeyCopy, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT group_id::text, gk_version, wrapped FROM group_key_copy
+		WHERE owner_id = $1 AND epoch = $2 ORDER BY group_id, gk_version`, ownerID, epoch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []GroupKeyCopy
+	for rows.Next() {
+		var g GroupKeyCopy
+		if err := rows.Scan(&g.GroupID, &g.GKVersion, &g.Wrapped); err != nil {
+			return nil, err
+		}
+		out = append(out, g)
 	}
 	return out, rows.Err()
 }

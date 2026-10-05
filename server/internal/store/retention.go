@@ -153,27 +153,70 @@ func (s *Store) PurgeableAccounts(ctx context.Context, now time.Time, limit int)
 	return out, rows.Err()
 }
 
-// PurgeMessageContent стирает содержимое сообщений, чьи ключи эпох уже уничтожены.
-// Строка остаётся: метаданные (кто, кому, когда, какого типа) не удаляются никогда
-// — это отдельная плоскость с отдельным сроком (план §0).
-func (s *Store) PurgeMessageContent(ctx context.Context, now time.Time, limit int) (int64, error) {
-	tag, err := s.pool.Exec(ctx, `
+// Сроки содержимого сообщений (Р45): по сроку депозитария, своим сроком или бессрочно.
+const (
+	ContentWithEscrow = 0  // содержимое уходит вместе с ключом эпохи депозитария (как было до Р45)
+	ContentForever    = -1 // содержимое не стирается вовсе
+)
+
+// PurgeMessageContent — стирание по срокам, порциями.
+//
+// Два срока и два стирания. Поля депозитария (`escrow_*`) уходят, когда анклав уничтожил ключ
+// эпохи: открыть их после этого нечем, и держать незачем — это срок закона. Само содержимое
+// (`encrypted_payload`) живёт по настройке сервера (Р45, `TIMA_MESSAGE_RETENTION`):
+// [ContentWithEscrow] — вместе с депозитарием, как было; число дней — своим сроком от
+// отправки; [ContentForever] — не стирается. Метаданные строки не стираются никогда.
+func (s *Store) PurgeMessageContent(ctx context.Context, now time.Time, limit int, contentDays int) (int64, error) {
+	escrow, err := s.pool.Exec(ctx, `
 		UPDATE personal_messages m
-		SET encrypted_payload = ''::bytea,
-		    escrow_wrapped_key = ''::bytea,
-		    escrow_mlkem_ct = ''::bytea,
-		    ratchet_envelope = NULL
+		SET escrow_wrapped_key = ''::bytea,
+		    escrow_mlkem_ct = ''::bytea
 		WHERE (m.chat_id, m.message_id) IN (
 		    SELECT m2.chat_id, m2.message_id
 		    FROM personal_messages m2
 		    JOIN escrow_keys k ON k.id = m2.escrow_key_version
-		    WHERE k.destroy_at <= $1 AND octet_length(m2.encrypted_payload) > 0
+		    WHERE k.destroy_at <= $1 AND octet_length(m2.escrow_wrapped_key) > 0
 		    LIMIT $2
 		)`, now, limit)
 	if err != nil {
 		return 0, err
 	}
-	return tag.RowsAffected(), nil
+	var content int64
+	switch {
+	case contentDays == ContentWithEscrow:
+		tag, err := s.pool.Exec(ctx, `
+			UPDATE personal_messages m
+			SET encrypted_payload = ''::bytea,
+			    ratchet_envelope = NULL
+			WHERE (m.chat_id, m.message_id) IN (
+			    SELECT m2.chat_id, m2.message_id
+			    FROM personal_messages m2
+			    JOIN escrow_keys k ON k.id = m2.escrow_key_version
+			    WHERE k.destroy_at <= $1 AND octet_length(m2.encrypted_payload) > 0
+			    LIMIT $2
+			)`, now, limit)
+		if err != nil {
+			return 0, err
+		}
+		content = tag.RowsAffected()
+	case contentDays > 0:
+		cutoff := now.Add(-time.Duration(contentDays) * 24 * time.Hour).UnixMilli()
+		tag, err := s.pool.Exec(ctx, `
+			UPDATE personal_messages m
+			SET encrypted_payload = ''::bytea,
+			    ratchet_envelope = NULL
+			WHERE (m.chat_id, m.message_id) IN (
+			    SELECT m2.chat_id, m2.message_id
+			    FROM personal_messages m2
+			    WHERE m2.created_at_unix_ms < $1 AND octet_length(m2.encrypted_payload) > 0
+			    LIMIT $2
+			)`, cutoff, limit)
+		if err != nil {
+			return 0, err
+		}
+		content = tag.RowsAffected()
+	}
+	return escrow.RowsAffected() + content, nil
 }
 
 // IdentityHistoryStart — момент самого раннего сообщения, отправленного под этой
