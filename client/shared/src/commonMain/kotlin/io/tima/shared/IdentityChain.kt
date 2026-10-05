@@ -59,9 +59,10 @@ class IdentityChain(
                         currentStatuses[current]?.reregistered == true -> w.peerReregistered
                         else -> w.identityChangedLine
                     }
-                    runCatching { environment.journal.note(newChat, "identity:$peer>$current", line, msNow()) }
-                    // Был спор — он кончился исходом: строка перед строкой о личности.
+                    // Был спор — он кончился исходом: «спор завершён» — первой, следом строка о личности
+                    // (§2б). Строка о личности — на миллисекунду позже, чтобы порядок не зависел от записи.
                     noteDispute(newChat, peer, null, marks)
+                    runCatching { environment.journal.note(newChat, "identity:$peer>$current", line, msNow() + 1) }
                     val what = if (st.cancelled || st.deleteAt != null) "новую личность собеседника отменили — переписка вернулась" else "собеседник сменил личность — переписка переехала"
                     Journal.note(LogCode.DEVICE_TRUST, what, "было" to peer.take(8), "стало" to current.take(8))
                 }
