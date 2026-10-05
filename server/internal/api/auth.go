@@ -351,6 +351,8 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 		return
 	}
+	// Новое своё устройство — событие остальным устройствам личности (Р48).
+	announceNewDevice(r.Context(), s.notifier(), userID, deviceID, platform)
 	// Свидетельство — после заведения: устройству нужен device_id. Сбой здесь не отменяет
 	// регистрацию: устройство заведено и годно, свидетельство телефон пришлёт снова
 	// («Устройства» → «Подтвердить фразой»).

@@ -1533,6 +1533,17 @@ object EnglishWords : Words {
         override val banCodeHint = "Code from SMS"
         override val banConfirm = "Forbid for good"
         override val bannedTitle = "“Start over” is forbidden"
+        override val deviceAddedTitle = "A new device was added"
+        override fun deviceAddedText(platform: String): String {
+            val what = when (platform) {
+                "android" -> "an Android phone"
+                "ios" -> "an iPhone"
+                "desktop" -> "a computer"
+                else -> "a device"
+            }
+            return "Someone connected $what to your account. Usually that is just a new phone. If it was not you, disconnect it in “Recovery phrase and devices”."
+        }
+        override val deviceAddedOpen = "Open devices"
         override val bannedAbout = "You can sign in to the account only with the secret phrase. The ban cannot be lifted."
         override val banDone = "The ban is set"
         override val startAnewBanned = "The owner has forbidden “Start over” on this account. You can sign in only with the secret phrase."

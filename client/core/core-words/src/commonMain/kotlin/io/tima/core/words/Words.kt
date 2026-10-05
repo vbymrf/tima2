@@ -1644,6 +1644,10 @@ interface AuthWords {
     val banCodeHint: String
     val banConfirm: String
     val bannedTitle: String
+    /** Р48: к аккаунту добавлено новое устройство — событие в подокне. */
+    val deviceAddedTitle: String
+    fun deviceAddedText(platform: String): String
+    val deviceAddedOpen: String
     val bannedAbout: String
     val banDone: String
     /** Экран входа: владелец закрыл «Начать заново». */
@@ -3559,6 +3563,17 @@ object RussianWords : Words {
         override val banCodeHint = "Код из SMS"
         override val banConfirm = "Запретить навсегда"
         override val bannedTitle = "«Начать заново» запрещено"
+        override val deviceAddedTitle = "Добавлено новое устройство"
+        override fun deviceAddedText(platform: String): String {
+            val what = when (platform) {
+                "android" -> "телефон Android"
+                "ios" -> "iPhone"
+                "desktop" -> "компьютер"
+                else -> "устройство"
+            }
+            return "К вашему аккаунту подключили $what. Обычно это смена телефона. Если это не вы — отключите его в «Секретная фраза и устройства»."
+        }
+        override val deviceAddedOpen = "Открыть устройства"
         override val bannedAbout = "Войти в аккаунт можно только по секретной фразе. Снять запрет нельзя."
         override val banDone = "Запрет поставлен"
         override val startAnewBanned = "Владелец запретил «Начать заново» на этом аккаунте. Войти можно только по секретной фразе."

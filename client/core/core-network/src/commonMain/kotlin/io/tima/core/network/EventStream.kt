@@ -210,6 +210,7 @@ class EventStream(
                         is EventStreamProtocol.Decision.GroupCall,
                         is EventStreamProtocol.Decision.GroupDeleted,
                         is EventStreamProtocol.Decision.IdentityReplaced,
+                        is EventStreamProtocol.Decision.DeviceAdded,
                         is EventStreamProtocol.Decision.IdentityClaim,
                         is EventStreamProtocol.Decision.HistoryReady,
                         -> {
@@ -223,6 +224,7 @@ class EventStream(
                                 is EventStreamProtocol.Decision.GroupCall -> decision.eventId
                                 is EventStreamProtocol.Decision.GroupDeleted -> decision.eventId
                                 is EventStreamProtocol.Decision.IdentityReplaced -> decision.eventId
+                                is EventStreamProtocol.Decision.DeviceAdded -> decision.eventId
                                 is EventStreamProtocol.Decision.IdentityClaim -> decision.eventId
                                 is EventStreamProtocol.Decision.HistoryReady -> decision.eventId
                                 else -> null

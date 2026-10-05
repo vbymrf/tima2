@@ -42,6 +42,15 @@ class EventStreamProtocolTest {
         assertTrue(broken is EventStreamProtocol.Decision.Skip, "без переписки — пропуск с подтверждением")
     }
 
+    @Test
+    fun новое_своё_устройство_разбирается() {
+        // Р48: событие «добавлено новое устройство» — всем устройствам личности.
+        val added = protocol.decide("""{"event":"device.added","event_id":14,"device_id":"d-новое","platform":"android"}""")
+        assertEquals(EventStreamProtocol.Decision.DeviceAdded("d-новое", "android", 14), added)
+        val broken = protocol.decide("""{"event":"device.added","event_id":15}""")
+        assertTrue(broken is EventStreamProtocol.Decision.Skip, "без устройства — пропуск с подтверждением")
+    }
+
     // ── кадры, которые мы отправляем ─────────────────────────────────────────
 
     @Test

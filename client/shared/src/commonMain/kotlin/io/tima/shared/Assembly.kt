@@ -107,6 +107,8 @@ class Assembled(
     val identityReplaced: MutableStateFlow<Boolean> = MutableStateFlow(false),
     /** Группы, где ждёт заявка новой личности (ДУ6). */
     val identityClaims: MutableStateFlow<Set<String>> = MutableStateFlow(emptySet()),
+    /** К личности добавилось новое устройство — его платформа; `null` — события нет (Р48). */
+    val deviceAdded: MutableStateFlow<String?> = MutableStateFlow(null),
     /** Переписки, чью историю передало своё устройство (ИУ3), — забрать. */
     val historyReady: MutableSharedFlow<String> = MutableSharedFlow(extraBufferCapacity = 64),
 )
@@ -248,6 +250,7 @@ fun buildAssembled(
         val callOwners = MutableStateFlow<Map<String, String>>(emptyMap())
         val identityReplaced = MutableStateFlow(false)
         val identityClaims = MutableStateFlow<Set<String>>(emptySet())
+        val deviceAdded = MutableStateFlow<String?>(null)
         val historyReady = MutableSharedFlow<String>(extraBufferCapacity = 64)
 
         // ── УВЕДОМЛЕНИЯ СОБИРАЮТСЯ ЗДЕСЬ, А НЕ В ОКНЕ (У5) ──────────────────
@@ -359,6 +362,7 @@ fun buildAssembled(
                 onCallGroups = { callGroups.value = it },
                 onCallOwners = { callOwners.value = it },
                 onIdentityReplaced = { identityReplaced.value = true },
+                onDeviceAdded = { deviceAdded.value = it },
                 onIdentityClaim = { g -> identityClaims.value = identityClaims.value + g },
                 onHistoryReady = { chat -> historyReady.tryEmit(chat) },
                 onStamp = { senderStamps.tryEmit(it) },
@@ -377,6 +381,7 @@ fun buildAssembled(
             callOwners = callOwners,
             identityReplaced = identityReplaced,
             identityClaims = identityClaims,
+            deviceAdded = deviceAdded,
             historyReady = historyReady,
         )
     }

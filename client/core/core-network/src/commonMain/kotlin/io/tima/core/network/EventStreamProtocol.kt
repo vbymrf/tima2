@@ -261,6 +261,9 @@ class EventStreamProtocol {
         /** С номера аккаунта начали заново — новая личность [newUserId] (ДУ6). */
         data class IdentityReplaced(val newUserId: String, val eventId: Long?) : Decision
 
+        /** К своей личности добавилось устройство [deviceId] (Р48). */
+        data class DeviceAdded(val deviceId: String, val platform: String, val eventId: Long?) : Decision
+
         /** Заявка новой личности [userId] в группу [groupId] (ДУ6, Р9). */
         data class IdentityClaim(val groupId: String, val userId: String, val eventId: Long?) : Decision
 
@@ -598,6 +601,11 @@ class EventStreamProtocol {
 
             // С номера этого аккаунта начали заново (ДУ6): «это вы? отменить».
             "identity.replaced" -> Decision.IdentityReplaced(json.string("new_user_id").orEmpty(), eventId)
+
+            // Новое своё устройство (Р48): событие в подокне — «если это не вы, отключите».
+            "device.added" ->
+                json.string("device_id")?.let { Decision.DeviceAdded(it, json.string("platform").orEmpty(), eventId) }
+                    ?: Decision.Skip("device.added без device_id", eventId)
 
             // Новая личность просит место прежней в группе — решать владельцу или модератору.
             "group.identity_claim" ->

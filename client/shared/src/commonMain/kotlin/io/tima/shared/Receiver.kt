@@ -116,6 +116,8 @@ class Receiver(
     private val onCallOwners: (Map<String, String>) -> Unit = {},
     /** С номера начали заново (ДУ6) — событие «это вы? отменить». */
     private val onIdentityReplaced: () -> Unit = {},
+    /** К своей личности добавилось другое устройство — платформа (Р48). */
+    private val onDeviceAdded: (String) -> Unit = {},
     /** Заявка новой личности в группу — решать владельцу или модератору (ДУ6). */
     private val onIdentityClaim: (String) -> Unit = {},
     /**
@@ -277,6 +279,13 @@ class Receiver(
             is EventStreamProtocol.Decision.IdentityReplaced -> {
                 Journal.trouble(LogCode.DEVICE_TRUST, "с номера аккаунта начали заново", "новая" to decision.newUserId.take(8))
                 onIdentityReplaced()
+            }
+            is EventStreamProtocol.Decision.DeviceAdded -> {
+                // Своё событие о себе не показываем: новое устройство и так знает, что оно новое.
+                if (decision.deviceId != session.deviceId) {
+                    Journal.note(LogCode.DEVICE_TRUST, "к аккаунту добавлено устройство", "устройство" to decision.deviceId.take(8), "платформа" to decision.platform)
+                    onDeviceAdded(decision.platform)
+                }
             }
             is EventStreamProtocol.Decision.IdentityClaim -> {
                 Journal.note(LogCode.DEVICE_TRUST, "заявка новой личности в группу", "группа" to decision.groupId.take(8))

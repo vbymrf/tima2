@@ -202,6 +202,8 @@ func linkConfirm(deps devicesDeps) http.HandlerFunc {
 		}
 		log.Printf("linkConfirm: устройство %s подтвердило %q (%s) для %s",
 			id.DeviceID, ls.DeviceName, newDeviceID, id.UserID)
+		// Новое своё устройство — событие всем устройствам личности (Р48).
+		announceNewDevice(ctx, deps.notifier, id.UserID, newDeviceID, "")
 		if certSig != nil {
 			if err := deps.store.SetDeviceCertificate(ctx, id.UserID, newDeviceID, certByAsk, certAskID, certSig); err != nil {
 				log.Printf("доверие: свидетельство привязанного %s не записано: %v", newDeviceID, err)

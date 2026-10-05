@@ -1580,6 +1580,7 @@ private fun App(
         }
     }
     val identityReplaced by assembled.identityReplaced.collectAsState()
+    val deviceAdded by assembled.deviceAdded.collectAsState()
     val identityClaims by assembled.identityClaims.collectAsState()
     LaunchedEffect(assembled.session.userId) {
         val me = assembled.session.userId
@@ -2130,6 +2131,8 @@ private fun App(
         // ДУ6: с номера начали заново — важнее всего; заявки новых личностей в группы.
         EventKind.IdentityReplaced to if (identityReplaced) Presence.Yes else Presence.No,
         EventKind.IdentityClaim to if (identityClaims.isNotEmpty()) Presence.Yes else Presence.No,
+        // Р48: к аккаунту добавлено новое устройство.
+        EventKind.DeviceAdded to if (deviceAdded != null) Presence.Yes else Presence.No,
     )
     var eventMemory by remember { mutableStateOf(EventMemory()) }
     // Показывать — на главном экране и не во время звонка: окно поверх разговора его бы
@@ -2165,6 +2168,7 @@ private fun App(
         fun lineTitle(kind: EventKind): String = when (kind) {
             EventKind.IdentityReplaced -> authWords.replacedTitle
             EventKind.IdentityClaim -> socialWords.identityClaims
+            EventKind.DeviceAdded -> authWords.deviceAddedTitle
             EventKind.Update -> upd.importantOut.takeIf { importantOffer != null } ?: upd.broken
             EventKind.Notices -> warn.eventsLineNotices
             EventKind.Calls -> warn.eventsLineCalls
@@ -2197,6 +2201,24 @@ private fun App(
                     },
                     NoticeAction(Tima.words.auth.replacedItsMe, ButtonKind.Quiet) {
                         close(EventKind.IdentityReplaced, "Это я")
+                    },
+                ),
+            )
+            // Р48: новое своё устройство. Обычно это смена телефона; не вы — отключить.
+            EventKind.DeviceAdded -> NoticeEntry(
+                notice = io.tima.feature.shell.Notice(
+                    title = Tima.words.auth.deviceAddedTitle,
+                    text = Tima.words.auth.deviceAddedText(deviceAdded.orEmpty()),
+                ),
+                actions = listOf(
+                    NoticeAction(Tima.words.auth.deviceAddedOpen) {
+                        close(EventKind.DeviceAdded, "Открыть устройства")
+                        assembled.deviceAdded.value = null
+                        where = Where.Settings(SettingsItem.DEVICES)
+                    },
+                    NoticeAction(warn.eventsGotIt, ButtonKind.Quiet) {
+                        close(EventKind.DeviceAdded, "Понятно")
+                        assembled.deviceAdded.value = null
                     },
                 ),
             )
