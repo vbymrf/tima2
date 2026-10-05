@@ -161,6 +161,15 @@ class AuthApiTest {
     }
 
     @Test
+    fun отказ_занятого_номера_говорит_можно_ли_начать_заново() = runTest {
+        // ДУ10: владелец мог закрыть «Начать заново». Молчание старого сервера — «можно».
+        val closed = api(json("""{"code":"identity_mismatch","start_anew":false}""", HttpStatusCode.Forbidden))
+        assertEquals(RegisterResult.IdentityMismatch(startAnew = false), closed.register("rt-1", key, key))
+        val silent = api(json("""{"code":"identity_mismatch"}""", HttpStatusCode.Forbidden))
+        assertEquals(RegisterResult.IdentityMismatch(startAnew = true), silent.register("rt-1", key, key))
+    }
+
+    @Test
     fun фраза_прежней_личности_это_не_чужая_фраза() = runTest {
         // Р38: после «Начать заново» фраза прежней личности не подходит, но и не «неверна» —
         // человеку надо сказать, как вернуть свою, а не «перепроверьте фразу».
@@ -177,7 +186,7 @@ class AuthApiTest {
             """{"code":"identity_mismatch","message":"телефон связан с другой личностью"}""",
             HttpStatusCode.Forbidden,
         ))
-        assertEquals(RegisterResult.IdentityMismatch, withForeign.register("rt-1", key, key))
+        assertEquals(RegisterResult.IdentityMismatch(), withForeign.register("rt-1", key, key))
 
         val withExpired = api(json(
             """{"code":"bad_token","message":"registration_token просрочен"}""",

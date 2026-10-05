@@ -83,6 +83,10 @@ fun DeviceScreen(
     onCancelNewIdentity: ((String) -> Unit)? = null,
     /** Показать код заверения этого устройства (Р32); `null` — кнопки нет. */
     onShowCertifyCode: (() -> Unit)? = null,
+    /** Запрет «Начать заново» (ДУ10): отправить SMS; `null` — панели нет. */
+    onSendBanCode: (() -> Unit)? = null,
+    /** Запрет «Начать заново»: фраза и код из SMS. */
+    onBanStartAnew: ((String, String) -> Unit)? = null,
 ) = Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
     val words = Tima.words.auth
     var signingOut by rememberSaveable { mutableStateOf(false) }
@@ -141,6 +145,11 @@ fun DeviceScreen(
                 io.tima.core.ui.QrCodeImage(code, Modifier.fillMaxWidth().padding(TimaSpacing.about4))
             }
         }
+    }
+    // Запрет «Начать заново» (ДУ10, Р41): до запрета — кнопка, после — что закрыто навсегда.
+    val banned = state.startAnewBanned
+    if (banned != null && onSendBanCode != null && onBanStartAnew != null && !signingOut) {
+        StartAnewBan(banned, codeSent = state.banCode != null, onSendBanCode, onBanStartAnew, state.trusting)
     }
     state.trustNotice?.let {
         Secondary(it, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
@@ -356,6 +365,54 @@ private fun CancelNewIdentity(onCancel: (String) -> Unit, busy: Boolean) = Colum
             kind = ButtonKind.Dangerous,
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+/**
+ * Запрет «Начать заново» (ДУ10, Р41). Два шага: SMS на номер аккаунта, потом фраза и код.
+ * Поставленный запрет не снимается — после него здесь только слова о том, что закрыто.
+ */
+@Composable
+private fun StartAnewBan(
+    banned: Boolean,
+    codeSent: Boolean,
+    onSendCode: () -> Unit,
+    onBan: (String, String) -> Unit,
+    busy: Boolean,
+) = Column(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+) {
+    val words = Tima.words.auth
+    if (banned) {
+        Caption(words.bannedTitle, weight = FontWeight.ExtraBold)
+        Secondary(words.bannedAbout)
+        return@Column
+    }
+    var open by rememberSaveable { mutableStateOf(false) }
+    var phrase by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    Caption(words.banTitle, weight = FontWeight.ExtraBold)
+    Secondary(words.banAbout)
+    when {
+        !open -> Button(label = words.banTitle, onClick = { open = true }, kind = ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
+        !codeSent -> Button(label = words.banSendCode, onClick = { if (!busy) onSendCode() }, modifier = Modifier.fillMaxWidth())
+        else -> {
+            Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, modifier = Modifier.fillMaxWidth())
+            Field(value = code, onChange = { code = it }, hint = words.banCodeHint, modifier = Modifier.fillMaxWidth())
+            Button(
+                label = words.banConfirm,
+                onClick = {
+                    if (!busy && phrase.isNotBlank() && code.isNotBlank()) {
+                        onBan(phrase, code)
+                        phrase = ""
+                        code = ""
+                    }
+                },
+                kind = ButtonKind.Dangerous,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 

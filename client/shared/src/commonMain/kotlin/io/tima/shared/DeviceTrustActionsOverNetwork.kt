@@ -29,6 +29,8 @@ class DeviceTrustActionsOverNetwork(
      * передаются ключи групп и история переписок (ИУ2).
      */
     private val onCertified: (String, ByteArray) -> Unit = { _, _ -> },
+    /** SMS на номер аккаунта — для запрета «Начать заново» (ДУ10). */
+    private val sms: io.tima.core.network.AuthApi? = null,
 ) : DeviceTrustActions {
 
     override fun holdsKey(): Boolean = phone && asks.get() != null
@@ -118,6 +120,37 @@ class DeviceTrustActionsOverNetwork(
                 "bad_signature" -> TrustStep.WrongPhrase
                 "device_unproven" -> TrustStep.NoKey
                 "nothing_to_cancel" -> TrustStep.NothingToCancel
+                else -> TrustStep.Refused(answer.code)
+            }
+        }
+    }
+
+    override suspend fun startAnewBanned(): Boolean? = users?.startAnewState()?.banned
+
+    override suspend fun sendBanCode(): io.tima.domain.account.BanCode? {
+        val phone = users?.startAnewState()?.phone?.takeIf { it.isNotBlank() } ?: return null
+        val sent = sms?.requestSms(phone) as? io.tima.core.network.SmsRequestResult.Sent ?: return null
+        return io.tima.domain.account.BanCode(sent.requestId, sent.devCode)
+    }
+
+    override suspend fun banStartAnew(words: List<String>, requestId: String, code: String): TrustStep {
+        val api = users ?: return TrustStep.Refused("нет сети пользователей")
+        val auth = sms ?: return TrustStep.Refused("нет SMS")
+        val token = when (val v = auth.verifySms(requestId, code)) {
+            is io.tima.core.network.SmsVerifyResult.Verified -> v.registrationToken
+            io.tima.core.network.SmsVerifyResult.BadCode -> return TrustStep.WrongCode
+            is io.tima.core.network.SmsVerifyResult.NoConnection -> return TrustStep.Offline(v.link.retryDelayMs)
+            is io.tima.core.network.SmsVerifyResult.Refused -> return TrustStep.Refused(v.code)
+        }
+        val challenge = api.identityChallenge() ?: return TrustStep.Offline(0)
+        val signature = io.tima.core.encryption.IdentitySignerOverKodium.sign(words, challenge.encodeToByteArray())
+            ?: return TrustStep.WrongPhrase
+        return when (val answer = api.banStartAnew(token, challenge, signature)) {
+            TrustCallResult.Done -> TrustStep.Done
+            is TrustCallResult.Offline -> TrustStep.Offline(answer.link.retryDelayMs)
+            is TrustCallResult.Refused -> when (answer.code) {
+                "bad_signature" -> TrustStep.WrongPhrase
+                "bad_token" -> TrustStep.WrongCode
                 else -> TrustStep.Refused(answer.code)
             }
         }

@@ -1525,6 +1525,17 @@ object SpanishWords : Words {
         override val replacedCancelSend = "Cancelar"
         override val replacedItsMe = "Fui yo"
         override val replacedCancelled = "La identidad nueva está cancelada: sus dispositivos se desconectaron, usted vuelve a ser el principal"
+        override val banTitle = "Prohibir «Empezar de cero»"
+        override val banAbout =
+            "Después nadie podrá entrar en la cuenta sin la frase secreta, ni siquiera con la SIM de este número. " +
+                "La prohibición es para siempre: no se puede quitar."
+        override val banSendCode = "Recibir código"
+        override val banCodeHint = "Código del SMS"
+        override val banConfirm = "Prohibir para siempre"
+        override val bannedTitle = "«Empezar de cero» está prohibido"
+        override val bannedAbout = "Solo se puede entrar en la cuenta con la frase secreta. La prohibición no se puede quitar."
+        override val banDone = "La prohibición está puesta"
+        override val startAnewBanned = "El propietario prohibió «Empezar de cero» en esta cuenta. Solo se puede entrar con la frase secreta."
         override val nothingToCancel = "No hay nada que cancelar"
         override val showCertifyCode = "Mostrar código de verificación"
         override val identityChangedLine = "Su contacto cambió la clave de identidad: empezó de nuevo con el mismo número. Los mensajes anteriores siguen con usted, no con él. Si duda de que sea él, pregúntele."

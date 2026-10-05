@@ -52,6 +52,47 @@ class DevicesStore(
                 val r = runCatching { actions.replaced() }.getOrDefault(false)
                 _state.value = _state.value.copy(replaced = r)
             }
+            // Закрыто ли «Начать заново» (ДУ10) — от этого зависит, что показать: кнопку или запрет.
+            scope.launch {
+                val banned = runCatching { actions.startAnewBanned() }.getOrNull()
+                _state.value = _state.value.copy(startAnewBanned = banned)
+            }
+        }
+    }
+
+    /** Запрет «Начать заново»: сначала SMS на номер аккаунта (ДУ10). */
+    fun sendBanCode() {
+        val actions = trust ?: return
+        if (_state.value.trusting) return
+        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        scope.launch {
+            val sent = runCatching { actions.sendBanCode() }.getOrNull()
+            _state.value = _state.value.copy(
+                trusting = false,
+                banCode = sent,
+                trustNotice = if (sent == null) words().auth.trustFailed(words().auth.tryAgain) else sent.devCode?.let { words().auth.standSentCode(it) },
+            )
+        }
+    }
+
+    /**
+     * Закрыть «Начать заново» навсегда (Р41): фраза и код из SMS. Слова не хранятся — уходят в
+     * подпись и дальше не живут.
+     */
+    fun banStartAnew(phrase: String, code: String) {
+        val actions = trust ?: return
+        val sent = _state.value.banCode ?: return
+        if (_state.value.trusting) return
+        val words = phrase.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        scope.launch {
+            val step = runCatching { actions.banStartAnew(words, sent.requestId, code.trim()) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
+            _state.value = _state.value.copy(
+                trusting = false,
+                trustNotice = if (step == TrustStep.Done) words().auth.banDone else notice(step),
+                startAnewBanned = if (step == TrustStep.Done) true else _state.value.startAnewBanned,
+                banCode = if (step == TrustStep.Done) null else sent,
+            )
         }
     }
 
@@ -160,6 +201,7 @@ class DevicesStore(
         TrustStep.WrongPhrase -> words().auth.wrongPhrase
         TrustStep.NoKey -> words().auth.trustNoKey
         TrustStep.NothingToCancel -> words().auth.nothingToCancel
+        TrustStep.WrongCode -> words().auth.wrongCode
         is TrustStep.Offline -> words().auth.trustFailed(words().auth.tryAgain)
         is TrustStep.Refused -> words().auth.trustFailed(step.reason)
     }
@@ -228,4 +270,8 @@ data class DevicesState(
     val replaced: Boolean = false,
     /** Код заверения этого устройства для показа QR (Р32); `null` — не показываем. */
     val certifyCode: String? = null,
+    /** «Начать заново» закрыто на аккаунте (ДУ10); `null` — не узнали, панели нет. */
+    val startAnewBanned: Boolean? = null,
+    /** Код запрета отправлен — ждём его и фразу. */
+    val banCode: io.tima.domain.account.BanCode? = null,
 )

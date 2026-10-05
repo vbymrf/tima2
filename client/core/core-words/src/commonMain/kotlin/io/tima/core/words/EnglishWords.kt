@@ -1525,6 +1525,17 @@ object EnglishWords : Words {
         override val replacedCancelSend = "Cancel"
         override val replacedItsMe = "It was me"
         override val replacedCancelled = "The new identity is cancelled: its devices are disconnected, you are the main one again"
+        override val banTitle = "Forbid “Start over”"
+        override val banAbout =
+            "After this, nobody can sign in to the account without the secret phrase — not even with this number's SIM card. " +
+                "The ban is permanent: it cannot be lifted."
+        override val banSendCode = "Get code"
+        override val banCodeHint = "Code from SMS"
+        override val banConfirm = "Forbid for good"
+        override val bannedTitle = "“Start over” is forbidden"
+        override val bannedAbout = "You can sign in to the account only with the secret phrase. The ban cannot be lifted."
+        override val banDone = "The ban is set"
+        override val startAnewBanned = "The owner has forbidden “Start over” on this account. You can sign in only with the secret phrase."
         override val nothingToCancel = "Nothing to cancel"
         override val showCertifyCode = "Show verification code"
         override val identityChangedLine = "Your contact changed their identity key: started over with the same number. Earlier messages stay with you, not with them. If in doubt that it is them, ask."

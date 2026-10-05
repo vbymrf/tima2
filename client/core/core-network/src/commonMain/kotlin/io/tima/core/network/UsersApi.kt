@@ -281,7 +281,43 @@ class UsersApi(
         return TrustCallResult.Refused(response.status.value, code)
     }
 
+    /**
+     * Запрет «Начать заново» на своём аккаунте (ДУ10, Р41) и номер аккаунта — на него идёт
+     * SMS при постановке запрета. `null` — не узнали.
+     */
+    suspend fun startAnewState(): StartAnewState? {
+        val response = try {
+            client.get(route.api("/api/v1/users/me")) { header("Authorization", "Bearer ${token()}") }
+        } catch (e: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        val body = response.jsonBody() ?: return null
+        return StartAnewState(phone = body.str("phone").orEmpty(), banned = body.bool("start_anew_banned") == true)
+    }
+
+    /**
+     * `POST /users/me/start-anew-ban` — закрыть «Начать заново» навсегда: SMS на номер
+     * аккаунта (`registrationToken`) и подпись вызова ключом личности из фразы.
+     */
+    suspend fun banStartAnew(registrationToken: String, challenge: String, signature: ByteArray): TrustCallResult {
+        val response = try {
+            client.post(route.api("/api/v1/users/me/start-anew-ban")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody("""{"registration_token":"$registrationToken","challenge_token":"$challenge","signature":"${encodeBase64Url(signature)}"}""")
+            }
+        } catch (e: Throwable) {
+            return TrustCallResult.Offline(classifyFailure(e))
+        }
+        if (response.status.value in 200..299) return TrustCallResult.Done
+        return TrustCallResult.Refused(response.status.value, response.jsonBody().codeOf())
+    }
+
 }
+
+/** Запрет «Начать заново» на аккаунте (ДУ10) и номер, на который идёт SMS. */
+class StartAnewState(val phone: String, val banned: Boolean)
 
 private fun kotlinx.serialization.json.JsonArrayBuilder.add(value: String) {
     add(kotlinx.serialization.json.JsonPrimitive(value))

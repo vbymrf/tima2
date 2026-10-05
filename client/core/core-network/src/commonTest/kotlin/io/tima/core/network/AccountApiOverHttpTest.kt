@@ -66,7 +66,7 @@ class AccountApiOverHttpTest {
     fun чужая_личность_и_просроченный_токен_не_сливаются_в_отказ() = runTest {
         val foreign = port(json("""{"code":"identity_mismatch"}""", HttpStatusCode.Forbidden))
             .createDevice("rt", key, key, null, "desktop")
-        assertEquals(DeviceCreateStep.IdentityMismatch, foreign)
+        assertEquals(DeviceCreateStep.IdentityMismatch(), foreign)
 
         val expired = port(json("""{"code":"bad_token"}""", HttpStatusCode.Forbidden))
             .createDevice("rt", key, key, null, "desktop")

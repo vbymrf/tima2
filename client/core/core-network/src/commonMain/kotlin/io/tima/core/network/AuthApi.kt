@@ -160,7 +160,10 @@ class AuthApi(
             }
             // Телефон принадлежит другой личности. Не ошибка сети и не «неверный код»:
             // это встреча с собственным прошлым аккаунтом, и решать её человеку.
-            code == "identity_mismatch" -> RegisterResult.IdentityMismatch
+            // `start_anew` — можно ли здесь «Начать заново» (ДУ10); молчание старого сервера — можно.
+            code == "identity_mismatch" -> RegisterResult.IdentityMismatch(
+                startAnew = body?.bool("start_anew") ?: true,
+            )
             // Фраза прежней личности этого же аккаунта: с номера начали заново (Р38).
             code == "identity_closed" -> RegisterResult.IdentityClosed
 
@@ -212,7 +215,10 @@ sealed interface RegisterResult {
     ) : RegisterResult
 
     /** Телефон уже связан с другой личностью: путь возврата, а не ошибка. */
-    data object IdentityMismatch : RegisterResult
+    data class IdentityMismatch(
+        /** Можно ли «Начать заново»: владелец мог закрыть этот путь (ДУ10, Р41). */
+        val startAnew: Boolean = true,
+    ) : RegisterResult
 
     /** Фраза прежней, уже не текущей личности этого аккаунта (Р38): вернуть её входом нельзя. */
     data object IdentityClosed : RegisterResult

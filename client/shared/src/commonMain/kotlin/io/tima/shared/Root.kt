@@ -3119,6 +3119,7 @@ private fun App(
                             DeviceTrustActionsOverNetwork(
                                 keys = network.keys,
                                 users = network.directory,
+                                sms = network.sms,
                                 userId = assembled.session.userId,
                                 identity = deviceIdentityFrom(deviceSecret),
                                 asks = askSecrets,
@@ -3204,6 +3205,7 @@ private fun App(
                             trust = DeviceTrustActionsOverNetwork(
                                 keys = network.keys,
                                 users = network.directory,
+                                sms = network.sms,
                                 userId = assembled.session.userId,
                                 identity = deviceIdentityFrom(deviceSecret),
                                 asks = askSecrets,
@@ -4228,6 +4230,9 @@ private fun Devices(
         onConfirmWithPhrase = store::confirmWithPhrase,
         onCancelNewIdentity = store::cancelNewIdentity,
         onShowCertifyCode = store::showCertifyCode,
+        // Запрет «Начать заново» (ДУ10, Р41): SMS, потом фраза и код.
+        onSendBanCode = store::sendBanCode,
+        onBanStartAnew = store::banStartAnew,
     )
 }
 

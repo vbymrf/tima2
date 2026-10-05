@@ -37,7 +37,23 @@ interface DeviceTrustActions {
      * у сервера в своём аккаунте, подписывает ключ подписи устройств этого телефона.
      */
     suspend fun certifyByCode(code: String): TrustStep = TrustStep.Refused("не умеем")
+
+    /** Закрыто ли «Начать заново» на аккаунте (ДУ10, Р41); `null` — не узнали. */
+    suspend fun startAnewBanned(): Boolean? = null
+
+    /** SMS на номер аккаунта — для запрета «Начать заново». `null` — не ушло. */
+    suspend fun sendBanCode(): BanCode? = null
+
+    /**
+     * Закрыть «Начать заново» навсегда (Р41): фраза доказывает личность, код из SMS — что
+     * номер сейчас у того же человека. Снять запрет нельзя.
+     */
+    suspend fun banStartAnew(words: List<String>, requestId: String, code: String): TrustStep =
+        TrustStep.Refused("не умеем")
 }
+
+/** Отправленный код запрета (ДУ10). `devCode` — код в ответе стенда (`TIMA_DEV_SMS`). */
+data class BanCode(val requestId: String, val devCode: String? = null)
 
 /** Чем кончилось действие доверия. */
 sealed interface TrustStep {
@@ -51,6 +67,9 @@ sealed interface TrustStep {
 
     /** Отменять нечего: заново с номера не начинали или уже отменено. */
     data object NothingToCancel : TrustStep
+
+    /** Код из SMS неверен или просрочен. */
+    data object WrongCode : TrustStep
     data class Offline(val retryAfterMs: Long) : TrustStep
     data class Refused(val reason: String) : TrustStep
 }

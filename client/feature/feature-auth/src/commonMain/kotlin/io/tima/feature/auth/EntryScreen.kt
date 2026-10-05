@@ -359,11 +359,14 @@ private fun PhraseInput(
         modifier = Modifier.fillMaxWidth(),
     )
 
-    Tertiary(words.noPhrase)
-    Button(
-        label = words.startAnew,
-        onClick = onAnew,
-        kind = ButtonKind.Dangerous,
-        modifier = Modifier.fillMaxWidth(),
-    )
+    // Владелец закрыл «Начать заново» (ДУ10, Р41) — кнопки нет: войти можно только фразой.
+    if (state.startAnew) {
+        Tertiary(words.noPhrase)
+        Button(
+            label = words.startAnew,
+            onClick = onAnew,
+            kind = ButtonKind.Dangerous,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }

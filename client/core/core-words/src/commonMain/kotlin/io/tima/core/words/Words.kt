@@ -1636,6 +1636,18 @@ interface AuthWords {
     val replacedCancelSend: String
     val replacedItsMe: String
     val replacedCancelled: String
+
+    /** Запрет «Начать заново» (ДУ10, Р41). */
+    val banTitle: String
+    val banAbout: String
+    val banSendCode: String
+    val banCodeHint: String
+    val banConfirm: String
+    val bannedTitle: String
+    val bannedAbout: String
+    val banDone: String
+    /** Экран входа: владелец закрыл «Начать заново». */
+    val startAnewBanned: String
     val nothingToCancel: String
     /** Заверение по QR (Р32). */
     val showCertifyCode: String
@@ -3539,6 +3551,17 @@ object RussianWords : Words {
         override val replacedCancelSend = "Отменить"
         override val replacedItsMe = "Это я"
         override val replacedCancelled = "Новая личность отменена: её устройства отключены, вы снова главный"
+        override val banTitle = "Запретить «Начать заново»"
+        override val banAbout =
+            "Тогда войти в аккаунт без секретной фразы будет нельзя — даже с SIM-картой этого номера. " +
+                "Запрет навсегда: снять его нельзя."
+        override val banSendCode = "Получить код"
+        override val banCodeHint = "Код из SMS"
+        override val banConfirm = "Запретить навсегда"
+        override val bannedTitle = "«Начать заново» запрещено"
+        override val bannedAbout = "Войти в аккаунт можно только по секретной фразе. Снять запрет нельзя."
+        override val banDone = "Запрет поставлен"
+        override val startAnewBanned = "Владелец запретил «Начать заново» на этом аккаунте. Войти можно только по секретной фразе."
         override val nothingToCancel = "Отменять нечего"
         override val showCertifyCode = "Показать код заверения"
         override val identityChangedLine = "Собеседник сменил ключ личности: начал заново с того же номера. Прежние сообщения у вас остались, у него — нет. Если сомневаетесь, что это он, — уточните."

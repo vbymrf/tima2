@@ -388,6 +388,9 @@ class Network(
      * Отдельный порт от личного транспорта: у группового сообщения нет ни конверта, ни
      * обёрток на устройства — есть версия ключа либо открытый текст.
      */
+    /** SMS на номер аккаунта изнутри — для запрета «Начать заново» (ДУ10). */
+    val sms: AuthApi = AuthApi(link.route, link.client)
+
     val groupMessages: GroupMessagesApi =
         GroupMessagesApi(link.route, link.client, token = { token() })
 

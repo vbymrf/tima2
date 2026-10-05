@@ -172,6 +172,7 @@ class AuthStore(
                     // Дальше идём с токеном: код погашен проверкой и второй раз не
                     // сработает. Именно это и ломало вход по фразе.
                     registrationToken = step.registrationToken,
+                    startAnew = step.startAnew,
                 )
                 // Новая фраза прежней личностью быть не может; ветка — для полноты.
                 RegistrationStep.IdentityClosed -> current.copyWithTrouble(words().auth.identityClosed)
@@ -265,7 +266,12 @@ class AuthStore(
                 is RegistrationStep.IdentityMismatch -> current.copyWithTrouble(words().auth.identityRefused)
                 RegistrationStep.IdentityClosed -> current.copyWithTrouble(words().auth.identityClosed)
                 is RegistrationStep.Offline -> current.copyWithTrouble(noLinks(step.retryAfterMs))
-                is RegistrationStep.Refused -> current.copyWithTrouble(step.reason)
+                // Владелец закрыл этот путь, пока экран был открыт (ДУ10): кнопку — убрать.
+                is RegistrationStep.Refused -> if (step.reason == "start_anew_banned") {
+                    current.copy(trouble = words().auth.startAnewBanned, expect = false, startAnew = false)
+                } else {
+                    current.copyWithTrouble(step.reason)
+                }
             }
         }
     }
@@ -444,6 +450,8 @@ sealed interface AuthState {
         val phrase: String = "",
         override val trouble: String? = null,
         val expect: Boolean = false,
+        /** Можно ли «Начать заново»: владелец мог закрыть этот путь навсегда (ДУ10, Р41). */
+        val startAnew: Boolean = true,
     ) : AuthState {
         fun copyWithTrouble(text: String) = copy(trouble = text, expect = false)
     }

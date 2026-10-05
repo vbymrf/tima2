@@ -216,7 +216,7 @@ class RegisterDeviceTest {
         // Ключи ещё понадобятся тому пути, который человек выберет дальше — возврату по
         // секретной фразе. Стереть их значило бы заставить пройти регистрацию заново.
         val (registration, _, store) = case(
-            Server(creation = DeviceCreateStep.IdentityMismatch),
+            Server(creation = DeviceCreateStep.IdentityMismatch()),
         )
 
         // Исход несёт registration_token: дальше — вход по фразе или «начать заново», и

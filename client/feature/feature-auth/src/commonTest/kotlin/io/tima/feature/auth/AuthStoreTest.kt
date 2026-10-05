@@ -186,7 +186,7 @@ class AuthStoreTest {
     @Test
     fun занятый_номер_ведёт_к_вводу_фразы() = runTest {
         api.onCheckCode = { CodeSubmitStep.Accepted("t-1") }
-        api.onCreation = { DeviceCreateStep.IdentityMismatch }
+        api.onCreation = { DeviceCreateStep.IdentityMismatch() }
         val store = deliveredUntilCode(backgroundScope)
         store.changedCode("111111")
 
@@ -199,6 +199,23 @@ class AuthStoreTest {
         // Второй confirm с ним отвечал «неверен или просрочен», и вход по фразе не мог
         // сработать никогда — найдено живым прогоном 2026-08-25.
         assertTrue(state.registrationToken.isNotBlank(), "токен обязан сохраниться")
+    }
+
+    /**
+     * Владелец закрыл «Начать заново» (ДУ10, Р41) — экран фразы его не предлагает: сервер
+     * сказал это в самом отказе, и кнопка, которая всё равно откажет, только путала бы.
+     */
+    @Test
+    fun запрещённое_начать_заново_не_предлагается() = runTest {
+        api.onCheckCode = { CodeSubmitStep.Accepted("t-1") }
+        api.onCreation = { DeviceCreateStep.IdentityMismatch(startAnew = false) }
+        val store = deliveredUntilCode(backgroundScope)
+        store.changedCode("111111")
+
+        store.confirm()
+
+        val state = assertIs<AuthState.PhraseInput>(store.state.first { it is AuthState.PhraseInput })
+        assertEquals(false, state.startAnew)
     }
 
     /**
@@ -493,7 +510,7 @@ class AuthStoreTest {
 
     private suspend fun deliveredUntilInputPhrase(scope: kotlinx.coroutines.CoroutineScope): AuthStore {
         api.onCheckCode = { CodeSubmitStep.Accepted("t-1") }
-        api.onCreation = { DeviceCreateStep.IdentityMismatch }
+        api.onCreation = { DeviceCreateStep.IdentityMismatch() }
         val store = deliveredUntilCode(scope)
         store.changedCode("111111")
         store.confirm()
