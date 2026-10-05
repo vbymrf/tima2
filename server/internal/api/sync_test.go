@@ -138,7 +138,7 @@ func TestSyncPullAfterOffline(t *testing.T) {
 	env3 := sealEnvelope(t, sender, []*device{recipient}, 3003, []byte("третье, уже live"))
 	resp = post(t, ts, env3, sender.token, "eeeeeeee-0000-0000-0000-000000003003")
 	resp.Body.Close()
-	live := readEvent(t, conn, "message.new")
+	live := readByPoke(t, conn, "message.new")
 	var liveID int64
 	_ = json.Unmarshal(live["event_id"], &liveID)
 	if liveID <= ev2 {

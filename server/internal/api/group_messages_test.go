@@ -266,7 +266,7 @@ func TestWSDeliversGroupMessage(t *testing.T) {
 		t.Fatalf("POST group message: %d", code)
 	}
 
-	frame := readEvent(t, conn, "message.group")
+	frame := readByPoke(t, conn, "message.group")
 	got := verifyAndOpen(t, groupID, frame, owner.signKey.Public().(ed25519.PublicKey), gk1)
 	if !bytes.Equal(got, plaintext) {
 		t.Fatalf("plaintext из WS не совпал: %q", got)

@@ -236,13 +236,8 @@ func TestВершиныПолосПриходятВПриветствии(t *tes
 		t.Fatal(err)
 	}
 
-	conn := dialWS(t, ts, dev.token)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_, raw, err := conn.Read(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Приветствие одно, и `dialWS` его уже прочёл бы: ждать второго — пять секунд впустую.
+	_, raw := dialWSHello(t, ts, dev.token)
 	var hello struct {
 		Event string `json:"event"`
 		Pts   int64  `json:"pts"`

@@ -43,6 +43,14 @@ func setupWithEvents(t *testing.T) (*httptest.Server, *Server) {
 // dialWS подключает устройство: auth первым кадром → ok.
 func dialWS(t *testing.T, ts *httptest.Server, token string) *websocket.Conn {
 	t.Helper()
+	conn, _ := dialWSHello(t, ts, token)
+	return conn
+}
+
+// dialWSHello — то же, но отдаёт и само приветствие: в нём вершины полос (П3), и тест,
+// которому они нужны, второго приветствия не дождётся — оно одно.
+func dialWSHello(t *testing.T, ts *httptest.Server, token string) (*websocket.Conn, []byte) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
 	url := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws"
@@ -62,7 +70,7 @@ func dialWS(t *testing.T, ts *httptest.Server, token string) *websocket.Conn {
 	if err != nil || json.Unmarshal(frame, &ok) != nil || ok.Event != "ok" {
 		t.Fatalf("ожидался кадр ok, получено %q (err=%v)", frame, err)
 	}
-	return conn
+	return conn, frame
 }
 
 func readEvent(t *testing.T, conn *websocket.Conn, wantEvent string) map[string]json.RawMessage {
@@ -83,6 +91,34 @@ func readEvent(t *testing.T, conn *websocket.Conn, wantEvent string) map[string]
 		t.Fatalf("ожидалось событие %s, пришло %s", wantEvent, event)
 	}
 	return m
+}
+
+// readByPoke — событие так, как его получает клиент: по шине едет подсказка `sync.poke`
+// с номером, а не тело (2af7ee34, план П4), и тело забирается догоном с этого номера.
+func readByPoke(t *testing.T, conn *websocket.Conn, wantEvent string) map[string]json.RawMessage {
+	t.Helper()
+	poke := readEvent(t, conn, "sync.poke")
+	var id int64
+	_ = json.Unmarshal(poke["event_id"], &id)
+	if id <= 0 {
+		t.Fatalf("в подсказке нет номера события: %v", poke)
+	}
+	events, _, _ := pull(t, conn, id-1)
+	for _, e := range events {
+		var got int64
+		_ = json.Unmarshal(e["event_id"], &got)
+		if got != id {
+			continue
+		}
+		var event string
+		_ = json.Unmarshal(e["event"], &event)
+		if event != wantEvent {
+			t.Fatalf("по подсказке %d пришло %s, ожидалось %s", id, event, wantEvent)
+		}
+		return e
+	}
+	t.Fatalf("догон с %d не вернул события из подсказки", id-1)
+	return nil
 }
 
 func TestWSDeliversMessageNew(t *testing.T) {
@@ -114,7 +150,7 @@ func TestWSDeliversMessageNew(t *testing.T) {
 		t.Fatalf("POST: %d", resp.StatusCode)
 	}
 
-	frame := readEvent(t, conn, "message.new")
+	frame := readByPoke(t, conn, "message.new")
 	var envB64 string
 	_ = json.Unmarshal(frame["envelope"], &envB64)
 	raw, err := base64.RawURLEncoding.DecodeString(envB64)
@@ -164,7 +200,7 @@ func TestWSDeliversKeyRotated(t *testing.T) {
 		t.Fatalf("ротация: %d", code)
 	}
 
-	frame := readEvent(t, conn, "key.rotated")
+	frame := readByPoke(t, conn, "key.rotated")
 	var wrappedB64, ephB64 string
 	_ = json.Unmarshal(frame["wrapped_gk"], &wrappedB64)
 	_ = json.Unmarshal(frame["sender_ephemeral_pub"], &ephB64)
