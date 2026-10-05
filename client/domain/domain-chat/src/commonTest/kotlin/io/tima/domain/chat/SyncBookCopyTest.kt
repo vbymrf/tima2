@@ -102,6 +102,40 @@ class SyncBookCopyTest {
         override fun remember(revision: Long) { value = revision }
     }
 
+    /** Кодек, который открывает только тем ключом, которым запечатано. */
+    private object Keyed : BookCopyCodec {
+        val table = mutableMapOf<Int, Pair<Byte, BookCopy>>()
+        override fun seal(key: ByteArray, copy: BookCopy): ByteArray {
+            val id = table.size + 1
+            table[id] = key[0] to copy
+            return byteArrayOf(id.toByte())
+        }
+        override fun open(key: ByteArray, sealed: ByteArray) = table[sealed[0].toInt()]?.takeIf { it.first == key[0] }?.second
+    }
+
+    /**
+     * realme 2026-10-05: книга запечатана версией 1 ключа служебной группы, потом ключ сменился
+     * (версия 2) — и копия перестала открываться, а записать новую поверх тоже было нельзя.
+     */
+    @Test
+    fun копия_под_прежней_версией_ключа_открывается() = runTest {
+        val cell = Cell()
+        val phone = MemoryCopy(BookCopy(0, "T1", listOf(contact("+1", "Витя", at = 10, device = "T1")), emptyList()))
+        cell.caller = "T1"
+        assertIs<CopyStep.Pushed>(SyncBookCopy(phone, cell, Keyed, { byteArrayOf(1) }, Memory(), { "T1" }).push())
+
+        val withoutOld = SyncBookCopy(MemoryCopy(BookCopy.EMPTY), cell, Keyed, { byteArrayOf(2) }, Memory(), { "T1" })
+        assertIs<CopyStep.Refused>(withoutOld.pull(), "одной последней версией прежнюю копию не открыть")
+
+        val after = MemoryCopy(BookCopy.EMPTY.copy(device = "T1"))
+        val sync = SyncBookCopy(after, cell, Keyed, { byteArrayOf(2) }, Memory(), { "T1" }, olderKeys = { listOf(byteArrayOf(1)) })
+        assertIs<CopyStep.Pulled>(sync.pull())
+        assertEquals("Витя", after.mine.contacts.single().nameOwn)
+        after.mine = after.mine.copy(contacts = after.mine.contacts + contact("+2", "Анна", at = 20, device = "T1"))
+        assertIs<CopyStep.Pushed>(sync.push(), "после открытия копия снова пишется — уже последней версией")
+        assertEquals(2.toByte(), Keyed.table.getValue(cell.blob!![0].toInt()).first)
+    }
+
     @Test
     fun отдать_потом_забрать_на_втором_устройстве() = runTest {
         val cell = Cell()

@@ -88,6 +88,7 @@ class BookCopySync(
         key = { storeKey() },
         revision = memory,
         device = { deviceId },
+        olderKeys = { olderStoreKeys() },
         lastPrint = { bookPrint },
         rememberPrint = { print ->
             bookPrint = print
@@ -101,6 +102,7 @@ class BookCopySync(
         key = { storeKey() },
         revision = readsMemory,
         device = { deviceId },
+        olderKeys = { olderStoreKeys() },
         marks = object : ReadMarksPort {
             override fun marks() = readState.marks()
             override fun dirty() = readState.dirty()
@@ -153,6 +155,13 @@ class BookCopySync(
                 return keys.keys.key(gid, version)
             }
         }
+    }
+
+    /** Прежние версии ключа служебной группы, от новой к старой: копию мог запечатать ключ до смены. */
+    private fun olderStoreKeys(): List<ByteArray> {
+        val gid = groupId ?: return emptyList()
+        val latest = keys.keys.latestVersion(gid) ?: return emptyList()
+        return keys.keys.versions(gid).filter { it != latest }.sortedDescending().mapNotNull { keys.keys.key(gid, it) }
     }
 
     fun start() {

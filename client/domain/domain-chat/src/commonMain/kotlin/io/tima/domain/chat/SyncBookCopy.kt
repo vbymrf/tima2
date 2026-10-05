@@ -42,6 +42,14 @@ class SyncBookCopy(
      */
     private val lastPrint: () -> Int? = { null },
     private val rememberPrint: (Int) -> Unit = {},
+    /**
+     * Прежние версии ключа служебной группы, от новой к старой. Копия запечатана той версией,
+     * что была последней у писавшего; после смены ключа (эпоха, новый участник) читающий
+     * открыл бы её только прежней. Без них копия застревала навсегда: realme 2026-10-05 не
+     * открывал свою же книгу от 09-30 (версия 1) ключом версии 2 от 10-02 — и записать новую
+     * тоже не мог, запись начинается со слияния.
+     */
+    private val olderKeys: suspend () -> List<ByteArray> = { emptyList() },
 ) {
 
     suspend fun pull(): CopyStep {
@@ -105,7 +113,9 @@ class SyncBookCopy(
     }
 
     private suspend fun applyRemote(k: ByteArray, blob: AccountStoreStep.Blob): CopyStep {
-        val theirs = codec.open(k, blob.bytes) ?: return CopyStep.Refused("копия не открылась: чужой ключ или порча")
+        val theirs = codec.open(k, blob.bytes)
+            ?: olderKeys().firstNotNullOfOrNull { codec.open(it, blob.bytes) }
+            ?: return CopyStep.Refused("копия не открылась: чужой ключ или порча")
         // Ревизия внутри блоба обязана совпадать с ревизией снаружи — иначе сервер (или
         // кто-то между) подменил блоб. Тогда не применяем: чужая книга хуже отсутствия копии.
         if (theirs.revision != blob.revision) return CopyStep.Refused("ревизия внутри копии не совпадает с внешней")

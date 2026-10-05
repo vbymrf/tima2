@@ -26,6 +26,8 @@ class SyncReadsCopy(
     private val revision: RevisionMemory,
     private val device: () -> String,
     private val marks: ReadMarksPort,
+    /** Прежние версии ключа служебной группы, от новой к старой, — как у [SyncBookCopy]. */
+    private val olderKeys: suspend () -> List<ByteArray> = { emptyList() },
 ) {
 
     suspend fun pull(): ReadsStep {
@@ -76,8 +78,10 @@ class SyncReadsCopy(
         }
     }
 
-    private fun applyRemote(k: ByteArray, blob: AccountStoreStep.Blob): ReadsStep {
-        val theirs = codec.open(k, blob.bytes) ?: return ReadsStep.Refused("отметки не открылись: чужой ключ или порча")
+    private suspend fun applyRemote(k: ByteArray, blob: AccountStoreStep.Blob): ReadsStep {
+        val theirs = codec.open(k, blob.bytes)
+            ?: olderKeys().firstNotNullOfOrNull { codec.open(it, blob.bytes) }
+            ?: return ReadsStep.Refused("отметки не открылись: чужой ключ или порча")
         // Ревизия внутри обязана совпадать с внешней — иначе блоб подменили.
         if (theirs.revision != blob.revision) return ReadsStep.Refused("ревизия внутри отметок не совпадает с внешней")
         val advanced = marks.merge(theirs.marks)
