@@ -1598,6 +1598,8 @@ interface AuthWords {
     val timeIsUp: String
     val wrongPhrase: String
     val identityRefused: String
+    /** Вход фразой прежней личности после «Начать заново» (Р38). */
+    val identityClosed: String
     val codeTermOver: String
     val notYourVirtual: String
     val cancelDidNotReach: String
@@ -3495,6 +3497,9 @@ object RussianWords : Words {
         override val timeIsUp = "Время истекло — запросите код заново"
         override val wrongPhrase = "Фраза не та — проверьте запись"
         override val identityRefused = "Сервер отказал в смене личности"
+        override val identityClosed =
+            "Это фраза прежней личности: с этого номера начали заново. Вернуть её можно отменой " +
+                "новой личности с прежнего устройства или перерегистрацией."
         override val codeTermOver = "Срок кода вышел — попросите новый"
         override val notYourVirtual = "Это не ваш виртуальный аккаунт"
         override val cancelDidNotReach =

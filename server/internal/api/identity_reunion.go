@@ -93,31 +93,11 @@ func reidentify(deps usersDeps) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "already_current", "Вы уже под этой личностью — присоединять нечего.")
 			return
 		}
-		newUserID, err := deps.store.StartNewIdentity(ctx, personID, priorUserID, sig)
-		if err != nil {
-			log.Printf("reidentify: start new identity: %v", err)
-			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-			return
-		}
-		// Тот же ключ доказан — новая голова цепочки продолжает им пользоваться, иначе
-		// следующий вход снова упёрся бы в identity_mismatch на пустом месте.
-		if err := deps.store.SetOrCheckIdentity(ctx, newUserID, identityPub); err != nil {
-			log.Printf("reidentify: set identity: %v", err)
-			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-			return
-		}
-		if err := deps.store.MoveDeviceToUser(ctx, id.DeviceID, newUserID); err != nil {
-			log.Printf("reidentify: move device: %v", err)
-			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-			return
-		}
-		access, err := deps.tokens().IssueAccess(newUserID, id.DeviceID)
-		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
-			return
-		}
-		log.Printf("reidentify: %s → %s (proven)", id.UserID, newUserID)
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"user_id": newUserID, "access_token": access})
+		// Р38 (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ, 2026-10-05): прежняя личность вошедшим по фразе не
+		// возвращается. Раньше здесь заводилась ТРЕТЬЯ личность с ключом прежней и сюда
+		// переезжало одно устройство — группы прежней не возвращались, а у собеседников
+		// появлялся третий идентификатор одного человека. Вернуть прежнюю — отменой новой с
+		// прежнего устройства (Р29–Р31) или перерегистрацией (Р34).
+		writeErr(w, http.StatusConflict, "identity_closed", identityClosedText)
 	}
 }

@@ -161,6 +161,14 @@ class AuthApiTest {
     }
 
     @Test
+    fun фраза_прежней_личности_это_не_чужая_фраза() = runTest {
+        // Р38: после «Начать заново» фраза прежней личности не подходит, но и не «неверна» —
+        // человеку надо сказать, как вернуть свою, а не «перепроверьте фразу».
+        val closed = api(json("""{"code":"identity_closed"}""", HttpStatusCode.Forbidden))
+        assertEquals(RegisterResult.IdentityClosed, closed.register("rt-1", key, key))
+    }
+
+    @Test
     fun чужая_личность_и_просроченный_токен_это_разные_исходы() = runTest {
         // identity_mismatch — встреча с собственным прошлым аккаунтом, и решать её
         // человеку. bad_token — начинать с запроса кода. Свалить оба в «отказ» значило бы

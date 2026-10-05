@@ -315,6 +315,12 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	// Ключ личности: первое устройство устанавливает, последующие обязаны совпасть
 	// (устройство, знающее фразу, выведет тот же ключ). Расхождение → отказ.
 	if err := s.Store.SetOrCheckIdentity(r.Context(), userID, identityPub); errors.Is(err, store.ErrIdentityMismatch) {
+		// Фраза прежней личности этого же аккаунта (с номера начали заново) — не «чужая
+		// фраза»: человеку нужно знать, как вернуть свою, а не что фраза неверна (Р38).
+		if s.isClosedIdentity(r.Context(), userID, identityPub) {
+			writeErr(w, http.StatusForbidden, "identity_closed", identityClosedText)
+			return
+		}
 		// Формулировка не техническая намеренно: сюда попадает обычный случай
 		// «этот номер уже зарегистрирован, а секретную фразу не ввели». Человеку
 		// нужно знать, что делать, а не что не сошлось внутри.
@@ -638,4 +644,21 @@ func (s *Server) listDeviceKeys(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// identityClosedText — отказ войти фразой прежней личности (Р38).
+const identityClosedText = "Это фраза прежней личности: с этого номера начали заново. Вернуть её можно " +
+	"отменой новой личности с прежнего устройства или перерегистрацией."
+
+// isClosedIdentity — ключ принадлежит прежней, уже не текущей личности того же аккаунта.
+func (s *Server) isClosedIdentity(ctx context.Context, userID string, identityPub []byte) bool {
+	if len(identityPub) == 0 {
+		return false
+	}
+	personID, err := s.Store.PersonOfUser(ctx, userID)
+	if err != nil {
+		return false
+	}
+	prior, err := s.Store.FindPriorIdentity(ctx, personID, identityPub)
+	return err == nil && prior != userID
 }

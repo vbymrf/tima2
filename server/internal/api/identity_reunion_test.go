@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"tima/server/internal/store"
@@ -151,10 +152,10 @@ func challengeFor(t *testing.T, ts *httptest.Server, bearer string) string {
 	return resp.ChallengeToken
 }
 
-// Основной путь: прежний ключ доказан подписью → проверяемая связка, устройство
-// переезжает на новую личность, старый интерим (административный форк) перестаёт
-// быть текущим.
-func TestReidentifyProvenReunion(t *testing.T) {
+// Р38 (2026-10-05): прежняя личность по фразе не возвращается — ни ручкой воссоединения
+// (раньше она заводила ТРЕТЬЮ личность с ключом прежней), ни входом на новом устройстве.
+// Отказ называет причину: это фраза прежней личности, а не «неверная фраза».
+func TestReidentifyRefusesClosedIdentity(t *testing.T) {
 	ts, srv := setup(t)
 	ctx := context.Background()
 	phone := "+79990060002"
@@ -168,8 +169,13 @@ func TestReidentifyProvenReunion(t *testing.T) {
 		t.Fatalf("исходная регистрация: %d", code)
 	}
 
-	// Устройство потеряно, фразы под рукой нет — «начать заново».
-	interim, code, _ := registerRaw(t, ts, phone, nil, true)
+	// Устройство потеряно, фразы под рукой нет — «начать заново». Клиент при этом
+	// заводит новую фразу и присылает её ключ (AuthStore.startAnew).
+	newPub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	interim, code, _ := registerRaw(t, ts, phone, newPub, true)
 	if code != 201 {
 		t.Fatalf("force_new_identity: %d", code)
 	}
@@ -177,41 +183,32 @@ func TestReidentifyProvenReunion(t *testing.T) {
 		t.Fatal("«начать заново» обязан форкнуть личность")
 	}
 
-	// Фраза нашлась: воссоединяемся с устройства interim.
+	// Фраза нашлась — воссоединение с устройства interim отклоняется.
 	challenge := challengeFor(t, ts, interim.token)
 	sig := ed25519.Sign(oldPriv, []byte(challenge))
 	b64 := base64.RawURLEncoding
-	var reidResp struct {
-		UserID      string `json:"user_id"`
-		AccessToken string `json:"access_token"`
+	var refusal struct {
+		Code string `json:"code"`
 	}
 	if code := jsonAuth(t, ts, "POST", "/api/v1/users/me/reidentify", interim.token, map[string]string{
 		"challenge_token": challenge,
 		"identity_pub":    b64.EncodeToString(oldPub),
 		"signature":       b64.EncodeToString(sig),
-	}, &reidResp); code != 200 {
-		t.Fatalf("reidentify: %d", code)
-	}
-	if reidResp.UserID == interim.userID || reidResp.UserID == original.userID {
-		t.Fatalf("воссоединение обязано завести НОВУЮ голову цепочки, получили %s", reidResp.UserID)
-	}
-	if reidResp.AccessToken == "" {
-		t.Fatal("пустой access_token после воссоединения")
+	}, &refusal); code != 409 || refusal.Code != "identity_closed" {
+		t.Fatalf("reidentify: %d %q, ждали 409 identity_closed", code, refusal.Code)
 	}
 
-	ids := identitiesOf(t, ts, reidResp.AccessToken, []string{reidResp.UserID, interim.userID, original.userID})
-	if ids[reidResp.UserID].Link != store.LinkProven {
-		t.Fatalf("воссоединение: link = %q, ожидали %q", ids[reidResp.UserID].Link, store.LinkProven)
-	}
-	if !ids[reidResp.UserID].Current {
-		t.Fatal("воссоединённая личность обязана стать текущей")
-	}
-	if ids[interim.userID].Current {
-		t.Fatal("административный форк обязан перестать быть текущим")
+	// Вход фразой прежней личности на новом устройстве — тот же отказ.
+	if _, code, body := registerRaw(t, ts, phone, oldPub, false); code != 403 || !strings.Contains(body, "identity_closed") {
+		t.Fatalf("вход фразой прежней личности: %d %s, ждали 403 identity_closed", code, body)
 	}
 
-	// Устройство interim.id теперь пишет под новой личностью.
-	devices, err := srv.Store.ListDevices(ctx, reidResp.UserID)
+	// Третьей личности нет: текущая — interim, устройство на месте.
+	ids := identitiesOf(t, ts, interim.token, []string{interim.userID, original.userID})
+	if !ids[interim.userID].Current {
+		t.Fatal("после отказа текущей обязана остаться новая личность")
+	}
+	devices, err := srv.Store.ListDevices(ctx, interim.userID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +219,7 @@ func TestReidentifyProvenReunion(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("устройство не переехало на новую личность после воссоединения")
+		t.Fatal("устройство не обязано никуда переезжать")
 	}
 }
 

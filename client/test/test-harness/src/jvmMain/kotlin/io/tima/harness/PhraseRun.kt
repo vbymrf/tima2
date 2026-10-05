@@ -214,6 +214,7 @@ object PhraseRun {
     private fun RegisterResult.shortName(): String = when (this) {
         is RegisterResult.Registered -> "201 Registered"
         RegisterResult.IdentityMismatch -> "403 identity_mismatch"
+        RegisterResult.IdentityClosed -> "403 identity_closed"
         RegisterResult.TokenExpired -> "403 bad_token"
         is RegisterResult.Refused -> "отказ $status $code"
         is RegisterResult.NoConnection -> "нет связи: $link"

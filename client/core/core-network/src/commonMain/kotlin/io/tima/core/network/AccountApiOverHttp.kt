@@ -57,6 +57,7 @@ class AccountApiOverHttp(private val auth: AuthApi) : AccountApi {
         is RegisterResult.Registered ->
             DeviceCreateStep.Created(outcome.userId, outcome.deviceId, outcome.accessToken)
         RegisterResult.IdentityMismatch -> DeviceCreateStep.IdentityMismatch
+        RegisterResult.IdentityClosed -> DeviceCreateStep.IdentityClosed
         RegisterResult.TokenExpired -> DeviceCreateStep.TokenExpired
         is RegisterResult.NoConnection -> DeviceCreateStep.Offline(outcome.link.retryDelayMs)
         is RegisterResult.Refused -> DeviceCreateStep.Refused(outcome.code)

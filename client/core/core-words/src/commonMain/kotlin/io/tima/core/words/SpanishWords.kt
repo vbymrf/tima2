@@ -1480,6 +1480,9 @@ object SpanishWords : Words {
         override val timeIsUp = "Se acabó el tiempo — pida el código otra vez"
         override val wrongPhrase = "La frase no es la correcta — revise lo que anotó"
         override val identityRefused = "El servidor rechazó el cambio de identidad"
+        override val identityClosed =
+            "Esta es la frase de tu identidad anterior: alguien empezó de cero con este número. " +
+                "Puedes recuperarla cancelando la nueva identidad desde tu dispositivo anterior o volviendo a registrarte."
         override val codeTermOver = "El plazo del código ha terminado — pida uno nuevo"
         override val notYourVirtual = "Esa no es su cuenta virtual"
         override val cancelDidNotReach =

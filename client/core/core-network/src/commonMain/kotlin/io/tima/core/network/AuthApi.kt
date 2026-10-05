@@ -161,6 +161,8 @@ class AuthApi(
             // Телефон принадлежит другой личности. Не ошибка сети и не «неверный код»:
             // это встреча с собственным прошлым аккаунтом, и решать её человеку.
             code == "identity_mismatch" -> RegisterResult.IdentityMismatch
+            // Фраза прежней личности этого же аккаунта: с номера начали заново (Р38).
+            code == "identity_closed" -> RegisterResult.IdentityClosed
 
             // registration_token живёт минуты: истёк — значит начинать с кода заново.
             code == "bad_token" -> RegisterResult.TokenExpired
@@ -211,6 +213,9 @@ sealed interface RegisterResult {
 
     /** Телефон уже связан с другой личностью: путь возврата, а не ошибка. */
     data object IdentityMismatch : RegisterResult
+
+    /** Фраза прежней, уже не текущей личности этого аккаунта (Р38): вернуть её входом нельзя. */
+    data object IdentityClosed : RegisterResult
 
     /** `registration_token` просрочен: начинать с запроса кода. */
     data object TokenExpired : RegisterResult

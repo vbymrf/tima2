@@ -1481,6 +1481,9 @@ object EnglishWords : Words {
         override val timeIsUp = "Time is up — request the code again"
         override val wrongPhrase = "Wrong phrase — check what you wrote down"
         override val identityRefused = "The server refused to change the identity"
+        override val identityClosed =
+            "This is the phrase of your previous identity: someone started over with this number. " +
+                "You can get it back by cancelling the new identity from your previous device, or by re-registering."
         override val codeTermOver = "The code's term is over — ask for a new one"
         override val notYourVirtual = "That is not your virtual account"
         override val cancelDidNotReach =

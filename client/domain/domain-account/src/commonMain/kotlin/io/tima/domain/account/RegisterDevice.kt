@@ -135,6 +135,7 @@ class RegisterDevice(
             // Токен отдаётся наружу: следующий шаг (фраза или «начать заново») пойдёт с
             // ним, потому что кода больше нет — он погашен при проверке.
             DeviceCreateStep.IdentityMismatch -> RegistrationStep.IdentityMismatch(registrationToken)
+            DeviceCreateStep.IdentityClosed -> RegistrationStep.IdentityClosed
             DeviceCreateStep.TokenExpired -> RegistrationStep.CodeExpired
             is DeviceCreateStep.Offline -> RegistrationStep.Offline(answer.retryAfterMs)
             is DeviceCreateStep.Refused -> RegistrationStep.Refused(answer.reason)
@@ -172,6 +173,9 @@ sealed interface RegistrationStep {
      *   проверкой и второй раз не сработает — это и ломало вход по фразе.
      */
     data class IdentityMismatch(val registrationToken: String) : RegistrationStep
+
+    /** Фраза прежней личности (Р38): вернуть её можно отменой с прежнего устройства или перерегистрацией. */
+    data object IdentityClosed : RegistrationStep
     data class Offline(val retryAfterMs: Long) : RegistrationStep
     data class Refused(val reason: String) : RegistrationStep
 }
@@ -188,6 +192,7 @@ sealed interface CodeSubmitStep {
 sealed interface DeviceCreateStep {
     data class Created(val userId: String, val deviceId: String, val accessToken: String) : DeviceCreateStep
     data object IdentityMismatch : DeviceCreateStep
+    data object IdentityClosed : DeviceCreateStep
     data object TokenExpired : DeviceCreateStep
     data class Offline(val retryAfterMs: Long) : DeviceCreateStep
     data class Refused(val reason: String) : DeviceCreateStep

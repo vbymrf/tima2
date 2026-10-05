@@ -173,6 +173,8 @@ class AuthStore(
                     // сработает. Именно это и ломало вход по фразе.
                     registrationToken = step.registrationToken,
                 )
+                // Новая фраза прежней личностью быть не может; ветка — для полноты.
+                RegistrationStep.IdentityClosed -> current.copyWithTrouble(words().auth.identityClosed)
 
                 is RegistrationStep.Offline -> current.copyWithTrouble(noLinks(step.retryAfterMs))
                 is RegistrationStep.Refused -> current.copyWithTrouble(step.reason)
@@ -208,6 +210,7 @@ class AuthStore(
                 }
                 RegistrationStep.AlreadyRegistered -> AuthState.CreatedAlready
                 is RegistrationStep.IdentityMismatch -> current.copyWithTrouble(words().auth.wrongPhrase)
+                RegistrationStep.IdentityClosed -> current.copyWithTrouble(words().auth.identityClosed)
                 RegistrationStep.WrongCode -> current.copyWithTrouble(words().auth.wrongCode)
                 // Токен живёт десять минут. Истёк — начинать с запроса кода, и сказать об
                 // этом надо именно так: «введите фразу заново» здесь бесполезно.
@@ -260,6 +263,7 @@ class AuthStore(
                     trouble = words().auth.timeIsUp,
                 )
                 is RegistrationStep.IdentityMismatch -> current.copyWithTrouble(words().auth.identityRefused)
+                RegistrationStep.IdentityClosed -> current.copyWithTrouble(words().auth.identityClosed)
                 is RegistrationStep.Offline -> current.copyWithTrouble(noLinks(step.retryAfterMs))
                 is RegistrationStep.Refused -> current.copyWithTrouble(step.reason)
             }
