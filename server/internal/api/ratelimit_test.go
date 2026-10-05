@@ -71,3 +71,35 @@ func TestAuthRateLimits(t *testing.T) {
 		t.Fatalf("6-я попытка verify: ожидался 429, получен %d", code)
 	}
 }
+
+// TestSmsLimitPerAction — Р53: у каждого шага перерегистрации свой предел SMS на номер. Одна
+// перерегистрация со спором тратит четыре кода, а общий предел — три: живьём 2026-10-05
+// подтверждение упёрлось в отказ.
+func TestSmsLimitPerAction(t *testing.T) {
+	ts, _ := setupWithLimiter(t)
+	const phone = "+79998880011"
+	send := func(purpose string) int {
+		body := map[string]string{"phone": phone}
+		if purpose != "" {
+			body["purpose"] = purpose
+		}
+		return postJSON(t, ts, "/api/v1/auth/sms/request", body, nil)
+	}
+	for i := 1; i <= 3; i++ {
+		if code := send(""); code != http.StatusOK {
+			t.Fatalf("вход #%d: %d", i, code)
+		}
+	}
+	if code := send(""); code != http.StatusTooManyRequests {
+		t.Fatalf("4-й код входа: %d, ждали 429", code)
+	}
+	if code := send("rereg_claim"); code != http.StatusOK {
+		t.Fatalf("заявка после исчерпанного входа: %d — у шага свой предел", code)
+	}
+	if code := send("rereg_confirm_old"); code != http.StatusOK {
+		t.Fatalf("подтверждение С: %d", code)
+	}
+	if code := send("что-то-своё"); code != http.StatusTooManyRequests {
+		t.Fatalf("незнакомое назначение — общий предел: %d, ждали 429", code)
+	}
+}

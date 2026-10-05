@@ -132,12 +132,15 @@ func hashCode(requestID, code string) []byte {
 func (s *Server) smsRequest(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Phone string `json:"phone"`
+		// Purpose — для чего код (Р53): у шагов перерегистрации свой предел на номер, у
+		// остального — общий. Незнакомое значение — общий предел.
+		Purpose string `json:"purpose,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&req); err != nil || !phoneRe.MatchString(req.Phone) {
 		writeErr(w, http.StatusBadRequest, "bad_phone", "нужен телефон в формате E.164 (+79991234567)")
 		return
 	}
-	if !s.rateLimit(w, r, "sms:phone:"+req.Phone, s.limSmsPerPhone()) ||
+	if !s.rateLimit(w, r, "sms:phone:"+smsPurpose(req.Purpose)+req.Phone, s.limSmsPerPhone()) ||
 		!s.rateLimit(w, r, "sms:ip:"+clientIP(r), s.limSmsPerIP()) {
 		return
 	}
@@ -166,6 +169,17 @@ func (s *Server) smsRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// smsPurpose — ключ предела SMS на номер по назначению (Р53, заказчик 2026-10-05): запуск
+// перерегистрации, заявка «Аккаунт украден» и подтверждения Н и С — у каждого свой предел, иначе
+// одна перерегистрация со спором (четыре кода) упиралась в общий (три). Остальное — общий.
+func smsPurpose(purpose string) string {
+	switch purpose {
+	case "rereg_start", "rereg_claim", "rereg_confirm_new", "rereg_confirm_old":
+		return purpose + ":"
+	}
+	return ""
 }
 
 // smsVerify — код → короткий registration-токен.
