@@ -247,6 +247,12 @@ class Entry private constructor(
         override fun put(secret: ByteArray) = accounts.store(userId).saveAskSecret(secret)
     }
 
+    /** Секрет копии ключей аккаунта [userId] — только на телефонах (Р46). */
+    fun keyCopySecrets(userId: String): KeyCopySecrets = object : KeyCopySecrets {
+        override fun get(): Pair<Int, ByteArray>? = accounts.store(userId).keyCopySecret()
+        override fun put(epoch: Int, secret: ByteArray) = accounts.store(userId).saveKeyCopySecret(epoch, secret)
+    }
+
     companion object {
 
         /**
@@ -390,6 +396,10 @@ class Network(
      */
     /** SMS на номер аккаунта изнутри — для запрета «Начать заново» (ДУ10). */
     val sms: AuthApi = AuthApi(link.route, link.client)
+
+    /** Копия ключей по модели Matrix (§3а). */
+    val keyCopy: io.tima.core.network.KeyCopyApi =
+        io.tima.core.network.KeyCopyApi(link.route, link.client, token = { token() })
 
     val groupMessages: GroupMessagesApi =
         GroupMessagesApi(link.route, link.client, token = { token() })
@@ -607,7 +617,14 @@ class Environment private constructor(
      * Здесь же, а не только внутри [GroupKeyOrchestrator]: ключи нужны и отправке
      * ([GroupSender]) — она обязана взять свежую версию перед шифрованием.
      */
-    val groupKeyBook: SqlGroupKeys = SqlGroupKeys(db, cipher)
+    /**
+     * Ключ группы лёг на устройство — пополнить копию (М2). Ставит сборка аккаунта; до неё —
+     * некому, и ключ просто ложится в базу.
+     */
+    @kotlin.concurrent.Volatile
+    var onGroupKeyStored: ((String, Int, ByteArray) -> Unit)? = null
+
+    val groupKeyBook: SqlGroupKeys = SqlGroupKeys(db, cipher, onPut = { g, v, k -> onGroupKeyStored?.invoke(g, v, k) })
 
     val chatFacts: ChatFacts = SqlChatFacts(db)
 
@@ -691,6 +708,12 @@ class Environment private constructor(
         fun open(db: TimaDatabase, deviceSecret: ByteArray, myUserId: String, myDeviceId: String = ""): Environment =
             Environment(db, LocalStoreFieldCipher(deviceSecret), myUserId, myDeviceId)
     }
+}
+
+/** Где лежит секрет копии ключей телефона (Р46): эпоха и закрытый ключ копии. */
+interface KeyCopySecrets {
+    fun get(): Pair<Int, ByteArray>?
+    fun put(epoch: Int, secret: ByteArray)
 }
 
 /** Где лежит ключ подписи устройств телефона (ДУ1). */

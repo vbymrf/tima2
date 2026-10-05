@@ -31,6 +31,8 @@ class DeviceTrustActionsOverNetwork(
     private val onCertified: (String, ByteArray) -> Unit = { _, _ -> },
     /** SMS на номер аккаунта — для запрета «Начать заново» (ДУ10). */
     private val sms: io.tima.core.network.AuthApi? = null,
+    /** Фраза подтверждена — копии ключей вывести свою пару (модель Matrix, М1). */
+    private val onPhrase: suspend (List<String>) -> Unit = {},
 ) : DeviceTrustActions {
 
     override fun holdsKey(): Boolean = phone && asks.get() != null
@@ -51,6 +53,7 @@ class DeviceTrustActionsOverNetwork(
         if (!phone) {
             val cert = IdentityTrustSigner.certifyDevice(words, enc, sig) ?: return TrustStep.WrongPhrase
             return keys.certifyDevice(selfId(), DeviceTrustCheck.BY_IDENTITY, cert).step()
+                .also { if (it == TrustStep.Done) onPhrase(words) }
         }
         val ask = AccountSigningKey.generate()
         val askSig = IdentityTrustSigner.certifyAsk(words, ask.public) ?: return TrustStep.WrongPhrase
@@ -58,7 +61,10 @@ class DeviceTrustActionsOverNetwork(
         val step = keys.issueSigningKey(ask.public, askSig, cert).step()
         // Ключ сохраняется после успеха сервера: заведённый, но отвергнутый ключ заверял бы
         // устройства, которым никто не поверит.
-        if (step == TrustStep.Done) asks.put(ask.exportRaw())
+        if (step == TrustStep.Done) {
+            asks.put(ask.exportRaw())
+            onPhrase(words)
+        }
         return step
     }
 

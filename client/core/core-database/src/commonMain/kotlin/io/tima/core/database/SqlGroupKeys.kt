@@ -18,12 +18,15 @@ import io.tima.domain.chat.GroupKeyBook
 class SqlGroupKeys(
     private val db: TimaDatabase,
     private val cipher: FieldCipher,
+    /** Ключ лёг — сказать копии ключей (модель Matrix, М2); по умолчанию — никому. */
+    private val onPut: (String, Int, ByteArray) -> Unit = { _, _, _ -> },
 ) : GroupKeyBook {
 
     private val q get() = db.groupKeysQueries
 
     override fun put(groupId: String, version: Int, key: ByteArray) {
         q.putGroupKey(group_id = groupId, version = version.toLong(), key_enc = cipher.seal(key))
+        onPut(groupId, version, key)
     }
 
     override fun key(groupId: String, version: Int): ByteArray? =

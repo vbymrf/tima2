@@ -61,6 +61,11 @@ class AuthStore(
      * секрета.
      */
     private val onEnteredByPhrase: (List<String>) -> Unit = {},
+    /**
+     * Фраза известна этому устройству — вход по фразе, новый аккаунт, «Начать заново»: копии
+     * ключей вывести свою пару (модель Matrix, М1). Слова отдаются один раз и не хранятся.
+     */
+    private val onPhraseKnown: (List<String>) -> Unit = {},
 ) {
 
     /**
@@ -144,7 +149,7 @@ class AuthStore(
                 // Личность приняли — значит у аккаунта теперь наша, и фразу надо показать.
                 // Один раз: второго раза у неё не бывает.
                 is RegistrationStep.Registered -> AuthState.Phrase(
-                    words = identity.words,
+                    words = identity.words.also(onPhraseKnown),
                     userId = step.userId,
                     deviceId = step.deviceId,
                 )
@@ -207,6 +212,7 @@ class AuthStore(
                 // Фразу показывать не надо: она у человека есть, он её только что ввёл.
                 is RegistrationStep.Registered -> {
                     onEnteredByPhrase(words)
+                    onPhraseKnown(words)
                     AuthState.Done(step.userId, step.deviceId)
                 }
                 RegistrationStep.AlreadyRegistered -> AuthState.CreatedAlready
@@ -253,7 +259,7 @@ class AuthStore(
                 // Личность теперь новая — и фраза к ней новая. Показать обязательно: иначе
                 // человек второй раз останется без способа вернуться.
                 is RegistrationStep.Registered -> AuthState.Phrase(
-                    words = identity.words,
+                    words = identity.words.also(onPhraseKnown),
                     userId = step.userId,
                     deviceId = step.deviceId,
                 )

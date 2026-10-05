@@ -1,5 +1,6 @@
 package io.tima.shared
 
+import io.tima.core.outbox.SendOutcome
 import io.tima.domain.chat.ChatKind
 import io.tima.core.encryption.DeviceIdentity
 import io.tima.core.encryption.EscrowKeyVerifier
@@ -38,6 +39,8 @@ class Sender(
     private val network: Network,
     private val session: Session,
     identity: DeviceIdentity,
+    /** Копия ключей (модель Matrix, М2): принятое сервером — в копию. */
+    private val keyCopy: KeyCopyService? = null,
 ) {
 
     private val pump = OutboxPump(environment.queue)
@@ -92,7 +95,11 @@ class Sender(
                     ?: error("нет сборщика для переписки ${entry.chatId}: насос взял чужое")
                 own(entry)
             },
-            send = { ready -> network.transport.send(ready.entry.dedupKey, ready.envelope) },
+            send = { ready ->
+                network.transport.send(ready.entry.dedupKey, ready.envelope).also { outcome ->
+                    if (outcome is SendOutcome.Accepted) keyCopy?.feedMessage(ready.entry.chatId, ready.envelope)
+                }
+            },
         )
     }
 

@@ -42,7 +42,7 @@ class GroupKeyOrchestrator(
     identity: DeviceIdentity,
     private val msNow: () -> Long,
 ) {
-    private val groupKeys = SqlGroupKeys(environment.db, environment.cipher)
+    private val groupKeys = SqlGroupKeys(environment.db, environment.cipher, onPut = { g, v, k -> environment.onGroupKeyStored?.invoke(g, v, k) })
 
     private val sync = SyncGroupKeys(
         wraps = GroupKeyWrapsOverHttp(network.groupKeys),

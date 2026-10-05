@@ -109,6 +109,8 @@ class Assembled(
     val identityClaims: MutableStateFlow<Set<String>> = MutableStateFlow(emptySet()),
     /** К личности добавилось новое устройство — его платформа; `null` — события нет (Р48). */
     val deviceAdded: MutableStateFlow<String?> = MutableStateFlow(null),
+    /** Копия ключей по модели Matrix (§3а): пополнение, ключ из фразы, восстановление. */
+    val keyCopy: KeyCopyService? = null,
     /** Переписки, чью историю передало своё устройство (ИУ3), — забрать. */
     val historyReady: MutableSharedFlow<String> = MutableSharedFlow(extraBufferCapacity = 64),
 )
@@ -283,6 +285,18 @@ fun buildAssembled(
             quiet = { QuietHours.read(environment.settings.all().first()) },
         )
 
+        // Копия ключей (модель Matrix, §3а): пополняют все устройства, секрет — только телефон (Р46).
+        val keyCopy = KeyCopyService(
+            api = network.keyCopy,
+            keys = network.keys,
+            userId = device.session.userId,
+            deviceId = device.session.deviceId,
+            identity = identity,
+            scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default),
+            secrets = if (entry.platform.server in io.tima.domain.account.PHONES) entry.keyCopySecrets(device.session.userId) else null,
+        )
+        environment.onGroupKeyStored = keyCopy::feedGroupKey
+
         Assembled(
             session = device.session,
             environment = environment,
@@ -292,6 +306,7 @@ fun buildAssembled(
                 network = network,
                 session = device.session,
                 identity = identity,
+                keyCopy = keyCopy,
             ),
             groupSender = GroupSender(
                 environment = environment,
@@ -363,6 +378,7 @@ fun buildAssembled(
                 onCallOwners = { callOwners.value = it },
                 onIdentityReplaced = { identityReplaced.value = true },
                 onDeviceAdded = { deviceAdded.value = it },
+                keyCopy = keyCopy,
                 onIdentityClaim = { g -> identityClaims.value = identityClaims.value + g },
                 onHistoryReady = { chat -> historyReady.tryEmit(chat) },
                 onStamp = { senderStamps.tryEmit(it) },
@@ -382,6 +398,7 @@ fun buildAssembled(
             identityReplaced = identityReplaced,
             identityClaims = identityClaims,
             deviceAdded = deviceAdded,
+            keyCopy = keyCopy,
             historyReady = historyReady,
         )
     }

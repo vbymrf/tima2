@@ -118,6 +118,8 @@ class Receiver(
     private val onIdentityReplaced: () -> Unit = {},
     /** К своей личности добавилось другое устройство — платформа (Р48). */
     private val onDeviceAdded: (String) -> Unit = {},
+    /** Копия ключей (модель Matrix, М2): открытое сообщение — в копию. */
+    private val keyCopy: KeyCopyService? = null,
     /** Заявка новой личности в группу — решать владельцу или модератору (ДУ6). */
     private val onIdentityClaim: (String) -> Unit = {},
     /**
@@ -1034,6 +1036,53 @@ class Receiver(
         return added
     }
 
+    /**
+     * История из копии ключей (модель Matrix, М3) — на свежем устройстве с фразой.
+     *
+     * Сначала ключи групп всех версий (тогда и история групп откроется), потом личные
+     * переписки: страница копии → своя обёртка ([KeyCopy.restoreFor]) → очередь входящих → тот
+     * же разбор, что у живых. Срока в 90 дней здесь нет: копия живёт столько же, сколько сами
+     * сообщения на сервере (Р45).
+     *
+     * @return сколько личных сообщений записано впервые; `null` — копию не прочитать.
+     */
+    suspend fun pullFromCopy(copy: io.tima.core.encryption.DeviceIdentity): Int? {
+        val groupKeys = network.keyCopy.groupKeys() ?: return null
+        var keys = 0
+        for (item in groupKeys) {
+            val key = io.tima.core.encryption.KeyCopy.openGroupKey(copy, item.wrapped) ?: continue
+            environment.groupKeyBook.put(item.groupId, item.gkVersion, key)
+            keys++
+        }
+        val chats = network.history.personalChats() ?: return null
+        var added = 0
+        for (chat in chats) {
+            var before = 0L
+            var peer = chat.peerId.takeIf { it != session.userId }
+            while (true) {
+                val page = network.keyCopy.page(chat.chatId, before) ?: break
+                if (page.isEmpty()) break
+                for (item in page) {
+                    val stored = io.tima.core.encryption.KeyCopy.restoreFor(
+                        item.envelope, item.wrapEphemeral, copy, session.deviceId, identity.encryptionPublic,
+                    ) ?: continue
+                    val sender = envelopeSender(stored) ?: continue
+                    if (peer == null && sender.userId != session.userId) peer = sender.userId
+                    captionKey(sender.userId, sender.deviceId)
+                    if (environment.incoming.receive(chat.chatId, item.messageId, stored, sentAtMs = sender.createdAtMs)) added++
+                }
+                if (page.size < io.tima.core.network.KeyCopyApi.PAGE) break
+                before = page.last().messageId
+            }
+            if (peer != null && !environment.chatFacts.knows(chat.chatId)) {
+                book.remember(chatId = chat.chatId, kind = ChatKind.Personal, title = network.directory.nameOrNumber(peer), peerId = peer)
+            }
+        }
+        if (added > 0) drainIncoming()
+        Journal.note(LogCode.DEVICE_TRUST, "история из копии забрана", "ключей групп" to keys, "сообщений" to added)
+        return added
+    }
+
     /** Все свои группы (ИУ3): строки списка — сверкой групп, затем история каждой. */
     suspend fun pullAllGroupHistory(): Int? {
         val groups = (network.groups.mine() as? GroupsResult.Groups)?.groups ?: return null
@@ -1079,7 +1128,12 @@ class Receiver(
             // Вид берётся отсюда и только отсюда: подпись сошлась, значит метаданным
             // можно верить. Метку внутри тела отправитель волен сочинить сам, и
             // «системное сообщение от TIMa» рисовал бы кто угодно (Л14).
-            onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId, kind = it.meta.kind) },
+            onSuccess = {
+                // Пришедшее из истории или из самой копии в копии уже есть — второй раз не подаём,
+                // иначе восстановление давало бы по запросу на каждое сообщение.
+                if (!io.tima.core.encryption.HistoryFrame.isHistory(entry.envelope)) keyCopy?.feedMessage(entry.chatId, entry.envelope)
+                OpenOutcome.Opened(it.body, it.meta.senderId, kind = it.meta.kind)
+            },
             // Подпись не сошлась или обёртки для нас нет — разные беды, и причина
             // доносится дословно: человеку видно «не читается», нам — почему.
             onFailure = { OpenOutcome.NoKey(it.message ?: "не открылось") },

@@ -632,6 +632,7 @@ private fun Occurrence(entry: Entry, build: Build, onReturn: (String) -> Unit = 
             deviceName = entry.platform.deviceName,
             // Вход по фразе — слова один раз до просьбы о ключе служебной группы (2а).
             onEnteredByPhrase = PhraseOnce::hold,
+            onPhraseKnown = KeyCopyPhrase::hold,
         )
     }
     val state by store.state.collectAsState()
@@ -1547,6 +1548,9 @@ private fun App(
         // личной истории переписки на устройстве уже есть, и второй раз решить было бы не по
         // чему. Не удалось забрать группы — попытка повторится при следующем запуске.
         val groupsPending = "history.groups.pending.v1"
+        // Фраза, введённая при входе или выданная новому аккаунту, — копии ключей: вывести пару,
+        // опубликовать открытый ключ, на телефоне сохранить секрет (модель Matrix, М1, Р46).
+        KeyCopyPhrase.take()?.let { words -> runCatching { assembled.keyCopy?.onPhrase(words) } }
         val marks = runCatching { environment.settings.all().first() }.getOrNull() ?: return@LaunchedEffect
         if (marks[key] == null) {
             // Только на свежем устройстве — без единой личной переписки. На работающем сверка
@@ -1558,6 +1562,12 @@ private fun App(
                 return@LaunchedEffect
             }
             runCatching { environment.settings.put(groupsPending, "1") }
+            // Сначала копия ключей (М3): она даёт всё за срок хранения и ключи групп; передача и
+            // обёртки за 90 дней — следом, на случай если копии нет.
+            assembled.keyCopy?.copyIdentity()?.let { copy ->
+                val fromCopy = runCatching { assembled.receiver.pullFromCopy(copy) }.getOrNull()
+                Journal.note(LogCode.DEVICE_TRUST, "история из копии при первом запуске", "новых" to (fromCopy ?: -1))
+            }
             val added = runCatching { assembled.receiver.pullAllHistory() }.getOrNull() ?: return@LaunchedEffect
             Journal.note(LogCode.DEVICE_TRUST, "история при первом запуске забрана", "новых" to added)
             runCatching { environment.settings.put(key, "1") }
@@ -3142,6 +3152,7 @@ private fun App(
                                 keys = network.keys,
                                 users = network.directory,
                                 sms = network.sms,
+                                onPhrase = { w -> assembled.keyCopy?.onPhrase(w) },
                                 userId = assembled.session.userId,
                                 identity = deviceIdentityFrom(deviceSecret),
                                 asks = askSecrets,
@@ -3150,7 +3161,7 @@ private fun App(
                                 onCertified = { id, pub ->
                                     scope.launch {
                                         runCatching { assembled.keyOrchestrator.handOver(id, pub) }
-                                        HistoryHandover(network.history, assembled.session.deviceId, deviceIdentityFrom(deviceSecret)).handOver(id, pub)
+                                        HistoryHandover(network.history, assembled.session.deviceId, deviceIdentityFrom(deviceSecret), network.keyCopy, assembled.keyCopy?.copyIdentity()).handOver(id, pub)
                                     }
                                 },
                             )
@@ -3228,6 +3239,7 @@ private fun App(
                                 keys = network.keys,
                                 users = network.directory,
                                 sms = network.sms,
+                                onPhrase = { w -> assembled.keyCopy?.onPhrase(w) },
                                 userId = assembled.session.userId,
                                 identity = deviceIdentityFrom(deviceSecret),
                                 asks = askSecrets,
@@ -3236,7 +3248,7 @@ private fun App(
                                 onCertified = { id, pub ->
                                     scope.launch {
                                         runCatching { assembled.keyOrchestrator.handOver(id, pub) }
-                                        HistoryHandover(network.history, assembled.session.deviceId, deviceIdentityFrom(deviceSecret)).handOver(id, pub)
+                                        HistoryHandover(network.history, assembled.session.deviceId, deviceIdentityFrom(deviceSecret), network.keyCopy, assembled.keyCopy?.copyIdentity()).handOver(id, pub)
                                     }
                                 },
                             ),
@@ -3266,7 +3278,7 @@ private fun App(
                         onTrusted = { id, pub ->
                             assembled.keyOrchestrator.handOver(id, pub)
                             scope.launch {
-                                HistoryHandover(network.history, assembled.session.deviceId, deviceIdentityFrom(deviceSecret)).handOver(id, pub)
+                                HistoryHandover(network.history, assembled.session.deviceId, deviceIdentityFrom(deviceSecret), network.keyCopy, assembled.keyCopy?.copyIdentity()).handOver(id, pub)
                             }
                         },
                     )
@@ -4712,7 +4724,7 @@ private fun Members(
                     deviceKeys = network.keys,
                     escrow = network.escrow,
                     groupKeys = network.groupKeys,
-                    book = SqlGroupKeys(environment.db, environment.cipher),
+                    book = SqlGroupKeys(environment.db, environment.cipher, onPut = { g, v, k -> environment.onGroupKeyStored?.invoke(g, v, k) }),
                     msNow = ::msNow,
                     // Ключ группы — только доверенным устройствам (ДУ3): без этого смена
                     // состава из «Участников» обходила проверку.

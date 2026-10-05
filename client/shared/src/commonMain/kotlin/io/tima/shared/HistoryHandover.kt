@@ -22,6 +22,13 @@ class HistoryHandover(
     private val history: HistoryApi,
     private val myDeviceId: String,
     private val identity: DeviceIdentity,
+    /**
+     * Копия ключей и её секрет на этом телефоне (модель Matrix, М4, Р46). Есть — история
+     * берётся из копии целиком, за весь срок хранения сообщений; нет — прежним путём, из
+     * своих обёрток за 90 дней.
+     */
+    private val keyCopy: io.tima.core.network.KeyCopyApi? = null,
+    private val copy: DeviceIdentity? = null,
 ) {
 
     /** @return сколько ключей принял сервер. */
@@ -36,15 +43,34 @@ class HistoryHandover(
         for (chat in chats) {
             val keys = mutableListOf<HistoryApi.Key>()
             var before = 0L
-            while (true) {
-                val page = history.page(chat.chatId, before) ?: break
-                if (page.isEmpty()) break
-                for (item in page) {
-                    val r = HistoryKeys.rewrap(item.envelope, item.wrapEphemeral, myDeviceId, identity, encryptionPub)
-                    if (r == null) failed++ else keys += HistoryApi.Key(r.messageId, r.ephemeralPub, r.wrapped)
+            val fromCopy = if (keyCopy != null && copy != null) {
+                while (true) {
+                    val page = keyCopy.page(chat.chatId, before) ?: break
+                    if (page.isEmpty()) break
+                    for (item in page) {
+                        val r = io.tima.core.encryption.KeyCopy.rewrapFor(item.envelope, item.wrapEphemeral, copy, encryptionPub)
+                        if (r == null) failed++ else keys += HistoryApi.Key(r.messageId, r.ephemeralPub, r.wrapped)
+                    }
+                    if (page.size < io.tima.core.network.KeyCopyApi.PAGE) break
+                    before = page.last().messageId
                 }
-                if (page.size < HistoryApi.PAGE) break
-                before = page.last().messageId
+                keys.isNotEmpty()
+            } else {
+                false
+            }
+            // Копии нет или она пуста — прежним путём: свои обёртки за срок их хранения.
+            if (!fromCopy) {
+                before = 0L
+                while (true) {
+                    val page = history.page(chat.chatId, before) ?: break
+                    if (page.isEmpty()) break
+                    for (item in page) {
+                        val r = HistoryKeys.rewrap(item.envelope, item.wrapEphemeral, myDeviceId, identity, encryptionPub)
+                        if (r == null) failed++ else keys += HistoryApi.Key(r.messageId, r.ephemeralPub, r.wrapped)
+                    }
+                    if (page.size < HistoryApi.PAGE) break
+                    before = page.last().messageId
+                }
             }
             // Одной передачей на переписку, а не на страницу: каждая передача будит новое
             // устройство, и оно забирает переписку целиком.

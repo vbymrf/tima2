@@ -36,6 +36,22 @@ class VaultSecretStore(private val vault: SecretVault) : DeviceSecretStore {
 
     override fun askSecret(): ByteArray? = vault.get(Secrets.ASK_SECRET)
 
+    /** Секрет копии ключей с эпохой (Р46) — только на телефонах. */
+    fun saveKeyCopySecret(epoch: Int, secret: ByteArray) {
+        require(epoch >= 1 && secret.isNotEmpty()) { "секрет копии: эпоха с единицы и непустой ключ" }
+        val head = byteArrayOf((epoch ushr 24).toByte(), (epoch ushr 16).toByte(), (epoch ushr 8).toByte(), epoch.toByte())
+        vault.put(Secrets.KEY_COPY_SECRET, head + secret)
+    }
+
+    /** `эпоха → закрытый ключ копии`; `null` — не сохранён. */
+    fun keyCopySecret(): Pair<Int, ByteArray>? {
+        val raw = vault.get(Secrets.KEY_COPY_SECRET) ?: return null
+        if (raw.size <= 4) return null
+        val epoch = ((raw[0].toInt() and 0xff) shl 24) or ((raw[1].toInt() and 0xff) shl 16) or
+            ((raw[2].toInt() and 0xff) shl 8) or (raw[3].toInt() and 0xff)
+        return epoch to raw.copyOfRange(4, raw.size)
+    }
+
     override fun saveSession(session: Session) {
         val parts = listOf(session.userId, session.deviceId, session.accessToken)
         require(parts.none { it.isEmpty() }) { "пустое поле сессии: $parts" }
@@ -61,6 +77,7 @@ class VaultSecretStore(private val vault: SecretVault) : DeviceSecretStore {
         vault.remove(SESSION)
         vault.remove(Secrets.DEVICE_SECRET)
         vault.remove(Secrets.ASK_SECRET)
+        vault.remove(Secrets.KEY_COPY_SECRET)
     }
 
     private companion object {
