@@ -62,6 +62,19 @@ class CallRecordTest {
     }
 
     @Test
+    fun отбой_до_ответа_хранится_как_missed_и_читается_так_же() {
+        // Сервер с 2026-10-05 не переписывает закрытый звонок: отклонённый остаётся
+        // `missed` с тем, кто нажал первым. Прочти его без `ended_by` — и звонивший увидит
+        // «не дозвонился» там, где ему отказали (так и было на Samsung, звонок 9bfc4fd3).
+        val отменил_звонивший = запись(CallStates.MISSED, initiator = я, endedBy = я)
+        val отклонил_вызываемый = запись(CallStates.MISSED, initiator = я, endedBy = он)
+        assertEquals(CallOutcome.Cancelled, отменил_звонивший.outcome(я))
+        assertEquals(CallOutcome.Cancelled, отменил_звонивший.outcome(он))
+        assertEquals(CallOutcome.Declined, отклонил_вызываемый.outcome(я))
+        assertEquals(CallOutcome.Declined, отклонил_вызываемый.outcome(он))
+    }
+
+    @Test
     fun без_ended_by_отменил_от_отклонил_не_отличить_и_мы_не_выдумываем() {
         // Строки старше поля `ended_by`, и закрытые SFU. Сказать, кто нажал, нечем —
         // и тогда честнее «оборвался», чем угаданное «отклонён».

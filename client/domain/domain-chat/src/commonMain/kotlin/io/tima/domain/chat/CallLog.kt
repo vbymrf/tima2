@@ -86,9 +86,18 @@ data class CallRecord(
         CallStates.RINGING -> CallOutcome.Ringing
         CallStates.LOST -> CallOutcome.Lost
         CallStates.MISSED ->
-            // У звонившего это «не дозвонился», у вызываемого «пропущенный». Разные
-            // слова и разные поступки: первый перезвонит, второй перезвонит извинившись.
-            if (outgoing(me)) CallOutcome.NotAnswered else CallOutcome.Missed
+            when {
+                // Отбой до ответа сервер хранит как `missed` с тем, кто нажал первым
+                // (`ended_by`). До 2026-10-05 второй `/end` переписывал его в `ended`, и
+                // различение жило только там — строка ниже; теперь оно нужно и здесь.
+                endedBy.isNotEmpty() && endedBy == initiatorId -> CallOutcome.Cancelled
+                endedBy.isNotEmpty() -> CallOutcome.Declined
+                // Никто не нажимал — истекло время вызова. У звонившего это «не
+                // дозвонился», у вызываемого «пропущенный». Разные слова и разные
+                // поступки: первый перезвонит, второй перезвонит извинившись.
+                outgoing(me) -> CallOutcome.NotAnswered
+                else -> CallOutcome.Missed
+            }
         CallStates.BUSY ->
             // Звонившему сказали «занят». Вызываемому в это время звонили, пока он
             // говорил, — то есть он этот вызов пропустил, и знать о нём должен.
