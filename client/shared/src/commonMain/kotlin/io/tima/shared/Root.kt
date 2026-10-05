@@ -1581,6 +1581,15 @@ private fun App(
         runCatching { environment.settings.put(groupsKey, "1") }
     }
 
+    // Копия ключей заведена (этим устройством раньше или другим) — дозалить в неё то, что здесь
+    // уже есть, один раз на эпоху (Р44). Позже сверки истории: свежее устройство сначала
+    // поднимает своё из копии. Не вышло — повтор через пятнадцать минут.
+    LaunchedEffect(assembled.session.userId) {
+        val copy = assembled.keyCopy ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(60_000L)
+        while (runCatching { copy.backfillOnce() }.getOrDefault(false).not()) kotlinx.coroutines.delay(15 * 60_000L)
+    }
+
     // Один человек — одна переписка (ДУ6, Р26): при запуске и раз в пять минут.
     LaunchedEffect(assembled.session.userId) {
         val chain = IdentityChain(environment, network.directory, assembled.session.userId, ::msNow)

@@ -9,6 +9,7 @@ import io.tima.core.network.DeviceKeysResult
 import io.tima.core.network.KeyCopyApi
 import io.tima.core.network.KeysApi
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -40,6 +41,10 @@ class KeyCopyService(
     private val scope: CoroutineScope,
     /** Хранилище секрета копии — только у телефона (Р46); у ПК `null`. */
     private val secrets: KeyCopySecrets?,
+    /** Ключи групп этого устройства, все версии: `группа, версия, ключ` — для дозаливки. */
+    private val localGroupKeys: () -> List<Triple<String, Int, ByteArray>> = { emptyList() },
+    /** Отметка «дозалито под эпоху» — в настройках аккаунта; `null` — не отмечаем (тесты). */
+    private val settings: io.tima.domain.chat.Settings? = null,
 ) {
     private val lock = Mutex()
     private var cached: Pair<Int, ByteArray>? = null
@@ -51,6 +56,11 @@ class KeyCopyService(
     /** Действующий открытый ключ копии, проверенный подписью ключа личности; `null` — нет или не сошлась. */
     suspend fun pub(): Pair<Int, ByteArray>? = lock.withLock {
         cached ?: load()?.also { cached = it }
+    }
+
+    private companion object {
+        /** Эпоха, под которую это устройство уже дозалило копию. */
+        const val BACKFILL_MARK = "key-copy.backfill.v1"
     }
 
     private suspend fun load(): Pair<Int, ByteArray>? {
@@ -85,6 +95,61 @@ class KeyCopyService(
         }
     }
 
+    /**
+     * Дозалить в копию то, что у устройства уже есть (Р44), — один раз на эпоху.
+     *
+     * Пополнение (М2) кладёт в копию только новое: сообщение, пришедшее или ушедшее после того,
+     * как копия завелась, и версию ключа группы, легшую после. Всё прежнее — личные переписки
+     * до «Завести копию» и ключи групп, полученные раньше, — в неё не попадало, и новое
+     * устройство их не поднимало: проверка 2026-10-05 на Redmi — вернулись два сообщения из
+     * копии, а прежние пропали вместе с ключом служебной группы, то есть с книгой контактов.
+     * Matrix при включении копии заливает все имеющиеся ключи; так и здесь.
+     *
+     * Личные сообщения берутся с сервера — те, где есть обёртка под это устройство, то есть за
+     * срок хранения обёрток (90 дней); ключи групп — из местной базы, все версии. Повтор не
+     * вредит: сервер обёртку той же эпохи не переписывает.
+     *
+     * @return `true` — дозалито или уже было; `false` — копии нет или сеть не ответила, повторить позже.
+     */
+    suspend fun backfillOnce(): Boolean {
+        val (epoch, copyPub) = pub() ?: return false
+        val mark = BACKFILL_MARK
+        val done = settings?.let { s -> runCatching { s.all().first()[mark] }.getOrNull() }
+        if (done == epoch.toString()) return true
+        val groupItems = localGroupKeys().mapNotNull { (groupId, version, key) ->
+            KeyCopy.wrapGroupKey(copyPub, key)?.let { KeyCopyApi.GroupItem(groupId, version, it) }
+        }
+        var ok = true
+        for (part in groupItems.chunked(KeyCopyApi.PAGE)) {
+            if (api.saveGroupKeys(epoch, part) != KeyCopyApi.Saved.OK) ok = false
+        }
+        val chats = history.personalChats() ?: return false
+        var messages = 0
+        for (chat in chats) {
+            var before = 0L
+            while (true) {
+                val page = history.page(chat.chatId, before) ?: return false
+                if (page.isEmpty()) break
+                val items = page.mapNotNull { item ->
+                    KeyCopy.wrapMessage(item.envelope, item.wrapEphemeral, deviceId, identity, copyPub)?.let { item.messageId to it }
+                }
+                when (api.saveMessages(chat.chatId, epoch, items)) {
+                    KeyCopyApi.Saved.OK -> messages += items.size
+                    KeyCopyApi.Saved.STALE -> {
+                        lock.withLock { cached = null }
+                        return false
+                    }
+                    KeyCopyApi.Saved.FAILED -> ok = false
+                }
+                if (page.size < io.tima.core.network.HistoryApi.PAGE) break
+                before = page.last().messageId
+            }
+        }
+        Journal.note(LogCode.DEVICE_TRUST, "копия ключей дозалита", "эпоха" to epoch, "сообщений" to messages, "ключей групп" to groupItems.size, "полностью" to ok)
+        if (ok) settings?.let { s -> runCatching { s.put(mark, epoch.toString()) } }
+        return ok
+    }
+
     /** Секрет копии, которым это устройство может её открыть; `null` — не может. */
     fun copyIdentity(): DeviceIdentity? =
         fromPhrase ?: secrets?.get()?.let { (_, raw) -> runCatching { DeviceIdentity.fromRaw(raw) }.getOrNull() }
@@ -106,7 +171,10 @@ class KeyCopyService(
         val claimed = io.tima.core.encryption.AccountIdentitiesOverKodium.fromWords(words) ?: return Rotation.WRONG_PHRASE
         if (!claimed.contentEquals(mine)) return Rotation.WRONG_PHRASE
         onPhrase(words)
-        return if (missing() == false) Rotation.DONE else Rotation.OFFLINE
+        if (missing() != false) return Rotation.OFFLINE
+        // Всё, что у устройства уже есть, — в копию сразу, а не при следующем запуске.
+        scope.launch { runCatching { backfillOnce() } }
+        return Rotation.DONE
     }
 
     /** Пора ли сменить пару копии: отключили своё устройство (М5). */
@@ -167,6 +235,8 @@ class KeyCopyService(
             }
         }
         Journal.note(LogCode.DEVICE_TRUST, "копия ключей переведена на новую пару", "эпоха" to epoch, "сообщений" to moved, "ключей групп" to groupItems.size)
+        // Перезавёрнуто всё содержимое копии — дозаливать под новую эпоху нечего.
+        settings?.let { s -> runCatching { s.put(BACKFILL_MARK, epoch.toString()) } }
         return Rotation.DONE
     }
 

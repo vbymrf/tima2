@@ -295,6 +295,11 @@ fun buildAssembled(
             identity = identity,
             scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default),
             secrets = if (entry.platform.server in io.tima.domain.account.PHONES) entry.keyCopySecrets(device.session.userId) else null,
+            localGroupKeys = {
+                val book = environment.groupKeyBook
+                book.groupsWithKeys().flatMap { g -> book.versions(g).mapNotNull { v -> book.key(g, v)?.let { Triple(g, v, it) } } }
+            },
+            settings = environment.settings,
         )
         environment.onGroupKeyStored = keyCopy::feedGroupKey
 
