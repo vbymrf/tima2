@@ -42,6 +42,7 @@ import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
 import io.tima.core.words.CurrentWords
+import io.tima.core.words.Words
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -65,8 +66,14 @@ import java.util.concurrent.Executors
  * Результат — тот же, что у ссылки из штатной камеры: строка кода уходит в главное окно, а
  * там — экран «Доверить …?». Код не нашей схемы не принимается: сканер подключения, а не
  * общий.
+ *
+ * Словарь — ссылкой в конструкторе, как у store (ПЛАН-ЯЗЫКА, Я2-беды). Activity создаёт
+ * система конструктором без параметров, и Kotlin заводит его сам, когда у всех параметров
+ * есть умолчания.
  */
-class QrScanActivity : ComponentActivity() {
+class QrScanActivity(
+    private val words: () -> Words = { CurrentWords.value },
+) : ComponentActivity() {
 
     private val scanning: ExecutorService = Executors.newSingleThreadExecutor()
     private val reader = QRCodeReader()
@@ -86,7 +93,7 @@ class QrScanActivity : ComponentActivity() {
             start()
         } else {
             Journal.note(LogCode.PERM_DENIED, "сканер кода: камеру не разрешили")
-            notice.value = CurrentWords.value.auth.scanNoCamera
+            notice.value = words().auth.scanNoCamera
         }
     }
 
@@ -95,10 +102,10 @@ class QrScanActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         preview = PreviewView(this)
-        val words = CurrentWords.value.auth
+        val auth = words().auth
         setContent {
             val said by notice
-            io.tima.core.ui.TimaTheme(colors = io.tima.core.ui.TimaColors.light, words = CurrentWords.value) {
+            io.tima.core.ui.TimaTheme(colors = io.tima.core.ui.TimaColors.light, words = words()) {
             Box(Modifier.fillMaxSize().background(Color.Black)) {
                 AndroidView(factory = { preview }, modifier = Modifier.fillMaxSize())
                 Column(
@@ -109,9 +116,9 @@ class QrScanActivity : ComponentActivity() {
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Name(words.scanTitle)
-                    Secondary(said ?: words.scanHint)
-                    Button(label = words.scanClose, onClick = { finish() }, kind = ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
+                    Name(auth.scanTitle)
+                    Secondary(said ?: auth.scanHint)
+                    Button(label = auth.scanClose, onClick = { finish() }, kind = ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
                 }
             }
             }
@@ -129,7 +136,7 @@ class QrScanActivity : ComponentActivity() {
         future.addListener({
             val provider = runCatching { future.get() }.getOrElse {
                 Journal.trouble(LogCode.CALL_DEVICE, "сканер кода: камера не открылась", "почему" to it.message.orEmpty())
-                notice.value = CurrentWords.value.auth.scanNoCamera
+                notice.value = words().auth.scanNoCamera
                 return@addListener
             }
             val shown = Preview.Builder().build().also { it.setSurfaceProvider(preview.surfaceProvider) }
@@ -142,7 +149,7 @@ class QrScanActivity : ComponentActivity() {
                 provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, shown, analysis)
             }.onFailure {
                 Journal.trouble(LogCode.CALL_DEVICE, "сканер кода: камера не открылась", "почему" to it.message.orEmpty())
-                notice.value = CurrentWords.value.auth.scanNoCamera
+                notice.value = words().auth.scanNoCamera
             }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -165,7 +172,7 @@ class QrScanActivity : ComponentActivity() {
         }.getOrElse { if (it !is NotFoundException) null else null } ?: return
         reader.reset()
         if (!text.startsWith(LINK_PREFIX)) {
-            notice.value = CurrentWords.value.auth.scanNotOurs
+            notice.value = words().auth.scanNotOurs
             return
         }
         done = true

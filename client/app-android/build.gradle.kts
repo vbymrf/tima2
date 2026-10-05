@@ -22,6 +22,8 @@ kotlin {
             implementation(project(":shared"))
             implementation(project(":core:core-database"))
             implementation(project(":core:core-ui"))
+            // Словарь: сканер кода берёт надписи сам (QrScanActivity), а не через core-ui.
+            implementation(project(":core:core-words"))
             // Хранилищу секретов нужен контекст: AndroidKeyStore вместо DPAPI.
             implementation(project(":core:core-secrets"))
             implementation(project(":core:core-contacts"))
