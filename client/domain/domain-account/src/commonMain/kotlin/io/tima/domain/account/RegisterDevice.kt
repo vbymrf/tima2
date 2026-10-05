@@ -33,7 +33,8 @@ class RegisterDevice(
      * @return [CodeRequested.devCode] заполнен только на стенде с `TIMA_DEV_SMS`.
      *   Харнесс К4 живёт этим: иначе сквозной путь требовал бы настоящей SMS.
      */
-    suspend fun requestCode(phone: String): CodeRequestStep = api.requestCode(phone)
+    suspend fun requestCode(phone: String, purpose: String = ""): CodeRequestStep =
+        if (purpose.isBlank()) api.requestCode(phone) else api.requestCode(phone, purpose)
 
     /**
      * Шаги второй и третий: проверить код и завести устройство.
@@ -214,6 +215,9 @@ sealed interface DeviceCreateStep {
  */
 interface AccountApi {
     suspend fun requestCode(phone: String): CodeRequestStep
+
+    /** Код с назначением (Р53): у шагов перерегистрации свой предел SMS на номер. */
+    suspend fun requestCode(phone: String, purpose: String): CodeRequestStep = requestCode(phone)
     suspend fun submitCode(requestId: String, code: String): CodeSubmitStep
     suspend fun createDevice(
         registrationToken: String,

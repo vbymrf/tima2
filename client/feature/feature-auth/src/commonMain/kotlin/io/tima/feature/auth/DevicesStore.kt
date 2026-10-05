@@ -127,17 +127,32 @@ class DevicesStore(
         }
     }
 
-    /** Код из SMS для заявки или подтверждения (ДУ9) — на номер аккаунта. */
+    /**
+     * Код из SMS для заявки или подтверждения (ДУ9) — на номер аккаунта. У каждого шага свой
+     * предел SMS (Р53): заявка, подтверждение Н, подтверждение С.
+     */
     fun sendReregCode() {
         val actions = trust ?: return
         if (_state.value.trusting) return
+        val r = _state.value.rereg
+        val purpose = when {
+            r == null || !r.active -> return
+            !r.isNew && !r.disputed -> "rereg_claim"
+            r.isNew -> "rereg_confirm_new"
+            else -> "rereg_confirm_old"
+        }
         _state.value = _state.value.copy(trusting = true, trustNotice = null)
         scope.launch {
-            val sent = runCatching { actions.sendBanCode() }.getOrNull()
+            val sent = runCatching { actions.sendCode(purpose) }.getOrDefault(io.tima.domain.account.CodeSend.Failed)
+            val w = words().auth
             _state.value = _state.value.copy(
                 trusting = false,
-                reregCode = sent,
-                trustNotice = if (sent == null) words().auth.trustFailed(words().auth.tryAgain) else sent.devCode?.let { words().auth.standSentCode(it) },
+                reregCode = (sent as? io.tima.domain.account.CodeSend.Sent)?.code,
+                trustNotice = when (sent) {
+                    is io.tima.domain.account.CodeSend.Sent -> sent.code.devCode?.let { w.standSentCode(it) }
+                    io.tima.domain.account.CodeSend.Limited -> w.tooManyCodes
+                    io.tima.domain.account.CodeSend.Failed -> w.trustFailed(w.tryAgain)
+                },
             )
         }
     }

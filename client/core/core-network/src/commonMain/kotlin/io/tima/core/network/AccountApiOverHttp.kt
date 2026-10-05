@@ -19,8 +19,10 @@ import io.tima.domain.account.DeviceProof
  */
 class AccountApiOverHttp(private val auth: AuthApi) : AccountApi {
 
-    override suspend fun requestCode(phone: String): CodeRequestStep =
-        when (val outcome = auth.requestSms(phone)) {
+    override suspend fun requestCode(phone: String): CodeRequestStep = requestCode(phone, "")
+
+    override suspend fun requestCode(phone: String, purpose: String): CodeRequestStep =
+        when (val outcome = auth.requestSms(phone, purpose)) {
             is SmsRequestResult.Sent -> CodeRequestStep.CodeRequested(outcome.requestId, outcome.devCode)
             is SmsRequestResult.BadPhone -> CodeRequestStep.BadPhone(outcome.reason)
             is SmsRequestResult.NoConnection -> CodeRequestStep.Offline(outcome.link.retryDelayMs)

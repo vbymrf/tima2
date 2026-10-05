@@ -39,14 +39,15 @@ class AuthApi(
      * (`^\+[1-9][0-9]{7,14}$`), и гонять запрос ради заведомого `400` — это трата
      * времени человека, стоящего перед полем ввода.
      */
-    suspend fun requestSms(phone: String): SmsRequestResult {
+    suspend fun requestSms(phone: String, purpose: String = ""): SmsRequestResult {
         if (!PHONE.matches(phone)) {
             return SmsRequestResult.BadPhone("ожидается E.164: плюс и от 8 до 15 цифр")
         }
         val response = try {
             client.post(route.api("/api/v1/auth/sms/request")) {
                 contentType(ContentType.Application.Json)
-                setBody("""{"phone":"$phone"}""")
+                // Назначение кода (Р53): у шагов перерегистрации свой предел SMS на номер.
+                setBody(if (purpose.isBlank()) """{"phone":"$phone"}""" else """{"phone":"$phone","purpose":"$purpose"}""")
             }
         } catch (e: Throwable) {
             return SmsRequestResult.NoConnection(classifyFailure(e))

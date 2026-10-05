@@ -114,7 +114,8 @@ class AuthStore(
         _state.value = current.copy(expect = true, trouble = null)
 
         scope.launch {
-            _state.value = when (val step = register.requestCode(current.fullNumber)) {
+            // Перерегистрация — свой предел SMS на номер (Р53).
+            _state.value = when (val step = register.requestCode(current.fullNumber, if (current.rereg) "rereg_start" else "")) {
                 is CodeRequestStep.CodeRequested -> AuthState.Code(
                     requestId = step.requestId,
                     phone = current.fullNumber,
@@ -126,7 +127,9 @@ class AuthStore(
 
                 is CodeRequestStep.BadPhone -> current.copyWithTrouble(words().auth.badPhone(step.reason))
                 is CodeRequestStep.Offline -> current.copyWithTrouble(noLinks(step.retryAfterMs))
-                is CodeRequestStep.Refused -> current.copyWithTrouble(step.reason)
+                is CodeRequestStep.Refused -> current.copyWithTrouble(
+                    if (step.reason == "rate_limited") words().auth.tooManyCodes else step.reason,
+                )
             }
         }
     }

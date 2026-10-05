@@ -204,6 +204,17 @@ class DeviceTrustActionsOverNetwork(
         return io.tima.domain.account.PrepareRereg.Ready(phone, io.tima.domain.account.ReregProof(challenge, signature))
     }
 
+    override suspend fun sendCode(purpose: String): io.tima.domain.account.CodeSend {
+        val phone = users?.startAnewState()?.phone?.takeIf { it.isNotBlank() } ?: return io.tima.domain.account.CodeSend.Failed
+        return when (val sent = sms?.requestSms(phone, purpose)) {
+            is io.tima.core.network.SmsRequestResult.Sent ->
+                io.tima.domain.account.CodeSend.Sent(io.tima.domain.account.BanCode(sent.requestId, sent.devCode))
+            is io.tima.core.network.SmsRequestResult.Refused ->
+                if (sent.code == "rate_limited") io.tima.domain.account.CodeSend.Limited else io.tima.domain.account.CodeSend.Failed
+            else -> io.tima.domain.account.CodeSend.Failed
+        }
+    }
+
     override suspend fun claimRereg(words: List<String>, requestId: String, code: String): TrustStep =
         reregCall("claim", words, null, requestId, code)
 

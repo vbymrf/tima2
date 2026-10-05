@@ -72,6 +72,12 @@ interface DeviceTrustActions {
      */
     suspend fun prepareRereg(words: List<String>): PrepareRereg = PrepareRereg.Failed(TrustStep.Refused("не умеем"))
 
+    /**
+     * Код из SMS на номер аккаунта для шага перерегистрации (Р53): у каждого шага свой предел.
+     * [purpose] — `rereg_claim`, `rereg_confirm_new`, `rereg_confirm_old`.
+     */
+    suspend fun sendCode(purpose: String): CodeSend = sendBanCode()?.let { CodeSend.Sent(it) } ?: CodeSend.Failed
+
     /** «Аккаунт украден» (Р34): фраза С и код из SMS на номер аккаунта. */
     suspend fun claimRereg(words: List<String>, requestId: String, code: String): TrustStep = TrustStep.Refused("не умеем")
 
@@ -94,6 +100,16 @@ data class Rereg(
     companion object {
         val NONE = Rereg(active = false)
     }
+}
+
+/** Чем кончилась отправка кода. */
+sealed interface CodeSend {
+    class Sent(val code: BanCode) : CodeSend
+
+    /** Предел SMS на номер исчерпан — не «нет связи», а «подождите». */
+    data object Limited : CodeSend
+
+    data object Failed : CodeSend
 }
 
 /** Чем кончилась подготовка перерегистрации. */
