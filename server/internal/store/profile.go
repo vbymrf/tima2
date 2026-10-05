@@ -20,6 +20,8 @@ type Me struct {
 	NicknameLocked bool
 	// Медиа-объект аватара. Пусто — картинки нет, рисуются буквы.
 	AvatarMediaID string
+	// «Начать заново» на аккаунте запрещено владельцем (ДУ10, Р41) — навсегда.
+	StartAnewBanned bool
 }
 
 // Me — профиль по user_id текущей личности.
@@ -27,18 +29,20 @@ func (s *Store) Me(ctx context.Context, userID string) (Me, error) {
 	var (
 		phoneEnc, nameEnc []byte
 		nick, setBy, avatar *string
+		banned            bool
 	)
 	err := s.pool.QueryRow(ctx, `
-		SELECT p.phone_enc, p.name_enc, p.nickname, p.nickname_set_by::text, p.avatar_media_id::text
+		SELECT p.phone_enc, p.name_enc, p.nickname, p.nickname_set_by::text, p.avatar_media_id::text,
+		       p.start_anew_banned
 		  FROM users u JOIN persons p ON p.person_id = u.person_id
-		 WHERE u.user_id = $1`, userID).Scan(&phoneEnc, &nameEnc, &nick, &setBy, &avatar)
+		 WHERE u.user_id = $1`, userID).Scan(&phoneEnc, &nameEnc, &nick, &setBy, &avatar, &banned)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Me{}, ErrUserUnknown
 	}
 	if err != nil {
 		return Me{}, err
 	}
-	me := Me{}
+	me := Me{StartAnewBanned: banned}
 	if len(phoneEnc) > 0 {
 		if me.Phone, err = s.pii.Open(phoneEnc); err != nil {
 			return Me{}, err
@@ -146,4 +150,13 @@ func (s *Store) ProfileRevs(ctx context.Context, ids []string) (map[string]int32
 		out[id] = rev
 	}
 	return out, rows.Err()
+}
+
+// BanStartAnew — запретить «Начать заново» на аккаунте этой личности (ДУ10, Р41). Снять запрет
+// нельзя ни здесь, ни запросом в обход: это держит триггер миграции 0064.
+func (s *Store) BanStartAnew(ctx context.Context, userID string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE persons SET start_anew_banned = true
+		 WHERE person_id = (SELECT person_id FROM users WHERE user_id = $1)`, userID)
+	return err
 }

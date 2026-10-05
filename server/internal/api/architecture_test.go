@@ -212,7 +212,8 @@ const (
 	// GroupsWithStaleEpoch).
 	// 245 → 246: личные переписки личности — история на новом устройстве (ИУ1,
 	// PersonalChatsOf).
-	storeMethodBudget = 246
+	// 246 → 247: запрет «Начать заново» на аккаунте (ДУ10, Р41, BanStartAnew).
+	storeMethodBudget = 247
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
 )

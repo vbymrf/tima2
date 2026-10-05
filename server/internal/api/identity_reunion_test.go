@@ -23,6 +23,18 @@ import (
 // для сценариев конфликта, которые registerDevice (без этих полей) не покрывает.
 func registerRaw(t *testing.T, ts *httptest.Server, phone string, identityPub []byte, forceNew bool) (*device, int, string) {
 	t.Helper()
+	d, code, raw := registerReply(t, ts, phone, identityPub, forceNew)
+	var errBody struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(raw, &errBody)
+	return d, code, errBody.Code
+}
+
+// registerReply — то же, но с ответом сервера целиком: в отказе бывают поля сверх кода
+// (`start_anew` у identity_mismatch, ДУ10).
+func registerReply(t *testing.T, ts *httptest.Server, phone string, identityPub []byte, forceNew bool) (*device, int, json.RawMessage) {
+	t.Helper()
 	d := &device{}
 	seed := make([]byte, 32)
 	if _, err := rand.Read(seed); err != nil {
@@ -68,12 +80,8 @@ func registerRaw(t *testing.T, ts *httptest.Server, phone string, identityPub []
 	var raw json.RawMessage
 	code := postJSON(t, ts, "/api/v1/auth/register", body, &raw)
 	_ = json.Unmarshal(raw, &regResp)
-	var errBody struct {
-		Code string `json:"code"`
-	}
-	_ = json.Unmarshal(raw, &errBody)
 	d.userID, d.id, d.token = regResp.UserID, regResp.DeviceID, regResp.AccessToken
-	return d, code, errBody.Code
+	return d, code, raw
 }
 
 // Без реального конфликта force_new_identity не должен ничего форкать: иначе

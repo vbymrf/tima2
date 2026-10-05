@@ -24,6 +24,9 @@ type UserStore interface {
 	SetDisplayName(ctx context.Context, userID, name string) error
 	// Кто я: телефон, имя, ник и его замок, аватар (Д8)
 	Me(ctx context.Context, userID string) (store.Me, error)
+	// Запрет «Начать заново» (ДУ10, Р41): ставится фразой и SMS, не снимается.
+	BanStartAnew(ctx context.Context, userID string) error
+	IdentityPub(ctx context.Context, userID string) ([]byte, error)
 	SetAvatar(ctx context.Context, userID, mediaID string) error
 
 	// Ник: занять, проверить занятость, найти по нему (Д1)
@@ -98,4 +101,5 @@ func RegisterUsers(
 	mux.HandleFunc("POST /api/v1/users/identities", requireDevice(resolveIdentities(deps)))
 	mux.HandleFunc("POST /api/v1/users/me/reidentify/challenge", requireDevice(reidentifyChallenge(deps)))
 	mux.HandleFunc("POST /api/v1/users/me/reidentify", requireDevice(reidentify(deps)))
+	mux.HandleFunc("POST /api/v1/users/me/start-anew-ban", requireDevice(banStartAnew(deps)))
 }

@@ -41,6 +41,8 @@ func me(deps usersDeps) http.HandlerFunc {
 			"nickname":        m.Nickname,
 			"nickname_locked": m.NicknameLocked,
 			"avatar_media_id": m.AvatarMediaID,
+			// «Начать заново» запрещено владельцем (ДУ10, Р41) — экран фразы показывает это.
+			"start_anew_banned": m.StartAnewBanned,
 		})
 	}
 }

@@ -300,6 +300,11 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.ForceNewIdentity {
+		// Владелец запретил «Начать заново» на этом аккаунте (ДУ10, Р41).
+		if startAnewBanned(r.Context(), s.Store, userID) {
+			writeErr(w, http.StatusForbidden, "start_anew_banned", startAnewBannedText)
+			return
+		}
 		before := userID
 		userID, err = s.forceNewIdentityIfConflict(r.Context(), userID, identityPub)
 		if err != nil {
@@ -317,15 +322,22 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	if err := s.Store.SetOrCheckIdentity(r.Context(), userID, identityPub); errors.Is(err, store.ErrIdentityMismatch) {
 		// Фраза прежней личности этого же аккаунта (с номера начали заново) — не «чужая
 		// фраза»: человеку нужно знать, как вернуть свою, а не что фраза неверна (Р38).
-		if s.isClosedIdentity(r.Context(), userID, identityPub) {
+		if isClosedIdentity(r.Context(), s.Store, userID, identityPub) {
 			writeErr(w, http.StatusForbidden, "identity_closed", identityClosedText)
 			return
 		}
 		// Формулировка не техническая намеренно: сюда попадает обычный случай
 		// «этот номер уже зарегистрирован, а секретную фразу не ввели». Человеку
 		// нужно знать, что делать, а не что не сошлось внутри.
-		writeErr(w, http.StatusForbidden, "identity_mismatch",
-			"Этот номер уже зарегистрирован. Введите секретную фразу того аккаунта — без неё войти нельзя.")
+		// К отказу — можно ли здесь «Начать заново» (ДУ10): экран фразы прячет кнопку, если
+		// владелец этот путь закрыл. Новое поле ответа — API расширяется.
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code":       "identity_mismatch",
+			"message":    "Этот номер уже зарегистрирован. Введите секретную фразу того аккаунта — без неё войти нельзя.",
+			"start_anew": !startAnewBanned(r.Context(), s.Store, userID),
+		})
 		return
 	} else if err != nil {
 		log.Printf("register: identity: %v", err)
@@ -651,14 +663,24 @@ const identityClosedText = "Это фраза прежней личности: �
 	"отменой новой личности с прежнего устройства или перерегистрацией."
 
 // isClosedIdentity — ключ принадлежит прежней, уже не текущей личности того же аккаунта.
-func (s *Server) isClosedIdentity(ctx context.Context, userID string, identityPub []byte) bool {
+func isClosedIdentity(ctx context.Context, st *store.Store, userID string, identityPub []byte) bool {
 	if len(identityPub) == 0 {
 		return false
 	}
-	personID, err := s.Store.PersonOfUser(ctx, userID)
+	personID, err := st.PersonOfUser(ctx, userID)
 	if err != nil {
 		return false
 	}
-	prior, err := s.Store.FindPriorIdentity(ctx, personID, identityPub)
+	prior, err := st.FindPriorIdentity(ctx, personID, identityPub)
 	return err == nil && prior != userID
+}
+
+// startAnewBannedText — отказ «Начать заново» на аккаунте с запретом (ДУ10, Р41).
+const startAnewBannedText = "Владелец запретил «Начать заново» на этом аккаунте. Войти можно только по секретной фразе."
+
+// startAnewBanned — закрыт ли на аккаунте этой личности путь «Начать заново». Ошибка чтения —
+// «не закрыт»: регистрацию это не открывает шире прежнего, а ложный отказ запер бы человека.
+func startAnewBanned(ctx context.Context, st *store.Store, userID string) bool {
+	m, err := st.Me(ctx, userID)
+	return err == nil && m.StartAnewBanned
 }
