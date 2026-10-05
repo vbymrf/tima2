@@ -311,6 +311,14 @@ func serve() {
 		}
 		// Плановая смена ключа тихих групп (ADR-0017 §3): напоминание по расписанию.
 		srv.EpochReminders = time.Hour
+		// Перерегистрация (ДУ9, Р51): сроки — число дней или duration Go; на стенде минуты
+		// ставятся только на время живой проверки.
+		srv.Rereg = api.ReregTimes{
+			Wait:        envDays("TIMA_REREG_WAIT", 90),
+			Window:      envDays("TIMA_REREG_WINDOW", 30),
+			DeleteAfter: envDays("TIMA_IDENTITY_DELETE_AFTER", 30),
+		}
+		srv.RunRereg = true
 		srv.Register(mux)
 		log.Print("Auth + Message Service подключены")
 	} else {

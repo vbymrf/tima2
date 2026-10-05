@@ -46,6 +46,10 @@ type Server struct {
 	DeviceTrust string
 	// Attestation — режим аттестации телефона (TIMA_ATTESTATION: off|record|require; пусто — off).
 	Attestation string
+	// Rereg — сроки перерегистрации (ДУ9, Р51). RunRereg — смотреть на сроки в этом процессе:
+	// исходы и извещения; в тестах выключено, проход зовётся руками.
+	Rereg    ReregTimes
+	RunRereg bool
 
 	// Переопределение лимитов auth (0 → прод-дефолт). Для dev/тестов, где с одного
 	// IP регистрируется много устройств (иначе rate limit ложно срабатывает).
@@ -104,7 +108,18 @@ func (s *Server) requireActiveDevice(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if !active {
-			writeErr(w, http.StatusUnauthorized, "device_revoked", "устройство отозвано")
+			// Причина — экрану отключения (ДУ9, ДУ11): перерегистрация, спор, удаление личности.
+			reason, deleteAt, _ := s.Store.RevokeReason(r.Context(), id.DeviceID)
+			body := map[string]any{"code": "device_revoked", "message": revokedText(reason)}
+			if reason != "" {
+				body["reason"] = reason
+			}
+			if deleteAt != nil {
+				body["delete_at"] = deleteAt.UTC()
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(body)
 			return
 		}
 		next(w, r)
@@ -138,6 +153,10 @@ func (s *Server) Register(mux *http.ServeMux) {
 		func() string { return NormalizeDeviceTrust(s.DeviceTrust) })
 	RegisterDeviceTrust(mux, s.Store, s.requireActiveDevice)
 	RegisterIdentityCancel(mux, s.Store, func() IdentityTokens { return s.Auth }, s.notifier(), s.requireActiveDevice)
+	RegisterReregistration(mux, s.Store, func() IdentityTokens { return s.Auth }, s.notifier(), s.requireActiveDevice)
+	if s.RunRereg {
+		go runRereg(context.Background(), s.Store, s.notifier(), func() ReregTimes { return s.Rereg })
+	}
 	RegisterAttestation(mux, s.Store, func() IdentityTokens { return s.Auth },
 		func() string { return normalizeAttestation(s.Attestation) }, s.requireActiveDevice)
 	mux.HandleFunc("GET /api/v1/escrow/pubkey", s.requireActiveDevice(s.escrowPubkey))

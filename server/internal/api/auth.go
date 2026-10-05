@@ -226,6 +226,13 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		AskSig        string `json:"ask_sig,omitempty"`
 		DeviceCertBy  string `json:"device_cert_by,omitempty"`
 		DeviceCertSig string `json:"device_cert_sig,omitempty"`
+		// Reregister — перерегистрация (ДУ9, Р34): вместе с force_new_identity доказательство
+		// фразы текущей личности — подпись вызова `/users/me/reidentify/challenge` её ключом. С ним
+		// новая личность заводится и при запрете упрощённой (ДУ10 — запрет только упрощённой).
+		Reregister *struct {
+			ChallengeToken string `json:"challenge_token"`
+			Signature      string `json:"signature"`
+		} `json:"reregister,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -299,9 +306,20 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	rereg := req.Reregister != nil
+	if rereg && (!req.ForceNewIdentity || !reregProven(s.Auth, s.Store, r, userID, req.Reregister.ChallengeToken, req.Reregister.Signature)) {
+		writeErr(w, http.StatusForbidden, "bad_signature", "Прежняя фраза не подходит к этому аккаунту.")
+		return
+	}
 	if req.ForceNewIdentity {
-		// Владелец запретил «Начать заново» на этом аккаунте (ДУ10, Р41).
-		if startAnewBanned(r.Context(), s.Store, userID) {
+		// Идёт перерегистрация (ДУ9): вторую новую личность поверх спора не заводим.
+		if _, err := s.Store.ReregOfUser(r.Context(), userID); err == nil {
+			writeErr(w, http.StatusConflict, "rereg_open", "Идёт перерегистрация аккаунта: новую личность до её исхода завести нельзя.")
+			return
+		}
+		// Владелец запретил «Начать заново» на этом аккаунте (ДУ10, Р41) — перерегистрацию
+		// фразой (Р34) запрет не касается.
+		if !rereg && startAnewBanned(r.Context(), s.Store, userID) {
 			writeErr(w, http.StatusForbidden, "start_anew_banned", startAnewBannedText)
 			return
 		}
@@ -312,8 +330,13 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		// Новая личность заведена (ДУ6): прежней — «отменить?», группам — заявки.
-		if userID != before {
+		// Новая личность заведена (ДУ6): прежней — «отменить?», группам — заявки. При
+		// перерегистрации — процесс со сроками и своё событие прежней (ДУ9).
+		if userID != before && rereg {
+			if err := startRereg(r.Context(), s.Store, s.notifier(), s.Rereg, before, userID); err != nil {
+				log.Printf("register: перерегистрация %s → %s: %v", before, userID, err)
+			}
+		} else if userID != before {
 			announceNewIdentity(r.Context(), s.Store, s.notifier(), before, userID)
 		}
 	}

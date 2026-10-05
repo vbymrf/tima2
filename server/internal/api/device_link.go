@@ -114,6 +114,10 @@ func linkStart(deps devicesDeps) http.HandlerFunc {
 func linkConfirm(deps devicesDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
+		if reregBlocksTrust(r.Context(), deps.store, id.UserID) {
+			writeErr(w, http.StatusConflict, "rereg_disputed", reregDisputedText)
+			return
+		}
 		var req struct {
 			SessionID string `json:"session_id"`
 			Secret    string `json:"secret"`

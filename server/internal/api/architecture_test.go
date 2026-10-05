@@ -215,7 +215,10 @@ const (
 	// 246 → 247: запрет «Начать заново» на аккаунте (ДУ10, Р41, BanStartAnew).
 	// 247 → 251: копия ключей по модели Matrix (§3а, Р43): ключ копии и его публикация
 	// (KeyCopy, SetKeyCopy), ключи групп в копии (SaveGroupKeyCopies, ListGroupKeyCopies).
-	storeMethodBudget = 251
+	// 251 → 260: перерегистрация и удаление личности (ДУ9, ДУ11): процесс (StartRereg, ReregOfUser,
+	// ClaimRereg, ConfirmRereg), сроки (ReregsDue, MarkReregWindowNoticed, ResolveRereg),
+	// удаление (FinishIdentityDeletes) и причина отключения устройства (RevokeReason).
+	storeMethodBudget = 260
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
 )

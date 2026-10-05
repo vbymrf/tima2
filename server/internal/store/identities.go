@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -111,6 +112,14 @@ type Identity struct {
 	// Текущая личность того же аккаунта (ДУ6, Р26): по ней телефон склеивает переписку
 	// прежней личности с перепиской новой.
 	CurrentID string `json:"current_id"`
+	// Заведена перерегистрацией (ДУ9, Р34) — строка собеседнику «перерегистрировал аккаунт»,
+	// а не «начал заново».
+	Reregistered bool `json:"reregistered,omitempty"`
+	// Идёт спор за аккаунт («Аккаунт украден») — до конца окна подтверждения.
+	DisputedUntil *time.Time `json:"disputed_until,omitempty"`
+	// Личность на удалении (ДУ11, Р37) и само удаление: сообщения остаются с пометкой (Р49).
+	DeleteAt  *time.Time `json:"delete_at,omitempty"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
 
 // IdentitiesOf — по списку user_id вернуть аккаунт каждой личности. Клиент так
@@ -126,7 +135,11 @@ func (s *Store) IdentitiesOf(ctx context.Context, ids []string) (map[string]Iden
 		       link_proof IS NOT NULL AS proven, valid_to IS NULL AS current,
 		       cancelled_at IS NOT NULL AS cancelled,
 		       COALESCE((SELECT c.user_id::text FROM users c
-		                 WHERE c.person_id = users.person_id AND c.valid_to IS NULL LIMIT 1), '') AS current_id
+		                 WHERE c.person_id = users.person_id AND c.valid_to IS NULL LIMIT 1), '') AS current_id,
+		       EXISTS (SELECT 1 FROM reregistrations r WHERE r.new_user_id = users.user_id) AS reregistered,
+		       (SELECT r.window_to FROM reregistrations r
+		         WHERE r.person_id = users.person_id AND r.closed_at IS NULL AND r.claim_at IS NOT NULL) AS disputed_until,
+		       delete_at, deleted_at
 		FROM users WHERE user_id = ANY($1)`, ids)
 	if err != nil {
 		return nil, err
@@ -134,9 +147,10 @@ func (s *Store) IdentitiesOf(ctx context.Context, ids []string) (map[string]Iden
 	defer rows.Close()
 	for rows.Next() {
 		var id, personID string
-		var isRoot, proven, current, cancelled bool
+		var isRoot, proven, current, cancelled, rereg bool
 		var currentID string
-		if err := rows.Scan(&id, &personID, &isRoot, &proven, &current, &cancelled, &currentID); err != nil {
+		var disputed, deleteAt, deletedAt *time.Time
+		if err := rows.Scan(&id, &personID, &isRoot, &proven, &current, &cancelled, &currentID, &rereg, &disputed, &deleteAt, &deletedAt); err != nil {
 			return nil, err
 		}
 		link := LinkAdministrative
@@ -146,7 +160,8 @@ func (s *Store) IdentitiesOf(ctx context.Context, ids []string) (map[string]Iden
 		case proven:
 			link = LinkProven
 		}
-		out[id] = Identity{PersonID: personID, Link: link, Current: current, Cancelled: cancelled, CurrentID: currentID}
+		out[id] = Identity{PersonID: personID, Link: link, Current: current, Cancelled: cancelled, CurrentID: currentID,
+			Reregistered: rereg, DisputedUntil: disputed, DeleteAt: deleteAt, DeletedAt: deletedAt}
 	}
 	return out, rows.Err()
 }

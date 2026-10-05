@@ -31,6 +31,7 @@ type IdentityCancelStore interface {
 	DeviceCertified(ctx context.Context, userID, deviceID string) (bool, error)
 	CancelNewerIdentities(ctx context.Context, personID, keepUserID string) ([]string, error)
 	CopyGroupClaims(ctx context.Context, fromUserID, toUserID string) ([]string, error)
+	ReregOfUser(ctx context.Context, userID string) (store.Rereg, error)
 	ListGroupClaims(ctx context.Context, groupID string) ([]store.GroupClaim, error)
 	ConfirmGroupClaim(ctx context.Context, groupID, userID string) (string, error)
 	GroupRole(ctx context.Context, groupID, userID string) (string, error)
@@ -60,6 +61,12 @@ func announceNewIdentity(ctx context.Context, st IdentityCancelStore, n *Notifie
 	if n != nil {
 		n.Users(ctx, []string{oldUserID}, "identity.replaced", map[string]any{"new_user_id": newUserID})
 	}
+	announceGroupClaims(ctx, st, n, oldUserID, newUserID)
+}
+
+// announceGroupClaims — новая личность подаёт заявки в группы прежней; их владельцам и
+// модераторам — «подтвердите личность» (Р9). Общее у «начать заново» и перерегистрации (ДУ9).
+func announceGroupClaims(ctx context.Context, st IdentityCancelStore, n *Notifier, oldUserID, newUserID string) {
 	groups, err := st.CopyGroupClaims(ctx, oldUserID, newUserID)
 	if err != nil {
 		log.Printf("начать заново: заявки в группы не заведены: %v", err)
@@ -128,6 +135,12 @@ func cancelIdentity(deps identityCancelDeps) http.HandlerFunc {
 		if err != nil {
 			log.Printf("cancelIdentity: person: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		// Идёт перерегистрация (ДУ9): Н заведена фразой С, и отмена фразой С была бы обходом
+		// спора — оспаривается она только заявкой «Аккаунт украден» и окном подтверждения.
+		if _, err := deps.store.ReregOfUser(ctx, id.UserID); err == nil {
+			writeErr(w, http.StatusConflict, "rereg_open", "Идёт перерегистрация: отменить её нельзя — подайте заявку «Аккаунт украден».")
 			return
 		}
 		cancelled, err := deps.store.CancelNewerIdentities(ctx, personID, id.UserID)

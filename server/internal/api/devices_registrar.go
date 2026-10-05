@@ -17,6 +17,7 @@ import (
 
 // DeviceStore — что устройствам и привязке нужно от хранилища.
 type DeviceStore interface {
+	ReregOfUser(ctx context.Context, userID string) (store.Rereg, error)
 	ListUserDevices(ctx context.Context, userID string) ([]store.UserDevice, error)
 	ListDevices(ctx context.Context, userID string) ([]store.Device, error)
 	CountActiveDevices(ctx context.Context, userID string) (int, error)

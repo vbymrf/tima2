@@ -121,6 +121,7 @@ type DeviceTrustStore interface {
 	AddSigningKey(ctx context.Context, userID, deviceID string, pub, sig []byte) (string, error)
 	DeviceSigningKey(ctx context.Context, userID, deviceID string) (store.SigningKey, error)
 	SetDeviceCertificate(ctx context.Context, userID, deviceID, by, askID string, sig []byte) error
+	ReregOfUser(ctx context.Context, userID string) (store.Rereg, error)
 }
 
 var _ DeviceTrustStore = (*store.Store)(nil)
@@ -143,6 +144,10 @@ func RegisterDeviceTrust(mux *http.ServeMux, st DeviceTrustStore, requireDevice 
 func issueSigningKey(deps deviceTrustDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
+		if reregBlocksTrust(r.Context(), deps.store, id.UserID) {
+			writeErr(w, http.StatusConflict, "rereg_disputed", reregDisputedText)
+			return
+		}
 		var req struct {
 			AskPub        string `json:"ask_pub"`
 			AskSig        string `json:"ask_sig"`
@@ -211,6 +216,10 @@ func issueSigningKey(deps deviceTrustDeps) http.HandlerFunc {
 func certifyDevice(deps deviceTrustDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
+		if reregBlocksTrust(r.Context(), deps.store, id.UserID) {
+			writeErr(w, http.StatusConflict, "rereg_disputed", reregDisputedText)
+			return
+		}
 		target := r.PathValue("deviceID")
 		var req struct {
 			By  string `json:"by"`
