@@ -173,7 +173,7 @@ class Receiver(
     var lastOutcome: String? = null
 
     /** Канал сейчас открыт — для сторожа попытки. */
-    @Volatile
+    @kotlin.concurrent.Volatile
     private var live = false
         private set
 

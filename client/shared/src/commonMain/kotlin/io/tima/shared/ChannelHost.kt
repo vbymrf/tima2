@@ -3,6 +3,7 @@ package io.tima.shared
 import io.tima.core.database.TimaDatabase
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
+import io.tima.core.diag.ProcessLock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -52,6 +53,9 @@ object ChannelHost {
      */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /** Один замок на всё состояние ниже: общий код не умеет `@Synchronized` (iOS). */
+    private val lock = ProcessLock()
+
     /** Сборки по устройству. Ключ — `deviceId`: смена аккаунта это другое устройство. */
     private val assemblies = mutableMapOf<String, Assembled>()
 
@@ -65,9 +69,9 @@ object ChannelHost {
      * @param build как собрать, если её ещё нет. Зовётся **не больше одного раза** на
      *   устройство за жизнь процесса.
      */
-    @Synchronized
-    fun assembled(deviceId: String, build: () -> Assembled): Assembled =
+    fun assembled(deviceId: String, build: () -> Assembled): Assembled = lock.hold {
         assemblies.getOrPut(deviceId, build)
+    }
 
     /**
      * Держать канал этой сборки, пока жив процесс.
@@ -76,14 +80,14 @@ object ChannelHost {
      * пересборке состава, и служба при каждом запуске, и поднимать второй канал на
      * каждый такой вызов означало бы два `ack` по одному курсору.
      */
-    @Synchronized
-    fun hold(assembled: Assembled) {
+    fun hold(assembled: Assembled): Unit = lock.hold {
         val deviceId = assembled.session.deviceId
-        if (heldDevice == deviceId && job?.isActive == true) return
-        job?.cancel()
-        heldDevice = deviceId
-        Journal.note(LogCode.NET_CHANNEL, "канал взят процессом, а не окном")
-        job = scope.launch { assembled.receiver.hold() }
+        if (heldDevice != deviceId || job?.isActive != true) {
+            job?.cancel()
+            heldDevice = deviceId
+            Journal.note(LogCode.NET_CHANNEL, "канал взят процессом, а не окном")
+            job = scope.launch { assembled.receiver.hold() }
+        }
     }
 
     /**
@@ -91,16 +95,14 @@ object ChannelHost {
      *
      * Не зовётся при закрытии окна: в том и смысл, что окно закрыли, а канал остался.
      */
-    @Synchronized
-    fun release() {
+    fun release(): Unit = lock.hold {
         job?.cancel()
         job = null
         heldDevice = null
     }
 
     /** Держится ли канал прямо сейчас. Нужно службе: без сборки ей держать нечего. */
-    @Synchronized
-    fun holding(): Boolean = job?.isActive == true
+    fun holding(): Boolean = lock.hold { job?.isActive == true }
 
     /**
      * Уведомления той сборки, чей канал держим; `null` — не держим ничей.
@@ -108,8 +110,7 @@ object ChannelHost {
      * Нужно точке входа: показалось окно или ушло, знает платформа, а не композиция —
      * на ПК это трей, на Android `onStart`/`onStop`.
      */
-    @Synchronized
-    fun notices(): Notices? = heldDevice?.let { assemblies[it]?.notices }
+    fun notices(): Notices? = lock.hold { heldDevice?.let { assemblies[it]?.notices } }
 
     /**
      * Отклонить звонок **без окна** — «Отклонить» в строке уведомления (ВЗ2).
@@ -118,7 +119,7 @@ object ChannelHost {
      * лентой звонков (`declined`) и закроется само.
      */
     fun decline(callId: String) {
-        val network = synchronized(this) { heldDevice?.let { assemblies[it]?.network } } ?: return
+        val network = lock.hold { heldDevice?.let { assemblies[it]?.network } } ?: return
         scope.launch { network.calls.end(callId) }
     }
 }
