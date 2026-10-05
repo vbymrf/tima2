@@ -226,8 +226,12 @@ func (s *Store) SetCallState(ctx context.Context, callID, state, endedBy string)
 	if endedBy != "" {
 		by = endedBy
 	}
+	// Закрытый звонок окончателен: `/end` зовут обе стороны, и второй, пришедший на уже
+	// закрытый звонок, переписывал «пропущен» на «завершён» — отклонённый звонок выглядел в
+	// журнале разговором. Условие в самом запросе закрывает и гонку двух одновременных `/end`.
 	_, err := s.pool.Exec(ctx,
-		`UPDATE calls SET state = $2`+col+`, ended_by = COALESCE(ended_by, $3::uuid) WHERE call_id = $1`,
+		`UPDATE calls SET state = $2`+col+`, ended_by = COALESCE(ended_by, $3::uuid)
+		 WHERE call_id = $1 AND state IN ('ringing', 'answered')`,
 		callID, state, by)
 	return err
 }

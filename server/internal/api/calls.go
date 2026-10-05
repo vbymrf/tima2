@@ -322,9 +322,15 @@ func endCall(deps callsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "not_participant", "завершить может участник звонка")
 			return
 		}
+		// Уже закрытый звонок не переписывается: `/end` зовут обе стороны, и второй
+		// получает в ответ то, что решил первый (Ж4).
+		open := call.State == "ringing" || call.State == "answered"
 		state := "ended"
 		if call.State == "ringing" {
 			state = "missed"
+		}
+		if !open {
+			state = call.State
 		}
 		// ── ПРИЧИНА ОТ ТОГО, КТО ЕЁ ЗНАЕТ ───────────────────────────────────
 		//
@@ -347,11 +353,11 @@ func endCall(deps callsDeps) http.HandlerFunc {
 		}
 		// Кто положил трубку — сведение, которого в базе не было: `/end` зовут обе
 		// стороны, и без имени первого «отменил» и «отклонил» неразличимы. Ж4.
-		_ = deps.store.SetCallState(r.Context(), callID, state, id.UserID)
 		// Обеим сторонам, а не только «другой»: у кладущего трубку могут быть ещё
 		// устройства, и звонящий десктоп должен узнать, что звонок кончился на телефоне.
-		// Уже закрытый звонок второй раз не объявляется: `/end` зовут обе стороны.
-		if call.State == "ringing" || call.State == "answered" {
+		// Уже закрытый звонок второй раз не пишется и не объявляется.
+		if open {
+			_ = deps.store.SetCallState(r.Context(), callID, state, id.UserID)
 			change := endChange(call, id.UserID, state)
 			deps.notifier.CallChange(r.Context(), call.InitiatorID, callID, change, "")
 			if call.PeerID != "" {
