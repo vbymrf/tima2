@@ -1673,6 +1673,7 @@ interface AuthWords {
     fun reregWindowOld(to: String): String
     val reregConfirm: String
     val reregConfirmed: String
+    fun reregConfirmedWait(to: String): String
     val reregOldPhrase: String
     val reregNewPhrase: String
     val reregNotInWindow: String
@@ -3653,6 +3654,7 @@ object RussianWords : Words {
         override fun reregWindowOld(to: String) = "Пора подтвердить заявку «Аккаунт украден»: до $to введите фразу и код из SMS."
         override val reregConfirm = "Подтвердить"
         override val reregConfirmed = "Подтверждение принято"
+        override fun reregConfirmedWait(to: String) = "Ваше подтверждение принято. Исход — после $to, когда закроется окно подтверждения."
         override val reregOldPhrase = "прежняя фраза"
         override val reregNewPhrase = "новая фраза"
         override val reregNotInWindow = "Подтверждение принимается только в окне подтверждения."

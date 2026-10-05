@@ -2167,6 +2167,12 @@ private fun App(
         EventKind.Rereg to if (reregEvent != null) Presence.Yes else Presence.No,
     )
     var eventMemory by remember { mutableStateOf(EventMemory()) }
+    // Перерегистрация (ДУ9) идёт шагами — запуск, спор, окно, исход, — и каждое следующее событие
+    // обязано показаться, даже если прежнее уже закрыли: очередь помнит закрытое до конца
+    // запуска, и живьём 2026-10-05 «окно открылось» и «исход» на ПК не показались.
+    LaunchedEffect(reregEvent) {
+        if (reregEvent != null) eventMemory = eventMemory.copy(closed = eventMemory.closed - EventKind.Rereg)
+    }
     // Показывать — на главном экране и не во время звонка: окно поверх разговора его бы
     // закрыло, а поверх переписки — оторвало бы от неё. Нельзя — очередь просто ждёт.
     // Панель «Переключение окон» тоже ждём (заказчик 2026-09-27): человек в ней выбирает,

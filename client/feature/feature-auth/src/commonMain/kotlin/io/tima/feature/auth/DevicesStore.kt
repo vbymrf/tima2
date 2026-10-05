@@ -96,6 +96,7 @@ class DevicesStore(
         val to = dateText(r.windowTo)
         val open = now >= r.windowFrom
         return when {
+            r.confirmed -> w.reregConfirmedWait(to)
             r.isNew && open -> w.reregWindowNew(to)
             r.isNew && r.disputed -> w.reregDisputedNewAbout(from, to)
             r.isNew -> w.reregNewAbout(from, to)

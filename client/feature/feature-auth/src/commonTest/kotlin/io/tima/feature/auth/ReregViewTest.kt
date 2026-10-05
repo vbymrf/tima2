@@ -68,6 +68,7 @@ class ReregViewTest {
         assertTrue(open.twoPhrases)
         val done = view(Rereg(active = true, isNew = true, windowFrom = now - hour, windowTo = now + hour, confirmed = true), backgroundScope)!!
         assertFalse(done.canConfirm, "подтвердившая второй раз не подтверждает")
+        assertTrue(done.text!!.contains("д${now + hour}"), "подтвердившей — когда исход")
     }
 
     @Test
