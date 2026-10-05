@@ -52,3 +52,11 @@ alwaysApply: true
   described as harness or formal evidence. Ad-hoc UI or clipboard automation is a
   last resort to be stated explicitly, and never carries secrets, credentials,
   OTP, link payloads, tokens, or keys.
+- Exception, customer decision 2026-10-05: **stand test accounts.** For an
+  account listed in `doc_mig/ВЕРСИИ/ТЕЛЕФОНЫ.local.md` (stand numbers
+  `+7999000…`), UI automation may type its secret phrase and the login code
+  the stand returns in its own reply (`TIMA_DEV_SMS=1`) — on phones (`adb shell
+  input text`) and in the desktop window. The value is read from that file or
+  from the screen inside the script and is never printed: not in the command
+  line, tool output, report, commit or chat. Any other account — a real person's
+  number, a real SMS, a production server — stays under the rule above.
