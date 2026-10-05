@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -105,6 +106,8 @@ type reregReply struct {
 	Disputed  bool      `json:"disputed"`
 	Confirmed bool      `json:"confirmed"`
 	WindowTo  time.Time `json:"window_to"`
+	OldUserID string    `json:"old_user_id"`
+	NewUserID string    `json:"new_user_id"`
 }
 
 // revokedReason — отказ отключённому устройству: код, причина и срок удаления личности.
@@ -352,5 +355,93 @@ func TestReregistrationNewWins(t *testing.T) {
 	}
 	if strings.Contains(revokedText("rereg_confirmed"), "отозвано") {
 		t.Fatal("у причины обязан быть свой текст")
+	}
+}
+
+// TestReregCopyOfOldIdentity — М6 (Р55): новая личность того же аккаунта читает копию прежней —
+// ключ копии, её личные переписки с отметкой владельца, обёртки сообщений — и кладёт свои обёртки
+// в переписки прежней. Собеседнику копия чужой личности не выдаётся.
+func TestReregCopyOfOldIdentity(t *testing.T) {
+	ts, _ := setup(t)
+	db := testDB(t)
+	phone := "+79990067003"
+	oldPub, oldPriv, _ := ed25519.GenerateKey(rand.Reader)
+	oldPhone, code, _ := registerRaw(t, ts, phone, oldPub, false)
+	if code != 201 {
+		t.Fatalf("С: %d", code)
+	}
+	certifyByIdentity(t, db, oldPhone.id)
+	peer := registerDevice(t, ts, "+79990067004")
+	b64 := base64.RawURLEncoding
+	copyPub := make([]byte, 32)
+	_, _ = rand.Read(copyPub)
+	if code := jsonAuth(t, ts, "PUT", "/api/v1/users/me/key-copy", oldPhone.token, map[string]any{
+		"epoch": 1, "pub": b64.EncodeToString(copyPub),
+		"sig": b64.EncodeToString(ed25519.Sign(oldPriv, keyCopySigned(1, copyPub))),
+	}, nil); code != 204 {
+		t.Fatalf("ключ копии С: %d", code)
+	}
+	chatID := personalChatID(oldPhone.userID, peer.userID)
+	env := sealEnvelope(t, oldPhone, []*device{oldPhone, peer}, 920001, []byte("до перерегистрации"))
+	if resp := post(t, ts, env, oldPhone.token, "dddddddd-0000-0000-0000-000000000067"); resp.StatusCode != 201 {
+		defer resp.Body.Close()
+		t.Fatalf("отправка С: %d", resp.StatusCode)
+	}
+	wrap := b64.EncodeToString(bytes.Repeat([]byte{5}, 104))
+	backup := func(token string) int {
+		return jsonAuth(t, ts, "POST", "/api/v1/chats/"+chatID+"/backup", token, map[string]any{
+			"epoch": 1, "items": []map[string]any{{"message_id": 920001, "wrapped": wrap}},
+		}, nil)
+	}
+	if code := backup(oldPhone.token); code != 201 {
+		t.Fatalf("обёртка С: %d", code)
+	}
+
+	newPub, _, _ := ed25519.GenerateKey(rand.Reader)
+	newPhone, code, errCode := registerRereg(t, ts, phone, newPub, oldPhone.token, oldPriv)
+	if code != 201 {
+		t.Fatalf("перерегистрация: %d %s", code, errCode)
+	}
+	var st reregReply
+	if code := getAuthed(t, ts, newPhone.token, "/api/v1/users/me/rereg", &st); code != 200 || st.OldUserID != oldPhone.userID {
+		t.Fatalf("Н обязана знать прежнюю личность: %d %+v", code, st)
+	}
+	owner := "?owner=" + oldPhone.userID
+	var got struct {
+		Epoch int    `json:"epoch"`
+		Pub   string `json:"pub"`
+	}
+	if code := getAuthed(t, ts, newPhone.token, "/api/v1/users/me/key-copy"+owner, &got); code != 200 || got.Epoch != 1 || got.Pub != b64.EncodeToString(copyPub) {
+		t.Fatalf("ключ копии С для Н: %d %+v", code, got)
+	}
+	var list struct {
+		Chats []struct {
+			ChatID  string `json:"chat_id"`
+			OwnerID string `json:"owner_id"`
+		} `json:"chats"`
+	}
+	if code := getAuthed(t, ts, newPhone.token, "/api/v1/chats/personal?all=1", &list); code != 200 || len(list.Chats) != 1 ||
+		list.Chats[0].ChatID != chatID || list.Chats[0].OwnerID != oldPhone.userID {
+		t.Fatalf("переписки всех личностей: %d %+v", code, list)
+	}
+	var page struct {
+		Items []struct {
+			MessageID uint64 `json:"message_id"`
+		} `json:"items"`
+	}
+	if code := getAuthed(t, ts, newPhone.token, "/api/v1/chats/"+chatID+"/backup"+owner, &page); code != 200 || len(page.Items) != 1 {
+		t.Fatalf("копия переписки С для Н: %d, %d строк", code, len(page.Items))
+	}
+	// Перенос: Н кладёт обёртки в переписку прежней личности под свою эпоху. Без своего ключа копии у Н эпохи нет — обёртка отклоняется как под чужую эпоху, а не
+	// как «не участник»: участие проверяется по аккаунту.
+	if code := backup(newPhone.token); code == http.StatusForbidden {
+		t.Fatalf("Н — участник переписки прежней личности по аккаунту, а получила 403")
+	}
+	// Собеседнику копия чужой личности не выдаётся.
+	if code := getAuthed(t, ts, peer.token, "/api/v1/users/me/key-copy"+owner, nil); code != http.StatusForbidden {
+		t.Fatalf("собеседник прочёл ключ копии чужой личности: %d", code)
+	}
+	if code := getAuthed(t, ts, peer.token, "/api/v1/chats/"+chatID+"/backup"+owner, nil); code != http.StatusForbidden {
+		t.Fatalf("собеседник прочёл копию чужой личности: %d", code)
 	}
 }

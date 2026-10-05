@@ -87,6 +87,8 @@ func reregView(r store.Rereg, userID string) map[string]any {
 		"active": true, "role": role, "round": r.Round,
 		"started_at": r.StartedAt.UTC(), "window_from": r.WindowFrom.UTC(), "window_to": r.WindowTo.UTC(),
 		"disputed": r.Disputed(), "confirmed": confirmed,
+		// М6: новой — чья копия прежней личности переносится; прежней — какая личность новая.
+		"old_user_id": r.OldUserID, "new_user_id": r.NewUserID,
 	}
 }
 

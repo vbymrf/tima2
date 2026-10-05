@@ -24,7 +24,8 @@ func chatBackupSave(deps chatsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		chatID := r.PathValue("chatID")
 		id, _ := auth.FromContext(r.Context())
-		participant, err := deps.store.IsChatParticipant(r.Context(), chatID, id.UserID)
+		// Участник — аккаунт любой своей личностью (М6): новая кладёт копию в переписки прежней.
+		participant, err := accountParticipant(deps, r, chatID, id.UserID)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -81,7 +82,8 @@ func chatBackupList(deps chatsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		chatID := r.PathValue("chatID")
 		id, _ := auth.FromContext(r.Context())
-		participant, err := deps.store.IsChatParticipant(r.Context(), chatID, id.UserID)
+		// Участник — аккаунт любой своей личностью (М6): новая кладёт копию в переписки прежней.
+		participant, err := accountParticipant(deps, r, chatID, id.UserID)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
@@ -90,17 +92,22 @@ func chatBackupList(deps chatsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "not_participant", "бэкап доступен только участнику чата")
 			return
 		}
+		who, ok := copyOwner(deps, r, id.UserID)
+		if !ok {
+			writeErr(w, http.StatusForbidden, "not_your_identity", "копия чужой личности не выдаётся")
+			return
+		}
 		var before uint64
 		if v := r.URL.Query().Get("before"); v != "" {
 			before, _ = strconv.ParseUint(v, 10, 64)
 		}
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-		epoch, err := currentCopyEpoch(deps, r, id.UserID)
+		epoch, err := currentCopyEpoch(deps, r, who)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		items, err := deps.store.ListMessageBackups(r.Context(), chatID, id.UserID, epoch, before, limit)
+		items, err := deps.store.ListMessageBackups(r.Context(), chatID, who, epoch, before, limit)
 		if err != nil {
 			log.Printf("chatBackupList: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -287,20 +294,40 @@ func listPersonalChats(deps chatsDeps) http.HandlerFunc {
 				return
 			}
 		}
-		chats, err := deps.store.PersonalChatsOf(r.Context(), id.UserID)
-		if err != nil {
-			log.Printf("listPersonalChats: %v", err)
-			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+		// Чьи переписки: свои; `owner` — другой личности своего аккаунта; `all=1` — всех его
+		// личностей с отметкой, чья (М6, Р55): новая личность поднимает и копию прежней.
+		owners := []string{id.UserID}
+		if r.URL.Query().Get("all") == "1" {
+			ids, err := deps.store.IdentitiesOfAccount(r.Context(), id.UserID)
+			if err != nil {
+				log.Printf("listPersonalChats: identities: %v", err)
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+				return
+			}
+			owners = ids
+		} else if who, ok := copyOwner(deps, r, id.UserID); !ok {
+			writeErr(w, http.StatusForbidden, "not_your_identity", "переписки чужой личности не выдаются")
 			return
+		} else {
+			owners = []string{who}
 		}
 		type item struct {
 			ChatID        string `json:"chat_id"`
 			PeerID        string `json:"peer_id"`
 			LastMessageID uint64 `json:"last_message_id"`
+			OwnerID       string `json:"owner_id"`
 		}
-		out := make([]item, 0, len(chats))
-		for _, c := range chats {
-			out = append(out, item{ChatID: c.ChatID, PeerID: c.PeerID, LastMessageID: c.LastMessageID})
+		out := []item{}
+		for _, owner := range owners {
+			chats, err := deps.store.PersonalChatsOf(r.Context(), owner)
+			if err != nil {
+				log.Printf("listPersonalChats: %v", err)
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+				return
+			}
+			for _, c := range chats {
+				out = append(out, item{ChatID: c.ChatID, PeerID: c.PeerID, LastMessageID: c.LastMessageID, OwnerID: owner})
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"chats": out})

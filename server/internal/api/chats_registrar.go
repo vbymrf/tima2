@@ -36,6 +36,7 @@ type ChatStore interface {
 
 	// История на новом устройстве (ИУ1)
 	PersonalChatsOf(ctx context.Context, userID string) ([]store.PersonalChatRef, error)
+	IdentitiesOfAccount(ctx context.Context, userID string) ([]string, error)
 	DeviceCertified(ctx context.Context, userID, deviceID string) (bool, error)
 }
 

@@ -37,7 +37,12 @@ func keyCopySigned(epoch int, pub []byte) []byte {
 func getKeyCopy(deps chatsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
-		k, err := deps.store.KeyCopy(r.Context(), id.UserID)
+		who, ok := copyOwner(deps, r, id.UserID)
+		if !ok {
+			writeErr(w, http.StatusForbidden, "not_your_identity", "копия чужой личности не выдаётся")
+			return
+		}
+		k, err := deps.store.KeyCopy(r.Context(), who)
 		if errors.Is(err, store.ErrKeyCopyMissing) {
 			writeErr(w, http.StatusNotFound, "no_key_copy", "ключ копии ещё не опубликован")
 			return
@@ -99,6 +104,41 @@ func putKeyCopy(deps chatsDeps) http.HandlerFunc {
 	}
 }
 
+// copyOwner — чью копию читаем (М6, Р55): свою или, параметром `owner`, другой личности своего
+// же аккаунта — новая личность после перерегистрации переносит копию прежней. Чужую — нет.
+func copyOwner(deps chatsDeps, r *http.Request, callerID string) (string, bool) {
+	owner := r.URL.Query().Get("owner")
+	if owner == "" || owner == callerID {
+		return callerID, true
+	}
+	ids, err := deps.store.IdentitiesOfAccount(r.Context(), callerID)
+	if err != nil {
+		return "", false
+	}
+	for _, id := range ids {
+		if id == owner {
+			return owner, true
+		}
+	}
+	return "", false
+}
+
+// accountParticipant — участвует ли в переписке аккаунт вызывающего, любой своей личностью (М6):
+// копия прежней личности лежит в её переписках, и новая кладёт туда свои обёртки.
+func accountParticipant(deps chatsDeps, r *http.Request, chatID, callerID string) (bool, error) {
+	ids, err := deps.store.IdentitiesOfAccount(r.Context(), callerID)
+	if err != nil {
+		return false, err
+	}
+	for _, id := range ids {
+		ok, err := deps.store.IsChatParticipant(r.Context(), chatID, id)
+		if err != nil || ok {
+			return ok, err
+		}
+	}
+	return false, nil
+}
+
 // currentCopyEpoch — эпоха действующего ключа копии; ноль — копии нет.
 func currentCopyEpoch(deps chatsDeps, r *http.Request, userID string) (int, error) {
 	k, err := deps.store.KeyCopy(r.Context(), userID)
@@ -157,12 +197,17 @@ func saveGroupKeyCopies(deps chatsDeps) http.HandlerFunc {
 func listGroupKeyCopies(deps chatsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
-		epoch, err := currentCopyEpoch(deps, r, id.UserID)
+		who, ok := copyOwner(deps, r, id.UserID)
+		if !ok {
+			writeErr(w, http.StatusForbidden, "not_your_identity", "копия чужой личности не выдаётся")
+			return
+		}
+		epoch, err := currentCopyEpoch(deps, r, who)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		items, err := deps.store.ListGroupKeyCopies(r.Context(), id.UserID, epoch)
+		items, err := deps.store.ListGroupKeyCopies(r.Context(), who, epoch)
 		if err != nil {
 			log.Printf("listGroupKeyCopies: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")

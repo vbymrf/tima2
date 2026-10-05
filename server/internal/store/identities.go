@@ -199,3 +199,25 @@ func (s *Store) IdentityPub(ctx context.Context, userID string) ([]byte, error) 
 	}
 	return pub, err
 }
+
+// IdentitiesOfAccount — все личности аккаунта, которому принадлежит userID, начиная с неё
+// самой (М6, Р55): копия ключей прежней личности переносится и читается новой — это один человек.
+func (s *Store) IdentitiesOfAccount(ctx context.Context, userID string) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT user_id::text FROM users
+		WHERE person_id = (SELECT person_id FROM users WHERE user_id = $1)
+		ORDER BY (user_id = $1) DESC, valid_from DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
