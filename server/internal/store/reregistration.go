@@ -58,16 +58,25 @@ func scanRereg(row pgx.Row) (Rereg, error) {
 	return r, err
 }
 
-// revokeWithoutIdentityKey — отключить устройства личностей, заверенные не ключом личности
-// (ПК и всё, что заверил ключ подписи устройств), и снять ключи подписи устройств: «выданные
-// заверения отзываются» (Р34). Устройства с ключом личности работают дальше.
+// revokeWithoutIdentityKey — отключить устройства личностей, которые заверил кто-то другой
+// (ПК и всё, что заверил ключ подписи устройств другого телефона): «выданные заверения
+// отзываются» (Р34). Работают дальше «устройства с ключом личности»: заверенные ключом
+// личности (ПК, вошедший по фразе) и телефоны, заверившие себя своим же ключом подписи
+// устройств, — так заверяет себя телефон, вошедший по фразе (ДУ1, ДУ2). Ключи подписи
+// отключённых устройств снимаются вместе с ними.
+//
+// Живьём 2026-10-05: первая версия оставляла только `cert_by = 'identity'` и отключила телефоны
+// обеих сторон — у телефона это всегда `ask`.
 func revokeWithoutIdentityKey(ctx context.Context, tx pgx.Tx, userIDs []string, reason string) error {
-	if _, err := tx.Exec(ctx, `
-		UPDATE devices SET revoked_at = now(), revoked_reason = $2
-		WHERE user_id = ANY($1) AND revoked_at IS NULL AND cert_by <> 'identity'`, userIDs, reason); err != nil {
-		return err
-	}
-	_, err := tx.Exec(ctx, `UPDATE account_signing_keys SET revoked_at = now() WHERE user_id = ANY($1) AND revoked_at IS NULL`, userIDs)
+	_, err := tx.Exec(ctx, `
+		WITH gone AS (
+			UPDATE devices d SET revoked_at = now(), revoked_reason = $2
+			WHERE d.user_id = ANY($1) AND d.revoked_at IS NULL
+			  AND NOT (d.cert_by = 'identity' OR (d.cert_by = 'ask' AND EXISTS (
+			      SELECT 1 FROM account_signing_keys k WHERE k.ask_id = d.cert_ask_id AND k.device_id = d.device_id)))
+			RETURNING d.device_id)
+		UPDATE account_signing_keys SET revoked_at = now()
+		WHERE device_id IN (SELECT device_id FROM gone) AND revoked_at IS NULL`, userIDs, reason)
 	return err
 }
 

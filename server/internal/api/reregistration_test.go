@@ -132,6 +132,20 @@ func certifyByIdentity(t *testing.T, db *pgx.Conn, deviceID string) {
 	}
 }
 
+// certifyByOwnAsk — телефон, вошедший по фразе: заверен своим же ключом подписи устройств.
+func certifyByOwnAsk(t *testing.T, db *pgx.Conn, userID, deviceID string) {
+	t.Helper()
+	ctx := context.Background()
+	var askID string
+	if err := db.QueryRow(ctx, `INSERT INTO account_signing_keys (user_id, device_id, ask_pub, ask_sig)
+		VALUES ($1, $2, decode('00', 'hex'), decode('00', 'hex')) RETURNING ask_id`, userID, deviceID).Scan(&askID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(ctx, `UPDATE devices SET cert_by = 'ask', cert_ask_id = $2 WHERE device_id = $1`, deviceID, askID); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // openWindow — сдвинуть окно открытого процесса на «сейчас»; closeWindow — в прошлое.
 func openWindow(t *testing.T, db *pgx.Conn) {
 	t.Helper()
@@ -162,7 +176,8 @@ func TestReregistrationDispute(t *testing.T) {
 	if code != 201 {
 		t.Fatalf("С: %d", code)
 	}
-	certifyByIdentity(t, db, oldPhone.id)
+	// Телефон С заверил себя своим ключом подписи устройств — так у всех телефонов по фразе.
+	certifyByOwnAsk(t, db, oldPhone.userID, oldPhone.id)
 	oldPC, code, _ := registerRaw(t, ts, phone, oldPub, false) // заверено не ключом личности
 	if code != 201 {
 		t.Fatalf("ПК С: %d", code)
@@ -181,7 +196,7 @@ func TestReregistrationDispute(t *testing.T) {
 	if code != 201 {
 		t.Fatalf("перерегистрация: %d %s", code, errCode)
 	}
-	certifyByIdentity(t, db, newPhone.id)
+	certifyByOwnAsk(t, db, newPhone.userID, newPhone.id)
 	if newPhone.userID == oldPhone.userID {
 		t.Fatal("перерегистрация обязана завести новую личность")
 	}
