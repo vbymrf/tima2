@@ -91,6 +91,14 @@ fun DeviceScreen(
     onRotateCopy: ((String) -> Unit)? = null,
     /** Завести копию ключей фразой (Р44). */
     onStartCopy: ((String) -> Unit)? = null,
+    /** Перерегистрация (ДУ9): что показать; `null` — панели нет. */
+    rereg: ReregView? = null,
+    /** Начать перерегистрацию прежней фразой. */
+    onStartRereg: ((String) -> Unit)? = null,
+    /** Код из SMS для заявки и подтверждения. */
+    onSendReregCode: (() -> Unit)? = null,
+    /** Заявка (`true`) или подтверждение: фраза, прежняя фраза (у Н), код. */
+    onRereg: ((Boolean, String, String?, String) -> Unit)? = null,
 ) = Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
     val words = Tima.words.auth
     var signingOut by rememberSaveable { mutableStateOf(false) }
@@ -124,8 +132,13 @@ fun DeviceScreen(
         Secondary(keyNotice, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
     }
 
+    // Перерегистрация (ДУ9) — первым делом: спор за аккаунт важнее всего на экране.
+    if (rereg != null && rereg.text != null && onSendReregCode != null && onRereg != null && !signingOut) {
+        ReregPanel(rereg, codeSent = state.reregCode != null, onSendReregCode, onRereg, state.trusting)
+    }
     // С номера начали заново (ДУ6) — первым делом: это важнее всего остального на экране.
-    if (state.replaced && onCancelNewIdentity != null && !signingOut) {
+    // Во время перерегистрации отмены нет: оспаривается только заявкой (ДУ9).
+    if (state.replaced && rereg?.text == null && onCancelNewIdentity != null && !signingOut) {
         CancelNewIdentity(onCancelNewIdentity, state.trusting)
     }
 
@@ -162,6 +175,10 @@ fun DeviceScreen(
     val banned = state.startAnewBanned
     if (banned != null && onSendBanCode != null && onBanStartAnew != null && !signingOut) {
         StartAnewBan(banned, codeSent = state.banCode != null, onSendBanCode, onBanStartAnew, state.trusting)
+    }
+    // Запустить перерегистрацию (ДУ9, Р34) — прежней фразой; дальше вход тем же номером.
+    if (rereg?.canStart == true && onStartRereg != null && !signingOut) {
+        StartRereg(onStartRereg, state.trusting)
     }
     state.trustNotice?.let {
         Secondary(it, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
@@ -426,6 +443,86 @@ private fun StartAnewBan(
             )
         }
     }
+}
+
+/** Запуск перерегистрации (ДУ9): объяснение, поле прежней фразы, кнопка. */
+@Composable
+private fun StartRereg(onStart: (String) -> Unit, busy: Boolean) = Column(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+) {
+    val words = Tima.words.auth
+    var open by rememberSaveable { mutableStateOf(false) }
+    var phrase by remember { mutableStateOf("") }
+    Caption(words.reregTitle, weight = FontWeight.ExtraBold)
+    Secondary(words.reregAbout)
+    if (!open) {
+        Button(label = words.reregTitle, onClick = { open = true }, kind = ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
+        return@Column
+    }
+    Field(value = phrase, onChange = { phrase = it }, hint = words.reregOldPhrase, modifier = Modifier.fillMaxWidth())
+    Button(
+        label = words.reregStart,
+        onClick = {
+            if (!busy && phrase.isNotBlank()) {
+                onStart(phrase)
+                phrase = ""
+            }
+        },
+        kind = ButtonKind.Dangerous,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/** Идущая перерегистрация (ДУ9): текст стороны, заявка «Аккаунт украден» и подтверждение в окне. */
+@Composable
+private fun ReregPanel(
+    view: ReregView,
+    codeSent: Boolean,
+    onSendCode: () -> Unit,
+    onRereg: (Boolean, String, String?, String) -> Unit,
+    busy: Boolean,
+) = Column(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+) {
+    val words = Tima.words.auth
+    Caption(words.reregTitle, weight = FontWeight.ExtraBold, color = Tima.colors.alarm)
+    view.text?.let { Secondary(it) }
+    if (!view.canClaim && !view.canConfirm) return@Column
+    var phrase by remember { mutableStateOf("") }
+    var oldPhrase by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    if (!codeSent) {
+        Button(
+            label = if (view.canClaim) words.reregClaim else words.reregConfirm,
+            onClick = { if (!busy) onSendCode() },
+            kind = if (view.canClaim) ButtonKind.Dangerous else ButtonKind.Action,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        return@Column
+    }
+    if (view.twoPhrases) {
+        Field(value = oldPhrase, onChange = { oldPhrase = it }, hint = words.reregOldPhrase, modifier = Modifier.fillMaxWidth())
+        Field(value = phrase, onChange = { phrase = it }, hint = words.reregNewPhrase, modifier = Modifier.fillMaxWidth())
+    } else {
+        Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, modifier = Modifier.fillMaxWidth())
+    }
+    Field(value = code, onChange = { code = it }, hint = words.banCodeHint, modifier = Modifier.fillMaxWidth())
+    Button(
+        label = if (view.canClaim) words.reregClaim else words.reregConfirm,
+        onClick = {
+            val ready = phrase.isNotBlank() && code.isNotBlank() && (!view.twoPhrases || oldPhrase.isNotBlank())
+            if (!busy && ready) {
+                onRereg(view.canClaim, phrase, oldPhrase.takeIf { view.twoPhrases }, code)
+                phrase = ""
+                oldPhrase = ""
+                code = ""
+            }
+        },
+        kind = if (view.canClaim) ButtonKind.Dangerous else ButtonKind.Action,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /** Сменить ключ копии ключей (модель Matrix, М5): поле фразы, кнопка. */

@@ -546,7 +546,8 @@ private fun Inside(
         // Канал с отозванным токеном переподнимался раз в 20 с впустую (ПК, 2026-09-30):
         // отпускаем его сразу, не дожидаясь «Войти снова».
         LaunchedEffect(Unit) { ChannelHost.release() }
-        RevokedDevice(onAgain = signOut)
+        val why by (assembled.network.tokenKeeper?.revokedWhy ?: remember { kotlinx.coroutines.flow.MutableStateFlow(null) }).collectAsState()
+        RevokedDevice(onAgain = signOut, reason = why?.reason.orEmpty(), deleteAt = why?.deleteAt)
         return
     }
 
@@ -590,6 +591,12 @@ private fun Inside(
             device = entry.created()
         },
         onSignOut = signOut,
+        // Перерегистрация (ДУ9): доказательство прежней фразы готово — выйти и войти тем же
+        // номером новой личностью. Прежняя личность остаётся отложенной: она живёт до исхода (Р50).
+        onRereg = { ready ->
+            ReregHandoff.hold(ready)
+            signOut()
+        },
         // Заведённый виртуальный аккаунт записывается и становится текущим — то есть
         // приложение сразу входит в него. Иначе человек, только что придумавший ему ник
         // и записавший фразу, оставался бы в прежнем аккаунте и гадал, что произошло.
@@ -633,6 +640,7 @@ private fun Occurrence(entry: Entry, build: Build, onReturn: (String) -> Unit = 
             // Вход по фразе — слова один раз до просьбы о ключе служебной группы (2а).
             onEnteredByPhrase = PhraseOnce::hold,
             onPhraseKnown = KeyCopyPhrase::hold,
+            rereg = ReregHandoff.take(),
         )
     }
     val state by store.state.collectAsState()
@@ -834,6 +842,8 @@ private fun App(
     onSwitchAccount: (String) -> Unit = {},
     /** Выйти из аккаунта на этом устройстве (ПЛАН-(А)-ВЫХОДА-ИЗ-АККАУНТА.md, А4). */
     onSignOut: () -> Unit = {},
+    /** Перерегистрация подготовлена (ДУ9): выйти и войти тем же номером новой личностью. */
+    onRereg: (io.tima.domain.account.PrepareRereg.Ready) -> Unit = {},
     /**
      * Заведён виртуальный аккаунт: записать его в список и войти в него.
      *
@@ -1600,6 +1610,7 @@ private fun App(
     }
     val identityReplaced by assembled.identityReplaced.collectAsState()
     val deviceAdded by assembled.deviceAdded.collectAsState()
+    val reregEvent by assembled.rereg.collectAsState()
     val identityClaims by assembled.identityClaims.collectAsState()
     LaunchedEffect(assembled.session.userId) {
         val me = assembled.session.userId
@@ -2152,6 +2163,8 @@ private fun App(
         EventKind.IdentityClaim to if (identityClaims.isNotEmpty()) Presence.Yes else Presence.No,
         // Р48: к аккаунту добавлено новое устройство.
         EventKind.DeviceAdded to if (deviceAdded != null) Presence.Yes else Presence.No,
+        // ДУ9: перерегистрация — извещение стороне.
+        EventKind.Rereg to if (reregEvent != null) Presence.Yes else Presence.No,
     )
     var eventMemory by remember { mutableStateOf(EventMemory()) }
     // Показывать — на главном экране и не во время звонка: окно поверх разговора его бы
@@ -2188,6 +2201,7 @@ private fun App(
             EventKind.IdentityReplaced -> authWords.replacedTitle
             EventKind.IdentityClaim -> socialWords.identityClaims
             EventKind.DeviceAdded -> authWords.deviceAddedTitle
+            EventKind.Rereg -> authWords.reregTitle
             EventKind.Update -> upd.importantOut.takeIf { importantOffer != null } ?: upd.broken
             EventKind.Notices -> warn.eventsLineNotices
             EventKind.Calls -> warn.eventsLineCalls
@@ -2220,6 +2234,24 @@ private fun App(
                     },
                     NoticeAction(Tima.words.auth.replacedItsMe, ButtonKind.Quiet) {
                         close(EventKind.IdentityReplaced, "Это я")
+                    },
+                ),
+            )
+            // ДУ9: перерегистрация — текст стороны по §2б, «Открыть» ведёт к панели.
+            EventKind.Rereg -> NoticeEntry(
+                notice = io.tima.feature.shell.Notice(
+                    title = Tima.words.auth.reregTitle,
+                    text = reregNoticeText(reregEvent, assembled.session.userId, Tima.words.auth),
+                ),
+                actions = listOf(
+                    NoticeAction(Tima.words.auth.deviceAddedOpen) {
+                        close(EventKind.Rereg, "Открыть устройства")
+                        assembled.rereg.value = null
+                        where = Where.Settings(SettingsItem.DEVICES)
+                    },
+                    NoticeAction(warn.eventsGotIt, ButtonKind.Quiet) {
+                        close(EventKind.Rereg, "Понятно")
+                        assembled.rereg.value = null
                     },
                 ),
             )
@@ -3148,6 +3180,7 @@ private fun App(
                         opened = current.item,
                         onOpen = { where = Where.Settings(it) },
                         onSignOut = onSignOut,
+                        onRereg = onRereg,
                         onScanCode = onScanCode,
                         accountCopy = accountCopy,
                         network = network,
@@ -3954,6 +3987,7 @@ private fun Settings(
     opened: SettingsItem?,
     onOpen: (SettingsItem?) -> Unit,
     onSignOut: () -> Unit,
+    onRereg: (io.tima.domain.account.PrepareRereg.Ready) -> Unit,
     onScanCode: (() -> Unit)?,
     /** Копия аккаунта — ради «Запросить ключ» в «Секретная фраза и устройства». */
     accountCopy: BookCopySync,
@@ -4018,7 +4052,12 @@ private fun Settings(
 ) {
     // Название темы считается в составе, а не в лямбде списка: лямбда не composable.
     val themeName = Tima.words.appearance.theme(appearance.choice)
-    val fleet = remember { DevicesStore(network.myFleet, scope, trust = deviceTrust, onIdentityRestored = onIdentityRestored) }
+    val fleet = remember {
+        DevicesStore(
+            network.myFleet, scope, trust = deviceTrust, onIdentityRestored = onIdentityRestored,
+            onRereg = onRereg, dateText = ::reregDate,
+        )
+    }
     val devices by fleet.state.collectAsState()
 
     SettingsScreen(
@@ -4282,6 +4321,11 @@ private fun Devices(
         onRotateCopy = store::rotateCopy,
         // Завести копию на работающем устройстве (Р44).
         onStartCopy = store::startCopy,
+        // Перерегистрация (ДУ9, Р34): запуск, заявка «Аккаунт украден», подтверждение в окне.
+        rereg = store.reregView(msNow()),
+        onStartRereg = store::startRereg,
+        onSendReregCode = store::sendReregCode,
+        onRereg = store::rereg,
     )
 }
 
@@ -4291,8 +4335,17 @@ private fun Devices(
  * ведёт на вход — там и QR, и номер телефона.
  */
 @Composable
-private fun RevokedDevice(onAgain: () -> Unit) {
+private fun RevokedDevice(onAgain: () -> Unit, reason: String = "", deleteAt: Long? = null) {
     val words = Tima.words.auth
+    // Причина (ДУ9, ДУ11) — тексты §2б; проигравшей стороне — выбор «бороться» или «новый аккаунт».
+    val text = when (reason) {
+        "reregistered" -> words.revokedReregistered
+        "disputed" -> words.revokedDisputed
+        "rereg_not_confirmed" -> words.reregNewLost(deleteAt?.let(::reregDate).orEmpty())
+        "rereg_confirmed" -> words.reregOldLost
+        else -> null
+    }
+    val lost = reason == "rereg_not_confirmed" || reason == "rereg_confirmed"
     androidx.compose.foundation.layout.Column(
         modifier = Modifier
             .fillMaxSize()
@@ -4301,8 +4354,14 @@ private fun RevokedDevice(onAgain: () -> Unit) {
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(io.tima.core.ui.TimaSpacing.about3),
     ) {
         io.tima.core.ui.Caption(words.revokedTitle, weight = androidx.compose.ui.text.font.FontWeight.ExtraBold)
-        io.tima.core.ui.Secondary(words.revokedAbout)
-        io.tima.core.ui.Button(label = words.signInAgain, onClick = onAgain, modifier = Modifier.fillMaxWidth())
+        io.tima.core.ui.Secondary(text ?: words.revokedAbout)
+        if (lost) {
+            // Обе дороги начинаются со входа: бороться — тем же номером, новый аккаунт — другим.
+            io.tima.core.ui.Button(label = words.reregFight, onClick = onAgain, modifier = Modifier.fillMaxWidth())
+            io.tima.core.ui.Button(label = words.reregNewAccount, onClick = onAgain, kind = io.tima.core.ui.ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
+        } else {
+            io.tima.core.ui.Button(label = words.signInAgain, onClick = onAgain, modifier = Modifier.fillMaxWidth())
+        }
     }
 }
 
@@ -5353,3 +5412,25 @@ private const val INVITED_PREFIX = "call.group.invited."
 
 /** Выбранный вид группового звонка — ключ настроек устройства. */
 private const val GROUP_VIEW_KEY = "call.group.view"
+
+/** Текст извещения о перерегистрации (ДУ9) — для этой стороны, тексты §2б. */
+private fun reregNoticeText(
+    e: io.tima.core.network.EventStreamProtocol.Decision.Rereg?,
+    me: String,
+    w: io.tima.core.words.AuthWords,
+): String {
+    if (e == null) return ""
+    val isNew = e.newUserId == me
+    val from = reregDate(e.windowFrom)
+    val to = reregDate(e.windowTo)
+    return when (e.kind) {
+        "started" -> w.reregOldAbout
+        "disputed" -> if (isNew) w.reregDisputedNewAbout(from, to) else w.reregClaimedAbout(from, to)
+        "window" -> if (isNew) w.reregWindowNew(to) else w.reregWindowOld(to)
+        else -> when (e.outcome) {
+            "extended" -> w.reregExtended(from, to)
+            "new" -> if (isNew) w.reregNewWon else w.reregOldLost
+            else -> if (isNew) w.reregNewLost("") else w.reregOldWon
+        }
+    }
+}

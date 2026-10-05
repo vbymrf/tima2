@@ -43,6 +43,7 @@ class AccountApiOverHttp(private val auth: AuthApi) : AccountApi {
         platform: String,
         forceNewIdentity: Boolean,
         proof: DeviceProof?,
+        reregister: io.tima.domain.account.ReregProof?,
     ): DeviceCreateStep = when (
         val outcome = auth.register(
             registrationToken = registrationToken,
@@ -52,6 +53,7 @@ class AccountApiOverHttp(private val auth: AuthApi) : AccountApi {
             platform = platform,
             forceNewIdentity = forceNewIdentity,
             proof = proof?.let { DeviceProofFields(it.askPub, it.askSig, it.certBy, it.certSig) },
+            reregister = reregister?.let { it.challengeToken to it.signature },
         )
     ) {
         is RegisterResult.Registered ->

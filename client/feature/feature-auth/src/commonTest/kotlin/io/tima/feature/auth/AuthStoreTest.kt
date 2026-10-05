@@ -106,6 +106,36 @@ class AuthStoreTest {
         assertEquals(0, api.codeChecks)
     }
 
+    /**
+     * Перерегистрация (ДУ9): номер аккаунта подставлен, код заводит новую личность с
+     * доказательством прежней фразы — тем же вызовом, что «Начать заново», — и показывается
+     * новая фраза со своим текстом.
+     */
+    @Test
+    fun перерегистрация_заводит_новую_личность_с_доказательством() = runTest {
+        val proof = io.tima.domain.account.ReregProof("вызов", ByteArray(64))
+        val store = AuthStore(
+            register = RegisterDevice(api, keys, this@AuthStoreTest.store, platform = "проба"),
+            identities = identity,
+            scope = backgroundScope,
+            rereg = io.tima.domain.account.PrepareRereg.Ready("+79990000103", proof),
+        )
+        val phone = store.state.value
+        assertIs<AuthState.Phone>(phone)
+        assertTrue(phone.rereg)
+        assertEquals("+79990000103", phone.fullNumber)
+        store.requestCode()
+        val code = store.state.first { it is AuthState.Code } as AuthState.Code
+        assertTrue(code.rereg)
+        store.changedCode("123456")
+        store.confirm()
+        val phrase = store.state.first { it is AuthState.Phrase }
+        assertIs<AuthState.Phrase>(phrase)
+        assertTrue(phrase.rereg)
+        assertTrue(api.sentFork, "перерегистрация — новая личность")
+        assertEquals(proof, api.sentRereg, "с доказательством прежней фразы")
+    }
+
     /** «Изменить номер» возвращает к телефону с уже набранным номером. */
     @Test
     fun назад_помнит_номер() = runTest {
@@ -581,6 +611,7 @@ class AuthStoreTest {
         var onCheckCode: suspend () -> CodeSubmitStep = { CodeSubmitStep.Accepted("t-1") }
         var sentIdentity: ByteArray? = null
         var sentFork: Boolean = false
+        var sentRereg: io.tima.domain.account.ReregProof? = null
         var onCreation: suspend () -> DeviceCreateStep = {
             DeviceCreateStep.Created(userId = "u-1", deviceId = "d-1", accessToken = "a-1")
         }
@@ -605,10 +636,12 @@ class AuthStoreTest {
             platform: String,
             forceNewIdentity: Boolean,
             proof: DeviceProof?,
+            reregister: io.tima.domain.account.ReregProof?,
         ): DeviceCreateStep {
             creations++
             sentIdentity = identityPub
             sentFork = forceNewIdentity
+            sentRereg = reregister
             return onCreation()
         }
     }

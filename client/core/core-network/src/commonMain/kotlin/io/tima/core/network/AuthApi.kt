@@ -114,6 +114,11 @@ class AuthApi(
         forceNewIdentity: Boolean = false,
         /** Доказательство устройства (ПЛАН-(ДУ+ИУ)-УСТРОЙСТВ-И-ИСТОРИИ ДУ2); `null` — без него. */
         proof: DeviceProofFields? = null,
+        /**
+         * Перерегистрация (ДУ9, Р34): вызов `reidentify`, выданный сессии прежней личности, и его
+         * подпись её ключом — доказательство прежней фразы. Вместе с [forceNewIdentity].
+         */
+        reregister: Pair<String, ByteArray>? = null,
     ): RegisterResult {
         require(encryptionPub.size == KEY_BYTES) { "encryption_pub обязан быть $KEY_BYTES байт" }
         require(signingPub.size == KEY_BYTES) { "signing_pub обязан быть $KEY_BYTES байт" }
@@ -128,6 +133,9 @@ class AuthApi(
             if (identityPub != null) add(""""identity_pub":"${encodeBase64Url(identityPub)}"""")
             if (platform != null) add(""""platform":"$platform"""")
             if (forceNewIdentity) add(""""force_new_identity":true""")
+            if (reregister != null) {
+                add(""""reregister":{"challenge_token":"${reregister.first}","signature":"${encodeBase64Url(reregister.second)}"}""")
+            }
             if (proof != null) {
                 if (proof.askPub != null && proof.askSig != null) {
                     add(""""ask_pub":"${encodeBase64Url(proof.askPub)}"""")

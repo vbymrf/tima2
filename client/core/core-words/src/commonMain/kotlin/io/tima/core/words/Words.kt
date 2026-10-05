@@ -1654,6 +1654,41 @@ interface AuthWords {
     val copyStartAbout: String
     val copyStartSend: String
     val copyStarted: String
+    /** ДУ9, Р34: перерегистрация — тексты §2б. Даты — уже отформатированные. */
+    val reregTitle: String
+    val reregAbout: String
+    val reregStart: String
+    val reregEntryTitle: String
+    val reregEntryAbout: String
+    val reregPhraseAbout: String
+    val reregOpen: String
+    val reregStale: String
+    fun reregNewAbout(from: String, to: String): String
+    val reregOldAbout: String
+    val reregClaim: String
+    val reregClaimed: String
+    fun reregClaimedAbout(from: String, to: String): String
+    fun reregDisputedNewAbout(from: String, to: String): String
+    fun reregWindowNew(to: String): String
+    fun reregWindowOld(to: String): String
+    val reregConfirm: String
+    val reregConfirmed: String
+    val reregOldPhrase: String
+    val reregNewPhrase: String
+    val reregNotInWindow: String
+    val reregNewWon: String
+    val reregOldLost: String
+    fun reregNewLost(date: String): String
+    val reregOldWon: String
+    fun reregExtended(from: String, to: String): String
+    val revokedReregistered: String
+    val revokedDisputed: String
+    val reregFight: String
+    val reregNewAccount: String
+    val peerReregistered: String
+    fun peerDisputed(to: String): String
+    val peerDisputeOver: String
+    val peerBackToOld: String
     /** Р48: к аккаунту добавлено новое устройство — событие в подокне. */
     val deviceAddedTitle: String
     fun deviceAddedText(platform: String): String
@@ -3585,6 +3620,60 @@ object RussianWords : Words {
                 "Введите фразу один раз — дальше копия пополняется сама."
         override val copyStartSend = "Завести копию"
         override val copyStarted = "Копия переписки заведена"
+        override val reregTitle = "Перерегистрация"
+        override val reregAbout =
+            "Если доступ к аккаунту есть у кого-то ещё: прежняя фраза и код из SMS заведут новую личность с новой фразой. " +
+                "Прежние заверения снимутся, затем откроется окно подтверждения."
+        override val reregStart = "Перерегистрировать"
+        override val reregEntryTitle = "Перерегистрация аккаунта"
+        override val reregEntryAbout = "Подтвердите номер аккаунта кодом из SMS — заведётся новая личность с новой секретной фразой."
+        override val reregPhraseAbout =
+            "Аккаунт перерегистрирован на новую личность. Прежние заверения сняты: работают только телефоны с секретной фразой. " +
+                "В окне подтверждения — его даты в «Секретная фраза и устройства» — подтвердите перерегистрацию: прежняя фраза, " +
+                "новая фраза и код из SMS. Не подтвердите — новая личность будет удалена."
+        override val reregOpen = "Идёт перерегистрация аккаунта: новую личность до её исхода завести нельзя."
+        override val reregStale = "Прежняя фраза не подтвердилась — начните перерегистрацию заново в «Секретная фраза и устройства»."
+        override fun reregNewAbout(from: String, to: String) =
+            "Аккаунт перерегистрирован на новую личность. Прежние заверения сняты: работают только телефоны с секретной фразой. " +
+                "С $from по $to подтвердите перерегистрацию — прежняя фраза, новая фраза и код из SMS. " +
+                "Не подтвердите — новая личность будет удалена."
+        override val reregOldAbout =
+            "С вашего аккаунта запущена перерегистрация на новую личность. Если это не вы — подайте заявку «Аккаунт украден»: " +
+                "нужны фраза и код из SMS. Если это вы — ничего делать не нужно."
+        override val reregClaim = "Аккаунт украден"
+        override val reregClaimed = "Заявка принята"
+        override fun reregClaimedAbout(from: String, to: String) =
+            "Заявка принята. Идёт спор за аккаунт до $to: заверять устройства и заводить новую личность сейчас нельзя никому. " +
+                "С $from по $to подтвердите заявку фразой и кодом из SMS."
+        override fun reregDisputedNewAbout(from: String, to: String) =
+            "Идёт спор за аккаунт до $to: подана заявка «Аккаунт украден». Заверять устройства сейчас нельзя. " +
+                "С $from по $to подтвердите перерегистрацию — две фразы и код из SMS."
+        override fun reregWindowNew(to: String) =
+            "Пора подтвердить перерегистрацию: до $to введите прежнюю и новую фразы и код из SMS. Не подтвердите — новая личность будет удалена."
+        override fun reregWindowOld(to: String) = "Пора подтвердить заявку «Аккаунт украден»: до $to введите фразу и код из SMS."
+        override val reregConfirm = "Подтвердить"
+        override val reregConfirmed = "Подтверждение принято"
+        override val reregOldPhrase = "прежняя фраза"
+        override val reregNewPhrase = "новая фраза"
+        override val reregNotInWindow = "Подтверждение принимается только в окне подтверждения."
+        override val reregNewWon = "Перерегистрация подтверждена. Прежняя личность удалена, ограничения сняты — заверяйте свои устройства как обычно."
+        override val reregOldLost =
+            "Ваша личность удалена: перерегистрация подтверждена. Можно бороться за аккаунт — подать заявку заново — или завести новый аккаунт на другой номер."
+        override fun reregNewLost(date: String) =
+            "Перерегистрация не подтверждена. Ваша личность будет удалена $date, аккаунт остаётся за прежней. " +
+                "Можно повторить процедуру или завести новый аккаунт на другой номер."
+        override val reregOldWon = "Перерегистрация отменена: аккаунт снова ваш, ограничения сняты."
+        override fun reregExtended(from: String, to: String) =
+            "Подтверждения пришли от обеих сторон. Спор продлён: новое окно подтверждения — с $from по $to."
+        override val revokedReregistered = "Это устройство отключено: аккаунт перерегистрирован. Заверьте его заново с телефона по QR."
+        override val revokedDisputed = "Это устройство отключено: подана заявка «Аккаунт украден». Заверять устройства до конца спора нельзя."
+        override val reregFight = "Бороться за аккаунт"
+        override val reregNewAccount = "Новый аккаунт"
+        override val peerReregistered =
+            "Собеседник перерегистрировал аккаунт: ключ личности сменился. Прежние сообщения у вас остались. Если сомневаетесь, что это он, — уточните."
+        override fun peerDisputed(to: String) = "Аккаунт собеседника оспаривается до $to: подана заявка о краже."
+        override val peerDisputeOver = "Спор за аккаунт собеседника завершён."
+        override val peerBackToOld = "Собеседник вернулся к прежней личности — переписка снова с ней."
         override val deviceAddedTitle = "Добавлено новое устройство"
         override fun deviceAddedText(platform: String): String {
             val what = when (platform) {

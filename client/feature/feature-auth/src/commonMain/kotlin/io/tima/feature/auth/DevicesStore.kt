@@ -39,6 +39,10 @@ class DevicesStore(
     private val trust: DeviceTrustActions? = null,
     /** Новая личность отменена — снять событие «начали заново». */
     private val onIdentityRestored: () -> Unit = {},
+    /** Перерегистрация подготовлена (ДУ9): выйти и войти тем же номером новой личностью. */
+    private val onRereg: (io.tima.domain.account.PrepareRereg.Ready) -> Unit = {},
+    /** Дата для текстов перерегистрации — по местным часам; формат — у того, кто знает время. */
+    private val dateText: (Long) -> String = { it.toString() },
 ) {
 
     private val _state = MutableStateFlow(DevicesState(expect = true))
@@ -58,6 +62,111 @@ class DevicesStore(
                 _state.value = _state.value.copy(startAnewBanned = banned)
             }
             checkCopyRotation()
+            refreshRereg()
+        }
+    }
+
+    /** Идёт ли перерегистрация (ДУ9) — от этого зависят панели и тексты. */
+    fun refreshRereg() {
+        val actions = trust ?: return
+        scope.launch {
+            val r = runCatching { actions.rereg() }.getOrNull() ?: return@launch
+            _state.value = _state.value.copy(rereg = r)
+        }
+    }
+
+    /** Панель перерегистрации на момент [now]; `null` — не узнали, панели нет. */
+    fun reregView(now: Long): ReregView? {
+        val r = _state.value.rereg ?: return null
+        if (!r.active) return ReregView(text = null, canStart = true)
+        val open = now >= r.windowFrom && now < r.windowTo
+        return ReregView(
+            text = reregText(r, now),
+            canClaim = !r.isNew && !r.disputed && now < r.windowTo,
+            canConfirm = open && !r.confirmed && (r.isNew || r.disputed),
+            twoPhrases = r.isNew,
+        )
+    }
+
+    /** Текст перерегистрации для этой стороны — §2б; `null` — процесса нет. */
+    fun reregText(r: io.tima.domain.account.Rereg?, now: Long): String? {
+        if (r == null || !r.active) return null
+        val w = words().auth
+        val from = dateText(r.windowFrom)
+        val to = dateText(r.windowTo)
+        val open = now >= r.windowFrom
+        return when {
+            r.isNew && open -> w.reregWindowNew(to)
+            r.isNew && r.disputed -> w.reregDisputedNewAbout(from, to)
+            r.isNew -> w.reregNewAbout(from, to)
+            r.disputed && open -> w.reregWindowOld(to)
+            r.disputed -> w.reregClaimedAbout(from, to)
+            else -> w.reregOldAbout
+        }
+    }
+
+    /**
+     * Начать перерегистрацию (ДУ9): фраза сверяется с аккаунтом, вызов подписывается — и
+     * приложение выходит, чтобы войти тем же номером новой личностью. Слова дальше не живут.
+     */
+    fun startRereg(phrase: String) {
+        val actions = trust ?: return
+        if (_state.value.trusting) return
+        val words = phrase.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        scope.launch {
+            val step = runCatching { actions.prepareRereg(words) }.getOrElse {
+                io.tima.domain.account.PrepareRereg.Failed(TrustStep.Refused(it.message ?: "?"))
+            }
+            _state.value = _state.value.copy(trusting = false)
+            when (step) {
+                is io.tima.domain.account.PrepareRereg.Ready -> onRereg(step)
+                is io.tima.domain.account.PrepareRereg.Failed -> _state.value = _state.value.copy(trustNotice = notice(step.step))
+            }
+        }
+    }
+
+    /** Код из SMS для заявки или подтверждения (ДУ9) — на номер аккаунта. */
+    fun sendReregCode() {
+        val actions = trust ?: return
+        if (_state.value.trusting) return
+        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        scope.launch {
+            val sent = runCatching { actions.sendBanCode() }.getOrNull()
+            _state.value = _state.value.copy(
+                trusting = false,
+                reregCode = sent,
+                trustNotice = if (sent == null) words().auth.trustFailed(words().auth.tryAgain) else sent.devCode?.let { words().auth.standSentCode(it) },
+            )
+        }
+    }
+
+    /**
+     * «Аккаунт украден» ([oldPhrase] = `null`, своя фраза) или подтверждение в окне; у Н
+     * подтверждение просит и прежнюю фразу — [oldPhrase].
+     */
+    fun rereg(claim: Boolean, phrase: String, oldPhrase: String?, code: String) {
+        val actions = trust ?: return
+        val sent = _state.value.reregCode ?: return
+        if (_state.value.trusting) return
+        fun split(text: String) = text.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        scope.launch {
+            val step = runCatching {
+                if (claim) actions.claimRereg(split(phrase), sent.requestId, code.trim())
+                else actions.confirmRereg(split(phrase), oldPhrase?.let(::split), sent.requestId, code.trim())
+            }.getOrElse { TrustStep.Refused(it.message ?: "?") }
+            val w = words().auth
+            _state.value = _state.value.copy(
+                trusting = false,
+                reregCode = if (step == TrustStep.Done) null else sent,
+                trustNotice = when {
+                    step == TrustStep.Done -> if (claim) w.reregClaimed else w.reregConfirmed
+                    step is TrustStep.Refused && step.reason == "not_in_window" -> w.reregNotInWindow
+                    else -> notice(step)
+                },
+            )
+            if (step == TrustStep.Done) refreshRereg()
         }
     }
 
@@ -295,6 +404,19 @@ class DevicesStore(
     }
 }
 
+/** Что показать на панели перерегистрации (ДУ9). */
+data class ReregView(
+    val text: String?,
+    /** Процесса нет — можно запустить. */
+    val canStart: Boolean = false,
+    /** Это С, спора ещё нет — «Аккаунт украден». */
+    val canClaim: Boolean = false,
+    /** Окно открыто, эта сторона ещё не подтвердила. */
+    val canConfirm: Boolean = false,
+    /** Подтверждает Н — нужны обе фразы. */
+    val twoPhrases: Boolean = false,
+)
+
 /**
  * Что видит человек в списке устройств.
  *
@@ -323,4 +445,8 @@ data class DevicesState(
     val copyRotationDue: Boolean = false,
     /** Копия ключей у личности ещё не заведена (Р44). */
     val copyMissing: Boolean = false,
+    /** Перерегистрация (ДУ9); `null` — не узнали. */
+    val rereg: io.tima.domain.account.Rereg? = null,
+    /** Код для заявки или подтверждения перерегистрации отправлен. */
+    val reregCode: io.tima.domain.account.BanCode? = null,
 )

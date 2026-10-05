@@ -245,6 +245,9 @@ class UsersApi(
                 current = o["current"]?.jsonPrimitive?.content == "true",
                 cancelled = o["cancelled"]?.jsonPrimitive?.content == "true",
                 currentId = o["current_id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() },
+                reregistered = o["reregistered"]?.jsonPrimitive?.content == "true",
+                disputedUntil = o.msOf("disputed_until"),
+                deleteAt = o.msOf("delete_at"),
             )
         }.toMap()
     }
@@ -296,6 +299,46 @@ class UsersApi(
         return StartAnewState(phone = body.str("phone").orEmpty(), banned = body.bool("start_anew_banned") == true)
     }
 
+    /** `GET /users/me/rereg` — идёт ли перерегистрация (ДУ9). `null` — не узнали. */
+    suspend fun reregState(): ReregState? {
+        val response = try {
+            client.get(route.api("/api/v1/users/me/rereg")) { header("Authorization", "Bearer ${token()}") }
+        } catch (e: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        val body = response.jsonBody() ?: return null
+        if (body.bool("active") != true) return ReregState(active = false)
+        return ReregState(
+            active = true,
+            role = body.str("role").orEmpty(),
+            round = body.int("round") ?: 0,
+            windowFrom = body.msOf("window_from") ?: 0,
+            windowTo = body.msOf("window_to") ?: 0,
+            disputed = body.bool("disputed") == true,
+            confirmed = body.bool("confirmed") == true,
+        )
+    }
+
+    /**
+     * «Аккаунт украден» (`claim`) или подтверждение в окне (`confirm`) — ДУ9, Р34: SMS на номер
+     * аккаунта и подпись вызова ключом личности; у Н при подтверждении — ещё ключом прежней.
+     */
+    suspend fun rereg(action: String, registrationToken: String, challenge: String, signature: ByteArray, oldSignature: ByteArray? = null): TrustCallResult {
+        val old = oldSignature?.let { ",\"old_signature\":\"${encodeBase64Url(it)}\"" }.orEmpty()
+        val response = try {
+            client.post(route.api("/api/v1/users/me/rereg/$action")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody("""{"registration_token":"$registrationToken","challenge_token":"$challenge","signature":"${encodeBase64Url(signature)}"$old}""")
+            }
+        } catch (e: Throwable) {
+            return TrustCallResult.Offline(classifyFailure(e))
+        }
+        if (response.status.value in 200..299) return TrustCallResult.Done
+        return TrustCallResult.Refused(response.status.value, response.jsonBody().codeOf())
+    }
+
     /**
      * `POST /users/me/start-anew-ban` — закрыть «Начать заново» навсегда: SMS на номер
      * аккаунта (`registrationToken`) и подпись вызова ключом личности из фразы.
@@ -330,4 +373,26 @@ class IdentityStatus(
     val cancelled: Boolean,
     /** Текущая личность того же аккаунта; `null` — сервер старый. */
     val currentId: String? = null,
+    /** Заведена перерегистрацией (ДУ9): собеседнику — «перерегистрировал аккаунт». */
+    val reregistered: Boolean = false,
+    /** Идёт спор за аккаунт — до этого момента, мс; `null` — спора нет. */
+    val disputedUntil: Long? = null,
+    /** Личность на удалении (ДУ11), мс; её сообщения помечаются, как у отменённой (Р49). */
+    val deleteAt: Long? = null,
+)
+
+private fun JsonObject.msOf(key: String): Long? =
+    (this[key] as? kotlinx.serialization.json.JsonPrimitive)?.content
+        ?.let { runCatching { kotlinx.datetime.Instant.parse(it).toEpochMilliseconds() }.getOrNull() }
+
+/** Перерегистрация глазами стороны (ДУ9): что показать в «Секретная фраза и устройства». */
+class ReregState(
+    val active: Boolean,
+    /** `new` — эта личность заведена перерегистрацией (Н), `old` — прежняя (С). */
+    val role: String = "",
+    val round: Int = 0,
+    val windowFrom: Long = 0,
+    val windowTo: Long = 0,
+    val disputed: Boolean = false,
+    val confirmed: Boolean = false,
 )

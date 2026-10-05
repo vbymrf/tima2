@@ -1545,6 +1545,60 @@ object SpanishWords : Words {
                 "Escribe la frase una vez; después la copia se completa sola."
         override val copyStartSend = "Crear copia"
         override val copyStarted = "La copia de los mensajes está creada"
+        override val reregTitle = "Re-registro"
+        override val reregAbout =
+            "Si alguien más tiene acceso a la cuenta: la frase anterior y un código SMS crean una identidad nueva con una frase nueva. " +
+                "Las certificaciones anteriores se retiran y luego se abre una ventana de confirmación."
+        override val reregStart = "Re-registrar"
+        override val reregEntryTitle = "Re-registro de la cuenta"
+        override val reregEntryAbout = "Confirma el número de la cuenta con el código SMS: se creará una identidad nueva con una frase secreta nueva."
+        override val reregPhraseAbout =
+            "La cuenta se re-registró a una identidad nueva. Las certificaciones anteriores se retiraron: solo funcionan los teléfonos con la frase secreta. " +
+                "En la ventana de confirmación —sus fechas están en «Frase secreta y dispositivos»— confirma el re-registro: la frase anterior, " +
+                "la frase nueva y un código SMS. Sin confirmación la identidad nueva se eliminará."
+        override val reregOpen = "La cuenta se está re-registrando: no se puede crear otra identidad hasta que se resuelva."
+        override val reregStale = "La frase anterior no se confirmó: empieza el re-registro de nuevo en «Frase secreta y dispositivos»."
+        override fun reregNewAbout(from: String, to: String) =
+            "La cuenta se re-registró a una identidad nueva. Las certificaciones anteriores se retiraron: solo funcionan los teléfonos con la frase secreta. " +
+                "Entre el $from y el $to confirma el re-registro: la frase anterior, la frase nueva y un código SMS. " +
+                "Sin confirmación la identidad nueva se eliminará."
+        override val reregOldAbout =
+            "Se inició un re-registro de tu cuenta a una identidad nueva. Si no fuiste tú, presenta «Cuenta robada»: " +
+                "necesitas la frase y un código SMS. Si fuiste tú, no hace falta nada."
+        override val reregClaim = "Cuenta robada"
+        override val reregClaimed = "Solicitud aceptada"
+        override fun reregClaimedAbout(from: String, to: String) =
+            "Solicitud aceptada. La cuenta está en disputa hasta el $to: nadie puede certificar dispositivos ni crear una identidad nueva. " +
+                "Entre el $from y el $to confirma la solicitud con la frase y un código SMS."
+        override fun reregDisputedNewAbout(from: String, to: String) =
+            "La cuenta está en disputa hasta el $to: se presentó «Cuenta robada». Ahora no se pueden certificar dispositivos. " +
+                "Entre el $from y el $to confirma el re-registro: dos frases y un código SMS."
+        override fun reregWindowNew(to: String) =
+            "Es hora de confirmar el re-registro: antes del $to introduce la frase anterior, la nueva y un código SMS. Sin ello la identidad nueva se eliminará."
+        override fun reregWindowOld(to: String) = "Es hora de confirmar «Cuenta robada»: antes del $to introduce la frase y un código SMS."
+        override val reregConfirm = "Confirmar"
+        override val reregConfirmed = "Confirmación aceptada"
+        override val reregOldPhrase = "frase anterior"
+        override val reregNewPhrase = "frase nueva"
+        override val reregNotInWindow = "La confirmación solo se acepta dentro de la ventana de confirmación."
+        override val reregNewWon = "Re-registro confirmado. La identidad anterior se eliminó, sin restricciones: certifica tus dispositivos como siempre."
+        override val reregOldLost =
+            "Tu identidad se eliminó: el re-registro se confirmó. Puedes luchar por la cuenta —presentar de nuevo— o crear una cuenta nueva con otro número."
+        override fun reregNewLost(date: String) =
+            "El re-registro no se confirmó. Tu identidad se eliminará el $date, la cuenta queda con la anterior. " +
+                "Puedes repetir el procedimiento o crear una cuenta nueva con otro número."
+        override val reregOldWon = "Re-registro cancelado: la cuenta vuelve a ser tuya, sin restricciones."
+        override fun reregExtended(from: String, to: String) =
+            "Confirmaron ambas partes. La disputa se prolonga: nueva ventana de confirmación del $from al $to."
+        override val revokedReregistered = "Este dispositivo está desconectado: la cuenta se re-registró. Vuelve a certificarlo desde un teléfono con QR."
+        override val revokedDisputed = "Este dispositivo está desconectado: se presentó «Cuenta robada». No se pueden certificar dispositivos hasta el fin de la disputa."
+        override val reregFight = "Luchar por la cuenta"
+        override val reregNewAccount = "Cuenta nueva"
+        override val peerReregistered =
+            "El contacto re-registró la cuenta: la clave de identidad cambió. Tus mensajes anteriores siguen aquí. Si dudas de que sea él, compruébalo."
+        override fun peerDisputed(to: String) = "La cuenta del contacto está en disputa hasta el $to: se presentó una denuncia de robo."
+        override val peerDisputeOver = "La disputa por la cuenta del contacto terminó."
+        override val peerBackToOld = "El contacto volvió a la identidad anterior: el chat vuelve a ser con ella."
         override val deviceAddedTitle = "Se añadió un dispositivo nuevo"
         override fun deviceAddedText(platform: String): String {
             val what = when (platform) {

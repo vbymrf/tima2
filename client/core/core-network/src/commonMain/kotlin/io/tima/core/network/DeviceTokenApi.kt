@@ -59,8 +59,14 @@ class DeviceTokenApi(
             val code = body.codeOf()
             // Отозванное устройство — не «попробуйте позже», а конец: у этого устройства
             // доступа больше нет, и человеку придётся заводить его заново.
-            return if (code == "device_revoked") DeviceTokenResult.Revoked
-            else DeviceTokenResult.Refused(response.status.value, code)
+            return if (code == "device_revoked") {
+                DeviceTokenResult.Revoked(
+                    reason = body?.str("reason").orEmpty(),
+                    deleteAt = body?.str("delete_at")?.let { runCatching { kotlinx.datetime.Instant.parse(it).toEpochMilliseconds() }.getOrNull() },
+                )
+            } else {
+                DeviceTokenResult.Refused(response.status.value, code)
+            }
         }
         val token = body?.str("access_token").orEmpty()
         return if (token.isBlank()) DeviceTokenResult.Refused(response.status.value, "ответ без токена")
@@ -72,8 +78,11 @@ class DeviceTokenApi(
 sealed interface DeviceTokenResult {
     data class Renewed(val accessToken: String) : DeviceTokenResult
 
-    /** Устройство отозвано или неизвестно серверу — обновлять больше нечего. */
-    data object Revoked : DeviceTokenResult
+    /**
+     * Устройство отозвано или неизвестно серверу — обновлять больше нечего. [reason] — почему
+     * (ДУ9, ДУ11: перерегистрация, спор, удаление личности); [deleteAt] — когда удалится личность.
+     */
+    data class Revoked(val reason: String = "", val deleteAt: Long? = null) : DeviceTokenResult
 
     data class NoConnection(val link: LinkState) : DeviceTokenResult
 

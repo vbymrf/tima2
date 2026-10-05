@@ -109,6 +109,8 @@ class Assembled(
     val identityClaims: MutableStateFlow<Set<String>> = MutableStateFlow(emptySet()),
     /** К личности добавилось новое устройство — его платформа; `null` — события нет (Р48). */
     val deviceAdded: MutableStateFlow<String?> = MutableStateFlow(null),
+    /** Последнее событие перерегистрации (ДУ9) — до закрытия извещения. */
+    val rereg: MutableStateFlow<io.tima.core.network.EventStreamProtocol.Decision.Rereg?> = MutableStateFlow(null),
     /** Копия ключей по модели Matrix (§3а): пополнение, ключ из фразы, восстановление. */
     val keyCopy: KeyCopyService? = null,
     /** Переписки, чью историю передало своё устройство (ИУ3), — забрать. */
@@ -253,6 +255,7 @@ fun buildAssembled(
         val identityReplaced = MutableStateFlow(false)
         val identityClaims = MutableStateFlow<Set<String>>(emptySet())
         val deviceAdded = MutableStateFlow<String?>(null)
+        val rereg = MutableStateFlow<io.tima.core.network.EventStreamProtocol.Decision.Rereg?>(null)
         val historyReady = MutableSharedFlow<String>(extraBufferCapacity = 64)
 
         // ── УВЕДОМЛЕНИЯ СОБИРАЮТСЯ ЗДЕСЬ, А НЕ В ОКНЕ (У5) ──────────────────
@@ -384,6 +387,7 @@ fun buildAssembled(
                 onCallOwners = { callOwners.value = it },
                 onIdentityReplaced = { identityReplaced.value = true },
                 onDeviceAdded = { deviceAdded.value = it },
+                onRereg = { rereg.value = it },
                 keyCopy = keyCopy,
                 onIdentityClaim = { g -> identityClaims.value = identityClaims.value + g },
                 onHistoryReady = { chat -> historyReady.tryEmit(chat) },
@@ -404,6 +408,7 @@ fun buildAssembled(
             identityReplaced = identityReplaced,
             identityClaims = identityClaims,
             deviceAdded = deviceAdded,
+            rereg = rereg,
             keyCopy = keyCopy,
             historyReady = historyReady,
         )

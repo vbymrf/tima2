@@ -66,6 +66,12 @@ class AuthStore(
      * ключей вывести свою пару (модель Matrix, М1). Слова отдаются один раз и не хранятся.
      */
     private val onPhraseKnown: (List<String>) -> Unit = {},
+    /**
+     * Перерегистрация (ДУ9, Р34), подготовленная в «Секретная фраза и устройства»: номер
+     * аккаунта и доказательство прежней фразы. Вход идёт этим номером, код из SMS — и новая
+     * личность с новой фразой; запрет «Начать заново» её не останавливает.
+     */
+    private val rereg: io.tima.domain.account.PrepareRereg.Ready? = null,
 ) {
 
     /**
@@ -76,7 +82,9 @@ class AuthStore(
      */
     private var fresh: NewAccountIdentity? = null
 
-    private val _state = MutableStateFlow<AuthState>(AuthState.Phone())
+    private val _state = MutableStateFlow<AuthState>(
+        if (rereg != null) AuthState.Phone(number = rereg.phone, rereg = true) else AuthState.Phone(),
+    )
     val state: StateFlow<AuthState> = _state.asStateFlow()
 
     fun changedNumber(text: String) {
@@ -113,6 +121,7 @@ class AuthStore(
                     // Код в ответе приходит только со стенда, где включён TIMA_DEV_SMS.
                     // Решает это сервер, не мы: на боевом сервере поля нет вовсе.
                     standHint = step.devCode,
+                    rereg = current.rereg,
                 )
 
                 is CodeRequestStep.BadPhone -> current.copyWithTrouble(words().auth.badPhone(step.reason))
@@ -142,6 +151,7 @@ class AuthStore(
         // 2026-10-05 оно закрывало приложение на ПК («код пустой»).
         if (current.expect || current.code.isBlank()) return
         _state.value = current.copy(expect = true, trouble = null)
+        if (current.rereg && rereg != null) return reregister(current, rereg)
 
         scope.launch {
             val identity = identities.fresh().also { fresh = it }
@@ -284,6 +294,45 @@ class AuthStore(
         }
     }
 
+    /**
+     * Перерегистрация (ДУ9): новая личность с новой фразой и доказательство прежней — тем же
+     * кодом. Отказ «прежняя фраза не та» значит, что вызов устарел: подготовку надо повторить.
+     */
+    private fun reregister(current: AuthState.Code, start: io.tima.domain.account.PrepareRereg.Ready) {
+        scope.launch {
+            val identity = identities.fresh().also { fresh = it }
+            _state.value = when (
+                val step = register.confirm(
+                    requestId = current.requestId,
+                    code = current.code,
+                    identityPub = identity.identityPub,
+                    forceNewIdentity = true,
+                    words = identity.words,
+                    reregister = start.proof,
+                )
+            ) {
+                is RegistrationStep.Registered -> AuthState.Phrase(
+                    words = identity.words.also(onPhraseKnown),
+                    userId = step.userId,
+                    deviceId = step.deviceId,
+                    rereg = true,
+                )
+                RegistrationStep.AlreadyRegistered -> AuthState.CreatedAlready
+                RegistrationStep.WrongCode -> current.copyWithTrouble(words().auth.wrongCode)
+                RegistrationStep.CodeExpired -> AuthState.Phone(number = current.phone, trouble = words().auth.codeExpired, rereg = true)
+                is RegistrationStep.Offline -> current.copyWithTrouble(noLinks(step.retryAfterMs))
+                is RegistrationStep.Refused -> current.copyWithTrouble(
+                    when (step.reason) {
+                        "rereg_open" -> words().auth.reregOpen
+                        "bad_signature" -> words().auth.reregStale
+                        else -> step.reason
+                    },
+                )
+                else -> current.copyWithTrouble(words().auth.reregStale)
+            }
+        }
+    }
+
     /** Человек подтвердил, что фразу сохранил. Дальше — приложение. */
     fun savedPhrase() {
         val current = _state.value as? AuthState.Phrase ?: return
@@ -394,6 +443,8 @@ sealed interface AuthState {
         override val trouble: String? = null,
         /** Вызов идёт: кнопка занята, второе нажатие не посылает вторую SMS. */
         val expect: Boolean = false,
+        /** Перерегистрация (ДУ9): номер аккаунта подставлен, вход заводит новую личность. */
+        val rereg: Boolean = false,
     ) : AuthState {
         /**
          * То, что уходит серверу: E.164 без пробелов и скобок.
@@ -420,6 +471,8 @@ sealed interface AuthState {
          * `TIMA_DEV_SMS`; на боевом сервере поля нет вовсе, и решает это сервер, а не мы.
          */
         val standHint: String? = null,
+        /** Перерегистрация (ДУ9): код заведёт новую личность с доказательством прежней фразы. */
+        val rereg: Boolean = false,
     ) : AuthState {
         fun copyWithTrouble(text: String) = copy(trouble = text, expect = false)
     }
@@ -434,6 +487,8 @@ sealed interface AuthState {
         val words: List<String>,
         val userId: String,
         val deviceId: String,
+        /** Фраза новой личности после перерегистрации (ДУ9): свой текст над словами. */
+        val rereg: Boolean = false,
     ) : AuthState {
         override val trouble: String? get() = null
     }

@@ -92,6 +92,10 @@ class DeviceTokens(
     val revoked: StateFlow<Boolean> get() = _revoked
     private val _revoked = MutableStateFlow(false)
 
+    /** Почему отключено (ДУ9, ДУ11) — экрану отключения; `null` — причины сервер не назвал. */
+    val revokedWhy: StateFlow<DeviceTokenResult.Revoked?> get() = _revokedWhy
+    private val _revokedWhy = MutableStateFlow<DeviceTokenResult.Revoked?>(null)
+
     /**
      * Обновление одно на всё приложение (А1, 2026-09-30).
      *
@@ -156,10 +160,11 @@ class DeviceTokens(
                 true
             }
 
-            DeviceTokenResult.Revoked -> {
+            is DeviceTokenResult.Revoked -> {
                 // Отзыв — это конец, а не заминка: у этого устройства доступа больше нет.
                 // Экран предложит войти снова (А3); крутить обновление впустую незачем.
-                Journal.trouble(LogCode.AUTH_REVOKED, "устройство отозвано — нужен новый вход")
+                Journal.trouble(LogCode.AUTH_REVOKED, "устройство отозвано — нужен новый вход", "причина" to answer.reason)
+                _revokedWhy.value = answer
                 _revoked.value = true
                 false
             }

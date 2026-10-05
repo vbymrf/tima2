@@ -264,6 +264,20 @@ class EventStreamProtocol {
         /** К своей личности добавилось устройство [deviceId] (Р48). */
         data class DeviceAdded(val deviceId: String, val platform: String, val eventId: Long?) : Decision
 
+        /**
+         * Перерегистрация (ДУ9): [kind] — `started`, `disputed`, `window`, `done`; [outcome] — у
+         * `done`: `new`, `old` или `extended`. Окно — мс.
+         */
+        data class Rereg(
+            val kind: String,
+            val oldUserId: String,
+            val newUserId: String,
+            val windowFrom: Long,
+            val windowTo: Long,
+            val outcome: String,
+            val eventId: Long?,
+        ) : Decision
+
         /** Заявка новой личности [userId] в группу [groupId] (ДУ6, Р9). */
         data class IdentityClaim(val groupId: String, val userId: String, val eventId: Long?) : Decision
 
@@ -606,6 +620,17 @@ class EventStreamProtocol {
             "device.added" ->
                 json.string("device_id")?.let { Decision.DeviceAdded(it, json.string("platform").orEmpty(), eventId) }
                     ?: Decision.Skip("device.added без device_id", eventId)
+
+            // Перерегистрация (ДУ9): запуск, спор, окно подтверждения, исход — извещение стороне.
+            "rereg.started", "rereg.disputed", "rereg.window", "rereg.done" -> Decision.Rereg(
+                kind = event.removePrefix("rereg."),
+                oldUserId = json.string("old_user_id").orEmpty(),
+                newUserId = json.string("new_user_id").orEmpty(),
+                windowFrom = json.string("window_from")?.let { runCatching { kotlinx.datetime.Instant.parse(it).toEpochMilliseconds() }.getOrNull() } ?: 0,
+                windowTo = json.string("window_to")?.let { runCatching { kotlinx.datetime.Instant.parse(it).toEpochMilliseconds() }.getOrNull() } ?: 0,
+                outcome = json.string("outcome").orEmpty(),
+                eventId = eventId,
+            )
 
             // Новая личность просит место прежней в группе — решать владельцу или модератору.
             "group.identity_claim" ->

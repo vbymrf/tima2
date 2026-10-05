@@ -120,8 +120,14 @@ private fun Phone(
     onReturn: (String) -> Unit = {},
 ) {
     val words = Tima.words.auth
-    Caption(words.welcome, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-    Secondary(words.enterPhone)
+    if (state.rereg) {
+        // Перерегистрация (ДУ9): номер аккаунта уже подставлен.
+        Caption(words.reregEntryTitle, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+        Secondary(words.reregEntryAbout)
+    } else {
+        Caption(words.welcome, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
+        Secondary(words.enterPhone)
+    }
 
     // ── ДВА ПОЛЯ, А НЕ ОДНО ──────────────────────────────────────────────────
     //
@@ -279,7 +285,7 @@ private fun Code(
 private fun Phrase(state: AuthState.Phrase, onSaved: () -> Unit) {
     val words = Tima.words.auth
     Caption(words.secretPhrase, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-    Secondary(words.secretPhraseAbout)
+    Secondary(if (state.rereg) words.reregPhraseAbout else words.secretPhraseAbout)
 
     Column(
         modifier = Modifier.fillMaxWidth(),

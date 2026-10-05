@@ -60,6 +60,8 @@ class RegisterDevice(
         forceNewIdentity: Boolean = false,
         /** Фраза, если она в руках: из неё — доказательство устройства (ДУ2). */
         words: List<String>? = null,
+        /** Перерегистрация (ДУ9): доказательство прежней фразы; вместе с [forceNewIdentity]. */
+        reregister: ReregProof? = null,
     ): RegistrationStep {
         if (!replaceExisting && secrets.hasDevice()) {
             return RegistrationStep.AlreadyRegistered
@@ -67,7 +69,7 @@ class RegisterDevice(
 
         when (val check = api.submitCode(requestId, code)) {
             is CodeSubmitStep.Accepted ->
-                return create(check.registrationToken, identityPub, forceNewIdentity, words)
+                return create(check.registrationToken, identityPub, forceNewIdentity, words, reregister)
             CodeSubmitStep.WrongCode -> return RegistrationStep.WrongCode
             is CodeSubmitStep.Offline -> return RegistrationStep.Offline(check.retryAfterMs)
             is CodeSubmitStep.Refused -> return RegistrationStep.Refused(check.reason)
@@ -97,6 +99,7 @@ class RegisterDevice(
         identityPub: ByteArray?,
         forceNewIdentity: Boolean,
         words: List<String>?,
+        reregister: ReregProof? = null,
     ): RegistrationStep {
         val material = keys.newDeviceKeys()
         // Доказательство — пока фраза в руках: дальше её не будет нигде. Ключ подписи устройств
@@ -121,6 +124,7 @@ class RegisterDevice(
             platform = platform,
             forceNewIdentity = forceNewIdentity,
             proof = proof,
+            reregister = reregister,
         )) {
             is DeviceCreateStep.Created -> {
                 // Токен — после успеха: до него он не существует, а его наличие и есть
@@ -219,8 +223,15 @@ interface AccountApi {
         platform: String,
         forceNewIdentity: Boolean = false,
         proof: DeviceProof? = null,
+        reregister: ReregProof? = null,
     ): DeviceCreateStep
 }
+
+/**
+ * Доказательство прежней фразы при перерегистрации (ДУ9, Р34): вызов `reidentify`, выданный
+ * сессии прежней личности, и его подпись её ключом. Живёт минуты — сколько живёт вызов.
+ */
+class ReregProof(val challengeToken: String, val signature: ByteArray)
 
 /** Платформы, которые держат ключ подписи устройств (Р12: только телефон). */
 val PHONES: Set<String> = setOf("android", "ios")

@@ -118,6 +118,8 @@ class Receiver(
     private val onIdentityReplaced: () -> Unit = {},
     /** К своей личности добавилось другое устройство — платформа (Р48). */
     private val onDeviceAdded: (String) -> Unit = {},
+    /** Перерегистрация (ДУ9): извещение стороне. */
+    private val onRereg: (EventStreamProtocol.Decision.Rereg) -> Unit = {},
     /** Копия ключей (модель Matrix, М2): открытое сообщение — в копию. */
     private val keyCopy: KeyCopyService? = null,
     /** Заявка новой личности в группу — решать владельцу или модератору (ДУ6). */
@@ -288,6 +290,10 @@ class Receiver(
                     Journal.note(LogCode.DEVICE_TRUST, "к аккаунту добавлено устройство", "устройство" to decision.deviceId.take(8), "платформа" to decision.platform)
                     onDeviceAdded(decision.platform)
                 }
+            }
+            is EventStreamProtocol.Decision.Rereg -> {
+                Journal.note(LogCode.DEVICE_TRUST, "перерегистрация", "что" to decision.kind, "исход" to decision.outcome.ifEmpty { "—" })
+                onRereg(decision)
             }
             is EventStreamProtocol.Decision.IdentityClaim -> {
                 Journal.note(LogCode.DEVICE_TRUST, "заявка новой личности в группу", "группа" to decision.groupId.take(8))

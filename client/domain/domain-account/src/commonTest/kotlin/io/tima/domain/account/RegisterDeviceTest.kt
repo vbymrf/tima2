@@ -75,6 +75,7 @@ class RegisterDeviceTest {
             platform: String,
             forceNewIdentity: Boolean,
             proof: DeviceProof?,
+            reregister: io.tima.domain.account.ReregProof?,
         ): DeviceCreateStep {
             calls += "заведение"
             sentKeys = encryptionPub to signingPub

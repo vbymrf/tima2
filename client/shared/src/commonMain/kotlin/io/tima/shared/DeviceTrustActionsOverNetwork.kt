@@ -182,6 +182,59 @@ class DeviceTrustActionsOverNetwork(
         }
     }
 
+    override suspend fun rereg(): io.tima.domain.account.Rereg? {
+        val state = users?.reregState() ?: return null
+        if (!state.active) return io.tima.domain.account.Rereg.NONE
+        return io.tima.domain.account.Rereg(
+            active = true, isNew = state.role == "new", windowFrom = state.windowFrom, windowTo = state.windowTo,
+            disputed = state.disputed, confirmed = state.confirmed, round = state.round,
+        )
+    }
+
+    override suspend fun prepareRereg(words: List<String>): io.tima.domain.account.PrepareRereg {
+        fun failed(step: TrustStep) = io.tima.domain.account.PrepareRereg.Failed(step)
+        val api = users ?: return failed(TrustStep.Refused("нет сети пользователей"))
+        val mine = (keys.devicesOf(userId) as? DeviceKeysResult.Devices)?.identityPub ?: return failed(TrustStep.Offline(0))
+        val claimed = io.tima.core.encryption.AccountIdentitiesOverKodium.fromWords(words) ?: return failed(TrustStep.WrongPhrase)
+        if (!claimed.contentEquals(mine)) return failed(TrustStep.WrongPhrase)
+        val phone = api.startAnewState()?.phone?.takeIf { it.isNotBlank() } ?: return failed(TrustStep.Offline(0))
+        val challenge = api.identityChallenge() ?: return failed(TrustStep.Offline(0))
+        val signature = io.tima.core.encryption.IdentitySignerOverKodium.sign(words, challenge.encodeToByteArray())
+            ?: return failed(TrustStep.WrongPhrase)
+        return io.tima.domain.account.PrepareRereg.Ready(phone, io.tima.domain.account.ReregProof(challenge, signature))
+    }
+
+    override suspend fun claimRereg(words: List<String>, requestId: String, code: String): TrustStep =
+        reregCall("claim", words, null, requestId, code)
+
+    override suspend fun confirmRereg(words: List<String>, oldWords: List<String>?, requestId: String, code: String): TrustStep =
+        reregCall("confirm", words, oldWords, requestId, code)
+
+    /** Заявка и подтверждение (ДУ9): SMS на номер аккаунта, вызов, подписи фразами. */
+    private suspend fun reregCall(action: String, words: List<String>, oldWords: List<String>?, requestId: String, code: String): TrustStep {
+        val api = users ?: return TrustStep.Refused("нет сети пользователей")
+        val auth = sms ?: return TrustStep.Refused("нет SMS")
+        val token = when (val v = auth.verifySms(requestId, code)) {
+            is io.tima.core.network.SmsVerifyResult.Verified -> v.registrationToken
+            io.tima.core.network.SmsVerifyResult.BadCode -> return TrustStep.WrongCode
+            is io.tima.core.network.SmsVerifyResult.NoConnection -> return TrustStep.Offline(v.link.retryDelayMs)
+            is io.tima.core.network.SmsVerifyResult.Refused -> return TrustStep.Refused(v.code)
+        }
+        val challenge = api.identityChallenge() ?: return TrustStep.Offline(0)
+        val bytes = challenge.encodeToByteArray()
+        val signature = io.tima.core.encryption.IdentitySignerOverKodium.sign(words, bytes) ?: return TrustStep.WrongPhrase
+        val old = oldWords?.let { io.tima.core.encryption.IdentitySignerOverKodium.sign(it, bytes) ?: return TrustStep.WrongPhrase }
+        return when (val answer = api.rereg(action, token, challenge, signature, old)) {
+            TrustCallResult.Done -> TrustStep.Done
+            is TrustCallResult.Offline -> TrustStep.Offline(answer.link.retryDelayMs)
+            is TrustCallResult.Refused -> when (answer.code) {
+                "bad_signature" -> TrustStep.WrongPhrase
+                "phone_mismatch" -> TrustStep.WrongCode
+                else -> TrustStep.Refused(answer.code)
+            }
+        }
+    }
+
     /**
      * Своё `device_id` — из ответа сервера по своим ключам: сессию сюда не тащим ради одного
      * значения, а ключи и так у нас.

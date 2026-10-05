@@ -62,6 +62,46 @@ interface DeviceTrustActions {
 
     /** Завести копию ключей фразой — для устройств, которые фразу больше не вводят (Р44). */
     suspend fun startCopy(words: List<String>): TrustStep = TrustStep.Refused("не умеем")
+
+    /** Перерегистрация глазами этой личности (ДУ9); `null` — не узнали, нет — `Rereg.NONE`. */
+    suspend fun rereg(): Rereg? = null
+
+    /**
+     * Подготовить перерегистрацию (ДУ9, Р34): фраза текущей личности сверена с аккаунтом, вызов
+     * подписан. Дальше — вход тем же номером: код из SMS и новая личность с новой фразой.
+     */
+    suspend fun prepareRereg(words: List<String>): PrepareRereg = PrepareRereg.Failed(TrustStep.Refused("не умеем"))
+
+    /** «Аккаунт украден» (Р34): фраза С и код из SMS на номер аккаунта. */
+    suspend fun claimRereg(words: List<String>, requestId: String, code: String): TrustStep = TrustStep.Refused("не умеем")
+
+    /** Подтверждение в окне (Р34): Н — обе фразы ([oldWords] — прежняя), С — своя. */
+    suspend fun confirmRereg(words: List<String>, oldWords: List<String>?, requestId: String, code: String): TrustStep =
+        TrustStep.Refused("не умеем")
+}
+
+/** Перерегистрация глазами стороны (ДУ9). Времена — мс. */
+data class Rereg(
+    val active: Boolean,
+    /** Эта личность — заведённая перерегистрацией (Н); иначе прежняя (С). */
+    val isNew: Boolean = false,
+    val windowFrom: Long = 0,
+    val windowTo: Long = 0,
+    val disputed: Boolean = false,
+    val confirmed: Boolean = false,
+    val round: Int = 0,
+) {
+    companion object {
+        val NONE = Rereg(active = false)
+    }
+}
+
+/** Чем кончилась подготовка перерегистрации. */
+sealed interface PrepareRereg {
+    /** Можно входить тем же номером [phone] с доказательством [proof]. */
+    class Ready(val phone: String, val proof: ReregProof) : PrepareRereg
+
+    class Failed(val step: TrustStep) : PrepareRereg
 }
 
 /** Отправленный код запрета (ДУ10). `devCode` — код в ответе стенда (`TIMA_DEV_SMS`). */
