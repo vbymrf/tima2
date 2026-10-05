@@ -1675,6 +1675,8 @@ interface AuthWords {
     val reregConfirmed: String
     /** Р53: предел SMS на номер исчерпан. */
     val tooManyCodes: String
+    /** Р54: полоса в переписке прежней личности во время перерегистрации. */
+    val reregSenderWarn: String
     fun reregConfirmedWait(to: String): String
     val reregOldPhrase: String
     val reregNewPhrase: String
@@ -3656,6 +3658,7 @@ object RussianWords : Words {
         override fun reregWindowOld(to: String) = "Пора подтвердить заявку «Аккаунт украден»: до $to введите фразу и код из SMS."
         override val reregConfirm = "Подтвердить"
         override val reregConfirmed = "Подтверждение принято"
+        override val reregSenderWarn = "Идёт перерегистрация аккаунта: собеседники пишут новому ключу личности — ответ на ваше сообщение придёт не сюда."
         override val tooManyCodes = "На этот номер уже отправили несколько кодов подряд — подождите немного и попробуйте снова."
         override fun reregConfirmedWait(to: String) = "Ваше подтверждение принято. Исход — после $to, когда закроется окно подтверждения."
         override val reregOldPhrase = "прежняя фраза"

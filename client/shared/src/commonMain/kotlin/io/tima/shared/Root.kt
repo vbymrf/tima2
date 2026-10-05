@@ -1612,6 +1612,13 @@ private fun App(
     val identityReplaced by assembled.identityReplaced.collectAsState()
     val deviceAdded by assembled.deviceAdded.collectAsState()
     val reregEvent by assembled.rereg.collectAsState()
+    // Р54: идёт перерегистрация, а это прежняя личность (С) — собеседники пишут новому ключу,
+    // и в личной переписке С предупреждается, что ответ придёт не ей. Узнаём при запуске и на
+    // каждом событии перерегистрации.
+    var reregOld by remember { mutableStateOf(false) }
+    LaunchedEffect(assembled.session.userId, reregEvent) {
+        reregOld = runCatching { network.directory.reregState() }.getOrNull()?.let { it.active && it.role == "old" } == true
+    }
     val identityClaims by assembled.identityClaims.collectAsState()
     LaunchedEffect(assembled.session.userId) {
         val me = assembled.session.userId
@@ -3343,6 +3350,7 @@ private fun App(
             is Where.Chat -> {
                 {
                     Chat(
+                        reregWarn = reregOld,
                         notices = assembled.notices,
                         shelves = communityShelves,
                         currentShelf = listState.chats.firstOrNull { it.chatId == current.chatId }?.sectionId ?: "",
@@ -3704,6 +3712,8 @@ private fun Chat(
     onMoveToBookSection: ((chatId: String, sectionId: String) -> Unit)? = null,
     /** Групповой звонок — пункт «⋯» (ГЗ7); `null` — нечем звонить. */
     onGroupCall: (() -> Unit)? = null,
+    /** Р54: идёт перерегистрация, это прежняя личность — ответ на своё сообщение придёт не сюда. */
+    reregWarn: Boolean = false,
     /** Идущий звонок группы — полоса «Идёт звонок»; `null` — звонка нет. */
     groupCall: io.tima.core.call.GroupCallLive? = null,
     /** Следить за звонком группы, пока она открыта. */
@@ -3857,8 +3867,11 @@ private fun Chat(
         onFailed = { line -> failed = line },
         // Временная группа звонка: «удалится через N ч» под названием (решение 11).
         caption = ttlUntilMs?.let { Tima.words.groupCall.ttl(((it - msNow()) / 3_600_000L).toInt().coerceAtLeast(0)) },
-        // Полоса «Идёт звонок · Присоединиться» над лентой группы (решение 3а).
-        banner = groupCall?.takeIf { group }?.let { live ->
+        // Полоса «Идёт звонок · Присоединиться» над лентой группы (решение 3а). В личной
+        // переписке прежней личности во время перерегистрации — предупреждение (Р54).
+        banner = if (reregWarn && !group) {
+            { io.tima.feature.chat.GroupCallBanner(text = Tima.words.auth.reregSenderWarn, joinLabel = null, onJoin = {}) }
+        } else groupCall?.takeIf { group }?.let { live ->
             {
                 val inRoom = live.members.count { it.inRoom }
                 val minutes = ((msNow() - live.startedAtMs) / 60_000L).toInt().coerceAtLeast(0)

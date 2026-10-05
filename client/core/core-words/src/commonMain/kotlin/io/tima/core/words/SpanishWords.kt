@@ -1578,6 +1578,7 @@ object SpanishWords : Words {
         override fun reregWindowOld(to: String) = "Es hora de confirmar «Cuenta robada»: antes del $to introduce la frase y un código SMS."
         override val reregConfirm = "Confirmar"
         override val reregConfirmed = "Confirmación aceptada"
+        override val reregSenderWarn = "La cuenta se está re-registrando: los contactos escriben a la nueva clave de identidad; la respuesta a tu mensaje no llegará aquí."
         override val tooManyCodes = "Ya se enviaron varios códigos a este número: espera un poco y vuelve a intentarlo."
         override fun reregConfirmedWait(to: String) = "Tu confirmación está aceptada. El resultado llega después del $to, cuando se cierre la ventana de confirmación."
         override val reregOldPhrase = "frase anterior"
