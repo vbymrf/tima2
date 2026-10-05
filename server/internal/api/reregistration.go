@@ -370,6 +370,18 @@ func reregBlocksTrust(ctx context.Context, st interface {
 
 const reregDisputedText = "Идёт спор за аккаунт: заверять устройства до его конца нельзя никому."
 
+// revokedBody — отказ отключённому устройству: код, текст, причина и срок удаления личности.
+func revokedBody(rv store.RevokedDevice) map[string]any {
+	body := map[string]any{"code": "device_revoked", "message": revokedText(rv.Reason)}
+	if rv.Reason != "" {
+		body["reason"] = rv.Reason
+	}
+	if rv.DeleteAt != nil {
+		body["delete_at"] = rv.DeleteAt.UTC()
+	}
+	return body
+}
+
 // revokedText — экран отключения по причине (тексты §2б).
 func revokedText(reason string) string {
 	switch reason {

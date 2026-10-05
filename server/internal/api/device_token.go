@@ -42,6 +42,8 @@ const DeviceTokenWindow = 2 * time.Minute
 type DeviceTokenStore interface {
 	// SigningKey отдаёт ключ ТОЛЬКО неотозванного устройства — на этом и держится отзыв.
 	SigningKey(ctx context.Context, deviceID, userID string) ([]byte, error)
+	// RevokedDevice — отключённое устройство и причина (ДУ9, ДУ11): её получает только оно само.
+	RevokedDevice(ctx context.Context, deviceID, userID string) (store.RevokedDevice, error)
 }
 
 // deviceTokenRequest — что присылает устройство.
@@ -105,7 +107,15 @@ func RegisterDeviceToken(mux *http.ServeMux, st DeviceTokenStore, tokens func() 
 		signingPub, err := st.SigningKey(r.Context(), req.DeviceID, req.UserID)
 		if errors.Is(err, store.ErrDeviceUnknown) {
 			// Отозванное и несуществующее устройство отвечают одинаково: различать их
-			// значило бы сообщать предъявителю, существует ли такое устройство вообще.
+			// значило бы сообщать предъявителю, существует ли такое устройство вообще. Причину
+			// отключения (ДУ9, ДУ11) получает только само устройство — доказав себя подписью.
+			if rv, err := st.RevokedDevice(r.Context(), req.DeviceID, req.UserID); err == nil &&
+				ed25519.Verify(rv.SigningPub, deviceTokenSigningBytes(req.UserID, req.DeviceID, req.IssuedAt), signature) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(revokedBody(rv))
+				return
+			}
 			writeErr(w, http.StatusUnauthorized, "device_revoked", "устройство не зарегистрировано или отозвано")
 			return
 		}

@@ -109,14 +109,8 @@ func (s *Server) requireActiveDevice(next http.HandlerFunc) http.HandlerFunc {
 		}
 		if !active {
 			// Причина — экрану отключения (ДУ9, ДУ11): перерегистрация, спор, удаление личности.
-			reason, deleteAt, _ := s.Store.RevokeReason(r.Context(), id.DeviceID)
-			body := map[string]any{"code": "device_revoked", "message": revokedText(reason)}
-			if reason != "" {
-				body["reason"] = reason
-			}
-			if deleteAt != nil {
-				body["delete_at"] = deleteAt.UTC()
-			}
+			rv, _ := s.Store.RevokedDevice(r.Context(), id.DeviceID, id.UserID)
+			body := revokedBody(rv)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			_ = json.NewEncoder(w).Encode(body)

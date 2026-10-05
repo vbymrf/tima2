@@ -285,16 +285,22 @@ func (s *Store) FinishIdentityDeletes(ctx context.Context, now time.Time) ([]Del
 	return out, tx.Commit(ctx)
 }
 
-// RevokeReason — почему устройство отключено и, если его личность удаляется, когда (ДУ11).
-// Пустая причина — не отключено или отключено без причины (до 0067, руками).
-func (s *Store) RevokeReason(ctx context.Context, deviceID string) (string, *time.Time, error) {
-	var reason string
-	var deleteAt *time.Time
+// RevokedDevice — отключённое устройство: его ключ подписи (по нему оно доказывает, что это оно),
+// почему отключено и, если его личность удаляется, когда (ДУ9, ДУ11). ErrDeviceUnknown — нет
+// такого отключённого устройства у этой личности.
+type RevokedDevice struct {
+	SigningPub []byte
+	Reason     string
+	DeleteAt   *time.Time
+}
+
+func (s *Store) RevokedDevice(ctx context.Context, deviceID, userID string) (RevokedDevice, error) {
+	var d RevokedDevice
 	err := s.pool.QueryRow(ctx, `
-		SELECT d.revoked_reason, u.delete_at FROM devices d JOIN users u ON u.user_id = d.user_id
-		WHERE d.device_id = $1`, deviceID).Scan(&reason, &deleteAt)
+		SELECT d.signing_pub, d.revoked_reason, u.delete_at FROM devices d JOIN users u ON u.user_id = d.user_id
+		WHERE d.device_id = $1 AND d.user_id = $2 AND d.revoked_at IS NOT NULL`, deviceID, userID).Scan(&d.SigningPub, &d.Reason, &d.DeleteAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", nil, nil
+		return RevokedDevice{}, ErrDeviceUnknown
 	}
-	return reason, deleteAt, err
+	return d, err
 }

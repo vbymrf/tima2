@@ -309,6 +309,24 @@ func TestReregistrationNewWins(t *testing.T) {
 	if code, reason, _ := revokedReason(t, ts, oldPhone.token); code != 401 || reason != "rereg_confirmed" {
 		t.Fatalf("телефон С после исхода: %d %q", code, reason)
 	}
+	// Причину узнаёт и само устройство, чей токен уже истёк, — подписью при обновлении токена;
+	// чужая подпись причины не получает.
+	issued := time.Now().Unix()
+	renew := func(key ed25519.PrivateKey) map[string]any {
+		var out map[string]any
+		postJSON(t, ts, "/api/v1/auth/device/token", map[string]any{
+			"user_id": oldPhone.userID, "device_id": oldPhone.id, "issued_at": issued,
+			"signature": base64.RawURLEncoding.EncodeToString(ed25519.Sign(key, deviceTokenSigningBytes(oldPhone.userID, oldPhone.id, issued))),
+		}, &out)
+		return out
+	}
+	if out := renew(oldPhone.signKey); out["reason"] != "rereg_confirmed" || out["delete_at"] == nil {
+		t.Fatalf("обновление токена отключённым устройством: %v", out)
+	}
+	_, stranger, _ := ed25519.GenerateKey(rand.Reader)
+	if out := renew(stranger); out["reason"] != nil {
+		t.Fatalf("чужая подпись узнала причину: %v", out)
+	}
 	var st reregReply
 	if code := getAuthed(t, ts, newPhone.token, "/api/v1/users/me/rereg", &st); code != 200 || st.Active {
 		t.Fatalf("у Н процесса больше нет: %d %+v", code, st)

@@ -217,7 +217,7 @@ const (
 	// (KeyCopy, SetKeyCopy), ключи групп в копии (SaveGroupKeyCopies, ListGroupKeyCopies).
 	// 251 → 260: перерегистрация и удаление личности (ДУ9, ДУ11): процесс (StartRereg, ReregOfUser,
 	// ClaimRereg, ConfirmRereg), сроки (ReregsDue, MarkReregWindowNoticed, ResolveRereg),
-	// удаление (FinishIdentityDeletes) и причина отключения устройства (RevokeReason).
+	// удаление (FinishIdentityDeletes) и отключённое устройство с причиной (RevokedDevice).
 	storeMethodBudget = 260
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
