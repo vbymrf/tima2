@@ -68,6 +68,12 @@ services:
       TIMA_DEVICE_TRUST: ${TIMA_DEVICE_TRUST:-record}
       # Аттестация телефона (ДУ8, Р21): off | record | require. На стенде — по слову заказчика.
       TIMA_ATTESTATION: ${TIMA_ATTESTATION:-off}
+      # Перерегистрация (ДУ9, Р51): ожидание, окно подтверждения, жизнь удаляемой личности. Число —
+      # дни, иначе duration Go (5m, 2h). Пусто — 90, 30 и 30 дней. Минуты — только на время живой
+      # проверки, потом вернуть пусто.
+      TIMA_REREG_WAIT: ${TIMA_REREG_WAIT:-}
+      TIMA_REREG_WINDOW: ${TIMA_REREG_WINDOW:-}
+      TIMA_IDENTITY_DELETE_AFTER: ${TIMA_IDENTITY_DELETE_AFTER:-}
       # Авто-обновление приложения. При выпуске новой версии: положи новый APK в
       # deploy/download/, подними числа/ссылку в .env, перезапусти backend.
       APP_LATEST_VERSION_CODE: ${APP_LATEST_VERSION_CODE:-0}
@@ -136,6 +142,9 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       TIMA_PII_KEY_FILE: /data/pii/pii-key.json   # тот же ключ, что у backend
+      # Срок содержимого личных сообщений (Р45): пусто — вместе с депозитарием, число — дней от
+      # отправки, forever — бессрочно. Неверное значение — отказ запуска.
+      TIMA_MESSAGE_RETENTION: ${TIMA_MESSAGE_RETENTION:-}
       # Уборщику нужен LiveKit, чтобы спросить: жива ли комната брошенного звонка.
       # Без ключей он такие строки НЕ ТРОГАЕТ — закрывать их по одному возрасту значило
       # бы однажды оборвать живой разговор, — и говорит об этом в лог при старте.
