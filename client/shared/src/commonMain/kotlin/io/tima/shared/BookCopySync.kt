@@ -184,7 +184,10 @@ class BookCopySync(
                     tries = 12
                     pause = 15_000L
                 }
+                // Ключа нет давно — ни у одного своего устройства его нет (Р52): начать заново.
+                if (pulled == CopyStep.NoKey && turn.withLock { restartIfLost() }) return@launch
                 if (pulled !is CopyStep.Offline && pulled != CopyStep.NoKey) {
+                    forgetNoKey()
                     turn.withLock {
                         note("отдать при запуске", sync.push())
                         pullReads("забрать при запуске")
@@ -303,6 +306,40 @@ class BookCopySync(
         return step
     }
 
+    /**
+     * Книга без ключа служебной группы (Р52, заказчик 2026-10-05). Ключа нет ни у одного своего
+     * устройства — Redmi после стирания данных: просьба фразой ушла, ответить некому, и копия
+     * стояла бы «ключа нет» вечно. Первое «ключа нет» запоминается; если за [RESTART_AFTER_MS]
+     * ключ так и не пришёл — устройство выпускает новую версию ключа и отдаёт книгу и отметки
+     * из того, что у него есть, поверх серверных: прежние открыть нечем.
+     *
+     * @return `true` — копия начата заново.
+     */
+    private suspend fun restartIfLost(): Boolean {
+        val settings = environment.settings
+        val since = runCatching { settings.all().first()[NO_KEY_SINCE] }.getOrNull()?.toLongOrNull()
+        val now = msNow()
+        if (since == null) {
+            runCatching { settings.put(NO_KEY_SINCE, now.toString()) }
+            return false
+        }
+        if (now - since < RESTART_AFTER_MS) return false
+        val gid = groupId ?: store.storeGroup()?.also { groupId = it } ?: return false
+        if (!keys.rotate(gid, io.tima.domain.chat.RotationReason.Compromise)) {
+            Journal.trouble(COPY, "книга без ключа: новая версия ключа служебной группы не выпущена")
+            return false
+        }
+        val book = sync.restart()
+        note("начать заново без прежнего ключа", book)
+        reads?.restart()?.let { noteReads("начать заново без прежнего ключа", it) }
+        if (book is CopyStep.Pushed) forgetNoKey()
+        return book is CopyStep.Pushed
+    }
+
+    private suspend fun forgetNoKey() {
+        runCatching { if (environment.settings.all().first()[NO_KEY_SINCE].isNullOrEmpty().not()) environment.settings.put(NO_KEY_SINCE, "") }
+    }
+
     /** Забрать то, о чём сервер сказал, что оно новее нашего. */
     private fun catchUp(why: String) {
         val known = changes?.value ?: return
@@ -400,6 +437,10 @@ class BookCopySync(
         const val BOOK_REVISION = "book.copy.revision"
         const val READS_REVISION = "reads.copy.revision"
         const val BOOK_PRINT = "book.copy.print"
+        /** С какого момента у книги нет ключа служебной группы (Р52). */
+        const val NO_KEY_SINCE = "book.copy.nokey.since"
+        /** Сколько ждать ключа, прежде чем начать книгу заново (Р52) — сутки. */
+        const val RESTART_AFTER_MS = 24 * 60 * 60 * 1000L
     }
 }
 

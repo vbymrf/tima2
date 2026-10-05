@@ -50,6 +50,31 @@ class SyncReadsCopy(
      * @return [ReadsStep.Pushed] — отдано; [ReadsStep.Unchanged] — отдавать нечего. Если при
      *   отправке пришлось слить чужое, сдвинутые им переписки — в [ReadsStep.Pushed.advanced].
      */
+    /** Начать отметки заново поверх серверных, которые нечем открыть (Р52), — как [SyncBookCopy.restart]. */
+    suspend fun restart(): ReadsStep {
+        val k = key() ?: return ReadsStep.NoKey
+        val base = when (val fetched = store.fetch()) {
+            AccountStoreStep.Empty -> 0L
+            is AccountStoreStep.Blob -> fetched.revision
+            is AccountStoreStep.Offline -> return ReadsStep.Offline
+            is AccountStoreStep.Refused -> return ReadsStep.Refused(fetched.reason)
+            is AccountStoreStep.Conflict, AccountStoreStep.Stored -> return ReadsStep.Refused("неожиданный ответ на чтение")
+        }
+        val next = base + 1
+        val sealed = codec.seal(k, ReadsCopy(next, device(), marks.marks())) ?: return ReadsStep.Refused("не удалось закрыть отметки")
+        return when (val sent = store.put(next, sealed)) {
+            AccountStoreStep.Stored -> {
+                revision.remember(next)
+                marks.sent()
+                ReadsStep.Pushed(next, emptyMap())
+            }
+            is AccountStoreStep.Conflict -> ReadsStep.Refused("отметки переписали во время перезапуска")
+            is AccountStoreStep.Offline -> ReadsStep.Offline
+            is AccountStoreStep.Refused -> ReadsStep.Refused(sent.reason)
+            AccountStoreStep.Empty, is AccountStoreStep.Blob -> ReadsStep.Refused("неожиданный ответ на запись")
+        }
+    }
+
     suspend fun push(): ReadsStep {
         val k = key() ?: return ReadsStep.NoKey
         if (!marks.dirty()) return ReadsStep.Unchanged

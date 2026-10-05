@@ -136,6 +136,30 @@ class SyncBookCopyTest {
         assertEquals(2.toByte(), Keyed.table.getValue(cell.blob!![0].toInt()).first)
     }
 
+    /**
+     * Р52: ключа, которым закрыта серверная копия, нет ни у одного своего устройства (Redmi после
+     * стирания). Новая версия ключа — и своя книга поверх, без слияния: прежнюю открыть нечем.
+     */
+    @Test
+    fun книга_без_прежнего_ключа_начинается_заново() = runTest {
+        val cell = Cell()
+        cell.caller = "T1"
+        assertIs<CopyStep.Pushed>(SyncBookCopy(MemoryCopy(BookCopy(0, "T1", listOf(contact("+1", "Витя", at = 10, device = "T1")), emptyList())), cell, Keyed, { byteArrayOf(7) }, Memory(), { "T1" }).push())
+        val before = cell.revision
+
+        val wiped = MemoryCopy(BookCopy(0, "R3", listOf(contact("+3", "Оля", at = 30, device = "R3")), emptyList()))
+        val sync = SyncBookCopy(wiped, cell, Keyed, { byteArrayOf(8) }, Memory(), { "R3" })
+        cell.caller = "R3"
+        assertIs<CopyStep.Refused>(sync.push(), "слить с копией, которую нечем открыть, нельзя — запись застревает")
+        val restarted = sync.restart()
+        assertIs<CopyStep.Pushed>(restarted)
+        assertEquals(before + 1, restarted.revision)
+        val (key, copy) = Keyed.table.getValue(cell.blob!![0].toInt())
+        assertEquals(8.toByte(), key, "новая копия — под новой версией ключа")
+        assertEquals(listOf("+3"), copy.contacts.map { it.phone })
+        assertIs<CopyStep.Unchanged>(sync.push(), "после перезапуска та же книга второй раз не уходит")
+    }
+
     @Test
     fun отдать_потом_забрать_на_втором_устройстве() = runTest {
         val cell = Cell()

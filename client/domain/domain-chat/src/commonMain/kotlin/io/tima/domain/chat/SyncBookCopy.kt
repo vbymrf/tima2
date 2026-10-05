@@ -75,6 +75,35 @@ class SyncBookCopy(
         rememberPrint(print)
     }
 
+    /**
+     * Начать копию заново (Р52): записать свою книгу поверх серверной, не сливая — серверную
+     * открыть нечем, ключа служебной группы, которым её закрыли, нет ни у одного своего устройства.
+     */
+    suspend fun restart(): CopyStep {
+        val k = key() ?: return CopyStep.NoKey
+        val base = when (val fetched = store.fetch()) {
+            AccountStoreStep.Empty -> 0L
+            is AccountStoreStep.Blob -> fetched.revision
+            is AccountStoreStep.Offline -> return CopyStep.Offline
+            is AccountStoreStep.Refused -> return CopyStep.Refused(fetched.reason)
+            is AccountStoreStep.Conflict, AccountStoreStep.Stored -> return CopyStep.Refused("неожиданный ответ на чтение")
+        }
+        val next = base + 1
+        val plain = copy.snapshot()
+        val sealed = codec.seal(k, plain.copy(revision = next, device = device())) ?: return CopyStep.Refused("не удалось закрыть копию")
+        return when (val sent = store.put(next, sealed)) {
+            AccountStoreStep.Stored -> {
+                revision.remember(next)
+                remembered(plain.copy(revision = 0, device = "").hashCode())
+                CopyStep.Pushed(next)
+            }
+            is AccountStoreStep.Conflict -> CopyStep.Refused("копию переписали во время перезапуска")
+            is AccountStoreStep.Offline -> CopyStep.Offline
+            is AccountStoreStep.Refused -> CopyStep.Refused(sent.reason)
+            AccountStoreStep.Empty, is AccountStoreStep.Blob -> CopyStep.Refused("неожиданный ответ на запись")
+        }
+    }
+
     suspend fun push(): CopyStep {
         val k = key() ?: return CopyStep.NoKey
         if (!printRead) {
