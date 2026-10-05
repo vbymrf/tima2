@@ -74,6 +74,6 @@ enum class NetworkState {
  * то есть прежнее поведение, а не ошибка.
  */
 object NetworkWatches {
-    @Volatile
+    @kotlin.concurrent.Volatile
     var current: NetworkWatch = NetworkWatch.NONE
 }

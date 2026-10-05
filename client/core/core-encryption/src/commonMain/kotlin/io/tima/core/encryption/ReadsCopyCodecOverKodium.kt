@@ -23,7 +23,7 @@ object ReadsCopyCodecOverKodium : ReadsCopyCodec {
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 
     override fun seal(key: ByteArray, copy: ReadsCopy): ByteArray? = runCatching {
-        val wire = Wire(r = copy.revision, d = copy.device, m = copy.marks.toSortedMap().map { WireMark(it.key, it.value) })
+        val wire = Wire(r = copy.revision, d = copy.device, m = copy.marks.entries.sortedBy { it.key }.map { WireMark(it.key, it.value) })
         Kodium.encryptSymmetric(marksKey(key), json.encodeToString(Wire.serializer(), wire).encodeToByteArray()).getOrThrow()
     }.getOrNull()
 

@@ -1,7 +1,9 @@
 package io.tima.core.contacts
 
+import platform.Contacts.CNAuthorizationStatusDenied
+import platform.Contacts.CNAuthorizationStatusNotDetermined
+import platform.Contacts.CNAuthorizationStatusRestricted
 import platform.Contacts.CNContactStore
-import platform.Contacts.CNAuthorizationStatus
 import platform.Contacts.CNEntityType
 
 /**
@@ -26,9 +28,9 @@ actual fun askContactsAccess(onResult: (Boolean) -> Unit) {
  */
 actual fun contactsAccessWay(): ContactsAccessWay =
     when (CNContactStore.authorizationStatusForEntityType(CNEntityType.CNEntityTypeContacts)) {
-        CNAuthorizationStatus.CNAuthorizationStatusNotDetermined -> ContactsAccessWay.Ask
-        CNAuthorizationStatus.CNAuthorizationStatusDenied,
-        CNAuthorizationStatus.CNAuthorizationStatusRestricted,
+        CNAuthorizationStatusNotDetermined -> ContactsAccessWay.Ask
+        CNAuthorizationStatusDenied,
+        CNAuthorizationStatusRestricted,
         -> ContactsAccessWay.Settings
         else -> ContactsAccessWay.Ask
     }
