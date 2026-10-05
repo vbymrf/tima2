@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** Приглашение в групповой звонок — ссылкой в тексте (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ, решение 3а). */
+/** Приглашение в групповой звонок — ссылкой в тексте (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ, решение 3а). */
 class CallInviteLinkTest {
 
     @Test

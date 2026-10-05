@@ -3,7 +3,7 @@ package io.tima.core.ui
 import io.tima.core.words.AppearanceWords
 
 /**
- * Место на экране, у которого своя ручка размера — ПЛАН-ШРИФТОВ Ш3.
+ * Место на экране, у которого своя ручка размера — ПЛАН-(Ш)-ШРИФТОВ Ш3.
  *
  * Пять групп, решение заказчика 2026-09-16. Группы заданы **местами**, а не ролями
  * текста: в шапке и в сообщении встречается одна и та же роль, а укрупнять их человек
@@ -41,7 +41,7 @@ enum class TextPlace(val base: Int, val steps: List<Int>) {
     LISTS(base = 15, steps = listOf(13, 15, 17, 19, 22)),
 }
 
-/** Надпись группы — в словаре, а не в перечислении (ПЛАН-ЯЗЫКА Я2). */
+/** Надпись группы — в словаре, а не в перечислении (ПЛАН-(Я)-ЯЗЫКА Я2). */
 fun AppearanceWords.place(place: TextPlace): String = when (place) {
     TextPlace.MESSAGES -> sizeMessages
     TextPlace.TABS -> sizeTabs

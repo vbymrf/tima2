@@ -27,7 +27,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 
 /**
- * Сигналинг звонка по HTTP — `/api/v1/calls` (ПЛАН-ЗВОНКОВ.md §0).
+ * Сигналинг звонка по HTTP — `/api/v1/calls` (ПЛАН-(З)-ЗВОНКОВ.md §0).
  *
  * **Ручки на сервере были задолго до клиента**: `POST /calls`, `/calls/{id}/answer`,
  * `/calls/{id}/end`. Первое приложение их звало, второе до сегодняшнего дня — нет; поэтому
@@ -217,7 +217,7 @@ class CallsOverHttp(
         )
     }
 
-    /** Групповой звонок в двери (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ2); у звонка на двоих — `null`. */
+    /** Групповой звонок в двери (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ ГЗ2); у звонка на двоих — `null`. */
     private fun groupOf(body: JsonObject?): GroupRoom? {
         if (body?.str("type") != "group") return null
         val groupId = body.str("group_id").orEmpty().ifEmpty { return null }
@@ -321,7 +321,7 @@ class CallsOverHttp(
         text?.let { runCatching { kotlinx.datetime.Instant.parse(it).toEpochMilliseconds() }.getOrNull() } ?: 0
 
     /**
-     * Потолок видео от сервера (ПЛАН-ВИДЕО.md В5б). Нет поля или оно неполное — `null`, и
+     * Потолок видео от сервера (ПЛАН-(В)-ВИДЕО.md В5б). Нет поля или оно неполное — `null`, и
      * звонок берёт умолчание приложения: половина потолка хуже умолчания целиком.
      */
     private fun ceilingOf(body: JsonObject?): VideoCeiling? {

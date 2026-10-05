@@ -95,7 +95,7 @@ class TimaApplication : Application() {
 
         // Падения ловятся здесь, а не в Activity: упасть можно и до её создания, и такой
         // отчёт ценнее прочих — человек в этот момент видит только «приложение
-        // остановлено» (ПЛАН-ОТЛАДКИ.md, Б7).
+        // остановлено» (ПЛАН-(Б)-ОТЛАДКИ.md, Б7).
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             runCatching {

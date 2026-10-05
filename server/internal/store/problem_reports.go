@@ -1,4 +1,4 @@
-// Отчёты о проблеме, присланные с устройств (ПЛАН-ОТЛАДКИ.md, Б4).
+// Отчёты о проблеме, присланные с устройств (ПЛАН-(Б)-ОТЛАДКИ.md, Б4).
 package store
 
 import (
@@ -26,7 +26,7 @@ type ProblemReport struct {
 	Nickname string
 	Log      string
 	FromAddr string
-	// Images — снимки к отчёту (0057, ПЛАН-ВИДЕО.md В6): кадр собеседника, снимок экрана.
+	// Images — снимки к отчёту (0057, ПЛАН-(В)-ВИДЕО.md В6): кадр собеседника, снимок экрана.
 	Images []ProblemImage
 }
 
@@ -97,7 +97,7 @@ func (s *Store) CountProblemReportsFrom(ctx context.Context, addr string, since 
 }
 
 // ProblemReportImages — снимки отчёта по его номеру, в том порядке, в каком их приложили.
-// Нужны разбору отчёта (ПЛАН-ОТЛАДКИ.md): кадр собеседника и снимки экрана.
+// Нужны разбору отчёта (ПЛАН-(Б)-ОТЛАДКИ.md): кадр собеседника и снимки экрана.
 func (s *Store) ProblemReportImages(ctx context.Context, number string) ([]ProblemImage, error) {
 	rows, err := s.pool.Query(ctx, `
         SELECT i.mime, i.data

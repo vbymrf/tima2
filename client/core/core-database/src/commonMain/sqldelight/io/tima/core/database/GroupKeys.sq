@@ -46,7 +46,7 @@ latestGroupKey:
 SELECT MAX(version) AS version FROM group_keys WHERE group_id = ?;
 
 -- Группы, ключи которых у нас есть: их отдаём новому своему устройству при «Доверить»
--- (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ8).
+-- (ПЛАН-(ЖУ)-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ8).
 keyedGroups:
 SELECT DISTINCT group_id FROM group_keys;
 

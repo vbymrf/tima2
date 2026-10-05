@@ -180,7 +180,7 @@ func serve() {
 			Store:  st,
 			Auth:   auth.NewIssuer(key),
 			DevSMS: os.Getenv("TIMA_DEV_SMS") == "1",
-			// Доверие к устройствам (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ Р24): off | record | require.
+			// Доверие к устройствам (ПЛАН-(ДУ+ИУ)-УСТРОЙСТВ-И-ИСТОРИИ Р24): off | record | require.
 			DeviceTrust: api.NormalizeDeviceTrust(os.Getenv("TIMA_DEVICE_TRUST")),
 			// Аттестация телефона (ДУ8, Р21): off | record | require; пусто — off.
 			Attestation: os.Getenv("TIMA_ATTESTATION"),
@@ -228,12 +228,12 @@ func serve() {
 		if lk := calls.NewIssuer(os.Getenv("LIVEKIT_API_KEY"), os.Getenv("LIVEKIT_API_SECRET")); lk != nil {
 			srv.Calls = lk
 			srv.LiveKitURL = os.Getenv("LIVEKIT_URL")
-			// Потолок видео звонка (ПЛАН-ВИДЕО.md В5б): CALL_VIDEO_WIDTH/HEIGHT/FPS/BITRATE,
+			// Потолок видео звонка (ПЛАН-(В)-ВИДЕО.md В5б): CALL_VIDEO_WIDTH/HEIGHT/FPS/BITRATE,
 			// без них — 1280×720, 24 кадра/с, 800 кбит/с.
 			srv.CallVideo = api.VideoLimitsFromEnv(os.Getenv)
 			log.Printf("Звонки: потолок видео %d×%d, %d к/с, %d бит/с",
 				srv.CallVideo.Width, srv.CallVideo.Height, srv.CallVideo.FPS, srv.CallVideo.Bitrate)
-			// Групповой звонок (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ): CALL_GROUP_MAX, CALL_GROUP_TTL,
+			// Групповой звонок (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ): CALL_GROUP_MAX, CALL_GROUP_TTL,
 			// CALL_GROUP_HD_UPTO/HEIGHT, CALL_GROUP_SD_UPTO/HEIGHT.
 			srv.CallGroups = api.GroupCallRulesFromEnv(os.Getenv)
 			log.Printf("Групповые звонки: до %d участников, видео %v, временная группа %s",

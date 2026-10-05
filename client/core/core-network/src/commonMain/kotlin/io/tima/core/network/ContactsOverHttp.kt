@@ -18,7 +18,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.putJsonArray
 
 /**
- * Сверка книги с сервером — `POST /api/v1/users/discover` (ПЛАН-КОНТАКТОВ.md, Д4).
+ * Сверка книги с сервером — `POST /api/v1/users/discover` (ПЛАН-(Д)-КОНТАКТОВ.md, Д4).
  *
  * **«Сверяем, не читая» — не фигура речи.** На сервер уходит номер, но хранится он там
  * слепым индексом (`HMAC(pepper, E.164)`, миграция 0017), и по ответу сервер узнаёт лишь

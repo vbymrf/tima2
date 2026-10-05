@@ -96,7 +96,7 @@ class Assembled(
     val outdated: StateFlow<Boolean>,
     /**
      * В группе начался или кончился звонок, или временная группа удалена: `(groupId,
-     * live | ended | deleted)` (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ). Полоса «Идёт звонок» и список групп.
+     * live | ended | deleted)` (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ). Полоса «Идёт звонок» и список групп.
      */
     val groupEvents: MutableSharedFlow<Pair<String, String>> = MutableSharedFlow(extraBufferCapacity = 32),
     /** Временные группы звонка и когда удалятся, мс — «удалится через N ч» (решение 11). */
@@ -279,7 +279,7 @@ fun buildAssembled(
                     ?: soundChoiceOf(all[SoundKeys.RING])
             },
             messageSound = { soundChoiceOf(environment.settings.all().first()[SoundKeys.MESSAGE]) },
-            // Журнал уведомлений — в базе аккаунта (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ1).
+            // Журнал уведомлений — в базе аккаунта (ПЛАН-(ЖУ)-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ1).
             journal = environment.noticeJournal,
             // Тихие часы — в настройках устройства, по местным часам (заказчик 2026-10-01).
             quiet = { QuietHours.read(environment.settings.all().first()) },
@@ -375,7 +375,7 @@ fun buildAssembled(
                 onCallUnreachable = { callId -> callPings.send("недоступен|$callId|-") },
                 // Вызов дошёл до телефона собеседника — у звонящего «Звонит» (ВЗ0а).
                 onCallDelivered = { callId -> callPings.send("доставлен|$callId|-") },
-                // Групповой звонок (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ3): вызов в группу — своим словом,
+                // Групповой звонок (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ ГЗ3): вызов в группу — своим словом,
                 // команды создателя — своим; события группы — полосе «Идёт звонок».
                 onGroupCall = { callId, from, kind, groupId -> callPings.send("группа|$callId|$from|$kind|$groupId") },
                 onCallControl = { callId, action, by -> callPings.send("команда|$callId|$action|$by") },

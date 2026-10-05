@@ -10,7 +10,7 @@ import io.tima.core.words.AppearanceWords
 import org.jetbrains.compose.resources.Font
 
 /**
- * Шрифт приложения — ПЛАН-ШРИФТОВ Ш1, решение заказчика 2026-09-15.
+ * Шрифт приложения — ПЛАН-(Ш)-ШРИФТОВ Ш1, решение заказчика 2026-09-15.
  *
  * ── ПОЧЕМУ ШРИФТ СВОЙ, А НЕ СИСТЕМНЫЙ ───────────────────────────────────────
  *
@@ -48,7 +48,7 @@ enum class AppFont {
     }
 }
 
-/** Надпись пункта — в словаре, а не в перечислении (ПЛАН-ЯЗЫКА Я2). */
+/** Надпись пункта — в словаре, а не в перечислении (ПЛАН-(Я)-ЯЗЫКА Я2). */
 fun AppearanceWords.font(font: AppFont): String = when (font) {
     AppFont.Roboto -> fontRoboto
     AppFont.OpenSans -> fontOpenSans

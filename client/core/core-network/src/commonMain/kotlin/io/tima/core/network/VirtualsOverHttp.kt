@@ -20,7 +20,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
- * Виртуальные аккаунты по HTTP — `/api/v1/users/me/virtuals` (ПЛАН-КОНТАКТОВ.md, Д10).
+ * Виртуальные аккаунты по HTTP — `/api/v1/users/me/virtuals` (ПЛАН-(Д)-КОНТАКТОВ.md, Д10).
  *
  * **Один код ответа — один исход, и различать их обязан клиент.** Сервер отвечает 409 на
  * три разных вещи: ник занят, пять уже есть, у владельца нет ключа личности. Свести их к

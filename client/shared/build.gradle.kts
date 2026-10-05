@@ -53,7 +53,7 @@ kotlin {
             // ломается при первой же чужой уборке — в модуле, который никто не трогал.
             implementation(projects.core.coreCall)
             implementation(projects.core.coreNetwork)
-            // Журнал приложения: из него делается отчёт о проблеме (ПЛАН-ОТЛАДКИ.md).
+            // Журнал приложения: из него делается отчёт о проблеме (ПЛАН-(Б)-ОТЛАДКИ.md).
             implementation(projects.core.coreDiag)
             implementation(projects.feature.featureChat)
             implementation(projects.feature.featureGroup)
@@ -82,7 +82,7 @@ kotlin {
         // JVM, потому что ей нужна файловая база.
         jvmTest.dependencies {
             implementation(libs.sqldelight.driver.jvm)
-            // Поддельный сервер для проверки обновления токена (ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, А1/А2).
+            // Поддельный сервер для проверки обновления токена (ПЛАН-(А)-ВЫХОДА-ИЗ-АККАУНТА.md, А1/А2).
             implementation(libs.ktor.client.mock)
         }
     }

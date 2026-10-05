@@ -62,7 +62,7 @@ func createGroup(deps groupsDeps) http.HandlerFunc {
 			SlowModeSec   int32  `json:"slow_mode_sec"`
 			Premoderation bool   `json:"premoderation"`
 			ThreadsOnly   bool   `json:"threads_only"`
-			// CallTemp — временная группа звонка (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ1): живёт срок
+			// CallTemp — временная группа звонка (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ ГЗ1): живёт срок
 			// от последнего звонка и удаляется вместе с перепиской. Только личная.
 			CallTemp bool `json:"call_temp"`
 		}
@@ -153,7 +153,7 @@ func groupJSON(g store.Group, myRole string) map[string]any {
 
 // getGroup — GET /groups/{groupID}. Ответ участнику прежний, поле в поле.
 //
-// Не-участнику с 2026-09-04 отвечает ДВУМЯ видами (ADR-0018 п. 6, ПЛАН-СОЦИУМА Г2):
+// Не-участнику с 2026-09-04 отвечает ДВУМЯ видами (ADR-0018 п. 6, ПЛАН-(Г)-СОЦИУМА Г2):
 // карточкой, если она ему открыта, и 404 иначе. Личная группа без карточки по-прежнему
 // неотличима от несуществующей; публичная видна любому аутентифицированному.
 func getGroup(deps groupsDeps) http.HandlerFunc {

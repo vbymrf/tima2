@@ -162,7 +162,7 @@ func TestCallFlow(t *testing.T) {
 	if start.URL != "ws://localhost:7880" {
 		t.Fatalf("url LiveKit не передан: %q", start.URL)
 	}
-	// Потолок видео (ПЛАН-ВИДЕО.md В5б): не задан на сервере — умолчание.
+	// Потолок видео (ПЛАН-(В)-ВИДЕО.md В5б): не задан на сервере — умолчание.
 	if start.Video != DefaultVideoLimits {
 		t.Fatalf("потолок видео не передан: %+v", start.Video)
 	}

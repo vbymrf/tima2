@@ -7,7 +7,7 @@ plugins {
     alias(libs.plugins.wire)
 }
 
-// core-call-desktop — звонок на ПК, маршрут A (doc_mig/ПЛАН-ЗВОНКОВ-ПК.md).
+// core-call-desktop — звонок на ПК, маршрут A (doc_mig/ПЛАН-(ПК)-ЗВОНКОВ-ПК.md).
 //
 // Движок — `livekit-ffi`: клиентский Rust SDK LiveKit, собранный самой LiveKit в одну
 // нативную библиотеку. Внутри неё libwebrtc целиком: кодеки, сеть, **микрофон и колонки

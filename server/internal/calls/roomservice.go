@@ -165,7 +165,7 @@ func (c *RoomClient) ListParticipants(ctx context.Context, room string) ([]RoomP
 	return answer.Participants, nil
 }
 
-// MuteTrack выключает чужую дорожку (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ, решение 6). Только
+// MuteTrack выключает чужую дорожку (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ, решение 6). Только
 // выключает: включить её обратно может сам участник, а не сервер (LiveKit по умолчанию
 // включать чужое и не даёт).
 func (c *RoomClient) MuteTrack(ctx context.Context, room, identity, trackSid string) error {

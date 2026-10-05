@@ -13,7 +13,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 
 /**
- * Друзья по HTTP — `/api/v1/users/me/feed/subscribers` (ПЛАН-КОНТАКТОВ.md, Д1б).
+ * Друзья по HTTP — `/api/v1/users/me/feed/subscribers` (ПЛАН-(Д)-КОНТАКТОВ.md, Д1б).
  *
  * **Слова «друзья» сервер не знает.** Он хранит одно: кому открыта моя лента. Сущность
  * «друзья» живёт у клиента, а сюда уходит её след — подписка. Отдельная таблица друзей

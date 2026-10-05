@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** Кто что примет — и что из этого следует для отправителя (ПЛАН-ВИДЕО.md В5). */
+/** Кто что примет — и что из этого следует для отправителя (ПЛАН-(В)-ВИДЕО.md В5). */
 class PeerCodecsTest {
 
     private val all = setOf(VideoCodec.H264, VideoCodec.VP8, VideoCodec.VP9)

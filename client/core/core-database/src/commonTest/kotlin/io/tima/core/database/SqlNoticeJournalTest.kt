@@ -11,7 +11,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Журнал уведомлений на настоящем SQL — ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ1. */
+/** Журнал уведомлений на настоящем SQL — ПЛАН-(ЖУ)-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ1. */
 class SqlNoticeJournalTest {
 
     private val journal = SqlNoticeJournal(testDatabase())

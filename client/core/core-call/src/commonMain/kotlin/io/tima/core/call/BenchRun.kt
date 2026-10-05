@@ -1,7 +1,7 @@
 package io.tima.core.call
 
 /**
- * Прогон стенда — С4, С5 и С8 в [ПЛАН-СТЕНДА-ЗВОНКОВ](../../../../../../../../doc_mig/ПЛАН-СТЕНДА-ЗВОНКОВ.md).
+ * Прогон стенда — С4, С5 и С8 в [ПЛАН-(С)-СТЕНДА-ЗВОНКОВ](../../../../../../../../doc_mig/ПЛАН-(С)-СТЕНДА-ЗВОНКОВ.md).
  *
  * ── ЧТО ТАКОЕ ПРОГОН И ПОЧЕМУ ЭТО НЕ «ЗВОНОК» ──────────────────────────────
  *
@@ -85,7 +85,7 @@ data class BenchSummary(
     val upQpAverage: Double? = null,
     val downFpsAverage: Double? = null,
     val downQpAverage: Double? = null,
-    /** Раскодировщик приходящего видео и его беды за прогон (ПЛАН-ВИДЕО.md В1). */
+    /** Раскодировщик приходящего видео и его беды за прогон (ПЛАН-(В)-ВИДЕО.md В1). */
     val downDecoder: String? = null,
     val downFreezes: Long? = null,
     val downDropped: Long? = null,

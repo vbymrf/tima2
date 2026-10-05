@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Что система знает о сети — ПЛАН-УВЕДОМЛЕНИЙ.md, У17.
+ * Что система знает о сети — ПЛАН-(У)-УВЕДОМЛЕНИЙ.md, У17.
  *
  * ── ЗАЧЕМ, ЕСЛИ ЕСТЬ `LinkState` ────────────────────────────────────────────
  *

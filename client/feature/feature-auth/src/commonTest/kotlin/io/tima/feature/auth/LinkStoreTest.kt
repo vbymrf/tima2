@@ -55,7 +55,7 @@ class LinkStoreTest {
 
     @Test
     fun доверили_и_новому_устройству_отданы_ключи() = runTest {
-        // ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ8: без этого второе устройство не получало ключ
+        // ПЛАН-(ЖУ)-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ8: без этого второе устройство не получало ключ
         // служебной группы никогда — и копию книги тоже (ПК 2026-09-30).
         val отдано = mutableListOf<Pair<String, ByteArray>>()
         val store = LinkStore(ConfirmDeviceLink(network, AlwaysSigner), backgroundScope, "tima://link/v1?…",

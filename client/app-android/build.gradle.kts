@@ -40,7 +40,7 @@ kotlin {
             // живёт здесь (О4): DownloadManager, проверка подписи, PackageInstaller.
             implementation(project(":feature:feature-shell"))
             // Журнал: точка входа ловит падения и кладёт их в очередь отчётов вместе с
-            // тем, что человек успел сделать (ПЛАН-ОТЛАДКИ.md, Б7).
+            // тем, что человек успел сделать (ПЛАН-(Б)-ОТЛАДКИ.md, Б7).
             implementation(project(":core:core-diag"))
             implementation(libs.androidx.activity.compose)
             // Сканер кода подключения в «Фраза и устройства» (заказчик 2026-09-30, 1б):

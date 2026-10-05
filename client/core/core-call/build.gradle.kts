@@ -7,7 +7,7 @@ plugins {
     alias(libs.plugins.kotlinSerialization)
 }
 
-// core-call — звонок: контракт и его исполнение платформой (ПЛАН-ЗВОНКОВ.md, Plan.md §3.8).
+// core-call — звонок: контракт и его исполнение платформой (ПЛАН-(З)-ЗВОНКОВ.md, Plan.md §3.8).
 //
 // Отдельный модуль по той же причине, что core-media: медиа целиком платформенное. На
 // Android это livekit-android с libwebrtc внутри, на ПК маршрут ещё не выбран (К7.1), на
@@ -47,7 +47,7 @@ kotlin {
         }
         jvmMain.dependencies {
             // Доступ к микрофону и камере на ПК решает Windows переключателями в реестре
-            // (ПЛАН-ЗВОНКОВ-ПК, ПК3); читать его — Advapi32Util из jna-platform, который
+            // (ПЛАН-(ПК)-ЗВОНКОВ-ПК, ПК3); читать его — Advapi32Util из jna-platform, который
             // проект уже держит ради DPAPI.
             implementation(libs.jna.platform)
         }

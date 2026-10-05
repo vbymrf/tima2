@@ -40,7 +40,7 @@ kotlin {
             // foundation, а не material3: у нас своя система форм и цветов, и брать
             // чужую тему значило бы спорить с макетом в каждом компоненте.
             implementation(compose.foundation)
-            // Шрифты в сборке (ПЛАН-ШРИФТОВ Ш1). Ресурсы Compose, а не classpath:
+            // Шрифты в сборке (ПЛАН-(Ш)-ШРИФТОВ Ш1). Ресурсы Compose, а не classpath:
             // на iOS classpath нет вовсе, и файл оттуда не прочитать.
             implementation(compose.components.resources)
         }

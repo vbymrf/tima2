@@ -21,13 +21,13 @@ type VideoGrant struct {
 	CanPublish   *bool  `json:"canPublish,omitempty"`
 	CanSubscribe *bool  `json:"canSubscribe,omitempty"`
 	// CanUpdateOwnMetadata — участник меняет свои атрибуты. Нужен обмену «кто что
-	// раскодирует» (ПЛАН-ВИДЕО.md В5: атрибут `tima.decode`). Без него LiveKit отвечает
+	// раскодирует» (ПЛАН-(В)-ВИДЕО.md В5: атрибут `tima.decode`). Без него LiveKit отвечает
 	// «update own metadata not allowed», и каждый собеседник через 3 с решает «не знаем —
 	// VP8» (стенд 2026-09-29). Имени в LiveKit приложение не верит — его берут из
 	// справочника, — поэтому подменить им никого нельзя.
 	CanUpdateOwnMetadata bool `json:"canUpdateOwnMetadata,omitempty"`
 	// CanPublishSources — что участнику можно публиковать: `microphone`, `camera`. Пусто —
-	// всё. Запрет создателя группового звонка ложится сюда (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ).
+	// всё. Запрет создателя группового звонка ложится сюда (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ).
 	CanPublishSources []string `json:"canPublishSources,omitempty"`
 }
 

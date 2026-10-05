@@ -10,7 +10,7 @@ import com.sun.jna.ptr.FloatByReference
 import com.sun.jna.ptr.PointerByReference
 
 /**
- * Микрофон Windows через Core Audio: громкость (ПЛАН-ЗВОНКОВ-ПК, настройка
+ * Микрофон Windows через Core Audio: громкость (ПЛАН-(ПК)-ЗВОНКОВ-ПК, настройка
  * «Микрофон и камера»).
  *
  * ── ПОЧЕМУ НЕ ЧЕРЕЗ LIVEKIT ─────────────────────────────────────────────────

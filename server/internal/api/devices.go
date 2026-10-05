@@ -196,7 +196,7 @@ func requestRotationAfterRevoke(deps devicesDeps, ctx context.Context, userID, r
 				// без требования новых сообщений. Раньше здесь стояло "device_revoked" — ни
 				// сервер, ни клиент такой причины не знали; клиент делал из неё плановую смену,
 				// а плановую сервер отклонял, и отозванное устройство оставалось с действующим
-				// ключом группы (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ, долг ДУ4).
+				// ключом группы (ПЛАН-(ДУ+ИУ)-УСТРОЙСТВ-И-ИСТОРИИ, долг ДУ4).
 				deps.notifier.Device(ctx, d.DeviceID, "group.rotation_needed", map[string]any{
 					"group_id": g.GroupID,
 					"reason":   reasonCompromise,

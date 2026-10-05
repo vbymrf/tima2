@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Снимки к отчёту: что берём и что отбрасываем (ПЛАН-ВИДЕО.md В6).
+// Снимки к отчёту: что берём и что отбрасываем (ПЛАН-(В)-ВИДЕО.md В6).
 func TestAcceptImages(t *testing.T) {
 	jpeg := problemImage{Mime: "image/jpeg", Data: []byte{0xFF, 0xD8, 0xFF}}
 

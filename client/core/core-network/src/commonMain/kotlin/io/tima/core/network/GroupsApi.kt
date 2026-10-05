@@ -42,7 +42,7 @@ class GroupsApi(
         title: String,
         kind: String = "private",
         description: String = "",
-        /** Временная группа звонка (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ1): живёт срок от последнего звонка. */
+        /** Временная группа звонка (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ ГЗ1): живёт срок от последнего звонка. */
         callTemp: Boolean = false,
     ): GroupCreateResult {
         val response = try {

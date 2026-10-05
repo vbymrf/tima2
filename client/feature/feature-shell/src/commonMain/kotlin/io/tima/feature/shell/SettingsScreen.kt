@@ -60,7 +60,7 @@ fun SettingsScreen(
     Column(modifier.fillMaxSize().background(colors.surface)) {
         // Шапка одна на подокно, и заголовок в ней — имя открытого пункта. Человеку
         // нужно знать, где он, а «Настройки» этого уже не отвечают, когда он внутри.
-        // Меню и шапка — разные группы размера (ПЛАН-ШРИФТОВ Ш3): человек укрупняет
+        // Меню и шапка — разные группы размера (ПЛАН-(Ш)-ШРИФТОВ Ш3): человек укрупняет
         // список настроек, не раздувая шапку, и наоборот.
         SubwindowHeader(
             title = opened?.let { words.item(it) } ?: words.settings,
@@ -74,7 +74,7 @@ fun SettingsScreen(
             return@Column
         }
 
-        // Список настроек — группа «меню» (ПЛАН-ШРИФТОВ Ш3): своя ручка, отдельная
+        // Список настроек — группа «меню» (ПЛАН-(Ш)-ШРИФТОВ Ш3): своя ручка, отдельная
         // от шапки над ним и от списков переписки.
         ProvidePlace(TextPlace.MENU) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -84,7 +84,7 @@ fun SettingsScreen(
                 onClick = { onOpen(item) },
                 left = { Name(item.glyph) },
                 right = value(item).takeIf { it.isNotBlank() }?.let { { Secondary(it) } },
-                // Перенос, а не обрезка (ПЛАН-ШРИФТОВ Ш2): «Секретная фраза и
+                // Перенос, а не обрезка (ПЛАН-(Ш)-ШРИФТОВ Ш2): «Секретная фраза и
                 // устройства» обрезалась уже при ×1.3, а по-испански при ×1.
                 middle = {
                     Caption(

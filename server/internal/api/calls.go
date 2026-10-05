@@ -89,7 +89,7 @@ func startCall(deps callsDeps) http.HandlerFunc {
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"call_id": callID, "room": room, "url": deps.livekitURL(), "token": token,
-			// Потолок видео (ПЛАН-ВИДЕО.md В5б): новое поле, клиент без него берёт своё.
+			// Потолок видео (ПЛАН-(В)-ВИДЕО.md В5б): новое поле, клиент без него берёт своё.
 			"video": deps.video(),
 		})
 	}

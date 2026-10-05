@@ -7,7 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Датчик приближения — вариант 2а (ПЛАН-ВИДЕО.md В10, решение заказчика 2026-09-29). */
+/** Датчик приближения — вариант 2а (ПЛАН-(В)-ВИДЕО.md В10, решение заказчика 2026-09-29). */
 class NearEarTest {
 
     private val talking = CallState(stage = CallStage.Connected, sound = SoundRoute.Earpiece)

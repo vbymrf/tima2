@@ -88,7 +88,7 @@ import livekit.proto.VideoStreamEvent
 import livekit.proto.VideoStreamType
 
 /**
- * Звонок на ПК — `livekit-ffi`, маршрут A (doc_mig/ПЛАН-ЗВОНКОВ-ПК.md).
+ * Звонок на ПК — `livekit-ffi`, маршрут A (doc_mig/ПЛАН-(ПК)-ЗВОНКОВ-ПК.md).
  *
  * Ведёт себя как `LiveKitCallEngine` на Android — те же стадии, те же слова в журнале,
  * те же правила «кто в комнате» и «разговор кончился». Отличается устройством: SDK здесь
@@ -136,7 +136,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     private val _remoteVideo = MutableStateFlow<VideoHandle?>(null)
     override val remoteVideo: StateFlow<VideoHandle?> = _remoteVideo.asStateFlow()
 
-    // ── ГРУППОВОЙ ЗВОНОК (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ8) ─────────────────────────────
+    // ── ГРУППОВОЙ ЗВОНОК (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ ГЗ8) ─────────────────────────────
     private val _peers = MutableStateFlow<List<CallPeer>>(emptyList())
     override val peers: StateFlow<List<CallPeer>> = _peers.asStateFlow()
 
@@ -198,7 +198,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     /** Наблюдатель «видео собеседника нет» — см. [watchLoss]. */
     private var lossJob: Job? = null
 
-    // ── Кто что раскодирует (ПЛАН-ВИДЕО.md В5) ─────────────────────────────
+    // ── Кто что раскодирует (ПЛАН-(В)-ВИДЕО.md В5) ─────────────────────────────
     /** Что сказал каждый собеседник; нет ключа — ещё не сказал. */
     private val peerCodecs = HashMap<String, Set<VideoCodec>>()
 
@@ -474,7 +474,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     }
 
     /**
-     * Сказать собеседникам, что ПК раскодирует (ПЛАН-ВИДЕО.md В5), и записать, чем он
+     * Сказать собеседникам, что ПК раскодирует (ПЛАН-(В)-ВИДЕО.md В5), и записать, чем он
      * кодирует и раскодирует (В1). Всё программное: аппаратных кодеров в сборке
      * `livekit-ffi` под Windows нет (ADR-0031). AV1 ПК объявляет, но раскодировщика AV1
      * у него нет — в «принимаем» его нет.
@@ -615,7 +615,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                     val inbound = stats.mapNotNull { it.inbound_rtp }.firstOrNull { it.stream.kind == "video" }
                     bytes = inbound?.inbound?.bytes_received
                     frames = inbound?.inbound?.frames_decoded?.toLong()
-                    // Чем раскодируется и замирало ли (ПЛАН-ВИДЕО.md В1) — только смену.
+                    // Чем раскодируется и замирало ли (ПЛАН-(В)-ВИДЕО.md В1) — только смену.
                     inbound?.inbound?.let { got ->
                         if (got.decoder_implementation.isNotBlank() && got.decoder_implementation != decoderSaid) {
                             decoderSaid = got.decoder_implementation
@@ -631,7 +631,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                             froze = got.freeze_count
                             Journal.trouble(LogCode.CALL, "видео собеседника замирало", "раз" to got.freeze_count)
                         }
-                        // Пришло некратное (ПЛАН-ВИДЕО.md В2.4) — отправитель вне обрезки.
+                        // Пришло некратное (ПЛАН-(В)-ВИДЕО.md В2.4) — отправитель вне обрезки.
                         val size = "${got.frame_width}×${got.frame_height}"
                         if (got.frame_width > 0 && !CenterCrop.aligned(got.frame_width, got.frame_height) && size != inMisaligned) {
                             Journal.trouble(LogCode.CALL, "пришло некратное", "кадр" to size, "раскодировщик" to got.decoder_implementation)
@@ -642,7 +642,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                         stats.mapNotNull { it.codec }.firstOrNull { it.rtc.id == id }?.codec?.mime_type?.removePrefix("video/")
                     }
                 }
-                // Ушло некратное (ПЛАН-ВИДЕО.md В2.4): верхний слой режется до передачи
+                // Ушло некратное (ПЛАН-(В)-ВИДЕО.md В2.4): верхний слой режется до передачи
                 // (В2.2), нижние слои simulcast ужимает сам LiveKit — они и попадут сюда.
                 val track = cameraTrack
                 if (track != 0L) {
@@ -1033,7 +1033,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     }
 
     /**
-     * Кадр собеседника для отчёта (ПЛАН-ВИДЕО.md В8) — последний показанный: на ПК кадры и
+     * Кадр собеседника для отчёта (ПЛАН-(В)-ВИДЕО.md В8) — последний показанный: на ПК кадры и
      * так приходят картинкой BGRA, ждать следующего незачем.
      */
     override suspend fun remoteFrame(): ByteArray? {
@@ -1269,7 +1269,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         cameraTrack = Ffi.request(
             FfiRequest(create_video_track = CreateVideoTrackRequest(name = "camera", source_handle = cameraSource)),
         ).create_video_track?.track?.handle?.id ?: 0L
-        // Кодек — под собеседников, если они уже сказали (ПЛАН-ВИДЕО.md В5); никого нет или
+        // Кодек — под собеседников, если они уже сказали (ПЛАН-(В)-ВИДЕО.md В5); никого нет или
         // прогон — по набору и умению ПК. Пересмотрит [watchPeers].
         val publish = preset
         val codec = codecForPeers()
@@ -1284,7 +1284,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     }
 
     /**
-     * Какую середину кадра камеры отдавать: кратную 16 (ПЛАН-ВИДЕО.md В2.2) или, с
+     * Какую середину кадра камеры отдавать: кратную 16 (ПЛАН-(В)-ВИДЕО.md В2.2) или, с
      * снятой галочкой стенда «Обрезка до кратного 16», весь кадр.
      */
     private fun cutOf(opened: Camera): CenterCrop? =
@@ -1338,7 +1338,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     private suspend fun pumpCamera(opened: Camera, source: Long, preview: Frames) {
         val wait = (500L / opened.fps).coerceIn(5L, 50L)
         var shown = 0
-        // ── ОБРЕЗКА ДО КРАТНОГО 16 (ПЛАН-ВИДЕО.md В2.2) ──────────────────────
+        // ── ОБРЕЗКА ДО КРАТНОГО 16 (ПЛАН-(В)-ВИДЕО.md В2.2) ──────────────────────
         //
         // Кодирует LiveKit на Rust, программно, внутри себя — обёртку перед кодером не
         // вставить. Поэтому режется кадр **до передачи**: середина кратного 16 размера

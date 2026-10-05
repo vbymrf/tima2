@@ -89,7 +89,7 @@ type groupsDeps struct {
 	store    GroupStore
 	limiter  func() *ratelimit.Limiter
 	notifier *Notifier
-	// callTTL — срок временной группы звонка от последнего звонка (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ,
+	// callTTL — срок временной группы звонка от последнего звонка (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ,
 	// решение 1). Функцией: cmd/tima заполняет правила после Register.
 	callTTL func() time.Duration
 	// trust — режим доверия к устройствам: от него зависит, кому обязан дойти ключ группы.

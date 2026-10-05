@@ -99,7 +99,7 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 			return w.Store.GCCalls(ctx, journal)
 		}},
 		{"device_link_sessions", func() (int64, error) { return w.Store.GCExpiredLinkSessions(ctx) }},
-		// Временные группы звонка с вышедшим сроком — вместе с перепиской (ПЛАН-ГРУППОВЫХ-
+		// Временные группы звонка с вышедшим сроком — вместе с перепиской (ПЛАН-(ГЗ)-ГРУППОВЫХ-
 		// ЗВОНКОВ, решение 1). Группу с идущим звонком не трогаем.
 		{"call_groups", func() (int64, error) { return w.dropExpiredCallGroups(ctx) }},
 		// Стирание содержимого сообщений, чьи ключи эпох уже уничтожены анклавом.

@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
-/** Обычный звонок: H.264 без запасного, потолок — от сервера (ПЛАН-ВИДЕО.md В3, В5б). */
+/** Обычный звонок: H.264 без запасного, потолок — от сервера (ПЛАН-(В)-ВИДЕО.md В3, В5б). */
 class BasePresetTest {
 
     @Test

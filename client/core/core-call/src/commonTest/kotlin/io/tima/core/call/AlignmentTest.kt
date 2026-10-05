@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Обрезка до кратного 16: что обрезается и что кратно (ПЛАН-ВИДЕО.md В2, заказчик 2026-09-30). */
+/** Обрезка до кратного 16: что обрезается и что кратно (ПЛАН-(В)-ВИДЕО.md В2, заказчик 2026-09-30). */
 class AlignmentTest {
 
     @Test

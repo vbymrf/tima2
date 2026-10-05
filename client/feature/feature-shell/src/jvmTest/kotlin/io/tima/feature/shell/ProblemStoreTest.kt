@@ -10,7 +10,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Экран «Сообщить о проблеме» (ПЛАН-ОТЛАДКИ.md, Б2 и Б3).
+ * Экран «Сообщить о проблеме» (ПЛАН-(Б)-ОТЛАДКИ.md, Б2 и Б3).
  *
  * Проверяется не рисование, а обещания, которые экран даёт человеку: показываем то же, что
  * отправляем; журнал снимаем в момент прихода; пустой отчёт не уходит.
@@ -245,7 +245,7 @@ class ProblemStoreTest {
         assertContains(said, "3 строк")
     }
 
-    // ── Фото к отчёту (ПЛАН-ВИДЕО.md В6, В8) ────────────────────────────────
+    // ── Фото к отчёту (ПЛАН-(В)-ВИДЕО.md В6, В8) ────────────────────────────────
 
     private fun photo(byte: Int, fromCall: Boolean = false) =
         ProblemPhoto("image/jpeg", byteArrayOf(0xFF.toByte(), byte.toByte()), fromCall)

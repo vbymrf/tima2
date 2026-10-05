@@ -39,7 +39,7 @@ type CallStore interface {
 	// Лента звонков (0056, ВЗ0а): вершина и изменения после номера.
 	CallTop(ctx context.Context, userID string) (int64, error)
 	ListCallUpdates(ctx context.Context, userID string, after int64, limit int) ([]store.CallUpdate, error)
-	// Групповой звонок в личной группе (0058, ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ2).
+	// Групповой звонок в личной группе (0058, ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ ГЗ2).
 	GetGroup(ctx context.Context, groupID string) (store.Group, error)
 	GroupRole(ctx context.Context, groupID, userID string) (string, error)
 	CreateRoomCall(ctx context.Context, room, kind, groupID, creatorID string, invited []string, ring bool) (string, error)
@@ -67,9 +67,9 @@ type LiveKitSettings struct {
 	Issuer *calls.Issuer     // nil → звонки отвечают 503
 	Rooms  *calls.RoomClient // закрыть комнату, выкинуть участника
 	URL    string
-	// Video — потолок видео звонка (ПЛАН-ВИДЕО.md В5б). Нулевой — умолчание.
+	// Video — потолок видео звонка (ПЛАН-(В)-ВИДЕО.md В5б). Нулевой — умолчание.
 	Video VideoLimits
-	// Group — правила группового звонка (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ, решение 4). Нулевые —
+	// Group — правила группового звонка (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ, решение 4). Нулевые —
 	// умолчание: 25 участников, 720p до 4, 480p до 8, срок временной группы 12 ч.
 	Group GroupCallRules
 }
@@ -116,7 +116,7 @@ func RegisterCalls(
 	mux.HandleFunc("POST /api/v1/calls/{callID}/end", requireDevice(endCall(deps)))
 	mux.HandleFunc("POST /api/v1/calls/group", requireDevice(startGroupCall(deps)))
 	mux.HandleFunc("POST /api/v1/calls/{callID}/join", requireDevice(joinCall(deps)))
-	// Групповой звонок в личной группе (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ2).
+	// Групповой звонок в личной группе (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ ГЗ2).
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/call", requireDevice(startRoomCall(deps)))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}/call", requireDevice(roomCallState(deps)))
 	mux.HandleFunc("POST /api/v1/calls/{callID}/control", requireDevice(controlRoomCall(deps)))

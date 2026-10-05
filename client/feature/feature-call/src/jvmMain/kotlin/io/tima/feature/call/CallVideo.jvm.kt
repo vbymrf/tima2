@@ -17,7 +17,7 @@ import org.jetbrains.skia.Image
 import org.jetbrains.skia.ImageInfo
 
 /**
- * Видео на ПК — кадрами (ПЛАН-ЗВОНКОВ-ПК, ПК4).
+ * Видео на ПК — кадрами (ПЛАН-(ПК)-ЗВОНКОВ-ПК, ПК4).
  *
  * Поверхности, как у libwebrtc на Android, здесь нет: движок отдаёт кадры BGRA
  * ([PictureVideo]), и каждый кадр становится картинкой Skia без перестановки байтов —

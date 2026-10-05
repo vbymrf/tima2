@@ -21,7 +21,7 @@ class CodecChoiceTest {
 
     @Test
     fun honor_вместо_h264_публикует_и_объявляет_vp8() {
-        // С 2026-09-29 база — H.264, дальше VP8 (ПЛАН-ВИДЕО.md В3): VP9 в переборе нет.
+        // С 2026-09-29 база — H.264, дальше VP8 (ПЛАН-(В)-ВИДЕО.md В3): VP9 в переборе нет.
         val choice = CodecChoice.pick(VideoCodec.H264, VideoCodec.H264, honor)
         assertEquals(VideoCodec.VP8, choice.chosen)
         assertTrue(choice.substituted)

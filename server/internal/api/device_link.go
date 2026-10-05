@@ -119,7 +119,7 @@ func linkConfirm(deps devicesDeps) http.HandlerFunc {
 			Secret    string `json:"secret"`
 			Signature string `json:"signature"` // base64url, 64 B
 			// Свидетельство нового устройства от ключа подписи устройств этого телефона
-			// (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ ДУ2). Необязательное: телефон, заведённый до ДУ1, КПУ не имеет.
+			// (ПЛАН-(ДУ+ИУ)-УСТРОЙСТВ-И-ИСТОРИИ ДУ2). Необязательное: телефон, заведённый до ДУ1, КПУ не имеет.
 			DeviceCertSig string `json:"device_cert_sig,omitempty"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {

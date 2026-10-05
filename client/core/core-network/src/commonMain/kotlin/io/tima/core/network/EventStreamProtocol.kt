@@ -162,7 +162,7 @@ class EventStreamProtocol {
         ) : Decision
 
         /**
-         * Копия аккаунта изменилась на другом устройстве (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ9):
+         * Копия аккаунта изменилась на другом устройстве (ПЛАН-(ЖУ)-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ9):
          * вид (`book`, `reads`) и ревизия. Устройство в фоне только запоминает номер и
          * забирает копию, выйдя на экран, — и только если номер новее своего.
          */
@@ -247,7 +247,7 @@ class EventStreamProtocol {
         data class CallLeft(val callId: String, val userId: String, val eventId: Long?) : Decision
 
         /**
-         * Создатель группового звонка скомандовал (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ, решения 5, 6, 17):
+         * Создатель группового звонка скомандовал (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ, решения 5, 6, 17):
          * `mute_mic`, `mute_video`, `remove` — мне; `pause`, `resume` — всем в звонке.
          */
         data class CallControl(val callId: String, val action: String, val by: String, val eventId: Long?) : Decision

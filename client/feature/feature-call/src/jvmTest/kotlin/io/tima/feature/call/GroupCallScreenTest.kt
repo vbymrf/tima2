@@ -6,7 +6,7 @@ import io.tima.testui.capture
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
-/** Окно 0 группового звонка (ПЛАН-ГРУППОВЫХ-ЗВОНКОВ ГЗ4): сетка, счётчик, пауза. */
+/** Окно 0 группового звонка (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ ГЗ4): сетка, счётчик, пауза. */
 class GroupCallScreenTest {
 
     private fun tile(i: Int, name: String, mic: Boolean = true, speaking: Boolean = false) =

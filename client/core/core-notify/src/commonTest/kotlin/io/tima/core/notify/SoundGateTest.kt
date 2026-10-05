@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Звук — один на пачку, без наложений и без очереди (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ3). */
+/** Звук — один на пачку, без наложений и без очереди (ПЛАН-(ЖУ)-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ3). */
 class SoundGateTest {
 
     @Test

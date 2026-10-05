@@ -45,7 +45,7 @@ func TestTokenGrants(t *testing.T) {
 	if c.Video.CanPublish == nil || !*c.Video.CanPublish {
 		t.Fatal("canPublish должен быть true для говорящего")
 	}
-	// Атрибут «что раскодирую» (ПЛАН-ВИДЕО.md В5) без этого права сервер отвергает.
+	// Атрибут «что раскодирую» (ПЛАН-(В)-ВИДЕО.md В5) без этого права сервер отвергает.
 	if !c.Video.CanUpdateOwnMetadata {
 		t.Fatal("canUpdateOwnMetadata нужен обмену кодеками")
 	}

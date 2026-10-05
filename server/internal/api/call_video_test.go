@@ -2,7 +2,7 @@ package api
 
 import "testing"
 
-// Потолок видео звонка: умолчание, настройка и опечатка (ПЛАН-ВИДЕО.md В5б).
+// Потолок видео звонка: умолчание, настройка и опечатка (ПЛАН-(В)-ВИДЕО.md В5б).
 func TestVideoLimitsFromEnv(t *testing.T) {
 	env := func(values map[string]string) func(string) string {
 		return func(name string) string { return values[name] }

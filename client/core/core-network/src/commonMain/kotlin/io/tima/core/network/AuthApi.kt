@@ -112,7 +112,7 @@ class AuthApi(
         identityPub: ByteArray? = null,
         platform: String? = null,
         forceNewIdentity: Boolean = false,
-        /** Доказательство устройства (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ ДУ2); `null` — без него. */
+        /** Доказательство устройства (ПЛАН-(ДУ+ИУ)-УСТРОЙСТВ-И-ИСТОРИИ ДУ2); `null` — без него. */
         proof: DeviceProofFields? = null,
     ): RegisterResult {
         require(encryptionPub.size == KEY_BYTES) { "encryption_pub обязан быть $KEY_BYTES байт" }

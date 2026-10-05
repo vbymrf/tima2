@@ -94,7 +94,7 @@ func (n *Notifier) Device(ctx context.Context, deviceID, event string, payload m
 }
 
 // CallChange — изменение звонка в ленту человека и подсказка всем его устройствам
-// (ПЛАН-ВХОДЯЩЕГО-ЗВОНКА.md, ВЗ0а).
+// (ПЛАН-(ВЗ)-ВХОДЯЩЕГО-ЗВОНКА.md, ВЗ0а).
 //
 // ── ЖУРНАЛ УСТРОЙСТВА НЕ ТРОГАЕТСЯ ──────────────────────────────────────────
 //
@@ -190,7 +190,7 @@ func pokeFor(event string, eventID int64, lanes store.Lanes, payload map[string]
 }
 
 // StoreChanged — копия аккаунта изменилась: остальным устройствам человека событие
-// `store.changed {kind, revision}` (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ9). Сохранившему — нет:
+// `store.changed {kind, revision}` (ПЛАН-(ЖУ)-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ9). Сохранившему — нет:
 // своё он знает.
 func (n *Notifier) StoreChanged(ctx context.Context, userID, byDevice, kind string, revision int64) {
 	devices, err := n.store.ListDevices(ctx, userID)

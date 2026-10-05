@@ -157,7 +157,7 @@ class Entry private constructor(
     }
 
     /**
-     * Аккаунты этого устройства — ПЛАН-КОНТАКТОВ.md, Д11.
+     * Аккаунты этого устройства — ПЛАН-(Д)-КОНТАКТОВ.md, Д11.
      *
      * Основной и его виртуальные равны во всём, кроме телефона: у каждого своя сессия,
      * свой ключ покоя и своя база.
@@ -189,7 +189,7 @@ class Entry private constructor(
     fun switchAccount(userId: String) = accounts.switchTo(userId)
 
     /**
-     * Выйти из аккаунта на этом устройстве (ПЛАН-ВЫХОДА-ИЗ-АККАУНТА.md, А4/А5).
+     * Выйти из аккаунта на этом устройстве (ПЛАН-(А)-ВЫХОДА-ИЗ-АККАУНТА.md, А4/А5).
      *
      * Аккаунт **откладывается** (решение 1в): остаются запись в списке, ключи и база — снят
      * только указатель «текущий». Прежнее одиночное место сессии (до Д11) очищается: иначе
@@ -239,7 +239,7 @@ class Entry private constructor(
     class Device(val secret: ByteArray, val session: Session)
 
     /**
-     * Ключ подписи устройств этого телефона у аккаунта [userId] (ПЛАН-УСТРОЙСТВ-И-ИСТОРИИ ДУ1):
+     * Ключ подписи устройств этого телефона у аккаунта [userId] (ПЛАН-(ДУ+ИУ)-УСТРОЙСТВ-И-ИСТОРИИ ДУ1):
      * читается при подтверждении QR, пишется, когда человек вводит фразу в «Устройствах».
      */
     fun signingKeys(userId: String): AskSecrets = object : AskSecrets {
@@ -360,7 +360,7 @@ class Network(
     override val profile: Profile =
         ProfileOverHttp(link.route, link.client, token = { token() })
 
-    /** Ячейка копии книги у сервера и служебная группа аккаунта (ПЛАН-РАЗДЕЛОВ Р2а). */
+    /** Ячейка копии книги у сервера и служебная группа аккаунта (ПЛАН-(РЗ)-РАЗДЕЛОВ Р2а). */
     val accountStore: AccountStoreOverHttp =
         AccountStoreOverHttp(link.route, link.client, token = { token() })
 
@@ -642,7 +642,7 @@ class Environment private constructor(
     /** Своя книга контактов: телефонная книга плюс заведённое руками (Д2). */
     val bookStorage: Book = SqlBook(db, cipher, now = { msNow() }, device = { myDeviceId })
 
-    /** Набор разделов сообществ и раздел у переписки (ПЛАН-РАЗДЕЛОВ Р5). */
+    /** Набор разделов сообществ и раздел у переписки (ПЛАН-(РЗ)-РАЗДЕЛОВ Р5). */
     val communitySections: SqlCommunitySections = SqlCommunitySections(db)
 
     val book: ObserveBook = ObserveBook(bookStorage)
@@ -663,7 +663,7 @@ class Environment private constructor(
      */
     val callLog: CallLog = SqlCallLog(db)
 
-    /** Журнал уведомлений — числа вкладок, окон, строк и значка (ПЛАН-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ1). */
+    /** Журнал уведомлений — числа вкладок, окон, строк и значка (ПЛАН-(ЖУ)-ЖУРНАЛА-УВЕДОМЛЕНИЙ.md, ЖУ1). */
     val noticeJournal: io.tima.domain.chat.NoticeJournal = io.tima.core.database.SqlNoticeJournal(db)
 
     /** Что прочитано: сверка журнала уведомлений (ЖУ1) и отметки копии аккаунта (ЖУ9). */

@@ -5301,7 +5301,7 @@
       </component>
       <component group="org.jetbrains.compose" name="gradle-plugin-internal-jdk-version-probe" version="1.11.1">
          <artifact name="gradle-plugin-internal-jdk-version-probe-1.11.1.jar">
-            <sha256 value="c0d2d33d16f175f7c95efe56ee054c7a77ff8a2d9da5714bbe894399b648729a" origin="Сборка установщика для ПК: плагин Compose спрашивает версию JDK этим зондом (ПЛАН-ОБНОВЛЕНИЯ.md, О2)"/>
+            <sha256 value="c0d2d33d16f175f7c95efe56ee054c7a77ff8a2d9da5714bbe894399b648729a" origin="Сборка установщика для ПК: плагин Compose спрашивает версию JDK этим зондом (ПЛАН-(О)-ОБНОВЛЕНИЯ.md, О2)"/>
          </artifact>
          <artifact name="gradle-plugin-internal-jdk-version-probe-1.11.1.module">
             <sha256 value="fb4cc805477abaa08c0b639c20c765746559e075c6acd9eee17e805d14e48e77" origin="Сборка установщика для ПК"/>
