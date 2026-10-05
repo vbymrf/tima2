@@ -103,7 +103,7 @@ fun SectionsScreen(
         val rows = orderedSections(sections, common, words.commonSection)
         LazyColumn(Modifier.weight(1f)) {
             if (sections.isEmpty() && !adding) {
-                item(key = "пусто") {
+                item(key = "empty") {
                     Box(Modifier.padding(TimaSpacing.about4)) {
                         EmptyArea(
                             title = words.sectionsEmpty,

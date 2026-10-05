@@ -28,6 +28,7 @@ import io.tima.core.call.LayerMode
 import io.tima.core.call.PublishPreset
 import io.tima.core.call.VideoCodec
 import io.tima.core.call.VideoPreset
+import io.tima.core.words.BenchWords
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Caption
@@ -170,7 +171,7 @@ private fun Publishing(preset: PublishPreset, onChange: (PublishPreset) -> Unit)
         Pick(words.fps, FRAMES.map { it to it.toString() }, video.fps) { chosen ->
             video { copy(fps = chosen) }
         }
-        Pick(words.bitrate, BITRATES.map { it to kbit(it.toLong()) }, video.bitrate) { chosen ->
+        Pick(words.bitrate, BITRATES.map { it to kbit(it.toLong(), words) }, video.bitrate) { chosen ->
             video { copy(bitrate = chosen, maxBitrate = chosen) }
         }
         Pick(
@@ -209,7 +210,7 @@ private fun Sound(audio: AudioPreset, onChange: (AudioPreset) -> Unit) {
     Switch(words.red, audio.red) { onChange(audio.copy(red = it)) }
     Switch(words.dtx, audio.dtx) { onChange(audio.copy(dtx = it)) }
     Switch(words.stereo, audio.stereo) { onChange(audio.copy(stereo = it)) }
-    Pick(words.audioBitrate, AUDIO_BITRATES.map { it to kbit(it.toLong()) }, audio.bitrate) {
+    Pick(words.audioBitrate, AUDIO_BITRATES.map { it to kbit(it.toLong(), words) }, audio.bitrate) {
         onChange(audio.copy(bitrate = it))
     }
 }
@@ -406,9 +407,9 @@ private fun Numbers(last: BenchSample?) {
     val words = Tima.words.bench
     Section(words.sectionTraffic) {
         val stats = last?.stats
-        Line(words.up, stats?.upBitrate?.let { kbit(it) })
-        Line(words.down, stats?.downBitrate?.let { kbit(it) })
-        Line(words.rtt, stats?.rttMs?.let { "$it мс" })
+        Line(words.up, stats?.upBitrate?.let { kbit(it, words) })
+        Line(words.down, stats?.downBitrate?.let { kbit(it, words) })
+        Line(words.rtt, stats?.rttMs?.let { "$it ${words.millis}" })
         Line(words.lost, stats?.packetsLost?.toString())
         Line(words.codecUp, codecWho(stats?.videoCodec, stats?.hardwareEncoder))
         Line(words.codecDown, codecWho(stats?.downCodec, stats?.hardwareDecoder))
@@ -423,13 +424,13 @@ private fun Numbers(last: BenchSample?) {
         Line(words.fpsDown, stats?.downFps?.let { oneDecimal(it) })
         Line(words.qpDown, stats?.downQp?.let { oneDecimal(it) })
         val traffic = last?.traffic
-        Line(words.phoneSent, traffic?.sentBytes?.let { megabytes(it) })
-        Line(words.phoneReceived, traffic?.receivedBytes?.let { megabytes(it) })
+        Line(words.phoneSent, traffic?.sentBytes?.let { megabytes(it, words) })
+        Line(words.phoneReceived, traffic?.receivedBytes?.let { megabytes(it, words) })
     }
     Section(words.sectionLoad) {
         val load = last?.load
         Line(words.cpu, load?.cpuPercent?.let { percent(it) })
-        Line(words.memory, load?.memoryMb?.let { "$it МБ" })
+        Line(words.memory, load?.memoryMb?.let { "$it ${words.megabytes}" })
         Line(words.heat, load?.temperatureC?.let { degrees(it) })
         Line(words.battery, battery(load?.batteryPercent, load?.charging))
         Line(words.current, load?.currentMa?.let { milliAmps(it) })
@@ -444,9 +445,9 @@ private fun Runs(runs: List<BenchSummary>) {
         for (run in runs) {
             Name(run.preset)
             Line(words.seconds, run.seconds.toString())
-            Line(words.upAverage, run.upAverage?.let { kbit(it) })
-            Line(words.upPeak, run.upPeak?.let { kbit(it) })
-            Line(words.phoneSent, run.sentBytes?.let { megabytes(it) })
+            Line(words.upAverage, run.upAverage?.let { kbit(it, words) })
+            Line(words.upPeak, run.upPeak?.let { kbit(it, words) })
+            Line(words.phoneSent, run.sentBytes?.let { megabytes(it, words) })
             Line(words.cpuAverage, run.cpuAverage?.let { percent(it) })
             Line(words.cpuPeak, run.cpuPeak?.let { percent(it) })
             Line(words.heatPeak, run.temperaturePeak?.let { degrees(it) })
@@ -570,10 +571,10 @@ private val SKIPS = listOf(0, 3, 5, 10, 15)
 // Свои, а не платформенные: `String.format` в общем коде нет, а округление тут нужно
 // грубое — числа дышат, и лишние знаки после запятой только мешают их читать.
 
-internal fun kbit(bits: Long): String =
-    if (bits >= 1_000_000) "${bits / 100_000 / 10.0} Мбит/с" else "${bits / 1000} кбит/с"
+internal fun kbit(bits: Long, words: BenchWords): String =
+    if (bits >= 1_000_000) "${bits / 100_000 / 10.0} ${words.megabits}" else "${bits / 1000} ${words.kilobits}"
 
-internal fun megabytes(bytes: Long): String = "${bytes / 100_000 / 10.0} МБ"
+internal fun megabytes(bytes: Long, words: BenchWords): String = "${bytes / 100_000 / 10.0} ${words.megabytes}"
 
 internal fun percent(value: Double): String = "${(value * 10).toInt() / 10.0} %"
 

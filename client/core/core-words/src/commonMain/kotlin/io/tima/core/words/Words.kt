@@ -606,6 +606,14 @@ interface BookWords {
     val sectionsLook: String
     /** Заголовок над образцом в подокнах «Вида»: как будет выглядеть. */
     val lookSample: String
+    /** Выдуманные образцы на подокнах вида: разделы, человек, группа, реплика. */
+    val sampleSectionWork: String
+    val sampleSectionHome: String
+    val samplePerson: String
+    val samplePersonShort: String
+    val sampleGroup: String
+    val sampleGroupAbout: String
+    val sampleMessage: String
     val subsections: String
     val folders: String
     val foldersAbout: String
@@ -962,8 +970,13 @@ interface BenchWords {
 
     val on: String
     val off: String
-}
 
+    /** Единицы: задержка, объём, скорость. */
+    val millis: String
+    val megabytes: String
+    val megabits: String
+    val kilobits: String
+}
 
 /**
  * Журнал звонков — вкладка «Звонки» окна «Телефон» (Ж2).
@@ -1222,6 +1235,9 @@ interface ChatWords {
     val access: String
     val members: String
     val someone: String
+    /** Вкладка групп пуста. */
+    val noGroups: String
+    val noGroupsAbout: String
     fun thread(count: Int): String
     val messageUnavailable: String
     val decrypting: String
@@ -2412,6 +2428,10 @@ object RussianWords : Words {
 
         override val on = "вкл"
         override val off = "выкл"
+        override val millis = "мс"
+        override val megabytes = "МБ"
+        override val megabits = "Мбит/с"
+        override val kilobits = "кбит/с"
     }
 
     override val windows = object : WindowWords {
@@ -2849,6 +2869,13 @@ object RussianWords : Words {
         override val view = "Вид"
         override val sectionsLook = "Вид разделов"
         override val lookSample = "Как будет выглядеть"
+        override val sampleSectionWork = "Работа"
+        override val sampleSectionHome = "Дом"
+        override val samplePerson = "Анна Петрова"
+        override val samplePersonShort = "Анна"
+        override val sampleGroup = "Команда разработки"
+        override val sampleGroupAbout = "Планёрки, задачи, релизы"
+        override val sampleMessage = "Привет! Собираемся в семь"
         override val subsections = "Отображение подразделов"
         override val folders = "Папки"
         override val foldersAbout = "разделы полосами, сворачиваются"
@@ -3170,6 +3197,10 @@ object RussianWords : Words {
         override val access = "Доступность"
         override val members = "Участники"
         override val someone = "Участник"
+        override val noGroups = "Групп пока нет"
+        override val noGroupsAbout =
+            "Здесь будут группы, которыми вы владеете, которые ведёте и в которых состоите. " +
+                "Создание группы — из каталога окна «Социум»."
         override fun thread(count: Int): String {
             val tens = count % 100
             val word = if (tens in 11..14) {

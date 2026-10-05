@@ -429,6 +429,10 @@ object SpanishWords : Words {
         override val cpuPeak = "Procesador, pico"
         override val heatPeak = "Temperatura, pico"
         override val batterySpent = "Batería gastada"
+        override val millis = "ms"
+        override val megabytes = "MB"
+        override val megabits = "Mbit/s"
+        override val kilobits = "kbit/s"
 
         override val on = "sí"
         override val off = "no"
@@ -863,6 +867,13 @@ object SpanishWords : Words {
         override val view = "Vista"
         override val sectionsLook = "Aspecto de las secciones"
         override val lookSample = "Vista previa"
+        override val sampleSectionWork = "Trabajo"
+        override val sampleSectionHome = "Casa"
+        override val samplePerson = "Ana Pérez"
+        override val samplePersonShort = "Ana"
+        override val sampleGroup = "Equipo de desarrollo"
+        override val sampleGroupAbout = "Reuniones, tareas, versiones"
+        override val sampleMessage = "¡Hola! Quedamos a las siete"
         override val subsections = "Cómo se muestran las secciones"
         override val folders = "Carpetas"
         override val foldersAbout = "secciones en barras, plegables"
@@ -1174,6 +1185,10 @@ object SpanishWords : Words {
         override val access = "Audiencia"
         override val members = "Miembros"
         override val someone = "Miembro"
+        override val noGroups = "Aún no hay grupos"
+        override val noGroupsAbout =
+            "Aquí aparecerán los grupos que tienes, que diriges y en los que participas. " +
+                "Para crear un grupo, abre el catálogo de la ventana Social."
 
         override fun thread(count: Int): String {
             val word = if (count == 1) "respuesta" else "respuestas"

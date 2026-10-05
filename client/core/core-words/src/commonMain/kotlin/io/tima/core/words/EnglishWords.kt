@@ -431,6 +431,10 @@ object EnglishWords : Words {
         override val cpuPeak = "CPU, peak"
         override val heatPeak = "Temperature, peak"
         override val batterySpent = "Battery spent"
+        override val millis = "ms"
+        override val megabytes = "MB"
+        override val megabits = "Mbit/s"
+        override val kilobits = "kbit/s"
 
         override val on = "on"
         override val off = "off"
@@ -863,6 +867,13 @@ object EnglishWords : Words {
         override val view = "View"
         override val sectionsLook = "Sections look"
         override val lookSample = "Preview"
+        override val sampleSectionWork = "Work"
+        override val sampleSectionHome = "Home"
+        override val samplePerson = "Anna Petrova"
+        override val samplePersonShort = "Anna"
+        override val sampleGroup = "Dev Team"
+        override val sampleGroupAbout = "Stand-ups, tasks, releases"
+        override val sampleMessage = "Hi! We're meeting at seven"
         override val subsections = "How sections are shown"
         override val folders = "Folders"
         override val foldersAbout = "sections as bars, collapsible"
@@ -1174,6 +1185,10 @@ object EnglishWords : Words {
         override val access = "Audience"
         override val members = "Members"
         override val someone = "Member"
+        override val noGroups = "No groups yet"
+        override val noGroupsAbout =
+            "Groups you own, run or belong to will appear here. " +
+                "To create a group, open the catalog in the Social window."
 
         override fun thread(count: Int): String {
             val word = if (count == 1) "reply" else "replies"

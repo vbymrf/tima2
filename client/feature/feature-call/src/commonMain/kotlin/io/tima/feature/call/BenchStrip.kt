@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.tima.core.call.BenchSample
+import io.tima.core.call.CODER_HARDWARE
+import io.tima.core.call.CODER_SOFTWARE
 import io.tima.core.ui.Caption
 import io.tima.core.ui.IconButton
 import io.tima.core.ui.Secondary
@@ -227,8 +229,8 @@ private fun benchSecondLine(tile: GroupTile, line: BenchLine?): String? {
     val parts = tile.bench?.split(" · ") ?: return null
     val codecSize = parts.getOrNull(1)?.split(" ") ?: return null
     val who = when {
-        parts.getOrNull(2)?.startsWith("апп") == true -> bench.hardwareShort
-        parts.getOrNull(2)?.startsWith("прог") == true -> bench.softwareShort
+        parts.getOrNull(2)?.startsWith(CODER_HARDWARE.take(3)) == true -> bench.hardwareShort
+        parts.getOrNull(2)?.startsWith(CODER_SOFTWARE.take(4)) == true -> bench.softwareShort
         else -> ""
     }
     return listOf(prettyCodec(codecSize.getOrNull(0).orEmpty()), who, codecSize.getOrNull(1).orEmpty())
@@ -285,7 +287,7 @@ private fun Numbers(last: BenchSample?) {
     // «вниз» одного показателя — в одной строке, одно под другим не ищут. Деление по
     // счёту сдвигало пары от любой вставки: «Кадр/с вверх» оказался рядом с «QP вверх».
     val rows: List<List<Pair<String, String?>>> = listOf(
-        listOf(words.up to stats?.upBitrate?.let { kbit(it) }, words.down to stats?.downBitrate?.let { kbit(it) }),
+        listOf(words.up to stats?.upBitrate?.let { kbit(it, words) }, words.down to stats?.downBitrate?.let { kbit(it, words) }),
         listOf(
             words.framesUp to stats?.upFrames?.takeIf { it.isNotEmpty() }?.joinToString(", "),
             words.frameDown to stats?.downFrame,
@@ -298,7 +300,7 @@ private fun Numbers(last: BenchSample?) {
             words.codecUp to codecWho(stats?.videoCodec, stats?.hardwareEncoder),
             words.codecDown to codecWho(stats?.downCodec, stats?.hardwareDecoder),
         ),
-        listOf(words.phoneSent to traffic?.sentBytes?.let { megabytes(it) }, words.cpu to load?.cpuPercent?.let { percent(it) }),
+        listOf(words.phoneSent to traffic?.sentBytes?.let { megabytes(it, words) }, words.cpu to load?.cpuPercent?.let { percent(it) }),
         listOf(words.heat to load?.temperatureC?.let { degrees(it) }, words.battery to battery(load?.batteryPercent, load?.charging)),
         listOf(words.current to load?.currentMa?.let { milliAmps(it) }),
     )

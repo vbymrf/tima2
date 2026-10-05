@@ -182,9 +182,8 @@ fun GroupsScreen(
         when {
             !state.read -> Unit
             groups.isEmpty() -> EmptyArea(
-                title = "Групп пока нет",
-                explanation = "Здесь будут группы, которыми вы владеете, которые ведёте и в " +
-                    "которых состоите. Создание группы — из каталога окна «Социум».",
+                title = Tima.words.chat.noGroups,
+                explanation = Tima.words.chat.noGroupsAbout,
             )
 
             else -> List(chats = groups, onOpen = onOpen, countOf = countOf, tagOf = tagOf, callGroupOf = callGroupOf)

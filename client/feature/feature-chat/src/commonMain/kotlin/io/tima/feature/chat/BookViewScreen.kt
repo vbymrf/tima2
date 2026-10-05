@@ -290,8 +290,8 @@ fun SectionsLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Mod
         SectionTitle(words.lookSample)
         val tabs = listOf(
             SectionTab(if (view.folders && view.icons) ALL_SECTION else "", words.everyone, 0),
-            SectionTab("work", "Работа", 2),
-            SectionTab("home", "Дом", 1),
+            SectionTab("work", words.sampleSectionWork, 2),
+            SectionTab("home", words.sampleSectionHome, 1),
             SectionTab(COMMON_SECTION, words.commonSection, 0),
         )
         val counts = mapOf(tabs[0].id to 7, "work" to 3, "home" to 2, COMMON_SECTION to 2)
@@ -356,7 +356,7 @@ fun SectionsLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Mod
 fun PersonLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modifier = Modifier, forPeople: Boolean = true) {
     val words = Tima.words.book
     val colors = Tima.colors
-    val sample = ChatPerson(name = "Анна Петрова", userName = "Anna P.", nick = "anna_p", phone = "+7 999 000-00-00")
+    val sample = ChatPerson(name = words.samplePerson, userName = "Anna P.", nick = "anna_p", phone = "+7 999 000-00-00")
     val look = view.look()
     Column(modifier.fillMaxWidth().padding(vertical = TimaSpacing.about2), verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
         SectionTitle(words.lookSample)
@@ -386,7 +386,7 @@ fun PersonLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modif
                             author = sample.line(look) ?: Tima.words.chat.someone,
                             avatar = sample.letter(),
                             bottom = { Tertiary("12:40", lineOne = true) },
-                        ) { Caption("Привет! Собираемся в семь", fontSize = TimaType.sz4) }
+                        ) { Caption(words.sampleMessage, fontSize = TimaType.sz4) }
                     }
                 }
             }
@@ -429,13 +429,16 @@ private fun io.tima.core.words.BookWords.fieldAbout(field: PersonField): String 
 /** Строка образца: у контактов — человек с телефоном, у сообществ — группа с описанием. */
 @Composable
 private fun SampleLine(forPeople: Boolean) {
+    val words = Tima.words.book
+    val name = if (forPeople) words.samplePersonShort else words.sampleGroup
     ListLine(
         onClick = {},
-        left = { Avatar(letters = if (forPeople) "А" else "КР") },
+        // Буквы — из самого имени: у человека первая, у группы — первые двух слов.
+        left = { Avatar(letters = name.split(' ').take(if (forPeople) 1 else 2).joinToString("") { it.take(1) }.uppercase()) },
         middle = {
             Column {
-                Name(if (forPeople) "Анна" else "Команда разработки")
-                Tertiary(if (forPeople) "+7 999 000-00-00" else "Планёрки, задачи, релизы", lineOne = true)
+                Name(name)
+                Tertiary(if (forPeople) "+7 999 000-00-00" else words.sampleGroupAbout, lineOne = true)
             }
         },
     )

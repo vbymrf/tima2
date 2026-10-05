@@ -176,14 +176,21 @@ expect fun saveBenchReport(fileName: String, text: String): String?
 /** Модель телефона. Три телефона стенда различаются только так. */
 expect fun phoneModel(): String
 
+/**
+ * Кто обработал кадры — слово отчёта. Это данные, а не надпись: полоса стенда узнаёт его по
+ * началу в строке, пришедшей с другого телефона, и переводить его нельзя.
+ */
+const val CODER_HARDWARE = "аппаратный"
+const val CODER_SOFTWARE = "программный"
+
 /** «VP8, программный» — кодек и кто его обработал; не знаем ни того ни другого — пусто. */
 private fun codecText(codec: String?, hardware: Boolean?): String? {
-    val who = hardware?.let { if (it) "аппаратный" else "программный" }
+    val who = hardware?.let { if (it) CODER_HARDWARE else CODER_SOFTWARE }
     return listOfNotNull(codec, who).joinToString(", ").ifEmpty { null }
 }
 
 private fun choiceText(choice: CoderChoice): String = when (choice) {
     CoderChoice.Settings -> "как в настройках"
-    CoderChoice.Hardware -> "аппаратный"
-    CoderChoice.Software -> "программный"
+    CoderChoice.Hardware -> CODER_HARDWARE
+    CoderChoice.Software -> CODER_SOFTWARE
 }

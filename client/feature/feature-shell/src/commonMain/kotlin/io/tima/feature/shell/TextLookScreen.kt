@@ -150,7 +150,7 @@ private fun Sample(appearance: Appearance) {
         ProvideTextScale(look.scaleOf(TextPlace.LISTS)) {
             ListLine(
                 onClick = {},
-                left = { Avatar(letters = "П", size = AvatarSize.Small) },
+                left = { Avatar(letters = words.appearance.sizeLists.take(1), size = AvatarSize.Small) },
                 middle = {
                     Column {
                         Name(words.appearance.sizeLists.substringBefore(':'))
