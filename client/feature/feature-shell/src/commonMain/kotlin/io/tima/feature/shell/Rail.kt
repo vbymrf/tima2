@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -21,7 +23,6 @@ import androidx.compose.ui.unit.dp
 import io.tima.core.ui.words
 import io.tima.core.ui.Name
 import io.tima.core.ui.Layout
-import io.tima.core.ui.Counter
 import io.tima.core.ui.TimaShapes
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.Tima
@@ -153,12 +154,39 @@ private fun Item(
         // Значку отведена своя ширина, а не «сколько занял». Во-первых, подписи от
         // этого встают в колонку; во-вторых, ширина строки становится считаемой —
         // на ней держится RAIL_AROUND_CAPTION и проверка, что подпись влезает.
-        Box(Modifier.width(RAIL_GLYPH), contentAlignment = Alignment.Center) { Name(glyph) }
+        Box(Modifier.width(RAIL_GLYPH), contentAlignment = Alignment.Center) {
+            Name(glyph)
+            // Без подписей строке не хватает ширины на число рядом: оно сплющивалось в полоску
+            // и вылезало за неё (ПК, заказчик 2026-10-05). Пузырь садится на угол значка.
+            if (!withCaption && howMany > 0) {
+                RailBadge(howMany, Modifier.align(Alignment.TopEnd).offset(x = 12.dp, y = (-8).dp))
+            }
+        }
         if (withCaption) {
             Name(caption, modifier = Modifier.weight(1f))
+            if (howMany > 0) RailBadge(howMany)
         }
-        if (howMany > 0) Counter(howMany)
     }
+}
+
+/**
+ * Число непрочитанного в рейке — пузырь-квадрат со скруглёнными углами (заказчик 2026-10-05),
+ * а не круглая пилюля списков: рейка — другое место, и число здесь видно поверх значка.
+ */
+@Composable
+private fun RailBadge(howMany: Int, modifier: Modifier = Modifier) = Box(
+    modifier = modifier
+        .defaultMinSize(minWidth = 20.dp, minHeight = 20.dp)
+        .background(Tima.colors.activity, RoundedCornerShape(6.dp))
+        .padding(horizontal = 5.dp),
+    contentAlignment = Alignment.Center,
+) {
+    io.tima.core.ui.Caption(
+        text = if (howMany > 99) "99+" else howMany.toString(),
+        fontSize = io.tima.core.ui.TimaType.sz6,
+        weight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
+        color = Tima.colors.onAmber,
+    )
 }
 
 /** Ширина колонки значка в строке рейки. */
