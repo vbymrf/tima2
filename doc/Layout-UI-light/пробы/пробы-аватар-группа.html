@@ -1,0 +1,133 @@
+<meta charset="utf-8">
+<title>Пробы: аватар в группе и полоса</title>
+<link rel="stylesheet" href="../стиль.css">
+<style>
+  .срез { height: auto; width: 344px; border-width: 2px; border-radius: 20px; }
+  .срез .зона-2 { flex: 0 0 auto; overflow: visible; }
+  /* Лента — как в приложении: зазор между репликами 12, пузырь до 290 */
+  .лента { display: flex; flex-direction: column; gap: 12px; padding: 22px 14px 18px; background: var(--поверхность); }
+  .ряд { display: flex; }
+  .ряд.мой { justify-content: flex-end; }
+
+  /* Пузырь — как `Bubble.kt`: радиус 16, рамка 1 серая, слева полоса автора 4 цветная.
+     Полоса — левая сторона самой рамки и ПОВЕРХ серой (правка 2026-10-06): в браузере это
+     `border-left`, и угол сходит с 4 на 1 сам. */
+  .пуз {
+    position: relative; max-width: 290px; box-sizing: border-box;
+    background: var(--автор); color: var(--текст);
+    border: 1px solid var(--рамка); border-left: 4px solid var(--цвет, var(--навигация));
+    border-radius: 16px; padding: 11px 14px 11px 12px; font-size: 15px; line-height: 1.35;
+  }
+  .ряд.мой .пуз { background: var(--мои); border-left-width: 1px; border-left-color: var(--рамка); padding-left: 14px; }
+  .вр { display: block; text-align: right; font-size: 11px; font-weight: 700; color: var(--чёрный-50); margin-top: 3px; }
+  .имя { display: block; font-size: 13px; font-weight: 800; color: var(--чёрный-70); height: 20px; line-height: 20px; margin-bottom: 3px; white-space: nowrap; }
+
+  /* Аватар — квадрат 43 со скруглением 10 и своей рамкой 1; выступает вверх на 11 (зазор
+     между репликами минус пункт). Во всех вариантах он ПОВЕРХ рамки и полосы пузыря. */
+  .ав {
+    position: absolute; top: -12px; width: 43px; height: 43px; box-sizing: border-box; z-index: 2;
+    border-radius: 10px; border: 1px solid var(--рамка); background: var(--автор);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 800; color: var(--текст);
+  }
+  .ав.фото { background: linear-gradient(135deg, #2f9aa3, #d9b38c 60%, #6b4b3a); color: transparent; }
+
+  /* а — как сейчас: за скруглением (радиус + 3 = 19 от края пузыря) */
+  .ва .ав { left: 15px; }               /* 19 от внешнего края − 4 полосы, позиция от края заполнения */
+  .ва .имя { padding-left: 52px; }
+
+  /* б — влево до полосы: левый край аватара встаёт к внутреннему краю полосы, на её прямом
+     участке; верхнее скругление полосы уходит под аватар */
+  .вб .ав { left: 0; }
+  .вб .имя { padding-left: 37px; }
+
+  /* в — заподлицо с серым пузырём: левый край аватара — по внешней кромке рамки, полоса
+     сверху закрыта аватаром и выходит из-под него снизу */
+  .вв .ав { left: -4px; }
+  .вв .имя { padding-left: 33px; }
+
+  .проба { padding: 20px 0 24px; border-bottom: 1px solid var(--чёрный-12); }
+  .проба:target { box-shadow: inset 6px 0 0 var(--навигация); padding-left: 16px; }
+  .шапка-пробы { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .номер { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+  .опис { font-size: 13.5px; color: var(--чёрный-70); }
+  .свет { font-size: 12px; color: var(--чёрный-50); }
+  .срезы { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .с-подписью > .трет { margin-top: 8px; max-width: 344px; }
+  .увеличено { zoom: 2; }
+  .навигация-проб { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+  .навигация-проб a {
+    display: inline-flex; align-items: center; padding: 7px 13px; border-radius: 999px;
+    border: 1px solid var(--чёрный-12); text-decoration: none; color: var(--текст);
+    font-size: 12.5px; font-weight: 700;
+  }
+</style>
+
+<div class="лист-док">
+
+<div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-аватар-группа.html</div>
+<h1>Пробы: аватар в группе и полоса</h1>
+<p class="подзаголовок">
+  Где стоит аватар автора относительно цветной полосы и серой рамки пузыря. Во всех
+  вариантах аватар наложен поверх рамок, полоса — поверх серой рамки пузыря.
+  Прежние пробы: <a href="пробы-аватар.html">аватар заподлицо</a>,
+  <a href="пробы-аватар-рамка.html">единая рамка</a>, <a href="пробы-полоса.html">полоса автора</a>.
+</p>
+
+<div class="оговорка">
+  <b>Размеры — как в приложении</b> (`Bubble.kt`): пузырь со скруглением 16, рамка 1, полоса 4;
+  аватар 43 × 43, скругление 10, рамка 1, выступает над пузырём в зазор между репликами.
+  <br><br>
+  <b>Полоса поверх рамки.</b> До 2026-10-06 в приложении серая рамка пузыря ложилась на цветную
+  полосу: на скруглении и вдоль внешнего края полосы была серая линия в пункт. Порядок слоёв
+  поменян — теперь как здесь и как в макете: левая сторона рамки целиком цветная.
+</div>
+
+<h2>Ссылки на варианты</h2>
+<div class="навигация-проб">
+  <a href="#а">а · как сейчас</a>
+  <a href="#б">б · до полосы</a>
+  <a href="#в">в · заподлицо с пузырём</a>
+</div>
+
+<!-- Одна и та же лента в трёх вариантах -->
+<template id="лента">
+  <div class="лента">
+    <div class="ряд"><div class="пуз" style="--цвет:#4e87ed"><span class="ав фото"></span><span class="имя">redmi, Redmi</span>color20<span class="вр">18:31</span></div></div>
+    <div class="ряд"><div class="пуз" style="--цвет:#4e87ed">nafig<span class="вр">19:05</span></div></div>
+    <div class="ряд"><div class="пуз" style="--цвет:#d9488f"><span class="ав">СМ</span><span class="имя">Samsung</span>da<span class="вр">17:06</span></div></div>
+    <div class="ряд мой"><div class="пуз">trebovat-gruppa-realme<span class="вр">06:44</span></div></div>
+  </div>
+</template>
+
+<div class="проба" id="а">
+  <div class="шапка-пробы"><span class="номер">а</span><span class="опис">как сейчас: аватар за скруглением пузыря — 19 от края</span><span class="свет">полоса огибает угол целиком, аватар стоит отдельно от неё</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез ва"><div class="зона-2" data-лента></div></div><div class="трет">в натуральную величину</div></div>
+    <div class="с-подписью"><div class="увеличено"><div class="окно срез ва"><div class="зона-2" data-лента></div></div></div><div class="трет">увеличено вдвое — угол и полоса</div></div>
+  </div>
+</div>
+
+<div class="проба" id="б">
+  <div class="шапка-пробы"><span class="номер">б</span><span class="опис">аватар сдвинут влево до полосы, пока она не завернулась</span><span class="свет">левый край аватара — у внутреннего края полосы; скругление полосы уходит под аватар</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез вб"><div class="зона-2" data-лента></div></div><div class="трет">в натуральную величину</div></div>
+    <div class="с-подписью"><div class="увеличено"><div class="окно срез вб"><div class="зона-2" data-лента></div></div></div><div class="трет">увеличено вдвое</div></div>
+  </div>
+</div>
+
+<div class="проба" id="в">
+  <div class="шапка-пробы"><span class="номер">в</span><span class="опис">аватар заподлицо с серым пузырём: левый край — по внешней кромке</span><span class="свет">полоса выходит из-под аватара снизу; аватар и пузырь читаются одной фигурой</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез вв"><div class="зона-2" data-лента></div></div><div class="трет">в натуральную величину</div></div>
+    <div class="с-подписью"><div class="увеличено"><div class="окно срез вв"><div class="зона-2" data-лента></div></div></div><div class="трет">увеличено вдвое</div></div>
+  </div>
+</div>
+
+<script>
+  // Лента одна на все варианты: правка в одном месте — видна во всех.
+  const t = document.getElementById('лента');
+  document.querySelectorAll('[data-лента]').forEach(z => z.appendChild(t.content.cloneNode(true)));
+</script>
+
+</div>
