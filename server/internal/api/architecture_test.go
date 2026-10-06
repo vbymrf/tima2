@@ -219,7 +219,8 @@ const (
 	// ClaimRereg, ConfirmRereg), сроки (ReregsDue, MarkReregWindowNoticed, ResolveRereg),
 	// удаление (FinishIdentityDeletes) и отключённое устройство с причиной (RevokedDevice).
 	// 260 → 261: личности аккаунта (IdentitiesOfAccount) — перенос и чтение копии прежней (М6).
-	storeMethodBudget = 261
+	// 261 → 263: требование аттестации у телефона — поставить и проверить (ЗБ1).
+	storeMethodBudget = 263
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
 )

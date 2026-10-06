@@ -116,8 +116,44 @@ func (s *Server) requireActiveDevice(next http.HandlerFunc) http.HandlerFunc {
 			_ = json.NewEncoder(w).Encode(body)
 			return
 		}
+		// Требование аттестации у этого телефона (ПЛАН-(ЗБ)-ЗАЩИТЫ-ОТ-БОТОВ ЗБ1): до свежей
+		// годной аттестации — отказ во всём, кроме самой аттестации и вызова для неё.
+		if !attestationPath(r) {
+			demanded, err := s.Store.AttestationDemanded(r.Context(), id.DeviceID)
+			if err != nil {
+				log.Printf("requireActiveDevice: attestation demand: %v", err)
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+				return
+			}
+			if demanded {
+				// Заголовок — чтобы клиент узнал требование в общем месте, не разбирая тело.
+				w.Header().Set(attestationHeader, "required")
+				writeErr(w, http.StatusForbidden, attestationRequired,
+					"Сервер просит подтвердить, что это настоящий телефон. Проверка идёт сама; пока она не пройдена, действия недоступны.")
+				return
+			}
+		}
 		next(w, r)
 	})
+}
+
+// Требование аттестации (ЗБ1): код отказа и заголовок, по которому клиент его узнаёт.
+const (
+	attestationRequired = "attestation_required"
+	attestationHeader   = "X-Tima-Attestation"
+)
+
+// attestationPath — запросы, которые пропускаются и под требованием: без них устройство не
+// пройдёт аттестацию, а значит не выйдет из-под требования никогда.
+func attestationPath(r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		return false
+	}
+	switch r.URL.Path {
+	case "/api/v1/devices/me/attestation", "/api/v1/users/me/reidentify/challenge":
+		return true
+	}
+	return false
 }
 
 func (s *Server) Register(mux *http.ServeMux) {

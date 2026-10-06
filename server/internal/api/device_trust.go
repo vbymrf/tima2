@@ -294,6 +294,7 @@ func normalizeAttestation(v string) string {
 type AttestationStore interface {
 	DeviceKeys(ctx context.Context, userID, deviceID string) ([]byte, []byte, error)
 	SetDeviceAttestation(ctx context.Context, userID, deviceID, state, info string) error
+	AttestationDemanded(ctx context.Context, deviceID string) (bool, error)
 }
 
 // RegisterAttestation — POST /devices/me/attestation: телефон присылает цепочку аттестации ключа
@@ -302,9 +303,18 @@ type AttestationStore interface {
 func RegisterAttestation(mux *http.ServeMux, st AttestationStore, tokens func() IdentityTokens, mode func() string, requireDevice Middleware) {
 	mux.HandleFunc("POST /api/v1/devices/me/attestation", requireDevice(func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
+		// Требование у этого телефона (ЗБ1) проверяется и при выключенном общем режиме: иначе
+		// устройство под требованием не вышло бы из-под него никогда.
 		if mode() == trustOff {
-			w.WriteHeader(http.StatusNoContent)
-			return
+			demanded, err := st.AttestationDemanded(r.Context(), id.DeviceID)
+			if err != nil {
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+				return
+			}
+			if !demanded {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 		}
 		var req struct {
 			ChallengeToken string   `json:"challenge_token"`

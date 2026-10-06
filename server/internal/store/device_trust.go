@@ -122,6 +122,38 @@ func (s *Store) SetDeviceAttestation(ctx context.Context, userID, deviceID, stat
 	return nil
 }
 
+// DemandAttestation ставит устройству требование пройти аттестацию (ПЛАН-(ЗБ)-ЗАЩИТЫ-ОТ-БОТОВ
+// ЗБ1): до свежей годной аттестации сервер отказывает ему в действиях. Повторный вызов
+// передвигает время требования — прежняя аттестация его уже не снимает.
+//
+// Кто вызывает — решается с системной защитой от ботов; сейчас это ручка для тестов и стенда.
+// У ПК аттестации нет: требование к ПК — полная остановка устройства, а не проверка.
+func (s *Store) DemandAttestation(ctx context.Context, deviceID, reason string) error {
+	ct, err := s.pool.Exec(ctx, `
+		UPDATE devices SET attestation_demanded_at = clock_timestamp(), attestation_demand_reason = $2
+		WHERE device_id = $1 AND revoked_at IS NULL`, deviceID, reason)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrDeviceNotFound
+	}
+	return nil
+}
+
+// AttestationDemanded — стоит ли требование аттестации, не снятое свежей годной аттестацией (ЗБ1).
+func (s *Store) AttestationDemanded(ctx context.Context, deviceID string) (bool, error) {
+	var demanded bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT attestation_demanded_at IS NOT NULL
+		   AND (attestation_state <> 'verified' OR attested_at IS NULL OR attested_at < attestation_demanded_at)
+		FROM devices WHERE device_id = $1`, deviceID).Scan(&demanded)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return demanded, err
+}
+
 // CertifiedDevices — какие из устройств заверены действующей цепочкой (ДУ3): свидетельство
 // ключом личности или неотозванным ключом подписи устройств.
 func (s *Store) CertifiedDevices(ctx context.Context, deviceIDs []string) (map[string]bool, error) {
