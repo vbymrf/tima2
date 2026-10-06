@@ -16,6 +16,7 @@ import io.tima.feature.shell.UpdateInstaller
 import io.tima.feature.shell.UpdateOffer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
@@ -40,7 +41,21 @@ import java.security.MessageDigest
  */
 class AndroidInstaller(private val context: Context) : UpdateInstaller {
 
-    override suspend fun install(offer: UpdateOffer, onProgress: (Int) -> Unit): InstallOutcome =
+    override suspend fun install(offer: UpdateOffer, onProgress: (Int) -> Unit): InstallOutcome {
+        // Экран не гаснет, пока качаем и проверяем (заказчик 2026-10-06): окно подтверждения
+        // установки запускаем мы, а из погасшего экрана Android его не открывает — обновление
+        // скачивалось, а сообщение об установке не выходило.
+        InstallAwake.hold()
+        var outcome: InstallOutcome? = null
+        try {
+            outcome = installAwake(offer, onProgress)
+            return outcome
+        } finally {
+            InstallAwake.release(handedToSystem = outcome == InstallOutcome.Started)
+        }
+    }
+
+    private suspend fun installAwake(offer: UpdateOffer, onProgress: (Int) -> Unit): InstallOutcome =
         withContext(Dispatchers.IO) {
             // Разрешение спрашивается здесь, а не при запуске: объяснить его можно только
             // тогда, когда человек уже нажал «Обновить».
@@ -328,6 +343,39 @@ class AndroidInstaller(private val context: Context) : UpdateInstaller {
         const val LIMIT_MS = 30 * 60 * 1000L
         const val HEX = "0123456789abcdef"
     }
+}
+
+/**
+ * Экран не гаснет на время обновления (заказчик 2026-10-06) — флагом окна, как у видеозвонка:
+ * ушёл человек из приложения — система сняла его сама. Флаг ставит `MainActivity`.
+ *
+ * Отданное системе снимается не сразу, а через [AFTER_HANDOFF_MS]: окно подтверждения приходит
+ * следом, а снятый флаг гасит экран сразу, если человек давно его не трогал.
+ */
+object InstallAwake {
+    private val _on = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val on: kotlinx.coroutines.flow.StateFlow<Boolean> = _on
+
+    private var off: kotlinx.coroutines.Job? = null
+
+    fun hold() {
+        off?.cancel()
+        _on.value = true
+    }
+
+    fun release(handedToSystem: Boolean) {
+        off?.cancel()
+        if (!handedToSystem) {
+            _on.value = false
+            return
+        }
+        off = kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch {
+            delay(AFTER_HANDOFF_MS)
+            _on.value = false
+        }
+    }
+
+    private const val AFTER_HANDOFF_MS = 60_000L
 }
 
 /**

@@ -261,11 +261,13 @@ class MainActivity : ComponentActivity() {
             val callEngine = remember { (application as TimaApplication).callEngine }
             // Видеозвонок — экран не гаснет (решение заказчика 2026-09-30). Флаг окна, а не
             // блокировка питания: ушёл человек из приложения — система сняла его сама.
+            // Так же — пока качается обновление (заказчик 2026-10-06, [InstallAwake]).
             LaunchedEffect(Unit) {
-                AndroidCallNotice.screenOn.collect { on ->
-                    if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                }
+                kotlinx.coroutines.flow.combine(AndroidCallNotice.screenOn, InstallAwake.on) { call, update -> call || update }
+                    .collect { on ->
+                        if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    }
             }
 
             Root(
