@@ -817,7 +817,7 @@ private fun NoKeyYet(expect: Boolean, phrase: String, onPhrase: (String) -> Unit
             fontSize = TimaType.sz5,
         )
         if (open && !expect) {
-            Field(value = phrase, onChange = onPhrase, hint = words.phraseWords, modifier = Modifier.fillMaxWidth())
+            Field(value = phrase, onChange = onPhrase, hint = words.phraseWords, phrase = true, modifier = Modifier.fillMaxWidth())
         }
         if (!expect) {
             Chip(words.askKey, kind = ChipKind.Selected, onClick = {
@@ -855,7 +855,7 @@ private fun StoryUnavailable(
             Field(
                 value = phrase,
                 onChange = onPhrase,
-                hint = words.phraseWords,
+                hint = words.phraseWords, phrase = true,
                 modifier = Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
             )
         }

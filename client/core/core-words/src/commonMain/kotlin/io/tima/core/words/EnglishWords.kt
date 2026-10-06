@@ -224,7 +224,9 @@ object EnglishWords : Words {
 
     override val trouble = object : TroubleWords {
         override val offline = "No connection to the server"
-        override fun refused(reason: String) = "The server refused: $reason"
+        override fun refused(reason: String) = if (ServerRefusals.isCode(reason)) reason(reason) else "The server refused: $reason"
+        override fun reason(code: String) = ServerRefusals.en[code]
+            ?: "The server refused — try again later. If it happens again, send a problem report (code $code)."
         override val didNotReach = "It did not reach the server. Try again"
         override fun retryIn(seconds: Int) =
             "No connection to the server — retrying in $seconds s"
@@ -1456,7 +1458,8 @@ object EnglishWords : Words {
             "Nobody can answer: none of your other devices is online. Open the app on your phone and try again."
         override val requestKeyGot = "Key received — contacts are coming in."
         override val requestKeyNoAnswer = "The key did not arrive in three minutes. Open the app on your phone and try again."
-        override fun requestKeyFailed(reason: String) = "The request was not sent: $reason"
+        override fun requestKeyFailed(reason: String) =
+            if (ServerRefusals.isCode(reason)) "The request was not sent. " + trouble.reason(reason) else "The request was not sent: $reason"
         override val scanCode = "Scan code"
         override val scanCodeAbout = "Connect a computer or phone: the code is on its screen"
         override val scanTitle = "Connection code"
@@ -1518,7 +1521,8 @@ object EnglishWords : Words {
         override val certifyDevice = "Verify"
         override val trustDone = "Done: the device is verified"
         override val trustNoKey = "First confirm this phone with your phrase"
-        override fun trustFailed(reason: String) = "Did not work: $reason"
+        override fun trustFailed(reason: String) =
+            if (ServerRefusals.isCode(reason)) trouble.reason(reason) else "Did not work: $reason"
         override val replacedTitle = "Someone started over with your number"
         override val replacedAbout = "A new identity key of your account was created on another device — this happens when a phone and phrase are lost or the SIM card is reissued. Contacts now write to it, not to you. If it was not you, cancel it: you will need your secret phrase."
         override val replacedCancel = "Cancel the new identity key"

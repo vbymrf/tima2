@@ -135,7 +135,7 @@ class TransferStore(
             _state.value = state.copy(trouble = words().auth.needAccountPhrase)
             return
         }
-        val words = state.phrase.trim().split(' ', '\n', '\t').filter { it.isNotEmpty() }
+        val words = io.tima.domain.account.PhraseWords.parse(state.phrase)
         scope.launch {
             _state.value = state.copy(working = true, trouble = null)
             _state.value = when (val step = transfer.accept(code, words)) {

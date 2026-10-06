@@ -17,6 +17,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.TextUnit
@@ -69,6 +70,13 @@ fun Field(
      * ряду с крестиком, и пилюля вдвое толще кнопки рядом выглядит опечаткой.
      */
     narrow: Boolean = false,
+    /**
+     * Поле секретной фразы: клавиатура без заглавной буквы в начале, без исправлений и
+     * подсказок. Клавиатура телефона иначе делает первое слово «Fifi» и запоминает слова
+     * фразы в своём словаре (живая проверка на Honor, 2026-10-06). Регистр снимает и разбор
+     * фразы, но слова в словаре клавиатуры разбор уже не уберёт.
+     */
+    phrase: Boolean = false,
 ) {
     val colors = Tima.colors
     val focus = remember { FocusRequester() }
@@ -99,9 +107,14 @@ fun Field(
             ),
             cursorBrush = SolidColor(colors.navigation),
             singleLine = lineOne,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text,
-            ),
+            keyboardOptions = when {
+                phrase -> KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrectEnabled = false,
+                    keyboardType = KeyboardType.Password,
+                )
+                else -> KeyboardOptions(keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text)
+            },
             modifier = Modifier.fillMaxWidth().focusRequester(focus),
         )
     }

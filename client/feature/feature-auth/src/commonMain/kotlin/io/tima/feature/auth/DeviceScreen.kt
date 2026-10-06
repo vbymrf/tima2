@@ -399,7 +399,7 @@ private fun CancelNewIdentity(onCancel: (String) -> Unit, busy: Boolean) = Colum
     if (!open) {
         Button(label = words.replacedCancel, onClick = { open = true }, kind = ButtonKind.Dangerous, modifier = Modifier.fillMaxWidth())
     } else {
-        Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, modifier = Modifier.fillMaxWidth())
+        Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, phrase = true, modifier = Modifier.fillMaxWidth())
         Button(
             label = words.replacedCancelSend,
             onClick = {
@@ -444,7 +444,7 @@ private fun StartAnewBan(
         !open -> Button(label = words.banTitle, onClick = { open = true }, kind = ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
         !codeSent -> Button(label = words.banSendCode, onClick = { if (!busy) onSendCode() }, modifier = Modifier.fillMaxWidth())
         else -> {
-            Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, modifier = Modifier.fillMaxWidth())
+            Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, phrase = true, modifier = Modifier.fillMaxWidth())
             Field(value = code, onChange = { code = it }, hint = words.banCodeHint, modifier = Modifier.fillMaxWidth())
             Button(
                 label = words.banConfirm,
@@ -477,7 +477,7 @@ private fun StartRereg(onStart: (String) -> Unit, busy: Boolean) = Column(
         Button(label = words.reregTitle, onClick = { open = true }, kind = ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
         return@Column
     }
-    Field(value = phrase, onChange = { phrase = it }, hint = words.reregOldPhrase, modifier = Modifier.fillMaxWidth())
+    Field(value = phrase, onChange = { phrase = it }, hint = words.reregOldPhrase, phrase = true, modifier = Modifier.fillMaxWidth())
     Button(
         label = words.reregStart,
         onClick = {
@@ -520,10 +520,10 @@ private fun ReregPanel(
         return@Column
     }
     if (view.twoPhrases) {
-        Field(value = oldPhrase, onChange = { oldPhrase = it }, hint = words.reregOldPhrase, modifier = Modifier.fillMaxWidth())
-        Field(value = phrase, onChange = { phrase = it }, hint = words.reregNewPhrase, modifier = Modifier.fillMaxWidth())
+        Field(value = oldPhrase, onChange = { oldPhrase = it }, hint = words.reregOldPhrase, phrase = true, modifier = Modifier.fillMaxWidth())
+        Field(value = phrase, onChange = { phrase = it }, hint = words.reregNewPhrase, phrase = true, modifier = Modifier.fillMaxWidth())
     } else {
-        Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, modifier = Modifier.fillMaxWidth())
+        Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, phrase = true, modifier = Modifier.fillMaxWidth())
     }
     Field(value = code, onChange = { code = it }, hint = words.banCodeHint, modifier = Modifier.fillMaxWidth())
     Button(
@@ -570,7 +570,7 @@ private fun PhoneChangePanel(
             Button(label = words.phoneChangeSendNew, onClick = { if (!busy) onSendCode(true) }, kind = ButtonKind.Action, modifier = Modifier.fillMaxWidth())
             return@Column
         }
-        Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, modifier = Modifier.fillMaxWidth())
+        Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, phrase = true, modifier = Modifier.fillMaxWidth())
         Field(value = code, onChange = { code = it }, hint = words.banCodeHint, modifier = Modifier.fillMaxWidth())
         Button(
             label = words.phoneChangeConfirm,
@@ -596,7 +596,7 @@ private fun PhoneChangePanel(
         Button(label = words.phoneChangeSendOld, onClick = { if (!busy) onSendCode(false) }, kind = ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
         return@Column
     }
-    Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, modifier = Modifier.fillMaxWidth())
+    Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, phrase = true, modifier = Modifier.fillMaxWidth())
     Field(value = code, onChange = { code = it }, hint = words.banCodeHint, modifier = Modifier.fillMaxWidth())
     Button(
         label = words.phoneChangeStart,
@@ -627,7 +627,7 @@ private fun RotateCopy(onRotate: (String) -> Unit, busy: Boolean, start: Boolean
         Caption(words.copyRotateTitle, weight = FontWeight.ExtraBold, color = Tima.colors.alarm)
         Secondary(words.copyRotateAbout)
     }
-    Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, modifier = Modifier.fillMaxWidth())
+    Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, phrase = true, modifier = Modifier.fillMaxWidth())
     Button(
         label = if (start) words.copyStartSend else words.copyRotateSend,
         onClick = {
@@ -654,7 +654,7 @@ private fun TrustByPhrase(onConfirm: (String) -> Unit, busy: Boolean) = Column(
     if (!open) {
         Button(label = words.confirmWithPhrase, onClick = { open = true }, modifier = Modifier.fillMaxWidth())
     } else {
-        Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, modifier = Modifier.fillMaxWidth())
+        Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, phrase = true, modifier = Modifier.fillMaxWidth())
         Button(
             label = words.confirmWithPhraseSend,
             onClick = {
@@ -684,7 +684,7 @@ private fun KeyRequest(onRequest: (String) -> Unit, notice: String?, sending: Bo
         Field(
             value = phrase,
             onChange = { phrase = it },
-            hint = words.phraseHint,
+            hint = words.phraseHint, phrase = true,
             modifier = Modifier.fillMaxWidth(),
         )
         Button(

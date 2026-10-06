@@ -127,7 +127,7 @@ private fun Phrase(state: NewVirtualState, onPhrase: (String) -> Unit, onConfirm
         words.yourSecretPhraseAbout,
     )
 
-    Field(value = state.phrase, onChange = onPhrase, hint = words.phraseHint)
+    Field(value = state.phrase, onChange = onPhrase, hint = words.phraseHint, phrase = true)
     state.trouble?.let { Trouble(it) }
 
     Button(

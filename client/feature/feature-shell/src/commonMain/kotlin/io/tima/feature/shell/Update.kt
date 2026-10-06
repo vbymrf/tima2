@@ -1,6 +1,8 @@
 package io.tima.feature.shell
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -445,7 +447,9 @@ fun UpdateSection(
     canInstall: Boolean = false,
     modifier: Modifier = Modifier,
 ) = Column(
-    modifier.fillMaxSize().padding(TimaSpacing.about4),
+    // Прокрутка: с заметками к выпуску и вопросом об установке раздел длиннее экрана
+    // телефона, и кнопка уходила за край (заказчик 2026-10-06: «нужна прокрутка везде»).
+    modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(TimaSpacing.about4),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
 ) {
     val words = Tima.words.update

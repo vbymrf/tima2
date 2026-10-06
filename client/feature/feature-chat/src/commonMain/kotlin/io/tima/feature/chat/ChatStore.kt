@@ -1,6 +1,7 @@
 package io.tima.feature.chat
 
 import io.tima.core.words.CurrentWords
+import io.tima.domain.account.PhraseWords
 import io.tima.core.words.Words
 import io.tima.core.words.RussianWords
 import io.tima.core.words.ChatWords
@@ -416,10 +417,7 @@ class ChatStore(
         if (_state.value.expectKey) return
         // Слова берутся из поля и дальше нигде не сохраняются: держать их значило бы
         // отдать вместе с устройством и тот заслон, ради которого фразу спрашивают.
-        val words = _state.value.phrase.trim()
-            .split(Regex("""\s+"""))
-            .filter { it.isNotBlank() }
-            .takeIf { it.isNotEmpty() }
+        val words = PhraseWords.parse(_state.value.phrase).takeIf { it.isNotEmpty() }
         _state.value = _state.value.copy(expectKey = true, notice = null)
 
         scope.launch {
@@ -440,7 +438,7 @@ class ChatStore(
                             (outcome.retryAfterMs / 1000).coerceAtLeast(1).toInt(),
                         ),
                     )
-                    is RequestKeysStep.Refused -> ChatNotice.KeysRefused(outcome.reason)
+                    is RequestKeysStep.Refused -> ChatNotice.KeysRefused(words().trouble.refused(outcome.reason))
                 },
             )
         }

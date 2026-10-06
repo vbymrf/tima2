@@ -83,7 +83,7 @@ class LinkStore(
                 is LinkConfirmStep.Offline -> current.copyWithTrouble(
                     words().auth.tryAgain,
                 )
-                is LinkConfirmStep.Refused -> current.copyWithTrouble(step.reason)
+                is LinkConfirmStep.Refused -> current.copyWithTrouble(words().trouble.refused(step.reason))
             }
         }
     }

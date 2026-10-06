@@ -128,7 +128,7 @@ class AuthStore(
                 is CodeRequestStep.BadPhone -> current.copyWithTrouble(words().auth.badPhone(step.reason))
                 is CodeRequestStep.Offline -> current.copyWithTrouble(noLinks(step.retryAfterMs))
                 is CodeRequestStep.Refused -> current.copyWithTrouble(
-                    if (step.reason == "rate_limited") words().auth.tooManyCodes else step.reason,
+                    if (step.reason == "rate_limited") words().auth.tooManyCodes else words().trouble.refused(step.reason),
                 )
             }
         }
@@ -214,7 +214,7 @@ class AuthStore(
         val current = _state.value as? AuthState.PhraseInput ?: return
         if (current.expect) return
 
-        val words = current.phrase.split(SEPARATOR).filter { it.isNotBlank() }
+        val words = io.tima.domain.account.PhraseWords.parse(current.phrase)
         val key = identities.fromWords(words)
         if (key == null) {
             _state.value = current.copyWithTrouble(words().auth.wrongPhrase)
@@ -301,7 +301,8 @@ class AuthStore(
     private fun refusalText(reason: String): String = when (reason) {
         // ДУ8, Р17: в «требовать» новая личность — только на телефоне Android.
         "phone_required" -> words().auth.phoneRequired
-        else -> reason
+        // Код отказа словами, а не `device_unproven` на экране (живая проверка 2026-10-06).
+        else -> words().trouble.refused(reason)
     }
 
     /**
@@ -374,7 +375,7 @@ class AuthStore(
                 is LinkBeginStep.Offline -> _state.value =
                     AuthState.DisplayCode(code = null, trouble = noLinks(step.retryAfterMs))
                 is LinkBeginStep.Refused -> _state.value =
-                    AuthState.DisplayCode(code = null, trouble = step.reason)
+                    AuthState.DisplayCode(code = null, trouble = words().trouble.refused(step.reason))
             }
         }
     }
@@ -392,7 +393,7 @@ class AuthStore(
                 code = null,
                 trouble = words().auth.codeTermOver,
             )
-            is LinkAwaitStep.Refused -> AuthState.DisplayCode(code = null, trouble = step.reason)
+            is LinkAwaitStep.Refused -> AuthState.DisplayCode(code = null, trouble = words().trouble.refused(step.reason))
         }
     }
 
@@ -415,9 +416,6 @@ class AuthStore(
     }
 
     private companion object {
-
-        /** Пробелы, переводы строк, табуляции: фразу вставляют как получится. */
-        val SEPARATOR = Regex("\\s+")
 
         /**
          * «Нет связи» с числом секунд.

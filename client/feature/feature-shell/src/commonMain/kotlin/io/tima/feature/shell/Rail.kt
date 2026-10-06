@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -138,34 +137,42 @@ private fun Item(
     tag: String = "",
 ) {
     val colors = Tima.colors
+    // Подложка во всю ширину рейки — и со знаками, и с подписями. Без подписей она стояла по
+    // ширине значка: слева 8 точек, справа 22, и пузырь числа сидел на её углу. Теперь поля
+    // рейки поровну, а пузырь — внутри подложки справа по центру (заказчик 2026-10-06).
+    val pill = Modifier
+        .then(if (tag.isEmpty()) Modifier else Modifier.testTag(tag))
+        .fillMaxWidth()
+        .background(
+            if (selected) colors.navigation else colors.functional,
+            RoundedCornerShape(TimaShapes.smallSquare),
+        )
+        .clickable(onClick = onClick)
+    if (!withCaption) {
+        // Не строкой, а наложением: в строке на 60 точек значку и «99+» вместе тесно, и число
+        // сплющивалось в полоску (ПК, заказчик 2026-10-05). Здесь пузырь меряется сам по себе.
+        Box(pill.padding(vertical = TimaSpacing.about2)) {
+            Box(
+                Modifier.padding(start = TimaSpacing.about3).width(RAIL_GLYPH).align(Alignment.CenterStart),
+                contentAlignment = Alignment.Center,
+            ) { Name(glyph) }
+            if (howMany > 0) {
+                RailBadge(howMany, Modifier.align(Alignment.CenterEnd).padding(end = TimaSpacing.about1))
+            }
+        }
+        return
+    }
     Row(
-        modifier = Modifier
-            .then(if (tag.isEmpty()) Modifier else Modifier.testTag(tag))
-            .then(if (withCaption) Modifier.fillMaxWidth() else Modifier)
-            .background(
-                if (selected) colors.navigation else colors.functional,
-                RoundedCornerShape(TimaShapes.smallSquare),
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2),
+        modifier = pill.padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2),
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Значку отведена своя ширина, а не «сколько занял». Во-первых, подписи от
         // этого встают в колонку; во-вторых, ширина строки становится считаемой —
         // на ней держится RAIL_AROUND_CAPTION и проверка, что подпись влезает.
-        Box(Modifier.width(RAIL_GLYPH), contentAlignment = Alignment.Center) {
-            Name(glyph)
-            // Без подписей строке не хватает ширины на число рядом: оно сплющивалось в полоску
-            // и вылезало за неё (ПК, заказчик 2026-10-05). Пузырь садится на угол значка.
-            if (!withCaption && howMany > 0) {
-                RailBadge(howMany, Modifier.align(Alignment.TopEnd).offset(x = 12.dp, y = (-8).dp))
-            }
-        }
-        if (withCaption) {
-            Name(caption, modifier = Modifier.weight(1f))
-            if (howMany > 0) RailBadge(howMany)
-        }
+        Box(Modifier.width(RAIL_GLYPH), contentAlignment = Alignment.Center) { Name(glyph) }
+        Name(caption, modifier = Modifier.weight(1f))
+        if (howMany > 0) RailBadge(howMany)
     }
 }
 

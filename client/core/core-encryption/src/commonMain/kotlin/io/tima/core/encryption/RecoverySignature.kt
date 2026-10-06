@@ -26,7 +26,7 @@ object RecoverySignature {
      *   опечатка в фразе выглядит именно так, и это не поломка.
      */
     fun sign(words: List<String>, groupId: String, deviceId: String): String? {
-        val key = runCatching { AccountMnemonic.identityFromMnemonic(words) }.getOrNull() ?: return null
+        val key = runCatching { AccountMnemonic.identityFromMnemonic(io.tima.domain.account.PhraseWords.clean(words)) }.getOrNull() ?: return null
         val caption = MessageSigner.sign(key, canonicalBytes(groupId, deviceId)).getOrNull() ?: return null
         return encodeBase64UrlBytes(caption)
     }

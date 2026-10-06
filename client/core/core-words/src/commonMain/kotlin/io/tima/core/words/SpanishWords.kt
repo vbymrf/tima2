@@ -222,7 +222,9 @@ object SpanishWords : Words {
 
     override val trouble = object : TroubleWords {
         override val offline = "Sin conexión con el servidor"
-        override fun refused(reason: String) = "El servidor lo rechazó: $reason"
+        override fun refused(reason: String) = if (ServerRefusals.isCode(reason)) reason(reason) else "El servidor lo rechazó: $reason"
+        override fun reason(code: String) = ServerRefusals.es[code]
+            ?: "El servidor lo rechazó — inténtelo más tarde. Si se repite, envíe un informe del problema (código $code)."
         override val didNotReach = "No llegó al servidor. Inténtelo otra vez"
         override fun retryIn(seconds: Int) =
             "Sin conexión con el servidor — reintentamos en $seconds s"
@@ -1455,7 +1457,8 @@ object SpanishWords : Words {
             "Nadie puede responder: ninguno de tus otros dispositivos está conectado. Abre la app en el teléfono y vuelve a intentarlo."
         override val requestKeyGot = "Clave recibida: los contactos están llegando."
         override val requestKeyNoAnswer = "La clave no llegó en tres minutos. Abre la app en el teléfono y vuelve a intentarlo."
-        override fun requestKeyFailed(reason: String) = "La solicitud no se envió: $reason"
+        override fun requestKeyFailed(reason: String) =
+            if (ServerRefusals.isCode(reason)) "La solicitud no se envió. " + trouble.reason(reason) else "La solicitud no se envió: $reason"
         override val scanCode = "Escanear código"
         override val scanCodeAbout = "Conectar un ordenador o teléfono: el código está en su pantalla"
         override val scanTitle = "Código de conexión"
@@ -1518,7 +1521,8 @@ object SpanishWords : Words {
         override val certifyDevice = "Verificar"
         override val trustDone = "Listo: el dispositivo está verificado"
         override val trustNoKey = "Primero confirme este teléfono con su frase"
-        override fun trustFailed(reason: String) = "No funcionó: $reason"
+        override fun trustFailed(reason: String) =
+            if (ServerRefusals.isCode(reason)) trouble.reason(reason) else "No funcionó: $reason"
         override val replacedTitle = "Alguien empezó de nuevo con su número"
         override val replacedAbout = "En otro dispositivo se creó una clave de identidad nueva de su cuenta: pasa cuando se pierden el teléfono y la frase o se reemite la SIM. Los contactos ahora le escriben a ella, no a usted. Si no fue usted, cancélela: necesitará su frase secreta."
         override val replacedCancel = "Cancelar la clave de identidad nueva"

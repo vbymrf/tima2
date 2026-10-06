@@ -112,7 +112,10 @@ interface NoticeWords {
  */
 interface TroubleWords {
     val offline: String
+    /** Отказ сервера; код отказа (`device_unproven`) — словами, текст — как есть. */
     fun refused(reason: String): String
+    /** Код отказа сервера словами (`ServerRefusals`); незнакомый — общими словами и с кодом. */
+    fun reason(code: String): String
     val didNotReach: String
     fun retryIn(seconds: Int): String
     val noConnection: String
@@ -2297,7 +2300,9 @@ object RussianWords : Words {
 
     override val trouble = object : TroubleWords {
         override val offline = "Нет связи с сервером"
-        override fun refused(reason: String) = "Сервер отказал: $reason"
+        override fun refused(reason: String) = if (ServerRefusals.isCode(reason)) reason(reason) else "Сервер отказал: $reason"
+        override fun reason(code: String) = ServerRefusals.ru[code]
+            ?: "Сервер отказал — попробуйте позже. Повторится — отправьте отчёт о проблеме (код $code)."
         override val didNotReach = "Не дошло до сервера. Попробуйте ещё раз"
         override fun retryIn(seconds: Int) = "Нет связи с сервером — повторим через $seconds с"
         override val noConnection = "Нет связи"
@@ -3557,7 +3562,8 @@ object RussianWords : Words {
         override val requestKeyGot = "Ключ получен — контакты подтягиваются."
         override val requestKeyNoAnswer =
             "Ключ за три минуты не пришёл. Откройте приложение на телефоне и попробуйте снова."
-        override fun requestKeyFailed(reason: String) = "Просьба не ушла: $reason"
+        override fun requestKeyFailed(reason: String) =
+            if (ServerRefusals.isCode(reason)) "Просьба не ушла. " + trouble.reason(reason) else "Просьба не ушла: $reason"
         override val scanCode = "Сканировать код"
         override val scanCodeAbout = "Подключить компьютер или телефон: код показан на его экране"
         override val scanTitle = "Код подключения"
@@ -3617,7 +3623,8 @@ object RussianWords : Words {
         override val certifyDevice = "Заверить"
         override val trustDone = "Готово: устройство заверено"
         override val trustNoKey = "Сначала подтвердите этот телефон фразой"
-        override fun trustFailed(reason: String) = "Не получилось: $reason"
+        override fun trustFailed(reason: String) =
+            if (ServerRefusals.isCode(reason)) trouble.reason(reason) else "Не получилось: $reason"
         override val replacedTitle = "С вашего номера начали заново"
         override val replacedAbout = "На другом устройстве завели новый ключ личности вашего аккаунта — так бывает, когда теряют телефон и фразу или перевыпускают SIM-карту. Собеседники пишут теперь ей, а не вам. Если это не вы — отмените: понадобится секретная фраза."
         override val replacedCancel = "Отменить новый ключ личности"

@@ -345,7 +345,7 @@ private fun PhraseInput(
     Field(
         value = state.phrase,
         onChange = onPhrase,
-        hint = words.phraseHint,
+        hint = words.phraseHint, phrase = true,
     )
 
     state.trouble?.let { Trouble(it) }

@@ -8,6 +8,7 @@ import io.tima.domain.account.TrustStep
 import io.tima.domain.account.DeviceTrustActions
 import io.tima.domain.account.DevicesStep
 import io.tima.domain.account.MyDevices
+import io.tima.domain.account.PhraseWords
 import io.tima.domain.account.RevokeStep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -119,7 +120,7 @@ class DevicesStore(
         val actions = trust ?: return
         val sent = _state.value.phoneCode ?: return
         if (_state.value.trusting) return
-        val phraseWords = phrase.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        val phraseWords = PhraseWords.parse(phrase)
         val number = newPhone?.filter { it == '+' || it.isDigit() }
         _state.value = _state.value.copy(trusting = true, trustNotice = null)
         scope.launch {
@@ -192,7 +193,7 @@ class DevicesStore(
     fun startRereg(phrase: String) {
         val actions = trust ?: return
         if (_state.value.trusting) return
-        val words = phrase.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        val words = PhraseWords.parse(phrase)
         _state.value = _state.value.copy(trusting = true, trustNotice = null)
         scope.launch {
             val step = runCatching { actions.prepareRereg(words) }.getOrElse {
@@ -244,7 +245,7 @@ class DevicesStore(
         val actions = trust ?: return
         val sent = _state.value.reregCode ?: return
         if (_state.value.trusting) return
-        fun split(text: String) = text.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        fun split(text: String) = PhraseWords.parse(text)
         _state.value = _state.value.copy(trusting = true, trustNotice = null)
         scope.launch {
             val step = runCatching {
@@ -279,7 +280,7 @@ class DevicesStore(
     fun startCopy(phrase: String) {
         val actions = trust ?: return
         if (_state.value.trusting) return
-        val words = phrase.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        val words = PhraseWords.parse(phrase)
         _state.value = _state.value.copy(trusting = true, trustNotice = null)
         scope.launch {
             val step = runCatching { actions.startCopy(words) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
@@ -295,7 +296,7 @@ class DevicesStore(
     fun rotateCopy(phrase: String) {
         val actions = trust ?: return
         if (_state.value.trusting) return
-        val words = phrase.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        val words = PhraseWords.parse(phrase)
         _state.value = _state.value.copy(trusting = true, trustNotice = null)
         scope.launch {
             val step = runCatching { actions.rotateCopy(words) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
@@ -330,7 +331,7 @@ class DevicesStore(
         val actions = trust ?: return
         val sent = _state.value.banCode ?: return
         if (_state.value.trusting) return
-        val words = phrase.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        val words = PhraseWords.parse(phrase)
         _state.value = _state.value.copy(trusting = true, trustNotice = null)
         scope.launch {
             val step = runCatching { actions.banStartAnew(words, sent.requestId, code.trim()) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
@@ -371,7 +372,7 @@ class DevicesStore(
     fun cancelNewIdentity(phrase: String) {
         val actions = trust ?: return
         if (_state.value.trusting) return
-        val words = phrase.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        val words = PhraseWords.parse(phrase)
         _state.value = _state.value.copy(trusting = true, trustNotice = null)
         scope.launch {
             val step = runCatching { actions.cancelNewIdentity(words) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
@@ -403,7 +404,7 @@ class DevicesStore(
                     expect = false,
                     trouble = words().auth.listHasNothing,
                 )
-                is DevicesStep.Refused -> _state.value.copy(expect = false, trouble = step.reason)
+                is DevicesStep.Refused -> _state.value.copy(expect = false, trouble = words().trouble.refused(step.reason))
             }
         }
     }
@@ -422,7 +423,7 @@ class DevicesStore(
     fun confirmWithPhrase(phrase: String) {
         val actions = trust ?: return
         if (_state.value.trusting) return
-        val words = phrase.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        val words = PhraseWords.parse(phrase)
         _state.value = _state.value.copy(trusting = true, trustNotice = null)
         scope.launch {
             val step = runCatching { actions.confirmWithPhrase(words) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
@@ -492,7 +493,7 @@ class DevicesStore(
                 is RevokeStep.Refused -> _state.value = _state.value.copy(
                     ask = null,
                     expect = false,
-                    trouble = step.reason,
+                    trouble = words().trouble.refused(step.reason),
                 )
             }
         }

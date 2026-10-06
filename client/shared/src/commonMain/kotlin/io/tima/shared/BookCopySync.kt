@@ -254,7 +254,7 @@ class BookCopySync(
      * устройства. Слова дальше этого вызова не живут.
      */
     fun requestKey(phrase: String) {
-        val words = phrase.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+        val words = io.tima.domain.account.PhraseWords.parse(phrase)
         scope.launch {
             _keyAsk.value = KeyAsk.Sending
             if (io.tima.core.encryption.AccountIdentitiesOverKodium.fromWords(words) == null) {

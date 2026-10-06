@@ -77,7 +77,7 @@ class NewVirtualStore(
     fun confirm() {
         val state = _state.value
         if (state.working || state.phrase.isBlank()) return
-        val words = state.phrase.trim().split(' ', '\n', '\t').filter { it.isNotEmpty() }
+        val words = io.tima.domain.account.PhraseWords.parse(state.phrase)
         scope.launch {
             _state.value = state.copy(working = true, trouble = null)
             val step = create.create(state.nickname, words)

@@ -174,7 +174,7 @@ private fun Taking(
     Field(value = state.brought, onChange = onCode, hint = words.bringCodeHint)
 
     Caption(words.accountPhrase, fontSize = TimaType.sz5, weight = FontWeight.Bold)
-    Field(value = state.phrase, onChange = onPhrase, hint = words.phraseHint)
+    Field(value = state.phrase, onChange = onPhrase, hint = words.phraseHint, phrase = true)
 
     state.trouble?.let { Trouble(it) }
 
