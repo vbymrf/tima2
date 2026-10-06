@@ -16,9 +16,12 @@ support for previous clients, decision 2 wipes server data, and v2 is not releas
 yet — there is no old client anywhere. Do not justify anything by their existence;
 that was the wording in `CLAUDE.md` until 2026-09-04 and it produced wrong decisions.
 
-What holds instead is decision 5: **the envelope format and the API do not change
-until v2 works.** Debugging a client against a moving server means three unknowns
-at once. Once v2 ships to real phones, compatibility between its own versions
+Decision 5 ("the envelope format and the API do not change until v2 works") was
+**cancelled by the customer on 2026-10-06**. Formats may change, but only as a new
+version: a new domain label in the signed bytes, a new test vector, and the previous
+version still accepted. The deployment order and the widening API stay, for a
+different reason: installed clients live on the stand, and a server rollout must not
+break them. Once v2 ships to real phones, compatibility between its own versions
 becomes a separate decision, taken then and not assumed now.
 
 ## Relaxed until v2 ships (customer decision, 2026-09-08)
