@@ -59,6 +59,7 @@ class SendGroupMessage(
             signature = assembled.signature,
             createdAtUnixMs = moment,
             level = level,
+            keyCommitment = assembled.keyCommitment,
         )
 
         return when (outcome) {
@@ -152,10 +153,12 @@ interface GroupTransport {
          * второй контур, а сообщение с названным корнем.
          */
         threadRoot: Long = 0,
+        /** Обязательство по ключу группы (подпись версии 2); `null` — версия 1 или открытое. */
+        keyCommitment: ByteArray? = null,
     ): GroupSendStep
 }
 
-class SealedGroupBytes(val payload: ByteArray, val signature: ByteArray)
+class SealedGroupBytes(val payload: ByteArray, val signature: ByteArray, val keyCommitment: ByteArray? = null)
 
 sealed interface GroupSendStep {
     data class Sent(val messageId: Long) : GroupSendStep

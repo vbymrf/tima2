@@ -141,6 +141,7 @@ class GroupSender(
             // сообщение, у которого назван корень (ADR-0024).
             threadRoot = entry.threadRoot,
             level = entry.level,
+            keyCommitment = assembled.keyCommitment,
         )
 
         return when (outcome) {

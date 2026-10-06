@@ -46,6 +46,8 @@ class GroupFrame(
      * метку у реплики.
      */
     val level: Int = -1,
+    /** Обязательство по ключу группы (подпись версии 2); `null` — версия 1 или открытое. */
+    val keyCommitment: ByteArray? = null,
 ) {
 
     companion object {
@@ -98,6 +100,7 @@ class GroupFrame(
                 // Молчание сервера про уровень — шифр: так вело себя всё до ADR-0019, и
                 // принять открытым то, о чём не сказано, было бы опаснее.
                 level = json.int("level") ?: -1,
+                keyCommitment = json.str("key_commitment")?.let { decodeBase64Url(it) },
             )
         }
     }

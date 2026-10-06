@@ -53,12 +53,7 @@ object GroupMessages {
         val body = MessageContentCodec.toBody(content)
         val plaintext = MessageSerializer.encodeBody(body)
         val payload = EnvelopeCipher.seal(groupKey, plaintext).getOrThrow()
-        val canonical = CanonicalBytes.buildGroupMessage(meta, payload)
-        SealedGroupMessage(
-            meta = meta,
-            payload = payload,
-            signature = MessageSigner.sign(sender.key, canonical).getOrThrow(),
-        )
+        signedV2(meta, payload, sender, groupKey)
     }
 
     /**
@@ -106,10 +101,21 @@ object GroupMessages {
             "версия группового ключа обязана быть не меньше 1: нулевая означает открытый payload"
         }
         val payload = EnvelopeCipher.seal(groupKey, body).getOrThrow()
-        SealedGroupMessage(
+        signedV2(meta, payload, sender, groupKey)
+    }
+
+    /**
+     * Подпись версии 2 — привязка ключа группы (ADR-0013 для групп; решение заказчика 2026-10-06
+     * «отменяем решение 5»). Обязательство считается ОДИН раз от того же ключа, которым закрыт
+     * payload: получатель и депозитарий пересчитают его из своего ключа и сверят.
+     */
+    private fun signedV2(meta: GroupMessageMeta, payload: ByteArray, sender: DeviceIdentity, groupKey: ByteArray): SealedGroupMessage {
+        val commitment = CanonicalBytes.keyCommitment(groupKey)
+        return SealedGroupMessage(
             meta = meta,
             payload = payload,
-            signature = MessageSigner.sign(sender.key, CanonicalBytes.buildGroupMessage(meta, payload)).getOrThrow(),
+            signature = MessageSigner.sign(sender.key, CanonicalBytes.buildGroupMessageV2(meta, payload, commitment)).getOrThrow(),
+            keyCommitment = commitment,
         )
     }
 
@@ -145,9 +151,19 @@ object GroupMessages {
         senderSigningPublic: ByteArray,
         groupKey: ByteArray,
     ): Result<ReceivedGroupMessage> = runCatching {
-        val canonical = CanonicalBytes.buildGroupMessage(sealed.meta, sealed.payload)
+        val commitment = sealed.keyCommitment
+        val canonical = if (commitment == null) CanonicalBytes.buildGroupMessage(sealed.meta, sealed.payload)
+        else CanonicalBytes.buildGroupMessageV2(sealed.meta, sealed.payload, commitment)
         if (!MessageSigner.verify(senderSigningPublic, canonical, sealed.signature)) {
             throw VerificationFailure("Подпись сообщения группы не прошла проверку")
+        }
+        // Версия 2: обязательство в подписи обязано сойтись с ключом, которым открываем. Не
+        // сошлось — у нас не тот ключ, которым отправитель обещал закрыть текст, и
+        // расшифровывать им нельзя: шифртекст может раскрыться под двумя ключами в два разных
+        // текста. Подписью это не подмена (она сошлась), поэтому и не VerificationFailure —
+        // «не тот ключ», как и без обязательства.
+        check(commitment == null || CanonicalBytes.keyCommitment(groupKey).contentEquals(commitment)) {
+            "обязательство по ключу группы не сошлось с ключом — расшифровывать нельзя"
         }
         val plaintext = EnvelopeCipher.open(groupKey, sealed.payload).getOrThrow()
         val body = MessageSerializer.decodeBody(plaintext).getOrThrow()
@@ -218,6 +234,8 @@ object GroupMessages {
         senderSigningPublic: ByteArray,
         /** Пустой при [gkVersion] = 0: открытому сообщению ключ не нужен. */
         groupKey: ByteArray,
+        /** Обязательство по ключу группы (подпись версии 2); `null` — версия 1. */
+        keyCommitment: ByteArray? = null,
     ): Result<ReceivedGroupMessage> = openAny(
         sealed = SealedGroupMessage(
             meta = GroupMessageMeta(
@@ -232,6 +250,7 @@ object GroupMessages {
             ),
             payload = payload,
             signature = signature,
+            keyCommitment = keyCommitment,
         ),
         senderSigningPublic = senderSigningPublic,
         groupKey = groupKey,
@@ -254,6 +273,8 @@ class SealedGroupMessage(
     val payload: ByteArray,
     /** Ed25519 по `group_message_canonical_bytes`, 64 байта. */
     val signature: ByteArray,
+    /** Обязательство по ключу группы — у зашифрованного (подпись версии 2); `null` — версия 1 или открытое. */
+    val keyCommitment: ByteArray? = null,
 )
 
 /** Разобранное сообщение группы. [body] — байты тела как пришли, их и пишет хранилище. */

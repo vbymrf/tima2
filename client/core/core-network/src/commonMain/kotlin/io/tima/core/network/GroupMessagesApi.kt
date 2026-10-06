@@ -45,6 +45,8 @@ class GroupMessagesApi(
         replyTo: Long = 0,
         /** Кому сервер отдаст сообщение (ADR-0019). -1 — шифр. */
         level: Int = -1,
+        /** Обязательство по ключу группы (подпись версии 2); `null` — версия 1 или открытое. */
+        keyCommitment: ByteArray? = null,
     ): SendGroupResult {
         val requestBody = "{\"client_msg_id\":\"" + clientMsgId + "\"" +
             ",\"kind\":" + kind +
@@ -54,7 +56,8 @@ class GroupMessagesApi(
             ",\"thread_root\":" + threadRoot +
             ",\"reply_to\":" + replyTo +
             ",\"created_at_unix_ms\":" + createdAtUnixMs +
-            ",\"signature\":\"" + encodeBase64Url(signature) + "\"}"
+            ",\"signature\":\"" + encodeBase64Url(signature) + "\"" +
+            (keyCommitment?.let { ",\"key_commitment\":\"" + encodeBase64Url(it) + "\"" } ?: "") + "}"
 
         val response = try {
             client.post(route.api("/api/v1/groups/$groupId/messages")) {

@@ -95,6 +95,12 @@ object CanonicalBytes {
     /** Доменная метка preimage сообщения группы; несёт версию раскладки. */
     const val GROUP_MESSAGE_DOMAIN = "tima.group_message.v1"
 
+    /**
+     * Версия 2 — привязка ключа группы (ADR-0013 для групп; решение заказчика 2026-10-06
+     * «отменяем решение 5»): раскладка v1 под этим доменом плюс `key_commitment` хвостом.
+     */
+    const val GROUP_MESSAGE_DOMAIN_V2 = "tima.group_message.v2"
+
     val EMPTY: ByteArray = ByteArray(0)
 
     /**
@@ -133,7 +139,17 @@ object CanonicalBytes {
      * `SecretBox(zstd(protobuf(body)), GK)`, публичная — plaintext protobuf.
      */
     fun buildGroupMessage(meta: GroupMessageMeta, payload: ByteArray): ByteArray =
-        lp(GROUP_MESSAGE_DOMAIN) +
+        groupMessage(GROUP_MESSAGE_DOMAIN, meta, payload)
+
+    /**
+     * Preimage версии 2: обязательство по ключу группы ([keyCommitment] от того же ключа, которым
+     * закрыт payload) входит в подпись — KAT-вектор `group_message_canonical_v2`.
+     */
+    fun buildGroupMessageV2(meta: GroupMessageMeta, payload: ByteArray, keyCommitment: ByteArray): ByteArray =
+        groupMessage(GROUP_MESSAGE_DOMAIN_V2, meta, payload) + keyCommitment
+
+    private fun groupMessage(domain: String, meta: GroupMessageMeta, payload: ByteArray): ByteArray =
+        lp(domain) +
             lp(meta.groupId) +
             lp(meta.senderId) +
             lp(meta.senderDevice) +

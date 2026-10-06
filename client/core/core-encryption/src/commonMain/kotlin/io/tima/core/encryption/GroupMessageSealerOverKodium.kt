@@ -40,7 +40,7 @@ class GroupMessageSealerOverKodium(
         } else {
             GroupMessages.seal(MessageContent.text(text), meta, identity, key).getOrNull()
         } ?: return null
-        return SealedGroupBytes(payload = assembled.payload, signature = assembled.signature)
+        return SealedGroupBytes(payload = assembled.payload, signature = assembled.signature, keyCommitment = assembled.keyCommitment)
     }
 
     /**
@@ -72,7 +72,7 @@ class GroupMessageSealerOverKodium(
         } else {
             GroupMessages.sealPrepared(body, meta, identity, key).getOrNull()
         } ?: return null
-        return SealedGroupBytes(payload = assembled.payload, signature = assembled.signature)
+        return SealedGroupBytes(payload = assembled.payload, signature = assembled.signature, keyCommitment = assembled.keyCommitment)
     }
 
     private companion object {

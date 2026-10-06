@@ -57,6 +57,31 @@ class GroupMessagesTest {
     }
 
     @Test
+    fun зашифрованное_несёт_обязательство_по_ключу_версии_2() {
+        // Привязка ключа группы (ADR-0013 для групп): обязательство в подписи — от того же
+        // ключа, которым закрыт payload.
+        val sealed = seal()
+        assertContentEquals(io.tima.crypto.CanonicalBytes.keyCommitment(key), sealed.keyCommitment)
+    }
+
+    @Test
+    fun обязательство_не_от_того_ключа_не_открывается() {
+        // Отправитель подписал обязательство по ОДНОМУ ключу, а получатель открывает ДРУГИМ
+        // (депозитарий или участник со своей версией): показывать нельзя — это разные тексты.
+        val sealed = seal()
+        val failure = GroupMessages.open(sealed, author.signingPublic, otherKey).exceptionOrNull()
+        assertTrue(failure != null && failure !is VerificationFailure, "не тот ключ — отказ, но не подмена: $failure")
+    }
+
+    @Test
+    fun подменённое_обязательство_ломает_подпись() {
+        val sealed = seal()
+        val forged = SealedGroupMessage(sealed.meta, sealed.payload, sealed.signature,
+            io.tima.crypto.CanonicalBytes.keyCommitment(otherKey))
+        assertIs<VerificationFailure>(GroupMessages.open(forged, author.signingPublic, otherKey).exceptionOrNull())
+    }
+
+    @Test
     fun чужая_подпись_не_проходит() {
         val sealed = seal()
         val failure = GroupMessages.open(sealed, foreign.signingPublic, key).exceptionOrNull()
