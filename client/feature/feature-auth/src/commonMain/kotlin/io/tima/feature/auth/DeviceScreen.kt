@@ -7,8 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -105,7 +104,12 @@ fun DeviceScreen(
     onSendPhoneCode: ((Boolean) -> Unit)? = null,
     /** Заявка (новый номер задан) или подтверждение: номер, фраза, код. */
     onPhoneChange: ((String?, String, String) -> Unit)? = null,
-) = Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
+) = Column(
+    // Экран прокручивается целиком (живая проверка 2026-10-06): панели доверия, копии, запрета,
+    // смены номера и перерегистрации не помещались на телефон, и сообщение под ними — код стенда,
+    // отказ — уходило за край, а список устройств не был виден вовсе.
+    modifier.fillMaxSize().background(Tima.colors.surface).verticalScroll(androidx.compose.foundation.rememberScrollState()),
+) {
     val words = Tima.words.auth
     var signingOut by rememberSaveable { mutableStateOf(false) }
     // Фон заливается явно. Экран без своего фона показывает то, что под ним, — на телефоне
@@ -275,13 +279,14 @@ fun DeviceScreen(
         return@Column
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(TimaSpacing.about4),
+    // Обычная колонка, а не ленивый список: экран прокручивается целиком, а устройств у
+    // человека единицы.
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(TimaSpacing.about4),
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
     ) {
-        items(state.devices, key = { it.deviceId }) { device ->
-            Line(device, onAsk, onCertify.takeIf { !state.trusting })
+        state.devices.forEach { device ->
+            androidx.compose.runtime.key(device.deviceId) { Line(device, onAsk, onCertify.takeIf { !state.trusting }) }
         }
     }
 }
