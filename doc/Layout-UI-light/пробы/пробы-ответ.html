@@ -1,0 +1,385 @@
+<meta charset="utf-8">
+<title>Пробы: ответ на действие</title>
+<link rel="stylesheet" href="../стиль.css">
+<style>
+  .срез { height: auto; width: 344px; border-width: 2px; border-radius: 20px; }
+  .срез .зона-2 { flex: 0 0 auto; overflow: visible; }
+  .срез .зона-1 { flex-wrap: nowrap; }
+  .срез .имя-окна { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+  .проба { padding: 20px 0 24px; border-bottom: 1px solid var(--чёрный-12); }
+  .проба:target { box-shadow: inset 6px 0 0 var(--навигация); padding-left: 16px; }
+  .шапка-пробы { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .номер { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+  .опис { font-size: 13.5px; color: var(--чёрный-70); }
+  .свет { font-size: 12px; color: var(--чёрный-50); }
+  .срезы { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .с-подписью > .трет { margin-top: 8px; max-width: 344px; }
+  .навигация-проб { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+  .навигация-проб a {
+    display: inline-flex; align-items: center; padding: 7px 13px; border-radius: 999px;
+    border: 1px solid var(--чёрный-12); text-decoration: none; color: var(--текст);
+    font-size: 12.5px; font-weight: 700;
+  }
+
+  /* Панель «Подтвердить фразой» — как на экране «Секретная фраза и устройства» */
+  .панель { padding: 14px var(--о4) 16px; display: flex; flex-direction: column; gap: 10px; }
+  .панель h3 { margin: 0; font-size: var(--щ4); font-weight: 800; }
+  .панель .втор { line-height: 1.35; }
+  .ввод-фразы {
+    border-radius: 999px; background: var(--акцент-мягкий); padding: 13px 18px;
+    font-size: var(--щ5); color: var(--чёрный-70); letter-spacing: 0.02em;
+  }
+  .кн.во-всю { width: 100%; box-sizing: border-box; }
+  .кн.ждёт { background: var(--чёрный-12); color: var(--чёрный-70); }
+  .ниже { padding: 12px var(--о4); border-top: 1px solid var(--чёрный-12); }
+  .ниже .трет { margin-top: 2px; }
+
+  /* Два цвета ответа: первый — навигация, сменившийся — активность (решение для проб) */
+  .отв { --цв: var(--навигация); --тинт: rgba(138, 196, 74, 0.16); }
+  .отв.второй { --цв: var(--активность); --тинт: rgba(254, 187, 2, 0.20); }
+
+  /* Знак итога: кружок с «✓» или «!» — рисуется, не эмодзи */
+  .знак-итога {
+    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--цв); color: #fff; font-size: 13px; font-weight: 900;
+    display: inline-flex; align-items: center; justify-content: center; line-height: 1;
+  }
+  .отв.второй .знак-итога { color: var(--текст); }
+  .итог { font-weight: 800; font-size: var(--щ5); color: var(--текст); }
+  .текст-отв { font-size: var(--щ5); color: var(--чёрный-70); line-height: 1.35; }
+
+  /* 01 плашка с полосой */
+  .в01 { border-radius: var(--радиус-мал); background: var(--тинт); border-left: 4px solid var(--цв); padding: 10px 12px; }
+
+  /* 02 выноска к кнопке */
+  .в02 { position: relative; margin-top: 8px; border-radius: var(--радиус-мал); background: var(--тинт); border: 1.5px solid var(--цв); padding: 10px 12px; }
+  .в02::before {
+    content: ""; position: absolute; top: -8px; left: 50%; margin-left: -8px;
+    width: 14px; height: 14px; background: var(--поверхность); border-left: 1.5px solid var(--цв); border-top: 1.5px solid var(--цв);
+    transform: rotate(45deg);
+  }
+
+  /* 03 панель обводится, ответ на месте подсказки */
+  .панель.в03 { margin: 8px; border-radius: var(--радиус-квадрат-бол); border: 2px solid var(--цв); background: var(--тинт); }
+
+  /* 05 плашка со знаком слева */
+  .в05 { display: flex; gap: 10px; align-items: flex-start; border-radius: var(--радиус-мал); background: var(--тинт); padding: 10px 12px; }
+
+  /* 06 полоса снизу экрана — для сравнения */
+  .в06 { margin: 10px; border-radius: var(--радиус-мал); background: var(--текст); color: #fff; padding: 12px 14px; font-size: var(--щ5); display: flex; gap: 10px; align-items: center; }
+  .в06 .полоска { width: 4px; align-self: stretch; border-radius: 2px; background: var(--цв); }
+
+  /* 07 плашка с номером ответа */
+  .в07 { position: relative; display: flex; gap: 10px; align-items: flex-start; border-radius: var(--радиус-мал); background: var(--тинт); border-left: 4px solid var(--цв); padding: 10px 12px 10px 12px; }
+  .в07 .который { position: absolute; top: 8px; right: 10px; font-size: 10.5px; font-weight: 800; color: var(--чёрный-50); }
+
+  /* 08 минимум: цветной жирный текст без фона */
+  .в08 { border-left: 3px solid var(--цв); padding: 2px 0 2px 10px; }
+  .в08 .итог { color: var(--текст); }
+
+  /* 04 кнопка-итог */
+  .кн.итоговая { background: var(--поверхность); color: var(--текст); border: 2px solid var(--цв); }
+</style>
+
+<div class="лист-док">
+
+<div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-ответ.html</div>
+<h1>Пробы: ответ на действие</h1>
+<p class="подзаголовок">
+  Нажал кнопку — что ответило приложение. Один вид на всё приложение. Пример —
+  «Секретная фраза и устройства» → «Подтвердить фразой».
+</p>
+
+<div class="оговорка">
+  <b>Что не так сейчас.</b> Ответ выходит строкой обычного серого текста под панелью — тем же
+  кеглем и цветом, что пояснения. Он не читается как ответ на нажатие: его принимают за
+  подпись, а если он ниже края экрана — не видят вовсе (отчёт DGAR: «ноль реакции»).
+  <br><br>
+  <b>Правила, общие для всех вариантов.</b>
+  <br>1. Ответ стоит <b>сразу под тем, что нажали</b>, — не внизу экрана и не в общем месте.
+  <br>2. Форма — <b>квадрат со скруглением</b>, а не пилюля: пилюля в этой системе значит
+  «нажми», квадрат — «что-то». Ответ, похожий на кнопку, начнут нажимать.
+  <br>3. Итог — <b>первым словом и жирно</b>: «Готово», «Не получилось», «Проверяю».
+  Подробность — ниже, обычным текстом.
+  <br>4. Успех и беда различаются <b>знаком и словом</b> (✓ / !), а не цветом: красного в
+  палитре для ответов нет, а цвет занят другим — пункт 5.
+  <br>5. <b>Ответ сменился — второй цвет.</b> Первый ответ — цвет навигации, новый ответ на
+  повторное нажатие — цвет активности, следующий — снова первый. Иначе одинаковая плашка с
+  другим текстом выглядит так, будто ничего не произошло.
+  <br>6. Ответ живёт до следующего нажатия или до ухода с экрана.
+</div>
+
+<h2>Ссылки на варианты</h2>
+<div class="навигация-проб">
+  <a href="#в01">01 · плашка с полосой</a>
+  <a href="#в02">02 · выноска к кнопке</a>
+  <a href="#в03">03 · панель обводится</a>
+  <a href="#в04">04 · кнопка становится итогом</a>
+  <a href="#в05">05 · плашка со знаком</a>
+  <a href="#в06">06 · полоса внизу экрана</a>
+  <a href="#в07">07 · плашка с номером ответа</a>
+  <a href="#в08">08 · только черта и текст</a>
+</div>
+
+<!-- ───────────────────────────── 01 ───────────────────────────── -->
+<div class="проба" id="в01">
+  <div class="шапка-пробы"><span class="номер">01</span><span class="опис">плашка под кнопкой: полоса слева, светлый тинт, итог жирно</span><span class="свет">спокойно, читается как ответ, место берёт по тексту</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель">
+          <h3>Подтвердить фразой</h3>
+          <div class="втор">Это устройство ещё не заверено. Введите секретную фразу — тогда собеседники будут знать, что оно ваше.</div>
+          <div class="ввод-фразы">fifi geti bemu fosa lari favi …</div>
+          <span class="кн во-всю">Подтвердить</span>
+          <div class="отв в01"><div class="итог">Не получилось</div><div class="текст-отв">Фраза настоящая, но не от этого аккаунта. Сверьте запись по буквам.</div></div>
+        </div><div class="ниже"><b>Показать код заверения</b><div class="трет">заверить с телефона по QR</div></div></div>
+      </div>
+      <div class="трет">первый ответ — цвет навигации</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель">
+          <h3>Подтвердить фразой</h3>
+          <div class="втор">Это устройство ещё не заверено. Введите секретную фразу — тогда собеседники будут знать, что оно ваше.</div>
+          <div class="ввод-фразы">fifi geti bemu fosa lari …</div>
+          <span class="кн во-всю">Подтвердить</span>
+          <div class="отв второй в01"><div class="итог">Не получилось</div><div class="текст-отв">Введено слов: 11, а во фразе их 12. Проверьте, не слились ли два слова.</div></div>
+        </div><div class="ниже"><b>Показать код заверения</b><div class="трет">заверить с телефона по QR</div></div></div>
+      </div>
+      <div class="трет">нажали снова, ответ сменился — второй цвет</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель">
+          <h3>Подтвердить фразой</h3>
+          <div class="ввод-фразы">fifi geti bemu fosa lari favi kova lema …</div>
+          <span class="кн во-всю ждёт">Проверяю…</span>
+          <div class="отв в01"><div class="итог">Проверяю фразу</div><div class="текст-отв">Это занимает несколько секунд.</div></div>
+        </div></div>
+      </div>
+      <div class="трет">пока ждём ответа сервера — тоже ответ: кнопка гаснет, плашка говорит, что идёт</div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────── 02 ───────────────────────────── -->
+<div class="проба" id="в02">
+  <div class="шапка-пробы"><span class="номер">02</span><span class="опис">выноска с хвостиком к кнопке</span><span class="свет">связь с нажатием видна сразу; хвостик — лишняя деталь на каждом экране</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель">
+          <h3>Подтвердить фразой</h3>
+          <div class="ввод-фразы">fifi geti bemu fosa lari favi …</div>
+          <span class="кн во-всю">Подтвердить</span>
+          <div class="отв в02"><div class="итог">Не получилось</div><div class="текст-отв">Фраза настоящая, но не от этого аккаунта.</div></div>
+        </div></div>
+      </div>
+      <div class="трет">первый ответ</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель">
+          <h3>Подтвердить фразой</h3>
+          <div class="ввод-фразы">fifi geti bemu fosa lari favi …</div>
+          <span class="кн во-всю">Подтвердить</span>
+          <div class="отв второй в02"><div class="итог">Готово</div><div class="текст-отв">Устройство заверено. Собеседники видят, что оно ваше.</div></div>
+        </div></div>
+      </div>
+      <div class="трет">сменился — второй цвет</div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────── 03 ───────────────────────────── -->
+<div class="проба" id="в03">
+  <div class="шапка-пробы"><span class="номер">03</span><span class="опис">панель обводится цветом, ответ встаёт на место пояснения</span><span class="свет">заметно, но пояснение пропадает, а на экранах без панели обводить нечего</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель отв в03">
+          <h3>Подтвердить фразой</h3>
+          <div><div class="итог">Не получилось</div><div class="текст-отв">Фраза настоящая, но не от этого аккаунта.</div></div>
+          <div class="ввод-фразы">fifi geti bemu fosa lari favi …</div>
+          <span class="кн во-всю">Подтвердить</span>
+        </div></div>
+      </div>
+      <div class="трет">первый ответ</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель отв второй в03">
+          <h3>Подтвердить фразой</h3>
+          <div><div class="итог">Не получилось</div><div class="текст-отв">Таких слов нет в списке фраз: №5 «lаri». Только латинские буквы.</div></div>
+          <div class="ввод-фразы">fifi geti bemu fosa lаri favi …</div>
+          <span class="кн во-всю">Подтвердить</span>
+        </div></div>
+      </div>
+      <div class="трет">сменился — второй цвет</div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────── 04 ───────────────────────────── -->
+<div class="проба" id="в04">
+  <div class="шапка-пробы"><span class="номер">04</span><span class="опис">кнопка сама становится итогом, подробность под ней</span><span class="свет">нагляднее всего, но кнопка перестаёт быть кнопкой: «нажать ещё раз» уже нечего</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель отв">
+          <h3>Подтвердить фразой</h3>
+          <div class="ввод-фразы">fifi geti bemu fosa lari favi …</div>
+          <span class="кн во-всю итоговая">! Не получилось — ещё раз</span>
+          <div class="текст-отв">Фраза настоящая, но не от этого аккаунта.</div>
+        </div></div>
+      </div>
+      <div class="трет">первый ответ</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель отв второй">
+          <h3>Подтвердить фразой</h3>
+          <div class="ввод-фразы">fifi geti bemu fosa lari …</div>
+          <span class="кн во-всю итоговая">! Не получилось — ещё раз</span>
+          <div class="текст-отв">Введено слов: 11, а во фразе их 12.</div>
+        </div></div>
+      </div>
+      <div class="трет">сменился — второй цвет контура</div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────── 05 ───────────────────────────── -->
+<div class="проба" id="в05">
+  <div class="шапка-пробы"><span class="номер">05</span><span class="опис">плашка со знаком итога слева: ✓ или !</span><span class="свет">успех и беда различаются с одного взгляда, без чтения</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель">
+          <h3>Подтвердить фразой</h3>
+          <div class="ввод-фразы">fifi geti bemu fosa lari favi …</div>
+          <span class="кн во-всю">Подтвердить</span>
+          <div class="отв в05"><span class="знак-итога">!</span><div><div class="итог">Не получилось</div><div class="текст-отв">Фраза настоящая, но не от этого аккаунта. Сверьте запись по буквам.</div></div></div>
+        </div></div>
+      </div>
+      <div class="трет">первый ответ: беда</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель">
+          <h3>Подтвердить фразой</h3>
+          <div class="ввод-фразы">fifi geti bemu fosa lari favi …</div>
+          <span class="кн во-всю">Подтвердить</span>
+          <div class="отв второй в05"><span class="знак-итога">✓</span><div><div class="итог">Готово</div><div class="текст-отв">Устройство заверено. Собеседники видят, что оно ваше.</div></div></div>
+        </div></div>
+      </div>
+      <div class="трет">сменился: успех, второй цвет</div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────── 06 ───────────────────────────── -->
+<div class="проба" id="в06">
+  <div class="шапка-пробы"><span class="номер">06</span><span class="опис">тёмная полоса внизу экрана — для сравнения</span><span class="свет">так делает Android; ответ оторван от кнопки, исчезает сам — то, от чего уходим</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель">
+          <h3>Подтвердить фразой</h3>
+          <div class="ввод-фразы">fifi geti bemu fosa lari favi …</div>
+          <span class="кн во-всю">Подтвердить</span>
+        </div><div class="ниже"><b>Показать код заверения</b><div class="трет">заверить с телефона по QR</div></div>
+        <div class="отв в06"><span class="полоска"></span>Фраза настоящая, но не от этого аккаунта.</div></div>
+      </div>
+      <div class="трет">не рекомендую</div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────── 07 ───────────────────────────── -->
+<div class="проба" id="в07">
+  <div class="шапка-пробы"><span class="номер">07</span><span class="опис">01 и 05 вместе, плюс номер ответа в углу</span><span class="свет">номер снимает сомнение «это новый ответ или тот же» — даже когда текст тот же</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель">
+          <h3>Подтвердить фразой</h3>
+          <div class="ввод-фразы">fifi geti bemu fosa lari favi …</div>
+          <span class="кн во-всю">Подтвердить</span>
+          <div class="отв в07"><span class="знак-итога">!</span><div><div class="итог">Не получилось</div><div class="текст-отв">Фраза настоящая, но не от этого аккаунта.</div></div><span class="который">1</span></div>
+        </div></div>
+      </div>
+      <div class="трет">первый ответ</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель">
+          <h3>Подтвердить фразой</h3>
+          <div class="ввод-фразы">fifi geti bemu fosa lari favi …</div>
+          <span class="кн во-всю">Подтвердить</span>
+          <div class="отв второй в07"><span class="знак-итога">!</span><div><div class="итог">Не получилось</div><div class="текст-отв">Фраза настоящая, но не от этого аккаунта.</div></div><span class="который">2</span></div>
+        </div></div>
+      </div>
+      <div class="трет">тот же текст, но новый ответ: второй цвет и «2»</div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────── 08 ───────────────────────────── -->
+<div class="проба" id="в08">
+  <div class="шапка-пробы"><span class="номер">08</span><span class="опис">минимум: цветная черта слева и жирный итог, без фона</span><span class="свет">тише всех; на длинных экранах может снова потеряться</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель">
+          <h3>Подтвердить фразой</h3>
+          <div class="ввод-фразы">fifi geti bemu fosa lari favi …</div>
+          <span class="кн во-всю">Подтвердить</span>
+          <div class="отв в08"><div class="итог">Не получилось</div><div class="текст-отв">Фраза настоящая, но не от этого аккаунта.</div></div>
+        </div></div>
+      </div>
+      <div class="трет">первый ответ</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Секретная фраза и устройства</div></div>
+        <div class="зона-2"><div class="панель">
+          <h3>Подтвердить фразой</h3>
+          <div class="ввод-фразы">fifi geti bemu fosa lari …</div>
+          <span class="кн во-всю">Подтвердить</span>
+          <div class="отв второй в08"><div class="итог">Не получилось</div><div class="текст-отв">Введено слов: 11, а во фразе их 12.</div></div>
+        </div></div>
+      </div>
+      <div class="трет">сменился — второй цвет черты</div>
+    </div>
+  </div>
+</div>
+
+<h2>Где этот ответ встанет в приложении</h2>
+<div class="оговорка">
+  Один компонент — во всех местах, где сейчас ответ выходит строкой текста или кодом:
+  вход (номер, код, фраза), «Секретная фраза и устройства» (все панели: подтверждение,
+  копия, запрет «Начать заново», смена номера, перерегистрация, сканер, заверение),
+  «Запросить ключ» в переписке группы, профиль (сохранение имени и ника), «Обновление»,
+  «Сообщить о проблеме», виртуальные аккаунты и передача, «Вернуть» на экране входа.
+  Перечень мест — при реализации, по коду.
+</div>
+
+</div>
