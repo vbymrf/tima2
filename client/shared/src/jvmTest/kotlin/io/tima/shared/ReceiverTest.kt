@@ -71,4 +71,24 @@ class ReceiverTest {
     private companion object {
         val SECRET: ByteArray = ByteArray(32) { (it + 5).toByte() }
     }
+
+    @Test
+    fun причина_недоступного_пишется_в_журнал_один_раз() {
+        // 2026-10-06: «Сообщение недоступно» на ПК заказчика разобрать было нечем — причина
+        // лежала только в базе устройства.
+        val diary = io.tima.core.diag.Diary(now = { 0L })
+        io.tima.core.diag.Journal.replace(diary)
+        val r = receiver("d-я")
+        val entry = io.tima.core.outbox.IncomingEntry("c-1", 7, ByteArray(1))
+        val noKey = io.tima.core.outbox.OpenOutcome.NoKey("ключ подписи отправителя не получен")
+        r.noted(entry, noKey)
+        r.noted(entry, noKey)
+        r.noted(io.tima.core.outbox.IncomingEntry("c-1", 8, ByteArray(1)), io.tima.core.outbox.OpenOutcome.Rejected("подпись не сошлась"))
+
+        val lines = diary.tail().filter { it.code == io.tima.core.diag.LogCode.MSG_UNREADABLE }
+        kotlin.test.assertEquals(2, lines.size, "повтор той же причины записан снова")
+        kotlin.test.assertEquals(io.tima.core.diag.Level.Info, lines[0].level)
+        assertTrue(lines[0].details.contains("причина" to "ключ подписи отправителя не получен"))
+        kotlin.test.assertEquals(io.tima.core.diag.Level.Trouble, lines[1].level, "непрошедшая проверка — беда")
+    }
 }

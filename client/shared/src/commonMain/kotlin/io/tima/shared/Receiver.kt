@@ -24,6 +24,7 @@ import io.tima.core.network.DeviceKeysResult
 import io.tima.core.network.EventStream
 import io.tima.core.outbox.IncomingEntry
 import io.tima.core.outbox.OpenOutcome
+import kotlinx.coroutines.flow.getAndUpdate
 import io.tima.domain.account.Session
 import io.tima.core.words.CurrentWords
 import io.tima.core.words.Words
@@ -976,7 +977,7 @@ class Receiver(
                 else -> open(entry, key)
             }
             if (outcome is OpenOutcome.Opened) opened = entry.chatId to outcome.senderId
-            outcome
+            noted(entry, outcome)
         }
         // ── ВТОРАЯ СТАДИЯ: ПОДПИСЬ СОШЛАСЬ, ИМЯ МОЖНО НАЗВАТЬ (У6) ──────────
         //
@@ -1153,7 +1154,7 @@ class Receiver(
         val held = heldChats()
         while (true) {
             environment.incoming.openNext(held) { entry ->
-                if (GroupFrame.isGroupFrame(entry.envelope)) {
+                val outcome = if (GroupFrame.isGroupFrame(entry.envelope)) {
                     openGroup(entry)
                 } else {
                     val s = envelopeSender(entry.envelope)
@@ -1164,6 +1165,7 @@ class Receiver(
                         else -> open(entry, key)
                     }
                 }
+                noted(entry, outcome)
             } ?: break
         }
     }
@@ -1207,6 +1209,36 @@ class Receiver(
         PersonalMessages.peekSender(envelope)?.let {
             SentBy(userId = it.userId, deviceId = it.deviceId, createdAtMs = it.createdAtMs)
         }
+
+    /** О каком сообщении и причине уже сказано за этот запуск — повтор разбора не дублирует строку. */
+    private val unreadableSaid = kotlinx.coroutines.flow.MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * Не открылось — причину в журнал (`MSG-UNREADABLE`, 2026-10-06): без неё «сообщение
+     * недоступно» в отчёте разобрать нечем. Подпись не сошлась — беда: возможна подмена.
+     */
+    internal fun noted(entry: IncomingEntry, outcome: OpenOutcome): OpenOutcome {
+        val (reason, forged) = when (outcome) {
+            is OpenOutcome.NoKey -> outcome.reason to false
+            is OpenOutcome.Rejected -> outcome.reason to true
+            else -> return outcome
+        }
+        val said = "${entry.chatId}/${entry.messageId}/$reason"
+        val first = said !in unreadableSaid.getAndUpdate { it + said }
+        if (!first) return outcome
+        val fields = arrayOf(
+            "переписка" to entry.chatId.take(8),
+            "сообщение" to entry.messageId,
+            "попытка" to entry.attempts + 1,
+            "причина" to reason,
+        )
+        if (forged) {
+            Journal.trouble(LogCode.MSG_UNREADABLE, "сообщение не открылось — проверка не прошла", *fields)
+        } else {
+            Journal.note(LogCode.MSG_UNREADABLE, "сообщение не открылось", *fields)
+        }
+        return outcome
+    }
 
     /**
      * Разобрать недоступное заново (заказчик 2026-10-06): сервер ответил на просьбу о ключах,
