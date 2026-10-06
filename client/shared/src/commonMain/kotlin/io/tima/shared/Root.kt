@@ -3911,35 +3911,45 @@ private fun Chat(
             },
             // Личная переписка: недоступное сообщение — просьба ключей у своих устройств и
             // собеседника (заказчик 2026-10-06). Ответ приходит событием `recovery.msg_ready`,
-            // и история догоняется сама.
+            // и история догоняется сама. Незаверенное устройство подписывает просьбу фразой.
             askChatKeys = if (!group) {
-                {
-                    when (val r = network.history.recover(chatId)) {
+                { words ->
+                    val signature = words?.let { io.tima.core.encryption.RecoverySignature.sign(it, chatId, myDeviceId) }
+                    when (val r = network.history.recover(chatId, signature)) {
                         is io.tima.core.network.HistoryApi.Recover.Asked -> {
-                            Journal.note(LogCode.DEVICE_TRUST, "ключи переписки запрошены", "переписка" to chatId.take(8), "помощников" to r.helpers)
-                            if (r.helpers > 0) io.tima.domain.chat.RequestKeysStep.Asked(r.helpers) else io.tima.domain.chat.RequestKeysStep.NoHelpers
+                            Journal.note(
+                                LogCode.DEVICE_TRUST, "ключи переписки запрошены", "переписка" to chatId.take(8),
+                                "помощников" to r.helpers, "недостаёт" to (r.missing ?: -1), "по фразе" to (signature != null),
+                            )
+                            when {
+                                r.missing == 0 -> io.tima.domain.chat.RequestKeysStep.NothingMissing
+                                r.helpers > 0 -> io.tima.domain.chat.RequestKeysStep.Asked(r.helpers)
+                                else -> io.tima.domain.chat.RequestKeysStep.NoHelpers
+                            }
                         }
-                        is io.tima.core.network.HistoryApi.Recover.Refused -> {
-                            Journal.trouble(LogCode.DEVICE_TRUST, "просьба о ключах переписки отклонена", "код" to r.code)
-                            io.tima.domain.chat.RequestKeysStep.Refused(r.code)
-                        }
+                        // Устройство не заверено — просьбу подписывает фраза; опечатка в фразе
+                        // приходит тем же отказом.
+                        is io.tima.core.network.HistoryApi.Recover.Refused ->
+                            if (r.code == "bad_identity_sig" || r.code == "phrase_required") {
+                                Journal.note(LogCode.DEVICE_TRUST, "ключи переписки — нужна фраза", "переписка" to chatId.take(8), "с фразой" to (words != null))
+                                io.tima.domain.chat.RequestKeysStep.NeedsSecretPhrase
+                            } else {
+                                Journal.trouble(LogCode.DEVICE_TRUST, "просьба о ключах переписки отклонена", "код" to r.code)
+                                io.tima.domain.chat.RequestKeysStep.Refused(r.code)
+                            }
                         io.tima.core.network.HistoryApi.Recover.Offline -> io.tima.domain.chat.RequestKeysStep.Offline(0)
                     }
                 }
             } else {
                 null
             },
-            // Сами — один раз на переписку в сутки: каждое открытие с недоступным сообщением
-            // будило бы чужие устройства заново.
-            autoAskAllowed = if (!group) {
-                {
-                    val key = CHAT_KEYS_ASKED + chatId
-                    val last = runCatching { environment.settings.all().first()[key]?.toLongOrNull() }.getOrNull() ?: 0L
-                    val now = msNow()
-                    (now - last >= CHAT_KEYS_AGAIN_MS).also { if (it) runCatching { environment.settings.put(key, now.toString()) } }
-                }
-            } else {
-                null
+            // Сами — один раз на переписку в сутки, в личной и в группе: каждое открытие с
+            // недоступным сообщением будило бы чужие устройства заново.
+            autoAskAllowed = {
+                val key = CHAT_KEYS_ASKED + chatId
+                val last = runCatching { environment.settings.all().first()[key]?.toLongOrNull() }.getOrNull() ?: 0L
+                val now = msNow()
+                (now - last >= CHAT_KEYS_AGAIN_MS).also { if (it) runCatching { environment.settings.put(key, now.toString()) } }
             },
         )
     }

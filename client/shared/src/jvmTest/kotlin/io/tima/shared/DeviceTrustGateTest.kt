@@ -1,6 +1,7 @@
 package io.tima.shared
 
 import io.kodium.Kodium
+import io.tima.core.encryption.RecoverySignature
 import io.tima.core.network.DeviceKeyRecord
 import io.tima.core.network.DeviceKeysResult
 import io.tima.core.network.SigningKeyRecord
@@ -78,5 +79,37 @@ class DeviceTrustGateTest {
     fun аккаунт_без_фразы_в_строгом_режиме_не_получает_ничего() = runTest {
         val gate = DeviceTrustGate(Memory())
         assertEquals(emptyList(), gate.admit("u-2", answer("require", idPub = null)).map { it.deviceId })
+    }
+
+    // Отдать ключи по просьбе (2026-10-06): строже, чем упаковать сообщение, и в любом режиме.
+
+    @Test
+    fun по_просьбе_отдаётся_заверенному_в_любом_режиме() = runTest {
+        val gate = DeviceTrustGate(Memory())
+        for (mode in listOf("off", "record", "require")) {
+            assertEquals("телефон-хозяина", gate.vouched("u-1", answer(mode), owner.deviceId, "c-1", null)?.deviceId, mode)
+        }
+    }
+
+    @Test
+    fun незаверенному_без_фразы_не_отдаётся_даже_при_записи() = runTest {
+        // В «записывать» admit пропустил бы вора — а по просьбе отдаётся вся переписка.
+        val gate = DeviceTrustGate(Memory())
+        assertEquals(2, gate.admit("u-1", answer("record")).size)
+        assertEquals(null, gate.vouched("u-1", answer("record"), thief.deviceId, "c-1", null))
+        assertEquals(null, gate.vouched("u-1", answer("off"), thief.deviceId, "c-1", null))
+    }
+
+    @Test
+    fun незаверенному_по_подписи_фразой_отдаётся_только_на_ту_переписку() = runTest {
+        val gate = DeviceTrustGate(Memory())
+        val signed = DeviceTrust.sign(identity, RecoverySignature.canonicalBytes("c-1", thief.deviceId))!!
+        assertEquals(thief.deviceId, gate.vouched("u-1", answer("require"), thief.deviceId, "c-1", signed)?.deviceId)
+        // Та же подпись к другой переписке или другому устройству не подходит.
+        assertEquals(null, gate.vouched("u-1", answer("require"), thief.deviceId, "c-2", signed))
+        assertEquals(null, gate.vouched("u-1", answer("require"), owner.deviceId + "-x", "c-1", signed))
+        // Подпись чужим ключом — не фраза этого аккаунта.
+        val stranger = DeviceTrust.sign(Kodium.generateKeyPair(), RecoverySignature.canonicalBytes("c-1", thief.deviceId))!!
+        assertEquals(null, gate.vouched("u-1", answer("require"), thief.deviceId, "c-1", stranger))
     }
 }

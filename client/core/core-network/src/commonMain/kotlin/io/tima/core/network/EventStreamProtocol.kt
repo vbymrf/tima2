@@ -183,7 +183,18 @@ class EventStreamProtocol {
             val eventId: Long?,
             /** Чьё устройство просит (Р57); пусто — сервер старше, проверить нечем. */
             val requesterUser: String = "",
-        ) : Decision
+            /**
+             * Подпись просьбы ключом личности из фразы — `tima.recover.v1|<группа>|<устройство>`;
+             * `null` — просили без фразы, и отдать можно только заверенному (2026-10-06).
+             */
+            val signature: ByteArray? = null,
+        ) : Decision {
+            override fun equals(other: Any?): Boolean = other is ShareKeys && groupId == other.groupId &&
+                requesterDevice == other.requesterDevice && versions == other.versions && eventId == other.eventId &&
+                requesterUser == other.requesterUser && requesterEncryptionPub.contentEquals(other.requesterEncryptionPub) &&
+                signature.contentEquals(other.signature)
+            override fun hashCode(): Int = groupId.hashCode() * 31 + requesterDevice.hashCode()
+        }
 
         /**
          * Сервер просит ротировать ключ (`group.rotation_needed`): сменилась эпоха
@@ -301,10 +312,18 @@ class EventStreamProtocol {
             val requesterEncPub: ByteArray,
             val own: Boolean,
             val eventId: Long?,
+            /** Чьё устройство просит; пусто — сервер старше, и помощник берёт по [own]. */
+            val requesterUser: String = "",
+            /** Подпись фразой, если просили с ней; без неё отдаём только заверенному. */
+            val signature: ByteArray? = null,
+            /** Каких сообщений у просящего нет — новые первыми; пусто — сервер старше. */
+            val missing: List<Long> = emptyList(),
         ) : Decision {
             override fun equals(other: Any?): Boolean = other is MsgRequest && chatId == other.chatId &&
                 requesterDevice == other.requesterDevice && own == other.own && eventId == other.eventId &&
-                requesterEncPub.contentEquals(other.requesterEncPub)
+                requesterEncPub.contentEquals(other.requesterEncPub) && requesterUser == other.requesterUser &&
+                missing == other.missing &&
+                signature.contentEquals(other.signature)
             override fun hashCode(): Int = chatId.hashCode() * 31 + requesterDevice.hashCode()
         }
 
@@ -555,7 +574,10 @@ class EventStreamProtocol {
                 if (groupId == null || requester == null || encPub == null || versions.isNullOrEmpty()) {
                     Decision.Skip("recovery.gk_request без обязательных полей", eventId)
                 } else {
-                    Decision.ShareKeys(groupId, requester, encPub, versions, eventId, json.string("requester_user").orEmpty())
+                    Decision.ShareKeys(
+                        groupId, requester, encPub, versions, eventId, json.string("requester_user").orEmpty(),
+                        signature = json.string("signature")?.takeIf { it.isNotEmpty() }?.let { decodeBase64Url(it) },
+                    )
                 }
             }
 
@@ -681,7 +703,12 @@ class EventStreamProtocol {
                 if (chatId == null || device == null || pub == null) {
                     Decision.Skip("recovery.msg_request без обязательных полей", eventId)
                 } else {
-                    Decision.MsgRequest(chatId, device, pub, own = json["own"]?.jsonPrimitive?.content == "true", eventId = eventId)
+                    Decision.MsgRequest(
+                        chatId, device, pub, own = json["own"]?.jsonPrimitive?.content == "true", eventId = eventId,
+                        requesterUser = json.string("requester_user").orEmpty(),
+                        signature = json.string("signature")?.takeIf { it.isNotEmpty() }?.let { decodeBase64Url(it) },
+                        missing = runCatching { (json["missing"] as JsonArray).mapNotNull { it.jsonPrimitive.longOrNull } }.getOrDefault(emptyList()),
+                    )
                 }
             }
 

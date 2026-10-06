@@ -119,8 +119,11 @@ class HistoryApi(
 
     /** Чем кончилась просьба о ключах переписки. */
     sealed interface Recover {
-        /** Просьба разослана [helpers] устройствам. */
-        data class Asked(val helpers: Int) : Recover
+        /**
+         * Просьба разослана [helpers] устройствам; [missing] — сколько сообщений не хватает по
+         * счёту сервера (`null` — сервер старше и не считает, 0 — не хватает ничего).
+         */
+        data class Asked(val helpers: Int, val missing: Int? = null) : Recover
         data class Refused(val status: Int, val code: String) : Recover
         data object Offline : Recover
     }
@@ -128,21 +131,22 @@ class HistoryApi(
     /**
      * `POST /api/v1/chats/{id}/recover` — попросить ключи сообщений переписки у своих устройств
      * и собеседника (2026-10-06: «сообщение недоступно, запросить»). Заверенному устройству
-     * подпись фразой не нужна.
+     * подпись фразой не нужна; незаверенное подписывает ([signature] — base64url,
+     * `RecoverySignature.sign`), без неё сервер отвечает `bad_identity_sig`.
      */
-    suspend fun recover(chatId: String): Recover {
+    suspend fun recover(chatId: String, signature: String? = null): Recover {
         val response = try {
             client.post(route.api("/api/v1/chats/$chatId/recover")) {
                 header("Authorization", "Bearer ${token()}")
                 contentType(ContentType.Application.Json)
-                setBody("{}")
+                setBody(if (signature == null) "{}" else "{\"signature\":\"$signature\"}")
             }
         } catch (e: Throwable) {
             return Recover.Offline
         }
         val body = response.jsonBody()
         if (response.status != HttpStatusCode.OK) return Recover.Refused(response.status.value, body.codeOf())
-        return Recover.Asked(body?.int("helpers") ?: 0)
+        return Recover.Asked(body?.int("helpers") ?: 0, body?.int("missing"))
     }
 
     companion object {

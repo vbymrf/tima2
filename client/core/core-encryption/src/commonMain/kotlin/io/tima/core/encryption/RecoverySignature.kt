@@ -30,6 +30,13 @@ object RecoverySignature {
         val caption = MessageSigner.sign(key, canonicalBytes(groupId, deviceId)).getOrNull() ?: return null
         return encodeBase64UrlBytes(caption)
     }
+
+    /**
+     * Просьба подписана ключом личности аккаунта [identityPub] — проверяет отдающий сам, а не
+     * верит серверу (2026-10-06): незаверенному устройству ключи отдаются только по фразе.
+     */
+    fun verify(identityPub: ByteArray, id: String, deviceId: String, signature: ByteArray): Boolean =
+        runCatching { MessageSigner.verify(identityPub, canonicalBytes(id, deviceId), signature) }.getOrDefault(false)
 }
 
 /** Base64url без выравнивания — как ждёт сервер. */

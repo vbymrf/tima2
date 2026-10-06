@@ -146,7 +146,7 @@ fun ChatScreen(
      * поимённо, шифр читают по ключу.
      */
     onCarry: ((Long, Int) -> Unit)? = null,
-    /** «Сообщение недоступно, запросить» — личная переписка (2026-10-06). `null` — не нажимается. */
+    /** «Сообщение недоступно, запросить» — личная переписка и группа (2026-10-06). `null` — не нажимается. */
     onAskChatKeys: (() -> Unit)? = null,
     /** Меню «•••» в шапке. `null` — кнопки нет (личная переписка). */
     onMore: (() -> Unit)? = null,
@@ -273,7 +273,7 @@ fun ChatScreen(
             showCircles = state.showCircles,
             onNarrow = onNarrow,
             onCarry = onCarry,
-            onAskChatKeys = onAskChatKeys?.takeIf { state.chatKeysMay },
+            onAskChatKeys = onAskChatKeys?.takeIf { state.chatKeysMay || state.keyAskMay },
             onThread = onThread,
             onFailed = onFailed,
             invite = invite,
@@ -283,16 +283,20 @@ fun ChatScreen(
         // Полоса недоступной истории — над вводом и ОДНА на экран, а не у каждой строки.
         // Запрос уходит сразу за все недостающие версии; кнопка у каждого сообщения
         // обещала бы точность, которой в механизме нет.
-        if (state.keyAskMay &&
+        // В личной переписке полосы нет, пока не понадобилась фраза: просят нажатием на само
+        // сообщение.
+        val phraseWanted = state.phraseWanted || state.notice is ChatNotice.KeysNeedPhrase
+        if ((state.keyAskMay || (state.chatKeysMay && phraseWanted)) &&
             state.lines.any { it.display == MessageDisplay.UNREADABLE }
         ) {
             StoryUnavailable(
                 expect = state.expectKey,
-                // Фраза нужна всегда (Р42: просьба подписывается ключом личности), поэтому
-                // кнопка сначала открывает поле (заказчик 2026-10-06, п. 1.7).
-                phraseInputNeeded = state.notice is ChatNotice.KeysNeedPhrase,
+                // Заверенному фраза не нужна (заказчик 2026-10-06): первое нажатие просит без
+                // неё, отказ по подписи открывает поле, и следующее нажатие подписывает фразой.
+                phraseInputNeeded = phraseWanted,
                 phrase = state.phrase,
                 onPhrase = onPhrase,
+                onAsk = onAskChatKeys ?: onRequestKey,
                 onRequest = onRequestKey,
             )
         }
@@ -855,15 +859,13 @@ private fun StoryUnavailable(
     phraseInputNeeded: Boolean,
     phrase: String,
     onPhrase: (String) -> Unit,
+    onAsk: () -> Unit,
     onRequest: () -> Unit,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
-    // Первое нажатие открывает поле фразы, второе отправляет (п. 1.7): просьба без фразы всё
-    // равно получит отказ по подписи (Р42).
-    var open by remember { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth().background(colors.functional)) {
-        if (open || phraseInputNeeded) {
+        if (phraseInputNeeded) {
             Field(
                 value = phrase,
                 onChange = onPhrase,
@@ -885,7 +887,7 @@ private fun StoryUnavailable(
             modifier = Modifier.weight(1f),
         )
         Button(label = if (expect) words.asking else words.askKey, onClick = {
-            if (!open && !phraseInputNeeded) open = true else if (phrase.isNotBlank()) onRequest()
+            if (!phraseInputNeeded) onAsk() else if (phrase.isNotBlank()) onRequest()
         })
     }
     }

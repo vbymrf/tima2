@@ -129,12 +129,14 @@ class ChatStore(
     private val io: CoroutineDispatcher = Dispatchers.Default,
     /**
      * Попросить ключи личной переписки у своих устройств и собеседника (заказчик 2026-10-06:
-     * «сообщение недоступно, запросить»). `null` — переписка не личная.
+     * «сообщение недоступно, запросить»). Слова фразы — для незаверенного устройства: оно
+     * подписывает просьбу ключом личности; `null` — просим без подписи. `null` вместо всего —
+     * переписка не личная.
      */
-    private val askChatKeys: (suspend () -> RequestKeysStep)? = null,
+    private val askChatKeys: (suspend (List<String>?) -> RequestKeysStep)? = null,
     /**
      * Можно ли сейчас попросить самим, без нажатия, — один раз на переписку за срок, который
-     * помнит вызывающий. `null` — сами не просим.
+     * помнит вызывающий; и в личной, и в группе (заказчик 2026-10-06). `null` — сами не просим.
      */
     private val autoAskAllowed: (suspend () -> Boolean)? = null,
 ) {
@@ -201,11 +203,19 @@ class ChatStore(
                     },
                     noGroupKey = noKey,
                 )
-                // Недоступные сообщения в личной переписке — один запрос ключей сами
-                // (заказчик 2026-10-06: «автоматический режим в виде одного запроса»).
-                if (askChatKeys != null && !autoAsked && lines.any { it.display == MessageDisplay.UNREADABLE }) {
+                // Недоступные сообщения — один запрос ключей сами, без фразы (заказчик
+                // 2026-10-06: «автоматический режим в виде одного запроса»). Молча: откажут по
+                // подписи — откроется поле фразы, остальное человеку не показывается.
+                if ((askChatKeys != null || requestKeys != null) && !autoAsked &&
+                    lines.any { it.display == MessageDisplay.UNREADABLE }
+                ) {
                     autoAsked = true
-                    scope.launch { if (autoAskAllowed?.invoke() == true) askChatKeysNow() }
+                    scope.launch {
+                        if (autoAskAllowed?.invoke() == true && !_state.value.expectKey) {
+                            _state.value = _state.value.copy(expectKey = true)
+                            askKeysNow(null, quiet = true)
+                        }
+                    }
                 }
                 // Имена спрашиваются по одному разу на автора и только в группе: список
                 // обновляется на каждое сообщение, и поход за именем на каждой строке
@@ -416,80 +426,64 @@ class ChatStore(
         return outcome
     }
 
-    /** Человек закрыл сообщение о беде. */
-    /**
-     * Человек нажал «запросить ключ» на нечитаемом сообщении.
-     *
-     * **Делает это человек, а не приложение фоном.** Просьба уходит чужим устройствам и
-     * означает «дайте мне историю до моего прихода»: решать за человека, что он этого
-     * хочет, и будить ради этого чужие устройства — не наше дело.
-     *
-     * `null` в [requestKeys] означает, что переписка не групповая: у личной такой
-     * возможности нет, и кнопки на экране тоже не будет.
-     */
     /** Человек набирает секретную фразу — её просят только после отказа по подписи. */
     fun changedPhrase(text: String) {
         _state.value = _state.value.copy(phrase = text)
     }
 
+    /**
+     * Отправить просьбу с набранной фразой — после отказа по подписи. Слова берутся из поля и
+     * дальше нигде не сохраняются: держать их значило бы отдать вместе с устройством и тот
+     * заслон, ради которого фразу спрашивают.
+     */
     fun requestKey() {
-        val case = requestKeys ?: return
+        if (requestKeys == null && askChatKeys == null) return
         if (_state.value.expectKey) return
-        // Слова берутся из поля и дальше нигде не сохраняются: держать их значило бы
-        // отдать вместе с устройством и тот заслон, ради которого фразу спрашивают.
         val words = PhraseWords.parse(_state.value.phrase).takeIf { it.isNotEmpty() }
         _state.value = _state.value.copy(expectKey = true, notice = null)
-
-        scope.launch {
-            val outcome = case.request(chatId, words)
-            _state.value = _state.value.copy(
-                expectKey = false,
-                // Набранная фраза живёт до успеха и стирается сразу после него: держать
-                // её на экране дольше нужного незачем.
-                phrase = if (outcome is RequestKeysStep.Asked) "" else _state.value.phrase,
-                notice = when (outcome) {
-                    is RequestKeysStep.Asked -> ChatNotice.KeysAsked(outcome.devices)
-                    RequestKeysStep.NoHelpers -> ChatNotice.KeysNoHelpers
-                    RequestKeysStep.NothingMissing -> ChatNotice.KeysNothingMissing
-                    RequestKeysStep.NeedsSecretPhrase -> ChatNotice.KeysNeedPhrase
-                    RequestKeysStep.NotMember -> ChatNotice.KeysRefused(words().chat.notMemberAnyMore)
-                    is RequestKeysStep.Offline -> ChatNotice.KeysRefused(
-                        words().chat.offlineRetryIn(
-                            (outcome.retryAfterMs / 1000).coerceAtLeast(1).toInt(),
-                        ),
-                    )
-                    is RequestKeysStep.Refused -> ChatNotice.KeysRefused(words().trouble.refused(outcome.reason))
-                },
-            )
-        }
+        scope.launch { askKeysNow(words, quiet = false) }
     }
 
-    /** «Сообщение недоступно, запросить» — нажатие на недоступное сообщение личной переписки. */
+    /**
+     * «Сообщение недоступно, запросить» — нажатие на недоступное сообщение, в личной переписке
+     * и в группе (2026-10-06). Сначала без фразы: заверенному устройству она не нужна. Не всякое
+     * устройство можно заверить — тогда сервер отказывает по подписи, и открывается поле фразы.
+     */
     fun askChatKeys() {
-        if (askChatKeys == null || _state.value.expectKey) return
-        scope.launch { askChatKeysNow() }
+        if (requestKeys == null && askChatKeys == null) return
+        if (_state.value.expectKey) return
+        _state.value = _state.value.copy(expectKey = true, notice = null)
+        scope.launch { askKeysNow(null, quiet = false) }
     }
 
-    private suspend fun askChatKeysNow() {
-        val ask = askChatKeys ?: return
-        _state.value = _state.value.copy(expectKey = true, notice = null)
-        val outcome = ask()
+    /** Признак «запрос в пути» ставит вызывающий — до запуска, чтобы второе нажатие его видело. */
+    private suspend fun askKeysNow(words: List<String>?, quiet: Boolean) {
+        val outcome = requestKeys?.request(chatId, words) ?: askChatKeys?.invoke(words) ?: return
+        val needs = outcome == RequestKeysStep.NeedsSecretPhrase
         _state.value = _state.value.copy(
             expectKey = false,
-            notice = when (outcome) {
-                is RequestKeysStep.Asked -> ChatNotice.KeysAsked(outcome.devices)
-                RequestKeysStep.NoHelpers -> ChatNotice.KeysNoHelpers
-                RequestKeysStep.NothingMissing -> ChatNotice.KeysNothingMissing
-                RequestKeysStep.NeedsSecretPhrase -> ChatNotice.KeysNeedPhrase
-                RequestKeysStep.NotMember -> ChatNotice.KeysRefused(words().chat.notMemberAnyMore)
-                is RequestKeysStep.Offline -> ChatNotice.KeysRefused(
-                    words().chat.offlineRetryIn((outcome.retryAfterMs / 1000).coerceAtLeast(1).toInt()),
-                )
-                is RequestKeysStep.Refused -> ChatNotice.KeysRefused(words().trouble.refused(outcome.reason))
-            },
+            // Фраза нужна — поле остаётся открытым, пока просьба не уйдёт.
+            phraseWanted = needs || (_state.value.phraseWanted && outcome !is RequestKeysStep.Asked),
+            // Набранная фраза живёт до успеха и стирается сразу после него: держать её на
+            // экране дольше нужного незачем.
+            phrase = if (outcome is RequestKeysStep.Asked) "" else _state.value.phrase,
+            notice = if (quiet) _state.value.notice else noticeOf(outcome),
         )
     }
 
+    private fun noticeOf(outcome: RequestKeysStep): ChatNotice = when (outcome) {
+        is RequestKeysStep.Asked -> ChatNotice.KeysAsked(outcome.devices)
+        RequestKeysStep.NoHelpers -> ChatNotice.KeysNoHelpers
+        RequestKeysStep.NothingMissing -> ChatNotice.KeysNothingMissing
+        RequestKeysStep.NeedsSecretPhrase -> ChatNotice.KeysNeedPhrase
+        RequestKeysStep.NotMember -> ChatNotice.KeysRefused(words().chat.notMemberAnyMore)
+        is RequestKeysStep.Offline -> ChatNotice.KeysRefused(
+            words().chat.offlineRetryIn((outcome.retryAfterMs / 1000).coerceAtLeast(1).toInt()),
+        )
+        is RequestKeysStep.Refused -> ChatNotice.KeysRefused(words().trouble.refused(outcome.reason))
+    }
+
+    /** Человек закрыл сообщение о беде. */
     fun noticeDismissed() {
         _state.value = _state.value.copy(notice = null)
     }
@@ -510,6 +504,11 @@ data class ChatState(
     val chatKeysMay: Boolean = false,
     /** Набранная секретная фраза. Пусто — запрос уйдёт без подписи. */
     val phrase: String = "",
+    /**
+     * Сервер отказал без подписи — устройство не заверено, и просьбу подписывает фраза: поле
+     * фразы открыто (2026-10-06).
+     */
+    val phraseWanted: Boolean = false,
     /**
      * Групповая ли переписка. От этого зависит показ автора у каждой реплики: в личной
      * он лишний, в групповой без него сообщение теряет половину смысла.

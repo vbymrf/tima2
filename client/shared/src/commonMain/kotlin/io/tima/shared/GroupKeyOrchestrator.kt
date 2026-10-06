@@ -132,15 +132,16 @@ class GroupKeyOrchestrator(
     }
 
     /**
-     * Открытый ключ просящего устройства — из списка устройств его владельца, пропущенного через
-     * проверку заверения (Р57, как в ДУ3); `null` — устройство не прошло или не нашлось. В
-     * «записывать» проверка пишет в журнал и пропускает, в «требовать» — отказывает. Ключ,
-     * названный в событии, обязан совпасть с проверенным: иначе сервер подменил адресата.
+     * Открытый ключ просящего устройства — из списка устройств его владельца; `null` — устройство
+     * не нашлось, не заверено и не подписало просьбу фразой. Проверка строгая и **в любом
+     * режиме** ([DeviceTrustGate.vouched], заказчик 2026-10-06): в «записывать» прежний
+     * [DeviceTrustGate.admit] пропустил бы любое, а здесь отдаётся история группы. Ключ,
+     * названный в событии, обязан совпасть с проверенным: иначе сервер подменил адресата (Р57).
      */
     private suspend fun trustedRequester(decision: EventStreamProtocol.Decision.ShareKeys): ByteArray? {
         val user = decision.requesterUser.ifEmpty { return null }
         val answer = network.keys.devicesOf(user) as? io.tima.core.network.DeviceKeysResult.Devices ?: return null
-        val device = environment.trustGate.admit(user, answer).firstOrNull { it.deviceId == decision.requesterDevice }
+        val device = environment.trustGate.vouched(user, answer, decision.requesterDevice, decision.groupId, decision.signature)
             ?: return null
         if (!device.encryptionPub.contentEquals(decision.requesterEncryptionPub)) return null
         // Под ключ эпохи, если он подписан ключом подписи устройства (ПЛАН-(ПС) ПС3).

@@ -82,6 +82,47 @@ class RequestKeyTest {
         assertEquals(1, requests)
     }
 
+    @Test
+    fun заверенное_просит_без_фразы_незаверенное_по_фразе() = runTest {
+        // 2026-10-06: первое нажатие уходит без фразы; отказ по подписи открывает поле, и
+        // следующая просьба несёт набранные слова.
+        val asked = mutableListOf<List<String>?>()
+        val store = store(backgroundScope, request = RequestGroupKeys { _, words ->
+            asked += words
+            if (words == null) RecoveryStep.NeedsSecretPhrase else RecoveryStep.Requested(1, 2)
+        })
+        store.askChatKeys()
+        runCurrent()
+        assertEquals(listOf<List<String>?>(null), asked)
+        assertTrue(store.state.value.phraseWanted, "поле фразы не открылось")
+
+        store.changedPhrase("один два три")
+        store.requestKey()
+        runCurrent()
+        assertEquals(listOf("один", "два", "три"), asked.last())
+        assertIs<ChatNotice.KeysAsked>(store.state.value.notice)
+        assertFalse(store.state.value.phraseWanted, "поле фразы осталось после успеха")
+        assertEquals("", store.state.value.phrase, "фраза осталась на экране")
+    }
+
+    @Test
+    fun личная_переписка_просит_тем_же_путём() = runTest {
+        val asked = mutableListOf<List<String>?>()
+        val store = ChatStore(
+            io = kotlinx.coroutines.Dispatchers.Unconfined,
+            chatId = "cccccccc-0000-0000-0000-000000000001",
+            observe = ObserveChat(ChatFeed { _, _ -> stream }),
+            send = send(),
+            scope = backgroundScope,
+            askChatKeys = { words -> asked += words; io.tima.domain.chat.RequestKeysStep.NothingMissing },
+        )
+        assertTrue(store.state.value.chatKeysMay)
+        store.askChatKeys()
+        runCurrent()
+        assertEquals(listOf<List<String>?>(null), asked)
+        assertIs<ChatNotice.KeysNothingMissing>(store.state.value.notice)
+    }
+
     private val stream = MutableStateFlow<List<ChatLine>>(emptyList())
 
     private fun store(scope: kotlinx.coroutines.CoroutineScope, request: RequestGroupKeys?) = ChatStore(
@@ -90,16 +131,18 @@ class RequestKeyTest {
         io = kotlinx.coroutines.Dispatchers.Unconfined,
         chatId = "gggggggg-0000-0000-0000-000000000001",
         observe = ObserveChat(ChatFeed { _, _ -> stream }),
-        send = SendMessage(
-            queue = OutgoingQueue { _, _, _, _, _, _ -> true },
-            codec = object : MessageBodyCodec {
-                override fun encodeText(text: String) = ByteArray(10)
-                override fun decodeText(body: ByteArray): String? = null
-            },
-            keys = DedupKeys { "d-1" },
-            maxBodyBytes = 100,
-        ),
+        send = send(),
         scope = scope,
         requestKeys = request,
+    )
+
+    private fun send() = SendMessage(
+        queue = OutgoingQueue { _, _, _, _, _, _ -> true },
+        codec = object : MessageBodyCodec {
+            override fun encodeText(text: String) = ByteArray(10)
+            override fun decodeText(body: ByteArray): String? = null
+        },
+        keys = DedupKeys { "d-1" },
+        maxBodyBytes = 100,
     )
 }

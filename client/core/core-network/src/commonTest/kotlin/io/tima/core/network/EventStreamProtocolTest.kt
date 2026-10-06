@@ -51,6 +51,29 @@ class EventStreamProtocolTest {
     }
 
     @Test
+    fun просьба_называет_недостающие_и_несёт_подпись() {
+        // 2026-10-06: сервер называет, каких сообщений нет, и передаёт подпись фразой как есть.
+        val asked = protocol.decide("""{"event":"recovery.msg_request","event_id":15,"chat_id":"c-1","requester_device":"d-2","requester_enc_pub":"AQID","own":true,"requester_user":"u-1","signature":"BAU","missing":[9,7,3]}""")
+        assertEquals(
+            EventStreamProtocol.Decision.MsgRequest(
+                "c-1", "d-2", byteArrayOf(1, 2, 3), own = true, eventId = 15,
+                requesterUser = "u-1", signature = byteArrayOf(4, 5), missing = listOf(9L, 7L, 3L),
+            ),
+            asked,
+        )
+        val unsigned = protocol.decide("""{"event":"recovery.msg_request","event_id":16,"chat_id":"c-1","requester_device":"d-2","requester_enc_pub":"AQID","signature":""}""")
+        assertEquals(null, (unsigned as EventStreamProtocol.Decision.MsgRequest).signature, "пустая подпись — просили без фразы")
+    }
+
+    @Test
+    fun просьба_о_ключах_группы_несёт_подпись() {
+        val asked = protocol.decide("""{"event":"recovery.gk_request","event_id":17,"group_id":"g-1","requester_device":"d-2","requester_user":"u-1","requester_enc_pub":"AQID","versions":[2],"signature":"BAU"}""")
+        assertEquals(byteArrayOf(4, 5).toList(), (asked as EventStreamProtocol.Decision.ShareKeys).signature?.toList())
+        val unsigned = protocol.decide("""{"event":"recovery.gk_request","event_id":18,"group_id":"g-1","requester_device":"d-2","requester_enc_pub":"AQID","versions":[2],"signature":""}""")
+        assertEquals(null, (unsigned as EventStreamProtocol.Decision.ShareKeys).signature)
+    }
+
+    @Test
     fun новое_своё_устройство_разбирается() {
         // Р48: событие «добавлено новое устройство» — всем устройствам личности.
         val added = protocol.decide("""{"event":"device.added","event_id":14,"device_id":"d-новое","platform":"android"}""")

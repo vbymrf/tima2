@@ -309,7 +309,7 @@ class Receiver(
                 Journal.note(LogCode.DEVICE_TRUST, "просьба о ключах переписки", "переписка" to decision.chatId.take(8), "своё" to decision.own)
                 // Не в канале: перезаворачивание — страницы истории и запросы, канал всё это
                 // время стоял бы.
-                chatKeyHelper?.later(decision.chatId, decision.requesterDevice, decision.requesterEncPub, decision.own)
+                chatKeyHelper?.later(decision)
             }
             is EventStreamProtocol.Decision.CallState -> {
                 // Строка звонка не переживает звонок — чем бы он ни кончился (У7).

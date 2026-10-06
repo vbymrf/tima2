@@ -5,6 +5,7 @@ import io.tima.core.diag.LogCode
 import io.tima.core.network.DeviceKeyRecord
 import io.tima.core.network.DeviceKeysResult
 import io.tima.core.encryption.DeviceTrustCheck
+import io.tima.core.encryption.RecoverySignature
 import io.tima.domain.chat.Settings
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -59,6 +60,40 @@ class DeviceTrustGate(private val settings: Settings) {
             note(userId, d.deviceId, why, trouble = false, mode = mode)
         }
         return if (mode == MODE_REQUIRE) trusted else answer.devices
+    }
+
+    /**
+     * Кому отдать ключи по просьбе (`recovery.msg_request`, `recovery.gk_request`) — строже
+     * [admit] и **в любом режиме** (заказчик 2026-10-06): устройство заверено, либо просьба
+     * подписана ключом личности из фразы над `tima.recover.v1|<[scopeId]>|<устройство>`. Не
+     * всякое устройство можно заверить, и фраза остаётся его путём.
+     *
+     * В «записывать» [admit] пропустил бы любое — а здесь отдаётся вся переписка, и вор SIM
+     * получил бы её одной просьбой. Ключ личности сверяется с запомненным, как в [admit].
+     *
+     * @return запись устройства из ответа либо `null` — не заверено и не подписано.
+     */
+    suspend fun vouched(
+        userId: String,
+        answer: DeviceKeysResult.Devices,
+        deviceId: String,
+        scopeId: String,
+        signature: ByteArray?,
+    ): DeviceKeyRecord? {
+        val device = answer.devices.firstOrNull { it.deviceId == deviceId } ?: return null
+        val identity = answer.identityPub ?: return null
+        val remembered = known(userId)
+        if (remembered == null) remember(userId, identity)
+        if (remembered != null && !remembered.contentEquals(identity)) {
+            note(userId, "-", "ключ личности не тот, что при первой встрече — сервер подменил?", trouble = true)
+            return null
+        }
+        val asks = answer.signingKeys.map { DeviceTrustCheck.SigningKey(it.askId, it.askPub, it.askSig) }
+        if (DeviceTrustCheck.trusted(identity, asks, device.encryptionPub, device.signingPub, device.certBy, device.certAskId, device.certSig)) {
+            return device
+        }
+        if (signature != null && RecoverySignature.verify(identity, scopeId, deviceId, signature)) return device
+        return null
     }
 
     private suspend fun known(userId: String): ByteArray? =
