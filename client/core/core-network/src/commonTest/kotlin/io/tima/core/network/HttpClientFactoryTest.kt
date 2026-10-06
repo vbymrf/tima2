@@ -60,6 +60,22 @@ class HttpClientFactoryTest {
     }
 
     @Test
+    fun требование_аттестации_это_ожидание_и_сигнал_а_не_отказ() = runTest {
+        // ПЛАН-(ЗБ)-ЗАЩИТЫ-ОТ-БОТОВ ЗБ1: сервер отказывает устройству, пока телефон не пройдёт
+        // аттестацию. Конверт годен — сообщение ждёт, а не выбрасывается; требование узнаётся
+        // по заголовку в общем месте, чтобы приложение запустило проверку.
+        val before = AttestationDemand.raised.value
+        val (transport, _) = transport {
+            respond(
+                """{"code":"attestation_required","message":"проверка телефона"}""", HttpStatusCode.Forbidden,
+                headersOf("Content-Type" to listOf("application/json"), AttestationDemand.HEADER to listOf("required")),
+            )
+        }
+        assertIs<SendOutcome.Retry>(transport.send("d", byteArrayOf(1)))
+        assertEquals(before + 1, AttestationDemand.raised.value, "требование не дошло до сигнала")
+    }
+
+    @Test
     fun ошибочный_статус_не_становится_исключением() = runTest {
         // Включённый expectSuccess обратил бы 403 в исключение, а транспорт по своему
         // правилу «исключение → повтор» повторял бы вечно конверт, отвергнутый по сути.

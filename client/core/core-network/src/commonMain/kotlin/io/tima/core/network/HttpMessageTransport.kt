@@ -100,9 +100,18 @@ class HttpMessageTransport(
             // Повтор ничего не изменит, и держать такое в очереди вечно — значит
             // никогда не дойти до следующего сообщения.
             HttpStatusCode.BadRequest,
-            HttpStatusCode.Forbidden,
             HttpStatusCode.PayloadTooLarge,
             -> SendOutcome.Permanent("${response.status.value} ${code ?: "without code"}")
+
+            HttpStatusCode.Forbidden -> when (code) {
+                // Сервер требует аттестацию у этого телефона (ЗБ1): конверт годен, отказ —
+                // устройству, и снимется, когда телефон пройдёт проверку. Сообщение ждёт.
+                AttestationDemand.CODE -> SendOutcome.Retry(
+                    afterMs = ATTESTATION_WAIT_MS,
+                    reason = "403 ${AttestationDemand.CODE}: сервер ждёт аттестацию телефона",
+                )
+                else -> SendOutcome.Permanent("403 ${code ?: "without code"}")
+            }
 
             HttpStatusCode.Unauthorized -> when (code) {
                 // Устройство отозвано — это не «попробуем позже», это конец пути для
@@ -156,5 +165,8 @@ class HttpMessageTransport(
          * ходят через объектное хранилище, а не этой ручкой.
          */
         const val MAX_ENVELOPE_BYTES: Int = 4 shl 20
+
+        /** Пауза до повтора, пока сервер ждёт аттестацию телефона (ЗБ1): сама проверка — секунды. */
+        const val ATTESTATION_WAIT_MS: Long = 15_000
     }
 }

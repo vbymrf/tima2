@@ -2,7 +2,9 @@ package io.tima.shared
 
 import io.tima.core.encryption.DeviceIdentity
 import io.tima.core.encryption.GroupMessageSealerOverKodium
+import io.tima.core.network.AttestationDemand
 import io.tima.core.network.GroupTransportOverHttp
+import io.tima.core.network.HttpMessageTransport
 import io.tima.core.outbox.OutboxEntry
 import io.tima.core.outbox.OutboxState
 import io.tima.core.outbox.SendOutcome
@@ -173,6 +175,11 @@ class GroupSender(
 
             is GroupSendStep.Offline ->
                 wait(entry, "нет связи с сервером", outcome.retryAfterMs)
+
+            // Сервер требует аттестацию у этого телефона (ЗБ1): отказ устройству, а не
+            // сообщению — снимется, когда телефон пройдёт проверку. Сообщение ждёт.
+            is GroupSendStep.Refused if outcome.reason == AttestationDemand.CODE ->
+                wait(entry, "сервер ждёт аттестацию телефона — сообщение ждёт", HttpMessageTransport.ATTESTATION_WAIT_MS)
 
             is GroupSendStep.Refused -> {
                 lastTrouble = "сервер отказал: ${outcome.reason}"

@@ -1520,22 +1520,47 @@ private fun App(
     // ДУ6: с номера начали заново (событие или проверка при запуске); заявки в группы.
     // Аттестация ключа телефона (ДУ8, Р22): один раз на установку — сервер в режиме «записывать»
     // видит, какие телефоны и прошивки проходят. Выключенный сервер ответит «пусто», и это не беда.
+    // Вторая дорога — требование сервера у этого телефона (ПЛАН-(ЗБ)-ЗАЩИТЫ-ОТ-БОТОВ ЗБ1): под ним
+    // сервер отказывает во всём, кроме аттестации, и отметка «уже аттестован» тогда не в счёт.
+    val attestKey = "trust.attested.v2"
+    suspend fun attestNow(at: DeviceAttester, why: String) {
+        val token = network.directory.identityChallenge() ?: return
+        val identity = deviceIdentityFrom(deviceSecret)
+        val signed = io.tima.core.encryption.DeviceTrustCheck.deviceCertBytes(identity.encryptionPublic, identity.signingPublic)
+        val proof = runCatching { at.attest(token, signed) }
+            .onFailure { Journal.trouble(LogCode.DEVICE_TRUST, "аттестация не сделалась", "причина" to (it.message ?: "?"), "зачем" to why) }
+            .getOrNull() ?: return
+        val state = network.keys.sendAttestation(token, proof.chain, proof.signature)
+        Journal.note(LogCode.DEVICE_TRUST, "аттестация отправлена", "итог" to (state ?: "не дошла"), "сертификатов" to proof.chain.size, "зачем" to why)
+        // Отметка — только когда сервер её принял: не дошла или не прошла — повторим при запуске.
+        if (state == "verified") runCatching { environment.settings.put(attestKey, "1") }
+    }
     LaunchedEffect(assembled.session.userId, attester) {
         val at = attester ?: return@LaunchedEffect
         // v2: прежняя отметка ставилась и при неудаче — Honor тогда не прошёл из-за строгого
         // разбора сертификата на сервере, и повторять было некому.
-        val key = "trust.attested.v2"
-        if (runCatching { environment.settings.all().first()[key] }.getOrNull() != null) return@LaunchedEffect
-        val token = network.directory.identityChallenge() ?: return@LaunchedEffect
-        val identity = deviceIdentityFrom(deviceSecret)
-        val signed = io.tima.core.encryption.DeviceTrustCheck.deviceCertBytes(identity.encryptionPublic, identity.signingPublic)
-        val proof = runCatching { at.attest(token, signed) }
-            .onFailure { Journal.trouble(LogCode.DEVICE_TRUST, "аттестация не сделалась", "причина" to (it.message ?: "?")) }
-            .getOrNull() ?: return@LaunchedEffect
-        val state = network.keys.sendAttestation(token, proof.chain, proof.signature)
-        Journal.note(LogCode.DEVICE_TRUST, "аттестация отправлена", "итог" to (state ?: "не дошла"), "сертификатов" to proof.chain.size)
-        // Отметка — только когда сервер её принял: не дошла или не прошла — повторим при запуске.
-        if (state == "verified") runCatching { environment.settings.put(key, "1") }
+        if (runCatching { environment.settings.all().first()[attestKey] }.getOrNull() != null) return@LaunchedEffect
+        attestNow(at, "установка")
+    }
+    LaunchedEffect(assembled.session.userId, attester) {
+        // Требований бывает очередь — на каждый отказанный запрос; проверка одна на пачку и не
+        // чаще раза в полминуты: сама она секунды, а повторять её на каждом отказе — петля.
+        var last = 0L
+        io.tima.core.network.AttestationDemand.raised.collect { count ->
+            if (count == 0L) return@collect
+            val at = attester
+            if (at == null) {
+                // ПК: аттестации нет вовсе — требование к нему означает остановку, сказать один раз.
+                if (last == 0L) Journal.trouble(LogCode.DEVICE_TRUST, "сервер требует аттестацию, а на этом устройстве её нет")
+                last = 1L
+                return@collect
+            }
+            val now = msNow()
+            if (now - last < ATTEST_AGAIN_MS) return@collect
+            last = now
+            Journal.note(LogCode.DEVICE_TRUST, "сервер требует аттестацию телефона — прохожу")
+            attestNow(at, "требование сервера")
+        }
     }
 
     // Двойники из-за округлённого номера сообщения (сервер до 2026-10-02) — убрать один раз.
@@ -5301,6 +5326,9 @@ private enum class NoticesAsk {
 
 /** «Позже» — неделя (решение заказчика 2026-09-26). */
 private const val BG_LATER_MS = 7L * 24 * 60 * 60 * 1000
+
+/** Не чаще раза в полминуты — повторная аттестация по требованию сервера (ЗБ1). */
+private const val ATTEST_AGAIN_MS = 30_000L
 
 /** Разрешение на уведомления спрошено само — один раз на установку (ВЗ0б). */
 private const val NOTICES_AUTO_ASKED = "notices.autoAsked"

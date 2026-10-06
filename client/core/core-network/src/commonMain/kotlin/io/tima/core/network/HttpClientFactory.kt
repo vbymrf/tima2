@@ -146,6 +146,8 @@ fun HttpClientConfig<*>.timaDefaults(
             // Время сервера — с каждого ответа: по нему подписывается обновление токена,
             // когда часы устройства разошлись с сервером (ServerClock, А2).
             ServerClock.observe(response.headers[HttpHeaders.Date])
+            // Требование аттестации у этого телефона (ЗБ1) — тоже с любого ответа.
+            if (response.status == HttpStatusCode.Forbidden) AttestationDemand.observe(response.headers[AttestationDemand.HEADER])
             val started = response.call.request.attributes.getOrNull(startedAt)
             val spent = started?.let { Clock.System.now().toEpochMilliseconds() - it } ?: -1
             val path = shortPath(response.call.request.url.encodedPath)
