@@ -1605,6 +1605,7 @@ object EnglishWords : Words {
         override val phoneChangeTaken = "This number is already linked to another account."
         override val phoneChangeReregOpen = "The account is being re-registered: the number can be changed when the dispute ends."
         override val phoneChangeNotMine = "Only the identity key that filed the request can confirm the number change."
+        override val phoneRequired = "A new account and a new identity key can be created only on an Android phone with the TIMA app."
         override val reregNewWon = "Re-registration confirmed. The old identity key is deleted, restrictions lifted — certify your devices as usual."
         override val reregOldLost =
             "Your identity key is deleted: the re-registration was confirmed. You can fight for the account — file again — or create a new account on another number."

@@ -1605,6 +1605,7 @@ object SpanishWords : Words {
         override val phoneChangeTaken = "Este número ya está vinculado a otra cuenta."
         override val phoneChangeReregOpen = "La cuenta se está re-registrando: el número se podrá cambiar cuando termine la disputa."
         override val phoneChangeNotMine = "Solo la clave de identidad que presentó la solicitud puede confirmar el cambio de número."
+        override val phoneRequired = "Una cuenta nueva y una clave de identidad nueva solo se crean en un teléfono Android con la aplicación TIMA."
         override val reregNewWon = "Re-registro confirmado. La clave de identidad anterior se eliminó, sin restricciones: certifica tus dispositivos como siempre."
         override val reregOldLost =
             "Tu clave de identidad se eliminó: el re-registro se confirmó. Puedes luchar por la cuenta —presentar de nuevo— o crear una cuenta nueva con otro número."

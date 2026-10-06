@@ -1698,6 +1698,8 @@ interface AuthWords {
     val phoneChangeTaken: String
     val phoneChangeReregOpen: String
     val phoneChangeNotMine: String
+    /** ДУ8, Р17: в «требовать» новая личность заводится только на телефоне Android. */
+    val phoneRequired: String
     val reregNewWon: String
     val reregOldLost: String
     fun reregNewLost(date: String): String
@@ -3702,6 +3704,7 @@ object RussianWords : Words {
         override val phoneChangeTaken = "Этот номер уже привязан к другому аккаунту."
         override val phoneChangeReregOpen = "Идёт перерегистрация аккаунта: сменить номер можно, когда спор кончится."
         override val phoneChangeNotMine = "Подтвердить смену номера может только ключ личности, подавший заявку."
+        override val phoneRequired = "Новый аккаунт и новый ключ личности заводятся только на телефоне Android с приложением TIMA."
         override val reregNewWon = "Перерегистрация подтверждена. Прежний ключ личности удалён, ограничения сняты — заверяйте свои устройства как обычно."
         override val reregOldLost =
             "Ваш ключ личности удалён: перерегистрация подтверждена. Можно бороться за аккаунт — подать заявку заново — или завести новый аккаунт на другой номер."

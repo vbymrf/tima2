@@ -198,7 +198,7 @@ class AuthStore(
                 RegistrationStep.IdentityClosed -> current.copyWithTrouble(words().auth.identityClosed)
 
                 is RegistrationStep.Offline -> current.copyWithTrouble(noLinks(step.retryAfterMs))
-                is RegistrationStep.Refused -> current.copyWithTrouble(step.reason)
+                is RegistrationStep.Refused -> current.copyWithTrouble(refusalText(step.reason))
             }
         }
     }
@@ -241,7 +241,7 @@ class AuthStore(
                     trouble = words().auth.timeIsUp,
                 )
                 is RegistrationStep.Offline -> current.copyWithTrouble(noLinks(step.retryAfterMs))
-                is RegistrationStep.Refused -> current.copyWithTrouble(step.reason)
+                is RegistrationStep.Refused -> current.copyWithTrouble(refusalText(step.reason))
             }
         }
     }
@@ -291,10 +291,17 @@ class AuthStore(
                 is RegistrationStep.Refused -> if (step.reason == "start_anew_banned") {
                     current.copy(trouble = words().auth.startAnewBanned, expect = false, startAnew = false)
                 } else {
-                    current.copyWithTrouble(step.reason)
+                    current.copyWithTrouble(refusalText(step.reason))
                 }
             }
         }
+    }
+
+    /** Отказ сервера в регистрации — словами, где код знаком; иначе как пришёл. */
+    private fun refusalText(reason: String): String = when (reason) {
+        // ДУ8, Р17: в «требовать» новая личность — только на телефоне Android.
+        "phone_required" -> words().auth.phoneRequired
+        else -> reason
     }
 
     /**
@@ -328,7 +335,7 @@ class AuthStore(
                     when (step.reason) {
                         "rereg_open" -> words().auth.reregOpen
                         "bad_signature" -> words().auth.reregStale
-                        else -> step.reason
+                        else -> refusalText(step.reason)
                     },
                 )
                 else -> current.copyWithTrouble(words().auth.reregStale)
