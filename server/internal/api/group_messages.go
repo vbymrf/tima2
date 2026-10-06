@@ -74,6 +74,9 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			ReplyTo         int64  `json:"reply_to"`
 			CreatedAtUnixMs int64  `json:"created_at_unix_ms"`
 			Signature       string `json:"signature"` // base64url, Ed25519
+			// KeyCommitment — обязательство по ключу группы (ADR-0013 для групп): есть — подпись
+			// версии 2 и только у зашифрованного; нет — версия 1.
+			KeyCommitment string `json:"key_commitment,omitempty"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, maxEnvelopeBytes+64<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -93,6 +96,15 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 		if len(payload) == 0 || len(payload) > maxEnvelopeBytes {
 			writeErr(w, http.StatusBadRequest, "bad_payload", "payload пуст или больше 4 MiB")
 			return
+		}
+		var commitment []byte
+		if req.KeyCommitment != "" {
+			c, err := b64.DecodeString(req.KeyCommitment)
+			if err != nil || len(c) != timacrypto.CommitmentSize {
+				writeErr(w, http.StatusBadRequest, "bad_commitment", "key_commitment — base64url, 32 байта")
+				return
+			}
+			commitment = c
 		}
 		if req.ThreadRoot < 0 || req.ReplyTo < 0 || req.GKVersion < 0 {
 			writeErr(w, http.StatusBadRequest, "bad_refs", "thread_root/reply_to/gk_version не могут быть отрицательными")
@@ -148,6 +160,10 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 				writeErr(w, http.StatusBadRequest, "unknown_gk_version", "такой версии GK у группы нет")
 				return
 			}
+		} else if commitment != nil {
+			// Обязательство — по ключу группы; у открытого сообщения ключа нет.
+			writeErr(w, http.StatusBadRequest, "commitment_without_secret", "key_commitment бывает только у уровня -1")
+			return
 		} else if req.GKVersion != 0 {
 			// Незашифрованное сообщение с версией ключа — противоречие: версия говорит,
 			// что payload закрыт, а уровень — что открыт.
@@ -182,7 +198,7 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		cb := timacrypto.GroupMessageCanonicalBytes(timacrypto.GroupMessageMeta{
+		meta := timacrypto.GroupMessageMeta{
 			GroupID:         groupID,
 			SenderID:        id.UserID,
 			SenderDevice:    id.DeviceID,
@@ -191,7 +207,11 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			ThreadRoot:      uint64(req.ThreadRoot),
 			ReplyTo:         uint64(req.ReplyTo),
 			GKVersion:       uint32(req.GKVersion),
-		}, payload)
+		}
+		cb := timacrypto.GroupMessageCanonicalBytes(meta, payload)
+		if commitment != nil {
+			cb = timacrypto.GroupMessageCanonicalBytesV2(meta, payload, commitment)
+		}
 		if !timacrypto.VerifyEnvelopeSignature(signingPub, cb, signature) {
 			writeErr(w, http.StatusForbidden, "bad_signature", "подпись сообщения не прошла проверку")
 			return
@@ -209,6 +229,7 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			ReplyTo:         req.ReplyTo,
 			CreatedAtUnixMs: req.CreatedAtUnixMs,
 			Signature:       signature,
+			KeyCommitment:   commitment,
 			Level:           level,
 		}
 		messageID, duplicate, err := deps.store.SaveGroupMessage(r.Context(), msg)
@@ -273,7 +294,7 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 // обязан суметь проверить подпись).
 func groupMessageJSON(m store.GroupMessage) map[string]any {
 	b64 := base64.RawURLEncoding
-	return map[string]any{
+	out := map[string]any{
 		"message_id":         m.MessageID,
 		"group_id":           m.GroupID,
 		"sender_id":          m.SenderID,
@@ -287,6 +308,10 @@ func groupMessageJSON(m store.GroupMessage) map[string]any {
 		"signature":          b64.EncodeToString(m.Signature),
 		"level":              m.Level,
 	}
+	if len(m.KeyCommitment) > 0 {
+		out["key_commitment"] = b64.EncodeToString(m.KeyCommitment)
+	}
+	return out
 }
 
 // listGroupMessages — GET /groups/{groupID}/messages?before=&limit=&thread=.

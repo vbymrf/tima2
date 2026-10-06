@@ -35,6 +35,8 @@ type GroupMessage struct {
 	ReplyTo         int64
 	CreatedAtUnixMs int64
 	Signature       []byte
+	// KeyCommitment — обязательство по ключу группы (подпись версии 2); nil — версия 1.
+	KeyCommitment []byte
 	// Level — кому сервер отдаёт сообщение (ADR-0019): -1 шифр, 0 всем и всегда,
 	// 1 всем, 2 вступившим, 3 по разрешению. В подпись НЕ входит: подпись неизменна,
 	// а уровень по замыслу сужается после отправки.
@@ -55,13 +57,13 @@ func (s *Store) SaveGroupMessage(ctx context.Context, m GroupMessage) (int64, bo
 	var id int64
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO group_messages (group_id, client_msg_id, sender_id, sender_device, kind,
-			gk_version, payload, thread_root, reply_to, created_at_unix_ms, signature, level)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+			gk_version, payload, thread_root, reply_to, created_at_unix_ms, signature, level, key_commitment)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 		ON CONFLICT (group_id, client_msg_id) DO NOTHING
 		RETURNING message_id`,
 		m.GroupID, m.ClientMsgID, m.SenderID, m.SenderDevice, m.Kind,
 		nullIfZero(m.GKVersion), m.Payload, nullIfZero(m.ThreadRoot), nullIfZero(m.ReplyTo),
-		m.CreatedAtUnixMs, m.Signature, m.Level).Scan(&id)
+		m.CreatedAtUnixMs, m.Signature, m.Level, m.KeyCommitment).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) { // конфликт — сообщение уже принято
 		err = s.pool.QueryRow(ctx,
 			`SELECT message_id FROM group_messages WHERE group_id = $1 AND client_msg_id = $2`,
@@ -86,7 +88,7 @@ func (s *Store) ListGroupMessages(ctx context.Context, groupID string, threadRoo
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT message_id, sender_id, sender_device, kind, COALESCE(gk_version, 0), payload,
-		       COALESCE(thread_root, 0), COALESCE(reply_to, 0), created_at_unix_ms, signature, level
+		       COALESCE(thread_root, 0), COALESCE(reply_to, 0), created_at_unix_ms, signature, level, key_commitment
 		FROM group_messages
 		WHERE group_id = $1 AND message_id < $2 AND NOT deleted
 		  AND ($3::bigint = 0 OR thread_root = $3)
@@ -101,7 +103,7 @@ func (s *Store) ListGroupMessages(ctx context.Context, groupID string, threadRoo
 	for rows.Next() {
 		m := GroupMessage{GroupID: groupID}
 		if err := rows.Scan(&m.MessageID, &m.SenderID, &m.SenderDevice, &m.Kind, &m.GKVersion,
-			&m.Payload, &m.ThreadRoot, &m.ReplyTo, &m.CreatedAtUnixMs, &m.Signature, &m.Level); err != nil {
+			&m.Payload, &m.ThreadRoot, &m.ReplyTo, &m.CreatedAtUnixMs, &m.Signature, &m.Level, &m.KeyCommitment); err != nil {
 			return nil, err
 		}
 		out = append(out, m)

@@ -108,6 +108,10 @@ func hkdfSHA256(ikm, info []byte, length int) []byte {
 // раскладки (schema/proto/README.md §group_message_canonical_bytes).
 const GroupMessageDomain = "tima.group_message.v1"
 
+// GroupMessageDomainV2 — версия 2: привязка ключа группы (ADR-0013 для групп; решение заказчика
+// 2026-10-06 «отменяем решение 5»). Раскладка v1 под этим доменом плюс key_commitment хвостом.
+const GroupMessageDomainV2 = "tima.group_message.v2"
+
 // GroupMessageMeta — подписываемые поля сообщения группы. message_id не входит —
 // его назначает сервер при приёме. GKVersion 0 = публичная группа (plaintext).
 type GroupMessageMeta struct {
@@ -124,8 +128,19 @@ type GroupMessageMeta struct {
 // GroupMessageCanonicalBytes — preimage подписи сообщения группы: строго
 // schema/proto/README.md, KAT-вектор group_message_canonical.
 func GroupMessageCanonicalBytes(meta GroupMessageMeta, payload []byte) []byte {
+	return groupMessageCanonical(GroupMessageDomain, meta, payload)
+}
+
+// GroupMessageCanonicalBytesV2 — preimage версии 2: обязательство по ключу группы входит в
+// подпись, поэтому подменить его нельзя, а получатель и депозитарий пересчитывают его из
+// своего ключа и сверяют (KAT-вектор group_message_canonical_v2).
+func GroupMessageCanonicalBytesV2(meta GroupMessageMeta, payload, keyCommitment []byte) []byte {
+	return append(groupMessageCanonical(GroupMessageDomainV2, meta, payload), keyCommitment...)
+}
+
+func groupMessageCanonical(domain string, meta GroupMessageMeta, payload []byte) []byte {
 	var out []byte
-	out = appendLP(out, GroupMessageDomain)
+	out = appendLP(out, domain)
 	out = appendLP(out, meta.GroupID)
 	out = appendLP(out, meta.SenderID)
 	out = appendLP(out, meta.SenderDevice)
