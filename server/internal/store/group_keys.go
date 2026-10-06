@@ -182,7 +182,11 @@ func (s *Store) HelperDevices(ctx context.Context, groupID, requester string, ve
 		JOIN devices d ON d.device_id = w.recipient AND d.revoked_at IS NULL
 		JOIN memberships m ON m.user_id = d.user_id
 		  AND m.target_type = 'group' AND m.target_id = w.group_id AND m.left_at IS NULL
-		WHERE w.group_id = $1 AND w.recipient <> $2 AND w.gk_version = ANY($3)`,
+		WHERE w.group_id = $1 AND w.recipient <> $2 AND w.gk_version = ANY($3)
+		  -- Ключ отдают модератор, администратор и владелец — и свои устройства просящего
+		  -- (заказчик 2026-10-06, п. 1.7): рядовой участник ключами не распоряжается.
+		  AND (m.role IN ('moderator', 'admin', 'owner')
+		       OR d.user_id = (SELECT user_id FROM devices WHERE device_id = $2))`,
 		groupID, requester, versions)
 	if err != nil {
 		return nil, err

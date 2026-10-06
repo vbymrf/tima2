@@ -369,6 +369,20 @@ func groupKeyProvide(deps groupsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_json", "нужны requester_device и keys")
 			return
 		}
+		// Ключ отдают модератор, администратор и владелец — или своё же устройство просящему
+		// (заказчик 2026-10-06, п. 1.7). Тот же порядок, что при выборе помощников.
+		if roleRank[role] < rankModerator {
+			own, err := deps.store.IsActiveDevice(r.Context(), id.UserID, req.RequesterDevice)
+			if err != nil {
+				log.Printf("groupKeyProvide: own device: %v", err)
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+				return
+			}
+			if !own {
+				writeErr(w, http.StatusForbidden, "not_moderator", "ключи группы отдают модератор, администратор и владелец")
+				return
+			}
+		}
 		member, err := deps.store.IsGroupMemberDevice(r.Context(), groupID, req.RequesterDevice)
 		if err != nil {
 			log.Printf("groupKeyProvide: member check: %v", err)

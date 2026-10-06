@@ -65,6 +65,7 @@ type GroupStore interface {
 	MissingGKVersions(ctx context.Context, groupID, deviceID string) ([]int32, error)
 	SaveRecoveryKeys(ctx context.Context, groupID, recipient string, keys []store.RecoveryKey) error
 	HelperDevices(ctx context.Context, groupID, requester string, versions []int32) ([]string, error)
+	IsActiveDevice(ctx context.Context, userID, deviceID string) (bool, error)
 	EscrowKeyEpoch(ctx context.Context, id uint32) (string, error)
 
 	// Устройства участников: покрытие ротации и адресаты уведомлений

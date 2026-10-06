@@ -17,6 +17,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -238,7 +242,7 @@ fun ChatScreen(
         // Полоса «ключа нет вовсе» — НАД лентой, а не над вводом: она не про отдельные
         // сообщения, а про то, что список пуст не потому, что в группе не пишут.
         if (state.noGroupKey) {
-            NoKeyYet(expect = state.expectKey, onRequest = onRequestKey)
+            NoKeyYet(expect = state.expectKey, phrase = state.phrase, onPhrase = onPhrase, onRequest = onRequestKey)
         }
         banner?.invoke()
 
@@ -281,8 +285,8 @@ fun ChatScreen(
         ) {
             StoryUnavailable(
                 expect = state.expectKey,
-                // Поле фразы появляется только после отказа по подписи: спрашивать её
-                // заранее значило бы требовать секрет там, где он может не понадобиться.
+                // Фраза нужна всегда (Р42: просьба подписывается ключом личности), поэтому
+                // кнопка сначала открывает поле (заказчик 2026-10-06, п. 1.7).
                 phraseInputNeeded = state.notice is ChatNotice.KeysNeedPhrase,
                 phrase = state.phrase,
                 onPhrase = onPhrase,
@@ -790,9 +794,12 @@ private fun Trouble(trouble: ChatNotice, onClose: () -> Unit, onConfirm: (() -> 
  * другого своего устройства — тогда ключ сменится, и группа начнёт читаться вперёд.
  */
 @Composable
-private fun NoKeyYet(expect: Boolean, onRequest: () -> Unit) {
+private fun NoKeyYet(expect: Boolean, phrase: String, onPhrase: (String) -> Unit, onRequest: () -> Unit) {
     val colors = Tima.colors
     val words = Tima.words.chat
+    // Просьба подписывается ключом личности (Р42): первое нажатие открывает поле фразы, второе
+    // отправляет (заказчик 2026-10-06, п. 1.7). Слова живут только в поле.
+    var open by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -809,8 +816,13 @@ private fun NoKeyYet(expect: Boolean, onRequest: () -> Unit) {
             words.noGroupKeyAbout,
             fontSize = TimaType.sz5,
         )
+        if (open && !expect) {
+            Field(value = phrase, onChange = onPhrase, hint = words.phraseWords, modifier = Modifier.fillMaxWidth())
+        }
         if (!expect) {
-            Chip(words.askKey, kind = ChipKind.Selected, onClick = onRequest)
+            Chip(words.askKey, kind = ChipKind.Selected, onClick = {
+                if (!open) open = true else if (phrase.isNotBlank()) onRequest()
+            })
         } else {
             Chip(words.asking, kind = ChipKind.Quiet)
         }
@@ -835,8 +847,11 @@ private fun StoryUnavailable(
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
+    // Первое нажатие открывает поле фразы, второе отправляет (п. 1.7): просьба без фразы всё
+    // равно получит отказ по подписи (Р42).
+    var open by remember { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth().background(colors.functional)) {
-        if (phraseInputNeeded) {
+        if (open || phraseInputNeeded) {
             Field(
                 value = phrase,
                 onChange = onPhrase,
@@ -857,7 +872,9 @@ private fun StoryUnavailable(
             fontSize = TimaType.sz5,
             modifier = Modifier.weight(1f),
         )
-        Button(label = if (expect) words.asking else words.askKey, onClick = onRequest)
+        Button(label = if (expect) words.asking else words.askKey, onClick = {
+            if (!open && !phraseInputNeeded) open = true else if (phrase.isNotBlank()) onRequest()
+        })
     }
     }
 }
