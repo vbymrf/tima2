@@ -315,7 +315,12 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 			}
 		case certBy == "":
 			log.Printf("доверие: устройство в аккаунт %s без доказательства фразы (режим %s, ask=%v)", userID, mode, askOK)
-			if mode == trustRequire {
+			// Свой новый ключ личности без «начать заново» — это телефон, который фразы ещё не
+			// знает: ниже ответ identity_mismatch откроет ему поле фразы, а устройство не
+			// заведётся. Отказ здесь прятал это поле, и в «требовать» в аккаунт с фразой
+			// нельзя было войти ни на одном новом устройстве (живой прогон М6, 2026-10-06).
+			asksPhrase := len(existing) > 0 && len(identityPub) > 0 && !req.ForceNewIdentity && !bytes.Equal(identityPub, existing)
+			if mode == trustRequire && !asksPhrase {
 				writeErr(w, http.StatusForbidden, "device_unproven",
 					"Этот номер привязан к аккаунту с секретной фразой. Введите фразу или подключите устройство по QR с телефона.")
 				return

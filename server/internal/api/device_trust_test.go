@@ -177,6 +177,30 @@ func TestSimThiefRefusedInRequireMode(t *testing.T) {
 	}
 }
 
+// Новый телефон в аккаунт с фразой в «требовать»: фразы он ещё не знает и присылает свой
+// ключ личности — ответ обязан быть identity_mismatch (клиент по нему просит фразу), а не
+// device_unproven, на котором вход обрывался. Устройство при этом не заводится.
+func TestRequireModeAsksPhraseOnNewPhone(t *testing.T) {
+	ts, srv := setup(t)
+	srv.DeviceTrust = trustRequire
+	phone := "+79990000104"
+	owner := newTrustAccount()
+	first, code, why := registerProof(t, ts, phone, owner.identityPub(), owner.withAsk)
+	if code != 201 {
+		t.Fatalf("хозяин с фразой и КПУ: ожидался 201, получен %d %s", code, why)
+	}
+	if _, code, why := registerProof(t, ts, phone, newTrustAccount().identityPub(), nil); code != http.StatusForbidden || why != "identity_mismatch" {
+		t.Fatalf("новый телефон без фразы: ожидался 403 identity_mismatch, получен %d %s", code, why)
+	}
+	if v := keysOf(t, ts, first, first.userID); len(v.Devices) != 1 {
+		t.Fatalf("после отказа у аккаунта должно остаться одно устройство: %+v", v.Devices)
+	}
+	// Тот же телефон ввёл фразу — заверяет себя КПУ и входит.
+	if _, code, why := registerProof(t, ts, phone, owner.identityPub(), owner.withAsk); code != 201 {
+		t.Fatalf("тот же телефон с фразой: ожидался 201, получен %d %s", code, why)
+	}
+}
+
 func TestRecordModeLetsThroughButStaysUnsigned(t *testing.T) {
 	ts, srv := setup(t)
 	srv.DeviceTrust = trustRecord
