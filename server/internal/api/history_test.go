@@ -77,3 +77,41 @@ func TestPersonalChatsListAndHandedOverHistory(t *testing.T) {
 		t.Fatalf("незаверенное в строгом режиме: ожидался 403, получен %d", code)
 	}
 }
+
+// «Сообщение недоступно, запросить» (заказчик 2026-10-06): заверенное устройство просит ключи
+// переписки без подписи фразой — заверить его без фразы было нельзя; незаверенное — только с ней.
+func TestChatRecoverCertifiedNeedsNoPhrase(t *testing.T) {
+	ts, srv := setup(t)
+	srv.DeviceTrust = trustRecord
+	owner := newTrustAccount()
+	phone, code, why := registerProof(t, ts, "+79990000331", owner.identityPub(), owner.withAsk)
+	if code != 201 {
+		t.Fatalf("телефон хозяина: %d %s", code, why)
+	}
+	peer := registerDevice(t, ts, "+79990000332")
+	resp := post(t, ts, sealEnvelope(t, peer, []*device{phone}, 3301, []byte("до компьютера")), peer.token, "eeeeeeee-0000-0000-0000-000000003301")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("отправка: %d", resp.StatusCode)
+	}
+	chat := personalChatID(peer.userID, phone.userID)
+
+	pc, code, why := registerProof(t, ts, "+79990000331", owner.identityPub(), owner.byPhrase)
+	if code != 201 {
+		t.Fatalf("компьютер по фразе: %d %s", code, why)
+	}
+	var out struct {
+		Helpers int `json:"helpers"`
+	}
+	if code := postAuthed(t, ts, pc.token, "POST", "/api/v1/chats/"+chat+"/recover", map[string]any{}, &out); code != 200 || out.Helpers == 0 {
+		t.Fatalf("заверенное без подписи: ожидался 200 с помощниками, получен %d, помощников %d", code, out.Helpers)
+	}
+
+	stranger, code, _ := registerProof(t, ts, "+79990000331", owner.identityPub(), nil)
+	if code != 201 {
+		t.Fatalf("незаверенное в «записывать»: %d", code)
+	}
+	if code := postAuthed(t, ts, stranger.token, "POST", "/api/v1/chats/"+chat+"/recover", map[string]any{}, nil); code != http.StatusForbidden {
+		t.Fatalf("незаверенное без подписи: ожидался 403, получен %d", code)
+	}
+}

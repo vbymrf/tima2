@@ -170,7 +170,16 @@ func chatRecover(deps chatsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		if len(identityPub) == 32 {
+		// Заверенное устройство просит без фразы (заказчик 2026-10-06: «сообщение недоступно,
+		// запросить» и запрос сам по себе): заверить его без фразы было нельзя, и подпись
+		// фразой на каждый запрос ничего к этому не добавляет. Незаверенное — как прежде.
+		certified, err := deps.store.DeviceCertified(r.Context(), id.UserID, id.DeviceID)
+		if err != nil {
+			log.Printf("chatRecover: certified: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		if len(identityPub) == 32 && !certified {
 			sig, derr := base64.RawURLEncoding.DecodeString(req.Signature)
 			if derr != nil || !timacrypto.VerifyEnvelopeSignature(identityPub, recoverCanonical(chatID, id.DeviceID), sig) {
 				writeErr(w, http.StatusForbidden, "bad_identity_sig", "запрос не подписан ключом личности аккаунта")
