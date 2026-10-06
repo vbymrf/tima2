@@ -1251,6 +1251,8 @@ interface ChatWords {
     val noGroupsAbout: String
     fun thread(count: Int): String
     val messageUnavailable: String
+    /** Недоступное сообщение личной переписки — с просьбой ключей (2026-10-06). */
+    val messageUnavailableAsk: String
     val decrypting: String
     val addToSelf: String
     val narrowTo: String
@@ -3344,6 +3346,7 @@ object RussianWords : Words {
             return "ветка · $count $word"
         }
         override val messageUnavailable = "сообщение недоступно"
+        override val messageUnavailableAsk = "Сообщение недоступно, запросить"
         override val decrypting = "расшифровывается…"
         override val addToSelf = "Добавить себе"
         override val narrowTo = "сузить до"

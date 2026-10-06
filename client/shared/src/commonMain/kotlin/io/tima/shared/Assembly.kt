@@ -413,6 +413,16 @@ fun buildAssembled(
                 keyCopy = keyCopy,
                 onIdentityClaim = { g -> identityClaims.value = identityClaims.value + g },
                 onHistoryReady = { chat -> historyReady.tryEmit(chat) },
+                // Просьба о ключах переписки — своё устройство или собеседник (2026-10-06).
+                chatKeyHelper = ChatKeyHelper(
+                    history = network.history,
+                    keys = network.keys,
+                    trustGate = environment.trustGate,
+                    myUserId = device.session.userId,
+                    myDeviceId = device.session.deviceId,
+                    identity = { identity },
+                    peerOf = { chatId -> environment.chatFacts.peerOf(chatId) },
+                ),
                 onStamp = { senderStamps.tryEmit(it) },
                 onOutdated = { outdated.value = true },
                 notices = notices,

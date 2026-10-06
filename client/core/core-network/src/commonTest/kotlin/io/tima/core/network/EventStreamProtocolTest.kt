@@ -43,6 +43,14 @@ class EventStreamProtocolTest {
     }
 
     @Test
+    fun просьба_о_ключах_переписки_разбирается() {
+        val asked = protocol.decide("""{"event":"recovery.msg_request","event_id":13,"chat_id":"c-1","requester_device":"d-2","requester_enc_pub":"AQID","own":false}""")
+        assertEquals(EventStreamProtocol.Decision.MsgRequest("c-1", "d-2", byteArrayOf(1, 2, 3), own = false, eventId = 13), asked)
+        val broken = protocol.decide("""{"event":"recovery.msg_request","event_id":14,"chat_id":"c-1"}""")
+        assertTrue(broken is EventStreamProtocol.Decision.Skip)
+    }
+
+    @Test
     fun новое_своё_устройство_разбирается() {
         // Р48: событие «добавлено новое устройство» — всем устройствам личности.
         val added = protocol.decide("""{"event":"device.added","event_id":14,"device_id":"d-новое","platform":"android"}""")

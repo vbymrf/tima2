@@ -527,7 +527,7 @@ class Network(
         GroupKeyRecoveryApi(link.route, link.client, token = { token() })
 
     /** История личных переписок на новом устройстве (ИУ1–ИУ3). */
-    val history: io.tima.core.network.HistoryApi =
+    override val history: io.tima.core.network.HistoryApi =
         io.tima.core.network.HistoryApi(link.route, link.client, token = { token() })
 
     /**

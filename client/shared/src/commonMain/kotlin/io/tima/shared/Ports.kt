@@ -51,6 +51,9 @@ interface ChatPorts {
     /** Кто скрывается за номером телефона. */
     val directory: UsersApi
 
+    /** История личных переписок и просьба о их ключах («сообщение недоступно, запросить»). */
+    val history: io.tima.core.network.HistoryApi
+
     /**
      * Сверка книги: кто из этих номеров в TIMa (Д4).
      *

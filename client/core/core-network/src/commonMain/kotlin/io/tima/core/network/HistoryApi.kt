@@ -117,6 +117,34 @@ class HistoryApi(
         return response.jsonBody()?.int("saved") ?: keys.size
     }
 
+    /** Чем кончилась просьба о ключах переписки. */
+    sealed interface Recover {
+        /** Просьба разослана [helpers] устройствам. */
+        data class Asked(val helpers: Int) : Recover
+        data class Refused(val status: Int, val code: String) : Recover
+        data object Offline : Recover
+    }
+
+    /**
+     * `POST /api/v1/chats/{id}/recover` — попросить ключи сообщений переписки у своих устройств
+     * и собеседника (2026-10-06: «сообщение недоступно, запросить»). Заверенному устройству
+     * подпись фразой не нужна.
+     */
+    suspend fun recover(chatId: String): Recover {
+        val response = try {
+            client.post(route.api("/api/v1/chats/$chatId/recover")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody("{}")
+            }
+        } catch (e: Throwable) {
+            return Recover.Offline
+        }
+        val body = response.jsonBody()
+        if (response.status != HttpStatusCode.OK) return Recover.Refused(response.status.value, body.codeOf())
+        return Recover.Asked(body?.int("helpers") ?: 0)
+    }
+
     companion object {
         /** Страница истории: столько же отдаёт сервер по умолчанию, больше 200 он не даст. */
         const val PAGE: Int = 100

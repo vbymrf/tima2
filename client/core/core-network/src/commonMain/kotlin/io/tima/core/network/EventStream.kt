@@ -214,6 +214,7 @@ class EventStream(
                         is EventStreamProtocol.Decision.Rereg,
                         is EventStreamProtocol.Decision.IdentityClaim,
                         is EventStreamProtocol.Decision.HistoryReady,
+                        is EventStreamProtocol.Decision.MsgRequest,
                         -> {
                             onCall(decision)
                             val id = when (decision) {
@@ -229,6 +230,7 @@ class EventStream(
                                 is EventStreamProtocol.Decision.Rereg -> decision.eventId
                                 is EventStreamProtocol.Decision.IdentityClaim -> decision.eventId
                                 is EventStreamProtocol.Decision.HistoryReady -> decision.eventId
+                                is EventStreamProtocol.Decision.MsgRequest -> decision.eventId
                                 else -> null
                             }
                             id?.let {

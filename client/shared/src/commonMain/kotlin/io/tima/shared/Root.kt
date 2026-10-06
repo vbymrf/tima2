@@ -3909,6 +3909,38 @@ private fun Chat(
             } else {
                 null
             },
+            // Личная переписка: недоступное сообщение — просьба ключей у своих устройств и
+            // собеседника (заказчик 2026-10-06). Ответ приходит событием `recovery.msg_ready`,
+            // и история догоняется сама.
+            askChatKeys = if (!group) {
+                {
+                    when (val r = network.history.recover(chatId)) {
+                        is io.tima.core.network.HistoryApi.Recover.Asked -> {
+                            Journal.note(LogCode.DEVICE_TRUST, "ключи переписки запрошены", "переписка" to chatId.take(8), "помощников" to r.helpers)
+                            if (r.helpers > 0) io.tima.domain.chat.RequestKeysStep.Asked(r.helpers) else io.tima.domain.chat.RequestKeysStep.NoHelpers
+                        }
+                        is io.tima.core.network.HistoryApi.Recover.Refused -> {
+                            Journal.trouble(LogCode.DEVICE_TRUST, "просьба о ключах переписки отклонена", "код" to r.code)
+                            io.tima.domain.chat.RequestKeysStep.Refused(r.code)
+                        }
+                        io.tima.core.network.HistoryApi.Recover.Offline -> io.tima.domain.chat.RequestKeysStep.Offline(0)
+                    }
+                }
+            } else {
+                null
+            },
+            // Сами — один раз на переписку в сутки: каждое открытие с недоступным сообщением
+            // будило бы чужие устройства заново.
+            autoAskAllowed = if (!group) {
+                {
+                    val key = CHAT_KEYS_ASKED + chatId
+                    val last = runCatching { environment.settings.all().first()[key]?.toLongOrNull() }.getOrNull() ?: 0L
+                    val now = msNow()
+                    (now - last >= CHAT_KEYS_AGAIN_MS).also { if (it) runCatching { environment.settings.put(key, now.toString()) } }
+                }
+            } else {
+                null
+            },
         )
     }
     val state by store.state.collectAsState()
@@ -3967,6 +3999,7 @@ private fun Chat(
         onBack = onBack,
         onCloseMessage = store::noticeDismissed,
         onRequestKey = store::requestKey,
+        onAskChatKeys = store::askChatKeys,
         onPhrase = store::changedPhrase,
         onMembers = if (group) onMembers else null,
         onMore = if ((group && onMoveToShelf != null) || (!group && onMoveToBookSection != null)) { { chatMenu = true } } else null,
@@ -5623,3 +5656,9 @@ private fun reregNoticeText(
         }
     }
 }
+
+/** Отметка «ключи переписки уже просили сами» — в настройках аккаунта, латиницей. */
+private const val CHAT_KEYS_ASKED = "chat.keys.asked."
+
+/** Сами просим ключи переписки не чаще раза в сутки. */
+private const val CHAT_KEYS_AGAIN_MS = 24 * 60 * 60_000L

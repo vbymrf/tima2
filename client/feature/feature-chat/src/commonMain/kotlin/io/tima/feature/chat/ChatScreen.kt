@@ -146,6 +146,8 @@ fun ChatScreen(
      * поимённо, шифр читают по ключу.
      */
     onCarry: ((Long, Int) -> Unit)? = null,
+    /** «Сообщение недоступно, запросить» — личная переписка (2026-10-06). `null` — не нажимается. */
+    onAskChatKeys: (() -> Unit)? = null,
     /** Меню «•••» в шапке. `null` — кнопки нет (личная переписка). */
     onMore: (() -> Unit)? = null,
     /**
@@ -271,6 +273,7 @@ fun ChatScreen(
             showCircles = state.showCircles,
             onNarrow = onNarrow,
             onCarry = onCarry,
+            onAskChatKeys = onAskChatKeys?.takeIf { state.chatKeysMay },
             onThread = onThread,
             onFailed = onFailed,
             invite = invite,
@@ -337,6 +340,7 @@ private fun Feed(
     showCircles: Boolean = false,
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
     onCarry: ((Long, Int) -> Unit)? = null,
+    onAskChatKeys: (() -> Unit)? = null,
     onThread: ((Long) -> Unit)? = null,
     onFailed: ((ChatLine) -> Unit)? = null,
     invite: (ChatLine) -> CallInvite? = { null },
@@ -396,6 +400,7 @@ private fun Feed(
                 showCircle = showCircles,
                 onNarrow = onNarrow,
                 onCarry = onCarry,
+                onAskChatKeys = onAskChatKeys,
                 onThread = onThread,
                 onFailed = onFailed,
             )
@@ -446,6 +451,7 @@ private fun Reply(
     showCircle: Boolean = false,
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
     onCarry: ((Long, Int) -> Unit)? = null,
+    onAskChatKeys: (() -> Unit)? = null,
     onThread: ((Long) -> Unit)? = null,
     onFailed: ((ChatLine) -> Unit)? = null,
 ) {
@@ -474,7 +480,7 @@ private fun Reply(
     val failed = (line.display == MessageDisplay.FAILED || line.display == MessageDisplay.PENDING) &&
         line.outgoing && onFailed != null
     Column(if (failed) Modifier.clickable { onFailed!!(line) } else Modifier) {
-        Bubbled(line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry)
+        Bubbled(line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys)
         // «Ветка · N ответов» — под сообщением, отдельной строкой, а не внутри пузыря:
         // это не часть сказанного, а вход в разговор о нём (ADR-0024 §7).
         //
@@ -515,6 +521,7 @@ private fun Bubbled(
     showCircle: Boolean,
     onNarrow: ((Long, Int, Int) -> Unit)?,
     onCarry: ((Long, Int) -> Unit)?,
+    onAskChatKeys: (() -> Unit)? = null,
 ) = Bubble(
     my = line.outgoing,
     author = author,
@@ -543,8 +550,13 @@ private fun Bubbled(
         // Нашлось на живом прогоне: экран показывал «не читается» на сообщении, которое в
         // базе лежало разобранным. Список переписок при этом различал их правильно — то
         // есть два места в одном приложении говорили человеку разное.
-        line.display == MessageDisplay.UNREADABLE ->
+        // В личной переписке — с просьбой: нажатие просит ключи у своих устройств и
+        // собеседника (заказчик 2026-10-06: «сообщение недоступно, запросить»).
+        line.display == MessageDisplay.UNREADABLE -> if (onAskChatKeys != null) {
+            Chip(Tima.words.chat.messageUnavailableAsk, kind = ChipKind.Quiet, onClick = onAskChatKeys)
+        } else {
             Chip(Tima.words.chat.messageUnavailable, kind = ChipKind.Quiet)
+        }
 
         else -> Chip(Tima.words.chat.decrypting, kind = ChipKind.Quiet)
     }

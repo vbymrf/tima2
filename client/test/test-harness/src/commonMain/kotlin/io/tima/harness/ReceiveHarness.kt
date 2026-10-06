@@ -150,6 +150,7 @@ class ReceiveHarness(private val inbox: Inbox) {
             is EventStreamProtocol.Decision.DeviceAdded -> decision.eventId?.let { sent += protocol.ackFrame(it) }
             is EventStreamProtocol.Decision.Rereg -> decision.eventId?.let { sent += protocol.ackFrame(it) }
             is EventStreamProtocol.Decision.HistoryReady -> decision.eventId?.let { sent += protocol.ackFrame(it) }
+            is EventStreamProtocol.Decision.MsgRequest -> decision.eventId?.let { sent += protocol.ackFrame(it) }
 
             is EventStreamProtocol.Decision.NeedHistory,
             is EventStreamProtocol.Decision.ServerTrouble,

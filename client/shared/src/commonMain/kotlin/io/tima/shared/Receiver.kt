@@ -129,6 +129,8 @@ class Receiver(
      * может быть много, а канал всё это время стоял бы.
      */
     private val onHistoryReady: (String) -> Unit = {},
+    /** Просьба о ключах переписки (`recovery.msg_request`) — ответ после проверки заверения. */
+    private val chatKeyHelper: ChatKeyHelper? = null,
     /** Словарь — ссылкой: строки звонка пишутся словами на момент события. */
     private val words: () -> Words = { CurrentWords.value },
     /**
@@ -302,6 +304,12 @@ class Receiver(
             is EventStreamProtocol.Decision.HistoryReady -> {
                 Journal.note(LogCode.DEVICE_TRUST, "своё устройство передало историю", "переписка" to decision.chatId.take(8))
                 onHistoryReady(decision.chatId)
+            }
+            is EventStreamProtocol.Decision.MsgRequest -> {
+                Journal.note(LogCode.DEVICE_TRUST, "просьба о ключах переписки", "переписка" to decision.chatId.take(8), "своё" to decision.own)
+                // Не в канале: перезаворачивание — страницы истории и запросы, канал всё это
+                // время стоял бы.
+                chatKeyHelper?.later(decision.chatId, decision.requesterDevice, decision.requesterEncPub, decision.own)
             }
             is EventStreamProtocol.Decision.CallState -> {
                 // Строка звонка не переживает звонок — чем бы он ни кончился (У7).

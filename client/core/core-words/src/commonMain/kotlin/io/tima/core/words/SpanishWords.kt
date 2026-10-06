@@ -1208,6 +1208,8 @@ object SpanishWords : Words {
         }
 
         override val messageUnavailable = "mensaje no disponible"
+
+        override val messageUnavailableAsk = "Mensaje no disponible, solicitar"
         override val decrypting = "descifrando…"
         override val addToSelf = "Traer a mi página"
         override val narrowTo = "restringir a"

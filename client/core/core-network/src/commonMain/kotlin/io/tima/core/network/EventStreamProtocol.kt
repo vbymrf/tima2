@@ -292,6 +292,23 @@ class EventStreamProtocol {
         data class HistoryReady(val chatId: String, val eventId: Long?) : Decision
 
         /**
+         * Устройство просит ключи сообщений переписки [chatId] (`recovery.msg_request`):
+         * своё ([own]) или собеседника. Отдавать — после проверки заверения (2026-10-06).
+         */
+        data class MsgRequest(
+            val chatId: String,
+            val requesterDevice: String,
+            val requesterEncPub: ByteArray,
+            val own: Boolean,
+            val eventId: Long?,
+        ) : Decision {
+            override fun equals(other: Any?): Boolean = other is MsgRequest && chatId == other.chatId &&
+                requesterDevice == other.requesterDevice && own == other.own && eventId == other.eventId &&
+                requesterEncPub.contentEquals(other.requesterEncPub)
+            override fun hashCode(): Int = chatId.hashCode() * 31 + requesterDevice.hashCode()
+        }
+
+        /**
          * Вызов не забрало ни одно устройство собеседника (`call.unreachable`).
          *
          * **Это не конец звонка и не состояние человека.** Сервер говорит ровно то, что
@@ -655,6 +672,18 @@ class EventStreamProtocol {
             "group.identity_claim" ->
                 json.string("group_id")?.let { Decision.IdentityClaim(it, json.string("user_id").orEmpty(), eventId) }
                     ?: Decision.Skip("group.identity_claim без group_id", eventId)
+
+            // Просьба о ключах переписки — отдать, если просящее заверено (2026-10-06).
+            "recovery.msg_request" -> {
+                val chatId = json.string("chat_id")
+                val device = json.string("requester_device")
+                val pub = json.string("requester_enc_pub")?.let { decodeBase64Url(it) }
+                if (chatId == null || device == null || pub == null) {
+                    Decision.Skip("recovery.msg_request без обязательных полей", eventId)
+                } else {
+                    Decision.MsgRequest(chatId, device, pub, own = json["own"]?.jsonPrimitive?.content == "true", eventId = eventId)
+                }
+            }
 
             // История переписки передана этому устройству (ИУ2–ИУ3).
             "recovery.msg_ready" ->

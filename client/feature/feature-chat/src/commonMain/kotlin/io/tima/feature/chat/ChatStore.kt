@@ -20,6 +20,7 @@ import io.tima.domain.chat.ChatPerson
 import io.tima.core.media.decodeImage
 import androidx.compose.ui.graphics.ImageBitmap
 import io.tima.domain.chat.RequestGroupKeys
+import io.tima.domain.chat.MessageDisplay
 import io.tima.domain.chat.RequestKeysStep
 import io.tima.domain.chat.SendMessage
 import io.tima.domain.chat.SendMessageResult
@@ -126,12 +127,25 @@ class ChatStore(
      * четыре теста покраснели ровно на этом.
      */
     private val io: CoroutineDispatcher = Dispatchers.Default,
+    /**
+     * Попросить ключи личной переписки у своих устройств и собеседника (заказчик 2026-10-06:
+     * «сообщение недоступно, запросить»). `null` — переписка не личная.
+     */
+    private val askChatKeys: (suspend () -> RequestKeysStep)? = null,
+    /**
+     * Можно ли сейчас попросить самим, без нажатия, — один раз на переписку за срок, который
+     * помнит вызывающий. `null` — сами не просим.
+     */
+    private val autoAskAllowed: (suspend () -> Boolean)? = null,
 ) {
+
+    /** Сами уже просили в этой переписке — один запрос, не на каждое обновление списка. */
+    private var autoAsked = false
 
     // Признак берётся из наличия случая, а не задаётся отдельно: два источника одной
     // правды разошлись бы, и кнопка появилась бы там, где нажимать её нечем.
     private val _state = MutableStateFlow(
-        ChatState(keyAskMay = requestKeys != null, group = names != null),
+        ChatState(keyAskMay = requestKeys != null, group = names != null, chatKeysMay = askChatKeys != null),
     )
     val state: StateFlow<ChatState> = _state.asStateFlow()
 
@@ -187,6 +201,12 @@ class ChatStore(
                     },
                     noGroupKey = noKey,
                 )
+                // Недоступные сообщения в личной переписке — один запрос ключей сами
+                // (заказчик 2026-10-06: «автоматический режим в виде одного запроса»).
+                if (askChatKeys != null && !autoAsked && lines.any { it.display == MessageDisplay.UNREADABLE }) {
+                    autoAsked = true
+                    scope.launch { if (autoAskAllowed?.invoke() == true) askChatKeysNow() }
+                }
                 // Имена спрашиваются по одному разу на автора и только в группе: список
                 // обновляется на каждое сообщение, и поход за именем на каждой строке
                 // означал бы запрос к серверу на каждую реплику.
@@ -444,6 +464,32 @@ class ChatStore(
         }
     }
 
+    /** «Сообщение недоступно, запросить» — нажатие на недоступное сообщение личной переписки. */
+    fun askChatKeys() {
+        if (askChatKeys == null || _state.value.expectKey) return
+        scope.launch { askChatKeysNow() }
+    }
+
+    private suspend fun askChatKeysNow() {
+        val ask = askChatKeys ?: return
+        _state.value = _state.value.copy(expectKey = true, notice = null)
+        val outcome = ask()
+        _state.value = _state.value.copy(
+            expectKey = false,
+            notice = when (outcome) {
+                is RequestKeysStep.Asked -> ChatNotice.KeysAsked(outcome.devices)
+                RequestKeysStep.NoHelpers -> ChatNotice.KeysNoHelpers
+                RequestKeysStep.NothingMissing -> ChatNotice.KeysNothingMissing
+                RequestKeysStep.NeedsSecretPhrase -> ChatNotice.KeysNeedPhrase
+                RequestKeysStep.NotMember -> ChatNotice.KeysRefused(words().chat.notMemberAnyMore)
+                is RequestKeysStep.Offline -> ChatNotice.KeysRefused(
+                    words().chat.offlineRetryIn((outcome.retryAfterMs / 1000).coerceAtLeast(1).toInt()),
+                )
+                is RequestKeysStep.Refused -> ChatNotice.KeysRefused(words().trouble.refused(outcome.reason))
+            },
+        )
+    }
+
     fun noticeDismissed() {
         _state.value = _state.value.copy(notice = null)
     }
@@ -460,6 +506,8 @@ data class ChatState(
     val expectKey: Boolean = false,
     /** Можно ли просить ключ: у личной переписки такой возможности нет. */
     val keyAskMay: Boolean = false,
+    /** Личная переписка, где недоступное сообщение можно запросить нажатием (2026-10-06). */
+    val chatKeysMay: Boolean = false,
     /** Набранная секретная фраза. Пусто — запрос уйдёт без подписи. */
     val phrase: String = "",
     /**

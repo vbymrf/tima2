@@ -1208,6 +1208,8 @@ object EnglishWords : Words {
         }
 
         override val messageUnavailable = "message unavailable"
+
+        override val messageUnavailableAsk = "Message unavailable, request"
         override val decrypting = "decrypting…"
         override val addToSelf = "Bring to my page"
         override val narrowTo = "narrow to"
