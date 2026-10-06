@@ -1681,6 +1681,23 @@ interface AuthWords {
     val reregOldPhrase: String
     val reregNewPhrase: String
     val reregNotInWindow: String
+    /** ДУ9: смена номера аккаунта (смена SIM) — тексты §2б. */
+    val phoneChangeTitle: String
+    val phoneChangeAbout: String
+    val phoneChangeNewHint: String
+    val phoneChangeSendOld: String
+    val phoneChangeSendNew: String
+    val phoneChangeStart: String
+    fun phoneChangeFiled(from: String, to: String): String
+    fun phoneChangeOthers(phone: String): String
+    fun phoneChangeWindow(to: String): String
+    val phoneChangeConfirm: String
+    fun phoneChangeDone(phone: String): String
+    val phoneChangeExpired: String
+    val phoneChangeCancelled: String
+    val phoneChangeTaken: String
+    val phoneChangeReregOpen: String
+    val phoneChangeNotMine: String
     val reregNewWon: String
     val reregOldLost: String
     fun reregNewLost(date: String): String
@@ -3664,6 +3681,27 @@ object RussianWords : Words {
         override val reregOldPhrase = "прежняя фраза"
         override val reregNewPhrase = "новая фраза"
         override val reregNotInWindow = "Подтверждение принимается только в окне подтверждения."
+        override val phoneChangeTitle = "Смена номера"
+        override val phoneChangeAbout =
+            "Новый телефон или SIM-карта. Заявка — фраза и код на прежний номер. Через 3 месяца подтвердите её фразой и кодом на новый номер — тогда номер аккаунта сменится."
+        override val phoneChangeNewHint = "новый номер, +79991234567"
+        override val phoneChangeSendOld = "Отправить код на прежний номер"
+        override val phoneChangeSendNew = "Отправить код на новый номер"
+        override val phoneChangeStart = "Подать заявку"
+        override fun phoneChangeFiled(from: String, to: String) =
+            "Заявка на смену номера принята. С $from по $to подтвердите её фразой и кодом из SMS на новый номер."
+        override fun phoneChangeOthers(phone: String) =
+            "Номер аккаунта меняется на $phone. Если это не вы, у кого-то тоже есть доступ к вашему аккаунту: для защиты запустите перерегистрацию в «Секретная фраза и устройства» — код придёт на прежний номер."
+        override fun phoneChangeWindow(to: String) =
+            "Пора подтвердить смену номера: до $to введите фразу и код из SMS на новый номер. Не подтвердите — номер останется прежним."
+        override val phoneChangeConfirm = "Подтвердить смену номера"
+        override fun phoneChangeDone(phone: String) = "Номер аккаунта сменён на $phone."
+        override val phoneChangeExpired = "Смена номера не подтверждена — номер аккаунта остаётся прежним."
+        override val phoneChangeCancelled =
+            "Заявка на смену номера отменена: запущена перерегистрация. Подать её заново можно, когда спор за аккаунт кончится."
+        override val phoneChangeTaken = "Этот номер уже привязан к другому аккаунту."
+        override val phoneChangeReregOpen = "Идёт перерегистрация аккаунта: сменить номер можно, когда спор кончится."
+        override val phoneChangeNotMine = "Подтвердить смену номера может только ключ личности, подавший заявку."
         override val reregNewWon = "Перерегистрация подтверждена. Прежний ключ личности удалён, ограничения сняты — заверяйте свои устройства как обычно."
         override val reregOldLost =
             "Ваш ключ личности удалён: перерегистрация подтверждена. Можно бороться за аккаунт — подать заявку заново — или завести новый аккаунт на другой номер."

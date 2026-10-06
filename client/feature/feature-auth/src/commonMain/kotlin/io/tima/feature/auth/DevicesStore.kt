@@ -63,6 +63,85 @@ class DevicesStore(
             }
             checkCopyRotation()
             refreshRereg()
+            refreshPhoneChange()
+        }
+    }
+
+    /** Смена номера аккаунта (ДУ9) — от этого зависит панель «Смена номера». */
+    fun refreshPhoneChange() {
+        val actions = trust ?: return
+        scope.launch {
+            val p = runCatching { actions.phoneChange() }.getOrNull() ?: return@launch
+            _state.value = _state.value.copy(phoneChange = p)
+        }
+    }
+
+    /** Панель смены номера на момент [now]; `null` — не узнали, панели нет. */
+    fun phoneChangeView(now: Long): PhoneChangeView? {
+        val p = _state.value.phoneChange ?: return null
+        val w = words().auth
+        if (!p.active) return PhoneChangeView(text = null, canStart = _state.value.rereg?.active != true)
+        val open = now >= p.windowFrom && now < p.windowTo
+        val text = when {
+            !p.mine -> w.phoneChangeOthers(p.newPhone)
+            open -> w.phoneChangeWindow(dateText(p.windowTo))
+            else -> w.phoneChangeFiled(dateText(p.windowFrom), dateText(p.windowTo))
+        }
+        return PhoneChangeView(text = text, canConfirm = p.mine && open && p.newPhoneFull.isNotBlank())
+    }
+
+    /**
+     * Код из SMS для смены номера (ДУ9): для заявки — на прежний номер аккаунта, для
+     * подтверждения в окне — на новый номер.
+     */
+    fun sendPhoneChangeCode(confirm: Boolean) {
+        val actions = trust ?: return
+        if (_state.value.trusting) return
+        val target = if (confirm) _state.value.phoneChange?.newPhoneFull?.takeIf { it.isNotBlank() } ?: return else null
+        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        scope.launch {
+            val sent = runCatching { actions.sendPhoneChangeCode(target) }.getOrDefault(io.tima.domain.account.CodeSend.Failed)
+            val w = words().auth
+            _state.value = _state.value.copy(
+                trusting = false,
+                phoneCode = (sent as? io.tima.domain.account.CodeSend.Sent)?.code,
+                trustNotice = when (sent) {
+                    is io.tima.domain.account.CodeSend.Sent -> sent.code.devCode?.let { w.standSentCode(it) }
+                    io.tima.domain.account.CodeSend.Limited -> w.tooManyCodes
+                    io.tima.domain.account.CodeSend.Failed -> w.trustFailed(w.tryAgain)
+                },
+            )
+        }
+    }
+
+    /** Заявка на смену номера ([newPhone] задан) или подтверждение в окне: фраза и код из SMS. */
+    fun phoneChange(newPhone: String?, phrase: String, code: String) {
+        val actions = trust ?: return
+        val sent = _state.value.phoneCode ?: return
+        if (_state.value.trusting) return
+        val phraseWords = phrase.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
+        val number = newPhone?.filter { it == '+' || it.isDigit() }
+        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        scope.launch {
+            val step = runCatching {
+                if (number != null) actions.startPhoneChange(number, phraseWords, sent.requestId, code.trim())
+                else actions.confirmPhoneChange(phraseWords, sent.requestId, code.trim())
+            }.getOrElse { TrustStep.Refused(it.message ?: "?") }
+            val w = words().auth
+            val reason = (step as? TrustStep.Refused)?.reason
+            _state.value = _state.value.copy(
+                trusting = false,
+                phoneCode = if (step == TrustStep.Done) null else sent,
+                trustNotice = when {
+                    step == TrustStep.Done -> null
+                    reason == "phone_taken" -> w.phoneChangeTaken
+                    reason == "rereg_open" -> w.phoneChangeReregOpen
+                    reason == "not_in_window" -> w.reregNotInWindow
+                    reason == "not_your_request" -> w.phoneChangeNotMine
+                    else -> notice(step)
+                },
+            )
+            if (step == TrustStep.Done || reason == "phone_change_open") refreshPhoneChange()
         }
     }
 
@@ -420,6 +499,15 @@ class DevicesStore(
     }
 }
 
+/** Что показать на панели смены номера (ДУ9). */
+data class PhoneChangeView(
+    val text: String?,
+    /** Заявки нет и перерегистрации нет — можно подать. */
+    val canStart: Boolean = false,
+    /** Окно открыто, заявка этой личности — можно подтвердить. */
+    val canConfirm: Boolean = false,
+)
+
 /** Что показать на панели перерегистрации (ДУ9). */
 data class ReregView(
     val text: String?,
@@ -465,4 +553,8 @@ data class DevicesState(
     val rereg: io.tima.domain.account.Rereg? = null,
     /** Код для заявки или подтверждения перерегистрации отправлен. */
     val reregCode: io.tima.domain.account.BanCode? = null,
+    /** Смена номера аккаунта (ДУ9); `null` — не узнали. */
+    val phoneChange: io.tima.domain.account.PhoneChange? = null,
+    /** Код для заявки или подтверждения смены номера отправлен. */
+    val phoneCode: io.tima.domain.account.BanCode? = null,
 )

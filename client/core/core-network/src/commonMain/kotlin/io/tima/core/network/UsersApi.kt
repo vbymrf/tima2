@@ -340,6 +340,46 @@ class UsersApi(
         return TrustCallResult.Refused(response.status.value, response.jsonBody().codeOf())
     }
 
+    /** Смена номера аккаунта (ДУ9) глазами этой личности — `GET /users/me/phone-change`; `null` — не узнали. */
+    suspend fun phoneChangeState(): PhoneChangeState? {
+        val response = try {
+            client.get(route.api("/api/v1/users/me/phone-change")) { header("Authorization", "Bearer ${token()}") }
+        } catch (e: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        val body = response.jsonBody() ?: return null
+        if (body.bool("active") != true) return PhoneChangeState(active = false)
+        return PhoneChangeState(
+            active = true,
+            newPhone = body.str("new_phone").orEmpty(),
+            newPhoneFull = body.str("new_phone_full").orEmpty(),
+            mine = body.bool("mine") == true,
+            windowFrom = body.msOf("window_from") ?: 0,
+            windowTo = body.msOf("window_to") ?: 0,
+        )
+    }
+
+    /**
+     * Заявка на смену номера ([newPhone] задан: код — на прежний номер) или подтверждение в окне
+     * ([newPhone] = `null`: код — на новый номер) — ДУ9. Подпись вызова — ключом личности из фразы.
+     */
+    suspend fun phoneChange(newPhone: String?, registrationToken: String, challenge: String, signature: ByteArray): TrustCallResult {
+        val path = if (newPhone == null) "/api/v1/users/me/phone-change/confirm" else "/api/v1/users/me/phone-change"
+        val phone = newPhone?.let { ",\"new_phone\":\"$it\"" }.orEmpty()
+        val response = try {
+            client.post(route.api(path)) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody("""{"registration_token":"$registrationToken","challenge_token":"$challenge","signature":"${encodeBase64Url(signature)}"$phone}""")
+            }
+        } catch (e: Throwable) {
+            return TrustCallResult.Offline(classifyFailure(e))
+        }
+        if (response.status.value in 200..299) return TrustCallResult.Done
+        return TrustCallResult.Refused(response.status.value, response.jsonBody().codeOf())
+    }
+
     /**
      * `POST /users/me/start-anew-ban` — закрыть «Начать заново» навсегда: SMS на номер
      * аккаунта (`registrationToken`) и подпись вызова ключом личности из фразы.
@@ -387,6 +427,17 @@ private fun JsonObject.msOf(key: String): Long? =
         ?.let { runCatching { kotlinx.datetime.Instant.parse(it).toEpochMilliseconds() }.getOrNull() }
 
 /** Перерегистрация глазами стороны (ДУ9): что показать в «Секретная фраза и устройства». */
+/** Смена номера аккаунта (ДУ9). [newPhone] — для показа, «+7 ••• •• 34»; [mine] — заявку подала эта личность. */
+class PhoneChangeState(
+    val active: Boolean,
+    val newPhone: String = "",
+    /** Номер целиком — только подавшей заявку личности: на него просят код в окне. */
+    val newPhoneFull: String = "",
+    val mine: Boolean = false,
+    val windowFrom: Long = 0,
+    val windowTo: Long = 0,
+)
+
 class ReregState(
     val active: Boolean,
     /** `new` — эта личность заведена перерегистрацией (Н), `old` — прежняя (С). */

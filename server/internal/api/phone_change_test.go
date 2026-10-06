@@ -20,6 +20,7 @@ type phoneChangeReply struct {
 	Active   bool   `json:"active"`
 	Mine     bool   `json:"mine"`
 	NewPhone string `json:"new_phone"`
+	Full     string `json:"new_phone_full"`
 	Outcome  string `json:"outcome"`
 }
 
@@ -76,7 +77,7 @@ func TestPhoneChange(t *testing.T) {
 		t.Fatalf("вторая заявка: %d %s", c, e)
 	}
 	var st phoneChangeReply
-	if c := getAuthed(t, ts, dev.token, "/api/v1/users/me/phone-change", &st); c != 200 || !st.Active || !st.Mine || st.NewPhone != "+7 ••• •• 02" {
+	if c := getAuthed(t, ts, dev.token, "/api/v1/users/me/phone-change", &st); c != 200 || !st.Active || !st.Mine || st.NewPhone != "+7 ••• •• 02" || st.Full != newNum {
 		t.Fatalf("состояние: %d %+v", c, st)
 	}
 

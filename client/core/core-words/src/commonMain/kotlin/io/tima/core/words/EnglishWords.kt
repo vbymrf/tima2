@@ -1584,6 +1584,27 @@ object EnglishWords : Words {
         override val reregOldPhrase = "old phrase"
         override val reregNewPhrase = "new phrase"
         override val reregNotInWindow = "Confirmation is accepted only within the confirmation window."
+        override val phoneChangeTitle = "Change number"
+        override val phoneChangeAbout =
+            "A new phone or SIM card. The request takes the phrase and a code sent to the old number. In 3 months confirm it with the phrase and a code sent to the new number — then the account number changes."
+        override val phoneChangeNewHint = "new number, +79991234567"
+        override val phoneChangeSendOld = "Send a code to the old number"
+        override val phoneChangeSendNew = "Send a code to the new number"
+        override val phoneChangeStart = "File the request"
+        override fun phoneChangeFiled(from: String, to: String) =
+            "The number change request is accepted. From $from to $to confirm it with the phrase and an SMS code sent to the new number."
+        override fun phoneChangeOthers(phone: String) =
+            "The account number is changing to $phone. If this is not you, someone else also has access to your account: to protect it, start re-registration in “Secret phrase and devices” — the code will come to the old number."
+        override fun phoneChangeWindow(to: String) =
+            "Time to confirm the number change: before $to enter the phrase and an SMS code sent to the new number. Without confirmation the number stays the same."
+        override val phoneChangeConfirm = "Confirm the number change"
+        override fun phoneChangeDone(phone: String) = "The account number is changed to $phone."
+        override val phoneChangeExpired = "The number change was not confirmed — the account keeps its number."
+        override val phoneChangeCancelled =
+            "The number change request is cancelled: re-registration was started. You can file it again when the account dispute ends."
+        override val phoneChangeTaken = "This number is already linked to another account."
+        override val phoneChangeReregOpen = "The account is being re-registered: the number can be changed when the dispute ends."
+        override val phoneChangeNotMine = "Only the identity key that filed the request can confirm the number change."
         override val reregNewWon = "Re-registration confirmed. The old identity key is deleted, restrictions lifted — certify your devices as usual."
         override val reregOldLost =
             "Your identity key is deleted: the re-registration was confirmed. You can fight for the account — file again — or create a new account on another number."

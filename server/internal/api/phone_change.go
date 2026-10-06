@@ -57,10 +57,15 @@ func phoneTail(phone string) string {
 
 // phoneChangeView — заявка глазами устройства: что показать в «Секретная фраза и устройства».
 func phoneChangeView(p store.PhoneChange, userID string) map[string]any {
-	return map[string]any{
+	v := map[string]any{
 		"active": true, "new_phone": phoneTail(p.NewPhone), "mine": p.UserID == userID,
 		"started_at": p.StartedAt.UTC(), "window_from": p.WindowFrom.UTC(), "window_to": p.WindowTo.UTC(),
 	}
+	// Подавшей заявку личности — номер целиком: на него в окне просят код подтверждения.
+	if p.UserID == userID {
+		v["new_phone_full"] = p.NewPhone
+	}
+	return v
 }
 
 func phoneChangePayload(p store.PhoneChange) map[string]any {

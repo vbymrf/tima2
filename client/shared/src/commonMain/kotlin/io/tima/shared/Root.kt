@@ -2293,7 +2293,7 @@ private fun App(
             // ДУ9: перерегистрация — текст стороны по §2б, «Открыть» ведёт к панели.
             EventKind.Rereg -> NoticeEntry(
                 notice = io.tima.feature.shell.Notice(
-                    title = Tima.words.auth.reregTitle,
+                    title = if (reregEvent?.kind?.startsWith("phone_") == true) Tima.words.auth.phoneChangeTitle else Tima.words.auth.reregTitle,
                     text = reregNoticeText(reregEvent, assembled.session.userId, Tima.words.auth),
                 ),
                 actions = listOf(
@@ -4387,6 +4387,10 @@ private fun Devices(
         onStartRereg = store::startRereg,
         onSendReregCode = store::sendReregCode,
         onRereg = store::rereg,
+        // Смена номера (ДУ9): заявка — код на прежний номер, в окне — на новый.
+        phoneChange = store.phoneChangeView(msNow()),
+        onSendPhoneCode = store::sendPhoneChangeCode,
+        onPhoneChange = store::phoneChange,
     )
 }
 
@@ -5488,6 +5492,14 @@ private fun reregNoticeText(
     val from = reregDate(e.windowFrom)
     val to = reregDate(e.windowTo)
     return when (e.kind) {
+        // Смена номера (ДУ9): всем устройствам — «номер меняется», в окне — «пора подтвердить».
+        "phone_started" -> w.phoneChangeOthers(e.phone)
+        "phone_window" -> w.phoneChangeWindow(to)
+        "phone_done" -> when (e.outcome) {
+            "changed" -> w.phoneChangeDone(e.phone)
+            "cancelled" -> w.phoneChangeCancelled
+            else -> w.phoneChangeExpired
+        }
         "started" -> w.reregOldAbout
         "disputed" -> if (isNew) w.reregDisputedNewAbout(from, to) else w.reregClaimedAbout(from, to)
         "window" -> if (isNew) w.reregWindowNew(to) else w.reregWindowOld(to)

@@ -221,6 +221,58 @@ class DeviceTrustActionsOverNetwork(
     override suspend fun confirmRereg(words: List<String>, oldWords: List<String>?, requestId: String, code: String): TrustStep =
         reregCall("confirm", words, oldWords, requestId, code)
 
+    override suspend fun phoneChange(): io.tima.domain.account.PhoneChange? {
+        val state = users?.phoneChangeState() ?: return null
+        if (!state.active) return io.tima.domain.account.PhoneChange.NONE
+        return io.tima.domain.account.PhoneChange(
+            active = true, newPhone = state.newPhone, newPhoneFull = state.newPhoneFull, mine = state.mine,
+            windowFrom = state.windowFrom, windowTo = state.windowTo,
+        )
+    }
+
+    override suspend fun sendPhoneChangeCode(newPhone: String?): io.tima.domain.account.CodeSend {
+        val phone = newPhone ?: users?.startAnewState()?.phone?.takeIf { it.isNotBlank() }
+            ?: return io.tima.domain.account.CodeSend.Failed
+        val purpose = if (newPhone == null) "phone_change_start" else "phone_change_confirm"
+        return when (val sent = sms?.requestSms(phone, purpose)) {
+            is io.tima.core.network.SmsRequestResult.Sent ->
+                io.tima.domain.account.CodeSend.Sent(io.tima.domain.account.BanCode(sent.requestId, sent.devCode))
+            is io.tima.core.network.SmsRequestResult.Refused ->
+                if (sent.code == "rate_limited") io.tima.domain.account.CodeSend.Limited else io.tima.domain.account.CodeSend.Failed
+            else -> io.tima.domain.account.CodeSend.Failed
+        }
+    }
+
+    override suspend fun startPhoneChange(newPhone: String, words: List<String>, requestId: String, code: String): TrustStep =
+        phoneChangeCall(newPhone, words, requestId, code)
+
+    override suspend fun confirmPhoneChange(words: List<String>, requestId: String, code: String): TrustStep =
+        phoneChangeCall(null, words, requestId, code)
+
+    /** Заявка ([newPhone] задан) и подтверждение смены номера (ДУ9): SMS, вызов, подпись фразой. */
+    private suspend fun phoneChangeCall(newPhone: String?, words: List<String>, requestId: String, code: String): TrustStep {
+        val api = users ?: return TrustStep.Refused("нет сети пользователей")
+        val auth = sms ?: return TrustStep.Refused("нет SMS")
+        val token = when (val v = auth.verifySms(requestId, code)) {
+            is io.tima.core.network.SmsVerifyResult.Verified -> v.registrationToken
+            io.tima.core.network.SmsVerifyResult.BadCode -> return TrustStep.WrongCode
+            is io.tima.core.network.SmsVerifyResult.NoConnection -> return TrustStep.Offline(v.link.retryDelayMs)
+            is io.tima.core.network.SmsVerifyResult.Refused -> return TrustStep.Refused(v.code)
+        }
+        val challenge = api.identityChallenge() ?: return TrustStep.Offline(0)
+        val signature = io.tima.core.encryption.IdentitySignerOverKodium.sign(words, challenge.encodeToByteArray())
+            ?: return TrustStep.WrongPhrase
+        return when (val answer = api.phoneChange(newPhone, token, challenge, signature)) {
+            TrustCallResult.Done -> TrustStep.Done
+            is TrustCallResult.Offline -> TrustStep.Offline(answer.link.retryDelayMs)
+            is TrustCallResult.Refused -> when (answer.code) {
+                "bad_signature" -> TrustStep.WrongPhrase
+                "phone_mismatch" -> TrustStep.WrongCode
+                else -> TrustStep.Refused(answer.code)
+            }
+        }
+    }
+
     /** Заявка и подтверждение (ДУ9): SMS на номер аккаунта, вызов, подписи фразами. */
     private suspend fun reregCall(action: String, words: List<String>, oldWords: List<String>?, requestId: String, code: String): TrustStep {
         val api = users ?: return TrustStep.Refused("нет сети пользователей")

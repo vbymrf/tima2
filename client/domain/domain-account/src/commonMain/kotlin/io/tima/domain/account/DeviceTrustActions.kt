@@ -84,6 +84,40 @@ interface DeviceTrustActions {
     /** Подтверждение в окне (Р34): Н — обе фразы ([oldWords] — прежняя), С — своя. */
     suspend fun confirmRereg(words: List<String>, oldWords: List<String>?, requestId: String, code: String): TrustStep =
         TrustStep.Refused("не умеем")
+
+    /** Смена номера аккаунта (ДУ9) глазами этой личности; `null` — не узнали, нет — `PhoneChange.NONE`. */
+    suspend fun phoneChange(): PhoneChange? = null
+
+    /**
+     * Код из SMS для смены номера: [newPhone] = `null` — на номер аккаунта (заявка), иначе — на
+     * новый номер (подтверждение в окне). У заявки и подтверждения свой предел SMS (Р53).
+     */
+    suspend fun sendPhoneChangeCode(newPhone: String?): CodeSend = CodeSend.Failed
+
+    /** Заявка на смену номера (ДУ9): фраза и код из SMS на прежний номер. */
+    suspend fun startPhoneChange(newPhone: String, words: List<String>, requestId: String, code: String): TrustStep =
+        TrustStep.Refused("не умеем")
+
+    /** Подтверждение смены номера в окне: фраза той же личности и код из SMS на новый номер. */
+    suspend fun confirmPhoneChange(words: List<String>, requestId: String, code: String): TrustStep =
+        TrustStep.Refused("не умеем")
+}
+
+/**
+ * Смена номера аккаунта (ДУ9) глазами личности. Времена — мс. [newPhone] — для показа
+ * («+7 ••• •• 34»), [newPhoneFull] — целиком, только подавшей заявку ([mine]).
+ */
+data class PhoneChange(
+    val active: Boolean,
+    val newPhone: String = "",
+    val newPhoneFull: String = "",
+    val mine: Boolean = false,
+    val windowFrom: Long = 0,
+    val windowTo: Long = 0,
+) {
+    companion object {
+        val NONE = PhoneChange(active = false)
+    }
 }
 
 /** Перерегистрация глазами стороны (ДУ9). Времена — мс. */

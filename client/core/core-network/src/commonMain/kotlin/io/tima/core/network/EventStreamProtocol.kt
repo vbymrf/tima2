@@ -276,6 +276,11 @@ class EventStreamProtocol {
             val windowTo: Long,
             val outcome: String,
             val eventId: Long?,
+            /**
+             * Смена номера (ДУ9) идёт тем же извещением: [kind] — `phone_started`, `phone_window`,
+             * `phone_done` ([outcome] — `changed`, `expired`, `cancelled`); номер — для показа.
+             */
+            val phone: String = "",
         ) : Decision
 
         /** Заявка новой личности [userId] в группу [groupId] (ДУ6, Р9). */
@@ -630,6 +635,18 @@ class EventStreamProtocol {
                 windowTo = json.string("window_to")?.let { runCatching { kotlinx.datetime.Instant.parse(it).toEpochMilliseconds() }.getOrNull() } ?: 0,
                 outcome = json.string("outcome").orEmpty(),
                 eventId = eventId,
+            )
+
+            // Смена номера аккаунта (ДУ9): заявка, окно подтверждения, исход — тем же извещением.
+            "phone_change.started", "phone_change.window", "phone_change.done" -> Decision.Rereg(
+                kind = "phone_" + event.removePrefix("phone_change."),
+                oldUserId = "",
+                newUserId = "",
+                windowFrom = json.string("window_from")?.let { runCatching { kotlinx.datetime.Instant.parse(it).toEpochMilliseconds() }.getOrNull() } ?: 0,
+                windowTo = json.string("window_to")?.let { runCatching { kotlinx.datetime.Instant.parse(it).toEpochMilliseconds() }.getOrNull() } ?: 0,
+                outcome = json.string("outcome").orEmpty(),
+                eventId = eventId,
+                phone = json.string("new_phone").orEmpty(),
             )
 
             // Новая личность просит место прежней в группе — решать владельцу или модератору.

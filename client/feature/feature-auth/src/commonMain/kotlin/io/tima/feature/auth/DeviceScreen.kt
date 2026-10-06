@@ -99,6 +99,12 @@ fun DeviceScreen(
     onSendReregCode: (() -> Unit)? = null,
     /** Заявка (`true`) или подтверждение: фраза, прежняя фраза (у Н), код. */
     onRereg: ((Boolean, String, String?, String) -> Unit)? = null,
+    /** Смена номера (ДУ9): что показать; `null` — панели нет. */
+    phoneChange: PhoneChangeView? = null,
+    /** Код из SMS: `false` — на прежний номер (заявка), `true` — на новый (подтверждение). */
+    onSendPhoneCode: ((Boolean) -> Unit)? = null,
+    /** Заявка (новый номер задан) или подтверждение: номер, фраза, код. */
+    onPhoneChange: ((String?, String, String) -> Unit)? = null,
 ) = Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
     val words = Tima.words.auth
     var signingOut by rememberSaveable { mutableStateOf(false) }
@@ -175,6 +181,12 @@ fun DeviceScreen(
     val banned = state.startAnewBanned
     if (banned != null && onSendBanCode != null && onBanStartAnew != null && !signingOut) {
         StartAnewBan(banned, codeSent = state.banCode != null, onSendBanCode, onBanStartAnew, state.trusting)
+    }
+    // Смена номера (ДУ9): заявка, её состояние и подтверждение в окне.
+    if (phoneChange != null && onSendPhoneCode != null && onPhoneChange != null && !signingOut &&
+        (phoneChange.text != null || phoneChange.canStart)
+    ) {
+        PhoneChangePanel(phoneChange, codeSent = state.phoneCode != null, onSendPhoneCode, onPhoneChange, state.trusting)
     }
     // Запустить перерегистрацию (ДУ9, Р34) — прежней фразой; дальше вход тем же номером.
     if (rereg?.canStart == true && onStartRereg != null && !signingOut) {
@@ -521,6 +533,76 @@ private fun ReregPanel(
             }
         },
         kind = if (view.canClaim) ButtonKind.Dangerous else ButtonKind.Action,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/**
+ * Смена номера (ДУ9): без заявки — номер, код на прежний номер, фраза; с заявкой — её состояние,
+ * а в окне — код на новый номер и фраза той же личности.
+ */
+@Composable
+private fun PhoneChangePanel(
+    view: PhoneChangeView,
+    codeSent: Boolean,
+    onSendCode: (Boolean) -> Unit,
+    onSubmit: (String?, String, String) -> Unit,
+    busy: Boolean,
+) = Column(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+) {
+    val words = Tima.words.auth
+    var open by rememberSaveable { mutableStateOf(false) }
+    var number by remember { mutableStateOf("") }
+    var phrase by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    Caption(words.phoneChangeTitle, weight = FontWeight.ExtraBold)
+    if (view.text != null) {
+        Secondary(view.text)
+        if (!view.canConfirm) return@Column
+        if (!codeSent) {
+            Button(label = words.phoneChangeSendNew, onClick = { if (!busy) onSendCode(true) }, kind = ButtonKind.Action, modifier = Modifier.fillMaxWidth())
+            return@Column
+        }
+        Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, modifier = Modifier.fillMaxWidth())
+        Field(value = code, onChange = { code = it }, hint = words.banCodeHint, modifier = Modifier.fillMaxWidth())
+        Button(
+            label = words.phoneChangeConfirm,
+            onClick = {
+                if (!busy && phrase.isNotBlank() && code.isNotBlank()) {
+                    onSubmit(null, phrase, code)
+                    phrase = ""
+                    code = ""
+                }
+            },
+            kind = ButtonKind.Action,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        return@Column
+    }
+    Secondary(words.phoneChangeAbout)
+    if (!open) {
+        Button(label = words.phoneChangeTitle, onClick = { open = true }, kind = ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
+        return@Column
+    }
+    Field(value = number, onChange = { number = it }, hint = words.phoneChangeNewHint, modifier = Modifier.fillMaxWidth())
+    if (!codeSent) {
+        Button(label = words.phoneChangeSendOld, onClick = { if (!busy) onSendCode(false) }, kind = ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
+        return@Column
+    }
+    Field(value = phrase, onChange = { phrase = it }, hint = words.phraseHint, modifier = Modifier.fillMaxWidth())
+    Field(value = code, onChange = { code = it }, hint = words.banCodeHint, modifier = Modifier.fillMaxWidth())
+    Button(
+        label = words.phoneChangeStart,
+        onClick = {
+            if (!busy && number.isNotBlank() && phrase.isNotBlank() && code.isNotBlank()) {
+                onSubmit(number, phrase, code)
+                phrase = ""
+                code = ""
+            }
+        },
+        kind = ButtonKind.Dangerous,
         modifier = Modifier.fillMaxWidth(),
     )
 }
