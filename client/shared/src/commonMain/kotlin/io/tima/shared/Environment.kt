@@ -214,6 +214,50 @@ class Entry private constructor(
         Journal.note(LogCode.ACCOUNT_BACK, "возврат отложенного аккаунта")
     }
 
+    /** Карточка отложенного аккаунта для экрана входа: имя, номер, с какого дня. */
+    fun cardOf(userId: String): io.tima.core.secrets.AccountCard? = accounts.card(userId)
+
+    /** Открытый аккаунт оставляет списку своё имя и номер — больше их записать некому. */
+    fun noteCard(userId: String, name: String, phone: String) = accounts.noteCard(userId, name, phone, nowMillis())
+
+    /**
+     * Забыть отложенный аккаунт на этом устройстве (заказчик 2026-10-06): его нет на сервере.
+     * Уходят запись, ключи и сессия; база остаётся файлом и больше не открывается.
+     */
+    fun forget(userId: String) {
+        accounts.forget(userId)
+        Journal.note(LogCode.ACCOUNT_OUT, "отложенный аккаунт забыт — его нет на сервере", "осталось" to accounts.all().size)
+    }
+
+    /**
+     * Есть ли отложенный аккаунт на сервере — проверяется при «Вернуть» (заказчик 2026-10-06):
+     * продлить его вход ключом его устройства, как при каждом запуске. `true` — жив (новый токен
+     * сохранён), `false` — устройство отключено или аккаунт удалён, `null` — не узнали (нет сети):
+     * тогда возвращаем как раньше, и отключение покажет уже экран аккаунта.
+     */
+    suspend fun aliveOnServer(userId: String): Boolean? {
+        val store = accounts.store(userId)
+        val session = store.session() ?: return false
+        val secret = store.deviceSecret() ?: return false
+        val link = io.tima.core.network.ServerLink.open(host)
+        return try {
+            val issuedAt = nowMillis() / 1000
+            val bytes = io.tima.core.network.deviceTokenSigningBytes(session.userId, session.deviceId, issuedAt)
+            val signature = io.tima.core.encryption.DeviceTokenSignerOverKodium(io.tima.core.encryption.deviceIdentityFrom(secret)).sign(bytes)
+                ?: return null
+            when (val r = DeviceTokenApi(link.route, link.client).renew(session.userId, session.deviceId, issuedAt, signature)) {
+                is io.tima.core.network.DeviceTokenResult.Renewed -> {
+                    rememberSession(session.copy(accessToken = r.accessToken))
+                    true
+                }
+                is io.tima.core.network.DeviceTokenResult.Revoked -> false
+                else -> null
+            }
+        } finally {
+            runCatching { link.client.close() }
+        }
+    }
+
     /** Каким устройством аккаунт вошёл заново — для имени его базы (А5). */
     fun relinkedDevice(userId: String): String? = accounts.relinked(userId)
 

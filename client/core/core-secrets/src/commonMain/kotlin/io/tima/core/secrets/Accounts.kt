@@ -125,11 +125,30 @@ class Accounts(private val vault: SecretVault) {
     fun forget(userId: String) {
         store(userId).clear()
         vault.remove(pendingAlias(userId))
+        vault.remove(cardAlias(userId))
         val remaining = all().filterNot { it.userId == userId }
         write(remaining)
         if (current() == userId) {
             remaining.firstOrNull()?.let { switchTo(it.userId) } ?: vault.remove(CURRENT)
         }
+    }
+
+    /**
+     * Карточка аккаунта для экрана входа (заказчик 2026-10-06): имя, номер и с какого дня он
+     * на этом устройстве. Вместо «…f8c860» человек видит, что возвращает. `null` — карточку
+     * ещё не записывали (аккаунт отложен до этой версии).
+     */
+    fun card(userId: String): AccountCard? {
+        val parts = vault.get(cardAlias(userId))?.decodeToString()?.split(FIELD) ?: return null
+        if (parts.size != 3) return null
+        return AccountCard(name = parts[0], phone = parts[1], since = parts[2].toLongOrNull() ?: 0L)
+    }
+
+    /** Записать имя и номер открытого аккаунта; день появления на устройстве — только первый раз. */
+    fun noteCard(userId: String, name: String, phone: String, now: Long) {
+        val since = card(userId)?.since?.takeIf { it > 0 } ?: now
+        val line = listOf(name.replace(FIELD, " ").replace("\n", " "), phone, since.toString()).joinToString(FIELD)
+        vault.put(cardAlias(userId), line.encodeToByteArray())
     }
 
     private fun write(list: List<Account>) {
@@ -154,6 +173,7 @@ class Accounts(private val vault: SecretVault) {
         // дефис и подчёркивание — см. пояснение у Scoped.
         fun pendingAlias(userId: String) = SecretAlias("accounts.pending.v1.$userId")
         fun relinkedAlias(userId: String) = SecretAlias("accounts.relinked.v1.$userId")
+        fun cardAlias(userId: String) = SecretAlias("accounts.card.v1.$userId")
     }
 }
 
@@ -164,6 +184,9 @@ class Accounts(private val vault: SecretVault) {
  * без сети. Ник же выбирается один раз и служит опознанием — у виртуального аккаунта он
  * вообще единственное, чем его называют.
  */
+/** Карточка аккаунта для экрана входа: имя, номер, с какого дня (мс) на этом устройстве. */
+data class AccountCard(val name: String = "", val phone: String = "", val since: Long = 0L)
+
 data class Account(
     val userId: String,
     val nickname: String = "",

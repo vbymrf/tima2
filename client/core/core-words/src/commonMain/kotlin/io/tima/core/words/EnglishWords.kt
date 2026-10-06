@@ -1529,6 +1529,19 @@ object EnglishWords : Words {
                 "Enter the secret phrase — once: updates will not ask again. " +
                 "A computer can also be certified from your phone: “Show verification code” and scan it with the phone."
         override val uncertifiedConfirm = "Confirm with phrase"
+        override fun phraseCount(got: Int, need: Int) =
+            "Words entered: $got, but the phrase has $need. Check that two words have not merged and none is missing."
+        override fun phraseUnknown(list: String) =
+            "These words are not in the phrase list: $list. Check the spelling: Latin letters only."
+        override val phraseChecksum =
+            "All words are from the list, but the phrase does not add up. Check the order and every word: one letter changes a word."
+        override val phraseOtherIdentity =
+            "The phrase is real, but not of this account. A typo may have turned one word into another word from the list — " +
+                "compare it with your note letter by letter. If the number was started over, the previous phrase does not fit."
+        override fun returnSince(date: String) = "since $date"
+        override val returnChecking = "Checking the account…"
+        override val returnGone = "This account is no longer on the server: the device was disconnected or the account deleted."
+        override val forgetAccount = "Forget"
         override val replacedTitle = "Someone started over with your number"
         override val replacedAbout = "A new identity key of your account was created on another device — this happens when a phone and phrase are lost or the SIM card is reissued. Contacts now write to it, not to you. If it was not you, cancel it: you will need your secret phrase."
         override val replacedCancel = "Cancel the new identity key"

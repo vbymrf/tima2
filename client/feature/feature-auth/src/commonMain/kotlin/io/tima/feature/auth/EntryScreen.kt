@@ -64,8 +64,10 @@ fun EntryScreen(
      * Отложенные аккаунты этого устройства — `userId` и как его назвать (ПЛАН-(А)-ВЫХОДА-ИЗ-
      * АККАУНТА.md, А6). Пусто — возвращать некого, раздела нет.
      */
-    returnable: List<Pair<String, String>> = emptyList(),
+    returnable: List<ReturnAccount> = emptyList(),
     onReturn: (String) -> Unit = {},
+    /** Забыть отложенный аккаунт, которого нет на сервере (заказчик 2026-10-06). */
+    onForget: (String) -> Unit = {},
     /**
      * Номер сборки — единственное место, где он виден человеку.
      *
@@ -88,7 +90,7 @@ fun EntryScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             when (state) {
-                is AuthState.Phone -> Phone(state, onNumber, onCodeCountry, onRequest, onConnect, returnable, onReturn)
+                is AuthState.Phone -> Phone(state, onNumber, onCodeCountry, onRequest, onConnect, returnable, onReturn, onForget)
                 is AuthState.Code -> Code(state, onCode, onConfirm, onBack)
                 is AuthState.Phrase -> Phrase(state, onPhraseSaved)
                 is AuthState.PhraseInput -> PhraseInput(state, onPhrase, onEnterByPhrase, onStartAnew, onBack)
@@ -116,8 +118,10 @@ private fun Phone(
     onCodeCountry: (String) -> Unit,
     onRequest: () -> Unit,
     onConnect: (() -> Unit)?,
-    returnable: List<Pair<String, String>> = emptyList(),
+    returnable: List<ReturnAccount> = emptyList(),
     onReturn: (String) -> Unit = {},
+    /** Забыть отложенный аккаунт, которого нет на сервере (заказчик 2026-10-06). */
+    onForget: (String) -> Unit = {},
 ) {
     val words = Tima.words.auth
     if (state.rereg) {
@@ -169,13 +173,25 @@ private fun Phone(
     // Отложенные выходом аккаунты (А6): вернуться в прежний — одним нажатием, без входа.
     if (returnable.isNotEmpty()) {
         Tertiary(words.returnTitle)
-        for ((userId, name) in returnable) {
+        for (account in returnable) {
             Button(
-                label = words.returnTo(name),
-                onClick = { onReturn(userId) },
+                label = words.returnTo(account.label),
+                onClick = { onReturn(account.userId) },
                 kind = ButtonKind.Quiet,
+                enabled = !account.checking && !account.gone,
                 modifier = Modifier.fillMaxWidth(),
             )
+            // Проверка — при нажатии (заказчик 2026-10-06): аккаунта нет — сказать и дать забыть.
+            if (account.checking) Tertiary(words.returnChecking)
+            if (account.gone) {
+                Secondary(words.returnGone)
+                Button(
+                    label = words.forgetAccount,
+                    onClick = { onForget(account.userId) },
+                    kind = ButtonKind.Quiet,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }

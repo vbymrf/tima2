@@ -531,6 +531,13 @@ private fun Inside(
     // приложением, переписка лежит в `tima.db`, и переименование потеряло бы её.
     val assembled = assemble(entry, current, build, deviceDatabase, entry.accountList().firstOrNull()?.userId)
 
+    // Карточка для экрана входа (заказчик 2026-10-06): имя и номер этого аккаунта — пока он
+    // открыт. Отложенный потом покажется «Имя · +799 ••• 01 · с 06.10.2026», а не хвостом id.
+    LaunchedEffect(current.session.userId) {
+        val me = runCatching { assembled.network.profile.me() }.getOrNull() ?: return@LaunchedEffect
+        entry.noteCard(current.session.userId, me.name.ifBlank { me.nickname }, me.phone)
+    }
+
     // Выход из аккаунта на этом устройстве (ПЛАН-(А)-ВЫХОДА-ИЗ-АККАУНТА.md, А4): канал
     // отпускается, указатель «текущий» снимается, аккаунт откладывается — и приложение
     // возвращается на экран входа, где есть и QR, и «Вернуть прежний аккаунт».
@@ -632,6 +639,10 @@ private fun Inside(
 @Composable
 private fun Occurrence(entry: Entry, build: Build, onReturn: (String) -> Unit = {}, onEntered: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val authWords = Tima.words.auth
+    var listed by remember { mutableStateOf(entry.accountList()) }
+    var gone by remember { mutableStateOf(emptySet<String>()) }
+    var checking by remember { mutableStateOf<String?>(null) }
     val store = remember {
         AuthStore(
             register = entry.registration,
@@ -643,6 +654,7 @@ private fun Occurrence(entry: Entry, build: Build, onReturn: (String) -> Unit = 
             onEnteredByPhrase = PhraseOnce::hold,
             onPhraseKnown = KeyCopyPhrase::hold,
             rereg = ReregHandoff.take(),
+            checkPhrase = io.tima.core.encryption.PhraseCheckOverKodium,
         )
     }
     val state by store.state.collectAsState()
@@ -665,10 +677,38 @@ private fun Occurrence(entry: Entry, build: Build, onReturn: (String) -> Unit = 
         onPhraseSaved = store::savedPhrase,
         onConnect = store::connect,
         buildVersion = build.name,
-        // Отложенные выходом аккаунты (А6). Имя — ник; у основного его нет, тогда хвост
-        // идентификатора: различить два своих аккаунта хватит.
-        returnable = entry.accountList().map { it.userId to it.nickname.ifBlank { "…" + it.userId.takeLast(6) } },
-        onReturn = onReturn,
+        // Отложенные выходом аккаунты (А6): имя, номер с закрытой серединой, с какого дня
+        // (заказчик 2026-10-06). Нажатие сначала спрашивает сервер: аккаунта нет — «Забыть».
+        returnable = listed.map { account ->
+            val card = entry.cardOf(account.userId)
+            io.tima.feature.auth.ReturnAccount(
+                userId = account.userId,
+                label = io.tima.feature.auth.returnLabel(
+                    userId = account.userId,
+                    name = card?.name?.ifBlank { null } ?: account.nickname,
+                    phone = card?.phone.orEmpty(),
+                    since = card?.since?.takeIf { it > 0 }?.let { authWords.returnSince(reregDate(it).substringBefore(' ')) },
+                ),
+                gone = account.userId in gone,
+                checking = checking == account.userId,
+            )
+        },
+        onReturn = { userId ->
+            if (checking == null) {
+                scope.launch {
+                    checking = userId
+                    val alive = runCatching { entry.aliveOnServer(userId) }.getOrNull()
+                    checking = null
+                    // Не узнали (нет сети) — возвращаем как раньше: отключение покажет экран аккаунта.
+                    if (alive == false) gone = gone + userId else onReturn(userId)
+                }
+            }
+        },
+        onForget = { userId ->
+            entry.forget(userId)
+            gone = gone - userId
+            listed = entry.accountList()
+        },
     )
 }
 
@@ -4155,6 +4195,8 @@ private fun Settings(
         DevicesStore(
             network.myFleet, scope, trust = deviceTrust, onIdentityRestored = onIdentityRestored,
             onRereg = onRereg, dateText = ::reregDate,
+            // Фраза проверяется по словарю и сумме до сервера (отчёт DGAR).
+            checkPhrase = io.tima.core.encryption.PhraseCheckOverKodium,
         )
     }
     val devices by fleet.state.collectAsState()

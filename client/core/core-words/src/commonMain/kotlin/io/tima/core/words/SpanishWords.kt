@@ -1529,6 +1529,19 @@ object SpanishWords : Words {
                 "Introduzca la frase secreta — una sola vez: las actualizaciones no volverán a pedirla. " +
                 "Un ordenador también se puede certificar desde el teléfono: «Mostrar código de verificación» y escanéelo con el teléfono."
         override val uncertifiedConfirm = "Confirmar con la frase"
+        override fun phraseCount(got: Int, need: Int) =
+            "Palabras introducidas: $got, pero la frase tiene $need. Compruebe que no se hayan unido dos palabras ni falte ninguna."
+        override fun phraseUnknown(list: String) =
+            "Estas palabras no están en la lista de frases: $list. Revise la ortografía: solo letras latinas."
+        override val phraseChecksum =
+            "Todas las palabras son de la lista, pero la frase no cuadra. Revise el orden y cada palabra: una letra cambia la palabra."
+        override val phraseOtherIdentity =
+            "La frase es real, pero no de esta cuenta. Quizá una errata convirtió una palabra en otra de la lista; " +
+                "compárela letra por letra con su nota. Si el número empezó de cero, la frase anterior no sirve."
+        override fun returnSince(date: String) = "desde $date"
+        override val returnChecking = "Comprobando la cuenta…"
+        override val returnGone = "Esta cuenta ya no está en el servidor: el dispositivo se desconectó o la cuenta se eliminó."
+        override val forgetAccount = "Olvidar"
         override val replacedTitle = "Alguien empezó de nuevo con su número"
         override val replacedAbout = "En otro dispositivo se creó una clave de identidad nueva de su cuenta: pasa cuando se pierden el teléfono y la frase o se reemite la SIM. Los contactos ahora le escriben a ella, no a usted. Si no fue usted, cancélela: necesitará su frase secreta."
         override val replacedCancel = "Cancelar la clave de identidad nueva"

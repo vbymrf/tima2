@@ -9,6 +9,8 @@ import io.tima.domain.account.DeviceTrustActions
 import io.tima.domain.account.DevicesStep
 import io.tima.domain.account.MyDevices
 import io.tima.domain.account.PhraseWords
+import io.tima.domain.account.PhraseChecker
+import io.tima.domain.account.PhraseFault
 import io.tima.domain.account.RevokeStep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,6 +46,8 @@ class DevicesStore(
     private val onRereg: (io.tima.domain.account.PrepareRereg.Ready) -> Unit = {},
     /** Дата для текстов перерегистрации — по местным часам; формат — у того, кто знает время. */
     private val dateText: (Long) -> String = { it.toString() },
+    /** Проверка фразы по словарю и сумме — до сервера (отчёт DGAR); по умолчанию не проверяет. */
+    private val checkPhrase: PhraseChecker = PhraseChecker { null },
 ) {
 
     private val _state = MutableStateFlow(DevicesState(expect = true))
@@ -99,7 +103,7 @@ class DevicesStore(
         val actions = trust ?: return
         if (_state.value.trusting) return
         val target = if (confirm) _state.value.phoneChange?.newPhoneFull?.takeIf { it.isNotBlank() } ?: return else null
-        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        _state.value = _state.value.copy(trusting = true, trustNotice = null, noticeAt = TrustPanel.Phone)
         scope.launch {
             val sent = runCatching { actions.sendPhoneChangeCode(target) }.getOrDefault(io.tima.domain.account.CodeSend.Failed)
             val w = words().auth
@@ -122,7 +126,8 @@ class DevicesStore(
         if (_state.value.trusting) return
         val phraseWords = PhraseWords.parse(phrase)
         val number = newPhone?.filter { it == '+' || it.isDigit() }
-        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        if (phraseTrouble(listOf(phraseWords), TrustPanel.Phone)) return
+        _state.value = _state.value.copy(trusting = true, trustNotice = null, noticeAt = TrustPanel.Phone)
         scope.launch {
             val step = runCatching {
                 if (number != null) actions.startPhoneChange(number, phraseWords, sent.requestId, code.trim())
@@ -194,7 +199,8 @@ class DevicesStore(
         val actions = trust ?: return
         if (_state.value.trusting) return
         val words = PhraseWords.parse(phrase)
-        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        if (phraseTrouble(listOf(words), TrustPanel.StartRereg)) return
+        _state.value = _state.value.copy(trusting = true, trustNotice = null, noticeAt = TrustPanel.StartRereg)
         scope.launch {
             val step = runCatching { actions.prepareRereg(words) }.getOrElse {
                 io.tima.domain.account.PrepareRereg.Failed(TrustStep.Refused(it.message ?: "?"))
@@ -221,7 +227,7 @@ class DevicesStore(
             r.isNew -> "rereg_confirm_new"
             else -> "rereg_confirm_old"
         }
-        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        _state.value = _state.value.copy(trusting = true, trustNotice = null, noticeAt = TrustPanel.Rereg)
         scope.launch {
             val sent = runCatching { actions.sendCode(purpose) }.getOrDefault(io.tima.domain.account.CodeSend.Failed)
             val w = words().auth
@@ -246,7 +252,8 @@ class DevicesStore(
         val sent = _state.value.reregCode ?: return
         if (_state.value.trusting) return
         fun split(text: String) = PhraseWords.parse(text)
-        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        if (phraseTrouble(listOfNotNull(split(phrase), oldPhrase?.let(::split)), TrustPanel.Rereg)) return
+        _state.value = _state.value.copy(trusting = true, trustNotice = null, noticeAt = TrustPanel.Rereg)
         scope.launch {
             val step = runCatching {
                 if (claim) actions.claimRereg(split(phrase), sent.requestId, code.trim())
@@ -281,7 +288,8 @@ class DevicesStore(
         val actions = trust ?: return
         if (_state.value.trusting) return
         val words = PhraseWords.parse(phrase)
-        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        if (phraseTrouble(listOf(words), TrustPanel.Copy)) return
+        _state.value = _state.value.copy(trusting = true, trustNotice = null, noticeAt = TrustPanel.Copy)
         scope.launch {
             val step = runCatching { actions.startCopy(words) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
             _state.value = _state.value.copy(
@@ -297,7 +305,8 @@ class DevicesStore(
         val actions = trust ?: return
         if (_state.value.trusting) return
         val words = PhraseWords.parse(phrase)
-        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        if (phraseTrouble(listOf(words), TrustPanel.Copy)) return
+        _state.value = _state.value.copy(trusting = true, trustNotice = null, noticeAt = TrustPanel.Copy)
         scope.launch {
             val step = runCatching { actions.rotateCopy(words) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
             _state.value = _state.value.copy(
@@ -312,7 +321,7 @@ class DevicesStore(
     fun sendBanCode() {
         val actions = trust ?: return
         if (_state.value.trusting) return
-        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        _state.value = _state.value.copy(trusting = true, trustNotice = null, noticeAt = TrustPanel.Ban)
         scope.launch {
             val sent = runCatching { actions.sendBanCode() }.getOrNull()
             _state.value = _state.value.copy(
@@ -332,7 +341,8 @@ class DevicesStore(
         val sent = _state.value.banCode ?: return
         if (_state.value.trusting) return
         val words = PhraseWords.parse(phrase)
-        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        if (phraseTrouble(listOf(words), TrustPanel.Ban)) return
+        _state.value = _state.value.copy(trusting = true, trustNotice = null, noticeAt = TrustPanel.Ban)
         scope.launch {
             val step = runCatching { actions.banStartAnew(words, sent.requestId, code.trim()) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
             _state.value = _state.value.copy(
@@ -349,7 +359,7 @@ class DevicesStore(
         val actions = trust ?: return
         scope.launch {
             val code = runCatching { actions.certifyCode() }.getOrNull()
-            _state.value = _state.value.copy(certifyCode = code, trustNotice = if (code == null) words().auth.trustFailed(words().auth.tryAgain) else null)
+            _state.value = _state.value.copy(certifyCode = code, trustNotice = if (code == null) words().auth.trustFailed(words().auth.tryAgain) else null, noticeAt = TrustPanel.Confirm)
         }
     }
 
@@ -357,7 +367,7 @@ class DevicesStore(
     fun certifyByCode(code: String, done: () -> Unit = {}) {
         val actions = trust ?: return
         if (_state.value.trusting) return
-        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        _state.value = _state.value.copy(trusting = true, trustNotice = null, noticeAt = TrustPanel.Scan)
         scope.launch {
             val step = runCatching { actions.certifyByCode(code) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
             _state.value = _state.value.copy(trusting = false, trustNotice = notice(step))
@@ -373,7 +383,8 @@ class DevicesStore(
         val actions = trust ?: return
         if (_state.value.trusting) return
         val words = PhraseWords.parse(phrase)
-        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        if (phraseTrouble(listOf(words), TrustPanel.CancelIdentity)) return
+        _state.value = _state.value.copy(trusting = true, trustNotice = null, noticeAt = TrustPanel.CancelIdentity)
         scope.launch {
             val step = runCatching { actions.cancelNewIdentity(words) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
             _state.value = _state.value.copy(
@@ -424,7 +435,8 @@ class DevicesStore(
         val actions = trust ?: return
         if (_state.value.trusting) return
         val words = PhraseWords.parse(phrase)
-        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        if (phraseTrouble(listOf(words), TrustPanel.Confirm)) return
+        _state.value = _state.value.copy(trusting = true, trustNotice = null, noticeAt = TrustPanel.Confirm)
         scope.launch {
             val step = runCatching { actions.confirmWithPhrase(words) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
             _state.value = _state.value.copy(trusting = false, trustNotice = notice(step))
@@ -436,7 +448,7 @@ class DevicesStore(
     fun certify(deviceId: String) {
         val actions = trust ?: return
         if (_state.value.trusting) return
-        _state.value = _state.value.copy(trusting = true, trustNotice = null)
+        _state.value = _state.value.copy(trusting = true, trustNotice = null, noticeAt = TrustPanel.Certify)
         scope.launch {
             val step = runCatching { actions.certify(deviceId) }.getOrElse { TrustStep.Refused(it.message ?: "?") }
             _state.value = _state.value.copy(trusting = false, trustNotice = notice(step))
@@ -444,9 +456,28 @@ class DevicesStore(
         }
     }
 
+    /**
+     * Фраза не складывается — сказать, что именно, под той же панелью, и не ходить на сервер
+     * (отчёт DGAR, 2026-10-06: «ноль реакции», «нет проверки фразы»).
+     *
+     * @return `true` — беда показана, действие не идёт.
+     */
+    private fun phraseTrouble(phrases: List<List<String>>, at: TrustPanel): Boolean {
+        val fault = phrases.firstNotNullOfOrNull { checkPhrase.check(it) } ?: return false
+        val w = words().auth
+        val text = when (fault) {
+            is PhraseFault.Count -> w.phraseCount(fault.got, fault.need)
+            is PhraseFault.Unknown -> w.phraseUnknown(fault.words.joinToString(", ") { (n, word) -> "№$n «$word»" })
+            PhraseFault.Checksum -> w.phraseChecksum
+        }
+        _state.value = _state.value.copy(trustNotice = text, noticeAt = at)
+        return true
+    }
+
     private fun notice(step: TrustStep): String = when (step) {
         TrustStep.Done -> words().auth.trustDone
-        TrustStep.WrongPhrase -> words().auth.wrongPhrase
+        // Сюда фраза доходит, только сложившись по словарю и сумме: значит, она от другого ключа.
+        TrustStep.WrongPhrase -> words().auth.phraseOtherIdentity
         TrustStep.NoKey -> words().auth.trustNoKey
         TrustStep.NothingToCancel -> words().auth.nothingToCancel
         TrustStep.WrongCode -> words().auth.wrongCode
@@ -529,7 +560,15 @@ data class ReregView(
  *   нет. Хранится здесь, а не в экране: вопрос — это состояние, и после поворота телефона
  *   он должен остаться тем же.
  */
+/**
+ * Под какой панелью показать ответ (отчёт DGAR, 2026-10-06): одна строка под всеми панелями
+ * уходила за край экрана, и «Фраза не та» после «Подтвердить фразой» была не видна вовсе.
+ */
+enum class TrustPanel { Rereg, CancelIdentity, Confirm, Copy, Ban, Phone, StartRereg, Scan, Certify }
+
 data class DevicesState(
+    /** Под какой панелью ответ [trustNotice]; `null` — на прежнем месте, под всеми. */
+    val noticeAt: TrustPanel? = null,
     val devices: List<AccountDevice> = emptyList(),
     val expect: Boolean = false,
     val ask: String? = null,

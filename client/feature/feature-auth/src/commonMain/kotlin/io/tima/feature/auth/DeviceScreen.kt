@@ -146,11 +146,13 @@ fun DeviceScreen(
     if (rereg != null && rereg.text != null && onSendReregCode != null && onRereg != null && !signingOut) {
         ReregPanel(rereg, codeSent = state.reregCode != null, onSendReregCode, onRereg, state.trusting)
     }
+    NoticeUnder(state, TrustPanel.Rereg)
     // С номера начали заново (ДУ6) — первым делом: это важнее всего остального на экране.
     // Во время перерегистрации отмены нет: оспаривается только заявкой (ДУ9).
     if (state.replaced && rereg?.text == null && onCancelNewIdentity != null && !signingOut) {
         CancelNewIdentity(onCancelNewIdentity, state.trusting)
     }
+    NoticeUnder(state, TrustPanel.CancelIdentity)
 
     // Доверие к этому устройству (ДУ5): не заверено — предложить фразу. До ранних выходов:
     // подтверждать себя можно и тогда, когда список не пришёл целиком.
@@ -173,6 +175,7 @@ fun DeviceScreen(
             }
         }
     }
+    NoticeUnder(state, TrustPanel.Confirm)
     // Отключённое устройство могло унести ключ копии (М5) — сменить его фразой, первым делом.
     if (state.copyRotationDue && onRotateCopy != null && !signingOut) {
         RotateCopy(onRotateCopy, state.trusting)
@@ -181,23 +184,30 @@ fun DeviceScreen(
     if (state.copyMissing && onStartCopy != null && !signingOut) {
         RotateCopy(onStartCopy, state.trusting, start = true)
     }
+    NoticeUnder(state, TrustPanel.Copy)
     // Запрет «Начать заново» (ДУ10, Р41): до запрета — кнопка, после — что закрыто навсегда.
     val banned = state.startAnewBanned
     if (banned != null && onSendBanCode != null && onBanStartAnew != null && !signingOut) {
         StartAnewBan(banned, codeSent = state.banCode != null, onSendBanCode, onBanStartAnew, state.trusting)
     }
+    NoticeUnder(state, TrustPanel.Ban)
     // Смена номера (ДУ9): заявка, её состояние и подтверждение в окне.
     if (phoneChange != null && onSendPhoneCode != null && onPhoneChange != null && !signingOut &&
         (phoneChange.text != null || phoneChange.canStart)
     ) {
         PhoneChangePanel(phoneChange, codeSent = state.phoneCode != null, onSendPhoneCode, onPhoneChange, state.trusting)
     }
+    NoticeUnder(state, TrustPanel.Phone)
     // Запустить перерегистрацию (ДУ9, Р34) — прежней фразой; дальше вход тем же номером.
     if (rereg?.canStart == true && onStartRereg != null && !signingOut) {
         StartRereg(onStartRereg, state.trusting)
     }
-    state.trustNotice?.let {
-        Secondary(it, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
+    NoticeUnder(state, TrustPanel.StartRereg)
+    // Ответ без панели — на прежнем месте; с панелью — под ней (отчёт DGAR).
+    if (state.noticeAt == null) {
+        state.trustNotice?.let {
+            Secondary(it, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
+        }
     }
 
     // Сканер — тоже до ранних выходов: подключить новое устройство можно и тогда, когда
@@ -213,6 +223,8 @@ fun DeviceScreen(
             Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about1),
         )
     }
+    NoticeUnder(state, TrustPanel.Scan)
+    NoticeUnder(state, TrustPanel.Certify)
 
     // Выход — до ранних выходов экрана: он нужен и тогда, когда список не пришёл. Так было
     // на ПК 2026-09-30 — «Смотрим…» без конца, а выйти и войти заново было неоткуда.
@@ -699,4 +711,17 @@ private fun KeyRequest(onRequest: (String) -> Unit, notice: String?, sending: Bo
         )
     }
     notice?.let { Secondary(it) }
+}
+
+/**
+ * Ответ под той панелью, что его вызвала (отчёт DGAR, 2026-10-06). Одна строка под всеми
+ * панелями уходила за край экрана: после «Подтвердить фразой» человек не видел ни «Фраза не
+ * та», ни «Готово» — «ноль реакции».
+ */
+@Composable
+private fun NoticeUnder(state: DevicesState, panel: TrustPanel) {
+    if (state.noticeAt != panel) return
+    state.trustNotice?.let {
+        Secondary(it, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
+    }
 }

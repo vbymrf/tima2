@@ -1636,6 +1636,17 @@ interface AuthWords {
     val uncertifiedTitle: String
     val uncertifiedText: String
     val uncertifiedConfirm: String
+    /** Что не так с фразой — до сервера (отчёт DGAR, 2026-10-06). */
+    fun phraseCount(got: Int, need: Int): String
+    fun phraseUnknown(list: String): String
+    val phraseChecksum: String
+    /** Фраза складывается, но от другого ключа личности. */
+    val phraseOtherIdentity: String
+    /** Отложенные аккаунты на экране входа (заказчик 2026-10-06): с какого дня на устройстве. */
+    fun returnSince(date: String): String
+    val returnChecking: String
+    val returnGone: String
+    val forgetAccount: String
     /** «Начать заново» с номера этого аккаунта (ДУ6). */
     val replacedTitle: String
     val replacedAbout: String
@@ -3635,6 +3646,19 @@ object RussianWords : Words {
                 "Введите секретную фразу — один раз: после обновлений просить больше не будем. " +
                 "Компьютер можно заверить и с телефона: «Показать код заверения» и сканировать его телефоном."
         override val uncertifiedConfirm = "Подтвердить фразой"
+        override fun phraseCount(got: Int, need: Int) =
+            "Введено слов: $got, а во фразе их $need. Проверьте, не слились ли два слова и не пропущено ли одно."
+        override fun phraseUnknown(list: String) =
+            "Таких слов нет в списке фраз: $list. Проверьте написание: только латинские буквы."
+        override val phraseChecksum =
+            "Все слова из списка, но фраза не сходится. Проверьте порядок и каждое слово: одна буква меняет слово."
+        override val phraseOtherIdentity =
+            "Фраза настоящая, но не от этого аккаунта. Возможно, в одном слове опечатка, которая дала другое " +
+                "слово из списка, — сверьте с записью по буквам. Если с номера начинали заново, прежняя фраза не подходит."
+        override fun returnSince(date: String) = "с $date"
+        override val returnChecking = "Проверяю аккаунт…"
+        override val returnGone = "Этого аккаунта на сервере больше нет: устройство отключено или аккаунт удалён."
+        override val forgetAccount = "Забыть"
         override val replacedTitle = "С вашего номера начали заново"
         override val replacedAbout = "На другом устройстве завели новый ключ личности вашего аккаунта — так бывает, когда теряют телефон и фразу или перевыпускают SIM-карту. Собеседники пишут теперь ей, а не вам. Если это не вы — отмените: понадобится секретная фраза."
         override val replacedCancel = "Отменить новый ключ личности"

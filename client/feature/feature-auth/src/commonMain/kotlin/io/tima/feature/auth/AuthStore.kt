@@ -72,6 +72,8 @@ class AuthStore(
      * личность с новой фразой; запрет «Начать заново» её не останавливает.
      */
     private val rereg: io.tima.domain.account.PrepareRereg.Ready? = null,
+    /** Проверка фразы по словарю и сумме — до сервера (отчёт DGAR); по умолчанию не проверяет. */
+    private val checkPhrase: io.tima.domain.account.PhraseChecker = io.tima.domain.account.PhraseChecker { null },
 ) {
 
     /**
@@ -206,15 +208,27 @@ class AuthStore(
     /**
      * Человек ввёл фразу возврата.
      *
-     * Фраза не та — так и говорим, не уточняя, что именно не сошлось: число слов, слово не
-     * из списка или контрольная сумма. Человеку во всех трёх случаях надо перепроверить
-     * запись, а подробность подсказывала бы подбирающему.
+     * Что не сошлось — говорим прямо (заказчик 2026-10-06, отчёт DGAR): сколько слов, какое
+     * слово не из списка, не сходится ли сумма. Подбирающему это ничего не даёт — словарь и
+     * сумма открыты и проверяются без сервера; закрыто одно — чья фраза, и это говорит сервер.
      */
     fun enterByPhrase() {
         val current = _state.value as? AuthState.PhraseInput ?: return
         if (current.expect) return
 
         val words = io.tima.domain.account.PhraseWords.parse(current.phrase)
+        checkPhrase.check(words)?.let { fault ->
+            val w = words().auth
+            _state.value = current.copyWithTrouble(
+                when (fault) {
+                    is io.tima.domain.account.PhraseFault.Count -> w.phraseCount(fault.got, fault.need)
+                    is io.tima.domain.account.PhraseFault.Unknown ->
+                        w.phraseUnknown(fault.words.joinToString(", ") { (n, word) -> "№$n «$word»" })
+                    io.tima.domain.account.PhraseFault.Checksum -> w.phraseChecksum
+                },
+            )
+            return
+        }
         val key = identities.fromWords(words)
         if (key == null) {
             _state.value = current.copyWithTrouble(words().auth.wrongPhrase)
@@ -231,7 +245,8 @@ class AuthStore(
                     AuthState.Done(step.userId, step.deviceId)
                 }
                 RegistrationStep.AlreadyRegistered -> AuthState.CreatedAlready
-                is RegistrationStep.IdentityMismatch -> current.copyWithTrouble(words().auth.wrongPhrase)
+                // Фраза сложилась по словарю и сумме, но ключ другой — от другого аккаунта.
+                is RegistrationStep.IdentityMismatch -> current.copyWithTrouble(words().auth.phraseOtherIdentity)
                 RegistrationStep.IdentityClosed -> current.copyWithTrouble(words().auth.identityClosed)
                 RegistrationStep.WrongCode -> current.copyWithTrouble(words().auth.wrongCode)
                 // Токен живёт десять минут. Истёк — начинать с запроса кода, и сказать об
