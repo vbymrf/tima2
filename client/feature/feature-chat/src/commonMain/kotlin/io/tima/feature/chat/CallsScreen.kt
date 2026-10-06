@@ -1,5 +1,6 @@
 package io.tima.feature.chat
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
@@ -62,8 +63,13 @@ fun CallsScreen(
     faceOf: (CallRecord) -> ImageBitmap? = { null },
     /** Перезвонить — **тем же видом**, каким звонили тогда. `null` — звонить нечем. */
     onCallAgain: ((CallRecord) -> Unit)? = null,
-    /** Открыть переписку с этим человеком. */
+    /** Открыть переписку с этим человеком — нажатие на строку. */
     onOpen: ((CallRecord) -> Unit)? = null,
+    /**
+     * Нажали на аватар — страница человека; строка — переписка. Так же, как у «Контактов»
+     * (заказчик 2026-10-06: «единый стиль для клика»). `null` — аватар не нажимается.
+     */
+    onFace: ((CallRecord) -> Unit)? = null,
     /**
      * Журнал пуст **потому, что нет связи**, а не потому, что звонков не было.
      *
@@ -87,7 +93,13 @@ fun CallsScreen(
             val outcome = record.outcome(me)
             ListLine(
                 onClick = onOpen?.let { { it(record) } },
-                left = { Avatar(letters = who.letter(), image = faceOf(record)) },
+                left = {
+                    Avatar(
+                        letters = who.letter(),
+                        image = faceOf(record),
+                        modifier = onFace?.let { open -> Modifier.clickable { open(record) } } ?: Modifier,
+                    )
+                },
                 middle = {
                     Column {
                         Name(who.line(look, PERSON_FIRST_LINE) ?: Tima.words.book.nameless)

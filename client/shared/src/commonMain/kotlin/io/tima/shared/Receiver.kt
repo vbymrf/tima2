@@ -527,7 +527,19 @@ class Receiver(
                 onStoreChanged = { decision -> onStoreChanged(decision.kind, decision.revision) },
                 onCall = { decision -> aboutCall(decision) },
                 onCallsTop = { top -> callsTop(top) },
-                onOpen = { live = true },
+                onOpen = {
+                    live = true
+                    // Экономичный режим (заказчик 2026-10-06): журнал отвечает на вопрос,
+                    // рвётся ли канал при редкой перекличке и на какой сети.
+                    if (io.tima.core.network.ChannelPing.economy) {
+                        Journal.note(
+                            LogCode.NET_CHANNEL,
+                            "канал открыт — экономичный режим",
+                            "перекличка" to "${io.tima.core.network.ChannelPing.economySeconds} с",
+                            "сеть" to NetworkWatches.current.kind().ifEmpty { "?" },
+                        )
+                    }
+                },
                 // Разрыв называется полосой, а не «что-то потерялось». Строка
                 // в дневнике — единственное место, где это видно человеку,
                 // который разбирает отчёт о проблеме.
@@ -671,7 +683,17 @@ class Receiver(
                 "связь" to link.name,
                 "подряд" to streak,
                 "пауза" to pause,
-            )
+            ) + if (io.tima.core.network.ChannelPing.economy) {
+                // Сколько прожил канал при редкой перекличке и на какой сети — ради этого
+                // экономичный режим и пишет журнал (заказчик 2026-10-06).
+                arrayOf<Pair<String, Any?>>(
+                    "жил" to "${(msNow() - startedAt) / 1000} с",
+                    "перекличка" to "${io.tima.core.network.ChannelPing.economySeconds} с",
+                    "сеть" to NetworkWatches.current.kind().ifEmpty { "?" },
+                )
+            } else {
+                emptyArray()
+            }
             if (streak >= 1) {
                 Journal.trouble(LogCode.NET_CHANNEL, "живой канал оборвался, поднимаю заново", *fields)
             } else {

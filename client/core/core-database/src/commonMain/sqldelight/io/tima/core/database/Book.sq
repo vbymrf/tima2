@@ -205,10 +205,10 @@ UPDATE book SET section_id = '' WHERE section_id = ?;
 -- ── Копия для других устройств (ПЛАН-(РЗ)-РАЗДЕЛОВ Р2а) ───────────────────────────
 --
 -- Снимок берётся ЦЕЛИКОМ, с убранными и с надгробиями: именно они и должны доехать до
--- второго устройства — иначе убранный там вернётся. Имя из телефонной книги не едет: на
--- втором устройстве своя телефонная книга, и оно прочтёт его само.
+-- второго устройства — иначе убранный там вернётся. Имя из телефонной книги едет тоже
+-- (2026-10-06): у ПК своей телефонной книги нет, и без него контакт там оставался без имени.
 copyContacts:
-SELECT id, phone, name_own_enc, section_id, user_id, manual, list, known, updated_at, device FROM book;
+SELECT id, phone, name_phone_enc, name_own_enc, section_id, user_id, manual, list, known, updated_at, device FROM book;
 
 copySections:
 SELECT id, name, icon, place, deleted, updated_at, device FROM book_section;
@@ -219,13 +219,19 @@ copyPutContact:
 INSERT OR REPLACE INTO book (id, phone, name_phone_enc, name_own_enc, section_id, user_id, manual, list, known, updated_at, device)
 VALUES (
     :id, :phone,
-    (SELECT name_phone_enc FROM book WHERE id = :id),
+    -- Своя телефонная книга главнее пришедшей: пришедшее имя — только если своего нет.
+    COALESCE((SELECT name_phone_enc FROM book WHERE id = :id), :namePhoneEnc),
     :nameOwnEnc, :sectionId,
     -- `user_id` берётся свой, если он уже известен: чужая копия могла быть снята до
     -- сверки, и принять её `NULL` значило бы забыть, что человек в TIMa.
     COALESCE((SELECT user_id FROM book WHERE id = :id), :userId),
     :manual, :list, :known, :updatedAt, :device
 );
+
+-- Имя из чужой телефонной книги — и тем записям, что уже приняты: штампы у них не новее
+-- наших, и `copyPutContact` до них не доходит, а имени до 2026-10-06 в копии не было.
+copyFillPhoneName:
+UPDATE book SET name_phone_enc = :namePhoneEnc WHERE id = :id AND name_phone_enc IS NULL;
 
 copyPutSection:
 INSERT OR REPLACE INTO book_section (id, name, icon, place, deleted, updated_at, device)

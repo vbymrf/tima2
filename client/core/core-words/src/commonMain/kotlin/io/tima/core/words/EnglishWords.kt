@@ -45,6 +45,9 @@ object EnglishWords : Words {
         override val hide = "Hide"
         override val noConnection = "No connection to the server"
         override val nothingChosen = "Nothing selected"
+        override val answerDone = "Done"
+        override val answerTrouble = "Did not work"
+        override val answerWaiting = "Please wait…"
     }
 
     override val settings = object : SettingsWords {
@@ -593,6 +596,13 @@ object EnglishWords : Words {
         override val quietCallsAbout = "Incoming — a silent notification, no ringtone or full screen; missed — none"
         override val quietMessages = "Messages"
         override val quietMessagesAbout = "Direct and group — no notification and no sound"
+        override val economyTitle = "Economy mode"
+        override val economyAbout = "Check the connection to the server less often — less battery use"
+        override val economyOff = "Off"
+        override val economyOffAbout = "The connection is checked every 18 seconds: a call arrives even if the connection silently dropped"
+        override val economyOn = "On"
+        override val economyOnAbout = "The connection is checked less often. If it silently drops, a call may not arrive and messages will come late"
+        override fun economyEvery(seconds: Int) = "Every $seconds s"
         override val soundRingAbout = "Incoming call"
         override val soundMessageAbout = "New message and missed call"
         override val soundDefaultAbout = "The sound chosen in phone settings"

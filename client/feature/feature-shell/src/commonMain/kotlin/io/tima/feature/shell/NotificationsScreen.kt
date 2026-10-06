@@ -67,6 +67,8 @@ fun NotificationsScreen(
     message: SoundRow? = null,
     /** Не показывать уведомления с … до … (заказчик 2026-10-01). `null` — строки нет. */
     quiet: QuietRow? = null,
+    /** Экономичный режим канала (заказчик 2026-10-06). `null` — строки нет. */
+    economy: EconomyRow? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.settings2
@@ -110,6 +112,7 @@ fun NotificationsScreen(
                 },
             )
             quiet?.let { QuietSetting(it) }
+            economy?.let { EconomySetting(it) }
         }
     }
 }
@@ -467,6 +470,19 @@ data class QuietRow(
     val onChange: (QuietRow) -> Unit,
 )
 
+/**
+ * Экономичный режим канала: включён ли и раз во сколько секунд перекличка (заказчик
+ * 2026-10-06). Границы и шаг — у того, кто хранит настройку.
+ */
+data class EconomyRow(
+    val on: Boolean,
+    val seconds: Int,
+    val min: Int,
+    val max: Int,
+    val step: Int,
+    val onChange: (EconomyRow) -> Unit,
+)
+
 /** «12:30» из минут от полуночи. */
 fun clockOf(minute: Int): String {
     val m = ((minute % 1440) + 1440) % 1440
@@ -505,6 +521,44 @@ private fun QuietSetting(row: QuietRow) {
             // Что глушить — галочками (заказчик 2026-10-01): квадрат — «сколько угодно».
             QuietCheck(words.quietCalls, words.quietCallsAbout, row.calls) { row.onChange(row.copy(calls = it)) }
             QuietCheck(words.quietMessages, words.quietMessagesAbout, row.messages) { row.onChange(row.copy(messages = it)) }
+        }
+    }
+}
+
+/** Экономичный режим — строкой с раскрытием, как тихие часы. */
+@Composable
+private fun EconomySetting(row: EconomyRow) {
+    val words = Tima.words.settings2
+    var open by remember { mutableStateOf(false) }
+    ListLine(
+        onClick = { open = !open },
+        left = { Name("🔋") },
+        right = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                Secondary(if (row.on) words.economyEvery(row.seconds) else words.economyOff, lineOne = true)
+                Secondary(if (open) "⌃" else "›")
+            }
+        },
+        middle = {
+            Caption(words.economyTitle, fontSize = TimaType.sz4, weight = FontWeight.Bold, maxLines = 2)
+            Tertiary(words.economyAbout)
+        },
+    )
+    if (!open) return
+    Column(Modifier.fillMaxWidth().background(Tima.colors.softAccent)) {
+        SoundChoice(words.economyOff, words.economyOffAbout, !row.on) { row.onChange(row.copy(on = false)) }
+        SoundChoice(words.economyOn, words.economyOnAbout, row.on) { row.onChange(row.copy(on = true)) }
+        if (row.on) {
+            ListLine(
+                modifier = Modifier.padding(start = TimaSpacing.about5),
+                middle = { Caption(words.economyEvery(row.seconds), fontSize = TimaType.sz4, weight = FontWeight.Bold) },
+                right = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                        io.tima.core.ui.IconButton(glyph = "−", onClick = { row.onChange(row.copy(seconds = (row.seconds - row.step).coerceAtLeast(row.min))) })
+                        io.tima.core.ui.IconButton(glyph = "+", onClick = { row.onChange(row.copy(seconds = (row.seconds + row.step).coerceAtMost(row.max))) })
+                    }
+                },
+            )
         }
     }
 }

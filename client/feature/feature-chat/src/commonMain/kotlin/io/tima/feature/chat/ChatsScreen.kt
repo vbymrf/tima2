@@ -1,6 +1,7 @@
 package io.tima.feature.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.words
 import io.tima.core.ui.WindowHeader
 import androidx.compose.ui.graphics.ImageBitmap
+import io.tima.domain.chat.ChatKind
 import io.tima.domain.chat.ChatPerson
 import io.tima.domain.chat.PersonLook
 import io.tima.domain.chat.letter
@@ -76,6 +78,12 @@ fun ChatsScreen(
     personOf: (ChatSummary) -> ChatPerson? = { null },
     /** Картинка аватара собеседника; `null` — её нет или она ещё не доехала. */
     faceOf: (ChatSummary) -> ImageBitmap? = { null },
+    /**
+     * Нажали на аватар личной переписки — страница собеседника; строка — сама переписка.
+     * Так же, как у «Контактов» (заказчик 2026-10-06: «единый стиль для клика»). `null` —
+     * аватар не нажимается.
+     */
+    onFace: ((ChatSummary) -> Unit)? = null,
     /** Как называть человека — тот же «Вид», что у книги. */
     look: PersonLook = PersonLook.DEFAULT,
     /**
@@ -141,7 +149,7 @@ fun ChatsScreen(
                     explanation = words.writeFirst,
                 )
 
-                else -> List(state.chats, onOpen, personOf, faceOf, look, countOf, tagOf, callGroupOf)
+                else -> List(state.chats, onOpen, personOf, faceOf, look, countOf, tagOf, callGroupOf, onFace)
             }
         }
     }
@@ -202,11 +210,17 @@ private fun List(
     tagOf: (ChatSummary) -> String? = { null },
     /** Группа звонка: создатель и его аватар (заказчик 2026-10-02); `null` — обычная. */
     callGroupOf: (ChatSummary) -> CallGroupLook? = { null },
+    onFace: ((ChatSummary) -> Unit)? = null,
 ) = LazyColumn(
     modifier = Modifier.fillMaxSize(),
 ) {
     items(chats, key = { it.chatId }) { chat ->
-        ChatLine(chat, personOf(chat), faceOf(chat), look, countOf?.invoke(chat) ?: chat.unread, onClick = { onOpen(chat) }, tag = tagOf(chat), call = callGroupOf(chat))
+        ChatLine(
+            chat, personOf(chat), faceOf(chat), look, countOf?.invoke(chat) ?: chat.unread,
+            onClick = { onOpen(chat) }, tag = tagOf(chat), call = callGroupOf(chat),
+            // Страница есть только у собеседника личной переписки.
+            onFace = onFace?.takeIf { chat.kind == ChatKind.Personal && chat.peerId != null }?.let { { it(chat) } },
+        )
     }
 }
 
@@ -221,6 +235,7 @@ private fun ChatLine(
     onClick: () -> Unit,
     tag: String? = null,
     call: CallGroupLook? = null,
+    onFace: (() -> Unit)? = null,
 ) = ListLine(
     onClick = onClick,
     // Картинка, если она есть, иначе буква — та же, что в книге. У группы человека нет,
@@ -230,7 +245,11 @@ private fun ChatLine(
             val badge = Tima.words.groupCall.badge
             Avatar(letters = badge, image = call.face, overlay = badge)
         } else {
-            Avatar(letters = who?.letter() ?: letters(chat), image = face)
+            Avatar(
+                letters = who?.letter() ?: letters(chat),
+                image = face,
+                modifier = if (onFace != null) Modifier.clickable(onClick = onFace) else Modifier,
+            )
         }
     },
     right = {

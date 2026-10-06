@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -86,7 +87,12 @@ object ChannelHost {
             job?.cancel()
             heldDevice = deviceId
             Journal.note(LogCode.NET_CHANNEL, "канал взят процессом, а не окном")
-            job = scope.launch { assembled.receiver.hold() }
+            job = scope.launch {
+                // Перекличку берём из настройки до подъёма канала: держать его может и служба
+                // без окна, и тогда больше прочесть настройку некому (заказчик 2026-10-06).
+                runCatching { ChannelEconomy.apply(assembled.environment.settings.all().first()) }
+                assembled.receiver.hold()
+            }
         }
     }
 
@@ -99,6 +105,17 @@ object ChannelHost {
         job?.cancel()
         job = null
         heldDevice = null
+    }
+
+    /**
+     * Поднять канал заново — после смены переклички (экономичный режим, заказчик 2026-10-06):
+     * интервал задаётся при подъёме, и без перезапуска новый вступил бы в силу лишь при обрыве.
+     */
+    fun restart(): Unit = lock.hold {
+        val assembled = heldDevice?.let { assemblies[it] } ?: return@hold
+        job?.cancel()
+        job = scope.launch { assembled.receiver.hold() }
+        Journal.note(LogCode.NET_CHANNEL, "канал поднят заново — сменилась перекличка", "перекличка" to "${io.tima.core.network.ChannelPing.intervalMs() / 1000} с")
     }
 
     /** Держится ли канал прямо сейчас. Нужно службе: без сборки ей держать нечего. */

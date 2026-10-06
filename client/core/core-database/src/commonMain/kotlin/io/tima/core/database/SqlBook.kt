@@ -220,6 +220,7 @@ class SqlBook(
                     id = it.id,
                     phone = it.phone.orEmpty(),
                     userId = it.user_id,
+                    namePhone = it.name_phone_enc?.let(::open),
                     nameOwn = it.name_own_enc?.let(::open),
                     sectionId = it.section_id,
                     manual = it.manual != 0L,
@@ -252,10 +253,14 @@ class SqlBook(
         db.transaction {
             for (c in theirs.contacts) {
                 val ours = db.bookQueries.contactStamp(c.id).executeAsOneOrNull()
-                if (ours != null && ours >= c.updatedAt) continue
+                if (ours != null && ours >= c.updatedAt) {
+                    c.namePhone?.let { db.bookQueries.copyFillPhoneName(seal(it), c.id) }
+                    continue
+                }
                 db.bookQueries.copyPutContact(
                     id = c.id,
                     phone = c.phone.ifBlank { null },
+                    namePhoneEnc = c.namePhone?.let(::seal),
                     nameOwnEnc = c.nameOwn?.let(::seal),
                     sectionId = c.sectionId,
                     userId = c.userId,

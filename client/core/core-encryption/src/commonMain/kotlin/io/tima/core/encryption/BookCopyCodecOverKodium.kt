@@ -54,6 +54,7 @@ object BookCopyCodecOverKodium : BookCopyCodec {
                     id = it.i ?: BookKey.ofPhone(it.p.orEmpty()),
                     phone = it.p.orEmpty(),
                     userId = it.u,
+                    namePhone = it.b,
                     nameOwn = it.n, sectionId = it.s, manual = it.m,
                     // `h` — прежнее «убран»; до Л3 списка не было, было одно надгробие.
                     list = if (it.l != 0) it.l else if (it.h) 1 else 0,
@@ -69,7 +70,7 @@ object BookCopyCodecOverKodium : BookCopyCodec {
                 r = copy.revision, d = copy.device,
                 c = copy.contacts.sortedBy { it.id }.map {
                     WireContact(
-                        i = it.id, p = it.phone.ifBlank { null }, u = it.userId,
+                        i = it.id, p = it.phone.ifBlank { null }, u = it.userId, b = it.namePhone,
                         n = it.nameOwn, s = it.sectionId, m = it.manual,
                         l = it.list, k = it.known, t = it.updatedAt, d = it.device,
                     )
@@ -92,6 +93,8 @@ object BookCopyCodecOverKodium : BookCopyCodec {
         val i: String? = null,
         val p: String? = null,
         val u: String? = null,
+        /** Имя из телефонной книги (2026-10-06). Старые устройства поле пропускают. */
+        val b: String? = null,
         val n: String?,
         val s: String,
         val m: Boolean,

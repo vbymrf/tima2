@@ -342,6 +342,14 @@ interface SettingsListWords {
     val quietCallsAbout: String
     val quietMessages: String
     val quietMessagesAbout: String
+    /** Экономичный режим канала (заказчик 2026-10-06): перекличка реже, звонки ненадёжнее. */
+    val economyTitle: String
+    val economyAbout: String
+    val economyOff: String
+    val economyOffAbout: String
+    val economyOn: String
+    val economyOnAbout: String
+    fun economyEvery(seconds: Int): String
     val soundRingAbout: String
     val soundMessageAbout: String
     val soundDefaultAbout: String
@@ -1923,6 +1931,10 @@ interface CommonWords {
     val hide: String
     val noConnection: String
     val nothingChosen: String
+    /** Первое слово ответа на действие (`Answer`, заказчик 2026-10-06). */
+    val answerDone: String
+    val answerTrouble: String
+    val answerWaiting: String
 }
 
 interface SettingsWords {
@@ -2136,6 +2148,9 @@ object RussianWords : Words {
         override val hide = "Скрыть"
         override val noConnection = "Нет связи с сервером"
         override val nothingChosen = "Ничего не выбрано"
+        override val answerDone = "Готово"
+        override val answerTrouble = "Не получилось"
+        override val answerWaiting = "Подождите…"
     }
 
     override val settings = object : SettingsWords {
@@ -2693,6 +2708,13 @@ object RussianWords : Words {
         override val quietCallsAbout = "Входящий — строкой без мелодии и полного экрана; пропущенные — без строки"
         override val quietMessages = "Сообщения"
         override val quietMessagesAbout = "Личные и групповые — без строки в шторке и без звука"
+        override val economyTitle = "Экономичный режим"
+        override val economyAbout = "Реже проверять связь с сервером — меньше расход батареи"
+        override val economyOff = "Выключен"
+        override val economyOffAbout = "Связь проверяется раз в 18 секунд: звонок приходит, даже если соединение тихо оборвалось"
+        override val economyOn = "Включён"
+        override val economyOnAbout = "Связь проверяется реже. Если соединение тихо оборвётся, звонок может не прийти, а сообщения придут с опозданием"
+        override fun economyEvery(seconds: Int) = "Раз в $seconds с"
         override val soundRingAbout = "Входящий звонок"
         override val soundMessageAbout = "Новое сообщение и пропущенный звонок"
         override val soundDefaultAbout = "Звук, выбранный в настройках телефона"

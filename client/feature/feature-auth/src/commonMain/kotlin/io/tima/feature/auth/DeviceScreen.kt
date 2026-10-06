@@ -204,11 +204,7 @@ fun DeviceScreen(
     }
     NoticeUnder(state, TrustPanel.StartRereg)
     // Ответ без панели — на прежнем месте; с панелью — под ней (отчёт DGAR).
-    if (state.noticeAt == null) {
-        state.trustNotice?.let {
-            Secondary(it, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
-        }
-    }
+    if (state.noticeAt == null) TrustAnswer(state)
 
     // Сканер — тоже до ранних выходов: подключить новое устройство можно и тогда, когда
     // список не пришёл.
@@ -721,7 +717,34 @@ private fun KeyRequest(onRequest: (String) -> Unit, notice: String?, sending: Bo
 @Composable
 private fun NoticeUnder(state: DevicesState, panel: TrustPanel) {
     if (state.noticeAt != panel) return
-    state.trustNotice?.let {
-        Secondary(it, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
+    TrustAnswer(state)
+}
+
+/**
+ * Ответ панели — общей плашкой ([io.tima.core.ui.Answer], вариант 01 проб). Пока ждём
+ * сервера — «Подождите…»: нажатие без видимого отклика читается как «ничего не произошло».
+ */
+@Composable
+private fun TrustAnswer(state: DevicesState) {
+    val modifier = Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)
+    val text = state.trustNotice
+    when {
+        state.trusting -> io.tima.core.ui.Answer(null, io.tima.core.ui.AnswerTone.Waiting, modifier)
+        text != null -> io.tima.core.ui.Answer(text, toneOf(text), modifier)
+    }
+}
+
+/**
+ * Успех или беда — по тексту: ответы панелей собирает [DevicesStore] из словаря, и успешных среди
+ * них немного. Код стенда — не итог, а сведения.
+ */
+@Composable
+private fun toneOf(text: String): io.tima.core.ui.AnswerTone {
+    val w = Tima.words.auth
+    val done = setOf(w.trustDone, w.copyStarted, w.copyRotated, w.banDone, w.replacedCancelled, w.reregClaimed, w.reregConfirmed)
+    return when {
+        text in done -> io.tima.core.ui.AnswerTone.Done
+        text.startsWith(w.standSentCode("").trimEnd()) -> io.tima.core.ui.AnswerTone.Info
+        else -> io.tima.core.ui.AnswerTone.Trouble
     }
 }

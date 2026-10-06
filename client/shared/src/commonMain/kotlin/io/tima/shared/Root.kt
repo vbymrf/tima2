@@ -2898,6 +2898,12 @@ private fun App(
                     // в переписку. Того, кого нет в TIMa, открывать нечем: страница
                     // принадлежит аккаунту, а не номеру.
                     onFacePerson = { entry -> entry.userId?.let { where = Where.Person(it) } },
+                    onFaceUser = { id -> where = Where.Person(id) },
+                    // Строка «Звонков» — переписка; имя — из книги, если человек в ней есть.
+                    onOpenUser = { id ->
+                        val entry = bookState.all.firstOrNull { it.userId == id }
+                        where = Where.Chat(openPersonalChat(id, entry?.name, entry?.phone), entry?.name)
+                    },
                     // Звонок из строки книги. Только тому, у кого есть аккаунт: остальным
                     // звонит системный набиратель из подокна «Пригласить», и это другой
                     // звонок (ЗВ13).
@@ -4293,6 +4299,23 @@ private fun Settings(
                         }
                     }
                 },
+                // Экономичный режим канала (заказчик 2026-10-06): настройка устройства; смена —
+                // сразу в канал, канал поднимается заново с новой перекличкой.
+                economy = run {
+                    val saved by deviceSettings.all().collectAsState(emptyMap())
+                    val e = ChannelEconomy.read(saved)
+                    io.tima.feature.shell.EconomyRow(
+                        on = e.on, seconds = e.seconds,
+                        min = ChannelEconomy.MIN_SECONDS, max = ChannelEconomy.MAX_SECONDS, step = ChannelEconomy.STEP_SECONDS,
+                    ) { r ->
+                        scope.launch {
+                            deviceSettings.put(ChannelEconomy.KEY_ON, if (r.on) "1" else "0")
+                            deviceSettings.put(ChannelEconomy.KEY_SECONDS, r.seconds.toString())
+                            ChannelEconomy.apply(deviceSettings.all().first())
+                            ChannelHost.restart()
+                        }
+                    }
+                },
             )
 
             // Разрешения — одно место для всех (заказчик 2026-09-26).
@@ -5103,6 +5126,10 @@ private fun PhoneWindow(
     onAddContact: () -> Unit,
     /** Нажали на аватар в книге — личная страница человека. */
     onFacePerson: (BookEntry) -> Unit = {},
+    /** Аватар в «Чатах» и «Звонках» — страница человека, строка — переписка (заказчик 2026-10-06). */
+    onFaceUser: (String) -> Unit = {},
+    /** Строка «Звонков» — переписка с этим человеком (заказчик 2026-10-06). */
+    onOpenUser: ((String) -> Unit)? = null,
     /** Позвонить из строки книги — ЗВ13. `null` — звонить нечем (ПК). */
     onCallPerson: ((BookEntry) -> Unit)? = null,
     /** Видеозвонок из строки книги — Ж3. `null` — звонить нечем. */
@@ -5247,6 +5274,7 @@ private fun PhoneWindow(
                 // Тот же человек и тот же «Вид», что во вкладке «Контакты».
                 personOf = personOfChat,
                 faceOf = faceOfChat,
+                onFace = { chat -> chat.peerId?.let(onFaceUser) },
                 look = book.view.look(),
                 countOf = { chat -> noticeCounts.chat(chat.chatId, chat.peerId) },
                 tagOf = tagOf,
@@ -5304,6 +5332,8 @@ private fun PhoneWindow(
                     faceOf = faceOfCall,
                     look = book.view.look(),
                     onCallAgain = onCallAgain,
+                    onOpen = onOpenUser?.let { open -> { record -> open(record.other(myUserId)) } },
+                    onFace = { record -> onFaceUser(record.other(myUserId)) },
                     offline = callsState.offline,
                 )
             }

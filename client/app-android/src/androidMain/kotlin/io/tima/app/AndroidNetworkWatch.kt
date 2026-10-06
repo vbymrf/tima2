@@ -43,8 +43,20 @@ class AndroidNetworkWatch(context: Context) : NetworkWatch {
     @Volatile
     private var current: Network? = null
 
+    private val manager: ConnectivityManager? = context.getSystemService(ConnectivityManager::class.java)
+
+    override fun kind(): String {
+        val caps = runCatching { manager?.getNetworkCapabilities(current) }.getOrNull() ?: return ""
+        return when {
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) -> "vpn"
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> "mobile"
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+            else -> "other"
+        }
+    }
+
     init {
-        val manager = context.getSystemService(ConnectivityManager::class.java)
         runCatching {
             manager?.registerDefaultNetworkCallback(
                 object : ConnectivityManager.NetworkCallback() {

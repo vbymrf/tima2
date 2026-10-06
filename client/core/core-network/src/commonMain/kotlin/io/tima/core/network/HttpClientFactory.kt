@@ -235,6 +235,8 @@ fun timaHttpClient(
 fun timaHttpClientWithChannel(
     tuning: TransportTuning = TransportTuning(),
     renewal: TokenRenewal? = null,
+    /** Перекличка канала; другая — только в экономичном режиме ([ChannelPing]). */
+    pingMs: Long = ChannelPing.NORMAL_MS,
 ): HttpClient = HttpClient(httpEngine()) {
     timaDefaults(tuning, renewal)
     install(WebSockets) {
@@ -281,8 +283,31 @@ fun timaHttpClientWithChannel(
         // которого пинг раз в 60 с: у него входящий звонок будит телефон ПУШЕМ, а не
         // сокетом. У нас пуша пока нет (ПЛАН-(ПУ)-ПУШ-УВЕДОМЛЕНИЙ), и сокет — единственный
         // звонок в дверь.
-        pingIntervalMillis = 18_000
+        //
+        // Экономичный режим (заказчик 2026-10-06) задаёт другой интервал **сознательно**, с
+        // этой ценой: звонок в слепое окно пропадёт. По умолчанию выключен.
+        pingIntervalMillis = pingMs
     }
+}
+
+/**
+ * Перекличка живого канала — обычная или экономичная (заказчик 2026-10-06: «экономичный
+ * режим с указанием секунд в настройках „Уведомления“, по умолчанию 90 секунд, не включено»).
+ *
+ * Один на процесс: канал один, и решает за него настройка устройства. Читается при каждом
+ * подъёме канала — смена вступает в силу со следующего подъёма.
+ */
+object ChannelPing {
+    /** Обычная перекличка — см. довод о 45 секундах звонка у `timaHttpClientWithChannel`. */
+    const val NORMAL_MS: Long = 18_000L
+
+    /** Секунды экономичного режима; 0 — выключен. */
+    @kotlin.concurrent.Volatile
+    var economySeconds: Int = 0
+
+    val economy: Boolean get() = economySeconds > 0
+
+    fun intervalMs(): Long = if (economy) economySeconds * 1000L else NORMAL_MS
 }
 
 /**
@@ -317,5 +342,21 @@ class ServerLink(val route: ServerRoute, val client: HttpClient) {
             client = if (liveChannel) timaHttpClientWithChannel(renewal = renewal)
             else timaHttpClient(renewal = renewal),
         )
+    }
+}
+
+/**
+ * Клиент живого канала под текущую перекличку ([ChannelPing]). Обычная — общий клиент связи;
+ * экономичная — свой, заведённый под эти секунды: интервал задаётся при постройке клиента и
+ * потом не меняется. Здесь, а не в композиции: `HttpClient` выше этого модуля не поднимается.
+ */
+class ChannelClients(private val link: ServerLink, private val renewal: TokenRenewal?) {
+    private var economy: Pair<Long, HttpClient>? = null
+
+    fun current(): HttpClient {
+        val ping = ChannelPing.intervalMs()
+        if (ping == ChannelPing.NORMAL_MS) return link.client
+        economy?.let { (ms, client) -> if (ms == ping) return client else runCatching { client.close() } }
+        return timaHttpClientWithChannel(renewal = renewal, pingMs = ping).also { economy = ping to it }
     }
 }

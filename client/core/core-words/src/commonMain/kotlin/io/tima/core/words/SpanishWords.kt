@@ -43,6 +43,9 @@ object SpanishWords : Words {
         override val hide = "Ocultar"
         override val noConnection = "Sin conexión con el servidor"
         override val nothingChosen = "Nada seleccionado"
+        override val answerDone = "Listo"
+        override val answerTrouble = "No funcionó"
+        override val answerWaiting = "Espere…"
     }
 
     override val settings = object : SettingsWords {
@@ -591,6 +594,13 @@ object SpanishWords : Words {
         override val quietCallsAbout = "Entrante — notificación sin tono ni pantalla completa; perdidas — sin notificación"
         override val quietMessages = "Mensajes"
         override val quietMessagesAbout = "Directos y de grupo — sin notificación ni sonido"
+        override val economyTitle = "Modo de ahorro"
+        override val economyAbout = "Comprobar la conexión con el servidor con menos frecuencia — menos consumo de batería"
+        override val economyOff = "Desactivado"
+        override val economyOffAbout = "La conexión se comprueba cada 18 segundos: la llamada llega aunque la conexión se haya cortado sin aviso"
+        override val economyOn = "Activado"
+        override val economyOnAbout = "La conexión se comprueba con menos frecuencia. Si se corta sin aviso, la llamada puede no llegar y los mensajes llegarán tarde"
+        override fun economyEvery(seconds: Int) = "Cada $seconds s"
         override val soundRingAbout = "Llamada entrante"
         override val soundMessageAbout = "Mensaje nuevo y llamada perdida"
         override val soundDefaultAbout = "El sonido elegido en los ajustes del teléfono"

@@ -125,13 +125,10 @@ fun Field(
  *
  * Красного в палитре нет вовсе, и опасное отличается словом и местом. Там, где беда
  * единственное изменение на экране, она заметна и без цвета.
+ *
+ * С 2026-10-06 — та же плашка, что у любого ответа на действие ([Answer], макет
+ * `пробы-ответ.html`, вариант 01): прежде здесь была пилюля, а пилюля в этой системе значит
+ * «нажми», и беду пытались нажать.
  */
 @Composable
-fun Trouble(text: String, modifier: Modifier = Modifier) = Box(
-    modifier = modifier
-        .fillMaxWidth()
-        .background(Tima.colors.softAccent, CircleShape)
-        .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
-) {
-    Caption(text, fontSize = TimaType.sz5, weight = androidx.compose.ui.text.font.FontWeight.Bold)
-}
+fun Trouble(text: String, modifier: Modifier = Modifier) = Answer(text, AnswerTone.Trouble, modifier)

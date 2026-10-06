@@ -389,6 +389,8 @@ class Network(
      * а выдуманная однажды доедет до экрана.
      */
     private val build: Build = Build(),
+    /** Обновление токена — тем же путём и для клиента экономичного канала. */
+    private val renewal: io.tima.core.network.TokenRenewal? = null,
 ) : ChatPorts, GroupPorts, DevicePorts {
 
     /** Тот токен, которым подписывается ЭТОТ вызов. */
@@ -579,11 +581,14 @@ class Network(
      */
     fun eventChannel(): EventStream = EventStream(
         link.route,
-        link.client,
+        channelClients.current(),
         token = { token() },
         appCode = build.code,
         appStream = build.stream,
     )
+
+    /** Клиенты канала по перекличке — обычной и экономичной (заказчик 2026-10-06). */
+    private val channelClients = io.tima.core.network.ChannelClients(link, renewal)
 
     /** Держатель токена: он же обновляет его по сроку и по `401`. */
     val tokenKeeper: DeviceTokens? get() = tokens
@@ -621,7 +626,7 @@ class Network(
                 )
             }
             renewal.renew = { if (tokens?.renew() == true) tokens.access else null }
-            return Network(link = link, session = session, tokens = tokens, build = build)
+            return Network(link = link, session = session, tokens = tokens, build = build, renewal = renewal)
         }
     }
 }
