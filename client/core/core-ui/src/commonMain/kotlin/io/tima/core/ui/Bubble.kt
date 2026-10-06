@@ -105,15 +105,19 @@ fun Bubble(
                         color = if (my) colors.my else colors.author,
                         shape = RoundedCornerShape(TimaShapes.radius),
                     )
-                    .border(1.dp, colors.border, RoundedCornerShape(TimaShapes.radius))
+                    // Полоса автора — левая граница самого пузыря и **поверх** серой рамки, как в
+                    // макете (`border-left` цветной, прочие стороны серые). Стояла после рамки и
+                    // рисовалась под содержимым — серая рамка ложилась на полосу, и на скруглении
+                    // и вдоль края была видна серая линия (заказчик 2026-10-06). Порядок здесь
+                    // и есть порядок слоёв: полоса рисуется после всего, что внутри неё.
                     .then(
                         if (!my) {
-                            // Полоса автора: левая граница самого пузыря.
                             Modifier.authorStrip(strip ?: colors.navigation)
                         } else {
                             Modifier
                         },
                     )
+                    .border(1.dp, colors.border, RoundedCornerShape(TimaShapes.radius))
                     .padding(
                         start = if (my) 14.dp else 12.dp + STRIP,
                         end = 14.dp,
@@ -251,7 +255,11 @@ private fun Modifier.authorStrip(color: Color): Modifier = drawWithCache {
     // `drawWithCache`: обе фигуры и их пересечение считаются при смене РАЗМЕРА, а не на
     // каждом кадре. Прежняя редакция создавала `Path` внутри отрисовки — на длинной
     // переписке это выделение памяти в цикле прокрутки.
-    onDrawBehind { drawPath(path = strip, color = color) }
+    // Поверх содержимого (рамки пузыря), а не под ним — см. место вызова.
+    onDrawWithContent {
+        drawContent()
+        drawPath(path = strip, color = color)
+    }
 }
 
 /** Толщина рамки пузыря с прочих сторон: `border: 1px` из макета. */
