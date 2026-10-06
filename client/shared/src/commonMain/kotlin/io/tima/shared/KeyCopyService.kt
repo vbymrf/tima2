@@ -61,10 +61,35 @@ class KeyCopyService(
     private companion object {
         /** Эпоха, под которую это устройство уже дозалило копию. */
         const val BACKFILL_MARK = "key-copy.backfill.v1"
+
+        /** Пополнение на каждом сообщении: ответ «копии нет» живёт десять минут. */
+        const val QUIET_ANSWER_MS = 10 * 60_000L
+
+        /** Экран устройств спрашивает дважды подряд («нет ли копии», «не пора ли сменить») — один запрос. */
+        const val SCREEN_ANSWER_MS = 5_000L
+    }
+
+    /**
+     * Ответ сервера о копии с памятью (заказчик 2026-10-06, батарея). Без неё у аккаунта без
+     * копии каждое отправленное и полученное сообщение спрашивало сервер заново и получало тот
+     * же 404: отчёт DGAR — 24 таких запроса за сутки, по два подряд. «Не знаю» не запоминается.
+     */
+    @kotlin.concurrent.Volatile
+    private var answer: Pair<Long, KeyCopyApi.Current>? = null
+
+    private suspend fun current(maxAgeMs: Long): KeyCopyApi.Current {
+        val now = msNow()
+        answer?.let { (at, said) -> if (now - at < maxAgeMs) return said }
+        return api.current().also { if (it != KeyCopyApi.Current.Unknown) answer = now to it }
+    }
+
+    /** Копию только что опубликовали или сменили — прежний ответ неверен. */
+    private fun forgetAnswer() {
+        answer = null
     }
 
     private suspend fun load(): Pair<Int, ByteArray>? {
-        val key = (api.current() as? KeyCopyApi.Current.Published)?.key ?: return null
+        val key = (current(QUIET_ANSWER_MS) as? KeyCopyApi.Current.Published)?.key ?: return null
         val identityPub = (keys.devicesOf(userId) as? DeviceKeysResult.Devices)?.identityPub ?: return null
         if (!KeyCopy.verify(identityPub, key.epoch, key.pub, key.sig)) {
             Journal.trouble(LogCode.DEVICE_TRUST, "ключ копии не подписан ключом личности — копию не пополняем", "эпоха" to key.epoch)
@@ -91,6 +116,7 @@ class KeyCopyService(
             val sig = KeyCopy.sign(words, 1, copy.encryptionPublic) ?: return
             val ok = api.publish(KeyCopyApi.Key(1, copy.encryptionPublic, sig))
             Journal.note(LogCode.DEVICE_TRUST, "ключ копии опубликован", "принят" to ok)
+            forgetAnswer()
             lock.withLock { cached = null }
         }
     }
@@ -136,6 +162,7 @@ class KeyCopyService(
                 when (api.saveMessages(chat.chatId, epoch, items)) {
                     KeyCopyApi.Saved.OK -> messages += items.size
                     KeyCopyApi.Saved.STALE -> {
+                        forgetAnswer()
                         lock.withLock { cached = null }
                         return false
                     }
@@ -155,7 +182,7 @@ class KeyCopyService(
         fromPhrase ?: secrets?.get()?.let { (_, raw) -> runCatching { DeviceIdentity.fromRaw(raw) }.getOrNull() }
 
     /** Не заведена ли копия у личности (Р44); `null` — не узнали. */
-    suspend fun missing(): Boolean? = when (api.current()) {
+    suspend fun missing(): Boolean? = when (current(SCREEN_ANSWER_MS)) {
         KeyCopyApi.Current.Missing -> true
         is KeyCopyApi.Current.Published -> false
         KeyCopyApi.Current.Unknown -> null
@@ -179,7 +206,7 @@ class KeyCopyService(
 
     /** Пора ли сменить пару копии: отключили своё устройство (М5). */
     suspend fun rotationDue(): Boolean =
-        (api.current() as? KeyCopyApi.Current.Published)?.key?.rotationDue == true
+        (current(SCREEN_ANSWER_MS) as? KeyCopyApi.Current.Published)?.key?.rotationDue == true
 
     /** Исход смены пары копии (М5). */
     enum class Rotation { DONE, WRONG_PHRASE, OFFLINE }
@@ -224,6 +251,7 @@ class KeyCopyService(
 
         val sig = KeyCopy.sign(words, epoch, next.encryptionPublic) ?: return Rotation.WRONG_PHRASE
         if (!api.publish(KeyCopyApi.Key(epoch, next.encryptionPublic, sig))) return Rotation.OFFLINE
+        forgetAnswer()
         lock.withLock { cached = epoch to next.encryptionPublic }
         fromPhrase = next
         secrets?.put(epoch, next.exportRaw())
@@ -299,6 +327,7 @@ class KeyCopyService(
                 val blob = KeyCopy.wrapMessage(envelope, eph, deviceId, identity, copyPub) ?: return@launch
                 val messageId = KeyCopy.messageIdOf(envelope) ?: return@launch
                 if (api.saveMessages(chatId, epoch, listOf(messageId to blob)) == KeyCopyApi.Saved.STALE) {
+                    forgetAnswer()
                     lock.withLock { cached = null }
                 }
             }
@@ -312,6 +341,7 @@ class KeyCopyService(
                 val (epoch, copyPub) = pub() ?: return@launch
                 val blob = KeyCopy.wrapGroupKey(copyPub, key) ?: return@launch
                 if (api.saveGroupKeys(epoch, listOf(KeyCopyApi.GroupItem(groupId, version, blob))) == KeyCopyApi.Saved.STALE) {
+                    forgetAnswer()
                     lock.withLock { cached = null }
                 }
             }

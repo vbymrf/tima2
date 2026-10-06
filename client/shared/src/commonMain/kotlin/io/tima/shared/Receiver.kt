@@ -579,7 +579,9 @@ class Receiver(
                     // открытого канала, а паузы ограничены — зависнуть можно было только
                     // внутри попытки. Сторож рвёт её и начинает заново.
                     val guard = launch {
-                        while (true) {
+                        // Канал открылся — сторожить попытку больше нечего, и будить телефон
+                        // раз в 15 с до конца жизни канала незачем (заказчик 2026-10-06, батарея).
+                        while (!live) {
                             delay(STUCK_CHECK_MS)
                             val lost = NetworkWatches.current.state.value == NetworkState.LOST
                             if (!live && !lost && msNow() - startedAt > STUCK_MS) throw ChannelStuck()

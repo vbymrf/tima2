@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -216,5 +217,60 @@ func TestWSDeliversKeyRotated(t *testing.T) {
 	raw, ok := box.Open(nil, wrapped[24:], &nonce, &ephPub, &member.encPriv)
 	if !ok || !bytes.Equal(raw, gk[:]) {
 		t.Fatal("GK из key.rotated не развернулся в исходный")
+	}
+}
+
+// Пинг сервера — только когда клиент молчит (заказчик 2026-10-06, батарея): клиент пингует
+// сам каждые 18 с, и встречный поток пингов сервера будил телефон ещё 120 раз в час.
+func TestWSServerPingsOnlyWhenClientSilent(t *testing.T) {
+	before := wsPingInterval
+	wsPingInterval = 300 * time.Millisecond
+	t.Cleanup(func() { wsPingInterval = before })
+
+	ts, _ := setupWithEvents(t)
+	dev := registerDevice(t, ts, "+79993330091")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	var serverPings atomic.Int32
+	url := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws"
+	conn, _, err := websocket.Dial(ctx, url, &websocket.DialOptions{
+		OnPingReceived: func(context.Context, []byte) bool {
+			serverPings.Add(1)
+			return true
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+	raw, _ := json.Marshal(map[string]string{"token": dev.token})
+	if err := conn.Write(ctx, websocket.MessageText, raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := conn.Read(ctx); err != nil {
+		t.Fatalf("кадр ok не пришёл: %v", err)
+	}
+	// Дальше кадров данных не будет — читатель нужен только для служебных кадров (ping/pong).
+	readCtx := conn.CloseRead(ctx)
+
+	// Клиент пингует чаще интервала сервера — сервер молчит.
+	for i := 0; i < 10; i++ {
+		pctx, pcancel := context.WithTimeout(readCtx, 2*time.Second)
+		if err := conn.Ping(pctx); err != nil {
+			pcancel()
+			t.Fatalf("ping клиента не прошёл: %v", err)
+		}
+		pcancel()
+		time.Sleep(100 * time.Millisecond)
+	}
+	if n := serverPings.Load(); n != 0 {
+		t.Fatalf("клиент пинговал сам, а сервер прислал ещё %d ping", n)
+	}
+
+	// Клиент замолчал — сервер проверяет соединение сам.
+	time.Sleep(1200 * time.Millisecond)
+	if n := serverPings.Load(); n == 0 {
+		t.Fatal("клиент молчит, а сервер не пингует — мёртвое соединение не заметили бы")
 	}
 }

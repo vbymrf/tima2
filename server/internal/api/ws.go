@@ -39,6 +39,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -53,7 +54,6 @@ import (
 // переподключался, снова не укладывался — и так по кругу.
 const (
 	wsAuthTimeout  = 20 * time.Second
-	wsPingInterval = 30 * time.Second // websocket-events.md: ping/pong каждые 30 с
 	wsPongTimeout  = 20 * time.Second // ответ на ping; меньше интервала, иначе очередь ping-ов
 	wsWriteTimeout = 30 * time.Second // отдача кадра клиенту
 
@@ -91,12 +91,28 @@ var (
 	wsCallFrameTTL = 2 * time.Minute
 )
 
+// wsPingInterval — как часто сервер проверяет соединение своим ping (websocket-events.md:
+// каждые 30 с). Переменная, а не константа, — ради теста, которому полминуты ждать долго.
+//
+// **Пинг сервера — только если клиент молчит** (заказчик 2026-10-06, батарея). Клиент сам шлёт
+// ping каждые 18 с (OkHttp): его ping и наш pong уже держат NAT и доказывают, что он жив. Второй,
+// встречный, поток пингов будил телефон ещё 120 раз в час — треть всей переклички. Старый клиент
+// без своих пингов по-прежнему получает наши.
+var wsPingInterval = 30 * time.Second
+
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	if s.Events == nil {
 		writeErr(w, http.StatusServiceUnavailable, "no_events", "шина событий не сконфигурирована (REDIS_URL)")
 		return
 	}
-	conn, err := websocket.Accept(w, r, nil)
+	// Когда клиент последний раз пинговал сам — см. [wsPingInterval].
+	var clientPinged atomic.Int64
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OnPingReceived: func(context.Context, []byte) bool {
+			clientPinged.Store(time.Now().UnixNano())
+			return true
+		},
+	})
 	if err != nil {
 		return // Accept сам ответил клиенту
 	}
@@ -235,6 +251,9 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-ping.C:
+			if time.Since(time.Unix(0, clientPinged.Load())) < wsPingInterval {
+				continue // клиент пинговал сам — соединение живо, встречный ping лишний
+			}
 			pingCtx, cancel := context.WithTimeout(ctx, wsPongTimeout)
 			err := conn.Ping(pingCtx)
 			cancel()

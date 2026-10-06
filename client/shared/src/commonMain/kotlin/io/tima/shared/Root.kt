@@ -1678,10 +1678,13 @@ private fun App(
         while (runCatching { copy.backfillOnce() }.getOrDefault(false).not()) kotlinx.coroutines.delay(15 * 60_000L)
     }
 
-    // Один человек — одна переписка (ДУ6, Р26): при запуске и раз в пять минут.
+    // Один человек — одна переписка (ДУ6, Р26): при запуске и раз в пять минут — пока окно на
+    // экране. Свёрнутое приложение не сверяет: композиция живёт и в фоне, и цикл будил телефон
+    // каждые пять минут впустую (заказчик 2026-10-06, батарея). Вернулись позже — сверка сразу.
     LaunchedEffect(assembled.session.userId) {
         val chain = IdentityChain(environment, network.directory, assembled.session.userId, ::msNow)
         while (true) {
+            assembled.notices.shown.first { it }
             runCatching { chain.refresh() }
             kotlinx.coroutines.delay(5 * 60_000L)
         }

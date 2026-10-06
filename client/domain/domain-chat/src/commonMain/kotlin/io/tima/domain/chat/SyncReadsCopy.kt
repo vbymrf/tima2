@@ -76,8 +76,11 @@ class SyncReadsCopy(
     }
 
     suspend fun push(): ReadsStep {
-        val k = key() ?: return ReadsStep.NoKey
+        // Сначала — есть ли что отдавать, и только потом ключ: ключ служебной группы — запрос к
+        // серверу, и до 2026-10-06 он уходил при каждом уходе в фон, даже без новых отметок
+        // (отчёт DGAR: 51 запрос ключей группы за сутки).
         if (!marks.dirty()) return ReadsStep.Unchanged
+        val k = key() ?: return ReadsStep.NoKey
         var advanced = emptyMap<String, Long>()
         var attempts = 0
         while (true) {
