@@ -37,7 +37,7 @@ import io.tima.domain.chat.SyncGroupKeys
  * Поэтому провал остаётся строкой диагностики, а не летит наверх.
  */
 class GroupKeyOrchestrator(
-    environment: Environment,
+    private val environment: Environment,
     private val network: GroupPorts,
     identity: DeviceIdentity,
     private val msNow: () -> Long,
@@ -131,6 +131,21 @@ class GroupKeyOrchestrator(
         return epoch != currentEpoch()
     }
 
+    /**
+     * Открытый ключ просящего устройства — из списка устройств его владельца, пропущенного через
+     * проверку заверения (Р57, как в ДУ3); `null` — устройство не прошло или не нашлось. В
+     * «записывать» проверка пишет в журнал и пропускает, в «требовать» — отказывает. Ключ,
+     * названный в событии, обязан совпасть с проверенным: иначе сервер подменил адресата.
+     */
+    private suspend fun trustedRequester(decision: EventStreamProtocol.Decision.ShareKeys): ByteArray? {
+        val user = decision.requesterUser.ifEmpty { return null }
+        val answer = network.keys.devicesOf(user) as? io.tima.core.network.DeviceKeysResult.Devices ?: return null
+        val device = environment.trustGate.admit(user, answer).firstOrNull { it.deviceId == decision.requesterDevice }
+            ?: return null
+        if (!device.encryptionPub.contentEquals(decision.requesterEncryptionPub)) return null
+        return device.encryptionPub
+    }
+
     /** Текущая эпоха escrow — «2026-09». Тот же формат, что у сервера. */
     private fun currentEpoch(): String {
         val now = Instant.fromEpochMilliseconds(msNow()).toLocalDateTime(TimeZone.UTC)
@@ -149,13 +164,18 @@ class GroupKeyOrchestrator(
 
             // Просят у нас — значит, у нас эти версии есть. Молчание оставит человека
             // ждать вечно: другого способа получить историю до своего прихода у него нет.
-            is EventStreamProtocol.Decision.ShareKeys ->
-                "отдали ключи: " + sharing.share(
+            is EventStreamProtocol.Decision.ShareKeys -> {
+                // Р57: заверение просящего проверяет отдающий, как в ДУ3 — сервер не якорь
+                // доверия. Ключ заворачивается под ключ из проверенного списка.
+                val pub = trustedRequester(decision)
+                if (pub == null) "не отдали ключи: просящее устройство не прошло проверку заверения"
+                else "отдали ключи: " + sharing.share(
                     groupId = decision.groupId,
                     requesterDevice = decision.requesterDevice,
-                    requesterEncryptionPub = decision.requesterEncryptionPub,
+                    requesterEncryptionPub = pub,
                     versions = decision.versions,
                 )
+            }
 
             // Сервер сам ротировать не может — ключа он не видит (ADR-0017 §3).
             is EventStreamProtocol.Decision.RotationNeeded ->

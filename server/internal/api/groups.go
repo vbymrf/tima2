@@ -332,8 +332,11 @@ func groupKeyRecover(deps groupsDeps) http.HandlerFunc {
 		copy(versions, missing)
 		for _, helper := range helpers {
 			deps.notifier.Device(r.Context(), helper, "recovery.gk_request", map[string]any{
-				"group_id":          groupID,
-				"requester_device":  id.DeviceID,
+				"group_id":         groupID,
+				"requester_device": id.DeviceID,
+				// Чьё устройство просит (Р57): отдающий сам проверит его заверение, как в ДУ3,
+				// и завернёт ключ под ключ из проверенного списка, а не под названный здесь.
+				"requester_user":    id.UserID,
 				"requester_enc_pub": b64.EncodeToString(encPub),
 				"versions":          versions,
 			})

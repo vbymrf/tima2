@@ -181,6 +181,8 @@ class EventStreamProtocol {
             val requesterEncryptionPub: ByteArray,
             val versions: List<Int>,
             val eventId: Long?,
+            /** Чьё устройство просит (Р57); пусто — сервер старше, проверить нечем. */
+            val requesterUser: String = "",
         ) : Decision
 
         /**
@@ -536,7 +538,7 @@ class EventStreamProtocol {
                 if (groupId == null || requester == null || encPub == null || versions.isNullOrEmpty()) {
                     Decision.Skip("recovery.gk_request без обязательных полей", eventId)
                 } else {
-                    Decision.ShareKeys(groupId, requester, encPub, versions, eventId)
+                    Decision.ShareKeys(groupId, requester, encPub, versions, eventId, json.string("requester_user").orEmpty())
                 }
             }
 

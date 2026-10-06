@@ -40,6 +40,15 @@ class EventStreamProtocolKeysTest {
     }
 
     @Test
+    fun просьба_называет_владельца_устройства() {
+        // Р57: отдающий сам проверяет заверение просящего — для этого ему нужен владелец.
+        val frame = """{"event":"recovery.gk_request","event_id":8,"group_id":"g-1",""" +
+            """"requester_device":"dev-2","requester_user":"u-2","requester_enc_pub":"AAAA","versions":[1]}"""
+        val decision = assertIs<EventStreamProtocol.Decision.ShareKeys>(protocol.decide(frame))
+        assertEquals("u-2", decision.requesterUser)
+    }
+
+    @Test
     fun просьба_без_версий_пропускается_но_подтверждается() {
         // Курсор обязан двигаться даже на испорченном кадре — иначе он застрянет на нём
         // навсегда, и всё, что после, не приедет никогда.
