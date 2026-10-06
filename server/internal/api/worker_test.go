@@ -86,6 +86,11 @@ func TestWorkerGCAndSyncGap(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// Обёртки ключей групп уходят по смене версии (ПЛАН-(ПС) ПС2): v1 сменена v2 давно.
+	if _, err := testDB(t).Exec(context.Background(),
+		`UPDATE group_key_history SET rotated_at = now() - interval '3 months' WHERE group_id = $1`, groupID); err != nil {
+		t.Fatal(err)
+	}
 	w := &worker.Worker{
 		Store:        srv.Store,
 		Retention:    999 * 24 * time.Hour,
@@ -110,9 +115,10 @@ func TestWorkerGCAndSyncGap(t *testing.T) {
 	if len(hist.Messages) != 0 {
 		t.Fatalf("после GC в истории %d сообщений, ожидалось 0", len(hist.Messages))
 	}
-	// Групповые обёртки удалены и у активного участника (ретеншен 0)
-	if keys := fetchGroupKeys(t, ts, recipient.token, groupID, 0); len(keys) != 0 {
-		t.Fatalf("после GC у участника %d ключей, ожидалось 0", len(keys))
+	// Групповые обёртки сменённой версии удалены и у активного участника, а текущая версия
+	// остаётся всегда — ею закрыты новые сообщения (ПЛАН-(ПС) Р5).
+	if keys := fetchGroupKeys(t, ts, recipient.token, groupID, 0); len(keys) != 1 {
+		t.Fatalf("после GC у участника %d ключей, ожидалась 1 — текущая версия", len(keys))
 	}
 
 	// sync.gap: cursor указывает до удалённых событий → полный re-bootstrap.

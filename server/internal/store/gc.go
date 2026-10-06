@@ -45,26 +45,32 @@ func (s *Store) MaxDeviceEventID(ctx context.Context, deviceID string) (int64, e
 	return v, err
 }
 
-// GCPersonalWrappedKeys удаляет обёртки конвертов старше olderThanSec:
-// сообщение исчезает из выдачи истории (JOIN по обёртке), конверт с escrow
-// остаётся до escrow-архива.
-func (s *Store) GCPersonalWrappedKeys(ctx context.Context, olderThanSec int64) (int64, error) {
+// GCPersonalWrappedKeys удаляет обёртки конвертов по эпохе (ПЛАН-(ПС) ПС2, Р3, Р5): обёртка
+// живёт до конца календарного месяца сообщения (UTC; эпоха депозитария «чат × месяц») плюс
+// graceSec. Сообщение исчезает из выдачи истории (JOIN по обёртке) — дальше история только из
+// копии ключей; конверт с escrow остаётся до escrow-архива. Короче обёртка — меньше прошлого
+// откроет ключ устройства, утёкший потом.
+func (s *Store) GCPersonalWrappedKeys(ctx context.Context, graceSec int64) (int64, error) {
 	ct, err := s.pool.Exec(ctx, `
 		DELETE FROM personal_message_keys k
 		USING personal_messages m
 		WHERE m.chat_id = k.chat_id AND m.message_id = k.message_id
-		  AND m.received_at < now() - make_interval(secs => $1)`, olderThanSec)
+		  AND date_trunc('month', m.received_at AT TIME ZONE 'UTC') + interval '1 month'
+		      < (now() AT TIME ZONE 'UTC') - make_interval(secs => $1)`, graceSec)
 	return ct.RowsAffected(), err
 }
 
-// GCGroupWrappedKeys удаляет wrapped_GK версий, ротированных раньше olderThanSec
-// (устройства давно забрали свои); escrow версии в group_key_history остаётся.
-func (s *Store) GCGroupWrappedKeys(ctx context.Context, olderThanSec int64) (int64, error) {
+// GCGroupWrappedKeys удаляет wrapped_GK версий, которые сменила следующая версия больше
+// graceSec назад (ПС2, Р5); escrow версии в group_key_history остаётся. Текущая версия группы
+// не удаляется никогда: ею закрыты новые сообщения, и тихая группа без смены ключа иначе
+// осталась бы без обёрток у тех, кто их ещё не забрал.
+func (s *Store) GCGroupWrappedKeys(ctx context.Context, graceSec int64) (int64, error) {
 	ct, err := s.pool.Exec(ctx, `
 		DELETE FROM group_wrapped_keys w
-		USING group_key_history h
-		WHERE h.group_id = w.group_id AND h.gk_version = w.gk_version
-		  AND h.rotated_at < now() - make_interval(secs => $1)`, olderThanSec)
+		WHERE EXISTS (
+			SELECT 1 FROM group_key_history n
+			WHERE n.group_id = w.group_id AND n.gk_version > w.gk_version
+			  AND n.rotated_at < now() - make_interval(secs => $1))`, graceSec)
 	return ct.RowsAffected(), err
 }
 

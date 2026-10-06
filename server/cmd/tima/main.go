@@ -119,6 +119,8 @@ func runWorker() {
 		Store:        st,
 		Retention:    envDays("TIMA_RETENTION_DAYS", 90),
 		AppealWindow: envDays("TIMA_APPEAL_WINDOW_DAYS", 30),
+		// Обёртки под устройства — до конца эпохи плюс запас (ПЛАН-(ПС) Р5).
+		WrapGrace: envDays("TIMA_WRAP_GRACE_DAYS", 30),
 		// Срок содержимого личных сообщений (Р45): пусто — вместе с депозитарием, как было;
 		// число — дней; forever — бессрочно.
 		MessageContentDays: messageContentDays(os.Getenv("TIMA_MESSAGE_RETENTION")),

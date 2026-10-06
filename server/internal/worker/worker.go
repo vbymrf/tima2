@@ -27,6 +27,9 @@ type Worker struct {
 	// политики нет — то есть на базе, где 0030 не применена.
 	Retention    time.Duration // обёртки ключей и журнал событий: 90 дней (sync-offline.md §1)
 	AppealWindow time.Duration // wrapped_GK исключённых: 30 дней (crypto-protocol §4.2)
+	// WrapGrace — запас после эпохи для обёрток ключей под устройства (ПЛАН-(ПС) Р5): личные —
+	// конец месяца сообщения плюс запас, групповые — смена версии плюс запас. Ноль — 30 дней.
+	WrapGrace time.Duration
 	// MessageContentDays — срок содержимого личных сообщений (Р45): store.ContentWithEscrow —
 	// вместе с ключом депозитария (умолчание), N > 0 — дней от отправки, store.ContentForever —
 	// бессрочно. Поля депозитария уходят по сроку закона при любом значении.
@@ -67,6 +70,15 @@ func (w *Worker) retentionSeconds(ctx context.Context) (retention, window, journ
 	return int64(rd) * day, int64(wd) * day, int64(jd) * day, nil
 }
 
+// wrapGraceSeconds — запас после эпохи для обёрток (ПЛАН-(ПС) Р5); по умолчанию одна эпоха.
+func (w *Worker) wrapGraceSeconds() int64 {
+	g := w.WrapGrace
+	if g <= 0 {
+		g = 30 * 24 * time.Hour
+	}
+	return int64(g / time.Second)
+}
+
 // RunOnce прогоняет все GC-задачи один раз; ошибки задач не прерывают остальные.
 func (w *Worker) RunOnce(ctx context.Context) error {
 	retention, window, journal, err := w.retentionSeconds(ctx)
@@ -80,8 +92,9 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	}
 	jobs := []job{
 		{"device_events", func() (int64, error) { return w.Store.GCDeviceEvents(ctx, retention) }},
-		{"personal_wrapped_keys", func() (int64, error) { return w.Store.GCPersonalWrappedKeys(ctx, retention) }},
-		{"group_wrapped_keys", func() (int64, error) { return w.Store.GCGroupWrappedKeys(ctx, retention) }},
+		// Обёртки — по эпохе, а не по общему сроку (ПЛАН-(ПС) ПС2).
+		{"personal_wrapped_keys", func() (int64, error) { return w.Store.GCPersonalWrappedKeys(ctx, w.wrapGraceSeconds()) }},
+		{"group_wrapped_keys", func() (int64, error) { return w.Store.GCGroupWrappedKeys(ctx, w.wrapGraceSeconds()) }},
 		{"excluded_group_keys", func() (int64, error) { return w.Store.GCExcludedGroupKeys(ctx, window) }},
 		{"sms_codes", func() (int64, error) { return w.Store.GCExpiredSmsCodes(ctx) }},
 		// Брошенные звонки: строка открыта, а комнаты уже нет. См. closeAbandonedCalls.
