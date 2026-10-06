@@ -176,18 +176,22 @@ func (s *Store) MissingGKVersions(ctx context.Context, groupID, deviceID string)
 // HelperDevices — устройства активных участников группы (кроме requester),
 // у которых ЕСТЬ обёртка хотя бы одной из versions — кандидаты в помощники.
 func (s *Store) HelperDevices(ctx context.Context, groupID, requester string, versions []int32) ([]string, error) {
+	// Помощник — не только тот, у кого на сервере лежит обёртка: ключ могли поднять из копии
+	// ключей (М3, М6), и обёртки под устройство тогда нет. Просьба уходит устройствам
+	// модераторов…владельца и своим устройствам просящего; у кого версии нет — промолчит
+	// (живая проверка п. 1.7, 2026-10-06: у владельца «gruppa» ключ был только из копии).
+	_ = versions
 	rows, err := s.pool.Query(ctx, `
-		SELECT DISTINCT w.recipient
-		FROM group_wrapped_keys w
-		JOIN devices d ON d.device_id = w.recipient AND d.revoked_at IS NULL
+		SELECT DISTINCT d.device_id::text
+		FROM devices d
 		JOIN memberships m ON m.user_id = d.user_id
-		  AND m.target_type = 'group' AND m.target_id = w.group_id AND m.left_at IS NULL
-		WHERE w.group_id = $1 AND w.recipient <> $2 AND w.gk_version = ANY($3)
+		  AND m.target_type = 'group' AND m.target_id = $1 AND m.left_at IS NULL
+		WHERE d.revoked_at IS NULL AND d.device_id <> $2
 		  -- Ключ отдают модератор, администратор и владелец — и свои устройства просящего
 		  -- (заказчик 2026-10-06, п. 1.7): рядовой участник ключами не распоряжается.
 		  AND (m.role IN ('moderator', 'admin', 'owner')
 		       OR d.user_id = (SELECT user_id FROM devices WHERE device_id = $2))`,
-		groupID, requester, versions)
+		groupID, requester)
 	if err != nil {
 		return nil, err
 	}
