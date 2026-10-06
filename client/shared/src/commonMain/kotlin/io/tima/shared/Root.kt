@@ -1656,6 +1656,18 @@ private fun App(
     LaunchedEffect(assembled.session.userId, reregEvent) {
         reregOld = runCatching { network.directory.reregState() }.getOrNull()?.let { it.active && it.role == "old" } == true
     }
+    // Это устройство не заверено, а сервер в «требовать» (отчёт QMTG, заказчик 2026-10-06):
+    // собеседники его не видят, и человек узнаёт об этом событием с кнопкой, как о разрешениях.
+    // Узнаём при запуске и по выходе из настроек — там его и заверяют. Сеть не ответила —
+    // «не знаю», и событие не показывается.
+    var uncertified by remember { mutableStateOf<Boolean?>(null) }
+    val inSettings = where is Where.Settings
+    LaunchedEffect(assembled.session.userId, inSettings) {
+        if (inSettings) return@LaunchedEffect
+        val own = (assembled.identity ?: deviceIdentityFrom(deviceSecret)).signingPublic
+        val answer = runCatching { network.keys.devicesOf(assembled.session.userId) }.getOrNull()
+        if (answer is io.tima.core.network.DeviceKeysResult.Devices) uncertified = OwnDeviceTrust.needsCertify(answer, own)
+    }
     val identityClaims by assembled.identityClaims.collectAsState()
     LaunchedEffect(assembled.session.userId) {
         val me = assembled.session.userId
@@ -2210,6 +2222,11 @@ private fun App(
         EventKind.IdentityClaim to if (identityClaims.isNotEmpty()) Presence.Yes else Presence.No,
         // Р48: к аккаунту добавлено новое устройство.
         EventKind.DeviceAdded to if (deviceAdded != null) Presence.Yes else Presence.No,
+        EventKind.Uncertified to when (uncertified) {
+            true -> Presence.Yes
+            false -> Presence.No
+            null -> Presence.Unknown
+        },
         // ДУ9: перерегистрация — извещение стороне.
         EventKind.Rereg to if (reregEvent != null) Presence.Yes else Presence.No,
     )
@@ -2254,6 +2271,7 @@ private fun App(
             EventKind.IdentityReplaced -> authWords.replacedTitle
             EventKind.IdentityClaim -> socialWords.identityClaims
             EventKind.DeviceAdded -> authWords.deviceAddedTitle
+            EventKind.Uncertified -> authWords.uncertifiedTitle
             EventKind.Rereg -> authWords.reregTitle
             EventKind.Update -> upd.importantOut.takeIf { importantOffer != null } ?: upd.broken
             EventKind.Notices -> warn.eventsLineNotices
@@ -2324,6 +2342,19 @@ private fun App(
                         close(EventKind.DeviceAdded, "Понятно")
                         assembled.deviceAdded.value = null
                     },
+                ),
+            )
+            // Устройство не заверено — к «Секретной фразе и устройствам», там «Подтвердить
+            // фразой» или код заверения для телефона. «Позже» — до следующего запуска, а не на
+            // неделю, как у разрешений: без заверения переписка не идёт вовсе.
+            EventKind.Uncertified -> NoticeEntry(
+                notice = io.tima.feature.shell.Notice(title = authWords.uncertifiedTitle, text = authWords.uncertifiedText),
+                actions = listOf(
+                    NoticeAction(authWords.uncertifiedConfirm) {
+                        close(EventKind.Uncertified, "Подтвердить фразой")
+                        where = Where.Settings(SettingsItem.DEVICES)
+                    },
+                    NoticeAction(warn.warnLater, ButtonKind.Quiet) { close(EventKind.Uncertified, "Позже") },
                 ),
             )
             // Заявка новой личности в группу — к составу группы, там «Подтвердить».

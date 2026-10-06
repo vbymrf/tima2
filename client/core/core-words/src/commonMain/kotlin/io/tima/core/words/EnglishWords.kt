@@ -1523,6 +1523,12 @@ object EnglishWords : Words {
         override val trustNoKey = "First confirm this phone with your phrase"
         override fun trustFailed(reason: String) =
             if (ServerRefusals.isCode(reason)) trouble.reason(reason) else "Did not work: $reason"
+        override val uncertifiedTitle = "This device is not certified"
+        override val uncertifiedText =
+            "Your contacts cannot read messages from it, and their messages do not reach it. " +
+                "Enter the secret phrase — once: updates will not ask again. " +
+                "A computer can also be certified from your phone: “Show verification code” and scan it with the phone."
+        override val uncertifiedConfirm = "Confirm with phrase"
         override val replacedTitle = "Someone started over with your number"
         override val replacedAbout = "A new identity key of your account was created on another device — this happens when a phone and phrase are lost or the SIM card is reissued. Contacts now write to it, not to you. If it was not you, cancel it: you will need your secret phrase."
         override val replacedCancel = "Cancel the new identity key"

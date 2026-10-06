@@ -1632,6 +1632,10 @@ interface AuthWords {
     val trustDone: String
     val trustNoKey: String
     fun trustFailed(reason: String): String
+    /** Событие «это устройство не заверено» в «требовать» (отчёт QMTG, заказчик 2026-10-06). */
+    val uncertifiedTitle: String
+    val uncertifiedText: String
+    val uncertifiedConfirm: String
     /** «Начать заново» с номера этого аккаунта (ДУ6). */
     val replacedTitle: String
     val replacedAbout: String
@@ -3625,6 +3629,12 @@ object RussianWords : Words {
         override val trustNoKey = "Сначала подтвердите этот телефон фразой"
         override fun trustFailed(reason: String) =
             if (ServerRefusals.isCode(reason)) trouble.reason(reason) else "Не получилось: $reason"
+        override val uncertifiedTitle = "Это устройство не заверено"
+        override val uncertifiedText =
+            "Собеседники не могут прочитать сообщения с него, а их сообщения сюда не приходят. " +
+                "Введите секретную фразу — один раз: после обновлений просить больше не будем. " +
+                "Компьютер можно заверить и с телефона: «Показать код заверения» и сканировать его телефоном."
+        override val uncertifiedConfirm = "Подтвердить фразой"
         override val replacedTitle = "С вашего номера начали заново"
         override val replacedAbout = "На другом устройстве завели новый ключ личности вашего аккаунта — так бывает, когда теряют телефон и фразу или перевыпускают SIM-карту. Собеседники пишут теперь ей, а не вам. Если это не вы — отмените: понадобится секретная фраза."
         override val replacedCancel = "Отменить новый ключ личности"

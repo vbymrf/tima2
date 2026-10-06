@@ -1523,6 +1523,12 @@ object SpanishWords : Words {
         override val trustNoKey = "Primero confirme este teléfono con su frase"
         override fun trustFailed(reason: String) =
             if (ServerRefusals.isCode(reason)) trouble.reason(reason) else "No funcionó: $reason"
+        override val uncertifiedTitle = "Este dispositivo no está certificado"
+        override val uncertifiedText =
+            "Sus contactos no pueden leer los mensajes que envía desde él, y los suyos no llegan aquí. " +
+                "Introduzca la frase secreta — una sola vez: las actualizaciones no volverán a pedirla. " +
+                "Un ordenador también se puede certificar desde el teléfono: «Mostrar código de verificación» y escanéelo con el teléfono."
+        override val uncertifiedConfirm = "Confirmar con la frase"
         override val replacedTitle = "Alguien empezó de nuevo con su número"
         override val replacedAbout = "En otro dispositivo se creó una clave de identidad nueva de su cuenta: pasa cuando se pierden el teléfono y la frase o se reemite la SIM. Los contactos ahora le escriben a ella, no a usted. Si no fue usted, cancélela: necesitará su frase secreta."
         override val replacedCancel = "Cancelar la clave de identidad nueva"
