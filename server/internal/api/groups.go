@@ -299,10 +299,21 @@ func groupKeyRecover(deps groupsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "phrase_required", "ключи группы выдаются только по секретной фразе")
 			return
 		}
-		sig, derr := base64.RawURLEncoding.DecodeString(req.Signature)
-		if derr != nil || !timacrypto.VerifyEnvelopeSignature(identityPub, recoverCanonical(groupID, id.DeviceID), sig) {
-			writeErr(w, http.StatusForbidden, "bad_identity_sig", "запрос не подписан ключом личности аккаунта")
+		// Заверенное устройство — без фразы (заказчик 2026-10-06): заверить его без фразы было
+		// нельзя. Незаверенное — только с подписью фразой, в любом режиме доверия: не всякое
+		// устройство можно заверить, и фраза остаётся его путём.
+		certified, err := deps.store.DeviceCertified(r.Context(), id.UserID, id.DeviceID)
+		if err != nil {
+			log.Printf("groupKeyRecover: certified: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
+		}
+		if !certified {
+			sig, derr := base64.RawURLEncoding.DecodeString(req.Signature)
+			if derr != nil || !timacrypto.VerifyEnvelopeSignature(identityPub, recoverCanonical(groupID, id.DeviceID), sig) {
+				writeErr(w, http.StatusForbidden, "bad_identity_sig", "запрос не подписан ключом личности аккаунта")
+				return
+			}
 		}
 		missing, err := deps.store.MissingGKVersions(r.Context(), groupID, id.DeviceID)
 		if err != nil {
@@ -339,6 +350,9 @@ func groupKeyRecover(deps groupsDeps) http.HandlerFunc {
 				"requester_user":    id.UserID,
 				"requester_enc_pub": b64.EncodeToString(encPub),
 				"versions":          versions,
+				// Подпись фразой, если просили с ней: отдающий проверит её сам, когда просящее
+				// устройство не заверено (2026-10-06).
+				"signature": req.Signature,
 			})
 		}
 		w.Header().Set("Content-Type", "application/json")

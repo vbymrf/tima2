@@ -187,7 +187,9 @@ func chatRecover(deps chatsDeps) http.HandlerFunc {
 			}
 		}
 
-		helpers, err := deps.store.ChatHelperDevices(r.Context(), chatID, id.DeviceID, id.UserID)
+		// Чего именно не хватает — сервер знает сам: помощник перезаворачивает ровно это, новые
+		// первыми, не больше [recoverMissingLimit] (2026-10-06).
+		helpers, missing, err := deps.store.ChatHelperDevices(r.Context(), chatID, id.DeviceID, id.UserID, recoverMissingLimit)
 		if err != nil {
 			log.Printf("chatRecover: helpers: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -197,6 +199,11 @@ func chatRecover(deps chatsDeps) http.HandlerFunc {
 		if err != nil {
 			log.Printf("chatRecover: enc pub: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		if len(missing) == 0 {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"helpers": 0, "own_helpers": 0, "missing": 0})
 			return
 		}
 		b64 := base64.RawURLEncoding
@@ -210,10 +217,15 @@ func chatRecover(deps chatsDeps) http.HandlerFunc {
 				"requester_device":  id.DeviceID,
 				"requester_enc_pub": b64.EncodeToString(encPub),
 				"own":               h.Own, // свои устройства помогают без согласия
+				// Чьё устройство просит и подпись фразой, если она была: помощник отдаёт только
+				// заверенному или подписавшему фразой и проверяет это сам (2026-10-06).
+				"requester_user": id.UserID,
+				"signature":      req.Signature,
+				"missing":        missing,
 			})
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"helpers": len(helpers), "own_helpers": own})
+		_ = json.NewEncoder(w).Encode(map[string]any{"helpers": len(helpers), "own_helpers": own, "missing": len(missing)})
 	}
 }
 
@@ -342,3 +354,7 @@ func listPersonalChats(deps chatsDeps) http.HandlerFunc {
 		_ = json.NewEncoder(w).Encode(map[string]any{"chats": out})
 	}
 }
+
+// recoverMissingLimit — сколько недостающих сообщений называет одна просьба: обёртка — около
+// двухсот байт, 500 — около сотни килобайт с помощника и месяцы обычной переписки.
+const recoverMissingLimit = 500

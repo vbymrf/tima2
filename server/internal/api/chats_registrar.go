@@ -28,7 +28,7 @@ type ChatStore interface {
 	SaveGroupKeyCopies(ctx context.Context, ownerID string, epoch int, items []store.GroupKeyCopy) error
 	ListGroupKeyCopies(ctx context.Context, ownerID string, epoch int) ([]store.GroupKeyCopy, error)
 	SaveRecoveryMessageKeys(ctx context.Context, chatID, recipient string, keys []store.RecoveryMessageKey) error
-	ChatHelperDevices(ctx context.Context, chatID, requesterDevice, requesterUser string) ([]store.ChatHelper, error)
+	ChatHelperDevices(ctx context.Context, chatID, requesterDevice, requesterUser string, missingLimit int) ([]store.ChatHelper, []int64, error)
 	IsChatParticipant(ctx context.Context, chatID, userID string) (bool, error)
 	IsChatParticipantDevice(ctx context.Context, chatID, deviceID string) (bool, error)
 	DeviceEncryptionPub(ctx context.Context, deviceID string) ([]byte, error)

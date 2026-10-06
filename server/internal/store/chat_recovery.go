@@ -211,25 +211,56 @@ type ChatHelper struct {
 // ChatHelperDevices — устройства с обёртками сообщений чата (кроме requester);
 // Own=true, если то же устройство-владелец, что у запросившего (свои устройства
 // помогают без согласия; собеседник — с согласием, ADR-0010 §защита).
-func (s *Store) ChatHelperDevices(ctx context.Context, chatID, requesterDevice, requesterUser string) ([]ChatHelper, error) {
+//
+// missingLimit > 0 — заодно сообщения, к которым у requester нет обёртки, новые первыми и не
+// больше missingLimit (2026-10-06): по ним помощник перезаворачивает ровно недостающее.
+// Удалённые не называются — отдавать их некому. Одним методом с помощниками, а не отдельным:
+// это один вопрос «кто и что отдаёт по просьбе», и бюджет методов Store только уменьшается.
+func (s *Store) ChatHelperDevices(ctx context.Context, chatID, requesterDevice, requesterUser string, missingLimit int) ([]ChatHelper, []int64, error) {
+	var missing []int64
+	if missingLimit > 0 {
+		rows, err := s.pool.Query(ctx, `
+			SELECT m.message_id FROM personal_messages m
+			WHERE m.chat_id = $1 AND NOT m.deleted
+			  AND NOT EXISTS (
+			      SELECT 1 FROM personal_message_keys k
+			      WHERE k.chat_id = m.chat_id AND k.message_id = m.message_id AND k.recipient = $2)
+			ORDER BY m.message_id DESC
+			LIMIT $3`, chatID, requesterDevice, missingLimit)
+		if err != nil {
+			return nil, nil, err
+		}
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return nil, nil, err
+			}
+			missing = append(missing, id)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, nil, err
+		}
+	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT DISTINCT k.recipient, (d.user_id = $3) AS own
 		FROM personal_message_keys k
 		JOIN devices d ON d.device_id = k.recipient AND d.revoked_at IS NULL
 		WHERE k.chat_id = $1 AND k.recipient <> $2`, chatID, requesterDevice, requesterUser)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 	var out []ChatHelper
 	for rows.Next() {
 		var h ChatHelper
 		if err := rows.Scan(&h.DeviceID, &h.Own); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		out = append(out, h)
 	}
-	return out, rows.Err()
+	return out, missing, rows.Err()
 }
 
 // RecoveryMessageKey — обёртка ключа сообщения под устройство-получателя (от помощника).

@@ -63,6 +63,8 @@ type GroupStore interface {
 	RotationEvidenceSince(ctx context.Context, groupID string, since time.Time) (store.RotationEvidence, error)
 	ListGroupKeysForDevice(ctx context.Context, groupID, deviceID string, sinceVersion int32) ([]store.DeviceGroupKey, error)
 	MissingGKVersions(ctx context.Context, groupID, deviceID string) ([]int32, error)
+	// Заверено ли устройство — заверенное просит ключи группы без подписи фразой (2026-10-06).
+	DeviceCertified(ctx context.Context, userID, deviceID string) (bool, error)
 	SaveRecoveryKeys(ctx context.Context, groupID, recipient string, keys []store.RecoveryKey) error
 	HelperDevices(ctx context.Context, groupID, requester string, versions []int32) ([]string, error)
 	IsActiveDevice(ctx context.Context, userID, deviceID string) (bool, error)

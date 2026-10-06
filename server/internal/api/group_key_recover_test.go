@@ -43,6 +43,36 @@ func TestGroupKeyRecoverNeedsIdentitySignature(t *testing.T) {
 	}
 }
 
+// TestGroupKeyRecoverCertifiedNeedsNoPhrase — заверенное устройство просит ключи группы без
+// подписи фразой: заверить его без фразы было нельзя (заказчик 2026-10-06). Незаверенное —
+// по-прежнему только с подписью, в любом режиме: не всякое устройство можно заверить.
+func TestGroupKeyRecoverCertifiedNeedsNoPhrase(t *testing.T) {
+	ts, srv := setup(t)
+	srv.DeviceTrust = trustRecord
+	owner := newTrustAccount()
+	phone, code, why := registerProof(t, ts, "+79990061021", owner.identityPub(), owner.withAsk)
+	if code != 201 {
+		t.Fatalf("телефон хозяина: %d %s", code, why)
+	}
+	other := registerDevice(t, ts, "+79990061022")
+	group := createGroupWith(t, ts, other, phone)
+	path := "/api/v1/groups/" + group + "/keys/recover"
+
+	if code := jsonAuth(t, ts, "POST", path, phone.token, map[string]string{}, nil); code != 200 {
+		t.Fatalf("заверенное без подписи: %d, ждали 200", code)
+	}
+	bare, code, _ := registerProof(t, ts, "+79990061021", owner.identityPub(), nil)
+	if code != 201 {
+		t.Fatalf("незаверенное в «записывать»: %d", code)
+	}
+	var refusal struct {
+		Code string `json:"code"`
+	}
+	if code := jsonAuth(t, ts, "POST", path, bare.token, map[string]string{}, &refusal); code != 403 || refusal.Code != "bad_identity_sig" {
+		t.Fatalf("незаверенное без подписи: %d %q, ждали 403 bad_identity_sig", code, refusal.Code)
+	}
+}
+
 // TestGroupKeyHelpersAreModerators — ключ группы по просьбе отдают модератор, администратор и
 // владелец, а рядовой участник — только своему же устройству (заказчик 2026-10-06, п. 1.7).
 func TestGroupKeyHelpersAreModerators(t *testing.T) {

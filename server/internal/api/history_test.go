@@ -102,9 +102,26 @@ func TestChatRecoverCertifiedNeedsNoPhrase(t *testing.T) {
 	}
 	var out struct {
 		Helpers int `json:"helpers"`
+		Missing int `json:"missing"`
 	}
 	if code := postAuthed(t, ts, pc.token, "POST", "/api/v1/chats/"+chat+"/recover", map[string]any{}, &out); code != 200 || out.Helpers == 0 {
 		t.Fatalf("заверенное без подписи: ожидался 200 с помощниками, получен %d, помощников %d", code, out.Helpers)
+	}
+	// Сервер называет, чего не хватает: помощник перезаворачивает ровно это (2026-10-06).
+	if out.Missing != 1 {
+		t.Fatalf("недостающих у компьютера: %d, ждали 1", out.Missing)
+	}
+	_, missing, err := srv.Store.ChatHelperDevices(t.Context(), chat, pc.id, pc.userID, 500)
+	if err != nil || len(missing) != 1 || missing[0] != 3301 {
+		t.Fatalf("недостающие у компьютера: %v %v, ждали [3301]", missing, err)
+	}
+	// У телефона ключ есть — просить нечего, и помощников не будят.
+	var none struct {
+		Helpers int `json:"helpers"`
+		Missing int `json:"missing"`
+	}
+	if code := postAuthed(t, ts, phone.token, "POST", "/api/v1/chats/"+chat+"/recover", map[string]any{}, &none); code != 200 || none.Missing != 0 || none.Helpers != 0 {
+		t.Fatalf("телефону нечего просить: %d, недостаёт %d, помощников %d", code, none.Missing, none.Helpers)
 	}
 
 	stranger, code, _ := registerProof(t, ts, "+79990000331", owner.identityPub(), nil)
