@@ -50,6 +50,11 @@ class SyncBookCopy(
      * тоже не мог, запись начинается со слияния.
      */
     private val olderKeys: suspend () -> List<ByteArray> = { emptyList() },
+    /**
+     * Прежний блоб, который затирает [restart] (Р56): его открыть пока нечем, но ключ ещё может
+     * прийти — тогда [adopt] сольёт его с книгой, а не потеряет. Хранит вызывающий.
+     */
+    private val keepOrphan: suspend (ByteArray) -> Unit = {},
 ) {
 
     suspend fun pull(): CopyStep {
@@ -83,7 +88,12 @@ class SyncBookCopy(
         val k = key() ?: return CopyStep.NoKey
         val base = when (val fetched = store.fetch()) {
             AccountStoreStep.Empty -> 0L
-            is AccountStoreStep.Blob -> fetched.revision
+            is AccountStoreStep.Blob -> {
+                // Прежняя копия уходит с сервера, но не пропадает: если её ключ ещё придёт —
+                // сольём (Р56).
+                keepOrphan(fetched.bytes)
+                fetched.revision
+            }
             is AccountStoreStep.Offline -> return CopyStep.Offline
             is AccountStoreStep.Refused -> return CopyStep.Refused(fetched.reason)
             is AccountStoreStep.Conflict, AccountStoreStep.Stored -> return CopyStep.Refused("неожиданный ответ на чтение")
@@ -102,6 +112,21 @@ class SyncBookCopy(
             is AccountStoreStep.Refused -> CopyStep.Refused(sent.reason)
             AccountStoreStep.Empty, is AccountStoreStep.Blob -> CopyStep.Refused("неожиданный ответ на запись")
         }
+    }
+
+    /**
+     * Слить прежнюю копию, затёртую [restart], с книгой и отдать слитое (Р56): ключ к ней пришёл
+     * позже — от своего устройства, которое было не на связи. [CopyStep.NoKey] — открыть всё
+     * ещё нечем, прежняя копия остаётся ждать.
+     */
+    suspend fun adopt(orphan: ByteArray): CopyStep {
+        val k = key() ?: return CopyStep.NoKey
+        val theirs = codec.open(k, orphan) ?: olderKeys().firstNotNullOfOrNull { codec.open(it, orphan) }
+            ?: return CopyStep.NoKey
+        // Ревизия прежней копии — прошлая: сверять её с нынешней ячейкой незачем. Записи
+        // сливаются как всегда — моложе побеждает, надгробия держат убранное.
+        copy.apply(theirs)
+        return push()
     }
 
     suspend fun push(): CopyStep {

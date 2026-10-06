@@ -94,6 +94,9 @@ class BookCopySync(
             bookPrint = print
             scope.launch { environment.settings.put(BOOK_PRINT, print.toString()) }
         },
+        // Р56: прежняя копия, затёртая стартом заново, — в настройки; она закрыта ключом и
+        // открыть её без него нельзя, а придёт ключ — сольём.
+        keepOrphan = { bytes -> runCatching { environment.settings.put(BOOK_ORPHAN, encodeOrphan(bytes)) } },
     )
 
     private val reads: SyncReadsCopy? = if (readState == null || readsStore == null) null else SyncReadsCopy(
@@ -189,6 +192,7 @@ class BookCopySync(
                 if (pulled !is CopyStep.Offline && pulled != CopyStep.NoKey) {
                     forgetNoKey()
                     turn.withLock {
+                        adoptOrphan("при запуске")
                         note("отдать при запуске", sync.push())
                         pullReads("забрать при запуске")
                         pushReads("отдать при запуске")
@@ -275,6 +279,7 @@ class BookCopySync(
                 if (pulled != CopyStep.NoKey && pulled !is CopyStep.Offline) {
                     _keyAsk.value = KeyAsk.Got
                     turn.withLock {
+                        adoptOrphan("после просьбы о ключе")
                         pullReads("забрать после просьбы о ключе")
                         pushReads("отдать после просьбы о ключе")
                     }
@@ -292,6 +297,8 @@ class BookCopySync(
         val step = request.request(gid, words)
         when (step) {
             is io.tima.domain.chat.RecoveryStep.Requested -> {
+                // Р56: есть ли у кого ключ — от этого зависит, сколько ждать до старта заново.
+                runCatching { environment.settings.put(HELPERS_SEEN, step.helpers.toString()) }
                 if (step.helpers == 0) {
                     Journal.trouble(COPY, "ключ служебной группы попрошен фразой — ответить некому: других устройств на связи нет")
                 } else {
@@ -323,7 +330,12 @@ class BookCopySync(
             runCatching { settings.put(NO_KEY_SINCE, now.toString()) }
             return false
         }
-        if (now - since < RESTART_AFTER_MS) return false
+        // Р56: ждать, пока ответит хоть одно своё устройство, или дольше. Сутки — только когда
+        // сервер сказал, что ключа нет ни у одного своего устройства; иначе (есть или неизвестно)
+        // — неделю: выключенное устройство успеет выйти на связь и отдать ключ.
+        val helpers = runCatching { settings.all().first()[HELPERS_SEEN] }.getOrNull()?.toIntOrNull()
+        val wait = if (helpers == 0) RESTART_AFTER_MS else RESTART_WITH_DEVICES_MS
+        if (now - since < wait) return false
         val gid = groupId ?: store.storeGroup()?.also { groupId = it } ?: return false
         if (!keys.rotate(gid, io.tima.domain.chat.RotationReason.Compromise)) {
             Journal.trouble(COPY, "книга без ключа: новая версия ключа служебной группы не выпущена")
@@ -335,6 +347,25 @@ class BookCopySync(
         if (book is CopyStep.Pushed) forgetNoKey()
         return book is CopyStep.Pushed
     }
+
+    /**
+     * Прежняя копия, затёртая стартом заново (Р56), — слить с книгой, если её ключ уже пришёл.
+     * Не открылась — ждёт дальше; слилась и ушла — забывается.
+     */
+    private suspend fun adoptOrphan(why: String) {
+        val saved = runCatching { environment.settings.all().first()[BOOK_ORPHAN] }.getOrNull()
+        val bytes = saved?.takeIf { it.isNotEmpty() }?.let { decodeOrphan(it) } ?: return
+        val step = sync.adopt(bytes)
+        if (step == CopyStep.NoKey) return
+        note("слить прежнюю копию $why", step)
+        if (step is CopyStep.Pushed || step == CopyStep.Unchanged) runCatching { environment.settings.put(BOOK_ORPHAN, "") }
+    }
+
+    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+    private fun encodeOrphan(bytes: ByteArray): String = kotlin.io.encoding.Base64.encode(bytes)
+
+    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+    private fun decodeOrphan(text: String): ByteArray? = runCatching { kotlin.io.encoding.Base64.decode(text) }.getOrNull()
 
     private suspend fun forgetNoKey() {
         runCatching { if (environment.settings.all().first()[NO_KEY_SINCE].isNullOrEmpty().not()) environment.settings.put(NO_KEY_SINCE, "") }
@@ -439,8 +470,14 @@ class BookCopySync(
         const val BOOK_PRINT = "book.copy.print"
         /** С какого момента у книги нет ключа служебной группы (Р52). */
         const val NO_KEY_SINCE = "book.copy.nokey.since"
-        /** Сколько ждать ключа, прежде чем начать книгу заново (Р52) — сутки. */
+        /** Сколько ждать ключа, прежде чем начать книгу заново (Р52) — сутки, если ключа нет ни у кого. */
         const val RESTART_AFTER_MS = 24 * 60 * 60 * 1000L
+        /** Р56: свои устройства с ключом есть или неизвестно — ждать неделю, пока ответят. */
+        const val RESTART_WITH_DEVICES_MS = 7 * RESTART_AFTER_MS
+        /** Сколько своих устройств с ключом назвал сервер в последней просьбе (Р56). */
+        const val HELPERS_SEEN = "book.copy.helpers"
+        /** Прежняя копия, затёртая стартом заново (Р56), — до слияния. */
+        const val BOOK_ORPHAN = "book.copy.orphan.v1"
     }
 }
 

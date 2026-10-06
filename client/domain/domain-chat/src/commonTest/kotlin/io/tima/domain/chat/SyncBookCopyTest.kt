@@ -4,6 +4,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -158,6 +159,33 @@ class SyncBookCopyTest {
         assertEquals(8.toByte(), key, "новая копия — под новой версией ключа")
         assertEquals(listOf("+3"), copy.contacts.map { it.phone })
         assertIs<CopyStep.Unchanged>(sync.push(), "после перезапуска та же книга второй раз не уходит")
+    }
+
+    /**
+     * Р56: прежняя копия при старте заново не пропадает — когда её ключ приходит (своё
+     * устройство было не на связи), она сливается с новой, а не заменяет её.
+     */
+    @Test
+    fun прежняя_копия_сливается_когда_пришёл_её_ключ() = runTest {
+        val cell = Cell()
+        cell.caller = "T1"
+        assertIs<CopyStep.Pushed>(SyncBookCopy(MemoryCopy(BookCopy(0, "T1", listOf(contact("+1", "Витя", at = 10, device = "T1")), emptyList())), cell, Keyed, { byteArrayOf(5) }, Memory(), { "T1" }).push())
+
+        var orphan: ByteArray? = null
+        var older = emptyList<ByteArray>()
+        val wiped = MemoryCopy(BookCopy(0, "R3", listOf(contact("+3", "Оля", at = 30, device = "R3")), emptyList()))
+        val sync = SyncBookCopy(wiped, cell, Keyed, { byteArrayOf(6) }, Memory(), { "R3" },
+            olderKeys = { older }, keepOrphan = { orphan = it })
+        cell.caller = "R3"
+        assertIs<CopyStep.Pushed>(sync.restart())
+        val kept = assertNotNull(orphan, "прежняя копия обязана остаться на устройстве")
+        assertIs<CopyStep.NoKey>(sync.adopt(kept), "без её ключа сливать нечем — ждём")
+
+        older = listOf(byteArrayOf(5)) // ключ прежней версии пришёл от своего устройства
+        assertIs<CopyStep.Pushed>(sync.adopt(kept))
+        val (key, merged) = Keyed.table.getValue(cell.blob!![0].toInt())
+        assertEquals(6.toByte(), key, "слитое — под нынешней версией ключа")
+        assertEquals(setOf("+1", "+3"), merged.contacts.map { it.phone }.toSet(), "слито, а не заменено")
     }
 
     @Test
