@@ -3387,6 +3387,7 @@ private fun App(
             is Where.Chat -> {
                 {
                     Chat(
+                        myDeviceId = assembled.session.deviceId,
                         reregWarn = reregOld,
                         notices = assembled.notices,
                         shelves = communityShelves,
@@ -3697,6 +3698,8 @@ private fun App(
 private fun Chat(
     environment: Environment,
     network: ChatPorts,
+    /** Это устройство — им подписывается просьба о ключе группы (Р42). */
+    myDeviceId: String,
     chatId: String,
     name: String?,
     scope: kotlinx.coroutines.CoroutineScope,
@@ -3799,7 +3802,11 @@ private fun Chat(
             // Запрос недостающего ключа и имена авторов — только у группы: у личной
             // переписки просить не у кого, а собеседник назван в шапке.
             requestKeys = if (group) {
-                RequestGroupKeys(GroupKeyRecoveryOverHttp(network.keyRecovery))
+                // Просьба подписывается фразой (Р42): без подписывающего она уходила неподписанной и
+                // получала 403 даже с введённой фразой (живая проверка 2026-10-06, п. 1.7).
+                RequestGroupKeys(GroupKeyRecoveryOverHttp(network.keyRecovery) { gid, words ->
+                    io.tima.core.encryption.RecoverySignature.sign(words, gid, myDeviceId)
+                })
             } else {
                 null
             },
