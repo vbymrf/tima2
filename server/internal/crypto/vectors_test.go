@@ -189,6 +189,19 @@ func TestGroupMessageCanonicalV2Vector(t *testing.T) {
 	assertHex(t, v.Sha256Hex, digest[:], "sha256(group_message_canonical_bytes v2)")
 }
 
+// Байты ключа шифрования устройства на эпоху (ПЛАН-(ПС) ПС3) — те же, что у Kotlin и node.
+func TestDeviceEpochKeyVector(t *testing.T) {
+	v := vec[struct {
+		Inputs struct {
+			DeviceID         string `json:"device_id"`
+			Epoch            string `json:"epoch"`
+			EncryptionPubHex string `json:"encryption_pub_hex"`
+		} `json:"inputs"`
+		BytesHex string `json:"bytes_hex"`
+	}](t, loadVectors(t), "device_epoch_key")
+	assertHex(t, v.BytesHex, DeviceEpochKeyBytes(v.Inputs.DeviceID, v.Inputs.Epoch, unhex(t, v.Inputs.EncryptionPubHex)), "device_epoch_key")
+}
+
 func TestEd25519Vector(t *testing.T) {
 	v := vec[struct {
 		Seed         string `json:"seed"`

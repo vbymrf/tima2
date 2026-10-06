@@ -70,7 +70,7 @@ class GroupKeyRotation(
             when (val answer = deviceKeys.devicesOf(who)) {
                 // Ключ группы — только доверенным устройствам участника (ДУ3).
                 is DeviceKeysResult.Devices ->
-                    recipients += (trust?.admit(who, answer) ?: answer.devices).map { RecipientDevice(it.deviceId, it.encryptionPub) }
+                    recipients += (trust?.admit(who, answer) ?: answer.devices).map { RecipientDevice(it.deviceId, it.wrapPub()) } // ключ эпохи (ПС3)
 
                 is DeviceKeysResult.Offline -> return RotateStep.Offline(answer.link.retryDelayMs)
 

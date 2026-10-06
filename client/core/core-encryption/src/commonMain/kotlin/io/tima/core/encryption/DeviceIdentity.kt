@@ -17,7 +17,21 @@ import io.kodium.KodiumPrivateKey
  * Пока его нет, [exportRaw] и [fromRaw] — единственный мост, и вызывать их обязан
  * тот, кто отвечает за хранилище, а не этот модуль.
  */
-class DeviceIdentity internal constructor(internal val key: KodiumPrivateKey) {
+class DeviceIdentity internal constructor(
+    internal val key: KodiumPrivateKey,
+    /**
+     * Ключи шифрования на эпоху (ПЛАН-(ПС) ПС3), от нового к старому. Подпись и ключ покоя — всегда
+     * от [key]; расшифровка пробует сначала эти, потом [key].
+     */
+    internal val epochKeys: List<KodiumPrivateKey> = emptyList(),
+) {
+
+    /** Чем пробовать развернуть обёртку: ключи эпох от нового к старому, затем основной. */
+    internal val decryptKeys: List<KodiumPrivateKey> get() = epochKeys + key
+
+    /** Та же личность с ключами эпох (секреты — от нового к старому). Секреты дальше не живут. */
+    fun withEpochKeys(secrets: List<ByteArray>): DeviceIdentity =
+        DeviceIdentity(key, secrets.map { KodiumPrivateKey.fromRaw(it) })
 
     /** Открытый ключ подписи (Ed25519, 32 байта) — его проверяет получатель. */
     val signingPublic: ByteArray get() = key.getPublicKey().signingKey

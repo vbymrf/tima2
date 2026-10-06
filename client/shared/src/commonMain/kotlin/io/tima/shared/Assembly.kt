@@ -3,6 +3,7 @@ package io.tima.shared
 import androidx.compose.runtime.Composable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.runtime.remember
@@ -115,7 +116,16 @@ class Assembled(
     val keyCopy: KeyCopyService? = null,
     /** Переписки, чью историю передало своё устройство (ИУ3), — забрать. */
     val historyReady: MutableSharedFlow<String> = MutableSharedFlow(extraBufferCapacity = 64),
+    /**
+     * Ключ этого устройства вместе с ключами эпох (ПЛАН-(ПС) ПС3). Перезаворачивать свою историю
+     * (ИУ2) и открывать её — только им: выведенный заново из секрета ключей эпох не знает.
+     */
+    val identity: io.tima.core.encryption.DeviceIdentity? = null,
 )
+
+/** Публикация ключа эпохи при запуске: попыток и пауза между ними (растёт). */
+private const val EPOCH_PUBLISH_TRIES = 5
+private const val EPOCH_PUBLISH_PAUSE_MS = 10_000L
 
 /**
  * Готовая сборка для устройства — та же самая, что у процесса (У2).
@@ -217,7 +227,10 @@ fun buildAssembled(
             )
         }
 
-        val identity = deviceIdentityFrom(device.secret)
+        // Ключи шифрования на эпоху (ПЛАН-(ПС) ПС3): ключ текущей эпохи заводится ДО сборки —
+        // устройство держит его с первой секунды; публикация — в фоне, после сети.
+        val epochRing = EpochKeyRing(entry.epochKeys(device.session.userId), ::msNow)
+        val identity = deviceIdentityFrom(device.secret).withEpochKeys(epochRing.prepare())
 
         // Подпись ключом ЭТОГО устройства — то, чем обновляется просроченный токен
         // (находка 2026-09-06). Ключ выводится из секрета, который здесь уже открыт:
@@ -232,6 +245,14 @@ fun buildAssembled(
             remember = { session -> entry.rememberSession(session) },
             build = build,
         )
+
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
+            // Сеть при запуске поднимается не сразу — несколько попыток, дальше до следующего запуска.
+            repeat(EPOCH_PUBLISH_TRIES) { attempt ->
+                if (epochRing.publish(network.keys, identity, device.session.deviceId)) return@launch
+                kotlinx.coroutines.delay(EPOCH_PUBLISH_PAUSE_MS * (attempt + 1))
+            }
+        }
 
         // Оркестр ключей собирается ЗДЕСЬ, а не внутри приёмника: ему нужны escrow,
         // крипта, сеть и хранилище разом — это работа сборки, а не канала.
@@ -310,6 +331,7 @@ fun buildAssembled(
             session = device.session,
             environment = environment,
             network = network,
+            identity = identity,
             sender = Sender(
                 environment = environment,
                 network = network,

@@ -31,6 +31,13 @@ object DeviceTrust {
     /** Что ключ личности подписывает, отзывая КПУ (ДУ4). */
     fun askRevokeBytes(askId: String): ByteArray = "tima.ask-revoke.v1|$askId".encodeToByteArray()
 
+    /**
+     * Что ключ подписи устройства подписывает, публикуя ключ шифрования на эпоху (ПЛАН-(ПС) ПС3).
+     * Зеркало `server/internal/crypto/device_trust.go` — `DeviceEpochKeyBytes`, вектор `device_epoch_key`.
+     */
+    fun deviceEpochKeyBytes(deviceId: String, epoch: String, encryptionPub: ByteArray): ByteArray =
+        "tima.device-epoch.v1|$deviceId|$epoch|${b64(encryptionPub)}".encodeToByteArray()
+
     fun sign(key: KodiumPrivateKey, bytes: ByteArray): ByteArray? = MessageSigner.sign(key, bytes).getOrNull()
 
     /**

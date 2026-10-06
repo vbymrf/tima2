@@ -143,7 +143,8 @@ class GroupKeyOrchestrator(
         val device = environment.trustGate.admit(user, answer).firstOrNull { it.deviceId == decision.requesterDevice }
             ?: return null
         if (!device.encryptionPub.contentEquals(decision.requesterEncryptionPub)) return null
-        return device.encryptionPub
+        // Под ключ эпохи, если он подписан ключом подписи устройства (ПЛАН-(ПС) ПС3).
+        return device.wrapPub()
     }
 
     /** Текущая эпоха escrow — «2026-09». Тот же формат, что у сервера. */

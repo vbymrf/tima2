@@ -52,6 +52,26 @@ class VaultSecretStore(private val vault: SecretVault) : DeviceSecretStore {
         return epoch to raw.copyOfRange(4, raw.size)
     }
 
+    /** Эпохи, чьи ключи шифрования лежат здесь (ПЛАН-(ПС) ПС3). */
+    fun epochKeyEpochs(): List<String> =
+        vault.get(Secrets.EPOCH_KEYS)?.decodeToString()?.split(',')?.filter { it.isNotBlank() }.orEmpty()
+
+    fun epochKeySecret(epoch: String): ByteArray? = vault.get(Secrets.epochKey(epoch))
+
+    /** Секрет пишется ДО перечня: перечень без секрета хуже, чем секрет без перечня. */
+    fun saveEpochKeySecret(epoch: String, secret: ByteArray) {
+        require(secret.size == DEVICE_SECRET_BYTES) { "ключ эпохи обязан быть $DEVICE_SECRET_BYTES байт" }
+        vault.put(Secrets.epochKey(epoch), secret)
+        val all = (epochKeyEpochs() + epoch).distinct()
+        vault.put(Secrets.EPOCH_KEYS, all.joinToString(",").encodeToByteArray())
+    }
+
+    /** Уничтожить ключ эпохи: дальше обёртки под него не открыть никому, и это цель (ПС3). */
+    fun removeEpochKeySecret(epoch: String) {
+        vault.remove(Secrets.epochKey(epoch))
+        vault.put(Secrets.EPOCH_KEYS, (epochKeyEpochs() - epoch).joinToString(",").encodeToByteArray())
+    }
+
     override fun saveSession(session: Session) {
         val parts = listOf(session.userId, session.deviceId, session.accessToken)
         require(parts.none { it.isEmpty() }) { "пустое поле сессии: $parts" }
@@ -78,6 +98,8 @@ class VaultSecretStore(private val vault: SecretVault) : DeviceSecretStore {
         vault.remove(Secrets.DEVICE_SECRET)
         vault.remove(Secrets.ASK_SECRET)
         vault.remove(Secrets.KEY_COPY_SECRET)
+        epochKeyEpochs().forEach { vault.remove(Secrets.epochKey(it)) }
+        vault.remove(Secrets.EPOCH_KEYS)
     }
 
     private companion object {

@@ -16,6 +16,7 @@ import io.tima.domain.chat.GroupKeyUnwrap
  */
 class GroupKeyUnwrapOverKodium(private val me: DeviceIdentity) : GroupKeyUnwrap {
 
+    // Ключи эпох от нового к старому, затем основной (ПЛАН-(ПС) ПС3).
     override fun unwrap(senderEphemeralPub: ByteArray, wrapped: ByteArray): ByteArray? =
-        GroupKeyManager.unwrapGroupKey(me.key, senderEphemeralPub, wrapped).getOrNull()
+        me.decryptKeys.firstNotNullOfOrNull { GroupKeyManager.unwrapGroupKey(it, senderEphemeralPub, wrapped).getOrNull() }
 }

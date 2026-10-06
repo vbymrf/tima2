@@ -93,13 +93,39 @@ class KeysApi(
         }
         val certBy = this["cert_by"]?.jsonPrimitive?.content?.takeIf { it.isNotEmpty() }
         val certSig = this["cert_sig"]?.jsonPrimitive?.content?.let { decodeBase64Url(it) }
+        // Ключ эпохи (ПЛАН-(ПС) ПС3): испорченный — как будто его нет, шифруем под основной.
+        val epochKey = runCatching {
+            (this["epoch_key"] as? JsonObject)?.let { o ->
+                val epoch = o["epoch"]!!.jsonPrimitive.content
+                val pub = decodeBase64Url(o["encryption_pub"]!!.jsonPrimitive.content)!!.also { require(it.size == KEY_BYTES) }
+                val signature = decodeBase64Url(o["signature"]!!.jsonPrimitive.content)!!
+                EpochKeyRecord(epoch, pub, signature)
+            }
+        }.getOrNull()
         return DeviceKeyRecord(
             id, enc, sig,
             certBy = certBy?.takeIf { certSig != null },
             certAskId = this["cert_ask_id"]?.jsonPrimitive?.content?.takeIf { it.isNotEmpty() },
             certSig = certSig?.takeIf { certBy != null },
+            epochKey = epochKey,
         )
     }
+
+    /**
+     * Опубликовать ключ шифрования этого устройства на эпоху — `PUT /devices/me/epoch-key`
+     * (ПЛАН-(ПС) ПС3). Подпись — ключом подписи устройства над `tima.device-epoch.v1|…`.
+     */
+    suspend fun publishEpochKey(epoch: String, encryptionPub: ByteArray, signature: ByteArray): TrustCallResult =
+        trustCall {
+            client.put(route.api("/api/v1/devices/me/epoch-key")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody(
+                    """{"epoch":"$epoch","encryption_pub":"${encodeBase64Url(encryptionPub)}",""" +
+                        """"signature":"${encodeBase64Url(signature)}"}""",
+                )
+            }
+        }
 
     /**
      * Телефон, на котором человек ввёл фразу, заводит свой ключ подписи устройств и заверяет
@@ -191,6 +217,8 @@ data class DeviceKeyRecord(
     val certBy: String? = null,
     val certAskId: String? = null,
     val certSig: ByteArray? = null,
+    /** Последний опубликованный ключ шифрования на эпоху (ПЛАН-(ПС) ПС3); `null` — не публиковало. */
+    val epochKey: EpochKeyRecord? = null,
 ) {
     override fun equals(other: Any?): Boolean = other is DeviceKeyRecord &&
         deviceId == other.deviceId &&
@@ -204,6 +232,9 @@ data class DeviceKeyRecord(
         return h
     }
 }
+
+/** Ключ шифрования устройства на эпоху и подпись его ключом подписи (ПЛАН-(ПС) ПС3). */
+class EpochKeyRecord(val epoch: String, val encryptionPub: ByteArray, val signature: ByteArray)
 
 sealed interface DeviceKeysResult {
     /**

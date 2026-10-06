@@ -105,7 +105,7 @@ class DeviceTrustActionsOverNetwork(
         }
         val cert = ask.certify(target.encryptionPub, target.signingPub) ?: return TrustStep.Refused("подпись не сделалась")
         val step = keys.certifyDevice(deviceId, DeviceTrustCheck.BY_ASK, cert).step()
-        if (step == TrustStep.Done) onCertified(deviceId, target.encryptionPub)
+        if (step == TrustStep.Done) onCertified(deviceId, target.wrapPub()) // ключ эпохи (ПС3)
         return step
     }
 

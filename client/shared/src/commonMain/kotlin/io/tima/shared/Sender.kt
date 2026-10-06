@@ -174,7 +174,8 @@ class Sender(
         when (val outcome = network.keys.devicesOf(userId)) {
             // Только доверенные (ДУ3): устройству вора ключ сообщения не упаковывается.
             is DeviceKeysResult.Devices ->
-                environment.trustGate.admit(userId, outcome).map { RecipientDevice(it.deviceId, it.encryptionPub) }
+                // Под ключ эпохи, если он подписан ключом подписи устройства (ПЛАН-(ПС) ПС3).
+                environment.trustGate.admit(userId, outcome).map { RecipientDevice(it.deviceId, it.wrapPub()) }
 
             is DeviceKeysResult.Offline -> {
                 lastTrouble = "нет связи с сервером"

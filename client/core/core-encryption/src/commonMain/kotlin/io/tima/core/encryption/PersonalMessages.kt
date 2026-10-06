@@ -105,13 +105,24 @@ class PersonalMessages(escrowKey: EscrowEpochKey) {
             // Конверт истории (ИУ3) несёт эфемерал обёртки помощника рядом с собой.
             val (wrapEphemeral, envelope) = HistoryFrame.split(envelopeBytes)
             val sealed = MessageSerializer.decodeEnvelope(envelope).getOrThrow()
-            val payload = PersonalMessageSealer.openWithWrappedKey(
-                message = sealed,
-                myDeviceId = myDeviceId,
-                myDeviceKey = me.key,
-                senderSigningPub = senderSigningPublic,
-                wrapEphemeralOverride = wrapEphemeral,
-            ).getOrThrow()
+            // Ключи эпох от нового к старому, затем основной (ПС3). Подпись от ключа не зависит:
+            // не сошлась — это не «не тот ключ», и дальше пробовать незачем.
+            var failure: Throwable? = null
+            var opened: ByteArray? = null
+            for (key in me.decryptKeys) {
+                val attempt = PersonalMessageSealer.openWithWrappedKey(
+                    message = sealed,
+                    myDeviceId = myDeviceId,
+                    myDeviceKey = key,
+                    senderSigningPub = senderSigningPublic,
+                    wrapEphemeralOverride = wrapEphemeral,
+                )
+                opened = attempt.getOrNull()
+                if (opened != null) break
+                failure = attempt.exceptionOrNull()
+                if (failure is io.tima.crypto.VerificationFailure) throw failure
+            }
+            val payload = opened ?: throw (failure ?: IllegalStateException("конверт не открылся"))
             val body = MessageSerializer.decodeBody(payload).getOrThrow()
             ReceivedMessage(
                 meta = sealed.meta,

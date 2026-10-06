@@ -3259,7 +3259,7 @@ private fun App(
                                 onCertified = { id, pub ->
                                     scope.launch {
                                         runCatching { assembled.keyOrchestrator.handOver(id, pub) }
-                                        HistoryHandover(network.history, assembled.session.deviceId, deviceIdentityFrom(deviceSecret), network.keyCopy, assembled.keyCopy?.copyIdentity()).handOver(id, pub)
+                                        HistoryHandover(network.history, assembled.session.deviceId, assembled.identity ?: deviceIdentityFrom(deviceSecret), network.keyCopy, assembled.keyCopy?.copyIdentity()).handOver(id, pub)
                                     }
                                 },
                             )
@@ -3347,7 +3347,7 @@ private fun App(
                                 onCertified = { id, pub ->
                                     scope.launch {
                                         runCatching { assembled.keyOrchestrator.handOver(id, pub) }
-                                        HistoryHandover(network.history, assembled.session.deviceId, deviceIdentityFrom(deviceSecret), network.keyCopy, assembled.keyCopy?.copyIdentity()).handOver(id, pub)
+                                        HistoryHandover(network.history, assembled.session.deviceId, assembled.identity ?: deviceIdentityFrom(deviceSecret), network.keyCopy, assembled.keyCopy?.copyIdentity()).handOver(id, pub)
                                     }
                                 },
                             ),
@@ -3377,7 +3377,7 @@ private fun App(
                         onTrusted = { id, pub ->
                             assembled.keyOrchestrator.handOver(id, pub)
                             scope.launch {
-                                HistoryHandover(network.history, assembled.session.deviceId, deviceIdentityFrom(deviceSecret), network.keyCopy, assembled.keyCopy?.copyIdentity()).handOver(id, pub)
+                                HistoryHandover(network.history, assembled.session.deviceId, assembled.identity ?: deviceIdentityFrom(deviceSecret), network.keyCopy, assembled.keyCopy?.copyIdentity()).handOver(id, pub)
                             }
                         },
                     )

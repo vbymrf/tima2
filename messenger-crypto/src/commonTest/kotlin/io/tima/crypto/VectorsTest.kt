@@ -195,6 +195,18 @@ class VectorsTest {
     }
 
     @Test
+    fun `device_epoch_key - байты ключа эпохи устройства совпадают байт-в-байт`() {
+        val v = vector("device_epoch_key")
+        val inputs = v["inputs"]!!.jsonObject
+        val bytes = DeviceTrust.deviceEpochKeyBytes(
+            inputs["device_id"]!!.jsonPrimitive.content,
+            inputs["epoch"]!!.jsonPrimitive.content,
+            inputs["encryption_pub_hex"]!!.jsonPrimitive.content.chunked(2).map { it.toInt(16).toByte() }.toByteArray(),
+        )
+        assertEquals(v["bytes_hex"]!!.jsonPrimitive.content, bytes.toHex())
+    }
+
+    @Test
     fun `mlkem768 - keygen из seed детерминирован escrow round-trip`() {
         val v = vector("mlkem768_escrow")
         val seed = v.hex("keygen_seed") // 64 байта, layout noble/FIPS 203: d(32) ‖ z(32)
@@ -224,7 +236,7 @@ class VectorsTest {
         val expected = setOf(
             "secretbox", "box_wrap", "ed25519", "hkdf_sha256", "media_chunk_keys",
             "canonical_bytes", "canonical_bytes_v2", "message_body", "mlkem768_escrow",
-            "group_message_canonical", "group_message_canonical_v2",
+            "group_message_canonical", "group_message_canonical_v2", "device_epoch_key",
         )
         assertEquals(expected, vectors.keys, "Состав vectors.json изменился — обнови KAT")
     }

@@ -99,6 +99,12 @@ object Secrets {
      * устройства (М4). Потеря — не беда: человек вводит фразу, и ключ выводится заново.
      */
     val KEY_COPY_SECRET = SecretAlias("key-copy-secret.v1")
+
+    /** Ключ шифрования устройства на эпоху «2026-10» (ПЛАН-(ПС) ПС3). */
+    fun epochKey(epoch: String): SecretAlias = SecretAlias("epoch-key.$epoch")
+
+    /** Перечень эпох, чьи ключи лежат в хранилище: перечислять хранилище платформы не умеет. */
+    val EPOCH_KEYS = SecretAlias("epoch-keys.v1")
 }
 
 /**

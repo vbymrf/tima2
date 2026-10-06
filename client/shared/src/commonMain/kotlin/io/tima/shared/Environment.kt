@@ -247,6 +247,14 @@ class Entry private constructor(
         override fun put(secret: ByteArray) = accounts.store(userId).saveAskSecret(secret)
     }
 
+    /** Ключи шифрования устройства на эпоху у аккаунта [userId] (ПЛАН-(ПС) ПС3). */
+    fun epochKeys(userId: String): EpochKeySecrets = object : EpochKeySecrets {
+        override fun epochs(): List<String> = accounts.store(userId).epochKeyEpochs()
+        override fun get(epoch: String): ByteArray? = accounts.store(userId).epochKeySecret(epoch)
+        override fun put(epoch: String, secret: ByteArray) = accounts.store(userId).saveEpochKeySecret(epoch, secret)
+        override fun remove(epoch: String) = accounts.store(userId).removeEpochKeySecret(epoch)
+    }
+
     /** Секрет копии ключей аккаунта [userId] — только на телефонах (Р46). */
     fun keyCopySecrets(userId: String): KeyCopySecrets = object : KeyCopySecrets {
         override fun get(): Pair<Int, ByteArray>? = accounts.store(userId).keyCopySecret()
@@ -717,6 +725,14 @@ class Environment private constructor(
 interface KeyCopySecrets {
     fun get(): Pair<Int, ByteArray>?
     fun put(epoch: Int, secret: ByteArray)
+}
+
+/** Где лежат ключи шифрования устройства на эпоху (ПЛАН-(ПС) ПС3): эпоха «2026-10» → секрет. */
+interface EpochKeySecrets {
+    fun epochs(): List<String>
+    fun get(epoch: String): ByteArray?
+    fun put(epoch: String, secret: ByteArray)
+    fun remove(epoch: String)
 }
 
 /** Где лежит ключ подписи устройств телефона (ДУ1). */

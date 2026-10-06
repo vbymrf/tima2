@@ -41,7 +41,9 @@ object HistoryKeys {
         val sealed = MessageSerializer.decodeEnvelope(envelope).getOrThrow()
         val wrapped = sealed.wrappedKeys[myDeviceId] ?: return null
         val eph = wrapEphemeral?.takeIf { it.size == 32 } ?: sealed.senderEphemeralPub
-        val messageKey = WrappedKeyService.unwrap(me.key, eph, wrapped).getOrThrow()
+        // Ключи эпох от нового к старому, затем основной (ПС3).
+        val messageKey = me.decryptKeys.firstNotNullOfOrNull { WrappedKeyService.unwrap(it, eph, wrapped).getOrNull() }
+            ?: return null
         if (sealed.formatVersion >= CanonicalBytes.FORMAT_VERSION &&
             !CanonicalBytes.commitmentMatches(messageKey, sealed.keyCommitment)
         ) return null
