@@ -176,7 +176,9 @@ func (s *Server) smsRequest(w http.ResponseWriter, r *http.Request) {
 // одна перерегистрация со спором (четыре кода) упиралась в общий (три). Остальное — общий.
 func smsPurpose(purpose string) string {
 	switch purpose {
-	case "rereg_start", "rereg_claim", "rereg_confirm_new", "rereg_confirm_old":
+	case "rereg_start", "rereg_claim", "rereg_confirm_new", "rereg_confirm_old",
+		// Смена номера (ДУ9): заявка — код на прежний номер, подтверждение — на новый.
+		"phone_change_start", "phone_change_confirm":
 		return purpose + ":"
 	}
 	return ""

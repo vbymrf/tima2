@@ -184,6 +184,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 	RegisterDeviceTrust(mux, s.Store, s.requireActiveDevice)
 	RegisterIdentityCancel(mux, s.Store, func() IdentityTokens { return s.Auth }, s.notifier(), s.requireActiveDevice)
 	RegisterReregistration(mux, s.Store, func() IdentityTokens { return s.Auth }, s.notifier(), s.requireActiveDevice)
+	// Смена SIM — смена номера аккаунта (ДУ9): сроки те же, что у перерегистрации.
+	RegisterPhoneChange(mux, s.Store, func() IdentityTokens { return s.Auth }, s.notifier(),
+		func() ReregTimes { return s.Rereg }, s.requireActiveDevice)
 	if s.RunRereg {
 		go runRereg(context.Background(), s.Store, s.notifier(), func() ReregTimes { return s.Rereg })
 	}

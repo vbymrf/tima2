@@ -263,6 +263,8 @@ func startRereg(ctx context.Context, st *store.Store, n *Notifier, times ReregTi
 	if n != nil {
 		n.Users(ctx, []string{oldUserID}, "rereg.started", reregPayload(rr))
 	}
+	// Заявка на смену номера отменяется до конца спора (ответ заказчика 2026-10-06).
+	cancelPhoneChange(ctx, st, n, oldUserID)
 	announceGroupClaims(ctx, st, n, oldUserID, newUserID)
 	return nil
 }
@@ -272,6 +274,7 @@ func runRereg(ctx context.Context, st *store.Store, n *Notifier, times func() Re
 	for {
 		t := times().orDefault()
 		stepRereg(ctx, st, n, t, time.Now())
+		stepPhoneChanges(ctx, st, n, time.Now())
 		select {
 		case <-ctx.Done():
 			return
