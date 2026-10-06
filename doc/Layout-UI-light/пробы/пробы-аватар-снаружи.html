@@ -1,0 +1,191 @@
+<meta charset="utf-8">
+<title>Пробы: аватар снаружи сообщения</title>
+<link rel="stylesheet" href="../стиль.css">
+<style>
+  .срез { height: auto; width: 344px; border-width: 2px; border-radius: 20px; }
+  .срез .зона-2 { flex: 0 0 auto; overflow: visible; }
+  .лента { display: flex; flex-direction: column; gap: 12px; padding: 18px 14px; background: var(--поверхность); }
+  .ряд { display: flex; }
+  .ряд.мой { justify-content: flex-end; }
+  .блок { display: flex; flex-direction: column; align-items: flex-start; max-width: 290px; position: relative; }
+
+  /* Пузырь — как в приложении: радиус 16, рамка 1, полоса автора 4 — поверх рамки. */
+  .пуз {
+    position: relative; box-sizing: border-box; z-index: 1;
+    background: var(--автор); color: var(--текст);
+    border: 1px solid var(--рамка); border-left: 4px solid var(--цвет, var(--навигация));
+    border-radius: 16px; padding: 11px 14px 11px 12px; font-size: 15px; line-height: 1.35;
+  }
+  .ряд.мой .пуз { background: var(--мои); border-left: 1px solid var(--рамка); padding-left: 14px; }
+  .вр { display: block; text-align: right; font-size: 11px; font-weight: 700; color: var(--чёрный-50); margin-top: 3px; }
+
+  /* Шапка автора вне пузыря: аватар и имя. */
+  .кто { display: flex; align-items: flex-end; gap: 6px; position: relative; z-index: 2; }
+  .ав {
+    width: 32px; height: 32px; box-sizing: border-box; border-radius: 8px;
+    border: 1px solid var(--рамка); background: var(--автор);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800; color: var(--текст);
+  }
+  .ав.фото { background: linear-gradient(135deg, #2f9aa3, #d9b38c 60%, #6b4b3a); color: transparent; }
+  .имя { font-size: 13px; font-weight: 800; color: var(--чёрный-70); line-height: 18px; white-space: nowrap; }
+  .внутри-имя { display: none; font-size: 13px; font-weight: 800; color: var(--чёрный-70); line-height: 18px; margin-bottom: 3px; }
+
+  /* ── а — нижний край аватара заподлицо с серой рамкой: пузырь «вытолкнул» аватар ── */
+  .ва .кто { margin-bottom: -1px; }                  /* рамка аватара ложится на рамку пузыря */
+  .ва .кто .имя { padding-bottom: 4px; }
+  /* отступ над сообщением с аватаром — больше: аватар занимает его место */
+  .ва .с-автором { margin-top: 6px; }
+
+  /* ── б — вкладка: аватар и имя на ярлыке, ярлык и пузырь — одна фигура ─────────── */
+  .вб .кто {
+    background: var(--автор); border: 1px solid var(--рамка); border-bottom: none;
+    border-left: 4px solid var(--цвет, var(--навигация));
+    border-radius: 12px 12px 0 0; padding: 4px 10px 3px 4px; margin-bottom: -1px; z-index: 2;
+  }
+  .вб .кто .ав { width: 26px; height: 26px; border-radius: 7px; }
+  .вб .с-автором .пуз { border-top-left-radius: 0; }
+  /* пузырь не уже ярлыка: иначе ярлык висит над пустотой у короткого сообщения */
+  .вб .с-автором .блок { align-items: stretch; }
+  .вб .с-автором { margin-top: 4px; }
+
+  /* ── в — полоса автора поднимается к аватару: левая кромка — одна цветная линия ───── */
+  .вв .кто { margin-bottom: -1px; }
+  .вв .кто .ав { border-left: 4px solid var(--цвет, var(--навигация)); border-radius: 8px 8px 0 8px; }
+  .вв .с-автором .пуз { border-top-left-radius: 0; }
+  .вв .кто .имя { padding-bottom: 4px; }
+  .вв .с-автором { margin-top: 6px; }
+
+  /* ── г — аватар снаружи, имя внутри пузыря первой строкой ─────────────────────────── */
+  .вг .кто { margin-bottom: -1px; }
+  .вг .кто .имя { display: none; }
+  .вг .внутри-имя { display: block; }
+  .вг .с-автором { margin-top: 6px; }
+
+  /* ── д — мелкий аватар 22 и имя в одну строку над пузырём ─────────────────────────── */
+  .вд .кто { margin-bottom: -1px; }
+  .вд .кто .ав { width: 22px; height: 22px; border-radius: 6px; font-size: 9px; }
+  .вд .кто .имя { padding-bottom: 2px; }
+  .вд .с-автором { margin-top: 2px; }
+
+  /* ── е — аватар слева от ленты, низом к низу первого пузыря серии; имя внутри ─────── */
+  .ве .блок { padding-left: 40px; }
+  .ве .кто { position: absolute; left: 0; bottom: 0; }
+  .ве .кто .имя { display: none; }
+  .ве .внутри-имя { display: block; }
+
+  .проба { padding: 20px 0 24px; border-bottom: 1px solid var(--чёрный-12); }
+  .проба:target { box-shadow: inset 6px 0 0 var(--навигация); padding-left: 16px; }
+  .шапка-пробы { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .номер { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+  .опис { font-size: 13.5px; color: var(--чёрный-70); }
+  .свет { font-size: 12px; color: var(--чёрный-50); }
+  .срезы { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .с-подписью > .трет { margin-top: 8px; max-width: 344px; }
+  .увеличено { zoom: 2; }
+  .навигация-проб { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+  .навигация-проб a {
+    display: inline-flex; align-items: center; padding: 7px 13px; border-radius: 999px;
+    border: 1px solid var(--чёрный-12); text-decoration: none; color: var(--текст);
+    font-size: 12.5px; font-weight: 700;
+  }
+</style>
+
+<div class="лист-док">
+
+<div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-аватар-снаружи.html</div>
+<h1>Пробы: аватар снаружи сообщения</h1>
+<p class="подзаголовок">
+  Аватар и имя автора лежат вне пузыря, на фоне ленты. Нижний край аватара — заподлицо с
+  серой рамкой пузыря: вид, будто сообщение вытолкнуло аватар наверх. Предыдущие пробы —
+  <a href="пробы-аватар-группа.html">аватар в группе и полоса</a> (внутри пузыря).
+</p>
+
+<div class="оговорка">
+  <b>Отступы разные.</b> Над первым сообщением серии стоит аватар, и отступ над ним больше —
+  на высоту аватара и имени. Продолжение серии идёт с обычным зазором 12, без аватара и имени.
+  <br><br>
+  <b>Что выигрываем.</b> Текст начинается от края пузыря, а не после аватара; пузырь не
+  растёт в высоту ради строки имени (в вариантах а–д имени внутри нет). <b>Что теряем.</b>
+  Лента становится выше на каждую смену автора, а имя отрывается от текста.
+</div>
+
+<h2>Ссылки на варианты</h2>
+<div class="навигация-проб">
+  <a href="#а">а · заподлицо с рамкой</a>
+  <a href="#б">б · вкладка</a>
+  <a href="#в">в · полоса поднимается к аватару</a>
+  <a href="#г">г · имя внутри</a>
+  <a href="#д">д · мелкий аватар</a>
+  <a href="#е">е · аватар сбоку</a>
+</div>
+
+<template id="лента">
+  <div class="лента">
+    <div class="ряд с-автором"><div class="блок" style="--цвет:#4e87ed">
+      <div class="кто"><span class="ав фото"></span><span class="имя">redmi, Redmi</span></div>
+      <div class="пуз"><span class="внутри-имя">redmi, Redmi</span>color20<span class="вр">18:31</span></div>
+    </div></div>
+    <div class="ряд"><div class="блок" style="--цвет:#4e87ed"><div class="пуз">nafig<span class="вр">19:05</span></div></div></div>
+    <div class="ряд с-автором"><div class="блок" style="--цвет:#d9488f">
+      <div class="кто"><span class="ав">СМ</span><span class="имя">Samsung</span></div>
+      <div class="пуз"><span class="внутри-имя">Samsung</span>da, все на месте<span class="вр">17:06</span></div>
+    </div></div>
+    <div class="ряд мой"><div class="блок"><div class="пуз">trebovat-gruppa-realme<span class="вр">06:44</span></div></div></div>
+  </div>
+</template>
+
+<div class="проба" id="а">
+  <div class="шапка-пробы"><span class="номер">а</span><span class="опис">аватар над пузырём, низ — заподлицо с серой рамкой; имя справа от аватара</span><span class="свет">как просили: пузырь «вытолкнул» аватар; отступ над серией больше</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез ва"><div class="зона-2" data-лента></div></div><div class="трет">в натуральную величину</div></div>
+    <div class="с-подписью"><div class="увеличено"><div class="окно срез ва"><div class="зона-2" data-лента></div></div></div><div class="трет">увеличено вдвое</div></div>
+  </div>
+</div>
+
+<div class="проба" id="б">
+  <div class="шапка-пробы"><span class="номер">б</span><span class="опис">вкладка: аватар и имя на ярлыке, ярлык и пузырь — одна фигура</span><span class="свет">как папка с закладкой; полоса автора идёт и по ярлыку</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез вб"><div class="зона-2" data-лента></div></div><div class="трет">в натуральную величину</div></div>
+    <div class="с-подписью"><div class="увеличено"><div class="окно срез вб"><div class="зона-2" data-лента></div></div></div><div class="трет">увеличено вдвое</div></div>
+  </div>
+</div>
+
+<div class="проба" id="в">
+  <div class="шапка-пробы"><span class="номер">в</span><span class="опис">полоса автора поднимается по левой кромке аватара — одна цветная линия</span><span class="свет">аватар и пузырь связаны цветом автора, не только положением</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез вв"><div class="зона-2" data-лента></div></div><div class="трет">в натуральную величину</div></div>
+    <div class="с-подписью"><div class="увеличено"><div class="окно срез вв"><div class="зона-2" data-лента></div></div></div><div class="трет">увеличено вдвое</div></div>
+  </div>
+</div>
+
+<div class="проба" id="г">
+  <div class="шапка-пробы"><span class="номер">г</span><span class="опис">аватар снаружи, имя — внутри пузыря первой строкой</span><span class="свет">имя не отрывается от текста; аватар меньше спорит с ним за ширину</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез вг"><div class="зона-2" data-лента></div></div><div class="трет">в натуральную величину</div></div>
+    <div class="с-подписью"><div class="увеличено"><div class="окно срез вг"><div class="зона-2" data-лента></div></div></div><div class="трет">увеличено вдвое</div></div>
+  </div>
+</div>
+
+<div class="проба" id="д">
+  <div class="шапка-пробы"><span class="номер">д</span><span class="опис">мелкий аватар 22 и имя одной строкой над пузырём</span><span class="свет">лента почти не растёт; аватар — скорее значок, чем лицо</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез вд"><div class="зона-2" data-лента></div></div><div class="трет">в натуральную величину</div></div>
+    <div class="с-подписью"><div class="увеличено"><div class="окно срез вд"><div class="зона-2" data-лента></div></div></div><div class="трет">увеличено вдвое</div></div>
+  </div>
+</div>
+
+<div class="проба" id="е">
+  <div class="шапка-пробы"><span class="номер">е</span><span class="опис">аватар в колонке слева, низом к низу первого пузыря серии; имя внутри</span><span class="свет">так в большинстве мессенджеров; вся лента сдвинута вправо на колонку аватаров</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез ве"><div class="зона-2" data-лента></div></div><div class="трет">в натуральную величину</div></div>
+    <div class="с-подписью"><div class="увеличено"><div class="окно срез ве"><div class="зона-2" data-лента></div></div></div><div class="трет">увеличено вдвое</div></div>
+  </div>
+</div>
+
+<script>
+  const t = document.getElementById('лента');
+  document.querySelectorAll('[data-лента]').forEach(z => z.appendChild(t.content.cloneNode(true)));
+</script>
+
+</div>
