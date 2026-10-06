@@ -166,9 +166,15 @@ func (s *Store) NewDevice(ctx context.Context, userID string, encryptionPub, sig
 // (GET /keys/devices: отправителю — для обёрток, получателю — для проверки подписи).
 func (s *Store) ListDevices(ctx context.Context, userID string) ([]Device, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT device_id, user_id, encryption_pub, signing_pub,
-		       cert_by, COALESCE(cert_ask_id::text, ''), cert_sig
-		FROM devices WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at`, userID)
+		SELECT d.device_id, d.user_id, d.encryption_pub, d.signing_pub,
+		       d.cert_by, COALESCE(d.cert_ask_id::text, ''), d.cert_sig,
+		       COALESCE(e.epoch, ''), e.encryption_pub, e.signature
+		FROM devices d
+		LEFT JOIN LATERAL (
+			SELECT epoch, encryption_pub, signature FROM device_epoch_keys k
+			WHERE k.device_id = d.device_id ORDER BY epoch DESC LIMIT 1
+		) e ON true
+		WHERE d.user_id = $1 AND d.revoked_at IS NULL ORDER BY d.created_at`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +183,7 @@ func (s *Store) ListDevices(ctx context.Context, userID string) ([]Device, error
 	for rows.Next() {
 		var d Device
 		if err := rows.Scan(&d.DeviceID, &d.UserID, &d.EncryptionPub, &d.SigningPub,
-			&d.CertBy, &d.CertAskID, &d.CertSig); err != nil {
+			&d.CertBy, &d.CertAskID, &d.CertSig, &d.EpochKey.Epoch, &d.EpochKey.EncryptionPub, &d.EpochKey.Signature); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
@@ -195,6 +201,43 @@ type Device struct {
 	CertBy    string
 	CertAskID string
 	CertSig   []byte
+	// EpochKey — последний опубликованный ключ шифрования на эпоху (ПЛАН-(ПС) ПС3); Epoch пусто —
+	// не публиковало, шифруют под EncryptionPub.
+	EpochKey EpochKey
+}
+
+// EpochKey — ключ шифрования устройства на эпоху и подпись ключом подписи устройства.
+type EpochKey struct {
+	Epoch         string
+	EncryptionPub []byte
+	Signature     []byte
+}
+
+// ErrEpochKeyTaken — у устройства в эту эпоху уже другой ключ: в эпоху он один.
+var ErrEpochKeyTaken = errors.New("ключ эпохи уже опубликован другим")
+
+// SetDeviceEpochKey публикует ключ шифрования устройства на эпоху (ПС3). Повтор того же ключа —
+// не ошибка; другой ключ в ту же эпоху — ErrEpochKeyTaken.
+func (s *Store) SetDeviceEpochKey(ctx context.Context, deviceID string, k EpochKey) error {
+	ct, err := s.pool.Exec(ctx, `
+		INSERT INTO device_epoch_keys (device_id, epoch, encryption_pub, signature)
+		VALUES ($1, $2, $3, $4) ON CONFLICT (device_id, epoch) DO NOTHING`,
+		deviceID, k.Epoch, k.EncryptionPub, k.Signature)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 1 {
+		return nil
+	}
+	var same bool
+	if err := s.pool.QueryRow(ctx, `SELECT encryption_pub = $3 FROM device_epoch_keys WHERE device_id = $1 AND epoch = $2`,
+		deviceID, k.Epoch, k.EncryptionPub).Scan(&same); err != nil {
+		return err
+	}
+	if !same {
+		return ErrEpochKeyTaken
+	}
+	return nil
 }
 
 // SigningKey возвращает Ed25519-ключ неотозванного устройства пользователя.

@@ -60,6 +60,15 @@ func (s *Store) GCPersonalWrappedKeys(ctx context.Context, graceSec int64) (int6
 	return ct.RowsAffected(), err
 }
 
+// GCDeviceEpochKeys удаляет записи ключей эпох старше keepEpochs последних у устройства
+// (ПЛАН-(ПС) ПС3): отправителю нужен последний, остальные — история без пользы.
+func (s *Store) GCDeviceEpochKeys(ctx context.Context, keepEpochs int) (int64, error) {
+	ct, err := s.pool.Exec(ctx, `
+		DELETE FROM device_epoch_keys k
+		WHERE (SELECT count(*) FROM device_epoch_keys n WHERE n.device_id = k.device_id AND n.epoch > k.epoch) >= $1`, keepEpochs)
+	return ct.RowsAffected(), err
+}
+
 // GCGroupWrappedKeys удаляет wrapped_GK версий, которые сменила следующая версия больше
 // graceSec назад (ПС2, Р5); escrow версии в group_key_history остаётся. Текущая версия группы
 // не удаляется никогда: ею закрыты новые сообщения, и тихая группа без смены ключа иначе

@@ -95,6 +95,8 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		// Обёртки — по эпохе, а не по общему сроку (ПЛАН-(ПС) ПС2).
 		{"personal_wrapped_keys", func() (int64, error) { return w.Store.GCPersonalWrappedKeys(ctx, w.wrapGraceSeconds()) }},
 		{"group_wrapped_keys", func() (int64, error) { return w.Store.GCGroupWrappedKeys(ctx, w.wrapGraceSeconds()) }},
+		// Ключи эпох устройств: держим три последних (ПС3) — отправителю нужен последний.
+		{"device_epoch_keys", func() (int64, error) { return w.Store.GCDeviceEpochKeys(ctx, 3) }},
 		{"excluded_group_keys", func() (int64, error) { return w.Store.GCExcludedGroupKeys(ctx, window) }},
 		{"sms_codes", func() (int64, error) { return w.Store.GCExpiredSmsCodes(ctx) }},
 		// Брошенные звонки: строка открыта, а комнаты уже нет. См. closeAbandonedCalls.

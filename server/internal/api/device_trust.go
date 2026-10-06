@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"tima/server/internal/attest"
 	"tima/server/internal/auth"
@@ -300,6 +301,72 @@ func certifyDevice(deps deviceTrustDeps) http.HandlerFunc {
 		log.Printf("доверие: %s заверил устройство %s (%s)", id.DeviceID, target, proof.CertBy)
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// ── Ключ шифрования на эпоху (ПЛАН-(ПС) ПС3) ────────────────────────────────────
+
+// epochKeyItem — ключ эпохи в выдаче /keys/devices.
+type epochKeyItem struct {
+	Epoch         string `json:"epoch"`
+	EncryptionPub string `json:"encryption_pub"`
+	Signature     string `json:"signature"`
+}
+
+// EpochKeyStore — что публикации ключа эпохи нужно от хранилища.
+type EpochKeyStore interface {
+	DeviceKeys(ctx context.Context, userID, deviceID string) ([]byte, []byte, error)
+	SetDeviceEpochKey(ctx context.Context, deviceID string, k store.EpochKey) error
+}
+
+// epochOf — эпоха депозитария для момента: календарный месяц UTC, «2026-10».
+func epochOf(t time.Time) string { return t.UTC().Format("2006-01") }
+
+// RegisterEpochKeys — PUT /devices/me/epoch-key: устройство публикует ключ шифрования на эпоху,
+// подписанный своим ключом подписи. Эпоха — текущая или следующая (часы на стыке месяцев).
+func RegisterEpochKeys(mux *http.ServeMux, st EpochKeyStore, now func() time.Time, requireDevice Middleware) {
+	mux.HandleFunc("PUT /api/v1/devices/me/epoch-key", requireDevice(func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		var req struct {
+			Epoch         string `json:"epoch"`
+			EncryptionPub string `json:"encryption_pub"`
+			Signature     string `json:"signature"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
+			return
+		}
+		t := now()
+		if req.Epoch != epochOf(t) && req.Epoch != epochOf(t.AddDate(0, 1, 0)) {
+			writeErr(w, http.StatusBadRequest, "bad_epoch", "эпоха — текущий или следующий месяц UTC")
+			return
+		}
+		b64 := base64.RawURLEncoding
+		pub, err1 := b64.DecodeString(req.EncryptionPub)
+		sig, err2 := b64.DecodeString(req.Signature)
+		if err1 != nil || err2 != nil || len(pub) != 32 || len(sig) != 64 {
+			writeErr(w, http.StatusBadRequest, "bad_key", "ключ — 32 байта, подпись — 64 (base64url)")
+			return
+		}
+		_, signingPub, err := st.DeviceKeys(r.Context(), id.UserID, id.DeviceID)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		if !timacrypto.VerifyEnvelopeSignature(signingPub, timacrypto.DeviceEpochKeyBytes(id.DeviceID, req.Epoch, pub), sig) {
+			writeErr(w, http.StatusForbidden, "bad_signature", "ключ эпохи не подписан ключом подписи этого устройства")
+			return
+		}
+		err = st.SetDeviceEpochKey(r.Context(), id.DeviceID, store.EpochKey{Epoch: req.Epoch, EncryptionPub: pub, Signature: sig})
+		if errors.Is(err, store.ErrEpochKeyTaken) {
+			writeErr(w, http.StatusConflict, "epoch_key_taken", "ключ на эту эпоху уже опубликован")
+			return
+		} else if err != nil {
+			log.Printf("epoch key: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
 }
 
 // ── Аттестация (ДУ8, закладка Р20–Р23) ─────────────────────────────────────────

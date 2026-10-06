@@ -689,6 +689,9 @@ func (s *Server) listDeviceKeys(w http.ResponseWriter, r *http.Request) {
 		CertBy        string `json:"cert_by,omitempty"`
 		CertAskID     string `json:"cert_ask_id,omitempty"`
 		CertSig       string `json:"cert_sig,omitempty"`
+		// Ключ шифрования на эпоху (ПЛАН-(ПС) ПС3): клиент сверяет подпись ключом подписи
+		// устройства и заворачивает под него, а не под encryption_pub.
+		EpochKey *epochKeyItem `json:"epoch_key,omitempty"`
 	}
 	type askItem struct {
 		AskID  string `json:"ask_id"`
@@ -700,6 +703,10 @@ func (s *Server) listDeviceKeys(w http.ResponseWriter, r *http.Request) {
 		it := item{DeviceID: d.DeviceID, EncryptionPub: b64.EncodeToString(d.EncryptionPub), SigningPub: b64.EncodeToString(d.SigningPub)}
 		if d.CertBy != "" && len(d.CertSig) > 0 {
 			it.CertBy, it.CertAskID, it.CertSig = d.CertBy, d.CertAskID, b64.EncodeToString(d.CertSig)
+		}
+		if d.EpochKey.Epoch != "" {
+			it.EpochKey = &epochKeyItem{Epoch: d.EpochKey.Epoch, EncryptionPub: b64.EncodeToString(d.EpochKey.EncryptionPub),
+				Signature: b64.EncodeToString(d.EpochKey.Signature)}
 		}
 		out = append(out, it)
 	}

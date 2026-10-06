@@ -23,4 +23,11 @@ func AskRevokeBytes(askID string) []byte {
 	return []byte("tima.ask-revoke.v1|" + askID)
 }
 
+// DeviceEpochKeyBytes — что ключ подписи устройства подписывает, публикуя ключ шифрования на
+// эпоху (ПЛАН-(ПС) ПС3). device_id и эпоха в байтах — чтобы подпись нельзя было перенести на
+// другое устройство или другой месяц.
+func DeviceEpochKeyBytes(deviceID, epoch string, encryptionPub []byte) []byte {
+	return []byte("tima.device-epoch.v1|" + deviceID + "|" + epoch + "|" + b64url(encryptionPub))
+}
+
 func b64url(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }

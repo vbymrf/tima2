@@ -184,6 +184,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 		func() TokenIssuer { return s.Auth }, s.notifier(), s.requireActiveDevice,
 		func() string { return NormalizeDeviceTrust(s.DeviceTrust) })
 	RegisterDeviceTrust(mux, s.Store, s.requireActiveDevice, func() string { return normalizeAttestation(s.Attestation) })
+	// Ключ шифрования устройства на эпоху (ПЛАН-(ПС) ПС3).
+	RegisterEpochKeys(mux, s.Store, time.Now, s.requireActiveDevice)
 	RegisterIdentityCancel(mux, s.Store, func() IdentityTokens { return s.Auth }, s.notifier(), s.requireActiveDevice)
 	RegisterReregistration(mux, s.Store, func() IdentityTokens { return s.Auth }, s.notifier(), s.requireActiveDevice)
 	// Смена SIM — смена номера аккаунта (ДУ9): сроки те же, что у перерегистрации.
