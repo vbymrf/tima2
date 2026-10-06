@@ -46,6 +46,21 @@
   .вв .ав { left: -4px; }
   .вв .имя { padding-left: 33px; }
 
+  /* г — как «б», но цветная полоса идёт выше пузыря, вдоль левой кромки аватара, и
+     закруглением переходит на его верх (заказчик 2026-10-06) */
+  .вг .ав { left: 0; }
+  .вг .имя { padding-left: 37px; }
+  .вг .пуз:has(.ав)::before {
+    content: ""; position: absolute; z-index: 3; pointer-events: none; box-sizing: border-box;
+    left: -4px; top: -13px; width: 47px; height: 32px;
+    border-left: 4px solid var(--цвет, var(--навигация)); border-top: 4px solid var(--цвет, var(--навигация));
+    border-top-left-radius: 14px; border-top-right-radius: 12px;
+  }
+
+  /* д — как сейчас, но аватар прижат к краю телефона: 2 точки от края, поверх полосы */
+  .вд .ав { left: -16px; }
+  .вд .имя { padding-left: 21px; }
+
   .проба { padding: 20px 0 24px; border-bottom: 1px solid var(--чёрный-12); }
   .проба:target { box-shadow: inset 6px 0 0 var(--навигация); padding-left: 16px; }
   .шапка-пробы { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -88,6 +103,8 @@
   <a href="#а">а · как сейчас</a>
   <a href="#б">б · до полосы</a>
   <a href="#в">в · заподлицо с пузырём</a>
+  <a href="#г">г · полоса переходит на аватар</a>
+  <a href="#д">д · аватар у края телефона</a>
 </div>
 
 <!-- Одна и та же лента в трёх вариантах -->
@@ -121,6 +138,22 @@
   <div class="срезы">
     <div class="с-подписью"><div class="окно срез вв"><div class="зона-2" data-лента></div></div><div class="трет">в натуральную величину</div></div>
     <div class="с-подписью"><div class="увеличено"><div class="окно срез вв"><div class="зона-2" data-лента></div></div></div><div class="трет">увеличено вдвое</div></div>
+  </div>
+</div>
+
+<div class="проба" id="г">
+  <div class="шапка-пробы"><span class="номер">г</span><span class="опис">как «б», но полоса идёт выше пузыря — по левой кромке аватара — и закруглением переходит на его верх</span><span class="свет">аватар и пузырь обведены одной цветной линией автора</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез вг"><div class="зона-2" data-лента></div></div><div class="трет">в натуральную величину</div></div>
+    <div class="с-подписью"><div class="увеличено"><div class="окно срез вг"><div class="зона-2" data-лента></div></div></div><div class="трет">увеличено вдвое</div></div>
+  </div>
+</div>
+
+<div class="проба" id="д">
+  <div class="шапка-пробы"><span class="номер">д</span><span class="опис">как сейчас, но аватар прижат к краю телефона — 2 точки от края; ложится поверх полосы</span><span class="свет">пузырь не двигается; имя идёт следом за аватаром</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез вд"><div class="зона-2" data-лента></div></div><div class="трет">в натуральную величину</div></div>
+    <div class="с-подписью"><div class="увеличено"><div class="окно срез вд"><div class="зона-2" data-лента></div></div></div><div class="трет">увеличено вдвое</div></div>
   </div>
 </div>
 
