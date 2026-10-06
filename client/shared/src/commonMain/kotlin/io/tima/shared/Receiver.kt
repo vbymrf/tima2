@@ -1208,6 +1208,31 @@ class Receiver(
             SentBy(userId = it.userId, deviceId = it.deviceId, createdAtMs = it.createdAtMs)
         }
 
+    /**
+     * Разобрать недоступное заново (заказчик 2026-10-06): сервер ответил на просьбу о ключах,
+     * что обёртка у этого устройства уже есть, — значит, дело не в ключе сообщения. Чаще всего
+     * не было ключа подписи отправителя: его устройство не было заверено, а в «требовать»
+     * подпись незаверенного не принимается. Заверили — ключ подписи теперь дадут.
+     *
+     * До этого повтор не вызывался нигде: однажды недоступное оставалось таким навсегда.
+     *
+     * @return сколько записей открылось.
+     */
+    suspend fun reopenUnreadable(): Int {
+        val stuck = environment.incoming.undecryptable()
+        if (stuck.isEmpty()) return 0
+        for (entry in stuck) {
+            if (GroupFrame.isGroupFrame(entry.envelope)) continue
+            val s = envelopeSender(entry.envelope) ?: continue
+            captionKey(s.userId, s.deviceId)
+        }
+        environment.incoming.retryUndecryptable()
+        drainIncoming()
+        val left = environment.incoming.undecryptable().size
+        Journal.note(LogCode.DEVICE_TRUST, "недоступное разобрано заново", "было" to stuck.size, "осталось" to left)
+        return stuck.size - left
+    }
+
     private suspend fun captionKey(userId: String, deviceId: String): ByteArray? {
         senderKeys[deviceId]?.let { return it }
         val outcome = network.keys.devicesOf(userId)

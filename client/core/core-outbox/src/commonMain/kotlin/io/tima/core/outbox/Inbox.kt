@@ -313,6 +313,9 @@ class Inbox(
 
     fun pending(): List<IncomingEntry> = store.pending()
 
+    /** Всё нечитаемое — чтобы перед повтором подтянуть то, чего не хватало (ключи подписи). */
+    fun undecryptable(): List<IncomingEntry> = store.undecryptable()
+
     /**
      * Переписка открыта: всё разобранное в ней прочитано.
      *

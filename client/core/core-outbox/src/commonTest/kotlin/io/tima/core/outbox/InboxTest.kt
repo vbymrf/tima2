@@ -125,6 +125,8 @@ class InboxTest {
     fun появился_ключ_и_нечитаемое_разбирается_снова() {
         accept()
         inbox.openNext(open = { OpenOutcome.NoKey("нет ключа") })
+        // Перечень нужен до повтора: по нему подтягивают ключи подписи отправителей.
+        assertEquals(listOf(5L), inbox.undecryptable().map { it.messageId })
 
         assertEquals(1, inbox.retryUndecryptable(), "вернуться должно одно")
         assertEquals(IncomingState.RECEIVED, store.byKey("chat-1", 5)?.state)

@@ -213,12 +213,9 @@ func chatRecover(deps chatsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		// Ключ на сервере уже есть — помощник не нужен: устройство заберёт историю само.
-		if len(plan.Ready) > 0 {
-			deps.notifier.Device(r.Context(), id.DeviceID, "recovery.msg_ready", map[string]any{
-				"chat_id": chatID, "count": len(plan.Ready),
-			})
-		}
+		// Ключ на сервере уже есть — помощник не нужен, и забирать историю незачем: сообщение у
+		// устройства уже лежит, а не открылось оно по другой причине. Устройство разбирает
+		// недоступное заново само, по числу ready в ответе (2026-10-06).
 		lost := plan.Lost
 		if lost == nil {
 			lost = []int64{}
