@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"tima/server/internal/attest"
 	"tima/server/internal/auth"
@@ -122,18 +123,22 @@ type DeviceTrustStore interface {
 	DeviceSigningKey(ctx context.Context, userID, deviceID string) (store.SigningKey, error)
 	SetDeviceCertificate(ctx context.Context, userID, deviceID, by, askID string, sig []byte) error
 	ReregOfUser(ctx context.Context, userID string) (store.Rereg, error)
+	DeviceAttested(ctx context.Context, deviceID string) (bool, error)
+	DemandAttestation(ctx context.Context, deviceID, reason string) error
 }
 
 var _ DeviceTrustStore = (*store.Store)(nil)
 
 type deviceTrustDeps struct {
 	store DeviceTrustStore
+	// attestation — режим аттестации (Р21): в «требовать» КПУ выдаётся только аттестованному телефону.
+	attestation func() string
 }
 
 // RegisterDeviceTrust — две ручки: телефон заводит свой КПУ; устройство аккаунта получает
 // свидетельство.
-func RegisterDeviceTrust(mux *http.ServeMux, st DeviceTrustStore, requireDevice Middleware) {
-	deps := deviceTrustDeps{store: st}
+func RegisterDeviceTrust(mux *http.ServeMux, st DeviceTrustStore, requireDevice Middleware, attestation func() string) {
+	deps := deviceTrustDeps{store: st, attestation: attestation}
 	mux.HandleFunc("POST /api/v1/users/me/signing-keys", requireDevice(issueSigningKey(deps)))
 	mux.HandleFunc("PUT /api/v1/devices/{deviceID}/certificate", requireDevice(certifyDevice(deps)))
 }
@@ -174,6 +179,25 @@ func issueSigningKey(deps deviceTrustDeps) http.HandlerFunc {
 		if !store.PlatformPhone[platform] {
 			writeErr(w, http.StatusForbidden, "not_a_phone", "ключ подписи устройств держит только телефон")
 			return
+		}
+		// «Требовать» (ДУ8, Р17): КПУ — только телефону, прошедшему аттестацию. Не прошёл —
+		// требование ЗБ1: клиент проходит аттестацию сам, человек повторяет действие.
+		if deps.attestation != nil && deps.attestation() == trustRequire {
+			attested, err := deps.store.DeviceAttested(ctx, id.DeviceID)
+			if err != nil {
+				log.Printf("issueSigningKey: attested: %v", err)
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+				return
+			}
+			if !attested {
+				if err := deps.store.DemandAttestation(ctx, id.DeviceID, "ключ подписи устройств"); err != nil {
+					log.Printf("issueSigningKey: demand: %v", err)
+				}
+				w.Header().Set(attestationHeader, "required")
+				writeErr(w, http.StatusForbidden, attestationRequired,
+					"Ключ подписи устройств выдаётся только проверенному телефону. Проверка идёт сама — повторите через минуту.")
+				return
+			}
 		}
 		identityPub, err := deps.store.IdentityPub(ctx, id.UserID)
 		if err != nil {
@@ -290,6 +314,48 @@ func normalizeAttestation(v string) string {
 	return trustOff
 }
 
+// AttestationPolicy — что считается годной аттестацией (ДУ8, Р25; ПЛАН-(ЗБ) ЗБ2): разрешённые
+// корни цепочки (sha256 открытого ключа корня, hex) и подписи приложения (sha256 подписи APK, hex;
+// Р25 — и отладочная, и выпускная). Списки — настройкой сервера (TIMA_ATTESTATION_ROOTS,
+// TIMA_ATTESTATION_APK_DIGESTS). Пустой список в «записывать» не проверяется; в «требовать»
+// без обоих списков годной не будет ни одна: иначе поддельная цепочка с самодельным корнем прошла бы.
+type AttestationPolicy struct {
+	Roots []string
+	Apps  []string
+}
+
+// attestPackage — наше приложение в записи аттестации.
+const attestPackage = "io.tima.app.v2"
+
+// judgeAttestation — годна ли аттестация и, если нет, чем.
+func judgeAttestation(res attest.Result, p AttestationPolicy, mode string) (bool, string) {
+	has := func(list []string, v string) bool {
+		for _, x := range list {
+			if strings.EqualFold(strings.TrimSpace(x), v) {
+				return true
+			}
+		}
+		return false
+	}
+	switch {
+	case !res.Ok():
+		return false, res.Problem
+	case res.SecurityLevel != "tee" && res.SecurityLevel != "strongbox":
+		return false, "ключ не в защищённой части телефона: " + res.SecurityLevel
+	case res.VerifiedBoot != "verified":
+		return false, "загрузка телефона не проверена: " + res.VerifiedBoot
+	case res.PackageName != attestPackage:
+		return false, "не наше приложение: " + res.PackageName
+	case len(p.Roots) > 0 && !has(p.Roots, res.RootSPKI):
+		return false, "корень цепочки не из списка разрешённых"
+	case len(p.Apps) > 0 && !has(p.Apps, res.SignatureDigest):
+		return false, "подпись приложения не из списка разрешённых"
+	case mode == trustRequire && (len(p.Roots) == 0 || len(p.Apps) == 0):
+		return false, "в «требовать» не заданы списки корней и подписей приложения"
+	}
+	return true, ""
+}
+
 // AttestationStore — что аттестации нужно от хранилища.
 type AttestationStore interface {
 	DeviceKeys(ctx context.Context, userID, deviceID string) ([]byte, []byte, error)
@@ -300,7 +366,7 @@ type AttestationStore interface {
 // RegisterAttestation — POST /devices/me/attestation: телефон присылает цепочку аттестации ключа
 // и подпись им над ключами своего устройства. Вызов — `/users/me/reidentify/challenge`, в запись
 // аттестации кладётся sha256 его токена.
-func RegisterAttestation(mux *http.ServeMux, st AttestationStore, tokens func() IdentityTokens, mode func() string, requireDevice Middleware) {
+func RegisterAttestation(mux *http.ServeMux, st AttestationStore, tokens func() IdentityTokens, mode func() string, policy func() AttestationPolicy, requireDevice Middleware) {
 	mux.HandleFunc("POST /api/v1/devices/me/attestation", requireDevice(func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
 		// Требование у этого телефона (ЗБ1) проверяется и при выключенном общем режиме: иначе
@@ -354,8 +420,10 @@ func RegisterAttestation(mux *http.ServeMux, st AttestationStore, tokens func() 
 		challenge := sha256.Sum256([]byte(req.ChallengeToken))
 		res := attest.VerifyAndroid(chain, challenge[:], timacrypto.DeviceCertBytes(enc, sgn), sig)
 		state := "failed"
-		if res.Ok() {
+		if ok, problem := judgeAttestation(res, policy(), mode()); ok {
 			state = "verified"
+		} else if res.Problem == "" {
+			res.Problem = problem
 		}
 		info, _ := json.Marshal(res)
 		if err := st.SetDeviceAttestation(r.Context(), id.UserID, id.DeviceID, state, string(info)); err != nil {

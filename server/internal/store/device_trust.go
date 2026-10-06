@@ -141,6 +141,16 @@ func (s *Store) DemandAttestation(ctx context.Context, deviceID, reason string) 
 	return nil
 }
 
+// DeviceAttested — прошло ли устройство аттестацию (состояние verified), когда бы то ни было.
+func (s *Store) DeviceAttested(ctx context.Context, deviceID string) (bool, error) {
+	var ok bool
+	err := s.pool.QueryRow(ctx, `SELECT attestation_state = 'verified' FROM devices WHERE device_id = $1`, deviceID).Scan(&ok)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return ok, err
+}
+
 // AttestationDemanded — стоит ли требование аттестации, не снятое свежей годной аттестацией (ЗБ1).
 func (s *Store) AttestationDemanded(ctx context.Context, deviceID string) (bool, error) {
 	var demanded bool

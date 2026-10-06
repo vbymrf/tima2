@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -152,6 +153,17 @@ func atoiOr(name string, def int) int {
 	return def
 }
 
+// splitList — значения через запятую из env; пустые выбрасываются.
+func splitList(v string) []string {
+	var out []string
+	for _, x := range strings.Split(v, ",") {
+		if x = strings.TrimSpace(x); x != "" {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
 func serve() {
 	mux := http.NewServeMux()
 	healthz := func(w http.ResponseWriter, _ *http.Request) {
@@ -184,6 +196,11 @@ func serve() {
 			DeviceTrust: api.NormalizeDeviceTrust(os.Getenv("TIMA_DEVICE_TRUST")),
 			// Аттестация телефона (ДУ8, Р21): off | record | require; пусто — off.
 			Attestation: os.Getenv("TIMA_ATTESTATION"),
+			// Годная аттестация (Р25, ЗБ2): корни и подписи APK — sha256 hex через запятую.
+			AttestationPolicy: api.AttestationPolicy{
+				Roots: splitList(os.Getenv("TIMA_ATTESTATION_ROOTS")),
+				Apps:  splitList(os.Getenv("TIMA_ATTESTATION_APK_DIGESTS")),
+			},
 			// Переопределение лимитов auth (0 → прод-дефолт): dev/нагрузочные прогоны
 			SMSPerPhone:   atoiOr("TIMA_RL_SMS_PER_PHONE", 0),
 			SMSPerIP:      atoiOr("TIMA_RL_SMS_PER_IP", 0),

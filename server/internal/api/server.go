@@ -46,6 +46,8 @@ type Server struct {
 	DeviceTrust string
 	// Attestation — режим аттестации телефона (TIMA_ATTESTATION: off|record|require; пусто — off).
 	Attestation string
+	// AttestationPolicy — разрешённые корни и подписи приложения (ДУ8, Р25).
+	AttestationPolicy AttestationPolicy
 	// Rereg — сроки перерегистрации (ДУ9, Р51). RunRereg — смотреть на сроки в этом процессе:
 	// исходы и извещения; в тестах выключено, проход зовётся руками.
 	Rereg    ReregTimes
@@ -181,7 +183,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	RegisterDevices(mux, s.Store, func() *ratelimit.Limiter { return s.Limit },
 		func() TokenIssuer { return s.Auth }, s.notifier(), s.requireActiveDevice,
 		func() string { return NormalizeDeviceTrust(s.DeviceTrust) })
-	RegisterDeviceTrust(mux, s.Store, s.requireActiveDevice)
+	RegisterDeviceTrust(mux, s.Store, s.requireActiveDevice, func() string { return normalizeAttestation(s.Attestation) })
 	RegisterIdentityCancel(mux, s.Store, func() IdentityTokens { return s.Auth }, s.notifier(), s.requireActiveDevice)
 	RegisterReregistration(mux, s.Store, func() IdentityTokens { return s.Auth }, s.notifier(), s.requireActiveDevice)
 	// Смена SIM — смена номера аккаунта (ДУ9): сроки те же, что у перерегистрации.
@@ -191,7 +193,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 		go runRereg(context.Background(), s.Store, s.notifier(), func() ReregTimes { return s.Rereg })
 	}
 	RegisterAttestation(mux, s.Store, func() IdentityTokens { return s.Auth },
-		func() string { return normalizeAttestation(s.Attestation) }, s.requireActiveDevice)
+		func() string { return normalizeAttestation(s.Attestation) }, func() AttestationPolicy { return s.AttestationPolicy }, s.requireActiveDevice)
 	mux.HandleFunc("GET /api/v1/escrow/pubkey", s.requireActiveDevice(s.escrowPubkey))
 	mux.HandleFunc("GET /api/v1/escrow/key", s.requireActiveDevice(s.escrowKeyForChat))
 	// Группы: состав, сообщения и ключи (шаг 4). Три файла держатся вместе

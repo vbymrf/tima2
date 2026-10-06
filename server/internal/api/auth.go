@@ -322,6 +322,15 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// Аттестация в «требовать» (ДУ8, Р17): личность рождается только на телефоне Android — у ПК
+	// и iPhone аттестации нет, а личность без настоящего телефона и есть путь бота.
+	attMode := normalizeAttestation(s.Attestation)
+	newIdentity := len(existing) == 0 || req.ForceNewIdentity
+	if attMode == trustRequire && newIdentity && normalizePlatform(req.Platform) != "android" {
+		writeErr(w, http.StatusForbidden, "phone_required",
+			"Новый аккаунт и новый ключ личности заводятся только на телефоне Android с приложением TIMA.")
+		return
+	}
 	rereg := req.Reregister != nil
 	if rereg && (!req.ForceNewIdentity || !reregProven(s.Auth, s.Store, r, userID, req.Reregister.ChallengeToken, req.Reregister.Signature)) {
 		writeErr(w, http.StatusForbidden, "bad_signature", "Прежняя фраза не подходит к этому аккаунту.")
@@ -410,6 +419,17 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			log.Printf("доверие: свидетельство устройства %s не записано: %v", deviceID, err)
+		}
+	}
+	// «Требовать» (ДУ8, Р17): телефон, на котором родилась личность или который получил КПУ, до
+	// годной аттестации стоит под требованием ЗБ1 — клиент проходит её сам сразу после входа.
+	if attMode == trustRequire && (newIdentity || (certBy == certByAsk && askOK && store.PlatformPhone[platform])) {
+		reason := "новая личность"
+		if !newIdentity {
+			reason = "ключ подписи устройств"
+		}
+		if err := s.Store.DemandAttestation(r.Context(), deviceID, reason); err != nil {
+			log.Printf("register: требование аттестации %s: %v", deviceID, err)
 		}
 	}
 	access, err := s.Auth.IssueAccess(userID, deviceID)
