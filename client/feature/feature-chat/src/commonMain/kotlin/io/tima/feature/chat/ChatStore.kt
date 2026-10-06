@@ -130,10 +130,16 @@ class ChatStore(
     /**
      * Попросить ключи личной переписки у своих устройств и собеседника (заказчик 2026-10-06:
      * «сообщение недоступно, запросить»). Слова фразы — для незаверенного устройства: оно
-     * подписывает просьбу ключом личности; `null` — просим без подписи. `null` вместо всего —
-     * переписка не личная.
+     * подписывает просьбу ключом личности; `null` — просим без подписи. Номера — недоступные
+     * сообщения на экране, новые первыми: сервер разберёт, что вернуть, а что потеряно. `null`
+     * вместо всего — переписка не личная.
      */
-    private val askChatKeys: (suspend (List<String>?) -> RequestKeysStep)? = null,
+    private val askChatKeys: (suspend (List<String>?, List<Long>) -> RequestKeysStep)? = null,
+    /**
+     * Сообщения, к которым ключа не осталось ни у кого, — по ответу сервера на прежние просьбы.
+     * Их не просят ни нажатием, ни сами. `null` — не помним (группа).
+     */
+    private val lostKeys: (suspend () -> Set<Long>)? = null,
     /**
      * Можно ли сейчас попросить самим, без нажатия, — один раз на переписку за срок, который
      * помнит вызывающий; и в личной, и в группе (заказчик 2026-10-06). `null` — сами не просим.
@@ -160,6 +166,8 @@ class ChatStore(
     private var known: List<ChatLine> = emptyList()
 
     init {
+        // Потерянное помечается сразу, а не после первой просьбы: «запросить» у него быть не должно.
+        lostKeys?.let { load -> scope.launch { _state.value = _state.value.copy(lostKeys = load()) } }
         peopleChanges?.onEach { who ->
             if (who !in _state.value.names) return@onEach
             names?.let { directory ->
@@ -211,7 +219,10 @@ class ChatStore(
                 ) {
                     autoAsked = true
                     scope.launch {
-                        if (autoAskAllowed?.invoke() == true && !_state.value.expectKey) {
+                        lostKeys?.let { _state.value = _state.value.copy(lostKeys = it()) }
+                        // В личной — только если есть что вернуть: потерянное просить незачем.
+                        val worth = requestKeys != null || askable().isNotEmpty()
+                        if (worth && autoAskAllowed?.invoke() == true && !_state.value.expectKey) {
                             _state.value = _state.value.copy(expectKey = true)
                             askKeysNow(null, quiet = true)
                         }
@@ -456,9 +467,20 @@ class ChatStore(
         scope.launch { askKeysNow(null, quiet = false) }
     }
 
+    /** Недоступные сообщения, которые стоит просить: с номером сервера и не потерянные, новые первыми. */
+    private fun askable(): List<Long> {
+        val lost = _state.value.lostKeys
+        return _state.value.lines
+            .filter { it.display == MessageDisplay.UNREADABLE && it.serverId > 0 && it.serverId !in lost }
+            .map { it.serverId }
+            .distinct()
+            .sortedDescending()
+    }
+
     /** Признак «запрос в пути» ставит вызывающий — до запуска, чтобы второе нажатие его видело. */
     private suspend fun askKeysNow(words: List<String>?, quiet: Boolean) {
-        val outcome = requestKeys?.request(chatId, words) ?: askChatKeys?.invoke(words) ?: return
+        val outcome = requestKeys?.request(chatId, words) ?: askChatKeys?.invoke(words, askable()) ?: return
+        lostKeys?.let { _state.value = _state.value.copy(lostKeys = it()) }
         val needs = outcome == RequestKeysStep.NeedsSecretPhrase
         _state.value = _state.value.copy(
             expectKey = false,
@@ -474,6 +496,7 @@ class ChatStore(
     private fun noticeOf(outcome: RequestKeysStep): ChatNotice = when (outcome) {
         is RequestKeysStep.Asked -> ChatNotice.KeysAsked(outcome.devices)
         RequestKeysStep.NoHelpers -> ChatNotice.KeysNoHelpers
+        is RequestKeysStep.Lost -> ChatNotice.KeysLost(outcome.messages)
         RequestKeysStep.NothingMissing -> ChatNotice.KeysNothingMissing
         RequestKeysStep.NeedsSecretPhrase -> ChatNotice.KeysNeedPhrase
         RequestKeysStep.NotMember -> ChatNotice.KeysRefused(words().chat.notMemberAnyMore)
@@ -509,6 +532,8 @@ data class ChatState(
      * фразы открыто (2026-10-06).
      */
     val phraseWanted: Boolean = false,
+    /** Номера сообщений, к которым ключа не осталось ни у кого: «запросить» у них нет. */
+    val lostKeys: Set<Long> = emptySet(),
     /**
      * Групповая ли переписка. От этого зависит показ автора у каждой реплики: в личной
      * он лишний, в групповой без него сообщение теряет половину смысла.
@@ -576,6 +601,9 @@ sealed interface ChatNotice {
 
     /** Просить некого: нужных версий нет ни у кого из участников. Ждать бесполезно. */
     data object KeysNoHelpers : ChatNotice
+
+    /** Личная переписка: [messages] названных сообщений не вернуть — ключа нет ни у кого. */
+    data class KeysLost(val messages: Int) : ChatNotice
 
     /** Недостающих версий нет — значит, сообщение не читается по другой причине. */
     data object KeysNothingMissing : ChatNotice

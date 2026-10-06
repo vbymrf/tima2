@@ -274,6 +274,7 @@ fun ChatScreen(
             onNarrow = onNarrow,
             onCarry = onCarry,
             onAskChatKeys = onAskChatKeys?.takeIf { state.chatKeysMay || state.keyAskMay },
+            lostKeys = state.lostKeys,
             onThread = onThread,
             onFailed = onFailed,
             invite = invite,
@@ -345,6 +346,8 @@ private fun Feed(
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
     onCarry: ((Long, Int) -> Unit)? = null,
     onAskChatKeys: (() -> Unit)? = null,
+    /** Номера сообщений, к которым ключа не осталось ни у кого: «запросить» у них нет. */
+    lostKeys: Set<Long> = emptySet(),
     onThread: ((Long) -> Unit)? = null,
     onFailed: ((ChatLine) -> Unit)? = null,
     invite: (ChatLine) -> CallInvite? = { null },
@@ -405,6 +408,7 @@ private fun Feed(
                 onNarrow = onNarrow,
                 onCarry = onCarry,
                 onAskChatKeys = onAskChatKeys,
+                lostKeys = lostKeys,
                 onThread = onThread,
                 onFailed = onFailed,
             )
@@ -456,6 +460,8 @@ private fun Reply(
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
     onCarry: ((Long, Int) -> Unit)? = null,
     onAskChatKeys: (() -> Unit)? = null,
+    /** Номера сообщений, к которым ключа не осталось ни у кого: «запросить» у них нет. */
+    lostKeys: Set<Long> = emptySet(),
     onThread: ((Long) -> Unit)? = null,
     onFailed: ((ChatLine) -> Unit)? = null,
 ) {
@@ -484,7 +490,7 @@ private fun Reply(
     val failed = (line.display == MessageDisplay.FAILED || line.display == MessageDisplay.PENDING) &&
         line.outgoing && onFailed != null
     Column(if (failed) Modifier.clickable { onFailed!!(line) } else Modifier) {
-        Bubbled(line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys)
+        Bubbled(line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys, line.serverId in lostKeys)
         // «Ветка · N ответов» — под сообщением, отдельной строкой, а не внутри пузыря:
         // это не часть сказанного, а вход в разговор о нём (ADR-0024 §7).
         //
@@ -526,6 +532,7 @@ private fun Bubbled(
     onNarrow: ((Long, Int, Int) -> Unit)?,
     onCarry: ((Long, Int) -> Unit)?,
     onAskChatKeys: (() -> Unit)? = null,
+    keyLost: Boolean = false,
 ) = Bubble(
     my = line.outgoing,
     author = author,
@@ -556,6 +563,10 @@ private fun Bubbled(
         // есть два места в одном приложении говорили человеку разное.
         // В личной переписке — с просьбой: нажатие просит ключи у своих устройств и
         // собеседника (заказчик 2026-10-06: «сообщение недоступно, запросить»).
+        // Ключа не осталось ни у кого — просить незачем, и кнопка была бы обещанием без
+        // исполнения (2026-10-06).
+        line.display == MessageDisplay.UNREADABLE && keyLost -> Chip(Tima.words.chat.messageKeyLost, kind = ChipKind.Quiet)
+
         line.display == MessageDisplay.UNREADABLE -> if (onAskChatKeys != null) {
             Chip(Tima.words.chat.messageUnavailableAsk, kind = ChipKind.Quiet, onClick = onAskChatKeys)
         } else {
@@ -765,6 +776,9 @@ private fun Trouble(trouble: ChatNotice, onClose: () -> Unit, onConfirm: (() -> 
             // Не «попробуйте позже»: ждать здесь бесполезно, и сказать надо именно это.
             ChatNotice.KeysNoHelpers ->
                 words.keysNoHelpers
+
+            is ChatNotice.KeysLost ->
+                words.keysLost(trouble.messages)
 
             ChatNotice.KeysNothingMissing ->
                 words.keysNothingMissing

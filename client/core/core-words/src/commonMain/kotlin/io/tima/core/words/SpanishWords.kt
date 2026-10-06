@@ -1210,6 +1210,7 @@ object SpanishWords : Words {
         override val messageUnavailable = "mensaje no disponible"
 
         override val messageUnavailableAsk = "Mensaje no disponible, solicitar"
+        override val messageKeyLost = "Mensaje no disponible: no queda clave"
         override val decrypting = "descifrando…"
         override val addToSelf = "Traer a mi página"
         override val narrowTo = "restringir a"
@@ -1225,6 +1226,8 @@ object SpanishWords : Words {
             "Ninguno de los miembros tiene estas claves — el historial anterior a su llegada se perdió"
         override val keysNothingMissing =
             "Ya tiene todas las claves: el mensaje no se lee por otro motivo"
+        override fun keysLost(messages: Int) =
+            "Mensajes que no se pueden recuperar: $messages — ningún dispositivo conserva su clave"
         override val keysNeedPhrase =
             "Hace falta la frase de recuperación: es lo que protege la cuenta si le roban " +
                 "el número. Si aquí no la sabe, escriba al grupo desde otro de sus " +

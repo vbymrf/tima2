@@ -6,6 +6,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -159,11 +160,22 @@ func chatRecover(deps chatsDeps) http.HandlerFunc {
 			return
 		}
 
-		// Подпись ключом личности (этап 3), если он установлен у аккаунта
+		// Подпись ключом личности (этап 3), если он установлен у аккаунта, и номера сообщений,
+		// которые устройство само видит недоступными (2026-10-06). Сколько номеров — решает
+		// размер тела, а не счёт: клиент кладёт столько, сколько влезает в [recoverBodyLimit].
 		var req struct {
-			Signature string `json:"signature"`
+			Signature string  `json:"signature"`
+			Missing   []int64 `json:"missing"`
 		}
-		_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req)
+		body, _ := io.ReadAll(io.LimitReader(r.Body, recoverBodyLimit+1))
+		if len(body) > recoverBodyLimit {
+			writeErr(w, http.StatusRequestEntityTooLarge, "too_large", "просьба больше предела")
+			return
+		}
+		if len(bytes.TrimSpace(body)) > 0 && json.Unmarshal(body, &req) != nil {
+			writeErr(w, http.StatusBadRequest, "bad_request", "тело просьбы не разбирается")
+			return
+		}
 		identityPub, err := deps.store.IdentityPub(r.Context(), id.UserID)
 		if err != nil {
 			log.Printf("chatRecover: identity: %v", err)
@@ -187,11 +199,11 @@ func chatRecover(deps chatsDeps) http.HandlerFunc {
 			}
 		}
 
-		// Чего именно не хватает — сервер знает сам: помощник перезаворачивает ровно это, новые
-		// первыми, не больше [recoverMissingLimit] (2026-10-06).
-		helpers, missing, err := deps.store.ChatHelperDevices(r.Context(), chatID, id.DeviceID, id.UserID, recoverMissingLimit)
+		// Названное устройством — разобрать: уже есть, вернёт помощник, потеряно; добрать то,
+		// чего оно не видело. Список помощнику — в тех же байтах, что и просьба.
+		plan, err := deps.store.ChatRecovery(r.Context(), chatID, id.DeviceID, id.UserID, req.Missing, recoverIDsBytes)
 		if err != nil {
-			log.Printf("chatRecover: helpers: %v", err)
+			log.Printf("chatRecover: plan: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
@@ -201,14 +213,19 @@ func chatRecover(deps chatsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		if len(missing) == 0 {
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"helpers": 0, "own_helpers": 0, "missing": 0})
-			return
+		// Ключ на сервере уже есть — помощник не нужен: устройство заберёт историю само.
+		if len(plan.Ready) > 0 {
+			deps.notifier.Device(r.Context(), id.DeviceID, "recovery.msg_ready", map[string]any{
+				"chat_id": chatID, "count": len(plan.Ready),
+			})
+		}
+		lost := plan.Lost
+		if lost == nil {
+			lost = []int64{}
 		}
 		b64 := base64.RawURLEncoding
 		own := 0
-		for _, h := range helpers {
+		for _, h := range plan.Helpers {
 			if h.Own {
 				own++
 			}
@@ -221,11 +238,14 @@ func chatRecover(deps chatsDeps) http.HandlerFunc {
 				// заверенному или подписавшему фразой и проверяет это сам (2026-10-06).
 				"requester_user": id.UserID,
 				"signature":      req.Signature,
-				"missing":        missing,
+				"missing":        plan.Recoverable,
 			})
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"helpers": len(helpers), "own_helpers": own, "missing": len(missing)})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"helpers": len(plan.Helpers), "own_helpers": own,
+			"missing": len(plan.Recoverable), "ready": len(plan.Ready), "lost": lost,
+		})
 	}
 }
 
@@ -355,6 +375,10 @@ func listPersonalChats(deps chatsDeps) http.HandlerFunc {
 	}
 }
 
-// recoverMissingLimit — сколько недостающих сообщений называет одна просьба: обёртка — около
-// двухсот байт, 500 — около сотни килобайт с помощника и месяцы обычной переписки.
-const recoverMissingLimit = 500
+// recoverBodyLimit — предел тела просьбы о ключах переписки. Сколько сообщений в ней назвать,
+// решает он, а не счёт (заказчик 2026-10-06): клиент кладёт номера, пока тело влезает.
+// recoverIDsBytes — столько же байт списка сервер называет помощнику; запас — на подпись и поля.
+const (
+	recoverBodyLimit = 4096
+	recoverIDsBytes  = recoverBodyLimit - 256
+)

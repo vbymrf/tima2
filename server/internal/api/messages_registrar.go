@@ -20,7 +20,7 @@ type MessageStore interface {
 	ProfileRevs(ctx context.Context, ids []string) (map[string]int32, error)
 	ListMessages(ctx context.Context, chatID, deviceID string, before uint64, limit int) ([]store.StoredMessage, error)
 	SigningKey(ctx context.Context, deviceID, userID string) ([]byte, error)
-	ChatHelperDevices(ctx context.Context, chatID, requesterDevice, requesterUser string, missingLimit int) ([]store.ChatHelper, []int64, error)
+	ChatHelperDevices(ctx context.Context, chatID, requesterDevice, requesterUser string) ([]store.ChatHelper, error)
 	UsersOfDevices(ctx context.Context, deviceIDs []string) (map[string]string, error)
 	EscrowKeyEpoch(ctx context.Context, id uint32) (string, error)
 }

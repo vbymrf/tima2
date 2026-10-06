@@ -8,6 +8,7 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import kotlinx.serialization.json.longOrNull
 
 /**
  * История личных переписок на новом устройстве (ПЛАН-(ДУ+ИУ)-УСТРОЙСТВ-И-ИСТОРИИ ИУ1–ИУ3).
@@ -120,10 +121,16 @@ class HistoryApi(
     /** Чем кончилась просьба о ключах переписки. */
     sealed interface Recover {
         /**
-         * Просьба разослана [helpers] устройствам; [missing] — сколько сообщений не хватает по
-         * счёту сервера (`null` — сервер старше и не считает, 0 — не хватает ничего).
+         * Сервер разобрал просьбу (2026-10-06): [missing] сообщений вернут [helpers] устройств;
+         * к [ready] ключ на сервере уже есть — история догонится сама (`recovery.msg_ready`);
+         * [lost] — названные, к которым ключа не осталось ни у кого: просить их снова незачем.
          */
-        data class Asked(val helpers: Int, val missing: Int? = null) : Recover
+        data class Asked(
+            val helpers: Int,
+            val missing: Int = 0,
+            val ready: Int = 0,
+            val lost: List<Long> = emptyList(),
+        ) : Recover
         data class Refused(val status: Int, val code: String) : Recover
         data object Offline : Recover
     }
@@ -133,23 +140,45 @@ class HistoryApi(
      * и собеседника (2026-10-06: «сообщение недоступно, запросить»). Заверенному устройству
      * подпись фразой не нужна; незаверенное подписывает ([signature] — base64url,
      * `RecoverySignature.sign`), без неё сервер отвечает `bad_identity_sig`.
+     *
+     * @param named номера сообщений, которые устройство видит недоступными, новые первыми. Их
+     *   кладётся столько, сколько влезает в [RECOVER_BODY_BYTES] — предел тела у сервера:
+     *   число решает размер, а не счёт (заказчик 2026-10-06).
      */
-    suspend fun recover(chatId: String, signature: String? = null): Recover {
+    suspend fun recover(chatId: String, signature: String? = null, named: List<Long> = emptyList()): Recover {
         val response = try {
             client.post(route.api("/api/v1/chats/$chatId/recover")) {
                 header("Authorization", "Bearer ${token()}")
                 contentType(ContentType.Application.Json)
-                setBody(if (signature == null) "{}" else "{\"signature\":\"$signature\"}")
+                setBody(recoverBody(signature, named))
             }
         } catch (e: Throwable) {
             return Recover.Offline
         }
         val body = response.jsonBody()
         if (response.status != HttpStatusCode.OK) return Recover.Refused(response.status.value, body.codeOf())
-        return Recover.Asked(body?.int("helpers") ?: 0, body?.int("missing"))
+        val lost = body?.get("lost")?.jsonArrayOrNull()?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.longOrNull }.orEmpty()
+        return Recover.Asked(body?.int("helpers") ?: 0, body?.int("missing") ?: 0, body?.int("ready") ?: 0, lost)
     }
 
     companion object {
+        /** Предел тела просьбы о ключах — тот же, что у сервера (`recoverBodyLimit`). */
+        const val RECOVER_BODY_BYTES: Int = 4096
+
+        /** Тело просьбы: подпись и столько номеров, сколько влезает в [RECOVER_BODY_BYTES]. */
+        fun recoverBody(signature: String?, named: List<Long>): String {
+            val head = if (signature == null) "{\"missing\":[" else "{\"signature\":\"$signature\",\"missing\":["
+            val out = StringBuilder(head)
+            var first = true
+            for (id in named) {
+                val part = (if (first) "" else ",") + id
+                if (out.length + part.length + 2 > RECOVER_BODY_BYTES) break
+                out.append(part)
+                first = false
+            }
+            return out.append("]}").toString()
+        }
+
         /** Страница истории: столько же отдаёт сервер по умолчанию, больше 200 он не даст. */
         const val PAGE: Int = 100
     }

@@ -4,6 +4,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -211,56 +212,25 @@ type ChatHelper struct {
 // ChatHelperDevices — устройства с обёртками сообщений чата (кроме requester);
 // Own=true, если то же устройство-владелец, что у запросившего (свои устройства
 // помогают без согласия; собеседник — с согласием, ADR-0010 §защита).
-//
-// missingLimit > 0 — заодно сообщения, к которым у requester нет обёртки, новые первыми и не
-// больше missingLimit (2026-10-06): по ним помощник перезаворачивает ровно недостающее.
-// Удалённые не называются — отдавать их некому. Одним методом с помощниками, а не отдельным:
-// это один вопрос «кто и что отдаёт по просьбе», и бюджет методов Store только уменьшается.
-func (s *Store) ChatHelperDevices(ctx context.Context, chatID, requesterDevice, requesterUser string, missingLimit int) ([]ChatHelper, []int64, error) {
-	var missing []int64
-	if missingLimit > 0 {
-		rows, err := s.pool.Query(ctx, `
-			SELECT m.message_id FROM personal_messages m
-			WHERE m.chat_id = $1 AND NOT m.deleted
-			  AND NOT EXISTS (
-			      SELECT 1 FROM personal_message_keys k
-			      WHERE k.chat_id = m.chat_id AND k.message_id = m.message_id AND k.recipient = $2)
-			ORDER BY m.message_id DESC
-			LIMIT $3`, chatID, requesterDevice, missingLimit)
-		if err != nil {
-			return nil, nil, err
-		}
-		for rows.Next() {
-			var id int64
-			if err := rows.Scan(&id); err != nil {
-				rows.Close()
-				return nil, nil, err
-			}
-			missing = append(missing, id)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return nil, nil, err
-		}
-	}
+func (s *Store) ChatHelperDevices(ctx context.Context, chatID, requesterDevice, requesterUser string) ([]ChatHelper, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT DISTINCT k.recipient, (d.user_id = $3) AS own
 		FROM personal_message_keys k
 		JOIN devices d ON d.device_id = k.recipient AND d.revoked_at IS NULL
 		WHERE k.chat_id = $1 AND k.recipient <> $2`, chatID, requesterDevice, requesterUser)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer rows.Close()
 	var out []ChatHelper
 	for rows.Next() {
 		var h ChatHelper
 		if err := rows.Scan(&h.DeviceID, &h.Own); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		out = append(out, h)
 	}
-	return out, missing, rows.Err()
+	return out, rows.Err()
 }
 
 // RecoveryMessageKey — обёртка ключа сообщения под устройство-получателя (от помощника).
@@ -333,4 +303,139 @@ func (s *Store) PersonalChatsOf(ctx context.Context, userID string) ([]PersonalC
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// ChatRecovery — что делать с просьбой устройства о ключах личной переписки (2026-10-06).
+//
+// Ready — названные сообщения, к которым у просящего обёртка на сервере уже есть: ему
+// достаточно забрать историю. Recoverable — те, к которым у него обёртки нет, а у другого
+// живого устройства есть: их перезавернёт помощник. Lost — названные, к которым обёртки нет
+// ни у кого (убраны по сроку, ПС2, или их не заворачивали вовсе) либо которых в переписке нет:
+// вернуть их нельзя, и просить снова незачем. Helpers — устройства с обёртками к Recoverable.
+type ChatRecovery struct {
+	Ready       []int64
+	Recoverable []int64
+	Lost        []int64
+	Helpers     []ChatHelper
+}
+
+// ChatRecovery разбирает просьбу: named — номера, которые устройство само видит
+// недоступными; к ним сервер добирает то, чего устройство не видело вовсе (у него нет обёртки,
+// у другого есть), новые первыми. Recoverable ограничен не числом, а размером: сколько номеров
+// влезает в fitBytes байт JSON-списка — тот же предел, что у тела просьбы.
+func (s *Store) ChatRecovery(ctx context.Context, chatID, requesterDevice, requesterUser string, named []int64, fitBytes int) (ChatRecovery, error) {
+	var out ChatRecovery
+	if named == nil {
+		named = []int64{}
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT n.id,
+		  EXISTS (SELECT 1 FROM personal_messages m
+		          WHERE m.chat_id = $1 AND m.message_id = n.id AND NOT m.deleted),
+		  EXISTS (SELECT 1 FROM personal_message_keys k
+		          WHERE k.chat_id = $1 AND k.message_id = n.id AND k.recipient = $2),
+		  EXISTS (SELECT 1 FROM personal_message_keys k
+		          JOIN devices d ON d.device_id = k.recipient AND d.revoked_at IS NULL
+		          WHERE k.chat_id = $1 AND k.message_id = n.id AND k.recipient <> $2)
+		FROM (SELECT DISTINCT unnest($3::bigint[]) AS id) n
+		ORDER BY n.id DESC`, chatID, requesterDevice, named)
+	if err != nil {
+		return out, err
+	}
+	for rows.Next() {
+		var id int64
+		var present, mine, others bool
+		if err := rows.Scan(&id, &present, &mine, &others); err != nil {
+			rows.Close()
+			return out, err
+		}
+		switch {
+		case !present:
+			out.Lost = append(out.Lost, id)
+		case mine:
+			out.Ready = append(out.Ready, id)
+		case others:
+			out.Recoverable = append(out.Recoverable, id)
+		default:
+			out.Lost = append(out.Lost, id)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+
+	// Добор: чего устройство не видело. Старше самой старой обёртки переписки искать нечего —
+	// там ключа нет ни у кого, и без этой границы запрос шёл бы по всей переписке.
+	used := idsBytes(out.Recoverable)
+	if used < fitBytes {
+		rows, err = s.pool.Query(ctx, `
+			SELECT m.message_id FROM personal_messages m
+			WHERE m.chat_id = $1 AND NOT m.deleted
+			  AND m.message_id >= (SELECT coalesce(min(message_id), 0) FROM personal_message_keys WHERE chat_id = $1)
+			  AND NOT (m.message_id = ANY($3::bigint[]))
+			  AND NOT EXISTS (SELECT 1 FROM personal_message_keys k
+			                  WHERE k.chat_id = m.chat_id AND k.message_id = m.message_id AND k.recipient = $2)
+			  AND EXISTS (SELECT 1 FROM personal_message_keys k
+			              JOIN devices d ON d.device_id = k.recipient AND d.revoked_at IS NULL
+			              WHERE k.chat_id = m.chat_id AND k.message_id = m.message_id AND k.recipient <> $2)
+			ORDER BY m.message_id DESC
+			LIMIT $4`, chatID, requesterDevice, named, fitBytes/2)
+		if err != nil {
+			return out, err
+		}
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return out, err
+			}
+			if used+idBytes(id) > fitBytes {
+				break
+			}
+			used += idBytes(id)
+			out.Recoverable = append(out.Recoverable, id)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return out, err
+		}
+	}
+	// Названное само могло не влезть — тогда вперёд новые.
+	for idsBytes(out.Recoverable) > fitBytes {
+		out.Recoverable = out.Recoverable[:len(out.Recoverable)-1]
+	}
+	if len(out.Recoverable) == 0 {
+		return out, nil
+	}
+
+	rows, err = s.pool.Query(ctx, `
+		SELECT DISTINCT k.recipient, (d.user_id = $3) AS own
+		FROM personal_message_keys k
+		JOIN devices d ON d.device_id = k.recipient AND d.revoked_at IS NULL
+		WHERE k.chat_id = $1 AND k.recipient <> $2 AND k.message_id = ANY($4::bigint[])`,
+		chatID, requesterDevice, requesterUser, out.Recoverable)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var h ChatHelper
+		if err := rows.Scan(&h.DeviceID, &h.Own); err != nil {
+			return out, err
+		}
+		out.Helpers = append(out.Helpers, h)
+	}
+	return out, rows.Err()
+}
+
+// idBytes — сколько номер занимает в JSON-списке: цифры и запятая.
+func idBytes(id int64) int { return len(strconv.FormatInt(id, 10)) + 1 }
+
+func idsBytes(ids []int64) int {
+	n := 2
+	for _, id := range ids {
+		n += idBytes(id)
+	}
+	return n
 }

@@ -28,11 +28,13 @@ type ChatStore interface {
 	SaveGroupKeyCopies(ctx context.Context, ownerID string, epoch int, items []store.GroupKeyCopy) error
 	ListGroupKeyCopies(ctx context.Context, ownerID string, epoch int) ([]store.GroupKeyCopy, error)
 	SaveRecoveryMessageKeys(ctx context.Context, chatID, recipient string, keys []store.RecoveryMessageKey) error
-	ChatHelperDevices(ctx context.Context, chatID, requesterDevice, requesterUser string, missingLimit int) ([]store.ChatHelper, []int64, error)
+	ChatHelperDevices(ctx context.Context, chatID, requesterDevice, requesterUser string) ([]store.ChatHelper, error)
 	IsChatParticipant(ctx context.Context, chatID, userID string) (bool, error)
 	IsChatParticipantDevice(ctx context.Context, chatID, deviceID string) (bool, error)
 	DeviceEncryptionPub(ctx context.Context, deviceID string) ([]byte, error)
 	IdentityPub(ctx context.Context, userID string) ([]byte, error)
+	// Просьба о ключах: что уже есть, что вернёт помощник, что потеряно (2026-10-06).
+	ChatRecovery(ctx context.Context, chatID, requesterDevice, requesterUser string, named []int64, fitBytes int) (store.ChatRecovery, error)
 
 	// История на новом устройстве (ИУ1)
 	PersonalChatsOf(ctx context.Context, userID string) ([]store.PersonalChatRef, error)

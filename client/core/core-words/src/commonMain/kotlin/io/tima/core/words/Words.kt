@@ -1253,6 +1253,8 @@ interface ChatWords {
     val messageUnavailable: String
     /** Недоступное сообщение личной переписки — с просьбой ключей (2026-10-06). */
     val messageUnavailableAsk: String
+    /** Недоступное сообщение, к которому ключа не осталось ни у кого — просить незачем. */
+    val messageKeyLost: String
     val decrypting: String
     val addToSelf: String
     val narrowTo: String
@@ -1355,6 +1357,8 @@ interface ChatWords {
     fun keysAsked(devices: Int): String
     val keysNoHelpers: String
     val keysNothingMissing: String
+    /** Названные сообщения не вернуть: ключа к ним нет ни у одного устройства. */
+    fun keysLost(messages: Int): String
     val keysNeedPhrase: String
     fun narrowWarning(circle: String): String
     fun narrowed(circle: String): String
@@ -3347,6 +3351,7 @@ object RussianWords : Words {
         }
         override val messageUnavailable = "сообщение недоступно"
         override val messageUnavailableAsk = "Сообщение недоступно, запросить"
+        override val messageKeyLost = "Сообщение недоступно: ключа не осталось"
         override val decrypting = "расшифровывается…"
         override val addToSelf = "Добавить себе"
         override val narrowTo = "сузить до"
@@ -3362,6 +3367,8 @@ object RussianWords : Words {
             "Этих ключей нет ни у кого из участников — история до вашего прихода утрачена"
         override val keysNothingMissing =
             "Все ключи уже у вас: сообщение не читается по другой причине"
+        override fun keysLost(messages: Int) =
+            "Сообщений, которые не вернуть: $messages — ключа к ним не осталось ни у одного устройства"
         override val keysNeedPhrase =
             "Нужна секретная фраза: ею аккаунт защищён от угона номера. " +
                 "Не знаете её здесь — напишите в группу с другого своего устройства: " +

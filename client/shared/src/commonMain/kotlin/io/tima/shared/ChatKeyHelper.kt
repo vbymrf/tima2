@@ -28,11 +28,11 @@ import kotlinx.coroutines.sync.withLock
  * устройства смогут быть заверенными, требуем фразу»). Вор SIM фразы не знает — тот довод,
  * которым в своё время закрыли ИУ4.
  *
- * **Перезаворачиваем ровно недостающее** — сервер называет номера сообщений, к которым у
- * просящего нет ключа, новые первыми и не больше [LIMIT]. Обёртка — около двухсот байт; 500 —
- * около сотни килобайт с одного помощника и месяцы обычной переписки. Остальное — по следующей
- * просьбе. Сервер старше и номеров не прислал — [LIMIT] последних. Повтор той же просьбы в
- * течение [AGAIN_MS] не обрабатывается: одну и ту же переписку перезаворачивали бы зря.
+ * **Перезаворачиваем ровно названное сервером** — сообщения, к которым у просящего нет ключа,
+ * а у других устройств есть: те, что просящий видит недоступными, и те, что до него не дошли
+ * вовсе. Сколько — решает размер списка в просьбе (4 КБ номеров), а не счёт (заказчик
+ * 2026-10-06). Номеров нет — перезаворачивать нечего. Отдаём кусками не больше [PROVIDE_BYTES].
+ * Повтор той же просьбы в течение [AGAIN_MS] не обрабатывается.
  */
 class ChatKeyHelper(
     private val history: HistoryApi,
@@ -64,7 +64,7 @@ class ChatKeyHelper(
      * @param requesterUser чьё устройство просит, по слову сервера; обязано совпасть с тем, кого
      *   ждём по [own], — иначе сервер подсунул чужого.
      * @param signature подпись фразой; `null` — отдаём только заверенному.
-     * @param missing каких сообщений нет; пусто — [LIMIT] последних.
+     * @param missing какие сообщения перезавернуть; пусто — нечего.
      * @return сколько ключей принял сервер; 0 — не отдали.
      */
     suspend fun answer(
@@ -77,6 +77,7 @@ class ChatKeyHelper(
         missing: List<Long> = emptyList(),
     ): Int {
         if (requesterDevice == myDeviceId) return 0
+        if (missing.isEmpty()) return said(chatId, "сервер не назвал сообщений")
         val key = "$chatId|$requesterDevice"
         val fresh = lock.withLock {
             val at = answered[key]
@@ -92,18 +93,17 @@ class ChatKeyHelper(
         if (!device.encryptionPub.contentEquals(requesterEncPub)) return said(chatId, "ключ в просьбе не совпал с заверенным")
         val pub = device.wrapPub()
 
-        val wanted = missing.take(LIMIT).toHashSet()
-        val oldest = wanted.minOrNull()
+        val wanted = missing.toHashSet()
+        val oldest = wanted.min()
         val out = mutableListOf<HistoryApi.Key>()
         var failed = 0
         var before = 0L
-        pages@ while (out.size + failed < LIMIT) {
+        pages@ while (out.size + failed < wanted.size) {
             val page = history.page(chatId, before) ?: break
             if (page.isEmpty()) break
             for (item in page) {
-                if (out.size + failed >= LIMIT) break@pages
-                if (oldest != null && item.messageId < oldest) break@pages
-                if (wanted.isNotEmpty() && item.messageId !in wanted) continue
+                if (item.messageId < oldest) break@pages
+                if (item.messageId !in wanted) continue
                 val r = HistoryKeys.rewrap(item.envelope, item.wrapEphemeral, myDeviceId, identity(), pub)
                 if (r == null) failed++ else out += HistoryApi.Key(r.messageId, r.ephemeralPub, r.wrapped)
             }
@@ -111,7 +111,7 @@ class ChatKeyHelper(
             before = page.last().messageId
         }
         var saved = 0
-        for (part in out.chunked(CHUNK)) saved += history.provide(chatId, requesterDevice, part) ?: 0
+        for (part in bySize(out)) saved += history.provide(chatId, requesterDevice, part) ?: 0
         Journal.note(
             LogCode.DEVICE_TRUST, "ключи переписки отданы по просьбе",
             "переписка" to chatId.take(8), "устройство" to requesterDevice.take(8),
@@ -121,18 +121,35 @@ class ChatKeyHelper(
         return saved
     }
 
+    /** Куски не больше [PROVIDE_BYTES] JSON: номер, эфемерал и обёртка в base64 и поля. */
+    private fun bySize(keys: List<HistoryApi.Key>): List<List<HistoryApi.Key>> {
+        val parts = mutableListOf<List<HistoryApi.Key>>()
+        var part = mutableListOf<HistoryApi.Key>()
+        var size = 0
+        for (k in keys) {
+            val one = 80 + k.messageId.toString().length + (k.ephemeralPub.size + k.wrapped.size) * 4 / 3
+            if (part.isNotEmpty() && size + one > PROVIDE_BYTES) {
+                parts += part
+                part = mutableListOf()
+                size = 0
+            }
+            part += k
+            size += one
+        }
+        if (part.isNotEmpty()) parts += part
+        return parts
+    }
+
     private fun said(chatId: String, why: String): Int {
         Journal.note(LogCode.DEVICE_TRUST, "просьба о ключах переписки не исполнена", "переписка" to chatId.take(8), "почему" to why)
         return 0
     }
 
     companion object {
-        /** Сколько сообщений переписки перезаворачивается на одну просьбу — как у сервера. */
-        const val LIMIT = 500
-
         /** Та же просьба раньше этого срока не обрабатывается. */
         const val AGAIN_MS = 10 * 60_000L
 
-        private const val CHUNK = 500
+        /** Кусок отдачи: у сервера предел тела 8 МБ, кусок в 1 МБ держит запрос коротким. */
+        const val PROVIDE_BYTES = 1 shl 20
     }
 }

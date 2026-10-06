@@ -72,6 +72,12 @@ sealed interface RequestKeysStep {
      */
     data object NoHelpers : RequestKeysStep
 
+    /**
+     * Названные сообщения не вернуть: ключа к ним не осталось ни у одного устройства (личная
+     * переписка, 2026-10-06). Просить их снова незачем.
+     */
+    data class Lost(val messages: Int) : RequestKeysStep
+
     data object NeedsSecretPhrase : RequestKeysStep
     data object NotMember : RequestKeysStep
     data class Offline(val retryAfterMs: Long) : RequestKeysStep

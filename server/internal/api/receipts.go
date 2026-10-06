@@ -25,7 +25,7 @@ func chatRead(deps messagesDeps) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_request", "нужен message_id")
 			return
 		}
-		peers, _, err := deps.store.ChatHelperDevices(r.Context(), chatID, id.DeviceID, id.UserID, 0)
+		peers, err := deps.store.ChatHelperDevices(r.Context(), chatID, id.DeviceID, id.UserID)
 		if err != nil {
 			log.Printf("chatRead: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -52,7 +52,7 @@ func chatTyping(deps messagesDeps) http.HandlerFunc {
 		}
 		id, _ := auth.FromContext(r.Context())
 		chatID := r.PathValue("chatID")
-		peers, _, err := deps.store.ChatHelperDevices(r.Context(), chatID, id.DeviceID, id.UserID, 0)
+		peers, err := deps.store.ChatHelperDevices(r.Context(), chatID, id.DeviceID, id.UserID)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return

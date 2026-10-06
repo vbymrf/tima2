@@ -107,21 +107,33 @@ func TestChatRecoverCertifiedNeedsNoPhrase(t *testing.T) {
 	if code := postAuthed(t, ts, pc.token, "POST", "/api/v1/chats/"+chat+"/recover", map[string]any{}, &out); code != 200 || out.Helpers == 0 {
 		t.Fatalf("заверенное без подписи: ожидался 200 с помощниками, получен %d, помощников %d", code, out.Helpers)
 	}
-	// Сервер называет, чего не хватает: помощник перезаворачивает ровно это (2026-10-06).
+	// Ничего не названо — сервер добирает сам: у компьютера нет обёртки, у телефона есть.
 	if out.Missing != 1 {
 		t.Fatalf("недостающих у компьютера: %d, ждали 1", out.Missing)
 	}
-	_, missing, err := srv.Store.ChatHelperDevices(t.Context(), chat, pc.id, pc.userID, 500)
-	if err != nil || len(missing) != 1 || missing[0] != 3301 {
-		t.Fatalf("недостающие у компьютера: %v %v, ждали [3301]", missing, err)
+	// Названное разбирается: 3301 вернёт помощник, несуществующее потеряно.
+	plan, err := srv.Store.ChatRecovery(t.Context(), chat, pc.id, pc.userID, []int64{3301, 999999}, recoverIDsBytes)
+	if err != nil || len(plan.Recoverable) != 1 || plan.Recoverable[0] != 3301 || len(plan.Lost) != 1 || plan.Lost[0] != 999999 || len(plan.Helpers) == 0 {
+		t.Fatalf("разбор у компьютера: %+v %v, ждали вернуть [3301], потеряно [999999], помощники есть", plan, err)
 	}
-	// У телефона ключ есть — просить нечего, и помощников не будят.
-	var none struct {
-		Helpers int `json:"helpers"`
-		Missing int `json:"missing"`
+	// У телефона ключ есть — помощников не будят, а ему самому говорят «забери историю».
+	var phoneOut struct {
+		Helpers int     `json:"helpers"`
+		Missing int     `json:"missing"`
+		Ready   int     `json:"ready"`
+		Lost    []int64 `json:"lost"`
 	}
-	if code := postAuthed(t, ts, phone.token, "POST", "/api/v1/chats/"+chat+"/recover", map[string]any{}, &none); code != 200 || none.Missing != 0 || none.Helpers != 0 {
-		t.Fatalf("телефону нечего просить: %d, недостаёт %d, помощников %d", code, none.Missing, none.Helpers)
+	if code := postAuthed(t, ts, phone.token, "POST", "/api/v1/chats/"+chat+"/recover", map[string]any{"missing": []int64{3301, 999999}}, &phoneOut); code != 200 ||
+		phoneOut.Missing != 0 || phoneOut.Helpers != 0 || phoneOut.Ready != 1 || len(phoneOut.Lost) != 1 {
+		t.Fatalf("у телефона: %d, %+v; ждали ready 1, lost [999999], помощников 0", code, phoneOut)
+	}
+	// Сколько назвать — решает размер тела, а не счёт: больше предела — отказ, а не обрезка.
+	tooMany := make([]int64, 0, 2000)
+	for i := int64(1); i <= 2000; i++ {
+		tooMany = append(tooMany, 1000000+i)
+	}
+	if code := postAuthed(t, ts, pc.token, "POST", "/api/v1/chats/"+chat+"/recover", map[string]any{"missing": tooMany}, nil); code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("тело больше предела: %d, ждали 413", code)
 	}
 
 	stranger, code, _ := registerProof(t, ts, "+79990000331", owner.identityPub(), nil)

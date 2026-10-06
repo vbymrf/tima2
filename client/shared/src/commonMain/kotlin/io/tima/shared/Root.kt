@@ -3913,18 +3913,30 @@ private fun Chat(
             // собеседника (заказчик 2026-10-06). Ответ приходит событием `recovery.msg_ready`,
             // и история догоняется сама. Незаверенное устройство подписывает просьбу фразой.
             askChatKeys = if (!group) {
-                { words ->
+                { words, named ->
                     val signature = words?.let { io.tima.core.encryption.RecoverySignature.sign(it, chatId, myDeviceId) }
-                    when (val r = network.history.recover(chatId, signature)) {
+                    when (val r = network.history.recover(chatId, signature, named)) {
                         is io.tima.core.network.HistoryApi.Recover.Asked -> {
                             Journal.note(
                                 LogCode.DEVICE_TRUST, "ключи переписки запрошены", "переписка" to chatId.take(8),
-                                "помощников" to r.helpers, "недостаёт" to (r.missing ?: -1), "по фразе" to (signature != null),
+                                "названо" to named.size, "вернут" to r.missing, "уже есть" to r.ready,
+                                "потеряно" to r.lost.size, "помощников" to r.helpers, "по фразе" to (signature != null),
                             )
+                            // Потерянное запоминается: ключа к нему нет ни у кого, и просить его
+                            // снова — будить чужие устройства зря.
+                            if (r.lost.isNotEmpty()) {
+                                val key = CHAT_KEYS_LOST + chatId
+                                runCatching {
+                                    val before = environment.settings.all().first()[key].orEmpty()
+                                        .split(',').mapNotNull { it.toLongOrNull() }.toSet()
+                                    environment.settings.put(key, (before + r.lost).sortedDescending().joinToString(","))
+                                }
+                            }
                             when {
-                                r.missing == 0 -> io.tima.domain.chat.RequestKeysStep.NothingMissing
-                                r.helpers > 0 -> io.tima.domain.chat.RequestKeysStep.Asked(r.helpers)
-                                else -> io.tima.domain.chat.RequestKeysStep.NoHelpers
+                                r.missing > 0 && r.helpers > 0 -> io.tima.domain.chat.RequestKeysStep.Asked(r.helpers)
+                                r.missing > 0 -> io.tima.domain.chat.RequestKeysStep.NoHelpers
+                                r.lost.isNotEmpty() && r.ready == 0 -> io.tima.domain.chat.RequestKeysStep.Lost(r.lost.size)
+                                else -> io.tima.domain.chat.RequestKeysStep.NothingMissing
                             }
                         }
                         // Устройство не заверено — просьбу подписывает фраза; опечатка в фразе
@@ -3939,6 +3951,14 @@ private fun Chat(
                             }
                         io.tima.core.network.HistoryApi.Recover.Offline -> io.tima.domain.chat.RequestKeysStep.Offline(0)
                     }
+                }
+            } else {
+                null
+            },
+            lostKeys = if (!group) {
+                {
+                    runCatching { environment.settings.all().first()[CHAT_KEYS_LOST + chatId] }.getOrNull().orEmpty()
+                        .split(',').mapNotNull { it.toLongOrNull() }.toSet()
                 }
             } else {
                 null
@@ -5669,6 +5689,12 @@ private fun reregNoticeText(
 
 /** Отметка «ключи переписки уже просили сами» — в настройках аккаунта, латиницей. */
 private const val CHAT_KEYS_ASKED = "chat.keys.asked."
+
+/**
+ * Номера сообщений переписки, к которым ключа не осталось ни у кого (ответ сервера на просьбу,
+ * 2026-10-06): их не просят снова. Имя латиницей — то, что приложение кладёт на диск.
+ */
+private const val CHAT_KEYS_LOST = "chat.keys.lost."
 
 /** Сами просим ключи переписки не чаще раза в сутки. */
 private const val CHAT_KEYS_AGAIN_MS = 24 * 60 * 60_000L

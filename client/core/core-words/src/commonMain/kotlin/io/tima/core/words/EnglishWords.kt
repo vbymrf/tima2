@@ -1210,6 +1210,7 @@ object EnglishWords : Words {
         override val messageUnavailable = "message unavailable"
 
         override val messageUnavailableAsk = "Message unavailable, request"
+        override val messageKeyLost = "Message unavailable: no key left"
         override val decrypting = "decrypting…"
         override val addToSelf = "Bring to my page"
         override val narrowTo = "narrow to"
@@ -1225,6 +1226,8 @@ object EnglishWords : Words {
             "Nobody among the members has these keys — the history from before you joined is lost"
         override val keysNothingMissing =
             "You already have every key: the message is unreadable for another reason"
+        override fun keysLost(messages: Int) =
+            "Messages that cannot be restored: $messages — no device has their key anymore"
         override val keysNeedPhrase =
             "The recovery phrase is needed: it is what guards the account against a stolen " +
                 "number. If you do not know it here — write to the group from another of " +

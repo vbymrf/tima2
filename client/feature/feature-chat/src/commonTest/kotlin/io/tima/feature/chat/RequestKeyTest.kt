@@ -114,7 +114,7 @@ class RequestKeyTest {
             observe = ObserveChat(ChatFeed { _, _ -> stream }),
             send = send(),
             scope = backgroundScope,
-            askChatKeys = { words -> asked += words; io.tima.domain.chat.RequestKeysStep.NothingMissing },
+            askChatKeys = { words, _ -> asked += words; io.tima.domain.chat.RequestKeysStep.NothingMissing },
         )
         assertTrue(store.state.value.chatKeysMay)
         store.askChatKeys()
@@ -122,6 +122,39 @@ class RequestKeyTest {
         assertEquals(listOf<List<String>?>(null), asked)
         assertIs<ChatNotice.KeysNothingMissing>(store.state.value.notice)
     }
+
+    @Test
+    fun просьба_называет_недоступные_кроме_потерянных() = runTest {
+        // 2026-10-06: клиент называет свои недоступные сообщения, новые первыми; те, к которым
+        // ключа не осталось ни у кого, не называются и помечаются сразу.
+        val named = mutableListOf<List<Long>>()
+        stream.value = listOf(unreadable(5), unreadable(9), unreadable(7), unreadable(0))
+        val store = ChatStore(
+            io = kotlinx.coroutines.Dispatchers.Unconfined,
+            chatId = "cccccccc-0000-0000-0000-000000000002",
+            observe = ObserveChat(ChatFeed { _, _ -> stream }),
+            send = send(),
+            scope = backgroundScope,
+            askChatKeys = { _, ids -> named += ids; io.tima.domain.chat.RequestKeysStep.Lost(2) },
+            lostKeys = { setOf(9L) },
+        )
+        runCurrent()
+        assertEquals(setOf(9L), store.state.value.lostKeys)
+        store.askChatKeys()
+        runCurrent()
+        assertEquals(listOf(7L, 5L), named.single(), "потерянное или без номера названо")
+        assertEquals(2, assertIs<ChatNotice.KeysLost>(store.state.value.notice).messages)
+    }
+
+    private fun unreadable(serverId: Long) = ChatLine(
+        dedupKey = "k-$serverId",
+        chatId = "cccccccc-0000-0000-0000-000000000002",
+        display = io.tima.domain.chat.MessageDisplay.UNREADABLE,
+        outgoing = false,
+        atMs = 1_000 + serverId,
+        localId = serverId + 1,
+        serverId = serverId,
+    )
 
     private val stream = MutableStateFlow<List<ChatLine>>(emptyList())
 
