@@ -288,3 +288,32 @@ func TestВиртуальныйПолноценен(t *testing.T) {
 		t.Fatalf("виртуальный не виден обычными ручками: %d %v", code, resp.Nicknames)
 	}
 }
+
+// TestВиртуальныйЗнаетКлючВладельца — пин-код временного аккаунта сбрасывается и фразой
+// владельца (ПЛАН-(ПН) Р3, 2026-10-07): устройство сверяет фразу с ключом владельца, который
+// отдаёт сервер. У обычного аккаунта владельца нет — пустой список, а не отказ.
+func TestВиртуальныйЗнаетКлючВладельца(t *testing.T) {
+	ts, _ := setup(t)
+	пётр := заведиВладельца(t, ts, "+79990000049")
+	_, virtual := завестиВиртуального(t, ts, пётр, "vladelec_pina_0")
+	токен := последнийТокен
+	if virtual == "" {
+		t.Fatal("виртуальный не заведён")
+	}
+
+	var ответ struct {
+		IdentityPubs []string `json:"identity_pubs"`
+	}
+	if code := authedJSON(t, ts, "GET", "/api/v1/users/me/owner", токен, nil, &ответ); code != http.StatusOK {
+		t.Fatalf("ключ владельца: %d", code)
+	}
+	want := base64.RawURLEncoding.EncodeToString(пётр.identity.Public().(ed25519.PublicKey))
+	if len(ответ.IdentityPubs) != 1 || ответ.IdentityPubs[0] != want {
+		t.Fatalf("ключ владельца: %v, ждали ключ Петра", ответ.IdentityPubs)
+	}
+
+	ответ.IdentityPubs = nil
+	if code := authedJSON(t, ts, "GET", "/api/v1/users/me/owner", пётр.token, nil, &ответ); code != http.StatusOK || len(ответ.IdentityPubs) != 0 {
+		t.Fatalf("у обычного аккаунта владельца нет: %d %v", code, ответ.IdentityPubs)
+	}
+}

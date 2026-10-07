@@ -102,6 +102,35 @@ func (s *Store) CreateVirtual(ctx context.Context, ownerUserID, nickname string,
 	return userID, tx.Commit(ctx)
 }
 
+// OwnerIdentityPubs — ключи личности владельца виртуального аккаунта: его действующие
+// личности (ПЛАН-(ПН) Р3, 2026-10-07). Пин-код временного аккаунта сбрасывается и фразой
+// владельца, а сверить её устройству не с чем: владелец живёт только здесь. Пусто — аккаунт
+// не виртуальный или владелец без ключа.
+func (s *Store) OwnerIdentityPubs(ctx context.Context, userID string) ([][]byte, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT o.identity_pub
+		FROM users v
+		JOIN persons p ON p.person_id = v.person_id AND p.owner_person_id IS NOT NULL
+		JOIN users o ON o.person_id = p.owner_person_id AND o.valid_to IS NULL
+		WHERE v.user_id = $1 AND length(o.identity_pub) = 32`, userID)
+	if err != nil {
+		if isBadUUID(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer rows.Close()
+	var out [][]byte
+	for rows.Next() {
+		var pub []byte
+		if err := rows.Scan(&pub); err != nil {
+			return nil, err
+		}
+		out = append(out, pub)
+	}
+	return out, rows.Err()
+}
+
 // VirtualsOf — виртуальные аккаунты владельца: их текущие личности.
 func (s *Store) VirtualsOf(ctx context.Context, ownerUserID string) ([]string, error) {
 	rows, err := s.pool.Query(ctx, `

@@ -33,6 +33,8 @@ type VirtualStore interface {
 	VirtualsOf(ctx context.Context, ownerUserID string) ([]string, error)
 	HasPhone(ctx context.Context, ids []string) (map[string]bool, error)
 	IdentityPub(ctx context.Context, userID string) ([]byte, error)
+	// Ключи личности владельца — для сброса пин-кода фразой владельца (ПЛАН-(ПН) Р3).
+	OwnerIdentityPubs(ctx context.Context, userID string) ([][]byte, error)
 	Nicknames(ctx context.Context, ids []string) (map[string]string, error)
 
 	// Устройство виртуального аккаунта: без него в него не войти вовсе.
@@ -52,6 +54,29 @@ var _ VirtualStore = (*store.Store)(nil)
 func RegisterVirtuals(mux *http.ServeMux, st VirtualStore, tokens func() VirtualTokens, requireDevice Middleware) {
 	mux.HandleFunc("GET /api/v1/users/me/virtuals", requireDevice(listVirtuals(st)))
 	mux.HandleFunc("POST /api/v1/users/me/virtuals", requireDevice(createVirtual(st, tokens)))
+	mux.HandleFunc("GET /api/v1/users/me/owner", requireDevice(virtualOwner(st)))
+}
+
+// virtualOwner — GET /users/me/owner: ключи личности владельца, если аккаунт виртуальный
+// (ПЛАН-(ПН) Р3, 2026-10-07). Пин-код временного аккаунта сбрасывается и фразой владельца;
+// устройство сверяет фразу само, сервер отдаёт только открытые ключи. Не виртуальный —
+// пустой список, а не отказ.
+func virtualOwner(st VirtualStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		pubs, err := st.OwnerIdentityPubs(r.Context(), id.UserID)
+		if err != nil {
+			log.Printf("virtualOwner: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		out := make([]string, 0, len(pubs))
+		for _, p := range pubs {
+			out = append(out, base64.RawURLEncoding.EncodeToString(p))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"identity_pubs": out})
+	}
 }
 
 // virtualSigned — что именно подписывает владелец.
