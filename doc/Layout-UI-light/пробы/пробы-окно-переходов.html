@@ -1,0 +1,268 @@
+<meta charset="utf-8">
+<title>Пробы: окно переходов</title>
+<link rel="stylesheet" href="../стиль.css">
+<style>
+  /* Панель «Переключение окон» — как `WindowSwitchingScreen.kt`: выезжает снизу, верх скруглён,
+     под ней затемнённое окно, откуда пришли. Ширина телефона — 344. */
+  .пп-экран { width: 344px; background: rgba(0,0,0,0.32); border-radius: 20px; padding-top: 70px; overflow: hidden; border: 2px solid var(--чёрный-12); }
+  .пп-панель { background: var(--поверхность); border-radius: 16px 16px 0 0; overflow: hidden; }
+
+  .пп-шапка { display: flex; align-items: center; gap: 12px; background: var(--функц); padding: 12px 16px; }
+  .пп-ав { width: 42px; height: 42px; flex: 0 0 42px; border-radius: 10px; border: 1px solid var(--рамка); background: #fff;
+           display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; box-sizing: border-box; }
+  .пп-ав.мал { width: 34px; height: 34px; flex-basis: 34px; font-size: 13px; }
+  .пп-кто { flex: 1; min-width: 0; }
+  .пп-имя { font-size: 15px; font-weight: 700; }
+  .пп-третье { font-size: 12px; color: var(--чёрный-50); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .пп-второе { font-size: 13px; color: var(--чёрный-70); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .пп-кн { width: 34px; height: 34px; border-radius: 999px; background: #fff; border: 1px solid var(--чёрный-12);
+           display: flex; align-items: center; justify-content: center; font-size: 14px; }
+
+  .пп-строка { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--чёрный-12); }
+  .пп-знак { background: var(--акцент-мягкий); border-radius: 8px; padding: 6px 8px; font-size: 15px; line-height: 1; }
+  .пп-мид { flex: 1; min-width: 0; }
+  .пп-назв { font-size: 15px; font-weight: 700; }
+  .пп-справа { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+  .пп-счёт { background: var(--активность); color: #000; font-weight: 800; font-size: 12px; border-radius: 999px; padding: 2px 8px; }
+  .пп-звонок { background: var(--акцент-мягкий); }
+  .пп-стрелка { width: 16px; height: 26px; display: block; }
+  .пп-стрелка.вверх { transform: rotate(-90deg); }
+  .пп-заголовок { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--чёрный-70); padding: 14px 16px 6px; }
+
+  /* Раскрытый список аккаунтов — на мягкой подложке, отступом, как варианты «Экономичного режима» */
+  .пп-раскрыто { background: var(--акцент-мягкий); }
+  .пп-раскрыто .пп-строка { padding-left: 38px; border-bottom-color: rgba(0,0,0,0.08); }
+  .пп-галка { width: 22px; height: 22px; border-radius: 6px; background: var(--навигация); color: #fff; font-weight: 900; font-size: 13px;
+              display: flex; align-items: center; justify-content: center; }
+  .пп-плюс { width: 34px; height: 34px; flex: 0 0 34px; border-radius: 10px; border: 1.5px dashed var(--навигация); color: var(--навигация);
+             display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; box-sizing: border-box; }
+  .пп-разд { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--чёрный-50); padding: 10px 16px 4px 38px; }
+
+  /* Всё, что ниже окон и аккаунтов, во всех вариантах одно и то же */
+  .пп-низ .пп-назв { font-size: 15px; }
+
+  /* ── А: окна на подложке, ниже — толстая черта и мельче ──────────────────── */
+  .вА .пп-окна { background: var(--функц); }
+  .вА .пп-окна .пп-строка { border-bottom-color: rgba(0,0,0,0.08); }
+  .вА .пп-черта { height: 6px; background: var(--чёрный-12); }
+  .вА .пп-низ .пп-назв, .вА .пп-акк .пп-назв { font-size: 13px; }
+  .вА .пп-низ .пп-строка, .вА .пп-акк > .пп-строка { padding-top: 7px; padding-bottom: 7px; }
+
+  /* ── Б: окна плитками 3×2 ────────────────────────────────────────────────── */
+  .вБ .пп-плитки { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px 12px 14px; border-bottom: 1px solid var(--чёрный-12); }
+  .пп-плитка { position: relative; border: 1px solid var(--чёрный-12); border-radius: 12px; padding: 12px 4px 10px; text-align: center; background: #fff; }
+  .пп-плитка .пп-знак { display: inline-block; margin-bottom: 6px; font-size: 20px; padding: 8px 10px; }
+  .пп-плитка .пп-подп { font-size: 13px; font-weight: 700; }
+  .пп-плитка .пп-счёт { position: absolute; top: 6px; right: 6px; font-size: 11px; padding: 1px 6px; }
+  .пп-плитка.тут { border: 2px solid var(--навигация); background: var(--акцент-мягкий); padding: 11px 3px 9px; }
+  .пп-плитка.пусто { border-style: dashed; background: transparent; }
+
+  /* ── В: крупные строки, заголовок «Окна», текущее — зелёной полосой ──────── */
+  .вВ .пп-окна .пп-назв { font-size: 17px; }
+  .вВ .пп-окна .пп-строка { padding-top: 13px; padding-bottom: 13px; position: relative; }
+  .вВ .пп-окна .пп-строка.тут::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--навигация); }
+  .вВ .пп-окна .пп-знак { font-size: 18px; padding: 8px 10px; }
+
+  /* ── Д: настройки → «Аккаунты» ───────────────────────────────────────────── */
+  .пп-лист { width: 344px; border: 2px solid var(--чёрный-12); border-radius: 20px; overflow: hidden; background: var(--поверхность); }
+  .пп-лист-шапка { display: flex; align-items: center; gap: 12px; background: var(--функц); padding: 12px 16px; font-size: 17px; font-weight: 800; }
+  .пп-назад { width: 34px; height: 34px; border-radius: 999px; background: var(--навигация); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 900; }
+  .пп-абзац { font-size: 13px; color: var(--чёрный-70); padding: 12px 16px; line-height: 1.4; }
+  .пп-тихая { background: var(--акцент-мягкий); border-radius: 999px; padding: 7px 12px; font-size: 13px; font-weight: 700; }
+  .пп-пузырь { display: inline-block; margin-top: 4px; background: var(--акцент-мягкий); border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 700; }
+  .пп-разделитель { display: flex; align-items: center; gap: 10px; padding: 14px 16px 6px; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--чёрный-70); }
+  .пп-разделитель::after { content: ""; flex: 1; height: 2px; background: var(--чёрный-12); }
+
+  .проба { padding: 20px 0 24px; border-bottom: 1px solid var(--чёрный-12); }
+  .шапка-пробы { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .номер { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+  .опис { font-size: 13.5px; color: var(--чёрный-70); max-width: 760px; }
+  .срезы { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .пп-подпись { margin-top: 8px; max-width: 344px; font-size: 12.5px; color: var(--чёрный-70); }
+  .решения { font-size: 13.5px; line-height: 1.5; max-width: 820px; }
+  .решения li { margin-bottom: 4px; }
+</style>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="стрелка" viewBox="0 0 16 26"><polyline points="4,5 12,13 4,21" fill="none" stroke="#8ac44a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<h1>Пробы: окно переходов</h1>
+
+<p class="решения">Задача заказчика (2026-10-07): «Нужно выделить пункты меню в окне переходов 5 окон, всегда держать их в
+самом верху. Аккаунты сделать ввиде списка… Щас они выдают техническое имя – поменять на то, что мы показываем»; затем
+«Делай пробы» и «Нужно добавить в Настройки Виртуальные аккаунты тот же список… Меняем название на Аккаунты. Покажем
+все аккаунты. Рзделитель для виртуальных и основных».</p>
+
+<ul class="решения">
+  <li><b>Порядок:</b> шапка → «Активный звонок» (если звонок) → окна → «Аккаунты» → «Настройки, помощь, баги» → «Выйти» →
+    «Закрыть приложение». Окна первыми и прокручиваются со всеми (вариант «а»).</li>
+  <li><b>Аккаунты</b> — раскрывающимся списком; есть и при одном аккаунте. Свёрнут; раскрыт сам, если у какого-то аккаунта
+    есть неотправленное. Внизу списка — «Добавить виртуальный аккаунт» (тот же экран, что сейчас пункт внизу панели);
+    отдельный пункт внизу панели уходит. Перехода в настройки из списка нет.</li>
+  <li><b>Подпись аккаунта — одна везде</b> (переключатель, замок пин-кода, вход): первая строка — имя, без имени —
+    @ник, без ника — служебное имя; вторая — @ник и телефон со скрытой серединой, у виртуального — «виртуальный».
+    Полный номер — только в шапке панели. «С 05.10» — только на экране входа.</li>
+  <li>Различаются пробы А, Б, В только тем, <b>как выделены окна</b>. Список аккаунтов и низ — общие, они в пробах Г и Д.</li>
+</ul>
+
+<!-- ═════════════════════════════ А ═════════════════════════════ -->
+<section class="проба" id="А">
+  <div class="шапка-пробы"><span class="номер">А</span><span class="опис">Окна — на подложке, как у шапки: блок управления.
+    Всё ниже отделено толстой чертой и набрано мельче. Строки окон прежние, со второй строкой «что внутри».</span></div>
+  <div class="срезы"><div>
+  <div class="пп-экран вА"><div class="пп-панель">
+    <div class="пп-шапка"><div class="пп-ав">А</div><div class="пп-кто"><div class="пп-имя">Анна Смирнова</div>
+      <div class="пп-третье">+7 999 000-00-01</div><div class="пп-третье">@anna</div></div><div class="пп-кн">👤</div><div class="пп-кн">✕</div></div>
+    <div class="пп-строка пп-звонок"><span class="пп-знак">📞</span><div class="пп-мид"><div class="пп-назв">Активный звонок</div><div class="пп-второе">Ольга Кравец</div></div></div>
+    <div class="пп-окна">
+      <div class="пп-строка"><span class="пп-знак">📞</span><div class="пп-мид"><div class="пп-назв">Телефон</div><div class="пп-второе">чаты, книга, звонки · вы здесь</div></div><div class="пп-справа"><span class="пп-счёт">3</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">📰</span><div class="пп-мид"><div class="пп-назв">Социальная лента</div><div class="пп-второе">общая, друзья, каталог</div></div><div class="пп-справа"><span class="пп-счёт">12</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">🖼</span><div class="пп-мид"><div class="пп-назв">Медиа-лента</div><div class="пп-второе">лента и слайды</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">💬</span><div class="пп-мид"><div class="пп-назв">Свободное общение</div><div class="пп-второе">истории, ответы, реакции</div></div><div class="пп-справа"><span class="пп-счёт">2</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">👤</span><div class="пп-мид"><div class="пп-назв">Личная страница</div><div class="пп-второе">профиль, коллекции, роли</div></div></div>
+    </div>
+    <div class="пп-черта"></div>
+    <div class="пп-акк"><div class="пп-строка"><span class="пп-знак">👥</span><div class="пп-мид"><div class="пп-назв">Аккаунты</div></div>
+      <div class="пп-справа"><span class="пп-второе">Анна Смирнова</span><svg class="пп-стрелка"><use href="#стрелка"/></svg></div></div></div>
+    <div class="пп-низ">
+      <div class="пп-строка"><span class="пп-знак">⚙</span><div class="пп-мид"><div class="пп-назв">Настройки, помощь, баги</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">↩</span><div class="пп-мид"><div class="пп-назв">Выйти</div><div class="пп-третье">TIMA работает в фоне: звонки и сообщения придут</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">🚪</span><div class="пп-мид"><div class="пп-назв">Закрыть приложение</div><div class="пп-третье">Звонки и сообщения не придут, пока TIMA снова не открыта</div></div></div>
+    </div>
+  </div></div>
+  <div class="пп-подпись">Окна видно как одно целое — серой полосой, как у шапки и строки ввода («где им управляют — фон есть»).
+    Минус: подложка у окон та же, что у шапки, и граница шапки и окон читается слабо.</div>
+  </div></div>
+</section>
+
+<!-- ═════════════════════════════ Б ═════════════════════════════ -->
+<section class="проба" id="Б">
+  <div class="шапка-пробы"><span class="номер">Б</span><span class="опис">Окна — плитками 3×2: значок, короткое имя, счётчик
+    в углу. Текущее — зелёной рамкой. Второй строки «что внутри» нет. Шестая клетка — окно 0 во время звонка или стенд;
+    без них пустая.</span></div>
+  <div class="срезы"><div>
+  <div class="пп-экран вБ"><div class="пп-панель">
+    <div class="пп-шапка"><div class="пп-ав">А</div><div class="пп-кто"><div class="пп-имя">Анна Смирнова</div>
+      <div class="пп-третье">+7 999 000-00-01</div><div class="пп-третье">@anna</div></div><div class="пп-кн">👤</div><div class="пп-кн">✕</div></div>
+    <div class="пп-строка пп-звонок"><span class="пп-знак">📞</span><div class="пп-мид"><div class="пп-назв">Активный звонок</div><div class="пп-второе">Ольга Кравец</div></div></div>
+    <div class="пп-плитки">
+      <div class="пп-плитка тут"><span class="пп-счёт">3</span><span class="пп-знак">📞</span><div class="пп-подп">Телефон</div></div>
+      <div class="пп-плитка"><span class="пп-счёт">12</span><span class="пп-знак">📰</span><div class="пп-подп">Социум</div></div>
+      <div class="пп-плитка"><span class="пп-знак">🖼</span><div class="пп-подп">Медиа</div></div>
+      <div class="пп-плитка"><span class="пп-счёт">2</span><span class="пп-знак">💬</span><div class="пп-подп">Общение</div></div>
+      <div class="пп-плитка"><span class="пп-знак">👤</span><div class="пп-подп">Страница</div></div>
+      <div class="пп-плитка"><span class="пп-знак">📞</span><div class="пп-подп">Звонок</div></div>
+    </div>
+    <div class="пп-акк"><div class="пп-строка"><span class="пп-знак">👥</span><div class="пп-мид"><div class="пп-назв">Аккаунты</div></div>
+      <div class="пп-справа"><span class="пп-второе">Анна Смирнова</span><svg class="пп-стрелка"><use href="#стрелка"/></svg></div></div></div>
+    <div class="пп-низ">
+      <div class="пп-строка"><span class="пп-знак">⚙</span><div class="пп-мид"><div class="пп-назв">Настройки, помощь, баги</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">↩</span><div class="пп-мид"><div class="пп-назв">Выйти</div><div class="пп-третье">TIMA работает в фоне: звонки и сообщения придут</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">🚪</span><div class="пп-мид"><div class="пп-назв">Закрыть приложение</div><div class="пп-третье">Звонки и сообщения не придут, пока TIMA снова не открыта</div></div></div>
+    </div>
+  </div></div>
+  <div class="пп-подпись">Самое компактное: окна занимают втрое меньше высоты, и аккаунты с настройками видны без прокрутки.
+    Минус: пропадает «что внутри» — человек, не ходивший в «Общение», не узнает здесь, что это.</div>
+  </div></div>
+</section>
+
+<!-- ═════════════════════════════ В ═════════════════════════════ -->
+<section class="проба" id="В">
+  <div class="шапка-пробы"><span class="номер">В</span><span class="опис">Окна — строками крупнее (имя 17 вместо 15, строка выше),
+    с заголовком «Окна». Текущее окно — зелёной полосой слева вместо приписки «вы здесь». Ниже — обычный размер.</span></div>
+  <div class="срезы"><div>
+  <div class="пп-экран вВ"><div class="пп-панель">
+    <div class="пп-шапка"><div class="пп-ав">А</div><div class="пп-кто"><div class="пп-имя">Анна Смирнова</div>
+      <div class="пп-третье">+7 999 000-00-01</div><div class="пп-третье">@anna</div></div><div class="пп-кн">👤</div><div class="пп-кн">✕</div></div>
+    <div class="пп-строка пп-звонок"><span class="пп-знак">📞</span><div class="пп-мид"><div class="пп-назв">Активный звонок</div><div class="пп-второе">Ольга Кравец</div></div></div>
+    <div class="пп-заголовок">Окна</div>
+    <div class="пп-окна">
+      <div class="пп-строка тут"><span class="пп-знак">📞</span><div class="пп-мид"><div class="пп-назв">Телефон</div><div class="пп-второе">чаты, книга, звонки</div></div><div class="пп-справа"><span class="пп-счёт">3</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">📰</span><div class="пп-мид"><div class="пп-назв">Социальная лента</div><div class="пп-второе">общая, друзья, каталог</div></div><div class="пп-справа"><span class="пп-счёт">12</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">🖼</span><div class="пп-мид"><div class="пп-назв">Медиа-лента</div><div class="пп-второе">лента и слайды</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">💬</span><div class="пп-мид"><div class="пп-назв">Свободное общение</div><div class="пп-второе">истории, ответы, реакции</div></div><div class="пп-справа"><span class="пп-счёт">2</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">👤</span><div class="пп-мид"><div class="пп-назв">Личная страница</div><div class="пп-второе">профиль, коллекции, роли</div></div></div>
+    </div>
+    <div class="пп-акк"><div class="пп-строка"><span class="пп-знак">👥</span><div class="пп-мид"><div class="пп-назв">Аккаунты</div></div>
+      <div class="пп-справа"><span class="пп-второе">Анна Смирнова</span><svg class="пп-стрелка"><use href="#стрелка"/></svg></div></div></div>
+    <div class="пп-низ">
+      <div class="пп-строка"><span class="пп-знак">⚙</span><div class="пп-мид"><div class="пп-назв">Настройки, помощь, баги</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">↩</span><div class="пп-мид"><div class="пп-назв">Выйти</div><div class="пп-третье">TIMA работает в фоне: звонки и сообщения придут</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">🚪</span><div class="пп-мид"><div class="пп-назв">Закрыть приложение</div><div class="пп-третье">Звонки и сообщения не придут, пока TIMA снова не открыта</div></div></div>
+    </div>
+  </div></div>
+  <div class="пп-подпись">Ближе всего к нынешнему: те же строки, но окна заметно главнее остального. Минус: самый высокий —
+    при крупном шрифте «Аккаунты» уходят под прокрутку.</div>
+  </div></div>
+</section>
+
+<!-- ═════════════════════════════ Г ═════════════════════════════ -->
+<section class="проба" id="Г">
+  <div class="шапка-пробы"><span class="номер">Г</span><span class="опис">«Аккаунты» в панели — раскрывающимся списком (общий
+    для А, Б и В). Справа в свёрнутой строке — текущий аккаунт и сумма неотправленного; стрелка зелёная, как в настройках.</span></div>
+  <div class="срезы">
+  <div>
+    <div class="пп-лист">
+      <div class="пп-строка"><span class="пп-знак">👥</span><div class="пп-мид"><div class="пп-назв">Аккаунты</div></div>
+        <div class="пп-справа"><span class="пп-счёт">2</span><svg class="пп-стрелка вверх"><use href="#стрелка"/></svg></div></div>
+      <div class="пп-раскрыто">
+        <div class="пп-разд">Основной</div>
+        <div class="пп-строка"><div class="пп-ав мал">А</div><div class="пп-мид"><div class="пп-назв">Анна Смирнова</div><div class="пп-второе">@anna · +7 9•• ••• 01</div></div><div class="пп-справа"><div class="пп-галка">✓</div></div></div>
+        <div class="пп-разд">Виртуальные</div>
+        <div class="пп-строка"><div class="пп-ав мал">Р</div><div class="пп-мид"><div class="пп-назв">Работа</div><div class="пп-второе">@anna_work · виртуальный</div><div class="пп-третье">не отправлено</div></div><div class="пп-справа"><span class="пп-счёт">2</span></div></div>
+        <div class="пп-строка"><div class="пп-ав мал">S</div><div class="пп-мид"><div class="пп-назв">@shop</div><div class="пп-второе">виртуальный</div></div></div>
+        <div class="пп-строка"><div class="пп-плюс">＋</div><div class="пп-мид"><div class="пп-назв">Добавить виртуальный аккаунт</div><div class="пп-второе">не больше пяти на номер</div></div></div>
+      </div>
+    </div>
+    <div class="пп-подпись"><b>Г1.</b> Раскрыт сам: у «Работы» два неотправленных. Текущий — зелёная галочка; нажатие на другой —
+      переход в него. «@shop» — без имени: первой строкой ник. Разделитель «Основной / Виртуальные» — как в настройках (Д).</div>
+  </div>
+  <div>
+    <div class="пп-лист">
+      <div class="пп-строка"><span class="пп-знак">👥</span><div class="пп-мид"><div class="пп-назв">Аккаунты</div></div>
+        <div class="пп-справа"><svg class="пп-стрелка вверх"><use href="#стрелка"/></svg></div></div>
+      <div class="пп-раскрыто">
+        <div class="пп-строка"><div class="пп-ав мал">А</div><div class="пп-мид"><div class="пп-назв">Анна Смирнова</div><div class="пп-второе">@anna · +7 9•• ••• 01</div></div><div class="пп-справа"><div class="пп-галка">✓</div></div></div>
+        <div class="пп-строка"><div class="пп-плюс">＋</div><div class="пп-мид"><div class="пп-назв">Добавить виртуальный аккаунт</div><div class="пп-второе">не больше пяти на номер</div></div></div>
+      </div>
+    </div>
+    <div class="пп-подпись"><b>Г2.</b> Аккаунт один, виртуальных нет: в списке только он и кнопка. Разделителя нет — делить нечего.
+      Раскрыт нажатием (неотправленного нет — сам не раскрывается).</div>
+  </div>
+  <div>
+    <div class="пп-лист">
+      <div class="пп-строка"><span class="пп-знак">👥</span><div class="пп-мид"><div class="пп-назв">Аккаунты</div></div>
+        <div class="пп-справа"><span class="пп-второе">69a94f52</span><svg class="пп-стрелка"><use href="#стрелка"/></svg></div></div>
+    </div>
+    <div class="пп-подпись"><b>Г3.</b> Свёрнут. Ни имени, ни ника в карточке нет — служебное имя, а не пустота (заказчик:
+      «служебное имя покажем все равно»). Карточка обновляется при каждом приходе профиля, так что это редкость.</div>
+  </div>
+  </div>
+</section>
+
+<!-- ═════════════════════════════ Д ═════════════════════════════ -->
+<section class="проба" id="Д">
+  <div class="шапка-пробы"><span class="номер">Д</span><span class="опис">Настройки → «Аккаунты» (было «Виртуальные аккаунты»):
+    все аккаунты устройства той же подписью, разделитель основных и виртуальных. «Передать» — только у виртуальных, как сейчас.
+    Ниже — прежние действия.</span></div>
+  <div class="срезы"><div>
+  <div class="пп-лист">
+    <div class="пп-лист-шапка"><div class="пп-назад">←</div>Аккаунты</div>
+    <div class="пп-абзац">Виртуальный аккаунт — отдельный пользователь: своя переписка, свои ключи, своя секретная фраза.
+      Телефона у него нет, находят его по нику.</div>
+    <div class="пп-разделитель">Основной</div>
+    <div class="пп-строка"><div class="пп-ав мал">А</div><div class="пп-мид"><div class="пп-назв">Анна Смирнова</div><div class="пп-второе">@anna · +7 9•• ••• 01</div><span class="пп-пузырь">сейчас</span></div></div>
+    <div class="пп-разделитель">Виртуальные</div>
+    <div class="пп-строка"><div class="пп-ав мал">Р</div><div class="пп-мид"><div class="пп-назв">Работа</div><div class="пп-второе">@anna_work · виртуальный</div></div><div class="пп-справа"><span class="пп-тихая">Передать</span></div></div>
+    <div class="пп-строка"><div class="пп-ав мал">S</div><div class="пп-мид"><div class="пп-назв">@shop</div><div class="пп-второе">виртуальный</div></div><div class="пп-справа"><span class="пп-тихая">Передать</span></div></div>
+    <div class="пп-разделитель">Действия</div>
+    <div class="пп-строка"><div class="пп-плюс">＋</div><div class="пп-мид"><div class="пп-назв">Завести виртуальный аккаунт</div><div class="пп-второе">не больше пяти на номер</div></div></div>
+    <div class="пп-строка"><div class="пп-ав мал">↓</div><div class="пп-мид"><div class="пп-назв">Принять аккаунт</div><div class="пп-второе">нужны код и фраза от того, кто передаёт</div></div></div>
+    <div class="пп-абзац" style="font-size:12px;color:var(--чёрный-50)">Связь с вашим основным аккаунтом не видна собеседникам. От нас она не
+      скрыта: привязка хранится на сервере — иначе её нечем было бы проверять.</div>
+  </div>
+  <div class="пп-подпись">Текущий отмечен пузырём «сейчас». Виртуальных нет — под «Виртуальные» строка «Виртуальных аккаунтов пока
+    нет.», как сейчас. Сейчас этот экран берёт список с сервера — там только виртуальные; основной добавляется с устройства.</div>
+  </div></div>
+</section>
