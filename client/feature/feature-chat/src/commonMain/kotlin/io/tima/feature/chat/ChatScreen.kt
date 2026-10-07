@@ -148,6 +148,10 @@ fun ChatScreen(
     onCarry: ((Long, Int) -> Unit)? = null,
     /** «Сообщение недоступно, запросить» — личная переписка и группа (2026-10-06). `null` — не нажимается. */
     onAskChatKeys: (() -> Unit)? = null,
+    /** Где аватар в группе (пробы «вид группы», 2026-10-07): «Вид» в «Социуме». */
+    avatarLook: io.tima.core.ui.AvatarLook = io.tima.core.ui.AvatarLook.Free,
+    /** Нажатие на аватар автора — его страница, во всех видах. `null` — не нажимается. */
+    onAuthor: ((String) -> Unit)? = null,
     /** Меню «•••» в шапке. `null` — кнопки нет (личная переписка). */
     onMore: (() -> Unit)? = null,
     /**
@@ -274,6 +278,8 @@ fun ChatScreen(
             onNarrow = onNarrow,
             onCarry = onCarry,
             onAskChatKeys = onAskChatKeys?.takeIf { state.chatKeysMay || state.keyAskMay },
+            avatarLook = avatarLook,
+            onAuthor = onAuthor,
             lostKeys = state.lostKeys,
             onThread = onThread,
             onFailed = onFailed,
@@ -346,6 +352,10 @@ private fun Feed(
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
     onCarry: ((Long, Int) -> Unit)? = null,
     onAskChatKeys: (() -> Unit)? = null,
+    /** Где аватар в группе (пробы «вид группы», 2026-10-07): «Вид» в «Социуме». */
+    avatarLook: io.tima.core.ui.AvatarLook = io.tima.core.ui.AvatarLook.Free,
+    /** Нажатие на аватар автора — его страница, во всех видах. `null` — не нажимается. */
+    onAuthor: ((String) -> Unit)? = null,
     /** Номера сообщений, к которым ключа не осталось ни у кого: «запросить» у них нет. */
     lostKeys: Set<Long> = emptySet(),
     onThread: ((Long) -> Unit)? = null,
@@ -363,7 +373,9 @@ private fun Feed(
             horizontal = TimaSpacing.about3,
             vertical = TimaSpacing.about4,
         ),
-        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3, Alignment.Bottom),
+        // Зазор между репликами — вдвое меньше прежнего (заказчик 2026-10-07), везде; над репликой
+        // с аватаром — прежний: аватар выступает в него вверх (см. отступ у реплики ниже).
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3 / 2, Alignment.Bottom),
     ) {
         // Порядок появления авторов — по первому сообщению в переписке (заказчик 2026-09-19):
         // список идёт новым сверху, поэтому считается с конца. Свои и владелец в счёт не идут —
@@ -410,6 +422,8 @@ private fun Feed(
                 onAskChatKeys = onAskChatKeys,
                 lostKeys = lostKeys,
                 onThread = onThread,
+                avatarLook = avatarLook,
+                onAuthor = onAuthor,
                 onFailed = onFailed,
             )
         }
@@ -460,6 +474,10 @@ private fun Reply(
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
     onCarry: ((Long, Int) -> Unit)? = null,
     onAskChatKeys: (() -> Unit)? = null,
+    /** Где аватар в группе (пробы «вид группы», 2026-10-07): «Вид» в «Социуме». */
+    avatarLook: io.tima.core.ui.AvatarLook = io.tima.core.ui.AvatarLook.Free,
+    /** Нажатие на аватар автора — его страница, во всех видах. `null` — не нажимается. */
+    onAuthor: ((String) -> Unit)? = null,
     /** Номера сообщений, к которым ключа не осталось ни у кого: «запросить» у них нет. */
     lostKeys: Set<Long> = emptySet(),
     onThread: ((Long) -> Unit)? = null,
@@ -489,8 +507,17 @@ private fun Reply(
     // делать» относится ко всему сообщению.
     val failed = (line.display == MessageDisplay.FAILED || line.display == MessageDisplay.PENDING) &&
         line.outgoing && onFailed != null
-    Column(if (failed) Modifier.clickable { onFailed!!(line) } else Modifier) {
-        Bubbled(line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys, line.serverId in lostKeys)
+    // Над репликой с аватаром — прежний зазор 12: аватар выступает в него вверх (2026-10-07).
+    val withAvatar = !line.outgoing && !continuation && author != null
+    Column(
+        (if (failed) Modifier.clickable { onFailed!!(line) } else Modifier)
+            .then(if (withAvatar) Modifier.padding(top = TimaSpacing.about3 / 2) else Modifier),
+    ) {
+        Bubbled(
+            line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys, line.serverId in lostKeys,
+            look = avatarLook,
+            onAvatar = line.senderId?.let { who -> onAuthor?.let { open -> { open(who) } } },
+        )
         // «Ветка · N ответов» — под сообщением, отдельной строкой, а не внутри пузыря:
         // это не часть сказанного, а вход в разговор о нём (ADR-0024 §7).
         //
@@ -533,6 +560,8 @@ private fun Bubbled(
     onCarry: ((Long, Int) -> Unit)?,
     onAskChatKeys: (() -> Unit)? = null,
     keyLost: Boolean = false,
+    look: io.tima.core.ui.AvatarLook = io.tima.core.ui.AvatarLook.Free,
+    onAvatar: (() -> Unit)? = null,
 ) = Bubble(
     my = line.outgoing,
     author = author,
@@ -541,6 +570,8 @@ private fun Bubbled(
     avatarImage = face,
     strip = strip,
     continuation = continuation,
+    look = look,
+    onAvatar = onAvatar,
     bottom = {
         Tertiary(time(line.atMs), lineOne = true)
         mark(line.display)?.let { Mark(it) }

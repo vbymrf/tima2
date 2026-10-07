@@ -11,6 +11,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +34,25 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+
+/**
+ * Как в группе стоит аватар автора (пробы `пробы-вид-группы.html`, заказчик 2026-10-07). Один на
+ * все сообщества — «Вид» в «Социуме»; аватар внутри сообщения есть только в группах.
+ */
+enum class AvatarLook {
+    /** «Аватар свободно» — как было: над пузырём за скруглением, имя рядом. По умолчанию. */
+    Free,
+
+    /** «Аватар у края» — в 2 точках от края экрана, поверх полосы; пузырь на месте, имя рядом. */
+    Edge,
+
+    /**
+     * «Имя в аватаре» — аватары колонкой слева (2 + аватар + 2), низом к низу первого пузыря
+     * серии; имени в пузыре нет, оно мелко в квадрате аватара; есть картинка — только она.
+     * Лента всех чужих сообщений сдвинута вправо на колонку.
+     */
+    Inside,
+}
 
 /**
  * Пузырь сообщения переписки.
@@ -74,6 +95,10 @@ fun Bubble(
     strip: Color? = null,
     /** Нижняя строка: эмоции, время, галочки. Одним рядом справа. */
     bottom: (@Composable () -> Unit)? = null,
+    /** Где аватар (группы). В личной переписке аватара нет — вид не играет роли. */
+    look: AvatarLook = AvatarLook.Free,
+    /** Нажатие на аватар — страница человека (заказчик 2026-10-07, во всех видах). `null` — не нажимается. */
+    onAvatar: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val colors = Tima.colors
@@ -91,8 +116,18 @@ fun Bubble(
     val nameLine = with(LocalDensity.current) { AUTHOR_SIZE.toDp() } * 1.35f
     val avatarRise = REPLY_GAP - 1.dp
     val avatarSide = avatarRise + BUBBLE_TOP + nameLine + 1.dp
+    // Где аватар по горизонтали — от левого края пузыря. «У края» — в 2 точках от края экрана,
+    // то есть за полем ленты; «имя в аватаре» — в колонке слева от пузыря.
+    val inside = look == AvatarLook.Inside && !my
+    val avatarLeft = when (look) {
+        AvatarLook.Free -> AVATAR_LEFT
+        AvatarLook.Edge -> EDGE_GAP - FEED_PADDING
+        AvatarLook.Inside -> -(avatarSide + EDGE_GAP)
+    }
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth()
+            // Колонка аватаров: все чужие сообщения отходят от края экрана на 2 + аватар + 2.
+            .then(if (inside) Modifier.padding(start = EDGE_GAP + avatarSide + EDGE_GAP - FEED_PADDING) else Modifier),
         horizontalArrangement = if (my) Arrangement.End else Arrangement.Start,
     ) {
         Box {
@@ -126,14 +161,14 @@ fun Bubble(
                     ),
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                if (showName(showAuthor, author)) {
+                if (showName(showAuthor, author) && !inside) {
                     Caption(
                         text = author!!,
                         // Имя отходит на ширину аватара: обтекания нет, текст идёт во
                         // всю ширину пузыря. Отступ едет за кеглем вместе с аватаром.
                         // Имя — сразу за аватаром: он стоит за скруглением, имя от его
                         // правого края через 6, за вычетом поля пузыря, в котором мы уже.
-                        modifier = Modifier.padding(start = AVATAR_LEFT + avatarSide + 6.dp - 12.dp - STRIP).height(nameLine),
+                        modifier = Modifier.padding(start = avatarLeft + avatarSide + 6.dp - 12.dp - STRIP).height(nameLine),
                         // Кегль имени — 22, верхняя ступень «Сообщений» в настройках
                         // (решение заказчика 2026-09-18): строка автора выше, и аватар
                         // помещается рядом с ней, а не сползает на текст. Сам текст
@@ -161,11 +196,13 @@ fun Bubble(
                 val shape = RoundedCornerShape(TimaShapes.square)
                 Box(
                     modifier = Modifier
-                        .offset(x = AVATAR_LEFT, y = -avatarRise)
+                        // «Имя в аватаре» — низом к низу пузыря; иначе выступает вверх в зазор.
+                        .then(if (inside) Modifier.align(Alignment.BottomStart).offset(x = avatarLeft) else Modifier.offset(x = avatarLeft, y = -avatarRise))
                         .size(avatarSide)
                         .background(color = if (my) colors.my else colors.author, shape = shape)
                         .border(1.dp, colors.border, shape)
-                        .clip(shape),
+                        .clip(shape)
+                        .then(if (onAvatar != null) Modifier.clickable(onClick = onAvatar) else Modifier),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (avatarImage != null) {
@@ -174,6 +211,19 @@ fun Bubble(
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop,
+                        )
+                    } else if (inside && !author.isNullOrBlank()) {
+                        // Имя — мелко в квадрате, как настроено «Отображать пользователя как»;
+                        // до трёх строк, перенос по пробелу. От «Шрифты и размеры» не растёт:
+                        // иначе в квадрат ничего не влезет.
+                        Caption(
+                            text = author,
+                            modifier = Modifier.padding(horizontal = 1.dp),
+                            fontSize = INSIDE_SIZE / scale,
+                            weight = FontWeight.Bold,
+                            color = colors.text,
+                            maxLines = 3,
+                            textAlign = TextAlign.Center,
                         )
                     } else {
                         Caption(
@@ -271,8 +321,20 @@ private val STRIP = 4.dp
 /** Кегль имени автора: 22 (верхняя ступень настроек), уменьшенный в полтора раза — заказчик 2026-09-19. */
 private val AUTHOR_SIZE = 15.sp
 
-/** Зазор между репликами в ленте — `spacedBy(about3)` в `ChatScreen.Feed`. */
+/**
+ * Зазор над репликой с аватаром — 12: аватар выступает в него вверх. Между прочими репликами
+ * зазор вдвое меньше (заказчик 2026-10-07), см. `ChatScreen.Feed`.
+ */
 private val REPLY_GAP = 12.dp
+
+/** Поле ленты слева — `contentPadding(horizontal = about3)` в `ChatScreen.Feed`. */
+private val FEED_PADDING = TimaSpacing.about3
+
+/** От края экрана до аватара «у края» и вокруг колонки аватаров. */
+private val EDGE_GAP = 2.dp
+
+/** Мелкий текст в квадрате аватара («имя в аватаре»). */
+private val INSIDE_SIZE = 7.sp
 
 /** Верхнее поле пузыря: `padding: 11px` из макета. */
 private val BUBBLE_TOP = 11.dp

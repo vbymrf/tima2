@@ -3540,6 +3540,9 @@ private fun App(
                         kind = socialState.mine.firstOrNull { it.groupId == current.chatId }?.kind,
                         myUserId = session.userId,
                         reopenUnreadable = { assembled.receiver.reopenUnreadable() },
+                        // Вид группы — один на сообщества (2026-10-07); нажатие на аватар — страница.
+                        avatarLook = communityView.avatarLook,
+                        onAuthor = { id -> where = Where.Person(id) },
                         myName = profileState.name.ifBlank { profileState.nickname.ifBlank { session.userId.take(2) } },
                         // Список групп (владелец) и участники (цвета) — при открытии группы,
                         // чтобы полосы стояли верно с первого кадра, а не после чьего-то сообщения.
@@ -3877,6 +3880,10 @@ private fun Chat(
      * есть (2026-10-06). `null` — нечем: так собирают экран в проверках.
      */
     reopenUnreadable: (suspend () -> Int)? = null,
+    /** Где аватар автора в группе — «Вид» в «Социуме»; в личной переписке аватара нет. */
+    avatarLook: io.tima.core.ui.AvatarLook = io.tima.core.ui.AvatarLook.Free,
+    /** Нажатие на аватар автора — его страница. */
+    onAuthor: ((String) -> Unit)? = null,
     /** Как меня зовут — для образца «мой пузырь глазами остальных». */
     myName: String = "",
     /** Открыли группу: обновить владельца и цвета участников. */
@@ -4098,6 +4105,8 @@ private fun Chat(
         onCloseMessage = store::noticeDismissed,
         onRequestKey = store::requestKey,
         onAskChatKeys = store::askChatKeys,
+        avatarLook = avatarLook,
+        onAuthor = onAuthor,
         onPhrase = store::changedPhrase,
         onMembers = if (group) onMembers else null,
         onMore = if ((group && onMoveToShelf != null) || (!group && onMoveToBookSection != null)) { { chatMenu = true } } else null,

@@ -49,6 +49,8 @@ interface Words {
     val auth: AuthWords
     /** Пин-код и вид «Секретной фразы и устройств» (ПЛАН-(ПН)). */
     val pin: PinWords
+    /** Вид группы — где аватар автора (2026-10-07). */
+    val groupLook: GroupLookWords
     val chat: ChatWords
     val call: CallWords
 
@@ -3449,6 +3451,7 @@ object RussianWords : Words {
     }
 
     override val pin: PinWords = RussianPinWords
+    override val groupLook: GroupLookWords = RussianGroupLookWords
 
     override val auth = object : AuthWords {
         override fun build(version: String) = "сборка $version"

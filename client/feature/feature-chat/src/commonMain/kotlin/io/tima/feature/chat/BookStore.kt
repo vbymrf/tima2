@@ -253,6 +253,11 @@ data class BookView(
     /** Показывать раздел «Телефон» — тех, кого нет в TIMa. */
     val showOutsiders: Boolean = true,
     /**
+     * Где аватар автора в группе (2026-10-07) — только у вида сообществ: аватар внутри
+     * сообщения есть только в группах.
+     */
+    val avatarLook: io.tima.core.ui.AvatarLook = io.tima.core.ui.AvatarLook.Free,
+    /**
      * Чем называть человека. Ни одной галки — order по умолчанию, тот же самый:
      * имя → имя пользователя → ник → outsiders → «Без имени».
      */
@@ -318,6 +323,7 @@ data class BookView(
             "phone".takeIf { showPhone },
         ).joinToString(","))
         settings.put("$prefix.$ORDER", order.joinToString(",") { it.wire })
+        if (prefix == COMMUNITY) settings.put("$prefix.$AVATAR", avatarLook.name.lowercase())
     }
 
     companion object {
@@ -331,6 +337,7 @@ data class BookView(
         private const val OUTSIDERS = "outsiders"
         private const val NAMES = "names"
         private const val ORDER = "names_order"
+        private const val AVATAR = "avatar_look"
         private const val FOLDERS = "folders"
         private const val MENU = "menu"
 
@@ -363,6 +370,8 @@ data class BookView(
                 showNickname = names?.contains("nick") ?: false,
                 showPhone = names?.contains("phone") ?: !community,
                 order = orderFrom(saved["$prefix.$ORDER"]),
+                avatarLook = io.tima.core.ui.AvatarLook.entries.firstOrNull { it.name.lowercase() == saved["$prefix.$AVATAR"] }
+                    ?: io.tima.core.ui.AvatarLook.Free,
             )
         }
     }

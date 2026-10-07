@@ -43,6 +43,8 @@ fun Caption(
      * без предела — растёт без края от чужого длинного имени.
      */
     maxLines: Int = Int.MAX_VALUE,
+    /** Выравнивание строк — по центру для имени в квадрате аватара; `null` — как обычно. */
+    textAlign: androidx.compose.ui.text.style.TextAlign? = null,
 ) {
     BasicText(
         text = text,
@@ -56,6 +58,7 @@ fun Caption(
             // `null` — системный шрифт, как и было. Подставляют сюда только снимочные
             // проверки, чтобы их ответ не зависел от машины: см. [LocalFontFamily].
             fontFamily = LocalFontFamily.current,
+            textAlign = textAlign ?: androidx.compose.ui.text.style.TextAlign.Unspecified,
         ),
         maxLines = if (lineOne) 1 else maxLines,
         overflow = if (lineOne) TextOverflow.Ellipsis else TextOverflow.Clip,

@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
@@ -385,6 +386,7 @@ fun PersonLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modif
                             my = false,
                             author = sample.line(look) ?: Tima.words.chat.someone,
                             avatar = sample.letter(),
+                            look = view.avatarLook,
                             bottom = { Tertiary("12:40", lineOne = true) },
                         ) { Caption(words.sampleMessage, fontSize = TimaType.sz4) }
                     }
@@ -403,6 +405,53 @@ fun PersonLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modif
                 onToggle = { onChange(view.withChecked(field, !view.checked(field))) },
                 onUp = { onChange(view.moved(field, up = true)) },
                 onDown = { onChange(view.moved(field, up = false)) },
+            )
+        }
+        // Вид группы — переключателем, как «Экономичный режим» в «Уведомлениях» (2026-10-07):
+        // «Отображать пользователя как» не меняется, вид — отдельной строкой под ним.
+        if (!forPeople) AvatarLookSetting(view.avatarLook) { onChange(view.copy(avatarLook = it)) }
+    }
+}
+
+/** «Аватар в группе»: строка с выбранным справа; нажатие раскрывает три вида с пояснениями. */
+@Composable
+private fun AvatarLookSetting(chosen: io.tima.core.ui.AvatarLook, onChoose: (io.tima.core.ui.AvatarLook) -> Unit) {
+    val w = Tima.words.groupLook
+    var open by remember { mutableStateOf(false) }
+    val short = when (chosen) {
+        io.tima.core.ui.AvatarLook.Free -> w.freeShort
+        io.tima.core.ui.AvatarLook.Edge -> w.edgeShort
+        io.tima.core.ui.AvatarLook.Inside -> w.insideShort
+    }
+    ListLine(
+        onClick = { open = !open },
+        left = { Name("👤") },
+        right = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                io.tima.core.ui.Secondary(short, lineOne = true)
+                io.tima.core.ui.Secondary(if (open) "⌃" else "›")
+            }
+        },
+        middle = {
+            Caption(w.title, fontSize = TimaType.sz4, weight = FontWeight.Bold, maxLines = 2)
+            Tertiary(w.about)
+        },
+    )
+    if (!open) return
+    Column(Modifier.fillMaxWidth().background(Tima.colors.softAccent)) {
+        for ((look, title, about) in listOf(
+            Triple(io.tima.core.ui.AvatarLook.Free, w.free, w.freeAbout),
+            Triple(io.tima.core.ui.AvatarLook.Edge, w.edge, w.edgeAbout),
+            Triple(io.tima.core.ui.AvatarLook.Inside, w.inside, w.insideAbout),
+        )) {
+            ListLine(
+                modifier = Modifier.padding(start = TimaSpacing.about5),
+                onClick = { onChoose(look) },
+                left = { RadioMark(look == chosen) },
+                middle = {
+                    Caption(title, fontSize = TimaType.sz4, weight = if (look == chosen) FontWeight.Bold else FontWeight.Normal)
+                    Tertiary(about)
+                },
             )
         }
     }

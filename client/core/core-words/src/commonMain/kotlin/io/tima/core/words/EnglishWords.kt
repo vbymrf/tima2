@@ -1308,6 +1308,7 @@ object EnglishWords : Words {
     }
 
     override val pin: PinWords = EnglishPinWords
+    override val groupLook: GroupLookWords = EnglishGroupLookWords
 
     override val auth = object : AuthWords {
         override fun build(version: String) = "build $version"
