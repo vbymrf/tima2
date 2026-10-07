@@ -43,6 +43,7 @@ class SwitchingLookTest {
                 accounts = listOf("a" to "Анна Смирнова", "b" to "Работа", "c" to "@shop"),
                 currentAccount = "a",
                 unsent = mapOf("b" to 2),
+                news = mapOf("a" to 3, "c" to 5),
                 onNewAccount = {},
                 onSettings = {},
             )

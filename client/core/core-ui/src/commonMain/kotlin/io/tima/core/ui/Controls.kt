@@ -463,13 +463,21 @@ enum class ChipKind { Quiet, Neutral, Selected, Confirmed }
  * зелёный, и правило про текст на заливке к нему не относится.
  */
 @Composable
-fun Counter(howMany: Int, modifier: Modifier = Modifier) {
+fun Counter(
+    howMany: Int,
+    modifier: Modifier = Modifier,
+    /**
+     * Зелёный — число неотправленного у аккаунта в панели переходов (заказчик 2026-10-07: «не
+     * отправленных — зелёным ниже, оранжевым — полученных»). Текст на зелёном белый.
+     */
+    green: Boolean = false,
+) {
     if (howMany <= 0) return
     val colors = Tima.colors
     Box(
         modifier = modifier
             .defaultMinSize(minWidth = 22.dp, minHeight = 22.dp)
-            .background(colors.activity, CircleShape)
+            .background(if (green) colors.navigation else colors.activity, CircleShape)
             .padding(horizontal = 7.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -479,7 +487,7 @@ fun Counter(howMany: Int, modifier: Modifier = Modifier) {
             text = if (howMany > 99) "99+" else howMany.toString(),
             fontSize = TimaType.sz6,
             weight = FontWeight.ExtraBold,
-            color = colors.onAmber,
+            color = if (green) colors.onAccent else colors.onAmber,
         )
     }
 }

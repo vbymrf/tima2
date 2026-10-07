@@ -128,6 +128,11 @@ fun WindowSwitchingScreen(
      */
     unsent: Map<String, Int> = emptyMap(),
     /**
+     * Полученное по аккаунтам — оранжевым у аватара (заказчик 2026-10-07): у текущего —
+     * непрочитанное окон, у остальных — новое, что ждёт их на сервере. Нет записи — числа нет.
+     */
+    news: Map<String, Int> = emptyMap(),
+    /**
      * «Завести виртуальный аккаунт» (Д11).
      *
      * Стоит здесь, а не в настройках: человек заводит второго себя, и место этому там,
@@ -206,7 +211,7 @@ fun WindowSwitchingScreen(
             // Аккаунты — сеткой аватаров под окнами (И1): видны все сразу, переход — одним
             // нажатием. Есть и при одном аккаунте: там же «Добавить».
             if (accounts.isNotEmpty()) {
-                AccountsGrid(accounts, currentAccount, unsent, onAccount, onNewAccount)
+                AccountsGrid(accounts, currentAccount, unsent, news, onAccount, onNewAccount)
             }
 
             if (onSettings != null) {
@@ -349,7 +354,7 @@ private fun CallBubble(ringing: Boolean, peer: String, onClick: () -> Unit) {
 /**
  * Аккаунты — сеткой аватаров (заказчик 2026-10-07, И1): пять постоянных мест в строке, не
  * влезло — следующая строка; «Добавить» — всегда в правой колонке последней строки. Текущий —
- * зелёной рамкой аватара, неотправленное — числом в углу.
+ * зелёной рамкой аватара; полученное — оранжевым числом сверху, неотправленное — зелёным снизу.
  *
  * @param accounts пары «идентификатор — подпись»; подпись одна на всё приложение (имя, @ник,
  * служебное имя — `AccountTitle`)
@@ -359,6 +364,7 @@ private fun AccountsGrid(
     accounts: List<Pair<String, String>>,
     current: String,
     unsent: Map<String, Int>,
+    news: Map<String, Int>,
     onAccount: (String) -> Unit,
     onNew: (() -> Unit)?,
 ) {
@@ -376,7 +382,7 @@ private fun AccountsGrid(
                         slot == ADD_SLOT && onNew != null -> AddCell(words.addAccount, m, onNew)
                         else -> {
                             val (userId, label) = accounts[slot]
-                            AccountCell(label, userId == current, unsent[userId] ?: 0, m) { if (userId != current) onAccount(userId) }
+                            AccountCell(label, userId == current, news[userId] ?: 0, unsent[userId] ?: 0, m) { if (userId != current) onAccount(userId) }
                         }
                     }
                 }
@@ -404,7 +410,7 @@ internal fun accountSlots(accounts: Int, add: Boolean): List<List<Int?>> {
 internal const val ADD_SLOT = -1
 
 @Composable
-private fun AccountCell(label: String, current: Boolean, waiting: Int, modifier: Modifier, onClick: () -> Unit) {
+private fun AccountCell(label: String, current: Boolean, received: Int, waiting: Int, modifier: Modifier, onClick: () -> Unit) {
     val colors = Tima.colors
     Column(modifier.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
         Box {
@@ -414,7 +420,9 @@ private fun AccountCell(label: String, current: Boolean, waiting: Int, modifier:
             ) {
                 Avatar(letters = label.trimStart('@').take(1).uppercase().ifBlank { "?" })
             }
-            if (waiting > 0) Counter(waiting, Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-4).dp))
+            // Оранжевым сверху — полученное, зелёным снизу — неотправленное (заказчик 2026-10-07).
+            if (received > 0) Counter(received, Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-4).dp))
+            if (waiting > 0) Counter(waiting, Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 4.dp), green = true)
         }
         Caption(label, fontSize = TimaType.sz6, weight = FontWeight.Bold, lineOne = true, textAlign = TextAlign.Center)
     }

@@ -266,6 +266,32 @@ class Entry private constructor(
         }
     }
 
+    /**
+     * Сколько нового у неоткрытого аккаунта (заказчик 2026-10-07: оранжевое число у аватара в панели
+     * переходов) — `GET /users/me/news` его же входом. Вход продлевается ключом его устройства, как
+     * в [aliveOnServer]. `null` — не узнали: число не показывается.
+     */
+    suspend fun newsOf(userId: String): Int? {
+        val store = accounts.store(userId)
+        val session = store.session() ?: return null
+        val secret = store.deviceSecret() ?: return null
+        val link = io.tima.core.network.ServerLink.open(host)
+        return try {
+            val issuedAt = nowMillis() / 1000
+            val bytes = io.tima.core.network.deviceTokenSigningBytes(session.userId, session.deviceId, issuedAt)
+            val signature = io.tima.core.encryption.DeviceTokenSignerOverKodium(io.tima.core.encryption.deviceIdentityFrom(secret)).sign(bytes)
+                ?: return null
+            val renewed = DeviceTokenApi(link.route, link.client).renew(session.userId, session.deviceId, issuedAt, signature)
+                as? io.tima.core.network.DeviceTokenResult.Renewed ?: return null
+            rememberSession(session.copy(accessToken = renewed.accessToken))
+            io.tima.core.network.NewsOverHttp(link.route, link.client) { renewed.accessToken }.messages()
+        } catch (e: Throwable) {
+            null
+        } finally {
+            runCatching { link.client.close() }
+        }
+    }
+
     /** Каким устройством аккаунт вошёл заново — для имени его базы (А5). */
     fun relinkedDevice(userId: String): String? = accounts.relinked(userId)
 

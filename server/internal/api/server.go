@@ -229,6 +229,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// человеку, поэтому регистратор стоит рядом с каналами, а не с группами.
 	RegisterFeeds(mux, s.Store, s.requireActiveDevice)
 	RegisterVirtuals(mux, s.Store, func() VirtualTokens { return s.Auth }, s.requireActiveDevice)
+	RegisterNews(mux, s.Store, s.requireActiveDevice)
 	RegisterTransfers(mux, s.Store, func() VirtualTokens { return s.Auth }, s.requireActiveDevice)
 
 	// Обновление токена доступа подписью устройства. Публичная по необходимости: её
@@ -450,8 +451,11 @@ func postMessage(deps messagesDeps) http.HandlerFunc {
 				continue
 			}
 			deps.notifier.Device(r.Context(), wk.GetRecipient(), "message.new", map[string]any{
-				"chat_id":            meta.GetChatId(),
-				"message_id":         meta.GetMessageId(),
+				"chat_id":    meta.GetChatId(),
+				"message_id": meta.GetMessageId(),
+				// Кто прислал — открыто, он и так в конверте: по нему /users/me/news не
+				// считает своё новым (2026-10-07). Поле новое, клиент его не читает.
+				"sender_id":          meta.GetSenderId(),
 				"envelope":           base64.RawURLEncoding.EncodeToString(raw),
 				"sender_profile_rev": senderRev,
 			})

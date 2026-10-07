@@ -607,6 +607,7 @@ private fun Inside(
         onLanguage = onLanguage,
         accounts = entry.accountList(),
         cardOf = entry::cardOf,
+        newsOf = entry::newsOf,
         onCard = { name, phone, nickname -> entry.noteCard(current.session.userId, name, phone, nickname) },
         unsent = unsent,
         // Число оставляет тот аккаунт, что открыт: чужую очередь не прочитать — её база
@@ -934,6 +935,8 @@ private fun App(
     cardOf: (String) -> io.tima.core.secrets.AccountCard? = { null },
     /** Профиль текущего пришёл или изменился — обновить его карточку. */
     onCard: (name: String, phone: String, nickname: String) -> Unit = { _, _, _ -> },
+    /** Сколько нового у неоткрытого аккаунта — спрашивается сервер его входом; `null` — не узнали. */
+    newsOf: suspend (String) -> Int? = { null },
     onSwitchAccount: (String) -> Unit = {},
     /** Выйти из аккаунта на этом устройстве (ПЛАН-(А)-ВЫХОДА-ИЗ-АККАУНТА.md, А4). */
     onSignOut: () -> Unit = {},
@@ -2546,6 +2549,19 @@ private fun App(
         return
     }
 
+    // Полученное у других аккаунтов — спрашивается при открытии панели (заказчик 2026-10-07): у
+    // каждого свой вход, и сообщения им сейчас не приходят — число знает только сервер.
+    var accountNews by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    LaunchedEffect(windowSwitcher) {
+        if (!windowSwitcher) return@LaunchedEffect
+        accounts.filter { it.userId != session.userId }.forEach { other ->
+            launch {
+                val n = runCatching { newsOf(other.userId) }.getOrNull() ?: return@launch
+                accountNews = accountNews + (other.userId to n)
+            }
+        }
+    }
+
     if (windowSwitcher) {
         // Подпись аккаунта — одна на всё приложение (2026-10-07): имя, @ник, служебное имя. У
         // текущего — из профиля: он свежее карточки.
@@ -2601,6 +2617,8 @@ private fun App(
             accounts = accountTitles,
             currentAccount = session.userId,
             unsent = unsent,
+            // У текущего — непрочитанное окон: оно уже посчитано для чисел на окнах выше.
+            news = accountNews + (session.userId to windowCounters(noticeCounts).values.sum()),
             onAccount = { userId ->
                 if ((unsent[session.userId] ?: 0) > 0) {
                     leavingTo = userId
