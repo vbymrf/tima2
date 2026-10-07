@@ -142,3 +142,15 @@ func TestОтчётСоСнимками(t *testing.T) {
 		t.Fatalf("снимок не лёг как прислан: %+v", images)
 	}
 }
+
+// Предложение в журнале сервера называется предложением, остальное — отчётом о проблеме.
+func TestПредложениеВЖурналеНеПоломка(t *testing.T) {
+	if got := problemTitle("suggestion"); got != "Предложение" {
+		t.Fatalf("предложение: %q", got)
+	}
+	for _, kind := range []string{"messages", "calls", "looks", "other", "crash", ""} {
+		if got := problemTitle(kind); got != "Отчёт о проблеме" {
+			t.Fatalf("%q: %q", kind, got)
+		}
+	}
+}

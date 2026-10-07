@@ -206,12 +206,14 @@ func (s *Store) IsChatParticipantDevice(ctx context.Context, chatID, deviceID st
 // ChatHelper — устройство-помощник для восстановления личного чата.
 type ChatHelper struct {
 	DeviceID string
-	Own      bool // принадлежит тому же пользователю, что и запросивший (свои — без согласия)
+	Own      bool // принадлежит тому же пользователю, что и запросивший
 }
 
 // ChatHelperDevices — устройства с обёртками сообщений чата (кроме requester);
-// Own=true, если то же устройство-владелец, что у запросившего (свои устройства
-// помогают без согласия; собеседник — с согласием, ADR-0010 §защита).
+// Own=true, если то же устройство-владелец, что у запросившего. Отдают без согласия и свои
+// устройства, и собеседник: просит та же личность, которой сообщения и адресованы. Новая
+// личность стороной прежней переписки не является и ключей не получает (ADR-0037 §5,
+// заказчик 2026-10-07).
 func (s *Store) ChatHelperDevices(ctx context.Context, chatID, requesterDevice, requesterUser string) ([]ChatHelper, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT DISTINCT k.recipient, (d.user_id = $3) AS own

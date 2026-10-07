@@ -177,12 +177,25 @@ func RegisterProblems(mux *http.ServeMux, st ProblemStore, tokens func() *auth.I
 
 		// Отчёт виден в журнале сервера сразу: разбирают их обычно в тот же день, и
 		// «пришло ли вообще» — первый вопрос.
-		log.Printf("Отчёт о проблеме %s: %s, %s %s, аккаунт %q, снимков %d", number, req.Kind, req.Platform, req.Model, userID, len(req.Images))
+		log.Printf("%s %s: %s, %s %s, аккаунт %q, снимков %d", problemTitle(req.Kind), number, req.Kind, req.Platform, req.Model, userID, len(req.Images))
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]string{"number": number})
 	})
+}
+
+// problemKindSuggestion — вид «Предложить изменения» (заказчик 2026-10-07). Хранится тем же
+// отчётом в той же таблице: отличает его только вид, отбор — `where kind = 'suggestion'`.
+const problemKindSuggestion = "suggestion"
+
+// problemTitle — с чего начинается строка журнала: предложение — не поломка, и в журнале это
+// видно сразу, без запроса к базе (заказчик 2026-10-07).
+func problemTitle(kind string) string {
+	if kind == problemKindSuggestion {
+		return "Предложение"
+	}
+	return "Отчёт о проблеме"
 }
 
 // identifyIfPossible — кто прислал, если это вообще известно.
