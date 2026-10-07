@@ -1,0 +1,410 @@
+<meta charset="utf-8">
+<title>Пробы: пин-код и «Секретная фраза и устройства»</title>
+<link rel="stylesheet" href="../стиль.css">
+<style>
+  .экр { width: 360px; height: auto; border-width: 3px; }
+  .экр .зона-2 { flex: 0 0 auto; overflow: visible; }
+  .экр .зона-1 { flex-wrap: nowrap; }
+  .экр .имя-окна { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+  .проба { padding: 20px 0 26px; border-bottom: 1px solid var(--чёрный-12); }
+  .проба:target { box-shadow: inset 6px 0 0 var(--навигация); padding-left: 16px; }
+  .шапка-пробы { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .номер { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+  .опис { font-size: 13.5px; color: var(--чёрный-70); }
+  .свет { font-size: 12px; color: var(--чёрный-50); }
+  .срезы { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .с-подписью > .трет { margin-top: 8px; max-width: 360px; }
+  .навигация-проб { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+  .навигация-проб a {
+    display: inline-flex; align-items: center; padding: 7px 13px; border-radius: 999px;
+    border: 1px solid var(--чёрный-12); text-decoration: none; color: var(--текст);
+    font-size: 12.5px; font-weight: 700;
+  }
+
+  /* Заголовок группы — как SectionTitle в «Уведомлениях»: прописные, мелко, серым */
+  .гр { padding: 16px 16px 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--чёрный-50); }
+  .гр.опасно { color: var(--опасно); }
+  .гр.идёт { color: var(--текст); }
+
+  /* Строка — как ListLine: значок, название жирно, под ним что это; справа «?» и стрелка */
+  .стр { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--чёрный-6); }
+  .стр .зн {
+    flex: 0 0 34px; height: 34px; border-radius: var(--радиус-квадрат-мал); background: var(--чёрный-6);
+    display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: var(--текст);
+  }
+  .стр .зн.ок { background: var(--акцент-мягкий); }
+  .стр .зн.тре { background: rgba(254, 187, 2, 0.25); }
+  .стр .зн.оп { background: rgba(198, 40, 40, 0.10); color: var(--опасно); }
+  .стр .сер { flex: 1 1 auto; min-width: 0; }
+  .стр .наз { font-size: 15px; font-weight: 700; line-height: 1.25; }
+  .стр .наз.оп { color: var(--опасно); }
+  .стр .что { font-size: 12.5px; color: var(--чёрный-70); line-height: 1.3; margin-top: 2px; }
+  .стр .знач { font-size: 12.5px; color: var(--чёрный-50); white-space: nowrap; }
+  .стр .знач.ок { color: var(--подтверждено); font-weight: 700; }
+  .стр .знач.тре { color: #a77a00; font-weight: 700; }
+  .вопр {
+    flex: 0 0 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--чёрный-35);
+    display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: var(--чёрный-70);
+  }
+  .стрелка { color: var(--чёрный-50); font-size: 16px; }
+  .стр.раскр { background: var(--акцент-мягкий); padding-left: 38px; }
+  .точка { flex: 0 0 16px; height: 16px; border-radius: 50%; border: 2px solid var(--чёрный-35); box-sizing: border-box; }
+  .точка.да { border: 5px solid var(--навигация); }
+  .низ { padding: 14px 16px 18px; font-size: 11px; color: var(--чёрный-50); }
+  .кн.во-всю { width: 100%; box-sizing: border-box; text-align: center; }
+  .кн.опасная { background: var(--опасно); color: #fff; }
+  .кнопки { display: flex; gap: 10px; }
+  .кнопки .кн { flex: 1 1 0; text-align: center; }
+
+  /* Подокно «?» — лист снизу поверх затемнённого экрана */
+  .тень { position: relative; }
+  .тень::after { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,0.38); }
+  .лист {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; background: var(--поверхность);
+    border-radius: 18px 18px 0 0; padding: 18px 18px 22px; display: flex; flex-direction: column; gap: 10px;
+    box-shadow: 0 -4px 18px rgba(0,0,0,0.18);
+  }
+  .лист h3 { margin: 0; font-size: 17px; font-weight: 800; }
+  .лист .подп { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--чёрный-50); margin-top: 4px; }
+  .лист p { margin: 0; font-size: 13.5px; line-height: 1.4; color: var(--чёрный-70); }
+
+  /* Красная плашка — Answer в тоне «опасно», с двумя кнопками */
+  .красная {
+    margin: 8px 16px 12px; border-radius: var(--радиус-мал); background: rgba(198, 40, 40, 0.08);
+    border-left: 4px solid var(--опасно); padding: 12px 12px 12px 14px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .красная .итог { font-weight: 800; font-size: 14px; color: var(--опасно); }
+  .красная .текст { font-size: 13px; line-height: 1.38; color: var(--текст); }
+
+  /* Экран пин-кода */
+  .пин { padding: 34px 24px 26px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .пин .кто { font-size: 15px; font-weight: 800; }
+  .пин .номерок { font-size: 12.5px; color: var(--чёрный-50); margin-top: -10px; }
+  .пин .просьба { font-size: 14px; color: var(--чёрный-70); margin-top: 8px; }
+  .точки { display: flex; gap: 16px; margin: 4px 0 2px; }
+  .точки i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--текст); box-sizing: border-box; }
+  .точки i.в { background: var(--текст); }
+  .точки.ошибка i { border-color: var(--опасно); }
+  .точки.ошибка i.в { background: var(--опасно); }
+  .пин .ответ { font-size: 13px; line-height: 1.35; text-align: center; min-height: 18px; }
+  .пин .ответ.оп { color: var(--опасно); font-weight: 700; }
+  .пин .ответ.ждёт { color: #a77a00; font-weight: 700; }
+  .клав { display: grid; grid-template-columns: repeat(3, 64px); gap: 12px 26px; margin-top: 6px; }
+  .клав b {
+    width: 64px; height: 64px; border-radius: 50%; background: var(--чёрный-6);
+    display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 600;
+  }
+  .клав b.пусто { background: none; }
+  .клав b.стер { background: none; font-size: 15px; color: var(--чёрный-70); }
+  .клав.гаснет b { color: var(--чёрный-35); background: var(--чёрный-6); }
+  .клав.гаснет b.пусто, .клав.гаснет b.стер { background: none; }
+  .ссылки { display: flex; justify-content: space-between; width: 100%; margin-top: 8px; font-size: 13.5px; font-weight: 700; }
+  .ссылки span { text-decoration: underline; }
+  .поле-фразы {
+    width: 100%; box-sizing: border-box; border-radius: 999px; background: var(--акцент-мягкий); padding: 13px 18px;
+    font-size: 13px; color: var(--чёрный-70);
+  }
+  .панель { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .панель h3 { margin: 0; font-size: 17px; font-weight: 800; }
+  .панель .втор { line-height: 1.38; }
+  .акк { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--чёрный-6); }
+  .акк .ав { width: 42px; height: 42px; border-radius: var(--радиус-квадрат); background: var(--чёрный-6); display: flex; align-items: center; justify-content: center; font-weight: 800; }
+  .акк .сер { flex: 1 1 auto; }
+  .акк .наз { font-weight: 700; }
+  .акк .что { font-size: 12.5px; color: var(--чёрный-50); }
+  .замок { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: var(--чёрный-6); color: var(--чёрный-70); }
+
+  table.тексты td:first-child { font-weight: 700; white-space: nowrap; }
+  table.тексты td { font-size: 13px; }
+</style>
+
+<div class="лист-док">
+
+<div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-пин-код.html</div>
+<h1>Пробы: пин-код и «Секретная фраза и устройства»</h1>
+<p class="подзаголовок">
+  Экран по группам, как «Уведомления»: от важного к опасному. У каждого пункта «?» с подокном «что делает и
+  что получится». Опасное — в конце, нажатие на него открывает красную плашку с подтверждением. Ниже —
+  экраны пин-кода. План — <code>doc_mig/ПЛАН-(ПН)-ПИН-КОДА.md</code>.
+</p>
+
+<div class="оговорка">
+  <b>Что согласовать по пробам:</b> порядок групп и пунктов; вид «?» (лист снизу); красную плашку на месте
+  нажатия; экраны пин-кода; тексты подокон «?» — таблица в конце страницы.
+  <br><br>
+  <b>Решения, на которых стоят пробы</b> (ПЛАН-(ПН) §2): пин — на аккаунт и на устройство, 4 цифры, по
+  умолчанию выключен; спрашивается при запуске, после 5 минут в фоне и при переходе на аккаунт с пином;
+  сбросить — только фразой (у временного аккаунта — его фразой или фразой владельца), SMS не сбрасывает;
+  после 5 ошибок — пауза, после 10 — только фраза; входящий звонок принимается без пина.
+</div>
+
+<h2>Ссылки на пробы</h2>
+<div class="навигация-проб">
+  <a href="#а">а · экран по группам</a>
+  <a href="#б">б · когда что-то идёт</a>
+  <a href="#в">в · подокно «?»</a>
+  <a href="#г">г · красная плашка</a>
+  <a href="#д">д · пин в настройках</a>
+  <a href="#е">е · задать пин</a>
+  <a href="#ж">ж · вход с пином</a>
+  <a href="#з">з · забыли пин</a>
+  <a href="#и">и · смена аккаунта</a>
+  <a href="#тексты">тексты «?»</a>
+</div>
+
+<script>
+  // Строка настроек: значок, название, что это, значение справа, «?» и стрелка.
+  function стр(зн, наз, что, знач, вид) {
+    const v = вид || '';
+    return `<div class="стр"><span class="зн ${v}">${зн}</span><div class="сер"><div class="наз ${v === 'оп' ? 'оп' : ''}">${наз}</div>` +
+      (что ? `<div class="что">${что}</div>` : '') + `</div>` +
+      (знач ? `<span class="знач ${v}">${знач}</span>` : '') +
+      `<span class="вопр">?</span><span class="стрелка">›</span></div>`;
+  }
+  function шапка(имя) {
+    return `<div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">${имя || 'Секретная фраза и устройства'}</div></div>`;
+  }
+  const СЕКЦИИ = {
+    устройство: `<div class="гр">Это устройство</div>` +
+      стр('Р', 'Redmi Note 12', 'это устройство', 'заверено', 'ок'),
+    вход: `<div class="гр">Вход</div>` +
+      стр('П', 'Пин-код', '4 цифры при входе в аккаунт на этом устройстве', 'выключен'),
+    устройства: `<div class="гр">Устройства</div>` +
+      стр('К', 'Компьютер', 'Windows · вход 05.10', 'заверено', 'ок') +
+      стр('S', 'Samsung A54', 'Android · вход 02.10', 'не заверено', 'тре') +
+      стр('Q', 'Сканировать код', 'подключить или заверить устройство по коду на его экране'),
+    история: `<div class="гр">История</div>` +
+      стр('И', 'Копия переписки', 'новый телефон с фразой поднимет историю сам', 'заведена', 'ок'),
+    номер: `<div class="гр">Номер</div>` +
+      стр('№', 'Смена номера', 'новый телефон или SIM-карта'),
+    опасное: `<div class="гр опасно">Опасное</div>` +
+      стр('↩', 'Выйти из аккаунта на этом устройстве', 'аккаунт отложится, переписка останется', '', 'оп') +
+      стр('!', 'Перерегистрация', 'новый ключ личности, если доступ есть у кого-то ещё', '', 'оп') +
+      стр('×', 'Запретить «Начать заново»', 'навсегда: без фразы в аккаунт не войти', '', 'оп'),
+    низ: `<div class="низ">Сборка 2.0.143 · 06.10.2026</div>`,
+  };
+  function экран(части, лишнее) {
+    return `<div class="окно экр">${шапка()}<div class="зона-2">${части.map(ч => СЕКЦИИ[ч] || ч).join('')}${лишнее || ''}</div></div>`;
+  }
+</script>
+
+<div class="проба" id="а">
+  <div class="шапка-пробы"><span class="номер">а</span><span class="опис">экран по группам — телефон заверен, ничего не идёт</span><span class="свет">от важного к опасному; опасное — красным и последним</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><script>document.write(экран(['устройство', 'вход', 'устройства', 'история', 'номер', 'опасное', 'низ']))</script>
+      <div class="трет">справа — что сейчас: «заверено», «выключен»; «?» — подокно, стрелка — открыть пункт</div></div>
+  </div>
+</div>
+
+<div class="проба" id="б">
+  <div class="шапка-пробы"><span class="номер">б</span><span class="опис">когда идёт дело со сроком и устройство не заверено</span><span class="свет">«Сейчас идёт» — первым, пока есть срок; кнопка заверения — сразу на месте</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><script>document.write(экран([
+      `<div class="гр идёт">Сейчас идёт</div>` +
+        стр('№', 'Смена номера', 'подтвердите фразой и кодом на новый номер с 06.01 по 05.02', 'ждёт', 'тре'),
+      `<div class="гр">Это устройство</div>` +
+        стр('К', 'Компьютер', 'это устройство · собеседники пока не пишут ему', 'не заверено', 'тре') +
+        `<div style="padding:10px 16px 14px;display:flex;flex-direction:column;gap:8px"><span class="кн во-всю">Подтвердить фразой</span><span class="кн тихая во-всю">Показать код заверения</span></div>`,
+      'вход',
+      `<div class="гр">Устройства</div>` +
+        стр('Р', 'Redmi Note 12', 'Android · вход 01.10', 'заверено', 'ок') +
+        стр('S', 'Samsung A54', 'Android · вход 02.10', 'не заверено', 'тре'),
+      'опасное', 'низ']))</script>
+      <div class="трет">это устройство — компьютер: «Сканировать код» на нём нет, сканирует телефон. «История» и «Номер» опущены — те же, что в «а»</div></div>
+  </div>
+</div>
+
+<div class="проба" id="в">
+  <div class="шапка-пробы"><span class="номер">в</span><span class="опис">подокно «?» — лист снизу: что делает и что получится</span><span class="свет">закрывается «Понятно» или нажатием мимо; ничего не меняет</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно экр"><script>document.write(шапка())</script><div class="зона-2 тень" style="position:relative">
+      <script>document.write(СЕКЦИИ.устройство + СЕКЦИИ.вход + СЕКЦИИ.устройства)</script>
+      <div class="лист"><h3>Пин-код</h3>
+        <div class="подп">Что делает</div><p>Закрывает вход в этот аккаунт на этом устройстве четырьмя цифрами. Пин-код хранится только здесь — на сервер он не уходит.</p>
+        <div class="подп">Что получится</div><p>Приложение спросит пин при запуске, после 5 минут в фоне и при переходе на этот аккаунт. Забыли — сменить или убрать его можно только секретной фразой.</p>
+        <span class="кн во-всю">Понятно</span></div>
+    </div></div><div class="трет">«?» у пин-кода</div></div>
+    <div class="с-подписью"><div class="окно экр"><script>document.write(шапка())</script><div class="зона-2 тень" style="position:relative">
+      <script>document.write(СЕКЦИИ.номер + СЕКЦИИ.опасное)</script>
+      <div style="height:150px"></div>
+      <div class="лист"><h3 style="color:var(--опасно)">Перерегистрация</h3>
+        <div class="подп">Что делает</div><p>Заводит новый ключ личности с новой секретной фразой — на случай, если доступ к аккаунту есть у кого-то ещё. Нужны прежняя фраза и код из SMS.</p>
+        <div class="подп">Что получится</div><p>Заверения снимутся со всех ваших устройств. Собеседники увидят, что ключ сменился. Затем откроется окно подтверждения: не подтвердите — новый ключ будет удалён.</p>
+        <span class="кн во-всю">Понятно</span></div>
+    </div></div><div class="трет">«?» у опасного — заголовок красным</div></div>
+  </div>
+</div>
+
+<div class="проба" id="г">
+  <div class="шапка-пробы"><span class="номер">г</span><span class="опис">красная плашка с подтверждением — на месте нажатого пункта</span><span class="свет">действие — только второй кнопкой; «Отмена» рядом и того же размера</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно экр"><script>document.write(шапка())</script><div class="зона-2">
+      <div class="гр опасно">Опасное</div>
+      <script>document.write(стр('↩', 'Выйти из аккаунта на этом устройстве', 'аккаунт отложится, переписка останется', '', 'оп'))</script>
+      <div class="красная"><div class="итог">Выйти из аккаунта?</div><div class="текст">Переписка и ключи останутся на этом устройстве. Вернуться — кнопкой «Вернуть прежний аккаунт» на экране входа.</div>
+        <div class="кнопки"><span class="кн тихая">Отмена</span><span class="кн опасная">Выйти</span></div></div>
+      <script>document.write(стр('!', 'Перерегистрация', 'новый ключ личности, если доступ есть у кого-то ещё', '', 'оп') + стр('×', 'Запретить «Начать заново»', 'навсегда: без фразы в аккаунт не войти', '', 'оп'))</script>
+    </div></div><div class="трет">выход — обратим, текст спокойный</div></div>
+
+    <div class="с-подписью"><div class="окно экр"><script>document.write(шапка())</script><div class="зона-2">
+      <div class="гр опасно">Опасное</div>
+      <script>document.write(стр('↩', 'Выйти из аккаунта на этом устройстве', 'аккаунт отложится, переписка останется', '', 'оп') + стр('!', 'Перерегистрация', 'новый ключ личности, если доступ есть у кого-то ещё', '', 'оп'))</script>
+      <div class="красная"><div class="итог">Перерегистрировать аккаунт?</div><div class="текст">Заверения снимутся со всех ваших устройств, собеседники увидят смену ключа. Делайте это, только если доступ к аккаунту есть у кого-то ещё.</div>
+        <div class="кнопки"><span class="кн тихая">Отмена</span><span class="кн опасная">Перерегистрировать</span></div></div>
+      <script>document.write(стр('×', 'Запретить «Начать заново»', 'навсегда: без фразы в аккаунт не войти', '', 'оп'))</script>
+    </div></div><div class="трет">перерегистрация — затрагивает все устройства и собеседников</div></div>
+
+    <div class="с-подписью"><div class="окно экр"><script>document.write(шапка())</script><div class="зона-2">
+      <div class="гр опасно">Опасное</div>
+      <script>document.write(стр('↩', 'Выйти из аккаунта на этом устройстве', 'аккаунт отложится, переписка останется', '', 'оп') + стр('!', 'Перерегистрация', 'новый ключ личности, если доступ есть у кого-то ещё', '', 'оп') + стр('×', 'Запретить «Начать заново»', 'навсегда: без фразы в аккаунт не войти', '', 'оп'))</script>
+      <div class="красная"><div class="итог">Запретить навсегда?</div><div class="текст">Снять запрет будет нельзя. Без секретной фразы в аккаунт больше не войти — даже с SIM-картой этого номера. Потеряете фразу — аккаунт не вернуть.</div>
+        <div class="кнопки"><span class="кн тихая">Отмена</span><span class="кн опасная">Дальше</span></div></div>
+    </div></div><div class="трет">запрет — навсегда; «Дальше» ведёт к прежнему шагу с кодом из SMS</div></div>
+  </div>
+</div>
+
+<div class="проба" id="д">
+  <div class="шапка-пробы"><span class="номер">д</span><span class="опис">пин-код в настройках — как «Экономичный режим» в «Уведомлениях»</span><span class="свет">нажатие раскрывает выбор строками; включённый — сменить, убрать, забыли</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно экр"><script>document.write(шапка())</script><div class="зона-2">
+      <div class="гр">Вход</div>
+      <script>document.write(стр('П', 'Пин-код', '4 цифры при входе в аккаунт на этом устройстве', 'выключен'))</script>
+      <div class="стр раскр"><span class="точка да"></span><div class="сер"><div class="наз" style="font-size:14px">Выключен</div><div class="что">вход без пин-кода</div></div></div>
+      <div class="стр раскр"><span class="точка"></span><div class="сер"><div class="наз" style="font-size:14px;font-weight:400">Включить</div><div class="что">4 цифры при запуске, после 5 минут в фоне и при переходе на этот аккаунт</div></div></div>
+      <script>document.write(СЕКЦИИ.устройства)</script>
+    </div></div><div class="трет">выключен — раскрыт выбор</div></div>
+
+    <div class="с-подписью"><div class="окно экр"><script>document.write(шапка())</script><div class="зона-2">
+      <div class="гр">Вход</div>
+      <script>document.write(стр('П', 'Пин-код', '4 цифры при входе в аккаунт на этом устройстве', 'включён', 'ок'))</script>
+      <div class="стр раскр"><div class="сер"><div class="наз" style="font-size:14px">Сменить пин-код</div><div class="что">нужен нынешний пин-код или секретная фраза</div></div><span class="стрелка">›</span></div>
+      <div class="стр раскр"><div class="сер"><div class="наз" style="font-size:14px">Убрать пин-код</div><div class="что">нужен нынешний пин-код или секретная фраза</div></div><span class="стрелка">›</span></div>
+      <div class="стр раскр"><div class="сер"><div class="наз" style="font-size:14px">Забыли пин-код?</div><div class="что">сменить или убрать — секретной фразой</div></div><span class="стрелка">›</span></div>
+      <script>document.write(СЕКЦИИ.устройства)</script>
+    </div></div><div class="трет">включён — три действия</div></div>
+  </div>
+</div>
+
+<div class="проба" id="е">
+  <div class="шапка-пробы"><span class="номер">е</span><span class="опис">задать пин: придумать, повторить</span><span class="свет">не совпало — заново с первого шага, без счёта ошибок</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно экр"><script>document.write(шапка('Пин-код'))</script><div class="зона-2"><div class="пин">
+      <div class="просьба">Придумайте пин-код — 4 цифры</div>
+      <div class="точки"><i class="в"></i><i class="в"></i><i></i><i></i></div>
+      <div class="ответ трет">Хранится только на этом устройстве</div>
+      <div class="клав"><b>1</b><b>2</b><b>3</b><b>4</b><b>5</b><b>6</b><b>7</b><b>8</b><b>9</b><b class="пусто"></b><b>0</b><b class="стер">Стереть</b></div>
+    </div></div></div><div class="трет">шаг 1</div></div>
+    <div class="с-подписью"><div class="окно экр"><script>document.write(шапка('Пин-код'))</script><div class="зона-2"><div class="пин">
+      <div class="просьба">Повторите пин-код</div>
+      <div class="точки ошибка"><i class="в"></i><i class="в"></i><i class="в"></i><i class="в"></i></div>
+      <div class="ответ оп">Не совпало — придумайте заново</div>
+      <div class="клав"><b>1</b><b>2</b><b>3</b><b>4</b><b>5</b><b>6</b><b>7</b><b>8</b><b>9</b><b class="пусто"></b><b>0</b><b class="стер">Стереть</b></div>
+    </div></div></div><div class="трет">шаг 2 не совпал</div></div>
+  </div>
+</div>
+
+<div class="проба" id="ж">
+  <div class="шапка-пробы"><span class="номер">ж</span><span class="опис">вход с пином: ввод, ошибка, пауза, только фраза</span><span class="свет">поверх приложения; шапки нет — назад идти некуда</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно экр"><div class="зона-2"><div class="пин">
+      <div class="кто">Анна</div><div class="номерок">+799 ••• 01</div>
+      <div class="просьба">Введите пин-код</div>
+      <div class="точки"><i class="в"></i><i></i><i></i><i></i></div>
+      <div class="ответ"></div>
+      <div class="клав"><b>1</b><b>2</b><b>3</b><b>4</b><b>5</b><b>6</b><b>7</b><b>8</b><b>9</b><b class="пусто"></b><b>0</b><b class="стер">Стереть</b></div>
+      <div class="ссылки"><span>Забыли пин-код?</span><span>Другой аккаунт</span></div>
+    </div></div></div><div class="трет">при запуске и после 5 минут в фоне</div></div>
+
+    <div class="с-подписью"><div class="окно экр"><div class="зона-2"><div class="пин">
+      <div class="кто">Анна</div><div class="номерок">+799 ••• 01</div>
+      <div class="просьба">Введите пин-код</div>
+      <div class="точки ошибка"><i class="в"></i><i class="в"></i><i class="в"></i><i class="в"></i></div>
+      <div class="ответ оп">Неверный пин-код. Ещё 2 ошибки — и пауза.</div>
+      <div class="клав"><b>1</b><b>2</b><b>3</b><b>4</b><b>5</b><b>6</b><b>7</b><b>8</b><b>9</b><b class="пусто"></b><b>0</b><b class="стер">Стереть</b></div>
+      <div class="ссылки"><span>Забыли пин-код?</span><span>Другой аккаунт</span></div>
+    </div></div></div><div class="трет">третья ошибка</div></div>
+
+    <div class="с-подписью"><div class="окно экр"><div class="зона-2"><div class="пин">
+      <div class="кто">Анна</div><div class="номерок">+799 ••• 01</div>
+      <div class="просьба">Введите пин-код</div>
+      <div class="точки"><i></i><i></i><i></i><i></i></div>
+      <div class="ответ ждёт">Слишком много ошибок. Следующая попытка через 0:30.</div>
+      <div class="клав гаснет"><b>1</b><b>2</b><b>3</b><b>4</b><b>5</b><b>6</b><b>7</b><b>8</b><b>9</b><b class="пусто"></b><b>0</b><b class="стер">Стереть</b></div>
+      <div class="ссылки"><span>Забыли пин-код?</span><span>Другой аккаунт</span></div>
+    </div></div></div><div class="трет">после 5 ошибок — пауза 30 с, дальше каждая вдвое дольше</div></div>
+
+    <div class="с-подписью"><div class="окно экр"><div class="зона-2"><div class="панель" style="padding-top:34px">
+      <div style="text-align:center"><div class="кто" style="font-weight:800">Анна</div><div class="трет">+799 ••• 01</div></div>
+      <h3>Только секретная фраза</h3>
+      <div class="втор">Пин-код введён неверно 10 раз. Войти можно только секретной фразой этого аккаунта — после этого задайте новый пин-код или уберите его.</div>
+      <div class="поле-фразы">двенадцать слов через пробел</div>
+      <span class="кн во-всю">Войти фразой</span>
+      <div class="ссылки"><span></span><span>Другой аккаунт</span></div>
+    </div></div></div><div class="трет">после 10 ошибок</div></div>
+  </div>
+</div>
+
+<div class="проба" id="з">
+  <div class="шапка-пробы"><span class="номер">з</span><span class="опис">забыли пин — секретной фразой</span><span class="свет">у временного аккаунта подходит и фраза владельца; SMS не предлагается</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно экр"><script>document.write(шапка('Забыли пин-код'))</script><div class="зона-2"><div class="панель">
+      <div class="втор">Введите секретную фразу этого аккаунта. Пин-код после этого можно задать новый или убрать.</div>
+      <div class="поле-фразы">двенадцать слов через пробел</div>
+      <span class="кн во-всю">Проверить фразу</span>
+      <div class="трет">Код из SMS пин-код не сбрасывает: он пришёл бы на этот же телефон.</div>
+    </div></div></div><div class="трет">обычный аккаунт</div></div>
+
+    <div class="с-подписью"><div class="окно экр"><script>document.write(шапка('Забыли пин-код'))</script><div class="зона-2"><div class="панель">
+      <div class="втор">Введите секретную фразу этого аккаунта <b>или фразу владельца</b>, который его завёл. Пин-код после этого можно задать новый или убрать.</div>
+      <div class="поле-фразы">двенадцать слов через пробел</div>
+      <span class="кн во-всю">Проверить фразу</span>
+    </div></div></div><div class="трет">временный аккаунт — две фразы</div></div>
+
+    <div class="с-подписью"><div class="окно экр"><script>document.write(шапка('Забыли пин-код'))</script><div class="зона-2"><div class="панель">
+      <div class="красная" style="margin:0;border-left-color:var(--навигация);background:rgba(138,196,74,0.16)"><div class="итог" style="color:var(--текст)">Фраза подошла</div><div class="текст">Задайте новый пин-код или уберите его совсем.</div></div>
+      <span class="кн во-всю">Задать новый пин-код</span>
+      <span class="кн тихая во-всю">Убрать пин-код</span>
+    </div></div></div><div class="трет">фраза подошла — два выхода</div></div>
+  </div>
+</div>
+
+<div class="проба" id="и">
+  <div class="шапка-пробы"><span class="номер">и</span><span class="опис">смена аккаунта: у аккаунта с пином — знак, при переходе — его пин</span><span class="свет">переход на аккаунт без пина — без вопроса</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно экр"><script>document.write(шапка('Аккаунты на устройстве'))</script><div class="зона-2">
+      <div class="акк"><span class="ав">А</span><div class="сер"><div class="наз">Анна</div><div class="что">+799 ••• 01 · сейчас</div></div><span class="замок">пин</span></div>
+      <div class="акк"><span class="ав">Р</span><div class="сер"><div class="наз">Работа</div><div class="что">временный · без номера</div></div><span class="замок">пин</span></div>
+      <div class="акк"><span class="ав">Д</span><div class="сер"><div class="наз">Дача</div><div class="что">+799 ••• 47 · с 02.10</div></div></div>
+    </div></div><div class="трет">«пин» — у аккаунтов, где он задан</div></div>
+    <div class="с-подписью"><div class="окно экр"><div class="зона-2"><div class="пин">
+      <div class="кто">Работа</div><div class="номерок">временный аккаунт</div>
+      <div class="просьба">Пин-код аккаунта «Работа»</div>
+      <div class="точки"><i class="в"></i><i class="в"></i><i></i><i></i></div>
+      <div class="ответ"></div>
+      <div class="клав"><b>1</b><b>2</b><b>3</b><b>4</b><b>5</b><b>6</b><b>7</b><b>8</b><b>9</b><b class="пусто"></b><b>0</b><b class="стер">Стереть</b></div>
+      <div class="ссылки"><span>Забыли пин-код?</span><span>Отмена</span></div>
+    </div></div></div><div class="трет">переход на «Работа» — её пин; «Отмена» оставляет прежний аккаунт</div></div>
+  </div>
+</div>
+
+<h2 id="тексты">Тексты подокон «?» — на согласование</h2>
+<table class="тексты">
+  <tr><th>Пункт</th><th>Что делает</th><th>Что получится</th></tr>
+  <tr><td>Это устройство</td><td>Показывает, заверено ли устройство ключом личности из вашей фразы.</td><td>Заверенному собеседники пишут и принимают его подписи. Незаверенному — нет.</td></tr>
+  <tr><td>Подтвердить фразой</td><td>Заверяет это устройство секретной фразой.</td><td>Собеседники начнут писать и ему. На телефоне фраза нужна один раз: дальше он сам заверяет ваши новые устройства.</td></tr>
+  <tr><td>Показать код заверения</td><td>Показывает код, который сканирует ваш заверенный телефон.</td><td>Устройство заверено без ввода фразы на нём.</td></tr>
+  <tr><td>Пин-код</td><td>Закрывает вход в этот аккаунт на этом устройстве четырьмя цифрами. Хранится только здесь.</td><td>Пин спрашивается при запуске, после 5 минут в фоне и при переходе на этот аккаунт. Забыли — только секретная фраза.</td></tr>
+  <tr><td>Устройства</td><td>Все устройства аккаунта и заверено ли каждое.</td><td>Незаверенное можно заверить, чужое — отключить.</td></tr>
+  <tr><td>Заверить</td><td>Делает выбранное устройство доверенным.</td><td>Собеседники начнут писать и ему. Заверяйте только своё.</td></tr>
+  <tr><td>Отключить</td><td>Сервер перестаёт признавать устройство.</td><td>Оно больше не получает сообщений. Если оно могло унести ключ копии — смените его в «История».</td></tr>
+  <tr><td>Сканировать код</td><td>Подключает новое устройство или заверяет компьютер по коду на его экране.</td><td>Устройство входит в аккаунт и получает историю с этого телефона.</td></tr>
+  <tr><td>Копия переписки</td><td>Хранит ключи вашей переписки зашифрованными на сервере.</td><td>Новый телефон с секретной фразой поднимет историю сам. Сервер копию не прочтёт.</td></tr>
+  <tr><td>Сменить ключ копии</td><td>Переводит копию на новый ключ.</td><td>Отключённое устройство больше не откроет копию.</td></tr>
+  <tr><td>Смена номера</td><td>Заявка на новый номер: фраза и код на прежний номер.</td><td>Через 3 месяца подтвердите её фразой и кодом на новый номер — номер аккаунта сменится.</td></tr>
+  <tr><td>Выйти из аккаунта</td><td>Откладывает аккаунт на этом устройстве.</td><td>Переписка и ключи остаются здесь. Вернуться — на экране входа.</td></tr>
+  <tr><td>Перерегистрация</td><td>Заводит новый ключ личности с новой фразой, если доступ к аккаунту есть у кого-то ещё.</td><td>Заверения снимутся со всех устройств, собеседники увидят смену ключа. Не подтвердите в окне — новый ключ удалится.</td></tr>
+  <tr><td>Запретить «Начать заново»</td><td>Запрещает вход в аккаунт без секретной фразы — даже с SIM-картой этого номера.</td><td>Навсегда, снять нельзя. Потеряете фразу — аккаунт не вернуть.</td></tr>
+</table>
+
+</div>
