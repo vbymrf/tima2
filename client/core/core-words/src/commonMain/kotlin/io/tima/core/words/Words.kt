@@ -52,6 +52,7 @@ interface Words {
     /** Вид группы — где аватар автора (2026-10-07). */
     val groupLook: GroupLookWords
     val suggest: SuggestWords
+    val accountList: AccountListWords
     val chat: ChatWords
     val call: CallWords
 
@@ -180,6 +181,8 @@ interface SwitchingWords {
     val accounts: String
     val notSent: String
     val virtualAccount: String
+    /** «Добавить» в сетке аккаунтов панели переходов — заводит виртуальный аккаунт (2026-10-07). */
+    val addAccount: String
     val settingsHelpBugs: String
     val notSentSection: String
     fun waiting(howMany: Int): String
@@ -2422,6 +2425,7 @@ object RussianWords : Words {
         override val accounts = "Аккаунты"
         override val notSent = "не отправлено"
         override val virtualAccount = "Виртуальный аккаунт"
+        override val addAccount = "Добавить"
         override val settingsHelpBugs = "Настройки, помощь, баги"
         override val notSentSection = "Не отправлено"
         override fun waiting(howMany: Int) = if (howMany == 1) {
@@ -2736,7 +2740,7 @@ object RussianWords : Words {
         override val soundTooBig = "Файл больше 5 МБ — не взят"
         override val soundBadType = "Нужен звук: mp3, ogg, m4a или wav"
         override val soundsNotSynced = "Выбор у каждого устройства свой и между ними не переносится."
-        override val itemVirtuals = "Виртуальные аккаунты"
+        override val itemVirtuals = "Аккаунты"
         override val itemAppearance = "Цвета"
         override val itemText = "Шрифты и размеры"
         override val itemLanguage = "Язык"
@@ -3456,6 +3460,7 @@ object RussianWords : Words {
     override val pin: PinWords = RussianPinWords
     override val groupLook: GroupLookWords = RussianGroupLookWords
     override val suggest: SuggestWords = RussianSuggestWords
+    override val accountList: AccountListWords = RussianAccountListWords
 
     override val auth = object : AuthWords {
         override fun build(version: String) = "сборка $version"

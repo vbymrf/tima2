@@ -1,5 +1,7 @@
 package io.tima.feature.auth
 
+import io.tima.domain.account.AccountTitle
+
 /**
  * Отложенный выходом аккаунт на экране входа (А6; заказчик 2026-10-06).
  *
@@ -31,13 +33,23 @@ fun maskPhone(phone: String): String {
 }
 
 /**
- * Подпись строки: «Имя · +799 ••• 01 · с 06.10.2026». Нет ни имени, ни номера — хвост
- * идентификатора, как раньше: различить два своих аккаунта этого хватает.
+ * Подпись строки: «Имя · +799 ••• 01 · с 06.10.2026». Первое — подпись аккаунта, одна на всё
+ * приложение ([AccountTitle], заказчик 2026-10-07): имя, без имени — @ник, без ника — служебное имя.
  */
-fun returnLabel(userId: String, name: String, phone: String, since: String?): String {
+fun returnLabel(userId: String, name: String, phone: String, since: String?, nickname: String = ""): String {
     val who = listOfNotNull(
-        name.trim().ifBlank { null },
+        AccountTitle.of(name, nickname, userId),
         phone.takeIf { it.isNotBlank() }?.let(::maskPhone),
-    ).ifEmpty { listOf("…" + userId.takeLast(6)) }
+    )
     return (who + listOfNotNull(since)).joinToString(" · ")
+}
+
+/**
+ * Вторая строка подписи аккаунта (заказчик 2026-10-07): @ник и номер с закрытой серединой; у
+ * виртуального вместо номера — «виртуальный». Ник не повторяется, если он уже стоит первой строкой.
+ */
+fun accountDetail(name: String, nickname: String, phone: String, virtual: Boolean, virtualWord: String): String {
+    val nick = nickname.trim().trimStart('@').takeIf { it.isNotBlank() && name.isNotBlank() }?.let { "@$it" }
+    val tail = if (virtual) virtualWord else phone.takeIf { it.isNotBlank() }?.let(::maskPhone)
+    return listOfNotNull(nick, tail).joinToString(" · ")
 }

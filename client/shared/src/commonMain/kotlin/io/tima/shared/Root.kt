@@ -535,7 +535,7 @@ private fun Inside(
     // открыт. Отложенный потом покажется «Имя · +799 ••• 01 · с 06.10.2026», а не хвостом id.
     LaunchedEffect(current.session.userId) {
         val me = runCatching { assembled.network.profile.me() }.getOrNull() ?: return@LaunchedEffect
-        entry.noteCard(current.session.userId, me.name.ifBlank { me.nickname }, me.phone)
+        entry.noteCard(current.session.userId, me.name, me.phone, me.nickname)
     }
 
     // Выход из аккаунта на этом устройстве (ПЛАН-(А)-ВЫХОДА-ИЗ-АККАУНТА.md, А4): канал
@@ -571,7 +571,11 @@ private fun Inside(
     val lockWho = remember(pinUser) {
         val card = entry.cardOf(pinUser)
         io.tima.feature.auth.PinWho(
-            name = card?.name?.ifBlank { null } ?: entry.accountList().firstOrNull { it.userId == pinUser }?.nickname?.ifBlank { null } ?: pinUser.take(8),
+            name = io.tima.domain.account.AccountTitle.of(
+                card?.name.orEmpty(),
+                card?.nickname?.ifBlank { null } ?: entry.accountList().firstOrNull { it.userId == pinUser }?.nickname.orEmpty(),
+                pinUser,
+            ),
             detail = card?.phone?.ifBlank { null }?.let { io.tima.feature.auth.maskPhone(it) }.orEmpty(),
             temporary = temporary,
         )
@@ -602,6 +606,8 @@ private fun Inside(
         language = language,
         onLanguage = onLanguage,
         accounts = entry.accountList(),
+        cardOf = entry::cardOf,
+        onCard = { name, phone, nickname -> entry.noteCard(current.session.userId, name, phone, nickname) },
         unsent = unsent,
         // Число оставляет тот аккаунт, что открыт: чужую очередь не прочитать — её база
         // зашифрована своим ключом покоя (Д11).
@@ -636,7 +642,8 @@ private fun Inside(
             }
         },
         lockOthers = entry.accountList().filter { it.userId != current.session.userId }.map { other ->
-            LockAccount(other.userId, entry.cardOf(other.userId)?.name?.ifBlank { null } ?: other.nickname.ifBlank { other.userId.take(8) })
+            val card = entry.cardOf(other.userId)
+            LockAccount(other.userId, io.tima.domain.account.AccountTitle.of(card?.name.orEmpty(), card?.nickname?.ifBlank { null } ?: other.nickname, other.userId))
         },
         onSignOut = signOut,
         // Перерегистрация (ДУ9): доказательство прежней фразы готово — выйти и войти тем же
@@ -726,7 +733,8 @@ private fun Occurrence(entry: Entry, build: Build, onReturn: (String) -> Unit = 
                 userId = account.userId,
                 label = io.tima.feature.auth.returnLabel(
                     userId = account.userId,
-                    name = card?.name?.ifBlank { null } ?: account.nickname,
+                    name = card?.name.orEmpty(),
+                    nickname = card?.nickname?.ifBlank { null } ?: account.nickname,
                     phone = card?.phone.orEmpty(),
                     since = card?.since?.takeIf { it > 0 }?.let { authWords.returnSince(reregDate(it).substringBefore(' ')) },
                 ),
@@ -922,6 +930,10 @@ private fun App(
     onLanguage: (Language) -> Unit,
     /** Аккаунты этого устройства: основной и его виртуальные (Д11). */
     accounts: List<Account> = emptyList(),
+    /** Карточка аккаунта на устройстве — имя, номер, ник (подпись одна на всё приложение, 2026-10-07). */
+    cardOf: (String) -> io.tima.core.secrets.AccountCard? = { null },
+    /** Профиль текущего пришёл или изменился — обновить его карточку. */
+    onCard: (name: String, phone: String, nickname: String) -> Unit = { _, _, _ -> },
     onSwitchAccount: (String) -> Unit = {},
     /** Выйти из аккаунта на этом устройстве (ПЛАН-(А)-ВЫХОДА-ИЗ-АККАУНТА.md, А4). */
     onSignOut: () -> Unit = {},
@@ -1121,6 +1133,14 @@ private fun App(
         ProfileStore(profile = network.profile, phone = "", scope = scope, media = network.media)
     }
     val profileState by profile.state.collectAsState()
+    // Карточка аккаунта — свежая, когда профиль пришёл или изменился (2026-10-07): по ней подписан
+    // аккаунт на замке, на входе и в панели переходов, и устаревшее имя там видно сразу. Пустой
+    // профиль (ещё не загружен) карточку не затирает.
+    LaunchedEffect(profileState.loadedName, profileState.savedNickname, profileState.phone) {
+        if (profileState.loadedName.isNotBlank() || profileState.savedNickname.isNotBlank() || profileState.phone.isNotBlank()) {
+            onCard(profileState.loadedName, profileState.phone, profileState.savedNickname)
+        }
+    }
     // Кто я — с сервера, один раз на сборку корня. Телефон отсюда уходит и в шапку
     // переключения окон: сессия его не хранит (0050).
     LaunchedEffect(profile) { profile.refresh() }
@@ -2527,6 +2547,16 @@ private fun App(
     }
 
     if (windowSwitcher) {
+        // Подпись аккаунта — одна на всё приложение (2026-10-07): имя, @ник, служебное имя. У
+        // текущего — из профиля: он свежее карточки.
+        val accountTitles = accounts.map { account ->
+            val card = cardOf(account.userId)
+            account.userId to if (account.userId == session.userId) {
+                io.tima.domain.account.AccountTitle.of(profileState.loadedName, profileState.savedNickname, account.userId)
+            } else {
+                io.tima.domain.account.AccountTitle.of(card?.name.orEmpty(), card?.nickname?.ifBlank { null } ?: account.nickname, account.userId)
+            }
+        }
         WindowSwitchingScreen(
             current = window,
             inCall = callHost.active,
@@ -2568,7 +2598,7 @@ private fun App(
             },
             // Аккаунты — здесь же: это единственное место, где человек видит, от чьего
             // лица он в приложении, и менять это надо там же, где смотрят.
-            accounts = accounts.map { it.userId to (it.nickname.ifBlank { it.userId.take(8) }) },
+            accounts = accountTitles,
             currentAccount = session.userId,
             unsent = unsent,
             onAccount = { userId ->
@@ -3407,6 +3437,7 @@ private fun App(
                         virtuals = virtuals,
                         virtualsState = virtualsState,
                         onNewVirtual = { where = Where.NewVirtual },
+                        accountRows = accountRows(accounts, session.userId, profileState, cardOf, virtualsState),
                         onTransfer = { userId -> where = Where.Transfer(userId) },
                         update = update,
                         updateState = updateState,
@@ -4303,6 +4334,8 @@ private fun Settings(
     onNewVirtual: () -> Unit,
     /** `null` — принимаем чужой; иначе передаём свой. */
     onTransfer: (String?) -> Unit,
+    /** Все аккаунты для «Аккаунтов» (2026-10-07): с устройства и виртуальные с сервера. */
+    accountRows: List<io.tima.feature.auth.AccountRow> = emptyList(),
     /** Обновление: один магазин на приложение, здесь только его вкладка (О3, О5). */
     update: UpdateStore,
     updateState: UpdateState,
@@ -4337,7 +4370,7 @@ private fun Settings(
     callDevices: io.tima.core.call.CallDevices? = null,
     /** Запуск вместе с системой — есть только у ПК; `null` — раздела в «Разрешениях» нет. */
     loginStart: LoginStart? = null,
-    /** Пин-код этого аккаунта (ПЛАН-(ПН)) — строка «Пин-код» во «Входе». */
+    /** Пин-код этого аккаунта (ПЛАН-(ПН)) — значок «Пин» у текущего в «Аккаунтах» (2026-10-07). */
     pin: PinHost? = null,
 ) {
     // Название темы считается в составе, а не в лямбде списка: лямбда не composable.
@@ -4409,15 +4442,22 @@ private fun Settings(
                 // Список спрашивается у сервера при каждом заходе: он меняется и на
                 // других устройствах, а местный список показал бы вчерашнее.
                 LaunchedEffect(Unit) { virtuals.refresh() }
-                VirtualsScreen(
-                    state = virtualsState,
-                    onCreate = onNewVirtual,
-                    onGive = { onTransfer(it) },
-                    onTake = { onTransfer(null) },
-                )
+                // Пин-код текущего аккаунта — здесь, у его строки (заказчик 2026-10-07).
+                PinFlow(pin) { pinOn, onPin, pinNotice ->
+                    VirtualsScreen(
+                        state = virtualsState,
+                        onCreate = onNewVirtual,
+                        onGive = { onTransfer(it) },
+                        onTake = { onTransfer(null) },
+                        rows = accountRows,
+                        pinOn = pinOn,
+                        onPin = onPin,
+                        pinNotice = pinNotice,
+                    )
+                }
             }
 
-            SettingsItem.DEVICES -> Devices(fleet, devices, build.name, onSignOut, onScanCode, accountCopy, pin)
+            SettingsItem.DEVICES -> Devices(fleet, devices, build.name, onSignOut, onScanCode, accountCopy)
 
             // Уведомления (У1, У14). Пункт стоял в списке с самого начала и не
             // открывал ничего; теперь здесь два действия, без которых уведомления на
@@ -4595,44 +4635,7 @@ private fun Devices(
     onSignOut: () -> Unit,
     onScanCode: (() -> Unit)?,
     accountCopy: BookCopySync,
-    pin: PinHost? = null,
 ) {
-    // Пин-код (ПЛАН-(ПН)): экран пин-кода — на месте вкладки, пока идёт; итог — плашкой у строки.
-    val pinScope = rememberCoroutineScope()
-    val pw = Tima.words.pin
-    var pinFlow by remember { mutableStateOf<io.tima.feature.auth.PinFlowStore?>(null) }
-    var pinVersion by remember { mutableStateOf(0) }
-    var pinNotice by remember { mutableStateOf<String?>(null) }
-    val flow = pinFlow
-    if (flow != null && pin != null) {
-        val fs by flow.state.collectAsState()
-        LaunchedEffect(fs.step) {
-            if (fs.step == io.tima.feature.auth.PinStep.Done) {
-                pinNotice = when (fs.result) {
-                    io.tima.feature.auth.PinResult.TurnedOn -> pw.turnedOn
-                    io.tima.feature.auth.PinResult.TurnedOff -> pw.turnedOff
-                    io.tima.feature.auth.PinResult.Changed -> pw.changed
-                    else -> null
-                }
-                pinVersion++
-                pinFlow = null
-            }
-        }
-        io.tima.feature.auth.PinScreen(
-            state = fs,
-            onDigit = flow::digit,
-            onErase = flow::erase,
-            onForgot = flow::forgot,
-            onPhrase = flow::submitPhrase,
-            onChoose = flow::choose,
-            onTick = flow::tick,
-            now = { msNow() },
-            temporary = pin.temporary,
-            onCancel = { pinFlow = null },
-        )
-        return
-    }
-    val pinOn = remember(pin, pinVersion) { pin?.lock?.isOn() }
     // Ключа служебной группы нет — «Запросить ключ» (заказчик 2026-09-30).
     val keyMissing by accountCopy.keyMissing.collectAsState()
     val keyAsk by accountCopy.keyAsk.collectAsState()
@@ -4679,15 +4682,95 @@ private fun Devices(
         phoneChange = store.phoneChangeView(msNow()),
         onSendPhoneCode = store::sendPhoneChangeCode,
         onPhoneChange = store::phoneChange,
-        pinOn = pinOn,
-        onPin = pin?.let { p ->
+    )
+}
+
+/**
+ * Пин-код текущего аккаунта (ПЛАН-(ПН)): экран пин-кода — на месте вкладки, пока идёт; итог —
+ * плашкой у строки. Живёт в Настройки → «Аккаунты» (заказчик 2026-10-07: «Перенесем пин код в
+ * аккаунты»).
+ */
+@Composable
+private fun PinFlow(
+    pin: PinHost?,
+    content: @Composable (pinOn: Boolean?, onPin: ((io.tima.feature.auth.PinMode) -> Unit)?, pinNotice: String?) -> Unit,
+) {
+    val pinScope = rememberCoroutineScope()
+    val pw = Tima.words.pin
+    var pinFlow by remember { mutableStateOf<io.tima.feature.auth.PinFlowStore?>(null) }
+    var pinVersion by remember { mutableStateOf(0) }
+    var pinNotice by remember { mutableStateOf<String?>(null) }
+    val flow = pinFlow
+    if (flow != null && pin != null) {
+        val fs by flow.state.collectAsState()
+        LaunchedEffect(fs.step) {
+            if (fs.step == io.tima.feature.auth.PinStep.Done) {
+                pinNotice = when (fs.result) {
+                    io.tima.feature.auth.PinResult.TurnedOn -> pw.turnedOn
+                    io.tima.feature.auth.PinResult.TurnedOff -> pw.turnedOff
+                    io.tima.feature.auth.PinResult.Changed -> pw.changed
+                    else -> null
+                }
+                pinVersion++
+                pinFlow = null
+            }
+        }
+        io.tima.feature.auth.PinScreen(
+            state = fs,
+            onDigit = flow::digit,
+            onErase = flow::erase,
+            onForgot = flow::forgot,
+            onPhrase = flow::submitPhrase,
+            onChoose = flow::choose,
+            onTick = flow::tick,
+            now = { msNow() },
+            temporary = pin.temporary,
+            onCancel = { pinFlow = null },
+        )
+        return
+    }
+    val pinOn = remember(pin, pinVersion) { pin?.lock?.isOn() }
+    content(
+        pinOn,
+        pin?.let { p ->
             { mode: io.tima.feature.auth.PinMode ->
                 pinNotice = null
                 pinFlow = io.tima.feature.auth.PinFlowStore(mode, p.lock, p.verify, pinScope, { msNow() }, ::notePin)
             }
         },
-        pinNotice = pinNotice,
+        pinNotice,
     )
+}
+
+/**
+ * Строки «Аккаунтов»: аккаунты устройства и виртуальные с сервера, которых на устройстве нет.
+ * «Передать» — у виртуальных из списка сервера: им распоряжается текущий аккаунт.
+ */
+private fun accountRows(
+    accounts: List<Account>,
+    current: String,
+    profile: io.tima.feature.chat.ProfileState,
+    cardOf: (String) -> io.tima.core.secrets.AccountCard?,
+    virtuals: VirtualsState,
+): List<io.tima.feature.auth.AccountRow> {
+    val owned = virtuals.accounts.map { it.userId }.toSet()
+    val onDevice = accounts.map { account ->
+        val card = cardOf(account.userId)
+        val mine = account.userId == current
+        io.tima.feature.auth.AccountRow(
+            userId = account.userId,
+            name = if (mine) profile.loadedName else card?.name.orEmpty(),
+            nickname = if (mine) profile.savedNickname else card?.nickname?.ifBlank { null } ?: account.nickname,
+            phone = if (mine) profile.phone else card?.phone.orEmpty(),
+            virtual = account.virtual,
+            current = mine,
+            canGive = account.userId in owned,
+        )
+    }
+    val elsewhere = virtuals.accounts.filter { v -> accounts.none { it.userId == v.userId } }.map { v ->
+        io.tima.feature.auth.AccountRow(v.userId, "", v.nickname, "", virtual = true, current = false, canGive = true)
+    }
+    return onDevice + elsewhere
 }
 
 /**

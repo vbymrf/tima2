@@ -151,14 +151,22 @@ class Accounts(private val vault: SecretVault) {
      */
     fun card(userId: String): AccountCard? {
         val parts = vault.get(cardAlias(userId))?.decodeToString()?.split(FIELD) ?: return null
-        if (parts.size != 3) return null
-        return AccountCard(name = parts[0], phone = parts[1], since = parts[2].toLongOrNull() ?: 0L)
+        // Три поля — карточки до 2026-10-07, без ника; читаются как были.
+        if (parts.size != 3 && parts.size != 4) return null
+        return AccountCard(
+            name = parts[0],
+            phone = parts[1],
+            since = parts[2].toLongOrNull() ?: 0L,
+            nickname = parts.getOrNull(3).orEmpty(),
+        )
     }
 
     /** Записать имя и номер открытого аккаунта; день появления на устройстве — только первый раз. */
-    fun noteCard(userId: String, name: String, phone: String, now: Long) {
+    fun noteCard(userId: String, name: String, phone: String, now: Long, nickname: String = "") {
         val since = card(userId)?.since?.takeIf { it > 0 } ?: now
-        val line = listOf(name.replace(FIELD, " ").replace("\n", " "), phone, since.toString()).joinToString(FIELD)
+        // Ник — отдельным полем (2026-10-07): подпись аккаунта без имени — «@ник», а не голый ник.
+        fun clean(text: String) = text.replace(FIELD, " ").replace("\n", " ")
+        val line = listOf(clean(name), phone, since.toString(), clean(nickname)).joinToString(FIELD)
         vault.put(cardAlias(userId), line.encodeToByteArray())
     }
 
@@ -196,7 +204,7 @@ class Accounts(private val vault: SecretVault) {
  * вообще единственное, чем его называют.
  */
 /** Карточка аккаунта для экрана входа: имя, номер, с какого дня (мс) на этом устройстве. */
-data class AccountCard(val name: String = "", val phone: String = "", val since: Long = 0L)
+data class AccountCard(val name: String = "", val phone: String = "", val since: Long = 0L, val nickname: String = "")
 
 data class Account(
     val userId: String,

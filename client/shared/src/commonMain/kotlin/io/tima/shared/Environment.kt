@@ -225,7 +225,8 @@ class Entry private constructor(
     fun cardOf(userId: String): io.tima.core.secrets.AccountCard? = accounts.card(userId)
 
     /** Открытый аккаунт оставляет списку своё имя и номер — больше их записать некому. */
-    fun noteCard(userId: String, name: String, phone: String) = accounts.noteCard(userId, name, phone, nowMillis())
+    fun noteCard(userId: String, name: String, phone: String, nickname: String = "") =
+        accounts.noteCard(userId, name, phone, nowMillis(), nickname)
 
     /**
      * Забыть отложенный аккаунт на этом устройстве (заказчик 2026-10-06): его нет на сервере.

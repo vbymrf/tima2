@@ -297,6 +297,7 @@ object EnglishWords : Words {
         override val accounts = "Accounts"
         override val notSent = "not sent"
         override val virtualAccount = "Virtual account"
+        override val addAccount = "Add"
         override val settingsHelpBugs = "Settings, help, bugs"
         override val notSentSection = "Not sent"
 
@@ -612,7 +613,7 @@ object EnglishWords : Words {
         override val soundTooBig = "The file is larger than 5 MB — not taken"
         override val soundBadType = "A sound is needed: mp3, ogg, m4a or wav"
         override val soundsNotSynced = "Each device keeps its own choice; it is not carried between devices."
-        override val itemVirtuals = "Virtual accounts"
+        override val itemVirtuals = "Accounts"
         override val itemAppearance = "Colours"
         override val itemText = "Fonts and sizes"
         override val itemLanguage = "Language"
@@ -1311,6 +1312,7 @@ object EnglishWords : Words {
     override val pin: PinWords = EnglishPinWords
     override val groupLook: GroupLookWords = EnglishGroupLookWords
     override val suggest: SuggestWords = EnglishSuggestWords
+    override val accountList: AccountListWords = EnglishAccountListWords
 
     override val auth = object : AuthWords {
         override fun build(version: String) = "build $version"

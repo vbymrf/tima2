@@ -15,15 +15,17 @@ class PinScreensTest {
 
     @Test
     fun экран_по_группам_и_красный_аккаунт() {
-        val full = capture("фраза-и-устройства-группы", WIDTH, 1500, dark = false) { grouped(pinOn = false) }
+        val full = capture("фраза-и-устройства-группы", WIDTH, 1500, dark = false) { grouped() }
         assertTrue(full.patchHas(TimaColors.light.alarm, side = 2), "красного раздела «Аккаунт» не видно")
     }
 
+    /** Пин-код — в «Аккаунтах», значком у текущего (заказчик 2026-10-07): включён и выключен различимы. */
     @Test
-    fun пузырь_пин_кода_меняется_со_включением() {
-        val off = capture("пин-выключен", WIDTH, 500, dark = false) { grouped(pinOn = false) }
-        val on = capture("пин-включён", WIDTH, 500, dark = false) { grouped(pinOn = true) }
-        assertTrue(off.difference(on) > 0.0, "пузырь «выключен/включён» не отличается")
+    fun значок_пин_кода_меняется_со_включением() {
+        val off = capture("пин-выключен", WIDTH, 700, dark = false) { accounts(pinOn = false) }
+        val on = capture("пин-включён", WIDTH, 700, dark = false) { accounts(pinOn = true) }
+        assertTrue(off.difference(on) > 0.0, "значок «Пин» не отличается у включённого и выключенного")
+        assertTrue(on.patchHas(TimaColors.light.navigation, x = WIDTH - 140 until WIDTH, side = 1), "у включённого пина нет зелёной рамки")
     }
 
     /**
@@ -32,15 +34,15 @@ class PinScreensTest {
      */
     @Test
     fun сканер_в_группе_вход() {
-        val with = capture("вход-со-сканером", WIDTH, 260, dark = false) { grouped(pinOn = false) }
-        val without = capture("вход-без-сканера", WIDTH, 260, dark = false) { grouped(pinOn = false, scan = false) }
+        val with = capture("вход-со-сканером", WIDTH, 260, dark = false) { grouped() }
+        val without = capture("вход-без-сканера", WIDTH, 260, dark = false) { grouped(scan = false) }
         assertTrue(with.difference(without) > 0.0, "строки «Сканировать код» нет в «Вход»")
     }
 
     /** Стрелка нажимаемой строки — зелёная, цветом навигации (заказчик 2026-10-07). */
     @Test
     fun стрелка_строки_зелёная() {
-        val top = capture("стрелка-зелёная", WIDTH, 260, dark = false) { grouped(pinOn = false) }
+        val top = capture("стрелка-зелёная", WIDTH, 260, dark = false) { grouped() }
         assertTrue(
             top.patchHas(TimaColors.light.navigation, x = WIDTH - 40 until WIDTH, side = 2),
             "у края строк нет зелёной стрелки",
@@ -87,7 +89,7 @@ class PinScreensTest {
         )
 
         @androidx.compose.runtime.Composable
-        fun grouped(pinOn: Boolean, scan: Boolean = true) = DeviceScreen(
+        fun grouped(scan: Boolean = true) = DeviceScreen(
             state = STATE,
             onAsk = {},
             onConfirm = {},
@@ -106,6 +108,18 @@ class PinScreensTest {
             phoneChange = PhoneChangeView(text = null, canStart = true),
             onSendPhoneCode = {},
             onPhoneChange = { _, _, _ -> },
+        )
+
+        @androidx.compose.runtime.Composable
+        fun accounts(pinOn: Boolean) = VirtualsScreen(
+            state = VirtualsState(asked = true),
+            onCreate = {},
+            onGive = {},
+            onTake = {},
+            rows = listOf(
+                AccountRow("u-1", "Анна Смирнова", "anna", "+79990000101", virtual = false, current = true, canGive = false),
+                AccountRow("u-2", "Работа", "anna_work", "", virtual = true, current = false, canGive = true),
+            ),
             pinOn = pinOn,
             onPin = {},
         )

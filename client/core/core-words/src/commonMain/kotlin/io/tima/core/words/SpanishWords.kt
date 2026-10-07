@@ -295,6 +295,7 @@ object SpanishWords : Words {
         override val accounts = "Cuentas"
         override val notSent = "sin enviar"
         override val virtualAccount = "Cuenta virtual"
+        override val addAccount = "Añadir"
         override val settingsHelpBugs = "Ajustes, ayuda, fallos"
         override val notSentSection = "Sin enviar"
 
@@ -610,7 +611,7 @@ object SpanishWords : Words {
         override val soundTooBig = "El archivo supera 5 MB — no se tomó"
         override val soundBadType = "Se necesita un sonido: mp3, ogg, m4a o wav"
         override val soundsNotSynced = "Cada dispositivo guarda su elección; no se transfiere entre ellos."
-        override val itemVirtuals = "Cuentas virtuales"
+        override val itemVirtuals = "Cuentas"
         override val itemAppearance = "Colores"
         override val itemText = "Fuentes y tamaños"
         override val itemLanguage = "Idioma"
@@ -1312,6 +1313,7 @@ object SpanishWords : Words {
     override val pin: PinWords = SpanishPinWords
     override val groupLook: GroupLookWords = SpanishGroupLookWords
     override val suggest: SuggestWords = SpanishSuggestWords
+    override val accountList: AccountListWords = SpanishAccountListWords
 
     override val auth = object : AuthWords {
         override fun build(version: String) = "compilación $version"

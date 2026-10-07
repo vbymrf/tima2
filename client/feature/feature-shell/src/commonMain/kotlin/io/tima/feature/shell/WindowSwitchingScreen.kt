@@ -1,6 +1,19 @@
 package io.tima.feature.shell
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import io.tima.core.ui.Caption
+import io.tima.core.ui.TimaType
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -167,53 +180,33 @@ fun WindowSwitchingScreen(
         ) {
             Header(name, alias, phone, avatar, onClose, onProfile)
 
-            onCall?.let { goToCall ->
-                val callWords = Tima.words.call
-                ListLine(
-                    modifier = Modifier.background(colors.softAccent),
-                    onClick = goToCall,
-                    left = { Glyph("📞") },
-                    middle = {
-                        Column {
-                            Name(if (callRinging) callWords.incoming else callWords.activeCall)
-                            if (callPeer.isNotBlank()) Secondary(callPeer, lineOne = true)
-                        }
-                    },
-                )
-            }
+            onCall?.let { goToCall -> CallBubble(callRinging, callPeer, goToCall) }
 
-            if (accounts.size > 1) {
-                SectionTitle(words.accounts)
-                // Один аккаунт — списка нет: строка «переключиться» там, где переключаться
-                // не на что, обещает несуществующее.
-                run {
-                    accounts.forEach { (userId, label) ->
-                        val waiting = unsent[userId] ?: 0
-                        ListLine(
-                            onClick = { if (userId != currentAccount) onAccount(userId) },
-                            left = { Glyph(if (userId == currentAccount) "●" else "○") },
-                            right = { if (waiting > 0) Counter(waiting) },
-                            middle = {
-                                Column {
-                                    Name(label)
-                                    // Число само по себе непонятно: у окон рядом такой же
-                                    // счётчик означает непрочитанное. Здесь наоборот —
-                                    // несказанное, и это надо назвать словом.
-                                    if (waiting > 0) Secondary(words.notSent, lineOne = true)
-                                }
-                            },
-                        )
-                    }
+            // Окна — в общей рамке с зелёной окантовкой на мягкой подложке (пробы
+            // `пробы-окно-переходов.html`, И1, приняты заказчиком 2026-10-07): это то, ради
+            // чего панель открывают, и оно стоит сразу под шапкой.
+            Column(
+                Modifier
+                    .padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(TimaShapes.radius))
+                    .border(FRAME, colors.navigation, RoundedCornerShape(TimaShapes.radius))
+                    .background(colors.softAccent),
+            ) {
+                for (window in Window.shown(inCall, bench)) {
+                    Item(
+                        window = window,
+                        current = window == current,
+                        howMany = counters[window] ?: 0,
+                        onClick = { onSelect(window) },
+                    )
                 }
             }
 
-            for (window in Window.shown(inCall, bench)) {
-                Item(
-                    window = window,
-                    current = window == current,
-                    howMany = counters[window] ?: 0,
-                    onClick = { onSelect(window) },
-                )
+            // Аккаунты — сеткой аватаров под окнами (И1): видны все сразу, переход — одним
+            // нажатием. Есть и при одном аккаунте: там же «Добавить».
+            if (accounts.isNotEmpty()) {
+                AccountsGrid(accounts, currentAccount, unsent, onAccount, onNewAccount)
             }
 
             if (onSettings != null) {
@@ -221,19 +214,6 @@ fun WindowSwitchingScreen(
                     onClick = onSettings,
                     left = { Glyph("⚙") },
                     middle = { Name(words.settingsHelpBugs) },
-                )
-            }
-
-            // «Завести виртуальный аккаунт» — САМЫМ нижним пунктом (решение заказчика
-            // 2026-09-15). До этого строка стояла над окнами, рядом со списком аккаунтов, и
-            // человек, открывший панель ради смены окна, первым видел предложение завести
-            // второго себя. Заводят его редко, окна выбирают каждый раз — редкое внизу.
-            // Показывается и при единственном аккаунте: иначе завести второй неоткуда.
-            onNewAccount?.let {
-                ListLine(
-                    onClick = it,
-                    left = { Glyph("＋") },
-                    middle = { Name(words.virtualAccount) },
                 )
             }
 
@@ -313,34 +293,171 @@ private fun Header(
     }
 }
 
+/**
+ * Строка окна. Текущее — **и** зелёной полосой слева, **и** зелёной рамкой значка (заказчик
+ * 2026-10-07, И1); приписки «вы здесь» нет.
+ */
 @Composable
 private fun Item(window: Window, current: Boolean, howMany: Int, onClick: () -> Unit) {
-    ListLine(
-        onClick = onClick,
-        left = { Glyph(window.glyph) },
-        right = { if (howMany > 0) Counter(howMany) },
-        middle = {
-            Column {
-                val words = Tima.words.windows
-                Name(words.full(window))
-                Secondary(
-                    // Текущее окно называет себя текущим словом, а не только цветом:
-                    // цвет здесь один на всё приложение и уже занят навигацией.
-                    if (current) words.youAreHere(words.about(window)) else words.about(window),
-                    lineOne = true,
-                )
+    val colors = Tima.colors
+    Box(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+        ListLine(
+            onClick = onClick,
+            left = { Glyph(window.glyph, current = current, plate = colors.surface) },
+            right = { if (howMany > 0) Counter(howMany) },
+            middle = {
+                Column {
+                    val words = Tima.words.windows
+                    Name(words.full(window))
+                    Secondary(words.about(window), lineOne = true)
+                }
+            },
+        )
+        if (current) {
+            Box(Modifier.fillMaxHeight().width(STRIPE).background(colors.navigation))
+        }
+    }
+}
+
+/**
+ * «Активный звонок» — залитый зелёный пузырь, как кнопки, на поверхности и сдвинутый вправо к
+ * колонке текста (заказчик 2026-10-07: «Формат Активный звонок одобряю»).
+ */
+@Composable
+private fun CallBubble(ringing: Boolean, peer: String, onClick: () -> Unit) {
+    val colors = Tima.colors
+    val callWords = Tima.words.call
+    Row(
+        Modifier
+            .padding(start = CALL_INDENT, end = TimaSpacing.about4, top = TimaSpacing.about3, bottom = TimaSpacing.about1)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(TimaShapes.radius))
+            .background(colors.navigation)
+            .clickable(onClick = onClick)
+            .padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Glyph("📞", plate = colors.onAccent.copy(alpha = 0.25f))
+        Column {
+            Caption(if (ringing) callWords.incoming else callWords.activeCall, weight = FontWeight.Bold, color = colors.onAccent)
+            if (peer.isNotBlank()) Caption(peer, fontSize = TimaType.sz5, color = colors.onAccent, lineOne = true)
+        }
+    }
+}
+
+/**
+ * Аккаунты — сеткой аватаров (заказчик 2026-10-07, И1): пять постоянных мест в строке, не
+ * влезло — следующая строка; «Добавить» — всегда в правой колонке последней строки. Текущий —
+ * зелёной рамкой аватара, неотправленное — числом в углу.
+ *
+ * @param accounts пары «идентификатор — подпись»; подпись одна на всё приложение (имя, @ник,
+ * служебное имя — `AccountTitle`)
+ */
+@Composable
+private fun AccountsGrid(
+    accounts: List<Pair<String, String>>,
+    current: String,
+    unsent: Map<String, Int>,
+    onAccount: (String) -> Unit,
+    onNew: (() -> Unit)?,
+) {
+    val words = Tima.words.switching
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about2, vertical = TimaSpacing.about3),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+    ) {
+        accountSlots(accounts.size, add = onNew != null).forEach { row ->
+            Row(Modifier.fillMaxWidth()) {
+                row.forEach { slot ->
+                    val m = Modifier.weight(1f)
+                    when {
+                        slot == null -> Spacer(m)
+                        slot == ADD_SLOT && onNew != null -> AddCell(words.addAccount, m, onNew)
+                        else -> {
+                            val (userId, label) = accounts[slot]
+                            AccountCell(label, userId == current, unsent[userId] ?: 0, m) { if (userId != current) onAccount(userId) }
+                        }
+                    }
+                }
             }
-        },
-    )
+        }
+    }
+}
+
+/**
+ * Раскладка сетки аккаунтов: строки по [GRID] мест, в месте — номер аккаунта, [ADD_SLOT] или
+ * `null` (пусто). Места постоянные; «Добавить» — всегда в правой колонке последней строки, и если
+ * последняя строка заполнена аккаунтами до конца, «Добавить» уходит на новую строку.
+ */
+internal fun accountSlots(accounts: Int, add: Boolean): List<List<Int?>> {
+    val slots = mutableListOf<Int?>()
+    repeat(accounts) { slots += it }
+    if (add) {
+        while (slots.size % GRID != GRID - 1) slots += null
+        slots += ADD_SLOT
+    }
+    return slots.chunked(GRID).map { row -> row + List(GRID - row.size) { null } }
+}
+
+/** Место «Добавить» в [accountSlots]. */
+internal const val ADD_SLOT = -1
+
+@Composable
+private fun AccountCell(label: String, current: Boolean, waiting: Int, modifier: Modifier, onClick: () -> Unit) {
+    val colors = Tima.colors
+    Column(modifier.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box {
+            Box(
+                if (current) Modifier.border(FRAME, colors.navigation, RoundedCornerShape(TimaShapes.smallSquare + FRAME)).padding(FRAME)
+                else Modifier.padding(FRAME),
+            ) {
+                Avatar(letters = label.trimStart('@').take(1).uppercase().ifBlank { "?" })
+            }
+            if (waiting > 0) Counter(waiting, Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-4).dp))
+        }
+        Caption(label, fontSize = TimaType.sz6, weight = FontWeight.Bold, lineOne = true, textAlign = TextAlign.Center)
+    }
 }
 
 @Composable
-private fun Glyph(glyph: String) {
+private fun AddCell(label: String, modifier: Modifier, onClick: () -> Unit) {
     val colors = Tima.colors
-    val words = Tima.words.switching
+    Column(modifier.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier
+                .padding(FRAME)
+                .size(ADD_SIDE)
+                .border(1.5.dp, colors.navigation, RoundedCornerShape(TimaShapes.smallSquare)),
+            contentAlignment = Alignment.Center,
+        ) { Caption("+", fontSize = TimaType.sz2, weight = FontWeight.Bold, color = colors.navigation) }
+        Caption(label, fontSize = TimaType.sz6, weight = FontWeight.Bold, lineOne = true, textAlign = TextAlign.Center)
+    }
+}
+
+/** Мест в строке сетки аккаунтов: пять аватаров на ширину телефона. */
+internal const val GRID = 5
+
+/** Толщина зелёной рамки — окна, текущий значок, текущий аккаунт. */
+private val FRAME = 2.dp
+
+/** Полоса текущего окна. */
+private val STRIPE = 5.dp
+
+/** Сдвиг пузыря звонка — до колонки текста под шапкой. */
+private val CALL_INDENT = 58.dp
+
+/** Сторона «Добавить» — как у аватара. */
+private val ADD_SIDE = 42.dp
+
+@Composable
+private fun Glyph(glyph: String, current: Boolean = false, plate: Color? = null) {
+    val colors = Tima.colors
+    val shape = RoundedCornerShape(TimaShapes.smallSquare)
     Box(
         modifier = Modifier
-            .background(colors.softAccent, RoundedCornerShape(TimaShapes.smallSquare))
+            .then(if (current) Modifier.border(FRAME, colors.navigation, shape) else Modifier)
+            .background(plate ?: colors.softAccent, shape)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) { Name(glyph) }

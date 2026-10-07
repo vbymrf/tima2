@@ -98,12 +98,6 @@ fun DeviceScreen(
     phoneChange: PhoneChangeView? = null,
     onSendPhoneCode: ((Boolean) -> Unit)? = null,
     onPhoneChange: ((String?, String, String) -> Unit)? = null,
-    /** Пин-код этого аккаунта на этом устройстве (ПЛАН-(ПН)): включён ли; `null` — строки нет. */
-    pinOn: Boolean? = null,
-    /** Включить, сменить, убрать, забыли — открывает экран пин-кода. */
-    onPin: ((PinMode) -> Unit)? = null,
-    /** Ответ после экрана пин-кода — «Пин-код включён» и т. п.; `null` — нет. */
-    pinNotice: String? = null,
 ) {
     var help by remember { mutableStateOf<HelpTopic?>(null) }
     Box(modifier.fillMaxSize().background(Tima.colors.surface)) {
@@ -119,7 +113,7 @@ fun DeviceScreen(
                 return@Column
             }
             state.trouble?.let { Column(Modifier.padding(TimaSpacing.about4)) { Trouble(it) } }
-            EntryGroup(state, onSignOut, onScan, pinOn, onPin, pinNotice) { help = it }
+            EntryGroup(state, onSignOut, onScan) { help = it }
             ThisDeviceGroup(state, onConfirmWithPhrase, onShowCertifyCode) { help = it }
             DevicesGroup(state, onAsk, onRetry) { help = it }
             HistoryGroup(state, onStartCopy, onRotateCopy, onRequestKey, keyNotice, keySending) { help = it }
@@ -152,20 +146,17 @@ fun DeviceScreen(
 private val DANGER = setOf(HelpTopic.PhoneChange, HelpTopic.Rereg, HelpTopic.Ban, HelpTopic.Disputes)
 
 /**
- * «Вход»: выход из аккаунта, сканер кода и пин-код (заказчик 2026-10-07: пин в самом верху, выход
- * над ним; «Сканировать код» — в «Вход», ниже «Выйти из аккаунта»).
+ * «Вход»: выход из аккаунта и сканер кода (заказчик 2026-10-07: «Сканировать код» — ниже «Выйти из
+ * аккаунта»). Пин-код отсюда ушёл в Настройки → «Аккаунты» (заказчик 2026-10-07).
  */
 @Composable
 private fun EntryGroup(
     state: DevicesState,
     onSignOut: (() -> Unit)?,
     onScan: (() -> Unit)?,
-    pinOn: Boolean?,
-    onPin: ((PinMode) -> Unit)?,
-    pinNotice: String?,
     onHelp: (HelpTopic) -> Unit,
 ) {
-    if (onSignOut == null && onScan == null && (pinOn == null || onPin == null)) return
+    if (onSignOut == null && onScan == null) return
     val pw = Tima.words.pin
     val words = Tima.words.auth
     SectionTitle(pw.groupEntry)
@@ -195,52 +186,7 @@ private fun EntryGroup(
         SettingLine("📷", words.scanCode, words.scanCodeAbout, onClick = onScan, onHelp = { onHelp(HelpTopic.Scan) })
     }
     NoticeUnder(state, TrustPanel.Scan)
-    if (pinOn != null && onPin != null) {
-        var open by rememberSaveable { mutableStateOf(false) }
-        SettingLine(
-            "🔒", pw.title, pw.about, onClick = { open = !open },
-            pill = if (pinOn) pw.on else pw.off, pillTone = if (pinOn) PillTone.Good else PillTone.Plain,
-            onHelp = { onHelp(HelpTopic.Pin) }, open = open,
-        )
-        if (open) {
-            Column(Modifier.fillMaxWidth().background(Tima.colors.softAccent)) {
-                if (!pinOn) {
-                    PinChoice(pw.offChoice, pw.offChoiceAbout, selected = true) {}
-                    PinChoice(pw.enable, pw.enableAbout, selected = false) { onPin(PinMode.Enable) }
-                } else {
-                    PinAction(pw.change, pw.changeAbout) { onPin(PinMode.Change) }
-                    PinAction(pw.remove, pw.removeAbout) { onPin(PinMode.Remove) }
-                    PinAction(pw.forgot, pw.forgotAbout) { onPin(PinMode.Forgot) }
-                }
-            }
-        }
-        pinNotice?.let {
-            io.tima.core.ui.Answer(it, io.tima.core.ui.AnswerTone.Done, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
-        }
-    }
 }
-
-@Composable
-private fun PinChoice(title: String, about: String, selected: Boolean, onClick: () -> Unit) = ListLine(
-    modifier = Modifier.padding(start = TimaSpacing.about5),
-    onClick = onClick,
-    left = { io.tima.core.ui.CheckMark(selected) },
-    middle = {
-        Caption(title, fontSize = TimaType.sz4, weight = if (selected) FontWeight.Bold else FontWeight.Normal)
-        Tertiary(about)
-    },
-)
-
-@Composable
-private fun PinAction(title: String, about: String, onClick: () -> Unit) = ListLine(
-    modifier = Modifier.padding(start = TimaSpacing.about5),
-    onClick = onClick,
-    middle = {
-        Caption(title, fontSize = TimaType.sz4, weight = FontWeight.Bold)
-        Tertiary(about)
-    },
-    right = { io.tima.core.ui.ExpandMark() },
-)
 
 /** «Это устройство»: заверено ли; не заверено — фраза или код заверения прямо здесь. */
 @Composable
