@@ -90,6 +90,17 @@ class Accounts(private val vault: SecretVault) {
     fun store(userId: String): VaultSecretStore = VaultSecretStore(Scoped(vault, userId))
 
     /**
+     * Пин-код аккаунта на этом устройстве (ПЛАН-(ПН)): запись в разделе аккаунта, рядом с его
+     * секретами. Хеш и соль даёт вызывающий — здесь криптографии нет.
+     */
+    fun pin(
+        userId: String,
+        hash: (ByteArray, ByteArray) -> ByteArray,
+        salt: () -> ByteArray,
+        now: () -> Long,
+    ): PinLock = PinLock(Scoped(vault, userId), hash, salt, now)
+
+    /**
      * Сколько у аккаунта неотправленного — ПЛАН-(Д)-КОНТАКТОВ.md, Д11 (путь Б, смягчение 2).
      *
      * **Число живёт здесь, а не в очереди, потому что чужую очередь читать нечем.** База

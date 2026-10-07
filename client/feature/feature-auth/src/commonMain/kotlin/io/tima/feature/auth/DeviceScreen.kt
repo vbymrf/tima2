@@ -29,15 +29,31 @@ import io.tima.core.ui.TimaType
 import io.tima.core.ui.Tima
 import io.tima.core.ui.words
 import io.tima.core.ui.Tertiary
+import io.tima.core.ui.SettingLine
+import io.tima.core.ui.PillTone
+import io.tima.core.ui.ConfirmPlate
+import io.tima.core.ui.HelpSheet
+import io.tima.core.ui.HelpLabels
+import io.tima.core.ui.HelpMark
+import io.tima.core.ui.ListLine
+import io.tima.core.ui.SectionTitle
+import io.tima.core.words.HelpTopic
+import androidx.compose.foundation.layout.Box
 import io.tima.domain.account.AccountDevice
 
 /**
- * Свои устройства: чем читаю и что можно отключить. Вкладка подокна «Настройки».
+ * «Секретная фраза и устройства» — вкладка подокна «Настройки».
+ *
+ * **По группам, как «Уведомления»** (ПЛАН-(ПН)-ПИН-КОДА §4, пробы `пробы-пин-код.html`, приняты
+ * заказчиком 2026-10-07): «Вход» — выход из аккаунта и пин-код — сверху; дальше «Это устройство»,
+ * «Устройства», «История»; красный «Аккаунт» — заявки спора, смена номера, перерегистрация и
+ * запрет «Начать заново без фразы» — последним. У каждого пункта «?» с подокном «что делает и
+ * что получится»; нажатие на пункт «Аккаунта» — красная плашка с подтверждением. Состояние —
+ * пузырём под описанием, а не справа: крупный шрифт из «Шрифты и размеры» его не ужмёт.
  *
  * **Своё устройство помечено.** Строки похожи — «Телефон» и «Телефон», — и без пометки
- * человек однажды отключит то, с которого смотрит. Отключение при этом спрашивает
- * подтверждение и называет цену: вернуть отозванное нельзя, на нём придётся заводиться
- * заново.
+ * человек однажды отключит то, с которого смотрит. Отключение спрашивает подтверждение и
+ * называет цену: вернуть отозванное нельзя.
  */
 @Composable
 fun DeviceScreen(
@@ -46,33 +62,17 @@ fun DeviceScreen(
     onConfirm: () -> Unit,
     onChangedMind: () -> Unit,
     modifier: Modifier = Modifier,
-    /**
-     * Номер сборки. Здесь он нужен уже после входа: экран входа человек видит один раз,
-     * а «какая версия стоит» спрашивают, когда что-то пошло не так, — то есть изнутри
-     * приложения. Пусто — версия не передана (проверки, снимки), строки нет.
-     */
+    /** Номер сборки — мелко внизу; пусто — строки нет (проверки, снимки). */
     buildVersion: String = "",
-    /**
-     * Выйти из аккаунта на этом устройстве (ПЛАН-(А)-ВЫХОДА-ИЗ-АККАУНТА.md, А4). `null` — кнопки
-     * нет (проверки, снимки).
-     */
+    /** Выйти из аккаунта на этом устройстве (А4). `null` — строки нет. */
     onSignOut: (() -> Unit)? = null,
     /** Список не пришёл — запросить снова (А7). */
     onRetry: (() -> Unit)? = null,
-    /**
-     * Сканировать код подключения нового устройства (заказчик 2026-09-30, 1б). `null` —
-     * кнопки нет: на ПК подтверждать подключение сервер не даёт — только телефону
-     * (`not_a_phone`), и сканер там незачем.
-     */
+    /** Сканировать код подключения — только телефон (1б). `null` — строки нет. */
     onScan: (() -> Unit)? = null,
-    /**
-     * Ключа служебной группы нет — копия контактов не придёт (заказчик 2026-09-30).
-     * `null` — кнопки нет: ключ есть или просить нечем.
-     */
+    /** Ключа служебной группы нет — копия контактов не придёт. `null` — панели нет. */
     onRequestKey: ((String) -> Unit)? = null,
-    /** Что сказать под кнопкой о просьбе; `null` — ещё не просили. */
     keyNotice: String? = null,
-    /** Просьба в пути — кнопку не нажать второй раз. */
     keySending: Boolean = false,
     /** Подтвердить это устройство фразой (ДУ5); `null` — действия нет. */
     onConfirmWithPhrase: ((String) -> Unit)? = null,
@@ -82,86 +82,181 @@ fun DeviceScreen(
     onCancelNewIdentity: ((String) -> Unit)? = null,
     /** Показать код заверения этого устройства (Р32); `null` — кнопки нет. */
     onShowCertifyCode: (() -> Unit)? = null,
-    /** Запрет «Начать заново» (ДУ10): отправить SMS; `null` — панели нет. */
+    /** Запрет «Начать заново» (ДУ10): отправить SMS; `null` — строки нет. */
     onSendBanCode: (() -> Unit)? = null,
-    /** Запрет «Начать заново»: фраза и код из SMS. */
     onBanStartAnew: ((String, String) -> Unit)? = null,
     /** Сменить ключ копии фразой — после отключения своего устройства (М5). */
     onRotateCopy: ((String) -> Unit)? = null,
     /** Завести копию ключей фразой (Р44). */
     onStartCopy: ((String) -> Unit)? = null,
-    /** Перерегистрация (ДУ9): что показать; `null` — панели нет. */
+    /** Перерегистрация (ДУ9): что показать; `null` — строки нет. */
     rereg: ReregView? = null,
-    /** Начать перерегистрацию прежней фразой. */
     onStartRereg: ((String) -> Unit)? = null,
-    /** Код из SMS для заявки и подтверждения. */
     onSendReregCode: (() -> Unit)? = null,
-    /** Заявка (`true`) или подтверждение: фраза, прежняя фраза (у Н), код. */
     onRereg: ((Boolean, String, String?, String) -> Unit)? = null,
-    /** Смена номера (ДУ9): что показать; `null` — панели нет. */
+    /** Смена номера (ДУ9): что показать; `null` — строки нет. */
     phoneChange: PhoneChangeView? = null,
-    /** Код из SMS: `false` — на прежний номер (заявка), `true` — на новый (подтверждение). */
     onSendPhoneCode: ((Boolean) -> Unit)? = null,
-    /** Заявка (новый номер задан) или подтверждение: номер, фраза, код. */
     onPhoneChange: ((String?, String, String) -> Unit)? = null,
-) = Column(
-    // Экран прокручивается целиком (живая проверка 2026-10-06): панели доверия, копии, запрета,
-    // смены номера и перерегистрации не помещались на телефон, и сообщение под ними — код стенда,
-    // отказ — уходило за край, а список устройств не был виден вовсе.
-    modifier.fillMaxSize().background(Tima.colors.surface).verticalScroll(androidx.compose.foundation.rememberScrollState()),
+    /** Пин-код этого аккаунта на этом устройстве (ПЛАН-(ПН)): включён ли; `null` — строки нет. */
+    pinOn: Boolean? = null,
+    /** Включить, сменить, убрать, забыли — открывает экран пин-кода. */
+    onPin: ((PinMode) -> Unit)? = null,
+    /** Ответ после экрана пин-кода — «Пин-код включён» и т. п.; `null` — нет. */
+    pinNotice: String? = null,
 ) {
+    var help by remember { mutableStateOf<HelpTopic?>(null) }
+    Box(modifier.fillMaxSize().background(Tima.colors.surface)) {
+        // Экран прокручивается целиком (живая проверка 2026-10-06): панели не помещались на
+        // телефон, и ответ под ними уходил за край.
+        Column(Modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+            if (state.ask != null) {
+                Question(
+                    name = state.devices.firstOrNull { it.deviceId == state.ask }?.name.orEmpty(),
+                    onConfirm = onConfirm,
+                    onChangedMind = onChangedMind,
+                )
+                return@Column
+            }
+            state.trouble?.let { Column(Modifier.padding(TimaSpacing.about4)) { Trouble(it) } }
+            EntryGroup(state, onSignOut, pinOn, onPin, pinNotice) { help = it }
+            ThisDeviceGroup(state, onConfirmWithPhrase, onShowCertifyCode) { help = it }
+            DevicesGroup(state, onAsk, onRetry, onScan) { help = it }
+            HistoryGroup(state, onStartCopy, onRotateCopy, onRequestKey, keyNotice, keySending) { help = it }
+            AccountGroup(
+                state, onCancelNewIdentity, onSendBanCode, onBanStartAnew, rereg, onStartRereg, onSendReregCode, onRereg,
+                phoneChange, onSendPhoneCode, onPhoneChange,
+            ) { help = it }
+            // Ответ без панели — на прежнем месте; с панелью — под ней (отчёт DGAR).
+            if (state.noticeAt == null) TrustAnswer(state)
+            if (buildVersion.isNotBlank()) {
+                Tertiary(Tima.words.auth.build(buildVersion), Modifier.padding(TimaSpacing.about4))
+            }
+        }
+        help?.let { topic ->
+            val pw = Tima.words.pin
+            val text = pw.help(topic)
+            HelpSheet(
+                title = text.title,
+                does = text.does,
+                result = text.result,
+                labels = HelpLabels(pw.helpDoes, pw.helpResult, pw.helpOk),
+                danger = topic in DANGER,
+                onClose = { help = null },
+            )
+        }
+    }
+}
+
+/** Пункты красного раздела «Аккаунт» — их подокно «?» с красным заголовком. */
+private val DANGER = setOf(HelpTopic.PhoneChange, HelpTopic.Rereg, HelpTopic.Ban, HelpTopic.Disputes)
+
+/** «Вход»: выход из аккаунта и пин-код (заказчик 2026-10-07: пин в самом верху, выход над ним). */
+@Composable
+private fun EntryGroup(
+    state: DevicesState,
+    onSignOut: (() -> Unit)?,
+    pinOn: Boolean?,
+    onPin: ((PinMode) -> Unit)?,
+    pinNotice: String?,
+    onHelp: (HelpTopic) -> Unit,
+) {
+    if (onSignOut == null && (pinOn == null || onPin == null)) return
+    val pw = Tima.words.pin
     val words = Tima.words.auth
-    var signingOut by rememberSaveable { mutableStateOf(false) }
-    // Фон заливается явно. Экран без своего фона показывает то, что под ним, — на телефоне
-    // это выглядело как тёмный экран внутри светлой темы, и найдено это было только глазами
-    // на устройстве: снимки видят компонент, а не окно.
-    // ── ШАПКИ ЗДЕСЬ БОЛЬШЕ НЕТ ───────────────────────────────────────────────
-    //
-    // Экран стал вкладкой подокна «Настройки», а шапку с «назад» рисует подокно:
-    // одна на все вкладки. Пока экран открывался сам по себе, шапка жила в нём, и
-    // это было верно ровно до второй вкладки — две шапки одна под другой.
-
-    // Сразу сверху, а не в конце списка: у экрана есть ранние выходы — вопрос об
-    // отключении и пустой список, — и строка, поставленная после них, в этих состояниях
-    // не показалась бы вовсе. А спрашивают версию как раз тогда, когда что-то не так.
-    if (buildVersion.isNotBlank()) {
-        Tertiary(
-            Tima.words.auth.build(buildVersion),
-            Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+    SectionTitle(pw.groupEntry)
+    if (onSignOut != null) {
+        var asking by rememberSaveable { mutableStateOf(false) }
+        // Выход — до всего остального: он нужен и тогда, когда список устройств не пришёл
+        // (ПК 2026-09-30 — «Смотрим…» без конца, а выйти было неоткуда).
+        SettingLine("🚪", words.signOut, pw.signOutShort, onClick = { asking = !asking }, onHelp = { onHelp(HelpTopic.SignOut) }, open = asking)
+        if (asking) {
+            val last = state.devices.size == 1
+            ConfirmPlate(
+                title = pw.signOutAsk,
+                text = if (last) words.signOutAbout + " " + words.signOutLast else words.signOutAbout,
+                cancel = pw.cancel,
+                action = words.signOutYes,
+                danger = false,
+                onCancel = { asking = false },
+                onAction = {
+                    asking = false
+                    onSignOut()
+                },
+            )
+        }
+    }
+    if (pinOn != null && onPin != null) {
+        var open by rememberSaveable { mutableStateOf(false) }
+        SettingLine(
+            "🔒", pw.title, pw.about, onClick = { open = !open },
+            pill = if (pinOn) pw.on else pw.off, pillTone = if (pinOn) PillTone.Good else PillTone.Plain,
+            onHelp = { onHelp(HelpTopic.Pin) }, open = open,
         )
+        if (open) {
+            Column(Modifier.fillMaxWidth().background(Tima.colors.softAccent)) {
+                if (!pinOn) {
+                    PinChoice(pw.offChoice, pw.offChoiceAbout, selected = true) {}
+                    PinChoice(pw.enable, pw.enableAbout, selected = false) { onPin(PinMode.Enable) }
+                } else {
+                    PinAction(pw.change, pw.changeAbout) { onPin(PinMode.Change) }
+                    PinAction(pw.remove, pw.removeAbout) { onPin(PinMode.Remove) }
+                    PinAction(pw.forgot, pw.forgotAbout) { onPin(PinMode.Forgot) }
+                }
+            }
+        }
+        pinNotice?.let {
+            io.tima.core.ui.Answer(it, io.tima.core.ui.AnswerTone.Done, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
+        }
     }
+}
 
-    state.trouble?.let {
-        Column(Modifier.padding(TimaSpacing.about4)) { Trouble(it) }
-    }
+@Composable
+private fun PinChoice(title: String, about: String, selected: Boolean, onClick: () -> Unit) = ListLine(
+    modifier = Modifier.padding(start = TimaSpacing.about5),
+    onClick = onClick,
+    left = { io.tima.core.ui.CheckMark(selected) },
+    middle = {
+        Caption(title, fontSize = TimaType.sz4, weight = if (selected) FontWeight.Bold else FontWeight.Normal)
+        Tertiary(about)
+    },
+)
 
-    // Ключ копии — до ранних выходов: его просят и тогда, когда список устройств не пришёл.
-    if (onRequestKey != null && !signingOut) {
-        KeyRequest(onRequestKey, keyNotice, keySending)
-    } else if (keyNotice != null) {
-        Secondary(keyNotice, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
-    }
+@Composable
+private fun PinAction(title: String, about: String, onClick: () -> Unit) = ListLine(
+    modifier = Modifier.padding(start = TimaSpacing.about5),
+    onClick = onClick,
+    middle = {
+        Caption(title, fontSize = TimaType.sz4, weight = FontWeight.Bold)
+        Tertiary(about)
+    },
+    right = { Secondary("›") },
+)
 
-    // Перерегистрация (ДУ9) — первым делом: спор за аккаунт важнее всего на экране.
-    if (rereg != null && rereg.text != null && onSendReregCode != null && onRereg != null && !signingOut) {
-        ReregPanel(rereg, codeSent = state.reregCode != null, onSendReregCode, onRereg, state.trusting)
-    }
-    NoticeUnder(state, TrustPanel.Rereg)
-    // С номера начали заново (ДУ6) — первым делом: это важнее всего остального на экране.
-    // Во время перерегистрации отмены нет: оспаривается только заявкой (ДУ9).
-    if (state.replaced && rereg?.text == null && onCancelNewIdentity != null && !signingOut) {
-        CancelNewIdentity(onCancelNewIdentity, state.trusting)
-    }
-    NoticeUnder(state, TrustPanel.CancelIdentity)
-
-    // Доверие к этому устройству (ДУ5): не заверено — предложить фразу. До ранних выходов:
-    // подтверждать себя можно и тогда, когда список не пришёл целиком.
-    val self = state.devices.firstOrNull { it.current }
-    if (onConfirmWithPhrase != null && !signingOut && self != null && !self.certified) {
-        TrustByPhrase(onConfirmWithPhrase, state.trusting)
-    }
-    // Или по QR своим телефоном (Р32): единственный путь заверить уже подключённое без фразы.
-    if (onShowCertifyCode != null && !signingOut && self != null && !self.certified) {
+/** «Это устройство»: заверено ли; не заверено — фраза или код заверения прямо здесь. */
+@Composable
+private fun ThisDeviceGroup(
+    state: DevicesState,
+    onConfirmWithPhrase: ((String) -> Unit)?,
+    onShowCertifyCode: (() -> Unit)?,
+    onHelp: (HelpTopic) -> Unit,
+) {
+    val self = state.devices.firstOrNull { it.current } ?: return
+    val words = Tima.words.auth
+    SectionTitle(Tima.words.pin.groupThisDevice)
+    SettingLine(
+        "📱",
+        self.name.ifEmpty { words.nameless },
+        listOfNotNull(words.thisDevice, self.createdAt).filter { it.isNotBlank() }.joinToString(" · "),
+        onClick = null,
+        pill = if (self.certified) words.deviceCertified else words.deviceUncertified,
+        pillTone = if (self.certified) PillTone.Good else PillTone.Waiting,
+        onHelp = { onHelp(HelpTopic.ThisDevice) },
+    )
+    if (self.certified) return
+    // Не заверено (ДУ5): фраза — или код заверения своим телефоном (Р32).
+    if (onConfirmWithPhrase != null) TrustByPhrase(onConfirmWithPhrase, state.trusting)
+    if (onShowCertifyCode != null) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
             verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
@@ -176,92 +271,22 @@ fun DeviceScreen(
         }
     }
     NoticeUnder(state, TrustPanel.Confirm)
-    // Отключённое устройство могло унести ключ копии (М5) — сменить его фразой, первым делом.
-    if (state.copyRotationDue && onRotateCopy != null && !signingOut) {
-        RotateCopy(onRotateCopy, state.trusting)
-    }
-    // Копии ещё нет (Р44) — завести её фразой: это устройство фразу больше не вводит.
-    if (state.copyMissing && onStartCopy != null && !signingOut) {
-        RotateCopy(onStartCopy, state.trusting, start = true)
-    }
-    NoticeUnder(state, TrustPanel.Copy)
-    // Запрет «Начать заново» (ДУ10, Р41): до запрета — кнопка, после — что закрыто навсегда.
-    val banned = state.startAnewBanned
-    if (banned != null && onSendBanCode != null && onBanStartAnew != null && !signingOut) {
-        StartAnewBan(banned, codeSent = state.banCode != null, onSendBanCode, onBanStartAnew, state.trusting)
-    }
-    NoticeUnder(state, TrustPanel.Ban)
-    // Смена номера (ДУ9): заявка, её состояние и подтверждение в окне.
-    if (phoneChange != null && onSendPhoneCode != null && onPhoneChange != null && !signingOut &&
-        (phoneChange.text != null || phoneChange.canStart)
-    ) {
-        PhoneChangePanel(phoneChange, codeSent = state.phoneCode != null, onSendPhoneCode, onPhoneChange, state.trusting)
-    }
-    NoticeUnder(state, TrustPanel.Phone)
-    // Запустить перерегистрацию (ДУ9, Р34) — прежней фразой; дальше вход тем же номером.
-    if (rereg?.canStart == true && onStartRereg != null && !signingOut) {
-        StartRereg(onStartRereg, state.trusting)
-    }
-    NoticeUnder(state, TrustPanel.StartRereg)
-    // Ответ без панели — на прежнем месте; с панелью — под ней (отчёт DGAR).
-    if (state.noticeAt == null) TrustAnswer(state)
+}
 
-    // Сканер — тоже до ранних выходов: подключить новое устройство можно и тогда, когда
-    // список не пришёл.
-    if (onScan != null && !signingOut) {
-        Button(
-            label = words.scanCode,
-            onClick = onScan,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4),
-        )
-        Tertiary(
-            words.scanCodeAbout,
-            Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about1),
-        )
-    }
-    NoticeUnder(state, TrustPanel.Scan)
-    NoticeUnder(state, TrustPanel.Certify)
-
-    // Выход — до ранних выходов экрана: он нужен и тогда, когда список не пришёл. Так было
-    // на ПК 2026-09-30 — «Смотрим…» без конца, а выйти и войти заново было неоткуда.
-    if (onSignOut != null) {
-        if (signingOut) {
-            SignOutQuestion(
-                last = state.devices.size == 1,
-                onConfirm = { signingOut = false; onSignOut() },
-                onChangedMind = { signingOut = false },
-            )
-            return@Column
-        }
-        Button(
-            label = words.signOut,
-            onClick = { signingOut = true },
-            kind = ButtonKind.Quiet,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4),
-        )
-    }
-
-    val ask = state.ask
-    if (ask != null) {
-        Question(
-            name = state.devices.firstOrNull { it.deviceId == ask }?.name.orEmpty(),
-            onConfirm = onConfirm,
-            onChangedMind = onChangedMind,
-        )
-        return@Column
-    }
-
+/** «Устройства»: остальные устройства аккаунта, отключение, сканер. */
+@Composable
+private fun DevicesGroup(
+    state: DevicesState,
+    onAsk: (String) -> Unit,
+    onRetry: (() -> Unit)?,
+    onScan: (() -> Unit)?,
+    onHelp: (HelpTopic) -> Unit,
+) {
+    val words = Tima.words.auth
+    SectionTitle(Tima.words.pin.groupDevices)
     if (state.devices.isEmpty()) {
-        // **Пустой список и неудавшийся запрос — разные вещи, и путать их дороже всего.**
-        //
-        // Найдено 2026-08-26 по жалобе «Устройств нет — такого не бывает на ПК». Так и
-        // есть: сервер пустой список отдать не может. `requireActiveDevice` пропускает
-        // запрос, только убедившись, что строка устройства существует и не отозвана, а
-        // `listMyDevices` выбирает ровно такие строки — своё устройство обязано быть в
-        // ответе. Значит пусто здесь означает не «нет устройств», а «списка нет».
-        //
-        // Экран же рисовал беду баннером и тут же добавлял «Устройств нет»: два
-        // сообщения об одном, причём второе — неправда, и именно оно бросается в глаза.
+        // **Пустой список и неудавшийся запрос — разные вещи** (2026-08-26): сервер пустой список
+        // отдать не может — своё устройство обязано быть в ответе. Пусто здесь — «списка нет».
         EmptyArea(
             title = when {
                 state.expect -> words.watching
@@ -270,77 +295,202 @@ fun DeviceScreen(
             },
             explanation = when {
                 state.expect -> null
-                // Причина уже сказана баннером выше; повторять её здесь — шуметь.
                 state.trouble != null -> words.reasonAbove
-                // Сюда попасть можно только при 200 с пустым списком, а такого ответа
-                // сервер не строит. Остаётся клиент: не тот адрес, не тот разбор.
                 else -> words.emptyListIsOurs
             },
         )
         if (!state.expect && onRetry != null) {
-            Button(
-                label = words.retryList,
-                onClick = onRetry,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4),
-            )
+            Button(label = words.retryList, onClick = onRetry, modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4))
         }
-        return@Column
     }
+    state.devices.filterNot { it.current }.forEach { device ->
+        androidx.compose.runtime.key(device.deviceId) { OtherDevice(device, onAsk, onHelp) }
+    }
+    if (onScan != null) {
+        SettingLine("📷", words.scanCode, words.scanCodeAbout, onClick = onScan, onHelp = { onHelp(HelpTopic.Scan) })
+    }
+    NoticeUnder(state, TrustPanel.Scan)
+    NoticeUnder(state, TrustPanel.Certify)
+}
 
-    // Обычная колонка, а не ленивый список: экран прокручивается целиком, а устройств у
-    // человека единицы.
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(TimaSpacing.about4),
-        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
-    ) {
-        state.devices.forEach { device ->
-            androidx.compose.runtime.key(device.deviceId) { Line(device, onAsk, onCertify.takeIf { !state.trusting }) }
+/**
+ * Другое своё устройство. «Заверить» по строке списка убрано (Р32): список приходит от сервера, и
+ * по нему заверялось бы и устройство вора — заверяют по QR. Отключить — раскрытием строки.
+ */
+@Composable
+private fun OtherDevice(device: AccountDevice, onAsk: (String) -> Unit, onHelp: (HelpTopic) -> Unit) {
+    val words = Tima.words.auth
+    var open by rememberSaveable { mutableStateOf(false) }
+    SettingLine(
+        "📱",
+        device.name.ifEmpty { words.nameless },
+        device.createdAt?.ifEmpty { null },
+        onClick = { open = !open },
+        pill = if (device.certified) words.deviceCertified else words.deviceUncertified,
+        pillTone = if (device.certified) PillTone.Good else PillTone.Waiting,
+        onHelp = { onHelp(HelpTopic.Devices) },
+        open = open,
+    )
+    if (open) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Button(label = words.disconnect, onClick = { onAsk(device.deviceId) }, kind = ButtonKind.Dangerous, modifier = Modifier.weight(1f))
+            HelpMark { onHelp(HelpTopic.Disconnect) }
         }
     }
 }
 
+/** «История»: копия переписки и ключ копии контактов. */
 @Composable
-private fun Line(device: AccountDevice, onAsk: (String) -> Unit, onCertify: ((String) -> Unit)? = null) {
+private fun HistoryGroup(
+    state: DevicesState,
+    onStartCopy: ((String) -> Unit)?,
+    onRotateCopy: ((String) -> Unit)?,
+    onRequestKey: ((String) -> Unit)?,
+    keyNotice: String?,
+    keySending: Boolean,
+    onHelp: (HelpTopic) -> Unit,
+) {
+    val pw = Tima.words.pin
+    val copyKnown = onStartCopy != null || onRotateCopy != null
+    if (!copyKnown && onRequestKey == null && keyNotice == null) return
+    SectionTitle(pw.groupHistory)
+    if (copyKnown) {
+        var open by rememberSaveable { mutableStateOf(false) }
+        val canStart = state.copyMissing && onStartCopy != null
+        SettingLine(
+            "🗂", pw.copyTitle, pw.copyShort,
+            onClick = if (canStart) {
+                { open = !open }
+            } else {
+                null
+            },
+            pill = if (state.copyMissing) pw.copyOff else pw.copyOn,
+            pillTone = if (state.copyMissing) PillTone.Waiting else PillTone.Good,
+            onHelp = { onHelp(HelpTopic.Copy) }, open = open,
+        )
+        // Отключённое устройство могло унести ключ копии (М5) — сменить его фразой, сразу.
+        if (state.copyRotationDue && onRotateCopy != null) RotateCopy(onRotateCopy, state.trusting)
+        // Копии ещё нет (Р44) — завести её фразой.
+        if (open && canStart) RotateCopy(onStartCopy!!, state.trusting, start = true)
+        NoticeUnder(state, TrustPanel.Copy)
+    }
+    if (onRequestKey != null) {
+        KeyRequest(onRequestKey, keyNotice, keySending)
+    } else if (keyNotice != null) {
+        Secondary(keyNotice, Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2))
+    }
+}
+
+/**
+ * «Аккаунт» — красный, последним (заказчик 2026-10-07): заявки спора, пока идут, — первыми;
+ * дальше смена номера, перерегистрация, запрет «Начать заново без фразы». Нажатие — красная
+ * плашка с подтверждением, и только после неё — прежние шаги с фразой и кодом.
+ */
+@Composable
+private fun AccountGroup(
+    state: DevicesState,
+    onCancelNewIdentity: ((String) -> Unit)?,
+    onSendBanCode: (() -> Unit)?,
+    onBanStartAnew: ((String, String) -> Unit)?,
+    rereg: ReregView?,
+    onStartRereg: ((String) -> Unit)?,
+    onSendReregCode: (() -> Unit)?,
+    onRereg: ((Boolean, String, String?, String) -> Unit)?,
+    phoneChange: PhoneChangeView?,
+    onSendPhoneCode: ((Boolean) -> Unit)?,
+    onPhoneChange: ((String?, String, String) -> Unit)?,
+    onHelp: (HelpTopic) -> Unit,
+) {
+    val pw = Tima.words.pin
     val words = Tima.words.auth
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Caption(
-                text = device.name.ifEmpty { words.nameless },
-                weight = FontWeight.Bold,
-                lineOne = true,
-            )
-            // Пометка своего устройства и дата — в одной строке: это про одно и то же,
-            // «что это за железка».
-            Tertiary(
-                text = listOfNotNull(
-                    if (device.current) words.thisDevice else null,
-                    device.createdAt,
-                ).joinToString(" · ").ifEmpty { "—" },
-                lineOne = true,
-            )
-            // Доверие (ДУ5): незаверенное — красным, иначе его не отличить от своего.
-            Caption(
-                text = if (device.certified) words.deviceCertified else words.deviceUncertified,
-                fontSize = TimaType.sz6,
-                color = if (device.certified) Tima.colors.text3 else Tima.colors.alarm,
-                maxLines = 2,
-            )
+    val reregGoing = rereg != null && rereg.text != null && onSendReregCode != null && onRereg != null
+    val replaced = state.replaced && rereg?.text == null && onCancelNewIdentity != null
+    val phoneGoing = phoneChange?.text != null && onSendPhoneCode != null && onPhoneChange != null
+    val phoneStart = phoneChange != null && phoneChange.text == null && phoneChange.canStart && onSendPhoneCode != null && onPhoneChange != null
+    val reregStart = rereg?.canStart == true && onStartRereg != null
+    val banned = state.startAnewBanned
+    val ban = banned != null && onSendBanCode != null && onBanStartAnew != null
+    if (!reregGoing && !replaced && !phoneGoing && !phoneStart && !reregStart && !ban) return
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        SectionTitle(pw.groupAccount, Modifier.weight(1f), color = Tima.colors.alarm)
+        if (reregGoing || replaced || phoneGoing) {
+            Box(Modifier.padding(end = TimaSpacing.about4)) { HelpMark { onHelp(HelpTopic.Disputes) } }
         }
-        // «Заверить» по строке списка убрано (Р32): список приходит от сервера, и по нему
-        // заверялось бы и устройство вора. Заверяют по QR — код показывает само устройство.
-        // Своё устройство отключается не отсюда: «выйти» — это другое действие с другими
-        // последствиями, и оно живёт в настройках аккаунта.
-        if (!device.current) {
-            Button(
-                label = words.disconnect,
-                onClick = { onAsk(device.deviceId) },
-                kind = ButtonKind.Quiet,
-            )
+    }
+    // Заявки спора — первыми, пока идут: у них сроки.
+    if (reregGoing) ReregPanel(rereg!!, codeSent = state.reregCode != null, onSendReregCode!!, onRereg!!, state.trusting)
+    NoticeUnder(state, TrustPanel.Rereg)
+    if (replaced) CancelNewIdentity(onCancelNewIdentity!!, state.trusting)
+    NoticeUnder(state, TrustPanel.CancelIdentity)
+    if (phoneGoing) PhoneChangePanel(phoneChange!!, codeSent = state.phoneCode != null, onSendPhoneCode!!, onPhoneChange!!, state.trusting)
+
+    if (phoneStart) {
+        Asked(
+            glyph = "📲", title = words.phoneChangeTitle, about = pw.phoneShort, topic = HelpTopic.PhoneChange, onHelp = onHelp,
+            ask = pw.phoneAsk, askText = pw.phoneAskText, action = pw.next,
+        ) {
+            PhoneChangePanel(phoneChange!!, codeSent = state.phoneCode != null, onSendPhoneCode!!, onPhoneChange!!, state.trusting, bare = true)
         }
+    }
+    NoticeUnder(state, TrustPanel.Phone)
+    if (reregStart) {
+        Asked(
+            glyph = "⚠", title = words.reregTitle, about = pw.reregShort, topic = HelpTopic.Rereg, onHelp = onHelp,
+            ask = pw.reregAsk, askText = pw.reregAskText, action = words.reregStart,
+        ) {
+            StartRereg(onStartRereg!!, state.trusting, bare = true)
+        }
+    }
+    NoticeUnder(state, TrustPanel.StartRereg)
+    if (ban) {
+        if (banned == true) {
+            SettingLine("⛔", words.bannedTitle, words.bannedAbout, onClick = null, onHelp = { onHelp(HelpTopic.Ban) })
+        } else {
+            Asked(
+                glyph = "⛔", title = words.banTitle, about = pw.banShort, topic = HelpTopic.Ban, onHelp = onHelp,
+                ask = pw.banAsk, askText = pw.banAskText, action = pw.next,
+            ) {
+                StartAnewBan(false, codeSent = state.banCode != null, onSendBanCode!!, onBanStartAnew!!, state.trusting, bare = true)
+            }
+        }
+    }
+    NoticeUnder(state, TrustPanel.Ban)
+}
+
+/**
+ * Пункт «Аккаунта»: строка → красная плашка с подтверждением → прежний шаг ([then]).
+ * «Отмена» сворачивает всё обратно.
+ */
+@Composable
+private fun Asked(
+    glyph: String,
+    title: String,
+    about: String,
+    topic: HelpTopic,
+    onHelp: (HelpTopic) -> Unit,
+    ask: String,
+    askText: String,
+    action: String,
+    then: @Composable () -> Unit,
+) {
+    var step by rememberSaveable { mutableStateOf(0) }
+    SettingLine(glyph, title, about, onClick = { step = if (step == 0) 1 else 0 }, danger = true, onHelp = { onHelp(topic) }, open = step != 0)
+    when (step) {
+        1 -> ConfirmPlate(
+            title = ask,
+            text = askText,
+            cancel = Tima.words.pin.cancel,
+            action = action,
+            danger = true,
+            onCancel = { step = 0 },
+            onAction = { step = 2 },
+        )
+        2 -> then()
     }
 }
 
@@ -350,20 +500,6 @@ private fun Line(device: AccountDevice, onAsk: (String) -> Unit, onCertify: ((St
  * Занимает весь экран, а не всплывает над списком: отозванное устройство обратно не
  * вернуть, и решение должно выглядеть решением.
  */
-/** Вопрос перед выходом из аккаунта: что будет с аккаунтом и как вернуться (А4). */
-@Composable
-private fun SignOutQuestion(last: Boolean, onConfirm: () -> Unit, onChangedMind: () -> Unit) = Column(
-    modifier = Modifier.fillMaxWidth().padding(TimaSpacing.about4),
-    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
-) {
-    val words = Tima.words.auth
-    Caption(words.signOut, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
-    Secondary(words.signOutAbout)
-    if (last) Secondary(words.signOutLast)
-    Button(label = words.signOutYes, onClick = onConfirm, kind = ButtonKind.Dangerous, modifier = Modifier.fillMaxWidth())
-    Button(label = words.keep, onClick = onChangedMind, modifier = Modifier.fillMaxWidth())
-}
-
 @Composable
 private fun Question(name: String, onConfirm: () -> Unit, onChangedMind: () -> Unit) = Column(
     modifier = Modifier.fillMaxSize().padding(TimaSpacing.about4),
@@ -433,6 +569,8 @@ private fun StartAnewBan(
     onSendCode: () -> Unit,
     onBan: (String, String) -> Unit,
     busy: Boolean,
+    /** Из строки «Аккаунта» после подтверждения: без своего заголовка, сразу к коду. */
+    bare: Boolean = false,
 ) = Column(
     modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
@@ -443,11 +581,13 @@ private fun StartAnewBan(
         Secondary(words.bannedAbout)
         return@Column
     }
-    var open by rememberSaveable { mutableStateOf(false) }
+    var open by rememberSaveable { mutableStateOf(bare) }
     var phrase by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
-    Caption(words.banTitle, weight = FontWeight.ExtraBold)
-    Secondary(words.banAbout)
+    if (!bare) {
+        Caption(words.banTitle, weight = FontWeight.ExtraBold)
+        Secondary(words.banAbout)
+    }
     when {
         !open -> Button(label = words.banTitle, onClick = { open = true }, kind = ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
         !codeSent -> Button(label = words.banSendCode, onClick = { if (!busy) onSendCode() }, modifier = Modifier.fillMaxWidth())
@@ -472,14 +612,14 @@ private fun StartAnewBan(
 
 /** Запуск перерегистрации (ДУ9): объяснение, поле прежней фразы, кнопка. */
 @Composable
-private fun StartRereg(onStart: (String) -> Unit, busy: Boolean) = Column(
+private fun StartRereg(onStart: (String) -> Unit, busy: Boolean, bare: Boolean = false) = Column(
     modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
 ) {
     val words = Tima.words.auth
-    var open by rememberSaveable { mutableStateOf(false) }
+    var open by rememberSaveable { mutableStateOf(bare) }
     var phrase by remember { mutableStateOf("") }
-    Caption(words.reregTitle, weight = FontWeight.ExtraBold)
+    if (!bare) Caption(words.reregTitle, weight = FontWeight.ExtraBold)
     Secondary(words.reregAbout)
     if (!open) {
         Button(label = words.reregTitle, onClick = { open = true }, kind = ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
@@ -561,16 +701,18 @@ private fun PhoneChangePanel(
     onSendCode: (Boolean) -> Unit,
     onSubmit: (String?, String, String) -> Unit,
     busy: Boolean,
+    /** Из строки «Аккаунта» после подтверждения: без своего заголовка, сразу к номеру. */
+    bare: Boolean = false,
 ) = Column(
     modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
 ) {
     val words = Tima.words.auth
-    var open by rememberSaveable { mutableStateOf(false) }
+    var open by rememberSaveable { mutableStateOf(bare) }
     var number by remember { mutableStateOf("") }
     var phrase by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
-    Caption(words.phoneChangeTitle, weight = FontWeight.ExtraBold)
+    if (!bare) Caption(words.phoneChangeTitle, weight = FontWeight.ExtraBold)
     if (view.text != null) {
         Secondary(view.text)
         if (!view.canConfirm) return@Column
@@ -594,7 +736,7 @@ private fun PhoneChangePanel(
         )
         return@Column
     }
-    Secondary(words.phoneChangeAbout)
+    if (!bare) Secondary(words.phoneChangeAbout)
     if (!open) {
         Button(label = words.phoneChangeTitle, onClick = { open = true }, kind = ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
         return@Column

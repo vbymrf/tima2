@@ -100,6 +100,8 @@ class VaultSecretStore(private val vault: SecretVault) : DeviceSecretStore {
         vault.remove(Secrets.KEY_COPY_SECRET)
         epochKeyEpochs().forEach { vault.remove(Secrets.epochKey(it)) }
         vault.remove(Secrets.EPOCH_KEYS)
+        // Забытый аккаунт уносит и свой пин-код (ПЛАН-(ПН)): заведённый заново начнёт без него.
+        vault.remove(PinLock.ALIAS)
     }
 
     private companion object {

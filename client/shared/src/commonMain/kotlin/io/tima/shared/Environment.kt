@@ -189,6 +189,13 @@ class Entry private constructor(
     fun switchAccount(userId: String) = accounts.switchTo(userId)
 
     /**
+     * Пин-код аккаунта на этом устройстве (ПЛАН-(ПН)): хеш PBKDF2 с солью, ошибки и паузы — в
+     * разделе аккаунта хранилища платформы. Работает без сети (Р13).
+     */
+    fun pin(userId: String): io.tima.core.secrets.PinLock =
+        accounts.pin(userId, io.tima.core.encryption.PinCrypto::hash, io.tima.core.encryption.PinCrypto::salt, { nowMillis() })
+
+    /**
      * Выйти из аккаунта на этом устройстве (ПЛАН-(А)-ВЫХОДА-ИЗ-АККАУНТА.md, А4/А5).
      *
      * Аккаунт **откладывается** (решение 1в): остаются запись в списке, ключи и база — снят

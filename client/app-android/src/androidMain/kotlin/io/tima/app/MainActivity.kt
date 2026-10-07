@@ -124,6 +124,8 @@ class MainActivity : ComponentActivity() {
         ChannelHost.notices()?.windowVisible(false)
         // Свернули посреди видеозвонка — своё видео на паузу через 2 с (заказчик 2026-10-01).
         io.tima.shared.CallKeep.visible(false)
+        // Пин-код (ПЛАН-(ПН) Р9): 5 минут в фоне — замок снова.
+        io.tima.shared.PinGate.visible(false)
         Journal.note(LogCode.APP_BACKGROUND, "ушли в фон")
         Journal.diary.flush()
         super.onStop()
@@ -135,6 +137,7 @@ class MainActivity : ComponentActivity() {
         // «вернулись» рядом с `APP-START` было бы неправдой и лишней строкой.
         if (wasBackground) Journal.note(LogCode.APP_FOREGROUND, "вернулись из фона")
         ChannelHost.notices()?.windowVisible(true)
+        io.tima.shared.PinGate.visible(true)
         // Вернулись — видео снова идёт, сторож проверяет, что камера даёт кадры.
         io.tima.shared.CallKeep.visible(true)
         // Человек мог сходить в настройки и включить уведомления или белый список — сверяем.

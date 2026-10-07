@@ -153,6 +153,12 @@ fun interface IdentitySigner {
 
 /** Порт к серверу: две ручки Д10. Реализуется в `core-network`. */
 interface VirtualsApi {
+    /**
+     * Ключи личности владельца, если аккаунт временный (ПЛАН-(ПН) Р3): пин-код временного
+     * сбрасывается и фразой владельца. Пусто — аккаунт не временный; `null` — нет связи (Р13).
+     */
+    suspend fun ownerIdentities(): List<ByteArray>? = null
+
 
     suspend fun create(
         nickname: String,

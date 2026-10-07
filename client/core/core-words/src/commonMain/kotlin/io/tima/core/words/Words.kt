@@ -47,6 +47,8 @@ interface Words {
     val tabs: TabWords
     val wizard: WizardWords
     val auth: AuthWords
+    /** Пин-код и вид «Секретной фразы и устройств» (ПЛАН-(ПН)). */
+    val pin: PinWords
     val chat: ChatWords
     val call: CallWords
 
@@ -3446,6 +3448,8 @@ object RussianWords : Words {
         override val avatarNotImage = "Это не картинка или файл повреждён"
     }
 
+    override val pin: PinWords = RussianPinWords
+
     override val auth = object : AuthWords {
         override fun build(version: String) = "сборка $version"
 
@@ -3697,7 +3701,7 @@ object RussianWords : Words {
         override val replacedCancelSend = "Отменить"
         override val replacedItsMe = "Это я"
         override val replacedCancelled = "Новый ключ личности отменён: его устройства отключены, вы снова главный"
-        override val banTitle = "Запретить «Начать заново»"
+        override val banTitle = "Запретить «Начать заново без фразы»"
         override val banAbout =
             "Тогда войти в аккаунт без секретной фразы будет нельзя — даже с SIM-картой этого номера. " +
                 "Запрет навсегда: снять его нельзя."

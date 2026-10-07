@@ -1307,6 +1307,8 @@ object EnglishWords : Words {
         override val avatarNotImage = "This is not a picture, or the file is damaged"
     }
 
+    override val pin: PinWords = EnglishPinWords
+
     override val auth = object : AuthWords {
         override fun build(version: String) = "build $version"
 
@@ -1563,7 +1565,7 @@ object EnglishWords : Words {
         override val replacedCancelSend = "Cancel"
         override val replacedItsMe = "It was me"
         override val replacedCancelled = "The new identity key is cancelled: its devices are disconnected, you are the main one again"
-        override val banTitle = "Forbid “Start over”"
+        override val banTitle = "Forbid “Start over without the phrase”"
         override val banAbout =
             "After this, nobody can sign in to the account without the secret phrase — not even with this number's SIM card. " +
                 "The ban is permanent: it cannot be lifted."

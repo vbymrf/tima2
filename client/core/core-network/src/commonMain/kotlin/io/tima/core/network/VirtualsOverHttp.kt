@@ -37,6 +37,18 @@ class VirtualsOverHttp(
     private val token: () -> String,
 ) : VirtualsApi {
 
+    override suspend fun ownerIdentities(): List<ByteArray>? = try {
+        val response = client.get(route.api("/api/v1/users/me/owner")) { header("Authorization", "Bearer ${token()}") }
+        if (response.status != HttpStatusCode.OK) {
+            null
+        } else {
+            val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+            body["identity_pubs"]?.jsonArray?.mapNotNull { decodeBase64Url(it.jsonPrimitive.content) }.orEmpty()
+        }
+    } catch (e: Throwable) {
+        null
+    }
+
     override suspend fun create(
         nickname: String,
         identityPub: ByteArray,

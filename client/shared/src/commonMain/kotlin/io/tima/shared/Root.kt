@@ -558,6 +558,25 @@ private fun Inside(
         return
     }
 
+    // Пин-код этого аккаунта (ПЛАН-(ПН)): замок при запуске, после 5 минут в фоне (PinGate) и при
+    // переходе на аккаунт с пином. Открытый в этом запуске — без вопроса.
+    val pinUser = current.session.userId
+    val temporary = entry.accountList().firstOrNull { it.userId == pinUser }?.virtual == true
+    val pinHost = remember(pinUser) {
+        PinHost(entry.pin(pinUser), temporary) { text -> pinPhraseVerdict(assembled.network, pinUser, temporary, text) }
+    }
+    val relock by PinGate.relock.collectAsState()
+    var locked by remember(pinUser, relock) { mutableStateOf(pinHost.lock.isOn() && !PinGate.isOpen(pinUser)) }
+    LaunchedEffect(locked) { if (locked) Journal.note(LogCode.PIN_LOCK, "замок поставлен", "переход" to (PinGate.returnTo != null)) }
+    val lockWho = remember(pinUser) {
+        val card = entry.cardOf(pinUser)
+        io.tima.feature.auth.PinWho(
+            name = card?.name?.ifBlank { null } ?: entry.accountList().firstOrNull { it.userId == pinUser }?.nickname?.ifBlank { null } ?: pinUser.take(8),
+            detail = card?.phone?.ifBlank { null }?.let { io.tima.feature.auth.maskPhone(it) }.orEmpty(),
+            temporary = temporary,
+        )
+    }
+
     App(
         assembled = assembled,
         platform = entry.platform,
@@ -594,8 +613,30 @@ private fun Inside(
         // пересобирается само: `assemble` помнит по устройству, а у другого аккаунта
         // другая сессия и другой ключ покоя.
         onSwitchAccount = { userId ->
+            // Переход на аккаунт с пином (ПЛАН-(ПН) Р2): сразу его замок, а «Отмена» на замке
+            // вернёт сюда — этот аккаунт уже открыт.
+            val target = entry.pin(userId)
+            PinGate.returnTo = if (target.isOn() && !PinGate.isOpen(userId)) current.session.userId else null
             entry.switchAccount(userId)
             device = entry.created()
+        },
+        pin = pinHost,
+        locked = locked,
+        lockWho = lockWho,
+        onUnlocked = {
+            PinGate.opened(current.session.userId)
+            PinGate.returnTo = null
+            locked = false
+        },
+        onLockCancel = PinGate.returnTo?.takeIf { it != current.session.userId }?.let { back ->
+            {
+                PinGate.returnTo = null
+                entry.switchAccount(back)
+                device = entry.created()
+            }
+        },
+        lockOthers = entry.accountList().filter { it.userId != current.session.userId }.map { other ->
+            LockAccount(other.userId, entry.cardOf(other.userId)?.name?.ifBlank { null } ?: other.nickname.ifBlank { other.userId.take(8) })
         },
         onSignOut = signOut,
         // Перерегистрация (ДУ9): доказательство прежней фразы готово — выйти и войти тем же
@@ -902,6 +943,16 @@ private fun App(
     onTransferTaken: (TransferAcceptStep.Taken) -> Unit = {},
     /** Чем исполнять звонок; `null` — платформа звонить не умеет. См. [Root]. */
     callEngine: CallEngine? = null,
+    /** Пин-код этого аккаунта (ПЛАН-(ПН)); `null` — проверки, снимки. */
+    pin: PinHost? = null,
+    /** Замок стоит — поверх всего, кроме идущего звонка (Р11). */
+    locked: Boolean = false,
+    lockWho: io.tima.feature.auth.PinWho? = null,
+    onUnlocked: () -> Unit = {},
+    /** «Отмена» на замке после перехода на аккаунт с пином; `null` — кнопки нет. */
+    onLockCancel: (() -> Unit)? = null,
+    /** Другие аккаунты устройства — «Другой аккаунт» на замке. */
+    lockOthers: List<LockAccount> = emptyList(),
 ) {
     val environment = assembled.environment
     val network = assembled.network
@@ -2682,6 +2733,7 @@ private fun App(
         io.tima.feature.call.groupVisible(io.tima.feature.call.groupPages(io.tima.feature.call.gridTiles(st.tiles, groupView), groupView.perPage), groupView)
     }
     LaunchedEffect(visibleNow) { visibleNow?.let { callHost.showPeers(it) } }
+    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
     Stage(
         modifier = Modifier.fillMaxSize(),
         sizes = StageSizes(
@@ -3312,6 +3364,7 @@ private fun App(
             is Where.Settings -> {
                 {
                     Settings(
+                        pin = pin,
                         opened = current.item,
                         onOpen = { where = Where.Settings(it) },
                         onSignOut = onSignOut,
@@ -3772,6 +3825,12 @@ private fun App(
             }
         },
     )
+    // Замок пин-кода (ПЛАН-(ПН)) — поверх всего, но не поверх звонка: входящий принимается без
+    // пина (Р11), а пин спрашивается, когда звонок кончился.
+    if (locked && pin != null && lockWho != null && !callHost.active) {
+        PinLockLayer(pin, lockWho, onUnlocked, onLockCancel, lockOthers, onSwitchAccount)
+    }
+    }
     }
 }
 
@@ -4269,6 +4328,8 @@ private fun Settings(
     callDevices: io.tima.core.call.CallDevices? = null,
     /** Запуск вместе с системой — есть только у ПК; `null` — раздела в «Разрешениях» нет. */
     loginStart: LoginStart? = null,
+    /** Пин-код этого аккаунта (ПЛАН-(ПН)) — строка «Пин-код» во «Входе». */
+    pin: PinHost? = null,
 ) {
     // Название темы считается в составе, а не в лямбде списка: лямбда не composable.
     val themeName = Tima.words.appearance.theme(appearance.choice)
@@ -4347,7 +4408,7 @@ private fun Settings(
                 )
             }
 
-            SettingsItem.DEVICES -> Devices(fleet, devices, build.name, onSignOut, onScanCode, accountCopy)
+            SettingsItem.DEVICES -> Devices(fleet, devices, build.name, onSignOut, onScanCode, accountCopy, pin)
 
             // Уведомления (У1, У14). Пункт стоял в списке с самого начала и не
             // открывал ничего; теперь здесь два действия, без которых уведомления на
@@ -4522,7 +4583,44 @@ private fun Devices(
     onSignOut: () -> Unit,
     onScanCode: (() -> Unit)?,
     accountCopy: BookCopySync,
+    pin: PinHost? = null,
 ) {
+    // Пин-код (ПЛАН-(ПН)): экран пин-кода — на месте вкладки, пока идёт; итог — плашкой у строки.
+    val pinScope = rememberCoroutineScope()
+    val pw = Tima.words.pin
+    var pinFlow by remember { mutableStateOf<io.tima.feature.auth.PinFlowStore?>(null) }
+    var pinVersion by remember { mutableStateOf(0) }
+    var pinNotice by remember { mutableStateOf<String?>(null) }
+    val flow = pinFlow
+    if (flow != null && pin != null) {
+        val fs by flow.state.collectAsState()
+        LaunchedEffect(fs.step) {
+            if (fs.step == io.tima.feature.auth.PinStep.Done) {
+                pinNotice = when (fs.result) {
+                    io.tima.feature.auth.PinResult.TurnedOn -> pw.turnedOn
+                    io.tima.feature.auth.PinResult.TurnedOff -> pw.turnedOff
+                    io.tima.feature.auth.PinResult.Changed -> pw.changed
+                    else -> null
+                }
+                pinVersion++
+                pinFlow = null
+            }
+        }
+        io.tima.feature.auth.PinScreen(
+            state = fs,
+            onDigit = flow::digit,
+            onErase = flow::erase,
+            onForgot = flow::forgot,
+            onPhrase = flow::submitPhrase,
+            onChoose = flow::choose,
+            onTick = flow::tick,
+            now = { msNow() },
+            temporary = pin.temporary,
+            onCancel = { pinFlow = null },
+        )
+        return
+    }
+    val pinOn = remember(pin, pinVersion) { pin?.lock?.isOn() }
     // Ключа служебной группы нет — «Запросить ключ» (заказчик 2026-09-30).
     val keyMissing by accountCopy.keyMissing.collectAsState()
     val keyAsk by accountCopy.keyAsk.collectAsState()
@@ -4569,6 +4667,14 @@ private fun Devices(
         phoneChange = store.phoneChangeView(msNow()),
         onSendPhoneCode = store::sendPhoneChangeCode,
         onPhoneChange = store::phoneChange,
+        pinOn = pinOn,
+        onPin = pin?.let { p ->
+            { mode: io.tima.feature.auth.PinMode ->
+                pinNotice = null
+                pinFlow = io.tima.feature.auth.PinFlowStore(mode, p.lock, p.verify, pinScope, { msNow() }, ::notePin)
+            }
+        },
+        pinNotice = pinNotice,
     )
 }
 
