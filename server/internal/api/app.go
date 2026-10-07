@@ -68,6 +68,10 @@ type AppVersion struct {
 // Неизвестная платформа получает 204, а не пакет для Android: отдать чужой пакет значит
 // предложить человеку поставить то, что у него не запустится.
 func (s *Server) appVersion(w http.ResponseWriter, r *http.Request) {
+	// Сайт-визитка (timadd.ru, 2026-10-07) читает ту же версию со своей страницы «Установить»: ссылка
+	// на скачивание там та же, что у самообновления, — источник один. Данные публичные, поэтому
+	// читать разрешено с любого сайта; куки и вход здесь не участвуют.
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	var ver *AppVersion
 	switch r.URL.Query().Get("platform") {
 	case "", "android":

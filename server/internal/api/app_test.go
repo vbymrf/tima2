@@ -32,6 +32,10 @@ func TestAppVersion(t *testing.T) {
 	if resp2.StatusCode != http.StatusOK {
 		t.Fatalf("с конфигом: ожидался 200, получен %d", resp2.StatusCode)
 	}
+	// Сайт-визитка читает версию со своего домена (2026-10-07).
+	if got := resp2.Header.Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("сайту читать версию нельзя: Access-Control-Allow-Origin = %q", got)
+	}
 	var got AppVersion
 	if err := json.NewDecoder(resp2.Body).Decode(&got); err != nil {
 		t.Fatal(err)
