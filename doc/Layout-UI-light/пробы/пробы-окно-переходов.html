@@ -549,3 +549,149 @@
   </div>
 </section>
 
+
+<style>
+  /* ── Третья серия (2026-10-07) ─────────────────────────────────────────────
+     Окна — строками как в А, на мягкой зелёной подложке из Е2. Текущее окно — и зелёной полосой слева,
+     и зелёной рамкой значка. Аккаунты — полосой аватаров, как Ж3: сетка с постоянными местами, перенос на
+     новую строку, «Добавить» — всегда в правой колонке последней строки. */
+  .пп-окна3 { background: var(--акцент-мягкий); }
+  .пп-окна3.рамкой { margin: 8px 12px 10px; border: 2px solid var(--навигация); border-radius: 16px; overflow: hidden; }
+  .пп-окна3 .пп-строка { position: relative; border-bottom-color: rgba(0,0,0,0.08); }
+  .пп-окна3 .пп-строка:last-child { border-bottom: none; }
+  .пп-окна3 .пп-знак { background: #fff; }
+  .пп-окна3 .пп-строка.тут::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--навигация); }
+  .пп-окна3 .пп-знак.тут { box-shadow: 0 0 0 2px var(--навигация); }
+  .пп-черта3 { height: 6px; background: var(--чёрный-12); }
+
+  .пп-сетка-акк { display: grid; grid-template-columns: repeat(5, 1fr); row-gap: 10px; padding: 12px 8px; border-bottom: 1px solid var(--чёрный-12); }
+  .пп-сетка-акк .пп-чип { width: auto; }
+  .пп-сетка-акк .пп-добавить { grid-column: 5; }
+</style>
+
+<div class="серия">
+<h2>Третья серия</h2>
+<p class="решения">Задача заказчика (2026-10-07): «Фомат Активный звонок Одобряю, Далее Окна телефонов как А, только фон как в Е2,
+зеленую полоску из А и выделение вокруг иконки делаем обе. Аккаунты как Ж3, если не влезло, переносим на новую строку. Кнопка
+добавить всегда выравнивается справа, заданное положение значков».</p>
+<ul class="решения">
+  <li><b>Окна</b> — строки как в А (со второй строкой «что внутри»), фон — мягкая зелёная подложка из Е2, значки на белом.
+    Текущее окно — <b>и</b> зелёной полосой слева, <b>и</b> зелёной рамкой значка. Зелёная полоса в первой серии была у В, а не у А —
+    взята она; толстая серая черта из А — под окнами.</li>
+  <li><b>Аккаунты</b> — аватарами, как Ж3, но сеткой: пять мест в строке, места постоянные; не влезло — следующая строка.
+    «Добавить» — всегда в правой колонке последней строки.</li>
+</ul>
+</div>
+
+<section class="проба" id="И">
+  <div class="шапка-пробы"><span class="номер">И</span><span class="опис">Окна на мягкой зелёной подложке, текущее — полосой и рамкой значка; аккаунты — сеткой аватаров. Слева направо: с зелёной окантовкой и без неё; семь аккаунтов; один аккаунт и нет звонка.</span></div>
+  <div class="срезы">
+  <div>
+  <div class="пп-экран с2"><div class="пп-панель">
+    <div class="пп-шапка"><div class="пп-ав">А</div><div class="пп-кто"><div class="пп-имя">Анна Смирнова</div>
+      <div class="пп-третье">+7 999 000-00-01</div><div class="пп-третье">@anna</div></div><div class="пп-кн">👤</div><div class="пп-кн">✕</div></div>
+    <div class="пп-звонок2"><span class="пп-знак">📞</span><div class="пп-мид"><div class="пп-назв">Активный звонок</div><div class="пп-второе">Ольга Кравец</div></div></div>
+    <div class="пп-окна3 рамкой">
+      <div class="пп-строка тут"><span class="пп-знак тут">📞</span><div class="пп-мид"><div class="пп-назв">Телефон</div><div class="пп-второе">чаты, книга, звонки</div></div><div class="пп-справа"><span class="пп-счёт">3</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">📰</span><div class="пп-мид"><div class="пп-назв">Социальная лента</div><div class="пп-второе">общая, друзья, каталог</div></div><div class="пп-справа"><span class="пп-счёт">12</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">🖼</span><div class="пп-мид"><div class="пп-назв">Медиа-лента</div><div class="пп-второе">лента и слайды</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">💬</span><div class="пп-мид"><div class="пп-назв">Свободное общение</div><div class="пп-второе">истории, ответы, реакции</div></div><div class="пп-справа"><span class="пп-счёт">2</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">👤</span><div class="пп-мид"><div class="пп-назв">Личная страница</div><div class="пп-второе">профиль, коллекции, роли</div></div></div>
+    </div>
+    <div class="пп-сетка-акк">
+      <div class="пп-чип"><div class="пп-ав тут">А</div><div class="пп-подп">Анна</div></div>
+      <div class="пп-чип"><span class="пп-счёт">2</span><div class="пп-ав">Р</div><div class="пп-подп">Работа</div></div>
+      <div class="пп-чип"><div class="пп-ав">S</div><div class="пп-подп">@shop</div></div>
+      <div class="пп-чип пп-добавить"><div class="пп-плюс">＋</div><div class="пп-подп">Добавить</div></div>
+    </div>
+    <div class="пп-низ">
+      <div class="пп-строка"><span class="пп-знак">⚙</span><div class="пп-мид"><div class="пп-назв">Настройки, помощь, баги</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">↩</span><div class="пп-мид"><div class="пп-назв">Выйти</div><div class="пп-третье">TIMA работает в фоне: звонки и сообщения придут</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">🚪</span><div class="пп-мид"><div class="пп-назв">Закрыть приложение</div><div class="пп-третье">Звонки и сообщения не придут, пока TIMA снова не открыта</div></div></div>
+    </div>
+  </div></div>
+  <div class="пп-подпись"><b>И1.</b> Окна в пузыре с зелёной окантовкой и подложкой, как Е2. Три аккаунта — в первой строке, «Добавить» справа, между ними пустые места.</div>
+  </div>
+  <div>
+  <div class="пп-экран с2"><div class="пп-панель">
+    <div class="пп-шапка"><div class="пп-ав">А</div><div class="пп-кто"><div class="пп-имя">Анна Смирнова</div>
+      <div class="пп-третье">+7 999 000-00-01</div><div class="пп-третье">@anna</div></div><div class="пп-кн">👤</div><div class="пп-кн">✕</div></div>
+    <div class="пп-звонок2"><span class="пп-знак">📞</span><div class="пп-мид"><div class="пп-назв">Активный звонок</div><div class="пп-второе">Ольга Кравец</div></div></div>
+    <div class="пп-окна3 ">
+      <div class="пп-строка тут"><span class="пп-знак тут">📞</span><div class="пп-мид"><div class="пп-назв">Телефон</div><div class="пп-второе">чаты, книга, звонки</div></div><div class="пп-справа"><span class="пп-счёт">3</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">📰</span><div class="пп-мид"><div class="пп-назв">Социальная лента</div><div class="пп-второе">общая, друзья, каталог</div></div><div class="пп-справа"><span class="пп-счёт">12</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">🖼</span><div class="пп-мид"><div class="пп-назв">Медиа-лента</div><div class="пп-второе">лента и слайды</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">💬</span><div class="пп-мид"><div class="пп-назв">Свободное общение</div><div class="пп-второе">истории, ответы, реакции</div></div><div class="пп-справа"><span class="пп-счёт">2</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">👤</span><div class="пп-мид"><div class="пп-назв">Личная страница</div><div class="пп-второе">профиль, коллекции, роли</div></div></div>
+    </div>
+    <div class="пп-черта3"></div>
+    <div class="пп-сетка-акк">
+      <div class="пп-чип"><div class="пп-ав тут">А</div><div class="пп-подп">Анна</div></div>
+      <div class="пп-чип"><span class="пп-счёт">2</span><div class="пп-ав">Р</div><div class="пп-подп">Работа</div></div>
+      <div class="пп-чип"><div class="пп-ав">S</div><div class="пп-подп">@shop</div></div>
+      <div class="пп-чип пп-добавить"><div class="пп-плюс">＋</div><div class="пп-подп">Добавить</div></div>
+    </div>
+    <div class="пп-низ">
+      <div class="пп-строка"><span class="пп-знак">⚙</span><div class="пп-мид"><div class="пп-назв">Настройки, помощь, баги</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">↩</span><div class="пп-мид"><div class="пп-назв">Выйти</div><div class="пп-третье">TIMA работает в фоне: звонки и сообщения придут</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">🚪</span><div class="пп-мид"><div class="пп-назв">Закрыть приложение</div><div class="пп-третье">Звонки и сообщения не придут, пока TIMA снова не открыта</div></div></div>
+    </div>
+  </div></div>
+  <div class="пп-подпись"><b>И2.</b> Без окантовки: подложка во всю ширину, как блок в А, под ней толстая серая черта.</div>
+  </div>
+  <div>
+  <div class="пп-экран с2"><div class="пп-панель">
+    <div class="пп-шапка"><div class="пп-ав">А</div><div class="пп-кто"><div class="пп-имя">Анна Смирнова</div>
+      <div class="пп-третье">+7 999 000-00-01</div><div class="пп-третье">@anna</div></div><div class="пп-кн">👤</div><div class="пп-кн">✕</div></div>
+    <div class="пп-звонок2"><span class="пп-знак">📞</span><div class="пп-мид"><div class="пп-назв">Активный звонок</div><div class="пп-второе">Ольга Кравец</div></div></div>
+    <div class="пп-окна3 рамкой">
+      <div class="пп-строка тут"><span class="пп-знак тут">📞</span><div class="пп-мид"><div class="пп-назв">Телефон</div><div class="пп-второе">чаты, книга, звонки</div></div><div class="пп-справа"><span class="пп-счёт">3</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">📰</span><div class="пп-мид"><div class="пп-назв">Социальная лента</div><div class="пп-второе">общая, друзья, каталог</div></div><div class="пп-справа"><span class="пп-счёт">12</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">🖼</span><div class="пп-мид"><div class="пп-назв">Медиа-лента</div><div class="пп-второе">лента и слайды</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">💬</span><div class="пп-мид"><div class="пп-назв">Свободное общение</div><div class="пп-второе">истории, ответы, реакции</div></div><div class="пп-справа"><span class="пп-счёт">2</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">👤</span><div class="пп-мид"><div class="пп-назв">Личная страница</div><div class="пп-второе">профиль, коллекции, роли</div></div></div>
+    </div>
+    <div class="пп-сетка-акк">
+      <div class="пп-чип"><div class="пп-ав тут">А</div><div class="пп-подп">Анна</div></div>
+      <div class="пп-чип"><span class="пп-счёт">2</span><div class="пп-ав">Р</div><div class="пп-подп">Работа</div></div>
+      <div class="пп-чип"><div class="пп-ав">S</div><div class="пп-подп">@shop</div></div>
+      <div class="пп-чип"><div class="пп-ав">К</div><div class="пп-подп">Клуб</div></div>
+      <div class="пп-чип"><div class="пп-ав">Д</div><div class="пп-подп">Дача</div></div>
+      <div class="пп-чип"><span class="пп-счёт">1</span><div class="пп-ав">М</div><div class="пп-подп">Магазин</div></div>
+      <div class="пп-чип"><div class="пп-ав">Ф</div><div class="пп-подп">Фото</div></div>
+      <div class="пп-чип пп-добавить"><div class="пп-плюс">＋</div><div class="пп-подп">Добавить</div></div>
+    </div>
+    <div class="пп-низ">
+      <div class="пп-строка"><span class="пп-знак">⚙</span><div class="пп-мид"><div class="пп-назв">Настройки, помощь, баги</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">↩</span><div class="пп-мид"><div class="пп-назв">Выйти</div><div class="пп-третье">TIMA работает в фоне: звонки и сообщения придут</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">🚪</span><div class="пп-мид"><div class="пп-назв">Закрыть приложение</div><div class="пп-третье">Звонки и сообщения не придут, пока TIMA снова не открыта</div></div></div>
+    </div>
+  </div></div>
+  <div class="пп-подпись"><b>И3.</b> Семь аккаунтов: пять в первой строке, два во второй, «Добавить» — справа во второй строке. Число неотправленного — в углу аватара.</div>
+  </div>
+  <div>
+  <div class="пп-экран с2"><div class="пп-панель">
+    <div class="пп-шапка"><div class="пп-ав">А</div><div class="пп-кто"><div class="пп-имя">Анна Смирнова</div>
+      <div class="пп-третье">+7 999 000-00-01</div><div class="пп-третье">@anna</div></div><div class="пп-кн">👤</div><div class="пп-кн">✕</div></div>
+    <div class="пп-окна3 рамкой">
+      <div class="пп-строка тут"><span class="пп-знак тут">📞</span><div class="пп-мид"><div class="пп-назв">Телефон</div><div class="пп-второе">чаты, книга, звонки</div></div><div class="пп-справа"><span class="пп-счёт">3</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">📰</span><div class="пп-мид"><div class="пп-назв">Социальная лента</div><div class="пп-второе">общая, друзья, каталог</div></div><div class="пп-справа"><span class="пп-счёт">12</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">🖼</span><div class="пп-мид"><div class="пп-назв">Медиа-лента</div><div class="пп-второе">лента и слайды</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">💬</span><div class="пп-мид"><div class="пп-назв">Свободное общение</div><div class="пп-второе">истории, ответы, реакции</div></div><div class="пп-справа"><span class="пп-счёт">2</span></div></div>
+      <div class="пп-строка"><span class="пп-знак">👤</span><div class="пп-мид"><div class="пп-назв">Личная страница</div><div class="пп-второе">профиль, коллекции, роли</div></div></div>
+    </div>
+    <div class="пп-сетка-акк">
+      <div class="пп-чип"><div class="пп-ав тут">А</div><div class="пп-подп">Анна</div></div>
+      <div class="пп-чип пп-добавить"><div class="пп-плюс">＋</div><div class="пп-подп">Добавить</div></div>
+    </div>
+    <div class="пп-низ">
+      <div class="пп-строка"><span class="пп-знак">⚙</span><div class="пп-мид"><div class="пп-назв">Настройки, помощь, баги</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">↩</span><div class="пп-мид"><div class="пп-назв">Выйти</div><div class="пп-третье">TIMA работает в фоне: звонки и сообщения придут</div></div></div>
+      <div class="пп-строка"><span class="пп-знак">🚪</span><div class="пп-мид"><div class="пп-назв">Закрыть приложение</div><div class="пп-третье">Звонки и сообщения не придут, пока TIMA снова не открыта</div></div></div>
+    </div>
+  </div></div>
+  <div class="пп-подпись"><b>И4.</b> Один аккаунт, звонка нет: строки «Активный звонок» нет, окна сразу под шапкой; в сетке — текущий аккаунт и «Добавить» справа.</div>
+  </div>
+  </div>
+</section>
+
