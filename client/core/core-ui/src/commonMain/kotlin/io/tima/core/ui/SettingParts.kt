@@ -1,5 +1,6 @@
 package io.tima.core.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,10 +22,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -97,10 +105,94 @@ fun SettingLine(
         right = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
                 onHelp?.let { HelpMark(it) }
-                if (onClick != null) Secondary(if (open) "⌃" else "›")
+                if (onClick != null) ExpandMark(open)
             }
         },
     )
+}
+
+/**
+ * Стрелка нажимаемой строки: «›», раскрытая — остриём вверх.
+ *
+ * **Крупная и зелёная** (заказчик 2026-10-07: «Делаем стрелку вправо крупнее и зеленой не меняя
+ * режим управления кликом. Т.е что было понятно - кликабельно»). Серая мелкая «›» читалась как
+ * украшение, и строку с раскрытием не узнавали нажимаемой. Зелёный — цвет навигации и действия,
+ * тот же, что у «назад» и кнопок.
+ *
+ * **Нарисована, а не знаком шрифта** — по той же причине, что [RadioMark]: «›» даже на крупном
+ * кегле занимает треть своей клетки и остаётся мелкой, а «⌃» другого шрифтового размера.
+ * Раскрытая — та же стрелка, повёрнутая.
+ */
+@Composable
+fun ExpandMark(open: Boolean = false, modifier: Modifier = Modifier) {
+    val color = Tima.colors.navigation
+    Canvas(modifier.size(EXPAND_WIDTH, EXPAND_HEIGHT).rotate(if (open) -90f else 0f)) {
+        val stroke = EXPAND_STROKE.toPx()
+        val left = size.width * 0.25f
+        val right = size.width * 0.75f
+        val top = size.height * 0.5f - (right - left)
+        val bottom = size.height * 0.5f + (right - left)
+        drawLine(color, Offset(left, top), Offset(right, size.height / 2), stroke, StrokeCap.Round)
+        drawLine(color, Offset(right, size.height / 2), Offset(left, bottom), stroke, StrokeCap.Round)
+    }
+}
+
+/** Мера стрелки: высотой с «?» рядом, черта толщиной с рамку отметки. */
+private val EXPAND_WIDTH = 16.dp
+private val EXPAND_HEIGHT = 26.dp
+private val EXPAND_STROKE = 3.dp
+
+/**
+ * Выбор одного из — строкой с раскрытием, как «Экономичный режим» в «Уведомлениях»: справа
+ * выбранное и стрелка, нажатие раскрывает варианты с точками на мягкой подложке.
+ *
+ * @param label надпись варианта; @param about пояснение варианта, `null` — без него
+ */
+@Composable
+fun <T> ChoiceLine(
+    glyph: String?,
+    title: String,
+    about: String?,
+    options: List<T>,
+    chosen: T,
+    label: (T) -> String,
+    onChoose: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    optionAbout: (T) -> String? = { null },
+    /** Надпись справа; по умолчанию — надпись выбранного. */
+    short: String = label(chosen),
+) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    ListLine(
+        modifier = modifier,
+        onClick = { open = !open },
+        left = glyph?.let { { Name(it) } },
+        right = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                Secondary(short, lineOne = true)
+                ExpandMark(open)
+            }
+        },
+        middle = {
+            Caption(title, fontSize = TimaType.sz4, weight = FontWeight.Bold, maxLines = 2)
+            about?.let { Tertiary(it) }
+        },
+    )
+    if (!open) return
+    Column(Modifier.fillMaxWidth().background(Tima.colors.softAccent)) {
+        for (option in options) {
+            val on = option == chosen
+            ListLine(
+                modifier = Modifier.padding(start = TimaSpacing.about5),
+                onClick = { onChoose(option) },
+                left = { RadioMark(on) },
+                middle = {
+                    Caption(label(option), fontSize = TimaType.sz4, weight = if (on) FontWeight.Bold else FontWeight.Normal)
+                    optionAbout(option)?.let { Tertiary(it) }
+                },
+            )
+        }
+    }
 }
 
 /** Знак «?» — кружок; открывает подокно с описанием. */

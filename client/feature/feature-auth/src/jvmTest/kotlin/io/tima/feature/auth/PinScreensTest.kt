@@ -26,6 +26,27 @@ class PinScreensTest {
         assertTrue(off.difference(on) > 0.0, "пузырь «выключен/включён» не отличается")
     }
 
+    /**
+     * «Сканировать код» — в «Вход», под «Выйти из аккаунта» (заказчик 2026-10-07). Без сканера
+     * меняется верх экрана; останься строка в «Устройствах», верх был бы тем же.
+     */
+    @Test
+    fun сканер_в_группе_вход() {
+        val with = capture("вход-со-сканером", WIDTH, 260, dark = false) { grouped(pinOn = false) }
+        val without = capture("вход-без-сканера", WIDTH, 260, dark = false) { grouped(pinOn = false, scan = false) }
+        assertTrue(with.difference(without) > 0.0, "строки «Сканировать код» нет в «Вход»")
+    }
+
+    /** Стрелка нажимаемой строки — зелёная, цветом навигации (заказчик 2026-10-07). */
+    @Test
+    fun стрелка_строки_зелёная() {
+        val top = capture("стрелка-зелёная", WIDTH, 260, dark = false) { grouped(pinOn = false) }
+        assertTrue(
+            top.patchHas(TimaColors.light.navigation, x = WIDTH - 40 until WIDTH, side = 2),
+            "у края строк нет зелёной стрелки",
+        )
+    }
+
     @Test
     fun клавиатура_пина_и_пауза() {
         val enter = capture("пин-ввод", WIDTH, 760, dark = false) {
@@ -66,14 +87,14 @@ class PinScreensTest {
         )
 
         @androidx.compose.runtime.Composable
-        fun grouped(pinOn: Boolean) = DeviceScreen(
+        fun grouped(pinOn: Boolean, scan: Boolean = true) = DeviceScreen(
             state = STATE,
             onAsk = {},
             onConfirm = {},
             onChangedMind = {},
             buildVersion = "2.0.143",
             onSignOut = {},
-            onScan = {},
+            onScan = if (scan) ({}) else null,
             onStartCopy = {},
             onRotateCopy = {},
             onSendBanCode = {},

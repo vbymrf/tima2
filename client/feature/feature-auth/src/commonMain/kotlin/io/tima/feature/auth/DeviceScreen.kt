@@ -119,9 +119,9 @@ fun DeviceScreen(
                 return@Column
             }
             state.trouble?.let { Column(Modifier.padding(TimaSpacing.about4)) { Trouble(it) } }
-            EntryGroup(state, onSignOut, pinOn, onPin, pinNotice) { help = it }
+            EntryGroup(state, onSignOut, onScan, pinOn, onPin, pinNotice) { help = it }
             ThisDeviceGroup(state, onConfirmWithPhrase, onShowCertifyCode) { help = it }
-            DevicesGroup(state, onAsk, onRetry, onScan) { help = it }
+            DevicesGroup(state, onAsk, onRetry) { help = it }
             HistoryGroup(state, onStartCopy, onRotateCopy, onRequestKey, keyNotice, keySending) { help = it }
             AccountGroup(
                 state, onCancelNewIdentity, onSendBanCode, onBanStartAnew, rereg, onStartRereg, onSendReregCode, onRereg,
@@ -151,17 +151,21 @@ fun DeviceScreen(
 /** Пункты красного раздела «Аккаунт» — их подокно «?» с красным заголовком. */
 private val DANGER = setOf(HelpTopic.PhoneChange, HelpTopic.Rereg, HelpTopic.Ban, HelpTopic.Disputes)
 
-/** «Вход»: выход из аккаунта и пин-код (заказчик 2026-10-07: пин в самом верху, выход над ним). */
+/**
+ * «Вход»: выход из аккаунта, сканер кода и пин-код (заказчик 2026-10-07: пин в самом верху, выход
+ * над ним; «Сканировать код» — в «Вход», ниже «Выйти из аккаунта»).
+ */
 @Composable
 private fun EntryGroup(
     state: DevicesState,
     onSignOut: (() -> Unit)?,
+    onScan: (() -> Unit)?,
     pinOn: Boolean?,
     onPin: ((PinMode) -> Unit)?,
     pinNotice: String?,
     onHelp: (HelpTopic) -> Unit,
 ) {
-    if (onSignOut == null && (pinOn == null || onPin == null)) return
+    if (onSignOut == null && onScan == null && (pinOn == null || onPin == null)) return
     val pw = Tima.words.pin
     val words = Tima.words.auth
     SectionTitle(pw.groupEntry)
@@ -186,6 +190,11 @@ private fun EntryGroup(
             )
         }
     }
+    if (onScan != null) {
+        // Сканер — вход другого своего устройства в аккаунт, поэтому он здесь, а не в «Устройствах».
+        SettingLine("📷", words.scanCode, words.scanCodeAbout, onClick = onScan, onHelp = { onHelp(HelpTopic.Scan) })
+    }
+    NoticeUnder(state, TrustPanel.Scan)
     if (pinOn != null && onPin != null) {
         var open by rememberSaveable { mutableStateOf(false) }
         SettingLine(
@@ -230,7 +239,7 @@ private fun PinAction(title: String, about: String, onClick: () -> Unit) = ListL
         Caption(title, fontSize = TimaType.sz4, weight = FontWeight.Bold)
         Tertiary(about)
     },
-    right = { Secondary("›") },
+    right = { io.tima.core.ui.ExpandMark() },
 )
 
 /** «Это устройство»: заверено ли; не заверено — фраза или код заверения прямо здесь. */
@@ -273,13 +282,12 @@ private fun ThisDeviceGroup(
     NoticeUnder(state, TrustPanel.Confirm)
 }
 
-/** «Устройства»: остальные устройства аккаунта, отключение, сканер. */
+/** «Устройства»: остальные устройства аккаунта, отключение. Сканер — в «Вход». */
 @Composable
 private fun DevicesGroup(
     state: DevicesState,
     onAsk: (String) -> Unit,
     onRetry: (() -> Unit)?,
-    onScan: (() -> Unit)?,
     onHelp: (HelpTopic) -> Unit,
 ) {
     val words = Tima.words.auth
@@ -306,10 +314,6 @@ private fun DevicesGroup(
     state.devices.filterNot { it.current }.forEach { device ->
         androidx.compose.runtime.key(device.deviceId) { OtherDevice(device, onAsk, onHelp) }
     }
-    if (onScan != null) {
-        SettingLine("📷", words.scanCode, words.scanCodeAbout, onClick = onScan, onHelp = { onHelp(HelpTopic.Scan) })
-    }
-    NoticeUnder(state, TrustPanel.Scan)
     NoticeUnder(state, TrustPanel.Certify)
 }
 

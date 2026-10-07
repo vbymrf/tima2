@@ -96,11 +96,10 @@ fun SettingsScreen(
                 },
             )
 
-            // Первой строкой, над группами — см. [SettingsItem.PINNED].
-            for (item in SettingsItem.PINNED.filter { it !in hidden }) Line(item)
+            // «Помощь» — первой группой, см. [SettingsGroup].
             for (group in SettingsGroup.entries) {
                 SectionTitle(words.group(group))
-                for (item in SettingsItem.entries.filter { it.group == group && it !in hidden && it !in SettingsItem.PINNED }) {
+                for (item in SettingsItem.entries.filter { it.group == group && it !in hidden }) {
                     Line(item)
                 }
             }

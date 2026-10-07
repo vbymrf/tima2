@@ -56,6 +56,20 @@ class SettingsScreenTest {
         assertEquals(порядок.sorted(), порядок, "пункты группы разорваны чужим пунктом")
     }
 
+    /**
+     * «Помощь» — первой группой: «Сообщить о проблеме», «Частые вопросы», «Обновление» (заказчик
+     * 2026-10-07). «О приложении» заказчик не называл — оно осталось в «Помощи» последним.
+     */
+    @Test
+    fun помощь_первой_группой() {
+        assertEquals(SettingsGroup.HELP, SettingsGroup.entries.first())
+        assertEquals(
+            listOf(SettingsItem.PROBLEM, SettingsItem.QUESTIONS, SettingsItem.UPDATE, SettingsItem.ABOUT),
+            SettingsItem.entries.filter { it.group == SettingsGroup.HELP },
+        )
+        assertEquals(SettingsItem.PROBLEM, SettingsItem.entries.first())
+    }
+
     /** У каждого пункта своя надпись и свой знак: два одинаковых знака неразличимы в списке. */
     @Test
     fun надписи_и_знаки_не_повторяются() {

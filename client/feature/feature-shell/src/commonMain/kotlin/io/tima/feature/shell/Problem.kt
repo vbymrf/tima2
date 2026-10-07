@@ -21,8 +21,6 @@ import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Field
-import io.tima.core.ui.ListLine
-import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.TimaSpacing
@@ -490,27 +488,27 @@ fun ProblemScreen(
         }
     }
 
-    Caption(words.whenBegan, fontSize = TimaType.sz5, weight = FontWeight.Bold)
-    Began.entries.forEach { began ->
-        ListLine(
-            onClick = { onBegan(began) },
-            middle = {
-                val label = beganLabel(began, words)
-                Name(if (began == state.began) "● $label" else "○ $label")
-            },
-        )
-    }
-
-    Caption(words.whatAbout, fontSize = TimaType.sz5, weight = FontWeight.Bold)
-    ProblemKind.entries.forEach { kind ->
-        ListLine(
-            onClick = { onKind(kind) },
-            middle = {
-                val label = kindLabel(kind, words)
-                Name(if (kind == state.kind) "● $label" else "○ $label")
-            },
-        )
-    }
+    // Переключатели — строками с раскрытием, как в «Уведомлениях» (заказчик 2026-10-07): справа
+    // выбранное, нажатие раскрывает варианты. Шесть строк с точками занимали пол-экрана, хотя
+    // меняют их редко.
+    io.tima.core.ui.ChoiceLine(
+        glyph = "🕒",
+        title = words.whenBegan,
+        about = null,
+        options = Began.entries,
+        chosen = state.began,
+        label = { beganLabel(it, words) },
+        onChoose = onBegan,
+    )
+    io.tima.core.ui.ChoiceLine(
+        glyph = "🏷",
+        title = words.whatAbout,
+        about = null,
+        options = ProblemKind.entries,
+        chosen = state.kind,
+        label = { kindLabel(it, words) },
+        onChoose = onKind,
+    )
 
     Caption(words.whatGoes, fontSize = TimaType.sz5, weight = FontWeight.Bold)
     Secondary(

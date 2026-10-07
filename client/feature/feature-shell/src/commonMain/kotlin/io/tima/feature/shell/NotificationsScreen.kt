@@ -402,7 +402,7 @@ fun SoundSetting(glyph: String, title: String, about: String, row: SoundRow) {
         right = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
                 Secondary(row.current, lineOne = true)
-                Secondary(if (open) "⌃" else "›")
+                io.tima.core.ui.ExpandMark(open)
             }
         },
         middle = {
@@ -503,7 +503,7 @@ private fun QuietSetting(row: QuietRow) {
         right = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
                 Secondary(if (row.on) clockOf(row.from) + "–" + clockOf(row.to) else words.quietOff, lineOne = true)
-                Secondary(if (open) "⌃" else "›")
+                io.tima.core.ui.ExpandMark(open)
             }
         },
         middle = {
@@ -536,7 +536,7 @@ private fun EconomySetting(row: EconomyRow) {
         right = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
                 Secondary(if (row.on) words.economyEvery(row.seconds) else words.economyOff, lineOne = true)
-                Secondary(if (open) "⌃" else "›")
+                io.tima.core.ui.ExpandMark(open)
             }
         },
         middle = {
