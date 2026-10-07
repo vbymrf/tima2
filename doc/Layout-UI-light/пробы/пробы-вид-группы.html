@@ -1,0 +1,202 @@
+<meta charset="utf-8">
+<title>Пробы: вид группы</title>
+<link rel="stylesheet" href="../стиль.css">
+<style>
+  .срез { height: auto; width: 344px; border-width: 2px; border-radius: 20px; }
+  .срез .зона-2 { flex: 0 0 auto; overflow: visible; }
+
+  /* Лента: зазор между репликами — половина прежнего (12 → 6, заказчик 2026-10-07), кроме
+     реплики с аватаром: над ней прежние 12. */
+  .лента { display: flex; flex-direction: column; gap: 6px; padding: 22px 14px 18px; background: var(--поверхность); }
+  .лента.как-было { gap: 12px; }
+  .ряд { display: flex; position: relative; }
+  .ряд.мой { justify-content: flex-end; }
+  .ряд.с-аватаром { margin-top: 6px; }
+  .лента.как-было .ряд.с-аватаром { margin-top: 0; }
+  .ряд.с-аватаром:first-child { margin-top: 0; }
+
+  /* Пузырь — как `Bubble.kt`: радиус 16, рамка 1 серая, полоса автора 4 цветная поверх неё */
+  .пуз {
+    position: relative; max-width: 290px; box-sizing: border-box;
+    background: var(--автор); color: var(--текст);
+    border: 1px solid var(--рамка); border-left: 4px solid var(--цвет, var(--навигация));
+    border-radius: 16px; padding: 11px 14px 11px 12px; font-size: 15px; line-height: 1.35;
+  }
+  .ряд.мой .пуз { background: var(--мои); border-left-width: 1px; border-left-color: var(--рамка); padding-left: 14px; }
+  .вр { display: block; text-align: right; font-size: 11px; font-weight: 700; color: var(--чёрный-50); margin-top: 3px; }
+  .имя { display: block; font-size: 13px; font-weight: 800; color: var(--чёрный-70); height: 20px; line-height: 20px; margin-bottom: 3px; white-space: nowrap; }
+
+  /* Аватар — квадрат 43, скругление 10, своя рамка 1; поверх рамки и полосы пузыря.
+     Нажатие — страница человека, во всех трёх видах. */
+  .ав {
+    position: absolute; top: -12px; width: 43px; height: 43px; box-sizing: border-box; z-index: 2;
+    border-radius: 10px; border: 1px solid var(--рамка); background: var(--автор);
+    display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer;
+    font-size: 13px; font-weight: 800; color: var(--текст);
+  }
+  .ав.фото { background: linear-gradient(135deg, #2f9aa3, #d9b38c 60%, #6b4b3a); color: transparent; }
+  .ав .мелко { display: none; }
+
+  /* 1 — как сейчас: аватар за скруглением, 19 от края пузыря; имя после аватара */
+  .в1 .ав { left: 15px; }
+  .в1 .имя { padding-left: 52px; }
+
+  /* 2 — проба «аватар в группе», «д»: аватар у края телефона, 2 точки, поверх полосы;
+     пузырь не двигается, имя следом за аватаром */
+  .в2 .ав { left: -16px; }
+  .в2 .имя { padding-left: 21px; }
+
+  /* 3 — «аватар снаружи», «е», с правками: колонка аватара 2 + 43 + 2 слева от ленты,
+     аватар низом к низу первого пузыря серии; имени в пузыре нет; в квадрате — очень мелкий
+     текст из «Отображать пользователя как», с переносом; есть картинка — только она */
+  .в3 .лента { padding-left: 47px; }
+  .в3 .ав { top: auto; bottom: -1px; left: -49px; }
+  .в3 .имя { display: none; }
+  .в3 .ав .буквы { display: none; }
+  .в3 .ав .мелко {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+    font-style: normal; font-size: 7px; font-weight: 700; line-height: 1.15; text-align: center;
+    word-break: normal; overflow-wrap: anywhere; padding: 0 1px;
+  }
+  .в3 .ав.фото .мелко { display: none; }
+
+  .проба { padding: 20px 0 24px; border-bottom: 1px solid var(--чёрный-12); }
+  .проба:target { box-shadow: inset 6px 0 0 var(--навигация); padding-left: 16px; }
+  .шапка-пробы { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .номер { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+  .опис { font-size: 13.5px; color: var(--чёрный-70); }
+  .свет { font-size: 12px; color: var(--чёрный-50); }
+  .срезы { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .с-подписью > .трет { margin-top: 8px; max-width: 344px; }
+  .увеличено { zoom: 2; }
+  .навигация-проб { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+  .навигация-проб a {
+    display: inline-flex; align-items: center; padding: 7px 13px; border-radius: 999px;
+    border: 1px solid var(--чёрный-12); text-decoration: none; color: var(--текст);
+    font-size: 12.5px; font-weight: 700;
+  }
+
+  /* Настройка: «Вид» в «Социуме» → «Отображать пользователя как» → «Как отобразить» */
+  .меню { padding: 8px 0; }
+  .гр { padding: 14px 16px 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--чёрный-50); }
+  .стр { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--чёрный-6); }
+  .стр .сер { flex: 1 1 auto; }
+  .стр .наз { font-size: 14px; }
+  .стр .наз.да { font-weight: 800; }
+  .стр .что { font-size: 12px; color: var(--чёрный-50); margin-top: 2px; }
+  .точка { flex: 0 0 16px; height: 16px; border-radius: 50%; border: 2px solid var(--чёрный-35); box-sizing: border-box; }
+  .точка.да { border: 5px solid var(--навигация); }
+</style>
+
+<div class="лист-док">
+
+<div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-вид-группы.html</div>
+<h1>Пробы: вид группы</h1>
+<p class="подзаголовок">
+  Три вида сообщений группы — выбор в «Социуме»: кнопка «Вид» → «Отображать пользователя как» →
+  «Как отобразить». Вид один на сообщества: аватар внутри сообщения есть только в группах.
+  Зазор между сообщениями — вдвое меньше везде, кроме сообщения с аватаром.
+</p>
+
+<div class="оговорка">
+  <b>Решения заказчика 2026-10-07:</b>
+  <br>— зазор между сообщениями 12 → 6 во всех переписках, в том числе личных; над сообщением с
+  аватаром — прежние 12;
+  <br>— вид один на сообщества и нужен только там: аватар внутри сообщения есть только в группах;
+  <br>— нажатие на аватар — страница пользователя, во всех трёх видах;
+  <br>— в виде 3 текст в квадрате аватара мелкий, до трёх строк, лишнее обрезается; от
+  «Шрифты и размеры» он не растёт, иначе в квадрат ничего не влезет;
+  <br>— вид 3 сужает ленту: все пузыри сдвинуты вправо на колонку аватара, 2 + 43 + 2 = 47.
+  <br><br>
+  Прежние пробы: <a href="пробы-аватар-группа.html#д">аватар в группе, «д»</a>,
+  <a href="пробы-аватар-снаружи.html#е">аватар снаружи, «е»</a>.
+</div>
+
+<h2>Ссылки на пробы</h2>
+<div class="навигация-проб">
+  <a href="#было">как было · зазор 12</a>
+  <a href="#в1">1 · как сейчас</a>
+  <a href="#в2">2 · аватар у края</a>
+  <a href="#в3">3 · колонка аватаров</a>
+  <a href="#личная">личная переписка</a>
+  <a href="#настройка">настройка</a>
+</div>
+
+<!-- Одна и та же лента во всех видах -->
+<template id="лента">
+  <div class="ряд с-аватаром"><div class="пуз" style="--цвет:#4e87ed"><span class="ав фото"><b class="буквы">R</b><i class="мелко">redmi_note</i></span><span class="имя">redmi, Redmi</span>color20<span class="вр">18:31</span></div></div>
+  <div class="ряд"><div class="пуз" style="--цвет:#4e87ed">nafig<span class="вр">19:05</span></div></div>
+  <div class="ряд"><div class="пуз" style="--цвет:#4e87ed">ещё одно подряд<span class="вр">19:06</span></div></div>
+  <div class="ряд с-аватаром"><div class="пуз" style="--цвет:#d9488f"><span class="ав"><b class="буквы">СМ</b><i class="мелко">samsung_a54_marina</i></span><span class="имя">Samsung</span>da, все на месте<span class="вр">17:06</span></div></div>
+  <div class="ряд с-аватаром"><div class="пуз" style="--цвет:#3bb3a0"><span class="ав"><b class="буквы">АК</b><i class="мелко">Анна Ковалёва</i></span><span class="имя">Анна Ковалёва</span>Сообщение подлиннее, чтобы видно было, как узкая лента переносит строки<span class="вр">17:20</span></div></div>
+  <div class="ряд мой"><div class="пуз">trebovat-gruppa-realme<span class="вр">06:44</span></div></div>
+  <div class="ряд мой"><div class="пуз">и ещё моё<span class="вр">06:45</span></div></div>
+</template>
+
+<div class="проба" id="было">
+  <div class="шапка-пробы"><span class="номер">0</span><span class="опис">как было: зазор 12 между всеми сообщениями</span><span class="свет">для сравнения</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез в1"><div class="зона-2"><div class="лента как-было" data-лента></div></div></div><div class="трет">сейчас в приложении</div></div>
+  </div>
+</div>
+
+<div class="проба" id="в1">
+  <div class="шапка-пробы"><span class="номер">1</span><span class="опис">как сейчас — по умолчанию: аватар за скруглением, имя в пузыре</span><span class="свет">зазор 6, над сообщением с аватаром — 12</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез в1"><div class="зона-2"><div class="лента" data-лента></div></div></div><div class="трет">в натуральную величину</div></div>
+    <div class="с-подписью"><div class="увеличено"><div class="окно срез в1"><div class="зона-2"><div class="лента" data-лента></div></div></div></div><div class="трет">увеличено вдвое</div></div>
+  </div>
+</div>
+
+<div class="проба" id="в2">
+  <div class="шапка-пробы"><span class="номер">2</span><span class="опис">аватар у края телефона, 2 точки, поверх полосы (проба «аватар в группе», «д»)</span><span class="свет">пузырь не двигается; имя следом за аватаром</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез в2"><div class="зона-2"><div class="лента" data-лента></div></div></div><div class="трет">в натуральную величину</div></div>
+    <div class="с-подписью"><div class="увеличено"><div class="окно срез в2"><div class="зона-2"><div class="лента" data-лента></div></div></div></div><div class="трет">увеличено вдвое</div></div>
+  </div>
+</div>
+
+<div class="проба" id="в3">
+  <div class="шапка-пробы"><span class="номер">3</span><span class="опис">колонка аватаров слева (проба «аватар снаружи», «е»): 2 точки слева и справа, низом к низу первого пузыря серии</span><span class="свет">имени в пузыре нет; в квадрате — мелкий текст из «Отображать как»; есть картинка — только она</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез в3"><div class="зона-2"><div class="лента" data-лента></div></div></div><div class="трет">в натуральную величину</div></div>
+    <div class="с-подписью"><div class="увеличено"><div class="окно срез в3"><div class="зона-2"><div class="лента" data-лента></div></div></div></div><div class="трет">увеличено вдвое: имя переносится по пробелу («Анна / Ковалёва»), длинный ник без пробелов — по знакам; больше трёх строк — обрезается</div></div>
+  </div>
+</div>
+
+<div class="проба" id="личная">
+  <div class="шапка-пробы"><span class="номер">Л</span><span class="опис">личная переписка: зазор тоже 6</span><span class="свет">аватаров нет — половинный зазор между всеми</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез"><div class="зона-2"><div class="лента">
+      <div class="ряд"><div class="пуз" style="border-left-width:1px;border-left-color:var(--рамка);padding-left:14px">Привет, ты где?<span class="вр">10:01</span></div></div>
+      <div class="ряд"><div class="пуз" style="border-left-width:1px;border-left-color:var(--рамка);padding-left:14px">Позвони, как сможешь<span class="вр">10:02</span></div></div>
+      <div class="ряд мой"><div class="пуз">Уже еду<span class="вр">10:05</span></div></div>
+      <div class="ряд мой"><div class="пуз">Буду через 10 минут<span class="вр">10:05</span></div></div>
+    </div></div></div><div class="трет">зазор 6</div></div>
+  </div>
+</div>
+
+<div class="проба" id="настройка">
+  <div class="шапка-пробы"><span class="номер">Н</span><span class="опис">«Вид» в «Социуме» → «Отображать пользователя как» → новый раздел «Как отобразить»</span><span class="свет">выбор один на все сообщества</span></div>
+  <div class="срезы">
+    <div class="с-подписью"><div class="окно срез"><div class="зона-1 подокно"><span class="икона">‹</span><div class="имя-окна тянуть">Вид</div></div><div class="зона-2 меню">
+      <div class="гр">Отображать пользователя как</div>
+      <div class="стр"><span class="точка"></span><div class="сер"><div class="наз">Имя</div><div class="что">своё, иначе из телефонной книги</div></div></div>
+      <div class="стр"><span class="точка"></span><div class="сер"><div class="наз">Имя пользователя</div><div class="что">как он сам себя назвал</div></div></div>
+      <div class="стр"><span class="точка да"></span><div class="сер"><div class="наз да">Ник</div><div class="что">если человек его задал</div></div></div>
+      <div class="стр"><span class="точка"></span><div class="сер"><div class="наз">Телефон</div><div class="что">номер из книги</div></div></div>
+      <div class="гр">Как отобразить</div>
+      <div class="стр"><span class="точка да"></span><div class="сер"><div class="наз да">Как сейчас</div><div class="что">аватар за скруглением, имя в пузыре</div></div></div>
+      <div class="стр"><span class="точка"></span><div class="сер"><div class="наз">Аватар у края</div><div class="что">аватар у края экрана поверх полосы, имя в пузыре</div></div></div>
+      <div class="стр"><span class="точка"></span><div class="сер"><div class="наз">Колонка аватаров</div><div class="что">аватар слева от сообщений, имя — мелко в аватаре; лента уже</div></div></div>
+    </div></div><div class="трет">«Как отобразить» — под «Отображать пользователя как»; названия вариантов — предложение</div></div>
+  </div>
+</div>
+
+<script>
+  // Лента одна на все виды: правка в одном месте — видна во всех.
+  const t = document.getElementById('лента');
+  document.querySelectorAll('[data-лента]').forEach(z => z.appendChild(t.content.cloneNode(true)));
+</script>
+
+</div>
