@@ -4564,6 +4564,9 @@ private fun Settings(
                 draft = problemDraft, photos = problemPhotos, kind = problemKind,
             )
 
+            // Предложение — та же отправка с очередью, но без журнала (заказчик 2026-10-07).
+            SettingsItem.SUGGEST -> Suggest(problemFacts, reporting, scope, platform)
+
             SettingsItem.STORAGE -> Storage(diaryPolicy, callsLog, callsState)
 
             // Испытательный режим звонков. Пункт временный и уйдёт вместе со стендом —
@@ -4923,6 +4926,72 @@ private fun Problem(
         },
     )
 }
+
+/**
+ * «Предложить изменения» — вид `suggestion`, текст и фото. Журнала и снимка состояния нет; версия,
+ * модель, система и ник — из [ProblemFacts] (заказчик 2026-10-07: «пригодится»).
+ */
+@Composable
+private fun Suggest(
+    facts: ProblemFacts,
+    reporting: Reporting,
+    scope: kotlinx.coroutines.CoroutineScope,
+    platform: Platform,
+) {
+    val store = remember {
+        io.tima.feature.shell.SuggestStore(
+            sender = { text, photos ->
+                val result = reporting.send(
+                    ProblemPost(
+                        kind = SUGGESTION_KIND,
+                        text = text,
+                        origin = "",
+                        platform = platform.packageKind.ifBlank { platform.server },
+                        model = facts.model,
+                        os = facts.os,
+                        build = facts.build,
+                        stream = facts.stream,
+                        nickname = facts.nickname,
+                        log = "",
+                        images = photos.map { io.tima.core.network.ProblemImagePost.of(it.mime, it.bytes) },
+                    ),
+                )
+                when (result) {
+                    is ProblemSendResult.Sent -> SendOutcome.Sent(result.number)
+                    is ProblemSendResult.NoConnection -> SendOutcome.Queued
+                    is ProblemSendResult.Refused ->
+                        if (result.status == 0) SendOutcome.Queued
+                        else SendOutcome.Refused(io.tima.core.words.CurrentWords.value.suggest.refused(result.status))
+                }
+            },
+            scope = scope,
+        )
+    }
+    val state by store.state.collectAsState()
+    val pickPhoto = io.tima.core.media.rememberImagePicker { picked ->
+        if (picked == null) return@rememberImagePicker
+        scope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            val jpeg = io.tima.core.media.reportJpeg(picked.bytes)
+            store.addPhoto(jpeg?.let { io.tima.feature.shell.ProblemPhoto("image/jpeg", it) })
+        }
+    }
+    io.tima.feature.shell.SuggestScreen(
+        state = state,
+        onText = store::changedText,
+        onSend = store::send,
+        onAddPhoto = pickPhoto,
+        onRemovePhoto = store::removePhoto,
+        photoPreview = { photo ->
+            val picture = remember(photo) { decodeImage(photo.bytes) }
+            picture?.let {
+                androidx.compose.foundation.Image(bitmap = it, contentDescription = null, modifier = Modifier.height(PHOTO_PREVIEW))
+            }
+        },
+    )
+}
+
+/** Вид предложения на сервере — `problemKindSuggestion` в `server/internal/api/problems.go`. */
+private const val SUGGESTION_KIND = "suggestion"
 
 /** Высота снимка в форме отчёта: видно, что уходит, и не заслоняет форму. */
 private val PHOTO_PREVIEW = 160.dp

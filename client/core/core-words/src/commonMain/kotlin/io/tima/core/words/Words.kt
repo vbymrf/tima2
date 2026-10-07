@@ -51,6 +51,7 @@ interface Words {
     val pin: PinWords
     /** Вид группы — где аватар автора (2026-10-07). */
     val groupLook: GroupLookWords
+    val suggest: SuggestWords
     val chat: ChatWords
     val call: CallWords
 
@@ -379,6 +380,7 @@ interface SettingsListWords {
     val itemBlogger: String
     val itemQuestions: String
     val itemProblem: String
+    val itemSuggest: String
     val itemUpdate: String
     val itemAbout: String
 }
@@ -2745,6 +2747,7 @@ object RussianWords : Words {
         override val itemBlogger = "Окна блогера"
         override val itemQuestions = "Частые вопросы"
         override val itemProblem = "Сообщить о проблеме"
+        override val itemSuggest = "Предложить изменения"
         override val itemUpdate = "Обновление"
         override val itemAbout = "О приложении"
     }
@@ -3452,6 +3455,7 @@ object RussianWords : Words {
 
     override val pin: PinWords = RussianPinWords
     override val groupLook: GroupLookWords = RussianGroupLookWords
+    override val suggest: SuggestWords = RussianSuggestWords
 
     override val auth = object : AuthWords {
         override fun build(version: String) = "сборка $version"

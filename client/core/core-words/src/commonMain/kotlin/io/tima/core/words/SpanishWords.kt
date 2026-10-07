@@ -621,6 +621,7 @@ object SpanishWords : Words {
         override val itemBlogger = "Ventanas de blogger"
         override val itemQuestions = "Preguntas frecuentes"
         override val itemProblem = "Informar de un problema"
+        override val itemSuggest = "Proponer cambios"
         override val itemUpdate = "Actualización"
         override val itemAbout = "Acerca de la aplicación"
     }
@@ -1310,6 +1311,7 @@ object SpanishWords : Words {
 
     override val pin: PinWords = SpanishPinWords
     override val groupLook: GroupLookWords = SpanishGroupLookWords
+    override val suggest: SuggestWords = SpanishSuggestWords
 
     override val auth = object : AuthWords {
         override fun build(version: String) = "compilación $version"
