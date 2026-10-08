@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -242,6 +243,9 @@ fun CallScreen(
             // дорожку, а не убирает её, и окошко с замершим кадром висело (заказчик
             // 2026-10-08: «отключил камеру свою — окно не исчезает»).
             val mine = localVideo?.takeIf { state.cameraOn }
+            // Камеру выключили — обмен забыт: включённая снова, она появляется окошком, а не
+            // сразу во весь кадр (живая проверка realme 2026-10-08).
+            LaunchedEffect(mine == null) { if (mine == null) swapped = false }
             // Нажали на своё окошко — меняется местами с собеседником (заказчик 2026-10-08).
             // Собеседник без видео — меняется с его аватаром: своё крупно, аватар в окошке.
             val swap = swapped && mine != null
