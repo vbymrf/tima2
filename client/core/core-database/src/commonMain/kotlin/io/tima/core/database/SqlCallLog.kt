@@ -54,6 +54,7 @@ class SqlCallLog(
                     createdAt = r.createdAt,
                     answeredAt = r.answeredAt,
                     endedAt = r.endedAt,
+                    groupId = r.groupId,
                     callId = r.callId,
                 )
                 db.callLogQueries.insert(
@@ -66,6 +67,7 @@ class SqlCallLog(
                     created_at = r.createdAt,
                     answered_at = r.answeredAt,
                     ended_at = r.endedAt,
+                    group_id = r.groupId,
                 )
             }
         }
@@ -102,5 +104,6 @@ class SqlCallLog(
         answeredAt = row.answered_at,
         endedAt = row.ended_at,
         seen = row.seen != 0L,
+        groupId = row.group_id,
     )
 }

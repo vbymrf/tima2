@@ -53,7 +53,11 @@ CREATE TABLE call_log (
     --
     -- Из-за него же обновление пишется двумя запросами, а не `INSERT OR REPLACE`: тот
     -- сносит строку целиком и отметку вместе с ней.
-    seen         INTEGER NOT NULL DEFAULT 0
+    seen         INTEGER NOT NULL DEFAULT 0,
+    -- Группа группового звонка (схема 18, заказчик 2026-10-08). Пусто — звонок личный.
+    -- Последним столбцом: так его добавляет миграция 17, и свежая схема обязана с ней
+    -- совпасть.
+    group_id     TEXT    NOT NULL DEFAULT ''
 );
 
 -- Журнал читается только в одном порядке — новые сверху.
@@ -74,14 +78,14 @@ update:
 UPDATE call_log SET
     video = :video, state = :state, initiator_id = :initiatorId, peer_id = :peerId,
     ended_by = :endedBy, created_at = :createdAt, answered_at = :answeredAt,
-    ended_at = :endedAt
+    ended_at = :endedAt, group_id = :groupId
 WHERE call_id = :callId;
 
 insert:
 INSERT OR IGNORE INTO call_log (
     call_id, video, state, initiator_id, peer_id, ended_by,
-    created_at, answered_at, ended_at
-) VALUES (?,?,?,?,?,?,?,?,?);
+    created_at, answered_at, ended_at, group_id
+) VALUES (?,?,?,?,?,?,?,?,?,?);
 
 -- ── Счётчик пропущенных ─────────────────────────────────────────────────────
 --

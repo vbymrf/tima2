@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -132,6 +133,11 @@ fun CallScreen(
      * собеседника. `null` — звонок на двоих.
      */
     group: GroupStage? = null,
+    /**
+     * Собеседника нет в книге (заказчик 2026-10-08): перед именем — «Незнакомый» светлым
+     * оранжевым, как пропущенный; без имени и ника — одно это слово.
+     */
+    stranger: Boolean = false,
 ) {
     val colors = Tima.colors
     val words = Tima.words.call
@@ -215,7 +221,24 @@ fun CallScreen(
                     } else {
                         Avatar(letters = letters(peer), size = AvatarSize.Big)
                     }
-                    Name(peer.ifBlank { Tima.words.chat.nameless })
+                    if (stranger) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Caption(
+                                words.stranger,
+                                modifier = Modifier.testTag(CALL_STRANGER_TAG),
+                                fontSize = TimaType.sz4,
+                                weight = FontWeight.Bold,
+                                color = colors.activity,
+                                lineOne = true,
+                            )
+                            if (peer.isNotBlank()) Name(peer)
+                        }
+                    } else {
+                        Name(peer.ifBlank { Tima.words.chat.nameless })
+                    }
                     group?.creator?.let { Secondary(it) }
                     Secondary(under(state, incoming, seconds, peerRinging))
 
@@ -540,3 +563,6 @@ private fun letters(peer: String): String = peer.trim()
  */
 private val PIP_WIDTH = 96.dp
 private val PIP_HEIGHT = 128.dp
+
+/** Метка слова «Незнакомый» перед именем собеседника. */
+const val CALL_STRANGER_TAG: String = "call:stranger"

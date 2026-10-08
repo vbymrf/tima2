@@ -297,6 +297,12 @@ class EventStream(
                             onCallsTop(decision.cts)?.let { send(Frame.Text(protocol.callAckFrame(it))) }
                     }
                 }
+                // Сервер закрыл сам. Отказ по токену — свой исход: его лечит обновление
+                // токена, а не пауза (см. [EventStreamProtocol.tokenRefused]).
+                if (decided == null) {
+                    val reason = runCatching { closeReason.await() }.getOrNull()
+                    if (protocol.tokenRefused(reason?.code, reason?.message)) decided = StreamOutcome.TokenRefused
+                }
             }
             decided ?: StreamOutcome.Closed(last)
         } catch (e: Throwable) {
@@ -328,6 +334,9 @@ sealed interface StreamOutcome {
 
     /** Сервер закрыл канал сам. Обычный путь: обновление сервера, перезапуск. */
     data class Closed(val lastCursor: Long?) : StreamOutcome
+
+    /** Сервер не принял токен: обновить его и подниматься сразу, без паузы. */
+    data object TokenRefused : StreamOutcome
 
     /** Обрыв связи. Пауза берётся из состояния связи, снятого в живой сети v1. */
     data class Disconnected(val link: LinkState, val lastCursor: Long?, val cause: String = "") : StreamOutcome

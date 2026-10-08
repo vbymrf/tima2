@@ -141,7 +141,8 @@ class StageTest {
         // читаются как смена цвета. Что именно нарисовано внутри полосы, здесь не важно.
         val RAIL: Color = TimaColors.light.activity
         val COLUMN: Color = TimaColors.light.confirmed
-        val MAIN: Color = TimaColors.light.my
+        // Не `my`: тот с 2026-10-08 полупрозрачный, и сплошной полосой снимок его не покажет.
+        val MAIN: Color = TimaColors.light.alarm
         val PANEL: Color = TimaColors.light.navigation
         val CLUSTER: Color = TimaColors.light.emotion
 

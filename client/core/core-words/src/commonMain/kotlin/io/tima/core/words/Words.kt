@@ -1173,6 +1173,12 @@ interface CallWords {
      */
     val peerOffline: String
 
+    /**
+     * Звонит или звонят тому, кого нет в книге (заказчик 2026-10-08): слово стоит перед
+     * именем или ником светлым оранжевым, как пропущенный.
+     */
+    val stranger: String
+
     /** Набор публикации сменили посреди разговора: связь прервалась не сама. */
     fun presetApplied(name: String): String
 
@@ -3080,7 +3086,7 @@ object RussianWords : Words {
         override val showPersonAs = "Отображать пользователя как"
         override val name = "Имя"
         override val nameAbout = "своё, иначе из телефонной книги"
-        override val userName = "Имя пользователя"
+        override val userName = "#Имя пользователя"
         override val userNameAbout = "как он сам себя назвал"
         override val nickname = "Ник"
         override val nicknameAbout = "если человек его задал"
@@ -3226,6 +3232,7 @@ object RussianWords : Words {
         override val presetRefused =
             "Набор не применён: сервер не дал войти заново. Разговор продолжается прежним набором"
         override val peerOffline = "Телефон собеседника не на связи — звонок придёт, когда он появится"
+        override val stranger = "Незнакомый"
         override val noAnswer = "Не дозвонились: никто не ответил"
         override val peerBusy = "Собеседник занят другим звонком"
         override val ringing = "Звонит…"
@@ -3951,7 +3958,7 @@ object RussianWords : Words {
 
         override val all = "Все"
         override val fromBook = "Контактов"
-        override val unknown = "Неизвестные"
+        override val unknown = "Незнакомые"
         override val missed = "Пропущенные"
 
         override val common = "Общая"

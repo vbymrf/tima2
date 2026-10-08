@@ -8,6 +8,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +27,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Appearance
 import io.tima.core.ui.Button
@@ -469,7 +476,20 @@ private fun Editor(
             text = problem?.let { words.appearance.colorTrouble(it) } ?: words.appearance.alphaHint,
         )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+        Row(
+            modifier = Modifier.height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        ) {
+            // Образец набранного цвета — квадрат со стороной в высоту кнопки, слева от
+            // «Применить» (заказчик 2026-10-08): видно, что применится, до нажатия.
+            // Непонятное число — пустой квадрат в рамке.
+            Box(
+                Modifier.fillMaxHeight().aspectRatio(1f)
+                    .clip(RoundedCornerShape(TimaShapes.smallRadius))
+                    .background(ready ?: Color.Transparent)
+                    .border(1.dp, Tima.colors.line, RoundedCornerShape(TimaShapes.smallRadius))
+                    .testTag(CHOSEN_SAMPLE_TAG),
+            )
             // Гаснет, а не ругается после нажатия: запрет виден до того, как в него
             // упёрлись. Ровно поэтому же кнопка не «Готово»: она применяет, и называть
             // её надо тем, что она делает.
@@ -534,3 +554,6 @@ private fun sampleOf(choice: ThemeChoice, appearance: Appearance) = when (choice
     ThemeChoice.Dark -> TimaColors.dark.surface
     ThemeChoice.Custom -> appearance.custom.navigation
 }
+
+/** Метка образца набранного цвета слева от «Применить». */
+const val CHOSEN_SAMPLE_TAG: String = "appearance:chosen"

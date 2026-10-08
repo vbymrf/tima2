@@ -9,6 +9,7 @@ import io.tima.core.ui.Stage
 import io.tima.testui.FOREIGN_BACKGROUND
 import io.tima.testui.bothThemes
 import io.tima.testui.capture
+import io.tima.core.ui.TimaColors
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -242,6 +243,20 @@ class CallScreenTest {
         assertTrue(full.difference(plain) > 0.0, "ряд кнопок не перестроился под четыре")
     }
 
+    @Test
+    fun незнакомый_помечен_оранжевым_перед_именем() {
+        // Заказчик 2026-10-08: кого нет в книге — «Незнакомый» перед именем или ником светлым
+        // оранжевым, как пропущенный. Знакомого то же окно этим цветом не метит.
+        val stranger = capture("звонок-незнакомый", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connecting), incoming = true, stranger = true)
+        }
+        val known = capture("звонок-знакомый", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connecting), incoming = true)
+        }
+        assertTrue(stranger.has(TimaColors.light.activity, tolerance = 0.06), "«Незнакомый» не оранжевый")
+        assertTrue(!known.has(TimaColors.light.activity, tolerance = 0.06), "знакомый помечен оранжевым")
+    }
+
     private companion object {
         const val WIDTH = 380
         const val HEIGHT = 800
@@ -256,6 +271,7 @@ class CallScreenTest {
             events: List<CallEvent> = emptyList(),
             onRemoteVideo: ((Boolean) -> Unit)? = null,
             canAccept: Boolean = true,
+            stranger: Boolean = false,
         ) = Stage(
             column = {
                 CallScreen(
@@ -272,6 +288,7 @@ class CallScreenTest {
                     onClose = onClose,
                     events = events,
                     onRemoteVideo = onRemoteVideo,
+                    stranger = stranger,
                 )
             },
         )

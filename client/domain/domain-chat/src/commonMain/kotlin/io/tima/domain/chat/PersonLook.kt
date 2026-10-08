@@ -40,11 +40,19 @@ data class PersonLook(
 
 fun ChatPerson.field(field: PersonField): String? = when (field) {
     PersonField.Name -> name
-    PersonField.UserName -> userName
+    // Имя, которым человек назвал себя сам, — всегда с «#» (заказчик 2026-10-08), как ник с
+    // «@»: так его отличают от имени, данного мной.
+    PersonField.UserName -> selfName(userName)
     // Ник — всегда с «@» (заказчик 2026-09-18): так его отличают от имени.
     PersonField.Nick -> nick?.takeIf { it.isNotBlank() }?.let { "@" + it.removePrefix("@") }
     PersonField.Phone -> phone
 }?.takeIf { it.isNotBlank() }
+
+/**
+ * Имя, которым человек назвал себя сам, — с «#» впереди (заказчик 2026-10-08). Везде, где
+ * это имя показывается, — одним правилом, как «@» у ника. `null` — имени нет.
+ */
+fun selfName(name: String?): String? = name?.trim()?.removePrefix("#")?.trim()?.takeIf { it.isNotEmpty() }?.let { "#$it" }
 
 /**
  * Строка о человеке по «Виду». [among] — какие поля вообще допускаются в этой строке:

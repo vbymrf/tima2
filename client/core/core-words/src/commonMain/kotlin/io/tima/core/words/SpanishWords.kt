@@ -937,7 +937,7 @@ object SpanishWords : Words {
         override val showPersonAs = "Mostrar a la persona como"
         override val name = "Nombre"
         override val nameAbout = "el suyo, si no el de la agenda"
-        override val userName = "Nombre de usuario"
+        override val userName = "#Nombre de usuario"
         override val userNameAbout = "como se llamó a sí mismo"
         override val nickname = "Apodo"
         override val nicknameAbout = "si la persona lo puso"
@@ -1082,6 +1082,7 @@ object SpanishWords : Words {
         override val presetRefused =
             "Conjunto no aplicado: el servidor no permitió volver a entrar. La llamada sigue con el anterior"
         override val peerOffline = "El teléfono de la otra persona está sin conexión: la llamada llegará cuando vuelva"
+        override val stranger = "Desconocido"
         override val noAnswer = "Sin respuesta"
         override val peerBusy = "La otra persona está en otra llamada"
         override val ringing = "Sonando…"

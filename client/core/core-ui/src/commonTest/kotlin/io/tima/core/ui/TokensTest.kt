@@ -133,8 +133,10 @@ class TokensTest {
 
     @Test
     fun фоны_сообщений_читаются_в_обеих_темах() {
-        // Светлая: мои 11,42 : 1, автор 21 : 1 — оба с чёрным текстом.
-        close(11.42, TimaContrast.ratio(TimaColors.light.text, TimaColors.light.my))
+        // Светлая: мои — салатовый на пятой части поверх фона (заказчик 2026-10-08), автор
+        // 21 : 1 — оба с чёрным текстом.
+        val mine = TimaContrast.overlay(TimaColors.light.my, TimaColors.light.surface)
+        close(18.28, TimaContrast.ratio(TimaColors.light.text, mine), tolerance = 0.1)
         close(21.0, TimaContrast.ratio(TimaColors.light.text, TimaColors.light.author))
 
         // Тёмная: те же роли, значения опущены по серой лестнице, текст белый.
@@ -161,7 +163,8 @@ class TokensTest {
         // меня». Если однажды поменяется — пусть меняется явно, а не как побочный эффект
         // правки серой лестницы.
         assertTrue(
-            brightness(TimaColors.light.author) > brightness(TimaColors.light.my),
+            brightness(TimaColors.light.author) >
+                brightness(TimaContrast.overlay(TimaColors.light.my, TimaColors.light.surface)),
             "светлая: автор обязан быть светлее моих",
         )
         assertTrue(

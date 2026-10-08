@@ -284,6 +284,28 @@ class GroupCallDesk(
         host.joinGroup(callId, groupId, title, video = false)
     }
 
+    /**
+     * Кнопка строки группового звонка во вкладке «Звонки» и «Повторить звонок» в его чате
+     * (заказчик 2026-10-08): автору — повторить звонок в той же группе, участнику — войти в
+     * идущий. Не идёт — [onNote] со словами, окно звонка не открывается.
+     */
+    fun again(groupId: String, title: String, video: Boolean, mine: Boolean, onNote: (String) -> Unit) {
+        if (mine) {
+            host.repeatGroup(groupId, title, video)
+            onShowCall()
+            return
+        }
+        scope.launch {
+            val call = calls.groupCall(groupId)?.call
+            if (call == null) {
+                onNote(words().groupCall.notGoing)
+                return@launch
+            }
+            join(call.callId, groupId, title)
+            onShowCall()
+        }
+    }
+
     /** Приглашение в личном чате: что с его звонком — спросить один раз за показ. */
     fun inviteOf(groupId: String, title: String): CallInvite {
         invites[groupId]?.let { return it }

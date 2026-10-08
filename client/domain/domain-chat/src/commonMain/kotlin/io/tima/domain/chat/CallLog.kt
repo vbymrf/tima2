@@ -57,7 +57,15 @@ data class CallRecord(
     /** 0 — звонок ещё числится идущим. */
     val endedAt: Long = 0,
     val seen: Boolean = false,
+    /**
+     * Группа группового звонка (заказчик 2026-10-08: групповые — во вкладке «Звонки» строкой
+     * с «ГЗ»). Пусто — звонок личный. У группового [peerId] пуст, а [initiatorId] — создатель.
+     */
+    val groupId: String = "",
 ) {
+    /** Групповой звонок: строка с «ГЗ», нажатие ведёт в чат звонка. */
+    val group: Boolean get() = groupId.isNotEmpty()
+
     /** Собеседник — всегда «тот, другой», кем бы я ни был в этой записи. */
     fun other(me: String): String = if (initiatorId == me) peerId else initiatorId
 

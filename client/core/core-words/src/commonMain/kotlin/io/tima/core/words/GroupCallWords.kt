@@ -154,6 +154,14 @@ interface GroupCallWords {
     val removedCantJoin: String
     val created: String
     val createFailed: String
+
+    // ── Строка группового звонка во вкладке «Звонки» и в его чате (заказчик 2026-10-08) ──
+    /** Автору — повторить звонок в той же группе: в чате звонка и кнопкой в строке. */
+    val repeat: String
+    /** Чата звонка больше нет (временная группа удалена) — нажатие на строку или кнопку. */
+    val chatDeleted: String
+    /** Участнику: звонок сейчас не идёт — войти не во что. */
+    val notGoing: String
 }
 
 object RussianGroupCall : GroupCallWords {
@@ -287,6 +295,9 @@ object RussianGroupCall : GroupCallWords {
     override val removedCantJoin = "Создатель удалил вас из этого звонка"
     override val created = "Чат группового звонка создан — позвонить можно из него"
     override val createFailed = "Чат не создан — нет связи с сервером"
+    override val repeat = "Повторить звонок"
+    override val chatDeleted = "Чат удалён"
+    override val notGoing = "Звонок сейчас не идёт"
 }
 
 object EnglishGroupCall : GroupCallWords {
@@ -420,6 +431,9 @@ object EnglishGroupCall : GroupCallWords {
     override val removedCantJoin = "The creator removed you from this call"
     override val created = "The group call chat is created — call from it"
     override val createFailed = "The chat was not created — no connection to the server"
+    override val repeat = "Call again"
+    override val chatDeleted = "The chat was deleted"
+    override val notGoing = "The call is not going on now"
 }
 
 object SpanishGroupCall : GroupCallWords {
@@ -553,4 +567,7 @@ object SpanishGroupCall : GroupCallWords {
     override val removedCantJoin = "El creador le quitó de esta llamada"
     override val created = "El chat de la llamada grupal está creado — llame desde él"
     override val createFailed = "El chat no se creó — sin conexión con el servidor"
+    override val repeat = "Repetir la llamada"
+    override val chatDeleted = "El chat fue eliminado"
+    override val notGoing = "La llamada no está en curso"
 }

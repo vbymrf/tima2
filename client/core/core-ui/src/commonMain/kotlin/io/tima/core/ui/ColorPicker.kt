@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,9 +61,27 @@ fun ColorPicker(
     val (hue0, saturation, value) = color.hueSatVal()
     // Цвет полосы — своя память: у чёрного и белого оттенка нет, и считать его
     // из выбранного значило бы ронять ползунок в ноль при каждом заходе в угол.
-    var hue by remember { mutableStateOf(hue0) }
+    var kept by remember { mutableStateOf(hue0) }
+    // Последний цвет, выбранный здесь же. Пришёл другой — его поставили извне (образец
+    // проекта, набранное число), и полоса обязана встать на его оттенок: до 2026-10-08
+    // она оставалась на прежнем, квадрат рисовался старым оттенком, и следующее касание
+    // выбирало не тот цвет (заказчик).
+    var sent by remember { mutableStateOf(color) }
+    val outside = !sameColor(color, sent)
+    val hue = if (outside && saturation > GREY && value > GREY) hue0 else kept
+    SideEffect {
+        if (outside) {
+            kept = hue
+            sent = color
+        }
+    }
 
-    fun pick(s: Float, v: Float) = onPick(Color.hsv(hue, s, v, color.alpha))
+    fun pick(s: Float, v: Float, h: Float = hue) {
+        val picked = Color.hsv(h, s, v, color.alpha)
+        kept = h
+        sent = picked
+        onPick(picked)
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -94,8 +114,7 @@ fun ColorPicker(
                 .clip(RoundedCornerShape(TimaShapes.circle))
                 .background(Brush.horizontalGradient(RAINBOW), RoundedCornerShape(TimaShapes.circle))
                 .follow { at, size ->
-                    hue = (at.x / size.first).coerceIn(0f, 1f) * 360f
-                    pick(max(saturation, LEAST), max(value, LEAST))
+                    pick(max(saturation, LEAST), max(value, LEAST), (at.x / size.first).coerceIn(0f, 1f) * 360f)
                 },
         ) {
             marker(Offset(hue / 360f * size.width, size.height / 2))
@@ -110,15 +129,21 @@ fun ColorPicker(
  * вести пальцем, второй срабатывает только после порога сдвига, то есть простое касание
  * теряется. Ожидание нажатия с последующей протяжкой покрывает оба случая сразу.
  */
-private fun Modifier.follow(report: (Offset, Pair<Float, Float>) -> Unit): Modifier = pointerInput(Unit) {
-    awaitEachGesture {
-        val measures = size.width.toFloat() to size.height.toFloat()
-        val down = awaitFirstDown()
-        report(down.position, measures)
-        down.consume()
-        drag(down.id) { change ->
-            report(change.position, measures)
-            change.consume()
+@Composable
+private fun Modifier.follow(report: (Offset, Pair<Float, Float>) -> Unit): Modifier {
+    // Жест живёт дольше одного кадра, а оттенок, насыщенность и яркость меняются с каждым
+    // выбором: без свежей ручки жест звал бы ту, что была при первом показе палитры.
+    val current by rememberUpdatedState(report)
+    return pointerInput(Unit) {
+        awaitEachGesture {
+            val measures = size.width.toFloat() to size.height.toFloat()
+            val down = awaitFirstDown()
+            current(down.position, measures)
+            down.consume()
+            drag(down.id) { change ->
+                current(change.position, measures)
+                change.consume()
+            }
         }
     }
 }
@@ -173,6 +198,9 @@ private val MARKER = 9.dp
  * квадратом.
  */
 private const val LEAST = 0.15f
+
+/** Ниже этого у цвета нет своего оттенка — серый, чёрный, белый: полоса остаётся где была. */
+private const val GREY = 0.02f
 
 private val RAINBOW: List<Color> = (0..6).map { Color.hsv(it * 60f % 360f, 1f, 1f) }
 

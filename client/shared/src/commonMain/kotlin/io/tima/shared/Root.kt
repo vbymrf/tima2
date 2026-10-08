@@ -53,6 +53,8 @@ import io.tima.domain.chat.Contact
 import io.tima.domain.chat.ChatFaces
 import io.tima.feature.group.InviteCandidate
 import io.tima.domain.chat.PersonLook
+import io.tima.domain.chat.PersonField
+import io.tima.domain.chat.field
 import io.tima.domain.chat.line
 import io.tima.domain.chat.CallOutcome
 import io.tima.domain.chat.CallRecord
@@ -1568,7 +1570,7 @@ private fun App(
             },
             rememberInvited = { groupId, who -> runCatching { environment.settings.put(INVITED_PREFIX + groupId, who.joinToString(",")) } },
             myTitle = {
-                peopleCards[session.userId]?.let { me -> me.nick?.takeIf { it.isNotBlank() }?.let { "@$it" } ?: me.userName ?: me.name }
+                peopleCards[session.userId]?.let { me -> me.nick?.takeIf { it.isNotBlank() }?.let { "@$it" } ?: io.tima.domain.chat.selfName(me.userName) ?: me.name }
             },
         )
     }
@@ -1614,6 +1616,27 @@ private fun App(
     val personOfBook: (BookEntry) -> ChatPerson = { entry ->
         entry.userId?.let { people.want(listOf(it)) }
         (entry.userId?.let { peopleCards[it] } ?: ChatPerson()).withBookName(entry.name, entry.phone)
+    }
+
+    /**
+     * Человек за идентификатором — **одним правилом** для вкладки «Звонки» и окна 0
+     * (заказчик 2026-10-08): карточка сервера (как назвал себя, ник) и имя из книги поверх —
+     * то же, что у «Чатов». До этого окно 0 брало только карточку, а «Звонки» — только книгу,
+     * и незнакомый в журнале звался «Без имени».
+     */
+    val personOfId: (String) -> ChatPerson = { id ->
+        people.want(listOf(id))
+        val entry = bookStateForChats.all.firstOrNull { it.userId == id }
+        (peopleCards[id] ?: ChatPerson()).withBookName(entry?.name, entry?.phone)
+    }
+
+    // Короткое слово во вкладке «Звонки»: «Чат удалён», «Звонок сейчас не идёт» — и гаснет.
+    var callsNote by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(callsNote) {
+        if (callsNote != null) {
+            kotlinx.coroutines.delay(CALLS_NOTE_MS)
+            callsNote = null
+        }
     }
 
     val personOfChat: (ChatSummary) -> ChatPerson? = { chat ->
@@ -1802,7 +1825,7 @@ private fun App(
         val card = peopleCards[id]
         bookStateForChats.all.firstOrNull { it.userId == id }?.name?.takeIf { it.isNotBlank() }
             ?: card?.name?.takeIf { it.isNotBlank() }
-            ?: card?.userName?.takeIf { it.isNotBlank() }
+            ?: io.tima.domain.chat.selfName(card?.userName)
             ?: card?.nick?.takeIf { it.isNotBlank() }?.let { "@$it" }
     }
     val creatorFaceOf: (String) -> ImageBitmap? = { id ->
@@ -2817,6 +2840,18 @@ private fun App(
             )
         },
         column = {
+            // Собеседник окна 0: (незнакомый ли, как назвать). `null` — звонок групповой
+            // или собеседник не известен: тогда название из CallHost.
+            val callPeer: Pair<Boolean, String>? = callHost.peerUserId.takeIf { window == Window.Call && it.isNotEmpty() && groupStage == null }?.let { id ->
+                val who = personOfId(id)
+                val look = bookStateForChats.view.look()
+                if (bookStateForChats.all.none { it.userId == id }) {
+                    true to look.order.filter { it == PersonField.UserName || it == PersonField.Nick }
+                        .firstNotNullOfOrNull { who.field(it) }.orEmpty()
+                } else {
+                    false to (who.line(look, PERSON_FIRST_LINE) ?: callHost.peer)
+                }
+            }
             when (window) {
                 // Окно 0 — звонок. Временное: пока идёт разговор. Экран чистый, всю
                 // работу держит CallHost.
@@ -2824,9 +2859,12 @@ private fun App(
                     state = callHost.state,
                     // Окно, поднятое строкой звонка, открывается раньше, чем приезжают
                     // карточки людей, — имя подтягивается, как только карточка есть.
-                    peer = callHost.peer.ifBlank {
-                        peopleCards[callHost.peerUserId]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE).orEmpty()
-                    },
+                    // Имя собеседника — тем же правилом, что у «Контактов» и «Звонков»
+                    // (заказчик 2026-10-08): книга поверх карточки, по «Виду». Кого нет в
+                    // книге — «Незнакомый» и первое из имени или ника. Групповой звонок
+                    // зовётся своим названием.
+                    peer = callPeer?.second ?: callHost.peer,
+                    stranger = callPeer?.first == true,
                     incoming = callHost.incoming,
                     peerRinging = callHost.delivered,
                     seconds = callHost.seconds,
@@ -2920,12 +2958,7 @@ private fun App(
                     callsState = callsState,
                     // Имя и лицо в журнале — тем же механизмом, что везде (Д14): сервер
                     // знает только `user_id`, а «Аня Борисова» живёт в книге.
-                    personOfCall = { record ->
-                        val id = record.other(session.userId)
-                        bookState.all.firstOrNull { it.userId == id }
-                            ?.let { personOfBook(it) }
-                            ?: ChatPerson()
-                    },
+                    personOfCall = { record -> personOfId(record.other(session.userId)) },
                     faceOfCall = { record ->
                         val id = record.other(session.userId)
                         people.wantFace(id)
@@ -2934,13 +2967,45 @@ private fun App(
                     // Повтор звонит ТЕМ ЖЕ видом, каким звонили тогда (Ж6). Кнопка,
                     // молча звонящая голосом вместо видео, выглядит поломкой ровно один
                     // раз — а потом ей перестают верить.
+                    // Строка группового звонка (заказчик 2026-10-08): чат звонка, его создатель.
+                    groupCallOf = { record ->
+                        if (!record.group) {
+                            null
+                        } else {
+                            io.tima.feature.chat.GroupCallLine(
+                                title = listState.chats.firstOrNull { it.chatId == record.groupId }?.title
+                                    ?: wordsNow.groupCall.title,
+                                creator = creatorNameOf(record.initiatorId),
+                                face = creatorFaceOf(record.initiatorId),
+                            )
+                        }
+                    },
+                    // Нажали на строку группового: чат звонка, а его нет — «Чат удалён».
+                    onOpenGroupCall = { record ->
+                        val chat = listState.chats.firstOrNull { it.chatId == record.groupId }
+                        if (chat == null) callsNote = wordsNow.groupCall.chatDeleted
+                        else where = Where.Chat(chat.chatId, chat.title)
+                    },
+                    callsNote = callsNote,
                     onCallAgain = if (callHost.possible) {
                         { record ->
-                            val id = record.other(session.userId)
-                            val name = bookState.all.firstOrNull { it.userId == id }
-                                ?.let { personOfBook(it).line(bookState.view.look(), PERSON_FIRST_LINE) }
-                                .orEmpty()
-                            callPerson(id, name, record.video)
+                            // Кнопка группового: автору — повторить звонок, участнику — войти в
+                            // идущий; чата нет — то же «Чат удалён», что у строки.
+                            if (record.group) {
+                                val chat = listState.chats.firstOrNull { it.chatId == record.groupId }
+                                if (chat == null) {
+                                    callsNote = wordsNow.groupCall.chatDeleted
+                                } else {
+                                    groupDesk.again(
+                                        record.groupId, groupTitleOf(record.groupId), record.video,
+                                        mine = record.initiatorId == session.userId,
+                                    ) { callsNote = it }
+                                }
+                            } else {
+                                val id = record.other(session.userId)
+                                val name = personOfId(id).line(bookState.view.look(), PERSON_FIRST_LINE).orEmpty()
+                                callPerson(id, name, record.video)
+                            }
                         }
                     } else {
                         null
@@ -2960,8 +3025,9 @@ private fun App(
                     // заказчика 2026-09-17; до него они стояли здесь вперемешку с
                     // личными, и это было временным размещением, записанным в
                     // `ИНТЕРФЕЙС/04-социум/ФУНКЦИОНАЛ.md`.
-                    // Личные и временные группы звонка — они часть телефонного звонка.
-                    list = listState.copy(chats = listState.phone(callGroupsTtl.keys)),
+                    // Только личные. Группы звонка ушли во вкладку «Звонки» строкой с «ГЗ»
+                    // (заказчик 2026-10-08: в «Чатах» они раздвоились).
+                    list = listState.copy(chats = listState.personal),
                     // Ники — со справочника: в книге их нет, а искать по ним надо
                     // (Л19). У человека без номера ник — единственное, чем его найти.
                     book = bookState.copy(
@@ -3677,6 +3743,15 @@ private fun App(
                             showCall()
                         },
                         inCallHere = callHost.active && callHost.group?.groupId == current.chatId,
+                        // Автору чата звонка — «Повторить звонок», пока звонок не идёт
+                        // (заказчик 2026-10-08).
+                        onRepeatGroupCall = if (callHost.possible && callOwnerOf(current.chatId) == session.userId) {
+                            {
+                                groupDesk.again(current.chatId, groupTitleOf(current.chatId), video = true, mine = true) {}
+                            }
+                        } else {
+                            null
+                        },
                         ttlUntilMs = callGroupsTtl[current.chatId],
                         callCreator = callCreatorName(current.chatId),
                         callCreatorFace = callCreatorFace(current.chatId),
@@ -3962,6 +4037,8 @@ private fun Chat(
     onJoinGroupCall: (String) -> Unit = {},
     /** Я уже в звонке этой группы — «Присоединиться» не нужно. */
     inCallHere: Boolean = false,
+    /** Я автор чата звонка: «Повторить звонок», пока звонок не идёт. `null` — не автор. */
+    onRepeatGroupCall: (() -> Unit)? = null,
     /** Временная группа звонка — когда удалится, мс (решение 11). */
     ttlUntilMs: Long? = null,
     /** Группа звонка: имя создателя и его аватар (заказчик 2026-10-02). */
@@ -4192,6 +4269,14 @@ private fun Chat(
                     text = if (live.paused) Tima.words.groupCall.livePaused else Tima.words.groupCall.live(inRoom, minutes),
                     joinLabel = if (inCallHere) null else Tima.words.groupCall.join,
                     onJoin = { onJoinGroupCall(live.callId) },
+                )
+            }
+        } ?: onRepeatGroupCall?.takeIf { group && !inCallHere }?.let { repeat ->
+            {
+                io.tima.feature.chat.GroupCallBanner(
+                    text = Tima.words.groupCall.inviteEnded,
+                    joinLabel = Tima.words.groupCall.repeat,
+                    onJoin = repeat,
                 )
             }
         },
@@ -5094,6 +5179,9 @@ private fun Suggest(
 /** Вид предложения на сервере — `problemKindSuggestion` в `server/internal/api/problems.go`. */
 private const val SUGGESTION_KIND = "suggestion"
 
+/** Сколько висит короткое слово во вкладке «Звонки» («Чат удалён»). */
+private const val CALLS_NOTE_MS = 2_500L
+
 /** Высота снимка в форме отчёта: видно, что уходит, и не заслоняет форму. */
 private val PHOTO_PREVIEW = 160.dp
 
@@ -5352,7 +5440,7 @@ private fun Members(
     LaunchedEffect(groupId, claimsRev) {
         val raw = network.groups.identityClaims(groupId).orEmpty()
         suspend fun name(id: String): String =
-            people?.person(id)?.let { it.userName ?: it.name ?: it.nick?.let { n -> "@$n" } } ?: ("…" + id.takeLast(6))
+            people?.person(id)?.let { io.tima.domain.chat.selfName(it.userName) ?: it.name ?: it.nick?.let { n -> "@$n" } } ?: ("…" + id.takeLast(6))
         claims = raw.map { c -> io.tima.feature.group.IdentityClaimLine(c.userId, name(c.userId), name(c.fromUserId)) }
     }
 
@@ -5498,6 +5586,12 @@ private fun PhoneWindow(
     callsState: CallsState = CallsState(),
     /** Человек за строкой журнала: сервер знает только `user_id`, имя живёт в книге. */
     personOfCall: (CallRecord) -> ChatPerson = { ChatPerson() },
+    /** Строка группового звонка; `null` — звонок личный (заказчик 2026-10-08). */
+    groupCallOf: (CallRecord) -> io.tima.feature.chat.GroupCallLine? = { null },
+    /** Нажали на строку группового звонка — его чат или «Чат удалён». */
+    onOpenGroupCall: (CallRecord) -> Unit = {},
+    /** Короткое слово поверх журнала; `null` — нет. */
+    callsNote: String? = null,
     faceOfCall: (CallRecord) -> ImageBitmap? = { null },
     /** Перезвонить из журнала — **тем же видом**, каким звонили тогда (Ж6). */
     onCallAgain: ((CallRecord) -> Unit)? = null,
@@ -5670,16 +5764,17 @@ private fun PhoneWindow(
                 CallsScreen(
                     // ── ФИЛЬТРЫ ВТОРОГО РЯДА ────────────────────────────────
                     //
-                    // «Из книги» и «Неизвестные» отбираются **по книге, а не по
+                    // «Из книги» и «Незнакомые» отбираются **по книге, а не по
                     // серверу**: знает ли телефон этого человека — вопрос к телефону.
-                    // «Неизвестные» у нас поэтому означает «звонил тот, кого нет в
+                    // «Незнакомые» у нас поэтому означает «звонил тот, кого нет в
                     // книге», а не «звонок с чужого номера»: чужих номеров в нашем
                     // журнале не бывает вовсе — звонить может только аккаунт.
+                    // Групповой звонок — не про одного человека: он в «Всех» и «Пропущенных».
                     records = callsState.records.filter { record ->
                         val known = book.all.any { it.userId != null && it.userId == record.other(myUserId) }
                         when (calls) {
-                            WindowTab.FromBook -> known
-                            WindowTab.Unknown -> !known
+                            WindowTab.FromBook -> known && !record.group
+                            WindowTab.Unknown -> !known && !record.group
                             WindowTab.Missed -> record.outcome(myUserId) == CallOutcome.Missed
                             else -> true
                         }
@@ -5689,9 +5784,14 @@ private fun PhoneWindow(
                     faceOf = faceOfCall,
                     look = book.view.look(),
                     onCallAgain = onCallAgain,
-                    onOpen = onOpenUser?.let { open -> { record -> open(record.other(myUserId)) } },
-                    onFace = { record -> onFaceUser(record.other(myUserId)) },
+                    onOpen = { record ->
+                        if (record.group) onOpenGroupCall(record) else onOpenUser?.invoke(record.other(myUserId))
+                    },
+                    // Аватар группового — страница создателя, как в «Чатах».
+                    onFace = { record -> onFaceUser(if (record.group) record.initiatorId else record.other(myUserId)) },
                     offline = callsState.offline,
+                    groupOf = groupCallOf,
+                    note = callsNote,
                 )
             }
 

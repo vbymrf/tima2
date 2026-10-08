@@ -1,0 +1,214 @@
+<meta charset="utf-8">
+<title>Пробы: окно 0 при видеозвонке</title>
+<link rel="stylesheet" href="../стиль.css">
+<style>
+  .проба { padding: 20px 0 26px; border-bottom: 1px solid var(--чёрный-12); }
+  .проба:target { box-shadow: inset 6px 0 0 var(--навигация); padding-left: 16px; }
+  .шапка-пробы { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .номер { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+  .опис { font-size: 13.5px; color: var(--чёрный-70); max-width: 90ch; }
+  .срезы { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .с-подписью > .трет { margin-top: 8px; max-width: 360px; font-size: 12.5px; color: var(--чёрный-70); line-height: 1.35; }
+  .навигация-проб { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+  .навигация-проб a {
+    display: inline-flex; align-items: center; padding: 7px 13px; border-radius: 999px;
+    border: 1px solid var(--чёрный-12); text-decoration: none; color: var(--текст);
+    font-size: 12.5px; font-weight: 700;
+  }
+
+  /* ── Телефон ───────────────────────────────────────────────────────────── */
+  .тлф {
+    width: 360px; height: 740px; border: 3px solid #111; border-radius: 34px; overflow: hidden;
+    display: flex; flex-direction: column; background: var(--поверхность); position: relative;
+  }
+  .тлф .стат { flex: 0 0 26px; display: flex; justify-content: space-between; padding: 6px 22px 0; font-size: 12px; font-weight: 700; }
+  /* Видео собеседника — заглушка: тёмный кадр с силуэтом */
+  .видео {
+    flex: 1 1 auto; position: relative; overflow: hidden;
+    background: radial-gradient(circle at 50% 38%, #6b7a86 0, #3d4852 34%, #1d242a 70%);
+  }
+  .видео.нет { background: #1d242a; }
+  .видео .силуэт { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); width: 150px; opacity: 0.55; }
+  .видео .события {
+    position: absolute; left: 12px; right: 12px; top: 10px; display: flex; justify-content: space-between; align-items: center;
+    color: #fff; font-size: 13px; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  }
+  .видео .события .кто { font-size: 15px; }
+  .видео .свой {
+    position: absolute; right: 12px; top: 44px; width: 84px; height: 124px; border-radius: 14px;
+    background: linear-gradient(160deg, #a8b6a0, #5b6b55); border: 2px solid rgba(255,255,255,0.85);
+  }
+  .видео .свой.нет { background: #2b3238; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.6); font-size: 11px; font-weight: 700; text-align: center; }
+  .видео .заглушка { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: rgba(255,255,255,0.75); font-size: 13px; font-weight: 700; }
+  .видео .заглушка .ава { width: 88px; height: 88px; border-radius: 22px; background: var(--навигация); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 800; }
+
+  /* ── Панель управления: три столбца, подписи снизу ─────────────────────── */
+  .панель { flex: 0 0 auto; padding: 12px 6px 10px; background: var(--поверхность); }
+  .панель.накладка { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); color: #fff; }
+  .ряд { display: grid; grid-template-columns: 1fr 44px 1fr 1fr; align-items: center; column-gap: 4px; }
+  .ряд.подписи { margin-top: 6px; font-size: 12.5px; font-weight: 800; text-align: center; }
+  .ряд.подписи .глаз-место { display: flex; justify-content: center; }
+  .гр { display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+  .бол {
+    width: 62px; height: 62px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: var(--навигация); color: #fff; flex: 0 0 auto;
+  }
+  .бол.выкл { background: var(--чёрный-12); color: var(--текст); }
+  .бол.мёртв { background: var(--чёрный-6); color: var(--чёрный-35); }
+  .бол.красн { background: var(--опасно); color: #fff; width: 66px; height: 66px; }
+  .накладка .бол.выкл { background: rgba(255,255,255,0.22); color: #fff; }
+  .накладка .бол.мёртв { background: rgba(255,255,255,0.10); color: rgba(255,255,255,0.35); }
+  .бол svg { width: 30px; height: 30px; }
+
+  /* Переключатель на два места: столбик с двумя кругами, горит выбранный */
+  .перекл {
+    display: flex; flex-direction: column; gap: 4px; padding: 3px; border-radius: 999px; background: var(--чёрный-6);
+  }
+  .накладка .перекл { background: rgba(255,255,255,0.14); }
+  .перекл i {
+    width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    color: var(--чёрный-50); font-style: normal;
+  }
+  .накладка .перекл i { color: rgba(255,255,255,0.65); }
+  .перекл i.да { background: var(--навигация); color: #fff; }
+  .перекл.мёртв i { color: var(--чёрный-35); }
+  .перекл.мёртв i.да { background: var(--чёрный-12); color: var(--чёрный-50); }
+  .перекл i svg { width: 18px; height: 18px; }
+
+  .глаз {
+    width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: var(--навигация); color: #fff;
+  }
+  .глаз.выкл { background: var(--чёрный-12); color: var(--текст); }
+  .накладка .глаз.выкл { background: rgba(255,255,255,0.22); color: #fff; }
+  .глаз svg { width: 24px; height: 24px; }
+  .глаз.мал { width: 30px; height: 30px; }
+  .глаз.мал svg { width: 18px; height: 18px; }
+  .подп-мёртв { color: var(--чёрный-35); }
+  .накладка .подп-мёртв { color: rgba(255,255,255,0.4); }
+
+  .бол .лого { background: none; color: #fff; width: auto; height: auto; box-shadow: none; font-size: 28px; font-weight: 900; letter-spacing: -0.04em; }
+  .дом { flex: 0 0 18px; display: flex; justify-content: center; align-items: center; }
+  .дом::after { content: ""; width: 120px; height: 4px; border-radius: 2px; background: #111; }
+  .накладка ~ .дом::after { background: #fff; }
+</style>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="мик" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4M8.5 21h7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></symbol>
+    <symbol id="мик-выкл" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4M8.5 21h7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M4 4l16 16" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="кам" viewBox="0 0 24 24"><rect x="2.5" y="6.5" width="13" height="11" rx="2.5" fill="currentColor"/><path d="M16.5 10.5l5-3v9l-5-3z" fill="currentColor"/></symbol>
+    <symbol id="кам-выкл" viewBox="0 0 24 24"><rect x="2.5" y="6.5" width="13" height="11" rx="2.5" fill="currentColor"/><path d="M16.5 10.5l5-3v9l-5-3z" fill="currentColor"/><path d="M3 3l18 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="динамик" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></symbol>
+    <symbol id="ухо" viewBox="0 0 24 24"><path d="M8 9a5 5 0 0 1 10 0c0 3-2.5 4-3.5 6S13 20 10.5 20A3 3 0 0 1 7.5 17" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M11 9.5a2 2 0 0 1 4 0c0 1.2-1 1.6-1.6 2.4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></symbol>
+    <symbol id="лицо" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="9" cy="10" r="1.3" fill="currentColor"/><circle cx="15" cy="10" r="1.3" fill="currentColor"/><path d="M8.5 14.5a4 4 0 0 0 7 0" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></symbol>
+    <symbol id="картина" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M5 17l5-6 3.5 4 2.5-3 3 5" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/><circle cx="16.5" cy="9" r="1.5" fill="currentColor"/></symbol>
+    <symbol id="глаз" viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></symbol>
+    <symbol id="глаз-выкл" viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/><path d="M3.5 3.5l17 17" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="трубка" viewBox="0 0 24 24"><path d="M3 13.5c4.8-4.4 13.2-4.4 18 0l-2.4 2.8-3.4-1.6v-2.4a11 11 0 0 0-6.4 0v2.4l-3.4 1.6z" fill="currentColor"/></symbol>
+    <symbol id="силуэт" viewBox="0 0 100 120"><circle cx="50" cy="38" r="26" fill="#cfd8de"/><path d="M8 120c4-30 22-44 42-44s38 14 42 44z" fill="#cfd8de"/></symbol>
+  </defs>
+</svg>
+
+<div class="лист-док">
+
+<div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-окно-звонка.html</div>
+<h1>Пробы: окно 0 при видеозвонке</h1>
+<p class="подзаголовок">
+  Управление видеозвонком — тремя столбцами с подписями внизу: «Звук», «Камера», «Завершить». Над «Звук» — крупный
+  микрофон, левее — переключатель «Ухо» сверху и «Динамик» снизу; над «Камера» — крупная камера, правее —
+  переключатель «лицо» (передняя) и «картина» (задняя): что показывать. Над «Завершить» — крупная красная
+  кнопка. Глаз — между «Звук» и «Камера». Горит — салатовым; выключено — серым.
+</p>
+
+<div class="оговорка">
+  <b>Слово заказчика 2026-10-08:</b> «Делаем надпись Звук Камера Завершить — снизу. Над Звук большая кнопка
+  микрофон, левее кнопка переключатель Динамик снизу и Ухо сверху. Что горит, туда звук идёт. Где надпись
+  Камера — кнопка большая камеры. Справа переключатель фейс лицо иконка и картина — что показывать, фронтальная
+  или камера. Где Завершить — крупная кнопка нашей иконки красная кнопка. Глаз ставим между Звук и Камера. И она
+  функционально как закрывает приём видео, так и показ. Т.е. делает не активным кнопку Камера.»
+  <br><br>
+  <b>Что меняется против нынешнего окна:</b> сейчас внизу один ряд круглых значков без подписей — «Динамик»,
+  «Микрофон», «Камера», «Переключение камеры», «Глаз» (только приём чужого видео), «Завершить». Переключатели
+  станут столбиками на два места, глаз станет общим выключателем видео в обе стороны, а «Камера» под
+  выключенным глазом — неактивной. Наушники, когда подключены, занимают место «Ухо» своим значком — это в
+  пробах не нарисовано.
+</div>
+
+<h2>Ссылки на пробы</h2>
+<div class="навигация-проб">
+  <a href="#а">а · панель под видео, глаз в ряду кнопок</a>
+  <a href="#б">б · панель поверх видео</a>
+  <a href="#в">в · глаз в ряду подписей, красная с «T»</a>
+</div>
+
+<div id="пробы"></div>
+
+</div>
+
+<script>
+  const иконка = (id) => `<svg><use href="#${id}"/></svg>`;
+
+  // Состояние окна: что горит.
+  //   звук: 'динамик' | 'ухо'; мик: true/false; камера: true/false; лицо: true (передняя) / false (задняя);
+  //   глаз: true — видео идёт в обе стороны, false — ни приёма, ни показа, «Камера» неактивна.
+  function экран(вариант, с) {
+    const поверх = вариант === 'б';
+    const камМёртв = !с.глаз;
+    const видео = с.глаз
+      ? `<svg class="силуэт" viewBox="0 0 100 120"><use href="#силуэт"/></svg>` +
+        (с.камера ? `<div class="свой"></div>` : `<div class="свой нет">камера<br>выключена</div>`)
+      : `<div class="заглушка"><div class="ава">АК</div>Видео выключено глазом</div>`;
+    const глаз = (мал) => `<span class="глаз ${мал ? 'мал' : ''} ${с.глаз ? '' : 'выкл'}">${иконка(с.глаз ? 'глаз' : 'глаз-выкл')}</span>`;
+    const звук = `<div class="гр">
+        <span class="перекл"><i class="${с.звук === 'ухо' ? 'да' : ''}">${иконка('ухо')}</i><i class="${с.звук === 'динамик' ? 'да' : ''}">${иконка('динамик')}</i></span>
+        <span class="бол ${с.мик ? '' : 'выкл'}">${иконка(с.мик ? 'мик' : 'мик-выкл')}</span>
+      </div>`;
+    const камера = `<div class="гр">
+        <span class="бол ${камМёртв ? 'мёртв' : с.камера ? '' : 'выкл'}">${иконка(с.камера && !камМёртв ? 'кам' : 'кам-выкл')}</span>
+        <span class="перекл ${камМёртв ? 'мёртв' : ''}"><i class="${с.лицо ? 'да' : ''}">${иконка('лицо')}</i><i class="${с.лицо ? '' : 'да'}">${иконка('картина')}</i></span>
+      </div>`;
+    const конец = `<div class="гр"><span class="бол красн">${вариант === 'в' ? '<span class="лого">T</span>' : иконка('трубка')}</span></div>`;
+    const глазВРяду = вариант !== 'в';
+    const панель = `<div class="панель ${поверх ? 'накладка' : ''}">
+        <div class="ряд">${звук}<div class="гр">${глазВРяду ? глаз(false) : ''}</div>${камера}${конец}</div>
+        <div class="ряд подписи"><span>Звук</span><span class="глаз-место">${глазВРяду ? '' : глаз(true)}</span><span class="${камМёртв ? 'подп-мёртв' : ''}">Камера</span><span>Завершить</span></div>
+      </div>`;
+    return `<div class="тлф">
+      <div class="стат"><span>9:41</span><span>5G ▮▮▮</span></div>
+      <div class="видео ${с.глаз ? '' : 'нет'}">
+        <div class="события"><span class="кто">Анна Ковалёва</span><span>3:05</span></div>
+        ${видео}
+        ${поверх ? панель : ''}
+      </div>
+      ${поверх ? '' : панель}
+      <div class="дом"></div>
+    </div>`;
+  }
+
+  const состояния = [
+    [{ звук: 'динамик', мик: true, камера: true, лицо: true, глаз: true },
+      'Разговор с видео: звук в динамик, микрофон и камера включены, показываем лицо (передняя камера).'],
+    [{ звук: 'ухо', мик: false, камера: true, лицо: false, глаз: true },
+      'Звук в ухо, микрофон выключен, показываем картину (задняя камера).'],
+    [{ звук: 'динамик', мик: true, камера: true, лицо: true, глаз: false },
+      'Глаз выключен: видео не принимаем и не показываем. «Камера» и её переключатель неактивны, нажатие на них ничего не делает.'],
+  ];
+
+  const пробы = [
+    ['а', 'Панель под видео, глаз в ряду кнопок',
+      'Панель на белом под кадром собеседника — как сейчас. Глаз — маленькой кнопкой в том же ряду, между группами «Звук» и «Камера». Красная — трубка.'],
+    ['б', 'Панель поверх видео',
+      'Те же места, но панель лежит на затемнённом низе кадра: картинка собеседника занимает весь экран. Выключенное — полупрозрачным белым.'],
+    ['в', 'Глаз в ряду подписей, красная с «T»',
+      'Как «а», но глаз стоит в ряду подписей — ровно между словами «Звук» и «Камера»; ряд кнопок шире. Красная кнопка — с буквой «T» логотипа вместо трубки: если «нашей иконкой» назван логотип.'],
+  ];
+
+  document.getElementById('пробы').innerHTML = пробы.map(([ид, наз, опис]) => `
+    <section class="проба" id="${ид}">
+      <div class="шапка-пробы"><span class="номер">${ид}</span><b>${наз}</b></div>
+      <p class="опис">${опис}</p>
+      <div class="срезы">${состояния.map(([с, подп]) => `<div class="с-подписью">${экран(ид, с)}<div class="трет">${подп}</div></div>`).join('')}</div>
+    </section>`).join('');
+</script>

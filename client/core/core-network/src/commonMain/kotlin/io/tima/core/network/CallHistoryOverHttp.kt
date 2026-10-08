@@ -29,6 +29,9 @@ class CallHistoryOverHttp(
     override suspend fun page(beforeMs: Long, limit: Int): CallHistoryPage? {
         val query = buildString {
             append("/api/v1/calls?limit=").append(limit)
+            // Групповые — тоже: вкладка рисует их строкой с «ГЗ» (заказчик 2026-10-08). Сервер,
+            // не знающий параметра, отдаст одни личные, как раньше.
+            append("&groups=1")
             // Продолжение страницы — временем последней отданной строки. Сервер отбирает
             // строго, поэтому та же строка второй раз не придёт.
             if (beforeMs > 0) {
@@ -63,6 +66,7 @@ class CallHistoryOverHttp(
                 createdAt = createdAt,
                 answeredAt = millisOrZero(o.str("answered_at")),
                 endedAt = millisOrZero(o.str("ended_at")),
+                groupId = o.str("group_id").takeIf { o.str("type") == "group" }.orEmpty(),
             )
         }
         return CallHistoryPage(records, nextBeforeMs = millisOrZero(body.str("next_before")))

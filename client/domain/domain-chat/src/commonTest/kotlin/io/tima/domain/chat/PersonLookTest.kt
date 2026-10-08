@@ -44,4 +44,12 @@ class PersonLookTest {
         assertEquals("В", full.copy(nick = null, name = null).letter())
         assertEquals("+", ChatPerson(phone = "+7999").letter())
     }
+
+    @Test
+    fun своё_имя_человека_всегда_с_решёткой() {
+        // Как ник с «@» (заказчик 2026-10-08): «#» отличает имя, которым он назвал себя сам.
+        assertEquals("#Виктор", full.field(PersonField.UserName))
+        assertEquals("#Виктор", selfName("#Виктор"))
+        assertEquals(null, selfName("  "))
+    }
 }

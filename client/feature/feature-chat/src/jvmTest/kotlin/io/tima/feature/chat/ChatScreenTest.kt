@@ -87,11 +87,11 @@ class ChatScreenTest {
                 "$name: у чужого сообщения нет полосы автора у левого края",
             )
             assertTrue(
-                has(snapshot, colors.my, y = feed, x = (WIDTH - 30) until WIDTH),
+                has(snapshot, mine(colors), y = feed, x = (WIDTH - 30) until WIDTH),
                 "$name: своё сообщение не доходит до правого края",
             )
             assertTrue(
-                !has(snapshot, colors.my, y = feed, x = 0 until 20),
+                !has(snapshot, mine(colors), y = feed, x = 0 until 20),
                 "$name: своё сообщение достаёт до левого края — сторона перестала различать",
             )
         }
@@ -110,7 +110,7 @@ class ChatScreenTest {
         for ((name, snapshot) in bothThemes("чат-низ", WIDTH, HEIGHT) { screen(chat()) }) {
             val atInput = (HEIGHT - ZONE_4 - 40) until (HEIGHT - ZONE_4)
             assertTrue(
-                has(snapshot, theme(name).my, y = atInput),
+                has(snapshot, mine(theme(name)), y = atInput),
                 "$name: последней реплики нет у поля ввода — список прижался к шапке",
             )
         }
@@ -257,3 +257,10 @@ class ChatScreenTest {
         )
     }
 }
+
+/**
+ * Фон моего сообщения таким, каким его видит снимок: в светлой теме он полупрозрачный
+ * (заказчик 2026-10-08) и ложится на фон переписки.
+ */
+private fun mine(colors: io.tima.core.ui.TimaColors): androidx.compose.ui.graphics.Color =
+    if (colors.my.alpha < 1f) io.tima.core.ui.TimaContrast.overlay(colors.my, colors.surface) else colors.my

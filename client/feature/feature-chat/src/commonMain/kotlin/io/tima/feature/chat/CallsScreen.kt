@@ -1,11 +1,16 @@
 package io.tima.feature.chat
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.testTag
@@ -18,6 +23,8 @@ import io.tima.core.ui.IconButton
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
 import io.tima.core.ui.Tima
+import io.tima.core.ui.TimaShapes
+import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.words
 import io.tima.domain.chat.CallOutcome
@@ -77,32 +84,76 @@ fun CallsScreen(
      * второму надо сказать про связь — иначе он решит, что журнал потерялся.
      */
     offline: Boolean = false,
+    /**
+     * Строка группового звонка (заказчик 2026-10-08: групповые — здесь, а не в «Чатах»):
+     * название чата звонка, создатель и его аватар, на который ложится «ГЗ». `null` — звонок
+     * личный. Нажатия — те же ручки: аватар — страница создателя, строка — чат звонка,
+     * кнопка — повторить или войти; что из этого возможно, решает вызывающий.
+     */
+    groupOf: (CallRecord) -> GroupCallLine? = { null },
+    /** Короткое слово поверх журнала: «Чат удалён», «Звонок сейчас не идёт». `null` — нет. */
+    note: String? = null,
+) {
+    Box(modifier.fillMaxSize()) {
+        Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf)
+        note?.let {
+            Caption(
+                it,
+                modifier = Modifier.align(Alignment.BottomCenter)
+                    .padding(TimaSpacing.about4)
+                    .background(Tima.colors.text, RoundedCornerShape(TimaShapes.radius))
+                    .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)
+                    .testTag(CALLS_NOTE_TAG),
+                fontSize = TimaType.sz5,
+                weight = FontWeight.SemiBold,
+                color = Tima.colors.surface,
+            )
+        }
+    }
+}
+
+@Composable
+private fun Records(
+    records: List<CallRecord>,
+    me: String,
+    personOf: (CallRecord) -> ChatPerson,
+    look: PersonLook,
+    faceOf: (CallRecord) -> ImageBitmap?,
+    onCallAgain: ((CallRecord) -> Unit)?,
+    onOpen: ((CallRecord) -> Unit)?,
+    onFace: ((CallRecord) -> Unit)?,
+    offline: Boolean,
+    groupOf: (CallRecord) -> GroupCallLine?,
 ) {
     val words = Tima.words.callLog
     if (records.isEmpty()) {
         EmptyArea(
             title = words.nothingYet,
             explanation = if (offline) words.noConnection else words.nothingYetAbout,
-            modifier = modifier,
         )
         return
     }
-    LazyColumn(modifier.fillMaxSize().testTag(CALLS_LIST_TAG)) {
+    LazyColumn(Modifier.fillMaxSize().testTag(CALLS_LIST_TAG)) {
         items(records, key = { it.callId }) { record ->
-            val who = personOf(record)
+            val group = groupOf(record)
+            val who = if (group == null) personOf(record) else ChatPerson()
             val outcome = record.outcome(me)
             ListLine(
                 onClick = onOpen?.let { { it(record) } },
                 left = {
-                    Avatar(
-                        letters = who.letter(),
-                        image = faceOf(record),
-                        modifier = onFace?.let { open -> Modifier.clickable { open(record) } } ?: Modifier,
-                    )
+                    val tap = onFace?.let { open -> Modifier.clickable { open(record) } } ?: Modifier
+                    if (group != null) {
+                        // Аватар создателя и «ГЗ» поверх; картинки нет — одно «ГЗ», как в «Чатах».
+                        val badge = Tima.words.groupCall.badge
+                        Avatar(letters = badge, image = group.face, overlay = badge, modifier = tap)
+                    } else {
+                        Avatar(letters = who.letter(), image = faceOf(record), modifier = tap)
+                    }
                 },
                 middle = {
                     Column {
-                        Name(who.line(look, PERSON_FIRST_LINE) ?: Tima.words.book.nameless)
+                        Name(group?.title ?: who.line(look, PERSON_FIRST_LINE) ?: Tima.words.book.nameless)
+                        group?.creator?.let { Caption(it, fontSize = TimaType.sz6, color = Tima.colors.text2, lineOne = true) }
                         // Вторая строка — «↗ видео · не дозвонился · 3:05». Стрелка
                         // отвечает на «кто кому», слово — на «чем кончилось»,
                         // длительность бывает не всегда и молчит, когда её нет.
@@ -127,7 +178,8 @@ fun CallsScreen(
                         Caption(whenOf(record.createdAt, words), fontSize = TimaType.sz6, color = Tima.colors.text3)
                         if (onCallAgain != null) {
                             IconButton(
-                                glyph = if (record.video) VIDEO_GLYPH else VOICE_GLYPH,
+                                // Групповой — своей кнопкой: повторить звонок или войти в идущий.
+                                glyph = if (group != null) GROUP_GLYPH else if (record.video) VIDEO_GLYPH else VOICE_GLYPH,
                                 onClick = { onCallAgain(record) },
                                 modifier = Modifier.testTag(CALL_AGAIN_TAG),
                             )
@@ -207,8 +259,21 @@ const val CALLS_LIST_TAG: String = "calls:list"
 /** Метка кнопки «перезвонить» в строке журнала. */
 const val CALL_AGAIN_TAG: String = "calls:again"
 
+/** Метка короткого слова поверх журнала. */
+const val CALLS_NOTE_TAG: String = "calls:note"
+
 private const val OUT_ARROW = "↗"
 private const val IN_ARROW = "↙"
 private const val DOT = " · "
 private const val VOICE_GLYPH = "📞"
 private const val VIDEO_GLYPH = "📹"
+private const val GROUP_GLYPH = "👥"
+
+/** Как показать групповой звонок строкой журнала: чат звонка и его создатель. */
+data class GroupCallLine(
+    /** Название чата звонка; чата больше нет — «Групповой звонок». */
+    val title: String,
+    /** Имя создателя отдельной строкой, как в «Чатах»; `null` — не знаем. */
+    val creator: String?,
+    val face: ImageBitmap?,
+)

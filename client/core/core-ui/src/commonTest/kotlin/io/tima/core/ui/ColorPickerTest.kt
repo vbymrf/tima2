@@ -44,7 +44,7 @@ class ColorPickerTest {
      */
     @Test
     fun у_серого_насыщенность_ноль() {
-        for (grey in listOf(TimaFixed.ink, TimaFixed.paper, TimaColors.light.my)) {
+        for (grey in listOf(TimaFixed.ink, TimaFixed.paper, Color(0xFFBFBFBF))) {
             val (_, saturation, _) = grey.hueSatVal()
             assertEquals(0f, saturation, absoluteTolerance = 0.01f, message = "${grey.hex()} не серый")
         }

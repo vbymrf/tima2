@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -90,6 +91,16 @@ class EventStreamProtocolTest {
         // другое. Значит порядок — часть протокола, а не вежливость.
         assertEquals("""{"token":"жетон"}""", protocol.authFrame("жетон"))
         assertFailsWith<IllegalArgumentException> { protocol.authFrame("") }
+    }
+
+    @Test
+    fun отказ_по_токену_узнаётся_по_коду_и_слову() {
+        // Слова сервера из ws.go: истёкший токен лечится обновлением, а не паузой.
+        assertTrue(protocol.tokenRefused(1008, "токен просрочен или подделан"))
+        // Тот же код у «сборка ниже порога» и «первый кадр — auth» — это не про токен.
+        assertFalse(protocol.tokenRefused(1008, "сборка ниже порога совместимости"))
+        assertFalse(protocol.tokenRefused(1001, "токен просрочен или подделан"))
+        assertFalse(protocol.tokenRefused(null, null))
     }
 
     @Test

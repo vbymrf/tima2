@@ -8,7 +8,9 @@ class AccountTitleTest {
 
     @Test
     fun имя_потом_ник_потом_служебное_имя() {
-        assertEquals("Анна", AccountTitle.of("Анна", "anna", "69a94f52-f8c860"))
+        // Имя задал себе сам — с «#», как ник с «@» (заказчик 2026-10-08); «#» не удваивается.
+        assertEquals("#Анна", AccountTitle.of("Анна", "anna", "69a94f52-f8c860"))
+        assertEquals("#Анна", AccountTitle.of("#Анна", "anna", "69a94f52-f8c860"))
         assertEquals("@anna", AccountTitle.of(" ", "anna", "69a94f52-f8c860"))
         assertEquals("@anna", AccountTitle.of("", "@anna", "69a94f52-f8c860"))
         // Ни имени, ни ника — служебное имя, а не пустота.

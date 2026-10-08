@@ -146,7 +146,9 @@ data class TimaColors(
             navigation = Color(0xFF8AC44A),
             activity = Color(0xFFFEBB02),
             confirmed = Color(0xFF3BB300),
-            my = Color(0xFFBFBFBF),
+            // Салатовый на пятой части, как мягкая подложка: решение заказчика 2026-10-08,
+            // отменяет серый #BFBFBF макета. Полупрозрачный — ложится на фон переписки.
+            my = Color(0x338AC44A),
             author = Color(0xFFFFFFFF),
             text = Color(0xFF000000),
             surface = Color(0xFFFFFFFF),
