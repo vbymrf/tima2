@@ -64,8 +64,10 @@ class WindowSwitchingScreenTest {
                 onClose = {},
             )
         }
-        val surface = TimaColors.light.surface
-        val panelTop = (0 until 1400).first { Snapshot.close(shot.color(400, it), surface) }
+        // Верх панели — первая строка, отличная от затемнения: белого на панели с И2 нет
+        // (шапка на сером, окна на мягкой зелёной подложке).
+        val dim = shot.color(400, 4)
+        val panelTop = (0 until 1400).first { !Snapshot.close(shot.color(400, it), dim) }
         assertTrue(panelTop > 1400 * 0.15f, "панель заняла 85 % высоты при малом содержимом — ограничение сработало как растяжка")
     }
 

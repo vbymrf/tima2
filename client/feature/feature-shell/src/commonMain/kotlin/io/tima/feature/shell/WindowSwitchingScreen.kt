@@ -187,17 +187,11 @@ fun WindowSwitchingScreen(
 
             onCall?.let { goToCall -> CallBubble(callRinging, callPeer, goToCall) }
 
-            // Окна — в общей рамке с зелёной окантовкой на мягкой подложке (пробы
-            // `пробы-окно-переходов.html`, И1, приняты заказчиком 2026-10-07): это то, ради
-            // чего панель открывают, и оно стоит сразу под шапкой.
-            Column(
-                Modifier
-                    .padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2)
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(TimaShapes.radius))
-                    .border(FRAME, colors.navigation, RoundedCornerShape(TimaShapes.radius))
-                    .background(colors.softAccent),
-            ) {
+            // Окна — без окантовки, на мягкой зелёной подложке во всю ширину (пробы
+            // `пробы-окно-переходов.html`, И2, заказчик 2026-10-09). От остального блок отделён
+            // толстыми чертами сверху и снизу; между окнами — обычные линии строк.
+            ThickLine()
+            Column(Modifier.fillMaxWidth().background(colors.softAccent)) {
                 for (window in Window.shown(inCall, bench)) {
                     Item(
                         window = window,
@@ -207,6 +201,7 @@ fun WindowSwitchingScreen(
                     )
                 }
             }
+            ThickLine()
 
             // Аккаунты — сеткой аватаров под окнами (И1): видны все сразу, переход — одним
             // нажатием. Есть и при одном аккаунте: там же «Добавить».
@@ -323,6 +318,10 @@ private fun Item(window: Window, current: Boolean, howMany: Int, onClick: () -> 
         }
     }
 }
+
+/** Толстая серая черта — граница блока окон (И2): `.пп-черта3`, 6 точек. */
+@Composable
+private fun ThickLine() = Box(Modifier.fillMaxWidth().height(THICK_LINE).background(Tima.colors.line))
 
 /**
  * «Активный звонок» — залитый зелёный пузырь, как кнопки, на поверхности и сдвинутый вправо к
@@ -450,7 +449,10 @@ internal const val GRID = 5
 private val FRAME = 2.dp
 
 /** Полоса текущего окна. */
-private val STRIPE = 5.dp
+private val STRIPE = 10.dp
+
+/** Толщина черты вокруг блока окон (И2). */
+private val THICK_LINE = 6.dp
 
 /** Сдвиг пузыря звонка — до колонки текста под шапкой. */
 private val CALL_INDENT = 58.dp

@@ -85,7 +85,14 @@ enum class Window(
          */
         fun shown(inCall: Boolean, bench: Boolean = false): List<Window> =
             entries.filter {
-                !it.temporary || (it == Call && inCall) || (it == Bench && bench)
+                it !in OFF && (!it.temporary || (it == Call && inCall) || (it == Bench && bench))
             }
+
+        /**
+         * Окна, отключённые в этой версии клиента: их нет ни в переключателе, ни на рейке, ни в
+         * свайпе. «Медиа-лента» — заказчик 2026-10-09: «отключи, сделай обход; потом решим,
+         * что с ней делать — функционал для этой версии не реализуем».
+         */
+        val OFF: Set<Window> = setOf(Media)
     }
 }
