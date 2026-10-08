@@ -121,15 +121,15 @@ class CallScreenTest {
             screen(CallState(stage = CallStage.Ended), incoming = false, onCallAgain = {}, onClose = {})
         }
         assertTrue(with.difference(without) > 0.001, "переключателя нет")
-        // Телефон шириной 360 точек: «Закрыть» — в той же строке, что «Перезвонить».
-        val narrow = capture("звонок-завершён-переключатель-360", 360, HEIGHT, dark = false) {
+        // «Закрыть» — своей строкой под «Перезвонить» при любой ширине (заказчик 2026-10-08):
+        // строк с краской внизу у одного ряда кнопок около 50, у двух — около ста.
+        val wide = capture("звонок-завершён-переключатель-широкий", 600, HEIGHT, dark = false) {
             screen(CallState(stage = CallStage.Ended), incoming = false, onCallAgain = {}, onClose = {}, onRedialKind = {})
         }
-        // Строк с краской внизу: один ряд кнопок — около 50, два ряда — около ста.
         val inked = (HEIGHT - 150 until HEIGHT).count { y ->
-            (0 until 360 step 2).any { x -> narrow.color(x, y).let { it.red + it.green + it.blue < 2.9f } }
+            (0 until 600 step 2).any { x -> wide.color(x, y).let { it.red + it.green + it.blue < 2.9f } }
         }
-        assertTrue(inked < 75, "кнопки ушли на вторую строку: строк с краской $inked")
+        assertTrue(inked > 75, "«Закрыть» в одной строке с «Перезвонить»: строк с краской $inked")
     }
 
     @Test
