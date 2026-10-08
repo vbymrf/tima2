@@ -139,6 +139,16 @@ android {
             applicationIdSuffix = ".v2"
             versionNameSuffix = "-v2"
         }
+        // Опыт 2026-10-08 (ветка work/redmi-perf): та же сборка, но не отладочная — проверить,
+        // сколько стоит DEBUGGABLE на слабом телефоне. Отладочное приложение ART не
+        // компилирует заранее вовсе (на Redmi `cmd package compile -m speed` оставляет
+        // `status=verify`), а JIT у него урезан.
+        create("fast") {
+            initWith(getByName("debug"))
+            isDebuggable = false
+            isJniDebuggable = false
+            matchingFallbacks += listOf("release")
+        }
     }
 
     // ── Подпись ─────────────────────────────────────────────────────────────
