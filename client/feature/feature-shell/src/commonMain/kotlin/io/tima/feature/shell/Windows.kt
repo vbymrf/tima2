@@ -401,15 +401,22 @@ private fun WindowWithTabs(
     countOf: (WindowTab) -> Int = { 0 },
     content: @Composable (WindowTab) -> Unit,
 ) {
+    // Вкладка — из общего места [WindowTabs] (беда 2026-10-08): окно закрывается при переходе,
+    // и своя вкладка внутри него сбрасывалась на первую. Нет общего места (снимки) — своя.
+    val kept = LocalWindowTabs.current
     var own by remember(window) { mutableStateOf(tabs.first()) }
-    val selected = selectedOutside ?: own
+    val selected = (selectedOutside ?: kept?.of(window, tabs) ?: own).takeIf { it in tabs } ?: tabs.first()
     val row = secondRow
     val trailing = tabsTrailing
     WindowFrame(
         window = window,
         tabs = tabs,
         selected = selected,
-        onTab = { own = it; onSelectOutside?.invoke(it) },
+        onTab = {
+            own = it
+            kept?.choose(window, it)
+            onSelectOutside?.invoke(it)
+        },
         onSwitchWindows = onSwitchWindows,
         onSearch = onSearch,
         onSettings = onSettings,

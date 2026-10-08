@@ -1052,7 +1052,9 @@ private fun App(
     // «Социум» открывается на «Каталоге» — он первый (заказчик 2026-10-05).
     // Вкладки окон — правило состава журнала («открытие окна, вкладки»); до 2026-10-08 их не
     // было, и «открыл Звонки» приходилось угадывать по запросу `calls/seen`.
-    var socialTab by remember { mutableStateOf(WindowTab.Catalogue) }
+    // Вкладки всех окон — одно место (беда 2026-10-08); у «Социума» и «Телефона» — оно же.
+    val windowTabs = remember { io.tima.feature.shell.WindowTabs() }
+    var socialTab by windowTabs.state(Window.Social, WindowTab.Catalogue)
     LaunchedEffect(socialTab) { Journal.note(LogCode.SCREEN_OPEN, "tab", "окно" to Window.Social.name, "вкладка" to socialTab.name) }
     // Люди за идентификаторами — одно место на книгу, реплики и состав (2026-09-18).
     val people = remember(assembled) { People(network.directory, environment.bookStorage, scope, network.media) }
@@ -1418,7 +1420,7 @@ private fun App(
     LaunchedEffect(commentPing) {
         if (commentPing != 0L) page.refresh()
     }
-    var phoneTab by remember { mutableStateOf(WindowTab.Chats) }
+    var phoneTab by windowTabs.state(Window.Phone, WindowTab.Chats)
     LaunchedEffect(phoneTab) { Journal.note(LogCode.SCREEN_OPEN, "tab", "окно" to Window.Phone.name, "вкладка" to phoneTab.name) }
 
     // Откуда ушли в настройки (ПЛАН-(Б)-ОТЛАДКИ.md, Б2). Запоминается ЗДЕСЬ, в момент
@@ -2727,6 +2729,7 @@ private fun App(
             seconds = callHost.seconds,
             onOpen = { showCall() },
         ).takeIf { callHost.active && window != Window.Call },
+        io.tima.feature.shell.LocalWindowTabs provides windowTabs,
     ) {
     // Групповой звонок для окна 0 и области 3 широкого формата (ГЗ4, ГЗ8).
     val forbiddenMics = callHost.group?.groupId?.let { gid ->
