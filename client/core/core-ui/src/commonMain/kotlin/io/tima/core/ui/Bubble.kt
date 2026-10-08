@@ -47,7 +47,7 @@ enum class AvatarLook {
     Edge,
 
     /**
-     * «Имя в аватаре» — аватары колонкой слева (2 + аватар + 2), низом к низу первого пузыря
+     * «Имя в аватаре» — аватары колонкой слева (2 + аватар + 2), верхом к верху первого пузыря
      * серии; имени в пузыре нет, оно мелко в квадрате аватара; есть картинка — только она.
      * Лента всех чужих сообщений сдвинута вправо на колонку.
      */
@@ -196,8 +196,9 @@ fun Bubble(
                 val shape = RoundedCornerShape(TimaShapes.square)
                 Box(
                     modifier = Modifier
-                        // «Имя в аватаре» — низом к низу пузыря; иначе выступает вверх в зазор.
-                        .then(if (inside) Modifier.align(Alignment.BottomStart).offset(x = avatarLeft) else Modifier.offset(x = avatarLeft, y = -avatarRise))
+                        // «Имя в аватаре» — верхом к верху пузыря (заказчик 2026-10-08; до того
+                        // низом к низу); иначе выступает вверх в зазор.
+                        .then(if (inside) Modifier.align(Alignment.TopStart).offset(x = avatarLeft) else Modifier.offset(x = avatarLeft, y = -avatarRise))
                         .size(avatarSide)
                         .background(color = if (my) colors.my else colors.author, shape = shape)
                         .border(1.dp, colors.border, shape)

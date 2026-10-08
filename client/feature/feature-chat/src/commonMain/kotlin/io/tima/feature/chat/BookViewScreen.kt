@@ -394,6 +394,10 @@ fun PersonLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modif
             }
         }
 
+        // Вид группы — переключателем, как «Экономичный режим» в «Уведомлениях» (2026-10-07);
+        // стоит над «Отображать пользователя как» (заказчик 2026-10-08).
+        if (!forPeople) AvatarLookSetting(view.avatarLook) { onChange(view.copy(avatarLook = it)) }
+
         SectionTitle(words.showPersonAs)
         for ((index, field) in view.order.withIndex()) {
             PersonFieldRow(
@@ -407,9 +411,6 @@ fun PersonLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modif
                 onDown = { onChange(view.moved(field, up = false)) },
             )
         }
-        // Вид группы — переключателем, как «Экономичный режим» в «Уведомлениях» (2026-10-07):
-        // «Отображать пользователя как» не меняется, вид — отдельной строкой под ним.
-        if (!forPeople) AvatarLookSetting(view.avatarLook) { onChange(view.copy(avatarLook = it)) }
     }
 }
 
@@ -429,7 +430,8 @@ private fun AvatarLookSetting(chosen: io.tima.core.ui.AvatarLook, onChoose: (io.
         right = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
                 io.tima.core.ui.Secondary(short, lineOne = true)
-                io.tima.core.ui.Secondary(if (open) "⌃" else "›")
+                // Стрелка крупная и зелёная, как у строк настроек (заказчик 2026-10-08).
+                io.tima.core.ui.ExpandMark(open)
             }
         },
         middle = {
