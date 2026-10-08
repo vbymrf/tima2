@@ -68,6 +68,8 @@ class Receiver(
     private val session: Session,
     private val identity: DeviceIdentity,
     private val keyOrchestrator: GroupKeyOrchestrator,
+    /** «Доставлено», «прочитано», «печатает», «в сети» (ПЛАН-(ОП)); `null` — их нет (проверки). */
+    private val liveStates: LiveStates? = null,
     /**
      * Кому сказать, что под записью ответили: `(channelId, postId)`.
      *
@@ -536,6 +538,8 @@ class Receiver(
                 onStoreChanged = { decision -> onStoreChanged(decision.kind, decision.revision) },
                 onCall = { decision -> aboutCall(decision) },
                 onCallsTop = { top -> callsTop(top) },
+                onStateTop = { top -> liveStates?.top(top) },
+                outgoing = liveStates?.frames,
                 onOpen = {
                     live = true
                     // Экономичный режим (заказчик 2026-10-06): журнал отвечает на вопрос,

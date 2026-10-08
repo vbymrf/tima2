@@ -123,6 +123,13 @@ class EventStreamProtocol {
          */
         data class CallsPoke(val cts: Long) : Decision
 
+        /**
+         * «В ленте состояний есть до №[rev]» (ПЛАН-(ОП)): «доставлено», «прочитано»,
+         * «печатает», «в сети». Забирается `GET /users/me/states`; подтверждать нечего —
+         * строки там последняя правда, а не очередь.
+         */
+        data class StatePoke(val rev: Long) : Decision
+
         /** Сервер сообщил о своей беде. Не наша: повторить позже. */
         data class ServerTrouble(val code: String) : Decision
 
@@ -416,6 +423,17 @@ class EventStreamProtocol {
         return """{"token":"$token","app":$appCode,"stream":"$stream"}"""
     }
 
+    /** «Печатаю тебе» / «перестал» — в список собеседника [to] (ПЛАН-(ОП)). */
+    fun typingFrame(chatId: String, to: String, on: Boolean): String =
+        """{"event":"typing","chat_id":"$chatId","to":"$to","on":$on}"""
+
+    /** Приложение на экране (`true`) или свёрнуто (ПЛАН-(ОП)). */
+    fun presenceFrame(on: Boolean): String = """{"event":"presence","on":$on}"""
+
+    /** Смотрю переписку с человеком (`true`) — присылай его «в сети»; или перестал. */
+    fun watchFrame(userId: String, on: Boolean): String =
+        """{"event":"${if (on) "watch" else "unwatch"}","user_id":"$userId"}"""
+
     /**
      * Сервер закрыл канал отказом по токену (`ws.go`: 1008, «токен просрочен или подделан»).
      *
@@ -512,6 +530,10 @@ class EventStreamProtocol {
 
             // Две подсказки под одним именем: с `cts` — лента личных звонков (ВЗ0а), с
             // `call_id` — групповой звонок, который по-прежнему идёт журналом.
+            "state.poke" -> json["rev"]?.jsonPrimitive?.longOrNull
+                ?.let { Decision.StatePoke(it) }
+                ?: Decision.Skip("state.poke без rev", null)
+
             "call.poke" -> json["cts"]?.jsonPrimitive?.longOrNull
                 ?.let { Decision.CallsPoke(it) }
                 ?: json.string("call_id")?.let { Decision.CallPoke(it) }

@@ -161,7 +161,7 @@ private fun window(store: ReportsStore, hidden: Boolean) = application {
     // Убранное окно ничего не показывает глазами — значит открытая в нём переписка
     // снова обязана уведомлять (У10). Без этого человек, закрывший окно на переписке,
     // перестал бы получать из неё уведомления до следующего открытия.
-    LaunchedEffect(windowShown) { ChannelHost.notices()?.windowVisible(windowShown) }
+    LaunchedEffect(windowShown) { ChannelHost.windowVisible(windowShown) }
     // Пин-код (ПЛАН-(ПН) Р9, Р12): окно спрятано в трей или свёрнуто 5 минут — замок снова.
     LaunchedEffect(windowShown, windowState.isMinimized) { io.tima.shared.PinGate.visible(windowShown && !windowState.isMinimized) }
     // Окно ПК одно на процесс, но прячется в трей и возвращается: для отчёта это разные

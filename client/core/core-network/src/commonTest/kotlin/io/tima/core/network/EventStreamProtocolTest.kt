@@ -104,6 +104,15 @@ class EventStreamProtocolTest {
     }
 
     @Test
+    fun лента_состояний_и_свои_кадры() {
+        // ПЛАН-(ОП): сигнал ленты состояний — без номера события и без подтверждения.
+        assertEquals(EventStreamProtocol.Decision.StatePoke(9), protocol.decide("""{"event":"state.poke","rev":9}"""))
+        assertEquals("""{"event":"typing","chat_id":"c","to":"u","on":true}""", protocol.typingFrame("c", "u", true))
+        assertEquals("""{"event":"presence","on":false}""", protocol.presenceFrame(false))
+        assertEquals("""{"event":"unwatch","user_id":"u"}""", protocol.watchFrame("u", false))
+    }
+
+    @Test
     fun курсор_null_означает_серверную_копию() {
         // Так и надо на первом подключении: своя копия может быть старше, и тогда часть
         // событий приедет дважды. Дубли безвредны, но платить трафиком незачем.

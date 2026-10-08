@@ -1632,6 +1632,18 @@ private fun App(
         (peopleCards[id] ?: ChatPerson()).withBookName(entry?.name, entry?.phone)
     }
 
+    // Отметки и «печатает» для списка «Чаты» (ПЛАН-(ОП)); секунды — чтобы «печатает» гасло само.
+    val liveReceipts by (assembled.liveStates?.receipts ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, io.tima.feature.chat.ChatReceipt>()) }).collectAsState()
+    val liveTyping by (assembled.liveStates?.typing ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, Long>()) }).collectAsState()
+    var liveTick by remember { mutableStateOf(msNow()) }
+    LaunchedEffect(liveTyping) {
+        liveTick = msNow()
+        while (liveTyping.values.any { it > liveTick }) {
+            kotlinx.coroutines.delay(1_000)
+            liveTick = msNow()
+        }
+    }
+
     // Короткое слово во вкладке «Звонки»: «Чат удалён», «Звонок сейчас не идёт» — и гаснет.
     var callsNote by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(callsNote) {
@@ -3049,6 +3061,8 @@ private fun App(
                     personOfChat = personOfChat,
                     faceOfChat = faceOfChat,
                     callGroupOf = callGroupOf,
+                    receiptOfChat = { chat -> liveReceipts[chat.chatId] },
+                    typingOfChat = { chat -> (liveTyping[chat.chatId] ?: 0) > liveTick },
                     onOpen = { where = Where.Chat(it.chatId, it.title) },
                     // Открыть можно только того, кто в TIMa: у остальных переписки нет
                     // и завести её не из чего — им «Пригласить».
@@ -3647,6 +3661,7 @@ private fun App(
             is Where.Chat -> {
                 {
                     Chat(
+                        liveStates = assembled.liveStates,
                         myDeviceId = assembled.session.deviceId,
                         reregWarn = reregOld,
                         notices = assembled.notices,
@@ -3977,6 +3992,8 @@ private fun App(
 private fun Chat(
     environment: Environment,
     network: ChatPorts,
+    /** «Доставлено», «прочитано», «печатает», «в сети» — личной переписке (ПЛАН-(ОП)). */
+    liveStates: LiveStates? = null,
     /** Это устройство — им подписывается просьба о ключе группы (Р42). */
     myDeviceId: String,
     chatId: String,
@@ -4065,6 +4082,18 @@ private fun Chat(
     // вход в состав.
     val group = remember(chatId) {
         environment.chatFacts.kindOf(chatId) == ChatKind.Group
+    }
+    // Собеседник личной переписки — ему «печатает», за его «в сети» смотрим (ПЛАН-(ОП)).
+    val peerUser = remember(chatId, group) { if (group) null else environment.chatFacts.peerOf(chatId) }
+    val live = liveStates?.takeIf { peerUser != null }
+    if (live != null && peerUser != null) {
+        DisposableEffect(chatId, peerUser) {
+            live.watch(peerUser)
+            onDispose {
+                live.watch(null)
+                live.stopTyping()
+            }
+        }
     }
     // Пока переписка на экране — уведомлений о ней нет (У10): человек читает её глазами,
     // и строка в шторке была бы уведомлением о том, что он уже видит. `DisposableEffect`,
@@ -4225,9 +4254,31 @@ private fun Chat(
     val cancelledSenders = remember(settingsNow) {
         settingsNow.keys.filter { it.startsWith(IdentityChain.CANCELLED_PREFIX) }.map { it.removePrefix(IdentityChain.CANCELLED_PREFIX) }.toSet()
     }
+    // «Прочитано» — то новое, что сейчас на экране (ПЛАН-(ОП)): время написания позднейшего входящего.
+    val newestIncoming = state.lines.filter { !it.outgoing }.maxOfOrNull { it.atMs }
+    LaunchedEffect(newestIncoming, live) { if (live != null && newestIncoming != null) live.read(chatId, newestIncoming) }
+    val receipts by (live?.receipts ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, io.tima.feature.chat.ChatReceipt>()) }).collectAsState()
+    val typingNow by (live?.typing ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, Long>()) }).collectAsState()
+    val presenceNow by (live?.presence ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, LiveStates.Seen>()) }).collectAsState()
+    // Секунды — чтобы «печатает» и «в сети» гасли по сроку и без нового сигнала.
+    var tickMs by remember { mutableStateOf(msNow()) }
+    LaunchedEffect(live) {
+        while (live != null) {
+            kotlinx.coroutines.delay(1_000)
+            tickMs = msNow()
+        }
+    }
+    val peerSeen = peerUser?.let { presenceNow[it] }
+    val peerLine = if (live == null) null else io.tima.feature.chat.peerStatus(
+        Tima.words.chat, Tima.words.callLog,
+        typing = (typingNow[chatId] ?: 0) > tickMs,
+        online = peerSeen?.onlineAt(tickMs) == true,
+        lastSeenMs = peerSeen?.lastSeenMs ?: 0,
+    )
     ChatScreen(
         cancelledSenders = cancelledSenders,
         state = state,
+        receipt = receipts[chatId],
         onPerson = onPerson,
         onCall = onCall,
         peerFace = if (ttlUntilMs != null) callCreatorFace else peerFace,
@@ -4237,8 +4288,17 @@ private fun Chat(
         ownerId = ownerId,
         hues = hues,
         peer = name ?: "Без имени",
-        onSet = store::draftChanged,
-        onSend = { store.sendPressed() },
+        onSet = { text ->
+            store.draftChanged(text)
+            // «Печатаю» собеседнику — пока набирают; стёрли — «перестал» (ПЛАН-(ОП)).
+            if (live != null && peerUser != null) {
+                if (text.isBlank()) live.stopTyping() else live.typed(chatId, peerUser)
+            }
+        },
+        onSend = {
+            live?.stopTyping()
+            store.sendPressed()
+        },
         onBack = onBack,
         onCloseMessage = store::noticeDismissed,
         onRequestKey = store::requestKey,
@@ -4268,7 +4328,7 @@ private fun Chat(
         onThread = if (group) store::threadOpened else null,
         onFailed = { line -> failed = line },
         // Временная группа звонка: «удалится через N ч» под названием (решение 11).
-        caption = ttlUntilMs?.let { Tima.words.groupCall.ttl(((it - msNow()) / 3_600_000L).toInt().coerceAtLeast(0)) },
+        caption = ttlUntilMs?.let { Tima.words.groupCall.ttl(((it - msNow()) / 3_600_000L).toInt().coerceAtLeast(0)) } ?: peerLine,
         // Полоса «Идёт звонок · Присоединиться» над лентой группы (решение 3а). В личной
         // переписке прежней личности во время перерегистрации — предупреждение (Р54).
         banner = if (reregWarn && !group) {
@@ -5598,6 +5658,10 @@ private fun PhoneWindow(
     callsState: CallsState = CallsState(),
     /** Человек за строкой журнала: сервер знает только `user_id`, имя живёт в книге. */
     personOfCall: (CallRecord) -> ChatPerson = { ChatPerson() },
+    /** «Доставлено» и «прочитано» своего последнего в личной переписке (ПЛАН-(ОП)). */
+    receiptOfChat: (ChatSummary) -> io.tima.feature.chat.ChatReceipt? = { null },
+    /** Собеседник печатает — «печатает…» вместо превью (ПЛАН-(ОП)). */
+    typingOfChat: (ChatSummary) -> Boolean = { false },
     /** Строка группового звонка; `null` — звонок личный (заказчик 2026-10-08). */
     groupCallOf: (CallRecord) -> io.tima.feature.chat.GroupCallLine? = { null },
     /** Нажали на строку группового звонка — его чат или «Чат удалён». */
@@ -5742,6 +5806,8 @@ private fun PhoneWindow(
                 countOf = { chat -> noticeCounts.chat(chat.chatId, chat.peerId) },
                 tagOf = tagOf,
                 callGroupOf = callGroupOf,
+                receiptOf = receiptOfChat,
+                typingOf = typingOfChat,
             )
 
             WindowTab.Contacts -> {

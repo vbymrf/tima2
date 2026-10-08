@@ -116,6 +116,8 @@ class Assembled(
     val keyCopy: KeyCopyService? = null,
     /** Переписки, чью историю передало своё устройство (ИУ3), — забрать. */
     val historyReady: MutableSharedFlow<String> = MutableSharedFlow(extraBufferCapacity = 64),
+    /** «Доставлено», «прочитано», «печатает», «в сети» (ПЛАН-(ОП)); `null` — не собрано (проверки). */
+    val liveStates: LiveStates? = null,
     /**
      * Ключ этого устройства вместе с ключами эпох (ПЛАН-(ПС) ПС3). Перезаворачивать свою историю
      * (ИУ2) и открывать её — только им: выведенный заново из секрета ключей эпох не знает.
@@ -327,6 +329,14 @@ fun buildAssembled(
         )
         environment.onGroupKeyStored = keyCopy::feedGroupKey
 
+        // «Доставлено», «прочитано», «печатает», «в сети» (ПЛАН-(ОП)): у процесса, рядом с
+        // приёмником — лента приходит каналом, который живёт и без окна.
+        val liveStates = LiveStates(
+            api = network.states,
+            settings = environment.settings,
+            scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default),
+        )
+
         Assembled(
             session = device.session,
             environment = environment,
@@ -353,6 +363,7 @@ fun buildAssembled(
                 session = device.session,
                 identity = identity,
                 keyOrchestrator = keyOrchestrator,
+                liveStates = liveStates,
                 onComment = { _, postId -> commentPings.value = postId },
                 onStoreChanged = { kind, revision ->
                     val known = storeChanges.value
@@ -443,6 +454,7 @@ fun buildAssembled(
             rereg = rereg,
             keyCopy = keyCopy,
             historyReady = historyReady,
+            liveStates = liveStates,
         )
     }
 

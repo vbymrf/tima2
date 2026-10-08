@@ -130,6 +130,15 @@ object ChannelHost {
     fun notices(): Notices? = lock.hold { heldDevice?.let { assemblies[it]?.notices } }
 
     /**
+     * Окно на экране или нет — уведомлениям (не звучать в открытой переписке) и «в сети»
+     * (ПЛАН-(ОП): «в сети» значит приложение на экране, а не «есть связь»).
+     */
+    fun windowVisible(visible: Boolean) {
+        notices()?.windowVisible(visible)
+        lock.hold { heldDevice?.let { assemblies[it]?.liveStates } }?.visible(visible)
+    }
+
+    /**
      * Отклонить звонок **без окна** — «Отклонить» в строке уведомления (ВЗ2).
      *
      * Кладёт трубку серверу тем, кто держит канал; окно, если оно открыто, узнает об этом

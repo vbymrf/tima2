@@ -26,6 +26,8 @@ import io.tima.core.ui.Side
 import io.tima.core.ui.Arrow
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Counter
+import io.tima.core.ui.Caption
+import io.tima.core.ui.TimaType
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.Tertiary
 import io.tima.core.words.ChatWords
@@ -101,6 +103,10 @@ fun ChatsScreen(
     tagOf: (ChatSummary) -> String? = { null },
     /** Группа звонка: создатель и его аватар (заказчик 2026-10-02); `null` — обычная. */
     callGroupOf: (ChatSummary) -> CallGroupLook? = { null },
+    /** «Доставлено» и «прочитано» своего последнего (ПЛАН-(ОП)); `null` — не знаем. */
+    receiptOf: (ChatSummary) -> ChatReceipt? = { null },
+    /** Собеседник сейчас печатает — «печатает…» вместо превью (ПЛАН-(ОП)). */
+    typingOf: (ChatSummary) -> Boolean = { false },
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -150,7 +156,7 @@ fun ChatsScreen(
                     explanation = words.writeFirst,
                 )
 
-                else -> List(state.chats, onOpen, personOf, faceOf, look, countOf, tagOf, callGroupOf, onFace)
+                else -> List(state.chats, onOpen, personOf, faceOf, look, countOf, tagOf, callGroupOf, onFace, receiptOf, typingOf)
             }
         }
     }
@@ -212,6 +218,8 @@ private fun List(
     /** Группа звонка: создатель и его аватар (заказчик 2026-10-02); `null` — обычная. */
     callGroupOf: (ChatSummary) -> CallGroupLook? = { null },
     onFace: ((ChatSummary) -> Unit)? = null,
+    receiptOf: (ChatSummary) -> ChatReceipt? = { null },
+    typingOf: (ChatSummary) -> Boolean = { false },
 ) = LazyColumn(
     modifier = Modifier.fillMaxSize(),
 ) {
@@ -219,6 +227,7 @@ private fun List(
         ChatLine(
             chat, personOf(chat), faceOf(chat), look, countOf?.invoke(chat) ?: chat.unread,
             onClick = { onOpen(chat) }, tag = tagOf(chat), call = callGroupOf(chat),
+            receipt = receiptOf(chat), typing = typingOf(chat),
             // Страница есть только у собеседника личной переписки.
             onFace = onFace?.takeIf { chat.kind == ChatKind.Personal && chat.peerId != null }?.let { { it(chat) } },
         )
@@ -237,6 +246,8 @@ private fun ChatLine(
     tag: String? = null,
     call: CallGroupLook? = null,
     onFace: (() -> Unit)? = null,
+    receipt: ChatReceipt? = null,
+    typing: Boolean = false,
 ) = ListLine(
     onClick = onClick,
     // Картинка, если она есть, иначе буква — та же, что в книге. У группы человека нет,
@@ -269,7 +280,7 @@ private fun ChatLine(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 chat.atMs?.let { Tertiary(time(it), lineOne = true) }
-                if (chat.lastOutgoing) chat.lastDisplay?.let { mark(it) }?.let { Mark(it) }
+                if (chat.lastOutgoing) markOf(chat.lastDisplay, chat.atMs, receipt)?.let { Mark(it) }
             }
             // Без fillMaxWidth: в ряду строки этот столбец не взвешен, и растянутый на
             // всю ширину он съедал середину — имя и превью получали нулевую ширину и
@@ -293,7 +304,11 @@ private fun ChatLine(
         // Группа звонка — имя создателя отдельной строкой (заказчик 2026-10-02).
         call?.creator?.let { Secondary(it, lineOne = true) }
         // Превью обрезается: иначе строка списка растёт от чужого длинного сообщения.
-        Secondary(preview(chat, Tima.words.chat, Tima.words.groupCall.title), lineOne = true)
+        if (typing) {
+            Caption(Tima.words.chat.typing, fontSize = TimaType.sz5, color = Tima.colors.navigation, lineOne = true)
+        } else {
+            Secondary(preview(chat, Tima.words.chat, Tima.words.groupCall.title), lineOne = true)
+        }
         tag?.let { Tertiary(it, lineOne = true) }
     },
 )
@@ -325,15 +340,6 @@ private fun letters(chat: ChatSummary): String =
         ?.mapNotNull { it.firstOrNull()?.uppercase() }
         ?.joinToString("")
         ?: "?"
-
-/** Отметка о судьбе последнего своего сообщения. У чужого отметки не бывает. */
-private fun mark(kind: MessageDisplay): MarkKind? = when (kind) {
-    MessageDisplay.PENDING -> MarkKind.Waits
-    MessageDisplay.SENT -> MarkKind.Left
-    MessageDisplay.FAILED -> MarkKind.NotLeft
-    // Служебная строка не отправлялась — отмечать у неё нечего.
-    MessageDisplay.RECEIVED, MessageDisplay.UNREADABLE, MessageDisplay.SYSTEM -> null
-}
 
 /**
  * Подходит ли переписка поиску (заказчик 2026-09-19: «для Телефон реализуй функционал

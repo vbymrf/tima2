@@ -1393,6 +1393,13 @@ interface ChatWords {
     val noChatsYet: String
     val writeFirst: String
     val messageUnreadable: String
+
+    /** Собеседник набирает текст (ПЛАН-(ОП)): в шапке переписки и вместо превью в «Чатах». */
+    val typing: String
+    /** Приложение собеседника открыто на экране. */
+    val online: String
+    /** «был(а) сегодня в 14:05»: [day] — «сегодня», «вчера» или число, [time] — часы. */
+    fun lastSeen(day: String, time: String): String
     val newMessage: String
     val newChat: String
     val whomToWrite: String
@@ -3413,6 +3420,9 @@ object RussianWords : Words {
         override val noChatsYet = "Переписок пока нет"
         override val writeFirst = "Напишите первому собеседнику"
         override val messageUnreadable = "сообщение не читается"
+        override val typing = "печатает…"
+        override val online = "в сети"
+        override fun lastSeen(day: String, time: String) = "был(а) $day в $time"
         override val newMessage = "новое сообщение"
         override val newChat = "Новая переписка"
         override val whomToWrite = "Кому написать"

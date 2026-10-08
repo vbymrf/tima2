@@ -43,6 +43,12 @@ enum class MarkKind {
     /** Сервер принял. Галочка. */
     Left,
 
+    /** Доставлено — сообщение на устройстве получателя. Две чёрные галочки (ПЛАН-(ОП)). */
+    Delivered,
+
+    /** Прочитано — получатель открыл переписку. Две зелёные галочки (ПЛАН-(ОП)). */
+    Read,
+
     /**
      * Не ушло и не уйдёт — требует решения человека. Крест.
      *
@@ -60,11 +66,15 @@ fun Mark(kind: MarkKind, modifier: Modifier = Modifier, side: Dp = 12.dp) {
         MarkKind.Waits -> colors.text3
         // Чёрная, как текст (заказчик 2026-10-08): «отправлено» читается сразу, а не серым.
         MarkKind.Left -> colors.text
+        MarkKind.Delivered -> colors.text
+        MarkKind.Read -> colors.navigation
         // Красный, а не чёрный: чёрный крестик читался как галочка (заказчик 2026-09-19).
         // Второй потребитель тревожного цвета после «не закрывайте приложение».
         MarkKind.NotLeft -> colors.alarm
     }
-    Canvas(modifier.size(side)) {
+    // Две галочки шире одной: в квадрате они слиплись бы в зубец.
+    val double = kind == MarkKind.Delivered || kind == MarkKind.Read
+    Canvas(modifier.size(width = if (double) side * 1.5f else side, height = side)) {
         val thickness = size.minDimension * STROKE_FRACTION
         val outline = Stroke(width = thickness, cap = StrokeCap.Round)
         when (kind) {
@@ -106,6 +116,13 @@ fun Mark(kind: MarkKind, modifier: Modifier = Modifier, side: Dp = 12.dp) {
                 // Галочка двумя отрезками: короткий вниз, длинный вверх.
                 line(color, thickness, 0.18f, 0.55f, 0.42f, 0.80f)
                 line(color, thickness, 0.42f, 0.80f, 0.86f, 0.24f)
+            }
+
+            // Две галочки: вторая сдвинута вправо и короче слева — как у мессенджеров.
+            MarkKind.Delivered, MarkKind.Read -> {
+                line(color, thickness, 0.02f, 0.55f, 0.24f, 0.80f)
+                line(color, thickness, 0.24f, 0.80f, 0.64f, 0.24f)
+                line(color, thickness, 0.44f, 0.80f, 0.98f, 0.24f)
             }
 
             MarkKind.NotLeft -> {

@@ -4,6 +4,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
+import kotlinx.coroutines.launch
 
 /**
  * Живой канал: обвязка сокета вокруг [EventStreamProtocol].
@@ -97,6 +98,17 @@ class EventStream(
          */
         onCallsTop: suspend (Long) -> Long? = { null },
         /**
+         * Вершина ленты состояний (ПЛАН-(ОП)): по сигналу `state.poke` и сразу после открытия.
+         * По умолчанию ничего: канал обязан работать и там, где состояний нет (проверки).
+         */
+        onStateTop: suspend (Long) -> Unit = {},
+        /**
+         * Кадры, которые приложение шлёт само: «печатает», «в сети», «смотрю переписку».
+         * Пишутся, пока соединение живо; не дошедшие — пропадают, и это правильно: устаревшее
+         * «печатает» хуже отсутствующего. `null` — слать нечего.
+         */
+        outgoing: kotlinx.coroutines.channels.ReceiveChannel<String>? = null,
+        /**
          * Соединение открылось и представилось серверу — канал **жив**. По этому признаку
          * сторож приёмника отличает «канал работает и молчит» от «попытка висит»
          * (заказчик 2026-09-26: после включения VPN ПК минутами не держал ни соединения).
@@ -117,6 +129,11 @@ class EventStream(
                 send(Frame.Text(protocol.authFrame(token(), appCode, appStream)))
                 send(Frame.Text(protocol.pullFrame(last)))
                 onOpen()
+                // Свои кадры — отдельным потоком внутри соединения: закроется оно — закончится и он.
+                val writer = outgoing?.let { frames ->
+                    launch { for (frame in frames) send(Frame.Text(frame)) }
+                }
+                onStateTop(-1)
 
                 for (frame in incoming) {
                     val text = (frame as? Frame.Text)?.readText() ?: continue
@@ -295,8 +312,11 @@ class EventStream(
 
                         is EventStreamProtocol.Decision.CallsPoke ->
                             onCallsTop(decision.cts)?.let { send(Frame.Text(protocol.callAckFrame(it))) }
+
+                        is EventStreamProtocol.Decision.StatePoke -> onStateTop(decision.rev)
                     }
                 }
+                writer?.cancel()
                 // Сервер закрыл сам. Отказ по токену — свой исход: его лечит обновление
                 // токена, а не пауза (см. [EventStreamProtocol.tokenRefused]).
                 if (decided == null) {

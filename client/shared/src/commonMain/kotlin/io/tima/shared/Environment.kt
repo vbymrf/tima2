@@ -525,6 +525,10 @@ class Network(
     override val calls: CallsOverHttp =
         CallsOverHttp(link.route, link.client, token = { token() })
 
+    /** Лента состояний и «прочитано» (ПЛАН-(ОП)). */
+    val states: io.tima.core.network.StatesOverHttp =
+        io.tima.core.network.StatesOverHttp(link.route, link.client, token = { token() })
+
     /** Журнал звонков: страница прошлого. Копия его живёт в базе — [Environment.callLog]. */
     override val callHistory: CallHistoryOverHttp =
         CallHistoryOverHttp(link.route, link.client, token = { token() })

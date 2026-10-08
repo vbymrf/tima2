@@ -121,7 +121,7 @@ class MainActivity : ComponentActivity() {
         // Окно ничего не показывает глазами — значит переписка, оставшаяся «открытой»,
         // обязана снова уведомлять (У10). Без этого человек, свернувший приложение на
         // переписке, перестал бы получать из неё уведомления до следующего захода.
-        ChannelHost.notices()?.windowVisible(false)
+        ChannelHost.windowVisible(false)
         // Свернули посреди видеозвонка — своё видео на паузу через 2 с (заказчик 2026-10-01).
         io.tima.shared.CallKeep.visible(false)
         // Пин-код (ПЛАН-(ПН) Р9): 5 минут в фоне — замок снова.
@@ -136,7 +136,7 @@ class MainActivity : ComponentActivity() {
         // Только после настоящего ухода в фон: первый `onStart` идёт сразу за запуском, и
         // «вернулись» рядом с `APP-START` было бы неправдой и лишней строкой.
         if (wasBackground) Journal.note(LogCode.APP_FOREGROUND, "вернулись из фона")
-        ChannelHost.notices()?.windowVisible(true)
+        ChannelHost.windowVisible(true)
         io.tima.shared.PinGate.visible(true)
         // Вернулись — видео снова идёт, сторож проверяет, что камера даёт кадры.
         io.tima.shared.CallKeep.visible(true)

@@ -102,8 +102,10 @@ fun ChatScreen(
     onSend: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Подпись под именем: «в сети», «был вчера». */
+    /** Подпись под именем: «в сети», «был вчера», «печатает…». */
     caption: String? = null,
+    /** «Доставлено» и «прочитано» своих сообщений (ПЛАН-(ОП)); `null` — не знаем. */
+    receipt: ChatReceipt? = null,
     onCloseMessage: () -> Unit = {},
     /**
      * Человек просит недостающий ключ группы. Кнопка появляется только у групповой
@@ -216,6 +218,7 @@ fun ChatScreen(
     val cancelledMark = Tima.words.auth.identityCancelledMark
     val colors = Tima.colors
     val words = Tima.words.chat
+    androidx.compose.runtime.CompositionLocalProvider(LocalChatReceipt provides receipt) {
     Column(modifier.fillMaxSize().background(colors.surface)) {
         SubwindowHeader(
             title = peer,
@@ -326,6 +329,7 @@ fun ChatScreen(
             onCircle = onCircle,
             circles = circles,
         )
+    }
     }
 }
 
@@ -574,7 +578,7 @@ private fun Bubbled(
     onAvatar = onAvatar,
     bottom = {
         Tertiary(time(line.atMs), lineOne = true)
-        mark(line.display)?.let { Mark(it) }
+        markOf(line.display, line.atMs, LocalChatReceipt.current)?.let { Mark(it) }
         // Метка круга — рядом со временем, а не поверх текста: цвет несёт метка, а не
         // буквы. Красить текст значило бы, что читаемость зависит от доступа.
         if (showCircle) CircleMark(line.level)
@@ -680,19 +684,6 @@ private fun NarrowChoice(was: Int, onPick: (Int) -> Unit) {
     }
 }
 
-/**
- * Отметка о судьбе сообщения — только у своих.
- *
- * У входящего отметки нет: «получено» для чужого сообщения означает, что оно на экране,
- * а это и так видно. Нечитаемое говорит о себе самим пузырём.
- */
-private fun mark(kind: MessageDisplay): MarkKind? = when (kind) {
-    MessageDisplay.PENDING -> MarkKind.Waits
-    MessageDisplay.SENT -> MarkKind.Left
-    MessageDisplay.FAILED -> MarkKind.NotLeft
-    // Служебной строке отмечать нечего: её никто не отправлял.
-    MessageDisplay.RECEIVED, MessageDisplay.UNREADABLE, MessageDisplay.SYSTEM -> null
-}
 
 /**
  * Зона 4 — строка ввода.
