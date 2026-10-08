@@ -136,6 +136,8 @@ fun BookScreen(
      * «Спрашивать нечего» (ПК) приходит иначе — пустым `onAllow`.
      */
     allowInSettings: Boolean = false,
+    /** «Отказаться» — убрать просьбу (заказчик 2026-10-08). `null` — кнопки нет. */
+    onRefuse: (() -> Unit)? = null,
     /**
      * Человек за строкой книги: имя — из книги, имя пользователя и ник — со справочника.
      * По умолчанию — только то, что есть в книге: так собирают проверки без сети.
@@ -231,37 +233,15 @@ fun BookScreen(
     // нижнем углу — там же, где «написать» в списке чатов.
     Box(modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
+        if (state.askPermission && state.all.isNotEmpty()) {
+            AskBook(onAllow, allowInSettings, onRefuse, Modifier.fillMaxWidth().padding(TimaSpacing.about3))
+        }
         when {
-            state.needPermission -> InCenter(Modifier.fillMaxSize()) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-                    modifier = Modifier.padding(TimaSpacing.about5),
-                ) {
-                    Name(words.notRead)
-                    // Сказано, что будет и чего не будет: разрешение, о котором не
-                    // объяснили, отклоняют — и правильно делают.
-                    Secondary(words.notReadAbout)
-                    // ── КНОПКА НАЗЫВАЕТ СЕБЯ, А НЕ МОЛЧИТ ГЛИФОМ ────────
-                    //
-                    // Здесь стоял «✓», и за ним пряталось **два разных действия**: в
-                    // первый раз системный диалог, а после отказа, когда система
-                    // спрашивать больше не станет, — уход в настройки приложения.
-                    //
-                    // То есть кнопка «перейти в настройки» была и раньше, просто она
-                    // была той же самой и молчала о себе. Глиф «✓» означает «согласен»,
-                    // а второй раз означает «выйдешь из приложения».
-                    //
-                    // Кнопки нет вовсе там, где спрашивать нечего (ПК): `onAllow`
-                    // приходит пустым. Не «неактивная» — неактивная тоже зовёт нажать.
-                    if (onAllow != null) {
-                        Button(
-                            label = if (allowInSettings) words.openSettings else words.allow,
-                            onClick = onAllow,
-                            kind = ButtonKind.Action,
-                        )
-                    }
-                }
+            // Без разрешения книга не пуста: записанное в ней показывается и так (заказчик
+            // 2026-10-08: «если не дали разрешений, не значит что ничего не показывать»).
+            // Просьба — посередине, только пока показать нечего; иначе — над списком.
+            state.askPermission && state.all.isEmpty() -> InCenter(Modifier.fillMaxSize()) {
+                AskBook(onAllow, allowInSettings, onRefuse, Modifier.padding(TimaSpacing.about5))
             }
 
             state.noBook && state.all.isEmpty() -> InCenter(Modifier.fillMaxSize()) {
@@ -515,4 +495,43 @@ private fun CardLine(card: BookRow.Card, onClick: () -> Unit) {
         },
         right = { IconButton(glyph = "›", onClick = onClick) },
     )
+}
+
+/** Просьба прочитать книгу телефона: что будет, «Разрешить» и «Отказаться». */
+@Composable
+private fun AskBook(onAllow: (() -> Unit)?, allowInSettings: Boolean, onRefuse: (() -> Unit)?, modifier: Modifier) {
+    val words = Tima.words.book
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        modifier = modifier,
+    ) {
+        Name(words.notRead)
+        // Сказано, что будет и чего не будет: разрешение, о котором не
+        // объяснили, отклоняют — и правильно делают.
+        Secondary(words.notReadAbout)
+        // ── КНОПКА НАЗЫВАЕТ СЕБЯ, А НЕ МОЛЧИТ ГЛИФОМ ────────
+        //
+        // Здесь стоял «✓», и за ним пряталось **два разных действия**: в
+        // первый раз системный диалог, а после отказа, когда система
+        // спрашивать больше не станет, — уход в настройки приложения.
+        //
+        // То есть кнопка «перейти в настройки» была и раньше, просто она
+        // была той же самой и молчала о себе. Глиф «✓» означает «согласен»,
+        // а второй раз означает «выйдешь из приложения».
+        //
+        // Кнопки нет вовсе там, где спрашивать нечего (ПК): `onAllow`
+        // приходит пустым. Не «неактивная» — неактивная тоже зовёт нажать.
+        Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+            if (onAllow != null) {
+                Button(
+                    label = if (allowInSettings) words.openSettings else words.allow,
+                    onClick = onAllow,
+                    kind = ButtonKind.Action,
+                )
+            }
+            // Отказаться — просьба и кнопка уходят, книга показывает записанное.
+            if (onRefuse != null) Button(label = words.refuse, onClick = onRefuse, kind = ButtonKind.Quiet)
+        }
+    }
 }

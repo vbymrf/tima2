@@ -724,7 +724,9 @@ fun BookViewSheet(
                     withSections = withSections,
                     onOpenList = if (everyone.isEmpty()) null else ({ roster = it }),
                     countIn = { r -> everyone.count { r.holds(it) } },
-                    onOpenLedger = if (everyone.isEmpty() || onPickList == null || onPickSection == null) {
+                    // Журнал есть и при пустой книге (заказчик 2026-10-08: «журнал контактов
+                    // должен существовать вне зависимости разрешений»).
+                    onOpenLedger = if (onPickList == null || onPickSection == null) {
                         null
                     } else {
                         { ledger = true }

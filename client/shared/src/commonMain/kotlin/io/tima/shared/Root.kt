@@ -1630,6 +1630,11 @@ private fun App(
      * то же, что у «Чатов». До этого окно 0 брало только карточку, а «Звонки» — только книгу,
      * и незнакомый в журнале звался «Без имени».
      */
+    // Незнакомый — человека нет в книге; то же правило, что у окна 0 (2026-10-08). Себя
+    // незнакомым не называем.
+    val strangerId: (String) -> Boolean = { id ->
+        id.isNotEmpty() && id != session.userId && bookStateForChats.all.none { it.userId == id }
+    }
     val personOfId: (String) -> ChatPerson = { id ->
         people.want(listOf(id))
         val entry = bookStateForChats.all.firstOrNull { it.userId == id }
@@ -2992,6 +2997,8 @@ private fun App(
                     // знает только `user_id`, а «Аня Борисова» живёт в книге.
                     // У группового — создатель звонка: его имя и телефон в строке (2026-10-08).
                     personOfCall = { record -> personOfId(if (record.group) record.initiatorId else record.other(session.userId)) },
+                    strangerOfCall = { record -> strangerId(if (record.group) record.initiatorId else record.other(session.userId)) },
+                    strangerOfChat = { chat -> chat.kind == ChatKind.Personal && chat.peerId?.let(strangerId) == true },
                     faceOfCall = { record ->
                         val id = record.other(session.userId)
                         people.wantFace(id)
@@ -3139,8 +3146,10 @@ private fun App(
                     onRefreshContacts = if (contactsAccessWay() == ContactsAccessWay.None) {
                         null
                     } else {
-                        book::refresh
+                        // «Обновить» спрашивает снова, даже если от просьбы отказались.
+                        book::askAgain
                     },
+                    onRefuseContacts = if (contactsAccessWay() == ContactsAccessWay.None) null else book::refusePermission,
                 )
 
                 Window.Social -> {
@@ -5731,6 +5740,12 @@ private fun PhoneWindow(
     allowInSettings: Boolean = false,
     /** «Обновить» — сверка с телефонной книгой по требованию (Л2). */
     onRefreshContacts: (() -> Unit)? = null,
+    /** «Отказаться» от чтения книги телефона (2026-10-08). `null` — кнопки нет. */
+    onRefuseContacts: (() -> Unit)? = null,
+    /** Человека строки журнала нет в книге — «Незнакомый» (2026-10-08). */
+    strangerOfCall: (CallRecord) -> Boolean = { false },
+    /** Собеседника личной переписки нет в книге — «Незнакомый» (2026-10-08). */
+    strangerOfChat: (ChatSummary) -> Boolean = { false },
 ) {
     var calls by remember { mutableStateOf(CALL_FILTERS.first()) }
     val bookWords = Tima.words.book
@@ -5857,6 +5872,7 @@ private fun PhoneWindow(
                 receiptOf = receiptOfChat,
                 typingOf = typingOfChat,
                 mutedOf = { chat -> "chat:${chat.chatId}" in mutedKeys },
+                strangerOf = strangerOfChat,
             )
 
             WindowTab.Contacts -> {
@@ -5880,6 +5896,7 @@ private fun PhoneWindow(
                     onInvite = onInvite,
                     onAllow = onAllowContacts,
                     allowInSettings = allowInSettings,
+                    onRefuse = onRefuseContacts,
                     onRefresh = onRefreshContacts,
                 )
             }
@@ -5939,6 +5956,7 @@ private fun PhoneWindow(
                     groupOf = groupCallOf,
                     note = callsNote,
                     flagged = { it.callId in flaggedCalls },
+                    strangerOf = strangerOfCall,
                 )
             }
 

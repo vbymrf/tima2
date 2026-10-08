@@ -112,9 +112,11 @@ fun CallsScreen(
      * видно, кто его создал»).
      */
     flagged: (CallRecord) -> Boolean = { false },
+    /** Человека строки нет в книге — «Незнакомый» перед именем, как в окне звонка (2026-10-08). */
+    strangerOf: (CallRecord) -> Boolean = { false },
 ) {
     Box(modifier.fillMaxSize()) {
-        Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf, flagged)
+        Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf, flagged, strangerOf)
         note?.let {
             Caption(
                 it,
@@ -144,6 +146,7 @@ private fun Records(
     offline: Boolean,
     groupOf: (CallRecord) -> GroupCallLine?,
     flagged: (CallRecord) -> Boolean,
+    strangerOf: (CallRecord) -> Boolean,
 ) {
     val words = Tima.words.callLog
     val ring = Tima.colors.activity
@@ -177,12 +180,12 @@ private fun Records(
                     // Строки (заказчик 2026-10-08): личный — имя по «Виду», телефон, событие;
                     // групповой — «Групповой звонок» первой, дальше те же три о создателе.
                     Column {
-                        val name = who.line(look, PERSON_FIRST_LINE) ?: Tima.words.book.nameless
+                        val stranger = strangerOf(record)
                         if (group != null) {
                             Name(Tima.words.groupCall.title)
-                            Caption(name, fontSize = TimaType.sz5, color = Tima.colors.text2, lineOne = true)
+                            PersonName(who, look, stranger, Tima.words.book.nameless, fontSize = TimaType.sz5)
                         } else {
-                            Name(name)
+                            PersonName(who, look, stranger, Tima.words.book.nameless)
                         }
                         // Телефон — как второй строкой у контакта; без номера — ник.
                         Caption(

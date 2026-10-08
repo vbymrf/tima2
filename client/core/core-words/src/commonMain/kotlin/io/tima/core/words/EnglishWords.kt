@@ -868,6 +868,7 @@ object EnglishWords : Words {
         override val search = "Name, nickname or number"
         override val searchChats = "Name or message text"
         override val allow = "Allow"
+        override val refuse = "Decline"
         override val openSettings = "Open settings"
         override val notRead = "Contacts not read"
         override val notReadAbout =

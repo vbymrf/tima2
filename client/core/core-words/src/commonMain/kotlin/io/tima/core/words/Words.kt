@@ -607,6 +607,12 @@ interface BookWords {
     val allow: String
 
     /**
+     * «Отказаться» рядом с «Разрешить» (заказчик 2026-10-08): просьба и кнопка уходят, книга
+     * показывает то, что в ней уже записано. Спросить снова — «Обновить».
+     */
+    val refuse: String
+
+    /**
      * Надпись той же кнопки, когда система спрашивать больше не станет.
      *
      * Своя, а не взятая у звонка: `CallWords.openSettings` про микрофон, и правка там
@@ -3031,6 +3037,7 @@ object RussianWords : Words {
         override val searchChats = "Имя собеседника или текст"
         override val notRead = "Контакты не прочитаны"
         override val allow = "Разрешить"
+        override val refuse = "Отказаться"
         override val openSettings = "Открыть настройки"
         override val notReadAbout =
             "Приложение возьмёт из телефонной книги имена и номера, чтобы " +

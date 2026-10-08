@@ -73,7 +73,9 @@ class BookStore(
             }
         }
         scope.launch {
-            settings.all().collect { saved -> _state.value = _state.value.copy(view = BookView.from(saved)) }
+            settings.all().collect { saved ->
+                _state.value = _state.value.copy(view = BookView.from(saved), permissionRefused = saved[PERMISSION_REFUSED] == "1")
+            }
         }
     }
 
@@ -85,6 +87,24 @@ class BookStore(
      */
     fun refresh() {
         scope.launch {
+            _state.value = _state.value.copy(working = true)
+            val step = sync.run()
+            _state.value = _state.value.copy(working = false, sync = step)
+        }
+    }
+
+    /**
+     * «Отказаться» от чтения книги телефона (заказчик 2026-10-08): просьба уходит и не
+     * возвращается сама — книга показывает записанное. Помнится в настройках.
+     */
+    fun refusePermission() {
+        scope.launch { settings.put(PERMISSION_REFUSED, "1") }
+    }
+
+    /** «Обновить» — спросить снова, даже если отказались: кнопку нажали сами. */
+    fun askAgain() {
+        scope.launch {
+            settings.put(PERMISSION_REFUSED, "")
             _state.value = _state.value.copy(working = true)
             val step = sync.run()
             _state.value = _state.value.copy(working = false, sync = step)
@@ -459,6 +479,8 @@ data class BookState(
     val chosen: String = "",
     val working: Boolean = false,
     val sync: SyncStep? = null,
+    /** Отказались читать книгу телефона — просьбы нет, книга показывает записанное. */
+    val permissionRefused: Boolean = false,
     /**
      * Ники людей книги по `user_id` — для поиска (Л19).
      *
@@ -578,6 +600,9 @@ data class BookState(
     /** Разрешения нет — вкладка не пуста, ей есть что предложить нажать. */
     val needPermission: Boolean get() = sync == SyncStep.NeedPermission
 
+    /** Просить разрешение: его нет, и от просьбы не отказались. */
+    val askPermission: Boolean get() = needPermission && !permissionRefused
+
     /** Платформа без outsidersной книги: предлагать «разрешить» нечего. */
     val noBook: Boolean get() = sync == SyncStep.NoBook
 }
@@ -637,3 +662,6 @@ fun orderedSections(sections: List<Section>, common: Section?, commonName: Strin
 
 /** Место «Общего», пока его строки нет: заведомо больше любого настоящего — он последний. */
 const val COMMON_PLACE_DEFAULT = 1_000
+
+/** Ключ настроек: от чтения книги телефона отказались (2026-10-08). */
+private const val PERMISSION_REFUSED = "book.permission.refused"

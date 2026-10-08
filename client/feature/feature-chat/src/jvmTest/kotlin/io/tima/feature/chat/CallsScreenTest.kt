@@ -47,6 +47,18 @@ class CallsScreenTest {
     }
 
     @Test
+    fun незнакомый_вместо_без_имени() {
+        // Человека нет в книге — «Незнакомый», как в окне звонка (заказчик 2026-10-08).
+        val stranger = capture("звонки-незнакомый", 400, 300, dark = false) {
+            CallsScreen(records = listOf(direct), me = me, personOf = { ChatPerson(phone = "+79000000001") }, strangerOf = { true })
+        }
+        val nameless = capture("звонки-без-имени", 400, 300, dark = false) {
+            CallsScreen(records = listOf(direct), me = me, personOf = { ChatPerson(phone = "+79000000001") })
+        }
+        assertTrue(stranger.difference(nameless) > 0.001, "«Незнакомый» не показан")
+    }
+
+    @Test
     fun слово_поверх_журнала() {
         val with = capture("звонки-чат-удалён", 400, 300, dark = false) {
             CallsScreen(records = listOf(direct), me = me, personOf = { ChatPerson(name = "Аня") }, note = "Чат удалён")
