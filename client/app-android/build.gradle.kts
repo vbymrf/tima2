@@ -147,6 +147,8 @@ android {
             initWith(getByName("debug"))
             isDebuggable = false
             isJniDebuggable = false
+            // Видно в «О приложении», какая сборка стоит: номер тот же, вид другой.
+            versionNameSuffix = "-v2-fast"
             matchingFallbacks += listOf("release")
         }
     }

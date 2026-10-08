@@ -1054,7 +1054,7 @@ private fun App(
     // было, и «открыл Звонки» приходилось угадывать по запросу `calls/seen`.
     // Вкладки всех окон — одно место (беда 2026-10-08); у «Социума» и «Телефона» — оно же.
     val windowTabs = remember { io.tima.feature.shell.WindowTabs() }
-    var socialTab by windowTabs.state(Window.Social, WindowTab.Catalogue)
+    var socialTab by remember(windowTabs) { windowTabs.state(Window.Social, WindowTab.Catalogue) }
     LaunchedEffect(socialTab) { Journal.note(LogCode.SCREEN_OPEN, "tab", "окно" to Window.Social.name, "вкладка" to socialTab.name) }
     // Люди за идентификаторами — одно место на книгу, реплики и состав (2026-09-18).
     val people = remember(assembled) { People(network.directory, environment.bookStorage, scope, network.media) }
@@ -1420,7 +1420,7 @@ private fun App(
     LaunchedEffect(commentPing) {
         if (commentPing != 0L) page.refresh()
     }
-    var phoneTab by windowTabs.state(Window.Phone, WindowTab.Chats)
+    var phoneTab by remember(windowTabs) { windowTabs.state(Window.Phone, WindowTab.Chats) }
     LaunchedEffect(phoneTab) { Journal.note(LogCode.SCREEN_OPEN, "tab", "окно" to Window.Phone.name, "вкладка" to phoneTab.name) }
 
     // Откуда ушли в настройки (ПЛАН-(Б)-ОТЛАДКИ.md, Б2). Запоминается ЗДЕСЬ, в момент
@@ -2985,6 +2985,9 @@ private fun App(
                     swipeArea = Modifier.windowSwipe(
                         onLeft = { switchWindow(InSide.Next) },
                         onRight = { switchWindow(InSide.Previous) },
+                        // В картинке свои горизонтальные жесты (ряд участников, рамка
+                        // своего видео) — окно решает после них, как и прежде.
+                        beforeContent = false,
                     ),
                     // «Принять» гасит строку звонка и мелодию сразу, не дожидаясь ленты.
                     // Нет движка (ПК без `livekit_ffi.dll`) — нет и кнопки: принять нечем,
@@ -3087,12 +3090,16 @@ private fun App(
                     // `ИНТЕРФЕЙС/04-социум/ФУНКЦИОНАЛ.md`.
                     // Только личные. Группы звонка ушли во вкладку «Звонки» строкой с «ГЗ»
                     // (заказчик 2026-10-08: в «Чатах» они раздвоились).
-                    list = listState.copy(chats = listState.personal),
+                    // Запомнено: новый объект на каждую перерисовку окна не давал пропустить
+                    // ни одного экрана «Телефона» (Redmi A3, 2026-10-08).
+                    list = remember(listState) { listState.copy(chats = listState.personal) },
                     // Ники — со справочника: в книге их нет, а искать по ним надо
                     // (Л19). У человека без номера ник — единственное, чем его найти.
-                    book = bookState.copy(
-                        nicks = peopleCards.mapNotNull { (id, card) -> card.nick?.let { id to it } }.toMap(),
-                    ),
+                    book = remember(bookState, peopleCards) {
+                        bookState.copy(
+                            nicks = peopleCards.mapNotNull { (id, card) -> card.nick?.let { id to it } }.toMap(),
+                        )
+                    },
                     onSearchInBook = book::changedSearch,
                     personOfChat = personOfChat,
                     faceOfChat = faceOfChat,
@@ -5877,18 +5884,24 @@ private fun PhoneWindow(
             null
         },
     ) {
+        // Отобранное и «Вид» — запомнены, а не собираются заново на каждую перерисовку окна:
+        // новый объект на каждой перерисовке не давал пропустить ни экран, ни его строки
+        // (Redmi A3, 2026-10-08). Пересчитываются, только когда сменилось то, из чего собраны.
+        val look = remember(book.view) { book.view.look() }
         when (tab) {
             WindowTab.Chats -> ChatsScreen(
                 // Р4: переписки сужаются выбранным разделом — тем же, что у контактов;
                 // поиск сужает дальше, по имени в шапке и первой строке последнего.
-                state = list.copy(
-                    chats = list.chats.filter { chat ->
-                        (
-                            chatSection.isEmpty() ||
-                                sectionOfChat(chat) == (if (chatSection == COMMON_SECTION) "" else chatSection)
-                            ) && chat.matches(request)
-                    },
-                ),
+                state = remember(list, chatSection, request, sectionOfChat) {
+                    list.copy(
+                        chats = list.chats.filter { chat ->
+                            (
+                                chatSection.isEmpty() ||
+                                    sectionOfChat(chat) == (if (chatSection == COMMON_SECTION) "" else chatSection)
+                                ) && chat.matches(request)
+                        },
+                    )
+                },
                 onOpen = onOpen,
                 onNew = onNew,
                 onSettings = onSettings,
@@ -5896,7 +5909,7 @@ private fun PhoneWindow(
                 personOf = personOfChat,
                 faceOf = faceOfChat,
                 onFace = { chat -> chat.peerId?.let(onFaceUser) },
-                look = book.view.look(),
+                look = look,
                 countOf = { chat -> noticeCounts.chat(chat.chatId, chat.peerId) },
                 tagOf = tagOf,
                 callGroupOf = callGroupOf,
@@ -5964,19 +5977,24 @@ private fun PhoneWindow(
                     // книге», а не «звонок с чужого номера»: чужих номеров в нашем
                     // журнале не бывает вовсе — звонить может только аккаунт.
                     // Групповой звонок — не про одного человека: он в «Всех» и «Пропущенных».
-                    records = callsState.records.filter { record ->
-                        val known = book.all.any { it.userId != null && it.userId == record.other(myUserId) }
-                        when (calls) {
-                            WindowTab.FromBook -> known && !record.group
-                            WindowTab.Unknown -> !known && !record.group
-                            WindowTab.Missed -> record.outcome(myUserId) == CallOutcome.Missed
-                            else -> true
+                    // Кто из книги — одним набором на смену книги, а не проходом по книге на
+                    // каждую запись журнала при каждой перерисовке.
+                    records = remember(callsState.records, calls, book.all, myUserId) {
+                        val inBook = book.all.mapNotNullTo(HashSet()) { it.userId }
+                        callsState.records.filter { record ->
+                            val known = record.other(myUserId) in inBook
+                            when (calls) {
+                                WindowTab.FromBook -> known && !record.group
+                                WindowTab.Unknown -> !known && !record.group
+                                WindowTab.Missed -> record.outcome(myUserId) == CallOutcome.Missed
+                                else -> true
+                            }
                         }
                     },
                     me = myUserId,
                     personOf = personOfCall,
                     faceOf = faceOfCall,
-                    look = book.view.look(),
+                    look = look,
                     onCallAgain = onCallAgain,
                     onOpen = { record ->
                         if (record.group) onOpenGroupCall(record) else onOpenUser?.invoke(record.other(myUserId))

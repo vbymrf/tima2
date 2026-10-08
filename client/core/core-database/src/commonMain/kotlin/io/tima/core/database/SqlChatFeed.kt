@@ -9,6 +9,7 @@ import io.tima.domain.chat.MessageBodyCodec
 import io.tima.domain.chat.MessageDisplay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
 /**
@@ -54,6 +55,8 @@ class SqlChatFeed(
             .asFlow()
             .mapToList(Dispatchers.Default)
             .map { lines -> lines.map { it.toLine() } }
+            // Расшифровка ленты — не на главном потоке (см. SqlChatsFeed.list).
+            .flowOn(Dispatchers.Default)
 
     private fun Messages.toLine() = ChatLine(
         dedupKey = dedup_key,

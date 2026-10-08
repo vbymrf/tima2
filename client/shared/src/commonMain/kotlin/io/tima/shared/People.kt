@@ -9,6 +9,7 @@ import io.tima.domain.chat.ChatFaces
 import io.tima.domain.chat.ChatPeople
 import io.tima.domain.chat.ChatPerson
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Люди за идентификаторами — одно место на всё приложение (решение заказчика 2026-09-18:
@@ -51,7 +53,9 @@ class People(
         val mediaId = _cards.value[userId]?.avatar ?: return
         if (media == null || userId in _faces.value || !fetching.add(userId)) return
         scope.launch {
-            val picture = media.download(mediaId)?.let(::decodeImage)
+            // Раскодировать — не на главном потоке: scope здесь экранный, а картинки
+            // приезжают пачкой как раз во время первой прокрутки списка (Redmi A3, 2026-10-08).
+            val picture = media.download(mediaId)?.let { bytes -> withContext(Dispatchers.Default) { decodeImage(bytes) } }
             if (picture != null) _faces.value = _faces.value + (userId to picture) else fetching.remove(userId)
         }
     }

@@ -16,6 +16,7 @@ import io.tima.domain.chat.MessageBodyCodec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
 /**
@@ -69,6 +70,10 @@ class SqlChatsFeed(
             // создают заранее, и человек ждёт её в списке сразу.
             stubs.filter { it.kind == GROUP }.map { it.toSummary() } + lines.map { it.toSummary() }
         }
+            // Расшифровка имён и превью — не на главном потоке: собирает список тот, кто
+            // его слушает, а слушает экран. На Redmi A3 (2026-10-08) каждое изменение списка
+            // расшифровывало все строки посреди кадра.
+            .flowOn(Dispatchers.Default)
     }
 
     private fun ChatList.toSummary() = ChatSummary(

@@ -31,7 +31,11 @@ class WindowTabs {
         chosen[window] = tab
     }
 
-    /** Вкладка окна, у которого ряд вкладок свой (`PhoneWindow`): `var tab by tabs.state(…)`. */
+    /**
+     * Вкладка окна, у которого ряд вкладок свой (`PhoneWindow`):
+     * `var tab by remember(tabs) { tabs.state(…) }`. Без `remember` каждая перерисовка давала
+     * новый объект, и всё, что его захватило, не пропускалось (Redmi A3, 2026-10-08).
+     */
     fun state(window: Window, first: WindowTab): MutableState<WindowTab> = object : MutableState<WindowTab> {
         override var value: WindowTab
             get() = chosen[window] ?: first
