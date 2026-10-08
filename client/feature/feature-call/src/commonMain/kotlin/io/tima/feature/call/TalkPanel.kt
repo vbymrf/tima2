@@ -349,7 +349,8 @@ private fun PictureIcon(person: Boolean, lit: Boolean) {
  */
 @Composable
 internal fun Pip(
-    video: VideoHandle,
+    /** Картинка окошка; `null` — вместо неё [instead] (аватар собеседника без видео). */
+    video: VideoHandle?,
     offset: Offset,
     /** Отступ сверху: окошко стоит ниже строки имени и времени, чтобы их не закрывать. */
     below: androidx.compose.ui.unit.Dp,
@@ -358,7 +359,13 @@ internal fun Pip(
     onDrag: (Boolean) -> Unit,
     onMove: (Offset) -> Unit,
     modifier: Modifier = Modifier,
+    instead: @Composable () -> Unit = {},
 ) {
+    // Обработчики — свежие: жесты живут, пока живёт окошко, и замкнутые при первом показе
+    // обработчики помнили бы, что меняться было не с чем (2026-10-08).
+    val tap by rememberUpdatedState(onTap)
+    val drag by rememberUpdatedState(onDrag)
+    val move by rememberUpdatedState(onMove)
     Box(
         modifier
             .padding(top = below)
@@ -368,18 +375,26 @@ internal fun Pip(
             .background(if (dragging) Tima.colors.navigation else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(PIP_RADIUS))
             .testTag(PIP_TAG),
     ) {
-        CallVideo(video, Modifier.fillMaxSize().padding(if (dragging) PIP_FRAME else 0.dp))
+        if (video != null) {
+            CallVideo(video, Modifier.fillMaxSize().padding(if (dragging) PIP_FRAME else 0.dp))
+        } else {
+            Box(
+                Modifier.fillMaxSize().padding(if (dragging) PIP_FRAME else 0.dp)
+                    .background(Tima.colors.functional, RoundedCornerShape(PIP_RADIUS)),
+                contentAlignment = Alignment.Center,
+            ) { instead() }
+        }
         Box(
             Modifier.fillMaxSize()
-                .pointerInput(Unit) { detectTapGestures(onTap = { onTap() }) }
+                .pointerInput(Unit) { detectTapGestures(onTap = { tap() }) }
                 .pointerInput(Unit) {
                     detectDragGesturesAfterLongPress(
-                        onDragStart = { onDrag(true) },
-                        onDragEnd = { onDrag(false) },
-                        onDragCancel = { onDrag(false) },
+                        onDragStart = { drag(true) },
+                        onDragEnd = { drag(false) },
+                        onDragCancel = { drag(false) },
                         onDrag = { change, amount ->
                             change.consume()
-                            onMove(amount)
+                            move(amount)
                         },
                     )
                 },

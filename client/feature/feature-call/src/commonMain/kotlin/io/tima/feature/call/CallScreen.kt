@@ -238,10 +238,14 @@ fun CallScreen(
             // под ней не рисуются: они отвечают на тот же вопрос «с кем говорю», и
             // повторять его поверх лица незачем.
             val remoteShown = remoteVideo?.takeIf { remoteHere }
+            // Своя картинка — только пока камера включена. Выключенная камера в движке глушит
+            // дорожку, а не убирает её, и окошко с замершим кадром висело (заказчик
+            // 2026-10-08: «отключил камеру свою — окно не исчезает»).
+            val mine = localVideo?.takeIf { state.cameraOn }
             // Нажали на своё окошко — меняется местами с собеседником (заказчик 2026-10-08).
-            // Только когда есть обе картинки: менять пустое место не с чем.
-            val swap = swapped && remoteShown != null && localVideo != null
-            val big = if (swap) localVideo else remoteShown
+            // Собеседник без видео — меняется с его аватаром: своё крупно, аватар в окошке.
+            val swap = swapped && mine != null
+            val big = if (swap) mine else remoteShown
             if (big != null) {
                 CallVideo(big, Modifier.fillMaxSize())
             }
@@ -339,14 +343,16 @@ fun CallScreen(
             // Маленькое и сверху справа: человек проверяет им, что он в кадре, а не
             // смотрит на себя. Нажатие меняет его местами с собеседником; зажали —
             // толстая зелёная рамка, и окошко переносится пальцем (заказчик 2026-10-08).
-            val small = if (swap) remoteShown else localVideo
-            if (small != null) {
+            val small = if (swap) remoteShown else mine
+            // Поменялись, а у собеседника видео нет — в окошке его аватар.
+            if (small != null || swap) {
                 Pip(
                     video = small,
                     offset = pipOffset,
                     below = if (group == null && big != null) pipBelow else 0.dp,
                     dragging = pipDragging,
-                    onTap = { if (remoteShown != null && localVideo != null) swapped = !swapped },
+                    onTap = { if (mine != null) swapped = !swapped },
+                    instead = { Avatar(letters = letters(peer), size = AvatarSize.Big, image = peerFace) },
                     onDrag = { moving -> pipDragging = moving },
                     onMove = { delta -> pipOffset = clampPip(pipOffset + delta, area.belowBy(pipBelowPx), pipSizePx) },
                     modifier = Modifier.align(Alignment.TopEnd),
