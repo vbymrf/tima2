@@ -43,6 +43,9 @@ type StatesStore interface {
 	ListStates(ctx context.Context, userID string, after int64) ([]store.StateRow, int64, error)
 	ChatPeer(ctx context.Context, chatID, userID, deviceID string) (string, error)
 	SetReceipt(ctx context.Context, r store.Receipt) (int64, error)
+	SetEntityRead(ctx context.Context, ownerID, kind, entityID string, readID int64) (int64, error)
+	SetNotify(ctx context.Context, ownerID, kind, entityID string, off bool) (int64, error)
+	SetDeviceDelivery(ctx context.Context, deviceID, mode string) error
 }
 
 var _ StatesStore = (*store.Store)(nil)
@@ -73,6 +76,111 @@ type liveStates struct {
 func RegisterStates(mux *http.ServeMux, st StatesStore, n *Notifier, requireDevice Middleware) {
 	mux.HandleFunc("GET /api/v1/users/me/states", requireDevice(listStates(st)))
 	mux.HandleFunc("PUT /api/v1/chats/{chatID}/read", requireDevice(readChat(st, n)))
+	// ПЛАН-(ОУ): «прочитал до» сущности «зашли, забрали», «Отключить уведомления», способ доставки.
+	mux.HandleFunc("PUT /api/v1/users/me/reads", requireDevice(readEntity(st, n)))
+	mux.HandleFunc("PUT /api/v1/users/me/notify", requireDevice(setNotify(st, n)))
+	mux.HandleFunc("PUT /api/v1/devices/me/delivery", requireDevice(setDelivery(st)))
+}
+
+// entityKinds — сущности «зашли, забрали» (ПЛАН-(ОУ) решение 2).
+var entityKinds = map[string]bool{"group": true, "channel": true}
+
+// notifyKinds — у чего можно отключить уведомления (решение 5).
+var notifyKinds = map[string]bool{"chat": true, "group": true, "channel": true, "community": true}
+
+// readEntity — PUT /users/me/reads {kind, entity_id, read_id}: дочитал открытую группу или
+// канал. Число непрочитанного на других своих устройствах пересчитается по сигналу.
+func readEntity(st StatesStore, n *Notifier) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		var req struct {
+			Kind     string `json:"kind"`
+			EntityID string `json:"entity_id"`
+			ReadID   int64  `json:"read_id"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&req); err != nil ||
+			!entityKinds[req.Kind] || req.EntityID == "" || req.ReadID <= 0 {
+			writeErr(w, http.StatusBadRequest, "bad_json", "нужны kind (group|channel), entity_id, read_id")
+			return
+		}
+		rev, err := st.SetEntityRead(r.Context(), id.UserID, req.Kind, req.EntityID, req.ReadID)
+		if err != nil {
+			log.Printf("readEntity %s: %v", req.EntityID, err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		n.StatePoke(r.Context(), id.UserID, rev)
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// setNotify — PUT /users/me/notify {kind, entity_id, off}: «Отключить уведомления» у сущности или
+// включить обратно. Хранится на сервере и расходится по своим устройствам лентой.
+func setNotify(st StatesStore, n *Notifier) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		var req struct {
+			Kind     string `json:"kind"`
+			EntityID string `json:"entity_id"`
+			Off      bool   `json:"off"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&req); err != nil ||
+			!notifyKinds[req.Kind] || req.EntityID == "" {
+			writeErr(w, http.StatusBadRequest, "bad_json", "нужны kind (chat|group|channel|community), entity_id, off")
+			return
+		}
+		rev, err := st.SetNotify(r.Context(), id.UserID, req.Kind, req.EntityID, req.Off)
+		if err != nil {
+			log.Printf("setNotify %s: %v", req.EntityID, err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		n.StatePoke(r.Context(), id.UserID, rev)
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// setDelivery — PUT /devices/me/delivery {mode}: устройство умеет «зашли, забрали» (`tops`) —
+// открытые группы ему вершиной, а не телом (ОУ4). Установленные клиенты не заявляют и
+// получают по-прежнему.
+func setDelivery(st StatesStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		var req struct {
+			Mode string `json:"mode"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 256)).Decode(&req); err != nil || (req.Mode != "" && req.Mode != "tops") {
+			writeErr(w, http.StatusBadRequest, "bad_json", "mode — '' или tops")
+			return
+		}
+		if err := st.SetDeviceDelivery(r.Context(), id.DeviceID, req.Mode); err != nil {
+			log.Printf("setDelivery %s: %v", id.DeviceID, err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// RaiseTopsStore — вершины сущностей «зашли, забрали»: нужна ручкам постов и сообщений групп.
+type RaiseTopsStore interface {
+	RaiseTops(ctx context.Context, kind, entityID string, owners []string, topID, topAtMs int64) ([]store.RaisedTop, error)
+}
+
+// raiseTops — новое в сущности «зашли, забрали»: вершина подписчикам и сигнал тем, у кого
+// уведомления этой сущности не отключены (решение 6). Отключённым — тихо: число увидят при
+// следующем выходе на связь.
+func raiseTops(ctx context.Context, st RaiseTopsStore, n *Notifier, kind, entityID string, owners []string, topID, topAtMs int64) {
+	raised, err := st.RaiseTops(ctx, kind, entityID, owners, topID, topAtMs)
+	if err != nil {
+		log.Printf("вершина %s %s: %v", kind, entityID, err)
+		return
+	}
+	for _, t := range raised {
+		if !t.Off {
+			n.StatePoke(ctx, t.OwnerID, t.Rev)
+		}
+	}
 }
 
 // StatePoke — «в ленте состояний есть до №rev» всем устройствам человека.
@@ -114,6 +222,10 @@ func listStates(st StatesStore) http.HandlerFunc {
 				m["chat_id"], m["from_id"], m["until_ms"] = s.ChatID, s.PeerID, s.UntilMs
 			case "presence":
 				m["user_id"], m["online"], m["until_ms"], m["last_seen_ms"] = s.PeerID, s.Online, s.UntilMs, s.LastSeenMs
+			case "top":
+				m["entity_kind"], m["entity_id"], m["top_id"], m["top_at_ms"], m["unread"] = s.EntityKind, s.ChatID, s.TopID, s.TopAtMs, s.Unread
+			case "notify":
+				m["entity_kind"], m["entity_id"], m["off"] = s.EntityKind, s.ChatID, s.Off
 			}
 			out = append(out, m)
 		}

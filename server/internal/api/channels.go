@@ -41,6 +41,8 @@ type ChannelStore interface {
 	Unsubscribe(ctx context.Context, channelID, userID string) error
 	IsSubscribed(ctx context.Context, channelID, userID string) (bool, error)
 	SubscriberIDs(ctx context.Context, channelID string) ([]string, error)
+	// Вершина канала подписчикам вместо копии поста (ПЛАН-(ОУ) ОУ1, ОУ2).
+	RaiseTopsStore
 	CreatePost(ctx context.Context, p store.ChannelPost) (uint64, error)
 	ListPosts(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16, viewerID string) ([]store.ChannelPost, error)
 
@@ -296,17 +298,21 @@ func postToChannel(st ChannelStore, n *Notifier) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		// Fan-out: событие channel.post устройствам всех подписчиков. Порядок «сначала
-		// в журнал, потом live» держит Notifier — здесь про него знать не нужно.
-		post := map[string]any{
-			"channel_id": channelID, "post_id": postID, "author_id": id.UserID,
-			"text": req.Text, "nodes": nodes, "created_at_unix_ms": now, "level": level,
-		}
-		if len(markup) > 0 {
-			post["markup"] = json.RawMessage(markup)
-		}
+		// ── ПОСТ НЕ КОПИРУЕТСЯ ПОДПИСЧИКАМ (ПЛАН-(ОУ) ОУ1, ОУ2) ─────────────────
+		//
+		// До 2026-10-08 здесь каждому устройству каждого подписчика уходило событие
+		// `channel.post` с постом целиком — а приложение его не знало, забирало и выбрасывало
+		// («незнакомый кадр»), ленту же брало заново при открытии канала. Теперь подписчику —
+		// одна строка «в канале новое до №N» в ленте состояний; сигнал — тем, у кого
+		// уведомления канала не отключены. Автору — нет: своё новым не бывает.
 		if subs, err := st.SubscriberIDs(r.Context(), channelID); err == nil {
-			n.Users(r.Context(), subs, "channel.post", post)
+			owners := make([]string, 0, len(subs))
+			for _, s := range subs {
+				if s != id.UserID {
+					owners = append(owners, s)
+				}
+			}
+			raiseTops(r.Context(), st, n, "channel", channelID, owners, int64(postID), now)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)

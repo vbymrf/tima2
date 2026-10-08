@@ -24,6 +24,11 @@ type stateRow struct {
 	UntilMs     int64  `json:"until_ms"`
 	Online      bool   `json:"online"`
 	LastSeenMs  int64  `json:"last_seen_ms"`
+	EntityKind  string `json:"entity_kind"`
+	EntityID    string `json:"entity_id"`
+	TopID       int64  `json:"top_id"`
+	Unread      int64  `json:"unread"`
+	Off         bool   `json:"off"`
 }
 
 type statesPage struct {

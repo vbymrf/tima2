@@ -39,6 +39,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -99,6 +100,9 @@ var (
 // встречный, поток пингов будил телефон ещё 120 раз в час — треть всей переклички. Старый клиент
 // без своих пингов по-прежнему получает наши.
 var wsPingInterval = 30 * time.Second
+
+// statePokeGap — не чаще одного сигнала ленты состояний устройству (ПЛАН-(ОУ) 3.6).
+var statePokeGap = 300 * time.Millisecond
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	if s.Events == nil {
@@ -235,6 +239,18 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 	ping := time.NewTicker(wsPingInterval)
 	defer ping.Stop()
+
+	// ── СКЛЕЙКА СИГНАЛОВ ЛЕНТЫ СОСТОЯНИЙ (ПЛАН-(ОУ) 3.6) ─────────────────────
+	//
+	// Первый `state.poke` уходит сразу; следующие в течение [statePokeGap] — одним, последним:
+	// номер ленты в нём больше, и телефон заберёт всё разом, проснувшись один раз. `sync.poke`
+	// не склеивается: в нём вершины полос, и пропущенная подсказка читалась бы телефоном как
+	// потерянное событие.
+	var heldPoke []byte
+	lastStatePoke := time.Time{}
+	pokeFlush := time.NewTimer(time.Hour)
+	pokeFlush.Stop()
+	defer pokeFlush.Stop()
 	catchup := time.NewTicker(wsCatchupInterval)
 	defer catchup.Stop()
 
@@ -267,10 +283,32 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return
 			}
+		case <-pokeFlush.C:
+			if heldPoke == nil {
+				continue
+			}
+			wctx, cancel := context.WithTimeout(ctx, wsWriteTimeout)
+			err := conn.Write(wctx, websocket.MessageText, heldPoke)
+			cancel()
+			heldPoke = nil
+			lastStatePoke = time.Now()
+			if err != nil {
+				return
+			}
 		case msg, ok := <-sub.Frames():
 			if !ok {
 				conn.Close(websocket.StatusGoingAway, "шина событий закрылась")
 				return
+			}
+			if strings.Contains(msg.Payload, `"event":"state.poke"`) {
+				if time.Since(lastStatePoke) < statePokeGap {
+					if heldPoke == nil {
+						pokeFlush.Reset(statePokeGap - time.Since(lastStatePoke))
+					}
+					heldPoke = []byte(msg.Payload)
+					continue
+				}
+				lastStatePoke = time.Now()
 			}
 			// ── ПОДСКАЗКА ПРОХОДИТ КАК ЕСТЬ, И `sent` НЕ ДВИГАЕТ ────────
 			//

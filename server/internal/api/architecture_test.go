@@ -233,7 +233,10 @@ const (
 	// (SetTyping), «в сети» (SetDevicePresence, UserPresence, WatchPresence, PresenceWatchers,
 	// SetPresenceState), чтение ленты (ListStates). Потребители — узкие StatesStore и
 	// LiveStatesStore рядом с ручками и кадрами.
-	storeMethodBudget = 284
+	// 284 → 289: «зашли, забрали» и уведомления на сервере (ПЛАН-(ОУ), 0073) — вершины
+	// (RaiseTops), отметка прочтения сущности (SetEntityRead), «Отключить уведомления»
+	// (SetNotify), способ доставки устройства (SetDeviceDelivery, MemberDeliveries).
+	storeMethodBudget = 289
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
 )

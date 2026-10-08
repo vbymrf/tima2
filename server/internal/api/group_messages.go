@@ -251,6 +251,26 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 		if err != nil {
 			log.Printf("postGroupMessage: member devices: %v", err)
 		}
+		// ── ОТКРЫТАЯ ГРУППА — «ЗАШЛИ, ЗАБРАЛИ» (ПЛАН-(ОУ) решение 2, ОУ4) ──────────────
+		//
+		// Сразу целиком приходят только личные переписки и закрытые группы. Открытой группы
+		// тело остаётся у сервера: устройству, заявившему `tops`, — одна строка «в группе
+		// новое до №N» и сигнал, если уведомления группы не отключены. Устройства без заявки
+		// (установленные версии) получают по-прежнему, пока не обновятся.
+		var topsUsers []string
+		if g.Kind == "public" {
+			old, tops, derr := deps.store.MemberDeliveries(r.Context(), groupID, id.DeviceID)
+			if derr != nil {
+				log.Printf("postGroupMessage: способ доставки: %v", derr)
+			} else {
+				devices = old
+				for _, u := range tops {
+					if u != id.UserID {
+						topsUsers = append(topsUsers, u)
+					}
+				}
+			}
+		}
 		eventPayload := groupMessageJSON(msg)
 		// Штамп отправителя — счётчик профиля и цвет в группе (0052, 0053): получатель
 		// сравнит с тем, что помнит, и переспросит карточку только при разнице. Не
@@ -266,6 +286,7 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 		for _, dev := range devices {
 			deps.notifier.Device(r.Context(), dev, "message.group", eventPayload)
 		}
+		raiseTops(r.Context(), deps.store, deps.notifier, "group", groupID, topsUsers, messageID, req.CreatedAtUnixMs)
 
 		// Инвариант ADR-0017 §2: в группе, где в эту эпоху была отправка, последняя версия
 		// GK обязана быть завёрнута на текущую эпоху. Отправка только что произошла — самое

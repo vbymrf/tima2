@@ -256,15 +256,20 @@ func (s *Store) SetPresenceState(ctx context.Context, ownerID, targetID string, 
 
 // StateRow — одна строка ленты состояний: вид и поля своего вида.
 type StateRow struct {
-	Kind        string // receipt · typing · presence
+	Kind        string // receipt · typing · presence · top · notify
 	Rev         int64
-	ChatID      string
+	ChatID      string // receipt, typing: переписка; top, notify: сущность
 	PeerID      string // receipt: собеседник; typing: кто печатает; presence: о ком
 	DeliveredMs int64
 	ReadMs      int64
 	UntilMs     int64
 	Online      bool
 	LastSeenMs  int64
+	EntityKind  string // top, notify: group · channel · chat · community
+	TopID       int64
+	TopAtMs     int64
+	Unread      int64 // top: непрочитанного после отметки, не больше 100
+	Off         bool  // notify: уведомления отключены
 }
 
 // ListStates — строки ленты человека после after и вершина ленты.
@@ -277,15 +282,35 @@ func (s *Store) ListStates(ctx context.Context, userID string, after int64) ([]S
 		}
 		return nil, 0, err
 	}
+	// Непрочитанное у вершины считается при чтении, а не хранится: отметка прочтения и новое
+	// сообщение меняют его с двух сторон, и хранимое число разошлось бы с правдой.
 	rows, err := s.pool.Query(ctx, `
-		SELECT 'receipt', rev, chat_id::text, peer_id::text, delivered_ms, read_ms, 0, false, 0
+		SELECT 'receipt', rev, chat_id::text, peer_id::text, delivered_ms, read_ms, 0::bigint, false, 0::bigint,
+		       '', 0::bigint, 0::bigint, 0::bigint, false
 		  FROM chat_receipts WHERE owner_id = $1 AND rev > $2
 		UNION ALL
-		SELECT 'typing', rev, chat_id::text, from_id::text, 0, 0, until_ms, false, 0
+		SELECT 'typing', rev, chat_id::text, from_id::text, 0, 0, until_ms, false, 0, '', 0, 0, 0, false
 		  FROM typing_states WHERE owner_id = $1 AND rev > $2
 		UNION ALL
-		SELECT 'presence', rev, '', target_id::text, 0, 0, until_ms, online, last_seen_ms
+		SELECT 'presence', rev, '', target_id::text, 0, 0, until_ms, online, last_seen_ms, '', 0, 0, 0, false
 		  FROM presence_states WHERE owner_id = $1 AND rev > $2
+		UNION ALL
+		SELECT 'top', t.rev, t.entity_id::text, '', 0, 0, 0, false, 0, t.kind, t.top_id, t.top_at_ms,
+		       CASE t.kind
+		         WHEN 'channel' THEN (SELECT count(*) FROM (SELECT 1 FROM channel_posts p
+		              WHERE p.channel_id = t.entity_id AND p.post_id > COALESCE(r.read_id, 0)
+		                AND NOT p.deleted AND p.author_id <> $1 LIMIT 100) x)
+		         ELSE (SELECT count(*) FROM (SELECT 1 FROM group_messages m
+		              WHERE m.group_id = t.entity_id AND m.message_id > COALESCE(r.read_id, 0)
+		                AND m.sender_id <> $1 LIMIT 100) x)
+		       END,
+		       false
+		  FROM entity_tops t
+		  LEFT JOIN entity_reads r ON r.owner_id = t.owner_id AND r.kind = t.kind AND r.entity_id = t.entity_id
+		 WHERE t.owner_id = $1 AND t.rev > $2
+		UNION ALL
+		SELECT 'notify', rev, entity_id::text, '', 0, 0, 0, false, 0, kind, 0, 0, 0, off
+		  FROM notify_settings WHERE owner_id = $1 AND rev > $2
 		ORDER BY 2`, userID, after)
 	if err != nil {
 		return nil, top, err
@@ -295,7 +320,7 @@ func (s *Store) ListStates(ctx context.Context, userID string, after int64) ([]S
 	for rows.Next() {
 		var r StateRow
 		if err := rows.Scan(&r.Kind, &r.Rev, &r.ChatID, &r.PeerID, &r.DeliveredMs, &r.ReadMs,
-			&r.UntilMs, &r.Online, &r.LastSeenMs); err != nil {
+			&r.UntilMs, &r.Online, &r.LastSeenMs, &r.EntityKind, &r.TopID, &r.TopAtMs, &r.Unread, &r.Off); err != nil {
 			return nil, top, err
 		}
 		out = append(out, r)

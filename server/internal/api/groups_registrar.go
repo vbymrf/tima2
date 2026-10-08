@@ -72,6 +72,10 @@ type GroupStore interface {
 
 	// Устройства участников: покрытие ротации и адресаты уведомлений
 	ActiveMemberDevices(ctx context.Context, groupID, exceptDevice string) ([]string, error)
+	// Открытая группа — «зашли, забрали» (ПЛАН-(ОУ) ОУ4): участники по способу доставки
+	// и вершина тем, кто умеет.
+	MemberDeliveries(ctx context.Context, groupID, exceptDevice string) (old []string, tops []string, err error)
+	RaiseTopsStore
 	// Какие из устройств заверены цепочкой доверия (ДУ3) — в строгом режиме ключ группы
 	// получают только они.
 	CertifiedDevices(ctx context.Context, deviceIDs []string) (map[string]bool, error)
