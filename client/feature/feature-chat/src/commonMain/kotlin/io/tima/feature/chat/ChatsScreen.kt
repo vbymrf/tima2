@@ -111,8 +111,8 @@ fun ChatsScreen(
     typingOf: (ChatSummary) -> Boolean = { false },
     /** Уведомления переписки отключены — 🔕 у времени (ПЛАН-(ОУ)). */
     mutedOf: (ChatSummary) -> Boolean = { false },
-    /** Собеседника личной переписки нет в книге — «Незнакомый» перед именем (2026-10-08). */
-    strangerOf: (ChatSummary) -> Boolean = { false },
+    /** Кто собеседник личной переписки для меня: в книге, незнакомый, заблокирован (2026-10-08). */
+    kindOf: (ChatSummary) -> PersonKind = { PersonKind.Known },
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -162,7 +162,7 @@ fun ChatsScreen(
                     explanation = words.writeFirst,
                 )
 
-                else -> List(state.chats, onOpen, personOf, faceOf, look, countOf, tagOf, callGroupOf, onFace, receiptOf, typingOf, mutedOf, strangerOf)
+                else -> List(state.chats, onOpen, personOf, faceOf, look, countOf, tagOf, callGroupOf, onFace, receiptOf, typingOf, mutedOf, kindOf)
             }
         }
     }
@@ -229,7 +229,7 @@ private fun List(
     receiptOf: (ChatSummary) -> ChatReceipt? = { null },
     typingOf: (ChatSummary) -> Boolean = { false },
     mutedOf: (ChatSummary) -> Boolean = { false },
-    strangerOf: (ChatSummary) -> Boolean = { false },
+    kindOf: (ChatSummary) -> PersonKind = { PersonKind.Known },
 ) = LazyColumn(
     modifier = Modifier.fillMaxSize(),
 ) {
@@ -237,7 +237,7 @@ private fun List(
         ChatLine(
             chat, personOf(chat), faceOf(chat), look, countOf?.invoke(chat) ?: chat.unread,
             onClick = { onOpen(chat) }, tag = tagOf(chat), call = callGroupOf(chat),
-            receipt = receiptOf(chat), typing = typingOf(chat), muted = mutedOf(chat), stranger = strangerOf(chat),
+            receipt = receiptOf(chat), typing = typingOf(chat), muted = mutedOf(chat), kind = kindOf(chat),
             // Страница есть только у собеседника личной переписки.
             onFace = onFace?.takeIf { chat.kind == ChatKind.Personal && chat.peerId != null }?.let { { it(chat) } },
         )
@@ -259,7 +259,7 @@ private fun ChatLine(
     receipt: ChatReceipt? = null,
     typing: Boolean = false,
     muted: Boolean = false,
-    stranger: Boolean = false,
+    kind: PersonKind = PersonKind.Known,
 ) = ListLine(
     onClick = onClick,
     // Картинка, если она есть, иначе буква — та же, что в книге. У группы человека нет,
@@ -318,7 +318,7 @@ private fun ChatLine(
         // здесь занимает превью. Человека нет (группа) или он пуст — остаётся название
         // переписки. Имени может не быть и вовсе: профиль не приезжал. Строку это не
         // отменяет — сообщение есть, и человек должен его видеть.
-        PersonName(who, look, stranger, fallback = chat.title ?: Tima.words.chat.nameless)
+        PersonName(who, look, kind, fallback = chat.title ?: Tima.words.chat.nameless)
         // Группа звонка — имя создателя отдельной строкой (заказчик 2026-10-02).
         call?.creator?.let { Secondary(it, lineOne = true) }
         // Превью обрезается: иначе строка списка растёт от чужого длинного сообщения.

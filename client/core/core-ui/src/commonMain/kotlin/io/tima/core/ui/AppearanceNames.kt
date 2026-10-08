@@ -59,4 +59,5 @@ private fun AppearanceWords.slotWords(slot: ColorSlot) = when (slot) {
     ColorSlot.IN_PLATE -> slotInPlate
     ColorSlot.SOFT_ACCENT -> slotSoftAccent
     ColorSlot.QUIET -> slotQuiet
+    ColorSlot.ALARM -> slotAlarm
 }

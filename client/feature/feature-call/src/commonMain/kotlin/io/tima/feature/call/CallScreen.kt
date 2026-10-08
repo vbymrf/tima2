@@ -155,6 +155,8 @@ fun CallScreen(
      * свою горизонталь не отдают. Зону потом выставят точнее — она здесь одна.
      */
     swipeArea: Modifier = Modifier,
+    /** Цвет имени собеседника: заблокирован — красный, незнакомый «цветом» — оранжевый; `null` — обычный. */
+    peerTint: Color? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.call
@@ -267,7 +269,7 @@ fun CallScreen(
                     } else {
                         Avatar(letters = letters(peer), size = AvatarSize.Huge, image = peerFace)
                     }
-                    PeerName(peer, stranger)
+                    PeerName(peer, stranger, tint = peerTint)
                     peerPhone?.takeIf { group == null && it.isNotBlank() }?.let { Secondary(it) }
                     group?.creator?.let { Secondary(it) }
                     // Что со звонком — зелёным (заказчик 2026-10-08): «Соединяем…», «Звоним…», время.
@@ -318,7 +320,7 @@ fun CallScreen(
                         .testTag(CALL_OVERLAY_TAG),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.weight(1f)) { PeerName(peer, stranger, onVideo = true) }
+                        Box(Modifier.weight(1f)) { PeerName(peer, stranger, onVideo = true, tint = peerTint) }
                         Caption(
                             under(state, incoming, seconds, peerRinging),
                             fontSize = TimaType.sz5,
@@ -595,9 +597,9 @@ const val CALL_STRANGER_TAG: String = "call:stranger"
 
 /** Строка имени: «Незнакомый» оранжевым впереди, если человека нет в книге (2026-10-08). */
 @Composable
-private fun PeerName(peer: String, stranger: Boolean, onVideo: Boolean = false) {
+private fun PeerName(peer: String, stranger: Boolean, onVideo: Boolean = false, tint: Color? = null) {
     val colors = Tima.colors
-    val ink = if (onVideo) Color.White else colors.text
+    val ink = tint ?: if (onVideo) Color.White else colors.text
     Row(
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
         verticalAlignment = Alignment.CenterVertically,

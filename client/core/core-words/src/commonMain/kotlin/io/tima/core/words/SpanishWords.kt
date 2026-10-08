@@ -151,6 +151,10 @@ object SpanishWords : Words {
             name = "Fondo neutro",
             about = "subpestaña no elegida, cápsula del selector",
         )
+        override val slotAlarm = ColorSlotWords(
+            name = "Rojo",
+            about = "«Terminar», «Cerrar», llamada rechazada, bloqueados, errores",
+        )
 
         override val colorEmpty = "Vacío. Escriba un color: seis caracteres u ocho"
         override fun colorNotHex(listed: String) =
@@ -940,6 +944,15 @@ object SpanishWords : Words {
         override val moveDown = "Bajar"
         override val save = "Guardar"
         override val showPersonAs = "Mostrar a la persona como"
+        override val whichName = "Qué nombre mostrar"
+        override val strangerTitle = "Mostrar a los desconocidos como"
+        override val strangerAbout = "Quienes no están en tus contactos"
+        override val strangerWord = "Con la palabra «Desconocido»"
+        override val strangerWordAbout = "La palabra en naranja claro y luego su propio nombre o apodo"
+        override val strangerTinted = "Resaltar el nombre"
+        override val strangerTintedAbout = "Nombre, #nombre, @apodo o «Sin nombre» en naranja claro"
+        override val strangerPlain = "Como cualquier usuario"
+        override val strangerPlainAbout = "Color habitual, como tus contactos"
         override val name = "Nombre"
         override val nameAbout = "el suyo, si no el de la agenda"
         override val userName = "#Nombre de usuario"

@@ -153,6 +153,10 @@ object EnglishWords : Words {
             name = "Neutral backing",
             about = "unselected sub-tab, switch capsule",
         )
+        override val slotAlarm = ColorSlotWords(
+            name = "Red",
+            about = "“End”, “Close”, declined call, blocked people, errors",
+        )
 
         override val colorEmpty = "Empty. Type a colour: six characters or eight"
         override fun colorNotHex(listed: String) =
@@ -940,6 +944,15 @@ object EnglishWords : Words {
         override val moveDown = "Down"
         override val save = "Save"
         override val showPersonAs = "Show a person as"
+        override val whichName = "Which name to show"
+        override val strangerTitle = "Show strangers as"
+        override val strangerAbout = "People who are not in your contacts"
+        override val strangerWord = "The word “Stranger”"
+        override val strangerWordAbout = "The word in light orange, then their own name or nick"
+        override val strangerTinted = "Highlight the name"
+        override val strangerTintedAbout = "Name, #name, @nick or “No name” in light orange"
+        override val strangerPlain = "Like any other user"
+        override val strangerPlainAbout = "Usual colour, like your contacts"
         override val name = "Name"
         override val nameAbout = "your own, otherwise from the phone book"
         override val userName = "#User name"

@@ -112,11 +112,11 @@ fun CallsScreen(
      * видно, кто его создал»).
      */
     flagged: (CallRecord) -> Boolean = { false },
-    /** Человека строки нет в книге — «Незнакомый» перед именем, как в окне звонка (2026-10-08). */
-    strangerOf: (CallRecord) -> Boolean = { false },
+    /** Кто человек строки для меня: в книге, незнакомый, заблокирован (2026-10-08). */
+    kindOf: (CallRecord) -> PersonKind = { PersonKind.Known },
 ) {
     Box(modifier.fillMaxSize()) {
-        Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf, flagged, strangerOf)
+        Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf, flagged, kindOf)
         note?.let {
             Caption(
                 it,
@@ -146,7 +146,7 @@ private fun Records(
     offline: Boolean,
     groupOf: (CallRecord) -> GroupCallLine?,
     flagged: (CallRecord) -> Boolean,
-    strangerOf: (CallRecord) -> Boolean,
+    kindOf: (CallRecord) -> PersonKind,
 ) {
     val words = Tima.words.callLog
     val ring = Tima.colors.activity
@@ -180,12 +180,12 @@ private fun Records(
                     // Строки (заказчик 2026-10-08): личный — имя по «Виду», телефон, событие;
                     // групповой — «Групповой звонок» первой, дальше те же три о создателе.
                     Column {
-                        val stranger = strangerOf(record)
+                        val kind = kindOf(record)
                         if (group != null) {
                             Name(Tima.words.groupCall.title)
-                            PersonName(who, look, stranger, Tima.words.book.nameless, fontSize = TimaType.sz5)
+                            PersonName(who, look, kind, Tima.words.book.nameless, fontSize = TimaType.sz5)
                         } else {
-                            PersonName(who, look, stranger, Tima.words.book.nameless)
+                            PersonName(who, look, kind, Tima.words.book.nameless)
                         }
                         // Телефон — как второй строкой у контакта; без номера — ник.
                         Caption(
@@ -250,7 +250,8 @@ private fun Records(
 @Composable
 private fun arrowColor(outcome: CallOutcome, outgoing: Boolean): Color = when (outcome) {
     CallOutcome.Missed -> Tima.colors.activity
-    CallOutcome.Declined -> ARROW_DECLINED
+    // Отклонённый — единый красный, как «Закрыть» (заказчик 2026-10-08).
+    CallOutcome.Declined -> Tima.colors.alarm
     else -> if (outgoing) ARROW_OUT else ARROW_IN
 }
 
@@ -348,8 +349,6 @@ const val CALLS_NOTE_TAG: String = "calls:note"
 // рисовал Samsung; отменённый, не дозвонился, занято, оборвался — по направлению.
 private val ARROW_IN = Color(0xFF7CCB7C)
 private val ARROW_OUT = Color(0xFF5AAEE8)
-// Отклонённый — тот же светло-красный, что у «Закрыть» (заказчик 2026-10-08: F75454).
-private val ARROW_DECLINED = io.tima.core.ui.LEAVE_RED
 private const val DOT = " · "
 private const val VOICE_GLYPH = "📞"
 private const val VIDEO_GLYPH = "📹"

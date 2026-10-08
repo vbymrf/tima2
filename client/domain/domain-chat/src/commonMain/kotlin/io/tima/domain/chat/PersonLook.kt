@@ -32,9 +32,33 @@ enum class PersonField(val wire: String) {
 data class PersonLook(
     val order: List<PersonField> = PersonField.entries,
     val checked: Set<PersonField> = setOf(PersonField.Name, PersonField.Phone),
+    /** Как показывать того, кого нет в книге (заказчик 2026-10-08). */
+    val stranger: StrangerLook = StrangerLook.Tinted,
 ) {
     companion object {
         val DEFAULT = PersonLook()
+    }
+}
+
+/**
+ * Как показывать незнакомого — человека, которого нет в книге (заказчик 2026-10-08, «Вид» →
+ * «Отображать пользователя как» → «Незнакомых показывать как»).
+ *
+ * `wire` — как пишется в настройки; менять нельзя: строки лежат на телефонах.
+ */
+enum class StrangerLook(val wire: String) {
+    /** Словом «Незнакомый» светло-оранжевым, за ним только имя, которым назвался, и ник. */
+    Word("word"),
+
+    /** Имя как у всех (имя, «#имя», «@ник» или «Без имени»), но светло-оранжевым. По умолчанию. */
+    Tinted("tinted"),
+
+    /** Как обычного пользователя, цветом текста. */
+    Plain("plain"),
+    ;
+
+    companion object {
+        fun byWire(wire: String?): StrangerLook? = entries.firstOrNull { it.wire == wire }
     }
 }
 

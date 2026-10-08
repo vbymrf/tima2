@@ -1635,6 +1635,18 @@ private fun App(
     val strangerId: (String) -> Boolean = { id ->
         id.isNotEmpty() && id != session.userId && bookStateForChats.all.none { it.userId == id }
     }
+    // Кто человек для меня — для цвета и слова имени в «Чатах» и «Звонках» (2026-10-08).
+    // Заблокированный лежит в книге, но не в её показываемой части — поэтому первым.
+    val blockedId: (String) -> Boolean = { id ->
+        bookStateForChats.everyone.any { it.userId == id && it.list == io.tima.domain.chat.BookList.Blocked }
+    }
+    val kindOfId: (String) -> io.tima.feature.chat.PersonKind = { id ->
+        when {
+            blockedId(id) -> io.tima.feature.chat.PersonKind.Blocked
+            strangerId(id) -> io.tima.feature.chat.PersonKind.Stranger
+            else -> io.tima.feature.chat.PersonKind.Known
+        }
+    }
     val personOfId: (String) -> ChatPerson = { id ->
         people.want(listOf(id))
         val entry = bookStateForChats.all.firstOrNull { it.userId == id }
@@ -2870,7 +2882,9 @@ private fun App(
             val callPeer: Pair<Boolean, String>? = callHost.peerUserId.takeIf { window == Window.Call && it.isNotEmpty() && groupStage == null }?.let { id ->
                 val who = personOfId(id)
                 val look = bookStateForChats.view.look()
-                if (bookStateForChats.all.none { it.userId == id }) {
+                // Словом «Незнакомый» — только в этом режиме «Вида»; в прочих — имя как у всех,
+                // а цвет решает `callPeerTint` (заказчик 2026-10-08).
+                if (strangerId(id) && look.stranger == io.tima.domain.chat.StrangerLook.Word) {
                     true to look.order.filter { it == PersonField.UserName || it == PersonField.Nick }
                         .firstNotNullOfOrNull { who.field(it) }.orEmpty()
                 } else {
@@ -2898,6 +2912,14 @@ private fun App(
                     // зовётся своим названием.
                     peer = callPeer?.second ?: callHost.peer,
                     stranger = callPeer?.first == true,
+                    // Цвет имени: заблокированный — красный, незнакомый «цветом» — светло-оранжевый.
+                    peerTint = callHost.peerUserId.takeIf { callPeer != null }?.let { id ->
+                        when {
+                            blockedId(id) -> Tima.colors.alarm
+                            strangerId(id) && bookStateForChats.view.stranger == io.tima.domain.chat.StrangerLook.Tinted -> Tima.colors.activity
+                            else -> null
+                        }
+                    },
                     peerPhone = callPeerPhone,
                     peerFace = callPeerFace,
                     incoming = callHost.incoming,
@@ -2997,8 +3019,8 @@ private fun App(
                     // знает только `user_id`, а «Аня Борисова» живёт в книге.
                     // У группового — создатель звонка: его имя и телефон в строке (2026-10-08).
                     personOfCall = { record -> personOfId(if (record.group) record.initiatorId else record.other(session.userId)) },
-                    strangerOfCall = { record -> strangerId(if (record.group) record.initiatorId else record.other(session.userId)) },
-                    strangerOfChat = { chat -> chat.kind == ChatKind.Personal && chat.peerId?.let(strangerId) == true },
+                    kindOfCall = { record -> kindOfId(if (record.group) record.initiatorId else record.other(session.userId)) },
+                    kindOfChat = { chat -> chat.peerId?.takeIf { chat.kind == ChatKind.Personal }?.let(kindOfId) ?: io.tima.feature.chat.PersonKind.Known },
                     faceOfCall = { record ->
                         val id = record.other(session.userId)
                         people.wantFace(id)
@@ -5742,10 +5764,10 @@ private fun PhoneWindow(
     onRefreshContacts: (() -> Unit)? = null,
     /** «Отказаться» от чтения книги телефона (2026-10-08). `null` — кнопки нет. */
     onRefuseContacts: (() -> Unit)? = null,
-    /** Человека строки журнала нет в книге — «Незнакомый» (2026-10-08). */
-    strangerOfCall: (CallRecord) -> Boolean = { false },
-    /** Собеседника личной переписки нет в книге — «Незнакомый» (2026-10-08). */
-    strangerOfChat: (ChatSummary) -> Boolean = { false },
+    /** Кто человек строки журнала: в книге, незнакомый, заблокирован (2026-10-08). */
+    kindOfCall: (CallRecord) -> io.tima.feature.chat.PersonKind = { io.tima.feature.chat.PersonKind.Known },
+    /** Кто собеседник личной переписки: в книге, незнакомый, заблокирован (2026-10-08). */
+    kindOfChat: (ChatSummary) -> io.tima.feature.chat.PersonKind = { io.tima.feature.chat.PersonKind.Known },
 ) {
     var calls by remember { mutableStateOf(CALL_FILTERS.first()) }
     val bookWords = Tima.words.book
@@ -5872,7 +5894,7 @@ private fun PhoneWindow(
                 receiptOf = receiptOfChat,
                 typingOf = typingOfChat,
                 mutedOf = { chat -> "chat:${chat.chatId}" in mutedKeys },
-                strangerOf = strangerOfChat,
+                kindOf = kindOfChat,
             )
 
             WindowTab.Contacts -> {
@@ -5956,7 +5978,7 @@ private fun PhoneWindow(
                     groupOf = groupCallOf,
                     note = callsNote,
                     flagged = { it.callId in flaggedCalls },
-                    strangerOf = strangerOfCall,
+                    kindOf = kindOfCall,
                 )
             }
 

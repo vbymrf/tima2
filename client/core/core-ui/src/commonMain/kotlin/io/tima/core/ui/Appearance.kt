@@ -79,6 +79,9 @@ enum class ColorSlot {
     IN_PLATE,
     SOFT_ACCENT,
     QUIET,
+
+    /** Единый красный (заказчик 2026-10-08): «Завершить», «Закрыть», заблокированные, ошибки. */
+    ALARM,
 }
 
 /** Значение цвета из набора. */
@@ -100,6 +103,7 @@ fun TimaColors.slot(slot: ColorSlot): Color = when (slot) {
     ColorSlot.IN_PLATE -> inPlate
     ColorSlot.SOFT_ACCENT -> softAccent
     ColorSlot.QUIET -> quiet
+    ColorSlot.ALARM -> alarm
 }
 
 /**
@@ -127,6 +131,7 @@ fun TimaColors.with(slot: ColorSlot, color: Color): TimaColors = when (slot) {
     ColorSlot.IN_PLATE -> copy(inPlate = color)
     ColorSlot.SOFT_ACCENT -> copy(softAccent = color)
     ColorSlot.QUIET -> copy(quiet = color)
+    ColorSlot.ALARM -> copy(alarm = color)
 }
 
 /**

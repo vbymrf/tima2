@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -266,7 +267,11 @@ fun BookListPage(
                 left = { Avatar(letters = who.letter()) },
                 middle = {
                     Column {
-                        Name(who.line(PersonLook(), PERSON_FIRST_LINE) ?: words.nameless)
+                        PersonName(
+                            who, PersonLook(),
+                            if (BookRoster.Blocked.holds(person)) PersonKind.Blocked else PersonKind.Known,
+                            fallback = words.nameless,
+                        )
                         Tertiary(
                             person.phone.ifBlank { who.nick?.let { "@$it" }.orEmpty() },
                             lineOne = true,
@@ -394,11 +399,19 @@ fun PersonLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modif
             }
         }
 
+        // Разделители между частями страницы (заказчик 2026-10-08). Страница одна на все окна
+        // с «Видом» — контакты, Социум, Страница, — и разделители появляются везде сразу.
         // Вид группы — переключателем, как «Экономичный режим» в «Уведомлениях» (2026-10-07);
-        // стоит над «Отображать пользователя как» (заказчик 2026-10-08).
-        if (!forPeople) AvatarLookSetting(view.avatarLook) { onChange(view.copy(avatarLook = it)) }
+        // стоит над галочками имени (заказчик 2026-10-08).
+        if (!forPeople) {
+            PartLine()
+            AvatarLookSetting(view.avatarLook) { onChange(view.copy(avatarLook = it)) }
+        }
 
-        SectionTitle(words.showPersonAs)
+        PartLine()
+        // Раздел галочек — «Какое имя отображать»; «Отображать пользователя как» осталось
+        // названием самой страницы (заказчик 2026-10-08).
+        SectionTitle(words.whichName)
         for ((index, field) in view.order.withIndex()) {
             PersonFieldRow(
                 title = words.field(field),
@@ -409,6 +422,50 @@ fun PersonLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modif
                 onToggle = { onChange(view.withChecked(field, !view.checked(field))) },
                 onUp = { onChange(view.moved(field, up = true)) },
                 onDown = { onChange(view.moved(field, up = false)) },
+            )
+        }
+        // Незнакомые — последним пунктом, раскрывается (заказчик 2026-10-08). Только у людей:
+        // в наборе сообществ «незнакомых» нет — там все авторы чужие.
+        if (forPeople) {
+            PartLine()
+            StrangerLookSetting(view.stranger) { onChange(view.copy(stranger = it)) }
+        }
+    }
+}
+
+/** Разделитель частей страницы «Вида»: тонкая линия во всю ширину. */
+@Composable
+private fun PartLine() = Box(Modifier.fillMaxWidth().padding(top = TimaSpacing.about2).height(1.dp).background(Tima.colors.line))
+
+/** «Незнакомых показывать как»: строка с выбранным справа; нажатие раскрывает три режима. */
+@Composable
+private fun StrangerLookSetting(chosen: io.tima.domain.chat.StrangerLook, onChoose: (io.tima.domain.chat.StrangerLook) -> Unit) {
+    val w = Tima.words.book
+    var open by remember { mutableStateOf(false) }
+    val options = listOf(
+        Triple(io.tima.domain.chat.StrangerLook.Word, w.strangerWord, w.strangerWordAbout),
+        Triple(io.tima.domain.chat.StrangerLook.Tinted, w.strangerTinted, w.strangerTintedAbout),
+        Triple(io.tima.domain.chat.StrangerLook.Plain, w.strangerPlain, w.strangerPlainAbout),
+    )
+    ListLine(
+        onClick = { open = !open },
+        right = { io.tima.core.ui.ExpandMark(open) },
+        middle = {
+            Caption(w.strangerTitle, fontSize = TimaType.sz4, weight = FontWeight.Bold, maxLines = 2)
+            Tertiary(options.first { it.first == chosen }.second)
+        },
+    )
+    if (!open) return
+    Column(Modifier.fillMaxWidth().background(Tima.colors.softAccent)) {
+        for ((look, title, about) in options) {
+            ListLine(
+                modifier = Modifier.padding(start = TimaSpacing.about5),
+                onClick = { onChoose(look) },
+                left = { RadioMark(look == chosen) },
+                middle = {
+                    Caption(title, fontSize = TimaType.sz4, weight = if (look == chosen) FontWeight.Bold else FontWeight.Normal)
+                    Tertiary(about)
+                },
             )
         }
     }

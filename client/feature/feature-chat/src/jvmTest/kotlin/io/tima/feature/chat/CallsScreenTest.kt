@@ -47,15 +47,24 @@ class CallsScreenTest {
     }
 
     @Test
-    fun незнакомый_вместо_без_имени() {
-        // Человека нет в книге — «Незнакомый», как в окне звонка (заказчик 2026-10-08).
-        val stranger = capture("звонки-незнакомый", 400, 300, dark = false) {
-            CallsScreen(records = listOf(direct), me = me, personOf = { ChatPerson(phone = "+79000000001") }, strangerOf = { true })
+    fun незнакомый_по_виду_и_заблокированный_красным() {
+        // Заказчик 2026-10-08: незнакомый — словом, цветом или как все («Вид»); заблокированный —
+        // имя красным.
+        fun shot(name: String, kind: PersonKind, mode: io.tima.domain.chat.StrangerLook) = capture(name, 400, 300, dark = false) {
+            CallsScreen(
+                records = listOf(direct), me = me, personOf = { ChatPerson(nick = "anna", phone = "+79000000001") },
+                look = io.tima.domain.chat.PersonLook(stranger = mode), kindOf = { kind },
+            )
         }
-        val nameless = capture("звонки-без-имени", 400, 300, dark = false) {
-            CallsScreen(records = listOf(direct), me = me, personOf = { ChatPerson(phone = "+79000000001") })
-        }
-        assertTrue(stranger.difference(nameless) > 0.001, "«Незнакомый» не показан")
+        val word = shot("звонки-незнакомый-словом", PersonKind.Stranger, io.tima.domain.chat.StrangerLook.Word)
+        val tinted = shot("звонки-незнакомый-цветом", PersonKind.Stranger, io.tima.domain.chat.StrangerLook.Tinted)
+        val plain = shot("звонки-незнакомый-как-все", PersonKind.Stranger, io.tima.domain.chat.StrangerLook.Plain)
+        val known = shot("звонки-знакомый", PersonKind.Known, io.tima.domain.chat.StrangerLook.Tinted)
+        val blocked = shot("звонки-заблокирован", PersonKind.Blocked, io.tima.domain.chat.StrangerLook.Tinted)
+        assertTrue(word.difference(tinted) > 0.001, "словом и цветом выглядят одинаково")
+        assertTrue(tinted.difference(plain) > 0.0005, "цветом и как все выглядят одинаково")
+        assertTrue(plain.difference(known) < 0.0001, "«как все» отличается от знакомого")
+        assertTrue(blocked.difference(known) > 0.0005, "заблокированный не выделен")
     }
 
     @Test

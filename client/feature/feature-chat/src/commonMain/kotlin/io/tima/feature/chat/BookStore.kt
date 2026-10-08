@@ -290,6 +290,8 @@ data class BookView(
      * сортировкой — что в самом верху, то показываем, если есть»). Галки — выше.
      */
     val order: List<PersonField> = PersonField.entries,
+    /** Как показывать незнакомого (заказчик 2026-10-08); по умолчанию — имя цветом. */
+    val stranger: io.tima.domain.chat.StrangerLook = io.tima.domain.chat.StrangerLook.Tinted,
 ) {
     /** Как называть человека: порядок и галки одним значением для строк списков. */
     fun look(): PersonLook = PersonLook(
@@ -300,6 +302,7 @@ data class BookView(
             if (showNickname) add(PersonField.Nick)
             if (showPhone) add(PersonField.Phone)
         },
+        stranger = stranger,
     )
 
     fun checked(field: PersonField): Boolean = when (field) {
@@ -344,6 +347,7 @@ data class BookView(
         ).joinToString(","))
         settings.put("$prefix.$ORDER", order.joinToString(",") { it.wire })
         if (prefix == COMMUNITY) settings.put("$prefix.$AVATAR", avatarLook.name.lowercase())
+        if (prefix == BOOK) settings.put("$prefix.$STRANGER", stranger.wire)
     }
 
     companion object {
@@ -358,6 +362,7 @@ data class BookView(
         private const val NAMES = "names"
         private const val ORDER = "names_order"
         private const val AVATAR = "avatar_look"
+        private const val STRANGER = "stranger_look"
         private const val FOLDERS = "folders"
         private const val MENU = "menu"
 
@@ -392,6 +397,7 @@ data class BookView(
                 order = orderFrom(saved["$prefix.$ORDER"]),
                 avatarLook = io.tima.core.ui.AvatarLook.entries.firstOrNull { it.name.lowercase() == saved["$prefix.$AVATAR"] }
                     ?: io.tima.core.ui.AvatarLook.Free,
+                stranger = io.tima.domain.chat.StrangerLook.byWire(saved["$prefix.$STRANGER"]) ?: io.tima.domain.chat.StrangerLook.Tinted,
             )
         }
     }

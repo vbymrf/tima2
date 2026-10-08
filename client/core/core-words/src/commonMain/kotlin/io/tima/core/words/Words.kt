@@ -692,6 +692,19 @@ interface BookWords {
     val moveDown: String
     val save: String
     val showPersonAs: String
+
+    /** Раздел галочек имени на странице «Отображать пользователя как» (заказчик 2026-10-08). */
+    val whichName: String
+
+    /** «Незнакомых показывать как» — раскрывающийся пункт в конце той же страницы. */
+    val strangerTitle: String
+    val strangerAbout: String
+    val strangerWord: String
+    val strangerWordAbout: String
+    val strangerTinted: String
+    val strangerTintedAbout: String
+    val strangerPlain: String
+    val strangerPlainAbout: String
     val name: String
     val nameAbout: String
     val userName: String
@@ -2054,6 +2067,9 @@ interface AppearanceWords {
     val slotSoftAccent: ColorSlotWords
     val slotQuiet: ColorSlotWords
 
+    /** Единый красный приложения (заказчик 2026-10-08): «Завершить», «Закрыть», заблокированные. */
+    val slotAlarm: ColorSlotWords
+
     /**
      * Беда с набранным цветом — фраза собирается здесь, из частей.
      *
@@ -2301,6 +2317,10 @@ object RussianWords : Words {
         override val slotQuiet = ColorSlotWords(
             name = "Нейтральная подложка",
             about = "невыбранная подвкладка, капсула переключателя",
+        )
+        override val slotAlarm = ColorSlotWords(
+            name = "Красный",
+            about = "«Завершить», «Закрыть», отклонённый звонок, заблокированные, ошибки",
         )
 
         override val colorEmpty = "Пусто. Наберите цвет: шесть знаков или восемь"
@@ -3116,6 +3136,15 @@ object RussianWords : Words {
         override val moveDown = "Ниже"
         override val save = "Сохранить"
         override val showPersonAs = "Отображать пользователя как"
+        override val whichName = "Какое имя отображать"
+        override val strangerTitle = "Незнакомых показывать как"
+        override val strangerAbout = "Тех, кого нет в ваших контактах"
+        override val strangerWord = "Словом «Незнакомый»"
+        override val strangerWordAbout = "Слово светло-оранжевым, за ним — как он назвал себя сам или ник"
+        override val strangerTinted = "Выделить имя цветом"
+        override val strangerTintedAbout = "Имя, #имя, @ник или «Без имени» — светло-оранжевым"
+        override val strangerPlain = "Как обычного пользователя"
+        override val strangerPlainAbout = "Цвет обычный, как у ваших контактов"
         override val name = "Имя"
         override val nameAbout = "своё, иначе из телефонной книги"
         override val userName = "#Имя пользователя"

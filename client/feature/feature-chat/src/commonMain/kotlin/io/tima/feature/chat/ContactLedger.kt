@@ -214,7 +214,12 @@ fun ContactLedgerPage(
                     left = { Avatar(letters = person.letter(), image = faceOf(entry)) },
                     middle = {
                         Column {
-                            Name(person.line(view.look(), PERSON_FIRST_LINE) ?: entry.name ?: entry.phone)
+                            // Заблокированный — имя единым красным (заказчик 2026-10-08).
+                            PersonName(
+                                person, view.look(),
+                                if (BookRoster.Blocked.holds(entry)) PersonKind.Blocked else PersonKind.Known,
+                                fallback = entry.name ?: entry.phone,
+                            )
                             // Раздел · список · ♪ мелодия — мелодия, только если своя.
                             val listName = when {
                                 BookRoster.Blocked.holds(entry) -> words.listBlocked
