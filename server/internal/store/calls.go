@@ -260,17 +260,18 @@ type CallRow struct {
 
 // ListCalls — страница журнала звонков человека, новые → старые.
 //
-// **Только личные (`type = direct`).** Групповой звонок в клиенте не существует вовсе:
-// кнопка у него есть, а обратного вызова у кнопки нет намеренно. Строка о звонке,
-// которого нельзя совершить, — обещание, а не история. Групповые придут в журнал вместе
-// с самим групповым звонком (ПЛАН-(Ж)-ЖУРНАЛА-ЗВОНКОВ.md, решение Ж-В2).
+// **Личные — всегда; групповые — когда спросили (`groups`).** Вкладка «Звонки» показывает
+// групповые звонки строкой с «ГЗ» (заказчик 2026-10-08) — свои: начатые мной или те, куда
+// меня звали или где я был (`call_participants`). Установленные клиенты групповых строк не
+// ждут: у них нет собеседника, и прежняя вкладка звала бы их «Без имени». Поэтому только
+// по просьбе — API расширяется, а не меняет ответ.
 //
 // **Отбор по обоим концам.** Человек — сторона звонка, неважно, звонил он или ему;
 // журнал у него один. Индексы есть на оба (0014 на peer_id, 0054 на initiator_id).
 //
 // `before` нулевое — первая страница. Дальше передаётся `created_at` последней отданной
 // строки, и отбор строгий: та же строка второй раз не придёт.
-func (s *Store) ListCalls(ctx context.Context, userID string, before time.Time, limit int) ([]CallRow, error) {
+func (s *Store) ListCalls(ctx context.Context, userID string, before time.Time, limit int, groups bool) ([]CallRow, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
@@ -279,14 +280,15 @@ func (s *Store) ListCalls(ctx context.Context, userID string, before time.Time, 
 		upto = before
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT call_id, kind, state, initiator_id, peer_id, ended_by,
-		       created_at, answered_at, ended_at
-		FROM calls
-		WHERE type = 'direct'
-		  AND (initiator_id = $1 OR peer_id = $1)
-		  AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)
-		ORDER BY created_at DESC
-		LIMIT $3`, userID, upto, limit)
+		SELECT c.call_id, c.kind, c.state, c.initiator_id, c.peer_id, c.ended_by,
+		       c.created_at, c.answered_at, c.ended_at, c.type, c.group_id::text
+		FROM calls c
+		WHERE ((c.type = 'direct' AND (c.initiator_id = $1 OR c.peer_id = $1))
+		    OR ($4 AND c.type = 'group' AND (c.initiator_id = $1 OR EXISTS (
+		          SELECT 1 FROM call_participants p WHERE p.call_id = c.call_id AND p.user_id = $1))))
+		  AND ($2::timestamptz IS NULL OR c.created_at < $2::timestamptz)
+		ORDER BY c.created_at DESC
+		LIMIT $3`, userID, upto, limit, groups)
 	if err != nil {
 		return nil, err
 	}
@@ -294,13 +296,15 @@ func (s *Store) ListCalls(ctx context.Context, userID string, before time.Time, 
 	out := make([]CallRow, 0, limit)
 	for rows.Next() {
 		var c CallRow
-		// peer_id стал nullable в 0023 ради групповых; здесь их нет по отбору, но
-		// сканировать в строку значило бы падать на данных, которые база допускает.
-		var peer, endedBy *string
+		// peer_id стал nullable в 0023 ради групповых: у группового его нет.
+		var peer, endedBy, group *string
 		var answered, ended *time.Time
 		if err := rows.Scan(&c.CallID, &c.Kind, &c.State, &c.InitiatorID, &peer, &endedBy,
-			&c.CreatedAt, &answered, &ended); err != nil {
+			&c.CreatedAt, &answered, &ended, &c.Type, &group); err != nil {
 			return nil, err
+		}
+		if group != nil {
+			c.GroupID = *group
 		}
 		if peer != nil {
 			c.PeerID = *peer

@@ -26,7 +26,7 @@ type CallStore interface {
 	CallParticipants(ctx context.Context, callID string) (map[string]store.ParticipantState, error)
 	SetCallState(ctx context.Context, callID, state, endedBy string) error
 	// Журнал звонков: страница прошлого, новые → старые. Ж1.
-	ListCalls(ctx context.Context, userID string, before time.Time, limit int) ([]store.CallRow, error)
+	ListCalls(ctx context.Context, userID string, before time.Time, limit int, groups bool) ([]store.CallRow, error)
 	SetParticipantState(ctx context.Context, callID, userID string, state store.ParticipantState, at time.Time) error
 	CreateVoiceRoom(ctx context.Context, title, ownerID string) (string, error)
 	GetVoiceRoom(ctx context.Context, roomID string) (store.VoiceRoom, error)

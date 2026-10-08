@@ -264,3 +264,42 @@ func TestЖурналНеПоказываетДлительностьУОбор�
 		t.Fatalf("времена не проставлены: %+v", row)
 	}
 }
+
+// TestЖурналОтдаётГрупповыеТолькоПоПросьбе — вкладка «Звонки» показывает групповые строкой
+// с «ГЗ» (заказчик 2026-10-08); установленные клиенты их не просят и не получают.
+func TestЖурналОтдаётГрупповыеТолькоПоПросьбе(t *testing.T) {
+	ts, srv := setup(t)
+	withCalls(srv)
+	создатель := registerDevice(t, ts, "+79990060071")
+	участник := registerDevice(t, ts, "+79990060072")
+	чужой := registerDevice(t, ts, "+79990060073")
+	groupID := createGroupWith(t, ts, создатель, участник)
+	call, code := startGroupCallAs(t, ts, создатель, groupID)
+	if code != 201 {
+		t.Fatalf("групповой звонок не завёлся: %d", code)
+	}
+
+	type row struct {
+		CallID  string `json:"call_id"`
+		Type    string `json:"type"`
+		GroupID string `json:"group_id"`
+	}
+	var прежний, создателю, участнику, чужому struct {
+		Calls []row `json:"calls"`
+	}
+	getAuthed(t, ts, создатель.token, "/api/v1/calls", &прежний)
+	if len(прежний.Calls) != 0 {
+		t.Fatalf("без просьбы групповой попал в журнал: %+v", прежний.Calls)
+	}
+	getAuthed(t, ts, создатель.token, "/api/v1/calls?groups=1", &создателю)
+	getAuthed(t, ts, участник.token, "/api/v1/calls?groups=1", &участнику)
+	getAuthed(t, ts, чужой.token, "/api/v1/calls?groups=1", &чужому)
+	for name, got := range map[string][]row{"создатель": создателю.Calls, "участник": участнику.Calls} {
+		if len(got) != 1 || got[0].CallID != call.CallID || got[0].Type != "group" || got[0].GroupID != groupID {
+			t.Fatalf("%s: групповой не виден как надо: %+v", name, got)
+		}
+	}
+	if len(чужому.Calls) != 0 {
+		t.Fatalf("чужой видит групповой звонок: %+v", чужому.Calls)
+	}
+}

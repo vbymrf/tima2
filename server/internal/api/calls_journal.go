@@ -21,7 +21,7 @@ import (
 // не увидят: журнал открывают, чтобы перезвонить последнему, а не читать месяц.
 const callsPageDefault = 30
 
-// listCalls — GET /api/v1/calls?limit=&before=: страница журнала, новые → старые.
+// listCalls — GET /api/v1/calls?limit=&before=&groups=1: страница журнала, новые → старые.
 //
 // ── ПОЧЕМУ СТРОКА ОТДАЁТСЯ СЫРОЙ ────────────────────────────────────────────
 //
@@ -54,7 +54,9 @@ func listCalls(deps callsDeps) http.HandlerFunc {
 			}
 			before = t
 		}
-		rows, err := deps.store.ListCalls(r.Context(), id.UserID, before, limit)
+		// Групповые — по просьбе (`groups=1`): вкладка, которая их не рисует, их и не получит.
+		groups := r.URL.Query().Get("groups") == "1"
+		rows, err := deps.store.ListCalls(r.Context(), id.UserID, before, limit, groups)
 		if err != nil {
 			log.Printf("listCalls %s: %v", id.UserID, err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
