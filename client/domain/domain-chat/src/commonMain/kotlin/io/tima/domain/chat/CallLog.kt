@@ -98,7 +98,7 @@ data class CallRecord(
                 // Отбой до ответа сервер хранит как `missed` с тем, кто нажал первым
                 // (`ended_by`). До 2026-10-05 второй `/end` переписывал его в `ended`, и
                 // различение жило только там — строка ниже; теперь оно нужно и здесь.
-                endedBy.isNotEmpty() && endedBy == initiatorId -> CallOutcome.Cancelled
+                endedBy.isNotEmpty() && endedBy == initiatorId -> cancelledFor(me)
                 endedBy.isNotEmpty() -> CallOutcome.Declined
                 // Никто не нажимал — истекло время вызова. У звонившего это «не
                 // дозвонился», у вызываемого «пропущенный». Разные слова и разные
@@ -121,13 +121,21 @@ data class CallRecord(
                 answeredAt != 0L -> if (outgoing(me)) CallOutcome.Outgoing else CallOutcome.Incoming
                 // Трубку не брали, а звонок закрыт: кто-то нажал отбой. Кто именно —
                 // ровно то, ради чего на сервере завели `ended_by`.
-                endedBy.isNotEmpty() && endedBy == initiatorId -> CallOutcome.Cancelled
+                endedBy.isNotEmpty() && endedBy == initiatorId -> cancelledFor(me)
                 endedBy.isNotEmpty() -> CallOutcome.Declined
                 // Никто не нажимал — закрыл SFU. Сказать, отменили или отклонили, нечем.
                 else -> CallOutcome.Lost
             }
         else -> CallOutcome.Lost
     }
+
+    /**
+     * Звонивший положил трубку раньше ответа: у него «отменён», у вызываемого —
+     * «пропущенный» (заказчик 2026-10-08: по факту не дозвонился и сбросил, а мне звонили, и
+     * я этот звонок пропустил). Шторка вызываемого и раньше называла его пропущенным.
+     */
+    private fun cancelledFor(me: String): CallOutcome =
+        if (outgoing(me)) CallOutcome.Cancelled else CallOutcome.Missed
 }
 
 /** Состояния звонка на проводе. Строки сервера, собранные в одно место. */
@@ -165,11 +173,11 @@ enum class CallOutcome {
     Missed,
 
     /**
-     * Отменён звонившим: он положил трубку раньше, чем взяли.
+     * Отменён звонившим: он положил трубку раньше, чем взяли. Только у звонившего — у
+     * вызываемого тот же звонок [Missed] (заказчик 2026-10-08).
      *
-     * Слово одно на обоих, а не два разных, — и это выигрыш от `ended_by`. Пока его не
-     * было, «отменил» и «отклонил» приходилось выводить из того, кто смотрит, и выходила
-     * догадка. Кто нажал первым — теперь факт, а направление говорит стрелка.
+     * «Отменил» от «отклонил» отличает `ended_by`: кто нажал первым — факт, а не догадка
+     * от лица смотрящего.
      */
     Cancelled,
 

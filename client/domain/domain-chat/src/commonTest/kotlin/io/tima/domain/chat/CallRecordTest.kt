@@ -54,9 +54,10 @@ class CallRecordTest {
     fun отменил_и_отклонил_различаются_только_по_ended_by() {
         val отменил_звонивший = запись(CallStates.ENDED, initiator = я, endedBy = я)
         val отклонил_вызываемый = запись(CallStates.ENDED, initiator = я, endedBy = он)
-        // Слово одно на обоих: кто нажал первым — факт, а не догадка от лица смотрящего.
+        // Кто нажал первым — факт, а не догадка от лица смотрящего. Отменённый у
+        // вызываемого — пропущенный (заказчик 2026-10-08).
         assertEquals(CallOutcome.Cancelled, отменил_звонивший.outcome(я))
-        assertEquals(CallOutcome.Cancelled, отменил_звонивший.outcome(он))
+        assertEquals(CallOutcome.Missed, отменил_звонивший.outcome(он))
         assertEquals(CallOutcome.Declined, отклонил_вызываемый.outcome(я))
         assertEquals(CallOutcome.Declined, отклонил_вызываемый.outcome(он))
     }
@@ -69,7 +70,7 @@ class CallRecordTest {
         val отменил_звонивший = запись(CallStates.MISSED, initiator = я, endedBy = я)
         val отклонил_вызываемый = запись(CallStates.MISSED, initiator = я, endedBy = он)
         assertEquals(CallOutcome.Cancelled, отменил_звонивший.outcome(я))
-        assertEquals(CallOutcome.Cancelled, отменил_звонивший.outcome(он))
+        assertEquals(CallOutcome.Missed, отменил_звонивший.outcome(он))
         assertEquals(CallOutcome.Declined, отклонил_вызываемый.outcome(я))
         assertEquals(CallOutcome.Declined, отклонил_вызываемый.outcome(он))
     }

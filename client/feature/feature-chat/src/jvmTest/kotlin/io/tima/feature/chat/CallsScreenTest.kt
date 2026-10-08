@@ -24,13 +24,26 @@ class CallsScreenTest {
         val asGroup = capture("звонки-групповой", 400, 300, dark = false) {
             CallsScreen(
                 records = listOf(group), me = me, personOf = { ChatPerson(name = "Аня") }, onCallAgain = {},
-                groupOf = { GroupCallLine(title = "Групповой звонок", creator = "Евгений", face = null) },
+                groupOf = { GroupCallLine(face = null) },
             )
         }
         val asPerson = capture("звонки-личный", 400, 300, dark = false) {
             CallsScreen(records = listOf(direct), me = me, personOf = { ChatPerson(name = "Аня") }, onCallAgain = {})
         }
         assertTrue(asGroup.difference(asPerson) > 0.005, "групповая строка выглядит как личная")
+    }
+
+    @Test
+    fun звонок_с_уведомлением_в_оранжевом_контуре() {
+        // Вход во вкладку уведомление снимает; кто его оставил, видно по контуру аватара.
+        val missed = direct.copy(callId = "c3", state = "missed", initiatorId = "u1", peerId = me, answeredAt = 0, endedAt = 0)
+        val flagged = capture("звонки-контур", 400, 300, dark = false) {
+            CallsScreen(records = listOf(missed), me = me, personOf = { ChatPerson(name = "Аня", phone = "+7 900 000-00-00") }, flagged = { true })
+        }
+        val plain = capture("звонки-без-контура", 400, 300, dark = false) {
+            CallsScreen(records = listOf(missed), me = me, personOf = { ChatPerson(name = "Аня", phone = "+7 900 000-00-00") })
+        }
+        assertTrue(flagged.difference(plain) > 0.001, "контура нет")
     }
 
     @Test

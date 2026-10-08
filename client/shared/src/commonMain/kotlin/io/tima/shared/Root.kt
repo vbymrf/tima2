@@ -2983,7 +2983,8 @@ private fun App(
                     callsState = callsState,
                     // Имя и лицо в журнале — тем же механизмом, что везде (Д14): сервер
                     // знает только `user_id`, а «Аня Борисова» живёт в книге.
-                    personOfCall = { record -> personOfId(record.other(session.userId)) },
+                    // У группового — создатель звонка: его имя и телефон в строке (2026-10-08).
+                    personOfCall = { record -> personOfId(if (record.group) record.initiatorId else record.other(session.userId)) },
                     faceOfCall = { record ->
                         val id = record.other(session.userId)
                         people.wantFace(id)
@@ -2992,18 +2993,9 @@ private fun App(
                     // Повтор звонит ТЕМ ЖЕ видом, каким звонили тогда (Ж6). Кнопка,
                     // молча звонящая голосом вместо видео, выглядит поломкой ровно один
                     // раз — а потом ей перестают верить.
-                    // Строка группового звонка (заказчик 2026-10-08): чат звонка, его создатель.
+                    // Строка группового звонка (заказчик 2026-10-08): аватар создателя с «ГЗ».
                     groupCallOf = { record ->
-                        if (!record.group) {
-                            null
-                        } else {
-                            io.tima.feature.chat.GroupCallLine(
-                                title = listState.chats.firstOrNull { it.chatId == record.groupId }?.title
-                                    ?: wordsNow.groupCall.title,
-                                creator = creatorNameOf(record.initiatorId),
-                                face = creatorFaceOf(record.initiatorId),
-                            )
-                        }
+                        if (record.group) io.tima.feature.chat.GroupCallLine(face = creatorFaceOf(record.initiatorId)) else null
                     },
                     // Нажали на строку группового: чат звонка, а его нет — «Чат удалён».
                     onOpenGroupCall = { record ->
@@ -5751,6 +5743,11 @@ private fun PhoneWindow(
         // Книга фильтрует у себя: у неё поиск идёт по имени, нику и номеру сразу.
         onSearchInBook(text)
     }
+    // Числа уведомлений у разделов — только у «Чатов» (заказчик 2026-10-08). Модель разделов
+    // у «Чатов» и «Контактов» одна, а уведомления относятся к перепискам: переключение на
+    // «Контакты» их убирает.
+    val sectionNotices = tab == WindowTab.Chats
+    val sectionNews: (String) -> Int = if (sectionNotices) newInSection else { _ -> 0 }
     WindowFrame(
         window = Window.Phone,
         tabs = listOf(WindowTab.Chats, WindowTab.Contacts, WindowTab.Calls),
@@ -5804,7 +5801,7 @@ private fun PhoneWindow(
             // 2026-09-18 выбор на ней ни на что не влиял, потому что `onChooseSection`
             // сюда не передавался вовсе, и список показывал всех при любом чипе.
             tab == WindowTab.Contacts && !book.view.folders && book.tabs(bookWords).size > 1 ->
-                { { SectionsRow(book.tabs(bookWords), book.chosen, book.view.icons, onChooseSection, newIn = newInSection) } }
+                { { SectionsRow(book.tabs(bookWords), book.chosen, book.view.icons, onChooseSection, newIn = sectionNews) } }
             // Р4: те же разделы у личных переписок — раздел переписки это раздел собеседника.
             tab == WindowTab.Chats && chatSections.size > 1 ->
                 { { SectionsRow(chatSections, chatSection, book.view.icons, onChooseChatSection, newIn = newInSection) } }
@@ -5868,7 +5865,7 @@ private fun PhoneWindow(
                     onToggleSection = onToggleSection,
                     onChooseSection = onChooseSection,
                     onSections = onSections,
-                    newIn = newInSection,
+                    newIn = sectionNews,
                     onAdd = onAddContact,
                     onFace = onFacePerson,
                     onCall = onCallPerson,
@@ -5883,6 +5880,17 @@ private fun PhoneWindow(
             WindowTab.Calls -> {
                 // Журнал читается при открытии вкладки, а не при запуске: смотреть в него
                 // приходят редко, а сходить за ним стоит запроса.
+                // Кто оставил уведомление — снимок до того, как вход его снимет (заказчик
+                // 2026-10-08): по снимку аватар последнего пропущенного от этого человека в
+                // оранжевом контуре. Снимок живёт, пока открыта вкладка: переключился — контура нет.
+                val noticed = remember { noticeCounts.entities(io.tima.domain.chat.NoticeTab.Calls) }
+                val flaggedCalls = remember(callsState.records, noticed) {
+                    noticed.mapNotNull { who ->
+                        callsState.records.firstOrNull { record ->
+                            record.initiatorId == who && !record.outgoing(myUserId) && record.outcome(myUserId) == CallOutcome.Missed
+                        }?.callId
+                    }.toSet()
+                }
                 LaunchedEffect(Unit) { onOpenedCalls() }
                 CallsScreen(
                     // ── ФИЛЬТРЫ ВТОРОГО РЯДА ────────────────────────────────
@@ -5915,6 +5923,7 @@ private fun PhoneWindow(
                     offline = callsState.offline,
                     groupOf = groupCallOf,
                     note = callsNote,
+                    flagged = { it.callId in flaggedCalls },
                 )
             }
 
