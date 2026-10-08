@@ -2,6 +2,7 @@ package io.tima.feature.chat
 
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
 import kotlinx.datetime.toLocalDateTime
 
 /**
@@ -22,4 +23,19 @@ internal fun time(atMs: Long): String {
     val hour = local.hour.toString().padStart(2, '0')
     val minute = local.minute.toString().padStart(2, '0')
     return "$hour:$minute"
+}
+
+/**
+ * День строки списка — «Сегодня», «Вчера» или число без года «08.10» (заказчик 2026-10-08):
+ * нижней строкой в «Чатах» и «Звонках», под временем.
+ */
+internal fun day(atMs: Long, today: String, yesterday: String, nowMs: Long = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()): String {
+    val zone = TimeZone.currentSystemDefault()
+    val at = Instant.fromEpochMilliseconds(atMs).toLocalDateTime(zone).date
+    val now = Instant.fromEpochMilliseconds(nowMs).toLocalDateTime(zone).date
+    return when (at) {
+        now -> today.replaceFirstChar { it.uppercase() }
+        now.minus(1, kotlinx.datetime.DateTimeUnit.DAY) -> yesterday.replaceFirstChar { it.uppercase() }
+        else -> at.dayOfMonth.toString().padStart(2, '0') + "." + at.monthNumber.toString().padStart(2, '0')
+    }
 }

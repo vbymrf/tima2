@@ -58,7 +58,8 @@ fun Mark(kind: MarkKind, modifier: Modifier = Modifier, side: Dp = 12.dp) {
     val colors = Tima.colors
     val color = when (kind) {
         MarkKind.Waits -> colors.text3
-        MarkKind.Left -> colors.text2
+        // Чёрная, как текст (заказчик 2026-10-08): «отправлено» читается сразу, а не серым.
+        MarkKind.Left -> colors.text
         // Красный, а не чёрный: чёрный крестик читался как галочка (заказчик 2026-09-19).
         // Второй потребитель тревожного цвета после «не закрывайте приложение».
         MarkKind.NotLeft -> colors.alarm

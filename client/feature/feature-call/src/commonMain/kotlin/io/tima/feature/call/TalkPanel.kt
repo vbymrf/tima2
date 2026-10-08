@@ -15,13 +15,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -88,93 +89,107 @@ internal fun TalkPanel(
             .padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2)
             .testTag(TALK_PANEL_TAG),
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // ── Звук ──
-            Row(
-                Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1, Alignment.CenterHorizontally),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (onSpeaker != null && state.sound != SoundRoute.Unknown) {
-                    val speaker = state.sound == SoundRoute.Speaker
-                    TwoWay(
-                        top = { Glyph(if (state.sound == SoundRoute.Headset) "🎧" else "👂") },
-                        bottom = { Glyph("🔊") },
-                        topOn = !speaker,
-                        onTop = { onSpeaker(false) },
-                        onBottom = { onSpeaker(true) },
-                    )
-                }
-                BigButton(
-                    glyph = if (state.microphoneOn) "🎤" else "🔇",
-                    on = state.microphoneOn,
-                    onClick = { onMicrophone(!state.microphoneOn) },
-                )
-            }
-            // ── Глаз ──
-            Column(
-                Modifier.width(EYE_COLUMN),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
-            ) {
-                if (onRemoteVideo != null) {
-                    IconButton(
-                        glyph = if (eyeOpen) "👁" else "🙈",
-                        live = eyeOpen,
-                        onClick = {
-                            if (eyeOpen) {
-                                cameraBeforeEye = state.cameraOn
-                                onRemoteVideo(false)
-                                if (state.cameraOn) onCamera(false)
-                            } else {
-                                onRemoteVideo(true)
-                                if (cameraBeforeEye) onCamera(true)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            // Переключатель, микрофон, глаз, камера, переключатель — одной группой с равными
+            // промежутками (заказчик 2026-10-08): микрофон и камера стоят вплотную к глазу так
+            // же, как переключатели к ним. Нет переключателя или глаза — на их месте пусто,
+            // соседи не сдвигаются.
+            Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                Row(horizontalArrangement = Arrangement.spacedBy(GAP), verticalAlignment = Alignment.Top) {
+                    AtButton(SWITCH_WIDTH) {
+                        if (onSpeaker != null && state.sound != SoundRoute.Unknown) {
+                            val speaker = state.sound == SoundRoute.Speaker
+                            TwoWay(
+                                top = { Glyph(if (state.sound == SoundRoute.Headset) "🎧" else "👂") },
+                                bottom = { Glyph("🔊") },
+                                topOn = !speaker,
+                                onTop = { onSpeaker(false) },
+                                onBottom = { onSpeaker(true) },
+                            )
+                        }
+                    }
+                    // «Звук» серый, когда микрофон выключен, — как «Камера» под закрытым глазом.
+                    Labeled(words.panelSound, dim = !state.microphoneOn) {
+                        BigButton(
+                            glyph = if (state.microphoneOn) "🎤" else "🔇",
+                            on = state.microphoneOn,
+                            onClick = { onMicrophone(!state.microphoneOn) },
+                        )
+                    }
+                    AtButton(EYE_WIDTH) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
+                        ) {
+                            if (onRemoteVideo != null) {
+                                IconButton(
+                                    glyph = if (eyeOpen) "👁" else "🙈",
+                                    live = eyeOpen,
+                                    onClick = {
+                                        if (eyeOpen) {
+                                            cameraBeforeEye = state.cameraOn
+                                            onRemoteVideo(false)
+                                            if (state.cameraOn) onCamera(false)
+                                        } else {
+                                            onRemoteVideo(true)
+                                            if (cameraBeforeEye) onCamera(true)
+                                        }
+                                    },
+                                    modifier = Modifier.testTag(EYE_TAG),
+                                )
                             }
-                        },
-                        modifier = Modifier.testTag(EYE_TAG),
-                    )
-                }
-                onParticipants?.let { IconButton(glyph = "👥", live = true, onClick = it) }
-            }
-            // ── Камера ──
-            Row(
-                Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1, Alignment.CenterHorizontally),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                BigButton(
-                    glyph = "📹",
-                    on = state.cameraOn && eyeOpen,
-                    enabled = eyeOpen,
-                    onClick = { onCamera(!state.cameraOn) },
-                    modifier = Modifier.testTag(CAMERA_TAG),
-                )
-                if (onSwitchCamera != null && state.cameraSwitchable) {
-                    TwoWay(
-                        top = { lit -> PictureIcon(person = true, lit = lit) },
-                        bottom = { lit -> PictureIcon(person = false, lit = lit) },
-                        topOn = state.cameraFront,
-                        enabled = eyeOpen,
-                        onTop = { if (!state.cameraFront) onSwitchCamera() },
-                        onBottom = { if (state.cameraFront) onSwitchCamera() },
-                    )
+                            onParticipants?.let { IconButton(glyph = "👥", live = true, onClick = it) }
+                        }
+                    }
+                    Labeled(words.panelCamera, dim = !eyeOpen) {
+                        BigButton(
+                            glyph = "📹",
+                            on = state.cameraOn && eyeOpen,
+                            enabled = eyeOpen,
+                            onClick = { onCamera(!state.cameraOn) },
+                            modifier = Modifier.testTag(CAMERA_TAG),
+                        )
+                    }
+                    AtButton(SWITCH_WIDTH) {
+                        if (onSwitchCamera != null && state.cameraSwitchable) {
+                            TwoWay(
+                                top = { lit -> PictureIcon(person = true, lit = lit) },
+                                bottom = { lit -> PictureIcon(person = false, lit = lit) },
+                                topOn = state.cameraFront,
+                                enabled = eyeOpen,
+                                onTop = { if (!state.cameraFront) onSwitchCamera() },
+                                onBottom = { if (state.cameraFront) onSwitchCamera() },
+                            )
+                        }
+                    }
                 }
             }
-            // ── Завершить ── столбец уже двух других: место отдано промежутку между
-            // микрофоном и камерой (заказчик 2026-10-08).
-            Box(Modifier.weight(HANG_UP_WEIGHT), contentAlignment = Alignment.Center) {
-                BigButton(glyph = "📞", on = false, danger = true, onClick = onHangUp)
+            // ── Завершить ── своим столбцом справа.
+            Box(Modifier.width(HANG_UP_COLUMN), contentAlignment = Alignment.TopCenter) {
+                Labeled(words.hangUp) {
+                    BigButton(glyph = "📞", on = false, danger = true, onClick = onHangUp)
+                }
             }
-        }
-        Row(Modifier.fillMaxWidth().padding(top = TimaSpacing.about1)) {
-            // «Звук» серый, когда микрофон выключен, — как «Камера» под закрытым глазом.
-            Label(words.panelSound, Modifier.weight(1f), dim = !state.microphoneOn)
-            Spacer(Modifier.width(EYE_COLUMN))
-            Label(words.panelCamera, Modifier.weight(1f), dim = !eyeOpen)
-            Label(words.hangUp, Modifier.weight(HANG_UP_WEIGHT))
         }
     }
 }
+
+/** Крупная кнопка с подписью под ней. */
+@Composable
+private fun Labeled(text: String, dim: Boolean = false, button: @Composable () -> Unit) = Column(
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
+) {
+    button()
+    Label(text, Modifier, dim)
+}
+
+/** Место высотой с крупную кнопку: переключатель и глаз стоят по её середине. */
+@Composable
+private fun AtButton(width: androidx.compose.ui.unit.Dp, content: @Composable () -> Unit) = Box(
+    Modifier.width(width).height(BIG).wrapContentHeight(unbounded = true),
+    contentAlignment = Alignment.Center,
+) { content() }
 
 @Composable
 private fun Label(text: String, modifier: Modifier, dim: Boolean = false) = Caption(
@@ -375,11 +390,17 @@ internal fun Dialing(side: androidx.compose.ui.unit.Dp = WAVES, content: @Compos
 /** Крупная кнопка панели. */
 private val BIG = 54.dp
 
-/** Место маленького глаза между «Звук» и «Камера» — шире, чтобы микрофон и камеру разнести. */
-private val EYE_COLUMN = 64.dp
+/** Место маленького глаза между микрофоном и камерой. */
+private val EYE_WIDTH = 36.dp
 
-/** Доля столбца «Завершить» против «Звук» и «Камера». */
-private const val HANG_UP_WEIGHT = 0.72f
+/** Место переключателя на два места: ячейка и поля вокруг. */
+private val SWITCH_WIDTH = 34.dp
+
+/** Один промежуток между соседями группы «Звук · глаз · Камера». */
+private val GAP = 10.dp
+
+/** Столбец «Завершить». */
+private val HANG_UP_COLUMN = 84.dp
 
 private val SWITCH_CELL = 28.dp
 private val SWITCH_PAD = 3.dp

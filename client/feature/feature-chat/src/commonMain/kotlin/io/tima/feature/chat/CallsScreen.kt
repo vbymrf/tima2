@@ -33,9 +33,6 @@ import io.tima.domain.chat.ChatPerson
 import io.tima.domain.chat.PersonLook
 import io.tima.domain.chat.letter
 import io.tima.domain.chat.line
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 
 /**
  * Вкладка «Звонки» окна «Телефон» — ПЛАН-(Ж)-ЖУРНАЛА-ЗВОНКОВ.md, Ж2.
@@ -175,7 +172,11 @@ private fun Records(
                 },
                 right = {
                     ControlRow {
-                        Caption(whenOf(record.createdAt, words), fontSize = TimaType.sz6, color = Tima.colors.text3)
+                        // Сверху время, снизу день — как в «Чатах», без галочки (2026-10-08).
+                        Column(horizontalAlignment = Alignment.End) {
+                            Caption(time(record.createdAt), fontSize = TimaType.sz6, color = Tima.colors.text3, lineOne = true)
+                            Caption(day(record.createdAt, words.today, words.yesterday), fontSize = TimaType.sz6, color = Tima.colors.text3, lineOne = true)
+                        }
                         if (onCallAgain != null) {
                             IconButton(
                                 // Групповой — своей кнопкой: повторить звонок или войти в идущий.
@@ -235,22 +236,6 @@ private fun lasted(ms: Long): String {
     } else {
         "$minutes:$seconds"
     }
-}
-
-/**
- * «14:32», «вчера», «21.09» — когда это было.
- *
- * Часы показываются только у сегодняшних: вчерашнее время суток человеку уже не нужно,
- * ему нужен день. Тот же приём, что в списке переписок.
- */
-private fun whenOf(atMs: Long, words: io.tima.core.words.CallLogWords): String {
-    val zone = TimeZone.currentSystemDefault()
-    val at = Instant.fromEpochMilliseconds(atMs).toLocalDateTime(zone)
-    val now = kotlinx.datetime.Clock.System.now().toLocalDateTime(zone)
-    val sameDay = at.year == now.year && at.dayOfYear == now.dayOfYear
-    if (sameDay) return time(atMs)
-    if (at.year == now.year && at.dayOfYear == now.dayOfYear - 1) return words.yesterday
-    return at.dayOfMonth.toString().padStart(2, '0') + "." + at.monthNumber.toString().padStart(2, '0')
 }
 
 /** Метка списка журнала. */

@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -260,22 +261,25 @@ private fun ChatLine(
             // Времени может не быть вовсе: у пустой переписки нет последнего сообщения.
             // Ставить сюда 1970 год или «—» незачем — пустое место говорит то же самое и
             // не спорит с именем за внимание.
-            chat.atMs?.let {
-                // Время в строке списка не переносится: строка списка держит высоту.
-                Tertiary(time(it), lineOne = true)
+            // Верхняя строка — время и за ним отметка своего последнего: чёрная галочка —
+            // сервер принял; нижняя — день: «Сегодня», «Вчера», число (заказчик 2026-10-08).
+            // Время не переносится: строка списка держит высоту.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                chat.atMs?.let { Tertiary(time(it), lineOne = true) }
+                if (chat.lastOutgoing) chat.lastDisplay?.let { mark(it) }?.let { Mark(it) }
             }
             // Без fillMaxWidth: в ряду строки этот столбец не взвешен, и растянутый на
             // всю ширину он съедал середину — имя и превью получали нулевую ширину и
             // просто не рисовались. Поймал снимок.
-            Box(contentAlignment = Alignment.CenterEnd) {
-                // Счётчик и отметка не спорят за место: счётчик — про чужие сообщения,
-                // отметка — про своё последнее. Одновременно они бывают редко, и тогда
-                // важнее непрочитанное.
-                if (count > 0) {
-                    Counter(count)
-                } else if (chat.lastOutgoing) {
-                    chat.lastDisplay?.let { mark(it) }?.let { Mark(it) }
-                }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (count > 0) Counter(count)
+                chat.atMs?.let { Tertiary(day(it, Tima.words.callLog.today, Tima.words.callLog.yesterday), lineOne = true) }
             }
         }
     },

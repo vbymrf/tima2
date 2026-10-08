@@ -158,7 +158,12 @@ fun CallScreen(
     var pipOffset by remember { mutableStateOf(Offset.Zero) }
     var pipDragging by remember { mutableStateOf(false) }
     var area by remember { mutableStateOf(IntSize.Zero) }
-    val pipBelowPx = with(LocalDensity.current) { PIP_BELOW.roundToPx() }
+    // Высота затемнения с именем, временем и телефоном поверх видео: своё окошко стоит у его
+    // нижней границы, на три точки выше (заказчик 2026-10-08) — время видно, места не тратим.
+    var overlayPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    val pipBelow = with(density) { (overlayPx.toDp() - TimaSpacing.about3 - PIP_ABOVE_SHADE).coerceAtLeast(0.dp) }
+    val pipBelowPx = with(density) { pipBelow.roundToPx() }
     val pipSizePx = with(LocalDensity.current) {
         Offset((PIP_WIDTH + TimaSpacing.about3 * 2).toPx(), (PIP_HEIGHT + TimaSpacing.about3 * 2).toPx())
     }
@@ -301,6 +306,7 @@ fun CallScreen(
                     Modifier.align(Alignment.TopCenter).fillMaxWidth()
                         .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent)))
                         .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)
+                        .onSizeChanged { overlayPx = it.height }
                         .testTag(CALL_OVERLAY_TAG),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -328,7 +334,7 @@ fun CallScreen(
                 Pip(
                     video = small,
                     offset = pipOffset,
-                    below = if (group == null) PIP_BELOW else 0.dp,
+                    below = if (group == null && big != null) pipBelow else 0.dp,
                     dragging = pipDragging,
                     onTap = { if (remoteShown != null && localVideo != null) swapped = !swapped },
                     onDrag = { moving -> pipDragging = moving },
@@ -587,8 +593,8 @@ private fun PeerName(peer: String, stranger: Boolean, onVideo: Boolean = false) 
 /** Кадр без полосы имени сверху: в нём окошко ходит, не закрывая время звонка. */
 private fun IntSize.belowBy(px: Int): IntSize = IntSize(width, (height - px).coerceAtLeast(0))
 
-/** Насколько своё окошко ниже верха кадра — под строками имени, времени и телефона. */
-private val PIP_BELOW = 56.dp
+/** На сколько своё окошко заходит на затемнение с именем и временем — чуть-чуть, три точки. */
+private val PIP_ABOVE_SHADE = 3.dp
 
 /** Метка строки имени и времени поверх видео. */
 const val CALL_OVERLAY_TAG: String = "call:overlay"
