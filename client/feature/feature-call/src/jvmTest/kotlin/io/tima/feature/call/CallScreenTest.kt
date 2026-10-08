@@ -244,6 +244,19 @@ class CallScreenTest {
     }
 
     @Test
+    fun глаз_гасит_камеру_в_панели() {
+        // Проба «а» (заказчик 2026-10-08): глаз закрывает видео в обе стороны, и «Камера» под
+        // ним неактивна — панель с закрытым глазом выглядит иначе, чем с открытым.
+        val open = capture("звонок-панель-глаз-открыт", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connected, cameraOn = true, remoteVideoTaken = true), incoming = false, onRemoteVideo = {})
+        }
+        val shut = capture("звонок-панель-глаз-закрыт", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connected, cameraOn = false, remoteVideoTaken = false), incoming = false, onRemoteVideo = {})
+        }
+        assertTrue(open.difference(shut) > 0.001, "закрытый глаз панель не изменил")
+    }
+
+    @Test
     fun незнакомый_помечен_оранжевым_перед_именем() {
         // Заказчик 2026-10-08: кого нет в книге — «Незнакомый» перед именем или ником светлым
         // оранжевым, как пропущенный. Знакомого то же окно этим цветом не метит.

@@ -421,6 +421,55 @@ class CallHostTest {
         assertEquals(0, engine.restarts)
     }
 
+    @Test
+    fun гудок_вызова_пока_дозваниваемся_и_занято_в_конце() = runTest {
+        // Заказчик 2026-10-08: пока дозваниваемся — гудок, занято — короткие несколько секунд.
+        val ring = mutableListOf<Boolean>()
+        var busy = 0
+        val engine = FakeEngine()
+        val host = CallHost(
+            FakeCalls(),
+            engine,
+            CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
+            words = { io.tima.core.words.RussianWords },
+            access = allowed,
+            ringback = { ring += it },
+            busyTone = { busy++ },
+        )
+        fun settle() = androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+
+        host.start(peerId = "u-9", peerName = "Вера", video = false)
+        settle()
+        assertEquals(true, ring.lastOrNull(), "гудок вызова не пошёл: $ring")
+        engine.say(CallState(stage = CallStage.Connected))
+        settle()
+        assertEquals(false, ring.lastOrNull(), "ответили, а гудок идёт: $ring")
+        assertEquals(0, busy, "«занято» в отвеченном звонке")
+
+        host.close()
+        host.start(peerId = "u-9", peerName = "Вера", video = false)
+        host.ended("busy")
+        settle()
+        assertEquals(false, ring.lastOrNull(), "занято, а гудок вызова идёт: $ring")
+        assertEquals(1, busy, "«занято» не прозвучало")
+    }
+
+    @Test
+    fun входящий_гудком_вызова_не_звучит() = runTest {
+        val ring = mutableListOf<Boolean>()
+        val host = CallHost(
+            FakeCalls(),
+            FakeEngine(),
+            CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
+            words = { io.tima.core.words.RussianWords },
+            access = allowed,
+            ringback = { ring += it },
+        )
+        host.ring(callId = "первый", fromId = "u-1", fromName = "Аня", video = false)
+        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        assertTrue(ring.none { it }, "у входящего звучит гудок звонящего: $ring")
+    }
+
     private fun TestScope.host(
         calls: Calls = FakeCalls(),
         engine: FakeEngine = FakeEngine(),

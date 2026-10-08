@@ -1083,6 +1083,8 @@ object EnglishWords : Words {
             "Preset not applied: the server refused a re-entry. The call goes on with the previous preset"
         override val peerOffline = "The other phone is offline — the call will arrive when it comes back"
         override val stranger = "Stranger"
+        override val panelSound = "Sound"
+        override val panelCamera = "Camera"
         override val noAnswer = "No answer"
         override val peerBusy = "The other side is on another call"
         override val ringing = "Ringing…"

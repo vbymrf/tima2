@@ -1279,6 +1279,8 @@ private fun App(
                 keepScope,
                 preset = { bench.state.value.let { if (it.on) it.preset.copy(exact = it.armed) else null } },
                 cameraInBackground = { cameraInBackground.value },
+                ringback = io.tima.core.call.CallTones::ringback,
+                busyTone = io.tima.core.call.CallTones::busy,
             )
             CallKeep.Kept(callEngine, bench, host)
         }

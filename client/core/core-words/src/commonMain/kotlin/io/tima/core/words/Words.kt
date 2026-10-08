@@ -1179,6 +1179,10 @@ interface CallWords {
      */
     val stranger: String
 
+    /** Подписи столбцов панели разговора: «Звук», «Камера» (третья — [hangUp]), 2026-10-08. */
+    val panelSound: String
+    val panelCamera: String
+
     /** Набор публикации сменили посреди разговора: связь прервалась не сама. */
     fun presetApplied(name: String): String
 
@@ -3233,6 +3237,8 @@ object RussianWords : Words {
             "Набор не применён: сервер не дал войти заново. Разговор продолжается прежним набором"
         override val peerOffline = "Телефон собеседника не на связи — звонок придёт, когда он появится"
         override val stranger = "Незнакомый"
+        override val panelSound = "Звук"
+        override val panelCamera = "Камера"
         override val noAnswer = "Не дозвонились: никто не ответил"
         override val peerBusy = "Собеседник занят другим звонком"
         override val ringing = "Звонит…"

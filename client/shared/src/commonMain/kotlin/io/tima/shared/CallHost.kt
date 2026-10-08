@@ -38,6 +38,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -98,6 +99,13 @@ class CallHost(
     serviceOff: () -> Unit = ::callOngoingOff,
     /** Часы ворот службы — в проверках виртуальные. */
     clock: () -> Long = { msNow() },
+    /**
+     * Гудки звонящего (заказчик 2026-10-08): вызов — пока дозваниваемся, «занято» — когда
+     * занято или отклонили. По умолчанию тишина: проверкам звук не нужен; сборка передаёт
+     * платформенные `CallTones`.
+     */
+    private val ringback: (Boolean) -> Unit = {},
+    private val busyTone: () -> Unit = {},
 ) {
     /**
      * Все подъёмы и гашения службы — только здесь: не чаще одного подъёма в секунду, повтор
@@ -267,6 +275,16 @@ class CallHost(
         // «Завершить» из шторки — тем же путём, что кнопка окна 0 (ПЛАН-(В)-ВИДЕО.md В11).
         CallNoticeActions.hangUp = { hangUp() }
         engine?.let { live ->
+            // Гудок вызова — пока свой звонок на двоих дозванивается. Ответили, отменили,
+            // кончился — гудок гаснет сам: условие перестало быть правдой.
+            scope.launch {
+                androidx.compose.runtime.snapshotFlow {
+                    active && !incoming && group == null && state.stage == CallStage.Connecting
+                }.distinctUntilChanged().collect { dialing ->
+                    if (dialing) Journal.note(LogCode.CALL, "гудок вызова")
+                    ringback(dialing)
+                }
+            }
             scope.launch {
                 live.state.collectLatest { fresh ->
                     val was = state
@@ -502,10 +520,15 @@ class CallHost(
             why == BUSY -> {
                 Journal.note(LogCode.CALL, "собеседник занят", "кому" to peerId.take(8))
                 note(words().call.peerBusy)
+                if (group == null) busyTone()
             }
             // Исходы звонящего словами (ВЗ0а): отклонил — не то же, что не ответил, и
-            // человек поступает по-разному — второму перезванивают, первому нет.
-            !incoming && why == DECLINED -> note(words().call.peerDeclined)
+            // человек поступает по-разному — второму перезванивают, первому нет. Гудок
+            // у отклонённого тот же «занято», как у обычного телефона.
+            !incoming && why == DECLINED -> {
+                note(words().call.peerDeclined)
+                if (group == null) busyTone()
+            }
             !incoming && why == MISSED -> note(words().call.noAnswer)
         }
         hangUp()
@@ -1397,6 +1420,7 @@ class CallHost(
         if (step is CallStep.Refused && step.code == BUSY) {
             Journal.note(LogCode.CALL, "собеседник занят", "кому" to peerId.take(8))
             note(words().call.peerBusy)
+            busyTone()
             stopTicking()
             watchdog?.cancel()
             state = state.copy(stage = CallStage.Ended)

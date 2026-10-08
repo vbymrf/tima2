@@ -20,6 +20,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.tima.core.call.CallAction
@@ -143,6 +147,14 @@ fun CallScreen(
     val words = Tima.words.call
     var askHangUp by remember { mutableStateOf(false) }
     var benchJournal by remember { mutableStateOf(false) }
+    // Своё окошко: поменяно ли местами с собеседником, куда его перенесли, несут ли сейчас.
+    var swapped by remember { mutableStateOf(false) }
+    var pipOffset by remember { mutableStateOf(Offset.Zero) }
+    var pipDragging by remember { mutableStateOf(false) }
+    var area by remember { mutableStateOf(IntSize.Zero) }
+    val pipSizePx = with(LocalDensity.current) {
+        Offset((PIP_WIDTH + TimaSpacing.about3 * 2).toPx(), (PIP_HEIGHT + TimaSpacing.about3 * 2).toPx())
+    }
     Column(
         modifier = modifier.fillMaxSize().background(colors.surface),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -200,13 +212,17 @@ fun CallScreen(
                 }
             }
         } else
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged { area = it }) {
             // Картинка собеседника во весь кадр, если он себя показывает. Аватар и имя
             // под ней не рисуются: они отвечают на тот же вопрос «с кем говорю», и
             // повторять его поверх лица незачем.
             val remoteShown = remoteVideo?.takeIf { remoteHere }
-            if (remoteShown != null) {
-                CallVideo(remoteShown, Modifier.fillMaxSize())
+            // Нажали на своё окошко — меняется местами с собеседником (заказчик 2026-10-08).
+            // Только когда есть обе картинки: менять пустое место не с чем.
+            val swap = swapped && remoteShown != null && localVideo != null
+            val big = if (swap) localVideo else remoteShown
+            if (big != null) {
+                CallVideo(big, Modifier.fillMaxSize())
             }
 
             if (remoteShown == null) {
@@ -218,6 +234,9 @@ fun CallScreen(
                     if (group != null) {
                         val badge = Tima.words.groupCall.badge
                         Avatar(letters = badge, size = AvatarSize.Big, image = group.creatorFace, overlay = badge)
+                    } else if (!incoming && state.stage == CallStage.Connecting) {
+                        // Дозваниваемся — волны от аватара (заказчик 2026-10-08), вместе с гудком.
+                        Dialing { Avatar(letters = letters(peer), size = AvatarSize.Big) }
                     } else {
                         Avatar(letters = letters(peer), size = AvatarSize.Big)
                     }
@@ -279,14 +298,18 @@ fun CallScreen(
 
             // Своё изображение — плашкой в углу, как в макете (`[[ Вы (PIP) ]]`).
             // Маленькое и сверху справа: человек проверяет им, что он в кадре, а не
-            // смотрит на себя.
-            if (localVideo != null) {
-                CallVideo(
-                    localVideo,
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(TimaSpacing.about3)
-                        .size(width = PIP_WIDTH, height = PIP_HEIGHT),
+            // смотрит на себя. Нажатие меняет его местами с собеседником; зажали —
+            // толстая зелёная рамка, и окошко переносится пальцем (заказчик 2026-10-08).
+            val small = if (swap) remoteShown else localVideo
+            if (small != null) {
+                Pip(
+                    video = small,
+                    offset = pipOffset,
+                    dragging = pipDragging,
+                    onTap = { if (remoteShown != null && localVideo != null) swapped = !swapped },
+                    onDrag = { moving -> pipDragging = moving },
+                    onMove = { delta -> pipOffset = clampPip(pipOffset + delta, area, pipSizePx) },
+                    modifier = Modifier.align(Alignment.TopEnd),
                 )
             }
         }
@@ -301,6 +324,23 @@ fun CallScreen(
         //
         // Подписи при этом оставлены полными: включён микрофон или выключен, человек
         // читает словами, а не угадывает по цвету. Перенос дешевле краткости.
+        // Разговор — своя панель: три столбца «Звук · Камера · Завершить» с подписями внизу
+        // (проба «а», заказчик 2026-10-08). Кнопки стоят на своих местах при любом
+        // состоянии — прежнее правило ряда значков осталось в силе.
+        val talking = state.stage == CallStage.Connected && !(askHangUp && group != null)
+        if (talking) {
+            TalkPanel(
+                state = state,
+                onMicrophone = onMicrophone,
+                onCamera = onCamera,
+                onSpeaker = onSpeaker,
+                onSwitchCamera = onSwitchCamera,
+                onRemoteVideo = onRemoteVideo,
+                onParticipants = group?.onParticipants,
+                onHangUp = { if (group?.mine == true) askHangUp = true else onHangUp() },
+            )
+            return@Column
+        }
         FlowRow(
             modifier = Modifier.fillMaxWidth().padding(TimaSpacing.about4),
             horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2, Alignment.CenterHorizontally),
@@ -355,70 +395,8 @@ fun CallScreen(
                     Button(label = words.cancel, kind = ButtonKind.Dangerous, onClick = onHangUp)
                 }
 
-                else -> {
-                    // ── РАЗГОВОР: ЗНАЧКИ, А НЕ ПОДПИСИ ──────────────────────
-                    //
-                    // **Управление обязано выглядеть одинаково с видео и без.** С
-                    // подписями оно так не могло: «Микрофон включён», «Камера включена»,
-                    // «Скрыть видео» и «Завершить» в одну строку не влезают, ряд
-                    // переносился, и кнопки переезжали с места на место — а с видео
-                    // «Завершить» уходила за нижний край и положить трубку было нечем
-                    // (заказчик 2026-09-20).
-                    //
-                    // Четыре круглых значка влезают всегда и стоят на одних и тех же
-                    // местах при любом состоянии. Состояние несёт цвет: салатовый —
-                    // включено, серый — выключено. Что именно случилось, словами говорит
-                    // полоса событий сверху, и там на это есть место.
-                    // Порядок — решение заказчика 2026-09-29: «Динамик», «Микрофон»,
-                    // «Камера», «Переключение камеры», дальше прежние (ПЛАН-(В)-ВИДЕО.md В9).
-                    // Горит — громкая связь; наушники — свой значок, нажатие ведёт в громкую.
-                    if (onSpeaker != null && state.sound != SoundRoute.Unknown) {
-                        CallButton(
-                            glyph = when (state.sound) {
-                                SoundRoute.Speaker -> "🔊"
-                                SoundRoute.Headset -> "🎧"
-                                else -> "🔈"
-                            },
-                            on = state.sound == SoundRoute.Speaker,
-                            onClick = { onSpeaker(state.sound != SoundRoute.Speaker) },
-                        )
-                    }
-                    CallButton(
-                        glyph = if (state.microphoneOn) "🎤" else "🔇",
-                        on = state.microphoneOn,
-                        onClick = { onMicrophone(!state.microphoneOn) },
-                    )
-                    CallButton(
-                        glyph = "📹",
-                        on = state.cameraOn,
-                        onClick = { onCamera(!state.cameraOn) },
-                    )
-                    // Действие, а не состояние: горит, когда снимает задняя.
-                    if (onSwitchCamera != null && state.cameraSwitchable) {
-                        CallButton(glyph = "🔄", on = !state.cameraFront, onClick = onSwitchCamera)
-                    }
-                    // Принимать ли чужое видео — **решение, а не действие**, и потому
-                    // кнопка стоит всегда, а не появляется вместе с картинкой. Нажали
-                    // заранее — чужая камера, включённая потом, к нам не приедет и
-                    // трафика не съест.
-                    if (onRemoteVideo != null) {
-                        CallButton(
-                            glyph = if (state.remoteVideoTaken) "👁" else "🙈",
-                            on = state.remoteVideoTaken,
-                            onClick = { onRemoteVideo(!state.remoteVideoTaken) },
-                        )
-                    }
-                    // Групповой: журнал звонка — кто в нём и команды (ГЗ6).
-                    if (group != null) {
-                        CallButton(glyph = "👥", on = true, onClick = group.onParticipants)
-                    }
-                    CallButton(
-                        glyph = "📞",
-                        on = false,
-                        danger = true,
-                        onClick = { if (group?.mine == true) askHangUp = true else onHangUp() },
-                    )
-                }
+                // Разговор — панель выше: сюда он не доходит.
+                else -> Unit
             }
         }
     }
@@ -554,15 +532,6 @@ private fun letters(peer: String): String = peer.trim()
     .joinToString("")
     .ifEmpty { "+" }
 
-/**
- * Размер своего изображения в углу.
- *
- * Пропорция 3:4 — портретная, как держат телефон. Ширина выбрана так, чтобы плашка
- * читалась («я в кадре, свет есть»), но не спорила с лицом собеседника: смотреть человек
- * должен на него, а не на себя.
- */
-private val PIP_WIDTH = 96.dp
-private val PIP_HEIGHT = 128.dp
 
 /** Метка слова «Незнакомый» перед именем собеседника. */
 const val CALL_STRANGER_TAG: String = "call:stranger"

@@ -1083,6 +1083,8 @@ object SpanishWords : Words {
             "Conjunto no aplicado: el servidor no permitió volver a entrar. La llamada sigue con el anterior"
         override val peerOffline = "El teléfono de la otra persona está sin conexión: la llamada llegará cuando vuelva"
         override val stranger = "Desconocido"
+        override val panelSound = "Sonido"
+        override val panelCamera = "Cámara"
         override val noAnswer = "Sin respuesta"
         override val peerBusy = "La otra persona está en otra llamada"
         override val ringing = "Sonando…"
