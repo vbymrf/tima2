@@ -533,13 +533,15 @@ private fun CallButton(glyph: String, on: Boolean, onClick: () -> Unit, danger: 
  */
 @Composable
 private fun KindSwitch(video: Boolean, onPick: (Boolean) -> Unit) {
+    // Поля пузыря узкие: на телефоне шириной 360 точек три кнопки должны стоять в одну строку,
+    // а с полями по 8 «Закрыть» уходил на вторую (realme, 2026-10-08). Место по бокам — зазор
+    // ряда.
     Row(
-        Modifier.padding(horizontal = TimaSpacing.about2)
-            .background(Tima.colors.quiet, RoundedCornerShape(50))
+        Modifier.background(Tima.colors.quiet, RoundedCornerShape(50))
             .flipBy(vertical = false, onFirst = { onPick(false) }, onSecond = { onPick(true) })
-            .padding(horizontal = TimaSpacing.about2, vertical = TimaSpacing.about1)
+            .padding(TimaSpacing.about1)
             .testTag(CALL_KIND_SWITCH_TAG),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
     ) {
         CallButton(glyph = "🎤", on = !video, onClick = { onPick(false) })
         CallButton(glyph = "📹", on = video, onClick = { onPick(true) })
