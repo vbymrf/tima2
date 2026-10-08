@@ -338,12 +338,9 @@ fun buildAssembled(
             settings = environment.settings,
         )
         environment.onGroupKeyStored = keyCopy::feedGroupKey
-        // Новое в открытой группе — строка «Новое сообщение в группе» без текста (ПЛАН-(ОУ)). Каналы —
-        // нет: в приложении нет экрана ленты канала, отметку прочтения ставить негде, и число
-        // копилось бы без возможности его погасить (развилка — отчёт ОУ).
-        liveStates.onTopRaised = { kind, entityId, topId ->
-            if (kind == "group") notices.entityNew(kind, entityId, topId)
-        }
+        // Новое в открытой группе или канале — строка «Новое сообщение в группе» / «Новое в канале»
+        // без текста (ПЛАН-(ОУ)). Число каналов гаснет при открытии «Социума» (заказчик 2026-10-08).
+        liveStates.onTopRaised = { kind, entityId, topId -> notices.entityNew(kind, entityId, topId) }
 
         Assembled(
             session = device.session,

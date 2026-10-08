@@ -337,6 +337,18 @@ class Notices(
      * Открыли вкладку «Звонки» — её число обнуляется, строка в шторке уходит (ЖУ6,
      * заказчик 2026-09-30): сущностей для просмотра там нет, всё и так увидели.
      */
+    /**
+     * Открыли «Социум» — новое в каналах увидели: число окна и строка «Новое в канале» гаснут
+     * (заказчик 2026-10-08: «Гасить число при открытии Социума»).
+     */
+    fun channelsViewed() {
+        scope.launch {
+            lock.withLock {
+                if (journal.clearTab(NoticeTab.Channels, "Социум открыт", now()) > 0) showTab(NoticeTab.Channels, alert = false)
+            }
+        }
+    }
+
     fun callsViewed() {
         scope.launch {
             lock.withLock {

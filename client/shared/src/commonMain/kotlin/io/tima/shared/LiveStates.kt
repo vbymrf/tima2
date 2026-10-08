@@ -253,6 +253,16 @@ class LiveStates(
         }
     }
 
+    /**
+     * Открыли «Социум» — все каналы дочитаны до своих вершин (заказчик 2026-10-08): экрана
+     * ленты канала нет, и «прочитал» для канала значит «видел, что там новое».
+     */
+    fun channelsSeen() {
+        for ((key, top) in _tops.value) {
+            if (key.startsWith("channel:") && top.unread > 0) readEntity("channel", key.removePrefix("channel:"), top.topId)
+        }
+    }
+
     /** Дочитал открытую группу или канал до [readId] (ПЛАН-(ОУ)): число гаснет у себя сразу. */
     fun readEntity(kind: String, entityId: String, readId: Long) {
         if (readId <= 0) return

@@ -3145,6 +3145,11 @@ private fun App(
                 )
 
                 Window.Social -> {
+                    // Открыли «Социум» — новое в каналах увидели (заказчик 2026-10-08).
+                    LaunchedEffect(Unit) {
+                        assembled.notices.channelsViewed()
+                        assembled.liveStates?.channelsSeen()
+                    }
                     // Списки обновляются при входе в окно: возвращаясь из группы, человек
                     // должен видеть её на месте, а не прежний снимок.
                     LaunchedEffect(Unit) { social.refresh() }
