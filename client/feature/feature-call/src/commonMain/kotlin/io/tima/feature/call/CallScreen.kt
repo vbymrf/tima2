@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -148,6 +149,12 @@ fun CallScreen(
     peerPhone: String? = null,
     /** Лицо собеседника — настоящий аватар в голосовом звонке; `null` — буквы. */
     peerFace: ImageBitmap? = null,
+    /**
+     * Свайп между окнами — на области картинки и аватара, как у других окон на их
+     * содержимом, а не на всём окне (заказчик 2026-10-08): кнопки и переключатели внизу
+     * свою горизонталь не отдают. Зону потом выставят точнее — она здесь одна.
+     */
+    swipeArea: Modifier = Modifier,
 ) {
     val colors = Tima.colors
     val words = Tima.words.call
@@ -192,7 +199,7 @@ fun CallScreen(
 
         // Групповой в разговоре — сетка участников, своя картинка — одной из клеток.
         if (group != null && state.stage == CallStage.Connected) {
-            Column(Modifier.weight(1f).fillMaxWidth()) {
+            Column(Modifier.weight(1f).fillMaxWidth().then(swipeArea)) {
                 GroupTopBar(group, group.view, groupPages(gridTiles(group.tiles, group.view), group.view.perPage).size, words.duration(seconds), events.lastOrNull())
                 if (group.paused) {
                     Caption(
@@ -224,7 +231,7 @@ fun CallScreen(
                 }
             }
         } else
-        Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged { area = it }) {
+        Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged { area = it }.then(swipeArea)) {
             // Картинка собеседника во весь кадр, если он себя показывает. Аватар и имя
             // под ней не рисуются: они отвечают на тот же вопрос «с кем говорю», и
             // повторять его поверх лица незачем.
@@ -263,7 +270,8 @@ fun CallScreen(
                     PeerName(peer, stranger)
                     peerPhone?.takeIf { group == null && it.isNotBlank() }?.let { Secondary(it) }
                     group?.creator?.let { Secondary(it) }
-                    Secondary(under(state, incoming, seconds, peerRinging))
+                    // Что со звонком — зелёным (заказчик 2026-10-08): «Соединяем…», «Звоним…», время.
+                    Caption(under(state, incoming, seconds, peerRinging), fontSize = TimaType.sz5, weight = FontWeight.SemiBold, color = colors.navigation)
 
                     // Оценка связи — от SFU, своей не считаем. Пока не сказали — молчим:
                     // «связь выясняем» на каждом звонке было бы шумом.
@@ -315,7 +323,7 @@ fun CallScreen(
                             under(state, incoming, seconds, peerRinging),
                             fontSize = TimaType.sz5,
                             weight = FontWeight.Bold,
-                            color = Color.White,
+                            color = colors.navigation,
                             lineOne = true,
                         )
                     }
@@ -519,14 +527,27 @@ private fun CallButton(glyph: String, on: Boolean, onClick: () -> Unit, danger: 
  * Одним `Row`, а не двумя кнопками в общем ряду: `FlowRow` при переносе разнёс бы их по
  * строкам, и переключатель перестал бы читаться как один. Значки те же, что у микрофона и
  * камеры в разговоре, — человек их уже знает, и подписи не нужны.
+ *
+ * Заказчик 2026-10-08: переключателем — в сером пузыре, с местом по бокам от «Перезвонить» и
+ * «Закрыть»; кнопки внутри прежние. Меняется и нажатием, и свайпом влево-вправо.
  */
 @Composable
 private fun KindSwitch(video: Boolean, onPick: (Boolean) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
+    Row(
+        Modifier.padding(horizontal = TimaSpacing.about2)
+            .background(Tima.colors.quiet, RoundedCornerShape(50))
+            .flipBy(vertical = false, onFirst = { onPick(false) }, onSecond = { onPick(true) })
+            .padding(horizontal = TimaSpacing.about2, vertical = TimaSpacing.about1)
+            .testTag(CALL_KIND_SWITCH_TAG),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+    ) {
         CallButton(glyph = "🎤", on = !video, onClick = { onPick(false) })
         CallButton(glyph = "📹", on = video, onClick = { onPick(true) })
     }
 }
+
+/** Метка переключателя «голос · видео» у «Перезвонить». */
+const val CALL_KIND_SWITCH_TAG: String = "call:kind-switch"
 
 /**
  * Строка под именем.

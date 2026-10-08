@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.unit.dp
 import io.tima.core.ui.MarkKind
 import io.tima.core.ui.LayoutLocal
 import io.tima.core.ui.ButtonCircle
@@ -271,33 +273,38 @@ private fun ChatLine(
         }
     },
     right = {
-        Column(
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
+        // Без fillMaxWidth: в ряду строки правый край не взвешен, и растянутый на всю ширину
+        // он съедал середину — имя и превью получали нулевую ширину и просто не рисовались.
+        // Поймал снимок.
+        //
+        // Заказчик 2026-10-08: у края — время сверху и дата снизу (сегодня — без даты, вчера
+        // и раньше — число); перед ними место под знак, по середине между строками: число
+        // новых, а нет его — галочка своего последнего. Число важнее галочки.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Времени может не быть вовсе: у пустой переписки нет последнего сообщения.
-            // Ставить сюда 1970 год или «—» незачем — пустое место говорит то же самое и
-            // не спорит с именем за внимание.
-            // Верхняя строка — время и за ним отметка своего последнего: чёрная галочка —
-            // сервер принял; нижняя — день: «Сегодня», «Вчера», число (заказчик 2026-10-08).
-            // Время не переносится: строка списка держит высоту.
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (muted) Tertiary("🔕", lineOne = true)
-                chat.atMs?.let { Tertiary(time(it), lineOne = true) }
-                if (chat.lastOutgoing) markOf(chat.lastDisplay, chat.atMs, receipt)?.let { Mark(it) }
+            if (muted) Tertiary("🔕", lineOne = true)
+            // Место под знак — шириной числа из двух цифр, тем же кеглем: растёт вместе с
+            // крупным шрифтом телефона, и знаки разных строк стоят одним столбцом.
+            Box(contentAlignment = Alignment.Center) {
+                Counter(SLOT_SAMPLE, Modifier.alpha(0f))
+                when {
+                    count > 0 -> Counter(count)
+                    chat.lastOutgoing -> markOf(chat.lastDisplay, chat.atMs, receipt)?.let { Mark(it, side = MARK_SIDE) }
+                }
             }
-            // Без fillMaxWidth: в ряду строки этот столбец не взвешен, и растянутый на
-            // всю ширину он съедал середину — имя и превью получали нулевую ширину и
-            // просто не рисовались. Поймал снимок.
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
-                verticalAlignment = Alignment.CenterVertically,
+            // Время и дата — по пять знаков. Ширина задана образцом «00:00» тем же кеглем, а
+            // не точками: при крупном шрифте точки обрезали бы «12:45» до «12:…». Цифры
+            // шрифтов приложения одной ширины, и образец подходит любому времени.
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
             ) {
-                if (count > 0) Counter(count)
-                chat.atMs?.let { Tertiary(day(it, Tima.words.callLog.today, Tima.words.callLog.yesterday), lineOne = true) }
+                // Времени может не быть вовсе: у пустой переписки нет последнего сообщения.
+                // Ставить сюда 1970 год или «—» незачем — пустое место говорит то же самое.
+                FiveChars(chat.atMs?.let { time(it) })
+                FiveChars(chat.atMs?.let { dateOnly(it) })
             }
         }
     },
@@ -319,6 +326,19 @@ private fun ChatLine(
         tag?.let { Tertiary(it, lineOne = true) }
     },
 )
+
+/** Текст правого края шириной образца «00:00»; пусто — место остаётся, строка держит высоту. */
+@Composable
+private fun FiveChars(text: String?) = Box(contentAlignment = Alignment.CenterEnd) {
+    Tertiary(FIVE_SAMPLE, Modifier.alpha(0f), lineOne = true)
+    if (!text.isNullOrEmpty()) Tertiary(text, lineOne = true)
+}
+
+private const val FIVE_SAMPLE = "00:00"
+private const val SLOT_SAMPLE = 99
+
+/** Галочка в месте под знак — крупнее прежней, вровень с числом. */
+private val MARK_SIDE = 14.dp
 
 /**
  * Превью строки.

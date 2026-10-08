@@ -29,6 +29,17 @@ internal fun time(atMs: Long): String {
  * День строки списка — «Сегодня», «Вчера» или число без года «08.10» (заказчик 2026-10-08):
  * нижней строкой в «Чатах» и «Звонках», под временем.
  */
+/**
+ * Дата строки «Чатов» (заказчик 2026-10-08): сегодня — пусто, вчера и раньше — число без
+ * года. Слов «Сегодня», «Вчера» здесь нет.
+ */
+internal fun dateOnly(atMs: Long, nowMs: Long = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()): String {
+    val zone = TimeZone.currentSystemDefault()
+    val at = Instant.fromEpochMilliseconds(atMs).toLocalDateTime(zone).date
+    val now = Instant.fromEpochMilliseconds(nowMs).toLocalDateTime(zone).date
+    return if (at == now) "" else at.dayOfMonth.toString().padStart(2, '0') + "." + at.monthNumber.toString().padStart(2, '0')
+}
+
 internal fun day(atMs: Long, today: String, yesterday: String, nowMs: Long = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()): String {
     val zone = TimeZone.currentSystemDefault()
     val at = Instant.fromEpochMilliseconds(atMs).toLocalDateTime(zone).date

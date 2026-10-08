@@ -10,6 +10,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,9 +31,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
@@ -244,7 +248,10 @@ private fun TwoWay(
 ) {
     val colors = Tima.colors
     Column(
-        Modifier.background(colors.quiet, RoundedCornerShape(50)).padding(SWITCH_PAD),
+        Modifier.background(colors.quiet, RoundedCornerShape(50))
+            // Переключается и свайпом: вверх — верхнее место, вниз — нижнее (заказчик 2026-10-08).
+            .then(if (enabled) Modifier.flipBy(vertical = true, onFirst = onTop, onSecond = onBottom) else Modifier)
+            .padding(SWITCH_PAD),
         verticalArrangement = Arrangement.spacedBy(SWITCH_PAD),
     ) {
         for ((icon, lit, tap) in listOf(Triple(top, topOn, onTop), Triple(bottom, !topOn, onBottom))) {
@@ -255,6 +262,35 @@ private fun TwoWay(
                 contentAlignment = Alignment.Center,
             ) {
                 Box(Modifier.alpha(if (enabled) 1f else DIM)) { icon(lit) }
+            }
+        }
+    }
+}
+
+/**
+ * Переключатель на два места меняется и свайпом, а не только нажатием (заказчик 2026-10-08):
+ * влево или вверх — первое место, вправо или вниз — второе. Жест свой и поглощается: свайп
+ * по переключателю не листает окна.
+ */
+internal fun Modifier.flipBy(vertical: Boolean, onFirst: () -> Unit, onSecond: () -> Unit): Modifier = composed {
+    val first by rememberUpdatedState(onFirst)
+    val second by rememberUpdatedState(onSecond)
+    pointerInput(vertical) {
+        val threshold = FLIP_SWIPE.toPx()
+        var moved = 0f
+        val end = {
+            if (moved <= -threshold) first() else if (moved >= threshold) second()
+            moved = 0f
+        }
+        if (vertical) {
+            detectVerticalDragGestures(onDragStart = { moved = 0f }, onDragEnd = end, onDragCancel = { moved = 0f }) { change, shift ->
+                moved += shift
+                change.consume()
+            }
+        } else {
+            detectHorizontalDragGestures(onDragStart = { moved = 0f }, onDragEnd = end, onDragCancel = { moved = 0f }) { change, shift ->
+                moved += shift
+                change.consume()
             }
         }
     }
@@ -404,6 +440,9 @@ private val HANG_UP_COLUMN = 84.dp
 
 private val SWITCH_CELL = 28.dp
 private val SWITCH_PAD = 3.dp
+
+/** Сколько провести по переключателю, чтобы он сменился: меньше кнопки, больше дрожи пальца. */
+private val FLIP_SWIPE = 16.dp
 
 /** Прозрачность недоступного значка. */
 private const val DIM = 0.35f

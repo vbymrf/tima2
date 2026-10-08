@@ -112,6 +112,18 @@ class CallScreenTest {
     }
 
     @Test
+    fun голос_и_видео_у_перезвонить_переключателем_в_пузыре() {
+        // Заказчик 2026-10-08: между «Перезвонить» и «Закрыть» — переключатель в сером пузыре.
+        val with = capture("звонок-завершён-переключатель", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Ended), incoming = false, onCallAgain = {}, onClose = {}, onRedialKind = {})
+        }
+        val without = capture("звонок-завершён", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Ended), incoming = false, onCallAgain = {}, onClose = {})
+        }
+        assertTrue(with.difference(without) > 0.001, "переключателя нет")
+    }
+
+    @Test
     fun события_показываются_последним_а_не_списком() {
         // Решение заказчика 2026-09-20: копятся списком, показываются по одному. Если
         // лента однажды развернётся целиком, она отъест экран у видео — а оно здесь во
@@ -298,6 +310,7 @@ class CallScreenTest {
             canAccept: Boolean = true,
             stranger: Boolean = false,
             peerPhone: String? = null,
+            onRedialKind: ((Boolean) -> Unit)? = null,
         ) = Stage(
             column = {
                 CallScreen(
@@ -316,6 +329,7 @@ class CallScreenTest {
                     onRemoteVideo = onRemoteVideo,
                     stranger = stranger,
                     peerPhone = peerPhone,
+                    onRedialKind = onRedialKind,
                 )
             },
         )
