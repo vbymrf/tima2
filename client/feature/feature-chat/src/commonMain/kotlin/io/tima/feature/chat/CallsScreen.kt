@@ -345,7 +345,8 @@ const val CALLS_NOTE_TAG: String = "calls:note"
 // рисовал Samsung; отменённый, не дозвонился, занято, оборвался — по направлению.
 private val ARROW_IN = Color(0xFF7CCB7C)
 private val ARROW_OUT = Color(0xFF5AAEE8)
-private val ARROW_DECLINED = Color(0xFFF08A8A)
+// Отклонённый — тот же светло-красный, что у «Закрыть» (заказчик 2026-10-08: F75454).
+private val ARROW_DECLINED = io.tima.core.ui.LEAVE_RED
 private const val DOT = " · "
 private const val VOICE_GLYPH = "📞"
 private const val VIDEO_GLYPH = "📹"

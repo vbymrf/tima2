@@ -5899,7 +5899,12 @@ private fun PhoneWindow(
                     }.toSet()
                 }
                 LaunchedEffect(Unit) {
-                    if (flaggedCalls.isNotEmpty()) Journal.note(LogCode.NOTICE, "«Звонки»: контур у звонков с уведомлением", "сколько" to flaggedCalls.size)
+                    if (noticed.isNotEmpty()) {
+                        Journal.note(
+                            LogCode.NOTICE, "«Звонки»: контур у звонков с уведомлением", "сколько" to flaggedCalls.size,
+                            "звонки" to flaggedCalls.joinToString(",") { it.take(8) }, "от кого" to noticed.joinToString(",") { it.take(8) },
+                        )
+                    }
                     onOpenedCalls()
                 }
                 CallsScreen(
