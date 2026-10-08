@@ -2854,6 +2854,14 @@ private fun App(
                     false to (who.line(look, PERSON_FIRST_LINE) ?: callHost.peer)
                 }
             }
+            // Телефон и лицо собеседника окна 0 (заказчик 2026-10-08): номер второй строкой,
+            // лицо — настоящим аватаром в голосовом звонке.
+            val callPeerId = callHost.peerUserId.takeIf { window == Window.Call && it.isNotEmpty() && groupStage == null }
+            val callPeerPhone = callPeerId?.let { personOfId(it).phone }
+            val callPeerFace = callPeerId?.let { id ->
+                people.wantFace(id)
+                peopleFaces[id]
+            }
             when (window) {
                 // Окно 0 — звонок. Временное: пока идёт разговор. Экран чистый, всю
                 // работу держит CallHost.
@@ -2867,6 +2875,8 @@ private fun App(
                     // зовётся своим названием.
                     peer = callPeer?.second ?: callHost.peer,
                     stranger = callPeer?.first == true,
+                    peerPhone = callPeerPhone,
+                    peerFace = callPeerFace,
                     incoming = callHost.incoming,
                     peerRinging = callHost.delivered,
                     seconds = callHost.seconds,

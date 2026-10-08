@@ -160,19 +160,18 @@ internal fun TalkPanel(
                     )
                 }
             }
-            // Больше места перед «Завершить»: её не должны задевать, целясь в камеру.
-            Spacer(Modifier.width(HANG_UP_GAP))
-            // ── Завершить ──
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            // ── Завершить ── столбец уже двух других: место отдано промежутку между
+            // микрофоном и камерой (заказчик 2026-10-08).
+            Box(Modifier.weight(HANG_UP_WEIGHT), contentAlignment = Alignment.Center) {
                 BigButton(glyph = "📞", on = false, danger = true, onClick = onHangUp)
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = TimaSpacing.about1)) {
-            Label(words.panelSound, Modifier.weight(1f))
+            // «Звук» серый, когда микрофон выключен, — как «Камера» под закрытым глазом.
+            Label(words.panelSound, Modifier.weight(1f), dim = !state.microphoneOn)
             Spacer(Modifier.width(EYE_COLUMN))
             Label(words.panelCamera, Modifier.weight(1f), dim = !eyeOpen)
-            Spacer(Modifier.width(HANG_UP_GAP))
-            Label(words.hangUp, Modifier.weight(1f))
+            Label(words.hangUp, Modifier.weight(HANG_UP_WEIGHT))
         }
     }
 }
@@ -301,6 +300,8 @@ private fun PictureIcon(person: Boolean, lit: Boolean) {
 internal fun Pip(
     video: VideoHandle,
     offset: Offset,
+    /** Отступ сверху: окошко стоит ниже строки имени и времени, чтобы их не закрывать. */
+    below: androidx.compose.ui.unit.Dp,
     dragging: Boolean,
     onTap: () -> Unit,
     onDrag: (Boolean) -> Unit,
@@ -309,6 +310,7 @@ internal fun Pip(
 ) {
     Box(
         modifier
+            .padding(top = below)
             .offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }
             .padding(TimaSpacing.about3)
             .size(width = PIP_WIDTH, height = PIP_HEIGHT)
@@ -347,7 +349,7 @@ internal fun clampPip(wanted: Offset, area: IntSize, pip: Offset): Offset {
 
 /** Дозваниваемся: волны от аватара расходятся и гаснут, пока не ответили (заказчик 2026-10-08). */
 @Composable
-internal fun Dialing(content: @Composable () -> Unit) {
+internal fun Dialing(side: androidx.compose.ui.unit.Dp = WAVES, content: @Composable () -> Unit) {
     val color = Tima.colors.navigation
     val wave by rememberInfiniteTransition(label = "вызов").animateFloat(
         initialValue = 0f,
@@ -356,7 +358,7 @@ internal fun Dialing(content: @Composable () -> Unit) {
         label = "волна",
     )
     Box(contentAlignment = Alignment.Center, modifier = Modifier.testTag(DIALING_TAG)) {
-        Canvas(Modifier.size(WAVES)) {
+        Canvas(Modifier.size(side)) {
             val base = size.minDimension / 4
             for (i in 0 until 2) {
                 val t = (wave + i / 2f) % 1f
@@ -373,11 +375,11 @@ internal fun Dialing(content: @Composable () -> Unit) {
 /** Крупная кнопка панели. */
 private val BIG = 54.dp
 
-/** Место маленького глаза между «Звук» и «Камера». */
-private val EYE_COLUMN = 40.dp
+/** Место маленького глаза между «Звук» и «Камера» — шире, чтобы микрофон и камеру разнести. */
+private val EYE_COLUMN = 64.dp
 
-/** Запас перед «Завершить» сверх обычного. */
-private val HANG_UP_GAP = 14.dp
+/** Доля столбца «Завершить» против «Звук» и «Камера». */
+private const val HANG_UP_WEIGHT = 0.72f
 
 private val SWITCH_CELL = 28.dp
 private val SWITCH_PAD = 3.dp

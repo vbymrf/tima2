@@ -20,6 +20,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -39,8 +43,6 @@ import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Caption
 import io.tima.core.ui.IconButton
-import io.tima.core.ui.InCenter
-import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
@@ -142,6 +144,10 @@ fun CallScreen(
      * оранжевым, как пропущенный; без имени и ника — одно это слово.
      */
     stranger: Boolean = false,
+    /** Телефон собеседника — второй строкой под именем; `null` — не знаем (2026-10-08). */
+    peerPhone: String? = null,
+    /** Лицо собеседника — настоящий аватар в голосовом звонке; `null` — буквы. */
+    peerFace: ImageBitmap? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.call
@@ -152,6 +158,7 @@ fun CallScreen(
     var pipOffset by remember { mutableStateOf(Offset.Zero) }
     var pipDragging by remember { mutableStateOf(false) }
     var area by remember { mutableStateOf(IntSize.Zero) }
+    val pipBelowPx = with(LocalDensity.current) { PIP_BELOW.roundToPx() }
     val pipSizePx = with(LocalDensity.current) {
         Offset((PIP_WIDTH + TimaSpacing.about3 * 2).toPx(), (PIP_HEIGHT + TimaSpacing.about3 * 2).toPx())
     }
@@ -225,39 +232,31 @@ fun CallScreen(
                 CallVideo(big, Modifier.fillMaxSize())
             }
 
-            if (remoteShown == null) {
-            InCenter(Modifier.fillMaxSize()) {
+            if (big == null) {
+            // Голосом: аватар ниже, крупно и настоящим лицом; под ним имя, телефон и то, что
+            // со звонком сейчас (заказчик 2026-10-08).
+            Column(
+                Modifier.fillMaxSize().padding(horizontal = TimaSpacing.about4),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Spacer(Modifier.weight(1f))
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+                    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
                 ) {
                     if (group != null) {
                         val badge = Tima.words.groupCall.badge
-                        Avatar(letters = badge, size = AvatarSize.Big, image = group.creatorFace, overlay = badge)
+                        Avatar(letters = badge, size = AvatarSize.Huge, image = group.creatorFace, overlay = badge)
                     } else if (!incoming && state.stage == CallStage.Connecting) {
                         // Дозваниваемся — волны от аватара (заказчик 2026-10-08), вместе с гудком.
-                        Dialing { Avatar(letters = letters(peer), size = AvatarSize.Big) }
-                    } else {
-                        Avatar(letters = letters(peer), size = AvatarSize.Big)
-                    }
-                    if (stranger) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Caption(
-                                words.stranger,
-                                modifier = Modifier.testTag(CALL_STRANGER_TAG),
-                                fontSize = TimaType.sz4,
-                                weight = FontWeight.Bold,
-                                color = colors.activity,
-                                lineOne = true,
-                            )
-                            if (peer.isNotBlank()) Name(peer)
+                        Dialing(side = AvatarSize.Huge.side * 2) {
+                            Avatar(letters = letters(peer), size = AvatarSize.Huge, image = peerFace)
                         }
                     } else {
-                        Name(peer.ifBlank { Tima.words.chat.nameless })
+                        Avatar(letters = letters(peer), size = AvatarSize.Huge, image = peerFace)
                     }
+                    PeerName(peer, stranger)
+                    peerPhone?.takeIf { group == null && it.isNotBlank() }?.let { Secondary(it) }
                     group?.creator?.let { Secondary(it) }
                     Secondary(under(state, incoming, seconds, peerRinging))
 
@@ -293,7 +292,31 @@ fun CallScreen(
                         Tertiary(it, lineOne = true)
                     }
                 }
+                Spacer(Modifier.weight(1.6f))
             }
+            } else if (group == null) {
+                // С видео: имя и время звонка поверх картинки, второй строкой телефон — как в
+                // пробе (заказчик 2026-10-08).
+                Column(
+                    Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent)))
+                        .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)
+                        .testTag(CALL_OVERLAY_TAG),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { PeerName(peer, stranger, onVideo = true) }
+                        Caption(
+                            under(state, incoming, seconds, peerRinging),
+                            fontSize = TimaType.sz5,
+                            weight = FontWeight.Bold,
+                            color = Color.White,
+                            lineOne = true,
+                        )
+                    }
+                    peerPhone?.takeIf { it.isNotBlank() }?.let {
+                        Caption(it, fontSize = TimaType.sz5, color = Color.White.copy(alpha = 0.85f), lineOne = true)
+                    }
+                }
             }
 
             // Своё изображение — плашкой в углу, как в макете (`[[ Вы (PIP) ]]`).
@@ -305,10 +328,11 @@ fun CallScreen(
                 Pip(
                     video = small,
                     offset = pipOffset,
+                    below = if (group == null) PIP_BELOW else 0.dp,
                     dragging = pipDragging,
                     onTap = { if (remoteShown != null && localVideo != null) swapped = !swapped },
                     onDrag = { moving -> pipDragging = moving },
-                    onMove = { delta -> pipOffset = clampPip(pipOffset + delta, area, pipSizePx) },
+                    onMove = { delta -> pipOffset = clampPip(pipOffset + delta, area.belowBy(pipBelowPx), pipSizePx) },
                     modifier = Modifier.align(Alignment.TopEnd),
                 )
             }
@@ -535,3 +559,36 @@ private fun letters(peer: String): String = peer.trim()
 
 /** Метка слова «Незнакомый» перед именем собеседника. */
 const val CALL_STRANGER_TAG: String = "call:stranger"
+
+/** Строка имени: «Незнакомый» оранжевым впереди, если человека нет в книге (2026-10-08). */
+@Composable
+private fun PeerName(peer: String, stranger: Boolean, onVideo: Boolean = false) {
+    val colors = Tima.colors
+    val ink = if (onVideo) Color.White else colors.text
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (stranger) {
+            Caption(
+                Tima.words.call.stranger,
+                modifier = Modifier.testTag(CALL_STRANGER_TAG),
+                fontSize = TimaType.sz4,
+                weight = FontWeight.Bold,
+                color = colors.activity,
+                lineOne = true,
+            )
+        }
+        val name = peer.ifBlank { if (stranger) "" else Tima.words.chat.nameless }
+        if (name.isNotEmpty()) Caption(name, fontSize = TimaType.sz4, weight = FontWeight.Bold, color = ink, lineOne = true)
+    }
+}
+
+/** Кадр без полосы имени сверху: в нём окошко ходит, не закрывая время звонка. */
+private fun IntSize.belowBy(px: Int): IntSize = IntSize(width, (height - px).coerceAtLeast(0))
+
+/** Насколько своё окошко ниже верха кадра — под строками имени, времени и телефона. */
+private val PIP_BELOW = 56.dp
+
+/** Метка строки имени и времени поверх видео. */
+const val CALL_OVERLAY_TAG: String = "call:overlay"

@@ -244,6 +244,18 @@ class CallScreenTest {
     }
 
     @Test
+    fun голосом_под_аватаром_имя_и_телефон() {
+        // Заказчик 2026-10-08: под крупным аватаром — имя, ниже телефон, дальше событие.
+        val withPhone = capture("звонок-голос-телефон", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connected), incoming = false, peerPhone = "+7 999 000-01-01")
+        }
+        val without = capture("звонок-голос-без-телефона", WIDTH, HEIGHT, dark = false) {
+            screen(CallState(stage = CallStage.Connected), incoming = false)
+        }
+        assertTrue(withPhone.difference(without) > 0.0005, "телефона под именем нет")
+    }
+
+    @Test
     fun глаз_гасит_камеру_в_панели() {
         // Проба «а» (заказчик 2026-10-08): глаз закрывает видео в обе стороны, и «Камера» под
         // ним неактивна — панель с закрытым глазом выглядит иначе, чем с открытым.
@@ -285,6 +297,7 @@ class CallScreenTest {
             onRemoteVideo: ((Boolean) -> Unit)? = null,
             canAccept: Boolean = true,
             stranger: Boolean = false,
+            peerPhone: String? = null,
         ) = Stage(
             column = {
                 CallScreen(
@@ -302,6 +315,7 @@ class CallScreenTest {
                     events = events,
                     onRemoteVideo = onRemoteVideo,
                     stranger = stranger,
+                    peerPhone = peerPhone,
                 )
             },
         )

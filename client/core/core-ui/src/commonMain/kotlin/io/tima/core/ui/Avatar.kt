@@ -93,4 +93,6 @@ enum class AvatarSize(val side: Dp, val rounding: Dp, val fontSize: TextUnit) {
     Small(side = TimaZones.avatar * 0.76f, rounding = TimaShapes.smallSquare, fontSize = TimaType.sz6),
     Normal(side = TimaZones.avatar, rounding = TimaShapes.square, fontSize = TimaType.sz5),
     Big(side = TimaZones.avatar * 1.9f, rounding = TimaShapes.bigSquare, fontSize = TimaType.sz2),
+    /** Окно 0 в голосовом звонке: лицо собеседника крупно, как настоящий аватар (2026-10-08). */
+    Huge(side = TimaZones.avatar * 3f, rounding = TimaShapes.bigSquare, fontSize = TimaType.sz1),
 }
