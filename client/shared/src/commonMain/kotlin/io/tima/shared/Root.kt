@@ -1050,7 +1050,10 @@ private fun App(
     var communityViewSheet by remember { mutableStateOf(false) }
     /** Вкладка Социума — здесь, чтобы пережить подокно «Вид» (оно перестраивает окно). */
     // «Социум» открывается на «Каталоге» — он первый (заказчик 2026-10-05).
+    // Вкладки окон — правило состава журнала («открытие окна, вкладки»); до 2026-10-08 их не
+    // было, и «открыл Звонки» приходилось угадывать по запросу `calls/seen`.
     var socialTab by remember { mutableStateOf(WindowTab.Catalogue) }
+    LaunchedEffect(socialTab) { Journal.note(LogCode.SCREEN_OPEN, "tab", "окно" to Window.Social.name, "вкладка" to socialTab.name) }
     // Люди за идентификаторами — одно место на книгу, реплики и состав (2026-09-18).
     val people = remember(assembled) { People(network.directory, environment.bookStorage, scope, network.media) }
     val peopleCards by people.cards.collectAsState()
@@ -1413,6 +1416,7 @@ private fun App(
         if (commentPing != 0L) page.refresh()
     }
     var phoneTab by remember { mutableStateOf(WindowTab.Chats) }
+    LaunchedEffect(phoneTab) { Journal.note(LogCode.SCREEN_OPEN, "tab", "окно" to Window.Phone.name, "вкладка" to phoneTab.name) }
 
     // Откуда ушли в настройки (ПЛАН-(Б)-ОТЛАДКИ.md, Б2). Запоминается ЗДЕСЬ, в момент
     // перехода: к моменту отправки отчёта «текущее окно» будет «Настройки», то есть
@@ -1967,6 +1971,7 @@ private fun App(
             // Прибавляем размер до остатка: у отрицательного числа остаток в Kotlin
             // отрицателен, и свайп с первого окна ушёл бы в -1, то есть никуда.
             val step = if (where_ == InSide.Next) 1 else -1
+            Journal.note(LogCode.SCREEN_OPEN, "swipe", "из" to window.name, "куда" to where_.name)
             window = order[(at + step + order.size) % order.size]
             where = Where.Nothing
         }
@@ -5893,7 +5898,10 @@ private fun PhoneWindow(
                         }?.callId
                     }.toSet()
                 }
-                LaunchedEffect(Unit) { onOpenedCalls() }
+                LaunchedEffect(Unit) {
+                    if (flaggedCalls.isNotEmpty()) Journal.note(LogCode.NOTICE, "«Звонки»: контур у звонков с уведомлением", "сколько" to flaggedCalls.size)
+                    onOpenedCalls()
+                }
                 CallsScreen(
                     // ── ФИЛЬТРЫ ВТОРОГО РЯДА ────────────────────────────────
                     //

@@ -576,6 +576,7 @@ class CallHost(
 
     /** Переключатель «голос · видео» на окне 0: чем перезвонить. */
     fun redialAs(video: Boolean) {
+        if (this.video != video) Journal.note(LogCode.CALL, "перезвонить: выбран вид", "видео" to video)
         this.video = video
     }
 

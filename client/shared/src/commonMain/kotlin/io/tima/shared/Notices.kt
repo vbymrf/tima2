@@ -340,7 +340,11 @@ class Notices(
     fun channelsViewed() {
         scope.launch {
             lock.withLock {
-                if (journal.clearTab(NoticeTab.Channels, "Социум открыт", now()) > 0) showTab(NoticeTab.Channels, alert = false)
+                val cleared = journal.clearTab(NoticeTab.Channels, "Социум открыт", now())
+                if (cleared > 0) {
+                    Journal.note(LogCode.NOTICE, "уведомления сняты", "вкладка" to NoticeTab.Channels.wire, "снято" to cleared, "почему" to "Социум открыт")
+                    showTab(NoticeTab.Channels, alert = false)
+                }
             }
         }
     }
@@ -352,7 +356,11 @@ class Notices(
     fun callsViewed() {
         scope.launch {
             lock.withLock {
-                if (journal.clearTab(NoticeTab.Calls, "вкладка открыта", now()) > 0) showTab(NoticeTab.Calls, alert = false)
+                val cleared = journal.clearTab(NoticeTab.Calls, "вкладка открыта", now())
+                if (cleared > 0) {
+                    Journal.note(LogCode.NOTICE, "уведомления сняты", "вкладка" to NoticeTab.Calls.wire, "снято" to cleared, "почему" to "вкладка открыта")
+                    showTab(NoticeTab.Calls, alert = false)
+                }
             }
         }
     }
@@ -383,7 +391,13 @@ class Notices(
             lock.withLock {
                 val at = now()
                 for (tab in ENTITY_TABS) {
-                    if (journal.clearEntity(tab, chatId, by, at) > 0) showTab(tab, alert = false)
+                    val cleared = journal.clearEntity(tab, chatId, by, at)
+                    if (cleared > 0) {
+                        // Что сняли и почему — «зашёл в чат, а число осталось» иначе не разобрать:
+                        // в журнале видно, что переписку открыли, но не что это погасило (2026-10-08).
+                        Journal.note(LogCode.NOTICE, "уведомления сняты", "вкладка" to tab.wire, "сущность" to chatId.take(8), "снято" to cleared, "почему" to by)
+                        showTab(tab, alert = false)
+                    }
                 }
             }
         }
