@@ -65,6 +65,33 @@ fun Caption(
     )
 }
 
+/**
+ * То же, что [Caption], но с разметкой внутри строки: одно слово другим цветом — «пропущенный»
+ * в строке журнала звонков (заказчик 2026-10-08). Цвет и вес — у всей строки, разметка — поверх.
+ */
+@Composable
+fun Caption(
+    text: androidx.compose.ui.text.AnnotatedString,
+    modifier: Modifier = Modifier,
+    fontSize: TextUnit = TimaType.sz4,
+    weight: FontWeight = FontWeight.Normal,
+    color: Color = Tima.colors.text,
+    lineOne: Boolean = false,
+) {
+    BasicText(
+        text = text,
+        modifier = modifier,
+        style = TextStyle(
+            color = color,
+            fontSize = fontSize * LocalTextScale.current,
+            fontWeight = weight,
+            fontFamily = LocalFontFamily.current,
+        ),
+        maxLines = if (lineOne) 1 else Int.MAX_VALUE,
+        overflow = if (lineOne) TextOverflow.Ellipsis else TextOverflow.Clip,
+    )
+}
+
 /** Имя в строке списка: `.имя`. */
 @Composable
 fun Name(text: String, modifier: Modifier = Modifier) =

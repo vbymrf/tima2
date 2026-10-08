@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.AvatarSize
@@ -203,18 +204,17 @@ private fun Records(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             CallArrow(record.outgoing(me), arrowColor(outcome, record.outgoing(me)))
+                            // Строка — цветом текста темы (чёрный или белый); выделено только
+                            // слово «пропущенный» (заказчик 2026-10-08). Стрелка — своим цветом.
+                            //
+                            // Цвет слова — `activity`, тот же янтарь, что у непрочитанных
+                            // сообщений. Своего цвета для пропущенных не заводим: он значил бы
+                            // ровно то же самое — «сюда надо посмотреть», — а два цвета с одним
+                            // смыслом человек читает как два разных.
                             Caption(
-                                eventLine(record, outcome, words),
+                                eventLine(record, outcome, words, Tima.colors.activity),
                                 fontSize = TimaType.sz6,
-                                // Пропущенные выделяются. Иначе журнал — ровный список, в
-                                // котором главное (кому я не ответил) ищут глазами.
-                                //
-                                // Цвет — `activity`, тот же янтарь, что у непрочитанных
-                                // сообщений. Своего цвета для пропущенных не заводим: он
-                                // значил бы ровно то же самое — «сюда надо посмотреть», — а
-                                // два цвета с одним смыслом человек читает как два разных.
-                                weight = if (outcome == CallOutcome.Missed) FontWeight.Bold else FontWeight.Normal,
-                                color = if (outcome == CallOutcome.Missed) Tima.colors.activity else Tima.colors.text3,
+                                color = Tima.colors.text,
                                 lineOne = true,
                             )
                         }
@@ -298,11 +298,12 @@ private fun eventLine(
     record: CallRecord,
     outcome: CallOutcome,
     words: io.tima.core.words.CallLogWords,
-): String = buildString {
+    /** Цвет слова «пропущенный» — только оно и выделяется. */
+    missedColor: androidx.compose.ui.graphics.Color,
+): androidx.compose.ui.text.AnnotatedString = androidx.compose.ui.text.buildAnnotatedString {
     append(if (record.video) words.video else words.voice)
     append(DOT)
-    append(
-        when (outcome) {
+    val said = when (outcome) {
             CallOutcome.Ringing -> words.ringing
             CallOutcome.Outgoing -> words.outgoing
             CallOutcome.Incoming -> words.incoming
@@ -312,8 +313,12 @@ private fun eventLine(
             CallOutcome.Declined -> words.declined
             CallOutcome.Busy -> words.busy
             CallOutcome.Lost -> words.lost
-        },
-    )
+    }
+    if (outcome == CallOutcome.Missed) {
+        withStyle(androidx.compose.ui.text.SpanStyle(color = missedColor, fontWeight = FontWeight.Bold)) { append(said) }
+    } else {
+        append(said)
+    }
     // Длительность только когда она есть и когда она правда: у `lost` время конца
     // поставил уборщик сервера, и минуты по нему были бы выдумкой.
     val duration = record.durationMs
