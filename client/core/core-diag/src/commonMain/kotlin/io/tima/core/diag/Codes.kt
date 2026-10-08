@@ -278,6 +278,8 @@ object LogCode {
     const val BG_SERVICE = "BG-SERVICE"
 
     // ── Обновление приложения ─────────────────────────────────────────────────
+    /** Начали качать пакет: какую версию (2026-10-08 — без этой строки не видно, какую ставили). */
+    const val UPD_START = "UPD-START"
     const val UPD_DOWNLOADED = "UPD-DOWNLOADED"
     const val UPD_VERIFIED = "UPD-VERIFIED"
     const val UPD_BAD_PACKAGE = "UPD-BAD-PACKAGE"

@@ -188,7 +188,7 @@ fun WindowSwitchingScreen(
             onCall?.let { goToCall -> CallBubble(callRinging, callPeer, goToCall) }
 
             // Окна — без окантовки, на мягкой зелёной подложке во всю ширину (пробы
-            // `пробы-окно-переходов.html`, И2, заказчик 2026-10-09). От остального блок отделён
+            // `пробы-окно-переходов.html`, И2, заказчик 2026-10-08). От остального блок отделён
             // толстыми чертами сверху и снизу; между окнами — обычные линии строк.
             ThickLine()
             Column(Modifier.fillMaxWidth().background(colors.softAccent)) {

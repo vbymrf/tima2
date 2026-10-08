@@ -76,6 +76,32 @@ class UpdateStoreTest {
     }
 
     @Test
+    fun перед_скачиванием_сервер_спрошен_заново_и_ставится_последняя() = runTest {
+        // Отчёт VLAY (2026-10-08): предложение 155 запомнено при запуске, через полчаса
+        // нажали «Обновить», а сервер уже объявлял 159 — поставилась 155.
+        val installer = Fake()
+        var announced = offer
+        val store = UpdateStore(
+            versions = { announced },
+            scope = backgroundScope,
+            installed = "2.0.2-dev (2)",
+            installedCode = 2,
+            stream = "v2",
+            installer = installer,
+        )
+        store.state.first { it.offer != null }
+        val newer = offer.copy(versionCode = 9, versionName = "2.0.9-dev", url = "https://api.example.com/download/TIMA-9.msi")
+        announced = newer
+
+        store.ask()
+        store.install()
+        store.state.first { it.outcome != null }
+
+        assertEquals(newer, installer.seen, "поставили запомненную версию, а не последнюю объявленную")
+        assertEquals(newer, store.state.value.offer)
+    }
+
+    @Test
     fun подтверждение_ставит_и_закрывает_приложение() = runTest {
         val installer = Fake()
         var закрылись = false

@@ -383,11 +383,18 @@ class UpdateStore(
 
     /** Подтвердили: качаем, проверяем, запускаем установщик. */
     fun install() {
-        val offer = _state.value.offer ?: return
+        val known = _state.value.offer ?: return
         val installer = installer ?: return
         if (_state.value.installing) return
         scope.launch {
             _state.value = _state.value.copy(asking = false, installing = true, percent = 0, outcome = null)
+            // Перед скачиванием — спросить сервер заново (заказчик 2026-10-08, отчёт VLAY):
+            // предложение запомнено при запуске, а приложение живёт часами. Телефон спросил в
+            // 18:59, когда объявлена была 155, и через полчаса поставил 155, хотя сервер уже
+            // объявлял 159. Не ответил сервер — ставим то, что знаем.
+            val fresh = runCatching { versions.latest() }.getOrNull()
+            val offer = fresh?.takeIf { it.versionCode >= known.versionCode } ?: known
+            if (offer != known) _state.value = _state.value.copy(offer = offer)
             val outcome = try {
                 installer.install(offer) { percent ->
                     _state.value = _state.value.copy(percent = percent)

@@ -60,7 +60,7 @@ class WindowSwipeTest {
 
     @Test
     fun медиа_лента_отключена_и_её_обходят() {
-        // Заказчик 2026-10-09: «Отключи вкладку Медиа ленту, т.е. сделай обход её». Её нет ни
+        // Заказчик 2026-10-08: «Отключи вкладку Медиа ленту, т.е. сделай обход её». Её нет ни
         // в переключателе, ни в свайпе — список у них один.
         for (inCall in listOf(false, true)) for (bench in listOf(false, true)) {
             assertTrue(Window.Media !in Window.shown(inCall, bench), "Медиа-лента показана")

@@ -69,6 +69,7 @@ class AndroidInstaller(private val context: Context) : UpdateInstaller {
                 )
             }
 
+            Journal.note(LogCode.UPD_START, "качаю пакет", "версия" to offer.versionCode, "имя" to offer.versionName)
             val target = File(context.getExternalFilesDir(null) ?: context.filesDir, "TIMA-${offer.versionCode}.apk")
             target.delete() // остаток прошлой попытки — не файл, а ловушка
 
@@ -94,6 +95,10 @@ class AndroidInstaller(private val context: Context) : UpdateInstaller {
                 }
             }
 
+            // Журнал — на диск ДО передачи системе: установка заменяет процесс, и строки о
+            // скачивании оставались в памяти. Отчёт VLAY (2026-10-08) показал между последним
+            // экраном и «обновление встало» пустоту — какую версию качали, видно не было.
+            runCatching { Journal.diary.flush() }
             try {
                 commit(target)
             } catch (e: Throwable) {
