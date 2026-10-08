@@ -303,7 +303,13 @@ private fun Item(window: Window, current: Boolean, howMany: Int, onClick: () -> 
     Box(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
         ListLine(
             onClick = onClick,
-            left = { Glyph(window.glyph, current = current, plate = colors.surface) },
+            // Значок отступает от края на две ширины зелёной полосы (заказчик 2026-10-08): полоса
+            // не наезжает на него и читается отдельно. Строка даёт своё поле, здесь — остаток.
+            left = {
+                Box(Modifier.padding(start = (STRIPE * 2 - TimaSpacing.about4).coerceAtLeast(0.dp))) {
+                    Glyph(window.glyph, current = current, plate = colors.surface)
+                }
+            },
             right = { if (howMany > 0) Counter(howMany) },
             middle = {
                 Column {
