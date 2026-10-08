@@ -107,6 +107,8 @@ fun ChatsScreen(
     receiptOf: (ChatSummary) -> ChatReceipt? = { null },
     /** Собеседник сейчас печатает — «печатает…» вместо превью (ПЛАН-(ОП)). */
     typingOf: (ChatSummary) -> Boolean = { false },
+    /** Уведомления переписки отключены — 🔕 у времени (ПЛАН-(ОУ)). */
+    mutedOf: (ChatSummary) -> Boolean = { false },
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -156,7 +158,7 @@ fun ChatsScreen(
                     explanation = words.writeFirst,
                 )
 
-                else -> List(state.chats, onOpen, personOf, faceOf, look, countOf, tagOf, callGroupOf, onFace, receiptOf, typingOf)
+                else -> List(state.chats, onOpen, personOf, faceOf, look, countOf, tagOf, callGroupOf, onFace, receiptOf, typingOf, mutedOf)
             }
         }
     }
@@ -190,6 +192,8 @@ fun GroupsScreen(
     tagOf: (ChatSummary) -> String? = { null },
     /** Группа звонка: создатель и его аватар (заказчик 2026-10-02); `null` — обычная. */
     callGroupOf: (ChatSummary) -> CallGroupLook? = { null },
+    /** Уведомления группы отключены — 🔕 у времени (ПЛАН-(ОУ)). */
+    mutedOf: (ChatSummary) -> Boolean = { false },
 ) {
     val wanted = if (chosen == COMMON_SECTION) "" else chosen
     val groups = if (chosen.isEmpty()) state.groups else state.groups.filter { it.sectionId == wanted }
@@ -201,7 +205,7 @@ fun GroupsScreen(
                 explanation = Tima.words.chat.noGroupsAbout,
             )
 
-            else -> List(chats = groups, onOpen = onOpen, countOf = countOf, tagOf = tagOf, callGroupOf = callGroupOf)
+            else -> List(chats = groups, onOpen = onOpen, countOf = countOf, tagOf = tagOf, callGroupOf = callGroupOf, mutedOf = mutedOf)
         }
     }
 }
@@ -220,6 +224,7 @@ private fun List(
     onFace: ((ChatSummary) -> Unit)? = null,
     receiptOf: (ChatSummary) -> ChatReceipt? = { null },
     typingOf: (ChatSummary) -> Boolean = { false },
+    mutedOf: (ChatSummary) -> Boolean = { false },
 ) = LazyColumn(
     modifier = Modifier.fillMaxSize(),
 ) {
@@ -227,7 +232,7 @@ private fun List(
         ChatLine(
             chat, personOf(chat), faceOf(chat), look, countOf?.invoke(chat) ?: chat.unread,
             onClick = { onOpen(chat) }, tag = tagOf(chat), call = callGroupOf(chat),
-            receipt = receiptOf(chat), typing = typingOf(chat),
+            receipt = receiptOf(chat), typing = typingOf(chat), muted = mutedOf(chat),
             // Страница есть только у собеседника личной переписки.
             onFace = onFace?.takeIf { chat.kind == ChatKind.Personal && chat.peerId != null }?.let { { it(chat) } },
         )
@@ -248,6 +253,7 @@ private fun ChatLine(
     onFace: (() -> Unit)? = null,
     receipt: ChatReceipt? = null,
     typing: Boolean = false,
+    muted: Boolean = false,
 ) = ListLine(
     onClick = onClick,
     // Картинка, если она есть, иначе буква — та же, что в книге. У группы человека нет,
@@ -279,6 +285,7 @@ private fun ChatLine(
                 horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (muted) Tertiary("🔕", lineOne = true)
                 chat.atMs?.let { Tertiary(time(it), lineOne = true) }
                 if (chat.lastOutgoing) markOf(chat.lastDisplay, chat.atMs, receipt)?.let { Mark(it) }
             }

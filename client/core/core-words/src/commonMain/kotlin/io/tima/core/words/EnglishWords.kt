@@ -290,6 +290,8 @@ object EnglishWords : Words {
         override fun messagesFrom(people: Int) = "Messages from $people " + if (people == 1) "person" else "people"
         override fun messagesInGroups(groups: Int) = "Messages in $groups " + if (groups == 1) "group" else "groups"
         override val newInGroup = "New message in the group"
+        override val newInChannel = "New in the channel"
+        override fun postsInChannels(channels: Int) = "New in $channels " + if (channels == 1) "channel" else "channels"
         override fun missedFrom(people: Int) = "Missed calls from $people " + if (people == 1) "person" else "people"
     }
 
@@ -598,6 +600,8 @@ object EnglishWords : Words {
         override val quietMessages = "Messages"
         override val quietMessagesAbout = "Direct and group — no notification and no sound"
         override val economyTitle = "Economy mode"
+        override val mutedTitle = "Turned off"
+        override val unmute = "Turn on"
         override val economyAbout = "Check the connection to the server less often — less battery use"
         override val economyOff = "Off"
         override val economyOffAbout = "The connection is checked every 18 seconds: a call arrives even if the connection silently dropped"
@@ -1256,6 +1260,8 @@ object EnglishWords : Words {
         override val writeFirst = "Write to your first correspondent"
         override val messageUnreadable = "message unreadable"
         override val typing = "typing…"
+        override val notifyOff = "Turn off notifications"
+        override val notifyOffAbout = "No sound and no line in the shade — on all your devices"
         override val online = "online"
         override fun lastSeen(day: String, time: String) = "last seen $day at $time"
         override val newMessage = "new message"

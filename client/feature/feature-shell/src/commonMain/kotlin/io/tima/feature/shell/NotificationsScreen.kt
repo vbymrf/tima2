@@ -69,6 +69,12 @@ fun NotificationsScreen(
     quiet: QuietRow? = null,
     /** Экономичный режим канала (заказчик 2026-10-06). `null` — строки нет. */
     economy: EconomyRow? = null,
+    /**
+     * «Отключённые» (ПЛАН-(ОУ) 3.5): у чего уведомления отключены — `(ключ, название)`; нажатие
+     * «Включить» возвращает. Пусто — раздела нет.
+     */
+    muted: List<Pair<String, String>> = emptyList(),
+    onUnmute: (String) -> Unit = {},
 ) {
     val colors = Tima.colors
     val words = Tima.words.settings2
@@ -113,6 +119,17 @@ fun NotificationsScreen(
             )
             quiet?.let { QuietSetting(it) }
             economy?.let { EconomySetting(it) }
+
+            if (muted.isNotEmpty()) {
+                SectionTitle(words.mutedTitle)
+                for ((key, title) in muted) {
+                    ListLine(
+                        left = { Name("🔕") },
+                        middle = { Caption(title, fontSize = TimaType.sz4, weight = FontWeight.Bold, lineOne = true) },
+                        right = { io.tima.core.ui.Button(label = words.unmute, kind = io.tima.core.ui.ButtonKind.Quiet, onClick = { onUnmute(key) }) },
+                    )
+                }
+            }
         }
     }
 }

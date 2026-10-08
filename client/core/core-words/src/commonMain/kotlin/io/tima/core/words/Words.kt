@@ -102,6 +102,9 @@ interface NoticeWords {
 
     /** Строка группы, когда новое в одной: заголовок — название группы. */
     val newInGroup: String
+    /** Новое в канале — без текста поста (ПЛАН-(ОУ) решение 4). */
+    val newInChannel: String
+    fun postsInChannels(channels: Int): String
 
     /** Строка вкладки «Звонки», когда не дозвонились несколько: «Пропущенные звонки от 2 человек». */
     fun missedFrom(people: Int): String
@@ -352,6 +355,9 @@ interface SettingsListWords {
     val quietMessagesAbout: String
     /** Экономичный режим канала (заказчик 2026-10-06): перекличка реже, звонки ненадёжнее. */
     val economyTitle: String
+    /** «Отключённые» — у чего уведомления отключены (ПЛАН-(ОУ)). */
+    val mutedTitle: String
+    val unmute: String
     val economyAbout: String
     val economyOff: String
     val economyOffAbout: String
@@ -1394,6 +1400,10 @@ interface ChatWords {
     val writeFirst: String
     val messageUnreadable: String
 
+    /** «Отключить уведомления» в «⋯» переписки (ПЛАН-(ОУ)). */
+    val notifyOff: String
+    val notifyOffAbout: String
+
     /** Собеседник набирает текст (ПЛАН-(ОП)): в шапке переписки и вместо превью в «Чатах». */
     val typing: String
     /** Приложение собеседника открыто на экране. */
@@ -2431,6 +2441,8 @@ object RussianWords : Words {
             "Сообщения в $groups " + if (singular(groups)) "группе" else "группах"
 
         override val newInGroup = "Новое сообщение в группе"
+        override val newInChannel = "Новое в канале"
+        override fun postsInChannels(channels: Int) = "Новое в $channels " + if (channels % 10 == 1 && channels % 100 != 11) "канале" else "каналах"
 
         override fun missedFrom(people: Int) =
             "Пропущенные звонки от $people " + if (singular(people)) "человека" else "человек"
@@ -2742,6 +2754,8 @@ object RussianWords : Words {
         override val quietMessages = "Сообщения"
         override val quietMessagesAbout = "Личные и групповые — без строки в шторке и без звука"
         override val economyTitle = "Экономичный режим"
+        override val mutedTitle = "Отключённые"
+        override val unmute = "Включить"
         override val economyAbout = "Реже проверять связь с сервером — меньше расход батареи"
         override val economyOff = "Выключен"
         override val economyOffAbout = "Связь проверяется раз в 18 секунд: звонок приходит, даже если соединение тихо оборвалось"
@@ -3421,6 +3435,8 @@ object RussianWords : Words {
         override val writeFirst = "Напишите первому собеседнику"
         override val messageUnreadable = "сообщение не читается"
         override val typing = "печатает…"
+        override val notifyOff = "Отключить уведомления"
+        override val notifyOffAbout = "Без звука и строки в шторке — на всех ваших устройствах"
         override val online = "в сети"
         override fun lastSeen(day: String, time: String) = "был(а) $day в $time"
         override val newMessage = "новое сообщение"

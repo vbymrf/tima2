@@ -288,6 +288,8 @@ object SpanishWords : Words {
         override fun messagesFrom(people: Int) = "Mensajes de $people " + if (people == 1) "persona" else "personas"
         override fun messagesInGroups(groups: Int) = "Mensajes en $groups " + if (groups == 1) "grupo" else "grupos"
         override val newInGroup = "Mensaje nuevo en el grupo"
+        override val newInChannel = "Novedad en el canal"
+        override fun postsInChannels(channels: Int) = "Novedades en $channels " + if (channels == 1) "canal" else "canales"
         override fun missedFrom(people: Int) = "Llamadas perdidas de $people " + if (people == 1) "persona" else "personas"
     }
 
@@ -596,6 +598,8 @@ object SpanishWords : Words {
         override val quietMessages = "Mensajes"
         override val quietMessagesAbout = "Directos y de grupo — sin notificación ni sonido"
         override val economyTitle = "Modo de ahorro"
+        override val mutedTitle = "Desactivadas"
+        override val unmute = "Activar"
         override val economyAbout = "Comprobar la conexión con el servidor con menos frecuencia — menos consumo de batería"
         override val economyOff = "Desactivado"
         override val economyOffAbout = "La conexión se comprueba cada 18 segundos: la llamada llega aunque la conexión se haya cortado sin aviso"
@@ -1257,6 +1261,8 @@ object SpanishWords : Words {
         override val writeFirst = "Escriba a su primer contacto"
         override val messageUnreadable = "mensaje ilegible"
         override val typing = "escribiendo…"
+        override val notifyOff = "Desactivar notificaciones"
+        override val notifyOffAbout = "Sin sonido ni aviso — en todos sus dispositivos"
         override val online = "en línea"
         override fun lastSeen(day: String, time: String) = "visto $day a las $time"
         override val newMessage = "mensaje nuevo"

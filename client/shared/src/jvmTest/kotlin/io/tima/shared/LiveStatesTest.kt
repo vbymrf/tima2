@@ -70,6 +70,30 @@ class LiveStatesTest {
     }
 
     @Test
+    fun вершина_и_отключение_из_ленты() = runTest {
+        val settings = Memory()
+        val raised = mutableListOf<Triple<String, String, Long>>()
+        val live = LiveStates(
+            api = api {
+                """{"rev":3,"now_ms":0,"states":[
+                   {"kind":"notify","rev":1,"entity_kind":"group","entity_id":"g2","off":true},
+                   {"kind":"top","rev":2,"entity_kind":"group","entity_id":"g1","top_id":10,"top_at_ms":5,"unread":4},
+                   {"kind":"top","rev":3,"entity_kind":"group","entity_id":"g2","top_id":11,"top_at_ms":6,"unread":1}]}"""
+            },
+            settings = settings,
+            scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
+        )
+        live.onTopRaised = { kind, id, top -> raised += Triple(kind, id, top) }
+        live.top(3)
+        assertEquals(LiveStates.Top(10, 4), live.tops.value["group:g1"])
+        assertTrue(live.isMuted("group", "g2"), "отключение не легло")
+        assertEquals(listOf(Triple("group", "g1", 10L)), raised, "уведомлена отключённая или не уведомлена включённая")
+        live.readEntity("group", "g1", 10)
+        assertEquals(0, live.tops.value["group:g1"]?.unread, "отметка не погасила число у себя")
+        assertEquals("1", settings.values.value["states.muted.group:g2"], "отключение не пережило бы перезапуск")
+    }
+
+    @Test
     fun печатаю_не_чаще_раза_в_пять_секунд_и_отмена() = runTest {
         var clock = 0L
         val live = LiveStates(

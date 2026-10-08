@@ -65,6 +65,8 @@ enum class NoticeTab(val wire: String) {
     Chats("chats"),
     Calls("calls"),
     Groups("groups"),
+    /** Каналы — «Новое в канале» без текста поста (ПЛАН-(ОУ) решение 4); окно «Социум». */
+    Channels("channels"),
     ;
 
     companion object {

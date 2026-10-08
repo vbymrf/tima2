@@ -286,9 +286,19 @@ fun buildAssembled(
         // Показ платформенный (`platformNotifier`), правила общие, а зовёт их приёмник —
         // тот, кто первым узнаёт о событии. Собери это в композиции, и уведомление
         // приходило бы только при открытом окне, то есть тогда, когда оно не нужно.
+        // «Доставлено», «прочитано», «печатает», «в сети» (ПЛАН-(ОП)): у процесса, рядом с
+        // приёмником — лента приходит каналом, который живёт и без окна.
+        val liveStates = LiveStates(
+            api = network.states,
+            settings = environment.settings,
+            scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default),
+        )
+
         val notices = Notices(
             notifier = platformNotifier(),
             me = device.session.userId,
+            // «Отключить уведомления» — копия настройки сервера (ПЛАН-(ОУ)).
+            mutedOf = { chatId, group -> liveStates.isMuted(if (group) "group" else "chat", chatId) },
             // Строка книги — из местной базы, без сети: уведомление не должно ждать
             // сервера, чтобы назвать знакомого.
             entryOf = { id -> environment.book.everyone().first().firstOrNull { it.userId == id } },
@@ -328,14 +338,12 @@ fun buildAssembled(
             settings = environment.settings,
         )
         environment.onGroupKeyStored = keyCopy::feedGroupKey
-
-        // «Доставлено», «прочитано», «печатает», «в сети» (ПЛАН-(ОП)): у процесса, рядом с
-        // приёмником — лента приходит каналом, который живёт и без окна.
-        val liveStates = LiveStates(
-            api = network.states,
-            settings = environment.settings,
-            scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default),
-        )
+        // Новое в открытой группе — строка «Новое сообщение в группе» без текста (ПЛАН-(ОУ)). Каналы —
+        // нет: в приложении нет экрана ленты канала, отметку прочтения ставить негде, и число
+        // копилось бы без возможности его погасить (развилка — отчёт ОУ).
+        liveStates.onTopRaised = { kind, entityId, topId ->
+            if (kind == "group") notices.entityNew(kind, entityId, topId)
+        }
 
         Assembled(
             session = device.session,

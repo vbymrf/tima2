@@ -61,6 +61,30 @@ class LiveStates(
     /** «В сети» собеседников, чью переписку смотрю. */
     val presence: StateFlow<Map<String, Seen>> = _presence.asStateFlow()
 
+    private val _tops = MutableStateFlow<Map<String, Top>>(emptyMap())
+
+    /**
+     * Вершины «зашли, забрали» (ПЛАН-(ОУ)): ключ `вид:сущность` — `group:…`, `channel:…`.
+     * Хранятся — число непрочитанного переживает перезапуск.
+     */
+    val tops: StateFlow<Map<String, Top>> = _tops.asStateFlow()
+
+    private val _muted = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Отключённые уведомления: `вид:сущность` — `chat:…`, `group:…`, `channel:…`, `community:…`. */
+    val muted: StateFlow<Set<String>> = _muted.asStateFlow()
+
+    /** Вершина сущности: новое до [topId], непрочитанного [unread]. */
+    data class Top(val topId: Long, val unread: Int)
+
+    /**
+     * Вершина поднялась у сущности с включёнными уведомлениями: `(вид, сущность, номер)`. Зовёт
+     * сборка — строка в шторке «Новое в …» (ПЛАН-(ОУ) 3.5). Ставится после постройки.
+     */
+    var onTopRaised: (suspend (String, String, Long) -> Unit)? = null
+
+    fun isMuted(kind: String, entityId: String): Boolean = "$kind:$entityId" in _muted.value
+
     /** «В сети» до [untilMs] (свои часы) или был(а) в [lastSeenMs]. */
     data class Seen(val online: Boolean, val untilMs: Long, val lastSeenMs: Long) {
         fun onlineAt(nowMs: Long): Boolean = online && untilMs > nowMs
@@ -69,6 +93,7 @@ class LiveStates(
     private val protocol = EventStreamProtocol()
     private val lock = Mutex()
     private var rev: Long = -1
+    private var declared = false
     private var visible = false
     private var visibleJob: Job? = null
     private var watched: String? = null
@@ -85,6 +110,11 @@ class LiveStates(
                 val (d, r) = v.split(':').mapNotNull { it.toLongOrNull() }.takeIf { it.size == 2 } ?: return@mapNotNull null
                 k.removePrefix(RECEIPT) to ChatReceipt(d, r)
             }.toMap()
+            _tops.value = saved.filterKeys { it.startsWith(TOP) }.mapNotNull { (k, v) ->
+                val (id, unread) = v.split(':').mapNotNull { it.toLongOrNull() }.takeIf { it.size == 2 } ?: return@mapNotNull null
+                k.removePrefix(TOP) to Top(id, unread.toInt())
+            }.toMap()
+            _muted.value = saved.filter { (k, v) -> k.startsWith(MUTED) && v == "1" }.keys.map { it.removePrefix(MUTED) }.toSet()
         }
     }
 
@@ -96,6 +126,9 @@ class LiveStates(
         if (signal < 0) {
             if (visible) frames.trySend(protocol.presenceFrame(true))
             watched?.let { frames.trySend(protocol.watchFrame(it, true)) }
+            // «Зашли, забрали» умеем — серверу один раз за процесс (ОУ4); не дошло — повторим на
+            // следующем подъёме канала.
+            if (!declared) declared = api.declareTops()
         }
         lock.withLock {
             if (signal in 0..rev) return
@@ -129,6 +162,24 @@ class LiveStates(
             }
             is StateRow.Presence -> {
                 _presence.value = _presence.value + (row.userId to Seen(row.online, row.untilMs + shift, row.lastSeenMs))
+            }
+            is StateRow.Top -> {
+                val key = "${row.kind}:${row.entityId}"
+                val was = _tops.value[key]
+                val fresh = Top(row.topId, row.unread)
+                if (fresh != was) {
+                    _tops.value = _tops.value + (key to fresh)
+                    runCatching { settings.put(TOP + key, "${fresh.topId}:${fresh.unread}") }
+                }
+                // Новое, а не отметка прочтения с другого устройства: вершина выросла.
+                if (row.topId > (was?.topId ?: 0) && row.unread > 0 && key !in _muted.value) {
+                    onTopRaised?.invoke(row.kind, row.entityId, row.topId)
+                }
+            }
+            is StateRow.Notify -> {
+                val key = "${row.kind}:${row.entityId}"
+                _muted.value = if (row.off) _muted.value + key else _muted.value - key
+                runCatching { settings.put(MUTED + key, if (row.off) "1" else "0") }
             }
         }
     }
@@ -190,6 +241,26 @@ class LiveStates(
         frames.trySend(protocol.typingFrame(chatId, to, false))
     }
 
+    /** «Отключить уведомления» у сущности или включить обратно: сразу у себя, следом — серверу. */
+    fun mute(kind: String, entityId: String, off: Boolean) {
+        val key = "$kind:$entityId"
+        _muted.value = if (off) _muted.value + key else _muted.value - key
+        scope.launch {
+            runCatching { settings.put(MUTED + key, if (off) "1" else "0") }
+            if (!api.notify(kind, entityId, off)) {
+                Journal.trouble(LogCode.STATES, "отключение уведомлений не дошло", "сущность" to key.take(16))
+            }
+        }
+    }
+
+    /** Дочитал открытую группу или канал до [readId] (ПЛАН-(ОУ)): число гаснет у себя сразу. */
+    fun readEntity(kind: String, entityId: String, readId: Long) {
+        if (readId <= 0) return
+        val key = "$kind:$entityId"
+        _tops.value[key]?.let { _tops.value = _tops.value + (key to it.copy(unread = 0)) }
+        scope.launch { api.readEntity(kind, entityId, readId) }
+    }
+
     private val readSent = mutableMapOf<String, Long>()
 
     /** Прочитал сообщения собеседника в [chatId], написанные до [upToMs]. Повтор того же не шлётся. */
@@ -208,6 +279,8 @@ class LiveStates(
     private companion object {
         const val REV = "states.rev"
         const val RECEIPT = "states.receipt."
+        const val TOP = "states.top."
+        const val MUTED = "states.muted."
         const val PRESENCE_EVERY_MS = 30_000L
         const val WATCH_EVERY_MS = 60_000L
         const val TYPING_EVERY_MS = 5_000L

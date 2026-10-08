@@ -103,6 +103,13 @@ class Notices(
     private val now: () -> Long = { ServerClock.now() },
     /** Название группы — заголовок её строки, когда новое в одной группе. */
     private val groupTitle: suspend (String) -> String? = { null },
+    /** Название канала — заголовок строки «Новое в канале» (ПЛАН-(ОУ)). */
+    private val channelTitle: suspend (String) -> String? = { null },
+    /**
+     * Уведомления этой переписки отключены (ПЛАН-(ОУ) решение 5): `(переписка, группа ли)`.
+     * Отключённое не звучит, не попадает в шторку и не считается.
+     */
+    private val mutedOf: (String, Boolean) -> Boolean = { _, _ -> false },
     /** Где снимать уведомления, когда зовут с экрана: база — не на потоке экрана. */
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     /**
@@ -167,6 +174,7 @@ class Notices(
         group: Boolean = false,
     ): Boolean {
         if (!shouldNotify(senderId)) return false
+        if (mutedOf(chatId, group)) return false
         val tab = if (group) NoticeTab.Groups else NoticeTab.Chats
         return lock.withLock {
             val at = now()
@@ -187,6 +195,36 @@ class Notices(
                 return@withLock false
             }
             showTab(tab, decide(record, wasActive, fresh), record)
+            true
+        }
+    }
+
+    /**
+     * Новое в сущности «зашли, забрали» — открытой группе или канале (ПЛАН-(ОУ)): строка «Новое
+     * в …» без текста. Автора нет — сообщения на телефоне ещё нет, проверять нечего; включены ли
+     * уведомления, сервер уже сверил, а здесь — ещё раз по своей копии настройки.
+     */
+    suspend fun entityNew(kind: String, entityId: String, topId: Long): Boolean {
+        val tab = if (kind == "channel") NoticeTab.Channels else NoticeTab.Groups
+        if (mutedOf(entityId, true)) return false
+        return lock.withLock {
+            val at = now()
+            val record = NoticeRecord(
+                tab = tab,
+                entity = entityId,
+                what = NoticeWhat.Message,
+                ref = "top/$entityId/$topId",
+                atMs = at,
+                from = NoticeFrom.Live,
+            )
+            val wasActive = journal.isActive(tab, entityId, NoticeWhat.Message)
+            if (!journal.record(record)) return@withLock false
+            if (isWatched(entityId)) {
+                journal.clearEntity(tab, entityId, "открыта при приходе", at)
+                journal.done(NoticeWhat.Message, record.ref, "тишина: открыта")
+                return@withLock false
+            }
+            showTab(tab, decide(record, wasActive, true), record)
             true
         }
     }
@@ -477,6 +515,11 @@ class Notices(
                     (one?.let { named[it] }) to words().call.missedCall
                 } else {
                     null to notices.missedFrom(n)
+                }
+                NoticeTab.Channels -> if (n == 1) {
+                    (one?.let { channelTitle(it) }) to notices.newInChannel
+                } else {
+                    null to notices.postsInChannels(n)
                 }
             }
             // Тихие часы: строку не показываем и не звучим; накопленное покажет первое

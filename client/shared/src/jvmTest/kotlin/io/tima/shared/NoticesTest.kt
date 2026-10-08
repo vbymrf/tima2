@@ -67,6 +67,7 @@ class NoticesTest {
         книга: Map<String, BookEntry> = mapOf("u-борис" to борис),
         карточки: Map<String, ChatPerson> = emptyMap(),
         звонок: Boolean = false,
+        отключены: Set<String> = emptySet(),
     ) = Notices(
         notifier = показ,
         me = "u-я",
@@ -78,7 +79,26 @@ class NoticesTest {
         now = { сейчас },
         scope = this,
         inCall = { звонок },
+        mutedOf = { id, _ -> id in отключены },
     )
+
+    // ── «Отключить уведомления» и «зашли, забрали» (ПЛАН-(ОУ)) ──────────────────
+
+    @Test
+    fun отключённая_переписка_молчит_и_не_считается() = runTest {
+        уведомления(отключены = setOf("chat-1")).arrived("chat-1", "u-борис")
+        assertTrue(показ.строки.isEmpty(), "отключённая переписка показала строку: ${показ.строки}")
+    }
+
+    @Test
+    fun новое_в_открытой_группе_строкой_без_текста() = runTest {
+        val уведомления = уведомления()
+        assertTrue(уведомления.entityNew("group", "g-1", 7), "вершина группы не записана")
+        assertEquals(RussianWords.notices.newInGroup, показ.строки.single().what)
+        // Та же вершина второй раз — не новое.
+        assertTrue(!уведомления.entityNew("group", "g-1", 7), "та же вершина записана дважды")
+        assertTrue(!уведомления(отключены = setOf("g-2")).entityNew("group", "g-2", 1), "отключённая группа уведомила")
+    }
 
     // ── две стадии одной строки (У6) ────────────────────────────────────────
 

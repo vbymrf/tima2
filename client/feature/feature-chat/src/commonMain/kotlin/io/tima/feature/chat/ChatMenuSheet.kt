@@ -74,6 +74,12 @@ fun ChatMenuSheet(
     onGroupCall: (() -> Unit)? = null,
     /** Групповая переписка — заголовок «Настройка группы», иначе «Настройка переписки». */
     group: Boolean = circlesShown != null,
+    /**
+     * «Отключить уведомления» (ПЛАН-(ОУ) решение 5): `true` — отключены. `null` — пункта нет.
+     * Хранится на сервере — одна на все устройства.
+     */
+    notifyOff: Boolean? = null,
+    onNotifyOff: ((Boolean) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -134,6 +140,19 @@ fun ChatMenuSheet(
                         right = { RadioMark(currentSection == section.id) },
                     )
                 }
+            }
+
+            if (notifyOff != null && onNotifyOff != null) {
+                ListLine(
+                    onClick = { onNotifyOff(!notifyOff) },
+                    middle = {
+                        Column {
+                            Name(words.notifyOff)
+                            Tertiary(words.notifyOffAbout, lineOne = true)
+                        }
+                    },
+                    right = { CheckMark(notifyOff) },
+                )
             }
 
             // Действия — первыми: меню открывают ради действия чаще, чем ради галочки.

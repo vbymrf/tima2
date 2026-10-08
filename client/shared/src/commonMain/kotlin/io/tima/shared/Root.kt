@@ -1632,6 +1632,7 @@ private fun App(
         (peopleCards[id] ?: ChatPerson()).withBookName(entry?.name, entry?.phone)
     }
 
+    val mutedAll by (assembled.liveStates?.muted ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>()) }).collectAsState()
     // Отметки и «печатает» для списка «Чаты» (ПЛАН-(ОП)); секунды — чтобы «печатает» гасло само.
     val liveReceipts by (assembled.liveStates?.receipts ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, io.tima.feature.chat.ChatReceipt>()) }).collectAsState()
     val liveTyping by (assembled.liveStates?.typing ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, Long>()) }).collectAsState()
@@ -3063,6 +3064,7 @@ private fun App(
                     callGroupOf = callGroupOf,
                     receiptOfChat = { chat -> liveReceipts[chat.chatId] },
                     typingOfChat = { chat -> (liveTyping[chat.chatId] ?: 0) > liveTick },
+                    mutedKeys = mutedAll,
                     onOpen = { where = Where.Chat(it.chatId, it.title) },
                     // Открыть можно только того, кто в TIMa: у остальных переписки нет
                     // и завести её не из чего — им «Пригласить».
@@ -3316,6 +3318,7 @@ private fun App(
                                     callGroupsTtl[chat.chatId]?.let { wordsNow.groupCall.ttl(((it - msNow()) / 3_600_000L).toInt().coerceAtLeast(0)) }
                                 },
                                 callGroupOf = callGroupOf,
+                                mutedOf = { chat -> "group:${chat.chatId}" in mutedAll },
                             )
                         }
                     },
@@ -3504,6 +3507,13 @@ private fun App(
             is Where.Settings -> {
                 {
                     Settings(
+                        // «Отключённые» — названия по списку переписок (ПЛАН-(ОУ)).
+                        mutedList = mutedAll.map { key ->
+                            val id = key.substringAfter(':')
+                            val chat = listState.chats.firstOrNull { it.chatId == id }
+                            key to (chat?.let { c -> personOfChat(c)?.line(bookStateForChats.view.look(), io.tima.feature.chat.PERSON_FIRST_LINE) ?: c.title } ?: id.take(8))
+                        },
+                        onUnmute = { key -> assembled.liveStates?.mute(key.substringBefore(':'), key.substringAfter(':'), false) },
                         pin = pin,
                         opened = current.item,
                         onOpen = { where = Where.Settings(it) },
@@ -3662,6 +3672,7 @@ private fun App(
                 {
                     Chat(
                         liveStates = assembled.liveStates,
+                        onPullGroupNew = { id -> assembled.receiver.pullGroupNew(id) },
                         myDeviceId = assembled.session.deviceId,
                         reregWarn = reregOld,
                         notices = assembled.notices,
@@ -3994,6 +4005,8 @@ private fun Chat(
     network: ChatPorts,
     /** «Доставлено», «прочитано», «печатает», «в сети» — личной переписке (ПЛАН-(ОП)). */
     liveStates: LiveStates? = null,
+    /** Забрать новое открытой группы (ПЛАН-(ОУ) ОУ6) → номер позднейшего на сервере. */
+    onPullGroupNew: suspend (String) -> Long = { 0L },
     /** Это устройство — им подписывается просьба о ключе группы (Р42). */
     myDeviceId: String,
     chatId: String,
@@ -4082,6 +4095,17 @@ private fun Chat(
     // вход в состав.
     val group = remember(chatId) {
         environment.chatFacts.kindOf(chatId) == ChatKind.Group
+    }
+    // Открытая группа — «зашли, забрали» (ПЛАН-(ОУ) ОУ6): тело её сообщений к телефону само не
+    // приходит. Открыли — забрали новое и поставили отметку; пока открыта, новое по вершине —
+    // так же. Без сети — показываем, что уже есть.
+    val groupTop = liveStates?.tops?.collectAsState()?.value?.get("group:$chatId")?.topId
+    // Вид группы — из списка групп; список мог не доехать, тогда признак — сама вершина.
+    val publicGroup = group && liveStates != null && (kind == GroupKind.Public || groupTop != null)
+    LaunchedEffect(chatId, publicGroup, groupTop) {
+        if (!publicGroup || liveStates == null) return@LaunchedEffect
+        val newest = runCatching { onPullGroupNew(chatId) }.getOrDefault(0L)
+        if (newest > 0) liveStates.readEntity("group", chatId, newest)
     }
     // Собеседник личной переписки — ему «печатает», за его «в сети» смотрим (ПЛАН-(ОП)).
     val peerUser = remember(chatId, group) { if (group) null else environment.chatFacts.peerOf(chatId) }
@@ -4269,6 +4293,7 @@ private fun Chat(
         }
     }
     val peerSeen = peerUser?.let { presenceNow[it] }
+    val mutedNow by (liveStates?.muted ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>()) }).collectAsState()
     val peerLine = if (live == null) null else io.tima.feature.chat.peerStatus(
         Tima.words.chat, Tima.words.callLog,
         typing = (typingNow[chatId] ?: 0) > tickMs,
@@ -4389,6 +4414,8 @@ private fun Chat(
             onMembers = onMembers,
             onMyColor = if (onMyColor != null) { { myColor = true } } else null,
             onGroupCall = onGroupCall,
+            notifyOff = liveStates?.let { "group:$chatId" in mutedNow },
+            onNotifyOff = liveStates?.let { l -> { off: Boolean -> l.mute("group", chatId, off) } },
         )
     }
     if (myColor && group && onMyColor != null) {
@@ -4417,6 +4444,8 @@ private fun Chat(
             onVideoCall = onVideoCall,
             onGroupCall = onGroupCall,
             group = false,
+            notifyOff = liveStates?.let { "chat:$chatId" in mutedNow },
+            onNotifyOff = liveStates?.let { l -> { off: Boolean -> l.mute("chat", chatId, off) } },
         )
     }
 }
@@ -4539,6 +4568,9 @@ private fun Settings(
     /** Журнал звонков: сколько его держит телефон и сколько сейчас лежит (Ж5). */
     callsLog: CallsStore,
     callsState: CallsState,
+    /** «Отключённые» уведомления (ПЛАН-(ОУ)): `(ключ, название)` и вернуть одно. */
+    mutedList: List<Pair<String, String>> = emptyList(),
+    onUnmute: (String) -> Unit = {},
     /** Настройки устройства — выбор звуков (ВЗ4) живёт здесь и не синхронизируется. */
     deviceSettings: io.tima.domain.chat.Settings,
     /** Микрофон, колонки, камера — есть только у ПК; `null` — пункта нет. */
@@ -4673,6 +4705,8 @@ private fun Settings(
                         }
                     }
                 },
+                muted = mutedList,
+                onUnmute = onUnmute,
             )
 
             // Разрешения — одно место для всех (заказчик 2026-09-26).
@@ -5573,9 +5607,12 @@ private fun windowCounters(counts: io.tima.domain.chat.NoticeCounts): Map<Window
     // без пропущенных звонков.
     val phone = counts.tab(io.tima.domain.chat.NoticeTab.Chats) + counts.tab(io.tima.domain.chat.NoticeTab.Calls)
     val page = counts.tab(io.tima.domain.chat.NoticeTab.Groups)
+    // Каналы — в «Социуме»: там их каталог и лента (ПЛАН-(ОУ)).
+    val social = counts.tab(io.tima.domain.chat.NoticeTab.Channels)
     return buildMap {
         if (phone > 0) put(Window.Phone, phone)
         if (page > 0) put(Window.Page, page)
+        if (social > 0) put(Window.Social, social)
     }
 }
 
@@ -5662,6 +5699,8 @@ private fun PhoneWindow(
     receiptOfChat: (ChatSummary) -> io.tima.feature.chat.ChatReceipt? = { null },
     /** Собеседник печатает — «печатает…» вместо превью (ПЛАН-(ОП)). */
     typingOfChat: (ChatSummary) -> Boolean = { false },
+    /** Отключённые уведомления — ключи `вид:сущность` (ПЛАН-(ОУ)). */
+    mutedKeys: Set<String> = emptySet(),
     /** Строка группового звонка; `null` — звонок личный (заказчик 2026-10-08). */
     groupCallOf: (CallRecord) -> io.tima.feature.chat.GroupCallLine? = { null },
     /** Нажали на строку группового звонка — его чат или «Чат удалён». */
@@ -5808,6 +5847,7 @@ private fun PhoneWindow(
                 callGroupOf = callGroupOf,
                 receiptOf = receiptOfChat,
                 typingOf = typingOfChat,
+                mutedOf = { chat -> "chat:${chat.chatId}" in mutedKeys },
             )
 
             WindowTab.Contacts -> {

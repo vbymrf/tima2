@@ -25,6 +25,15 @@ sealed interface StateRow {
 
     /** [userId] в сети до [untilMs] или был(а) в [lastSeenMs]. */
     data class Presence(override val rev: Long, val userId: String, val online: Boolean, val untilMs: Long, val lastSeenMs: Long) : StateRow
+
+    /**
+     * Вершина сущности «зашли, забрали» (ПЛАН-(ОУ)): в открытой группе или канале новое до [topId];
+     * [unread] — после моей отметки прочтения, не больше 100.
+     */
+    data class Top(override val rev: Long, val kind: String, val entityId: String, val topId: Long, val topAtMs: Long, val unread: Int) : StateRow
+
+    /** «Отключить уведомления» у сущности (ПЛАН-(ОУ)): [off] — отключены. */
+    data class Notify(override val rev: Long, val kind: String, val entityId: String, val off: Boolean) : StateRow
 }
 
 /** Страница ленты: вершина, строки после спрошенного номера и часы сервера. */
@@ -61,6 +70,11 @@ class StatesOverHttp(
                             rev, o.str("user_id").orEmpty(), o.bool("online") == true,
                             o.long("until_ms") ?: 0, o.long("last_seen_ms") ?: 0,
                         )
+                        "top" -> StateRow.Top(
+                            rev, o.str("entity_kind").orEmpty(), o.str("entity_id").orEmpty(),
+                            o.long("top_id") ?: 0, o.long("top_at_ms") ?: 0, (o.long("unread") ?: 0).toInt(),
+                        )
+                        "notify" -> StateRow.Notify(rev, o.str("entity_kind").orEmpty(), o.str("entity_id").orEmpty(), o.bool("off") == true)
                         // Новый вид от сервера новее нас — пропускаем, ленту не роняем.
                         else -> null
                     }
@@ -70,6 +84,27 @@ class StatesOverHttp(
         }
     } catch (e: Throwable) {
         null
+    }
+
+    /** Дочитал открытую группу или канал до [readId] (ПЛАН-(ОУ)). */
+    suspend fun readEntity(kind: String, entityId: String, readId: Long): Boolean =
+        putJson("/api/v1/users/me/reads", """{"kind":"$kind","entity_id":"$entityId","read_id":$readId}""")
+
+    /** «Отключить уведомления» у сущности ([off]) или включить обратно (ПЛАН-(ОУ)). */
+    suspend fun notify(kind: String, entityId: String, off: Boolean): Boolean =
+        putJson("/api/v1/users/me/notify", """{"kind":"$kind","entity_id":"$entityId","off":$off}""")
+
+    /** Устройство умеет «зашли, забрали»: открытые группы — вершиной, а не телом (ОУ4). */
+    suspend fun declareTops(): Boolean = putJson("/api/v1/devices/me/delivery", """{"mode":"tops"}""")
+
+    private suspend fun putJson(path: String, body: String): Boolean = try {
+        client.put(route.api(path)) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }.status == HttpStatusCode.NoContent
+    } catch (e: Throwable) {
+        false
     }
 
     /** Прочитал сообщения собеседника, написанные до [upToMs]. `true` — сервер принял. */

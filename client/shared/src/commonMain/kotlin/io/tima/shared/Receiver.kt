@@ -1094,6 +1094,37 @@ class Receiver(
     }
 
     /**
+     * Новое в открытой группе — «зашли, забрали» (ПЛАН-(ОУ) ОУ6): страницы с сервера от свежих к
+     * старым, пока страница приносит новое. В отличие от [pullGroupHistory] не тянет всю историю
+     * каждый раз: открыли группу — забрали только то, чего нет.
+     *
+     * @return номер позднейшего сообщения группы на сервере (для отметки «прочитал до»); 0 — не
+     *   узнали (нет связи) или группа пуста.
+     */
+    suspend fun pullGroupNew(groupId: String): Long {
+        var before = 0L
+        var added = 0
+        var newest = 0L
+        while (true) {
+            val page = network.groupMessages.page(groupId, before) ?: break
+            if (page.isEmpty()) break
+            if (newest == 0L) newest = page.maxOf { it.messageId }
+            var fresh = 0
+            for (item in page) {
+                val frame = GroupFrame.parse(item.stored) ?: continue
+                captionKey(frame.senderId, frame.senderDevice)
+                if (environment.incoming.receive(groupId, item.messageId, item.stored, sentAtMs = item.sentAtMs)) fresh++
+            }
+            added += fresh
+            if (fresh == 0 || page.size < GroupMessagesApi.PAGE) break
+            before = page.last().messageId
+        }
+        if (added > 0) drainIncoming()
+        Journal.note(LogCode.STATES, "открытая группа — забрали новое", "группа" to groupId.take(8), "новых" to added)
+        return newest
+    }
+
+    /**
      * История из копии ключей (модель Matrix, М3) — на свежем устройстве с фразой.
      *
      * Сначала ключи групп всех версий (тогда и история групп откроется), потом личные
