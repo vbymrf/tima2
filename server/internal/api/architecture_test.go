@@ -228,7 +228,12 @@ const (
 	// встроить это в ChatHelperDevices значило бы обойти бюджет, а не уложиться в него.
 	// 273 → 274: ключи личности владельца виртуального аккаунта (OwnerIdentityPubs) — пин-код
 	// временного аккаунта сбрасывается и фразой владельца (ПЛАН-(ПН) Р3, заказчик 2026-10-07).
-	storeMethodBudget = 274
+	// 274 → 284: лента состояний (ПЛАН-(ОП), 0072; задача заказчика 2026-10-08 «Выполни два
+	// плана») — «доставлено» и «прочитано» (SetReceipt, AckedDeliveries, ChatPeer), «печатает»
+	// (SetTyping), «в сети» (SetDevicePresence, UserPresence, WatchPresence, PresenceWatchers,
+	// SetPresenceState), чтение ленты (ListStates). Потребители — узкие StatesStore и
+	// LiveStatesStore рядом с ручками и кадрами.
+	storeMethodBudget = 284
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
 )

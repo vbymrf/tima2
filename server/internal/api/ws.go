@@ -176,6 +176,13 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer sub.Close()
 
 	ctx := r.Context()
+	// Соединение кончилось — устройство больше не на экране (ПЛАН-(ОП) ОП4). Свой контекст:
+	// запрос к этому времени закрыт.
+	defer func() {
+		gctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		liveStates{s.Store, s.notifier()}.presenceFrame(gctx, deviceID, claims.Subject, false, true)
+	}()
 	// ── ВЕРШИНЫ ПОЛОС ЕДУТ В САМОМ `ok` ─────────────────────────────────────
 	//
 	// Клиент обязан узнать, где сейчас каждая полоса, **до** первой подсказки. Иначе
@@ -309,6 +316,11 @@ type wsClientFrame struct {
 	Limit   int    `json:"limit"`    // sync.pull; 0 → 100, максимум 500
 	EventID int64  `json:"event_id"` // ack
 	Cts     int64  `json:"cts"`      // call.ack — лента звонков, ВЗ0а
+	// ПЛАН-(ОП): typing {chat_id, to, on}, presence {on}, watch/unwatch {user_id}.
+	ChatID string `json:"chat_id"`
+	To     string `json:"to"`
+	On     *bool  `json:"on"`
+	UserID string `json:"user_id"`
 }
 
 // handleWSFrame — sync.pull и ack; typing/receipt/presence — следующие итерации.
@@ -380,6 +392,8 @@ func (s *Server) handleWSFrame(ctx context.Context, conn *websocket.Conn, device
 		})
 	case "ack":
 		if f.EventID > 0 {
+			// «Доставлено» — до сдвига курсора: считается забранное между прежним и новым.
+			liveStates{s.Store, s.notifier()}.deliveredOnAck(ctx, deviceID, userID, f.EventID)
 			if err := s.Store.SetSyncCursor(ctx, deviceID, f.EventID); err != nil {
 				log.Printf("ws %s: ack: %v", deviceID, err)
 			}
@@ -389,8 +403,17 @@ func (s *Server) handleWSFrame(ctx context.Context, conn *websocket.Conn, device
 		// Лента звонков — свой курсор, журнал сообщений не трогается (ВЗ0а).
 		ackCalls(ctx, s.Store, s.notifier(), userID, deviceID, f.Cts)
 		return nil
+	case "typing":
+		liveStates{s.Store, s.notifier()}.typingFrame(ctx, userID, f)
+		return nil
+	case "presence":
+		liveStates{s.Store, s.notifier()}.presenceFrame(ctx, deviceID, userID, f.On != nil && *f.On, false)
+		return nil
+	case "watch", "unwatch":
+		liveStates{s.Store, s.notifier()}.watchFrame(ctx, deviceID, userID, f, f.Event == "watch")
+		return nil
 	default:
-		return nil // неизвестные кадры молча пропускаем (typing и пр. — позже)
+		return nil // неизвестные кадры молча пропускаем
 	}
 }
 

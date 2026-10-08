@@ -230,6 +230,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	RegisterFeeds(mux, s.Store, s.requireActiveDevice)
 	RegisterVirtuals(mux, s.Store, func() VirtualTokens { return s.Auth }, s.requireActiveDevice)
 	RegisterNews(mux, s.Store, s.requireActiveDevice)
+	RegisterStates(mux, s.Store, s.notifier(), s.requireActiveDevice)
 	RegisterTransfers(mux, s.Store, func() VirtualTokens { return s.Auth }, s.requireActiveDevice)
 
 	// Обновление токена доступа подписью устройства. Публичная по необходимости: её
