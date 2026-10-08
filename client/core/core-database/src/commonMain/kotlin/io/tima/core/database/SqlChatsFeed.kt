@@ -61,7 +61,13 @@ class SqlChatsFeed(
         val empty = db.chatsQueries.emptyChats().asFlow().mapToList(Dispatchers.Default)
 
         return withMessages.combine(empty) { lines, stubs ->
-            stubs.map { it.toSummary() } + lines.map { it.toSummary() }
+            // Пустая **личная** переписка в список не идёт (беда 2026-10-08): её строка
+            // заводится от одного нажатия на человека в «Контактах» или «Звонках», и
+            // переписка без единого сообщения вставала первой с ложным «новое сообщение».
+            // Строка остаётся — она нужна отправке и странице; в списке переписка появится
+            // с первым сообщением, на своём месте по времени. Пустая группа — видна: её
+            // создают заранее, и человек ждёт её в списке сразу.
+            stubs.filter { it.kind == GROUP }.map { it.toSummary() } + lines.map { it.toSummary() }
         }
     }
 

@@ -1532,7 +1532,7 @@ private fun App(
     // там строка пишется (`StartPersonalChat`). То есть беда зависела от того, каким
     // входом человек воспользовался, и потому выглядела как «работает не на всех».
     val chatBook = remember(environment) { SqlChatBook(environment.db, environment.cipher) }
-    fun openPersonalChat(peerId: String, name: String?, phone: String?): String {
+    fun openPersonalChat(peerId: String, name: String?, phone: String?, from: String): String {
         val chatId = PersonalChatIdsOverKodium.personalChatId(session.userId, peerId)
         if (!environment.chatFacts.knows(chatId)) {
             chatBook.remember(
@@ -1543,7 +1543,8 @@ private fun App(
                 title = name?.takeIf { it.isNotBlank() } ?: phone,
                 peerId = peerId,
             )
-            Journal.note(LogCode.CHAT_PEER, "переписке дописан собеседник", "откуда" to "контакты")
+            // Каким входом заведена — иначе пустую переписку в отчёте не объяснить (беда 2026-10-08).
+            Journal.note(LogCode.CHAT_PEER, "переписка заведена", "откуда" to from)
         }
         return chatId
     }
@@ -1569,7 +1570,7 @@ private fun App(
             host = callHost,
             scope = scope,
             me = session.userId,
-            sendTo = { userId, text -> environment.send.send(openPersonalChat(userId, null, null), text) },
+            sendTo = { userId, text -> environment.send.send(openPersonalChat(userId, null, null, "приглашение в звонок"), text) },
             // Новая временная группа — сразу в «Чаты»: её срок узнаём сверкой групп.
             onCallGroupCreated = { scope.launch { runCatching { assembled.receiver.syncGroups() } } },
             onShowCall = { showCall() },
@@ -3102,7 +3103,7 @@ private fun App(
                     onOpenPerson = { person ->
                         val id = person.userId
                         if (id != null) {
-                            where = Where.Chat(openPersonalChat(id, person.name, person.phone), person.name)
+                            where = Where.Chat(openPersonalChat(id, person.name, person.phone, "контакты"), person.name)
                         }
                     },
                     onNew = { where = Where.New },
@@ -3127,7 +3128,7 @@ private fun App(
                     // Строка «Звонков» — переписка; имя — из книги, если человек в ней есть.
                     onOpenUser = { id ->
                         val entry = bookState.all.firstOrNull { it.userId == id }
-                        where = Where.Chat(openPersonalChat(id, entry?.name, entry?.phone), entry?.name)
+                        where = Where.Chat(openPersonalChat(id, entry?.name, entry?.phone, "звонки"), entry?.name)
                     },
                     // Звонок из строки книги. Только тому, у кого есть аккаунт: остальным
                     // звонит системный набиратель из подокна «Пригласить», и это другой
