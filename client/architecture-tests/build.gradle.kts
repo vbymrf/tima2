@@ -32,4 +32,9 @@ tasks.test {
     systemProperty("client.root", rootProject.projectDir.absolutePath)
     systemProperty("fixtures.root", layout.projectDirectory.dir("src/test/fixtures").asFile.absolutePath)
     testLogging { showStandardStreams = true }
+    // Тесты этого модуля читают файлы с диска — код клиента, сценарии `maestro/`, учёт в
+    // `doc_mig/` — и эти файлы не входы задачи. Без этой строки Gradle считал задачу
+    // актуальной и не запускал её, когда менялись только они: ScenarioTagsTest (ПЛАН-(МС))
+    // «прошёл» на нарочно сломанной метке, 2026-10-09. Модуль быстрый — запускаем всегда.
+    outputs.upToDateWhen { false }
 }

@@ -1,5 +1,6 @@
 package io.tima.feature.shell
 
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -492,7 +493,7 @@ fun UpdateSection(
             if (offer.notes.isNotBlank()) Secondary(offer.notes)
             if (offer.size > 0) Tertiary(words.download(megabytes(offer.size)))
             if (canInstall) {
-                Button(label = words.install, onClick = onInstall)
+                Button(label = words.install, onClick = onInstall, modifier = Modifier.testTag(UPDATE_INSTALL_TAG))
             } else {
                 // Кнопки нет, а не «есть и молчит»: сборка без установщика ставить не
                 // умеет, и делать вид — худшее из двух.
@@ -556,7 +557,7 @@ fun UpdateGate(
 
         state.outcome != null -> Failed(state.outcome, onInstall)
 
-        canInstall -> Button(label = words.install, onClick = onInstall)
+        canInstall -> Button(label = words.install, onClick = onInstall, modifier = Modifier.testTag(UPDATE_INSTALL_TAG))
 
         else -> Secondary(words.notSelfUpdatingLong)
     }
@@ -643,3 +644,9 @@ private fun megabytes(bytes: Long): String {
     val tenths = (bytes * 10 + 524_288) / 1_048_576
     return (tenths / 10).toString() + "," + (tenths % 10)
 }
+
+/** «Обновить» — для сценариев на телефонах (ПЛАН-(МС)). */
+const val UPDATE_INSTALL_TAG: String = "update:install"
+
+/** «Перейти к обновлению» в событии — для сценариев на телефонах (ПЛАН-(МС)). */
+const val EVENTS_UPDATE_TAG: String = "events:update"

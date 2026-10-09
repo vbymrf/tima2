@@ -1,5 +1,6 @@
 package io.tima.feature.chat
 
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -153,7 +154,7 @@ fun ChatsScreen(
         // группы и каналы.
         WithCluster(
             cluster = {
-                ButtonCircle(onClick = onNew, live = true) {
+                ButtonCircle(onClick = onNew, live = true, modifier = Modifier.testTag(CHATS_NEW_TAG)) {
                     Arrow(Side.Right, color = colors.onAccent)
                 }
             },
@@ -447,3 +448,6 @@ fun ChatSummary.matches(request: String): Boolean {
  * и его аватар, на который ложится «ГЗ».
  */
 data class CallGroupLook(val creator: String?, val face: ImageBitmap?)
+
+/** «Написать» (новая переписка) — для сценариев на телефонах (ПЛАН-(МС)). */
+const val CHATS_NEW_TAG: String = "chats:new"

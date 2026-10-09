@@ -1,5 +1,6 @@
 package io.tima.feature.call
 
+import io.tima.core.ui.TimaFixed
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -322,7 +323,7 @@ fun CallScreen(
                 // пробе (заказчик 2026-10-08).
                 Column(
                     Modifier.align(Alignment.TopCenter).fillMaxWidth()
-                        .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent)))
+                        .background(Brush.verticalGradient(listOf(TimaFixed.videoShade.copy(alpha = 0.55f), Color.Transparent)))
                         .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)
                         .onSizeChanged { overlayPx = it.height }
                         .testTag(CALL_OVERLAY_TAG),
@@ -338,7 +339,7 @@ fun CallScreen(
                         )
                     }
                     peerPhone?.takeIf { it.isNotBlank() }?.let {
-                        Caption(it, fontSize = TimaType.sz5, color = Color.White.copy(alpha = 0.85f), lineOne = true)
+                        Caption(it, fontSize = TimaType.sz5, color = TimaFixed.onVideo.copy(alpha = 0.85f), lineOne = true)
                     }
                 }
             }
@@ -419,36 +420,36 @@ fun CallScreen(
                     } else {
                         group.onJoinAgain?.let { Button(label = Tima.words.groupCall.join, onClick = it, enabled = group.joinLive) }
                     }
-                    onClose?.let { Button(label = words.close, kind = ButtonKind.Leave, onClick = it) }
+                    onClose?.let { Button(label = words.close, kind = ButtonKind.Leave, onClick = it, modifier = Modifier.testTag(CALL_CLOSE_TAG)) }
                 }
 
                 // «Перезвонить» с переключателем — строкой выше, «Закрыть» светло-красной — под
                 // ними (заказчик 2026-10-08): так вышло на телефоне шириной 360, и так оставили.
                 state.stage == CallStage.Ended -> {
-                    onCallAgain?.let { Button(label = words.callAgain, onClick = it) }
+                    onCallAgain?.let { Button(label = words.callAgain, onClick = it, modifier = Modifier.testTag(CALL_REDIAL_TAG)) }
                     if (onCallAgain != null && onRedialKind != null) {
                         KindSwitch(video = redialVideo, onPick = onRedialKind)
                     }
                     onClose?.let {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Button(label = words.close, kind = ButtonKind.Leave, onClick = it)
+                            Button(label = words.close, kind = ButtonKind.Leave, onClick = it, modifier = Modifier.testTag(CALL_CLOSE_TAG))
                         }
                     }
                 }
 
                 incoming && state.stage != CallStage.Connected -> {
                     if (onAccept != null) {
-                        Button(label = words.accept, onClick = onAccept)
+                        Button(label = words.accept, onClick = onAccept, modifier = Modifier.testTag(CALL_ACCEPT_TAG))
                     } else {
                         Secondary(words.noEngineHere)
                     }
-                    Button(label = words.decline, kind = ButtonKind.Dangerous, onClick = onDecline)
+                    Button(label = words.decline, kind = ButtonKind.Dangerous, onClick = onDecline, modifier = Modifier.testTag(CALL_DECLINE_TAG))
                 }
 
                 state.stage != CallStage.Connected -> {
                     // Исходящий до ответа: одна кнопка. «Завершить» тут не годится —
                     // завершать ещё нечего, разговор не начался.
-                    Button(label = words.cancel, kind = ButtonKind.Dangerous, onClick = onHangUp)
+                    Button(label = words.cancel, kind = ButtonKind.Dangerous, onClick = onHangUp, modifier = Modifier.testTag(CALL_CANCEL_TAG))
                 }
 
                 // Разговор — панель выше: сюда он не доходит.
@@ -609,7 +610,7 @@ const val CALL_STRANGER_TAG: String = "call:stranger"
 @Composable
 private fun PeerName(peer: String, stranger: Boolean, onVideo: Boolean = false, tint: Color? = null) {
     val colors = Tima.colors
-    val ink = tint ?: if (onVideo) Color.White else colors.text
+    val ink = tint ?: if (onVideo) TimaFixed.onVideo else colors.text
     Row(
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
         verticalAlignment = Alignment.CenterVertically,
@@ -637,3 +638,11 @@ private val PIP_ABOVE_SHADE = 3.dp
 
 /** Метка строки имени и времени поверх видео. */
 const val CALL_OVERLAY_TAG: String = "call:overlay"
+
+// Кнопки окна звонка — для сценариев на телефонах (ПЛАН-(МС)): сценарий нажимает метку, а не
+// надпись или значок, и смена вида кнопки его не ломает. Учёт — СЦЕНАРИИ-ПО-ОКНАМ.md.
+const val CALL_ACCEPT_TAG: String = "call:accept"
+const val CALL_DECLINE_TAG: String = "call:decline"
+const val CALL_CANCEL_TAG: String = "call:cancel"
+const val CALL_REDIAL_TAG: String = "call:redial"
+const val CALL_CLOSE_TAG: String = "call:close"

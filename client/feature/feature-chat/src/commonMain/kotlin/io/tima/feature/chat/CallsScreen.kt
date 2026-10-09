@@ -352,8 +352,9 @@ const val CALLS_NOTE_TAG: String = "calls:note"
 
 // Светлые тона стрелок (заказчик 2026-10-08). Исходящий — светло-синий, как его прежде
 // рисовал Samsung; отменённый, не дозвонился, занято, оборвался — по направлению.
-private val ARROW_IN = Color(0xFF7CCB7C)
-private val ARROW_OUT = Color(0xFF5AAEE8)
+// Сами тона — в дизайн-системе (`TimaFixed`): зашитых цветов на экранах нет (ArchitectureTest).
+private val ARROW_IN = io.tima.core.ui.TimaFixed.arrowIn
+private val ARROW_OUT = io.tima.core.ui.TimaFixed.arrowOut
 private const val DOT = " · "
 private const val VOICE_GLYPH = "📞"
 private const val VIDEO_GLYPH = "📹"

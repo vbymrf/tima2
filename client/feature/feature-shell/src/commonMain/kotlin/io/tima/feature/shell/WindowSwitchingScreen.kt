@@ -1,5 +1,6 @@
 package io.tima.feature.shell
 
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -289,7 +290,7 @@ private fun Header(
         // Значок своей страницы. Правка профиля — кнопкой уже на ней; второй вход в
         // правку остаётся в настройках.
         if (onProfile != null) IconButton(glyph = "👤", onClick = onProfile)
-        IconButton(glyph = "✕", onClick = onClose)
+        IconButton(glyph = "✕", onClick = onClose, modifier = Modifier.testTag(SWITCHER_CLOSE_TAG))
     }
 }
 
@@ -302,6 +303,7 @@ private fun Item(window: Window, current: Boolean, howMany: Int, onClick: () -> 
     val colors = Tima.colors
     Box(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
         ListLine(
+            modifier = Modifier.testTag(window.switcherTag()),
             onClick = onClick,
             // Значок отступает от края на две ширины зелёной полосы (заказчик 2026-10-08): полоса
             // не наезжает на него и читается отдельно. Строка даёт своё поле, здесь — остаток.
@@ -607,3 +609,6 @@ fun CloseQuestionSheet(
         }
     }
 }
+
+/** «✕» переключателя окон — для сценариев на телефонах (ПЛАН-(МС)). */
+const val SWITCHER_CLOSE_TAG: String = "switcher:close"

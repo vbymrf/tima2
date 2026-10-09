@@ -1,5 +1,6 @@
 package io.tima.feature.shell
 
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -58,6 +59,8 @@ data class Notice(
 data class NoticeAction(
     val label: String,
     val kind: ButtonKind = ButtonKind.Action,
+    /** Метка для сценариев на телефонах (ПЛАН-(МС)); `null` — без метки. */
+    val tag: String? = null,
     val onPick: () -> Unit,
 )
 
@@ -93,7 +96,7 @@ fun NoticeScreen(
                 label = action.label,
                 onClick = action.onPick,
                 kind = action.kind,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().then(action.tag?.let { Modifier.testTag(it) } ?: Modifier),
             )
         }
     }
@@ -154,7 +157,7 @@ fun NoticeQueueScreen(
                         label = action.label,
                         onClick = action.onPick,
                         kind = action.kind,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().then(action.tag?.let { Modifier.testTag(it) } ?: Modifier),
                     )
                 }
                 // Кнопки очереди — отдельно от кнопок события и тише их: решение здесь —

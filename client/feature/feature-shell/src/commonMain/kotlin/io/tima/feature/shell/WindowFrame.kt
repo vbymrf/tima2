@@ -115,8 +115,8 @@ fun WindowFrame(
                 onSwitchWindows = onSwitchWindows,
                 right = {
                     ControlRow {
-                        if (onSearch != null) IconButton(glyph = "🔍", onClick = onSearch)
-                        IconButton(glyph = "⚙", onClick = onSettings)
+                        if (onSearch != null) IconButton(glyph = "🔍", onClick = onSearch, modifier = Modifier.testTag(WINDOW_SEARCH_TAG))
+                        IconButton(glyph = "⚙", onClick = onSettings, modifier = Modifier.testTag(WINDOW_SETTINGS_TAG))
                     }
                 },
             )
@@ -240,3 +240,7 @@ fun TabStub(
         Secondary(thanHolds)
     }
 }
+
+// Кнопки шапки окна — для сценариев на телефонах (ПЛАН-(МС)).
+const val WINDOW_SEARCH_TAG: String = "window:search"
+const val WINDOW_SETTINGS_TAG: String = "window:settings"

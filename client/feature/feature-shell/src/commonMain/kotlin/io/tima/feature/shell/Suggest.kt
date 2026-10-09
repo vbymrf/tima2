@@ -1,5 +1,6 @@
 package io.tima.feature.shell
 
+import io.tima.core.words.Words
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -54,14 +55,18 @@ data class SuggestState(
 
     val morePhotos: Boolean get() = photos.size < MAX_PHOTOS && !delivered
 
-    /** Почему не отправить; `null` — всё на месте. */
-    val missing: String? get() = if (!delivered && text.isBlank()) CurrentWords.value.suggest.writeSomething else null
+    /**
+     * Почему не отправить; `null` — всё на месте. Словарь — параметром: глобальный словарь
+     * читается только в умолчании конструктора (`CurrentWordsTest`).
+     */
+    fun missing(words: Words): String? = if (!delivered && text.isBlank()) words.suggest.writeSomething else null
 }
 
 /** Состояние и решения экрана — то же устройство, что [ProblemStore], без журнала. */
 class SuggestStore(
     private val sender: SuggestSender,
     private val scope: CoroutineScope,
+    private val words: () -> Words = { CurrentWords.value },
 ) {
     private val _state = MutableStateFlow(SuggestState())
     val state: StateFlow<SuggestState> = _state.asStateFlow()
@@ -91,7 +96,7 @@ class SuggestStore(
             val outcome = try {
                 sender.send(state.text.trim(), state.photos)
             } catch (e: Throwable) {
-                SendOutcome.Refused(CurrentWords.value.problem.couldNotSend)
+                SendOutcome.Refused(words().problem.couldNotSend)
             }
             _state.value = _state.value.copy(sending = false, outcome = outcome)
         }
@@ -130,7 +135,7 @@ fun SuggestScreen(
         is SendOutcome.Refused -> Trouble(outcome.why)
         null -> Unit
     }
-    state.missing?.let { Alarm(it) }
+    state.missing(Tima.words)?.let { Alarm(it) }
     Button(
         label = when {
             state.delivered -> words.sent

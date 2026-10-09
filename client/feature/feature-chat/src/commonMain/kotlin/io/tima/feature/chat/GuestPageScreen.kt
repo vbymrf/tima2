@@ -1,5 +1,6 @@
 package io.tima.feature.chat
 
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
@@ -169,7 +170,7 @@ fun GuestPageScreen(
                     onCall?.let { Button(label = words.call, onClick = it) }
                     onVideoCall?.let { Button(label = words.videoCall, kind = ButtonKind.Quiet, onClick = it) }
                     onGroupCall?.let { Button(label = words.groupCall, kind = ButtonKind.Quiet, onClick = it) }
-                    onWrite?.let { Button(label = words.write, kind = ButtonKind.Quiet, onClick = it) }
+                    onWrite?.let { Button(label = words.write, kind = ButtonKind.Quiet, onClick = it, modifier = Modifier.testTag(PAGE_WRITE_TAG)) }
                 }
             }
 
@@ -281,3 +282,6 @@ fun GuestPageScreen(
         }
     }
 }
+
+/** «Написать» на странице человека — для сценариев на телефонах (ПЛАН-(МС)). */
+const val PAGE_WRITE_TAG: String = "page:write"

@@ -1,5 +1,6 @@
 package io.tima.core.ui
 
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -78,7 +79,7 @@ fun WindowHeader(
                 .heightIn(min = TimaZones.zone1 - TimaSpacing.about4)
                 .then(
                     if (onSwitchWindows != null) {
-                        Modifier.clickable(onClick = onSwitchWindows)
+                        Modifier.testTag(WINDOW_SWITCHER_TAG).clickable(onClick = onSwitchWindows)
                     } else {
                         Modifier
                     },
@@ -270,3 +271,6 @@ fun SubwindowHeader(
  * «наш» и «а». Предел заставляет правый блок уйти на вторую строку, а не давить имя.
  */
 private val TITLE_MIN = 96.dp
+
+/** Шапка окна, открывающая переключатель окон, — для сценариев на телефонах (ПЛАН-(МС)). */
+const val WINDOW_SWITCHER_TAG: String = "window:switcher"

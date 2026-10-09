@@ -1,5 +1,6 @@
 package io.tima.feature.call
 
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -240,6 +241,8 @@ private fun Arming(armed: Boolean, onArm: (Boolean) -> Unit) {
         Button(
             label = if (armed) words.disarm else words.arm,
             onClick = { onArm(!armed) },
+            // Две метки, а не одна: сценарий проверяет, что забег взведён, по «disarm».
+            modifier = Modifier.testTag(if (armed) BENCH_DISARM_TAG else BENCH_ARM_TAG),
             kind = if (armed) ButtonKind.Dangerous else ButtonKind.Action,
         )
         Tertiary(if (armed) words.armAbout else words.idleAbout)
@@ -274,7 +277,7 @@ private fun Saving(
     // буква, уходящая в хранилище, заводила бы там безымянный набор-черновик.
     var name by remember(preset.name) { mutableStateOf(preset.name) }
 
-    Section(words.sectionPresets) {
+    Section(words.sectionPresets, Modifier.testTag(BENCH_PRESETS_TAG)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
@@ -469,8 +472,8 @@ private fun Run(run: BenchSummary) {
 // ── МЕЛОЧЬ, ИЗ КОТОРОЙ ЭТО СОБРАНО ─────────────────────────────────────────
 
 @Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+private fun Section(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
         Caption(title, fontSize = TimaType.sz3, weight = FontWeight.Bold)
         content()
     }
@@ -634,3 +637,8 @@ fun CallBenchSwitch(
         Tertiary(words.presetNow(preset))
     }
 }
+
+// Стенд — для сценариев на телефонах (ПЛАН-(МС)).
+const val BENCH_ARM_TAG: String = "bench:arm"
+const val BENCH_DISARM_TAG: String = "bench:disarm"
+const val BENCH_PRESETS_TAG: String = "bench:presets"

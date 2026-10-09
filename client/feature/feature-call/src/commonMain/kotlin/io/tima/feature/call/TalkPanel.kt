@@ -171,7 +171,7 @@ internal fun TalkPanel(
             // ── Завершить ── своим столбцом справа.
             Box(Modifier.width(HANG_UP_COLUMN), contentAlignment = Alignment.TopCenter) {
                 Labeled(words.hangUp) {
-                    BigButton(glyph = "📞", on = false, danger = true, onClick = onHangUp)
+                    BigButton(glyph = "📞", on = false, danger = true, onClick = onHangUp, modifier = Modifier.testTag(HANG_UP_TAG))
                 }
             }
         }
@@ -417,11 +417,11 @@ internal fun clampPip(wanted: Offset, area: IntSize, pip: Offset): Offset {
 @Composable
 internal fun Dialing(side: androidx.compose.ui.unit.Dp = WAVES, content: @Composable () -> Unit) {
     val color = Tima.colors.navigation
-    val wave by rememberInfiniteTransition(label = "вызов").animateFloat(
+    val wave by rememberInfiniteTransition(label = "dialing").animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(WAVE_MS, easing = LinearEasing), RepeatMode.Restart),
-        label = "волна",
+        label = "wave",
     )
     Box(contentAlignment = Alignment.Center, modifier = Modifier.testTag(DIALING_TAG)) {
         Canvas(Modifier.size(side)) {
@@ -481,6 +481,9 @@ private val WAVES = 200.dp
 private const val WAVE_MS = 1_600
 
 const val TALK_PANEL_TAG: String = "call:panel"
+
+/** «Завершить» разговора — сценарии кладут трубку по ней, а не по значку (ПЛАН-(МС)). */
+const val HANG_UP_TAG: String = "call:hangup"
 const val EYE_TAG: String = "call:eye"
 const val CAMERA_TAG: String = "call:camera"
 const val PIP_TAG: String = "call:pip"

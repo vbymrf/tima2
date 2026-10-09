@@ -1,5 +1,6 @@
 package io.tima.shared
 
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -2617,7 +2618,7 @@ private fun App(
                     (brokenNews ?: UpdateNews.Broken("", "", "")).notice(upd)
                 },
                 actions = listOf(
-                    NoticeAction(warn.eventsGoToUpdate) {
+                    NoticeAction(warn.eventsGoToUpdate, tag = io.tima.feature.shell.EVENTS_UPDATE_TAG) {
                         close(EventKind.Update, "Перейти к обновлению")
                         update.dismissNews()
                         where = Where.Settings(SettingsItem.UPDATE)
@@ -5336,6 +5337,9 @@ private fun Suggest(
     scope: kotlinx.coroutines.CoroutineScope,
     platform: Platform,
 ) {
+    // Слова отказа — текущего языка, а не того, что был при создании store (и не глобалом:
+    // CurrentWordsTest).
+    val wordsNow by rememberUpdatedState(Tima.words)
     val store = remember {
         io.tima.feature.shell.SuggestStore(
             sender = { text, photos ->
@@ -5359,7 +5363,7 @@ private fun Suggest(
                     is ProblemSendResult.NoConnection -> SendOutcome.Queued
                     is ProblemSendResult.Refused ->
                         if (result.status == 0) SendOutcome.Queued
-                        else SendOutcome.Refused(io.tima.core.words.CurrentWords.value.suggest.refused(result.status))
+                        else SendOutcome.Refused(wordsNow.suggest.refused(result.status))
                 }
             },
             scope = scope,
@@ -6141,7 +6145,7 @@ private fun SearchRow(
             autoFocus = true,
             modifier = Modifier.weight(1f),
         )
-        ControlRow { IconButton(glyph = "✕", onClick = onClose) }
+        ControlRow { IconButton(glyph = "✕", onClick = onClose, modifier = Modifier.testTag(SEARCH_CLOSE_TAG)) }
     }
 }
 
@@ -6369,3 +6373,6 @@ private const val CHAT_KEYS_AGAIN_MS = 24 * 60 * 60_000L
 private fun HourglassLayer(awaited: androidx.compose.runtime.State<Window?>) {
     if (awaited.value != null) WindowHourglass()
 }
+
+/** «✕» строки поиска окна — для сценариев на телефонах (ПЛАН-(МС)). */
+const val SEARCH_CLOSE_TAG: String = "search:close"

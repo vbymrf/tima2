@@ -48,6 +48,9 @@ fun Window.tag(): String = "window:" + name
 /** Метка вкладки, фильтра или режима: `tab:Chats`. */
 fun WindowTab.tag(): String = "tab:" + name
 
+/** Метка окна в переключателе окон: `switcher:Bench` (ПЛАН-(МС)). */
+fun Window.switcherTag(): String = "switcher:" + name
+
 /** Метка пункта настроек: `settings:LANGUAGE`. */
 fun SettingsItem.tag(): String = "settings:" + name
 

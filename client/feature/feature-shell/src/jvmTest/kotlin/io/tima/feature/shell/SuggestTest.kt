@@ -42,7 +42,7 @@ class SuggestTest {
     fun пустое_не_уходит() = runTest {
         val sender = Sender()
         val store = SuggestStore(sender, backgroundScope)
-        assertNotNull(store.state.value.missing)
+        assertNotNull(store.state.value.missing(io.tima.core.words.RussianWords))
         store.send()
         assertNull(sender.text)
     }
