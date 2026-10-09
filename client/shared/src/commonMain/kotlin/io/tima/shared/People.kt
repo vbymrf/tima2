@@ -2,7 +2,10 @@ package io.tima.shared
 
 import io.tima.core.network.UsersApi
 import io.tima.domain.chat.Book
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.graphics.ImageBitmap
+import io.tima.core.ui.AvatarSize
+import kotlin.math.roundToInt
 import io.tima.core.media.Media
 import io.tima.core.media.decodeImage
 import io.tima.domain.chat.ChatFaces
@@ -43,23 +46,53 @@ class People(
 ) : ChatPeople, ChatFaces {
 
     private val _cards = MutableStateFlow<Map<String, ChatPerson>>(emptyMap())
-    private val _faces = MutableStateFlow<Map<String, ImageBitmap>>(emptyMap())
 
-    /** Картинки аватаров по идентификатору — те, что уже доехали. */
-    val faces: StateFlow<Map<String, ImageBitmap>> = _faces.asStateFlow()
-
+    // ── АВАТАРЫ ПОД РАЗМЕР (ПЛАН-(БС) Э5.5, заказчик 2026-10-08) ──────────────
+    //
+    // Картинка аватара — своя под каждый размер, в котором её показывают (`AvatarSize`):
+    // строка списка, шапка переписки, страница человека, окно звонка. Прежде одна картинка
+    // 512×512 шла на все, и строка списка в 84 точки держала мегабайт памяти.
+    //
+    // Байты качаются один раз на человека; раскодируются под размер, не на главном потоке.
+    // Картинки лежат в карте состояния: чтение подписывает место только на его картинку, и
+    // приезд чужого аватара не перерисовывает весь список.
+    private val faces = mutableStateMapOf<String, ImageBitmap>()
+    private val faceBytes = HashMap<String, ByteArray>()
     private val fetching = HashSet<String>()
 
-    /** Попросить картинку аватара; приедет в [faces]. Без аватара у карточки — ничего. */
-    fun wantFace(userId: String) {
+    /** Пикселей в точке этого экрана — ставит корень приложения. */
+    var density: Float = 2f
+
+    /**
+     * Картинка аватара человека в размере [size]; `null` — нет или ещё не доехала. Заодно
+     * просит её: приедет — место, которое её читает, перерисуется само.
+     */
+    fun face(userId: String, size: AvatarSize): ImageBitmap? {
+        wantFace(userId, size)
+        return faces[faceKey(userId, size)]
+    }
+
+    /** Попросить картинку аватара заранее. Без аватара у карточки — ничего. */
+    fun wantFace(userId: String, size: AvatarSize = AvatarSize.Normal) {
+        val key = faceKey(userId, size)
+        if (media == null || key in faces) return
         val mediaId = _cards.value[userId]?.avatar ?: return
-        if (media == null || userId in _faces.value || !fetching.add(userId)) return
+        if (!fetching.add(key)) return
+        val side = (size.side.value * density).roundToInt()
         scope.launch {
-            // Раскодировать — не на главном потоке: scope здесь экранный, а картинки
-            // приезжают пачкой как раз во время первой прокрутки списка (Redmi A3, 2026-10-08).
-            val picture = media.download(mediaId)?.let { bytes -> withContext(Dispatchers.Default) { decodeImage(bytes) } }
-            if (picture != null) _faces.value = _faces.value + (userId to picture) else fetching.remove(userId)
+            val bytes = faceBytes[userId] ?: media.download(mediaId)?.also { faceBytes[userId] = it }
+            val picture = bytes?.let { withContext(Dispatchers.Default) { decodeImage(it, atLeast = side) } }
+            if (picture != null) faces[key] = picture else fetching.remove(key)
         }
+    }
+
+    private fun faceKey(userId: String, size: AvatarSize) = "$userId|${size.name}"
+
+    private fun forgetFaces(userId: String) {
+        faceBytes.remove(userId)
+        val prefix = "$userId|"
+        faces.keys.filter { it.startsWith(prefix) }.forEach { faces.remove(it) }
+        fetching.removeAll { it.startsWith(prefix) }
     }
 
     /** Байты аватара для переписки — тот же порт, что раньше собирали в Root. */
@@ -105,8 +138,7 @@ class People(
         _cards.value = _cards.value + (userId to card)
         if (before?.avatar != card.avatar) {
             // Новый аватар — старую картинку забыть, следующий показ скачает новую.
-            _faces.value = _faces.value - userId
-            fetching.remove(userId)
+            forgetFaces(userId)
         }
         if (before != card) _changed.tryEmit(userId)
     }
