@@ -16,6 +16,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -219,6 +220,8 @@ import io.tima.feature.shell.InSide
 import io.tima.feature.shell.ActiveCall
 import io.tima.feature.shell.LocalActiveCall
 import io.tima.feature.shell.windowSwipe
+import io.tima.feature.shell.WindowHourglass
+import io.tima.feature.shell.WindowSwitchClock
 import io.tima.feature.shell.WindowFrame
 import io.tima.feature.shell.Rail
 import io.tima.feature.shell.TabStub
@@ -1985,6 +1988,38 @@ private fun App(
     //
     // Кольцо при этом ничего не прячет: переключатель окон показывает весь ряд целиком,
     // и где он кончается, видно там.
+    // ── ПЕСОЧНЫЕ ЧАСЫ ПРИ СМЕНЕ ОКНА (ПЛАН-(БС) Э4, заказчик 2026-10-08) ─────
+    //
+    // Окно строится с нуля, и на слабом телефоне кадр перехода долгий: экран стоял, человек
+    // свайпал ещё раз и проскакивал дальше. Теперь переход — в два кадра: первым рисуются
+    // часы поверх прежнего окна, вторым строится новое. Часы снимаются, когда новое окно
+    // нарисовано. После быстрого перехода часов нет — окно меняется сразу, без лишнего кадра.
+    var windowAwaited by remember { mutableStateOf<Window?>(null) }
+    val switchClock = remember { WindowSwitchClock() }
+    val goToWindow: (Window) -> Unit = { target ->
+        when {
+            target == window -> where = Where.Nothing
+            switchClock.needed -> windowAwaited = target
+            else -> {
+                switchClock.started()
+                window = target
+                where = Where.Nothing
+            }
+        }
+    }
+    LaunchedEffect(windowAwaited) {
+        val target = windowAwaited ?: return@LaunchedEffect
+        withFrameNanos { } // кадр с часами нарисован
+        switchClock.started()
+        window = target
+        where = Where.Nothing
+    }
+    LaunchedEffect(window) {
+        withFrameNanos { } // новое окно нарисовано
+        switchClock.finished()?.let { ms -> Journal.note(LogCode.SCREEN_OPEN, "окно построено", "окно" to window.name, "мс" to ms) }
+        windowAwaited = null
+    }
+
     val switchWindow: (InSide) -> Unit = { where_ ->
         // По показанным окнам, а не по перечню: окно 0 есть только во время звонка, и
         // свайпом в него попадать, когда его нет в переключателе, было бы странно.
@@ -1995,8 +2030,7 @@ private fun App(
             // отрицателен, и свайп с первого окна ушёл бы в -1, то есть никуда.
             val step = if (where_ == InSide.Next) 1 else -1
             Journal.note(LogCode.SCREEN_OPEN, "swipe", "из" to window.name, "куда" to where_.name)
-            window = order[(at + step + order.size) % order.size]
-            where = Where.Nothing
+            goToWindow(order[(at + step + order.size) % order.size])
         }
     }
 
@@ -2665,8 +2699,7 @@ private fun App(
             avatar = remember(profileState.avatarBytes) { profileState.avatarBytes?.let(::decodeImage) },
             counters = windowCounters(noticeCounts),
             onSelect = { selected ->
-                window = selected
-                where = Where.Nothing
+                goToWindow(selected)
                 windowSwitcher = false
             },
             onSettings = {
@@ -4039,6 +4072,8 @@ private fun App(
             }
         },
     )
+    // Часы — пока строится окно, в которое перешли (Э4).
+    if (windowAwaited != null) WindowHourglass()
     // Замок пин-кода (ПЛАН-(ПН)) — поверх всего, но не поверх звонка: входящий принимается без
     // пина (Р11), а пин спрашивается, когда звонок кончился.
     if (locked && pin != null && lockWho != null && !callHost.active) {
