@@ -2000,12 +2000,16 @@ private fun App(
     // свайпал ещё раз и проскакивал дальше. Теперь переход — в два кадра: первым рисуются
     // часы поверх прежнего окна, вторым строится новое. Часы снимаются, когда новое окно
     // нарисовано. После быстрого перехода часов нет — окно меняется сразу, без лишнего кадра.
-    var windowAwaited by remember { mutableStateOf<Window?>(null) }
+    //
+    // Ожидаемое окно корень **не читает** — ни в теле, ни ключом эффекта: иначе показ и снятие
+    // часов перестраивали бы весь корень, а это ровно та работа, которую часы прикрывают
+    // (Redmi 2026-10-09: два лишних кадра по 140 мс на переход). Читает его только слой часов.
+    val windowAwaited = remember { mutableStateOf<Window?>(null) }
     val switchClock = remember { WindowSwitchClock() }
     val goToWindow: (Window) -> Unit = { target ->
         when {
             target == window -> where = Where.Nothing
-            switchClock.needed -> windowAwaited = target
+            switchClock.needed -> windowAwaited.value = target
             else -> {
                 switchClock.started()
                 window = target
@@ -2013,17 +2017,19 @@ private fun App(
             }
         }
     }
-    LaunchedEffect(windowAwaited) {
-        val target = windowAwaited ?: return@LaunchedEffect
-        withFrameNanos { } // кадр с часами нарисован
-        switchClock.started()
-        window = target
-        where = Where.Nothing
+    LaunchedEffect(Unit) {
+        snapshotFlow { windowAwaited.value }.collect { target ->
+            if (target == null) return@collect
+            withFrameNanos { } // кадр с часами нарисован
+            switchClock.started()
+            window = target
+            where = Where.Nothing
+        }
     }
     LaunchedEffect(window) {
         withFrameNanos { } // новое окно нарисовано
         switchClock.finished()?.let { ms -> Journal.note(LogCode.SCREEN_OPEN, "окно построено", "окно" to window.name, "мс" to ms) }
-        windowAwaited = null
+        windowAwaited.value = null
     }
 
     val switchWindow: (InSide) -> Unit = { where_ ->
@@ -4072,7 +4078,7 @@ private fun App(
         },
     )
     // Часы — пока строится окно, в которое перешли (Э4).
-    if (windowAwaited != null) WindowHourglass()
+    HourglassLayer(windowAwaited)
     // Замок пин-кода (ПЛАН-(ПН)) — поверх всего, но не поверх звонка: входящий принимается без
     // пина (Р11), а пин спрашивается, когда звонок кончился.
     if (locked && pin != null && lockWho != null && !callHost.active) {
@@ -6357,3 +6363,9 @@ private const val CHAT_KEYS_LOST = "chat.keys.lost."
 
 /** Сами просим ключи переписки не чаще раза в сутки. */
 private const val CHAT_KEYS_AGAIN_MS = 24 * 60 * 60_000L
+
+/** Песочные часы, пока строится окно (Э4): состояние читает только этот слой, не корень. */
+@Composable
+private fun HourglassLayer(awaited: androidx.compose.runtime.State<Window?>) {
+    if (awaited.value != null) WindowHourglass()
+}
