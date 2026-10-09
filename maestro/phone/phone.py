@@ -291,6 +291,9 @@ def to_home(dev, debug_dir=None, steps=6):
     впереди: сборка без меток окон, решает вызывающий прежним способом."""
     notes, seen = [], set()
     for step in range(steps):
+        # Открытая клавиатура съедает «Назад»: оно прячет её, а место не меняется — и правило
+        # «тот же переход дважды — стоп» сработало бы зря (переписка после пачки, 2026-10-09).
+        hide_keyboard(dev)
         place, popup = screen_of(nodes(dev))
         if (place, popup) == HOME:
             return True, notes

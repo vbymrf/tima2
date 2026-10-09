@@ -52,3 +52,6 @@
 | PH-42 | preventive | `rightOf` нажал аватар вместо кнопки отправки | knowledge/phone.md | да — `chat:send` |
 | PH-43 | preventive | проверка Maestro стоит 7–8 с — ответ «нет» дорог | knowledge/phone.md | да — пара меток, флажки |
 | PH-44 | diagnostic | касание 3–4 с; ожидание «после касания» не срезается | knowledge/phone.md | нет — выигрыш в ожиданиях исхода |
+| PH-45 | preventive | `to_home` — «переход из screen:chat не помог», открыта клавиатура | knowledge/phone.md | да |
+| PH-46 | preventive | `bench` откатил забег на набор №1 | knowledge/phone.md | нет — смотреть журнал прошлых дней |
+| PH-47 | diagnostic | `send-burst`: сообщение ушло, а на экране его нет | knowledge/phone.md | да — прокрутка вниз |

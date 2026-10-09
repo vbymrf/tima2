@@ -34,6 +34,13 @@ appId: io.tima.app.v2
               id: "screen:Phone\\..*"
           commands:
             - evalScript: ${output.atPhone = true}
+# Поверх «Телефона» может быть подокно (переключатель окон подменяет весь экран, вкладок под
+# ним не видно) — сначала пара: любая вкладка «Телефона», подокно закрыть (ПЛАН-(МО) МО5).
+- runFlow:
+    file: expect-screen.yaml
+    env:
+      SCREEN: "screen:Phone\\..*"
+      POPUP: "popup:none"
 - tapOn:
     id: "tab:Chats"
 - runFlow:
@@ -83,4 +90,11 @@ appId: io.tima.app.v2
 # зелёным (2026-10-09).
 - assertVisible:
     id: "chat:input"
-- assertVisible: "burst ${output.burst}"
+# При открытой клавиатуре список не прокручивается к новому сообщению — последнее остаётся ниже
+# края (realme, 2026-10-09): ищется прокруткой вниз, а не ожиданием на экране. Проверка того, что
+# пачка дошла, — журнал получателя (приём на каждое сообщение, «значок сменился» — один раз).
+- scrollUntilVisible:
+    element:
+      text: "burst ${output.burst}"
+    direction: DOWN
+    timeout: 10000

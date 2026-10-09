@@ -41,7 +41,7 @@ import phone as ph  # noqa: E402
 LIMITS = {
     'ready': 90,
     'presets': 90,
-    'bench': 200,
+    'bench': 360,  # с повтором после нулевой точки (ПЛАН-(МО) МО5)
     'enter': 220,
     'exit': 200,  # проверка со сбросом журналов обоих — до трёх попыток (PH-25)
     'reset': 120,
@@ -149,11 +149,29 @@ def act_presets(a):
 def act_bench(a):
     dev = ph.PHONES[a['dev']]
     if a['method'] == 'maestro':
-        ph.hide_keyboard(dev)  # не дерево экрана — тёплому драйверу не мешает
-        ph.sh(dev, 'cmd statusbar collapse')
-        # сценарий сам проверяет «Остановить прогон», EXPECT и `tab:Chats`; драйвер тёплый
-        ok, tail = maestro('bench.yaml', a['dev'], {'PRESET': a['preset'], 'EXPECT': a['expect']}, limit=140)
-        return ok, ['maestro: ' + ('прошёл' if ok else 'упал')], tail if not ok else ''
+        notes = []
+        debug_dir = a.get('out') if a.get('debug') else None
+        for attempt in (1, 2):
+            ph.hide_keyboard(dev)  # не дерево экрана — тёплому драйверу не мешает
+            ph.sh(dev, 'cmd statusbar collapse')
+            # сценарий сам проверяет «Остановить прогон», EXPECT и `tab:Chats`; драйвер тёплый
+            env = {'PRESET': a['preset'], 'EXPECT': a['expect']}
+            if a.get('debug'):
+                env['DEBUG'] = '1'
+            ok, tail = maestro('bench.yaml', a['dev'], env, limit=140)
+            if ok:
+                return True, ['maestro: прошёл' + (' со второго раза' if attempt == 2 else '')], '; '.join(notes)
+            if attempt == 2:
+                break
+            # Стандартное действие (ПЛАН-(МО) МО5): где оказались — по паре меток; переход заново —
+            # с нулевой точки, один раз. Дерево экрана при живом драйвере не читается (PH-6).
+            ph.stop_drivers(dev)
+            pair = ph.screen_of(ph.nodes(dev))
+            home, how = ph.to_home(dev, debug_dir)
+            notes += ['упал, пара %s + %s' % pair] + how
+            if not home:
+                break
+        return False, ['maestro: упал'], '; '.join(notes + [tail])
     ph.stop_drivers(dev)
     ph.to_front(dev)
     ph.hide_keyboard(dev)
