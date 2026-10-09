@@ -7,14 +7,33 @@ appId: io.tima.app.v2
 ---
 - launchApp:
     stopApp: false
+# Метка, а не надпись (ПЛАН-(МС)): вид меняется, метка — нет. Надпись — запасной путь для
+# сборки без метки. Учёт — doc_mig/ФУНКЦИОНАЛ/АВТОТЕСТЫ/СЦЕНАРИИ-ПО-ОКНАМ.md.
+#
 # Окно стенда может быть уже открыто (приложение возвращается туда, где его оставили) —
-# тогда плашки «Телефон» нет, и идти через переключатель не нужно.
+# тогда шапки окна нет, и идти через переключатель не нужно. Шапка с меткой есть у любого
+# окна, а не только у «Телефона».
+- runFlow:
+    when:
+      visible:
+        id: "window:switcher"
+    commands:
+      - tapOn:
+          id: "window:switcher"
+      # На Redmi список окон длиннее экрана — «Стенд звонков» ниже края (PH-12).
+      - scrollUntilVisible:
+          element:
+            id: "switcher:Bench"
+          direction: DOWN
+          timeout: 10000
+      - tapOn:
+          id: "switcher:Bench"
+# Сборка без меток — прежний путь по надписям.
 - runFlow:
     when:
       visible: "Телефон"
     commands:
       - tapOn: "Телефон"
-      # На Redmi список окон длиннее экрана — «Стенд звонков» ниже края (PH-12).
       - scrollUntilVisible:
           element: "Стенд звонков"
           direction: DOWN
@@ -34,9 +53,19 @@ appId: io.tima.app.v2
           start: 50%, 35%
           end: 50%, 85%
           duration: 300
+# «Начать прогон» в окне дважды — заголовок раздела и кнопка; метка стоит только на кнопке (PH-29).
+- runFlow:
+    when:
+      visible:
+        id: "bench:arm"
+    commands:
+      - tapOn:
+          id: "bench:arm"
 - runFlow:
     when:
       visible: "Начать прогон"
+      notVisible:
+        id: "bench:disarm"
     commands:
       - tapOn: "Начать прогон"
 - assertVisible: "Остановить прогон"

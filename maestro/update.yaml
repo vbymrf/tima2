@@ -40,13 +40,39 @@ appId: io.tima.app.v2
       visible: "Обновление не завершилось"
     commands:
       - takeScreenshot: "О1-вход-незавершённое-обновление"
-      - tapOn: "Перейти к обновлению"
+      # метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
+      - runFlow:
+          when:
+            notVisible:
+              id: "events:update"
+          commands:
+            - tapOn: "Перейти к обновлению"
+      - runFlow:
+          when:
+            visible:
+              id: "events:update"
+          commands:
+            - tapOn:
+                id: "events:update"
 
 - runFlow:
     when:
       visible: "⚙"
     commands:
-      - tapOn: "⚙"
+      # метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
+      - runFlow:
+          when:
+            notVisible:
+              id: "window:settings"
+          commands:
+            - tapOn: "⚙"
+      - runFlow:
+          when:
+            visible:
+              id: "window:settings"
+          commands:
+            - tapOn:
+                id: "window:settings"
       - assertVisible: "Настройки"
       # Прокрутка, а не просто нажатие: 2026-09-16 в настройках появился
       # четырнадцатый пункт («Шрифты и размеры», ПЛАН-(Ш)-ШРИФТОВ Ш4), и «Обновление»
@@ -56,7 +82,20 @@ appId: io.tima.app.v2
           element: "Обновление"
           direction: DOWN
           timeout: 20000
-      - tapOn: "Обновление"
+      # метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
+      - runFlow:
+          when:
+            notVisible:
+              id: "settings:UPDATE"
+          commands:
+            - tapOn: "Обновление"
+      - runFlow:
+          when:
+            visible:
+              id: "settings:UPDATE"
+          commands:
+            - tapOn:
+                id: "settings:UPDATE"
 
 # Оба пути сошлись здесь: экран обновления открыт.
 #

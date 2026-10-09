@@ -45,10 +45,36 @@ env:
 # Это главное свойство временного окна, и проверить его можно только ДО звонка. Нажатие
 # на плашку с названием окна открывает переключатель — другого входа в него на телефоне
 # нет (`WindowHeader.onSwitchWindows`).
-- tapOn: "Телефон"
+# метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
+- runFlow:
+    when:
+      notVisible:
+        id: "window:switcher"
+    commands:
+      - tapOn: "Телефон"
+- runFlow:
+    when:
+      visible:
+        id: "window:switcher"
+    commands:
+      - tapOn:
+          id: "window:switcher"
 - assertNotVisible: "Звонок"
 - takeScreenshot: З1-окна-0-нет
-- tapOn: "✕"
+# метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
+- runFlow:
+    when:
+      notVisible:
+        id: "switcher:close"
+    commands:
+      - tapOn: "✕"
+- runFlow:
+    when:
+      visible:
+        id: "switcher:close"
+    commands:
+      - tapOn:
+          id: "switcher:close"
 
 # ── Переписка и телефонная кнопка ───────────────────────────────────────────
 - scrollUntilVisible:
@@ -94,7 +120,20 @@ env:
       visible: "Отменить"
     commands:
       # Отменить — а не «Завершить»: завершать ещё нечего, разговор не начался.
-      - tapOn: "Отменить"
+      # метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
+      - runFlow:
+          when:
+            notVisible:
+              id: "call:cancel"
+          commands:
+            - tapOn: "Отменить"
+      - runFlow:
+          when:
+            visible:
+              id: "call:cancel"
+          commands:
+            - tapOn:
+                id: "call:cancel"
       - assertVisible:
           text: "Звонок завершён"
           timeout: 10000
@@ -105,13 +144,52 @@ env:
 #
 # Оставить человека в окне, которого больше нет, — худший исход из возможных, поэтому
 # проверяется именно возврат, а не только исчезновение кнопок.
-- tapOn: "Закрыть"
+# метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
+- runFlow:
+    when:
+      notVisible:
+        id: "call:close"
+    commands:
+      - tapOn: "Закрыть"
+- runFlow:
+    when:
+      visible:
+        id: "call:close"
+    commands:
+      - tapOn:
+          id: "call:close"
 - assertVisible:
     id: "tab:Chats"
     timeout: 10000
 
 # И окна 0 снова нет: звонок кончился — окно ушло.
-- tapOn: "Телефон"
+# метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
+- runFlow:
+    when:
+      notVisible:
+        id: "window:switcher"
+    commands:
+      - tapOn: "Телефон"
+- runFlow:
+    when:
+      visible:
+        id: "window:switcher"
+    commands:
+      - tapOn:
+          id: "window:switcher"
 - assertNotVisible: "Звонок"
 - takeScreenshot: З1-окно-0-ушло
-- tapOn: "✕"
+# метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
+- runFlow:
+    when:
+      notVisible:
+        id: "switcher:close"
+    commands:
+      - tapOn: "✕"
+- runFlow:
+    when:
+      visible:
+        id: "switcher:close"
+    commands:
+      - tapOn:
+          id: "switcher:close"

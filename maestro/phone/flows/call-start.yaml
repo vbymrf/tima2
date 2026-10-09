@@ -13,10 +13,26 @@ appId: io.tima.app.v2
 - tapOn:
     id: "tab:Contacts"
 # прежний запрос — стереть: он общий у «Чатов» и «Контактов»
+# Метка, надпись — запасной путь (ПЛАН-(МС)).
+- tapOn:
+    id: "search:close"
+    optional: true
 - tapOn:
     text: "✕"
     optional: true
-- tapOn: "🔍"
+- runFlow:
+    when:
+      notVisible:
+        id: "window:search"
+    commands:
+      - tapOn: "🔍"
+- runFlow:
+    when:
+      visible:
+        id: "window:search"
+    commands:
+      - tapOn:
+          id: "window:search"
 - inputText: "${MAESTRO_QUERY}"
 - extendedWaitUntil:
     visible:

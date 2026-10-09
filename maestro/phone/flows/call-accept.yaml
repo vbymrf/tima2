@@ -5,7 +5,23 @@ appId: io.tima.app.v2
 ---
 - launchApp:
     stopApp: false
+# Метка, а не надпись (ПЛАН-(МС)): вид кнопки меняется, метка — нет. Надпись — запасной путь
+# для сборки без метки. Учёт — doc_mig/ФУНКЦИОНАЛ/АВТОТЕСТЫ/СЦЕНАРИИ-ПО-ОКНАМ.md.
 - extendedWaitUntil:
     visible: "Принять"
     timeout: 120000
-- tapOn: "Принять"
+# Сначала — сборка без метки (надпись), потом метка: в обратном порядке после нажатия по
+# метке кнопка пропадает, и запасная ветка нажала бы надпись где-то ещё (PH-10).
+- runFlow:
+    when:
+      notVisible:
+        id: "call:accept"
+    commands:
+      - tapOn: "Принять"
+- runFlow:
+    when:
+      visible:
+        id: "call:accept"
+    commands:
+      - tapOn:
+          id: "call:accept"

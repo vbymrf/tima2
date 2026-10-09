@@ -30,15 +30,16 @@ def open_bench(dev):
         return False
     ph.hide_keyboard(dev)
     ns = ph.nodes(dev)
-    if ph.find(ns, 'Закрыть') and ph.find(ns, 'Перезвонить'):
-        ph.tap(dev, 'Закрыть', wait=3)
+    if ph.find(ns, 'Закрыть', rid='call:close') and ph.find(ns, 'Перезвонить', rid='call:redial'):
+        ph.tap(dev, 'Закрыть', rid='call:close', wait=3)
         time.sleep(1.5)
         ns = ph.nodes(dev)
-    if not (ph.find(ns, 'Остановить прогон') or ph.find(ns, 'Начать прогон') or ph.find(ns, 'Наборы')):
-        if not ph.tap(dev, 'Телефон', wait=5):
+    if not (ph.find(ns, 'Остановить прогон', rid='bench:disarm') or ph.find(ns, 'Начать прогон', rid='bench:arm')
+            or ph.find(ns, 'Наборы', rid='bench:presets')):
+        if not ph.tap(dev, 'Телефон', rid='window:switcher', wait=5):
             return False
         time.sleep(1)
-        item = ph.scroll_to(dev, 'Стенд звонков', tries=4)
+        item = ph.scroll_to(dev, 'Стенд звонков', tries=4, rid='switcher:Bench')
         if not item:
             return False
         ph.tap_node(dev, item)

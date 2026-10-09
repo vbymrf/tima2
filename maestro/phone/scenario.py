@@ -116,8 +116,8 @@ def act_ready(a):
         if not ph.find(ns, rid='tab:Chats'):
             # окно стенда или звонка: из стенда «Назад» закрывает приложение (PH-3) —
             # значит сразу обратно на передний план
-            if ph.find(ns, 'Закрыть'):
-                ph.tap(dev, 'Закрыть', wait=2)
+            if ph.find(ns, 'Закрыть', rid='call:close'):
+                ph.tap(dev, 'Закрыть', rid='call:close', wait=2)
             else:
                 ph.sh(dev, 'input keyevent KEYCODE_BACK')
                 time.sleep(1)
@@ -152,17 +152,18 @@ def act_bench(a):
     ph.hide_keyboard(dev)
     ns = ph.nodes(dev)
     # окно завершённого звонка («Звонок завершён» / «Закрыть») — закрыть, оно поверх всего
-    if ph.find(ns, 'Закрыть') and ph.find(ns, 'Перезвонить'):
-        ph.tap(dev, 'Закрыть', wait=3)
+    if ph.find(ns, 'Закрыть', rid='call:close') and ph.find(ns, 'Перезвонить', rid='call:redial'):
+        ph.tap(dev, 'Закрыть', rid='call:close', wait=3)
         time.sleep(1.5)
         ns = ph.nodes(dev)
     # окно стенда может быть уже открыто — приложение возвращается, где его оставили
-    if not (ph.find(ns, 'Остановить прогон') or ph.find(ns, 'Начать прогон') or ph.find(ns, 'Наборы')):
-        if not ph.tap(dev, 'Телефон', wait=5):
+    if not (ph.find(ns, 'Остановить прогон', rid='bench:disarm') or ph.find(ns, 'Начать прогон', rid='bench:arm')
+            or ph.find(ns, 'Наборы', rid='bench:presets')):
+        if not ph.tap(dev, 'Телефон', rid='window:switcher', wait=5):
             return False, ['нет плашки «Телефон»'], ''
         time.sleep(1)
         # на Redmi список окон длиннее экрана — «Стенд звонков» ниже края (PH-12)
-        item = ph.scroll_to(dev, 'Стенд звонков', tries=4)
+        item = ph.scroll_to(dev, 'Стенд звонков', tries=4, rid='switcher:Bench')
         if not item:
             return False, ['нет «Стенд звонков» в переключателе'], ''
         ph.tap_node(dev, item)
@@ -174,13 +175,14 @@ def act_bench(a):
             ph.sh(dev, 'input swipe %d %d %d %d 200' % (w // 2, int(h * 0.3), w // 2, int(h * 0.85)))
     ns = ph.nodes(dev)
     # «Начать прогон» в окне дважды: заголовок раздела и кнопка под ним. Нажимать кнопку —
-    # последнюю в дереве; первая — заголовок, нажатие в него ничего не делает (PH-29).
-    same = [n for n in ns if n['text'] == 'Начать прогон']
+    # по метке; нет метки (старая сборка) — последнюю в дереве: первая — заголовок,
+    # нажатие в него ничего не делает (PH-29).
+    same = [n for n in ns if n['id'] == 'bench:arm'] or [n for n in ns if n['text'] == 'Начать прогон']
     if same:
         ph.tap_node(dev, same[-1])
         time.sleep(1)
         ns = ph.nodes(dev)
-    armed = ph.find(ns, 'Остановить прогон') is not None
+    armed = ph.find(ns, rid='bench:disarm') is not None or ph.find(ns, 'Остановить прогон') is not None
     chip = ph.scroll_to(dev, __import__('re').escape(a['preset']))
     if not chip:
         return False, ['набор «%s» не найден' % a['preset']], ''
@@ -199,7 +201,7 @@ def act_bench(a):
 
 
 def _accept_adb(dev, box):
-    n = ph.tap(dev, 'Принять', wait=45)
+    n = ph.tap(dev, 'Принять', rid='call:accept', wait=45)
     box['accept'] = 'нажато' if n else '«Принять» не появилось'
 
 
@@ -327,9 +329,9 @@ def act_exit(a):
             ph.stop_drivers(d)
         n = ph.hang_up(hd)  # только в окне звонка (PH-10)
         time.sleep(2)
-        c1 = ph.tap(hd, 'Закрыть', wait=8)
+        c1 = ph.tap(hd, 'Закрыть', rid='call:close', wait=8)
         try:
-            c2 = ph.tap(od, 'Закрыть', wait=8)
+            c2 = ph.tap(od, 'Закрыть', rid='call:close', wait=8)
         except Exception:
             c2 = None
         note = 'трубка %s, окна %s/%s' % ('да' if n else 'нет', 'да' if c1 else 'нет', 'да' if c2 else 'нет')
@@ -393,7 +395,7 @@ def act_reset(a):
     for name in names:
         d = ph.PHONES[name]
         try:
-            ph.tap(d, 'Закрыть', wait=3)
+            ph.tap(d, 'Закрыть', rid='call:close', wait=3)
         except Exception:
             pass
         ph.to_front(d)

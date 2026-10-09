@@ -117,11 +117,11 @@ def hide_keyboard(dev):
         time.sleep(0.8)
 
 
-def scroll_to(dev, pattern, tries=10):
+def scroll_to(dev, pattern=None, tries=10, rid=None):
     hide_keyboard(dev)
     w, h = size(dev)
     for _ in range(tries):
-        n = find(nodes(dev), pattern)
+        n = find(nodes(dev), pattern, rid)
         if n and 0.12 * h < n['y'] < 0.9 * h:
             return n
         sh(dev, 'input swipe %d %d %d %d 300' % (w // 2, int(h * 0.75), w // 2, int(h * 0.35)))
@@ -260,8 +260,21 @@ def in_call(dev):
 # (2026-09-29, «Брат Игорь»). Поэтому трубка кладётся только в окне звонка, а окно звонка
 # узнаётся по кнопке микрофона «🎤», которой в «Контактах» нет.
 
+# ── МЕТКИ, А НЕ НАДПИСИ (ПЛАН-(МС), 2026-10-09) ────────────────────────────────
+#
+# Окно и кнопки ищутся **по метке** (`testTag`, в дереве — resource-id): вид кнопки меняется,
+# метка — нет. 2026-10-09 окно звонка узнавалось по «🎤», а после смены вида панели его не
+# стало — звонок висел, пока его не положили руками (PH-32). Надпись или значок остаются
+# **запасным путём** (заказчик): `find` берёт узел с меткой ИЛИ с надписью — что есть.
+# Учёт, какой сценарий на что опирается, — doc_mig/ФУНКЦИОНАЛ/АВТОТЕСТЫ/СЦЕНАРИИ-ПО-ОКНАМ.md.
+
+# Окно звонка в любой стадии: набор, входящий, разговор, конец.
+CALL_WINDOW = ('call:panel', 'call:dialing', 'call:cancel', 'call:accept', 'call:close')
+
+
 def call_screen(ns):
-    return find(ns, '🎤') is not None and find(ns, rid='tab:Contacts') is None
+    seen = any(find(ns, rid=r) for r in CALL_WINDOW) or find(ns, '🎤') is not None
+    return seen and find(ns, rid='tab:Contacts') is None
 
 
 def open_call_window(dev):
@@ -269,11 +282,11 @@ def open_call_window(dev):
     ns = nodes(dev)
     if call_screen(ns):
         return True
-    if not tap(dev, 'Телефон', wait=3):
+    if not tap(dev, 'Телефон', rid='window:switcher', wait=3):
         return False
     time.sleep(1.2)
-    if not tap(dev, 'Звонок', wait=3):
-        tap(dev, '✕', wait=2)
+    if not tap(dev, 'Звонок', rid='switcher:Call', wait=3):
+        tap(dev, '✕', rid='switcher:close', wait=2)
         return False
     time.sleep(1.5)
     return call_screen(nodes(dev))
@@ -284,7 +297,7 @@ def hang_up(dev):
     if not open_call_window(dev):
         return False
     ns = nodes(dev)
-    phones = [n for n in ns if n['text'] == '📞' and n['b'][2] > n['b'][0]]
+    phones = [n for n in ns if (n['id'] == 'call:hangup' or n['text'] == '📞') and n['b'][2] > n['b'][0]]
     if not phones:
         return False
     tap_node(dev, max(phones, key=lambda n: n['y']))  # «Завершить» — внизу окна
