@@ -43,3 +43,10 @@
 | PH-33 | preventive | порты в `phone.py` устарели | knowledge/phone.md | нет — подставить текущие на прогон |
 | PH-34 | preventive | `-v2-fast` на телефоне — `run-as` нет | knowledge/phone.md | нет — сценарии только на отладочной |
 | PH-35 | diagnostic | exit «наборы или номера разные» у пары без стенда | knowledge/phone.md | нет — механику смотреть по «соединён/конец» |
+| PH-36 | preventive | сценарий Maestro на метках ждёт по 8 с на шаге | knowledge/phone.md | да — флажок ветки метки |
+| PH-37 | preventive | «Unknown Property: timeout» у `assertVisible` | knowledge/phone.md | да |
+| PH-38 | preventive | сценарий не находит главное окно — телефон оставлен в другом | knowledge/phone.md | нет — `ready` adb перед каждым сценарием |
+| PH-39 | preventive | `ready` Maestro «нет» — он только проверяет | knowledge/phone.md | нет — `ready` adb |
+| PH-40 | preventive | `send-burst` зелёный, сообщений нет, приложение в фоне | knowledge/phone.md | нет — нужны метки `chat:input`, `chat:send` |
+| PH-41 | diagnostic | после `inputText` кириллицей поле пустое | knowledge/phone.md | нет — латиница |
+| PH-42 | preventive | `rightOf` нажал аватар вместо кнопки отправки | knowledge/phone.md | нет — только метка |
