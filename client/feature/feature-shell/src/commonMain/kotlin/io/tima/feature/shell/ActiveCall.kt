@@ -26,10 +26,12 @@ import io.tima.core.ui.words
  *
  * @param seconds сколько идёт разговор. На плашке стоит **время**, а не одно слово
  *   «звонок»: человек тогда видит не только что звонок есть, но и сколько он уже длится,
- *   не заходя внутрь.
+ *   не заходя внутрь. **Функцией, а не числом** (ПЛАН-(БС) Э5.6): число, прочитанное в
+ *   корне, перерисовывало всё приложение раз в секунду, пока шёл звонок; функцию читает
+ *   только плашка, и каждую секунду перерисовывается она одна.
  * @param onOpen перейти в окно 0.
  */
-data class ActiveCall(val seconds: Int, val onOpen: () -> Unit)
+class ActiveCall(val seconds: () -> Int, val onOpen: () -> Unit)
 
 /**
  * Идёт ли звонок — **композиционным местным, а не параметром**.
@@ -74,7 +76,7 @@ internal fun ActiveCallBadge(call: ActiveCall) {
             // Надпись белая: плашка салатовая, и цвет берётся тот же, что у названия
             // окна внутри салатовой шапки, — правило `onAccent` уже заведено там.
             Caption(
-                text = "📞 " + words.activeCall + " — " + words.duration(call.seconds),
+                text = "📞 " + words.activeCall + " — " + words.duration(call.seconds()),
                 fontSize = TimaType.sz5,
                 weight = FontWeight.SemiBold,
                 color = colors.onAccent,

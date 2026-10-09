@@ -2763,11 +2763,11 @@ private fun App(
     // Плашка идущего звонка — во всех окнах, кроме самого звонка: предлагать «перейти в
     // звонок» тому, кто в нём стоит, незачем. Окно 0 временное, и без плашки оно
     // теряется: ушёл свайпом в «Чаты» — и не знаешь, разговор идёт или уже кончился.
+    // Один объект на всё время: секунды читает только плашка (ПЛАН-(БС) Э5.6), а новый
+    // объект на каждую перерисовку корня перерисовывал бы все окна, которые его читают.
+    val activeCall = remember(callHost, session.deviceId) { ActiveCall(seconds = { callHost.seconds }, onOpen = { showCall() }) }
     CompositionLocalProvider(
-        LocalActiveCall provides ActiveCall(
-            seconds = callHost.seconds,
-            onOpen = { showCall() },
-        ).takeIf { callHost.active && window != Window.Call },
+        LocalActiveCall provides activeCall.takeIf { callHost.active && window != Window.Call },
         io.tima.feature.shell.LocalWindowTabs provides windowTabs,
     ) {
     // Групповой звонок для окна 0 и области 3 широкого формата (ГЗ4, ГЗ8).
