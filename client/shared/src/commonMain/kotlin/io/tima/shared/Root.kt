@@ -1515,12 +1515,15 @@ private fun App(
     // `People.whoIs`. Оно нужно не для красоты — на стенде нашлась переписка, чей
     // `peer_id` не совпал ни с одним `user_id` книги, хотя номер у человека тот же:
     // аккаунт был заведён заново, а книга держит прежний идентификатор.
+    //
+    // Ищется по индексу, построенному раз на смену книги, а не проходом по книге в каждой
+    // строке (ПЛАН-(БС) Э5.3). Совпадение по идентификатору главнее совпадения по номеру.
+    val bookIndex = remember(bookStateForChats.all, bookStateForChats.everyone) {
+        BookIndex(bookStateForChats.all, bookStateForChats.everyone)
+    }
     val entryOfChat: (ChatSummary) -> BookEntry? = { chat ->
         chat.peerId?.takeIf { chat.kind == ChatKind.Personal }?.let { id ->
-            val card = peopleCards[id]
-            bookStateForChats.all.firstOrNull {
-                it.userId == id || (card?.phone != null && it.phone == card.phone)
-            }
+            bookIndex.entry(id, peopleCards[id]?.phone)
         }
     }
     val sectionOfChat: (ChatSummary) -> String = { chat -> entryOfChat(chat)?.sectionId ?: "" }
@@ -1646,12 +1649,12 @@ private fun App(
     // Незнакомый — человека нет в книге; то же правило, что у окна 0 (2026-10-08). Себя
     // незнакомым не называем.
     val strangerId: (String) -> Boolean = { id ->
-        id.isNotEmpty() && id != session.userId && bookStateForChats.all.none { it.userId == id }
+        id.isNotEmpty() && id != session.userId && !bookIndex.has(id)
     }
     // Кто человек для меня — для цвета и слова имени в «Чатах» и «Звонках» (2026-10-08).
     // Заблокированный лежит в книге, но не в её показываемой части — поэтому первым.
     val blockedId: (String) -> Boolean = { id ->
-        bookStateForChats.everyone.any { it.userId == id && it.list == io.tima.domain.chat.BookList.Blocked }
+        bookIndex.blocked(id)
     }
     val kindOfId: (String) -> io.tima.feature.chat.PersonKind = { id ->
         when {
@@ -1662,7 +1665,7 @@ private fun App(
     }
     val personOfId: (String) -> ChatPerson = { id ->
         people.want(listOf(id))
-        val entry = bookStateForChats.all.firstOrNull { it.userId == id }
+        val entry = bookIndex.entry(id)
         (peopleCards[id] ?: ChatPerson()).withBookName(entry?.name, entry?.phone)
     }
 
