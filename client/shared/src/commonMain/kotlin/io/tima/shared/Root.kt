@@ -16,6 +16,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -144,6 +145,9 @@ import io.tima.core.notify.SoundKeys
 import io.tima.core.notify.SoundChoice
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.stateIn
 import io.tima.feature.shell.BackgroundTrouble
 import io.tima.core.notify.openCallsChannelSettings
@@ -4358,10 +4362,15 @@ private fun Chat(
     var myColor by remember { mutableStateOf(false) }
     var myColorTrouble by remember { mutableStateOf<String?>(null) }
     // Отправители, чья личность отменена владельцем (ДУ6, Р30) — из настроек аккаунта.
-    val settingsNow by environment.settings.all().collectAsState(initial = emptyMap())
-    val cancelledSenders = remember(settingsNow) {
-        settingsNow.keys.filter { it.startsWith(IdentityChain.CANCELLED_PREFIX) }.map { it.removePrefix(IdentityChain.CANCELLED_PREFIX) }.toSet()
-    }
+    // Поток запомнен: `settings.all()` каждый раз новый, и подписка без remember снималась и
+    // ставилась заново на каждую перерисовку — раз в секунду, пока открыта переписка
+    // (ПЛАН-(БС) Э5.2). Выборка — не на главном потоке, и только когда она изменилась.
+    val cancelledSenders by remember(environment) {
+        environment.settings.all()
+            .map { all -> all.keys.filter { it.startsWith(IdentityChain.CANCELLED_PREFIX) }.map { it.removePrefix(IdentityChain.CANCELLED_PREFIX) }.toSet() }
+            .distinctUntilChanged()
+            .flowOn(Dispatchers.Default)
+    }.collectAsState(initial = emptySet())
     // «Прочитано» — то новое, что сейчас на экране (ПЛАН-(ОП)): время написания позднейшего входящего.
     val newestIncoming = state.lines.filter { !it.outgoing }.maxOfOrNull { it.atMs }
     LaunchedEffect(newestIncoming, live) { if (live != null && newestIncoming != null) live.read(chatId, newestIncoming) }
@@ -4376,14 +4385,26 @@ private fun Chat(
             tickMs = msNow()
         }
     }
-    val peerSeen = peerUser?.let { presenceNow[it] }
     val mutedNow by (liveStates?.muted ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>()) }).collectAsState()
-    val peerLine = if (live == null) null else io.tima.feature.chat.peerStatus(
-        Tima.words.chat, Tima.words.callLog,
-        typing = (typingNow[chatId] ?: 0) > tickMs,
-        online = peerSeen?.onlineAt(tickMs) == true,
-        lastSeenMs = peerSeen?.lastSeenMs ?: 0,
-    )
+    // Строка статуса — производное: секундный тик пересчитывает только её, а переписка
+    // перерисовывается, лишь когда строка сменилась (ПЛАН-(БС) Э5.2).
+    val chatWords = Tima.words.chat
+    val callWords = Tima.words.callLog
+    val peerLine by remember(live, chatId, peerUser, chatWords, callWords) {
+        derivedStateOf {
+            if (live == null) {
+                null
+            } else {
+                val seen = peerUser?.let { presenceNow[it] }
+                io.tima.feature.chat.peerStatus(
+                    chatWords, callWords,
+                    typing = (typingNow[chatId] ?: 0) > tickMs,
+                    online = seen?.onlineAt(tickMs) == true,
+                    lastSeenMs = seen?.lastSeenMs ?: 0,
+                )
+            }
+        }
+    }
     ChatScreen(
         cancelledSenders = cancelledSenders,
         state = state,
