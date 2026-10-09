@@ -76,6 +76,16 @@ import io.tima.domain.chat.MessageDisplay
 const val CALL_BUTTON_TAG: String = "chat:call"
 
 /**
+ * Метки поля ввода и кнопки отправки — для сценария пачки сообщений (`send-burst.yaml`).
+ *
+ * У кнопки нет надписи (стрелка нарисована), у поля подсказка в дерево экрана не попадает:
+ * без меток сценарий бил точками и отбором «правее текста» — и попадал в аватар шапки
+ * (PH-42 навыка телефонов, 2026-10-09).
+ */
+const val CHAT_INPUT_TAG: String = "chat:input"
+const val CHAT_SEND_TAG: String = "chat:send"
+
+/**
  * Окно переписки — К5.2, первый экран.
  *
  * **Экран — чистый рендер состояния.** Он ничего не решает: что делать с набранным
@@ -757,10 +767,10 @@ private fun InputZone(
                 onValueChange = onSet,
                 textStyle = TextStyle(fontSize = TimaType.sz4, color = colors.text),
                 cursorBrush = SolidColor(colors.navigation),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag(CHAT_INPUT_TAG),
             )
         }
-        ButtonCircle(onClick = onSend, live = true) {
+        ButtonCircle(onClick = onSend, live = true, modifier = Modifier.testTag(CHAT_SEND_TAG)) {
             Arrow(Side.Up, color = colors.onAccent)
         }
     }
