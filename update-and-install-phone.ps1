@@ -297,11 +297,6 @@ try {
             # Не отладочная — значит флага DEBUGGABLE нет. Есть — поставилось не то.
             $flags = (& $adb @server -s $t.Id shell "dumpsys package $package | grep -m1 'flags=\['" 2>$null)
             if ("$flags" -match 'DEBUGGABLE') { Bad '   стоит отладочная, а не быстрая' }
-            # Компиляция по профилю сразу: без неё быстрая работает на компиляторе
-            # «на ходу» — втрое быстрее отладочной, но не в полную силу.
-            $null = & $adb @server -s $t.Id shell cmd package compile -m speed-profile -f $package 2>&1
-            $state = (& $adb @server -s $t.Id shell "dumpsys package dexopt | grep -A2 '\[$package\]' | tail -1" 2>$null)
-            if ("$state" -match 'status=speed-profile') { Note '   скомпилирована по профилю' } else { Bad ('   не скомпилирована: ' + "$state".Trim()) }
         }
 
         if (-not $NoLaunch) {
@@ -310,6 +305,23 @@ try {
             # 2026-09-27, отчёт 5KXE) — с тех пор окно ещё и `singleTask`.
             $null = & $adb @server -s $t.Id shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "$package/$activity" 2>&1
             if ($LASTEXITCODE -eq 0) { Note '   запущено' } else { Bad '   поставилось, но не запустилось' }
+        }
+
+        if ($Fast) {
+            # Компиляция по профилю сразу: без неё быстрая работает на компиляторе «на ходу»
+            # — втрое быстрее отладочной, но не в полную силу. **После запуска и паузы**:
+            # профиль приложение пишет само, поработав; без него Android компилирует только
+            # до `verify` (Redmi 2026-10-09: через 25 с после запуска профиля ещё не было,
+            # через две минуты — был). Компиляция на слабом телефоне — до двух минут.
+            if ($NoLaunch) {
+                Bad '   не скомпилирована: сказано -NoLaunch, а профиль пишется только запущенным приложением'
+            } else {
+                Note '   жду профиль (90 с), потом компилирую…'
+                Start-Sleep -Seconds 90
+                $null = & $adb @server -s $t.Id shell cmd package compile -m speed-profile -f $package 2>&1
+                $state = (& $adb @server -s $t.Id shell "dumpsys package dexopt | grep -A2 '\[$package\]' | tail -1" 2>$null)
+                if ("$state" -match 'status=speed-profile') { Note '   скомпилирована по профилю' } else { Bad ('   не скомпилирована (профиля ещё нет — повторить позже): ' + "$state".Trim()) }
+            }
         }
     }
 
