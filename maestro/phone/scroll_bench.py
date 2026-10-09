@@ -47,12 +47,17 @@ def presents(dev, lay):
 
 
 def on_calls(dev):
-    return any(re.fullmatch(r'\d\d:\d\d', n['text']) for n in ph.nodes(dev))
+    """«Звонки» на экране: в строках номера телефонов. Время есть и в «Чатах» — по нему не узнать (PH-54)."""
+    return any(n['text'].startswith('+7') for n in ph.nodes(dev))
 
 
 def open_calls(dev):
-    for _ in range(4):
-        if ph.tap(dev, rid='tab:Calls', wait=4) or ph.tap(dev, 'Звонки', wait=2):
+    """Нажать «Звонки» и убедиться, что открылись: нажатие сразу после запуска бывает не принято, а пока экран
+    погашен, окно пересоздаётся и вкладка сбрасывается на «Чаты» (PH-54)."""
+    for _ in range(5):
+        ph.tap(dev, rid='tab:Calls', wait=4) or ph.tap(dev, 'Звонки', wait=2)
+        time.sleep(1.5)
+        if on_calls(dev):
             return True
         ph.sh(dev, 'input keyevent KEYCODE_BACK')
         time.sleep(1.5)
