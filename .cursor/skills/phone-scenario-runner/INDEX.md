@@ -56,3 +56,5 @@
 | PH-46 | preventive | `bench` откатил забег на набор №1 | knowledge/phone.md | нет — смотреть журнал прошлых дней |
 | PH-47 | diagnostic | `send-burst`: сообщение ушло, а на экране его нет | knowledge/phone.md | да — прокрутка вниз; в приложении — прокрутка к новому (`ChatScreen`, после 164) |
 | PH-48 | preventive | замер прокрутки: `gfxinfo` видит 2–7 кадров на росчерк | knowledge/phone.md | нет — SurfaceFlinger `--latency` |
+| PH-49 | preventive | росчерк «не сработал» или открыл переписку | knowledge/phone.md | нет — максимальная по двум удачным повторам |
+| PH-50 | preventive | замер прокрутки: время прохода съели чтения экрана | knowledge/phone.md | нет — проход без чтений |
