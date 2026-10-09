@@ -12,7 +12,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.DpSize
+import io.tima.core.ui.LocalFontFamily
+import io.tima.core.ui.LocalTextScale
 import androidx.compose.ui.unit.dp
 import io.tima.core.ui.MarkKind
 import io.tima.core.ui.LayoutLocal
@@ -230,17 +238,21 @@ private fun List(
     typingOf: (ChatSummary) -> Boolean = { false },
     mutedOf: (ChatSummary) -> Boolean = { false },
     kindOf: (ChatSummary) -> PersonKind = { PersonKind.Known },
-) = LazyColumn(
-    modifier = Modifier.fillMaxSize(),
 ) {
-    items(chats, key = { it.chatId }) { chat ->
-        ChatLine(
-            chat, personOf(chat), faceOf(chat), look, countOf?.invoke(chat) ?: chat.unread,
-            onClick = { onOpen(chat) }, tag = tagOf(chat), call = callGroupOf(chat),
-            receipt = receiptOf(chat), typing = typingOf(chat), muted = mutedOf(chat), kind = kindOf(chat),
-            // Страница есть только у собеседника личной переписки.
-            onFace = onFace?.takeIf { chat.kind == ChatKind.Personal && chat.peerId != null }?.let { { it(chat) } },
-        )
+    // Места правого края — мерятся раз на экран, а не невидимым образцом в каждой строке.
+    val edges = rememberEdgeSlots()
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        items(chats, key = { it.chatId }) { chat ->
+            ChatLine(
+                chat, personOf(chat), faceOf(chat), look, countOf?.invoke(chat) ?: chat.unread, edges,
+                onClick = { onOpen(chat) }, tag = tagOf(chat), call = callGroupOf(chat),
+                receipt = receiptOf(chat), typing = typingOf(chat), muted = mutedOf(chat), kind = kindOf(chat),
+                // Страница есть только у собеседника личной переписки.
+                onFace = onFace?.takeIf { chat.kind == ChatKind.Personal && chat.peerId != null }?.let { { it(chat) } },
+            )
+        }
     }
 }
 
@@ -252,6 +264,7 @@ private fun ChatLine(
     look: PersonLook,
     /** Число строки: уведомления сущности (ЖУ2) либо непрочитанные. */
     count: Int,
+    edges: EdgeSlots,
     onClick: () -> Unit,
     tag: String? = null,
     call: CallGroupLook? = null,
@@ -291,8 +304,7 @@ private fun ChatLine(
             if (muted) Tertiary("🔕", lineOne = true)
             // Место под знак — шириной числа из двух цифр, тем же кеглем: растёт вместе с
             // крупным шрифтом телефона, и знаки разных строк стоят одним столбцом.
-            Box(contentAlignment = Alignment.Center) {
-                Counter(SLOT_SAMPLE, Modifier.alpha(0f))
+            Box(Modifier.size(edges.sign), contentAlignment = Alignment.Center) {
                 when {
                     count > 0 -> Counter(count)
                     chat.lastOutgoing -> markOf(chat.lastDisplay, chat.atMs, receipt)?.let { Mark(it, side = MARK_SIDE) }
@@ -307,8 +319,8 @@ private fun ChatLine(
             ) {
                 // Времени может не быть вовсе: у пустой переписки нет последнего сообщения.
                 // Ставить сюда 1970 год или «—» незачем — пустое место говорит то же самое.
-                FiveChars(chat.atMs?.let { time(it) })
-                FiveChars(chat.atMs?.let { dateOnly(it) })
+                FiveChars(chat.atMs?.let { time(it) }, edges.five)
+                FiveChars(chat.atMs?.let { dateOnly(it) }, edges.five)
             }
         }
     },
@@ -333,13 +345,48 @@ private fun ChatLine(
 
 /** Текст правого края шириной образца «00:00»; пусто — место остаётся, строка держит высоту. */
 @Composable
-private fun FiveChars(text: String?) = Box(contentAlignment = Alignment.CenterEnd) {
-    Tertiary(FIVE_SAMPLE, Modifier.alpha(0f), lineOne = true)
+private fun FiveChars(text: String?, place: DpSize) = Box(Modifier.size(place), contentAlignment = Alignment.CenterEnd) {
     if (!text.isNullOrEmpty()) Tertiary(text, lineOne = true)
 }
 
+/**
+ * Места правого края строки: под знак (число новых или галочка) и под время и дату.
+ *
+ * Прежде их держали невидимые образцы — счётчик «99» и «00:00» дважды — в **каждой**
+ * строке: три лишних текста на строку, и все строятся при прокрутке (ПЛАН-(БС) Э5.7).
+ * Теперь образцы мерятся раз на экран тем же кеглем и шрифтом, что и настоящие надписи:
+ * место по-прежнему растёт вместе с крупным шрифтом телефона, а знаки и время разных
+ * строк стоят одним столбцом.
+ */
+internal class EdgeSlots(val sign: DpSize, val five: DpSize)
+
+@Composable
+private fun rememberEdgeSlots(): EdgeSlots {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val scale = LocalTextScale.current
+    val family = LocalFontFamily.current
+    return remember(measurer, density, scale, family) {
+        // Как у Counter: кегль sz6, жирность ExtraBold, поля по 7 точек, не меньше 22×22.
+        val sample = measurer.measure(SLOT_SAMPLE, TextStyle(fontSize = TimaType.sz6 * scale, fontWeight = FontWeight.ExtraBold, fontFamily = family), maxLines = 1).size
+        // Как у Tertiary: кегль sz6, жирность SemiBold.
+        val five = measurer.measure(FIVE_SAMPLE, TextStyle(fontSize = TimaType.sz6 * scale, fontWeight = FontWeight.SemiBold, fontFamily = family), maxLines = 1).size
+        with(density) {
+            EdgeSlots(
+                sign = DpSize(
+                    maxOf(COUNTER_MIN, sample.width.toDp() + COUNTER_PADDING * 2),
+                    maxOf(COUNTER_MIN, sample.height.toDp()),
+                ),
+                five = DpSize(five.width.toDp(), five.height.toDp()),
+            )
+        }
+    }
+}
+
 private const val FIVE_SAMPLE = "00:00"
-private const val SLOT_SAMPLE = 99
+private const val SLOT_SAMPLE = "99"
+private val COUNTER_MIN = 22.dp
+private val COUNTER_PADDING = 7.dp
 
 /** Галочка в месте под знак — крупнее прежней, вровень с числом. */
 private val MARK_SIDE = 14.dp
