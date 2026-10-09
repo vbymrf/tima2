@@ -8,8 +8,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -100,26 +103,31 @@ fun BenchScreen(
     onSpeakerOff: (Boolean) -> Unit = {},
 ) {
     val words = Tima.words.bench
-    Column(
+    // Ленивый список, а не одна колонка со всеми разделами (ПЛАН-(БС) Э5.1): переход в окно
+    // строил разом десяток рядов выбора и все прошлые прогоны, и на Redmi A3 этот кадр стоил
+    // около секунды. Теперь строится только то, что на экране.
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
             // Свой фон, как у окна звонка: окно рисуется голым, без оправы, и сквозь
             // непокрашенное видно то, что под ним.
-            .background(Tima.colors.surface)
-            .verticalScroll(rememberScrollState())
-            .padding(TimaSpacing.about3),
+            .background(Tima.colors.surface),
+        contentPadding = PaddingValues(TimaSpacing.about3),
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
     ) {
-        Arming(armed, onArm)
-        SpeakerOff(speakerOff, onSpeakerOff)
-        Publishing(preset, onChange)
-        Saving(preset, presets, onChange, onSave, onForget, onStep)
-        Applying(inCall, onApply)
-        Running(running, samples, lastFile, skip, onSkip, onStop)
-        Probe(probing, probeStep, probeFile, enabled = !running && !inCall, onProbe)
-        Numbers(samples.lastOrNull())
-        Runs(runs)
-        Tertiary(words.appliesToNextCall)
+        item("arming") { Arming(armed, onArm) }
+        item("speaker") { SpeakerOff(speakerOff, onSpeakerOff) }
+        item("publishing") { Publishing(preset, onChange) }
+        item("saving") { Saving(preset, presets, onChange, onSave, onForget, onStep) }
+        item("applying") { Applying(inCall, onApply) }
+        item("running") { Running(running, samples, lastFile, skip, onSkip, onStop) }
+        item("probe") { Probe(probing, probeStep, probeFile, enabled = !running && !inCall, onProbe) }
+        item("numbers") { Numbers(samples.lastOrNull()) }
+        if (runs.isNotEmpty()) {
+            item("runs") { Caption(words.sectionRuns, fontSize = TimaType.sz3, weight = FontWeight.Bold) }
+            itemsIndexed(runs) { _, run -> Run(run) }
+        }
+        item("next") { Tertiary(words.appliesToNextCall) }
     }
 }
 
@@ -438,26 +446,23 @@ private fun Numbers(last: BenchSample?) {
 }
 
 @Composable
-private fun Runs(runs: List<BenchSummary>) {
+private fun Run(run: BenchSummary) {
     val words = Tima.words.bench
-    if (runs.isEmpty()) return
-    Section(words.sectionRuns) {
-        for (run in runs) {
-            Name(run.preset)
-            Line(words.seconds, run.seconds.toString())
-            Line(words.upAverage, run.upAverage?.let { kbit(it, words) })
-            Line(words.upPeak, run.upPeak?.let { kbit(it, words) })
-            Line(words.phoneSent, run.sentBytes?.let { megabytes(it, words) })
-            Line(words.cpuAverage, run.cpuAverage?.let { percent(it) })
-            Line(words.cpuPeak, run.cpuPeak?.let { percent(it) })
-            Line(words.heatPeak, run.temperaturePeak?.let { degrees(it) })
-            Line(words.batterySpent, run.batterySpent?.let { "$it %" })
-            Line(words.mahSpent, run.mahSpent?.toString())
-            Line(words.currentAverage, run.currentAverageMa?.let { milliAmps(it) })
-            if (run.onCharger) Secondary(words.onCharger)
-            Line(words.codecUp, codecWho(run.codec, run.hardwareEncoder))
-            Line(words.codecDown, codecWho(run.downCodec, run.hardwareDecoder))
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+        Name(run.preset)
+        Line(words.seconds, run.seconds.toString())
+        Line(words.upAverage, run.upAverage?.let { kbit(it, words) })
+        Line(words.upPeak, run.upPeak?.let { kbit(it, words) })
+        Line(words.phoneSent, run.sentBytes?.let { megabytes(it, words) })
+        Line(words.cpuAverage, run.cpuAverage?.let { percent(it) })
+        Line(words.cpuPeak, run.cpuPeak?.let { percent(it) })
+        Line(words.heatPeak, run.temperaturePeak?.let { degrees(it) })
+        Line(words.batterySpent, run.batterySpent?.let { "$it %" })
+        Line(words.mahSpent, run.mahSpent?.toString())
+        Line(words.currentAverage, run.currentAverageMa?.let { milliAmps(it) })
+        if (run.onCharger) Secondary(words.onCharger)
+        Line(words.codecUp, codecWho(run.codec, run.hardwareEncoder))
+        Line(words.codecDown, codecWho(run.downCodec, run.hardwareDecoder))
     }
 }
 

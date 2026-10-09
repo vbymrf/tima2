@@ -24,6 +24,7 @@ import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
 import io.tima.domain.chat.Settings
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Испытательный стенд звонков — [ПЛАН-(С)-СТЕНДА-ЗВОНКОВ](../../../../../../../doc_mig/ПЛАН-(С)-СТЕНДА-ЗВОНКОВ.md),
@@ -128,24 +130,24 @@ class BenchStore(
      * значило бы завести второй источник и первый же вопрос «почему не тот набор»
      * решать сверкой двух хранилищ.
      */
-    fun reload() {
-        val text = readPresetsFile()
-        if (text != null) {
-            _state.value = _state.value.copy(presets = presetsFromJson(text))
-            return
+    fun reload() = scope.launch {
+        // Чтение и разбор файла — не на главном потоке (ПЛАН-(БС) Э5.1): reload зовётся при
+        // открытии окна, ровно в тот кадр, который на слабом телефоне и так самый долгий.
+        val fromFile = withContext(Dispatchers.Default) { readPresetsFile()?.let(::presetsFromJson) }
+        if (fromFile != null) {
+            _state.value = _state.value.copy(presets = fromFile)
+            return@launch
         }
         // ── ФАЙЛА НЕТ: ПЕРЕВОЗИМ ТО, ЧТО КОПИЛОСЬ В НАСТРОЙКАХ ──────────────
         //
         // До 2026-09-21 наборы лежали в настройках. Потерять их при переходе было бы
         // мелкой, но обидной потерей: их набирают пальцем на телефоне по одному.
-        scope.launch {
-            val kept = settings.all().firstOrNull()?.get(KEY_PRESETS)
-                ?.let { presetsFromWire(it) }.orEmpty()
-            if (kept.isEmpty()) return@launch
-            _state.value = _state.value.copy(presets = kept)
-            writePresetsFile(presetsToJson(kept))
-            Journal.note(LogCode.CALL, "наборы перенесены в файл", "штук" to kept.size)
-        }
+        val kept = settings.all().firstOrNull()?.get(KEY_PRESETS)
+            ?.let { presetsFromWire(it) }.orEmpty()
+        if (kept.isEmpty()) return@launch
+        _state.value = _state.value.copy(presets = kept)
+        writePresetsFile(presetsToJson(kept))
+        Journal.note(LogCode.CALL, "наборы перенесены в файл", "штук" to kept.size)
     }
 
     /** Включить или выключить испытательный режим. Набор при этом остаётся. */
