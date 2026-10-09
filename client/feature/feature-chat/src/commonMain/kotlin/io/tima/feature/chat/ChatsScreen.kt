@@ -12,7 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -304,7 +304,7 @@ private fun ChatLine(
             if (muted) Tertiary("🔕", lineOne = true)
             // Место под знак — шириной числа из двух цифр, тем же кеглем: растёт вместе с
             // крупным шрифтом телефона, и знаки разных строк стоят одним столбцом.
-            Box(Modifier.size(edges.sign), contentAlignment = Alignment.Center) {
+            Box(Modifier.sizeIn(minWidth = edges.sign.width, minHeight = edges.sign.height), contentAlignment = Alignment.Center) {
                 when {
                     count > 0 -> Counter(count)
                     chat.lastOutgoing -> markOf(chat.lastDisplay, chat.atMs, receipt)?.let { Mark(it, side = MARK_SIDE) }
@@ -345,7 +345,12 @@ private fun ChatLine(
 
 /** Текст правого края шириной образца «00:00»; пусто — место остаётся, строка держит высоту. */
 @Composable
-private fun FiveChars(text: String?, place: DpSize) = Box(Modifier.size(place), contentAlignment = Alignment.CenterEnd) {
+// Не меньше образца, а не ровно он: «08.10» с точкой шире «00:00» с двоеточием, и точная
+// ширина обрезала дату до «08.…» (Samsung, 2026-10-09). Образец в строке делал так же.
+private fun FiveChars(text: String?, place: DpSize) = Box(
+    Modifier.sizeIn(minWidth = place.width, minHeight = place.height),
+    contentAlignment = Alignment.CenterEnd,
+) {
     if (!text.isNullOrEmpty()) Tertiary(text, lineOne = true)
 }
 
