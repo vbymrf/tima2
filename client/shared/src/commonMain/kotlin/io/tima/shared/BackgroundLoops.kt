@@ -10,7 +10,10 @@ import io.tima.domain.chat.SyncGroupsStep
 import io.tima.core.network.GroupsOverHttp
 import io.tima.core.network.PlatformResult
 import io.tima.core.outbox.OutboxEntry
+import androidx.compose.runtime.remember
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 /**
  * Что приложение делает само, пока человек ничего не нажимает.
@@ -82,14 +85,22 @@ fun BackgroundLoops(
     // Отправка идёт ОТ ИЗМЕНЕНИЙ, а не по таймеру: список приходит потоком из базы, и
     // новое сообщение в очереди — это его изменение. Опрос по таймеру давал бы в v1 и
     // задержку, и лишние пробуждения.
+    //
+    // Проходы — не на главном потоке (ПЛАН-(БС) Э5.8): чтение очереди из базы шло на нём при
+    // каждом изменении списка переписок, то есть при каждом входящем. Но и не параллельно
+    // друг другу: на главном потоке проходы этого и следующего эффекта шли по очереди, и
+    // одна полоса в один поток держит тот же порядок — иначе одну запись отправили бы дважды.
+    val queueLane = remember { Dispatchers.Default.limitedParallelism(1) }
     LaunchedEffect(changeSign) {
-        val before = assembled.environment.queue.pending().size
-        assembled.sender.pass()
-        // Групповой проход идёт следом, а не вместо: в очереди лежат и личные, и
-        // групповые, и каждый берёт своё. Порядок между ними значения не имеет — записи
-        // не пересекаются.
-        assembled.groupSender.pass()
-        val after = assembled.environment.queue.pending().size
+        val (before, after) = withContext(queueLane) {
+            val before = assembled.environment.queue.pending().size
+            assembled.sender.pass()
+            // Групповой проход идёт следом, а не вместо: в очереди лежат и личные, и
+            // групповые, и каждый берёт своё. Порядок между ними значения не имеет — записи
+            // не пересекаются.
+            assembled.groupSender.pass()
+            before to assembled.environment.queue.pending().size
+        }
         // «Сообщение не ушло» — самая частая жалоба, и ответ на неё живёт здесь: сколько
         // было, сколько осталось. Пустой проход не пишем — журнал должен читаться.
         if (before > 0 || after > 0) {
@@ -127,13 +138,15 @@ fun BackgroundLoops(
     // это его изменение, и по нему же идёт первая отправка.
     LaunchedEffect(assembled, changeSign) {
         while (true) {
-            val sleepMs = nextRetryIn(assembled.environment.queue.pending(), msNow())
+            val sleepMs = withContext(queueLane) { nextRetryIn(assembled.environment.queue.pending(), msNow()) }
                 ?: return@LaunchedEffect
             delay(sleepMs)
-            val before = assembled.environment.queue.pending().size
-            assembled.sender.pass()
-            assembled.groupSender.pass()
-            val after = assembled.environment.queue.pending().size
+            val (before, after) = withContext(queueLane) {
+                val before = assembled.environment.queue.pending().size
+                assembled.sender.pass()
+                assembled.groupSender.pass()
+                before to assembled.environment.queue.pending().size
+            }
             // Застрявшая очередь важнее уходящей: одно и то же число из прохода в проход
             // означает, что повторы не помогают, и это надо видеть в отчёте.
             if (before > 0) {
