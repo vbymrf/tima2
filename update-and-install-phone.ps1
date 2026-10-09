@@ -21,6 +21,12 @@
 # Отладочная сборка: `io.tima.app.v2`, версия с суффиксом `-v2`. Она живёт РЯДОМ
 # с v1 (`io.tima.app`), а не вместо неё — так решено в app-android/build.gradle.kts.
 #
+# С ключом -Fast — быстрая (ADR-0043, doc_mig/ВИДЫ-СБОРКИ.md): тот же пакет, подпись и
+# номер, но без флага отладки, версия с суффиксом `-v2-fast`. После установки она сразу
+# компилируется на телефоне по профилю — иначе система сделает это только ночью на
+# зарядке. На такой сборке у агента нет `run-as`: журнал с телефона не читается,
+# сценарии и наборы стенда звонков не работают. Это не поломка.
+#
 # Установка идёт обновлением (`install -r`). Переустановка с потерей данных на
 # телефоне здесь не делается никогда: подпись разошлась — скрипт скажет об этом и
 # остановится, а решение стирать чужие данные принимает человек.
@@ -37,7 +43,10 @@ param(
     [switch]$SkipBuild,
 
     # Не запускать приложение после установки.
-    [switch]$NoLaunch
+    [switch]$NoLaunch,
+
+    # Быстрая сборка вместо отладочной (ADR-0043). Стендом не раздаётся.
+    [switch]$Fast
 )
 
 # ── ПОЧЕМУ ЗДЕСЬ НЕ 'Stop' ────────────────────────────────────────────────────
@@ -61,7 +70,9 @@ if ($Serial) { $Serial = @($Serial | ForEach-Object { $_ -split ',' } | Where-Ob
 $root = $PSScriptRoot
 $package = 'io.tima.app.v2'
 $activity = 'io.tima.app.MainActivity'
-$apk = Join-Path $root 'client\app-android\build\outputs\apk\debug\app-android-debug.apk'
+$kind = if ($Fast) { 'fast' } else { 'debug' }
+$apk = Join-Path $root "client\app-android\build\outputs\apk\$kind\app-android-$kind.apk"
+$task = if ($Fast) { ':app-android:assembleFast' } else { ':app-android:assembleDebug' }
 
 function Note([string]$text) { Write-Host $text }
 function Bad([string]$text) { Write-Host $text -ForegroundColor Red }
@@ -189,10 +200,10 @@ try {
             Bad "Не найден $gradlew — скрипт лежит не в корне репозитория?"
             exit 3
         }
-        Note 'Собираю отладочный APK…'
+        Note $(if ($Fast) { 'Собираю быструю сборку…' } else { 'Собираю отладочный APK…' })
         Push-Location (Join-Path $root 'client')
         try {
-            & $gradlew --no-daemon :app-android:assembleDebug --console=plain
+            & $gradlew --no-daemon $task --console=plain
             if ($LASTEXITCODE -ne 0) {
                 Bad 'Сборка упала. Ставить нечего.'
                 exit 7
@@ -281,6 +292,17 @@ try {
         # grep телефона, а не Select-String: строка уезжает в оболочку Android.
         $version = (& $adb @server -s $t.Id shell "dumpsys package $package | grep -m1 versionName" 2>$null)
         if ($version) { Note ("   " + "$version".Trim()) }
+
+        if ($Fast) {
+            # Не отладочная — значит флага DEBUGGABLE нет. Есть — поставилось не то.
+            $flags = (& $adb @server -s $t.Id shell "dumpsys package $package | grep -m1 'flags=\['" 2>$null)
+            if ("$flags" -match 'DEBUGGABLE') { Bad '   стоит отладочная, а не быстрая' }
+            # Компиляция по профилю сразу: без неё быстрая работает на компиляторе
+            # «на ходу» — втрое быстрее отладочной, но не в полную силу.
+            $null = & $adb @server -s $t.Id shell cmd package compile -m speed-profile -f $package 2>&1
+            $state = (& $adb @server -s $t.Id shell "dumpsys package dexopt | grep -A2 '\[$package\]' | tail -1" 2>$null)
+            if ("$state" -match 'status=speed-profile') { Note '   скомпилирована по профилю' } else { Bad ('   не скомпилирована: ' + "$state".Trim()) }
+        }
 
         if (-not $NoLaunch) {
             # Как значок: MAIN + LAUNCHER. Голый `-n` Android не признавал запуском со
