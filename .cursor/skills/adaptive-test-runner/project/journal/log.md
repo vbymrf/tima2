@@ -31,3 +31,35 @@ happens in the rule files; this is the record of what actually happened.
 - fix: added the missing context import, corrected the link-session ID type, and repaired related reset and authorization logic.
 - verify: fresh `go build ./...`, `go vet ./...`, and full isolated-database Go tests exited 0; API tests passed.
 - verified_on: 2026-08-14
+
+## TEST-005: Gradle reused a test task whose tests read undeclared files
+- type: gradle
+- count: 1
+- first_seen: 2026-10-07
+- last_seen: 2026-10-09
+- status: PROMOTED
+- tier: client-jvm (`jvmTest :architecture-tests:test`)
+- symptom: `:architecture-tests:test` stayed up-to-date after edits to client sources, `maestro/` and `doc_mig/`; its XML was reused and summed into "N of N green" (1548, 1556) while three real violations existed (hard-coded colours, global-words reads, Cyrillic literals — introduced 2026-10-07..08). Found when a deliberately broken scenario tag "passed" ScenarioTagsTest.
+- context: the module's tests read files from disk (client sources, scenarios, ledger) that are not declared task inputs; Gradle was run with `-q`, which hides UP-TO-DATE.
+- notes: BASE-2 existed and did not catch it — the reuse message was hidden by `-q`, and the summary did not compare report times with the run start (see TEST-006).
+
+### Solution (only after confirmed success)
+- fix: `outputs.upToDateWhen { false }` in `client/architecture-tests/build.gradle.kts` (35387a70); the three violations fixed in the same commit.
+- verify: a deliberately broken tag, ledger row and journal phrase each failed ScenarioTagsTest with its own message, then passed after revert; full gate 1559 of 1559 with architecture tests executed.
+- verified_on: 2026-10-09
+
+## TEST-006: Summary script reported "stale 0" without checking
+- type: harness
+- count: 1
+- first_seen: 2026-10-07
+- last_seen: 2026-10-09
+- status: PROMOTED
+- tier: client-jvm
+- symptom: the ad-hoc summary script printed `stale files 0` on every run; its freshness check was a stub (`if False: old += 1`), so reused XML was summed as fresh.
+- context: main-model summary of `**/build/test-results/*/*.xml` after `jvmTest :architecture-tests:test`; the script lived in the session scratchpad, not in the repository.
+- notes: the reported totals of 2026-10-07..09 (1545, 1548, 1556) are not evidence of a fresh run.
+
+### Solution (only after confirmed success)
+- fix: `project/scripts/count_results.py` — `start` stamps the run start, `count` compares every report with it, lists stale reports apart and leaves them out of the total, exits non-zero on stale, failed or missing reports.
+- verify: see the TEST-006 rule in `project/rules.md`.
+- verified_on: 2026-10-09

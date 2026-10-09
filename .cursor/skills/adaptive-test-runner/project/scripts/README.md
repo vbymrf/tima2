@@ -59,3 +59,17 @@ refutation must be cheap.
 
 Unfreezing is cheap and reversible. A wrong frozen script is neither: it runs,
 it succeeds, and it proves something other than what was claimed.
+
+## Totals: `count_results.py`
+
+Not a tier script — the summary every client gate ends with (rules BASE-2, TEST-006).
+
+```text
+python .cursor/skills/adaptive-test-runner/project/scripts/count_results.py start
+cd client && ./gradlew jvmTest --rerun :architecture-tests:test --continue
+python .cursor/skills/adaptive-test-runner/project/scripts/count_results.py count
+```
+
+`count` compares every JUnit report with the start stamp, lists stale reports apart and keeps
+them out of the total. Exit 0 — all fresh and green; 1 — failures or stale reports; 2 — no
+fresh reports or no stamp. Cite "N of N" only after exit 0.

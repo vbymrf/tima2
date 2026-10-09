@@ -25,16 +25,25 @@ anything specific to a repository.
 - code: BASE-2
 - kind: preventive
 - tier: *
-- symptom: a task reports up-to-date, or the artifact's timestamp predates this
-  run, yet the run is being treated as evidence.
-- check: the artifact's modification time against the start of this run, and
-  whether the build tool or test runner reported reuse.
-- cause: build systems and test runners reuse results when inputs are
-  unchanged. That is correct behaviour and wrong evidence when the point of the
-  run was to observe execution.
-- fix: force execution with the tool's own flag for it when the gate requires a
-  fresh run. Do not delete caches to achieve this.
-- verify: artifact timestamps fall inside this run.
+- symptom: a task reports up-to-date or shows no sign of execution; **or** a
+  report's timestamp predates this run; **or** a total is assembled from reports
+  whose times nobody compared — yet the result is treated as evidence.
+- check: the time of **every** report file against a start stamp taken before
+  the run, not a sample; the tool's output without a quiet mode that hides reuse;
+  a summary that counts stale reports apart and keeps them out of the total.
+- cause: tools reuse a result when inputs are unchanged — correct behaviour,
+  wrong evidence. Worse: a check that reads files which are **not declared
+  inputs** (sources, scenarios, documents read from disk) is reused even when
+  those files changed, and the stale result looks legitimate.
+- fix: for one run — the tool's own flag to force execution; when the check
+  reads undeclared files — declare them as inputs or mark the task "always
+  run", or it recurs on the next run. A total with stale reports is not a total:
+  do not report "N of N" until stale is zero. Do not delete caches.
+- verify: every report time falls inside the run, and the summary shows
+  "stale 0" computed by a real comparison, not a stub.
+- history: rewritten 2026-10-09 after TEST-005 and TEST-006 — the earlier text
+  was obeyed and did not help: the reuse message was hidden by a quiet flag, and
+  the summary never compared times.
 
 ## A summary that disagrees with the artifact
 - code: BASE-3

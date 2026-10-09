@@ -31,3 +31,13 @@ Rules naming TIMA-specific paths, packages, ports, services, or variables.
 - cause: the repository root is not a Gradle build; TIMA builds are messenger-crypto and client, while the read-only copies under third-party/reference are not targets.
 - fix: enter client or messenger-crypto for the documented target, then return to the repository root.
 - verify: the intended task resolves and writes its JUnit XML artifact.
+
+## Client test totals must come from fresh reports
+- code: TEST-006
+- kind: preventive
+- tier: client-jvm
+- symptom: a client total is cited ("N of N") from `**/build/test-results/**/TEST-*.xml` without comparing report times with the run start.
+- check: `python .cursor/skills/adaptive-test-runner/project/scripts/count_results.py count` — `stale` must be 0.
+- cause: unchanged modules keep their old XML; `:architecture-tests:test` reads client sources, `maestro/` and `doc_mig/` from disk (now always run, TEST-005). A summary that sums every XML mixes old results into the total.
+- fix: `count_results.py start` before Gradle, run `jvmTest --rerun :architecture-tests:test --continue`, then `count_results.py count`; cite the total only with `stale 0`.
+- verify: the script prints `stale 0` and exits 0; its list of reports matches the modules of the gate.

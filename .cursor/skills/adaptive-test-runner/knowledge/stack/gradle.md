@@ -19,3 +19,13 @@
 - cause: concurrent heavy Gradle invocations own shared outputs, including composite builds.
 - fix: wait for the active build and serialize Gradle work. Do not kill a healthy build.
 - verify: one invocation owns the outputs and writes fresh JUnit XML.
+
+## Test task reused although what it checks has changed
+- code: TEST-005
+- kind: preventive
+- tier: *
+- symptom: a test task is UP-TO-DATE (or prints nothing under `-q`) after edits to files its tests read from disk; the old report is reused.
+- check: run without `-q` and look for `UP-TO-DATE`/`FROM-CACHE` on the test task; compare its XML time with the run start.
+- cause: Gradle tracks only declared inputs; files a test opens itself (sources of other modules, scripts, documents) are invisible to it.
+- fix: declare them (`inputs.dir(...)`, `inputs.file(...)`) or `outputs.upToDateWhen { false }` on that task; for a single run — the built-in `--rerun` option after the task name.
+- verify: the task executes after such an edit and its XML is newer than the run start.

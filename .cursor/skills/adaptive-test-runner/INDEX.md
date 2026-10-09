@@ -22,7 +22,7 @@ Maintained by the journalist. The main model does not read this file.
 | code | kind | tier | stack | symptom key | file |
 |---|---|---|---|---|---|
 | BASE-1 | preventive | * | | suite green, cases skipped | knowledge/universal.md |
-| BASE-2 | preventive | * | | up-to-date / artifact older than run | knowledge/universal.md |
+| BASE-2 | preventive | * | | up-to-date / artifact older than run / total from unchecked reports | knowledge/universal.md |
 | BASE-3 | curative | * | | totals disagree with report | knowledge/universal.md |
 | BASE-4 | curative | * | | result cited for wrong revision | knowledge/universal.md |
 | BASE-5 | preventive | * | | exit zero, nothing executed | knowledge/universal.md |
@@ -32,3 +32,5 @@ Maintained by the journalist. The main model does not read this file.
 | IMPORTED-TEST-4 | curative | * | go | Go command unavailable | knowledge/stack/go.md |
 | IMPORTED-TEST-5 | curative | * | gradle | toolchain or unsupported class version | knowledge/stack/gradle.md |
 | IMPORTED-TEST-6 | curative | * | gradle | locked output or missing XML | knowledge/stack/gradle.md |
+| TEST-005 | preventive | * | gradle | test task reused though files it reads changed | knowledge/stack/gradle.md |
+| TEST-006 | preventive | client-jvm | gradle | client total cited without freshness count | project/rules.md |
