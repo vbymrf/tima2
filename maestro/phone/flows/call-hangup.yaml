@@ -7,36 +7,34 @@ appId: io.tima.app.v2
     stopApp: false
 # Метка, а не надпись (ПЛАН-(МС)): вид кнопки меняется, метка — нет. Надпись — запасной путь
 # для сборки без метки. Учёт — doc_mig/ФУНКЦИОНАЛ/АВТОТЕСТЫ/СЦЕНАРИИ-ПО-ОКНАМ.md.
-# Сначала — сборка без метки (надпись), потом метка: в обратном порядке после нажатия по
-# метке кнопка пропадает, и запасная ветка нажала бы надпись где-то ещё (PH-10).
-- runFlow:
-    when:
-      notVisible:
-        id: "call:hangup"
-    commands:
-      - tapOn: "📞"
+# метка, надпись — запасной путь (ПЛАН-(МС)): ветка метки ставит флажок, запасная — только без него
 - runFlow:
     when:
       visible:
         id: "call:hangup"
     commands:
+      - evalScript: ${output.tag_call_hangup = true}
       - tapOn:
           id: "call:hangup"
+- runFlow:
+    when:
+      true: ${!output.tag_call_hangup}
+    commands:
+      - tapOn: "📞"
 - extendedWaitUntil:
     visible: "Закрыть"
     timeout: 15000
-# Сначала — сборка без метки (надпись), потом метка: в обратном порядке после нажатия по
-# метке кнопка пропадает, и запасная ветка нажала бы надпись где-то ещё (PH-10).
-- runFlow:
-    when:
-      notVisible:
-        id: "call:close"
-    commands:
-      - tapOn: "Закрыть"
+# метка, надпись — запасной путь (ПЛАН-(МС)): ветка метки ставит флажок, запасная — только без него
 - runFlow:
     when:
       visible:
         id: "call:close"
     commands:
+      - evalScript: ${output.tag_call_close = true}
       - tapOn:
           id: "call:close"
+- runFlow:
+    when:
+      true: ${!output.tag_call_close}
+    commands:
+      - tapOn: "Закрыть"

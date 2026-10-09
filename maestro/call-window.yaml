@@ -45,36 +45,36 @@ env:
 # Это главное свойство временного окна, и проверить его можно только ДО звонка. Нажатие
 # на плашку с названием окна открывает переключатель — другого входа в него на телефоне
 # нет (`WindowHeader.onSwitchWindows`).
-# метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
-- runFlow:
-    when:
-      notVisible:
-        id: "window:switcher"
-    commands:
-      - tapOn: "Телефон"
+# метка, надпись — запасной путь (ПЛАН-(МС)): ветка метки ставит флажок, запасная — только без него
 - runFlow:
     when:
       visible:
         id: "window:switcher"
     commands:
+      - evalScript: ${output.tag_window_switcher = true}
       - tapOn:
           id: "window:switcher"
-- assertNotVisible: "Звонок"
-- takeScreenshot: З1-окна-0-нет
-# метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
 - runFlow:
     when:
-      notVisible:
-        id: "switcher:close"
+      true: ${!output.tag_window_switcher}
     commands:
-      - tapOn: "✕"
+      - tapOn: "Телефон"
+- assertNotVisible: "Звонок"
+- takeScreenshot: З1-окна-0-нет
+# метка, надпись — запасной путь (ПЛАН-(МС)): ветка метки ставит флажок, запасная — только без него
 - runFlow:
     when:
       visible:
         id: "switcher:close"
     commands:
+      - evalScript: ${output.tag_switcher_close = true}
       - tapOn:
           id: "switcher:close"
+- runFlow:
+    when:
+      true: ${!output.tag_switcher_close}
+    commands:
+      - tapOn: "✕"
 
 # ── Переписка и телефонная кнопка ───────────────────────────────────────────
 - scrollUntilVisible:
@@ -120,22 +120,25 @@ env:
       visible: "Отменить"
     commands:
       # Отменить — а не «Завершить»: завершать ещё нечего, разговор не начался.
-      # метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
-      - runFlow:
-          when:
-            notVisible:
-              id: "call:cancel"
-          commands:
-            - tapOn: "Отменить"
+      # метка, надпись — запасной путь (ПЛАН-(МС)): ветка метки ставит флажок, запасная — только без него
       - runFlow:
           when:
             visible:
               id: "call:cancel"
           commands:
+            - evalScript: ${output.tag_call_cancel = true}
             - tapOn:
                 id: "call:cancel"
-      - assertVisible:
-          text: "Звонок завершён"
+      - runFlow:
+          when:
+            true: ${!output.tag_call_cancel}
+          commands:
+            - tapOn: "Отменить"
+      # Ждать с пределом — `extendedWaitUntil`: `assertVisible` свойства `timeout` не знает
+      # (Maestro 2.10.0: «Unknown Property: timeout», 2026-10-09). Не найдено за срок — падение.
+      - extendedWaitUntil:
+          visible:
+            text: "Звонок завершён"
           timeout: 10000
 
 - takeScreenshot: З1-звонок-завершён
@@ -144,52 +147,53 @@ env:
 #
 # Оставить человека в окне, которого больше нет, — худший исход из возможных, поэтому
 # проверяется именно возврат, а не только исчезновение кнопок.
-# метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
-- runFlow:
-    when:
-      notVisible:
-        id: "call:close"
-    commands:
-      - tapOn: "Закрыть"
+# метка, надпись — запасной путь (ПЛАН-(МС)): ветка метки ставит флажок, запасная — только без него
 - runFlow:
     when:
       visible:
         id: "call:close"
     commands:
+      - evalScript: ${output.tag_call_close = true}
       - tapOn:
           id: "call:close"
-- assertVisible:
-    id: "tab:Chats"
+- runFlow:
+    when:
+      true: ${!output.tag_call_close}
+    commands:
+      - tapOn: "Закрыть"
+- extendedWaitUntil:
+    visible:
+      id: "tab:Chats"
     timeout: 10000
 
 # И окна 0 снова нет: звонок кончился — окно ушло.
-# метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
-- runFlow:
-    when:
-      notVisible:
-        id: "window:switcher"
-    commands:
-      - tapOn: "Телефон"
+# метка, надпись — запасной путь (ПЛАН-(МС)): ветка метки ставит флажок, запасная — только без него
 - runFlow:
     when:
       visible:
         id: "window:switcher"
     commands:
+      - evalScript: ${output.tag_window_switcher = true}
       - tapOn:
           id: "window:switcher"
-- assertNotVisible: "Звонок"
-- takeScreenshot: З1-окно-0-ушло
-# метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
 - runFlow:
     when:
-      notVisible:
-        id: "switcher:close"
+      true: ${!output.tag_window_switcher}
     commands:
-      - tapOn: "✕"
+      - tapOn: "Телефон"
+- assertNotVisible: "Звонок"
+- takeScreenshot: З1-окно-0-ушло
+# метка, надпись — запасной путь (ПЛАН-(МС)): ветка метки ставит флажок, запасная — только без него
 - runFlow:
     when:
       visible:
         id: "switcher:close"
     commands:
+      - evalScript: ${output.tag_switcher_close = true}
       - tapOn:
           id: "switcher:close"
+- runFlow:
+    when:
+      true: ${!output.tag_switcher_close}
+    commands:
+      - tapOn: "✕"

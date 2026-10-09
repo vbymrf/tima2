@@ -10,18 +10,17 @@ appId: io.tima.app.v2
 - extendedWaitUntil:
     visible: "Принять"
     timeout: 120000
-# Сначала — сборка без метки (надпись), потом метка: в обратном порядке после нажатия по
-# метке кнопка пропадает, и запасная ветка нажала бы надпись где-то ещё (PH-10).
-- runFlow:
-    when:
-      notVisible:
-        id: "call:accept"
-    commands:
-      - tapOn: "Принять"
+# метка, надпись — запасной путь (ПЛАН-(МС)): ветка метки ставит флажок, запасная — только без него
 - runFlow:
     when:
       visible:
         id: "call:accept"
     commands:
+      - evalScript: ${output.tag_call_accept = true}
       - tapOn:
           id: "call:accept"
+- runFlow:
+    when:
+      true: ${!output.tag_call_accept}
+    commands:
+      - tapOn: "Принять"

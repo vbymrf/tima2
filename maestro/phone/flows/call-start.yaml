@@ -20,19 +20,20 @@ appId: io.tima.app.v2
 - tapOn:
     text: "✕"
     optional: true
-- runFlow:
-    when:
-      notVisible:
-        id: "window:search"
-    commands:
-      - tapOn: "🔍"
+# метка, надпись — запасной путь (ПЛАН-(МС)): ветка метки ставит флажок, запасная — только без него
 - runFlow:
     when:
       visible:
         id: "window:search"
     commands:
+      - evalScript: ${output.tag_window_search = true}
       - tapOn:
           id: "window:search"
+- runFlow:
+    when:
+      true: ${!output.tag_window_search}
+    commands:
+      - tapOn: "🔍"
 - inputText: "${MAESTRO_QUERY}"
 - extendedWaitUntil:
     visible:

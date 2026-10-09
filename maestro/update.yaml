@@ -40,39 +40,39 @@ appId: io.tima.app.v2
       visible: "Обновление не завершилось"
     commands:
       - takeScreenshot: "О1-вход-незавершённое-обновление"
-      # метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
-      - runFlow:
-          when:
-            notVisible:
-              id: "events:update"
-          commands:
-            - tapOn: "Перейти к обновлению"
+      # метка, надпись — запасной путь (ПЛАН-(МС)): ветка метки ставит флажок, запасная — только без него
       - runFlow:
           when:
             visible:
               id: "events:update"
           commands:
+            - evalScript: ${output.tag_events_update = true}
             - tapOn:
                 id: "events:update"
+      - runFlow:
+          when:
+            true: ${!output.tag_events_update}
+          commands:
+            - tapOn: "Перейти к обновлению"
 
 - runFlow:
     when:
       visible: "⚙"
     commands:
-      # метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
-      - runFlow:
-          when:
-            notVisible:
-              id: "window:settings"
-          commands:
-            - tapOn: "⚙"
+      # метка, надпись — запасной путь (ПЛАН-(МС)): ветка метки ставит флажок, запасная — только без него
       - runFlow:
           when:
             visible:
               id: "window:settings"
           commands:
+            - evalScript: ${output.tag_window_settings = true}
             - tapOn:
                 id: "window:settings"
+      - runFlow:
+          when:
+            true: ${!output.tag_window_settings}
+          commands:
+            - tapOn: "⚙"
       - assertVisible: "Настройки"
       # Прокрутка, а не просто нажатие: 2026-09-16 в настройках появился
       # четырнадцатый пункт («Шрифты и размеры», ПЛАН-(Ш)-ШРИФТОВ Ш4), и «Обновление»
@@ -82,20 +82,20 @@ appId: io.tima.app.v2
           element: "Обновление"
           direction: DOWN
           timeout: 20000
-      # метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
-      - runFlow:
-          when:
-            notVisible:
-              id: "settings:UPDATE"
-          commands:
-            - tapOn: "Обновление"
+      # метка, надпись — запасной путь (ПЛАН-(МС)): ветка метки ставит флажок, запасная — только без него
       - runFlow:
           when:
             visible:
               id: "settings:UPDATE"
           commands:
+            - evalScript: ${output.tag_settings_UPDATE = true}
             - tapOn:
                 id: "settings:UPDATE"
+      - runFlow:
+          when:
+            true: ${!output.tag_settings_UPDATE}
+          commands:
+            - tapOn: "Обновление"
 
 # Оба пути сошлись здесь: экран обновления открыт.
 #

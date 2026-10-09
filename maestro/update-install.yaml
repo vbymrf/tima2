@@ -15,20 +15,20 @@ appId: io.tima.app.v2
     when:
       visible: "Обновить"
     commands:
-      # метка, надпись — запасной путь (ПЛАН-(МС)); сначала ветка без метки, потом с меткой (PH-10)
-      - runFlow:
-          when:
-            notVisible:
-              id: "update:install"
-          commands:
-            - tapOn: "Обновить"
+      # метка, надпись — запасной путь (ПЛАН-(МС)): ветка метки ставит флажок, запасная — только без него
       - runFlow:
           when:
             visible:
               id: "update:install"
           commands:
+            - evalScript: ${output.tag_update_install = true}
             - tapOn:
                 id: "update:install"
+      - runFlow:
+          when:
+            true: ${!output.tag_update_install}
+          commands:
+            - tapOn: "Обновить"
       - extendedWaitUntil:
           visible: "Установить"
           timeout: 120000
