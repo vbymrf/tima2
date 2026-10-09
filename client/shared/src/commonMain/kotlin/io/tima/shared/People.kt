@@ -17,8 +17,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 
 /**
  * Люди за идентификаторами — одно место на всё приложение (решение заказчика 2026-09-18:
@@ -120,15 +122,34 @@ class People(
         if (_hues.value[groupId] != hues) _hues.value = _hues.value + (groupId to hues)
     }
 
-    /** Спросить справочник о тех, кого ещё не спрашивали. Ответ приедет в [cards]. */
+    private val pending = LinkedHashSet<String>()
+    private var gathering = false
+
+    /**
+     * Спросить справочник о тех, кого ещё не спрашивали. Ответ приедет в [cards].
+     *
+     * **Одним запросом на кадр** (ПЛАН-(БС) Э5.4): строки списка просят каждая своего
+     * человека прямо при построении, и при первой прокрутке это был запрос на строку.
+     * Теперь просьбы копятся до конца кадра и уходят пачкой.
+     */
     fun want(ids: Collection<String>) {
         val fresh = ids.filter { it.isNotBlank() && asked.add(it) }
         if (fresh.isEmpty()) return
+        pending += fresh
+        if (gathering) return
+        gathering = true
         scope.launch {
-            val answer = directory.cards(fresh)
+            yield() // просьбы остальных строк этого кадра — в ту же пачку
+            val batch = pending.toList()
+            pending.clear()
+            gathering = false
+            val answer = directory.cards(batch)
             if (answer == null) {
-                // Не дошли — спросим в следующий раз, а не будем считать людей безымянными.
-                asked.removeAll(fresh.toSet())
+                // Не дошли — спросим снова, а не будем считать людей безымянными. Но не
+                // сразу: отметка «спрошен», снятая тут же, превращала каждую перерисовку
+                // строки в новый запрос, пока сети нет.
+                delay(RETRY_MS)
+                asked.removeAll(batch.toSet())
                 return@launch
             }
             _cards.value = _cards.value + answer
@@ -147,3 +168,6 @@ class People(
 /** Имя из книги поверх карточки справочника; телефон из книги — если справочник промолчал. */
 fun ChatPerson.withBookName(name: String?, phone: String? = null): ChatPerson =
     copy(name = name?.ifBlank { null } ?: this.name, phone = this.phone ?: phone)
+
+/** Через сколько переспрашивать людей, о которых справочник не ответил. */
+private const val RETRY_MS: Long = 30_000
