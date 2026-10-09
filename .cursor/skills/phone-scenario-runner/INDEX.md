@@ -54,4 +54,5 @@
 | PH-44 | diagnostic | касание 3–4 с; ожидание «после касания» не срезается | knowledge/phone.md | нет — выигрыш в ожиданиях исхода |
 | PH-45 | preventive | `to_home` — «переход из screen:chat не помог», открыта клавиатура | knowledge/phone.md | да |
 | PH-46 | preventive | `bench` откатил забег на набор №1 | knowledge/phone.md | нет — смотреть журнал прошлых дней |
-| PH-47 | diagnostic | `send-burst`: сообщение ушло, а на экране его нет | knowledge/phone.md | да — прокрутка вниз |
+| PH-47 | diagnostic | `send-burst`: сообщение ушло, а на экране его нет | knowledge/phone.md | да — прокрутка вниз; в приложении — прокрутка к новому (`ChatScreen`, после 164) |
+| PH-48 | preventive | замер прокрутки: `gfxinfo` видит 2–7 кадров на росчерк | knowledge/phone.md | нет — SurfaceFlinger `--latency` |

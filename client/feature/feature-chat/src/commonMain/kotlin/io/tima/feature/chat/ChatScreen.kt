@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -380,8 +382,25 @@ private fun Feed(
     // Сообщения — своя группа размера (ПЛАН-(Ш)-ШРИФТОВ Ш3): её укрупняют чаще всего, и
     // от списка чатов она не зависит.
     ProvidePlace(TextPlace.MESSAGES) {
+    // ── К НОВОМУ СООБЩЕНИЮ (заказчик 2026-10-09: «прокручиваем») ──────────────
+    //
+    // Список держит позицию по ключу строки: новое сообщение встаёт на место 0, а на экране
+    // остаётся прежнее — новое оказывается за нижним краем. Особенно при открытой клавиатуре:
+    // отправил — и не видишь отправленного (realme, PH-47 навыка телефонов).
+    //
+    // Своё — к нему всегда: его только что написали. Входящее — только если человек и так был
+    // внизу (на месте 0 или 1 — после вставки прежнее нижнее съезжает на 1): читающего историю
+    // новое сообщение сдёргивать не должно.
+    val listState = rememberLazyListState()
+    val newest = lines.firstOrNull()
+    LaunchedEffect(newest?.dedupKey) {
+        if (newest != null && (newest.outgoing || listState.firstVisibleItemIndex <= 1)) {
+            listState.animateScrollToItem(0)
+        }
+    }
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
+        state = listState,
         reverseLayout = true,
         contentPadding = PaddingValues(
             horizontal = TimaSpacing.about3,
