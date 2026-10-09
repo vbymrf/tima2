@@ -39,6 +39,6 @@
 | PH-29 | preventive | забег не вооружён после «bench» | knowledge/phone.md | да — нажимается кнопка, а не заголовок |
 | PH-30 | preventive | свернул посреди видео — видео пропало | knowledge/phone.md | нет — не сворачивать Redmi в замерах дольше 4 с |
 | PH-31 | diagnostic | отдельный `element exit` — «исключение: 'since'», звонок идёт | knowledge/phone.md | нет — элементы звонка гонять через `call` |
-| PH-32 | diagnostic | Samsung в видео: `call_screen` «нет окна», `hang_up` False | knowledge/phone.md | нет — снимок и нажатие по координатам |
+| PH-32 | diagnostic | окно звонка: `call_screen` «нет окна», `hang_up` False — сменился вид кнопок | knowledge/phone.md | да — сценарии на метках (ПЛАН-(МС)) |
 | PH-33 | preventive | порты в `phone.py` устарели | knowledge/phone.md | нет — подставить текущие на прогон |
 | PH-34 | preventive | `-v2-fast` на телефоне — `run-as` нет | knowledge/phone.md | нет — сценарии только на отладочной |
