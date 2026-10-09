@@ -253,6 +253,87 @@ def in_call(dev):
     return last == 'start'
 
 
+# ── МЕСТО И ПОДОКНО (ПЛАН-(МО), 2026-10-09) ─────────────────────────────────────
+#
+# Состояние экрана — пара меток: место `screen:<код>` (окно, вкладка, подэкран — всегда одно) и
+# подокно `popup:<код>` (что открыто поверх; ничего — `popup:none`). Коды те же, что приложение
+# пишет в журнал. Списки мест и подокон, как попасть и как закрыть, —
+# doc_mig/ФУНКЦИОНАЛ/АВТОТЕСТЫ/СЦЕНАРИИ-ПО-ОКНАМ.md, раздел «Места и подокна».
+
+
+def screen_of(ns):
+    """Пара меток экрана целиком: ('screen:Phone.Chats', 'popup:none'). Меток нет — None на их
+    месте: вне приложения или сборка без меток окон. Целиком, а не кодами: так их находит тест
+    `ScenarioTagsTest` — метка из сценария обязана быть в коде и в учёте."""
+    place = next((n['id'] for n in ns if n['id'].startswith('screen:')), None)
+    popup = next((n['id'] for n in ns if n['id'].startswith('popup:')), None)
+    return place, popup
+
+
+# Нулевая точка — главное окно, поверх ничего (ПЛАН-(МО) МО5).
+HOME = ('screen:Phone.Chats', 'popup:none')
+
+# Чем закрыть подокно — метка кнопки; нет в словаре — «Назад». Учёт, раздел «Места и подокна».
+CLOSE_POPUP = {'popup:switcher': 'switcher:close', 'popup:search': 'search:close'}
+# Подокна, которые сценарий закрыть не вправе или не умеет: пин-код, обязательное обновление.
+STOP_POPUPS = ('popup:pin.lock', 'popup:update.required')
+
+
+def to_home(dev, debug_dir=None, steps=6):
+    """Стандартное действие до нулевой точки HOME (ПЛАН-(МО) МО5, решение заказчика 2026-10-09):
+    не то подокно — закрыть; не то место — перейти заново; ни то, ни другое — стоп.
+
+    Каждое подокно закрывается и каждое место покидается **по одному разу**: второй раз то же —
+    действие не помогает, стоп (иначе ходим по кругу). При отладке (`debug_dir`) перед
+    исправлением — запись: снимок и пара; при обычной работе — только исправление.
+
+    Возвращает (True | False | None, заметки). None — меток экрана нет вовсе при приложении
+    впереди: сборка без меток окон, решает вызывающий прежним способом."""
+    notes, seen = [], set()
+    for step in range(steps):
+        place, popup = screen_of(nodes(dev))
+        if (place, popup) == HOME:
+            return True, notes
+        if place is None:
+            if APP not in focus(dev) and 'вне' not in seen:
+                seen.add('вне')
+                to_front(dev)
+                continue
+            return (None if APP in focus(dev) else False), notes + ['меток экрана нет']
+        if debug_dir:
+            shot(dev, os.path.join(debug_dir, 'пара-%d-%s.png' % (step, dev.replace(':', '_'))))
+            notes.append('%s + %s' % (place, popup))
+        if popup != 'popup:none':
+            if popup in seen or popup in STOP_POPUPS:
+                return False, notes + ['подокно %s не закрыть — стоп' % popup]
+            seen.add(popup)
+            if not (popup in CLOSE_POPUP and tap(dev, rid=CLOSE_POPUP[popup], wait=3)):
+                sh(dev, 'input keyevent KEYCODE_BACK')
+        else:
+            if place in seen:
+                return False, notes + ['переход из %s не помог — стоп' % place]
+            seen.add(place)
+            if place == 'screen:call.ended':
+                tap(dev, 'Закрыть', rid='call:close', wait=3)
+            elif place.startswith('screen:call.'):
+                return False, notes + ['идёт звонок — трубку здесь не кладём, стоп']
+            elif place.startswith('screen:Phone.'):
+                tap(dev, rid='tab:Chats', wait=3)
+            elif place[len('screen:')].isupper() and place != 'screen:Bench':
+                # другое окно — через переключатель: «Назад» из окна закрывает приложение
+                if tap(dev, 'Телефон', rid='window:switcher', wait=3):
+                    time.sleep(1)
+                    tap(dev, rid='switcher:Phone', wait=3)
+            else:
+                # подэкран — «Назад»; из стенда «Назад» закрывает приложение (PH-3) — вернуть
+                sh(dev, 'input keyevent KEYCODE_BACK')
+                time.sleep(1)
+                if APP not in focus(dev):
+                    to_front(dev)
+        time.sleep(1.2)
+    return False, notes + ['до главного окна не дошли за %d шагов — стоп' % steps]
+
+
 # ── ЗВОНОК: ПОЛОЖИТЬ ТРУБКУ БЕЗОПАСНО ────────────────────────────────────────
 #
 # Значок «📞» есть и в окне звонка («Завершить»), и в каждой строке «Контактов» («позвонить»).

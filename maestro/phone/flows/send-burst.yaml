@@ -11,18 +11,36 @@ appId: io.tima.app.v2
 ---
 - launchApp:
     stopApp: false
-# Приложение могло остаться в переписке или на странице человека — назад до главного окна.
+# Приложение могло остаться в переписке или на странице человека — назад до окна «Телефон».
+# Проверка «видно» с флажком, а не «пока не видно» (ПЛАН-(МО) МО4): обычно телефон уже в главном
+# окне, и «видно» отвечает сразу, а «не видно» на таком экране ждало около 8 с (PH-36).
+- runFlow:
+    when:
+      visible:
+        id: "screen:Phone\\..*"
+    commands:
+      - evalScript: ${output.atPhone = true}
 - repeat:
     while:
-      notVisible:
-        id: "tab:Chats"
+      true: ${!output.atPhone}
     times: 4
     commands:
       - back
       - launchApp:
           stopApp: false
+      - runFlow:
+          when:
+            visible:
+              id: "screen:Phone\\..*"
+          commands:
+            - evalScript: ${output.atPhone = true}
 - tapOn:
     id: "tab:Chats"
+- runFlow:
+    file: expect-screen.yaml
+    env:
+      SCREEN: "screen:Phone.Chats"
+      POPUP: "popup:none"
 - tapOn:
     text: "${MAESTRO_PEER}"
     below: "Вид"
@@ -34,11 +52,16 @@ appId: io.tima.app.v2
 - tapOn:
     text: "Написать"
     optional: true
-# Признак переписки — метка поля ввода.
+# Признак переписки — метка поля ввода и пара меток экрана (ПЛАН-(МО) МО3).
 - extendedWaitUntil:
     visible:
       id: "chat:input"
     timeout: 10000
+- runFlow:
+    file: expect-screen.yaml
+    env:
+      SCREEN: "screen:chat"
+      POPUP: "popup:none"
 # Без `hideKeyboard`: на Samsung он нажимает «Назад» и закрывает переписку (PH-40). Кнопка
 # отправки при открытой клавиатуре уезжает вверх вместе с полем — метка находит её там.
 # Текст латиницей и с номером: кириллица в поле не вводилась (PH-41), номер отличает

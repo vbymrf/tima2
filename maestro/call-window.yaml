@@ -140,6 +140,12 @@ env:
           visible:
             text: "Звонок завершён"
           timeout: 10000
+      # Пара меток после шага (ПЛАН-(МО) МО3): окно звонка в конце.
+      - runFlow:
+          file: phone/flows/expect-screen.yaml
+          env:
+            SCREEN: "screen:call.ended"
+            POPUP: "popup:none"
 
 - takeScreenshot: З1-звонок-завершён
 

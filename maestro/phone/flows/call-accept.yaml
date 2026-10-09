@@ -24,3 +24,9 @@ appId: io.tima.app.v2
       true: ${!output.tag_call_accept}
     commands:
       - tapOn: "Принять"
+# Пара меток после шага (ПЛАН-(МО) МО3): принятый звонок — разговор.
+- runFlow:
+    file: expect-screen.yaml
+    env:
+      SCREEN: "screen:call.talk"
+      POPUP: "popup:none"

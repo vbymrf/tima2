@@ -529,6 +529,7 @@ private fun Inside(
                 device = entry.created()
             },
         ) { device = entry.created() }
+        ScreenMarks(PlaceCode.ENTRY, PopupCode.NONE)
         return
     }
 
@@ -567,6 +568,7 @@ private fun Inside(
         LaunchedEffect(Unit) { ChannelHost.release() }
         val why by (assembled.network.tokenKeeper?.revokedWhy ?: remember { kotlinx.coroutines.flow.MutableStateFlow(null) }).collectAsState()
         RevokedDevice(onAgain = signOut, reason = why?.reason.orEmpty(), deleteAt = why?.deleteAt)
+        ScreenMarks(PlaceCode.DEVICE_REVOKED, PopupCode.NONE)
         return
     }
 
@@ -2047,6 +2049,21 @@ private fun App(
         }
     }
 
+    // Пара меток для сценариев (ПЛАН-(МО)-МЕТОК-ОКОН): место считается здесь, подокно — в каждой
+    // ветке ниже, у которой свой `return`: такое подокно подменяет весь экран, и места под ним
+    // в дереве нет. Место в паре — то, куда вернёмся, закрыв подокно.
+    val place = placeCode(window, where, callHost) { w ->
+        when (w) {
+            Window.Phone -> phoneTab
+            Window.Social -> socialTab
+            Window.Media -> windowTabs.state(Window.Media, WindowTab.Common).value
+            Window.Activity -> windowTabs.state(Window.Activity, WindowTab.Answers).value
+            Window.Page -> windowTabs.state(Window.Page, WindowTab.Subscribed).value
+            else -> null
+        }
+    }
+    val innerPopups = remember { InnerPopups() }
+
     // Переключатель окон лежит ПОВЕРХ стана, а не внутри колонки: он перекрывает
     // всё окно, включая главную область, и затемняет то, из чего его открыли.
     inviting?.let { person ->
@@ -2058,6 +2075,7 @@ private fun App(
             onShare = { invite.share(INVITE_TEXT); inviting = null },
             onClose = { inviting = null },
         )
+        ScreenMarks(place, PopupCode.INVITE)
         return
     }
 
@@ -2089,6 +2107,7 @@ private fun App(
             onFindNick = contacts::searchNick,
             onPickNick = contacts::pickNick,
         )
+        ScreenMarks(place, PopupCode.CONTACT_NEW)
         return
     }
 
@@ -2110,6 +2129,7 @@ private fun App(
             common = bookState.common,
             onRenameCommon = book::renameCommon,
         )
+        ScreenMarks(place, PopupCode.SECTIONS)
         return
     }
 
@@ -2153,6 +2173,7 @@ private fun App(
             common = communityCommon,
             onRenameCommon = { name, icon -> scope.launch { shelves.setCommon(name.trim(), icon) } },
         )
+        ScreenMarks(place, PopupCode.COMMUNITY_SECTIONS)
         return
     }
 
@@ -2170,6 +2191,7 @@ private fun App(
             },
             forPeople = false,
         )
+        ScreenMarks(place, PopupCode.COMMUNITY_VIEW)
         return
     }
 
@@ -2224,6 +2246,7 @@ private fun App(
             )
         }
         }
+        ScreenMarks(place, if (ledgerSound != null) PopupCode.CONTACT_SOUND else PopupCode.CONTACT_VIEW)
         return
     }
 
@@ -2274,7 +2297,10 @@ private fun App(
             },
             groupView = groupView,
         )
-    ) return
+    ) {
+        ScreenMarks(place, if (groupDesk.ledger != null) PopupCode.CALL_LEDGER else PopupCode.CALL_SETUP)
+        return
+    }
 
     if (closeAsked && onExit != null) {
         CloseQuestionSheet(
@@ -2291,6 +2317,7 @@ private fun App(
             },
             onCancel = { closeAsked = false },
         )
+        ScreenMarks(place, PopupCode.CLOSE_QUESTION)
         return
     }
 
@@ -2311,6 +2338,7 @@ private fun App(
             },
             onClose = { leavingTo = null },
         )
+        ScreenMarks(place, PopupCode.ACCOUNT_LEAVING)
         return
     }
 
@@ -2338,6 +2366,7 @@ private fun App(
             onDismiss = update::dismiss,
             canInstall = update.canInstall,
         )
+        ScreenMarks(place, PopupCode.UPDATE_REQUIRED)
         return
     }
 
@@ -2659,6 +2688,7 @@ private fun App(
                 eventMemory = EventQueue.skipAll(eventMemory)
             },
         )
+        ScreenMarks(place, PopupCode.NOTICE)
         return
     }
 
@@ -2759,6 +2789,7 @@ private fun App(
             },
             onClose = { windowSwitcher = false },
         )
+        ScreenMarks(place, PopupCode.SWITCHER)
         return
     }
 
@@ -2776,6 +2807,7 @@ private fun App(
     CompositionLocalProvider(
         LocalActiveCall provides activeCall.takeIf { callHost.active && window != Window.Call },
         io.tima.feature.shell.LocalWindowTabs provides windowTabs,
+        LocalInnerPopups provides innerPopups,
     ) {
     // Групповой звонок для окна 0 и области 3 широкого формата (ГЗ4, ГЗ8).
     val forbiddenMics = callHost.group?.groupId?.let { gid ->
@@ -4085,6 +4117,15 @@ private fun App(
     if (locked && pin != null && lockWho != null && !callHost.active) {
         PinLockLayer(pin, lockWho, onUnlocked, onLockCancel, lockOthers, onSwitchAccount)
     }
+    // Замок — верхнее подокно; под ним — подокна, о которых сообщили сами экраны (поиск, листы
+    // переписки). Песочные часы — не подокно: они не закрываются, а уходят сами.
+    ScreenMarks(
+        place,
+        when {
+            locked && pin != null && lockWho != null && !callHost.active -> PopupCode.PIN_LOCK
+            else -> innerPopups.top ?: PopupCode.NONE
+        },
+    )
     }
     }
 }
@@ -4362,6 +4403,10 @@ private fun Chat(
         if (allowed.none { it.level == state.level }) store.circleChosen(allowed.first().level)
     }
     var myColor by remember { mutableStateOf(false) }
+    // Листы переписки — подокна в паре меток для сценариев (ПЛАН-(МО)).
+    InnerPopup(PopupCode.CHAT_MENU, chatMenu)
+    InnerPopup(PopupCode.CHAT_FAILED, failed != null)
+    InnerPopup(PopupCode.CHAT_COLOR, myColor)
     var myColorTrouble by remember { mutableStateOf<String?>(null) }
     // Отправители, чья личность отменена владельцем (ДУ6, Р30) — из настроек аккаунта.
     // Поток запомнен: `settings.all()` каждый раз новый, и подписка без remember снималась и
@@ -5468,6 +5513,22 @@ private fun whereCode(where: Where): String = when (where) {
 }
 
 /**
+ * Место для метки `screen:` (ПЛАН-(МО)-МЕТОК-ОКОН): подэкран — кодом журнала [whereCode]; нет его —
+ * окно с вкладкой (`Phone.Chats`); у окна звонка — стадия, в том же порядке, в каком `CallScreen`
+ * выбирает кнопки: конец, входящий, набор, разговор.
+ */
+private fun placeCode(window: Window, where: Where, call: CallHost, tabOf: (Window) -> WindowTab?): String = when {
+    where != Where.Nothing -> whereCode(where)
+    window == Window.Call -> when {
+        call.state.stage == CallStage.Ended -> PlaceCode.CALL_ENDED
+        call.incoming && call.state.stage != CallStage.Connected -> PlaceCode.CALL_INCOMING
+        call.state.stage != CallStage.Connected -> PlaceCode.CALL_DIALING
+        else -> PlaceCode.CALL_TALK
+    }
+    else -> window.name + (tabOf(window)?.let { "." + it.name } ?: "")
+}
+
+/**
  * Что предлагает сервер этой платформе.
  *
  * Платформу называем в самом вопросе: пакеты у ПК и телефона разные, а сервер без этого
@@ -5859,6 +5920,8 @@ private fun PhoneWindow(
     // список сужённым без единого признака, почему.
     var searching by remember { mutableStateOf(false) }
     var request by remember { mutableStateOf("") }
+    // Строка поиска — подокно в паре меток для сценариев (ПЛАН-(МО)); на «Звонках» её не видно.
+    InnerPopup(PopupCode.SEARCH, searching && tab != WindowTab.Calls)
     fun searchTo(text: String) {
         request = text
         // Книга фильтрует у себя: у неё поиск идёт по имени, нику и номеру сразу.

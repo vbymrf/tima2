@@ -24,6 +24,12 @@ appId: io.tima.app.v2
 - extendedWaitUntil:
     visible: "Закрыть"
     timeout: 15000
+# Пара меток после шага (ПЛАН-(МО) МО3): окно звонка в конце.
+- runFlow:
+    file: expect-screen.yaml
+    env:
+      SCREEN: "screen:call.ended"
+      POPUP: "popup:none"
 # метка, надпись — запасной путь (ПЛАН-(МС)): ветка метки ставит флажок, запасная — только без него
 - runFlow:
     when:

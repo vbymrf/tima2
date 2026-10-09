@@ -61,6 +61,7 @@
 | 2026-10-09 | send-burst | maestro | samsung → realme | точка 88 %, проверка в конце | нет | ~150 | то же, поймано проверкой (PH-40) |
 | 2026-10-09 | send-burst | maestro | samsung → realme | без `hideKeyboard`, `rightOf` | нет ×2 | ~85 | кириллица не ввелась (PH-41); `rightOf` нажал аватар (PH-42) |
 | 2026-10-09 | ready | maestro | samsung, realme | `run.sh` без KEEP_AWAKE — возврат экранов | да ×2 | 27 / 15 | — |
+| 2026-10-09 | ready | adb | samsung, realme | `to_home` по паре меток (ПЛАН-(МО)); на 163 меток нет — прежний путь | да ×2 | 26 / 21 | «меток экрана нет» — как и должно на 163 |
 
 ## Свод
 

@@ -23,7 +23,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -71,6 +74,7 @@ import java.util.concurrent.Executors
  * система конструктором без параметров, и Kotlin заводит его сам, когда у всех параметров
  * есть умолчания.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 class QrScanActivity(
     private val words: () -> Words = { CurrentWords.value },
 ) : ComponentActivity() {
@@ -106,8 +110,11 @@ class QrScanActivity(
         setContent {
             val said by notice
             io.tima.core.ui.TimaTheme(colors = io.tima.core.ui.TimaColors.light, words = words()) {
-            Box(Modifier.fillMaxSize().background(Color.Black)) {
+            // Метки — идентификаторами для сценариев, как в MainActivity: у этой активности своё
+            // дерево экрана, и пара `screen:scan.code` / `popup:none` (ПЛАН-(МО)) нужна и здесь.
+            Box(Modifier.fillMaxSize().background(Color.Black).semantics { testTagsAsResourceId = true }) {
                 AndroidView(factory = { preview }, modifier = Modifier.fillMaxSize())
+                io.tima.shared.ScreenMarks(io.tima.shared.PlaceCode.SCAN_CODE, io.tima.shared.PopupCode.NONE)
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)

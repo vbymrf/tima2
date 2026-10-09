@@ -45,20 +45,50 @@ appId: io.tima.app.v2
                 direction: DOWN
                 timeout: 10000
             - tapOn: "Стенд звонков"
+# Пара меток после шага (ПЛАН-(МО) МО3): окно стенда открыто.
+- runFlow:
+    file: expect-screen.yaml
+    env:
+      SCREEN: "screen:Bench"
+      POPUP: "popup:none"
 # Клавиатуру от прошлого раза прячет scenario.py до запуска (adb, PH-20): hideKeyboard
 # Maestro на Redmi открывал шторку уведомлений (PH-21).
 # окно стенда помнит прокрутку — кнопка вооружения вверху может быть за краем.
 # Жест — из середины: scrollUntilVisible вверх начинает от края и на Redmi тянет шторку
 # уведомлений (PH-21).
+#
+# Проверка «видно», а не «не видно» (ПЛАН-(МО) МО4): обычно кнопка уже на экране, и «видно»
+# отвечает сразу; «не видно» на экране, где кнопка есть, ждало около 8 с (PH-36). Нашли —
+# флажок, свайпы только без него. Метка, а нет — надпись.
+- runFlow:
+    when:
+      visible:
+        id: "bench:(arm|disarm)"
+    commands:
+      - evalScript: ${output.bench_top = true}
+- runFlow:
+    when:
+      true: ${!output.bench_top}
+    commands:
+      - runFlow:
+          when:
+            visible: "(Начать|Остановить) прогон"
+          commands:
+            - evalScript: ${output.bench_top = true}
 - repeat:
     times: 8
     while:
-      notVisible: "(Начать|Остановить) прогон"
+      true: ${!output.bench_top}
     commands:
       - swipe:
           start: 50%, 35%
           end: 50%, 85%
           duration: 300
+      - runFlow:
+          when:
+            visible: "(Начать|Остановить) прогон"
+          commands:
+            - evalScript: ${output.bench_top = true}
 # «Начать прогон» в окне дважды — заголовок раздела и кнопка; метка стоит только на кнопке (PH-29).
 - runFlow:
     when:

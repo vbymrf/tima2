@@ -112,6 +112,13 @@ def act_ready(a):
         return good, ev + ['главное окно: %s (сценарий)' % ('да' if ok else 'нет')], '; '.join(notes)
     else:
         ph.to_front(dev)
+        # Пара меток экрана (ПЛАН-(МО) МО5): стандартное действие до главного окна. None — у
+        # сборки меток окон нет, ниже прежний путь.
+        home, how = ph.to_home(dev, debug_dir=a.get('out') if a.get('debug') else None)
+        notes += how
+        if home is not None:
+            ev = [ph.focus(dev), 'пара: %s + %s' % ph.screen_of(ph.nodes(dev))]
+            return home and ph.awake(dev) and not ph.in_call(dev), ev, '; '.join(notes)
         ns = ph.nodes(dev)
         if not ph.find(ns, rid='tab:Chats'):
             # окно стенда или звонка: из стенда «Назад» закрывает приложение (PH-3) —
@@ -491,9 +498,13 @@ def main():
     ap.add_argument('--hold', type=int, default=60)
     ap.add_argument('--calls', type=int, default=1)
     ap.add_argument('--out')
+    # Отладка (ПЛАН-(МО) МО5, заказчик): чужая пара меток — сначала запись (снимок и пара), потом
+    # исправление. Без ключа — только исправление.
+    ap.add_argument('--debug', action='store_true')
     o = ap.parse_args()
     out = o.out or os.path.join(ROOT, 'doc_add', 'тесты-звонков', 'сценарии', dt.datetime.now().strftime('%Y-%m-%d_%H%M%S'))
     report = Report(out)
+    o.out = out
     print('отчёт:', report.path, flush=True)
     if o.what == 'element':
         args = {k: v for k, v in vars(o).items() if v is not None and k not in ('what', 'name')}

@@ -50,3 +50,5 @@
 | PH-40 | preventive | `send-burst` зелёный, сообщений нет, приложение в фоне | knowledge/phone.md | да — метки `chat:input`, `chat:send` (сборки после 163) |
 | PH-41 | diagnostic | после `inputText` кириллицей поле пустое | knowledge/phone.md | да — `send-burst` вводит латиницу |
 | PH-42 | preventive | `rightOf` нажал аватар вместо кнопки отправки | knowledge/phone.md | да — `chat:send` |
+| PH-43 | preventive | проверка Maestro стоит 7–8 с — ответ «нет» дорог | knowledge/phone.md | да — пара меток, флажки |
+| PH-44 | diagnostic | касание 3–4 с; ожидание «после касания» не срезается | knowledge/phone.md | нет — выигрыш в ожиданиях исхода |

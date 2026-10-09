@@ -1,0 +1,74 @@
+# Проверка пары меток экрана после шага — ПЛАН-(МО)-МЕТОК-ОКОН, МО3 и МО5.
+#
+#   - runFlow:
+#       file: phone/flows/expect-screen.yaml     # путь — от файла, который вызывает
+#       env:
+#         SCREEN: "screen:settings.update"        # место
+#         POPUP: "popup:none"                     # подокно; «поверх ничего» — popup:none
+#
+# Обе метки на экране всегда, поэтому проверка положительная: при успехе ответ сразу, срок —
+# только потолок на медленный переход.
+#
+# Не то подокно — стандартное действие (решение заказчика 2026-10-09): закрыть известное и
+# проверить снова. Не то место — сценарий падает здесь, с ожидаемой меткой в отчёте Maestro;
+# переход заново — с нулевой точки (`scenario.py element ready`, adb), а не вслепую отсюда:
+# путь в место знает вызывающий сценарий, а не эта проверка.
+#
+# Отладка (MAESTRO_DEBUG=1): перед исправлением — снимок; при обычной работе — только исправление.
+#
+# Сборка без меток окон проверку пропускает: признак берётся один раз за прогон.
+appId: io.tima.app.v2
+---
+- runFlow:
+    when:
+      true: ${output.screenMarks === undefined}
+    commands:
+      - evalScript: ${output.screenMarks = false}
+      - runFlow:
+          when:
+            visible:
+              id: "screen:.*"
+          commands:
+            - evalScript: ${output.screenMarks = true}
+- runFlow:
+    when:
+      true: ${output.screenMarks}
+    commands:
+      - evalScript: ${output.popupRight = false}
+      - runFlow:
+          when:
+            visible:
+              id: "${POPUP}"
+          commands:
+            - evalScript: ${output.popupRight = true}
+      - runFlow:
+          when:
+            true: ${!output.popupRight}
+          commands:
+            - runFlow:
+                when:
+                  true: ${typeof MAESTRO_DEBUG !== 'undefined' && MAESTRO_DEBUG == '1'}
+                commands:
+                  - takeScreenshot: "чужое-подокно"
+            - runFlow:
+                when:
+                  visible:
+                    id: "popup:switcher"
+                commands:
+                  - tapOn:
+                      id: "switcher:close"
+            - runFlow:
+                when:
+                  visible:
+                    id: "popup:search"
+                commands:
+                  - tapOn:
+                      id: "search:close"
+      - extendedWaitUntil:
+          visible:
+            id: "${POPUP}"
+          timeout: 5000
+      - extendedWaitUntil:
+          visible:
+            id: "${SCREEN}"
+          timeout: 15000

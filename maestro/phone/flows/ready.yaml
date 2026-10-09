@@ -5,5 +5,12 @@ appId: io.tima.app.v2
 ---
 - launchApp:
     stopApp: false
+# Пара меток после шага (ПЛАН-(МО) МО3): нулевая точка — «Телефон», «Чаты», поверх ничего; кнопка вкладки
+# `tab:Chats` видна на любой вкладке «Телефона» и главного окна не доказывает.
+- runFlow:
+    file: expect-screen.yaml
+    env:
+      SCREEN: "screen:Phone.Chats"
+      POPUP: "popup:none"
 - assertVisible:
     id: "tab:Chats"
