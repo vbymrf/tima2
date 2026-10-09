@@ -42,3 +42,4 @@
 | PH-32 | diagnostic | окно звонка: `call_screen` «нет окна», `hang_up` False — сменился вид кнопок | knowledge/phone.md | да — сценарии на метках (ПЛАН-(МС)) |
 | PH-33 | preventive | порты в `phone.py` устарели | knowledge/phone.md | нет — подставить текущие на прогон |
 | PH-34 | preventive | `-v2-fast` на телефоне — `run-as` нет | knowledge/phone.md | нет — сценарии только на отладочной |
+| PH-35 | diagnostic | exit «наборы или номера разные» у пары без стенда | knowledge/phone.md | нет — механику смотреть по «соединён/конец» |
