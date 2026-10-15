@@ -5,6 +5,7 @@ import android.hardware.camera2.CameraManager
 import com.twilio.audioswitch.AudioDevice
 import io.livekit.android.AudioOptions
 import io.livekit.android.audio.AudioSwitchHandler
+import io.livekit.android.events.RoomEvent
 import io.livekit.android.room.track.CameraPosition
 import io.livekit.android.room.track.LocalVideoTrack
 import io.livekit.android.LiveKit
@@ -1045,6 +1046,7 @@ class LiveKitCallEngine(
         watchPeers(room)
         watchQuality(room)
         watchBreaks(room)
+        watchTracks(room)
         if (group != null) watchGroup(room)
     }
 
@@ -1069,6 +1071,70 @@ class LiveKitCallEngine(
                 if (ours == _state.value.quality) return@collect
                 _state.value = _state.value.copy(quality = ours)
                 Journal.note(LogCode.CALL, "оценка связи от SFU", "стала" to ours.name)
+            }
+        }
+    }
+
+    /**
+     * Дорожки собеседника и пауза сервера — `CALL-TRACK` и `CALL-PAUSE` (2026-10-15, отчёт 379C).
+     *
+     * Пауза — по `TrackStreamStateChanged`: так SFU сообщает, что перестал пересылать видео
+     * нехваткой полосы (`allow_pause: true`, решение 2026-09-19). До этого флаг [CallState.videoPaused]
+     * никто не ставил — надпись «Видео выключено: не хватает связи» (З9) не появлялась ни разу, и
+     * погасшая картинка выглядела поломкой. Дорожки — чтобы по журналу отличать «сервер
+     * приостановил» от «собеседник выключил камеру» и «дорожку перевыпустили».
+     */
+    private fun watchTracks(room: Room) {
+        watchers += scope.launch {
+            // Приостановленные сервером видеодорожки: в группе их бывает несколько, и надпись
+            // «видео выключено» держится, пока не вернулась последняя.
+            val paused = mutableMapOf<String, Long>()
+            fun kind(pub: io.livekit.android.room.track.TrackPublication) =
+                if (pub.kind == Track.Kind.VIDEO) "видео" else if (pub.kind == Track.Kind.AUDIO) "звук" else pub.kind.name
+            fun who(p: io.livekit.android.room.participant.Participant) = userOfIdentity(p.identity?.value ?: "").take(8)
+            fun remote(p: io.livekit.android.room.participant.Participant) = p != room.localParticipant
+            room.events.events.collect { e ->
+                when (e) {
+                    // ── Пауза сервера (З9): SFU погасил видео нехваткой полосы и вернул ────
+                    is RoomEvent.TrackStreamStateChanged -> {
+                        val pub = e.trackPublication
+                        if (pub.kind != Track.Kind.VIDEO) return@collect
+                        when (e.streamState) {
+                            Track.StreamState.PAUSED -> if (pub.sid !in paused) {
+                                paused[pub.sid] = nowMs()
+                                _state.value = _state.value.copy(videoPaused = true)
+                                Journal.trouble(LogCode.CALL_PAUSE, "сервер приостановил видео собеседника — не хватает полосы", "дорожка" to pub.sid.takeLast(6))
+                            }
+                            Track.StreamState.ACTIVE -> paused.remove(pub.sid)?.let { since ->
+                                _state.value = _state.value.copy(videoPaused = paused.isNotEmpty())
+                                Journal.note(LogCode.CALL_PAUSE, "сервер вернул видео собеседника", "пауза с" to ((nowMs() - since) / 1000.0).toString(), "дорожка" to pub.sid.takeLast(6))
+                            }
+                            else -> Unit
+                        }
+                    }
+                    // ── Дорожки собеседника ─────────────────────────────────────────────
+                    is RoomEvent.TrackPublished -> if (remote(e.participant)) {
+                        Journal.note(LogCode.CALL_TRACK, "собеседник опубликовал дорожку", "вид" to kind(e.publication), "кто" to who(e.participant), "дорожка" to e.publication.sid.takeLast(6))
+                    }
+                    is RoomEvent.TrackUnpublished -> if (remote(e.participant)) {
+                        // Снятая дорожка — и её пауза: вернуться ей уже некуда.
+                        if (paused.remove(e.publication.sid) != null) _state.value = _state.value.copy(videoPaused = paused.isNotEmpty())
+                        Journal.note(LogCode.CALL_TRACK, "собеседник снял дорожку", "вид" to kind(e.publication), "кто" to who(e.participant), "дорожка" to e.publication.sid.takeLast(6))
+                    }
+                    is RoomEvent.TrackSubscribed ->
+                        Journal.note(LogCode.CALL_TRACK, "подписались на дорожку собеседника", "вид" to kind(e.publication), "кто" to who(e.participant), "дорожка" to e.publication.sid.takeLast(6))
+                    is RoomEvent.TrackUnsubscribed ->
+                        Journal.note(LogCode.CALL_TRACK, "отписались от дорожки собеседника", "вид" to kind(e.publications), "кто" to who(e.participant), "дорожка" to e.publications.sid.takeLast(6))
+                    is RoomEvent.TrackMuted -> if (remote(e.participant)) {
+                        Journal.note(LogCode.CALL_TRACK, "собеседник выключил дорожку", "вид" to kind(e.publication), "кто" to who(e.participant))
+                    }
+                    is RoomEvent.TrackUnmuted -> if (remote(e.participant)) {
+                        Journal.note(LogCode.CALL_TRACK, "собеседник включил дорожку", "вид" to kind(e.publication), "кто" to who(e.participant))
+                    }
+                    is RoomEvent.TrackSubscriptionFailed ->
+                        Journal.trouble(LogCode.CALL_TRACK, "подписка на дорожку собеседника не удалась", "кто" to who(e.participant), "почему" to (e.exception.message ?: e.exception::class.simpleName.orEmpty()).take(120))
+                    else -> Unit
+                }
             }
         }
     }

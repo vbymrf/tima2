@@ -60,6 +60,11 @@ import java.io.File
  * Файл этим и ценен: он короткий. Стало длинно — значит в него протекло общее.
  */
 fun main(args: Array<String>) {
+    // Второй запуск — не второй процесс (отчёт 2026-10-15: три TIMA на одной базе). Раньше
+    // журнала: второй, уходя, не должен дописывать в чужие файлы. Запуск автозагрузкой окна не
+    // просит — он ничего и не показал бы.
+    if (!SingleInstance.claim(dataCatalog(), show = Autostart.HIDDEN !in args)) return
+
     // Журнал поднимается первым — раньше окна и раньше обработчика падений. Всё, что
     // случится дальше, обязано в него попасть, а прошлые запуски — приехать с диска:
     // жалуются обычно после перезапуска, и журнал, начинающийся с этого запуска,
@@ -139,6 +144,20 @@ private fun window(store: ReportsStore, hidden: Boolean) = application {
     // берёт то же самое.
     var windowShown by remember { mutableStateOf(!hidden) }
     var hasTray by remember { mutableStateOf(false) }
+    // Окно AWT под Compose — чтобы второй запуск мог поднять его поверх прочих, а не только
+    // сделать видимым.
+    val frame = remember { arrayOfNulls<java.awt.Window>(1) }
+    DisposableEffect(Unit) {
+        SingleInstance.onShow {
+            javax.swing.SwingUtilities.invokeLater {
+                Journal.note(LogCode.APP_WINDOW, "второй запуск — показано окно уже работающей TIMA", "просьба" to SingleInstance.asked)
+                windowShown = true
+                windowState.isMinimized = false
+                frame[0]?.toFront()
+            }
+        }
+        onDispose { }
+    }
 
     // ── ЗВОНКИ (ПЛАН-(ПК)-ЗВОНКОВ-ПК, маршрут A) ─────────────────────────────────
     //
@@ -209,12 +228,13 @@ private fun window(store: ReportsStore, hidden: Boolean) = application {
             // Считает общий код по журналу уведомлений, рисует приложение: окно есть только
             // здесь. В панели задач число видно, пока окно открыто или свёрнуто; спрятанное в
             // трей окно кнопки в панели не имеет — там число остаётся на значке трея.
-            val frame = window
-            androidx.compose.runtime.DisposableEffect(frame) {
+            val awt = window
+            frame[0] = awt
+            androidx.compose.runtime.DisposableEffect(awt) {
                 io.tima.core.notify.DesktopBadge.listen { total ->
                     java.awt.EventQueue.invokeLater {
                         Tray.number(total)
-                        taskbarBadge(frame, total)
+                        taskbarBadge(awt, total)
                     }
                 }
                 onDispose { }

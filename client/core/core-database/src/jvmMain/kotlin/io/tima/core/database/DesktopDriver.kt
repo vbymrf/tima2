@@ -30,7 +30,10 @@ import java.io.File
 fun desktopDatabaseDriver(file: File): SqlDriver {
     file.parentFile?.mkdirs()
     return JdbcSqliteDriver(
-        "jdbc:sqlite:${file.absolutePath}?secure_delete=true&foreign_keys=true",
+        // busy_timeout — ждать освобождения базы, а не падать сразу (отчёт SG9S, 2026-10-14):
+        // `sqlite-jdbc` берёт соединение под операцию, и два соединения одного процесса тоже
+        // спорят за запись. 10 с — с запасом над любой нашей транзакцией.
+        "jdbc:sqlite:${file.absolutePath}?secure_delete=true&foreign_keys=true&busy_timeout=10000",
     )
 }
 

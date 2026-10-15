@@ -837,7 +837,13 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                 Journal.note(LogCode.CALL, "оценка связи от SFU", "стала" to ours.name)
             }
         }
+        // Дорожки собеседника — в журнал (`CALL-TRACK`, 2026-10-15, отчёт 379C). Паузы сервера
+        // (`CALL-PAUSE`) здесь нет: `livekit-ffi` не присылает события смены состояния потока —
+        // оно есть только полем в сведениях о дорожке.
         event.track_published?.let {
+            if (it.participant_identity != myIdentity) {
+                Journal.note(LogCode.CALL_TRACK, "собеседник опубликовал дорожку", "вид" to trackKind(it.publication.info.kind), "кто" to userOfIdentity(it.participant_identity).take(8), "дорожка" to it.publication.info.sid.takeLast(6))
+            }
             remember(it.participant_identity, it.publication)
             // Нажали «скрыть» заранее — чужая камера, включённая потом, к нам не приедет.
             if (!takeRemote && it.publication.info.kind == TrackKind.KIND_VIDEO) {
@@ -845,20 +851,34 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             }
         }
         event.track_unpublished?.let { gone ->
+            if (gone.participant_identity != myIdentity) {
+                Journal.note(LogCode.CALL_TRACK, "собеседник снял дорожку", "вид" to (publications[gone.publication_sid]?.kind?.let(::trackKind) ?: "?"), "кто" to userOfIdentity(gone.participant_identity).take(8), "дорожка" to gone.publication_sid.takeLast(6))
+            }
             publications.remove(gone.publication_sid)?.let { Ffi.drop(it.handle) }
         }
         event.track_subscribed?.let {
+            Journal.note(LogCode.CALL_TRACK, "подписались на дорожку собеседника", "вид" to trackKind(it.track.info.kind), "кто" to userOfIdentity(it.participant_identity).take(8), "дорожка" to it.track.info.sid.takeLast(6))
             if (group != null) onGroupSubscribed(it.participant_identity, it.track) else onSubscribed(it.track)
         }
         event.track_unsubscribed?.let { gone ->
+            Journal.note(LogCode.CALL_TRACK, "отписались от дорожки собеседника", "кто" to userOfIdentity(gone.participant_identity).take(8), "дорожка" to gone.track_sid.takeLast(6))
             if (remote?.sid == gone.track_sid) stopRemote()
             groupRemotes.entries.removeAll { (_, r) -> (r.sid == gone.track_sid).also { if (it) dropRemote(r) } }
         }
+        event.track_subscription_failed?.let {
+            Journal.trouble(LogCode.CALL_TRACK, "подписка на дорожку собеседника не удалась", "кто" to userOfIdentity(it.participant_identity).take(8), "почему" to it.error.take(120))
+        }
         event.track_muted?.let {
+            if (it.participant_identity != myIdentity) {
+                Journal.note(LogCode.CALL_TRACK, "собеседник выключил дорожку", "вид" to (publications[it.track_sid]?.kind?.let(::trackKind) ?: "?"), "кто" to userOfIdentity(it.participant_identity).take(8))
+            }
             mutedSids += it.track_sid
             if (remote?.sid == it.track_sid) _state.value = _state.value.copy(remoteVideoShown = false)
         }
         event.track_unmuted?.let {
+            if (it.participant_identity != myIdentity) {
+                Journal.note(LogCode.CALL_TRACK, "собеседник включил дорожку", "вид" to (publications[it.track_sid]?.kind?.let(::trackKind) ?: "?"), "кто" to userOfIdentity(it.participant_identity).take(8))
+            }
             mutedSids -= it.track_sid
             if (remote?.sid == it.track_sid) _state.value = _state.value.copy(remoteVideoShown = true)
         }
@@ -869,6 +889,12 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         }
         event.room_metadata_changed?.let { roomPaused(it.metadata) }
         if (group != null) publishPeers()
+    }
+
+    private fun trackKind(kind: TrackKind): String = when (kind) {
+        TrackKind.KIND_VIDEO -> "видео"
+        TrackKind.KIND_AUDIO -> "звук"
+        else -> kind.name
     }
 
     /** Пауза создателя — в данных комнаты `{"paused":true}` (решение 5). */

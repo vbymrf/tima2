@@ -779,7 +779,7 @@ class Environment private constructor(
     val journal: ChatJournal = SqlChatJournal(db, TextBodyCodec, cipher)
 
     /** Открытая переписка прочитана: счётчик непрочитанного обязан гаснуть. */
-    val reading: MarkRead = MarkRead(SqlReadMarks(incoming))
+    val reading: MarkRead = MarkRead(BusyTolerantReadMarks(SqlReadMarks(incoming)))
 
     val send: SendMessage = SendMessage(
         queue = queue,
