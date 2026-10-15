@@ -47,7 +47,9 @@ kotlin {
             // Автозагрузка — значения в реестре Windows (Advapi32Util).
             implementation(libs.jna.platform)
         }
-
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+        }
     }
 }
 
