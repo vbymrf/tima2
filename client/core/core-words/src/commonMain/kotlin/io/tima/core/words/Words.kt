@@ -1188,6 +1188,10 @@ interface CallWords {
     val peerStoppedVideo: String
     /** Собеседник свернул приложение — его видео на паузе, вернётся само (1б). */
     val peerPausedVideo: String
+    /** Групповой: у собеседника слабая связь, его телефон выключил своё видео (ПЗ4, ПЗ-В2). */
+    val peerWeakVideo: String
+    /** Групповой: наша связь слабая, своё видео выключено само и включится само (ПЗ4, ПЗ-В2). */
+    val ownWeakVideo: String
 
     /**
      * Ни одно устройство собеседника не забрало вызов: сейчас он не на связи.
@@ -3287,6 +3291,8 @@ object RussianWords : Words {
         override val peerShowsSelf = "Собеседник показывает себя, наша камера выключена — нажмите камеру, чтобы показать себя"
         override val peerStoppedVideo = "Собеседник перестал показывать себя"
         override val peerPausedVideo = "Собеседник свернул приложение — его видео на паузе"
+        override val peerWeakVideo = "У собеседника слабая связь — видео выключено, звук идёт"
+        override val ownWeakVideo = "Ваше видео выключено: слабая связь"
         override val peerLeft = "Собеседник положил трубку"
         override fun presetApplied(name: String) =
             "Набор «$name» применён — связь прервалась на пару секунд не сама"

@@ -7,6 +7,14 @@ import io.tima.core.call.BenchAttribute
 import io.tima.core.call.PeerIncoming
 import io.tima.core.call.GroupRoom
 import io.tima.core.call.VideoPause
+import io.tima.core.call.BASE_PRESET
+import io.tima.core.call.BandWindow
+import io.tima.core.call.EstimateNotes
+import io.tima.core.call.IncomingBand
+import io.tima.core.call.ReceiveLimit
+import io.tima.core.call.ReceiveTeller
+import io.tima.core.call.Resubscribe
+import io.tima.core.call.SendLimit
 import io.tima.core.call.cappedTo
 import io.tima.core.call.userOfIdentity
 import io.tima.core.call.CenterCrop
@@ -167,6 +175,143 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     private var groupJob: Job? = null
     private var benchSaid = ""
 
+    // ── ПОЛОСА (ПЛАН-(ПЗ)-ПОЛОСЫ-ЗВОНКА.md, 2026-10-15) ─────────────────────────
+    //
+    // Правила общие с телефоном (`Bandwidth.kt`); у ПК свои ограничения библиотеки:
+    // - события «сервер приостановил видео» livekit-ffi не отдаёт (проверено до v0.12.83) — паузу
+    //   выводим по признакам (ПЗ2);
+    // - битрейт камеры на ходу не меняется — по слову собеседника камера переопубликуется, не
+    //   чаще раза в 10 с (ПЗ7);
+    // - видимости вида и флага кодера (ПЗ3) у ПК нет.
+
+    private var receiveTeller: ReceiveTeller? = null
+    private var sendLimit: SendLimit? = null
+    private var peerReceiveSaid: Int? = null
+    private var benchLimitSaid = false
+    /** Потолок битрейта камеры по слову собеседника, кбит/с; `null` — потолок сервера (ПЗ7). */
+    private var limitKbps: Int? = null
+    private var limitPublishedAt = 0L
+    private val resubscribe = Resubscribe()
+    /** Чьё видео, по признакам, сервер держит на паузе (ПЗ2). */
+    private val inferredPaused = HashSet<String>()
+    @Volatile private var lastEstimate: Double? = null
+
+    private fun ordinaryCall(): Boolean = preset?.name == BASE_PRESET
+
+    private fun ceilingKbps(): Int = (preset?.video?.bitrate ?: 800_000) / 1000
+
+    /** Два опроса без новых байт подряд — признаки паузы (ПЗ2). */
+    private class PausePoll {
+        var last = -1L
+        var still = 0
+    }
+
+    /**
+     * ПЗ2: пауза сервера по признакам. Видео шло (байты были), собеседник его не выключал (камера
+     * не приглушена, атрибут `tima.video` пуст), мы его принимаем и смотрим, звонок идёт — а новых
+     * байт нет 6 с. Тогда, скорее всего, его погасил сервер нехваткой полосы (`allow_pause`), и
+     * человек видит «Видео выключено: не хватает связи», а не «видео не приходит».
+     */
+    private fun inferPause(identity: String, kto: String, poll: PausePoll, bytes: Long?, eligible: Boolean) {
+        val flowing = bytes != null && poll.last >= 0 && bytes > poll.last
+        if (eligible && bytes != null && bytes > 0 && bytes == poll.last) poll.still++ else if (flowing || !eligible) poll.still = 0
+        if (bytes != null) poll.last = bytes
+        val now = identity in inferredPaused
+        if (!now && poll.still >= PAUSE_STILL_POLLS) {
+            inferredPaused += identity
+            _state.value = _state.value.copy(videoPaused = true)
+            Journal.trouble(LogCode.CALL_PAUSE, "похоже, сервер приостановил видео собеседника — по признакам", "кто" to kto, "без новых байт с" to poll.still * LOSS_EVERY_MS / 1000)
+            if (group != null) resubscribe.paused(identity, System.currentTimeMillis())
+        } else if (now && (flowing || !eligible)) {
+            inferredPaused -= identity
+            _state.value = _state.value.copy(videoPaused = inferredPaused.isNotEmpty())
+            resubscribe.resumed(identity)
+            Journal.note(
+                LogCode.CALL_PAUSE,
+                if (flowing) "видео собеседника снова идёт — пауза по признакам кончилась" else "пауза по признакам снята — видео не ждём",
+                "кто" to kto,
+            )
+        }
+    }
+
+    /** Атрибут участника — одним ключом; ответ — ошибка словами или `null`. */
+    private suspend fun setAttribute(key: String, value: String): String? {
+        if (localParticipant == 0L) return "нет комнаты"
+        val answer = Ffi.call(PUBLISH_TIMEOUT_MS) { id ->
+            FfiRequest(
+                set_local_attributes = SetLocalAttributesRequest(
+                    local_participant_handle = localParticipant,
+                    attributes = listOf(AttributesEntry(key = key, value_ = value)),
+                    request_async_id = id,
+                ),
+            )
+        }?.set_local_attributes ?: return "нет ответа"
+        return answer.error
+    }
+
+    /** Выбранная пара кандидатов из статистики — оценка полосы и счётчики соединения. */
+    private fun selectedPair(stats: List<livekit.proto.RtcStats>): livekit.proto.CandidatePairStats? {
+        val pairs = stats.mapNotNull { it.candidate_pair?.candidate_pair }
+        return pairs.firstOrNull { it.nominated && it.state == livekit.proto.IceCandidatePairState.PAIR_SUCCEEDED }
+            ?: pairs.firstOrNull { it.state == livekit.proto.IceCandidatePairState.PAIR_SUCCEEDED }
+    }
+
+    private fun estimateNote(notes: EstimateNotes, now: Long, estimate: Double?) {
+        notes.next(now, estimate, _state.value.videoPaused)?.let { note ->
+            val kbps = note.kbps
+            if (kbps == null) {
+                Journal.note(LogCode.CALL_ADAPT, "оценки приёма у WebRTC нет", "пауза сервера" to note.paused)
+            } else {
+                Journal.note(LogCode.CALL_ADAPT, "оценка приёма", "кбит/с" to kbps.toInt(), "пауза сервера" to note.paused)
+            }
+        }
+    }
+
+    /**
+     * Звонок на двоих, отправитель (ПЗ7): битрейт камеры по слову собеседника. На ходу его у
+     * livekit-ffi не сменить — камера переопубликуется с новым потолком, не чаще раза в 10 с.
+     */
+    private suspend fun applyPeerLimit() {
+        val identity = others.firstOrNull { it != myIdentity } ?: return
+        val told = ReceiveLimit.read(peerAttributes[identity]?.get(ReceiveLimit.ATTRIBUTE))
+        if (told != peerReceiveSaid) {
+            peerReceiveSaid = told
+            if (told != null) {
+                Journal.note(LogCode.CALL_ADAPT, "собеседник сказал, сколько к нему пролезает", "кбит/с" to told)
+            } else {
+                Journal.note(LogCode.CALL_ADAPT, "собеседник снял ограничение приёма")
+            }
+        }
+        if (!ordinaryCall()) {
+            if (told != null && !benchLimitSaid) {
+                benchLimitSaid = true
+                Journal.note(LogCode.CALL_ADAPT, "набор стенда — ПЗ7 не применён", "собеседник принимает кбит/с" to told)
+            }
+            return
+        }
+        val limit = sendLimit ?: return
+        val now = System.currentTimeMillis()
+        // Пока нельзя переопубликовать — слово собеседника не тратим: SendLimit считает ступени
+        // от момента, когда битрейт поставлен на деле.
+        if (cameraSid.isNotEmpty() && now - limitPublishedAt < REPUBLISH_LIMIT_EVERY_MS) return
+        limit.next(now, told) ?: return
+        val ceiling = ceilingKbps()
+        val want = limit.current.takeIf { it < ceiling }
+        if (want == limitKbps) return
+        val was = limitKbps ?: ceiling
+        limitKbps = want
+        val codec = cameraCodec
+        if (cameraSid.isEmpty() || codec == null) return
+        limitPublishedAt = now
+        val kbps = want ?: ceiling
+        Journal.note(
+            LogCode.CALL_ADAPT,
+            if (kbps < was) "видео понижено под приём собеседника — камера переопубликована" else "видео повышено — камера переопубликована",
+            "кбит/с" to kbps, "было" to was,
+        )
+        republishCamera(codec)
+    }
+
     /** Чьё видео принимать (страница сетки); `null` — всех. */
     @Volatile
     private var visiblePeers: Set<String>? = null
@@ -262,6 +407,15 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         takeRemote = true
         group = door.group
         ceilingHeight = null
+        receiveTeller = ReceiveTeller((publish?.video?.bitrate ?: 800_000) / 1000)
+        sendLimit = SendLimit((publish?.video?.bitrate ?: 800_000) / 1000)
+        peerReceiveSaid = null
+        benchLimitSaid = false
+        limitKbps = null
+        limitPublishedAt = 0L
+        resubscribe.forget(emptySet())
+        inferredPaused.clear()
+        lastEstimate = null
         _state.value = CallState(stage = CallStage.Connecting, callId = door.callId, roomPaused = door.group?.paused == true)
         Ffi.listen(listener)
         pump = scope.launch(worker) { for (event in events) onRoom(event) }
@@ -319,6 +473,9 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
 
     /** Что знаем о входящем видео одного участника между опросами. */
     private class PeerWatch {
+        /** Принятые байты видео при прошлом опросе — для замера входящего (ПЗ4). */
+        var bandGot = -1L
+        val pause = PausePoll()
         var qpSum = -1L
         var qpFrames = -1L
         var said = ""
@@ -338,11 +495,21 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         groupJob?.cancel()
         groupJob = scope.launch(worker) {
             val known = HashMap<String, PeerWatch>()
+            val videoBand = BandWindow()
+            val allBand = BandWindow()
+            var pairGot = -1L
+            var wasArriving = false
+            val notes = EstimateNotes()
             while (isActive) {
                 delay(LOSS_EVERY_MS)
                 announceBench()
                 applyVisible()
                 val present = HashSet<String>()
+                var videoSum = 0.0
+                var arriving = false
+                var fresh = false
+                var pairBytes: Long? = null
+                var estimate: Double? = null
                 for (identity in others.toList()) {
                     if (identity == myIdentity) continue
                     present += identity
@@ -360,6 +527,12 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                                 FfiRequest(get_stats = GetStatsRequest(track_handle = r.track, request_async_id = id))
                             }?.get_stats?.stats
                         }.getOrNull().orEmpty()
+                        if (pairBytes == null) {
+                            selectedPair(stats)?.let { pair ->
+                                pairBytes = pair.bytes_received
+                                estimate = pair.available_incoming_bitrate.takeIf { it > 0 }?.div(1000)
+                            }
+                        }
                         val inbound = stats.mapNotNull { it.inbound_rtp }.firstOrNull { it.stream.kind == "video" } ?: return@let
                         val got = inbound.inbound
                         bytes = got.bytes_received
@@ -405,10 +578,27 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                         }
                     }
                     val shownHere = visiblePeers?.contains(identity) != false
+
+                    // ── Полоса: входящее (ПЗ4) и пауза по признакам (ПЗ2) ────────────────
+                    val said = peerAttributes[identity]?.get(VideoPause.ATTRIBUTE)
+                    val sending = published && said != VideoPause.PAUSED && said != VideoPause.WEAK
+                    val watched = takeRemote && shownHere
+                    if (sending && watched) {
+                        arriving = true
+                        val b = bytes
+                        if (b == null || me.bandGot < 0 || b < me.bandGot) fresh = true else videoSum += (b - me.bandGot) * 8.0 / LOSS_EVERY_MS
+                        if (b != null) me.bandGot = b
+                    }
+                    inferPause(
+                        identity, kto, me.pause, bytes,
+                        eligible = sending && watched && !_state.value.roomPaused && _state.value.stage == CallStage.Connected,
+                    )
+
                     val loss = me.watch.next(
                         RemoteVideoWatch.Poll(
                             published = published,
-                            excused = !takeRemote || !shownHere || _state.value.roomPaused || _state.value.stage != CallStage.Connected,
+                            excused = !takeRemote || !shownHere || _state.value.roomPaused || _state.value.stage != CallStage.Connected ||
+                                identity in inferredPaused,
                             bytes = bytes,
                             frames = frames,
                             codec = codec,
@@ -427,6 +617,43 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                 known.keys.retainAll(present)
                 peerLoss.keys.retainAll(present)
                 peerNumbers.keys.retainAll(present)
+                if (inferredPaused.retainAll(present)) _state.value = _state.value.copy(videoPaused = inferredPaused.isNotEmpty())
+                resubscribe.forget(inferredPaused.toSet())
+
+                // ── Входящее за 10 с (ПЗ4), оценка приёма (ПЗ3), повторная подача (ПЗ5) ──
+                val now = System.currentTimeMillis()
+                val total = pairBytes
+                if (total != null && pairGot >= 0 && total >= pairGot) allBand.add(now, (total - pairGot) * 8.0 / LOSS_EVERY_MS)
+                if (total != null) pairGot = total
+                if (arriving && !wasArriving) videoBand.clear()
+                wasArriving = arriving
+                if (arriving && !fresh) videoBand.add(now, videoSum)
+                lastEstimate = estimate
+                estimateNote(notes, now, estimate)
+                val videoAvg = videoBand.average(now)
+                val allAvg = allBand.average(now)
+                val st = _state.value
+                val band = IncomingBand(
+                    videoKbps = videoAvg,
+                    allKbps = allAvg,
+                    videoArriving = arriving,
+                    measurable = takeRemote && !st.roomPaused && st.stage == CallStage.Connected &&
+                        (if (arriving) videoAvg != null else allAvg != null),
+                )
+                if (band != st.incomingBand) _state.value = st.copy(incomingBand = band)
+                for (due in resubscribe.due(now)) {
+                    val kto = userOfIdentity(due.key).take(8)
+                    val handles = publications.values.filter { it.kind == TrackKind.KIND_VIDEO && it.identity == due.key }.map { it.handle }
+                    if (handles.isEmpty()) continue
+                    Journal.note(
+                        LogCode.CALL_PAUSE, "повторная подача видео участника",
+                        "кто" to kto, "попытка" to due.attempt, "пауза с" to (due.pausedMs / 1000),
+                        "оценка приёма кбит/с" to (lastEstimate?.toInt() ?: "—"),
+                    )
+                    for (h in handles) subscribe(h, false)
+                    delay(RESUBSCRIBE_PAUSE_MS)
+                    for (h in handles) subscribe(h, true)
+                }
                 publishPeers()
             }
         }
@@ -505,6 +732,12 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     /** Собеседник сказал, что принимает, — или сказал заново. */
     private fun heard(identity: String, attributes: Map<String, String>) {
         peerAttributes[identity] = attributes
+        // Групповой: у участника слабая связь — его видео выключено его телефоном (ПЗ4).
+        val weak = peerAttributes.values.any { it[VideoPause.ATTRIBUTE] == VideoPause.WEAK }
+        if (weak != _state.value.peerWeak) {
+            _state.value = _state.value.copy(peerWeak = weak)
+            Journal.note(LogCode.CALL_ADAPT, if (weak) "у собеседника слабая связь — его видео выключено" else "у собеседника видео снова идёт после слабой связи")
+        }
         if (group != null) publishPeers()
         val told = PeerCodecs.read(attributes[PeerCodecs.ATTRIBUTE]) ?: return
         if (peerCodecs.put(identity, told) != told) {
@@ -546,6 +779,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         peersJob = scope.launch(worker) {
             while (isActive) {
                 delay(PEERS_EVERY_MS)
+                if (group == null) applyPeerLimit()
                 if (cameraSid.isEmpty()) continue
                 val codec = codecForPeers() ?: continue
                 if (codec == cameraCodec) continue
@@ -594,6 +828,12 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         lossJob = scope.launch(worker) {
             val watch = RemoteVideoWatch()
             var told: RemoteVideoLoss? = null
+            // Полоса на двоих (ПЗ7, ПЗ3, ПЗ2).
+            val estimates = BandWindow()
+            val arrived = BandWindow()
+            var pairGot = -1L
+            val notes = EstimateNotes()
+            val pausePoll = PausePoll()
             var decoderSaid = ""
             var froze = 0
             var inMisaligned = ""
@@ -606,12 +846,18 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                 var bytes: Long? = null
                 var frames: Long? = null
                 var codec: String? = null
+                var pairBytes: Long? = null
+                var estimate: Double? = null
                 remote?.let { shown ->
                     val stats = runCatching {
                         Ffi.call(STATS_TIMEOUT_MS) { id ->
                             FfiRequest(get_stats = GetStatsRequest(track_handle = shown.track, request_async_id = id))
                         }?.get_stats?.stats
                     }.getOrNull().orEmpty()
+                    selectedPair(stats)?.let { pair ->
+                        pairBytes = pair.bytes_received
+                        estimate = pair.available_incoming_bitrate.takeIf { it > 0 }?.div(1000)
+                    }
                     val inbound = stats.mapNotNull { it.inbound_rtp }.firstOrNull { it.stream.kind == "video" }
                     bytes = inbound?.inbound?.bytes_received
                     frames = inbound?.inbound?.frames_decoded?.toLong()
@@ -663,6 +909,42 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
 
                 // Групповой — пропажа по каждому участнику ведёт watchGroupIncoming.
                 if (group != null) continue
+
+                // ── Полоса на двоих ──────────────────────────────────────────────────
+                val peerId = others.firstOrNull { it != myIdentity }
+                if (peerId != null) {
+                    val said = peerAttributes[peerId]?.get(VideoPause.ATTRIBUTE)
+                    val st = _state.value
+                    inferPause(
+                        peerId, userOfIdentity(peerId).take(8), pausePoll, bytes,
+                        eligible = published && said != VideoPause.PAUSED && said != VideoPause.WEAK && takeRemote &&
+                            st.stage == CallStage.Connected,
+                    )
+                }
+                val at = System.currentTimeMillis()
+                val e = estimate
+                lastEstimate = e
+                if (e != null) estimates.add(at, e)
+                val pb = pairBytes
+                if (pb != null && pairGot >= 0 && pb >= pairGot) arrived.add(at, (pb - pairGot) * 8.0 / LOSS_EVERY_MS)
+                if (pb != null) pairGot = pb
+                if (remote != null) {
+                    estimateNote(notes, at, e)
+                    val paused = _state.value.videoPaused
+                    receiveTeller?.next(at, estimates.average(at), paused, arrived.average(at))?.let { change ->
+                        val why = setAttribute(ReceiveLimit.ATTRIBUTE, ReceiveLimit.write(change.kbps))
+                        if (why != null) Journal.trouble(LogCode.CALL_ADAPT, "не сказали собеседнику, сколько к нам пролезает", "причина" to why)
+                        val kbps = change.kbps
+                        if (kbps != null) {
+                            Journal.note(
+                                LogCode.CALL_ADAPT, "сказали собеседнику: к нам пролезает",
+                                "кбит/с" to kbps, "оценка за 10 с" to (estimates.average(at)?.toInt() ?: "—"), "пауза сервера" to paused,
+                            )
+                        } else {
+                            Journal.note(LogCode.CALL_ADAPT, "сказали собеседнику: ограничения приёма нет", "оценка за 10 с" to (estimates.average(at)?.toInt() ?: "—"))
+                        }
+                    }
+                }
                 val now = _state.value
                 val loss = watch.next(
                     RemoteVideoWatch.Poll(
@@ -1328,7 +1610,8 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                         source = TrackSource.SOURCE_CAMERA,
                         video_codec = codec,
                         video_encoding = VideoEncoding(
-                            max_bitrate = video.bitrate.toLong(),
+                            // Потолок по слову собеседника (ПЗ7) — ниже потолка сервера, не выше.
+                            max_bitrate = minOf(video.bitrate, limitKbps?.times(1000) ?: Int.MAX_VALUE).toLong(),
                             max_framerate = video.fps.toDouble(),
                         ),
                         simulcast = video.layers == LayerMode.Simulcast,
@@ -1627,6 +1910,11 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         _localVideo.value = null
     }
 
+    override suspend fun announceWeak(weak: Boolean) = withContext(worker) {
+        val why = setAttribute(VideoPause.ATTRIBUTE, if (weak) VideoPause.WEAK else "")
+        if (why != null) Journal.trouble(LogCode.CALL_ADAPT, "не сказали собеседникам про слабую связь", "причина" to why)
+    }
+
     override suspend fun setRemoteVideo(on: Boolean) = withContext(worker) {
         takeRemote = on
         for (p in publications.values) {
@@ -1734,3 +2022,12 @@ private val PC_DECODES = setOf(VideoCodec.H264, VideoCodec.VP8, VideoCodec.VP9)
 
 /** Как часто пересматриваем кодек под собеседников. */
 private const val PEERS_EVERY_MS = 1_000L
+
+/** Пауза сервера по признакам — столько опросов без новых байт подряд (ПЗ2): 6 с. */
+private const val PAUSE_STILL_POLLS = 2
+
+/** Битрейт по слову собеседника — перевыпуск камеры не чаще (ПЗ7). */
+private const val REPUBLISH_LIMIT_EVERY_MS = 10_000L
+
+/** Между отпиской и подпиской при повторной подаче (ПЗ5). */
+private const val RESUBSCRIBE_PAUSE_MS = 300L

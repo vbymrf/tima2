@@ -16,6 +16,7 @@ import io.tima.core.call.CallPeer
 import io.tima.core.call.Calls
 import io.tima.core.call.GroupControl
 import io.tima.core.call.GroupRules
+import io.tima.core.call.OwnVideoGuard
 import io.tima.core.call.cappedTo
 import io.tima.core.call.PublishPreset
 import io.tima.core.call.VideoHandle
@@ -292,6 +293,7 @@ class CallHost(
                     if (fresh.stage == CallStage.Connected) startTicking()
                     if (fresh.stage == CallStage.Ended) stopTicking()
                     noticed(was, fresh)
+                    guardOwnVideo(fresh)
                     if (fresh.roomPaused != was.roomPaused && group != null) paused(fresh.roomPaused)
                     nearEar(fresh)
                     screenOn(fresh)
@@ -660,8 +662,64 @@ class CallHost(
     private var pauseJob: kotlinx.coroutines.Job? = null
     private var pausedByBackground = false
 
+    // ── СЛАБАЯ СВЯЗЬ В ГРУППОВОМ (ПЛАН-(ПЗ) ПЗ4, заказчик 2026-10-15) ─────────────
+    //
+    // Входящее видео за 10 с в среднем ниже 150 кбит/с — своё видео выключается само, не ниже 250
+    // — включается. Мерит движок ([CallState.incomingBand]), решает [OwnVideoGuard]. Своё видео,
+    // выключенное человеком, правило не включает: нажатие камеры снимает решение правила.
+    // Набор стенда — закон (как потолок группы, 2026-10-02, 2а): правило не применяется.
+
+    private var pausedByWeak = false
+
+    /** Окно приложения на экране: в фоне камеру не поднимаем — система её отберёт (1б). */
+    private var appShown = true
+
+    private fun guardOwnVideo(now: CallState) {
+        if (group == null || !busy || preset() != null) return
+        val band = now.incomingBand
+        when (OwnVideoGuard.decide(pausedByWeak, band) ?: return) {
+            OwnVideoGuard.Decision.Pause -> {
+                if (!now.cameraOn || pausedByBackground) return
+                pausedByWeak = true
+                Journal.note(
+                    LogCode.CALL_ADAPT, "своё видео выключено — входящее видео ниже 150",
+                    "за 10 с кбит/с" to (band?.videoKbps?.toInt() ?: "—"), "всё входящее кбит/с" to (band?.allKbps?.toInt() ?: "—"),
+                )
+                note(words().call.ownWeakVideo, whileTrue = OWN_WEAK)
+                scope.launch {
+                    engine?.announceWeak(true)
+                    engine?.setCamera(false)
+                }
+            }
+            OwnVideoGuard.Decision.Resume -> {
+                if (!appShown) return
+                pausedByWeak = false
+                Journal.note(
+                    LogCode.CALL_ADAPT, "своё видео снова идёт — входящее за 10 с не ниже 250",
+                    "видео кбит/с" to (band?.videoKbps?.toInt() ?: "—"), "всё входящее кбит/с" to (band?.allKbps?.toInt() ?: "—"),
+                    "видео приходит" to (band?.videoArriving ?: false),
+                )
+                forget(OWN_WEAK)
+                scope.launch {
+                    engine?.setCamera(true)
+                    engine?.announceWeak(false)
+                }
+            }
+        }
+    }
+
+    /** Человек нажал камеру — решение правила слабой связи снято, дальше решает он. */
+    private fun dropWeak() {
+        if (!pausedByWeak) return
+        pausedByWeak = false
+        forget(OWN_WEAK)
+        Journal.note(LogCode.CALL_ADAPT, "камеру нажал человек — правило слабой связи снято")
+        scope.launch { engine?.announceWeak(false) }
+    }
+
     /** Окно приложения на экране или нет — зовёт платформа ([CallKeep.visible]). */
     fun appVisible(visible: Boolean) {
+        appShown = visible
         if (!busy) return
         if (!visible) {
             if (!state.cameraOn || cameraInBackground()) return
@@ -739,6 +797,7 @@ class CallHost(
         pauseJob?.cancel()
         pauseJob = null
         pausedByBackground = false
+        pausedByWeak = false
         toldOnce = false
         toldAt = 0L
         active = false
@@ -813,6 +872,7 @@ class CallHost(
      * Выключение разрешения не требует вовсе: перестать показывать можно всегда.
      */
     fun camera(on: Boolean) {
+        dropWeak()
         if (on && voiceOnly) {
             // Больше 8 — только голос (решение 4): правило сервера, а не поломка камеры.
             note(words().groupCall.voiceOnly(group?.rules?.videoUpTo ?: 8))
@@ -934,8 +994,11 @@ class CallHost(
         // Собеседник свернул приложение — его видео на паузе (1б): длится, пока не вернётся.
         if (now.peerPaused) note(words.peerPausedVideo, whileTrue = PEER_PAUSED) else forget(PEER_PAUSED)
 
+        // Групповой: у участника слабая связь — его телефон выключил своё видео (ПЗ4).
+        if (now.peerWeak) note(words.peerWeakVideo, whileTrue = PEER_WEAK) else forget(PEER_WEAK)
+
         // ── СЛУЧИВШИЕСЯ: остаются ──────────────────────────────────────────
-        if (!now.remoteVideoShown && was.remoteVideoShown && now.remoteVideoTaken && !now.peerPaused) note(words.peerStoppedVideo)
+        if (!now.remoteVideoShown && was.remoteVideoShown && now.remoteVideoTaken && !now.peerPaused && !now.peerWeak) note(words.peerStoppedVideo)
 
         // Камеру включили или выключили при «продолжать показывать» — тип службы следом (1в).
         if (now.cameraOn != was.cameraOn && toldOnce && busy && cameraInBackground()) told()
@@ -1495,6 +1558,8 @@ class CallHost(
         // и перечень на четыре значения был бы лестницей к одной ступеньке.
         const val PEER_ALONE = "чужое видео при нашей выключенной камере"
         const val PEER_PAUSED = "собеседник свернул приложение"
+        const val PEER_WEAK = "у собеседника слабая связь"
+        const val OWN_WEAK = "своё видео выключено слабой связью"
         const val PAUSED = "видео погашено полосой"
         const val BACKING = "связь возвращается"
         const val HIDDEN = "чужое видео скрыто нами"

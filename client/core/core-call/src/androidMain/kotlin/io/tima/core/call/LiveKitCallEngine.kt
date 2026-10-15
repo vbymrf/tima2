@@ -167,6 +167,30 @@ class LiveKitCallEngine(
     /** Что каждый собеседник уже сказал — чтобы писать в журнал только смену. */
     private val peerTold = HashMap<String, String>()
 
+    // ── ПОЛОСА (ПЛАН-(ПЗ)-ПОЛОСЫ-ЗВОНКА.md, 2026-10-15) ─────────────────────────
+    //
+    // Звонок на двоих — получатель говорит, сколько к нему пролезает, отправитель ставит битрейт
+    // (ПЗ7). Групповой — повторная подача приостановленного сервером видео (ПЗ5) и замер
+    // входящего для выключения своего видео (ПЗ4, решает `CallHost`). Правила — `Bandwidth.kt`.
+
+    private var receiveTeller: ReceiveTeller? = null
+    private var sendLimit: SendLimit? = null
+    /** Что сказал собеседник о своём приёме — чтобы писать в журнал только смену. */
+    private var peerReceiveSaid: Int? = null
+    private var benchLimitSaid = false
+    private var appliedKbps: Int? = null
+    private var refusedKbps: Int? = null
+    private val resubscribe = Resubscribe()
+    /** Приостановленные сервером видеодорожки участников — для повторной подачи (ПЗ5). */
+    private val pausedPublications = java.util.concurrent.ConcurrentHashMap<String, RemoteTrackPublication>()
+    /** Наблюдатели видимости видео собеседников (ПЗ3): по дорожке. */
+    private val visibilityJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
+
+    /** Обычный звонок, а не прогон стенда: набор стенда — закон (заказчик 2026-10-02, 2а). */
+    private fun ordinaryCall(): Boolean = publishing?.name == BASE_PRESET
+
+    private fun ceilingKbps(publish: PublishPreset?): Int = (publish?.video?.bitrate ?: 800_000) / 1000
+
     /** Выбор динамика этого звонка — наш экземпляр, с нашим порядком (ПЛАН-(В)-ВИДЕО.md В9). */
     private var sound: AudioSwitchHandler? = null
 
@@ -263,6 +287,14 @@ class LiveKitCallEngine(
         takeRemote = true
         peerSeen.clear()
         peerTold.clear()
+        receiveTeller = ReceiveTeller(ceilingKbps(publish))
+        sendLimit = SendLimit(ceilingKbps(publish))
+        peerReceiveSaid = null
+        benchLimitSaid = false
+        appliedKbps = null
+        refusedKbps = null
+        resubscribe.forget(emptySet())
+        pausedPublications.clear()
         soundChosen = false
         cameraFront = true
         publish?.let { publishVideoAs(created, it.video, exact = it.exact) }
@@ -588,6 +620,13 @@ class LiveKitCallEngine(
                     _state.value = _state.value.copy(peerPaused = paused)
                     Journal.note(LogCode.CALL, "собеседник свернул приложение — его видео на паузе", "на паузе" to paused)
                 }
+                // Групповой: у участника слабая связь — его видео выключено его телефоном (ПЗ4).
+                val weak = room.remoteParticipants.values.any { it.attributes[VideoPause.ATTRIBUTE] == VideoPause.WEAK }
+                if (weak != _state.value.peerWeak) {
+                    _state.value = _state.value.copy(peerWeak = weak)
+                    Journal.note(LogCode.CALL_ADAPT, if (weak) "у собеседника слабая связь — его видео выключено" else "у собеседника видео снова идёт после слабой связи")
+                }
+                if (group == null) applyPeerLimit(room)
                 val preset = publishing ?: continue
                 val codec = codecForPeers(room) ?: continue
                 if (codec == target) continue
@@ -600,6 +639,55 @@ class LiveKitCallEngine(
                 applyDefaults(room, preset.video, codec, null)
                 republishCamera(room, "кодек под собеседника")
             }
+        }
+    }
+
+    /**
+     * Звонок на двоих, отправитель (ПЗ7): битрейт видео по слову собеседника о его приёме.
+     *
+     * Ставится на ходу, в параметрах передачи видео, — без перевыпуска камеры и без перерыва
+     * картинки. Перевыпуск (смена кодека) приносит новый передатчик с потолком по умолчанию —
+     * тогда поставленное возвращается сюда же на следующей секунде.
+     */
+    private fun applyPeerLimit(room: Room) {
+        val peer = room.remoteParticipants.values.firstOrNull() ?: return
+        val told = ReceiveLimit.read(peer.attributes[ReceiveLimit.ATTRIBUTE])
+        if (told != peerReceiveSaid) {
+            peerReceiveSaid = told
+            if (told != null) {
+                Journal.note(LogCode.CALL_ADAPT, "собеседник сказал, сколько к нему пролезает", "кбит/с" to told)
+            } else {
+                Journal.note(LogCode.CALL_ADAPT, "собеседник снял ограничение приёма")
+            }
+        }
+        if (!ordinaryCall()) {
+            if (told != null && !benchLimitSaid) {
+                benchLimitSaid = true
+                Journal.note(LogCode.CALL_ADAPT, "набор стенда — ПЗ7 не применён", "собеседник принимает кбит/с" to told)
+            }
+            return
+        }
+        val limit = sendLimit ?: return
+        val changed = limit.next(nowMs(), told)
+        val want = limit.current
+        val ceiling = ceilingKbps(publishing)
+        if (appliedKbps == null && want >= ceiling) return
+        val track = room.localParticipant.videoTrackPublications.firstNotNullOfOrNull { it.second as? LocalVideoTrack } ?: return
+        val sender = VideoSender.of(track)
+        if (sender == null) {
+            if (changed != null) Journal.trouble(LogCode.CALL_ADAPT, "битрейт видео не поставить — нет доступа к передатчику", "кбит/с" to want)
+            return
+        }
+        // Уже стоит — ничего. Не принят раньше — не долбить каждую секунду, ждать новой цифры.
+        if (changed == null && (VideoSender.maxKbps(sender) == want || refusedKbps == want)) return
+        val ok = VideoSender.setMaxKbps(sender, want)
+        refusedKbps = if (ok) null else want
+        val was = appliedKbps ?: ceiling
+        appliedKbps = want
+        when {
+            changed == null && was == want -> Journal.note(LogCode.CALL_ADAPT, "битрейт видео поставлен заново после перевыпуска камеры", "кбит/с" to want, "принят" to ok)
+            want < was -> Journal.note(LogCode.CALL_ADAPT, "видео понижено под приём собеседника", "кбит/с" to want, "было" to was, "принят" to ok)
+            else -> Journal.note(LogCode.CALL_ADAPT, "видео повышено", "кбит/с" to want, "было" to was, "потолок" to ceiling, "принят" to ok)
         }
     }
 
@@ -735,6 +823,8 @@ class LiveKitCallEngine(
     private fun stopWatching() {
         for (job in watchers) job.cancel()
         watchers.clear()
+        for (job in visibilityJobs.values) job.cancel()
+        visibilityJobs.clear()
     }
 
     override suspend fun disconnect() {
@@ -836,6 +926,12 @@ class LiveKitCallEngine(
         val track = room?.localParticipant?.videoTrackPublications?.firstOrNull()?.second as? LocalVideoTrack ?: return
         val done = attempt { track.restartTrack() }
         Journal.note(LogCode.CALL, "камера открыта заново", "удалось" to done)
+    }
+
+    override suspend fun announceWeak(weak: Boolean) {
+        val live = room ?: return
+        runCatching { live.localParticipant.updateAttributes(mapOf(VideoPause.ATTRIBUTE to if (weak) VideoPause.WEAK else "")) }
+            .onFailure { Journal.trouble(LogCode.CALL_ADAPT, "не сказали собеседникам про слабую связь", "причина" to (it.message ?: it::class.simpleName)) }
     }
 
     override suspend fun announcePaused(paused: Boolean) {
@@ -1047,7 +1143,10 @@ class LiveKitCallEngine(
         watchQuality(room)
         watchBreaks(room)
         watchTracks(room)
-        if (group != null) watchGroup(room)
+        if (group != null) {
+            watchGroup(room)
+            watchResubscribe(room)
+        }
     }
 
     /**
@@ -1104,9 +1203,16 @@ class LiveKitCallEngine(
                                 paused[pub.sid] = nowMs()
                                 _state.value = _state.value.copy(videoPaused = true)
                                 Journal.trouble(LogCode.CALL_PAUSE, "сервер приостановил видео собеседника — не хватает полосы", "дорожка" to pub.sid.takeLast(6))
+                                // Групповой — повторная подача, если пауза затянется (ПЗ5).
+                                if (group != null && pub is RemoteTrackPublication) {
+                                    pausedPublications[pub.sid] = pub
+                                    resubscribe.paused(pub.sid, nowMs())
+                                }
                             }
                             Track.StreamState.ACTIVE -> paused.remove(pub.sid)?.let { since ->
                                 _state.value = _state.value.copy(videoPaused = paused.isNotEmpty())
+                                pausedPublications.remove(pub.sid)
+                                resubscribe.resumed(pub.sid)
                                 Journal.note(LogCode.CALL_PAUSE, "сервер вернул видео собеседника", "пауза с" to ((nowMs() - since) / 1000.0).toString(), "дорожка" to pub.sid.takeLast(6))
                             }
                             else -> Unit
@@ -1119,12 +1225,19 @@ class LiveKitCallEngine(
                     is RoomEvent.TrackUnpublished -> if (remote(e.participant)) {
                         // Снятая дорожка — и её пауза: вернуться ей уже некуда.
                         if (paused.remove(e.publication.sid) != null) _state.value = _state.value.copy(videoPaused = paused.isNotEmpty())
+                        pausedPublications.remove(e.publication.sid)
+                        resubscribe.resumed(e.publication.sid)
                         Journal.note(LogCode.CALL_TRACK, "собеседник снял дорожку", "вид" to kind(e.publication), "кто" to who(e.participant), "дорожка" to e.publication.sid.takeLast(6))
                     }
-                    is RoomEvent.TrackSubscribed ->
+                    is RoomEvent.TrackSubscribed -> {
                         Journal.note(LogCode.CALL_TRACK, "подписались на дорожку собеседника", "вид" to kind(e.publication), "кто" to who(e.participant), "дорожка" to e.publication.sid.takeLast(6))
-                    is RoomEvent.TrackUnsubscribed ->
+                        val video = e.track as? io.livekit.android.room.track.RemoteVideoTrack
+                        if (video != null && publishing?.video?.adaptiveStream != false) watchVisibility(video, e.publication.sid, who(e.participant))
+                    }
+                    is RoomEvent.TrackUnsubscribed -> {
+                        visibilityJobs.remove(e.publications.sid)?.cancel()
                         Journal.note(LogCode.CALL_TRACK, "отписались от дорожки собеседника", "вид" to kind(e.publications), "кто" to who(e.participant), "дорожка" to e.publications.sid.takeLast(6))
+                    }
                     is RoomEvent.TrackMuted -> if (remote(e.participant)) {
                         Journal.note(LogCode.CALL_TRACK, "собеседник выключил дорожку", "вид" to kind(e.publication), "кто" to who(e.participant))
                     }
@@ -1138,6 +1251,96 @@ class LiveKitCallEngine(
             }
         }
     }
+
+    /**
+     * Видно ли видео собеседника у нас — то, что adaptiveStream говорит серверу (ПЗ3, начало
+     * цепочки adaptiveStream → dynacast). Скрыто — сервер вправе не слать, и отправитель по dynacast
+     * останавливает кодер; показано — всё обязано пойти обратно. Если видео пропало и не вернулось,
+     * а здесь «скрыто» без «показано», цепочка не восстановилась на нашем конце: вид не привязался
+     * к дорожке заново (окно пересоздано системой и т. п.).
+     *
+     * Размер пишется не чаще раза в 5 с: при анимации раскладки он меняется на каждом кадре.
+     */
+    private fun watchVisibility(track: io.livekit.android.room.track.RemoteVideoTrack, sid: String, kto: String) {
+        visibilityJobs.remove(sid)?.cancel()
+        visibilityJobs[sid] = scope.launch {
+            var shown: Boolean? = null
+            var size = ""
+            var sizeAt = 0L
+            track.events.events.collect { ev ->
+                when (ev) {
+                    is io.livekit.android.events.TrackEvent.VisibilityChanged -> if (ev.isVisible != shown) {
+                        shown = ev.isVisible
+                        Journal.note(
+                            LogCode.CALL_ADAPT,
+                            if (ev.isVisible) "видео собеседника показано — серверу «слать»" else "видео собеседника скрыто — серверу «не слать»",
+                            "кто" to kto, "дорожка" to sid.takeLast(6),
+                        )
+                    }
+                    is io.livekit.android.events.TrackEvent.VideoDimensionsChanged -> {
+                        val d = ev.newDimensions
+                        val now = "" + d.width + "×" + d.height
+                        if (now != size && nowMs() - sizeAt >= SIZE_NOTE_EVERY_MS) {
+                            size = now
+                            sizeAt = nowMs()
+                            Journal.note(LogCode.CALL_ADAPT, "размер видео собеседника на экране — серверу", "кто" to kto, "размер" to now)
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
+
+    /**
+     * Повторная подача видео, которое сервер держит на паузе, — групповой (ПЗ5). Через 15, 30, 60
+     * с, дальше раз в 60 с (ПЗ-В7): отписаться и подписаться снова, и сервер решает заново.
+     *
+     * Не трогаем, если пауза не от сервера: участник сам выключил видео (свернул, слабая связь),
+     * его камера выключена, мы скрыли видео или участника нет на экране. Иначе мы воюем с
+     * собственной логикой.
+     */
+    private fun watchResubscribe(room: Room) {
+        watchers += scope.launch {
+            while (isActive) {
+                delay(RESUBSCRIBE_CHECK_MS)
+                resubscribe.forget(pausedPublications.keys.toSet())
+                for (due in resubscribe.due(nowMs())) {
+                    val pub = pausedPublications[due.key] ?: continue
+                    val who = pub.participant.get()
+                    val identity = who?.identity?.value
+                    val kto = userOfIdentity(identity ?: "").take(8)
+                    val said = who?.attributes?.get(VideoPause.ATTRIBUTE)
+                    val skip = when {
+                        said == VideoPause.PAUSED || said == VideoPause.WEAK -> "участник сам выключил видео"
+                        pub.muted -> "камера участника выключена"
+                        !takeRemote -> "видео скрыто нами"
+                        identity != null && visiblePeers?.contains(identity) == false -> "участника нет на экране"
+                        else -> null
+                    }
+                    if (skip != null) {
+                        Journal.note(LogCode.CALL_PAUSE, "повторная подача пропущена", "кто" to kto, "почему" to skip, "попытка" to due.attempt)
+                        continue
+                    }
+                    Journal.note(
+                        LogCode.CALL_PAUSE, "повторная подача видео участника",
+                        "кто" to kto, "попытка" to due.attempt, "пауза с" to (due.pausedMs / 1000),
+                        "оценка приёма кбит/с" to (lastEstimate?.toInt() ?: "—"),
+                    )
+                    runCatching {
+                        pub.setSubscribed(false)
+                        delay(RESUBSCRIBE_PAUSE_MS)
+                        pub.setSubscribed(true)
+                    }.onFailure {
+                        Journal.trouble(LogCode.CALL_PAUSE, "повторная подача не удалась", "кто" to kto, "почему" to (it.message ?: it::class.simpleName))
+                    }
+                }
+            }
+        }
+    }
+
+    /** Последняя оценка приёма WebRTC, кбит/с — для строки о повторной подаче. */
+    @Volatile private var lastEstimate: Double? = null
 
     /**
      * Обрывы: сколько заняло возвращение (§3.4).
@@ -1232,6 +1435,8 @@ class LiveKitCallEngine(
 
     /** Что знаем о входящем видео одного участника между опросами. */
     private class PeerWatch {
+        /** Принятые байты видео при прошлом опросе — для замера входящего (ПЗ4). */
+        var bandGot = -1L
         var qpSum = -1.0
         var qpFrames = -1L
         var said = ""
@@ -1253,9 +1458,21 @@ class LiveKitCallEngine(
     private fun watchGroupIncoming(room: Room) {
         watchers += scope.launch {
             val known = HashMap<String, PeerWatch>()
+            // Входящее для ПЗ4: всё видео тех, кого смотрим и кто его шлёт, и всё соединение со
+            // звуком — средние за 10 с.
+            val videoBand = BandWindow()
+            val allBand = BandWindow()
+            var pairGot = -1L
+            var wasArriving = false
+            val notes = EstimateNotes()
             while (isActive) {
                 delay(STATS_EVERY_MS)
                 val present = HashSet<String>()
+                var videoSum = 0.0
+                var arriving = false
+                var fresh = false
+                var pairBytes: Long? = null
+                var estimate: Double? = null
                 for (who in room.remoteParticipants.values) {
                     val identity = who.identity?.value ?: continue
                     present += identity
@@ -1268,6 +1485,24 @@ class LiveKitCallEngine(
                     val incoming = report?.firstOrNull { it.type == "inbound-rtp" && it.members["kind"] == "video" }
                     val codec = incoming?.members?.get("codecId")?.toString()?.let { id ->
                         report.firstOrNull { it.id == id }?.members?.get("mimeType")?.toString()?.removePrefix("video/")
+                    }
+
+                    // ── Входящее для ПЗ4 ──────────────────────────────────────────────
+                    // Участник шлёт видео (камера, не свёрнут, не «слабая связь») и мы его
+                    // смотрим. Пауза сервера сюда не входит: она и есть узкий канал.
+                    val told = who.attributes[VideoPause.ATTRIBUTE]
+                    if (published && told != VideoPause.PAUSED && told != VideoPause.WEAK &&
+                        takeRemote && visiblePeers?.contains(identity) != false
+                    ) {
+                        arriving = true
+                        val b = (incoming?.members?.get("bytesReceived") as? Number)?.toLong()
+                        if (b == null || me.bandGot < 0 || b < me.bandGot) fresh = true else videoSum += (b - me.bandGot) * 8.0 / STATS_EVERY_MS
+                        if (b != null) me.bandGot = b
+                    }
+                    if (pairBytes == null && report != null) {
+                        val pair = selectedPair(report)
+                        pairBytes = (pair?.members?.get("bytesReceived") as? Number)?.toLong()
+                        estimate = incomingEstimateKbps(pair)
                     }
 
                     // Пропажа видео — своя у участника, на его клетку.
@@ -1352,6 +1587,37 @@ class LiveKitCallEngine(
                 known.keys.retainAll(present)
                 peerLoss.keys.retainAll(present)
                 peerNumbers.keys.retainAll(present)
+
+                // ── Входящее за 10 с (ПЗ4) и оценка приёма (ПЗ3) ─────────────────────
+                val now = nowMs()
+                val total = pairBytes
+                if (total != null && pairGot >= 0 && total >= pairGot) allBand.add(now, (total - pairGot) * 8.0 / STATS_EVERY_MS)
+                if (total != null) pairGot = total
+                // Кто-то начал слать — окно видео сначала: старые нули в нём не про канал.
+                if (arriving && !wasArriving) videoBand.clear()
+                wasArriving = arriving
+                if (arriving && !fresh) videoBand.add(now, videoSum)
+                lastEstimate = estimate
+                notes.next(now, estimate, _state.value.videoPaused)?.let { note ->
+                    val kbps = note.kbps
+                    if (kbps == null) {
+                        Journal.note(LogCode.CALL_ADAPT, "оценки приёма у WebRTC нет", "пауза сервера" to note.paused)
+                    } else {
+                        Journal.note(LogCode.CALL_ADAPT, "оценка приёма", "кбит/с" to kbps.toInt(), "пауза сервера" to note.paused)
+                    }
+                }
+                val videoAvg = videoBand.average(now)
+                val allAvg = allBand.average(now)
+                val st = _state.value
+                val band = IncomingBand(
+                    videoKbps = videoAvg,
+                    allKbps = allAvg,
+                    videoArriving = arriving,
+                    // Пауза создателя и не начавшийся звонок — входящее мало не от канала.
+                    measurable = takeRemote && !st.roomPaused && st.stage == CallStage.Connected &&
+                        (if (arriving) videoAvg != null else allAvg != null),
+                )
+                if (band != st.incomingBand) _state.value = st.copy(incomingBand = band)
             }
         }
     }
@@ -1362,15 +1628,19 @@ class LiveKitCallEngine(
             var got = -1L
             var froze = 0L
             var misaligned = ""
+            // Полоса получателя (ПЗ7, ПЗ3): оценка приёма и что пришло на деле — средние за 10 с.
+            val estimates = BandWindow()
+            val arrived = BandWindow()
+            var pairGot = -1L
+            val notes = EstimateNotes()
             while (isActive) {
                 delay(STATS_EVERY_MS)
                 val track = room.remoteParticipants.values
                     .flatMap { it.videoTrackPublications }
                     .firstNotNullOfOrNull { it.second as? VideoTrack } ?: continue
-                val incoming = runCatching {
-                    track.getRTCStats()?.statsMap?.values
-                        ?.firstOrNull { it.type == "inbound-rtp" && it.members["kind"] == "video" }
-                }.getOrNull() ?: continue
+                val report = runCatching { track.getRTCStats()?.statsMap?.values }.getOrNull() ?: continue
+                receiveBand(room, report, estimates, arrived, notes, pairGot)?.let { pairGot = it }
+                val incoming = report.firstOrNull { it.type == "inbound-rtp" && it.members["kind"] == "video" } ?: continue
 
                 val w = incoming.members["frameWidth"] ?: continue
                 val h = incoming.members["frameHeight"] ?: continue
@@ -1429,6 +1699,50 @@ class LiveKitCallEngine(
                 )
             }
         }
+    }
+
+    /**
+     * Звонок на двоих, получатель (ПЗ7): оценка приёма в журнал (ПЗ3) и слово собеседнику о том,
+     * сколько к нам пролезает. Возвращает счётчик принятых байт соединения для следующего опроса.
+     */
+    private fun receiveBand(
+        room: Room,
+        report: Collection<livekit.org.webrtc.RTCStats>,
+        estimates: BandWindow,
+        arrived: BandWindow,
+        notes: EstimateNotes,
+        pairGot: Long,
+    ): Long? {
+        val now = nowMs()
+        val pair = selectedPair(report)
+        val estimate = incomingEstimateKbps(pair)
+        lastEstimate = estimate
+        if (estimate != null) estimates.add(now, estimate)
+        val pairBytes = (pair?.members?.get("bytesReceived") as? Number)?.toLong()
+        if (pairBytes != null && pairGot >= 0 && pairBytes >= pairGot) arrived.add(now, (pairBytes - pairGot) * 8.0 / STATS_EVERY_MS)
+        val paused = _state.value.videoPaused
+        notes.next(now, estimate, paused)?.let { note ->
+            val kbps = note.kbps
+            if (kbps == null) {
+                Journal.note(LogCode.CALL_ADAPT, "оценки приёма у WebRTC нет", "пауза сервера" to note.paused)
+            } else {
+                Journal.note(LogCode.CALL_ADAPT, "оценка приёма", "кбит/с" to kbps.toInt(), "пауза сервера" to note.paused)
+            }
+        }
+        receiveTeller?.next(now, estimates.average(now), paused, arrived.average(now))?.let { change ->
+            runCatching { room.localParticipant.updateAttributes(mapOf(ReceiveLimit.ATTRIBUTE to ReceiveLimit.write(change.kbps))) }
+                .onFailure { Journal.trouble(LogCode.CALL_ADAPT, "не сказали собеседнику, сколько к нам пролезает", "причина" to (it.message ?: it::class.simpleName)) }
+            val told = change.kbps
+            if (told != null) {
+                Journal.note(
+                    LogCode.CALL_ADAPT, "сказали собеседнику: к нам пролезает",
+                    "кбит/с" to told, "оценка за 10 с" to (estimates.average(now)?.toInt() ?: "—"), "пауза сервера" to paused,
+                )
+            } else {
+                Journal.note(LogCode.CALL_ADAPT, "сказали собеседнику: ограничения приёма нет", "оценка за 10 с" to (estimates.average(now)?.toInt() ?: "—"))
+            }
+        }
+        return pairBytes
     }
 
     /**
@@ -1616,10 +1930,26 @@ class LiveKitCallEngine(
             var lastCoder = "—"
             var misaligned = ""
             val check = CodecCheck()
+            var encoderOn: Boolean? = null
             while (isActive) {
                 delay(STATS_EVERY_MS)
                 val track = room.localParticipant.videoTrackPublications
                     .firstNotNullOfOrNull { it.second as? VideoTrack } ?: continue
+
+                // ── КОНЕЦ ЦЕПОЧКИ adaptiveStream → dynacast У ОТПРАВИТЕЛЯ (ПЗ3) ─────
+                //
+                // Сервер сказал «наше видео никому не нужно» — SDK выключил кодирование. Открытого
+                // события у SDK нет; флаг виден в параметрах передачи, сверяем раз в опрос.
+                val active = (track as? LocalVideoTrack)?.let { VideoSender.of(it) }?.let { VideoSender.active(it) }
+                if (active != null && active != encoderOn) {
+                    if (encoderOn != null || !active) {
+                        Journal.note(
+                            LogCode.CALL_ADAPT,
+                            if (active) "сервер: наше видео снова нужно — кодер идёт" else "сервер: наше видео никому не нужно — кодер остановлен",
+                        )
+                    }
+                    encoderOn = active
+                }
                 // Отчёт приходит пустым, пока дорожка не поднялась, — это не беда, а
                 // «ещё рано»: просто ждём следующего опроса.
                 val report = runCatching { track.getRTCStats()?.statsMap?.values }.getOrNull() ?: continue
@@ -1795,6 +2125,12 @@ private const val PEERS_EVERY_MS = 1_000L
 
 /** Пауза между отпиской и подпиской при смене раскодировщика. */
 private const val RESUBSCRIBE_PAUSE_MS = 300L
+
+/** Как часто сверять, чья пора на повторную подачу (ПЗ5). */
+private const val RESUBSCRIBE_CHECK_MS = 1_000L
+
+/** Размер видео собеседника на экране — в журнал не чаще (ПЗ3). */
+private const val SIZE_NOTE_EVERY_MS = 5_000L
 
 /** Отметка «собеседник не сказал» в [LiveKitCallEngine.peerTold]. */
 private const val UNKNOWN = "?"

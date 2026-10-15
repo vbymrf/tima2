@@ -129,6 +129,12 @@ interface CallEngine {
     /** Сказать собеседнику, что своё видео на паузе из-за сворачивания (атрибут участника). */
     suspend fun announcePaused(paused: Boolean) = Unit
 
+    /**
+     * Сказать собеседникам, что своё видео выключено слабой связью — групповой, ПЗ4 (атрибут
+     * [VideoPause.ATTRIBUTE] = [VideoPause.WEAK]; `false` снимает).
+     */
+    suspend fun announceWeak(weak: Boolean) = Unit
+
     suspend fun setHardwareCoding(coding: HardwareCoding) = Unit
 
     /**
@@ -254,6 +260,16 @@ data class CallState(
      * вернётся — видео пойдёт само.
      */
     val peerPaused: Boolean = false,
+    /**
+     * Групповой: у участника слабая связь, и его телефон сам выключил своё видео (ПЗ4) — атрибут
+     * [VideoPause.ATTRIBUTE] = [VideoPause.WEAK].
+     */
+    val peerWeak: Boolean = false,
+    /**
+     * Групповой: что к нам приходит, среднее за 10 с (ПЗ4). По нему [OwnVideoGuard] решает,
+     * выключить ли своё видео. `null` — звонок на двоих или ещё не мерили.
+     */
+    val incomingBand: IncomingBand? = null,
     /** Принимаем ли мы его видео. Выключается кнопкой «скрыть» (ЗВ11). */
     val remoteVideoTaken: Boolean = true,
     val quality: CallQuality = CallQuality.Unknown,

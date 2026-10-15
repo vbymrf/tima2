@@ -94,6 +94,12 @@ object VideoPause {
     const val ATTRIBUTE = "tima.video"
     const val PAUSED = "paused"
 
+    /**
+     * Своё видео выключено слабой связью — групповой звонок, ПЗ4 (заказчик 2026-10-15).
+     * Собеседник показывает «у собеседника слабая связь — видео выключено, звук идёт».
+     */
+    const val WEAK = "weak"
+
     /** Пустое значение атрибут снимает. */
     fun value(paused: Boolean): String = if (paused) PAUSED else ""
 }

@@ -1094,6 +1094,8 @@ object SpanishWords : Words {
         override val peerShowsSelf = "La otra persona muestra vídeo y tu cámara está apagada: toca la cámara para mostrarte"
         override val peerStoppedVideo = "La otra persona dejó de mostrar vídeo"
         override val peerPausedVideo = "La otra persona minimizó la aplicación — su vídeo está en pausa"
+        override val peerWeakVideo = "La otra persona tiene una conexión débil — el vídeo está apagado, el audio sigue"
+        override val ownWeakVideo = "Tu vídeo está apagado: conexión débil"
         override val peerLeft = "La otra persona colgó"
         override fun presetApplied(name: String) =
             "Conjunto «$name» aplicado: el corte de dos segundos no fue un fallo"
