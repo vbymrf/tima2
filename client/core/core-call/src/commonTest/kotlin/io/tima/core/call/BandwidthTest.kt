@@ -42,6 +42,17 @@ class BandwidthTest {
     }
 
     @Test
+    fun разгон_оценки_в_начале_звонка_не_ограничение() {
+        val t = ReceiveTeller(ceilingKbps = 800)
+        // Оценка ниже потолка, но выше того, что приходит, — канал не упирается.
+        assertNull(t.next(0, 612.0, serverPaused = false, incoming = 470.0))
+        // Пролезает меньше, чем приходит, — узко, сказать.
+        assertEquals(550, t.next(3_000, 560.0, false, incoming = 700.0)!!.kbps)
+        // Ниже на 20 %, но всё ещё выше пришедшего — молчим.
+        assertNull(t.next(6_000, 400.0, false, incoming = 380.0))
+    }
+
+    @Test
     fun пауза_сервера_шаг_вниз_даже_без_оценки() {
         val t = ReceiveTeller(ceilingKbps = 800)
         val c = t.next(0, estimate = null, serverPaused = true, incoming = 900.0)

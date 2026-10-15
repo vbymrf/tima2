@@ -60,7 +60,8 @@ object ReceiveLimit {
  * ПЗ7, получатель звонка на двоих: что сказать собеседнику о своём приёме.
  *
  * - **вниз:** среднее за 10 с упало на 20 % от сказанного (а пока не сказано ничего — ниже
- *   потолка с запасом на звук) или сервер поставил видео на паузу — сказать сразу;
+ *   потолка с запасом на звук) **и ниже того, что приходит**, или сервер поставил видео на паузу —
+ *   сказать сразу;
  * - **вверх:** не чаще раза в 10 с и только при росте на 30 %;
  * - приём с запасом над потолком — ограничение снять (пустой атрибут);
  * - число с округлением до 50 — атрибут не дёргается на каждом колебании.
@@ -100,12 +101,17 @@ class ReceiveTeller(private val ceilingKbps: Int) {
             return set(nowMs, kbps)
         }
         val e = estimate ?: return null
+        // Узко — только когда пролезает меньше, чем приходит. Оценка WebRTC растёт вместе с
+        // трафиком: в начале звонка она ниже потолка, но выше того, что шлют, — это разгон, а не
+        // узкий канал (живой прогон 2026-10-15, Honor: 472 → 760 → 886 кбит/с за 25 с при 415–606
+        // входящих — и ложное «пролезает 600» через 26 с).
+        val short = incoming == null || e < incoming
         val now = told
         if (now == null) {
-            if (e < full) return set(nowMs, round50(e))
+            if (e < full && short) return set(nowMs, round50(e))
             return null
         }
-        if (e <= now * DOWN_SHARE) return set(nowMs, round50(e))
+        if (e <= now * DOWN_SHARE && short) return set(nowMs, round50(e))
         if (nowMs - changedAt < UP_EVERY_MS) return null
         if (e >= full * CLEAR_SHARE) return set(nowMs, null)
         if (e >= now * UP_SHARE) return set(nowMs, round50(minOf(e, full.toDouble())))
