@@ -750,12 +750,22 @@ class CallHost(
     /**
      * Идут ли кадры своей камеры после возврата. Нет — открыть её заново: система могла
      * отобрать её в фоне, а сама она не вернётся.
+     *
+     * Камера, не давшая ещё **ни одного** кадра, не отобрана, а заводится: так бывает, когда
+     * звонок приняли из уведомления и окно вышло на экран раньше камеры. Отобранная камера
+     * оставляет счётчик на прежнем числе, а не на нуле (выключение камеры кнопкой или паузой
+     * его не сбрасывает — дорожка та же). Без этой проверки Samsung 2026-10-16 открыл камеру
+     * заново на второй секунде звонка и упал (`БЕДЫ/2026-10-16-камера-открыта-заново-в-начале-звонка.md`).
      */
     private suspend fun cameraWatch() {
         val live = engine ?: return
         kotlinx.coroutines.delay(CAMERA_SETTLE_MS)
         if (!busy || !state.cameraOn) return
         val before = live.cameraFrames() ?: return
+        if (before == 0L) {
+            Journal.note(LogCode.CALL, "сторож камеры: кадров ещё не было — камера заводится, не трогаем")
+            return
+        }
         kotlinx.coroutines.delay(CAMERA_PROBE_MS)
         if (!busy || !state.cameraOn) return
         val after = live.cameraFrames() ?: return

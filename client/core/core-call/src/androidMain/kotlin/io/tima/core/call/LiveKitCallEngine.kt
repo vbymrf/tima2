@@ -921,10 +921,20 @@ class LiveKitCallEngine(
      * Камеру открыть заново (заказчик 2026-10-01). HyperOS отбирает её у свёрнутого
      * приложения через несколько секунд, и ни WebRTC, ни LiveKit этого не замечают: дорожка
      * опубликована, кадров нет — `БЕДЫ/2026-10-01-камера-в-фоне.md`.
+     *
+     * Заново открывается **съёмка той же дорожки** (`stopCapture` → `startCapture`), а не
+     * дорожка целиком. `restartTrack` в LiveKit 2.28.2 уничтожает старую дорожку раньше, чем
+     * подставит новую, и сборщик статистики SDK (`RTCMetricsManager`, раз в секунду) в этом
+     * окне берёт `id()` уничтоженной — `IllegalStateException` в корутине SDK, которую никто не
+     * ловит: приложение падает (отчёт 637S, `БЕДЫ/2026-10-16-камера-открыта-заново-в-начале-звонка.md`).
+     * Остановку и запуск съёмки SDK и сам делает при выключении и включении камеры.
      */
     override suspend fun restartCamera() {
         val track = room?.localParticipant?.videoTrackPublications?.firstOrNull()?.second as? LocalVideoTrack ?: return
-        val done = attempt { track.restartTrack() }
+        val done = attempt {
+            track.stopCapture()
+            track.startCapture()
+        }
         Journal.note(LogCode.CALL, "камера открыта заново", "удалось" to done)
     }
 
