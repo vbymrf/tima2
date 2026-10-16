@@ -166,8 +166,8 @@ proves:    Shared client code compiles for Android and a debug APK can be assemb
 stack:     gradle, android
 setup:     none
 run:
-  - Push-Location client; .\gradlew --no-daemon --rerun-tasks :composeApp:compileDebugKotlinAndroid :composeApp:assembleDebug; Pop-Location
-artifact:  client/composeApp/build/outputs/apk/debug/composeApp-debug.apk
+  - Push-Location client; .\gradlew --no-daemon :app-android:assembleDebug; Pop-Location
+artifact:  client/app-android/build/outputs/apk/debug/app-android-debug.apk (версия — `aapt dump badging`)
 requires:  JDK 17; ANDROID_HOME; Android SDK platform 35 and build-tools 35.0.0
 forbids:   claiming Android runtime testing; concurrent Gradle work in messenger-crypto
 frozen:    —
