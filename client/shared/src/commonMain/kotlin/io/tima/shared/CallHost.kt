@@ -863,7 +863,7 @@ class CallHost(
     /** Держим ли экран включённым. */
     private var screenOnNow = false
 
-    /** Видеозвонок — экран не гаснет (решение заказчика 2026-09-30). */
+    /** Экран не гаснет, кроме звонка у уха без своей камеры ([screenOnWanted], заказчик 2026-10-16). */
     private fun screenOn(now: CallState) {
         val want = screenOnWanted(active, now)
         if (want == screenOnNow) return
@@ -1614,14 +1614,18 @@ internal typealias Door = CallDoor
 
 /** Гасить ли экран у уха (ПЛАН-(В)-ВИДЕО.md В10, вариант 2а). Отдельно — ради проверки. */
 /**
- * Не гасить экран (решение заказчика 2026-09-30): звонок идёт и в нём есть видео — своё или
- * собеседника. Скрытое нами видео собеседника звонок видеозвонком быть не перестаёт: скрыли
- * на минуту — и экран не должен погаснуть за эту минуту.
+ * Не гасить экран, пока звонок идёт (заказчик 2026-10-16): **гаснет он только тогда, когда звук в
+ * разговорном динамике («Ухо») и своя камера выключена** — то, что видно в голосовом звонке у уха;
+ * там экран гасит датчик приближения ([nearEarWanted]) и, как обычно, система. Громкая связь —
+ * экран не гаснет, есть видео у собеседника или нет.
+ *
+ * Прежнее правило (2026-09-30) держало экран только при видео — своём или собеседника — и
+ * голосовой звонок на громкой связи гас через полминуты.
  */
 internal fun screenOnWanted(active: Boolean, state: CallState): Boolean =
     active &&
         (state.stage == CallStage.Connecting || state.stage == CallStage.Connected || state.stage == CallStage.Reconnecting) &&
-        (state.cameraOn || state.remoteVideoShown)
+        !(state.sound == SoundRoute.Earpiece && !state.cameraOn)
 
 internal fun nearEarWanted(active: Boolean, state: CallState): Boolean =
     active && state.stage == CallStage.Connected && !state.cameraOn && state.sound == SoundRoute.Earpiece

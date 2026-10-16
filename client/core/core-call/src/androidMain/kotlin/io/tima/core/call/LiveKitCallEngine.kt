@@ -1248,11 +1248,15 @@ class LiveKitCallEngine(
                         visibilityJobs.remove(e.publications.sid)?.cancel()
                         Journal.note(LogCode.CALL_TRACK, "отписались от дорожки собеседника", "вид" to kind(e.publications), "кто" to who(e.participant), "дорожка" to e.publications.sid.takeLast(6))
                     }
+                    // Выключенная камера собеседника — та же дорожка, только приглушённая: смены
+                    // дорожек нет, и картинку пересматриваем здесь (заказчик 2026-10-16).
                     is RoomEvent.TrackMuted -> if (remote(e.participant)) {
                         Journal.note(LogCode.CALL_TRACK, "собеседник выключил дорожку", "вид" to kind(e.publication), "кто" to who(e.participant))
+                        if (e.publication.kind == Track.Kind.VIDEO) pickRemote(room)
                     }
                     is RoomEvent.TrackUnmuted -> if (remote(e.participant)) {
                         Journal.note(LogCode.CALL_TRACK, "собеседник включил дорожку", "вид" to kind(e.publication), "кто" to who(e.participant))
+                        if (e.publication.kind == Track.Kind.VIDEO) pickRemote(room)
                     }
                     is RoomEvent.TrackSubscriptionFailed ->
                         Journal.trouble(LogCode.CALL_TRACK, "подписка на дорожку собеседника не удалась", "кто" to who(e.participant), "почему" to (e.exception.message ?: e.exception::class.simpleName.orEmpty()).take(120))
@@ -2094,7 +2098,15 @@ class LiveKitCallEngine(
         }
     }
 
-    /** Какую чужую дорожку показывать. Одна: звонок один на один, в комнате двое. */
+    /**
+     * Какую чужую дорожку показывать. Одна: звонок один на один, в комнате двое.
+     *
+     * **Приглушённая — не показывается.** Выключая камеру, LiveKit дорожку не снимает, а глушит
+     * и останавливает съёмку. Раньше по одному наличию дорожки собеседник «показывал себя» и с
+     * выключенной камерой: на экране висел его последний кадр, а у обоих с выключенными
+     * камерами — «Собеседник показывает себя, наша камера выключена» (заказчик 2026-10-16).
+     * Своё окошко чинилось тем же 2026-10-08; на ПК приглушение учтено (`DesktopCallEngine`).
+     */
     private fun pickRemote(room: Room) {
         if (!takeRemote) {
             show(_remoteVideo, room, null)
@@ -2103,6 +2115,7 @@ class LiveKitCallEngine(
         }
         val track = room.remoteParticipants.values
             .flatMap { it.videoTrackPublications }
+            .filterNot { it.first.muted }
             .firstNotNullOfOrNull { it.second as? VideoTrack }
         show(_remoteVideo, room, track)
         _state.value = _state.value.copy(remoteVideoShown = track != null)
