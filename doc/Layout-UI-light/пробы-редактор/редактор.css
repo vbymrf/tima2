@@ -1,0 +1,199 @@
+/* Пробы редактора сообщений — общее для трёх страниц папки (2026-10-17).
+   Поверх ../стиль.css: те же цвета, формы и зоны, здесь только новое. */
+
+.срез { height: auto; width: 344px; border-width: 2px; border-radius: 20px; }
+.срез .зона-2 { flex: 0 0 auto; overflow: visible; }
+.срез .поток { padding: 14px; gap: 10px; }
+.срез .пузырь { max-width: 262px; }
+
+.проба { padding: 20px 0 24px; border-bottom: 1px solid var(--чёрный-12); }
+.проба:target { box-shadow: inset 6px 0 0 var(--навигация); padding-left: 16px; }
+.шапка-пробы { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.номер { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+.опис { font-size: 13.5px; color: var(--чёрный-70); }
+.срезы { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+.с-подписью > .трет { margin-top: 8px; max-width: 344px; }
+.разбор-пробы { flex: 1 1 300px; min-width: 280px; max-width: 520px; font-size: 13.5px; color: var(--чёрный-70); }
+.разбор-пробы b { color: var(--текст); }
+.разбор-пробы ul { margin: 6px 0; padding-left: 20px; }
+.разбор-пробы li { margin: 4px 0; }
+.навигация-проб { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+.навигация-проб a {
+  display: inline-flex; align-items: center; padding: 7px 13px; border-radius: 999px;
+  border: 1px solid var(--чёрный-12); text-decoration: none; color: var(--текст);
+  font-size: 12.5px; font-weight: 700;
+}
+.вопрос-метка {
+  display: inline-block; font-size: 11px; font-weight: 800; padding: 2px 9px; border-radius: 999px;
+  background: var(--активность); color: var(--текст); vertical-align: 2px;
+}
+
+/* ── Строка ввода: редактор · пузырь ввода · динамическая кнопка ───────────── */
+
+.строка-ввода {
+  display: flex; align-items: flex-end; gap: 8px;
+  padding: 8px 10px 10px; background: var(--функц); border-top: 1px solid var(--чёрный-12);
+}
+/* Редактор — три полосы. Серый, пока не включён; зелёный — сообщение собрано в редакторе */
+.кн-ред {
+  width: 38px; height: 38px; flex: 0 0 38px; border-radius: 50%;
+  background: var(--чёрный-6); color: var(--чёрный-50);
+  display: flex; align-items: center; justify-content: center; text-decoration: none;
+}
+.кн-ред.вкл { background: var(--навигация); color: #ffffff; }
+.полосы { display: flex; flex-direction: column; gap: 3px; }
+.полосы i { display: block; width: 16px; height: 2px; border-radius: 1px; background: currentColor; }
+.полосы i:nth-child(2) { width: 12px; }
+
+/* Пузырь ввода: текст и серые кнопки внутри */
+.пилюля {
+  flex: 1 1 auto; min-width: 0; min-height: 38px; box-sizing: border-box;
+  display: flex; align-items: flex-end; gap: 2px;
+  padding: 4px 4px 4px 14px; border-radius: 19px;
+  background: var(--поверхность); border: 1px solid var(--рамка);
+}
+.пилюля .набор {
+  flex: 1 1 auto; min-width: 0; padding: 6px 0; font-size: var(--щ5); line-height: 1.35; color: var(--текст);
+}
+.пилюля .набор.пусто { color: var(--чёрный-50); }
+.пилюля .курсор { display: inline-block; width: 1.5px; height: 15px; background: var(--навигация); vertical-align: -3px; margin-left: 1px; }
+.серая {
+  width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; color: var(--чёрный-50); text-decoration: none; filter: grayscale(1); opacity: 0.75;
+}
+.серая.нажата { background: var(--чёрный-6); opacity: 1; }
+/* Знаки быстрого оформления в строке ввода — видны, но приглушены */
+.знак { color: var(--чёрный-35); font-weight: 600; }
+
+/* Динамическая кнопка справа: микрофон → отправить */
+.кн-отпр {
+  width: 38px; height: 38px; flex: 0 0 38px; border-radius: 50%;
+  background: var(--навигация); color: #ffffff; font-size: 16px;
+  display: flex; align-items: center; justify-content: center; text-decoration: none;
+}
+
+/* Чип «собрано в редакторе» над строкой ввода */
+.собрано {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  background: var(--функц); border-top: 1px solid var(--чёрный-12); font-size: var(--щ6); color: var(--чёрный-70);
+}
+.собрано .миниатюра { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 8px; background: linear-gradient(135deg, #e8f3dc, #fff6d9); border: 1px solid var(--чёрный-12); }
+
+/* Клавиатура — заглушка того, что подменяется областью */
+.клав {
+  height: 236px; background: #d9dce1; display: flex; align-items: center; justify-content: center;
+  color: rgba(0,0,0,0.45); font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+}
+
+/* ── Область на месте клавиатуры ─────────────────────────────────────────── */
+
+.область { position: relative; height: 236px; background: var(--поверхность); border-top: 1px solid var(--чёрный-12); display: flex; flex-direction: column; }
+.область-шапка { display: flex; align-items: center; gap: 6px; padding: 6px 44px 6px 10px; min-height: 40px; box-sizing: border-box; }
+.закрыть {
+  position: absolute; top: 6px; right: 8px; width: 30px; height: 30px; border-radius: 50%;
+  background: var(--чёрный-6); color: var(--текст); font-size: 13px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; text-decoration: none;
+}
+.вкладка-обл {
+  padding: 5px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; color: var(--чёрный-70);
+  background: none; white-space: nowrap;
+}
+.вкладка-обл.тек { background: var(--акцент-мягкий); color: var(--текст); }
+.область-тело { flex: 1 1 auto; overflow: hidden; padding: 0 10px; }
+.область-низ { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--чёрный-12); }
+
+.сетка-эмо { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; font-size: 22px; text-align: center; line-height: 36px; }
+.поиск-обл { flex: 1 1 auto; height: 28px; border-radius: 14px; background: var(--чёрный-6); font-size: 11.5px; color: var(--чёрный-50); display: flex; align-items: center; padding: 0 12px; }
+
+.сетка-фото { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+.плитка { position: relative; height: 72px; border-radius: 6px; overflow: hidden; }
+.плитка.камера { background: var(--текст); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; gap: 2px; }
+.плитка .выбор {
+  position: absolute; top: 5px; right: 5px; width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid #fff; box-sizing: border-box; background: rgba(0,0,0,0.25);
+  font-size: 11px; font-weight: 800; color: #fff; display: flex; align-items: center; justify-content: center;
+}
+.плитка .выбор.да { background: var(--навигация); border-color: var(--навигация); color: #000; }
+
+.файл { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--чёрный-6); }
+.файл .знак-файла { width: 34px; height: 34px; flex: 0 0 34px; border-radius: 8px; background: var(--чёрный-6); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: var(--чёрный-70); }
+.файл .тянуть .имя { font-size: 12.5px; }
+.файл.нельзя { opacity: 0.45; }
+.файл .отметка { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--чёрный-35); box-sizing: border-box; flex: 0 0 20px; }
+.файл .отметка.да { background: var(--навигация); border-color: var(--навигация); }
+
+/* ── Сообщения вне пузыря (результат Галереи, Файла, Эмоджи) ─────────────── */
+
+.вне { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.вне .время { font-size: 10.5px; font-weight: 700; color: var(--чёрный-50); }
+.эмо-крупно { font-size: 54px; line-height: 1; }
+.фото-вне { width: 200px; height: 150px; border-radius: 14px; background: linear-gradient(135deg, #b8d99a, #6f9f4a 60%, #3e6b2a); }
+.файл-вне { display: flex; align-items: center; gap: 10px; width: 230px; padding: 8px 10px; border-radius: 14px; background: var(--чёрный-6); box-sizing: border-box; }
+
+/* ── Окно редактора ──────────────────────────────────────────────────────── */
+
+.ред-панель { background: var(--функц); border-bottom: 1px solid var(--чёрный-12); padding: 6px 8px; display: flex; flex-direction: column; gap: 5px; }
+.ред-ряд { display: flex; gap: 4px; flex-wrap: nowrap; }
+.кн-ф {
+  flex: 1 1 0; min-width: 0; height: 32px; border-radius: 9px;
+  background: var(--поверхность); border: 1px solid var(--чёрный-12); color: var(--текст);
+  display: flex; align-items: center; justify-content: center; font-size: 13px; text-decoration: none;
+}
+.кн-ф.вкл { background: var(--акцент-мягкий); border-color: var(--навигация); }
+.кн-ф.моно { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; font-weight: 800; }
+.кн-ф.откл { color: var(--чёрный-35); }
+
+.лист-ред { padding: 12px 12px 14px; background: var(--поверхность); display: flex; flex-direction: column; gap: 8px; }
+.подпись-лист { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--чёрный-50); }
+/* Предпросмотр — сам пузырь, как его увидит собеседник */
+.лист-ред .пузырь { max-width: none; width: 100%; box-sizing: border-box; }
+.блок { position: relative; border-radius: 6px; padding: 2px 4px; margin: 0 -4px; }
+.блок + .блок { margin-top: 6px; }
+.блок.выбран { outline: 2px solid var(--навигация); outline-offset: 1px; }
+.блок .бирка-блока {
+  position: absolute; top: -9px; right: 4px; font-size: 9.5px; font-weight: 800; padding: 1px 7px;
+  border-radius: 999px; background: var(--навигация); color: #000;
+}
+.блок.с-фоном { background: #fff3cd; padding: 8px 10px; margin: 0; }
+.раздел-блока { height: 0; border-top: 2px solid var(--навигация); margin: 8px 0; }
+.картинка-в { height: 120px; border-radius: 8px; background: linear-gradient(135deg, #cfe6b6, #8ac44a 70%); display: flex; align-items: flex-end; padding: 6px; box-sizing: border-box; font-size: 10px; font-weight: 800; color: rgba(0,0,0,0.6); }
+.картинка-в.полови { width: 50%; height: 80px; float: left; margin: 0 8px 4px 0; }
+.ответ-блок { border-left: 3px solid #5b73c9; background: rgba(91,115,201,0.12); border-radius: 6px; padding: 4px 8px; font-size: 11.5px; }
+.ответ-блок .кто { font-weight: 800; color: #3d55aa; }
+.ссылка-кн { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--рамка); font-size: 11.5px; font-weight: 700; }
+.ссылка-кн .домен { font-weight: 800; }
+.ссылка-кн .путь-ссылки { color: var(--чёрный-50); font-weight: 600; }
+.маркер { background: #fff07a; padding: 0 2px; border-radius: 2px; }
+.цитата-р { border-left: 3px solid var(--чёрный-35); padding-left: 8px; color: var(--чёрный-70); font-style: italic; }
+.табл { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.табл td, .табл th { border: 1px solid var(--чёрный-12); padding: 3px 6px; text-transform: none; letter-spacing: 0; font-size: 11.5px; }
+
+/* Панель над выделением */
+.над-выделением {
+  display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--текст);
+  position: absolute; top: -34px; left: 20px; z-index: 2;
+}
+.над-выделением span { color: #fff; font-size: 12px; font-weight: 800; padding: 3px 7px; border-radius: 6px; }
+.над-выделением span.вкл { background: var(--навигация); color: #000; }
+.выделено { background: rgba(138,196,74,0.35); }
+
+/* Свойства блока — область на месте клавиатуры */
+.свойства { padding: 0 12px 10px; display: flex; flex-direction: column; gap: 8px; font-size: 11.5px; }
+.свойство { display: flex; align-items: center; gap: 8px; }
+.свойство > .ярл { flex: 0 0 82px; font-weight: 700; color: var(--чёрный-70); }
+.образцы { display: flex; gap: 5px; flex-wrap: wrap; }
+.образец { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--чёрный-12); box-sizing: border-box; }
+.образец.тек { outline: 2px solid var(--текст); outline-offset: 1px; }
+.образец.нет { background: linear-gradient(135deg, #fff 45%, #c62828 46%, #c62828 54%, #fff 55%); }
+.выбор-чип { padding: 3px 9px; border-radius: 999px; background: var(--чёрный-6); font-weight: 700; color: var(--чёрный-70); }
+.выбор-чип.тек { background: var(--акцент-мягкий); color: var(--текст); outline: 1px solid var(--навигация); }
+.по-умолч { font-size: 10.5px; color: var(--чёрный-50); }
+
+.json {
+  font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; line-height: 1.5;
+  background: #1d1f21; color: #e6e6e6; border-radius: 8px; padding: 8px 10px; white-space: pre; overflow: hidden;
+}
+.json .к { color: #9fd36b; }
+.json .з { color: #ffd479; }
+.проверка { font-size: 10.5px; font-weight: 700; color: var(--подтверждено); }

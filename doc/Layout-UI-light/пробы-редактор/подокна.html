@@ -1,0 +1,220 @@
+<meta charset="utf-8">
+<title>Пробы: области на месте клавиатуры</title>
+<link rel="stylesheet" href="../стиль.css">
+<link rel="stylesheet" href="редактор.css">
+
+<div class="лист-док">
+
+<div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-редактор / подокна.html</div>
+<h1>Пробы: Эмоджи, Галерея, Файл, Голос</h1>
+<p class="подзаголовок">
+  Кнопка убирает клавиатуру и открывает на её месте свою область той же высоты — переписка
+  над ней не прыгает. <b>Закрыть</b> — крестик в правом верхнем углу или нажатие вне области
+  (в переписку или в строку ввода; нажатие в строку ввода возвращает клавиатуру). Эти же области
+  открываются из <a href="редактор.html">редактора</a>. Соседняя страница —
+  <a href="окно-ввода.html">строка ввода</a>.
+</p>
+
+<div class="навигация-проб">
+  <a href="#о01">01 · Эмоджи — отдельным сообщением</a>
+  <a href="#о05">02 · Эмоджи — в текст</a>
+  <a href="#о02">03 · Галерея</a>
+  <a href="#о03">04 · Файл</a>
+  <a href="#о04">05 · Голос</a>
+</div>
+
+<!-- ── Эмоджи, пусто ─────────────────────────────────────────────────────── -->
+<div class="проба" id="о01">
+  <div class="шапка-пробы"><span class="номер">01</span><span class="опис">Эмоджи, строка пуста — нажатие отправляет отдельным сообщением</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="строка-ввода">
+          <span class="кн-ред"><span class="полосы"><i></i><i></i><i></i></span></span>
+          <div class="пилюля"><div class="набор пусто">Сообщение…</div><span class="серая нажата">🙂</span><span class="серая">🖼</span><span class="серая">📎</span></div>
+          <span class="кн-отпр">🎙</span>
+        </div>
+        <div class="область">
+          <div class="область-шапка">
+            <span class="вкладка-обл тек">Недавние</span><span class="вкладка-обл">Лица</span><span class="вкладка-обл">Жесты</span><span class="вкладка-обл">Природа</span>
+          </div>
+          <a class="закрыть" href="окно-ввода.html#п01">✕</a>
+          <div class="область-тело">
+            <div class="сетка-эмо">
+              <span>👍</span><span>😂</span><span>❤️</span><span>🎉</span><span>🙏</span><span>😊</span><span>🔥</span><span>👌</span>
+              <span>😁</span><span>🤔</span><span>😮</span><span>😢</span><span>😡</span><span>🥳</span><span>😴</span><span>🤝</span>
+              <span>👏</span><span>💪</span><span>🙌</span><span>✌️</span><span>🤗</span><span>😎</span><span>🫶</span><span>👀</span>
+            </div>
+          </div>
+          <div class="область-низ"><div class="поиск-обл">Поиск эмоджи</div></div>
+        </div>
+      </div>
+      <div class="трет">строка ввода пуста</div>
+    </div>
+    <div class="разбор-пробы">
+      <ul>
+        <li><b>Нажатие — сразу отправка</b> отдельным сообщением вне пузыря, крупно и анимацией из набора приложения (решение 2026-09-04, <code>СТИКЕР-В-ТЕЛЕ-СООБЩЕНИЯ.md</code>). Одно нажатие — одно сообщение, как стикер.</li>
+        <li><b>Долгое нажатие</b> — показать крупно, не отправляя: посмотреть движение.</li>
+        <li><b>Вкладки</b> сверху по группам Unicode, «Недавние» первой; поиск — внизу, у большого пальца. Вкладки прокручиваются вбок, крестик стоит отдельно и не уезжает.</li>
+        <li>Свои наборы стикеров, когда появятся, — ещё одна вкладка здесь же.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── Эмоджи, набор ─────────────────────────────────────────────────────── -->
+<div class="проба" id="о05">
+  <div class="шапка-пробы"><span class="номер">02</span><span class="опис">Эмоджи, в строке есть текст — нажатие вставляет в текст</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="строка-ввода">
+          <span class="кн-ред"><span class="полосы"><i></i><i></i><i></i></span></span>
+          <div class="пилюля"><div class="набор">Поздравляю! 🎉🎉<span class="курсор"></span></div><span class="серая нажата">🙂</span></div>
+          <span class="кн-отпр">➤</span>
+        </div>
+        <div class="область">
+          <div class="область-шапка">
+            <span class="вкладка-обл тек">Недавние</span><span class="вкладка-обл">Лица</span><span class="вкладка-обл">Жесты</span><span class="вкладка-обл">Природа</span>
+          </div>
+          <a class="закрыть" href="окно-ввода.html#п02">✕</a>
+          <div class="область-тело">
+            <div class="сетка-эмо">
+              <span>👍</span><span>😂</span><span>❤️</span><span>🎉</span><span>🙏</span><span>😊</span><span>🔥</span><span>👌</span>
+              <span>😁</span><span>🤔</span><span>😮</span><span>😢</span><span>😡</span><span>🥳</span><span>😴</span><span>🤝</span>
+            </div>
+          </div>
+          <div class="область-низ"><div class="поиск-обл">Поиск эмоджи</div><span class="икона" style="width:30px;height:30px;flex-basis:30px">⌫</span></div>
+        </div>
+      </div>
+      <div class="трет">вставка в место курсора</div>
+    </div>
+    <div class="разбор-пробы">
+      <ul>
+        <li><b>Вставляет в место курсора</b>, область остаётся открытой — можно поставить несколько подряд.</li>
+        <li><b>«Стереть»</b> внизу справа — клавиатуры нет, а стереть лишний значок нужно.</li>
+        <li>Отправка — зелёной кнопкой в строке ввода, как обычно.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── Галерея ───────────────────────────────────────────────────────────── -->
+<div class="проба" id="о02">
+  <div class="шапка-пробы"><span class="номер">03</span><span class="опис">Галерея — выбрать несколько, каждое уйдёт отдельным сообщением</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="строка-ввода">
+          <span class="кн-ред"><span class="полосы"><i></i><i></i><i></i></span></span>
+          <div class="пилюля"><div class="набор пусто">Сообщение…</div><span class="серая">🙂</span><span class="серая нажата">🖼</span><span class="серая">📎</span></div>
+          <span class="кн-отпр">🎙</span>
+        </div>
+        <div class="область">
+          <div class="область-шапка"><span class="вкладка-обл тек">Недавние</span><span class="вкладка-обл">Вся галерея ›</span></div>
+          <a class="закрыть" href="окно-ввода.html#п01">✕</a>
+          <div class="область-тело">
+            <div class="сетка-фото">
+              <div class="плитка камера"><span style="font-size:20px">📷</span>Камера</div>
+              <div class="плитка" style="background:linear-gradient(135deg,#b8d99a,#5f8f3a)"><span class="выбор да">1</span></div>
+              <div class="плитка" style="background:linear-gradient(135deg,#ffe29a,#e08a2c)"><span class="выбор"></span></div>
+              <div class="плитка" style="background:linear-gradient(135deg,#a9c7f0,#3c6db3)"><span class="выбор да">2</span></div>
+              <div class="плитка" style="background:linear-gradient(135deg,#e6c3e6,#8a4f9e)"><span class="выбор"></span></div>
+              <div class="плитка" style="background:linear-gradient(135deg,#d6d6d6,#6e6e6e)"><span class="выбор"></span></div>
+            </div>
+          </div>
+          <div class="область-низ"><span class="трет" style="flex:1">2 фото · уйдут двумя сообщениями</span><span class="кн" style="min-height:32px;padding:0 14px">Отправить 2</span></div>
+        </div>
+      </div>
+      <div class="трет">выбрано два</div>
+    </div>
+    <div class="разбор-пробы">
+      <ul>
+        <li><b>Первая плитка — камера</b>: снять и сразу отправить.</li>
+        <li><b>Нажатие отмечает</b> номером в кружке — порядок отправки. Отдельной кнопки «выбрать» нет: выбор и есть первое нажатие.</li>
+        <li><b>«Отправить N»</b> появляется внизу, когда отмечено хоть одно; <b>каждое фото — отдельным сообщением</b> вне пузыря. Ужатие по ПФ (большая сторона 1280), превью делает принявший клиент.</li>
+        <li><b>«Вся галерея ›»</b> — системный выбор фото, если нужного нет среди последних.</li>
+        <li>Подпись к фото здесь не пишется: текст — отдельным сообщением, картинка внутрь текста — через редактор.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── Файл ──────────────────────────────────────────────────────────────── -->
+<div class="проба" id="о03">
+  <div class="шапка-пробы"><span class="номер">04</span><span class="опис">Файл — последние, запреты видны сразу</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="строка-ввода">
+          <span class="кн-ред"><span class="полосы"><i></i><i></i><i></i></span></span>
+          <div class="пилюля"><div class="набор пусто">Сообщение…</div><span class="серая">🙂</span><span class="серая">🖼</span><span class="серая нажата">📎</span></div>
+          <span class="кн-отпр">🎙</span>
+        </div>
+        <div class="область">
+          <div class="область-шапка"><span class="вкладка-обл тек">Последние</span><span class="вкладка-обл">Файлы телефона ›</span></div>
+          <a class="закрыть" href="окно-ввода.html#п01">✕</a>
+          <div class="область-тело">
+            <div class="файл"><span class="знак-файла">PDF</span><div class="тянуть"><div class="имя обрез">смета-июль.pdf</div><div class="трет">2,4 МБ · вчера</div></div><span class="отметка да"></span></div>
+            <div class="файл"><span class="знак-файла">DOC</span><div class="тянуть"><div class="имя обрез">договор-аренды.docx</div><div class="трет">310 КБ · 12 окт.</div></div><span class="отметка"></span></div>
+            <div class="файл нельзя"><span class="знак-файла">APK</span><div class="тянуть"><div class="имя обрез">setup.apk</div><div class="трет">нельзя: исполняемый файл</div></div></div>
+            <div class="файл нельзя"><span class="знак-файла">MP4</span><div class="тянуть"><div class="имя обрез">отпуск.mp4</div><div class="трет">нельзя: больше 10 МБ</div></div></div>
+          </div>
+          <div class="область-низ"><span class="трет" style="flex:1">до 10 МБ · хранится, пока не заберут</span><span class="кн" style="min-height:32px;padding:0 14px">Отправить 1</span></div>
+        </div>
+      </div>
+      <div class="трет">выбран один</div>
+    </div>
+    <div class="разбор-пробы">
+      <ul>
+        <li><b>Последние файлы</b> телефона, отметка справа; <b>«Файлы телефона ›»</b> — системный выбор.</li>
+        <li><b>Запреты видны до выбора</b>, серым и с причиной: исполняемые, <code>.html</code>, <code>.svg</code> (§3.3, §6.1) и больше предела сервера (сейчас 10 МБ). Предел приходит с сервера.</li>
+        <li>Подпись внизу говорит главное правило почтальона: файл лежит на сервере, пока его не заберут (час, неделя — §6.1).</li>
+        <li>Каждый файл — отдельным сообщением вне пузыря.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── Голос ─────────────────────────────────────────────────────────────── -->
+<div class="проба" id="о04">
+  <div class="шапка-пробы"><span class="номер">05</span><span class="опис">Голос — запись в области, не удержанием кнопки</span> <span class="вопрос-метка">как понято</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="строка-ввода">
+          <span class="кн-ред"><span class="полосы"><i></i><i></i><i></i></span></span>
+          <div class="пилюля"><div class="набор пусто">Сообщение…</div><span class="серая">🙂</span><span class="серая">🖼</span><span class="серая">📎</span></div>
+          <span class="кн-отпр" style="outline:3px solid var(--акцент-мягкий)">🎙</span>
+        </div>
+        <div class="область" style="align-items:center;justify-content:center;gap:12px">
+          <a class="закрыть" href="окно-ввода.html#п01">✕</a>
+          <div style="font-size:22px;font-weight:800;letter-spacing:-0.02em">0:07</div>
+          <div style="display:flex;gap:3px;align-items:center;height:30px">
+            <i style="width:3px;height:10px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:22px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:14px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:28px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:18px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:8px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:20px;background:var(--чёрный-12);border-radius:2px"></i><i style="width:3px;height:12px;background:var(--чёрный-12);border-radius:2px"></i>
+          </div>
+          <div style="display:flex;gap:28px;align-items:center">
+            <span class="икона" title="Удалить">🗑</span>
+            <span style="width:64px;height:64px;border-radius:50%;background:#c62828;display:flex;align-items:center;justify-content:center"><i style="width:20px;height:20px;border-radius:4px;background:#fff"></i></span>
+            <span class="икона жив" title="Отправить">➤</span>
+          </div>
+          <div class="трет">идёт запись · стоп — послушать перед отправкой</div>
+        </div>
+      </div>
+      <div class="трет">запись голосового</div>
+    </div>
+    <div class="разбор-пробы">
+      «Все четыре кнопки убирают клавиатуру и открывают область» — четвёртой понята кнопка
+      голосового. Поэтому запись — <b>в области</b>, а не удержанием кнопки:
+      <ul>
+        <li>нажали микрофон — запись пошла сразу, время и волна;</li>
+        <li><b>стоп</b> — послушать перед отправкой, <b>корзина</b> — удалить, <b>зелёная</b> — отправить;</li>
+        <li>крестик или нажатие вне области — запись удаляется (с вопросом, если длиннее 3 с).</li>
+      </ul>
+      Удержание без отрыва пальца удобно для коротких фраз, но длинную запись держать трудно и легко
+      сорвать. Если четвёртая кнопка имелась в виду другая — поправлю.
+    </div>
+  </div>
+</div>
+
+</div>
