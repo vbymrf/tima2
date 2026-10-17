@@ -205,3 +205,103 @@
   width: 42px; height: 42px; border-radius: 50%; background: var(--я, var(--навигация));
   display: flex; align-items: center; justify-content: center; font-size: 19px;
 }
+
+/* ── Редактор: ряды, ячейки, виджеты, уровень, буфер (2026-10-17, вторая проба) ── */
+
+/* Вторая строка кнопок — значок и короткая подпись: кнопок разметки не угадать по значку */
+.ред-ряд.с-подп .кн-ф { height: 40px; flex-direction: column; gap: 1px; font-size: 14px; line-height: 1; }
+.кн-ф .подп-кн { font-size: 7.5px; font-weight: 800; color: var(--чёрный-70); letter-spacing: -0.02em; max-width: 100%; overflow: hidden; white-space: nowrap; }
+.кн-ф .счёт {
+  position: absolute; top: -5px; right: -3px; min-width: 15px; height: 15px; border-radius: 8px;
+  background: var(--активность); color: #000; font-size: 9px; font-weight: 900;
+  display: flex; align-items: center; justify-content: center; padding: 0 3px; box-sizing: border-box;
+}
+.кн-ф { position: relative; }
+
+/* Уровень сообщения — кнопка-цифра в шапке редактора */
+.кн-ур {
+  min-width: 34px; height: 30px; padding: 0 8px; box-sizing: border-box; border-radius: 999px;
+  border: 2px solid var(--текст); background: var(--поверхность); color: var(--текст);
+  font: 900 14px/1 ui-monospace, Consolas, monospace; display: flex; align-items: center; justify-content: center;
+}
+.кн-ур.откл { border-color: var(--чёрный-35); color: var(--чёрный-50); }
+.кн-ур.открыт { background: var(--текст); color: #fff; }
+.меню-ур {
+  position: absolute; top: 46px; right: 50px; z-index: 3; background: var(--поверхность);
+  border: 1px solid var(--чёрный-12); border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+  padding: 4px; display: flex; flex-direction: column; gap: 2px;
+}
+.меню-ур span { width: 38px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font: 900 14px/1 ui-monospace, Consolas, monospace; }
+.меню-ур span.тек { background: var(--акцент-мягкий); outline: 2px solid var(--навигация); }
+
+/* Ряд и ячейки. Пунктир и подписи ширины видны только в редакторе */
+.ряд { display: flex; gap: 4px; align-items: stretch; }
+.ряд + .ряд, .ряд + .блок, .блок + .ряд { margin-top: 8px; }
+.ряд.с-фоном { background: #fff3cd; border-radius: 8px; padding: 6px; }
+.ячейка {
+  position: relative; min-width: 0; min-height: 34px; box-sizing: border-box; padding: 6px 5px 8px;
+  border: 1px dashed var(--чёрный-35); border-radius: 6px; font-size: 12.5px; line-height: 1.35;
+}
+.ячейка.актив { border: 2px solid var(--навигация); padding: 5px 4px 7px; }
+.ячейка.цель { border: 2px dashed var(--навигация); background: rgba(138,196,74,0.14); }
+.ячейка .шир {
+  position: absolute; bottom: -7px; right: 4px; font-size: 8.5px; font-weight: 900; padding: 0 5px;
+  border-radius: 999px; background: var(--поверхность); color: var(--чёрный-50); border: 1px solid var(--чёрный-12);
+}
+.ячейка.актив .шир { background: var(--навигация); color: #000; border-color: var(--навигация); }
+.ячейка .пусто-яч { color: var(--чёрный-35); font-size: 11px; font-weight: 700; }
+.курсор-р { display: inline-block; width: 1.5px; height: 14px; background: var(--навигация); vertical-align: -2px; margin-left: 1px; }
+
+/* Виджет: ярлык с ручкой виден, когда ячейка не в работе */
+.виджет { position: relative; border-radius: 6px; }
+.виджет + .виджет { margin-top: 6px; }
+.виджет.покой { outline: 1px solid var(--чёрный-12); outline-offset: 2px; }
+.виджет .ручка {
+  position: absolute; top: -12px; left: 2px; z-index: 1; font-size: 8.5px; font-weight: 800; padding: 1px 6px;
+  border-radius: 999px; background: var(--текст); color: #fff; white-space: nowrap;
+}
+.виджет.выбран { outline: 2px solid var(--навигация); outline-offset: 2px; }
+.виджет.выбран .ручка { background: var(--навигация); color: #000; }
+.виджет.поднят { box-shadow: 0 10px 22px rgba(0,0,0,0.25); transform: rotate(-2deg); background: var(--поверхность); padding: 4px 6px; }
+.виджет.откуда { opacity: 0.3; }
+.место-вставки { height: 3px; border-radius: 2px; background: var(--навигация); margin: 6px 0; position: relative; }
+.место-вставки::after {
+  content: attr(data-подп); position: absolute; right: 0; top: -15px; font-size: 9px; font-weight: 800; color: var(--подтверждено);
+}
+.место-вставки.слева::after { right: auto; left: 0; }
+.картинка-яч { border-radius: 6px; background: linear-gradient(135deg, #cfe6b6, #8ac44a 70%); display: flex; align-items: flex-end; padding: 4px 5px; box-sizing: border-box; font-size: 9px; font-weight: 800; color: rgba(0,0,0,0.6); }
+
+/* Флажки и переключатели в областях */
+.флаг { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--текст); }
+.флаг i { width: 16px; height: 16px; border-radius: 4px; border: 2px solid var(--чёрный-35); box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; font-style: normal; font-size: 11px; font-weight: 900; color: #000; }
+.флаг.да i { background: var(--навигация); border-color: var(--навигация); }
+.флаг i.круг { border-radius: 50%; }
+.флаг.да i.круг { background: var(--поверхность); box-shadow: inset 0 0 0 3px var(--поверхность), inset 0 0 0 8px var(--навигация); }
+.шаг { display: inline-flex; align-items: center; gap: 0; border: 1px solid var(--чёрный-12); border-radius: 999px; overflow: hidden; font-weight: 800; }
+.шаг span { padding: 3px 9px; }
+.шаг span.ч { background: var(--чёрный-6); min-width: 18px; text-align: center; }
+.поле-шир { display: inline-flex; align-items: center; gap: 2px; padding: 3px 8px; border-radius: 8px; border: 1px solid var(--рамка); font-weight: 800; }
+
+/* Вставленное сообщение (из буфера) */
+.вст { border-left: 3px solid #5b73c9; background: rgba(91,115,201,0.10); border-radius: 6px; padding: 4px 8px 5px; font-size: 11.5px; line-height: 1.35; position: relative; }
+.вст .кто { font-weight: 800; color: #3d55aa; display: flex; gap: 6px; align-items: baseline; }
+.вст .кто .где { font-weight: 600; color: var(--чёрный-50); font-size: 10px; }
+.вст .тело-вст { overflow: hidden; position: relative; }
+.вст .тело-вст.три { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.вст .тело-вст.по-высоте::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 18px; background: linear-gradient(rgba(234,238,250,0), rgba(234,238,250,1)); }
+.вст .дальше { font-size: 10px; font-weight: 800; color: #3d55aa; margin-top: 2px; }
+
+/* Буфер сообщений: список в области */
+.буф-эл { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--чёрный-6); }
+.буф-эл .тянуть .имя { font-size: 12px; }
+.буф-эл .тянуть .стр { font-size: 11.5px; color: var(--чёрный-70); }
+.буф-эл.нельзя { opacity: 0.45; }
+.ур-метка { font: 900 10.5px/1 ui-monospace, Consolas, monospace; padding: 3px 6px; border-radius: 999px; border: 1.5px solid var(--чёрный-35); color: var(--чёрный-70); flex: 0 0 auto; }
+
+/* Меню долгого нажатия на сообщение */
+.меню-сообщ { background: var(--поверхность); border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.22); padding: 4px 0; width: 210px; font-size: 12.5px; font-weight: 700; }
+.меню-сообщ div { padding: 8px 14px; display: flex; gap: 10px; align-items: center; }
+.меню-сообщ div.тек { background: var(--акцент-мягкий); }
+.тост { margin: 8px auto 0; background: var(--текст); color: #fff; border-radius: 12px; padding: 8px 12px; font-size: 11.5px; font-weight: 700; display: flex; gap: 10px; align-items: center; width: fit-content; }
+.тост a { color: var(--навигация); text-decoration: none; }
+.затемнение { background: rgba(0,0,0,0.35); padding: 14px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
